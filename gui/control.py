@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QVBoxLayout, QSize
 from PyQt5.QtGui import QIcon
 
 from src.hardware import AOETLGalvos
+from zaber.serial import AsciiSerial, AsciiDevice, AsciiCommand
 
 parameters = dict()
 parameters["samplerate"]=1000
@@ -51,8 +52,8 @@ class Controller(QWidget):
         self.pushButton_stopLive.clicked.connect(self.stop_live_mode)
         self.pushButton_MotorUp.clicked.connect(self.move_up)
         self.pushButton_MotorDown.clicked.connect(self.move_down)
-        self.pushButton_MotorBackward.clicked.connect(self.move_backward)
-        self.pushButton_MotorForward.clicked.connect(self.move_forward)
+        self.pushButton_MotorRight.clicked.connect(self.move_backward)
+        self.pushButton_MotorLeft.clicked.connect(self.move_forward)
 
         
     def start_live_mode(self):
@@ -72,11 +73,14 @@ class Controller(QWidget):
     
     def move_up(self):
         print ('Moving up')
-    
+        port = AsciiSerial("COM3")
+        command = AsciiCommand("home")
+        port.write(command)
+        
     def move_down(self):
         print ('Moving down')
 
-     def move_backward(self):
+    def move_backward(self):
         print ('Moving backward')
     
     def move_forward(self):
