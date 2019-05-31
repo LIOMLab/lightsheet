@@ -53,11 +53,11 @@ class Controller(QWidget):
         self.pushButton_MotorDown.clicked.connect(self.move_down)
         self.pushButton_MotorBackward.clicked.connect(self.move_backward)
         self.pushButton_MotorForward.clicked.connect(self.move_forward)
-        
 
         
     def start_live_mode(self):
 
+        print('start live mode')
         # Setup from data in gui
         self.ramps=AOETLGalvos(parameters)
         self.ramps.create_tasks()
