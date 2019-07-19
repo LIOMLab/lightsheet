@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QVBoxLayout, QSize
 from PyQt5.QtGui import QIcon
 
 from src.hardware import AOETLGalvos
-from zaber.serial import AsciiSerial, AsciiDevice, AsciiCommand
+#from zaber.serial import AsciiSerial, AsciiDevice, AsciiCommand
 
 parameters = dict()
 parameters["samplerate"]=1000
@@ -64,18 +64,19 @@ class Controller(QWidget):
         self.ramps.create_tasks()
         self.ramps.create_galvos_waveforms()
         self.ramps.create_etl_waveforms()
-
+        self.ramps.run_tasks()
         self.ramps.start_tasks()
 
     
     def stop_live_mode(self):
         self.ramps.stop_tasks()
+        self.ramps.close_tasks()
     
     def move_up(self):
         print ('Moving up')
-        port = AsciiSerial("COM3")
-        command = AsciiCommand("home")
-        port.write(command)
+#        port = AsciiSerial("COM3")
+#        command = AsciiCommand("home")
+#        port.write(command)
         
     def move_down(self):
         print ('Moving down')

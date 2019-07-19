@@ -91,7 +91,7 @@ class AOETLGalvos(QtCore.QObject):
 
         #self.master_trigger_task = nidaqmx.Task()
         #self.camera_trigger_task = nidaqmx.Task()
-        self.galvo_etl_task = nidaqmx.Task()
+        self.galvo_etl_task = nidaqmx.Task(new_task_name='galvo_etl_ramps')
 
 
 #        '''Setting up the counter task for the camera trigger'''
@@ -102,8 +102,8 @@ class AOETLGalvos(QtCore.QObject):
 #        self.camera_trigger_task.triggers.start_trigger.cfg_dig_edge_start_trig(ah['camera_trigger_source'])
 
         '''Housekeeping: Setting up the AO task for the Galvo and setting the trigger input'''
-        self.galvo_etl_task.ao_channels.add_ao_voltage_chan('ao0:3')
-        self.galvo_etl_task.timing.cfg_samp_clk_timing(rate=self.paramters["samplerate"],
+        self.galvo_etl_task.ao_channels.add_ao_voltage_chan('/Dev1/ao0:3')
+        self.galvo_etl_task.timing.cfg_samp_clk_timing(rate=self.parameters["samplerate"],
                                                    sample_mode=AcquisitionType.FINITE,
                                                    samps_per_chan=self.samples)
         #self.galvo_etl_task.triggers.start_trigger.cfg_dig_edge_start_trig(ah['galvo_etl_task_trigger_source'])
@@ -145,7 +145,9 @@ class AOETLGalvos(QtCore.QObject):
         #self.master_trigger_task.write([False, True, True, True, False], auto_start=True)
 
         '''Wait until everything is done - this is effectively a sleep function.'''
+        print('waiting until done')
         self.galvo_etl_task.wait_until_done()
+        print('done')
         #self.laser_task.wait_until_done()
         #self.camera_trigger_task.wait_until_done()
 
