@@ -3,6 +3,10 @@ Created on May 22, 2019
 
 @author: flesage
 '''
+
+import sys
+sys.path.append("..")
+
 import os
 import numpy as np
 from PyQt5 import QtGui
@@ -30,12 +34,12 @@ parameters["galvo_r_phase"]=np.pi/2
 parameters["etl_l_delay"]=7.5
 parameters["etl_l_ramp_rising"]=85
 parameters["etl_l_ramp_falling"]=2.5
-parameters["etl_l_amplitude"]=0
+parameters["etl_l_amplitude"]=2
 parameters["etl_l_offset"]=0
 parameters["etl_r_delay"]=7.5
 parameters["etl_r_ramp_rising"]=85
 parameters["etl_r_ramp_falling"]=2.5
-parameters["etl_r_amplitude"]=0
+parameters["etl_r_amplitude"]=2
 parameters["etl_r_offset"]=0
 
 class Controller(QWidget):
@@ -47,9 +51,17 @@ class Controller(QWidget):
     def __init__(self):
         QWidget.__init__(self)
         basepath= os.path.join(os.path.dirname(__file__))
-        uic.loadUi(os.path.join(basepath,"control.ui"), self)
+        uic.loadUi(os.path.join(basepath,"control.ui"), self)               
+        
         self.pushButton_startLive.clicked.connect(self.start_live_mode)
+        self.pushButton_startLive.clicked.connect(lambda: self.pushButton_startLive.setEnabled(False) )
+        self.pushButton_startLive.clicked.connect(lambda: self.pushButton_stopLive.setEnabled(True) )
+        
         self.pushButton_stopLive.clicked.connect(self.stop_live_mode)
+        self.pushButton_stopLive.setEnabled(False)
+        self.pushButton_stopLive.clicked.connect(lambda: self.pushButton_stopLive.setEnabled(False) )
+        self.pushButton_stopLive.clicked.connect(lambda: self.pushButton_startLive.setEnabled(True) )
+        
         self.pushButton_MotorUp.clicked.connect(self.move_up)
         self.pushButton_MotorDown.clicked.connect(self.move_down)
         self.pushButton_MotorRight.clicked.connect(self.move_backward)
@@ -60,20 +72,26 @@ class Controller(QWidget):
 
         print('start live mode')
         # Setup from data in gui
-        self.ramps=AOETLGalvos(parameters)
-        self.ramps.create_tasks()
-        self.ramps.create_galvos_waveforms()
-        self.ramps.create_etl_waveforms()
-        self.ramps.run_tasks()
-        self.ramps.start_tasks()
+        self.ramps=AOETLGalvos(parameters)                  
+        self.ramps.create_tasks()                           
+        self.ramps.create_galvos_waveforms()                
+        #plt.plot(range(len(self.ramps.galvo_l_waveform)),self.ramps.galvo_l_waveform)
+        #plt.plot(range(len(self.ramps.galvo_r_waveform)),self.ramps.galvo_r_waveform)
+        self.ramps.create_etl_waveforms()                   
+        self.ramps.write_waveforms_to_tasks()
+        self.ramps.run_tasks()                             
+        self.ramps.start_tasks()                           
+        #self.ramps.start_tasks()
 
     
     def stop_live_mode(self):
-        self.ramps.stop_tasks()
-        self.ramps.close_tasks()
+        self.ramps.stop_tasks()                             
+        self.ramps.close_tasks()                            
     
     def move_up(self):
         print ('Moving up')
+        distance = self.lineEdit_MotorStep.text()
+        print(distance)
 #        port = AsciiSerial("COM3")
 #        command = AsciiCommand("home")
 #        port.write(command)
