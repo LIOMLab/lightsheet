@@ -3,6 +3,8 @@ Created on May 16, 2019
 
 @author: flesage
 '''
+import sys
+sys.path.append("..")
 
 import os
 import numpy as np
@@ -121,6 +123,7 @@ class AOETLGalvos(QtCore.QObject):
                                                  self.galvo_r_waveform,
                                                  self.etl_l_waveform,
                                                  self.etl_r_waveform))
+       
         self.galvo_etl_task.write(self.galvo_and_etl_waveforms)
 
     def start_tasks(self):
