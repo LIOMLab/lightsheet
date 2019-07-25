@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QVBoxLayout, QSize
 from PyQt5.QtGui import QIcon
 
 from src.hardware import AOETLGalvos
+from src.hardware import Motors
 #from zaber.serial import AsciiSerial, AsciiDevice, AsciiCommand
 
 parameters = dict()
@@ -51,7 +52,17 @@ class Controller(QWidget):
     def __init__(self):
         QWidget.__init__(self)
         basepath= os.path.join(os.path.dirname(__file__))
-        uic.loadUi(os.path.join(basepath,"control.ui"), self)               
+        uic.loadUi(os.path.join(basepath,"control.ui"), self)
+        
+        self.motor1 = Motors(1, 'COM3')             #Vertical motor
+        self.motor2 = Motors(2, 'COM3')             #Horizontal motor for sample motion
+        self.motor3 = Motors(3, 'COM3')             #Horizontal motor for detection arm motion
+        
+        #Right values for the origin to determine
+        self.originX = 533333
+        self.originZ = 0
+        
+      
         
         self.pushButton_startLive.clicked.connect(self.start_live_mode)
         self.pushButton_startLive.clicked.connect(lambda: self.pushButton_startLive.setEnabled(False) )
@@ -66,6 +77,46 @@ class Controller(QWidget):
         self.pushButton_MotorDown.clicked.connect(self.move_down)
         self.pushButton_MotorRight.clicked.connect(self.move_backward)
         self.pushButton_MotorLeft.clicked.connect(self.move_forward)
+        self.pushButton_MotorOrigin.clicked.connect(self.move_to_origin)
+        
+        
+        
+        #Unit value changed to implement
+        self.comboBox_unit.insertItems(0,["cm","mm","\u03BCm","\u03BCStep"])
+        self.comboBox_unit.setCurrentIndex(1)
+        
+        self.pushButton_moveHome.clicked.connect(self.move_home)
+        
+        self.pushButton_moveMaxPosition.clicked.connect(self.move_to_maximum_position)
+
+        self.doubleSpinBox_incrementHorizontal.setSuffix(" {}".format(self.comboBox_unit.currentText()))
+        self.doubleSpinBox_incrementHorizontal.setDecimals(3)
+        self.doubleSpinBox_incrementHorizontal.setSingleStep(1)
+        self.doubleSpinBox_incrementHorizontal.setValue(1)
+        
+        self.doubleSpinBox_incrementVertical.setSuffix(" {}".format(self.comboBox_unit.currentText()))
+        self.doubleSpinBox_incrementVertical.setDecimals(3)
+        self.doubleSpinBox_incrementVertical.setSingleStep(1)
+        self.doubleSpinBox_incrementVertical.setValue(1)
+        
+        self.label_currentHorizontalNumerical.setText("{} {}".format(self.motor2.current_position(self.comboBox_unit.currentText()), self.comboBox_unit.currentText()))
+        
+        self.label_currentHeightNumerical.setText("{} {}".format(self.motor1.current_position(self.comboBox_unit.currentText()), self.comboBox_unit.currentText()))
+        
+        self.pushButton_setAsOrigin.clicked.connect(self.set_origin )
+        
+        self.doubleSpinBox_choosePosition.setSuffix(" {}".format(self.comboBox_unit.currentText()))
+        self.doubleSpinBox_choosePosition.setDecimals(3)
+        self.doubleSpinBox_choosePosition.setSingleStep(1)
+        
+        self.doubleSpinBox_chooseHeight.setSuffix(" {}".format(self.comboBox_unit.currentText()))
+        self.doubleSpinBox_chooseHeight.setDecimals(3)
+        self.doubleSpinBox_chooseHeight.setSingleStep(1)
+        
+        #Motion of the detection arm to implement when clicked (self.motor3)
+        self.pushButton_movePosition.clicked.connect(lambda: self.motor2.move_absolute_position(self.doubleSpinBox_choosePosition.value(),self.comboBox_unit.currentText()))
+        
+        self.pushButton_moveHeight.clicked.connect(lambda: self.motor1.move_absolute_position(self.doubleSpinBox_chooseHeight.value(),self.comboBox_unit.currentText()))
 
         
     def start_live_mode(self):
@@ -89,18 +140,43 @@ class Controller(QWidget):
         self.ramps.close_tasks()                            
     
     def move_up(self):
-        print ('Moving up')
-        distance = self.lineEdit_MotorStep.text()
-        print(distance)
+        print('Moving up')
+        self.motor1.move_relative_position(-self.doubleSpinBox_incrementVertical.value(),self.comboBox_unit.currentText())
 #        port = AsciiSerial("COM3")
 #        command = AsciiCommand("home")
 #        port.write(command)
         
     def move_down(self):
         print ('Moving down')
+        self.motor1.move_relative_position(self.doubleSpinBox_incrementVertical.value(),self.comboBox_unit.currentText())
 
     def move_backward(self):
+        #Motion of the detection arm to implement (self.motor3)
         print ('Moving backward')
+        self.motor2.move_relative_position(self.doubleSpinBox_incrementHorizontal.value(),self.comboBox_unit.currentText())
     
     def move_forward(self):
-        print ('Moving forward')       
+        #Motion of the detection arm to implement (self.motor3)
+        print ('Moving forward')
+        self.motor2.move_relative_position(-self.doubleSpinBox_incrementHorizontal.value(),self.comboBox_unit.currentText())
+        
+    def move_to_origin(self):
+        #Motion of the detection arm to implement (self.motor3)
+        print('Moving to origin')
+        self.motor2.move_absolute_position(self.originX,'\u03BCStep')
+        self.motor1.move_absolute_position(self.originZ,'\u03BCStep')
+    
+    def move_home(self):
+        self.motor1.move_home()
+        self.motor2.move_home()
+        self.motor3.move_home()
+    
+    def move_to_maximum_position(self):
+        self.motor3.move_maximum_position()
+        self.motor2.move_maximum_position()
+        self.motor1.move_maximum_position()
+    
+    def set_origin(self):
+        self.originX = self.motor2.position_to_data(self.motor2.current_position(self.comboBox_unit.currentText()),self.comboBox_unit.currentText())
+        self.originZ = 1066666 - self.motor1.position_to_data(self.motor1.current_position(self.comboBox_unit.currentText()),self.comboBox_unit.currentText())
+        print('Origin set')
