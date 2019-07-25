@@ -6,6 +6,8 @@ Created on May 16, 2019
 import sys
 sys.path.append("..")
 
+import serial
+
 import os
 import numpy as np
 import csv
@@ -170,3 +172,274 @@ class AOETLGalvos(QtCore.QObject):
         #self.laser_task.close()
         #self.camera_trigger_task.close()
         #self.master_trigger_task.close()
+        
+        
+        
+        
+        
+        
+        
+class Motors:
+    
+    def __init__(self, deviceNumber, port):
+        '''deviceNumber is the number of the device in the daisy chain '''
+        self.deviceNumber = deviceNumber
+        self.port = port
+        self.ID = self.ask_ID()
+        
+    
+    def generate_command(self,cmdNumber,data):
+        '''Generates the command to send to the motor device
+        
+        Parameters:
+            cmdNumber: Determines the type of operation (see Zaber T-LSM series User's Manual for a complete list)
+            data: The value associated to the cmdNumber
+        '''
+        command=[self.deviceNumber,cmdNumber]
+        
+        #To take into account negative data (such as a relative motion)
+        if data < 0:
+            data = pow(256,4) + data
+        
+        #Generates bytes 3 to 6
+        Byte6 = int(data//pow(256,3))
+        data = data - Byte6*pow(256,3)
+        Byte5 = int(data//pow(256,2))
+        data = data - Byte5*pow(256,2)
+        Byte4 = int(data//256)
+        data = data - Byte4*256
+        Byte3 = int(data//1)
+        
+        command.append(Byte3)
+        command.append(Byte4)
+        command.append(Byte5)
+        command.append(Byte6)
+        #command=bytearray(command)
+        
+        return bytearray(command)
+    
+    def byte_to_int(self,byte):
+        '''Converts bytes into an integer'''
+        
+        result = 0
+        for b in byte:
+            result = result * 256 + int(b)
+        return result
+    
+    
+    def ask_ID(self):
+        '''Returns the ID of the device. 
+        
+        If the ID is 6210, it is the vertical motor
+        If the ID is 6320, it is one of the horizontal motors
+        ''' 
+        motor=serial.Serial(port=self.port,baudrate=9600,bytesize=serial.EIGHTBITS,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE)
+        
+        command = self.generate_command(50,0)
+        motor.write(command)
+        
+        ID=0
+        #All the bytes are read, so they doesn't interfere with another command later
+        lastRead = []
+        for i in range(6):
+            lastRead.append(self.byte_to_int(motor.read(1)))
+        
+        #Byte3 (index 2) is the least significant byte of the data read and can determine alone the ID in this case
+        if lastRead[2] == 66:
+            ID = 6210
+        elif lastRead[2] == 176:
+            ID = 6320
+        
+        motor.close()
+        
+        return ID
+    
+    
+    def data_to_position(self,data,unit):
+        '''Converts a data into a position 
+        
+        Parameters:
+            data: An integer or a float
+            unit: A string wich specifies the unit into which the position will be converted. 
+                  The options are: 'm', 'cm', 'mm', '\u03BCm' (micro meter) and '\u03BCStep' (micro-step) 
+        '''
+        factor = 0
+        microStep = 0
+        
+        #The microstep size, necessary for the conversion, differs from each type of device
+        if self.ID == 6210:
+            microStep = 0.047625
+        elif self.ID == 6320:
+            microStep = 0.1905
+       
+        if unit == 'm':
+            factor = 1
+        elif unit == 'cm':
+            factor=pow(10,-2)
+        elif unit == 'mm':
+            factor=pow(10,-3)
+        elif unit == '\u03BCm':
+            factor=pow(10,-6)
+        elif unit == '\u03BCStep':
+            factor = microStep*pow(10,-6)
+            
+        return data*microStep*pow(10,-6)/factor
+    
+    
+    def position_to_data(self,position,unit):
+        '''Converts the position into the form of a data 
+        
+        Parameters:
+            position: Numerical value of the position
+            unit: A string which specifies the unit of the numerical position. 
+                  The options are: 'm', 'cm', 'mm', '\u03BCm' (micro meter) and '\u03BCStep' (micro-step) 
+        '''
+        factor = 0
+        microStep = 0
+        
+        #The microstep size, necessary for the conversion, differs from each type of device
+        if self.ID == 6210:
+            microStep = 0.047625
+        elif self.ID == 6320:
+            microStep = 0.1905
+        
+        if unit == 'm':
+            factor = 1
+        elif unit == 'cm':
+            factor=pow(10,-2)
+        elif unit == 'mm':
+            factor=pow(10,-3)
+        elif unit == '\u03BCm':
+            factor=pow(10,-6)
+        elif unit == '\u03BCStep':
+            factor = microStep*pow(10,-6)
+        
+        return position*factor/(microStep*pow(10,-6))
+    
+    
+    def current_position(self, unit):
+        '''Returns the current position of the device. The position is converted into the unit specified. 
+        
+        Parameter:
+            unit: A string. The options are: 'm', 'cm', 'mm', '\u03BCm' (micro meter) and '\u03BCStep' (micro-step)
+        '''
+        motor=serial.Serial(port=self.port,baudrate=9600,bytesize=serial.EIGHTBITS,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE)
+        cmdNumber = 60
+        command = self.generate_command(cmdNumber,0)
+        motor.write(command)
+        
+        lastRead = []
+        for i in range(6):
+            lastRead.append(self.byte_to_int(motor.read(1)))
+        
+        motor.close()
+        
+        data = pow(256,3)*lastRead[5]+pow(256,2)*lastRead[4]+256*lastRead[3]+lastRead[2]
+        
+        #The first two conditions are there to avoid a result with a huge number of decimals for the extremum positions. These could be taken off later
+        #by controling the number of decimals to display on the associated label of the GUI
+        if data == 1066666:
+                return 0
+            
+        elif data == 533333:
+                if unit == "m":
+                    return 0.1016
+                elif unit == "cm":
+                    return 10.16
+                elif unit == "mm":
+                    return 101.6
+                elif unit =='\u03BCm':
+                    return 101600
+                elif unit == '\u03BCStep':
+                    return 533333
+        
+        #Take into account that the minimum position (home position) of the vertical motor is at its maximum height in the physical structure
+        elif self.ID == 6210:
+                if unit == "m":
+                    return 0.0508-self.data_to_position(data,unit)
+                elif unit == "cm":
+                    return 5.08-self.data_to_position(data,unit)
+                elif unit == "mm":
+                    return 50.8-self.data_to_position(data,unit)
+                elif unit =='\u03BCm':
+                    return 50800-self.data_to_position(data,unit)
+                elif unit == '\u03BCStep':
+                    return 1066666-self.data_to_position(data,unit)
+                
+        else:
+            return self.data_to_position(data,unit)
+    
+    
+    def move_home(self):
+        '''Moves the device to home position. For the vertical motor, it matches the maximum height. '''
+        motor=serial.Serial(port=self.port,baudrate=9600,bytesize=serial.EIGHTBITS,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE)
+        
+        command = self.generate_command(20,0)
+        motor.write(command)
+        #All the reply bytes are read, so they doesn't interfere with further operations, suchas self.current_position(unit)
+        motor.read(6)
+        
+        motor.close()
+        
+        
+    def move_maximum_position(self):
+        '''Moves the device to its maximum position. For the vertical motor it matches the minimum height.  '''
+        if self.ID == 6210:
+            data = 1066666
+        elif self.ID == 6320:
+            data = 533333
+        
+        motor=serial.Serial(port=self.port,baudrate=9600,bytesize=serial.EIGHTBITS,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE)
+        
+        command = self.generate_command(20,data)
+        motor.write(command)
+        #All the reply bytes are read, so they doesn't interfere with further operations, suchas self.current_position(unit)
+        motor.read(6)
+        
+        motor.close()
+        
+    
+    def move_absolute_position(self, absolutePosition, unit):
+        '''Moves the device to a specified absolute position.
+        
+        Parameters:
+            absolutePosition: Numerical value of the absolute position
+            unit: A string which indicate the scale of the numerical value.
+                  The options are: 'm', 'cm', 'mm', '\u03BCm' (micro meter) and '\u03BCStep' (micro-step)
+                  
+        For the horizontal motors, position 0 is the home position.
+        For the vertical motor, height 0 is the maximum position.
+        '''
+        motor=serial.Serial(port=self.port,baudrate=9600,bytesize=serial.EIGHTBITS,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE)
+        
+        data=0
+        if self.ID == 6210:
+            data = 1066666-self.position_to_data(absolutePosition,unit)
+        elif self.ID == 6320:
+            data = self.position_to_data(absolutePosition,unit)
+        
+        command = self.generate_command(20,data)
+        motor.write(command)
+        #All the reply bytes are read, so they doesn't interfere with further operations, suchas self.current_position(unit)
+        motor.read(6)
+        
+        motor.close()
+        
+        
+    def move_relative_position(self, relativePosition, unit):
+        '''Moves the device to a specified relative position
+        
+        Parameters:
+            relativePosition: Numerical value of the relative motion
+            unit: A string which indicate the scale of the numerical value.
+                  The options are: 'm', 'cm', 'mm', '\u03BCm' (micro meter) and '\u03BCStep' (micro-step)
+        '''
+        motor=serial.Serial(port=self.port,baudrate=9600,bytesize=serial.EIGHTBITS,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE)
+        
+        data = self.position_to_data(relativePosition, unit)
+        command = self.generate_command(21,data)
+        motor.write(command)
+        #All the reply bytes are read, so they doesn't interfere with further operations, suchas self.current_position(unit)
+        motor.read(6)
+        
+        motor.close()
