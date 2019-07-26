@@ -80,7 +80,7 @@ class AOETLGalvos(QtCore.QObject):
                                          dutycycle = self.parameters["galvo_r_duty_cycle"],
                                          phase = self.parameters["galvo_r_phase"])
 
-    def create_tasks(self):
+    def create_tasks(self, acquisition):
         '''Creates a total of four tasks for the mesoSPIM:
 
         These are:
@@ -90,7 +90,15 @@ class AOETLGalvos(QtCore.QObject):
           the light-sheet and shadow avoidance
         - the ETL & Laser task (analog out) that controls all the laser intensities (Laser should only
           be on when the camera is acquiring) and the left/right ETL waveforms
+        
+        7/26/2019: acquisition parameter was added, options are; 'FINITE' or 'CONTINUOUS'
         '''
+        mode = 'NONE'
+        if acquisition == 'FINITE':
+             mode = AcquisitionType.FINITE
+        elif acquisition == 'CONTINUOUS':
+            mode = AcquisitionType.CONTINUOUS
+        
         self.calculate_samples()
 
         #self.master_trigger_task = nidaqmx.Task()
@@ -108,7 +116,7 @@ class AOETLGalvos(QtCore.QObject):
         '''Housekeeping: Setting up the AO task for the Galvo and setting the trigger input'''
         self.galvo_etl_task.ao_channels.add_ao_voltage_chan('/Dev1/ao0:3')
         self.galvo_etl_task.timing.cfg_samp_clk_timing(rate=self.parameters["samplerate"],
-                                                   sample_mode=AcquisitionType.FINITE,
+                                                   sample_mode=mode,
                                                    samps_per_chan=self.samples)
         #self.galvo_etl_task.triggers.start_trigger.cfg_dig_edge_start_trig(ah['galvo_etl_task_trigger_source'])
 
@@ -137,7 +145,8 @@ class AOETLGalvos(QtCore.QObject):
         #self.camera_trigger_task.start()
         self.galvo_etl_task.start()
         #self.laser_task.start()
-
+    
+    #This function is only for FINITE task, we don't call it for CONTINUOUS
     def run_tasks(self):
         '''Runs the tasks for triggering, analog and counter outputs
 
