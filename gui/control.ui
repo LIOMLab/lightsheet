@@ -583,7 +583,7 @@
          <item>
           <widget class="QPushButton" name="pushButton_setOptimized">
            <property name="text">
-            <string>PushButton</string>
+            <string>Set as parameters</string>
            </property>
           </widget>
          </item>
@@ -754,6 +754,71 @@
         </size>
        </property>
       </spacer>
+     </item>
+     <item row="10" column="2">
+      <layout class="QVBoxLayout" name="verticalLayout_9">
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_12">
+         <item>
+          <widget class="QPushButton" name="pushButton_lasersOn">
+           <property name="text">
+            <string>Lasers On</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButton_lasersOff">
+           <property name="text">
+            <string>Lasers Off</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="Line" name="line_8">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_13">
+         <item>
+          <widget class="QPushButton" name="pushButton_leftLaserOn">
+           <property name="text">
+            <string>Left Laser On</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButton_leftLaserOff">
+           <property name="text">
+            <string>Left Laser Off</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_15">
+         <item>
+          <widget class="QPushButton" name="pushButton_rightLaserOn">
+           <property name="text">
+            <string>Right Laser On</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButton_rightLaserOff">
+           <property name="text">
+            <string>Right Laser Off</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
      </item>
     </layout>
    </item>
