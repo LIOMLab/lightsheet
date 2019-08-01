@@ -15,6 +15,9 @@ from PyQt5.QtWidgets import QWidget, QFileDialog
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QVBoxLayout, QSizePolicy, QMessageBox, QPushButton
 from PyQt5.QtGui import QIcon
 
+import nidaqmx
+from nidaqmx.constants import AcquisitionType
+
 from src.hardware import AOETLGalvos
 from src.hardware import Motors
 #from zaber.serial import AsciiSerial, AsciiDevice, AsciiCommand
@@ -74,19 +77,11 @@ class Controller(QWidget):
         
         
         self.pushButton_startLive.clicked.connect(self.start_live_mode)
-        
         self.pushButton_stopLive.clicked.connect(self.stop_live_mode)
-        self.pushButton_stopLive.setEnabled(False)
-        
         self.pushButton_startContinuous.clicked.connect(self.start_continuous_mode)
-        
         self.pushButton_stopContinuous.clicked.connect(self.stop_continuous_mode)
-        self.pushButton_stopContinuous.setEnabled(False)
-        
         self.pushButton_startAcquisition.clicked.connect(self.start_acquisition_mode)
-        
         self.pushButton_stopAcquisition.clicked.connect(self.stop_acquisition_mode)
-        self.pushButton_stopAcquisition.setEnabled(False)
         
         self.pushButton_MotorUp.clicked.connect(self.move_up)
         self.pushButton_MotorDown.clicked.connect(self.move_down)
@@ -94,20 +89,18 @@ class Controller(QWidget):
         self.pushButton_MotorLeft.clicked.connect(self.move_left)
         self.pushButton_MotorOrigin.clicked.connect(self.move_to_origin)
         
-        
-        
         #Unit value changed to implement
         self.comboBox_unit.insertItems(0,["cm","mm","\u03BCm"])
         self.comboBox_unit.setCurrentIndex(1)
         self.comboBox_unit.currentTextChanged.connect(self.update_all)
         
-        #To initialize all the currents positions and doubleSpinBox properties
+        #To initialize the widget that are updated by a change of unit
         self.update_all()
+        #To initialize the properties of the other widgets
+        self.initialize_other_widgets()
         
         self.pushButton_moveHome.clicked.connect(self.move_home)
-        
         self.pushButton_moveMaxPosition.clicked.connect(self.move_to_maximum_position)
-        
         self.pushButton_setAsOrigin.clicked.connect(self.set_origin )
         
         #Motion of the detection arm to implement when clicked (self.motor3)
@@ -122,41 +115,22 @@ class Controller(QWidget):
         #Might write a function for this button
         self.pushButton_moveCamera.clicked.connect(lambda: self.motor3.move_absolute_position(self.doubleSpinBox_chooseCamera.value(),self.comboBox_unit.currentText()))
         self.pushButton_moveCamera.clicked.connect(lambda: self.label_currentCameraNumerical.setText("{} {}".format(round(self.motor3.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText())))
-        
         self.pushButton_setFocus.clicked.connect(self.set_focus)
         
         self.pushButton_forward.clicked.connect(self.move_forward)
         self.pushButton_backward.clicked.connect(self.move_backward)
         self.pushButton_focus.clicked.connect(self.move_to_focus)
         
-        #Might change it for a spin box
-        self.doubleSpinBox_planeNumber.setDecimals(0)
-        self.doubleSpinBox_planeNumber.setMaximum(101600)
-        self.doubleSpinBox_planeNumber.setMinimum(1)
-        self.doubleSpinBox_planeNumber.setSingleStep(1)
-        
-        self.doubleSpinBox_planeStep.setSuffix(' \u03BCm')
-        self.doubleSpinBox_planeNumber.setDecimals(0)
-        self.doubleSpinBox_planeStep.setMaximum(101600)
-        self.doubleSpinBox_planeStep.setSingleStep(1)
-        
-        self.comboBox_acquisitionDirection.insertItems(0,['Forward','Backward'])
-        self.comboBox_acquisitionDirection.setCurrentIndex(0)
-        
-        self.doubleSpinBox_galvoFrequency.setMaximum(130)
-        self.doubleSpinBox_galvoFrequency.setSuffix(' Hz')
-        self.doubleSpinBox_galvoFrequency.setSingleStep(5)
-        
-        self.spinBox_lines.setMinimum(1)
-        self.spinBox_lines.setMaximum(9999)
-        
-        self.spinBox_columns.setMinimum(1)
-        self.spinBox_columns.setMaximum(9999)
-        
         self.pushButton_calculateOptimized.clicked.connect(self.synchronize_ramps)
-        
         self.pushButton_setOptimized.clicked.connect(self.set_optimized_parameters)
-        self.pushButton_setOptimized.setEnabled(False)
+        
+        self.pushButton_lasersOn.clicked.connect(self.lasers_on)
+        self.pushButton_lasersOff.clicked.connect(self.lasers_off)
+        self.pushButton_leftLaserOn.clicked.connect(self.left_laser_on)
+        self.pushButton_leftLaserOff.clicked.connect(self.left_laser_off)
+        self.pushButton_rightLaserOn.clicked.connect(self.right_laser_on)
+        self.pushButton_rightLaserOff.clicked.connect(self.right_laser_off)
+        
         
     def start_live_mode(self):
         self.pushButton_startLive.setEnabled(False)
@@ -451,6 +425,100 @@ class Controller(QWidget):
         parameters["etl_l_delay"] = self.delay
         parameters["etl_r_delay"] = parameters["etl_l_delay"]
         
+    def initialize_other_widgets(self):
+        '''Initializes the properties of the widgets that are not upadted by a change of units, so the widgets that cannot be initialize with self.update_all() '''
+        self.pushButton_stopLive.setEnabled(False)
+        self.pushButton_stopContinuous.setEnabled(False)
+        self.pushButton_stopAcquisition.setEnabled(False)
+        self.pushButton_setOptimized.setEnabled(False)
+        
+        #Might change it for a spin box
+        self.doubleSpinBox_planeNumber.setDecimals(0)
+        self.doubleSpinBox_planeNumber.setMaximum(101600)
+        self.doubleSpinBox_planeNumber.setMinimum(1)
+        self.doubleSpinBox_planeNumber.setSingleStep(1)
+        
+        self.doubleSpinBox_planeStep.setSuffix(' \u03BCm')
+        self.doubleSpinBox_planeNumber.setDecimals(0)
+        self.doubleSpinBox_planeStep.setMaximum(101600)
+        self.doubleSpinBox_planeStep.setSingleStep(1)
+        
+        self.comboBox_acquisitionDirection.insertItems(0,['Forward','Backward'])
+        self.comboBox_acquisitionDirection.setCurrentIndex(0)
+        
+        self.doubleSpinBox_galvoFrequency.setMaximum(130)
+        self.doubleSpinBox_galvoFrequency.setSuffix(' Hz')
+        self.doubleSpinBox_galvoFrequency.setSingleStep(5)
+        
+        self.spinBox_lines.setMinimum(1)
+        self.spinBox_lines.setMaximum(9999)
+        
+        self.spinBox_columns.setMinimum(1)
+        self.spinBox_columns.setMaximum(9999)
+        
+        self.pushButton_lasersOff.setEnabled(False)
+        self.pushButton_leftLaserOff.setEnabled(False)
+        self.pushButton_rightLaserOff.setEnabled(False)
+        
+    def lasers_on(self):
+        self.pushButton_lasersOn.setEnabled(False)
+        self.pushButton_lasersOff.setEnabled(True)
+        self.pushButton_leftLaserOn.setEnabled(False)
+        self.pushButton_rightLaserOn.setEnabled(False)
+        self.lasers_task = nidaqmx.Task()
+        self.lasers_task.ao_channels.add_ao_voltage_chan('/Dev2/ao0:1')
+        waveforms = np.stack(([0.935],[0.905]))
+        self.lasers_task.write(waveforms)
+        print('Lasers on')
+        
+    def lasers_off(self):
+        self.pushButton_lasersOn.setEnabled(True)
+        self.pushButton_lasersOff.setEnabled(False)
+        self.pushButton_leftLaserOn.setEnabled(True)
+        self.pushButton_rightLaserOn.setEnabled(True)
+        waveforms = np.stack(([0],[0]))
+        self.lasers_task.write(waveforms)
+        self.lasers_task.stop()
+        self.lasers_task.close()
+        print('Lasers off')
+        
+    def left_laser_on(self):
+        self.pushButton_lasersOn.setEnabled(False)
+        self.pushButton_leftLaserOn.setEnabled(False)
+        self.pushButton_leftLaserOff.setEnabled(True)
+        self.left_laser = nidaqmx.Task()
+        self.left_laser.ao_channels.add_ao_voltage_chan('/Dev2/ao1')
+        self.left_laser.write(0.905)
+        print('Left laser on')
+        
+    def left_laser_off(self):
+        self.left_laser.write(0)
+        self.left_laser.stop()
+        self.left_laser.close()
+        print('Left laser off')
+        self.pushButton_leftLaserOn.setEnabled(True)
+        self.pushButton_leftLaserOff.setEnabled(False)
+        if self.pushButton_rightLaserOn.isEnabled() == True:
+            self.pushButton_lasersOn.setEnabled(True)
+        
+    def right_laser_on(self):
+        self.pushButton_lasersOn.setEnabled(False)
+        self.pushButton_rightLaserOn.setEnabled(False)
+        self.pushButton_rightLaserOff.setEnabled(True)
+        self.right_laser = nidaqmx.Task()
+        self.right_laser.ao_channels.add_ao_voltage_chan('/Dev2/ao0')
+        self.right_laser.write(0.935)
+        print('Left laser on')
+        
+    def right_laser_off(self):
+        self.right_laser.write(0)
+        self.right_laser.stop()
+        self.right_laser.close()
+        print('Left laser off')
+        self.pushButton_rightLaserOn.setEnabled(True)
+        self.pushButton_rightLaserOff.setEnabled(False)
+        if self.pushButton_leftLaserOn.isEnabled() == True:
+            self.pushButton_lasersOn.setEnabled(True)
         
         
         
