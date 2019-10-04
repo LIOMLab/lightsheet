@@ -14,13 +14,24 @@ from PyQt5 import uic
 from PyQt5.QtWidgets import QWidget, QFileDialog
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QVBoxLayout, QSizePolicy, QMessageBox, QPushButton
 from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import QThread
+
+import pyqtgraph as pg
+import ctypes
+import copy
 
 import nidaqmx
 from nidaqmx.constants import AcquisitionType
 
 from src.hardware import AOETLGalvos
 from src.hardware import Motors
+from src.pcoEdge import Camera
 #from zaber.serial import AsciiSerial, AsciiDevice, AsciiCommand
+
+import time
+import queue
+
+q = queue.Queue()
 
 parameters = dict()
 parameters["samplerate"]=100
@@ -57,9 +68,14 @@ class Controller(QWidget):
         basepath= os.path.join(os.path.dirname(__file__))
         uic.loadUi(os.path.join(basepath,"control.ui"), self)
         
+        self.parameters = copy.deepcopy(parameters)
+        self.defaultParameters = copy.deepcopy(parameters)
+        
         self.motor1 = Motors(1, 'COM3')             #Vertical motor
         self.motor2 = Motors(2, 'COM3')             #Horizontal motor for sample motion
         self.motor3 = Motors(3, 'COM3')             #Horizontal motor for detection arm motion
+        
+        self.camera = Camera()
         
         #Right values for the origin to determine
         self.originX = 533333
@@ -75,32 +91,53 @@ class Controller(QWidget):
         #Decimal number is the same for all widgets for a specific unit
         self.decimals = self.doubleSpinBox_incrementHorizontal.decimals()
         
+        self.comboBox_unit.insertItems(0,["cm","mm","\u03BCm"])
+        self.comboBox_unit.setCurrentIndex(1)
+        self.comboBox_unit.currentTextChanged.connect(self.update_all)
         
+        #To initialize the widget that are updated by a change of unit (the motion tab)
+        self.update_all()
+        #To initialize the properties of the other widgets
+        self.initialize_other_widgets()
+        
+        #**********************************************************************
+        # Camera window
+        #**********************************************************************
+        self.lines = 2160
+        self.columns = 2560
+        self.container = np.zeros((self.lines, self.columns))
+        #self.container = np.random.rand(self.lines, self.columns)*2000
+        
+        self.imv = pg.ImageView(None, 'Camera Window')
+        self.imv.setWindowTitle('Camera Window')
+        self.scene = self.imv.scene
+        self.imv.show()
+        self.imv.setImage(np.transpose(self.container))
+        #self.imv.setImage(np.stack(([1,2,3],[3,2,1])))
+        
+        #**********************************************************************
+        # Connections for the modes
+        #**********************************************************************
         self.pushButton_startLive.clicked.connect(self.start_live_mode)
         self.pushButton_stopLive.clicked.connect(self.stop_live_mode)
         self.pushButton_startContinuous.clicked.connect(self.start_continuous_mode)
         self.pushButton_stopContinuous.clicked.connect(self.stop_continuous_mode)
         self.pushButton_startAcquisition.clicked.connect(self.start_acquisition_mode)
         self.pushButton_stopAcquisition.clicked.connect(self.stop_acquisition_mode)
+        self.pushButton_startPreviewMode.clicked.connect(self.start_preview_mode)
+        self.pushButton_stopPreviewMode.clicked.connect(self.stop_preview_mode)
+        #self.pushButton_closeCamera.clicked.connect(self.close_camera)
         
+        #**********************************************************************
+        # Connections for the motion
+        #**********************************************************************
         self.pushButton_MotorUp.clicked.connect(self.move_up)
         self.pushButton_MotorDown.clicked.connect(self.move_down)
         self.pushButton_MotorRight.clicked.connect(self.move_right)
         self.pushButton_MotorLeft.clicked.connect(self.move_left)
         self.pushButton_MotorOrigin.clicked.connect(self.move_to_origin)
-        
-        #Unit value changed to implement
-        self.comboBox_unit.insertItems(0,["cm","mm","\u03BCm"])
-        self.comboBox_unit.setCurrentIndex(1)
-        self.comboBox_unit.currentTextChanged.connect(self.update_all)
-        
-        #To initialize the widget that are updated by a change of unit
-        self.update_all()
-        #To initialize the properties of the other widgets
-        self.initialize_other_widgets()
-        
         self.pushButton_moveHome.clicked.connect(self.move_home)
-        self.pushButton_moveMaxPosition.clicked.connect(self.move_to_maximum_position)
+        #self.pushButton_moveMaxPosition.clicked.connect(self.move_to_maximum_position)
         self.pushButton_setAsOrigin.clicked.connect(self.set_origin )
         
         #Motion of the detection arm to implement when clicked (self.motor3)
@@ -121,9 +158,48 @@ class Controller(QWidget):
         self.pushButton_backward.clicked.connect(self.move_backward)
         self.pushButton_focus.clicked.connect(self.move_to_focus)
         
+        
+        #**********************************************************************
+        # Connections for the ETLs and Galvos parameters
+        #**********************************************************************
         self.pushButton_calculateOptimized.clicked.connect(self.synchronize_ramps)
         self.pushButton_setOptimized.clicked.connect(self.set_optimized_parameters)
         
+        self.doubleSpinBox_leftEtlAmplitude.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(1))
+        self.doubleSpinBox_rightEtlAmplitude.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(2))
+        self.doubleSpinBox_leftEtlOffset.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(3))
+        self.doubleSpinBox_rightEtlOffset.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(4))
+        self.doubleSpinBox_leftEtlDelay.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(5))
+        self.doubleSpinBox_rightEtlDelay.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(6))
+        self.doubleSpinBox_leftEtlRising.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(7))
+        self.doubleSpinBox_rightEtlRising.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(8))
+        self.doubleSpinBox_leftEtlFalling.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(9))
+        self.doubleSpinBox_rightEtlFalling.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(10))
+        self.doubleSpinBox_leftGalvoAmplitude.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(11))
+        self.doubleSpinBox_rightGalvoAmplitude.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(12))
+        self.doubleSpinBox_leftGalvoOffset.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(13))
+        self.doubleSpinBox_rightGalvoOffset.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(14))
+        self.doubleSpinBox_leftGalvoFrequency.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(15))
+        self.doubleSpinBox_rightGalvoFrequency.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(16))
+        self.doubleSpinBox_leftGalvoDutyCycle.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(17))
+        self.doubleSpinBox_rightGalvoDutyCycle.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(18))
+        self.doubleSpinBox_leftGalvoPhase.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(19))
+        self.doubleSpinBox_rightGalvoPhase.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(20))
+        self.doubleSpinBox_samplerate.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(21))
+        self.doubleSpinBox_sweeptime.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(22))
+        
+        self.pushButton_defaultParameters.clicked.connect(self.back_to_default_parameters)
+    
+        
+        #**********************************************************************
+        # Connections for the camera
+        #**********************************************************************
+        self.pushButton_getTemp.clicked.connect(self.get_camera_temp)
+        
+        
+        #**********************************************************************
+        # Connections for the lasers
+        #**********************************************************************
         self.pushButton_lasersOn.clicked.connect(self.lasers_on)
         self.pushButton_lasersOff.clicked.connect(self.lasers_off)
         self.pushButton_leftLaserOn.clicked.connect(self.left_laser_on)
@@ -131,6 +207,11 @@ class Controller(QWidget):
         self.pushButton_rightLaserOn.clicked.connect(self.right_laser_on)
         self.pushButton_rightLaserOff.clicked.connect(self.right_laser_off)
         
+        #self.pushButton_startPreviewMode.clicked.connect(self.start_preview_mode)
+        #self.pushButton_closeCamera.clicked.connect(self.close_camera)
+        
+        #self.graphicsView.setImage(np.stack(([1,2,3],[3,2,1])))
+        #pg.plot([1,2,3],[3,2,1])
         
     def start_live_mode(self):
         self.pushButton_startLive.setEnabled(False)
@@ -186,7 +267,7 @@ class Controller(QWidget):
         self.pushButton_stopAcquisition.setEnabled(False)
         
     def start_acquisition_mode(self):
-        '''Detextion arm (self.motor3) to be implemented 
+        '''Detection arm (self.motor3) to be implemented 
         
         Note: check if there's a NI-Daqmx function to repeat the data sent instead of closing each time the task. This would be useful
         if it is possible to break a task with self.stop_acquisition_mode
@@ -207,8 +288,9 @@ class Controller(QWidget):
             self.ramps.create_galvos_waveforms()
             self.ramps.create_etl_waveforms()                   
             self.ramps.write_waveforms_to_tasks()
-            self.ramps.run_tasks()                             
+            self.ramps.run_tasks()                            
             self.ramps.start_tasks()
+            self.ramps.run_tasks()
             self.ramps.stop_tasks()                             
             self.ramps.close_tasks()
             #Sample motion
@@ -420,42 +502,133 @@ class Controller(QWidget):
     def set_optimized_parameters(self):
         parameters["samplerate"] = self.samplerate
         parameters["sweeptime"] = self.sweeptime
-        parameters["galvo_l_frequency"] = self.frequency
-        parameters["galvo_r_frequency"] = parameters["galvo_l_frequency"]
-        parameters["etl_l_delay"] = self.delay
-        parameters["etl_r_delay"] = parameters["etl_l_delay"]
+        parameters["galvo_l_frequency"] = parameters["galvo_r_frequency"]=self.frequency
+        parameters["etl_l_delay"] = parameters["etl_r_delay"] = self.delay
+        self.doubleSpinBox_samplerate.setValue(self.samplerate)
+        self.doubleSpinBox_sweeptime.setValue(self.sweeptime)
+        self.doubleSpinBox_leftGalvoFrequency.setValue(self.frequency)
+        self.doubleSpinBox_rightGalvoFrequency.setValue(self.frequency)
+        self.doubleSpinBox_leftEtlDelay.setValue(self.delay)
+        self.doubleSpinBox_rightEtlDelay.setValue(self.delay)
         
     def initialize_other_widgets(self):
         '''Initializes the properties of the widgets that are not upadted by a change of units, so the widgets that cannot be initialize with self.update_all() '''
+        
+        #**********************************************************************
+        # Modes
+        #**********************************************************************
         self.pushButton_stopLive.setEnabled(False)
         self.pushButton_stopContinuous.setEnabled(False)
         self.pushButton_stopAcquisition.setEnabled(False)
         self.pushButton_setOptimized.setEnabled(False)
         
-        #Might change it for a spin box
-        self.doubleSpinBox_planeNumber.setDecimals(0)
-        self.doubleSpinBox_planeNumber.setMaximum(101600)
-        self.doubleSpinBox_planeNumber.setMinimum(1)
-        self.doubleSpinBox_planeNumber.setSingleStep(1)
+        self.spinBox_planeNumber.setMaximum(101600)
+        self.spinBox_planeNumber.setMinimum(1)
+        self.spinBox_planeNumber.setSingleStep(1)
         
         self.doubleSpinBox_planeStep.setSuffix(' \u03BCm')
-        self.doubleSpinBox_planeNumber.setDecimals(0)
+        self.doubleSpinBox_planeStep.setDecimals(0)
         self.doubleSpinBox_planeStep.setMaximum(101600)
         self.doubleSpinBox_planeStep.setSingleStep(1)
         
         self.comboBox_acquisitionDirection.insertItems(0,['Forward','Backward'])
         self.comboBox_acquisitionDirection.setCurrentIndex(0)
         
+        #self.pushButton_stopPreviewMode.setEnabled(False)
+        
+        #**********************************************************************
+        # ETLs and Galvos Parameters
+        #**********************************************************************
         self.doubleSpinBox_galvoFrequency.setMaximum(130)
         self.doubleSpinBox_galvoFrequency.setSuffix(' Hz')
         self.doubleSpinBox_galvoFrequency.setSingleStep(5)
         
         self.spinBox_lines.setMinimum(1)
-        self.spinBox_lines.setMaximum(9999)
+        self.spinBox_lines.setMaximum(10000)
+        self.spinBox_lines.setValue(2160)
         
         self.spinBox_columns.setMinimum(1)
-        self.spinBox_columns.setMaximum(9999)
+        self.spinBox_columns.setMaximum(10000)
+        self.spinBox_columns.setValue(2560)
         
+        self.doubleSpinBox_leftEtlAmplitude.setValue(self.parameters["etl_l_amplitude"])
+        self.doubleSpinBox_leftEtlAmplitude.setSuffix(" V")
+        self.doubleSpinBox_leftEtlAmplitude.setMaximum(5)
+        self.doubleSpinBox_rightEtlAmplitude.setValue(self.parameters["etl_r_amplitude"])
+        self.doubleSpinBox_rightEtlAmplitude.setSuffix(" V")
+        self.doubleSpinBox_rightEtlAmplitude.setMaximum(5)
+        self.doubleSpinBox_leftEtlOffset.setValue(self.parameters["etl_l_offset"])
+        self.doubleSpinBox_leftEtlOffset.setSuffix(" V")
+        self.doubleSpinBox_leftEtlOffset.setMaximum(5)
+        self.doubleSpinBox_rightEtlOffset.setValue(self.parameters["etl_r_offset"])
+        self.doubleSpinBox_rightEtlOffset.setSuffix(" V")
+        self.doubleSpinBox_rightEtlOffset.setMaximum(5)
+        self.doubleSpinBox_leftEtlDelay.setValue(self.parameters["etl_l_delay"])
+        self.doubleSpinBox_leftEtlDelay.setSuffix(" %")
+        self.doubleSpinBox_rightEtlDelay.setValue(self.parameters["etl_r_delay"])
+        self.doubleSpinBox_rightEtlDelay.setSuffix(" %")
+        self.doubleSpinBox_leftEtlRising.setValue(self.parameters["etl_l_ramp_rising"])
+        self.doubleSpinBox_leftEtlRising.setSuffix(" %")
+        self.doubleSpinBox_rightEtlRising.setValue(self.parameters["etl_r_ramp_rising"])
+        self.doubleSpinBox_rightEtlRising.setSuffix(" %")
+        self.doubleSpinBox_leftEtlFalling.setValue(self.parameters["etl_l_ramp_falling"])
+        self.doubleSpinBox_leftEtlFalling.setSuffix(" %")
+        self.doubleSpinBox_rightEtlFalling.setValue(self.parameters["etl_r_ramp_falling"])
+        self.doubleSpinBox_rightEtlFalling.setSuffix(" %")
+        
+        self.doubleSpinBox_leftGalvoAmplitude.setValue(self.parameters["galvo_l_amplitude"])
+        self.doubleSpinBox_leftGalvoAmplitude.setSuffix(" V")
+        self.doubleSpinBox_leftGalvoAmplitude.setMaximum(10)
+        self.doubleSpinBox_leftGalvoAmplitude.setMinimum(-10)
+        self.doubleSpinBox_rightGalvoAmplitude.setValue(self.parameters["galvo_r_amplitude"])
+        self.doubleSpinBox_rightGalvoAmplitude.setSuffix(" V")
+        self.doubleSpinBox_rightGalvoAmplitude.setMaximum(10)
+        self.doubleSpinBox_rightGalvoAmplitude.setMinimum(-10)
+        self.doubleSpinBox_leftGalvoOffset.setValue(self.parameters["galvo_l_offset"])
+        self.doubleSpinBox_leftGalvoOffset.setSuffix(" V")
+        self.doubleSpinBox_leftGalvoOffset.setMaximum(10)
+        self.doubleSpinBox_leftGalvoOffset.setMinimum(-10)
+        self.doubleSpinBox_rightGalvoOffset.setValue(self.parameters["galvo_r_offset"])
+        self.doubleSpinBox_rightGalvoOffset.setSuffix(" V")
+        self.doubleSpinBox_rightGalvoOffset.setMaximum(10)
+        self.doubleSpinBox_rightGalvoOffset.setMinimum(-10)
+        self.doubleSpinBox_leftGalvoFrequency.setValue(self.parameters["galvo_l_frequency"])
+        self.doubleSpinBox_leftGalvoFrequency.setSuffix(" Hz")
+        self.doubleSpinBox_leftGalvoFrequency.setMaximum(130)
+        self.doubleSpinBox_rightGalvoFrequency.setValue(self.parameters["galvo_r_frequency"])
+        self.doubleSpinBox_rightGalvoFrequency.setSuffix(" Hz")
+        self.doubleSpinBox_rightGalvoFrequency.setMaximum(130)
+        self.doubleSpinBox_leftGalvoDutyCycle.setValue(self.parameters["galvo_l_duty_cycle"])
+        self.doubleSpinBox_leftGalvoDutyCycle.setSuffix(" %")
+        self.doubleSpinBox_rightGalvoDutyCycle.setValue(self.parameters["galvo_r_duty_cycle"])
+        self.doubleSpinBox_rightGalvoDutyCycle.setSuffix(" %")
+        self.doubleSpinBox_leftGalvoPhase.setValue(self.parameters["galvo_l_phase"])
+        self.doubleSpinBox_leftGalvoPhase.setSuffix(" rad")
+        self.doubleSpinBox_leftGalvoPhase.setMaximum(np.pi*2)
+        self.doubleSpinBox_leftGalvoPhase.setMinimum(-np.pi*2)
+        self.doubleSpinBox_rightGalvoPhase.setValue(self.parameters["galvo_r_phase"])
+        self.doubleSpinBox_rightGalvoPhase.setSuffix(" rad")
+        self.doubleSpinBox_rightGalvoPhase.setMaximum(np.pi*2)
+        self.doubleSpinBox_rightGalvoPhase.setMinimum(-np.pi*2)
+        
+        self.doubleSpinBox_samplerate.setMaximum(1000000)
+        self.doubleSpinBox_samplerate.setValue(self.parameters["samplerate"])
+        self.doubleSpinBox_samplerate.setSuffix(" samples/s")
+        self.doubleSpinBox_sweeptime.setValue(self.parameters["sweeptime"])
+        self.doubleSpinBox_sweeptime.setSuffix(" s")
+        
+        
+        #**********************************************************************
+        # Camera parameters
+        #**********************************************************************
+        #self.label_cameraName.setText(self.camera.name)
+        self.get_camera_temp()
+        self.comboBox_timeUnit.insertItems(0, ["ns","\u03BCs","ms"])
+        self.comboBox_timeUnit.setCurrentIndex(2)
+        
+        #**********************************************************************
+        # Lasers parameters
+        #**********************************************************************
         self.pushButton_lasersOff.setEnabled(False)
         self.pushButton_leftLaserOff.setEnabled(False)
         self.pushButton_rightLaserOff.setEnabled(False)
@@ -520,5 +693,150 @@ class Controller(QWidget):
         if self.pushButton_leftLaserOn.isEnabled() == True:
             self.pushButton_lasersOn.setEnabled(True)
         
+     
+    #Camera functions 
+    
+    def start_preview_mode(self):
+        #self.pushButton_startPreviewMode.setEnabled(False)
+        #self.pushButton_stopPreviewMode.setEnabled(True)
+        #self.pushButton_stopPreviewMode.setCheckable(True)
+        #self.pushButton_stopPreviewMode.checked(False)
+        #self.pushButton_closeCamera.setEnabled(False)
         
+        self.camera.arm_camera()
+         
+        self.camera.get_sizes() 
+        self.camera.allocate_buffer()    
+        self.camera.set_recording_state(1)
+        self.camera.insert_buffers_in_queue()
+        
+      
+        frame = self.camera.retrieve_single_image()
+        frame = frame/frame.max()
+        self.imv.setImage(np.transpose(frame))
+        
+        #self.imv.setImage(np.transpose(q.get()))
+        
+        #self.preview_thread = previewModeThread(self)
+        #self.preview_thread.start()
+        
+           
+        self.camera.cancel_images()
+        self.camera.set_recording_state(0)
+        self.camera.free_buffer()
+            
+        #self.pushButton_startPreviewMode.setEnabled(True)
+        #self.pushButton_stopPreviewMode.setEnabled(False)
+        #self.pushButton_closeCamera.setEnabled(True)
+     
+    def stop_preview_mode(self):
+        pass
+        #self.imv.setImage(self.frame)
+        #self.camera.cancel_images()
+        #self.camera.set_recording_state(0)
+        #self.camera.free_buffer()
+    
+    
+    def close_camera(self):
+        self.camera.close_camera()
+     
+     
+    def etl_galvos_parameters_changed(self, parameterNumber):
+        if parameterNumber==1:
+            self.parameters["etl_l_amplitude"]=self.doubleSpinBox_leftEtlAmplitude.value()
+        elif parameterNumber==2: 
+            self.parameters["etl_r_amplitude"]=self.doubleSpinBox_rightEtlAmplitude.value()
+        elif parameterNumber==3:
+            self.parameters["etl_l_offset"]=self.doubleSpinBox_leftEtlOffset.value()
+        elif parameterNumber==4:
+            self.parameters["etl_r_offset"]=self.doubleSpinBox_rightEtlOffset.value()
+        elif parameterNumber==5:
+            self.parameters["etl_l_delay"]=self.doubleSpinBox_leftEtlDelay.value()
+        elif parameterNumber==6:
+            self.parameters["etl_r_delay"]=self.doubleSpinBox_rightEtlDelay.value()
+        elif parameterNumber==7:
+            self.parameters["etl_l_ramp_rising"]=self.doubleSpinBox_leftEtlRising.value()
+        elif parameterNumber==8:
+            self.parameters["etl_r_ramp_rising"]=self.doubleSpinBox_rightEtlRising.value()
+        elif parameterNumber==9:
+            self.parameters["etl_l_ramp_falling"]=self.doubleSpinBox_leftEtlFalling.value()
+        elif parameterNumber==10:
+            self.parameters["etl_r_ramp_falling"]=self.doubleSpinBox_rightEtlFalling.value()
+        elif parameterNumber==11:
+            self.parameters["galvo_l_amplitude"]=self.doubleSpinBox_leftGalvoAmplitude.value()
+        elif parameterNumber==12:
+            self.parameters["galvo_r_amplitude"]=self.doubleSpinBox_rightGalvoAmplitude.value()
+        elif parameterNumber==13:
+            self.parameters["galvo_l_offset"]=self.doubleSpinBox_leftGalvoOffset.value()
+        elif parameterNumber==14:
+            self.parameters["galvo_r_offset"]=self.doubleSpinBox_rightGalvoOffset.value()
+        elif parameterNumber==15:
+            self.parameters["galvo_l_frequency"]=self.doubleSpinBox_leftGalvoFrequency.value()
+        elif parameterNumber==16:
+            self.parameters["galvo_r_frequency"]=self.doubleSpinBox_rightGalvoFrequency.value()
+        elif parameterNumber==17:
+            self.parameters["galvo_l_duty_cycle"]=self.doubleSpinBox_leftGalvoDutyCycle.value()
+        elif parameterNumber==18:
+            self.parameters["galvo_r_duty_cycle"]=self.doubleSpinBox_rightGalvoDutyCycle.value()
+        elif parameterNumber==19:
+            self.parameters["galvo_l_phase"]=self.doubleSpinBox_leftGalvoPhase.value()
+        elif parameterNumber==20:
+            self.parameters["galvo_r_phase"]=self.doubleSpinBox_rightGalvoPhase.value()
+        elif parameterNumber==21:
+            self.parameters["samplerate"]=self.doubleSpinBox_samplerate.value()
+        elif parameterNumber==22:
+            self.parameters["sweeptime"]=self.doubleSpinBox_sweeptime.value()                    
+     
+    def back_to_default_parameters(self):
+        self.parameters = copy.deepcopy(self.defaultParameters)
+        self.doubleSpinBox_leftEtlAmplitude.setValue(self.parameters["etl_l_amplitude"])
+        self.doubleSpinBox_rightEtlAmplitude.setValue(self.parameters["etl_r_amplitude"])
+        self.doubleSpinBox_leftEtlOffset.setValue(self.parameters["etl_l_offset"])
+        self.doubleSpinBox_rightEtlOffset.setValue(self.parameters["etl_r_offset"])
+        self.doubleSpinBox_leftEtlDelay.setValue(self.parameters["etl_l_delay"])
+        self.doubleSpinBox_rightEtlDelay.setValue(self.parameters["etl_r_delay"])
+        self.doubleSpinBox_leftEtlRising.setValue(self.parameters["etl_l_ramp_rising"])
+        self.doubleSpinBox_rightEtlRising.setValue(self.parameters["etl_r_ramp_rising"])
+        self.doubleSpinBox_leftEtlFalling.setValue(self.parameters["etl_l_ramp_falling"])
+        self.doubleSpinBox_rightEtlFalling.setValue(self.parameters["etl_r_ramp_falling"])
+        self.doubleSpinBox_leftGalvoAmplitude.setValue(self.parameters["galvo_l_amplitude"])
+        self.doubleSpinBox_rightGalvoAmplitude.setValue(self.parameters["galvo_r_amplitude"])
+        self.doubleSpinBox_leftGalvoOffset.setValue(self.parameters["galvo_l_offset"])
+        self.doubleSpinBox_rightGalvoOffset.setValue(self.parameters["galvo_r_offset"])
+        self.doubleSpinBox_leftGalvoFrequency.setValue(self.parameters["galvo_l_frequency"])
+        self.doubleSpinBox_rightGalvoFrequency.setValue(self.parameters["galvo_r_frequency"])
+        self.doubleSpinBox_leftGalvoDutyCycle.setValue(self.parameters["galvo_l_duty_cycle"])
+        self.doubleSpinBox_rightGalvoDutyCycle.setValue(self.parameters["galvo_r_duty_cycle"])
+        self.doubleSpinBox_leftGalvoPhase.setValue(self.parameters["galvo_l_phase"])
+        self.doubleSpinBox_rightGalvoPhase.setValue(self.parameters["galvo_r_phase"])
+        self.doubleSpinBox_samplerate.setValue(self.parameters["samplerate"])
+        self.doubleSpinBox_sweeptime.setValue(self.parameters["sweeptime"])
+     
+    def get_camera_temp(self):
+        self.camera.get_temperature()
+        self.label_cameraTemp.setText("{} \u2103".format(self.camera.camTemp.value))
+        self.label_ccdTemp.setText("{} \u2103".format(self.camera.ccdTemp.value/10))
+        self.label_powerSupplyTemp.setText("{} \u2103".format(self.camera.powTemp.value))
+        
+    def get_camera_exposure(self):
+        self.camera.get_exposure_time()
+        
+
+class previewModeThread(QThread):
+    
+    def __init__(self, controller):
+        QThread.__init__(self)
+        self.controller = controller
+        
+    def __del__(self):
+        self.wait()
+        
+    def run(self):
+        #Instructions
+        #for i in range(10):
+        frame = self.controller.camera.retrieve_single_image() 
+        print(frame.max())
+        frame = frame/frame.max()
+        self.controller.imv.setImage(np.transpose(frame))   
+            
         
