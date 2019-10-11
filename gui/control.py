@@ -27,7 +27,7 @@ from src.hardware import AOETLGalvos
 from src.hardware import Motors
 from src.pcoEdge import Camera
 #from zaber.serial import AsciiSerial, AsciiDevice, AsciiCommand
-
+import threading
 import time
 import queue
 
@@ -82,6 +82,10 @@ class Controller(QWidget):
         self.originZ = 0
         self.focus = 533333
         
+        #Lasers default voltage
+        self.leftLaserVoltage = 0.905
+        self.rightLaserVoltage = 0.935
+        
         #For optimized parameters calculations
         self.frequency=0
         self.samplerate=0
@@ -100,20 +104,6 @@ class Controller(QWidget):
         #To initialize the properties of the other widgets
         self.initialize_other_widgets()
         
-        #**********************************************************************
-        # Camera window
-        #**********************************************************************
-        self.lines = 2160
-        self.columns = 2560
-        self.container = np.zeros((self.lines, self.columns))
-        #self.container = np.random.rand(self.lines, self.columns)*2000
-        
-        self.imv = pg.ImageView(None, 'Camera Window')
-        self.imv.setWindowTitle('Camera Window')
-        self.scene = self.imv.scene
-        self.imv.show()
-        self.imv.setImage(np.transpose(self.container))
-        #self.imv.setImage(np.stack(([1,2,3],[3,2,1])))
         
         #**********************************************************************
         # Connections for the modes
@@ -207,11 +197,9 @@ class Controller(QWidget):
         self.pushButton_rightLaserOn.clicked.connect(self.right_laser_on)
         self.pushButton_rightLaserOff.clicked.connect(self.right_laser_off)
         
-        #self.pushButton_startPreviewMode.clicked.connect(self.start_preview_mode)
-        #self.pushButton_closeCamera.clicked.connect(self.close_camera)
+        self.horizontalSlider_leftLaser.sliderReleased.connect(self.left_laser_update)
+        self.horizontalSlider_rightLaser.sliderReleased.connect(self.right_laser_update)
         
-        #self.graphicsView.setImage(np.stack(([1,2,3],[3,2,1])))
-        #pg.plot([1,2,3],[3,2,1])
         
     def start_live_mode(self):
         self.pushButton_startLive.setEnabled(False)
@@ -534,7 +522,6 @@ class Controller(QWidget):
         self.comboBox_acquisitionDirection.insertItems(0,['Forward','Backward'])
         self.comboBox_acquisitionDirection.setCurrentIndex(0)
         
-        #self.pushButton_stopPreviewMode.setEnabled(False)
         
         #**********************************************************************
         # ETLs and Galvos Parameters
@@ -633,6 +620,13 @@ class Controller(QWidget):
         self.pushButton_leftLaserOff.setEnabled(False)
         self.pushButton_rightLaserOff.setEnabled(False)
         
+        self.horizontalSlider_leftLaser.setMaximum(2.5)
+        self.horizontalSlider_leftLaser.setMinimum(0)
+        self.horizontalSlider_leftLaser.setValue(self.leftLaserVoltage)
+        self.horizontalSlider_rightLaser.setMaximum(2.5)
+        self.horizontalSlider_rightLaser.setMinimum(0)
+        self.horizontalSlider_rightLaser.setValue(self.rightLaserVoltage)
+        
     def lasers_on(self):
         self.pushButton_lasersOn.setEnabled(False)
         self.pushButton_lasersOff.setEnabled(True)
@@ -661,7 +655,7 @@ class Controller(QWidget):
         self.pushButton_leftLaserOff.setEnabled(True)
         self.left_laser = nidaqmx.Task()
         self.left_laser.ao_channels.add_ao_voltage_chan('/Dev2/ao1')
-        self.left_laser.write(0.905)
+        self.left_laser.write(self.leftLaserVoltage)
         print('Left laser on')
         
     def left_laser_off(self):
@@ -680,7 +674,7 @@ class Controller(QWidget):
         self.pushButton_rightLaserOff.setEnabled(True)
         self.right_laser = nidaqmx.Task()
         self.right_laser.ao_channels.add_ao_voltage_chan('/Dev2/ao0')
-        self.right_laser.write(0.935)
+        self.right_laser.write(self.rightLaserVoltage)
         print('Left laser on')
         
     def right_laser_off(self):
@@ -692,16 +686,21 @@ class Controller(QWidget):
         self.pushButton_rightLaserOff.setEnabled(False)
         if self.pushButton_leftLaserOn.isEnabled() == True:
             self.pushButton_lasersOn.setEnabled(True)
+            
+    def left_laser_update(self):
+        self.leftLaserVoltage = self.horizontalSlider_leftLaser.value()
+    
+    def right_laser_update(self):
+        self.rightLaserVoltage = self.horizontalSlider_rightLaser.value()
         
      
     #Camera functions 
     
     def start_preview_mode(self):
-        #self.pushButton_startPreviewMode.setEnabled(False)
-        #self.pushButton_stopPreviewMode.setEnabled(True)
-        #self.pushButton_stopPreviewMode.setCheckable(True)
-        #self.pushButton_stopPreviewMode.checked(False)
-        #self.pushButton_closeCamera.setEnabled(False)
+        self.stopPreview = False
+        
+        self.pushButton_startPreviewMode.setEnabled(False)
+        self.pushButton_stopPreviewMode.setEnabled(True)
         
         self.camera.arm_camera()
          
@@ -710,31 +709,11 @@ class Controller(QWidget):
         self.camera.set_recording_state(1)
         self.camera.insert_buffers_in_queue()
         
-      
-        frame = self.camera.retrieve_single_image()
-        frame = frame/frame.max()
-        self.imv.setImage(np.transpose(frame))
-        
-        #self.imv.setImage(np.transpose(q.get()))
-        
-        #self.preview_thread = previewModeThread(self)
-        #self.preview_thread.start()
-        
-           
-        self.camera.cancel_images()
-        self.camera.set_recording_state(0)
-        self.camera.free_buffer()
-            
-        #self.pushButton_startPreviewMode.setEnabled(True)
-        #self.pushButton_stopPreviewMode.setEnabled(False)
-        #self.pushButton_closeCamera.setEnabled(True)
+        thread = threading.Thread(target = self.previewThread)
+        thread.start()
      
     def stop_preview_mode(self):
-        pass
-        #self.imv.setImage(self.frame)
-        #self.camera.cancel_images()
-        #self.camera.set_recording_state(0)
-        #self.camera.free_buffer()
+        self.stopPreview = True
     
     
     def close_camera(self):
@@ -821,22 +800,53 @@ class Controller(QWidget):
     def get_camera_exposure(self):
         self.camera.get_exposure_time()
         
+    def set_camera_window(self, cameraWindow):
+        self.cameraWindow = cameraWindow
+        
+    def previewThread(self):
+        continuer = True
+        while continuer:
+            if self.stopPreview == False:
+                frame = self.camera.retrieve_single_image()
+                frame = frame/frame.max()
+        
+                try:
+                    self.cameraWindow.put(frame)
+                except self.cameraWindow.Full:
+                    print("Queue is full")
+            elif self.stopPreview == True:
+                continuer = False
+        
+            
+        self.camera.cancel_images()
+        self.camera.set_recording_state(0)
+        self.camera.free_buffer()
+        
+        self.pushButton_startPreviewMode.setEnabled(True)
+        self.pushButton_stopPreviewMode.setEnabled(False)
 
-class previewModeThread(QThread):
+
+class CameraWindow(queue.Queue):
     
-    def __init__(self, controller):
-        QThread.__init__(self)
-        self.controller = controller
+    def __init__(self):
         
-    def __del__(self):
-        self.wait()
+        queue.Queue.__init__(self,2)   #Queue of size 2
         
-    def run(self):
-        #Instructions
-        #for i in range(10):
-        frame = self.controller.camera.retrieve_single_image() 
-        print(frame.max())
-        frame = frame/frame.max()
-        self.controller.imv.setImage(np.transpose(frame))   
+        self.lines = 2160
+        self.columns = 2560
+        self.container = np.zeros((self.lines, self.columns)) 
+        self.imv = pg.ImageView(None, 'Camera Window')
+        self.imv.setWindowTitle('Camera Window')
+        self.scene = self.imv.scene
+        self.imv.show()
+        self.imv.setImage(np.transpose(self.container))
+        
+    def update(self):
+        try:
+            frame = self.get(False)
+            self.imv.setImage(np.transpose(frame))
+        except queue.Empty:
+            pass
+           
             
         

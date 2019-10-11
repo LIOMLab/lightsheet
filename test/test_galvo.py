@@ -7,7 +7,8 @@ import sys
 sys.path.append("..")
 
 from PyQt5.QtWidgets import QApplication
-from gui.control import Controller
+from gui.control import Controller, CameraWindow
+import pyqtgraph as pg
 
 #This block is to show the error messages that do not print normally
 sys._excepthook = sys.excepthook
@@ -19,5 +20,14 @@ sys.excepthook = exception_hook
 
 app = QApplication(sys.argv)
 controller = Controller()
+cameraWindow = CameraWindow()
+timer = pg.QtCore.QTimer()
+timer.timeout.connect(cameraWindow.update)
+timer.start(100)
+
+controller.set_camera_window(cameraWindow)
 controller.show()
 app.exec_()  
+
+
+timer.stop()

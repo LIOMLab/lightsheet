@@ -26,7 +26,7 @@
     <cursorShape>ArrowCursor</cursorShape>
    </property>
    <property name="currentIndex">
-    <number>1</number>
+    <number>0</number>
    </property>
    <widget class="QWidget" name="tab">
     <attribute name="title">
@@ -1950,7 +1950,7 @@
        <string>Power:</string>
       </property>
      </widget>
-     <widget class="QSlider" name="horizontalSlider">
+     <widget class="QSlider" name="horizontalSlider_leftLaser">
       <property name="geometry">
        <rect>
         <x>70</x>
@@ -2015,7 +2015,7 @@
        <string>0</string>
       </property>
      </widget>
-     <widget class="QSlider" name="horizontalSlider_2">
+     <widget class="QSlider" name="horizontalSlider_rightLaser">
       <property name="geometry">
        <rect>
         <x>70</x>
