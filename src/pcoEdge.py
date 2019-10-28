@@ -240,24 +240,19 @@ class Camera:
     def get_buffer_status(self):
         self.dwStatusDll = ctypes.c_uint32()
         self.dwStatusDrv = ctypes.c_uint32()
-        get_buffer_status(self.handle, self.buffersInQueue[0], self.dwStatusDll, self.dwStatusDrv)    
+        get_buffer_status(self.handle, self.buffersInQueue[0], self.dwStatusDll, self.dwStatusDrv)
+        
+    def set_trigger_mode(self, triggerMode):
+        
+        if triggerMode == 'AutoSequence':
+            set_trigger_mode(self.handle, 0)
+        elif triggerMode == 'ExternalExposureStart':
+            set_trigger_mode(self.handle, 2)
+        elif triggerMode == 'ExternalExposureControl':
+            set_trigger_mode(self.handle, 3)
+            
+                    
     
-#camera = Camera() 
 
-#camera.arm_camera()
- 
-#camera.get_sizes() 
-#camera.allocate_buffer()    
-#camera.set_recording_state(1)
-#camera.insert_buffers_in_queue()
-
-
-#print(camera.pointers[0].contents.value)
-#print(camera.pointers[1].contents.value)
-
-#camera.cancel_images()
-#camera.set_recording_state(0)
-#camera.free_buffer()
-#camera.close_camera()
 
 

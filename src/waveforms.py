@@ -159,3 +159,42 @@ def square(
     waveform = amplitude * waveform + offset
 
     return waveform
+
+
+def DO_signal(
+    samplerate = 100000,    # in samples/second
+    sweeptime = 0.4,        # in seconds
+    delay = 7.5,            # in percent
+    rise = 85,              # in percent
+    fall = 2.5,             # in percent
+    low_level_time_added = 0.02,   # in seconds
+    high_level_voltage = 3        # in volts
+    ):
+    ''' Create the digital trigger signal sent to the camera. The camera is set in a mode where the exposition time corresponds
+        to the high time of the signal. 
+        
+        High time: lasts until the rising ramp of the galvo/ETL is complete
+        Low time: must include the fall time of the galvo/ETL ramp, because we do not want the camera to acquire during the falling ramp.
+        
+        Note: the rising ramp here lasts longer than the falling ramp. For the ETL/glavo of the other arm, the falling edge lasts longer 
+              because they are reversed for the focal of the ETLs are synchronized. So care must be taken when assigning the rise and fall
+              
+        parameters: 
+            low_level_time_added: additional inactive time (seconds) we want to add between each tunable_lens_ramp waveform (can be used to 
+                                complete the processing, saving or display of the image acquired)
+            high_level_voltage: voltage value (volts) that will be recognized as a high level (bit=1) for the camera. The camera used is
+                                3.3V LVTTL (5V tolerant), so 3 V should be enough to generate the high level.
+                                
+            Note: the low_level_time_added is added in half before and after the high signal, so we do not start (first data) with a high signal
+              '''
+    samples = int(np.floor(np.multiply(samplerate, sweeptime)))
+    
+    high_level_samples = int((delay + rise)/100 * samples)
+    
+    low_level_samples_added = int(samplerate*low_level_time_added)
+    
+    array = np.zeros((samples+low_level_samples_added))
+    
+    array[int(low_level_samples_added/2):int(low_level_samples_added/2)+high_level_samples] = high_level_voltage
+    
+    return np.array(array)

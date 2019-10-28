@@ -71,6 +71,8 @@ class Controller(QWidget):
         self.parameters = copy.deepcopy(parameters)
         self.defaultParameters = copy.deepcopy(parameters)
         
+        self.consumers = []
+        
         self.motor1 = Motors(1, 'COM3')             #Vertical motor
         self.motor2 = Motors(2, 'COM3')             #Horizontal motor for sample motion
         self.motor3 = Motors(3, 'COM3')             #Horizontal motor for detection arm motion
@@ -702,6 +704,8 @@ class Controller(QWidget):
         self.pushButton_startPreviewMode.setEnabled(False)
         self.pushButton_stopPreviewMode.setEnabled(True)
         
+        self.camera.set_trigger_mode('AutoSequence')
+        
         self.camera.arm_camera()
          
         self.camera.get_sizes() 
@@ -803,19 +807,29 @@ class Controller(QWidget):
     def set_camera_window(self, cameraWindow):
         self.cameraWindow = cameraWindow
         
+    def setDataConsumer(self, consumer, wait, consumerType, updateFlag):
+        """ Use this function when we will need flags or if we have multiple consumers"""
+        self.consumers.append(consumer)
+        self.consumers.append(wait)
+        self.consumers.append(consumerType)
+        self.consumers.append(updateFlag)
+        
+        
     def previewThread(self):
         continuer = True
-        while continuer:
-            if self.stopPreview == False:
-                frame = self.camera.retrieve_single_image()
-                frame = frame/frame.max()
+        for i in range(0, len(self.consumers), 4):
+            if self.consumers[i+2] == "CameraWindow":
+                while continuer:
+                    if self.stopPreview == False:
+                        frame = self.camera.retrieve_single_image()*1.0
+                        #frame = frame/frame.max()
         
-                try:
-                    self.cameraWindow.put(frame)
-                except self.cameraWindow.Full:
-                    print("Queue is full")
-            elif self.stopPreview == True:
-                continuer = False
+                        try:
+                            self.consumers[i].put(frame)
+                        except self.consumers[i].Full:
+                            print("Queue is full")
+                    elif self.stopPreview == True:
+                        continuer = False
         
             
         self.camera.cancel_images()
