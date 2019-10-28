@@ -15,13 +15,14 @@ import csv
 '''National Instruments Imports'''
 import nidaqmx
 from nidaqmx.constants import AcquisitionType, TaskMode
-from nidaqmx.constants import LineGrouping, DigitalWidthUnits
+from nidaqmx.constants import LineGrouping, DigitalWidthUnits, Edge
 from nidaqmx.types import CtrTime
 
 from PyQt5 import QtCore
 
 from src.waveforms import sawtooth
 from src.waveforms import tunable_lens_ramp
+from src.waveforms import DO_signal
 
 
 class AOETLGalvos(QtCore.QObject):
@@ -79,6 +80,17 @@ class AOETLGalvos(QtCore.QObject):
                                          offset = self.parameters["galvo_r_offset"],
                                          dutycycle = self.parameters["galvo_r_duty_cycle"],
                                          phase = self.parameters["galvo_r_phase"])
+        
+    
+    def create_DO_camera_waveform(self):
+        self.DO_camera_waveform = DO_signal(samplerate = self.parameters["samplerate"], 
+                                            sweeptime = self.parameters["sweeptime"], 
+                                            delay = self.parameters["etl_l_delay"], 
+                                            rise = self.parameters["etl_l_ramp_rising"], 
+                                            fall = self.parameters["etl_l_ramp_falling"], 
+                                            low_level_time_added = 0.02, 
+                                            high_level_voltage= 3)
+    
 
     def create_tasks(self, acquisition):
         '''Creates a total of four tasks for the mesoSPIM:
@@ -102,8 +114,11 @@ class AOETLGalvos(QtCore.QObject):
         self.calculate_samples()
 
         #self.master_trigger_task = nidaqmx.Task()
-        #self.camera_trigger_task = nidaqmx.Task()
+        self.camera_trigger_task = nidaqmx.Task()
         self.galvo_etl_task = nidaqmx.Task(new_task_name='galvo_etl_ramps')
+        
+        self.camera_trigger_task.do_channel.add_do_chan('/Dev2/port0/line1', line_grouping = LineGrouping.CHAN_PER_LINE)
+        self.camera_trigger_task.timing.cfg_samp_clk_timing(rate=self.parameters["samplerate"], sample_mode=mode, samps_per_chan=self.samples)
 
 
 #        '''Setting up the counter task for the camera trigger'''
@@ -118,7 +133,10 @@ class AOETLGalvos(QtCore.QObject):
         self.galvo_etl_task.timing.cfg_samp_clk_timing(rate=self.parameters["samplerate"],
                                                    sample_mode=mode,
                                                    samps_per_chan=self.samples)
-        #self.galvo_etl_task.triggers.start_trigger.cfg_dig_edge_start_trig(ah['galvo_etl_task_trigger_source'])
+        
+        '''Configures the task to start acquiring/generating samples on a rising/falling edge of a digital signal. 
+            args: terminal of the trigger source, which edge of the digital signal the task start (optionnal) '''
+        self.galvo_etl_task.triggers.start_trigger.cfg_dig_edge_start_trig('/Dev2/port0/line1', trigger_edge=Edge.RISING)
 
         '''Housekeeping: Setting up the AO task for the ETL and lasers and setting the trigger input'''
         #self.laser_task.ao_channels.add_ao_voltage_chan(ah['laser_task_line'])
@@ -142,7 +160,7 @@ class AOETLGalvos(QtCore.QObject):
         If the tasks are configured to be triggered, they won't output any
         signals until run_tasks() is called.
         '''
-        #self.camera_trigger_task.start()
+        self.camera_trigger_task.start()
         self.galvo_etl_task.start()
         #self.laser_task.start()
     
@@ -157,11 +175,13 @@ class AOETLGalvos(QtCore.QObject):
         that they are waiting for the trigger signal.
         '''
         #self.master_trigger_task.write([False, True, True, True, False], auto_start=True)
+        
+        self.camera_trigger_task.write(self.DO_camera_waveform)
 
         '''Wait until everything is done - this is effectively a sleep function.'''
-        print('waiting until done')
+        #print('waiting until done')
         self.galvo_etl_task.wait_until_done()
-        print('done')
+        #print('done')
         #self.laser_task.wait_until_done()
         #self.camera_trigger_task.wait_until_done()
 
@@ -169,7 +189,7 @@ class AOETLGalvos(QtCore.QObject):
         '''Stops the tasks for triggering, analog and counter outputs'''
         self.galvo_etl_task.stop()
         #self.laser_task.stop()
-        #self.camera_trigger_task.stop()
+        self.camera_trigger_task.stop()
         #self.master_trigger_task.stop()
 
     def close_tasks(self):
@@ -179,7 +199,7 @@ class AOETLGalvos(QtCore.QObject):
         '''
         self.galvo_etl_task.close()
         #self.laser_task.close()
-        #self.camera_trigger_task.close()
+        self.camera_trigger_task.close()
         #self.master_trigger_task.close()
         
         

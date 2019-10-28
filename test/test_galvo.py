@@ -25,7 +25,8 @@ timer = pg.QtCore.QTimer()
 timer.timeout.connect(cameraWindow.update)
 timer.start(100)
 
-controller.set_camera_window(cameraWindow)
+#controller.set_camera_window(cameraWindow)
+controller.setDataConsumer(cameraWindow, False, "CameraWindow", True)
 controller.show()
 app.exec_()  
 
