@@ -167,8 +167,6 @@ def DO_signal(
     delay = 7.5,            # in percent
     rise = 85,              # in percent
     fall = 2.5,             # in percent
-    low_level_time_added = 0.02,   # in seconds
-    high_level_voltage = 3        # in volts
     ):
     ''' Create the digital trigger signal sent to the camera. The camera is set in a mode where the exposition time corresponds
         to the high time of the signal. 
@@ -188,13 +186,25 @@ def DO_signal(
             Note: the low_level_time_added is added in half before and after the high signal, so we do not start (first data) with a high signal
               '''
     samples = int(np.floor(np.multiply(samplerate, sweeptime)))
+    delaysamples = int(samples*delay/100)
+    highlevelsamples = int(samples*rise/100)
     
-    high_level_samples = int((delay + rise)/100 * samples)
+    array = np.full((samples), False)
+    array[delaysamples:delaysamples+highlevelsamples]=True
     
-    low_level_samples_added = int(samplerate*low_level_time_added)
-    
-    array = np.zeros((samples+low_level_samples_added))
-    
-    array[int(low_level_samples_added/2):int(low_level_samples_added/2)+high_level_samples] = high_level_voltage
     
     return np.array(array)
+
+
+def laser_signal(
+            samplerate = 100000,    # in samples/second
+            sweeptime = 0.4,        # in seconds
+            voltage = 0.9           # in volts
+            ):
+    
+    samples = int(np.floor(np.multiply(samplerate, sweeptime)))
+    array = np.full((samples), voltage)
+    
+    return np.array(array)
+    
+    

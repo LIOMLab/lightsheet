@@ -23,6 +23,7 @@ from PyQt5 import QtCore
 from src.waveforms import sawtooth
 from src.waveforms import tunable_lens_ramp
 from src.waveforms import DO_signal
+from src.waveforms import laser_signal
 
 
 class AOETLGalvos(QtCore.QObject):
@@ -83,14 +84,22 @@ class AOETLGalvos(QtCore.QObject):
         
     
     def create_DO_camera_waveform(self):
-        self.DO_camera_waveform = DO_signal(samplerate = self.parameters["samplerate"], 
+        self.camera_waveform = DO_signal(samplerate = self.parameters["samplerate"], 
                                             sweeptime = self.parameters["sweeptime"], 
                                             delay = self.parameters["etl_l_delay"], 
                                             rise = self.parameters["etl_l_ramp_rising"], 
-                                            fall = self.parameters["etl_l_ramp_falling"], 
-                                            low_level_time_added = 0.02, 
-                                            high_level_voltage= 3)
-    
+                                            fall = self.parameters["etl_l_ramp_falling"])
+        
+        
+    def create_lasers_waveforms(self):
+        self.laser_l_waveform = laser_signal(samplerate = self.parameters["samplerate"], 
+                                             sweeptime = self.parameters["sweeptime"], 
+                                             voltage = self.parameters["laser_l_voltage"])
+        
+        self.laser_r_waveform = laser_signal(samplerate = self.parameters["samplerate"], 
+                                             sweeptime = self.parameters["sweeptime"], 
+                                             voltage = self.parameters["laser_r_voltage"])
+        
 
     def create_tasks(self, acquisition):
         '''Creates a total of four tasks for the mesoSPIM:
@@ -114,29 +123,27 @@ class AOETLGalvos(QtCore.QObject):
         self.calculate_samples()
 
         #self.master_trigger_task = nidaqmx.Task()
-        self.camera_trigger_task = nidaqmx.Task()
         self.galvo_etl_task = nidaqmx.Task(new_task_name='galvo_etl_ramps')
-        
-        self.camera_trigger_task.do_channel.add_do_chan('/Dev2/port0/line1', line_grouping = LineGrouping.CHAN_PER_LINE)
-        self.camera_trigger_task.timing.cfg_samp_clk_timing(rate=self.parameters["samplerate"], sample_mode=mode, samps_per_chan=self.samples)
+        self.camera_task = nidaqmx.Task(new_task_name='camera_do_signal')
+        self.laser_task = nidaqmx.Task(new_task_name='laser_ramps')
 
 
-#        '''Setting up the counter task for the camera trigger'''
-#        self.camera_trigger_task.co_channels.add_co_pulse_chan_time(ah['camera_trigger_out_line'],
-#                                                                    high_time=self.camera_high_time,
-#                                                                    initial_delay=self.camera_delay)
-
-#        self.camera_trigger_task.triggers.start_trigger.cfg_dig_edge_start_trig(ah['camera_trigger_source'])
-
-        '''Housekeeping: Setting up the AO task for the Galvo and setting the trigger input'''
+        '''Housekeeping: Setting up the AO task for the Galvo and ETLs. It is the master task'''
         self.galvo_etl_task.ao_channels.add_ao_voltage_chan('/Dev1/ao0:3')
         self.galvo_etl_task.timing.cfg_samp_clk_timing(rate=self.parameters["samplerate"],
                                                    sample_mode=mode,
                                                    samps_per_chan=self.samples)
         
+        self.camera_task.do_channels.add_do_chan('/Dev1/port0/line1', line_grouping = LineGrouping.CHAN_PER_LINE)
+        self.camera_task.timing.cfg_samp_clk_timing(rate=self.parameters["samplerate"], sample_mode=mode, samps_per_chan=self.samples)
+        
+        self.laser_task.ao_channels.add_ao_voltage_chan('/Dev2/ao0:1')
+        self.laser_task.timing.cfg_samp_clk_timing(rate=self.parameters["samplerate"], sample_mode=mode, samps_per_chan=self.samples)
+        
         '''Configures the task to start acquiring/generating samples on a rising/falling edge of a digital signal. 
             args: terminal of the trigger source, which edge of the digital signal the task start (optionnal) '''
-        self.galvo_etl_task.triggers.start_trigger.cfg_dig_edge_start_trig('/Dev2/port0/line1', trigger_edge=Edge.RISING)
+        self.camera_task.triggers.start_trigger.cfg_dig_edge_start_trig('/Dev1/ao/StartTrigger', trigger_edge=Edge.RISING)
+        #self.laser_task.triggers.start_trigger.cfg_dig_edge_start_trig('/Dev1/ao/StartTrigger', trigger_edge=Edge.RISING)
 
         '''Housekeeping: Setting up the AO task for the ETL and lasers and setting the trigger input'''
         #self.laser_task.ao_channels.add_ao_voltage_chan(ah['laser_task_line'])
@@ -153,6 +160,13 @@ class AOETLGalvos(QtCore.QObject):
                                                  self.etl_r_waveform))
        
         self.galvo_etl_task.write(self.galvo_and_etl_waveforms)
+        
+        self.camera_task.write(self.camera_waveform)
+        
+        self.lasers_waveforms = np.stack((self.laser_l_waveform,
+                                          self.laser_r_waveform))
+        
+        self.laser_task.write(self.lasers_waveforms)
 
     def start_tasks(self):
         '''Starts the tasks for camera triggering and analog outputs
@@ -160,9 +174,10 @@ class AOETLGalvos(QtCore.QObject):
         If the tasks are configured to be triggered, they won't output any
         signals until run_tasks() is called.
         '''
-        self.camera_trigger_task.start()
+        
+        self.laser_task.start()
+        self.camera_task.start()
         self.galvo_etl_task.start()
-        #self.laser_task.start()
     
     #This function is only for FINITE task, we don't call it for CONTINUOUS
     def run_tasks(self):
@@ -176,31 +191,29 @@ class AOETLGalvos(QtCore.QObject):
         '''
         #self.master_trigger_task.write([False, True, True, True, False], auto_start=True)
         
-        self.camera_trigger_task.write(self.DO_camera_waveform)
 
         '''Wait until everything is done - this is effectively a sleep function.'''
-        #print('waiting until done')
+      
+        self.laser_task.wait_until_done()
+        self.camera_task.wait_until_done()
         self.galvo_etl_task.wait_until_done()
-        #print('done')
-        #self.laser_task.wait_until_done()
-        #self.camera_trigger_task.wait_until_done()
 
     def stop_tasks(self):
         '''Stops the tasks for triggering, analog and counter outputs'''
+        
+        self.laser_task.stop()
+        self.camera_task.stop()
         self.galvo_etl_task.stop()
-        #self.laser_task.stop()
-        self.camera_trigger_task.stop()
-        #self.master_trigger_task.stop()
 
     def close_tasks(self):
         '''Closes the tasks for triggering, analog and counter outputs.
 
         Tasks should only be closed are they are stopped.
         '''
+        
+        self.laser_task.close()
+        self.camera_task.close()
         self.galvo_etl_task.close()
-        #self.laser_task.close()
-        self.camera_trigger_task.close()
-        #self.master_trigger_task.close()
         
         
         
