@@ -56,6 +56,8 @@ parameters["etl_r_ramp_rising"]=85
 parameters["etl_r_ramp_falling"]=2.5
 parameters["etl_r_amplitude"]=2
 parameters["etl_r_offset"]=0
+parameters["laser_l_voltage"]=0.905
+parameters["laser_r_voltage"]=0.935
 
 class Controller(QWidget):
     '''
@@ -72,6 +74,13 @@ class Controller(QWidget):
         self.defaultParameters = copy.deepcopy(parameters)
         
         self.consumers = []
+        
+        '''Initializing flags'''
+        self.allLasersOn = False
+        self.leftLaserOn = False
+        self.rightLaserOn = False
+        self.previewModeStarted = False
+        self.liveModeStarted = False
         
         self.motor1 = Motors(1, 'COM3')             #Vertical motor
         self.motor2 = Motors(2, 'COM3')             #Horizontal motor for sample motion
@@ -110,10 +119,9 @@ class Controller(QWidget):
         #**********************************************************************
         # Connections for the modes
         #**********************************************************************
-        self.pushButton_startLive.clicked.connect(self.start_live_mode)
-        self.pushButton_stopLive.clicked.connect(self.stop_live_mode)
-        self.pushButton_startContinuous.clicked.connect(self.start_continuous_mode)
-        self.pushButton_stopContinuous.clicked.connect(self.stop_continuous_mode)
+        self.pushButton_getSingleImage.clicked.connect(self.start_get_single_image)
+        self.pushButton_startLiveMode.clicked.connect(self.start_live_mode)
+        self.pushButton_stopLiveMode.clicked.connect(self.stop_live_mode)
         self.pushButton_startAcquisition.clicked.connect(self.start_acquisition_mode)
         self.pushButton_stopAcquisition.clicked.connect(self.stop_acquisition_mode)
         self.pushButton_startPreviewMode.clicked.connect(self.start_preview_mode)
@@ -203,56 +211,80 @@ class Controller(QWidget):
         self.horizontalSlider_rightLaser.sliderReleased.connect(self.right_laser_update)
         
         
+    def start_get_single_image(self):
+        self.pushButton_getSingleImage.setEnabled(False)
+        self.pushButton_startLiveMode.setEnabled(False)
+        self.pushButton_stopLiveMode.setEnabled(False)
+        self.pushButton_startAcquisition.setEnabled(False)
+        self.pushButton_stopAcquisition.setEnabled(False)
+        print('Getting single image')
+        # Setup from data in gui
+        self.ramps=AOETLGalvos(parameters)                  
+        self.ramps.create_tasks('FINITE')                           
+        self.ramps.create_galvos_waveforms()
+        self.ramps.create_etl_waveforms()
+        self.ramps.create_DO_camera_waveform()
+        self.ramps.create_lasers_waveforms()                   
+        self.ramps.write_waveforms_to_tasks()                            
+        self.ramps.start_tasks()
+        self.ramps.run_tasks()
+        
+        self.ramps.stop_tasks()                             
+        self.ramps.close_tasks()
+        
+        '''Put the lasers voltage to zero
+           This is done at the end, because we do not want to shut down the lasers
+           after each sweep to make sure their power values stay the same '''
+        self.lasers_task = nidaqmx.Task()
+        self.lasers_task.ao_channels.add_ao_voltage_chan('/Dev2/ao0:1')
+        waveforms = np.stack(([0],[0]))
+        self.lasers_task.write(waveforms)
+        self.lasers_task.stop()
+        self.lasers_task.close()
+        
+        self.pushButton_getSingleImage.setEnabled(True)
+        self.pushButton_startLiveMode.setEnabled(True)
+        self.pushButton_stopLiveMode.setEnabled(False)
+        self.pushButton_startAcquisition.setEnabled(True)
+        self.pushButton_stopAcquisition.setEnabled(False)
+    
+        
     def start_live_mode(self):
-        self.pushButton_startLive.setEnabled(False)
-        self.pushButton_stopLive.setEnabled(True)
-        self.pushButton_startContinuous.setEnabled(False)
-        self.pushButton_stopContinuous.setEnabled(False)
+        self.liveModeStarted = True
+        self.pushButton_getSingleImage.setEnabled(False)
+        self.pushButton_startLiveMode.setEnabled(False)
+        self.pushButton_stopLiveMode.setEnabled(True)
         self.pushButton_startAcquisition.setEnabled(False)
         self.pushButton_stopAcquisition.setEnabled(False)
         print('Start live mode')
         # Setup from data in gui
         self.ramps=AOETLGalvos(parameters)                  
-        self.ramps.create_tasks('FINITE')                           
-        self.ramps.create_galvos_waveforms()
-        self.ramps.create_etl_waveforms()                   
-        self.ramps.write_waveforms_to_tasks()
-        self.ramps.run_tasks()                             
-        self.ramps.start_tasks()
-    
-    def stop_live_mode(self):
-        self.ramps.stop_tasks()                             
-        self.ramps.close_tasks()
-        self.pushButton_startLive.setEnabled(True)
-        self.pushButton_stopLive.setEnabled(False)
-        self.pushButton_startContinuous.setEnabled(True)
-        self.pushButton_stopContinuous.setEnabled(False)
-        self.pushButton_startAcquisition.setEnabled(True)
-        self.pushButton_stopAcquisition.setEnabled(False)
-        
-    def start_continuous_mode(self):
-        self.pushButton_startLive.setEnabled(False)
-        self.pushButton_stopLive.setEnabled(False)
-        self.pushButton_startContinuous.setEnabled(False)
-        self.pushButton_stopContinuous.setEnabled(True)
-        self.pushButton_startAcquisition.setEnabled(False)
-        self.pushButton_stopAcquisition.setEnabled(False)
-        print('Start continuous mode')
-        # Setup from data in gui
-        self.ramps=AOETLGalvos(parameters)                  
         self.ramps.create_tasks('CONTINUOUS')                           
         self.ramps.create_galvos_waveforms()
-        self.ramps.create_etl_waveforms()                   
+        self.ramps.create_etl_waveforms()
+        self.ramps.create_DO_camera_waveform()
+        self.ramps.create_lasers_waveforms()                     
         self.ramps.write_waveforms_to_tasks()                            
         self.ramps.start_tasks()
         
-    def stop_continuous_mode(self):
+    def stop_live_mode(self):
+        self.liveModeStarted = False
         self.ramps.stop_tasks()                             
         self.ramps.close_tasks()
-        self.pushButton_startLive.setEnabled(True)
-        self.pushButton_stopLive.setEnabled(False)
-        self.pushButton_startContinuous.setEnabled(True)
-        self.pushButton_stopContinuous.setEnabled(False)
+        
+        '''Put the lasers voltage to zero
+           This is done at the end, because we do not want to shut down the lasers
+           after each sweep to make sure their power values stay the same '''
+        self.lasers_task = nidaqmx.Task()
+        self.lasers_task.ao_channels.add_ao_voltage_chan('/Dev2/ao0:1')
+        waveforms = np.stack(([0],[0]))
+        self.lasers_task.write(waveforms)
+        self.lasers_task.stop()
+        self.lasers_task.close()
+        
+        self.pushButton_getSingleImage.setEnabled(True)
+        self.pushButton_startLiveMode.setEnabled(True)
+        self.pushButton_stopLiveMode.setEnabled(False)
         self.pushButton_startAcquisition.setEnabled(True)
         self.pushButton_stopAcquisition.setEnabled(False)
         
@@ -265,10 +297,9 @@ class Controller(QWidget):
         An option to scan forward or backward should be implemented
         A progress bar would be nice
         '''
-        self.pushButton_startLive.setEnabled(False)
-        self.pushButton_stopLive.setEnabled(True)
-        self.pushButton_startContinuous.setEnabled(False)
-        self.pushButton_stopContinuous.setEnabled(False)
+        self.pushButton_getSingleImage.setEnabled(False)
+        self.pushButton_startLiveMode.setEnabled(False)
+        self.pushButton_stopLiveMode.setEnabled(False)
         self.pushButton_startAcquisition.setEnabled(False)
         self.pushButton_stopAcquisition.setEnabled(True)
         print('Start acquisition mode')
@@ -292,10 +323,9 @@ class Controller(QWidget):
         print('Acquisition done')
         #Current camera position update
         self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText())) 
-        self.pushButton_startLive.setEnabled(True)
-        self.pushButton_stopLive.setEnabled(False)
-        self.pushButton_startContinuous.setEnabled(True)
-        self.pushButton_stopContinuous.setEnabled(False)
+        self.pushButton_getSingleImage.setEnabled(True)
+        self.pushButton_startLiveMode.setEnabled(True)
+        self.pushButton_stopLiveMode.setEnabled(False)
         self.pushButton_startAcquisition.setEnabled(True)
         self.pushButton_stopAcquisition.setEnabled(False)
             
@@ -507,8 +537,7 @@ class Controller(QWidget):
         #**********************************************************************
         # Modes
         #**********************************************************************
-        self.pushButton_stopLive.setEnabled(False)
-        self.pushButton_stopContinuous.setEnabled(False)
+        self.pushButton_stopLiveMode.setEnabled(False)
         self.pushButton_stopAcquisition.setEnabled(False)
         self.pushButton_setOptimized.setEnabled(False)
         
@@ -630,40 +659,44 @@ class Controller(QWidget):
         self.horizontalSlider_rightLaser.setValue(self.rightLaserVoltage)
         
     def lasers_on(self):
+        self.allLasersOn = True
         self.pushButton_lasersOn.setEnabled(False)
         self.pushButton_lasersOff.setEnabled(True)
         self.pushButton_leftLaserOn.setEnabled(False)
         self.pushButton_rightLaserOn.setEnabled(False)
-        self.lasers_task = nidaqmx.Task()
-        self.lasers_task.ao_channels.add_ao_voltage_chan('/Dev2/ao0:1')
-        waveforms = np.stack(([0.935],[0.905]))
-        self.lasers_task.write(waveforms)
+        #self.lasers_task = nidaqmx.Task()
+        #self.lasers_task.ao_channels.add_ao_voltage_chan('/Dev2/ao0:1')
+        #waveforms = np.stack(([0.935],[0.905]))
+        #self.lasers_task.write(waveforms)
         print('Lasers on')
         
     def lasers_off(self):
+        self.allLasersOn = False
         self.pushButton_lasersOn.setEnabled(True)
         self.pushButton_lasersOff.setEnabled(False)
         self.pushButton_leftLaserOn.setEnabled(True)
         self.pushButton_rightLaserOn.setEnabled(True)
-        waveforms = np.stack(([0],[0]))
-        self.lasers_task.write(waveforms)
-        self.lasers_task.stop()
-        self.lasers_task.close()
+        #waveforms = np.stack(([0],[0]))
+        #self.lasers_task.write(waveforms)
+        #self.lasers_task.stop()
+        #self.lasers_task.close()
         print('Lasers off')
         
     def left_laser_on(self):
+        self.leftLaserOn = True
         self.pushButton_lasersOn.setEnabled(False)
         self.pushButton_leftLaserOn.setEnabled(False)
         self.pushButton_leftLaserOff.setEnabled(True)
-        self.left_laser = nidaqmx.Task()
-        self.left_laser.ao_channels.add_ao_voltage_chan('/Dev2/ao1')
-        self.left_laser.write(self.leftLaserVoltage)
+        #self.left_laser = nidaqmx.Task()
+        #self.left_laser.ao_channels.add_ao_voltage_chan('/Dev2/ao1')
+        #self.left_laser.write(self.leftLaserVoltage)
         print('Left laser on')
         
     def left_laser_off(self):
-        self.left_laser.write(0)
-        self.left_laser.stop()
-        self.left_laser.close()
+        self.leftLaserOn = False
+        #self.left_laser.write(0)
+        #self.left_laser.stop()
+        #self.left_laser.close()
         print('Left laser off')
         self.pushButton_leftLaserOn.setEnabled(True)
         self.pushButton_leftLaserOff.setEnabled(False)
@@ -671,18 +704,20 @@ class Controller(QWidget):
             self.pushButton_lasersOn.setEnabled(True)
         
     def right_laser_on(self):
+        self.rightLaserOn = True
         self.pushButton_lasersOn.setEnabled(False)
         self.pushButton_rightLaserOn.setEnabled(False)
         self.pushButton_rightLaserOff.setEnabled(True)
-        self.right_laser = nidaqmx.Task()
-        self.right_laser.ao_channels.add_ao_voltage_chan('/Dev2/ao0')
-        self.right_laser.write(self.rightLaserVoltage)
+        #self.right_laser = nidaqmx.Task()
+        #self.right_laser.ao_channels.add_ao_voltage_chan('/Dev2/ao0')
+        #self.right_laser.write(self.rightLaserVoltage)
         print('Left laser on')
         
     def right_laser_off(self):
-        self.right_laser.write(0)
-        self.right_laser.stop()
-        self.right_laser.close()
+        self.rightLaserOn = False
+        #self.right_laser.write(0)
+        #self.right_laser.stop()
+        #self.right_laser.close()
         print('Left laser off')
         self.pushButton_rightLaserOn.setEnabled(True)
         self.pushButton_rightLaserOff.setEnabled(False)
@@ -699,25 +734,34 @@ class Controller(QWidget):
     #Camera functions 
     
     def start_preview_mode(self):
-        self.stopPreview = False
+        self.previewModeStarted = True
         
         self.pushButton_startPreviewMode.setEnabled(False)
-        self.pushButton_stopPreviewMode.setEnabled(True)
+        self.pushButton_stopPreviewMode.setEnabled(True)\
         
+        '''Setting tasks'''
+        self.preview_lasers_task = nidaqmx.Task()
+        self.preview_lasers_task.ao_channels.add_ao_voltage_chan('/Dev2/ao0:1')
+        
+        self.preview_galvos_etls_task = nidaqmx.Task()
+        self.preview_galvos_etls_task.ao_channels.add_ao_voltage_chan('/Dev1/ao0:3')
+        
+        '''Setting the camera for acquisition'''
         self.camera.set_trigger_mode('AutoSequence')
-        
-        self.camera.arm_camera()
-         
+        self.camera.arm_camera() 
         self.camera.get_sizes() 
         self.camera.allocate_buffer()    
         self.camera.set_recording_state(1)
         self.camera.insert_buffers_in_queue()
         
-        thread = threading.Thread(target = self.previewThread)
-        thread.start()
+        previewMode_thread = threading.Thread(target = self.previewThread)
+        previewMode_thread.start()
+        
+        lasersGlavosEtls_thread = threading.Thread(target=self.laserGalvosEtlsThread)
+        lasersGlavosEtls_thread.start()
      
     def stop_preview_mode(self):
-        self.stopPreview = True
+        self.previewModeStarted = False
     
     
     def close_camera(self):
@@ -768,7 +812,9 @@ class Controller(QWidget):
         elif parameterNumber==21:
             self.parameters["samplerate"]=self.doubleSpinBox_samplerate.value()
         elif parameterNumber==22:
-            self.parameters["sweeptime"]=self.doubleSpinBox_sweeptime.value()                    
+            self.parameters["sweeptime"]=self.doubleSpinBox_sweeptime.value()
+            
+                          
      
     def back_to_default_parameters(self):
         self.parameters = copy.deepcopy(self.defaultParameters)
@@ -820,7 +866,43 @@ class Controller(QWidget):
         for i in range(0, len(self.consumers), 4):
             if self.consumers[i+2] == "CameraWindow":
                 while continuer:
-                    if self.stopPreview == False:
+                    
+                    '''Getting the data to send to the AO'''
+                    #leftGalvoVoltage = parameters['galvo_l_offset']
+                    #rightGalvoVoltage = parameters['galvo_r_offset']
+                    #leftEtlVoltage = parameters['etl_l_offset']
+                    #rightEtlVoltage = parameters['etl_r_offset']
+                    #leftLaserVoltage = 0
+                    #rightLaserVoltage = 0
+                    
+  
+                    
+                    '''Laser status override already dealt with by enabling 
+                       pushButtons in lasers' functions'''
+                    #if self.allLasersOn == True:
+                    #    leftLaserVoltage = self.parameters['laser_l_voltage']
+                    #    rightLaserVoltage = self.parameters['laser_r_voltage']
+                    
+                    #if self.leftLaserOn == True:
+                    #    leftLaserVoltage = self.parameters['laser_l_voltage']
+                    
+                    #if self.rightLaserOn == True:
+                    #    rightLaserVoltage = self.parameters['laser_r_voltage']
+                    
+                    '''Writing the data'''
+                    #preview_galvos_etls_waveforms = np.stack((np.array([leftGalvoVoltage]),
+                    #                                          np.array([rightGalvoVoltage]),
+                    #                                          np.array([leftEtlVoltage]),
+                    #                                          np.array([rightEtlVoltage])))
+                    
+                    #preview_lasers_waveforms = np.stack((np.array([leftLaserVoltage]),
+                    #                                     np.array([rightLaserVoltage])))
+                    
+                    #self.preview_lasers_task.write(preview_lasers_waveforms)
+                    #self.preview_galvos_etls_task.write(preview_galvos_etls_waveforms)
+                    
+                    '''Retrieving image from camera and putting it in its queue'''
+                    if self.previewModeStarted == True:
                         frame = self.camera.retrieve_single_image()*1.0
                         #frame = frame/frame.max()
         
@@ -828,7 +910,7 @@ class Controller(QWidget):
                             self.consumers[i].put(frame)
                         except self.consumers[i].Full:
                             print("Queue is full")
-                    elif self.stopPreview == True:
+                    elif self.previewModeStarted == False:
                         continuer = False
         
             
@@ -836,8 +918,63 @@ class Controller(QWidget):
         self.camera.set_recording_state(0)
         self.camera.free_buffer()
         
+        #self.preview_lasers_task.stop()
+        #self.preview_galvos_etls_task.stop()
+        
+        #self.preview_lasers_task.close()
+        #self.preview_galvos_etls_task.close()
+        
         self.pushButton_startPreviewMode.setEnabled(True)
         self.pushButton_stopPreviewMode.setEnabled(False)
+        
+    
+    def laserGalvosEtlsThread(self):
+        continuer = True
+        while continuer:
+              
+            '''Getting the data to send to the AO'''
+            leftGalvoVoltage = parameters['galvo_l_offset']
+            rightGalvoVoltage = parameters['galvo_r_offset']
+            leftEtlVoltage = parameters['etl_l_offset']
+            rightEtlVoltage = parameters['etl_r_offset']
+            leftLaserVoltage = 0
+            rightLaserVoltage = 0
+        
+          
+            '''Laser status override already dealt with by enabling 
+               pushButtons in lasers' functions'''
+            if self.allLasersOn == True:
+                leftLaserVoltage = self.parameters['laser_l_voltage']
+                rightLaserVoltage = self.parameters['laser_r_voltage']
+              
+            if self.leftLaserOn == True:
+                leftLaserVoltage = self.parameters['laser_l_voltage']
+              
+            if self.rightLaserOn == True:
+                rightLaserVoltage = self.parameters['laser_r_voltage']
+          
+            '''Writing the data'''
+            preview_galvos_etls_waveforms = np.stack((np.array([leftGalvoVoltage]),
+                                                      np.array([rightGalvoVoltage]),
+                                                      np.array([leftEtlVoltage]),
+                                                      np.array([rightEtlVoltage])))
+          
+            preview_lasers_waveforms = np.stack((np.array([leftLaserVoltage]),
+                                                 np.array([rightLaserVoltage])))
+          
+            self.preview_lasers_task.write(preview_lasers_waveforms)
+            self.preview_galvos_etls_task.write(preview_galvos_etls_waveforms)
+            
+            if self.previewModeStarted == False:
+                continuer = False
+        
+                
+        self.preview_lasers_task.stop()
+        self.preview_galvos_etls_task.stop()
+        
+        self.preview_lasers_task.close()
+        self.preview_galvos_etls_task.close()
+        
 
 
 class CameraWindow(queue.Queue):

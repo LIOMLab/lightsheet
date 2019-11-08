@@ -2043,37 +2043,11 @@
    <property name="title">
     <string/>
    </property>
-   <widget class="QPushButton" name="pushButton_startContinuous">
+   <widget class="QPushButton" name="pushButton_startLiveMode">
     <property name="geometry">
      <rect>
       <x>10</x>
       <y>70</y>
-      <width>121</width>
-      <height>23</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Start Continuous Mode</string>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="pushButton_stopContinuous">
-    <property name="geometry">
-     <rect>
-      <x>140</x>
-      <y>70</y>
-      <width>121</width>
-      <height>23</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Stop Continuous Mode</string>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="pushButton_startLive">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>20</y>
       <width>121</width>
       <height>23</height>
      </rect>
@@ -2082,17 +2056,30 @@
      <string>Start Live Mode</string>
     </property>
    </widget>
-   <widget class="QPushButton" name="pushButton_stopLive">
+   <widget class="QPushButton" name="pushButton_stopLiveMode">
     <property name="geometry">
      <rect>
       <x>140</x>
-      <y>20</y>
+      <y>70</y>
       <width>121</width>
       <height>23</height>
      </rect>
     </property>
     <property name="text">
      <string>Stop Live Mode</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="pushButton_getSingleImage">
+    <property name="geometry">
+     <rect>
+      <x>10</x>
+      <y>20</y>
+      <width>121</width>
+      <height>23</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Get Single Image</string>
     </property>
    </widget>
    <widget class="QPushButton" name="pushButton_startPreviewMode">
