@@ -35,7 +35,7 @@ q = queue.Queue()
 
 parameters = dict()
 parameters["samplerate"]=100
-parameters["sweeptime"]=0.4
+parameters["sweeptime"]=1        #0.4
 parameters["galvo_l_frequency"]=10
 parameters["galvo_l_amplitude"]=2
 parameters["galvo_l_offset"]=0
@@ -212,13 +212,30 @@ class Controller(QWidget):
         
         
     def start_get_single_image(self):
+        
+        '''Flags check up'''
+        if self.previewModeStarted == True:
+            self.stop_preview_mode()
+            self.previewModeStarted = False
+        elif self.liveModeStarted == True:
+            self.stop_live_mode()
+            self.liveModeStarted = False
+            
         self.pushButton_getSingleImage.setEnabled(False)
         self.pushButton_startLiveMode.setEnabled(False)
         self.pushButton_stopLiveMode.setEnabled(False)
         self.pushButton_startAcquisition.setEnabled(False)
         self.pushButton_stopAcquisition.setEnabled(False)
         print('Getting single image')
-        # Setup from data in gui
+        
+        '''Setting the camera for acquisition'''
+        self.camera.set_trigger_mode('ExternalExposureControl')
+        self.camera.arm_camera() 
+        self.camera.get_sizes() 
+        self.camera.allocate_buffer()    
+        self.camera.set_recording_state(1)
+        self.camera.insert_buffers_in_queue()
+        
         self.ramps=AOETLGalvos(parameters)                  
         self.ramps.create_tasks('FINITE')                           
         self.ramps.create_galvos_waveforms()
@@ -229,6 +246,19 @@ class Controller(QWidget):
         self.ramps.start_tasks()
         self.ramps.run_tasks()
         
+        frame = self.camera.retrieve_single_image()*1.0
+        
+        for i in range(0, len(self.consumers), 4):
+            if self.consumers[i+2] == "CameraWindow":
+                try:
+                    self.consumers[i].put(frame)
+                except self.consumers[i].Full:
+                    print("Queue is full")
+                    
+        self.camera.cancel_images()
+        self.camera.set_recording_state(0)
+        self.camera.free_buffer()
+
         self.ramps.stop_tasks()                             
         self.ramps.close_tasks()
         
@@ -250,6 +280,15 @@ class Controller(QWidget):
     
         
     def start_live_mode(self):
+        
+        '''Flags check up'''
+        if self.previewModeStarted == True:
+            self.stop_preview_mode()
+            self.previewModeStarted = False
+        elif self.liveModeStarted == True:
+            self.stop_live_mode()
+            self.liveModeStarted = False
+            
         self.liveModeStarted = True
         self.pushButton_getSingleImage.setEnabled(False)
         self.pushButton_startLiveMode.setEnabled(False)
@@ -257,6 +296,15 @@ class Controller(QWidget):
         self.pushButton_startAcquisition.setEnabled(False)
         self.pushButton_stopAcquisition.setEnabled(False)
         print('Start live mode')
+        
+        '''Setting the camera for acquisition'''
+        self.camera.set_trigger_mode('ExternalExposureControl')
+        self.camera.arm_camera() 
+        self.camera.get_sizes() 
+        self.camera.allocate_buffer()    
+        self.camera.set_recording_state(1)
+        self.camera.insert_buffers_in_queue()
+        
         # Setup from data in gui
         self.ramps=AOETLGalvos(parameters)                  
         self.ramps.create_tasks('CONTINUOUS')                           
@@ -267,8 +315,30 @@ class Controller(QWidget):
         self.ramps.write_waveforms_to_tasks()                            
         self.ramps.start_tasks()
         
-    def stop_live_mode(self):
-        self.liveModeStarted = False
+        liveMode_thread = threading.Thread(target = self.live_mode_thread)
+        liveMode_thread.start()
+        
+    def live_mode_thread(self):
+        continuer = True
+        for i in range(0, len(self.consumers), 4):
+            if self.consumers[i+2] == "CameraWindow":
+                while continuer:
+                    
+                    '''Retrieving image from camera and putting it in its queue'''
+                    if self.liveModeStarted == True:
+                        frame = self.camera.retrieve_single_image()*1.0
+        
+                        try:
+                            self.consumers[i].put(frame)
+                        except self.consumers[i].Full:
+                            print("Queue is full")
+                    elif self.liveModeStarted == False:
+                        continuer = False
+        
+        self.camera.cancel_images()
+        self.camera.set_recording_state(0)
+        self.camera.free_buffer()
+        
         self.ramps.stop_tasks()                             
         self.ramps.close_tasks()
         
@@ -287,6 +357,11 @@ class Controller(QWidget):
         self.pushButton_stopLiveMode.setEnabled(False)
         self.pushButton_startAcquisition.setEnabled(True)
         self.pushButton_stopAcquisition.setEnabled(False)
+        
+    def stop_live_mode(self):
+        self.liveModeStarted = False
+        
+    
         
     def start_acquisition_mode(self):
         '''Detection arm (self.motor3) to be implemented 
@@ -734,6 +809,15 @@ class Controller(QWidget):
     #Camera functions 
     
     def start_preview_mode(self):
+        
+        '''Flags check up'''
+        if self.previewModeStarted == True:
+            self.stop_preview_mode()
+            self.previewModeStarted = False
+        elif self.liveModeStarted == True:
+            self.stop_live_mode()
+            self.liveModeStarted = False
+            
         self.previewModeStarted = True
         
         self.pushButton_startPreviewMode.setEnabled(False)
@@ -757,8 +841,8 @@ class Controller(QWidget):
         previewMode_thread = threading.Thread(target = self.previewThread)
         previewMode_thread.start()
         
-        lasersGlavosEtls_thread = threading.Thread(target=self.laserGalvosEtlsThread)
-        lasersGlavosEtls_thread.start()
+        #lasersGlavosEtls_thread = threading.Thread(target=self.laserGalvosEtlsThread)
+        #lasersGlavosEtls_thread.start()
      
     def stop_preview_mode(self):
         self.previewModeStarted = False
@@ -868,43 +952,43 @@ class Controller(QWidget):
                 while continuer:
                     
                     '''Getting the data to send to the AO'''
-                    #leftGalvoVoltage = parameters['galvo_l_offset']
-                    #rightGalvoVoltage = parameters['galvo_r_offset']
-                    #leftEtlVoltage = parameters['etl_l_offset']
-                    #rightEtlVoltage = parameters['etl_r_offset']
-                    #leftLaserVoltage = 0
-                    #rightLaserVoltage = 0
+                    leftGalvoVoltage = self.parameters['galvo_l_offset']
+                    rightGalvoVoltage = self.parameters['galvo_r_offset']
+                    leftEtlVoltage = self.parameters['etl_l_offset']
+                    rightEtlVoltage = self.parameters['etl_r_offset']
+                    leftLaserVoltage = 0
+                    rightLaserVoltage = 0
                     
-  
+                    #print(leftGalvoVoltage)
                     
                     '''Laser status override already dealt with by enabling 
                        pushButtons in lasers' functions'''
-                    #if self.allLasersOn == True:
-                    #    leftLaserVoltage = self.parameters['laser_l_voltage']
-                    #    rightLaserVoltage = self.parameters['laser_r_voltage']
+                    if self.allLasersOn == True:
+                        leftLaserVoltage = self.parameters['laser_l_voltage']
+                        rightLaserVoltage = self.parameters['laser_r_voltage']
                     
-                    #if self.leftLaserOn == True:
-                    #    leftLaserVoltage = self.parameters['laser_l_voltage']
+                    if self.leftLaserOn == True:
+                        leftLaserVoltage = self.parameters['laser_l_voltage']
                     
-                    #if self.rightLaserOn == True:
-                    #    rightLaserVoltage = self.parameters['laser_r_voltage']
+                    if self.rightLaserOn == True:
+                        rightLaserVoltage = self.parameters['laser_r_voltage']
                     
                     '''Writing the data'''
-                    #preview_galvos_etls_waveforms = np.stack((np.array([leftGalvoVoltage]),
-                    #                                          np.array([rightGalvoVoltage]),
-                    #                                          np.array([leftEtlVoltage]),
-                    #                                          np.array([rightEtlVoltage])))
+                    preview_galvos_etls_waveforms = np.stack((np.array([leftGalvoVoltage]),
+                                                              np.array([rightGalvoVoltage]),
+                                                              np.array([leftEtlVoltage]),
+                                                              np.array([rightEtlVoltage])))
                     
-                    #preview_lasers_waveforms = np.stack((np.array([leftLaserVoltage]),
-                    #                                     np.array([rightLaserVoltage])))
+                    preview_lasers_waveforms = np.stack((np.array([leftLaserVoltage]),
+                                                         np.array([rightLaserVoltage])))
                     
-                    #self.preview_lasers_task.write(preview_lasers_waveforms)
-                    #self.preview_galvos_etls_task.write(preview_galvos_etls_waveforms)
+                    
+                    self.preview_lasers_task.write(preview_lasers_waveforms, auto_start=True)
+                    self.preview_galvos_etls_task.write(preview_galvos_etls_waveforms, auto_start=True)
                     
                     '''Retrieving image from camera and putting it in its queue'''
                     if self.previewModeStarted == True:
                         frame = self.camera.retrieve_single_image()*1.0
-                        #frame = frame/frame.max()
         
                         try:
                             self.consumers[i].put(frame)
@@ -918,14 +1002,15 @@ class Controller(QWidget):
         self.camera.set_recording_state(0)
         self.camera.free_buffer()
         
-        #self.preview_lasers_task.stop()
-        #self.preview_galvos_etls_task.stop()
+        self.preview_lasers_task.stop()
+        self.preview_galvos_etls_task.stop()
         
-        #self.preview_lasers_task.close()
-        #self.preview_galvos_etls_task.close()
+        self.preview_lasers_task.close()
+        self.preview_galvos_etls_task.close()
         
         self.pushButton_startPreviewMode.setEnabled(True)
         self.pushButton_stopPreviewMode.setEnabled(False)
+        
         
     
     def laserGalvosEtlsThread(self):
