@@ -26,7 +26,7 @@
     <cursorShape>ArrowCursor</cursorShape>
    </property>
    <property name="currentIndex">
-    <number>0</number>
+    <number>3</number>
    </property>
    <widget class="QWidget" name="tab">
     <attribute name="title">
@@ -1930,7 +1930,7 @@
       <rect>
        <x>20</x>
        <y>20</y>
-       <width>371</width>
+       <width>761</width>
        <height>131</height>
       </rect>
      </property>
@@ -1947,7 +1947,7 @@
        </rect>
       </property>
       <property name="text">
-       <string>Power:</string>
+       <string>Voltage:</string>
       </property>
      </widget>
      <widget class="QSlider" name="horizontalSlider_leftLaser">
@@ -1955,7 +1955,7 @@
        <rect>
         <x>70</x>
         <y>70</y>
-        <width>160</width>
+        <width>671</width>
         <height>22</height>
        </rect>
       </property>
@@ -1963,7 +1963,7 @@
        <enum>Qt::Horizontal</enum>
       </property>
      </widget>
-     <widget class="QLabel" name="label_72">
+     <widget class="QLabel" name="label_leftLaserVoltage">
       <property name="geometry">
        <rect>
         <x>70</x>
@@ -1980,9 +1980,9 @@
     <widget class="QGroupBox" name="groupBox_10">
      <property name="geometry">
       <rect>
-       <x>410</x>
-       <y>20</y>
-       <width>371</width>
+       <x>20</x>
+       <y>170</y>
+       <width>761</width>
        <height>131</height>
       </rect>
      </property>
@@ -1999,10 +1999,10 @@
        </rect>
       </property>
       <property name="text">
-       <string>Power:</string>
+       <string>Voltage:</string>
       </property>
      </widget>
-     <widget class="QLabel" name="label_74">
+     <widget class="QLabel" name="label_rightLaserVoltage">
       <property name="geometry">
        <rect>
         <x>70</x>
@@ -2020,7 +2020,7 @@
        <rect>
         <x>70</x>
         <y>70</y>
-        <width>160</width>
+        <width>671</width>
         <height>22</height>
        </rect>
       </property>

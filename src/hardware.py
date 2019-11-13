@@ -101,7 +101,7 @@ class AOETLGalvos(QtCore.QObject):
                                              voltage = self.parameters["laser_r_voltage"])
         
 
-    def create_tasks(self, acquisition):
+    def create_tasks(self, terminals, acquisition):
         '''Creates a total of four tasks for the mesoSPIM:
 
         These are:
@@ -129,15 +129,15 @@ class AOETLGalvos(QtCore.QObject):
 
 
         '''Housekeeping: Setting up the AO task for the Galvo and ETLs. It is the master task'''
-        self.galvo_etl_task.ao_channels.add_ao_voltage_chan('/Dev1/ao0:3')
+        self.galvo_etl_task.ao_channels.add_ao_voltage_chan(terminals["galvos_etls"])
         self.galvo_etl_task.timing.cfg_samp_clk_timing(rate=self.parameters["samplerate"],
                                                    sample_mode=mode,
                                                    samps_per_chan=self.samples)
         
-        self.camera_task.do_channels.add_do_chan('/Dev1/port0/line1', line_grouping = LineGrouping.CHAN_PER_LINE)
+        self.camera_task.do_channels.add_do_chan(terminals["camera"], line_grouping = LineGrouping.CHAN_PER_LINE)
         self.camera_task.timing.cfg_samp_clk_timing(rate=self.parameters["samplerate"], sample_mode=mode, samps_per_chan=self.samples)
         
-        self.laser_task.ao_channels.add_ao_voltage_chan('/Dev2/ao0:1')
+        self.laser_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
         self.laser_task.timing.cfg_samp_clk_timing(rate=self.parameters["samplerate"], sample_mode=mode, samps_per_chan=self.samples)
         
         '''Configures the task to start acquiring/generating samples on a rising/falling edge of a digital signal. 
@@ -154,17 +154,17 @@ class AOETLGalvos(QtCore.QObject):
     
     def write_waveforms_to_tasks(self):
         '''Write the waveforms to the slave tasks'''
-        self.galvo_and_etl_waveforms = np.stack((self.galvo_l_waveform,
-                                                 self.galvo_r_waveform,
-                                                 self.etl_l_waveform,
-                                                 self.etl_r_waveform))
+        self.galvo_and_etl_waveforms = np.stack((self.galvo_r_waveform,
+                                                 self.galvo_l_waveform,
+                                                 self.etl_r_waveform,
+                                                 self.etl_l_waveform))
        
         self.galvo_etl_task.write(self.galvo_and_etl_waveforms)
         
         self.camera_task.write(self.camera_waveform)
         
-        self.lasers_waveforms = np.stack((self.laser_l_waveform,
-                                          self.laser_r_waveform))
+        self.lasers_waveforms = np.stack((self.laser_r_waveform,
+                                          self.laser_l_waveform))
         
         self.laser_task.write(self.lasers_waveforms)
 
