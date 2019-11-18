@@ -240,7 +240,7 @@ class Controller(QWidget):
         self.camera.set_recording_state(1)
         self.camera.insert_buffers_in_queue()
         
-        self.ramps=AOETLGalvos(parameters)                  
+        self.ramps=AOETLGalvos(self.parameters)                  
         self.ramps.create_tasks(terminals,'FINITE')                           
         self.ramps.create_galvos_waveforms()
         self.ramps.create_etl_waveforms()
@@ -310,7 +310,7 @@ class Controller(QWidget):
         self.camera.insert_buffers_in_queue()
         
         # Setup from data in gui
-        self.ramps=AOETLGalvos(parameters)                  
+        self.ramps=AOETLGalvos(self.parameters)                  
         self.ramps.create_tasks(terminals, 'CONTINUOUS')                           
         self.ramps.create_galvos_waveforms()
         self.ramps.create_etl_waveforms()
@@ -758,10 +758,6 @@ class Controller(QWidget):
         self.pushButton_lasersOff.setEnabled(True)
         self.pushButton_leftLaserOn.setEnabled(False)
         self.pushButton_rightLaserOn.setEnabled(False)
-        #self.lasers_task = nidaqmx.Task()
-        #self.lasers_task.ao_channels.add_ao_voltage_chan('/Dev2/ao0:1')
-        #waveforms = np.stack(([0.935],[0.905]))
-        #self.lasers_task.write(waveforms)
         print('Lasers on')
         
     def lasers_off(self):
@@ -770,10 +766,6 @@ class Controller(QWidget):
         self.pushButton_lasersOff.setEnabled(False)
         self.pushButton_leftLaserOn.setEnabled(True)
         self.pushButton_rightLaserOn.setEnabled(True)
-        #waveforms = np.stack(([0],[0]))
-        #self.lasers_task.write(waveforms)
-        #self.lasers_task.stop()
-        #self.lasers_task.close()
         print('Lasers off')
         
     def left_laser_on(self):
@@ -781,16 +773,10 @@ class Controller(QWidget):
         self.pushButton_lasersOn.setEnabled(False)
         self.pushButton_leftLaserOn.setEnabled(False)
         self.pushButton_leftLaserOff.setEnabled(True)
-        #self.left_laser = nidaqmx.Task()
-        #self.left_laser.ao_channels.add_ao_voltage_chan('/Dev2/ao1')
-        #self.left_laser.write(self.leftLaserVoltage)
         print('Left laser on')
         
     def left_laser_off(self):
         self.leftLaserOn = False
-        #self.left_laser.write(0)
-        #self.left_laser.stop()
-        #self.left_laser.close()
         print('Left laser off')
         self.pushButton_leftLaserOn.setEnabled(True)
         self.pushButton_leftLaserOff.setEnabled(False)
@@ -802,16 +788,10 @@ class Controller(QWidget):
         self.pushButton_lasersOn.setEnabled(False)
         self.pushButton_rightLaserOn.setEnabled(False)
         self.pushButton_rightLaserOff.setEnabled(True)
-        #self.right_laser = nidaqmx.Task()
-        #self.right_laser.ao_channels.add_ao_voltage_chan('/Dev2/ao0')
-        #self.right_laser.write(self.rightLaserVoltage)
         print('Left laser on')
         
     def right_laser_off(self):
         self.rightLaserOn = False
-        #self.right_laser.write(0)
-        #self.right_laser.stop()
-        #self.right_laser.close()
         print('Left laser off')
         self.pushButton_rightLaserOn.setEnabled(True)
         self.pushButton_rightLaserOff.setEnabled(False)

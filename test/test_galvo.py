@@ -33,24 +33,3 @@ app.exec_()
 
 
 timer.stop()
-
-'''Making sure that everything is closed'''
-
-if controller.allLasersOn == True:
-    controller.lasers_off()
-    
-if controller.leftLaserOn == True:
-    controller.left_laser_off()
-    
-if controller.rightLaserOn == True:
-    controller.right_laser_off()
-    
-if controller.previewModeStarted == True:
-    controller.stop_preview_mode()
-    
-if controller.liveModeStarted == True:
-    controller.stop_live_mode()
-    
-if controller.cameraOn == True:
-    controller.close_camera()
-    
