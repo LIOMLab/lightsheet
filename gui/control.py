@@ -5,6 +5,7 @@ Created on May 22, 2019
 '''
 
 import sys
+from IPython.utils import frame
 sys.path.append("..")
 
 import os
@@ -30,6 +31,11 @@ from src.pcoEdge import Camera
 import threading
 import time
 import queue
+import multiprocessing
+import h5py
+import posixpath
+import datetime
+
 
 parameters = dict()
 parameters["samplerate"]=100
@@ -119,15 +125,20 @@ class Controller(QWidget):
         #To initialize the properties of the other widgets
         self.initialize_other_widgets()
         
+        self.lineEdit_filename.setEnabled(False)
+        self.pushButton_selectDirectory.clicked.connect(self.select_directory)
+        self.savingAllowed = False
+        
         
         #**********************************************************************
         # Connections for the modes
         #**********************************************************************
         self.pushButton_getSingleImage.clicked.connect(self.start_get_single_image)
+        self.pushButton_saveImage.clicked.connect(self.save_single_image)
         self.pushButton_startLiveMode.clicked.connect(self.start_live_mode)
         self.pushButton_stopLiveMode.clicked.connect(self.stop_live_mode)
-        self.pushButton_startAcquisition.clicked.connect(self.start_acquisition_mode)
-        self.pushButton_stopAcquisition.clicked.connect(self.stop_acquisition_mode)
+        self.pushButton_startStack.clicked.connect(self.start_stack_mode)
+        self.pushButton_stopStack.clicked.connect(self.stop_stack_mode)
         self.pushButton_startPreviewMode.clicked.connect(self.start_preview_mode)
         self.pushButton_stopPreviewMode.clicked.connect(self.stop_preview_mode)
         #self.pushButton_closeCamera.clicked.connect(self.close_camera)
@@ -228,8 +239,10 @@ class Controller(QWidget):
         self.pushButton_getSingleImage.setEnabled(False)
         self.pushButton_startLiveMode.setEnabled(False)
         self.pushButton_stopLiveMode.setEnabled(False)
-        self.pushButton_startAcquisition.setEnabled(False)
-        self.pushButton_stopAcquisition.setEnabled(False)
+        self.pushButton_startStack.setEnabled(False)
+        self.pushButton_stopStack.setEnabled(False)
+        self.pushButton_startPreviewMode.setEnabled(False)
+        self.pushButton_stopPreviewMode.setEnabled(False)
         print('Getting single image')
         
         '''Setting the camera for acquisition'''
@@ -256,8 +269,10 @@ class Controller(QWidget):
             if self.consumers[i+2] == "CameraWindow":
                 try:
                     self.consumers[i].put(frame)
-                except self.consumers[i].Full:
+                except:      #self.consumers[i].Full:
                     print("Queue is full")
+                    
+        self.single_frame = frame
                     
         self.camera.cancel_images()
         self.camera.set_recording_state(0)
@@ -277,11 +292,37 @@ class Controller(QWidget):
         self.lasers_task.close()
         
         self.pushButton_getSingleImage.setEnabled(True)
+        self.pushButton_saveImage.setEnabled(True)
         self.pushButton_startLiveMode.setEnabled(True)
-        self.pushButton_stopLiveMode.setEnabled(False)
-        self.pushButton_startAcquisition.setEnabled(True)
-        self.pushButton_stopAcquisition.setEnabled(False)
-    
+        self.pushButton_startStack.setEnabled(True)
+        self.pushButton_startPreviewMode.setEnabled(True)
+        
+    def save_single_image(self):
+        
+        self.filename = str(self.lineEdit_filename.text())
+        '''Removing spaces, dots and commas'''
+        self.filename = self.filename.replace(' ', '')
+        self.filename = self.filename.replace('.', '')
+        self.filename = self.filename.replace(',', '')
+        
+        if self.savingAllowed and self.filename != '':
+            self.filename = self.save_directory + '/' + self.filename + '.hdf5'
+            self.frame_saver = FrameSaver(self.filename)
+            self.scan_type = 'SingleImage'
+            self.scan_date = str(datetime.date.today())
+            self.path_root = posixpath.join('/', self.scan_date)
+            self.file_number = self.frame_saver.check_existing_files(self.path_root, self.scan_type)
+            self.scan_number = self.scan_type + '_' + str(self.file_number)
+            self.path_name = posixpath.join(self.path_root, self.scan_number)
+            #self.frame_saver.set_dataset_name(self.path_name)
+            print(self.path_name)
+            '''We can add attributes here'''
+            #self.frame_saver.f[self.frame_saver.path_name]= self.single_frame
+            self.frame_saver.f.create_dataset(self.path_name, data=self.single_frame)
+            self.frame_saver.f.close()
+            
+        else:
+            print('Select directory and enter a valid filename before saving')
         
     def start_live_mode(self):
         
@@ -295,10 +336,14 @@ class Controller(QWidget):
             
         self.liveModeStarted = True
         self.pushButton_getSingleImage.setEnabled(False)
+        self.pushButton_saveImage.setEnabled(False)
         self.pushButton_startLiveMode.setEnabled(False)
         self.pushButton_stopLiveMode.setEnabled(True)
-        self.pushButton_startAcquisition.setEnabled(False)
-        self.pushButton_stopAcquisition.setEnabled(False)
+        self.pushButton_startStack.setEnabled(False)
+        self.pushButton_stopStack.setEnabled(False)
+        self.pushButton_startPreviewMode.setEnabled(False)
+        self.pushButton_stopPreviewMode.setEnabled(False)
+        
         print('Start live mode')
         
         '''Setting the camera for acquisition'''
@@ -359,8 +404,8 @@ class Controller(QWidget):
         self.pushButton_getSingleImage.setEnabled(True)
         self.pushButton_startLiveMode.setEnabled(True)
         self.pushButton_stopLiveMode.setEnabled(False)
-        self.pushButton_startAcquisition.setEnabled(True)
-        self.pushButton_stopAcquisition.setEnabled(False)
+        self.pushButton_startStack.setEnabled(True)
+        self.pushButton_startPreviewMode.setEnabled(True)
         
         print('Live mode stopped')
         
@@ -369,21 +414,25 @@ class Controller(QWidget):
         
     
         
-    def start_acquisition_mode(self):
+    def start_stack_mode(self):
         '''Detection arm (self.motor3) to be implemented 
         
         Note: check if there's a NI-Daqmx function to repeat the data sent instead of closing each time the task. This would be useful
-        if it is possible to break a task with self.stop_acquisition_mode
+        if it is possible to break a task with self.stop_stack_mode
         
         An option to scan forward or backward should be implemented
         A progress bar would be nice
         '''
         self.pushButton_getSingleImage.setEnabled(False)
+        self.pushButton_saveImage.setEnabled(False)
         self.pushButton_startLiveMode.setEnabled(False)
         self.pushButton_stopLiveMode.setEnabled(False)
-        self.pushButton_startAcquisition.setEnabled(False)
-        self.pushButton_stopAcquisition.setEnabled(True)
-        print('Start acquisition mode')
+        self.pushButton_startStack.setEnabled(False)
+        self.pushButton_stopStack.setEnabled(True)
+        self.pushButton_startPreviewMode.setEnabled(False)
+        self.pushButton_stopPreviewMode.setEnabled(False)
+        
+        print('Start stack mode')
         for i in range(int(self.doubleSpinBox_planeNumber.value())):
             self.ramps=AOETLGalvos(parameters)                  
             self.ramps.create_tasks(terminals, 'FINITE')                           
@@ -396,9 +445,9 @@ class Controller(QWidget):
             self.ramps.stop_tasks()                             
             self.ramps.close_tasks()
             #Sample motion
-            if self.comboBox_acquisitionDirection.currentText() == 'Forward':
+            if self.comboBox_stackDirection.currentText() == 'Forward':
                 self.motor2.move_relative_position(-self.doubleSpinBox_planeStep.value(),'\u03BCm')
-            elif self.comboBox_acquisitionDirection.currentText() == 'Backward':
+            elif self.comboBox_stackDirection.currentText() == 'Backward':
                 self.motor2.move_relative_position(self.doubleSpinBox_planeStep.value(),'\u03BCm')
         
         print('Acquisition done')
@@ -406,12 +455,12 @@ class Controller(QWidget):
         self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText())) 
         self.pushButton_getSingleImage.setEnabled(True)
         self.pushButton_startLiveMode.setEnabled(True)
-        self.pushButton_stopLiveMode.setEnabled(False)
-        self.pushButton_startAcquisition.setEnabled(True)
-        self.pushButton_stopAcquisition.setEnabled(False)
+        self.pushButton_startStack.setEnabled(True)
+        self.pushButton_stopStack.setEnabled(False)
+        self.pushButton_startPreviewMode.setEnabled(True)
             
-    def stop_acquisition_mode(self):
-        '''Useless function for now. Would be useful to find a way to stop acquisition mode before it's done. Note: check how to break a NI-Daqmx task '''
+    def stop_stack_mode(self):
+        '''Useless function for now. Would be useful to find a way to stop stack mode before it's done. Note: check how to break a NI-Daqmx task '''
         pass
         
 
@@ -619,8 +668,10 @@ class Controller(QWidget):
         # Modes
         #**********************************************************************
         self.pushButton_stopLiveMode.setEnabled(False)
-        self.pushButton_stopAcquisition.setEnabled(False)
+        self.pushButton_stopStack.setEnabled(False)
         self.pushButton_setOptimized.setEnabled(False)
+        self.pushButton_saveImage.setEnabled(False)
+        self.pushButton_stopPreviewMode.setEnabled(False)
         
         self.spinBox_planeNumber.setMaximum(101600)
         self.spinBox_planeNumber.setMinimum(1)
@@ -631,8 +682,8 @@ class Controller(QWidget):
         self.doubleSpinBox_planeStep.setMaximum(101600)
         self.doubleSpinBox_planeStep.setSingleStep(1)
         
-        self.comboBox_acquisitionDirection.insertItems(0,['Forward','Backward'])
-        self.comboBox_acquisitionDirection.setCurrentIndex(0)
+        self.comboBox_stackDirection.insertItems(0,['Forward','Backward'])
+        self.comboBox_stackDirection.setCurrentIndex(0)
         
         
         #**********************************************************************
@@ -822,6 +873,12 @@ class Controller(QWidget):
             
         self.previewModeStarted = True
         
+        self.pushButton_getSingleImage.setEnabled(False)
+        self.pushButton_saveImage.setEnabled(False)
+        self.pushButton_startStack.setEnabled(False)
+        self.pushButton_stopStack.setEnabled(False)
+        self.pushButton_startLiveMode.setEnabled(False)
+        self.pushButton_stopLiveMode.setEnabled(False)
         self.pushButton_startPreviewMode.setEnabled(False)
         self.pushButton_stopPreviewMode.setEnabled(True)
         
@@ -1007,6 +1064,9 @@ class Controller(QWidget):
         self.preview_lasers_task.close()
         self.preview_galvos_etls_task.close()
         
+        self.pushButton_getSingleImage.setEnabled(True)
+        self.pushButton_startStack.setEnabled(True)
+        self.pushButton_startLiveMode.setEnabled(True)
         self.pushButton_startPreviewMode.setEnabled(True)
         self.pushButton_stopPreviewMode.setEnabled(False)
         
@@ -1034,6 +1094,27 @@ class Controller(QWidget):
             self.close_camera()
             
         event.accept()
+        
+        
+    def select_directory(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontResolveSymlinks
+        options |= QFileDialog.ShowDirsOnly
+        self.save_directory = QFileDialog.getExistingDirectory(self, 'Choose Directory', '', options)
+        
+        if self.save_directory != '':
+            self.label_currentDirectory.setText(self.save_directory)
+            self.lineEdit_filename.setEnabled(True)
+            self.lineEdit_filename.setText('')
+            self.savingAllowed = True
+        else:
+            self.label_currentDirectory.setText('None specified')
+            self.lineEdit_filename.setEnabled(False)
+            self.lineEdit_filename.setText('Select directory first')
+            self.savingAllowed = False
+        
+        
+        
 
 class CameraWindow(queue.Queue):
     
@@ -1057,5 +1138,106 @@ class CameraWindow(queue.Queue):
         except queue.Empty:
             pass
            
+           
+           
+           
+class FrameSaver():
+    
+    def __init__(self, filename):
+        self.filename = filename
+        self.f = h5py.File(self.filename, 'a')
+        
+        
+    def set_block_size(self, block_size):
+        self.block_size = block_size
+        self.queue = queue(2*block_size)
+        
+    def set_dataset_name(self,path_name):
+        self.path_name = path_name
+        self.f.create_group(self.path_name)   #Create sub-group (folder)
+        
+    def add_attribute(self, attribute, value):
+        self.f[self.path_name].attrs[attribute]=value
+        
+    def start_saving(self):
+        self.f.close()
+        self.parent_conn, child_conn = multiprocessing.Pipe()
+        self.p = multiprocessing.Process(target=save_process, args = (self.queue, self.block_size, self.path_name, child_conn, self.filename))
+        self.p.start()
+        
+    def stop_saving(self):
+        '''Stop saving, join save thread and clear data in queue to prepare for next round '''
+        self.parent_conn.send([False])
+        self.p.join()
+        
+    def put(self, value, flag):
+        self.queue.put(value, flag)
+        
+    def check_existing_files(self, path_name, scan_type):
+        in_loop = True
+        counter = 0
+        
+        while in_loop:
+            counter = counter +1
+            self.path_name = posixpath.join(path_name, scan_type + '_' + str(counter))
+            in_loop = self.path_name in self.f
             
+        return counter
+    
+
+
+def save_process(queue, block_size, datasetname, conn, filename):
+    
+    f = h5py.File(filename, 'a')
+    save_index = 0
+    index = 0
+    started = True
+    
+    while started:
+        try:
+            '''We block for 2s on no data to optimize CPU and avoid running the while loop for no reason'''
+            frame = queue.get(True,1)
+            
+            '''Create data buffer '''
+            if frame.ndim > 1:
+                if index == 0:
+                    buffer = np.zeros((frame.shape[0], frame.shape[1], block_size))
+                buffer[:, :, index] = frame
+                
+            else:
+                if index == 0:
+                    buffer = np.zeros((frame.shape[0], block_size))
+                buffer[:, index] = frame
+                
+            index = (index+1) % block_size  #Index returns to 0 when reaching block_size
+            
+            '''Add to file when index returns to 0'''
+            if index == 0:
+                f[posixpath.join(datasetname, 'scan'+u'%05d' % save_index)] = buffer
+                save_index = save_index +1
+                conn.send([save_index, queue.qsize()])
+                
+        except:
+            print('No frame')
+            
+            if conn.poll():
+                print('Checking connection status')
+                started = conn.recv()[0]
+                
+    '''Save last acquisition if incomplete (did not reach block_size)'''
+    if index != 0:
+        if frame.ndim > 1:
+            buffer2 = np.zeros((frame.shape[0], frame.shape[1], index+1))  #+1 to take into account the index 0
+            buffer2 = buffer[:,:,0:index]
+        
+        else:
+            buffer2 = np.zeros((frame.shape[0], index+1))    #+1 to take into account the index 0
+            buffer2 = buffer[:, 0:index]
+            
+        f[posixpath.join('\scans', datasetname, 'scan'+u'%05d' % save_index)] = buffer2  #Path slightly changed
+        f.close()
+                
+            
+
+          
         
