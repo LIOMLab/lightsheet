@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>830</width>
-    <height>815</height>
+    <height>886</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -2035,7 +2035,7 @@
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>600</y>
+     <y>670</y>
      <width>271</width>
      <height>161</height>
     </rect>
@@ -2108,33 +2108,7 @@
      <string>Stop Preview Mode</string>
     </property>
    </widget>
-  </widget>
-  <widget class="QGroupBox" name="groupBox_12">
-   <property name="geometry">
-    <rect>
-     <x>300</x>
-     <y>600</y>
-     <width>291</width>
-     <height>211</height>
-    </rect>
-   </property>
-   <property name="title">
-    <string/>
-   </property>
-   <widget class="QPushButton" name="pushButton_startAcquisition">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>20</y>
-      <width>121</width>
-      <height>23</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Start Acquisition Mode</string>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="pushButton_stopAcquisition">
+   <widget class="QPushButton" name="pushButton_saveImage">
     <property name="geometry">
      <rect>
       <x>140</x>
@@ -2144,7 +2118,46 @@
      </rect>
     </property>
     <property name="text">
-     <string>Stop Acquisition Mode</string>
+     <string>Save image</string>
+    </property>
+   </widget>
+  </widget>
+  <widget class="QGroupBox" name="groupBox_12">
+   <property name="geometry">
+    <rect>
+     <x>300</x>
+     <y>670</y>
+     <width>291</width>
+     <height>211</height>
+    </rect>
+   </property>
+   <property name="title">
+    <string/>
+   </property>
+   <widget class="QPushButton" name="pushButton_startStack">
+    <property name="geometry">
+     <rect>
+      <x>10</x>
+      <y>20</y>
+      <width>121</width>
+      <height>23</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Start Stack Mode</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="pushButton_stopStack">
+    <property name="geometry">
+     <rect>
+      <x>140</x>
+      <y>20</y>
+      <width>121</width>
+      <height>23</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Stop Stack Mode</string>
     </property>
    </widget>
    <widget class="QLabel" name="label_75">
@@ -2222,7 +2235,7 @@
      </rect>
     </property>
    </widget>
-   <widget class="QComboBox" name="comboBox_acquisitionDirection">
+   <widget class="QComboBox" name="comboBox_stackDirection">
     <property name="geometry">
      <rect>
       <x>150</x>
@@ -2260,7 +2273,7 @@
    <property name="geometry">
     <rect>
      <x>610</x>
-     <y>600</y>
+     <y>670</y>
      <width>211</width>
      <height>161</height>
     </rect>
@@ -2359,6 +2372,84 @@
      <enum>Qt::Horizontal</enum>
     </property>
    </widget>
+  </widget>
+  <widget class="QLabel" name="label_13">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>620</y>
+     <width>131</width>
+     <height>20</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Enter Filename For Saving:</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="pushButton_selectDirectory">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>590</y>
+     <width>121</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Select Directory</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_6">
+   <property name="geometry">
+    <rect>
+     <x>160</x>
+     <y>590</y>
+     <width>91</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Current Directory:</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_currentDirectory">
+   <property name="geometry">
+    <rect>
+     <x>260</x>
+     <y>590</y>
+     <width>551</width>
+     <height>20</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>None Specified</string>
+   </property>
+  </widget>
+  <widget class="QLineEdit" name="lineEdit_filename">
+   <property name="geometry">
+    <rect>
+     <x>160</x>
+     <y>620</y>
+     <width>651</width>
+     <height>20</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Select Directory First</string>
+   </property>
+  </widget>
+  <widget class="Line" name="line_10">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>640</y>
+     <width>811</width>
+     <height>31</height>
+    </rect>
+   </property>
+   <property name="orientation">
+    <enum>Qt::Horizontal</enum>
+   </property>
   </widget>
  </widget>
  <resources/>
