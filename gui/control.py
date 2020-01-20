@@ -38,14 +38,14 @@ import datetime
 
 
 parameters = dict()
-parameters["samplerate"]=100
+parameters["samplerate"]=20000
 parameters["sweeptime"]=1        #0.4
-parameters["galvo_l_frequency"]=10
+parameters["galvo_l_frequency"]=50
 parameters["galvo_l_amplitude"]=2
 parameters["galvo_l_offset"]=0
 parameters["galvo_l_duty_cycle"]=50
 parameters["galvo_l_phase"]=np.pi/2
-parameters["galvo_r_frequency"]=10
+parameters["galvo_r_frequency"]=50
 parameters["galvo_r_amplitude"]=2
 parameters["galvo_r_offset"]=0
 parameters["galvo_r_duty_cycle"]=50
@@ -62,6 +62,12 @@ parameters["etl_r_amplitude"]=2
 parameters["etl_r_offset"]=0
 parameters["laser_l_voltage"]=0.905
 parameters["laser_r_voltage"]=0.935
+parameters["columns"] = 2560          # In pixels
+parameters["rows"] = 2160             # In pixels 
+parameters["etl_step"] = 100          # In pixels
+parameters["camera_delay"] = 10       # In %
+parameters["min_t_delay"] = 0.0354404 # In seconds
+parameters["t_startExp"] = 0.017712   # In seconds
 
 terminals = dict()
 terminals["galvos_etls"] = '/Dev1/ao0:3'
@@ -90,11 +96,12 @@ class Controller(QWidget):
         self.rightLaserOn = False
         self.previewModeStarted = False
         self.liveModeStarted = False
+        self.stackModeStarted = False
         self.cameraOn = True
         
         self.motor1 = Motors(1, 'COM3')             #Vertical motor
         self.motor2 = Motors(2, 'COM3')             #Horizontal motor for sample motion
-        self.motor3 = Motors(3, 'COM3')             #Horizontal motor for detection arm motion
+        self.motor3 = Motors(3, 'COM3')             #Horizontal motor for camera motion (detection arm)
         
         self.camera = Camera()
         
@@ -139,6 +146,9 @@ class Controller(QWidget):
         self.pushButton_stopLiveMode.clicked.connect(self.stop_live_mode)
         self.pushButton_startStack.clicked.connect(self.start_stack_mode)
         self.pushButton_stopStack.clicked.connect(self.stop_stack_mode)
+        self.pushButton_setStartPoint.clicked.connect(self.set_stack_mode_starting_point)
+        self.pushButton_setEndPoint.clicked.connect(self.set_stack_mode_ending_point)
+        self.doubleSpinBox_planeStep.valueChanged.connect(self.set_number_of_planes)
         self.pushButton_startPreviewMode.clicked.connect(self.start_preview_mode)
         self.pushButton_stopPreviewMode.clicked.connect(self.stop_preview_mode)
         #self.pushButton_closeCamera.clicked.connect(self.close_camera)
@@ -232,10 +242,14 @@ class Controller(QWidget):
         if self.previewModeStarted == True:
             self.stop_preview_mode()
             self.previewModeStarted = False
-        elif self.liveModeStarted == True:
+        if self.liveModeStarted == True:
             self.stop_live_mode()
             self.liveModeStarted = False
+        if self.stackModeStarted == True:
+            self.stop_stack_mode()
+            self.stackModeStarted = False
             
+        
         self.pushButton_getSingleImage.setEnabled(False)
         self.pushButton_startLiveMode.setEnabled(False)
         self.pushButton_stopLiveMode.setEnabled(False)
@@ -253,17 +267,53 @@ class Controller(QWidget):
         self.camera.set_recording_state(1)
         self.camera.insert_buffers_in_queue()
         
+        self.stopLasers = False
+        
+        #numberOfSteps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"])
+        
+        self.lasers_task = nidaqmx.Task()
+        self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
+        lasers_thread = threading.Thread(target = self.lasers_thread)
+        lasers_thread.start()
+        
         self.ramps=AOETLGalvos(self.parameters)                  
         self.ramps.create_tasks(terminals,'FINITE')                           
+        
         self.ramps.create_galvos_waveforms()
         self.ramps.create_etl_waveforms()
         self.ramps.create_DO_camera_waveform()
-        self.ramps.create_lasers_waveforms()                   
+        #self.ramps.create_lasers_waveforms()                   
+        
+        #self.ramps.initialize_variables()
+        #self.ramps.create_etl_waveforms(case = 'STAIRS')
+        #self.ramps.create_galvos_waveforms(case = 'TRAPEZE')
+        #self.ramps.create_DO_camera_waveform( case = 'STAIRS_FITTING')
+        
         self.ramps.write_waveforms_to_tasks()                            
         self.ramps.start_tasks()
         self.ramps.run_tasks()
         
+        #buffer = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))
+        #print('Buffer: ' +str(np.size(buffer,0)) +'rows by ' + str(np.size(buffer,1))+ ' columns')
+        
+        #for i in range(int(numberOfSteps)):
+        #    frame_retrieved = self.camera.retrieve_single_image()*1.0
+        #    buffer[int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])] = frame_retrieved[int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])]
+        #    print('Frame: ' +str(np.size(frame_retrieved,0)) +'rows by ' + str(np.size(frame_retrieved,1))+ ' columns')
+            
+        #self.single_frame = buffer
+        
+        #for i in range(0, len(self.consumers), 4):
+        #    if self.consumers[i+2] == "CameraWindow":
+        #        try:
+        #            self.consumers[i].put(self.single_frame)
+        #        except:      #self.consumers[i].Full:
+        #            print("Queue is full")    
+        
+        
         frame = self.camera.retrieve_single_image()*1.0
+        
+        self.stopLasers = True
         
         for i in range(0, len(self.consumers), 4):
             if self.consumers[i+2] == "CameraWindow":
@@ -281,15 +331,15 @@ class Controller(QWidget):
         self.ramps.stop_tasks()                             
         self.ramps.close_tasks()
         
-        '''Put the lasers voltage to zero
-           This is done at the end, because we do not want to shut down the lasers
-           after each sweep to make sure their power values stay the same '''
-        self.lasers_task = nidaqmx.Task()
-        self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
-        waveforms = np.stack(([0],[0]))
-        self.lasers_task.write(waveforms)
-        self.lasers_task.stop()
-        self.lasers_task.close()
+        #'''Put the lasers voltage to zero
+        #   This is done at the end, because we do not want to shut down the lasers
+        #   after each sweep to make sure their power values stay the same '''
+        #self.lasers_task = nidaqmx.Task()
+        #self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
+        #waveforms = np.stack(([0],[0]))
+        #self.lasers_task.write(waveforms)
+        #self.lasers_task.stop()
+        #self.lasers_task.close()
         
         self.pushButton_getSingleImage.setEnabled(True)
         self.pushButton_saveImage.setEnabled(True)
@@ -297,13 +347,53 @@ class Controller(QWidget):
         self.pushButton_startStack.setEnabled(True)
         self.pushButton_startPreviewMode.setEnabled(True)
         
+    def lasers_thread(self):
+       
+        continuer = True
+        while continuer:
+            
+            if self.stopLasers == True:
+                continuer = False
+            
+            else:
+                leftLaserVoltage = 0
+                rightLaserVoltage = 0
+                
+                '''Laser status override already dealt with by enabling 
+                   pushButtons in lasers' functions'''
+                if self.allLasersOn == True:
+                    leftLaserVoltage = self.parameters['laser_l_voltage']
+                    rightLaserVoltage = self.parameters['laser_r_voltage']
+                
+                if self.leftLaserOn == True:
+                    leftLaserVoltage = self.parameters['laser_l_voltage']
+                
+                if self.rightLaserOn == True:
+                    rightLaserVoltage = self.parameters['laser_r_voltage']
+                    
+                self.lasers_waveforms = np.stack((np.array([rightLaserVoltage]),
+                                                        np.array([leftLaserVoltage])))   
+                    
+                self.lasers_task.write(self.lasers_waveforms, auto_start=True)
+        
+        '''Put the lasers voltage to zero
+           This is done at the end, because we do not want to shut down the lasers
+           after each sweep to make sure their power values stay the same '''
+        
+        waveforms = np.stack(([0],[0]))
+        self.lasers_task.write(waveforms)
+        self.lasers_task.stop()
+        self.lasers_task.close()        
+            
+        
+        
     def save_single_image(self):
         
         self.filename = str(self.lineEdit_filename.text())
         '''Removing spaces, dots and commas'''
-        self.filename = self.filename.replace(' ', '')
-        self.filename = self.filename.replace('.', '')
-        self.filename = self.filename.replace(',', '')
+        #self.filename = self.filename.replace(' ', '')
+        #self.filename = self.filename.replace('.', '')
+        #self.filename = self.filename.replace(',', '')
         
         if self.savingAllowed and self.filename != '':
             self.filename = self.save_directory + '/' + self.filename + '.hdf5'
@@ -323,16 +413,19 @@ class Controller(QWidget):
             
         else:
             print('Select directory and enter a valid filename before saving')
-        
+            
     def start_live_mode(self):
         
         '''Flags check up'''
         if self.previewModeStarted == True:
             self.stop_preview_mode()
             self.previewModeStarted = False
-        elif self.liveModeStarted == True:
+        if self.liveModeStarted == True:
             self.stop_live_mode()
             self.liveModeStarted = False
+        if self.stackModeStarted == True:
+            self.stop_stack_mode()
+            self.stackModeStarted = False
             
         self.liveModeStarted = True
         self.pushButton_getSingleImage.setEnabled(False)
@@ -354,13 +447,16 @@ class Controller(QWidget):
         self.camera.set_recording_state(1)
         self.camera.insert_buffers_in_queue()
         
+        self.lasers_task = nidaqmx.Task()
+        self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
+        
         # Setup from data in gui
         self.ramps=AOETLGalvos(self.parameters)                  
         self.ramps.create_tasks(terminals, 'CONTINUOUS')                           
         self.ramps.create_galvos_waveforms()
         self.ramps.create_etl_waveforms()
         self.ramps.create_DO_camera_waveform()
-        self.ramps.create_lasers_waveforms()                     
+        #self.ramps.create_lasers_waveforms()                     
         self.ramps.write_waveforms_to_tasks()                            
         self.ramps.start_tasks()
         
@@ -375,6 +471,28 @@ class Controller(QWidget):
                     
                     '''Retrieving image from camera and putting it in its queue'''
                     if self.liveModeStarted == True:
+                        
+                        leftLaserVoltage = 0
+                        rightLaserVoltage = 0
+                        
+                        '''Laser status override already dealt with by enabling 
+                           pushButtons in lasers' functions'''
+                        if self.allLasersOn == True:
+                            leftLaserVoltage = self.parameters['laser_l_voltage']
+                            rightLaserVoltage = self.parameters['laser_r_voltage']
+                        
+                        if self.leftLaserOn == True:
+                            leftLaserVoltage = self.parameters['laser_l_voltage']
+                        
+                        if self.rightLaserOn == True:
+                            rightLaserVoltage = self.parameters['laser_r_voltage']
+                            
+                        self.lasers_waveforms = np.stack((np.array([rightLaserVoltage]),
+                                                                np.array([leftLaserVoltage])))   
+                            
+                        self.lasers_task.write(self.lasers_waveforms, auto_start=True)
+                        
+                        
                         frame = self.camera.retrieve_single_image()*1.0
         
                         try:
@@ -394,8 +512,6 @@ class Controller(QWidget):
         '''Put the lasers voltage to zero
            This is done at the end, because we do not want to shut down the lasers
            after each sweep to make sure their power values stay the same '''
-        self.lasers_task = nidaqmx.Task()
-        self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
         waveforms = np.stack(([0],[0]))
         self.lasers_task.write(waveforms)
         self.lasers_task.stop()
@@ -412,6 +528,7 @@ class Controller(QWidget):
     def stop_live_mode(self):
         self.liveModeStarted = False
         
+        
     
         
     def start_stack_mode(self):
@@ -423,41 +540,125 @@ class Controller(QWidget):
         An option to scan forward or backward should be implemented
         A progress bar would be nice
         '''
-        self.pushButton_getSingleImage.setEnabled(False)
-        self.pushButton_saveImage.setEnabled(False)
-        self.pushButton_startLiveMode.setEnabled(False)
-        self.pushButton_stopLiveMode.setEnabled(False)
-        self.pushButton_startStack.setEnabled(False)
-        self.pushButton_stopStack.setEnabled(True)
-        self.pushButton_startPreviewMode.setEnabled(False)
-        self.pushButton_stopPreviewMode.setEnabled(False)
         
-        print('Start stack mode')
-        for i in range(int(self.doubleSpinBox_planeNumber.value())):
-            self.ramps=AOETLGalvos(parameters)                  
-            self.ramps.create_tasks(terminals, 'FINITE')                           
-            self.ramps.create_galvos_waveforms()
-            self.ramps.create_etl_waveforms()                   
-            self.ramps.write_waveforms_to_tasks()
-            self.ramps.run_tasks()                            
-            self.ramps.start_tasks()
-            self.ramps.run_tasks()
-            self.ramps.stop_tasks()                             
-            self.ramps.close_tasks()
-            #Sample motion
-            if self.comboBox_stackDirection.currentText() == 'Forward':
-                self.motor2.move_relative_position(-self.doubleSpinBox_planeStep.value(),'\u03BCm')
-            elif self.comboBox_stackDirection.currentText() == 'Backward':
-                self.motor2.move_relative_position(self.doubleSpinBox_planeStep.value(),'\u03BCm')
+        '''Flags check up'''
+        if self.previewModeStarted == True:
+            self.stop_preview_mode()
+            self.previewModeStarted = False
+        if self.liveModeStarted == True:
+            self.stop_live_mode()
+            self.liveModeStarted = False
+        if self.stackModeStarted == True:
+            self.stop_stack_mode()
+            self.stackModeStarted = False
+                
+        self.filename = str(self.lineEdit_filename.text())   
+        '''Removing spaces, dots and commas'''
+            #self.filename = self.filename.replace(' ', '')
+            #self.filename = self.filename.replace('.', '')
+            #self.filename = self.filename.replace(',', '')
         
-        print('Acquisition done')
-        #Current camera position update
-        self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText())) 
-        self.pushButton_getSingleImage.setEnabled(True)
-        self.pushButton_startLiveMode.setEnabled(True)
-        self.pushButton_startStack.setEnabled(True)
-        self.pushButton_stopStack.setEnabled(False)
-        self.pushButton_startPreviewMode.setEnabled(True)
+        if self.checkBox_setStartPoint.isChecked()==False or self.checkBox_setEndPoint.isChecked()==False or self.doubleSpinBox_planeStep.value()==0:
+            print('Set starting and ending points and select a non-zero plane step value')
+            
+        elif self.savingAllowed == False or self.filename == '':
+            print('Select directory and enter a valid filename before saving')
+            
+        else:
+            
+            
+            '''Setting start & end points and plane step (takes into account the direction of acquisition) '''
+            if self.stackModeStartingPoint > self.stackModeEndingPoint:
+                self.step = -1*self.doubleSpinBox_planeStep.value()
+                self.startPoint = self.stackModeStartingPoint
+                self.endPoint = self.stackModeStartingPoint+self.step*(self.numberOfPlanes-1)
+            else:
+                self.step = self.doubleSpinBox_planeStep.value()
+                self.startPoint = self.stackModeStartingPoint
+                self.endPoint = self.stackModeStartingPoint+self.step*(self.numberOfPlanes-1)
+                
+            
+            self.stackModeStarted = True
+            self.pushButton_getSingleImage.setEnabled(False)
+            self.pushButton_saveImage.setEnabled(False)
+            self.pushButton_startLiveMode.setEnabled(False)
+            self.pushButton_stopLiveMode.setEnabled(False)
+            self.pushButton_startStack.setEnabled(False)
+            self.pushButton_stopStack.setEnabled(True)
+            self.pushButton_startPreviewMode.setEnabled(False)
+            self.pushButton_stopPreviewMode.setEnabled(False)
+            
+            
+            '''Setting the camera for acquisition'''
+            self.camera.set_trigger_mode('ExternalExposureControl')
+            self.camera.arm_camera() 
+            self.camera.get_sizes() 
+            self.camera.allocate_buffer()    
+            self.camera.set_recording_state(1)
+            self.camera.insert_buffers_in_queue()
+            
+            
+            ''' Prepare saving'''
+            self.filename = self.save_directory + '/' + self.filename + '.hdf5'
+            self.frame_saver = FrameSaver(self.filename)
+            self.scan_type = 'SingleImage'
+            self.scan_date = str(datetime.date.today())
+            self.path_root = posixpath.join('/', self.scan_date)
+            self.file_number = self.frame_saver.check_existing_files(self.path_root, self.scan_type)
+            self.scan_number = self.scan_type + '_' + str(self.file_number)
+            self.path_name = posixpath.join(self.path_root, self.scan_number)
+            self.frame_saver.set_dataset_name(self.path_name)
+            print(self.path_name)
+            '''We can add attributes here'''
+            self.frame_saver.set_block_size(25)
+            self.setDataConsumer(self.frame_saver, False, "FrameSaver", True)
+            self.frame_saver.start_saving()
+            
+            
+            for i in range(int(self.numberOfPlanes)):
+                '''Moving sample position'''
+                position = self.startPoint+i*self.step
+                self.motor2.move_absolute_position(position,'\u03BCm')  #Position in micro-meters
+                
+                '''Changing ETLs focus '''
+                
+                '''Acquiring the frame '''
+                self.ramps=AOETLGalvos(self.parameters)                  
+                self.ramps.create_tasks(terminals,'FINITE')                           
+                self.ramps.create_galvos_waveforms()
+                self.ramps.create_etl_waveforms()
+                self.ramps.create_DO_camera_waveform()
+                self.ramps.create_lasers_waveforms()                   
+                
+                self.ramps.write_waveforms_to_tasks()                            
+                self.ramps.start_tasks()
+                self.ramps.run_tasks()
+                frame = self.camera.retrieve_single_image()*1.0
+                
+                for ii in range(0, len(self.consumers), 4):
+                    try:
+                        self.consumers[ii].put(frame)
+                    except:      #self.consumers[ii].Full:
+                        print("Queue is full")
+
+                self.ramps.stop_tasks()                             
+                self.ramps.close_tasks()
+            
+            #self.frame_saver.stop_saving()
+               
+            self.camera.cancel_images()
+            self.camera.set_recording_state(0)
+            self.camera.free_buffer()
+            
+            
+            print('Acquisition done')
+            #Current camera position update
+            self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText())) 
+            self.pushButton_getSingleImage.setEnabled(True)
+            self.pushButton_startLiveMode.setEnabled(True)
+            self.pushButton_startStack.setEnabled(True)
+            self.pushButton_stopStack.setEnabled(False)
+            self.pushButton_startPreviewMode.setEnabled(True)
             
     def stop_stack_mode(self):
         '''Useless function for now. Would be useful to find a way to stop stack mode before it's done. Note: check how to break a NI-Daqmx task '''
@@ -673,17 +874,14 @@ class Controller(QWidget):
         self.pushButton_saveImage.setEnabled(False)
         self.pushButton_stopPreviewMode.setEnabled(False)
         
-        self.spinBox_planeNumber.setMaximum(101600)
-        self.spinBox_planeNumber.setMinimum(1)
-        self.spinBox_planeNumber.setSingleStep(1)
+        self.checkBox_setStartPoint.setEnabled(False)
+        self.checkBox_setEndPoint.setEnabled(False)
         
         self.doubleSpinBox_planeStep.setSuffix(' \u03BCm')
         self.doubleSpinBox_planeStep.setDecimals(0)
         self.doubleSpinBox_planeStep.setMaximum(101600)
         self.doubleSpinBox_planeStep.setSingleStep(1)
         
-        self.comboBox_stackDirection.insertItems(0,['Forward','Backward'])
-        self.comboBox_stackDirection.setCurrentIndex(0)
         
         
         #**********************************************************************
@@ -1090,6 +1288,9 @@ class Controller(QWidget):
         if self.liveModeStarted == True:
             self.stop_live_mode()
             
+        if self.stackModeStarted == True:
+            self.stop_stack_mode()
+            
         if self.cameraOn == True:
             self.close_camera()
             
@@ -1113,8 +1314,26 @@ class Controller(QWidget):
             self.lineEdit_filename.setText('Select directory first')
             self.savingAllowed = False
         
+    
+    def set_stack_mode_starting_point(self):
+        self.stackModeStartingPoint = self.motor2.current_position('\u03BCm') #Units in micro-meters, because plane step is in micro-meters
+        self.checkBox_setStartPoint.setChecked(True)
+        self.set_number_of_planes()
         
+    def set_stack_mode_ending_point(self):
+        self.stackModeEndingPoint = self.motor2.current_position('\u03BCm') #Units in micro-meters, because plane step is in micro-meters
+        self.checkBox_setEndPoint.setChecked(True)
+        self.set_number_of_planes()
+            
+    def set_number_of_planes(self):
         
+        if self.doubleSpinBox_planeStep.value() != 0:
+            if self.checkBox_setStartPoint.isChecked() == True and self.checkBox_setEndPoint.isChecked() == True:
+                self.numberOfPlanes = np.ceil(abs((self.stackModeEndingPoint-self.stackModeStartingPoint)/self.doubleSpinBox_planeStep.value()))
+                self.numberOfPlanes +=1   #Takes into account the initial plane
+                self.label_numberOfPlanes.setText(str(self.numberOfPlanes))
+        else:
+            print('Set a non-zero value to plane step')
 
 class CameraWindow(queue.Queue):
     
@@ -1150,7 +1369,7 @@ class FrameSaver():
         
     def set_block_size(self, block_size):
         self.block_size = block_size
-        self.queue = queue(2*block_size)
+        self.queue = multiprocessing.Queue(2*block_size)
         
     def set_dataset_name(self,path_name):
         self.path_name = path_name
@@ -1235,7 +1454,7 @@ def save_process(queue, block_size, datasetname, conn, filename):
             buffer2 = buffer[:, 0:index]
             
         f[posixpath.join('\scans', datasetname, 'scan'+u'%05d' % save_index)] = buffer2  #Path slightly changed
-        f.close()
+    f.close()
                 
             
 

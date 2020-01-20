@@ -24,6 +24,9 @@ from src.waveforms import sawtooth
 from src.waveforms import tunable_lens_ramp
 from src.waveforms import DO_signal
 from src.waveforms import laser_signal
+from src.waveforms import etl_stairs
+from src.waveforms import galvo_trapeze
+from src.waveforms import camera_DO_signal
 
 
 class AOETLGalvos(QtCore.QObject):
@@ -43,53 +46,101 @@ class AOETLGalvos(QtCore.QObject):
     def calculate_samples(self):
         self.samples = int(self.parameters["samplerate"]*self.parameters["sweeptime"])
     
-    def create_etl_waveforms(self):
-        self.etl_l_waveform = tunable_lens_ramp(samplerate = self.parameters["samplerate"],
-                                                sweeptime = self.parameters["sweeptime"],
-                                                delay = self.parameters["etl_l_delay"],
-                                                rise = self.parameters["etl_l_ramp_rising"],
-                                                fall = self.parameters["etl_l_ramp_falling"],
-                                                amplitude = self.parameters["etl_l_amplitude"],
-                                                offset = self.parameters["etl_l_offset"])
-
-        self.etl_r_waveform = tunable_lens_ramp(samplerate = self.parameters["samplerate"],
-                                                sweeptime = self.parameters["sweeptime"],
-                                                delay = self.parameters["etl_r_delay"],
-                                                rise = self.parameters["etl_r_ramp_rising"],
-                                                fall = self.parameters["etl_r_ramp_falling"],
-                                                amplitude = self.parameters["etl_r_amplitude"],
-                                                offset = self.parameters["etl_r_offset"])
+    def create_etl_waveforms(self, case = 'NONE'):
+        
+        if case == 'STAIRS':
+            self.etl_l_waveform = etl_stairs(amplitude = self.parameters["etl_l_amplitude"], 
+                                             numberOfSteps = self.numberOfSteps, 
+                                             numberOfSamples = self.numberOfSamples, 
+                                             samplesPerStep = self.samplesPerStep, 
+                                             offset = self.parameters["etl_l_offset"], 
+                                             direction = 'UP')
+            
+            self.etl_r_waveform = etl_stairs(amplitude = self.parameters["etl_r_amplitude"], 
+                                             numberOfSteps = self.numberOfSteps, 
+                                             numberOfSamples = self.numberOfSamples, 
+                                             samplesPerStep = self.samplesPerStep, 
+                                             offset = self.parameters["etl_r_offset"], 
+                                             direction = 'DOWN')
+        
+        else:
+            self.etl_l_waveform = tunable_lens_ramp(samplerate = self.parameters["samplerate"],
+                                                    sweeptime = self.parameters["sweeptime"],
+                                                    delay = self.parameters["etl_l_delay"],
+                                                    rise = self.parameters["etl_l_ramp_rising"],
+                                                    fall = self.parameters["etl_l_ramp_falling"],
+                                                    amplitude = self.parameters["etl_l_amplitude"],
+                                                    offset = self.parameters["etl_l_offset"])
+    
+            self.etl_r_waveform = tunable_lens_ramp(samplerate = self.parameters["samplerate"],
+                                                    sweeptime = self.parameters["sweeptime"],
+                                                    delay = self.parameters["etl_r_delay"],
+                                                    rise = self.parameters["etl_r_ramp_rising"],
+                                                    fall = self.parameters["etl_r_ramp_falling"],
+                                                    amplitude = self.parameters["etl_r_amplitude"],
+                                                    offset = self.parameters["etl_r_offset"])
 
     
-    def create_galvos_waveforms(self):
+    def create_galvos_waveforms(self, case = 'NONE'):
         
-        '''Create Galvo waveforms:'''
-        self.galvo_l_waveform = sawtooth(samplerate = self.parameters["samplerate"],
-                                         sweeptime = self.parameters["sweeptime"],
-                                         frequency = self.parameters["galvo_l_frequency"],
-                                         amplitude = self.parameters["galvo_l_amplitude"],
-                                         offset = self.parameters["galvo_l_offset"],
-                                         dutycycle = self.parameters["galvo_l_duty_cycle"],
-                                         phase = self.parameters["galvo_l_phase"])
-
-        ''' Attention: Right Galvo gets the left frequency for now '''
-
-        self.galvo_r_waveform = sawtooth(samplerate = self.parameters["samplerate"],
-                                         sweeptime = self.parameters["sweeptime"],
-                                         frequency = self.parameters["galvo_l_frequency"],
-                                         amplitude = self.parameters["galvo_r_amplitude"],
-                                         offset = self.parameters["galvo_r_offset"],
-                                         dutycycle = self.parameters["galvo_r_duty_cycle"],
-                                         phase = self.parameters["galvo_r_phase"])
+        if case == 'TRAPEZE':
+            self.galvo_l_waveform = galvo_trapeze(amplitude = self.parameters["galvo_l_amplitude"], 
+                                                  samplesPerHalfPeriod = self.samplesPerHalfPeriod, 
+                                                  samplesPerDelay = self.samplesPerDelay, 
+                                                  numberOfSamples = self.numberOfSamples, 
+                                                  numberOfSteps = self.numberOfSteps, 
+                                                  samplesPerStep = self.samplesPerStep, 
+                                                  samplesPerHalfDelay = self.samplesPerHalfDelay,
+                                                  offset = self.parameters["galvo_l_offset"])
+            
+            self.galvo_r_waveform = galvo_trapeze(amplitude = self.parameters["galvo_r_amplitude"], 
+                                                  samplesPerHalfPeriod = self.samplesPerHalfPeriod, 
+                                                  samplesPerDelay = self.samplesPerDelay, 
+                                                  numberOfSamples = self.numberOfSamples, 
+                                                  numberOfSteps = self.numberOfSteps, 
+                                                  samplesPerStep = self.samplesPerStep, 
+                                                  samplesPerHalfDelay = self.samplesPerHalfDelay,
+                                                  offset = self.parameters["galvo_r_offset"])
         
+        else:
+            '''Create Galvo waveforms:'''
+            self.galvo_l_waveform = sawtooth(samplerate = self.parameters["samplerate"],
+                                             sweeptime = self.parameters["sweeptime"],
+                                             frequency = self.parameters["galvo_l_frequency"],
+                                             amplitude = self.parameters["galvo_l_amplitude"],
+                                             offset = self.parameters["galvo_l_offset"],
+                                             dutycycle = self.parameters["galvo_l_duty_cycle"],
+                                             phase = self.parameters["galvo_l_phase"])
     
-    def create_DO_camera_waveform(self):
-        self.camera_waveform = DO_signal(samplerate = self.parameters["samplerate"], 
-                                            sweeptime = self.parameters["sweeptime"], 
-                                            delay = self.parameters["etl_l_delay"], 
-                                            rise = self.parameters["etl_l_ramp_rising"], 
-                                            fall = self.parameters["etl_l_ramp_falling"])
+            ''' Attention: Right Galvo gets the left frequency for now '''
+    
+            self.galvo_r_waveform = sawtooth(samplerate = self.parameters["samplerate"],
+                                             sweeptime = self.parameters["sweeptime"],
+                                             frequency = self.parameters["galvo_l_frequency"],
+                                             amplitude = self.parameters["galvo_r_amplitude"],
+                                             offset = self.parameters["galvo_r_offset"],
+                                             dutycycle = self.parameters["galvo_r_duty_cycle"],
+                                             phase = self.parameters["galvo_r_phase"])
+            
+    
+    def create_DO_camera_waveform(self, case = 'NONE'):
         
+        if case == 'STAIRS_FITTING':
+            self.camera_waveform = camera_DO_signal(samplesPerHalfPeriod = self.samplesPerHalfPeriod, 
+                                                    t_startExp = self.parameters["t_startExp"], 
+                                                    samplerate = self.parameters["samplerate"], 
+                                                    samplesPerHalfDelay = self.samplesPerHalfDelay, 
+                                                    numberOfSamples = self.numberOfSamples, 
+                                                    numberOfSteps = self.numberOfSteps, 
+                                                    samplesPerStep = self.samplesPerStep)
+        
+        else:
+            self.camera_waveform = DO_signal(samplerate = self.parameters["samplerate"], 
+                                                sweeptime = self.parameters["sweeptime"], 
+                                                delay = self.parameters["etl_l_delay"], 
+                                                rise = self.parameters["etl_l_ramp_rising"], 
+                                                fall = self.parameters["etl_l_ramp_falling"])
+            
         
     def create_lasers_waveforms(self):
         self.laser_l_waveform = laser_signal(samplerate = self.parameters["samplerate"], 
@@ -125,7 +176,7 @@ class AOETLGalvos(QtCore.QObject):
         #self.master_trigger_task = nidaqmx.Task()
         self.galvo_etl_task = nidaqmx.Task(new_task_name='galvo_etl_ramps')
         self.camera_task = nidaqmx.Task(new_task_name='camera_do_signal')
-        self.laser_task = nidaqmx.Task(new_task_name='laser_ramps')
+        #self.laser_task = nidaqmx.Task(new_task_name='laser_ramps')
 
 
         '''Housekeeping: Setting up the AO task for the Galvo and ETLs. It is the master task'''
@@ -137,8 +188,8 @@ class AOETLGalvos(QtCore.QObject):
         self.camera_task.do_channels.add_do_chan(terminals["camera"], line_grouping = LineGrouping.CHAN_PER_LINE)
         self.camera_task.timing.cfg_samp_clk_timing(rate=self.parameters["samplerate"], sample_mode=mode, samps_per_chan=self.samples)
         
-        self.laser_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
-        self.laser_task.timing.cfg_samp_clk_timing(rate=self.parameters["samplerate"], sample_mode=mode, samps_per_chan=self.samples)
+        #self.laser_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
+        #self.laser_task.timing.cfg_samp_clk_timing(rate=self.parameters["samplerate"], sample_mode=mode, samps_per_chan=self.samples)
         
         '''Configures the task to start acquiring/generating samples on a rising/falling edge of a digital signal. 
             args: terminal of the trigger source, which edge of the digital signal the task start (optionnal) '''
@@ -163,10 +214,10 @@ class AOETLGalvos(QtCore.QObject):
         
         self.camera_task.write(self.camera_waveform)
         
-        self.lasers_waveforms = np.stack((self.laser_r_waveform,
-                                          self.laser_l_waveform))
+        #self.lasers_waveforms = np.stack((self.laser_r_waveform,
+        #                                  self.laser_l_waveform))
         
-        self.laser_task.write(self.lasers_waveforms)
+        #self.laser_task.write(self.lasers_waveforms)
 
     def start_tasks(self):
         '''Starts the tasks for camera triggering and analog outputs
@@ -175,7 +226,7 @@ class AOETLGalvos(QtCore.QObject):
         signals until run_tasks() is called.
         '''
         
-        self.laser_task.start()
+        #self.laser_task.start()
         self.camera_task.start()
         self.galvo_etl_task.start()
     
@@ -194,14 +245,14 @@ class AOETLGalvos(QtCore.QObject):
 
         '''Wait until everything is done - this is effectively a sleep function.'''
       
-        self.laser_task.wait_until_done()
+        #self.laser_task.wait_until_done()
         self.camera_task.wait_until_done()
         self.galvo_etl_task.wait_until_done()
 
     def stop_tasks(self):
         '''Stops the tasks for triggering, analog and counter outputs'''
         
-        self.laser_task.stop()
+        #self.laser_task.stop()
         self.camera_task.stop()
         self.galvo_etl_task.stop()
 
@@ -211,9 +262,44 @@ class AOETLGalvos(QtCore.QObject):
         Tasks should only be closed are they are stopped.
         '''
         
-        self.laser_task.close()
+        #self.laser_task.close()
         self.camera_task.close()
         self.galvo_etl_task.close()
+        
+    def initialize_variables(self):
+        self.t_halfPeriod = 0.5*(1/self.parameters["galvo_l_frequency"])     #It is our exposure time (is in the range of the camera)
+        self.samplesPerHalfPeriod = np.ceil(self.t_halfPeriod*self.parameters["samplerate"])
+        print('Samples per half period: '+str(self.samplesPerHalfPeriod))
+        
+        self.minSamplesPerDelay = np.ceil(self.parameters["min_t_delay"]*self.parameters["samplerate"])
+        print('Minimum samples per delay: '+str(self.minSamplesPerDelay))
+        
+        self.minSamplesPerStep = self.minSamplesPerDelay + self.samplesPerHalfPeriod
+        print('Minimum samples per step: '+str(self.minSamplesPerStep)+'\n')
+        
+        self.restSamplesAdded = np.ceil(self.minSamplesPerStep*self.parameters["camera_delay"]/100)  #Samples added to allow down time for the camera
+        self.samplesPerStep = self.minSamplesPerStep + self.restSamplesAdded
+        print('Samples per step: ' + str(self.samplesPerStep))
+        
+        self.samplesPerDelay = self.samplesPerStep-self.samplesPerHalfPeriod
+        print('Samples per delay: '+str(self.samplesPerDelay))
+        
+        self.samplesPerHalfDelay = np.floor(self.samplesPerDelay/2)
+        print('Samples per half delay: '+str(self.samplesPerHalfDelay)+'\n')
+        
+        print('Number of columns: '+str(self.parameters["columns"]))
+        print('Etl step: '+str(self.parameters["etl_step"]) + ' columns')
+        
+        self.numberOfSteps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"])
+        print('Number of steps: ' + str(self.numberOfSteps)+'\n')
+        
+        self.numberOfSamples = self.numberOfSteps*self.samplesPerStep
+        print('Number of samples: '+str(self.numberOfSamples))
+        
+        self.sweeptime = self.numberOfSamples/self.parameters["samplerate"]
+        print('Sweeptime: '+str(self.sweeptime)+'s')
+        
+    
         
         
         
