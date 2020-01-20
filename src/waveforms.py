@@ -196,6 +196,70 @@ def DO_signal(
     return np.array(array)
 
 
+def etl_stairs(amplitude, numberOfSteps, numberOfSamples, samplesPerStep, offset, direction):
+    '''Later, stepAmplitude will be define by the ETL focus position as a function of the voltage applied
+       Each ETL may have a different relation to the voltage applied'''
+    
+    stepAmplitude = amplitude/(numberOfSteps-1)   
+    print('Step amplitude: ' + str(stepAmplitude))
+    
+    array = np.zeros((int(numberOfSamples)))
+    
+    if direction == 'UP':
+        for i in range(int(numberOfSteps)):
+            stepValue = i*stepAmplitude*np.ones(int(samplesPerStep))
+            array[i*int(samplesPerStep):i*int(samplesPerStep)+int(samplesPerStep)] = stepValue
+    
+    if direction == 'DOWN':
+        for i in range(int(numberOfSteps)):
+            stepValue = (numberOfSteps-1-i)*stepAmplitude*np.ones(int(samplesPerStep))
+            array[i*int(samplesPerStep):i*int(samplesPerStep)+int(samplesPerStep)] = stepValue
+    
+    array = array+offset
+
+    return np.array(array)
+
+
+def galvo_trapeze(amplitude, samplesPerHalfPeriod, samplesPerDelay, numberOfSamples, numberOfSteps, samplesPerStep, samplesPerHalfDelay, offset):
+    
+    print('samplesPerHalfPeriod: ' + str(samplesPerHalfPeriod))
+    stepAmplitude = amplitude/(samplesPerHalfPeriod-1)
+    print('amplitude: ' + str(amplitude))
+    print('stepAmplitude: ' + str(stepAmplitude))
+    riseVector = np.arange(0,amplitude+stepAmplitude,stepAmplitude)
+    fallVector = np.arange(amplitude, 0-stepAmplitude, -stepAmplitude)
+    amplitudeVector = amplitude*np.ones((int(samplesPerDelay)))
+    
+    array = np.zeros((int(numberOfSamples)))
+    
+    for i in range(int(numberOfSteps)):
+        
+        if i%2==0:   #Even step number, ramp rising
+            array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod)]=riseVector    #Rising ramp
+            array[int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod):int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod+samplesPerDelay)]=amplitudeVector  #Plateau
+            
+        else:     #Odd step number, ramp falling
+            array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod)]=fallVector    #Falling ramp
+    
+    array = array + offset  
+    
+    return np.array(array)
+
+def camera_DO_signal(samplesPerHalfPeriod, t_startExp, samplerate, samplesPerHalfDelay, numberOfSamples, numberOfSteps, samplesPerStep):
+    
+    samplesPerExposition = samplesPerHalfPeriod
+    samplesBeforeExposition = np.round(t_startExp*samplerate)             #Round, ceil or floor?
+    samplesBeforeHighLevel = samplesPerHalfDelay-samplesBeforeExposition             
+    highLevelVector = np.full(int(samplesPerExposition), True)
+    
+    array = np.full(int(numberOfSamples), False)
+    
+    for i in range(int(numberOfSteps)):
+        array[int(samplesBeforeHighLevel+i*samplesPerStep):int(samplesBeforeHighLevel+i*samplesPerStep+samplesPerExposition)]=highLevelVector
+    
+    return np.array(array) 
+
+
 def laser_signal(
             samplerate = 100000,    # in samples/second
             sweeptime = 0.4,        # in seconds
