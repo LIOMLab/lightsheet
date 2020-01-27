@@ -38,14 +38,14 @@ import datetime
 
 
 parameters = dict()
-parameters["samplerate"]=20000
-parameters["sweeptime"]=1        #0.4
-parameters["galvo_l_frequency"]=50
+parameters["samplerate"]=100    #20000
+parameters["sweeptime"]=0.4
+parameters["galvo_l_frequency"]=10  #50
 parameters["galvo_l_amplitude"]=2
 parameters["galvo_l_offset"]=0
 parameters["galvo_l_duty_cycle"]=50
 parameters["galvo_l_phase"]=np.pi/2
-parameters["galvo_r_frequency"]=50
+parameters["galvo_r_frequency"]=10
 parameters["galvo_r_amplitude"]=2
 parameters["galvo_r_offset"]=0
 parameters["galvo_r_duty_cycle"]=50
@@ -271,10 +271,10 @@ class Controller(QWidget):
         
         #numberOfSteps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"])
         
-        self.lasers_task = nidaqmx.Task()
-        self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
-        lasers_thread = threading.Thread(target = self.lasers_thread)
-        lasers_thread.start()
+        #self.lasers_task = nidaqmx.Task()
+        #self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
+        #lasers_thread = threading.Thread(target = self.lasers_thread)
+        #lasers_thread.start()
         
         self.ramps=AOETLGalvos(self.parameters)                  
         self.ramps.create_tasks(terminals,'FINITE')                           
@@ -296,7 +296,7 @@ class Controller(QWidget):
         #buffer = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))
         #print('Buffer: ' +str(np.size(buffer,0)) +'rows by ' + str(np.size(buffer,1))+ ' columns')
         
-        #for i in range(int(numberOfSteps)):
+        #for i in range(3): #range(int(numberOfSteps)):
         #    frame_retrieved = self.camera.retrieve_single_image()*1.0
         #    buffer[int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])] = frame_retrieved[int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])]
         #    print('Frame: ' +str(np.size(frame_retrieved,0)) +'rows by ' + str(np.size(frame_retrieved,1))+ ' columns')
@@ -304,7 +304,7 @@ class Controller(QWidget):
         #self.single_frame = buffer
         
         #for i in range(0, len(self.consumers), 4):
-        #    if self.consumers[i+2] == "CameraWindow":
+        #   if self.consumers[i+2] == "CameraWindow":
         #        try:
         #            self.consumers[i].put(self.single_frame)
         #        except:      #self.consumers[i].Full:
@@ -313,7 +313,6 @@ class Controller(QWidget):
         
         frame = self.camera.retrieve_single_image()*1.0
         
-        self.stopLasers = True
         
         for i in range(0, len(self.consumers), 4):
             if self.consumers[i+2] == "CameraWindow":
@@ -321,6 +320,8 @@ class Controller(QWidget):
                     self.consumers[i].put(frame)
                 except:      #self.consumers[i].Full:
                     print("Queue is full")
+           
+        self.stopLasers = True   
                     
         self.single_frame = frame
                     
@@ -396,20 +397,33 @@ class Controller(QWidget):
         #self.filename = self.filename.replace(',', '')
         
         if self.savingAllowed and self.filename != '':
-            self.filename = self.save_directory + '/' + self.filename + '.hdf5'
+            
+            self.filename = self.save_directory + '/' + self.filename
             self.frame_saver = FrameSaver(self.filename)
-            self.scan_type = 'SingleImage'
-            self.scan_date = str(datetime.date.today())
-            self.path_root = posixpath.join('/', self.scan_date)
-            self.file_number = self.frame_saver.check_existing_files(self.path_root, self.scan_type)
-            self.scan_number = self.scan_type + '_' + str(self.file_number)
-            self.path_name = posixpath.join(self.path_root, self.scan_number)
-            #self.frame_saver.set_dataset_name(self.path_name)
-            print(self.path_name)
+            self.frame_saver.set_block_size(25)
+            self.frame_saver.set_path_root()
+            self.frame_saver.check_existing_files(self.filename, 1, 'single_image')
             '''We can add attributes here'''
-            #self.frame_saver.f[self.frame_saver.path_name]= self.single_frame
-            self.frame_saver.f.create_dataset(self.path_name, data=self.single_frame)
-            self.frame_saver.f.close()
+            print('Path root: ' + self.frame_saver.path_root)
+            
+            self.frame_saver.put(self.single_frame,1)
+            self.frame_saver.start_saving()
+            self.frame_saver.stop_saving()
+            
+            #self.filename = self.save_directory + '/' + self.filename + '.hdf5'
+            #self.frame_saver = FrameSaver(self.filename)
+            #self.scan_type = 'SingleImage'
+            #self.scan_date = str(datetime.date.today())
+            #self.path_root = posixpath.join('/', self.scan_date)
+            #self.file_number = self.frame_saver.check_existing_files(self.path_root, self.scan_type)
+            #self.scan_number = self.scan_type + '_' + str(self.file_number)
+            #self.path_name = posixpath.join(self.path_root, self.scan_number)
+            #print(self.path_name)
+            #'''We can add attributes here'''
+            #self.frame_saver.f.create_dataset(self.path_name, data=self.single_frame)
+            #self.frame_saver.f.close()
+            
+            print('Image saved')
             
         else:
             print('Select directory and enter a valid filename before saving')
@@ -541,6 +555,7 @@ class Controller(QWidget):
         A progress bar would be nice
         '''
         
+        
         '''Flags check up'''
         if self.previewModeStarted == True:
             self.stop_preview_mode()
@@ -599,22 +614,34 @@ class Controller(QWidget):
             
             
             ''' Prepare saving'''
-            self.filename = self.save_directory + '/' + self.filename + '.hdf5'
+            self.filename = self.save_directory + '/' + self.filename
             self.frame_saver = FrameSaver(self.filename)
-            self.scan_type = 'SingleImage'
-            self.scan_date = str(datetime.date.today())
-            self.path_root = posixpath.join('/', self.scan_date)
-            self.file_number = self.frame_saver.check_existing_files(self.path_root, self.scan_type)
-            self.scan_number = self.scan_type + '_' + str(self.file_number)
-            self.path_name = posixpath.join(self.path_root, self.scan_number)
-            self.frame_saver.set_dataset_name(self.path_name)
-            print(self.path_name)
-            '''We can add attributes here'''
             self.frame_saver.set_block_size(25)
+            self.frame_saver.set_path_root()
+            self.frame_saver.check_existing_files(self.filename, self.numberOfPlanes, 'stack')
+            '''We can add attributes here'''
+            print('Path root: ' + self.frame_saver.path_root)
             self.setDataConsumer(self.frame_saver, False, "FrameSaver", True)
             self.frame_saver.start_saving()
             
             
+            
+            #self.filename = self.save_directory + '/' + self.filename + '.hdf5'
+            #self.frame_saver = FrameSaver(self.filename)
+            #self.scan_type = 'SingleImage'
+            #self.scan_date = str(datetime.date.today())
+            #self.path_root = posixpath.join('/', self.scan_date)
+            #self.file_number = self.frame_saver.check_existing_files(self.path_root, self.scan_type)
+            #self.scan_number = self.scan_type + '_' + str(self.file_number)
+            #self.path_name = posixpath.join(self.path_root, self.scan_number)
+            #self.frame_saver.set_dataset_name(self.path_name)
+            #print(self.path_name)
+            #'''We can add attributes here'''
+            #self.frame_saver.set_block_size(25)
+            #self.setDataConsumer(self.frame_saver, False, "FrameSaver", True)
+            #self.frame_saver.start_saving()
+            
+            print('Number of frames to save: '+str(self.numberOfPlanes))
             for i in range(int(self.numberOfPlanes)):
                 '''Moving sample position'''
                 position = self.startPoint+i*self.step
@@ -628,23 +655,42 @@ class Controller(QWidget):
                 self.ramps.create_galvos_waveforms()
                 self.ramps.create_etl_waveforms()
                 self.ramps.create_DO_camera_waveform()
-                self.ramps.create_lasers_waveforms()                   
+                #self.ramps.create_lasers_waveforms()                   
                 
                 self.ramps.write_waveforms_to_tasks()                            
                 self.ramps.start_tasks()
                 self.ramps.run_tasks()
-                frame = self.camera.retrieve_single_image()*1.0
                 
-                for ii in range(0, len(self.consumers), 4):
-                    try:
-                        self.consumers[ii].put(frame)
-                    except:      #self.consumers[ii].Full:
-                        print("Queue is full")
+                frame =[]
+                while frame == []:
+                    frame = self.camera.retrieve_single_image()*1.0
+                
+                print('Frame retrieved')
+                
+                self.cameraWindow.put(frame)
+                print('Frame put in CameraWindow')
+                
+                self.frame_saver.put(frame,1)
+                print('Frame put in FrameSaver')
+                
+                #for ii in range(0, len(self.consumers), 4):
+                    #if self.consumers[ii+2] == 'CameraWindow':
+                    #    try:
+                    #        self.consumers[ii].put(frame)
+                    #        print('Frame put in CameraWindow')
+                    #    except:      #self.consumers[ii].Full:
+                    #        print("CameraWindow queue is full")
+                        
+                    #if self.consumers[ii+2] == 'FrameSaver':
+                    #    try:
+                    #        self.consumers[ii].put(frame,1)
+                    #        print('Frame put in FrameSaver')
+                    #    except:      #self.consumers[ii].Full:
+                    #        print("FrameSaver queue is full")
 
                 self.ramps.stop_tasks()                             
                 self.ramps.close_tasks()
             
-            #self.frame_saver.stop_saving()
                
             self.camera.cancel_images()
             self.camera.set_recording_state(0)
@@ -653,12 +699,14 @@ class Controller(QWidget):
             
             print('Acquisition done')
             #Current camera position update
-            self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText())) 
+            #self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText())) 
             self.pushButton_getSingleImage.setEnabled(True)
             self.pushButton_startLiveMode.setEnabled(True)
             self.pushButton_startStack.setEnabled(True)
             self.pushButton_stopStack.setEnabled(False)
             self.pushButton_startPreviewMode.setEnabled(True)
+            
+            self.frame_saver.stop_saving()
             
     def stop_stack_mode(self):
         '''Useless function for now. Would be useful to find a way to stop stack mode before it's done. Note: check how to break a NI-Daqmx task '''
@@ -1339,7 +1387,7 @@ class CameraWindow(queue.Queue):
     
     def __init__(self):
         
-        queue.Queue.__init__(self,2)   #Queue of size 2
+        queue.Queue.__init__(self)   #Queue of size 2
         
         self.lines = 2160
         self.columns = 2560
@@ -1363,8 +1411,9 @@ class CameraWindow(queue.Queue):
 class FrameSaver():
     
     def __init__(self, filename):
-        self.filename = filename
-        self.f = h5py.File(self.filename, 'a')
+        #self.filename = filename
+        #self.f = h5py.File(self.filename, 'a')
+        pass
         
         
     def set_block_size(self, block_size):
@@ -1376,85 +1425,199 @@ class FrameSaver():
         self.f.create_group(self.path_name)   #Create sub-group (folder)
         
     def add_attribute(self, attribute, value):
-        self.f[self.path_name].attrs[attribute]=value
+        self.f[self.path_root].attrs[attribute]=value
+        
+    def set_path_root(self):
+        scan_date = str(datetime.date.today())
+        self.path_root = posixpath.join('/', scan_date) 
         
     def start_saving(self):
-        self.f.close()
-        self.parent_conn, child_conn = multiprocessing.Pipe()
-        self.p = multiprocessing.Process(target=save_process, args = (self.queue, self.block_size, self.path_name, child_conn, self.filename))
-        self.p.start()
+        #self.f.close()
+        #self.parent_conn, self.child_conn = multiprocessing.Pipe()
+        #self.p = multiprocessing.Process(target=save_process, args = (self.queue, self.filenames_list, self.path_root, self.block_size, self.child_conn)) #(self.queue, self.block_size, self.path_name, child_conn, self.filename))
+        frame_saver_thread = threading.Thread(target = self.save_thread)
+        frame_saver_thread.start()
         
     def stop_saving(self):
         '''Stop saving, join save thread and clear data in queue to prepare for next round '''
-        self.parent_conn.send([False])
-        self.p.join()
+        #self.parent_conn.send([False])
+        #self.p.join()
+        self.started = False
         
     def put(self, value, flag):
         self.queue.put(value, flag)
         
-    def check_existing_files(self, path_name, scan_type):
-        in_loop = True
+    def check_existing_files(self, filename, number_of_planes, scan_type):   #(self,path_name, scan_type)
+        
+        number_of_files = np.ceil(number_of_planes/self.block_size)
+        self.filenames_list = [] 
         counter = 0
         
-        while in_loop:
-            counter = counter +1
-            self.path_name = posixpath.join(path_name, scan_type + '_' + str(counter))
-            in_loop = self.path_name in self.f
-            
-        return counter
-    
-
-
-def save_process(queue, block_size, datasetname, conn, filename):
-    
-    f = h5py.File(filename, 'a')
-    save_index = 0
-    index = 0
-    started = True
-    
-    while started:
-        try:
-            '''We block for 2s on no data to optimize CPU and avoid running the while loop for no reason'''
-            frame = queue.get(True,1)
-            
-            '''Create data buffer '''
-            if frame.ndim > 1:
-                if index == 0:
-                    buffer = np.zeros((frame.shape[0], frame.shape[1], block_size))
-                buffer[:, :, index] = frame
+        for i in range(int(number_of_files)):
+            in_loop = True
+            while in_loop:
+                counter = counter +1
+                new_filename = filename + '_' + scan_type + '_block_'+u'%05d'%counter+'.hdf5'
                 
-            else:
-                if index == 0:
-                    buffer = np.zeros((frame.shape[0], block_size))
-                buffer[:, index] = frame
-                
-            index = (index+1) % block_size  #Index returns to 0 when reaching block_size
-            
-            '''Add to file when index returns to 0'''
-            if index == 0:
-                f[posixpath.join(datasetname, 'scan'+u'%05d' % save_index)] = buffer
-                save_index = save_index +1
-                conn.send([save_index, queue.qsize()])
-                
-        except:
-            print('No frame')
-            
-            if conn.poll():
-                print('Checking connection status')
-                started = conn.recv()[0]
-                
-    '''Save last acquisition if incomplete (did not reach block_size)'''
-    if index != 0:
-        if frame.ndim > 1:
-            buffer2 = np.zeros((frame.shape[0], frame.shape[1], index+1))  #+1 to take into account the index 0
-            buffer2 = buffer[:,:,0:index]
+                if os.path.isfile(new_filename) == False:
+                    in_loop = False
+                    self.filenames_list.append(new_filename)
         
-        else:
-            buffer2 = np.zeros((frame.shape[0], index+1))    #+1 to take into account the index 0
-            buffer2 = buffer[:, 0:index]
+        #in_loop = True
+        #counter = 0
+        
+        #while in_loop:
+        #    counter = counter +1
+        #    self.path_name = posixpath.join(path_name, scan_type + '_' + str(counter))
+        #    in_loop = self.path_name in self.f
             
-        f[posixpath.join('\scans', datasetname, 'scan'+u'%05d' % save_index)] = buffer2  #Path slightly changed
-    f.close()
+        #return counter
+        
+    def save_thread(self):
+        
+        self.started = True
+        for i in range(len(self.filenames_list)):
+        
+            f = h5py.File(self.filenames_list[i],'a')
+            frame_number = 0
+            in_loop = True
+            counter = 1
+            
+            while in_loop:
+                try:
+                    frame = self.queue.get(True,1)
+                    print('Frame recieved')
+                    
+                    if frame_number == 0:
+                        buffer = np.zeros((frame.shape[0],frame.shape[1],self.block_size))
+                    
+                    buffer[:,:,frame_number] = frame
+                    frame_number = (frame_number+1) % self.block_size
+                    
+                    '''Executes when block_size is reached'''
+                    if frame_number == 0:
+                        for ii in range(self.block_size):
+                            path_root = self.path_root+'_'+u'%05d'%counter
+                            f.create_dataset(path_root, data = buffer[:,:,ii])
+                            counter = counter + 1
+                        
+                        in_loop = False
+                        #self.child_conn.send([i, self.queue.qsize()])
+                        
+                except:
+                    print('No frame')
+                    
+                    if self.started == False:
+                        in_loop = False
+                        
+            if frame_number !=0:
+                buffer2 = np.zeros((frame.shape[0], frame.shape[1], frame_number+1))
+                buffer2 = buffer[:,:,0:frame_number]
+                
+                for ii in range(frame_number):
+                    path_root = self.path_root+'_'+u'%05d'%counter
+                    f.create_dataset(path_root, data = buffer2[:,:,ii])
+                    counter = counter +1
+            
+            f.close()
+        
+    
+
+
+def save_process(queue, filenames_list, path_root, block_size, conn):    #(queue, block_size, datasetname, conn, filename):
+    
+    for i in range(len(filenames_list)):
+        
+        f = h5py.File(filenames_list[i],'a')
+        frame_number = 0
+        in_loop = True
+        
+        while in_loop:
+            try:
+                frame = queue.get(True,1)
+                print('Frame recieved')
+                
+                if frame_number == 0:
+                    buffer = np.zeros((frame.shape[0],frame.shape[1],block_size))
+                
+                buffer[:,:,frame_number] = frame
+                frame_number = (frame_number+1) % block_size
+                
+                '''Executes when block_size is reached'''
+                if frame_number == 0:
+                    for ii in range(block_size):
+                        f.create_dataset(path_root, data = buffer[:,:,ii])
+                    
+                    in_loop = False
+                    conn.send([i, queue.qsize()])
+                    
+            except:
+                print('No frame')
+                
+                if conn.poll():
+                    print('Checking connection status')
+                    in_loop = conn.recv()[0]
+                    
+        if frame_number !=0:
+            buffer2 = np.zeros((frame.shape[0], frame.shape[1], frame_number+1))
+            buffer2 = buffer[:,:,0:frame_number]
+            
+            for ii in range(frame_number):
+                f.create_dataset(path_root, data = buffer2[:,:,ii])
+        
+        f.close()
+            
+    
+    
+    
+    #f = h5py.File(filename, 'a')
+    #save_index = 0
+    #index = 0
+    #started = True
+    
+    #while started:
+    #    try:
+    #        '''We block for 2s on no data to optimize CPU and avoid running the while loop for no reason'''
+    #        frame = queue.get(True,1)
+            
+    #        '''Create data buffer '''
+    #        if frame.ndim > 1:
+    #            if index == 0:
+    #                buffer = np.zeros((frame.shape[0], frame.shape[1], block_size))
+    #            buffer[:, :, index] = frame
+                
+    #        else:
+    #            if index == 0:
+    #                buffer = np.zeros((frame.shape[0], block_size))
+    #            buffer[:, index] = frame
+                
+    #        index = (index+1) % block_size  #Index returns to 0 when reaching block_size
+            
+    #        '''Add to file when index returns to 0'''
+    #        if index == 0:
+    #            f[posixpath.join(datasetname, 'scan'+u'%05d' % save_index)] = buffer
+    #            save_index = save_index +1
+    #            conn.send([save_index, queue.qsize()])
+                
+    #    except:
+    #        print('No frame')
+            
+    #        if conn.poll():
+    #            print('Checking connection status')
+    #            started = conn.recv()[0]
+                
+    #'''Save last acquisition if incomplete (did not reach block_size)'''
+    #if index != 0:
+    #    if frame.ndim > 1:
+    #        buffer2 = np.zeros((frame.shape[0], frame.shape[1], index+1))  #+1 to take into account the index 0
+    #        buffer2 = buffer[:,:,0:index]
+        
+    #    else:
+    #        buffer2 = np.zeros((frame.shape[0], index+1))    #+1 to take into account the index 0
+    #        buffer2 = buffer[:, 0:index]
+            
+    #    f[posixpath.join('\scans', datasetname, 'scan'+u'%05d' % save_index)] = buffer2  #Path slightly changed
+    #f.close()
                 
             
 
