@@ -167,7 +167,7 @@ class AOETLGalvos(QtCore.QObject):
         '''
         mode = 'NONE'
         if acquisition == 'FINITE':
-             mode = AcquisitionType.FINITE
+            mode = AcquisitionType.FINITE
         elif acquisition == 'CONTINUOUS':
             mode = AcquisitionType.CONTINUOUS
         

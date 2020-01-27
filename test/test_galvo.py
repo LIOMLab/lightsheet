@@ -21,12 +21,13 @@ sys.excepthook = exception_hook
 app = QApplication(sys.argv)
 controller = Controller()
 cameraWindow = CameraWindow()
+controller.set_camera_window(cameraWindow)
 timer = pg.QtCore.QTimer()
 timer.timeout.connect(cameraWindow.update)
 timer.start(100)
 
 #controller.set_camera_window(cameraWindow)
-controller.setDataConsumer(cameraWindow, False, "CameraWindow", True)
+controller.setDataConsumer(controller.cameraWindow, False, "CameraWindow", True)
 controller.show()
 app.exec_()  
 
