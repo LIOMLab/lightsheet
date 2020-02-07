@@ -165,6 +165,7 @@ class AOETLGalvos(QtCore.QObject):
         
         7/26/2019: acquisition parameter was added, options are; 'FINITE' or 'CONTINUOUS'
         '''
+        
         mode = 'NONE'
         if acquisition == 'FINITE':
             mode = AcquisitionType.FINITE
@@ -266,7 +267,7 @@ class AOETLGalvos(QtCore.QObject):
         self.camera_task.close()
         self.galvo_etl_task.close()
         
-    def initialize_variables(self):
+    def initialize(self):
         self.t_halfPeriod = 0.5*(1/self.parameters["galvo_l_frequency"])     #It is our exposure time (is in the range of the camera)
         self.samplesPerHalfPeriod = np.ceil(self.t_halfPeriod*self.parameters["samplerate"])
         print('Samples per half period: '+str(self.samplesPerHalfPeriod))
@@ -299,6 +300,7 @@ class AOETLGalvos(QtCore.QObject):
         self.sweeptime = self.numberOfSamples/self.parameters["samplerate"]
         print('Sweeptime: '+str(self.sweeptime)+'s')
         
+        self.samples = self.numberOfSamples
     
         
         

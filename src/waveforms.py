@@ -235,11 +235,13 @@ def galvo_trapeze(amplitude, samplesPerHalfPeriod, samplesPerDelay, numberOfSamp
     for i in range(int(numberOfSteps)):
         
         if i%2==0:   #Even step number, ramp rising
-            array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod)]=riseVector    #Rising ramp
+            #array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod)]=riseVector    #Rising ramp
+            array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+len(riseVector))]=riseVector
             array[int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod):int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod+samplesPerDelay)]=amplitudeVector  #Plateau
             
         else:     #Odd step number, ramp falling
-            array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod)]=fallVector    #Falling ramp
+            #array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod)]=fallVector    #Falling ramp
+            array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+len(fallVector))]=fallVector
     
     array = array + offset  
     
