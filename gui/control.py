@@ -38,14 +38,14 @@ import datetime
 
 
 parameters = dict()
-parameters["samplerate"]=100    #20000
+parameters["samplerate"]=40000 #100    #20000
 parameters["sweeptime"]=0.4
-parameters["galvo_l_frequency"]=10  #50
+parameters["galvo_l_frequency"]=100  #10  #50
 parameters["galvo_l_amplitude"]=2
 parameters["galvo_l_offset"]=0
 parameters["galvo_l_duty_cycle"]=50
 parameters["galvo_l_phase"]=np.pi/2
-parameters["galvo_r_frequency"]=10
+parameters["galvo_r_frequency"]=100  #10
 parameters["galvo_r_amplitude"]=2
 parameters["galvo_r_offset"]=0
 parameters["galvo_r_duty_cycle"]=50
@@ -65,7 +65,7 @@ parameters["laser_r_voltage"]=0.935
 parameters["columns"] = 2560          # In pixels
 parameters["rows"] = 2160             # In pixels 
 parameters["etl_step"] = 100          # In pixels
-parameters["camera_delay"] = 10       # In %
+parameters["camera_delay"] = 10      # In %
 parameters["min_t_delay"] = 0.0354404 # In seconds
 parameters["t_startExp"] = 0.017712   # In seconds
 
@@ -259,71 +259,85 @@ class Controller(QWidget):
         self.pushButton_stopPreviewMode.setEnabled(False)
         print('Getting single image')
         
+        self.stopLasers = False
+        
+        numberOfSteps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"])
+        
         '''Setting the camera for acquisition'''
         self.camera.set_trigger_mode('ExternalExposureControl')
         self.camera.arm_camera() 
         self.camera.get_sizes() 
-        self.camera.allocate_buffer()    
+        self.camera.allocate_buffer(numberOfBuffers=2)    #Max numberOfBuffer = 16
         self.camera.set_recording_state(1)
         self.camera.insert_buffers_in_queue()
         
-        self.stopLasers = False
         
-        #numberOfSteps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"])
+        self.lasers_task = nidaqmx.Task()
+        self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
+        lasers_thread = threading.Thread(target = self.lasers_thread)
+        lasers_thread.start()
         
-        #self.lasers_task = nidaqmx.Task()
-        #self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
-        #lasers_thread = threading.Thread(target = self.lasers_thread)
-        #lasers_thread.start()
-        
-        self.ramps=AOETLGalvos(self.parameters)                  
-        self.ramps.create_tasks(terminals,'FINITE')                           
-        
-        self.ramps.create_galvos_waveforms()
-        self.ramps.create_etl_waveforms()
-        self.ramps.create_DO_camera_waveform()
+        #self.ramps=AOETLGalvos(self.parameters)                  
+        #self.ramps.create_tasks(terminals,'FINITE')                           
+        #self.ramps.create_galvos_waveforms()
+        #self.ramps.create_etl_waveforms()
+        #self.ramps.create_DO_camera_waveform()
         #self.ramps.create_lasers_waveforms()                   
         
-        #self.ramps.initialize_variables()
-        #self.ramps.create_etl_waveforms(case = 'STAIRS')
-        #self.ramps.create_galvos_waveforms(case = 'TRAPEZE')
-        #self.ramps.create_DO_camera_waveform( case = 'STAIRS_FITTING')
+        self.ramps=AOETLGalvos(self.parameters)
+        self.ramps.initialize()                  
+        self.ramps.create_tasks(terminals,'FINITE') 
+        self.ramps.create_etl_waveforms(case = 'STAIRS')
+        self.ramps.create_galvos_waveforms(case = 'TRAPEZE')
+        self.ramps.create_DO_camera_waveform( case = 'STAIRS_FITTING')
         
         self.ramps.write_waveforms_to_tasks()                            
         self.ramps.start_tasks()
         self.ramps.run_tasks()
         
+        buffer = self.camera.retrieve_multiple_images(numberOfSteps, self.ramps.t_halfPeriod, sleep_timeout = 5)
+        frame = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))
+        for i in range(int(numberOfSteps)):
+            frame[:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])] = buffer[i,:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])]
+        
         #buffer = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))
         #print('Buffer: ' +str(np.size(buffer,0)) +'rows by ' + str(np.size(buffer,1))+ ' columns')
         
-        #for i in range(3): #range(int(numberOfSteps)):
-        #    frame_retrieved = self.camera.retrieve_single_image()*1.0
-        #    buffer[int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])] = frame_retrieved[int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])]
-        #    print('Frame: ' +str(np.size(frame_retrieved,0)) +'rows by ' + str(np.size(frame_retrieved,1))+ ' columns')
+        #for i in range(int(numberOfSteps)):
             
-        #self.single_frame = buffer
-        
-        #for i in range(0, len(self.consumers), 4):
-        #   if self.consumers[i+2] == "CameraWindow":
-        #        try:
-        #            self.consumers[i].put(self.single_frame)
-        #        except:      #self.consumers[i].Full:
-        #            print("Queue is full")    
-        
-        
-        frame = self.camera.retrieve_single_image()*1.0
-        
+            #frame_retrieved = []
+            #print('Waiting for frame')
+            #while frame_retrieved == []:
+            #frame_retrieved = self.camera.retrieve_single_image()*1.0
+            
+            #print('Frame retrieved')
+            #print('Position: ' + str(i*self.parameters['etl_step']))
+            #buffer[:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])] = frame_retrieved[:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])]
+            #print('Frame: ' + str(i) + '\n')
+            
+        self.single_frame = frame
         
         for i in range(0, len(self.consumers), 4):
             if self.consumers[i+2] == "CameraWindow":
                 try:
-                    self.consumers[i].put(frame)
+                    self.consumers[i].put(self.single_frame)
                 except:      #self.consumers[i].Full:
-                    print("Queue is full")
+                    print("Queue is full")    
+        
+        
+        #frame = self.camera.retrieve_single_image()*1.0
+        
+        
+        #for i in range(0, len(self.consumers), 4):
+        #    if self.consumers[i+2] == "CameraWindow":
+        #        try:
+        #            self.consumers[i].put(frame)
+        #        except:      #self.consumers[i].Full:
+        #            print("Queue is full")
            
         self.stopLasers = True   
                     
-        self.single_frame = frame
+        #self.single_frame = frame
                     
         self.camera.cancel_images()
         self.camera.set_recording_state(0)
@@ -1387,7 +1401,7 @@ class CameraWindow(queue.Queue):
     
     def __init__(self):
         
-        queue.Queue.__init__(self)   #Queue of size 2
+        queue.Queue.__init__(self,2)   #Queue of size 2
         
         self.lines = 2160
         self.columns = 2560
@@ -1404,7 +1418,15 @@ class CameraWindow(queue.Queue):
             self.imv.setImage(np.transpose(frame))
         except queue.Empty:
             pass
-           
+        
+    def put(self, item, block=True, timeout=None):
+        
+        if queue.Queue.full(self) == False: 
+            queue.Queue.put(self, item, block=block, timeout=timeout)
+        else:
+            pass
+        
+        
            
            
            

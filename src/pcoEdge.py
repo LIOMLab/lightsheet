@@ -4,7 +4,7 @@ sys.path.append("..")
 
 import ctypes
 import numpy as np
-
+import time
 
 '''Saving Dynamic Link Library functions from the manufacturer for Python use '''
 
@@ -194,7 +194,7 @@ class Camera:
             
     def retrieve_single_image(self):
         ''' Return the image, a 3D numpy array '''
-        imageDatatype = ctypes.c_uint16*self.xCurrentRes.value*self.yCurrentRes.value
+        #imageDatatype = ctypes.c_uint16*self.xCurrentRes.value*self.yCurrentRes.value
         
         self.numberOfLoopsReached = False
         self.z=0
@@ -202,15 +202,13 @@ class Camera:
             self.get_buffer_status()
             
             if self.dwStatusDll.value == 0xc0008000:
-                bufferNumber = self.buffersInQueue.pop(0)
+                bufferNumber = self.buffersInQueue.pop(0)  #Removed from queue
                 break
             
             if self.z == 1000:
                 self.numberOfLoopsReached = True
                 break
             self.z=+1
-        
-        
         
         
         #bufferNumber = self.buffersInQueue.pop(0)
@@ -229,10 +227,85 @@ class Camera:
         ArrayType = ctypes.c_uint16*pixelsPerFrame.value
         bufferPTR=ctypes.cast(self.pointers[bufferNumber], ctypes.POINTER(ArrayType))
         image = np.frombuffer(bufferPTR.contents, dtype=np.uint16).reshape((self.yCurrentRes.value, self.xCurrentRes.value))
-        self.add_buffer_ex(bufferNumber)
+        self.add_buffer_ex(bufferNumber)   #Put the buffer back in the queue
         self.buffersInQueue.append(bufferNumber)  
         
         return image
+    
+    
+    def retrieve_multiple_images(self, number_of_frames, 
+                                 exposure_time_in_seconds, 
+                                 sleep_timeout = 40, 
+                                 poll_timeout = 5e5, 
+                                 first_trigger_timeout_in_seconds = 10):
+        
+        frame_buffer = np.ones((int(number_of_frames), int(self.yCurrentRes.value),int(self.xCurrentRes.value)), dtype = np.uint16)
+        pixelsPerFrame = ctypes.c_uint32(self.yCurrentRes.value*self.xCurrentRes.value)
+        ArrayType = ctypes.c_uint16*pixelsPerFrame.value
+        #number_acquired = 0
+        #retrieving_allowed = True
+        for i in range(int(number_of_frames)):
+            #number_of_sleeps = 0
+            #number_of_polls = 0
+            #in_loop = True
+            #start_time = time.perf_counter()
+            #while in_loop:
+                #'''Check if buffer is ready'''
+                #number_of_polls += 1
+                #self.get_buffer_status()
+                #if self.dwStatusDll.value == 0xc0008000:
+            buffer_number = self.buffersInQueue.pop(0) #Removed from queue
+                #    in_loop = False
+                    
+                #'''If the buffer isn't read, how long should we wait? We want super frequent polls
+                #for short exposure times. For long exposures, we use time.sleep() to save CPU.'''
+                #if exposure_time_in_seconds > 0.03:
+                #    time.sleep(exposure_time_in_seconds*2/sleep_timeout)
+                #    number_of_sleeps += 1
+                    
+                #'''At some point we have to admit we probably missed a trigger and give up. Give up
+                #after too many polls (likely triggered by short exposures) or too many sleeps
+                #(likely triggered by long exposures)  '''
+                #if number_of_polls > poll_timeout or number_of_sleeps > sleep_timeout:
+                #    elapsed_time = time.perf_counter()-start_time
+                #    if i == 0:   #First frame, maybe keep waiting
+                #        if elapsed_time < first_trigger_timeout_in_seconds:  
+                #            continue
+                    #print('After %i polls, '%(number_of_polls)
+                    #                   +'%i sleeps ' %(number_of_sleeps)
+                    #                   +'and %0.3f seconds, '%(elapsed_time)
+                    #                   + 'no camera buffer (%i frames acquired)'%(number_acquired))
+                #    in_loop = False
+                #    retrieving_allowed = False
+            
+            #if retrieving_allowed:
+                #try:
+                    #if self.dwStatusDrv.value == 0x0:
+                    #    pass
+                    #elif self.dwStatusDrv.value == 0x80332028:
+                    #    #Zero the rest of the buffer
+                    #    frame_buffer[max(0,i):,:,:].fill(0)
+                    #    #raise UserWarning('DMA error during retrieve_multiple_images')
+                    #    print('DMA error during retrieve_multiple_images')
+                    #else:
+                    #    print('Driver status: ', self.dwStatusDrv.value)
+                        #raise UserWarning('Buffer status error')
+                    #    print('Buffer status error')
+                    
+                    
+            bufferPTR=ctypes.cast(self.pointers[buffer_number], ctypes.POINTER(ArrayType))
+            frame_buffer[i,:,:] =  np.frombuffer(bufferPTR.contents, dtype=np.uint16).reshape((self.yCurrentRes.value, self.xCurrentRes.value))*1.0
+                    #number_acquired +=1
+                    
+                #except:
+                    #pass
+                
+            self.add_buffer_ex(buffer_number)   #Put the buffer back in the queue
+            self.buffersInQueue.append(buffer_number)
+            retrieving_allowed = True
+        
+        #print('Number of frames acquired: '+str(number_acquired))        
+        return frame_buffer
     
     def open_camera(self):
         open_camera(self.handle,0)
