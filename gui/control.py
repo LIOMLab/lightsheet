@@ -6,6 +6,8 @@ Created on May 22, 2019
 
 import sys
 from IPython.utils import frame
+from pyqtgraph.dockarea.DockArea import DockArea
+from pyqtgraph.dockarea.Dock import Dock
 sys.path.append("..")
 
 import os
@@ -212,6 +214,8 @@ class Controller(QWidget):
         self.doubleSpinBox_rightGalvoPhase.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(20))
         self.doubleSpinBox_samplerate.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(21))
         self.doubleSpinBox_sweeptime.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(22))
+        self.spinBox_etlStep.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(23))
+        self.doubleSpinBox_cameraDelay.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(24))
         
         self.pushButton_defaultParameters.clicked.connect(self.back_to_default_parameters)
     
@@ -261,13 +265,13 @@ class Controller(QWidget):
         
         self.stopLasers = False
         
-        numberOfSteps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"])
+        self.numberOfSteps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"])
         
         '''Setting the camera for acquisition'''
         self.camera.set_trigger_mode('ExternalExposureControl')
         self.camera.arm_camera() 
         self.camera.get_sizes() 
-        self.camera.allocate_buffer(numberOfBuffers=2)    #Max numberOfBuffer = 16
+        self.camera.allocate_buffer()    #(numberOfBuffers=2)    #Max numberOfBuffer = 16
         self.camera.set_recording_state(1)
         self.camera.insert_buffers_in_queue()
         
@@ -295,10 +299,13 @@ class Controller(QWidget):
         self.ramps.start_tasks()
         self.ramps.run_tasks()
         
-        buffer = self.camera.retrieve_multiple_images(numberOfSteps, self.ramps.t_halfPeriod, sleep_timeout = 5)
+        buffer = self.camera.retrieve_multiple_images(self.numberOfSteps, self.ramps.t_halfPeriod, sleep_timeout = 5)
         frame = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))
-        for i in range(int(numberOfSteps)):
-            frame[:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])] = buffer[i,:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])]
+        for i in range(int(self.numberOfSteps)):
+            if i == int(self.numberOfSteps-1): #Last loop
+                frame[:,int(i*self.parameters['etl_step']):] = buffer[i,:,int(i*self.parameters['etl_step']):]
+            else:
+                frame[:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])] = buffer[i,:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])]
         
         #buffer = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))
         #print('Buffer: ' +str(np.size(buffer,0)) +'rows by ' + str(np.size(buffer,1))+ ' columns')
@@ -315,12 +322,12 @@ class Controller(QWidget):
             #buffer[:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])] = frame_retrieved[:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])]
             #print('Frame: ' + str(i) + '\n')
             
-        self.single_frame = frame
+        self.single_image_buffer = buffer
         
         for i in range(0, len(self.consumers), 4):
             if self.consumers[i+2] == "CameraWindow":
                 try:
-                    self.consumers[i].put(self.single_frame)
+                    self.consumers[i].put(frame)
                 except:      #self.consumers[i].Full:
                     print("Queue is full")    
         
@@ -414,14 +421,14 @@ class Controller(QWidget):
             
             self.filename = self.save_directory + '/' + self.filename
             self.frame_saver = FrameSaver(self.filename)
-            self.frame_saver.set_block_size(25)
-            self.frame_saver.set_path_root()
-            self.frame_saver.check_existing_files(self.filename, 1, 'single_image')
+            self.frame_saver.set_block_size(1) #Block size is a number of buffers
+            #self.frame_saver.set_path_root()
+            self.frame_saver.check_existing_files(self.filename, 1, 'singleImage')
             '''We can add attributes here'''
-            print('Path root: ' + self.frame_saver.path_root)
+            #print('Path root: ' + self.frame_saver.path_root)
             
-            self.frame_saver.put(self.single_frame,1)
-            self.frame_saver.start_saving()
+            self.frame_saver.put(self.single_image_buffer,1)
+            self.frame_saver.start_saving(data_type = 'BUFFER')
             self.frame_saver.stop_saving()
             
             #self.filename = self.save_directory + '/' + self.filename + '.hdf5'
@@ -478,15 +485,6 @@ class Controller(QWidget):
         self.lasers_task = nidaqmx.Task()
         self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
         
-        # Setup from data in gui
-        self.ramps=AOETLGalvos(self.parameters)                  
-        self.ramps.create_tasks(terminals, 'CONTINUOUS')                           
-        self.ramps.create_galvos_waveforms()
-        self.ramps.create_etl_waveforms()
-        self.ramps.create_DO_camera_waveform()
-        #self.ramps.create_lasers_waveforms()                     
-        self.ramps.write_waveforms_to_tasks()                            
-        self.ramps.start_tasks()
         
         liveMode_thread = threading.Thread(target = self.live_mode_thread)
         liveMode_thread.start()
@@ -520,6 +518,17 @@ class Controller(QWidget):
                             
                         self.lasers_task.write(self.lasers_waveforms, auto_start=True)
                         
+                        self.ramps=AOETLGalvos(self.parameters) 
+                        self.ramps.initialize_live_mode()
+                        self.ramps.create_tasks(terminals, 'FINITE')                           
+                        self.ramps.create_galvos_waveforms('LIVE_MODE')
+                        self.ramps.create_etl_waveforms('LIVE_MODE')
+                        self.ramps.create_DO_camera_waveform('LIVE_MODE')
+                        self.ramps.write_waveforms_to_tasks()                            
+                        self.ramps.start_tasks()
+                        self.ramps.run_tasks()
+                    
+                        
                         
                         frame = self.camera.retrieve_single_image()*1.0
         
@@ -527,15 +536,16 @@ class Controller(QWidget):
                             self.consumers[i].put(frame)
                         except self.consumers[i].Full:
                             print("Queue is full")
+                            
+                        self.ramps.stop_tasks()                             
+                        self.ramps.close_tasks()
+        
                     elif self.liveModeStarted == False:
                         continuer = False
         
         self.camera.cancel_images()
         self.camera.set_recording_state(0)
         self.camera.free_buffer()
-        
-        self.ramps.stop_tasks()                             
-        self.ramps.close_tasks()
         
         '''Put the lasers voltage to zero
            This is done at the end, because we do not want to shut down the lasers
@@ -557,18 +567,7 @@ class Controller(QWidget):
         self.liveModeStarted = False
         
         
-    
-        
     def start_stack_mode(self):
-        '''Detection arm (self.motor3) to be implemented 
-        
-        Note: check if there's a NI-Daqmx function to repeat the data sent instead of closing each time the task. This would be useful
-        if it is possible to break a task with self.stop_stack_mode
-        
-        An option to scan forward or backward should be implemented
-        A progress bar would be nice
-        '''
-        
         
         '''Flags check up'''
         if self.previewModeStarted == True:
@@ -622,7 +621,7 @@ class Controller(QWidget):
             self.camera.set_trigger_mode('ExternalExposureControl')
             self.camera.arm_camera() 
             self.camera.get_sizes() 
-            self.camera.allocate_buffer()    
+            self.camera.allocate_buffer(numberOfBuffers=2)    
             self.camera.set_recording_state(1)
             self.camera.insert_buffers_in_queue()
             
@@ -630,97 +629,103 @@ class Controller(QWidget):
             ''' Prepare saving'''
             self.filename = self.save_directory + '/' + self.filename
             self.frame_saver = FrameSaver(self.filename)
-            self.frame_saver.set_block_size(25)
-            self.frame_saver.set_path_root()
+            self.frame_saver.set_block_size(3)  #3 buffers allowed in the queue
+            #self.frame_saver.set_path_root()
             self.frame_saver.check_existing_files(self.filename, self.numberOfPlanes, 'stack')
             '''We can add attributes here'''
-            print('Path root: ' + self.frame_saver.path_root)
+            #print('Path root: ' + self.frame_saver.path_root)
             self.setDataConsumer(self.frame_saver, False, "FrameSaver", True)
-            self.frame_saver.start_saving()
+            self.frame_saver.start_saving(data_type = 'BUFFER')
             
+            print(self.frame_saver.filenames_list)
             
+            self.stopLasers = False
+            self.lasers_task = nidaqmx.Task()
+            self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
+            lasers_thread = threading.Thread(target = self.lasers_thread)
+            lasers_thread.start()
             
-            #self.filename = self.save_directory + '/' + self.filename + '.hdf5'
-            #self.frame_saver = FrameSaver(self.filename)
-            #self.scan_type = 'SingleImage'
-            #self.scan_date = str(datetime.date.today())
-            #self.path_root = posixpath.join('/', self.scan_date)
-            #self.file_number = self.frame_saver.check_existing_files(self.path_root, self.scan_type)
-            #self.scan_number = self.scan_type + '_' + str(self.file_number)
-            #self.path_name = posixpath.join(self.path_root, self.scan_number)
-            #self.frame_saver.set_dataset_name(self.path_name)
-            #print(self.path_name)
-            #'''We can add attributes here'''
-            #self.frame_saver.set_block_size(25)
-            #self.setDataConsumer(self.frame_saver, False, "FrameSaver", True)
-            #self.frame_saver.start_saving()
+            self.ramps=AOETLGalvos(self.parameters)
+            self.ramps.initialize()                   
+            self.ramps.create_etl_waveforms(case = 'STAIRS')
+            self.ramps.create_galvos_waveforms(case = 'TRAPEZE')
+            self.ramps.create_DO_camera_waveform( case = 'STAIRS_FITTING')
+            
+            self.numberOfSteps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"])
             
             print('Number of frames to save: '+str(self.numberOfPlanes))
-            for i in range(int(self.numberOfPlanes)):
-                '''Moving sample position'''
-                position = self.startPoint+i*self.step
-                self.motor2.move_absolute_position(position,'\u03BCm')  #Position in micro-meters
                 
-                '''Changing ETLs focus '''
-                
-                '''Acquiring the frame '''
-                self.ramps=AOETLGalvos(self.parameters)                  
-                self.ramps.create_tasks(terminals,'FINITE')                           
-                self.ramps.create_galvos_waveforms()
-                self.ramps.create_etl_waveforms()
-                self.ramps.create_DO_camera_waveform()
-                #self.ramps.create_lasers_waveforms()                   
-                
-                self.ramps.write_waveforms_to_tasks()                            
-                self.ramps.start_tasks()
-                self.ramps.run_tasks()
-                
-                frame =[]
-                while frame == []:
-                    frame = self.camera.retrieve_single_image()*1.0
-                
-                print('Frame retrieved')
-                
-                self.cameraWindow.put(frame)
-                print('Frame put in CameraWindow')
-                
-                self.frame_saver.put(frame,1)
-                print('Frame put in FrameSaver')
-                
-                #for ii in range(0, len(self.consumers), 4):
-                    #if self.consumers[ii+2] == 'CameraWindow':
-                    #    try:
-                    #        self.consumers[ii].put(frame)
-                    #        print('Frame put in CameraWindow')
-                    #    except:      #self.consumers[ii].Full:
-                    #        print("CameraWindow queue is full")
-                        
-                    #if self.consumers[ii+2] == 'FrameSaver':
-                    #    try:
-                    #        self.consumers[ii].put(frame,1)
-                    #        print('Frame put in FrameSaver')
-                    #    except:      #self.consumers[ii].Full:
-                    #        print("FrameSaver queue is full")
+            stackMode_thread = threading.Thread(target = self.stack_mode_thread)
+            stackMode_thread.start()
+        
+        
+    def stack_mode_thread(self):
+        '''Detection arm (self.motor3) to be implemented 
+        
+        Note: check if there's a NI-Daqmx function to repeat the data sent instead of closing each time the task. This would be useful
+        if it is possible to break a task with self.stop_stack_mode
+        
+        An option to scan forward or backward should be implemented
+        A progress bar would be nice
+        '''
+        
+        for i in range(int(self.numberOfPlanes)):
+            '''Moving sample position'''
+            position = self.startPoint+i*self.step
+            self.motor2.move_absolute_position(position,'\u03BCm')  #Position in micro-meters
+            
+            
+            '''Acquiring the frame '''
+            self.ramps.create_tasks(terminals,'FINITE')
+            self.ramps.write_waveforms_to_tasks()                            
+            self.ramps.start_tasks()
+            self.ramps.run_tasks()
+            
+            buffer = self.camera.retrieve_multiple_images(self.numberOfSteps, self.ramps.t_halfPeriod, sleep_timeout = 5)
+            frame = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))
+            for i in range(int(self.numberOfSteps)):
+                if i == int(self.numberOfSteps-1): #Last loop
+                    frame[:,int(i*self.parameters['etl_step']):] = buffer[i,:,int(i*self.parameters['etl_step']):]
+                else:
+                    frame[:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])] = buffer[i,:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])]
+            
+            
+            
+            for ii in range(0, len(self.consumers), 4):
+                if self.consumers[ii+2] == 'CameraWindow':
+                    try:
+                        self.consumers[ii].put(frame)
+                        print('Frame put in CameraWindow')
+                    except:      #self.consumers[ii].Full:
+                        print("CameraWindow queue is full")
+                    
+                if self.consumers[ii+2] == 'FrameSaver':
+                    try:
+                        self.consumers[ii].put(buffer,1)
+                        print('Frame put in FrameSaver')
+                    except:      #self.consumers[ii].Full:
+                        print("FrameSaver queue is full")
 
-                self.ramps.stop_tasks()                             
-                self.ramps.close_tasks()
-            
-               
-            self.camera.cancel_images()
-            self.camera.set_recording_state(0)
-            self.camera.free_buffer()
-            
-            
-            print('Acquisition done')
-            #Current camera position update
-            #self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText())) 
-            self.pushButton_getSingleImage.setEnabled(True)
-            self.pushButton_startLiveMode.setEnabled(True)
-            self.pushButton_startStack.setEnabled(True)
-            self.pushButton_stopStack.setEnabled(False)
-            self.pushButton_startPreviewMode.setEnabled(True)
-            
-            self.frame_saver.stop_saving()
+            self.ramps.stop_tasks()                             
+            self.ramps.close_tasks()
+        
+        self.stopLasers = True
+           
+        self.camera.cancel_images()
+        self.camera.set_recording_state(0)
+        self.camera.free_buffer()
+        
+        
+        print('Acquisition done')
+        #Current camera position update
+        #self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText())) 
+        self.pushButton_getSingleImage.setEnabled(True)
+        self.pushButton_startLiveMode.setEnabled(True)
+        self.pushButton_startStack.setEnabled(True)
+        self.pushButton_stopStack.setEnabled(False)
+        self.pushButton_startPreviewMode.setEnabled(True)
+        
+        self.frame_saver.stop_saving()
             
     def stop_stack_mode(self):
         '''Useless function for now. Would be useful to find a way to stop stack mode before it's done. Note: check how to break a NI-Daqmx task '''
@@ -963,15 +968,19 @@ class Controller(QWidget):
         
         self.doubleSpinBox_leftEtlAmplitude.setValue(self.parameters["etl_l_amplitude"])
         self.doubleSpinBox_leftEtlAmplitude.setSuffix(" V")
+        self.doubleSpinBox_leftEtlAmplitude.setSingleStep(0.1)
         self.doubleSpinBox_leftEtlAmplitude.setMaximum(5)
         self.doubleSpinBox_rightEtlAmplitude.setValue(self.parameters["etl_r_amplitude"])
         self.doubleSpinBox_rightEtlAmplitude.setSuffix(" V")
+        self.doubleSpinBox_rightEtlAmplitude.setSingleStep(0.1)
         self.doubleSpinBox_rightEtlAmplitude.setMaximum(5)
         self.doubleSpinBox_leftEtlOffset.setValue(self.parameters["etl_l_offset"])
         self.doubleSpinBox_leftEtlOffset.setSuffix(" V")
+        self.doubleSpinBox_leftEtlOffset.setSingleStep(0.1)
         self.doubleSpinBox_leftEtlOffset.setMaximum(5)
         self.doubleSpinBox_rightEtlOffset.setValue(self.parameters["etl_r_offset"])
         self.doubleSpinBox_rightEtlOffset.setSuffix(" V")
+        self.doubleSpinBox_rightEtlOffset.setSingleStep(0.1)
         self.doubleSpinBox_rightEtlOffset.setMaximum(5)
         self.doubleSpinBox_leftEtlDelay.setValue(self.parameters["etl_l_delay"])
         self.doubleSpinBox_leftEtlDelay.setSuffix(" %")
@@ -988,18 +997,22 @@ class Controller(QWidget):
         
         self.doubleSpinBox_leftGalvoAmplitude.setValue(self.parameters["galvo_l_amplitude"])
         self.doubleSpinBox_leftGalvoAmplitude.setSuffix(" V")
+        self.doubleSpinBox_leftGalvoAmplitude.setSingleStep(0.1)
         self.doubleSpinBox_leftGalvoAmplitude.setMaximum(10)
         self.doubleSpinBox_leftGalvoAmplitude.setMinimum(-10)
         self.doubleSpinBox_rightGalvoAmplitude.setValue(self.parameters["galvo_r_amplitude"])
         self.doubleSpinBox_rightGalvoAmplitude.setSuffix(" V")
+        self.doubleSpinBox_rightGalvoAmplitude.setSingleStep(0.1)
         self.doubleSpinBox_rightGalvoAmplitude.setMaximum(10)
         self.doubleSpinBox_rightGalvoAmplitude.setMinimum(-10)
         self.doubleSpinBox_leftGalvoOffset.setValue(self.parameters["galvo_l_offset"])
         self.doubleSpinBox_leftGalvoOffset.setSuffix(" V")
+        self.doubleSpinBox_leftGalvoOffset.setSingleStep(0.1)
         self.doubleSpinBox_leftGalvoOffset.setMaximum(10)
         self.doubleSpinBox_leftGalvoOffset.setMinimum(-10)
         self.doubleSpinBox_rightGalvoOffset.setValue(self.parameters["galvo_r_offset"])
         self.doubleSpinBox_rightGalvoOffset.setSuffix(" V")
+        self.doubleSpinBox_rightGalvoOffset.setSingleStep(0.1)
         self.doubleSpinBox_rightGalvoOffset.setMaximum(10)
         self.doubleSpinBox_rightGalvoOffset.setMinimum(-10)
         self.doubleSpinBox_leftGalvoFrequency.setValue(self.parameters["galvo_l_frequency"])
@@ -1027,6 +1040,11 @@ class Controller(QWidget):
         self.doubleSpinBox_sweeptime.setValue(self.parameters["sweeptime"])
         self.doubleSpinBox_sweeptime.setSuffix(" s")
         
+        self.spinBox_etlStep.setMaximum(2560)
+        self.spinBox_etlStep.setSuffix(" columns")
+        self.spinBox_etlStep.setValue(self.parameters["etl_step"])
+        self.doubleSpinBox_cameraDelay.setSuffix(" %")
+        self.doubleSpinBox_cameraDelay.setValue(self.parameters["camera_delay"])
         
         #**********************************************************************
         # Camera parameters
@@ -1215,6 +1233,10 @@ class Controller(QWidget):
             self.parameters["samplerate"]=self.doubleSpinBox_samplerate.value()
         elif parameterNumber==22:
             self.parameters["sweeptime"]=self.doubleSpinBox_sweeptime.value()
+        elif parameterNumber==23:
+            self.parameters["etl_step"]=self.spinBox_etlStep.value()
+        elif parameterNumber==24:
+            self.parameters["camera_delay"]=self.doubleSpinBox_cameraDelay.value()
             
                           
      
@@ -1270,10 +1292,10 @@ class Controller(QWidget):
                 while continuer:
                     
                     '''Getting the data to send to the AO'''
-                    leftGalvoVoltage = self.parameters['galvo_l_offset']
-                    rightGalvoVoltage = self.parameters['galvo_r_offset']
-                    leftEtlVoltage = self.parameters['etl_l_offset']
-                    rightEtlVoltage = self.parameters['etl_r_offset']
+                    leftGalvoVoltage = self.parameters['galvo_l_amplitude']
+                    rightGalvoVoltage = self.parameters['galvo_r_amplitude']
+                    leftEtlVoltage = self.parameters['etl_l_amplitude']
+                    rightEtlVoltage = self.parameters['etl_r_amplitude']
                     leftLaserVoltage = 0
                     rightLaserVoltage = 0
                     
@@ -1399,6 +1421,8 @@ class Controller(QWidget):
 
 class CameraWindow(queue.Queue):
     
+    histogram_level = []
+    
     def __init__(self):
         
         queue.Queue.__init__(self,2)   #Queue of size 2
@@ -1406,16 +1430,48 @@ class CameraWindow(queue.Queue):
         self.lines = 2160
         self.columns = 2560
         self.container = np.zeros((self.lines, self.columns)) 
-        self.imv = pg.ImageView(None, 'Camera Window')
+        self.imv = pg.ImageView(view = pg.PlotItem())  #(None, 'Camera Window')
         self.imv.setWindowTitle('Camera Window')
         self.scene = self.imv.scene
         self.imv.show()
         self.imv.setImage(np.transpose(self.container))
         
+        #area = DockArea()
+        #area.setVisible(True)
+        #d1 = Dock('1',size = (2160,2560))
+        #d2 = Dock('2', size = (200,100))
+        #d3 = Dock('Other', size = (200,400))
+        #area.addDock(d1, 'top')
+        #area.addDock(d2, 'bottom')
+        #area.addDock(d3, 'right')
+        #self.imv = pg.ImageView(view = pg.PlotItem())
+        #self.imv.setImage(self.container)
+        #self.imv.show()
+        #self.imv.menuBtn.ui.hide()  #Hide menu button
+        #self.imv.roiBtn.ui.hide()  #Hide ROI button
+        
+        
+        
     def update(self):
         try:
+            _view = self.imv.getView()
+            _view_box = _view.getViewBox()
+            _state = _view_box.getState()
+            
+            first_update = False
+            if self.histogram_level == []:
+                first_update = True
+            _histo_widget = self.imv.getHistogramWidget()
+            self.histogram_level = _histo_widget.getLevels()
+            
             frame = self.get(False)
             self.imv.setImage(np.transpose(frame))
+            
+            _view_box.setState(_state)
+            
+            if not first_update:
+                _histo_widget.setLevels(self.histogram_level[0],self.histogram_level[1])
+        
         except queue.Empty:
             pass
         
@@ -1440,7 +1496,7 @@ class FrameSaver():
         
     def set_block_size(self, block_size):
         self.block_size = block_size
-        self.queue = multiprocessing.Queue(2*block_size)
+        self.queue = queue.Queue(2*block_size)  #multiprocessing.queue()
         
     def set_dataset_name(self,path_name):
         self.path_name = path_name
@@ -1453,12 +1509,17 @@ class FrameSaver():
         scan_date = str(datetime.date.today())
         self.path_root = posixpath.join('/', scan_date) 
         
-    def start_saving(self):
+    def start_saving(self, data_type):
         #self.f.close()
         #self.parent_conn, self.child_conn = multiprocessing.Pipe()
         #self.p = multiprocessing.Process(target=save_process, args = (self.queue, self.filenames_list, self.path_root, self.block_size, self.child_conn)) #(self.queue, self.block_size, self.path_name, child_conn, self.filename))
-        frame_saver_thread = threading.Thread(target = self.save_thread)
-        frame_saver_thread.start()
+        if data_type == '2D_ARRAY':
+            frame_saver_thread = threading.Thread(target = self.save_thread)
+            frame_saver_thread.start()
+        elif data_type == 'BUFFER':
+            frame_saver_thread = threading.Thread(target = self.save_thread_buffer)
+            frame_saver_thread.start()
+            
         
     def stop_saving(self):
         '''Stop saving, join save thread and clear data in queue to prepare for next round '''
@@ -1469,17 +1530,21 @@ class FrameSaver():
     def put(self, value, flag):
         self.queue.put(value, flag)
         
-    def check_existing_files(self, filename, number_of_planes, scan_type):   #(self,path_name, scan_type)
+    def check_existing_files(self, filename, number_of_planes, scan_type, data_type = 'BUFFER'):   #(self,path_name, scan_type)
         
-        number_of_files = np.ceil(number_of_planes/self.block_size)
+        if data_type == "BUFFER":
+            number_of_files = number_of_planes
+        else:
+            number_of_files = np.ceil(number_of_planes/self.block_size)
+        
         self.filenames_list = [] 
         counter = 0
         
         for i in range(int(number_of_files)):
             in_loop = True
             while in_loop:
-                counter = counter +1
-                new_filename = filename + '_' + scan_type + '_block_'+u'%05d'%counter+'.hdf5'
+                counter += 1
+                new_filename = filename + '_' + scan_type + '_plane_'+u'%05d'%counter+'.hdf5'
                 
                 if os.path.isfile(new_filename) == False:
                     in_loop = False
@@ -1494,6 +1559,34 @@ class FrameSaver():
         #    in_loop = self.path_name in self.f
             
         #return counter
+        
+    def save_thread_buffer(self):
+        self.started = True
+        for i in range(len(self.filenames_list)):
+            
+            f = h5py.File(self.filenames_list[i],'a')
+            in_loop = True
+            counter = 1
+            
+            while in_loop:
+                try:
+                    buffer = self.queue.get(True,1)
+                    print('Buffer received \n')
+                    
+                    for ii in range(buffer.shape[0]):
+                        path_root = 'scan'+'_'+u'%03d'%counter
+                        f.create_dataset(path_root, data = buffer[ii,:,:])
+                        counter += 1
+                        
+                    in_loop = False
+                
+                except:
+                    print('No buffer')
+                    
+                    if self.started == False:
+                        in_loop = False
+            
+            f.close()
         
     def save_thread(self):
         
@@ -1542,7 +1635,6 @@ class FrameSaver():
                     counter = counter +1
             
             f.close()
-        
     
 
 

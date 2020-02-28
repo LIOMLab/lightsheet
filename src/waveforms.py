@@ -199,51 +199,82 @@ def DO_signal(
 def etl_stairs(amplitude, numberOfSteps, numberOfSamples, samplesPerStep, offset, direction):
     '''Later, stepAmplitude will be define by the ETL focus position as a function of the voltage applied
        Each ETL may have a different relation to the voltage applied'''
+    if numberOfSteps !=1:
+        stepAmplitude = amplitude/(numberOfSteps-1)
     
-    stepAmplitude = amplitude/(numberOfSteps-1)   
-    print('Step amplitude: ' + str(stepAmplitude))
+        print('Step amplitude: ' + str(stepAmplitude))
+        
+        array = np.zeros((int(numberOfSamples)))
+        
+        if direction == 'UP':
+            for i in range(int(numberOfSteps)):
+                stepValue = i*stepAmplitude*np.ones(int(samplesPerStep))
+                array[i*int(samplesPerStep):i*int(samplesPerStep)+int(samplesPerStep)] = stepValue
+        
+        if direction == 'DOWN':
+            for i in range(int(numberOfSteps)):
+                stepValue = (numberOfSteps-1-i)*stepAmplitude*np.ones(int(samplesPerStep))
+                array[i*int(samplesPerStep):i*int(samplesPerStep)+int(samplesPerStep)] = stepValue
+        
+        array = array+offset
     
-    array = np.zeros((int(numberOfSamples)))
-    
-    if direction == 'UP':
-        for i in range(int(numberOfSteps)):
-            stepValue = i*stepAmplitude*np.ones(int(samplesPerStep))
-            array[i*int(samplesPerStep):i*int(samplesPerStep)+int(samplesPerStep)] = stepValue
-    
-    if direction == 'DOWN':
-        for i in range(int(numberOfSteps)):
-            stepValue = (numberOfSteps-1-i)*stepAmplitude*np.ones(int(samplesPerStep))
-            array[i*int(samplesPerStep):i*int(samplesPerStep)+int(samplesPerStep)] = stepValue
-    
-    array = array+offset
+    else:
+        array = amplitude*np.ones((int(numberOfSamples)))+offset
 
     return np.array(array)
 
 
 def galvo_trapeze(amplitude, samplesPerHalfPeriod, samplesPerDelay, numberOfSamples, numberOfSteps, samplesPerStep, samplesPerHalfDelay, offset):
     
-    print('samplesPerHalfPeriod: ' + str(samplesPerHalfPeriod))
-    stepAmplitude = amplitude/(samplesPerHalfPeriod-1)
-    print('amplitude: ' + str(amplitude))
-    print('stepAmplitude: ' + str(stepAmplitude))
-    riseVector = np.arange(0,amplitude+stepAmplitude,stepAmplitude)
-    fallVector = np.arange(amplitude, 0-stepAmplitude, -stepAmplitude)
-    amplitudeVector = amplitude*np.ones((int(samplesPerDelay)))
-    
-    array = np.zeros((int(numberOfSamples)))
-    
-    for i in range(int(numberOfSteps)):
+    if amplitude !=0:
+        print('samplesPerHalfPeriod: ' + str(samplesPerHalfPeriod))
+        stepAmplitude = amplitude/(samplesPerHalfPeriod-1)
+        print('amplitude: ' + str(amplitude))
+        print('stepAmplitude: ' + str(stepAmplitude))
+        riseVector = np.arange(0,amplitude+stepAmplitude,stepAmplitude)
+        fallVector = np.arange(amplitude, 0-stepAmplitude, -stepAmplitude)
+        amplitudeVector = amplitude*np.ones((int(samplesPerDelay)))
         
-        if i%2==0:   #Even step number, ramp rising
-            #array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod)]=riseVector    #Rising ramp
-            array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+len(riseVector))]=riseVector
-            array[int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod):int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod+samplesPerDelay)]=amplitudeVector  #Plateau
+        array = np.zeros((int(numberOfSamples)))
+        
+        for i in range(int(numberOfSteps)):
             
-        else:     #Odd step number, ramp falling
-            #array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod)]=fallVector    #Falling ramp
-            array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+len(fallVector))]=fallVector
-    
-    array = array + offset  
+            if i%2==0:   #Even step number, ramp rising
+                if i == int(numberOfSteps-1):  #Last iteration, deals with a shorter step (in case ETL step is not a multiple of the number of columns)
+                    samplesLeft = numberOfSamples-(samplesPerHalfDelay+i*samplesPerStep)
+                    if samplesLeft <= samplesPerHalfDelay:
+                        pass
+                    elif samplesLeft <= (samplesPerHalfDelay+samplesPerHalfPeriod):
+                        pass    #If there is not enough samples to make a scan, we pass
+                    else:
+                        samplesHigh = samplesLeft-samplesPerHalfDelay-samplesPerHalfPeriod
+                        amplitudeVector = amplitude*np.ones((int(samplesHigh)))
+                        array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+len(riseVector))]=riseVector
+                        array[int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod):int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod+samplesHigh)]=amplitudeVector
+                else: 
+                    #array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod)]=riseVector    #Rising ramp
+                    array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+len(riseVector))]=riseVector
+                    array[int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod):int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod+samplesPerDelay)]=amplitudeVector  #Plateau
+                
+            else:     #Odd step number, ramp falling
+                if i == int(numberOfSteps-1):  #Last iteration, deals with a shorter step (in case ETL step is not a multiple of the number of columns)
+                    samplesLeft = numberOfSamples-(samplesPerHalfDelay+i*samplesPerStep)
+                    if samplesLeft <= samplesPerHalfDelay:
+                        pass
+                    elif samplesLeft <= (samplesPerHalfDelay+samplesPerHalfPeriod):
+                        samplesHigh = samplesLeft-samplesPerHalfPeriod   #We stay high, not enough samples to make a scan
+                        amplitudeVector = amplitude*np.ones((int(samplesHigh)))
+                        array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+len(amplitudeVector))]=amplitudeVector
+                    else:
+                        array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+len(fallVector))]=fallVector
+                
+                else:        
+                    #array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod)]=fallVector    #Falling ramp
+                    array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+len(fallVector))]=fallVector
+        
+        array = array + offset
+    else:
+        array = np.zeros((int(numberOfSamples))) + offset  
     
     return np.array(array)
 
@@ -259,7 +290,48 @@ def camera_DO_signal(samplesPerHalfPeriod, t_startExp, samplerate, samplesPerHal
     for i in range(int(numberOfSteps)):
         array[int(samplesBeforeHighLevel+i*samplesPerStep):int(samplesBeforeHighLevel+i*samplesPerStep+samplesPerExposition)]=highLevelVector
     
-    return np.array(array) 
+    return np.array(array)
+
+def etl_live_mode_waveform(amplitude, numberOfSamples):
+    
+    array = amplitude*np.ones((int(numberOfSamples)))
+    
+    return np.array(array)
+    
+
+def galvo_live_mode_waveform(amplitude, samplesPerHalfPeriod, samplesPerDelay, numberOfSamples, samplesPerHalfDelay, offset):
+    
+    if amplitude !=0:
+        #print('samplesPerHalfPeriod: ' + str(samplesPerHalfPeriod))
+        stepAmplitude = amplitude/(samplesPerHalfPeriod-1)
+        #print('amplitude: ' + str(amplitude))
+        #print('stepAmplitude: ' + str(stepAmplitude))
+        riseVector = np.arange(0,amplitude+stepAmplitude,stepAmplitude)
+        fallVector = np.arange(amplitude, 0-stepAmplitude, -stepAmplitude)
+        
+        array = np.zeros((int(numberOfSamples)))
+        
+        array[int(samplesPerHalfDelay):int(samplesPerHalfDelay+len(riseVector))]=riseVector
+        array[int(samplesPerHalfDelay+len(riseVector)):int(samplesPerHalfDelay+len(riseVector)+len(fallVector))]=fallVector
+        
+        array = array + offset  
+    else:
+        array = np.zeros((int(numberOfSamples))) + offset
+    
+    return np.array(array)
+
+def camera_live_mode_waveform(samplesPerHalfPeriod, t_startExp, samplerate, samplesPerHalfDelay, numberOfSamples):
+    
+    samplesPerExposition = samplesPerHalfPeriod
+    samplesBeforeExposition = np.round(t_startExp*samplerate)             #Round, ceil or floor?
+    samplesBeforeHighLevel = samplesPerHalfDelay-samplesBeforeExposition             
+    highLevelVector = np.full(int(samplesPerExposition), True)
+    
+    array = np.full(int(numberOfSamples), False)
+    
+    array[int(samplesBeforeHighLevel):int(samplesBeforeHighLevel+samplesPerExposition)]=highLevelVector
+    
+    return np.array(array)
 
 
 def laser_signal(
