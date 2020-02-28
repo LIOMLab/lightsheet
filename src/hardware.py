@@ -24,9 +24,9 @@ from src.waveforms import sawtooth
 from src.waveforms import tunable_lens_ramp
 from src.waveforms import DO_signal
 from src.waveforms import laser_signal
-from src.waveforms import etl_stairs
-from src.waveforms import galvo_trapeze
-from src.waveforms import camera_DO_signal
+from src.waveforms import etl_stairs, etl_live_mode_waveform
+from src.waveforms import galvo_trapeze, galvo_live_mode_waveform
+from src.waveforms import camera_DO_signal, camera_live_mode_waveform
 
 
 class AOETLGalvos(QtCore.QObject):
@@ -62,6 +62,13 @@ class AOETLGalvos(QtCore.QObject):
                                              samplesPerStep = self.samplesPerStep, 
                                              offset = self.parameters["etl_r_offset"], 
                                              direction = 'DOWN')
+            
+        elif case == 'LIVE_MODE':
+            self.etl_l_waveform = etl_live_mode_waveform(amplitude = self.parameters["etl_l_amplitude"], 
+                                                         numberOfSamples = self.numberOfSamples) 
+            
+            self.etl_r_waveform = etl_live_mode_waveform(amplitude = self.parameters["etl_r_amplitude"], 
+                                                         numberOfSamples = self.numberOfSamples) 
         
         else:
             self.etl_l_waveform = tunable_lens_ramp(samplerate = self.parameters["samplerate"],
@@ -101,6 +108,20 @@ class AOETLGalvos(QtCore.QObject):
                                                   samplesPerStep = self.samplesPerStep, 
                                                   samplesPerHalfDelay = self.samplesPerHalfDelay,
                                                   offset = self.parameters["galvo_r_offset"])
+        elif case == 'LIVE_MODE':
+            self.galvo_l_waveform = galvo_live_mode_waveform(amplitude = self.parameters["galvo_l_amplitude"], 
+                                                             samplesPerHalfPeriod = self.samplesPerHalfPeriod, 
+                                                             samplesPerDelay = self.samplesPerDelay, 
+                                                             numberOfSamples = self.numberOfSamples,
+                                                             samplesPerHalfDelay = self.samplesPerHalfDelay, 
+                                                             offset = self.parameters["galvo_l_offset"])
+            
+            self.galvo_r_waveform = galvo_live_mode_waveform(amplitude = self.parameters["galvo_r_amplitude"], 
+                                                             samplesPerHalfPeriod = self.samplesPerHalfPeriod, 
+                                                             samplesPerDelay = self.samplesPerDelay, 
+                                                             numberOfSamples = self.numberOfSamples,
+                                                             samplesPerHalfDelay = self.samplesPerHalfDelay, 
+                                                             offset = self.parameters["galvo_r_offset"])
         
         else:
             '''Create Galvo waveforms:'''
@@ -133,6 +154,12 @@ class AOETLGalvos(QtCore.QObject):
                                                     numberOfSamples = self.numberOfSamples, 
                                                     numberOfSteps = self.numberOfSteps, 
                                                     samplesPerStep = self.samplesPerStep)
+        elif case == 'LIVE_MODE':
+            self.camera_waveform = camera_live_mode_waveform(samplesPerHalfPeriod = self.samplesPerHalfPeriod,
+                                                              t_startExp = self.parameters["t_startExp"], 
+                                                              samplerate = self.parameters["samplerate"], 
+                                                              samplesPerHalfDelay = self.samplesPerHalfDelay, 
+                                                              numberOfSamples = self.numberOfSamples)
         
         else:
             self.camera_waveform = DO_signal(samplerate = self.parameters["samplerate"], 
@@ -172,7 +199,7 @@ class AOETLGalvos(QtCore.QObject):
         elif acquisition == 'CONTINUOUS':
             mode = AcquisitionType.CONTINUOUS
         
-        self.calculate_samples()
+        #self.calculate_samples()
 
         #self.master_trigger_task = nidaqmx.Task()
         self.galvo_etl_task = nidaqmx.Task(new_task_name='galvo_etl_ramps')
@@ -300,7 +327,42 @@ class AOETLGalvos(QtCore.QObject):
         self.sweeptime = self.numberOfSamples/self.parameters["samplerate"]
         print('Sweeptime: '+str(self.sweeptime)+'s')
         
-        self.samples = self.numberOfSamples
+        self.samples = int(self.numberOfSamples)
+        
+    
+    def initialize_live_mode(self):
+        
+        self.t_halfPeriod = (1/self.parameters["galvo_l_frequency"])     #It is our exposure time (is in the range of the camera)
+        self.samplesPerHalfPeriod = np.ceil(self.t_halfPeriod*self.parameters["samplerate"])
+        #print('Samples per half period: '+str(self.samplesPerHalfPeriod))
+        
+        self.minSamplesPerDelay = np.ceil(self.parameters["min_t_delay"]*self.parameters["samplerate"])
+        #print('Minimum samples per delay: '+str(self.minSamplesPerDelay))
+        
+        self.minSamplesPerStep = self.minSamplesPerDelay + self.samplesPerHalfPeriod
+        #print('Minimum samples per step: '+str(self.minSamplesPerStep)+'\n')
+        
+        self.restSamplesAdded = np.ceil(self.minSamplesPerStep*self.parameters["camera_delay"]/100)  #Samples added to allow down time for the camera
+        self.samplesPerStep = self.minSamplesPerStep + self.restSamplesAdded
+        #print('Samples per step: ' + str(self.samplesPerStep))
+        
+        self.samplesPerDelay = self.samplesPerStep-self.samplesPerHalfPeriod
+        #print('Samples per delay: '+str(self.samplesPerDelay))
+        
+        self.samplesPerHalfDelay = np.floor(self.samplesPerDelay/2)
+        #print('Samples per half delay: '+str(self.samplesPerHalfDelay)+'\n')
+        
+        #print('Number of columns: '+str(self.parameters["columns"]))
+        #print('Etl step: '+str(self.parameters["etl_step"]) + ' columns')
+        
+        self.numberOfSamples = self.samplesPerStep
+        #print('Number of samples: '+str(self.numberOfSamples))
+        
+        self.sweeptime = self.numberOfSamples/self.parameters["samplerate"]
+        #print('Sweeptime: '+str(self.sweeptime)+'s')
+        
+        self.samples = int(self.numberOfSamples)
+        
     
         
         
