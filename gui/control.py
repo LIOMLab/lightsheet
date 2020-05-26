@@ -6,8 +6,6 @@ Created on May 22, 2019
 
 import sys
 from IPython.utils import frame
-from pyqtgraph.dockarea.DockArea import DockArea
-from pyqtgraph.dockarea.Dock import Dock
 sys.path.append("..")
 
 import os
@@ -129,10 +127,10 @@ class Controller(QWidget):
         self.comboBox_unit.setCurrentIndex(1)
         self.comboBox_unit.currentTextChanged.connect(self.update_all)
         
-        #To initialize the widget that are updated by a change of unit (the motion tab)
-        self.update_all()
         #To initialize the properties of the other widgets
         self.initialize_other_widgets()
+        #To initialize the widget that are updated by a change of unit (the motion tab)
+        self.update_all()
         
         self.lineEdit_filename.setEnabled(False)
         self.pushButton_selectDirectory.clicked.connect(self.select_directory)
@@ -184,6 +182,10 @@ class Controller(QWidget):
         self.pushButton_forward.clicked.connect(self.move_forward)
         self.pushButton_backward.clicked.connect(self.move_backward)
         self.pushButton_focus.clicked.connect(self.move_to_focus)
+        
+        self.pushButton_calibrateRange.clicked.connect(self.reset_boundaries)
+        self.pushButton_setUpperLimit.clicked.connect(self.set_upper_boundary)
+        self.pushButton_setLowerLimit.clicked.connect(self.set_lower_boundary)
         
         
         #**********************************************************************
@@ -289,11 +291,16 @@ class Controller(QWidget):
         #self.ramps.create_lasers_waveforms()                   
         
         self.ramps=AOETLGalvos(self.parameters)
-        self.ramps.initialize()                  
+        #self.ramps.initialize()                  
+        #self.ramps.create_tasks(terminals,'FINITE') 
+        #self.ramps.create_etl_waveforms(case = 'STAIRS')
+        #self.ramps.create_galvos_waveforms(case = 'TRAPEZE')
+        #self.ramps.create_DO_camera_waveform( case = 'STAIRS_FITTING')
+        self.ramps.initialize_live_mode()                 
         self.ramps.create_tasks(terminals,'FINITE') 
-        self.ramps.create_etl_waveforms(case = 'STAIRS')
-        self.ramps.create_galvos_waveforms(case = 'TRAPEZE')
-        self.ramps.create_DO_camera_waveform( case = 'STAIRS_FITTING')
+        self.ramps.create_etl_waveforms(case = 'LIVE_MODE')
+        self.ramps.create_galvos_waveforms(case = 'LIVE_MODE')
+        self.ramps.create_DO_camera_waveform( case = 'LIVE_MODE')
         
         self.ramps.write_waveforms_to_tasks()                            
         self.ramps.start_tasks()
@@ -579,6 +586,8 @@ class Controller(QWidget):
         if self.stackModeStarted == True:
             self.stop_stack_mode()
             self.stackModeStarted = False
+            
+        self.progressBar.setValue(0)
                 
         self.filename = str(self.lineEdit_filename.text())   
         '''Removing spaces, dots and commas'''
@@ -670,44 +679,52 @@ class Controller(QWidget):
         '''
         
         for i in range(int(self.numberOfPlanes)):
-            '''Moving sample position'''
-            position = self.startPoint+i*self.step
-            self.motor2.move_absolute_position(position,'\u03BCm')  #Position in micro-meters
             
-            
-            '''Acquiring the frame '''
-            self.ramps.create_tasks(terminals,'FINITE')
-            self.ramps.write_waveforms_to_tasks()                            
-            self.ramps.start_tasks()
-            self.ramps.run_tasks()
-            
-            buffer = self.camera.retrieve_multiple_images(self.numberOfSteps, self.ramps.t_halfPeriod, sleep_timeout = 5)
-            frame = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))
-            for i in range(int(self.numberOfSteps)):
-                if i == int(self.numberOfSteps-1): #Last loop
-                    frame[:,int(i*self.parameters['etl_step']):] = buffer[i,:,int(i*self.parameters['etl_step']):]
-                else:
-                    frame[:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])] = buffer[i,:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])]
-            
-            
-            
-            for ii in range(0, len(self.consumers), 4):
-                if self.consumers[ii+2] == 'CameraWindow':
-                    try:
-                        self.consumers[ii].put(frame)
-                        print('Frame put in CameraWindow')
-                    except:      #self.consumers[ii].Full:
-                        print("CameraWindow queue is full")
-                    
-                if self.consumers[ii+2] == 'FrameSaver':
-                    try:
-                        self.consumers[ii].put(buffer,1)
-                        print('Frame put in FrameSaver')
-                    except:      #self.consumers[ii].Full:
-                        print("FrameSaver queue is full")
-
-            self.ramps.stop_tasks()                             
-            self.ramps.close_tasks()
+            if self.stackModeStarted == False:
+                print('Acquisition Interrupted')
+                break
+            else:
+                '''Moving sample position'''
+                position = self.startPoint+i*self.step
+                self.motor2.move_absolute_position(position,'\u03BCm')  #Position in micro-meters
+                
+                
+                '''Acquiring the frame '''
+                self.ramps.create_tasks(terminals,'FINITE')
+                self.ramps.write_waveforms_to_tasks()                            
+                self.ramps.start_tasks()
+                self.ramps.run_tasks()
+                
+                buffer = self.camera.retrieve_multiple_images(self.numberOfSteps, self.ramps.t_halfPeriod, sleep_timeout = 5)
+                frame = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))
+                for i in range(int(self.numberOfSteps)):
+                    if i == int(self.numberOfSteps-1): #Last loop
+                        frame[:,int(i*self.parameters['etl_step']):] = buffer[i,:,int(i*self.parameters['etl_step']):]
+                    else:
+                        frame[:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])] = buffer[i,:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])]
+                
+                
+                
+                for ii in range(0, len(self.consumers), 4):
+                    if self.consumers[ii+2] == 'CameraWindow':
+                        try:
+                            self.consumers[ii].put(frame)
+                            print('Frame put in CameraWindow')
+                        except:      #self.consumers[ii].Full:
+                            print("CameraWindow queue is full")
+                        
+                    if self.consumers[ii+2] == 'FrameSaver':
+                        try:
+                            self.consumers[ii].put(buffer,1)
+                            print('Frame put in FrameSaver')
+                        except:      #self.consumers[ii].Full:
+                            print("FrameSaver queue is full")
+    
+                self.ramps.stop_tasks()                             
+                self.ramps.close_tasks()
+                
+                self.progress = round(100*(i+1)/self.numberOfPlanes)
+                self.update_progress_bar()
         
         self.stopLasers = True
            
@@ -729,9 +746,10 @@ class Controller(QWidget):
             
     def stop_stack_mode(self):
         '''Useless function for now. Would be useful to find a way to stop stack mode before it's done. Note: check how to break a NI-Daqmx task '''
-        pass
+        self.stackModeStarted = False
         
-
+    def update_progress_bar(self):
+        self.progressBar.setValue(self.progress)
                            
     
     def move_up(self):
@@ -751,22 +769,35 @@ class Controller(QWidget):
 
     def move_right(self):
         #Motion of the detection arm to implement (self.motor3)
-        print ('Sample moving forward')
-        self.motor2.move_relative_position(self.doubleSpinBox_incrementHorizontal.value(),self.comboBox_unit.currentText())
-        #Current horizontal position update
-        self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()), self.decimals), self.comboBox_unit.currentText()))
+        current_position = self.motor2.current_position(self.comboBox_unit.currentText())
+        if current_position+self.doubleSpinBox_incrementHorizontal.value() <= self.horizontal_maximum:
+            print ('Sample moving forward')
+            self.motor2.move_relative_position(self.doubleSpinBox_incrementHorizontal.value(),self.comboBox_unit.currentText())
+            #Current horizontal position update
+            self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()), self.decimals), self.comboBox_unit.currentText()))
+        else:
+            print('Out of boundaries')
     
     def move_left(self):
         #Motion of the detection arm to implement (self.motor3)
-        print ('Sample moving backward')
-        self.motor2.move_relative_position(-self.doubleSpinBox_incrementHorizontal.value(),self.comboBox_unit.currentText())
-        #Current horizontal position update
-        self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText()))
+        current_position = self.motor2.current_position(self.comboBox_unit.currentText())
+        if current_position-self.doubleSpinBox_incrementHorizontal.value() >= self.horizontal_minimum:
+            print ('Sample moving backward')
+            self.motor2.move_relative_position(-self.doubleSpinBox_incrementHorizontal.value(),self.comboBox_unit.currentText())
+            #Current horizontal position update
+            self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText()))
+        else:
+            print('Out of boundaries')
         
     def move_to_origin(self):
         #Motion of the detection arm to implement (self.motor3)
+        originX_current_unit = self.motor2.data_to_position(self.originX, self.comboBox_unit.currentText())
         print('Moving to origin')
-        self.motor2.move_absolute_position(self.originX,'\u03BCStep')
+        if originX_current_unit >= self.horizontal_minimum and originX_current_unit <= self.horizontal_maximum:
+            self.motor2.move_absolute_position(self.originX,'\u03BCStep')
+        else:
+            print('Sample Horizontal Origin Out Of Boundaries')
+            
         self.motor1.move_absolute_position(self.originZ,'\u03BCStep')
         #Current positions update
         self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText()))
@@ -817,6 +848,41 @@ class Controller(QWidget):
         self.focus = self.motor3.position_to_data(self.motor3.current_position(self.comboBox_unit.currentText()),self.comboBox_unit.currentText())
         print('Focus set')
         
+    def reset_boundaries(self):
+        self.pushButton_setUpperLimit.setEnabled(True)
+        self.pushButton_setLowerLimit.setEnabled(True)
+        self.label_calibrateRange.setText("Move Horizontal Position")
+        self.upperBoundarySelected = False
+        self.lowerBoundarySelected = False
+        self.pushButton_calibrateRange.setEnabled(False)
+        
+        self.upper_boundary = 533333
+        self.lower_boundary = 0
+        
+        self.update_all()
+        
+    def set_upper_boundary(self):
+        self.upper_boundary = self.motor2.current_position('\u03BCStep')
+        self.upperBoundarySelected = True
+        self.pushButton_setUpperLimit.setEnabled(False)
+        
+        self.update_all()
+        
+        if self.lowerBoundarySelected == True:
+            self.pushButton_calibrateRange.setEnabled(True)
+            self.label_calibrateRange.setText('Press Calibrate Range To Start')
+    
+    def set_lower_boundary(self):
+        self.lower_boundary = self.motor2.current_position('\u03BCStep')
+        self.lowerBoundarySelected = True
+        self.pushButton_setLowerLimit.setEnabled(False)
+        
+        self.update_all()
+        
+        if self.upperBoundarySelected == True:
+            self.pushButton_calibrateRange.setEnabled(True)
+            self.label_calibrateRange.setText('Press Calibrate Range To Start')
+        
     def update_all(self):
         unit = self.comboBox_unit.currentText()
         
@@ -834,16 +900,20 @@ class Controller(QWidget):
         self.doubleSpinBox_chooseCamera.setValue(0)
         
         if unit == 'cm':
+            self.horizontal_maximum = self.motor2.data_to_position(self.upper_boundary,'cm')
+            self.horizontal_minimum = self.motor2.data_to_position(self.lower_boundary,'cm')
+            maximum_increment = self.horizontal_maximum-self.horizontal_minimum
             self.doubleSpinBox_incrementHorizontal.setDecimals(4)
-            self.doubleSpinBox_incrementHorizontal.setMaximum(10.16)
+            self.doubleSpinBox_incrementHorizontal.setMaximum(maximum_increment)
             self.doubleSpinBox_incrementVertical.setDecimals(4)
-            self.doubleSpinBox_incrementVertical.setMaximum(10.16)
+            self.doubleSpinBox_incrementVertical.setMaximum(5.08)
             self.doubleSpinBox_incrementCamera.setDecimals(4)
             self.doubleSpinBox_incrementCamera.setMaximum(10.16)
             self.doubleSpinBox_choosePosition.setDecimals(4)
-            self.doubleSpinBox_choosePosition.setMaximum(10.16)
+            self.doubleSpinBox_choosePosition.setMaximum(self.horizontal_maximum)
+            self.doubleSpinBox_choosePosition.setMinimum(self.horizontal_minimum)
             self.doubleSpinBox_chooseHeight.setDecimals(4)
-            self.doubleSpinBox_chooseHeight.setMaximum(10.16)
+            self.doubleSpinBox_chooseHeight.setMaximum(5.08)
             self.doubleSpinBox_chooseCamera.setDecimals(4)
             self.doubleSpinBox_chooseCamera.setMaximum(10.16)
             self.decimals = self.doubleSpinBox_incrementHorizontal.decimals()
@@ -851,16 +921,20 @@ class Controller(QWidget):
             self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(unit),self.decimals), unit))
             self.label_currentCameraNumerical.setText("{} {}".format(round(self.motor3.current_position(unit),self.decimals), unit))
         elif unit == 'mm':
+            self.horizontal_maximum = self.motor2.data_to_position(self.upper_boundary,'mm')
+            self.horizontal_minimum = self.motor2.data_to_position(self.lower_boundary,'mm')
+            maximum_increment = self.horizontal_maximum-self.horizontal_minimum
             self.doubleSpinBox_incrementHorizontal.setDecimals(3)
-            self.doubleSpinBox_incrementHorizontal.setMaximum(101.6)
+            self.doubleSpinBox_incrementHorizontal.setMaximum(maximum_increment)
             self.doubleSpinBox_incrementVertical.setDecimals(3)
-            self.doubleSpinBox_incrementVertical.setMaximum(101.6)
+            self.doubleSpinBox_incrementVertical.setMaximum(50.8)
             self.doubleSpinBox_incrementCamera.setDecimals(3)
             self.doubleSpinBox_incrementCamera.setMaximum(101.6)
             self.doubleSpinBox_choosePosition.setDecimals(3)
-            self.doubleSpinBox_choosePosition.setMaximum(101.6)
+            self.doubleSpinBox_choosePosition.setMaximum(self.horizontal_maximum)
+            self.doubleSpinBox_choosePosition.setMinimum(self.horizontal_minimum)
             self.doubleSpinBox_chooseHeight.setDecimals(3)
-            self.doubleSpinBox_chooseHeight.setMaximum(101.6)
+            self.doubleSpinBox_chooseHeight.setMaximum(50.8)
             self.doubleSpinBox_chooseCamera.setDecimals(3)
             self.doubleSpinBox_chooseCamera.setMaximum(101.6)
             self.decimals = self.doubleSpinBox_incrementHorizontal.decimals()
@@ -868,16 +942,20 @@ class Controller(QWidget):
             self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(unit),self.decimals), unit))
             self.label_currentCameraNumerical.setText("{} {}".format(round(self.motor3.current_position(unit),self.decimals), unit))
         elif unit == '\u03BCm':
+            self.horizontal_maximum = self.motor2.data_to_position(self.upper_boundary,'\u03BCm')
+            self.horizontal_minimum = self.motor2.data_to_position(self.lower_boundary,'\u03BCm')
+            maximum_increment = self.horizontal_maximum-self.horizontal_minimum
             self.doubleSpinBox_incrementHorizontal.setDecimals(0)
-            self.doubleSpinBox_incrementHorizontal.setMaximum(101600)
+            self.doubleSpinBox_incrementHorizontal.setMaximum(maximum_increment)
             self.doubleSpinBox_incrementVertical.setDecimals(0)
-            self.doubleSpinBox_incrementVertical.setMaximum(101600)
+            self.doubleSpinBox_incrementVertical.setMaximum(50800)
             self.doubleSpinBox_incrementCamera.setDecimals(0)
             self.doubleSpinBox_incrementCamera.setMaximum(101600)
             self.doubleSpinBox_choosePosition.setDecimals(0)
-            self.doubleSpinBox_choosePosition.setMaximum(101600)
+            self.doubleSpinBox_choosePosition.setMaximum(self.horizontal_maximum)
+            self.doubleSpinBox_choosePosition.setMinimum(self.horizontal_minimum)
             self.doubleSpinBox_chooseHeight.setDecimals(0)
-            self.doubleSpinBox_chooseHeight.setMaximum(101600)
+            self.doubleSpinBox_chooseHeight.setMaximum(50800)
             self.doubleSpinBox_chooseCamera.setDecimals(0)
             self.doubleSpinBox_chooseCamera.setMaximum(101600)
             self.decimals = self.doubleSpinBox_incrementHorizontal.decimals()
@@ -930,7 +1008,16 @@ class Controller(QWidget):
         self.doubleSpinBox_rightEtlDelay.setValue(self.delay)
         
     def initialize_other_widgets(self):
-        '''Initializes the properties of the widgets that are not upadted by a change of units, so the widgets that cannot be initialize with self.update_all() '''
+        '''Initializes the properties of the widgets that are not updated by a 
+        change of units, so the widgets that cannot be initialize with self.update_all() '''
+        
+        #**********************************************************************
+        # Motion
+        #**********************************************************************
+        self.pushButton_setUpperLimit.setEnabled(False)
+        self.pushButton_setLowerLimit.setEnabled(False)
+        self.upper_boundary = 533333
+        self.lower_boundary = 0
         
         #**********************************************************************
         # Modes
@@ -948,6 +1035,8 @@ class Controller(QWidget):
         self.doubleSpinBox_planeStep.setDecimals(0)
         self.doubleSpinBox_planeStep.setMaximum(101600)
         self.doubleSpinBox_planeStep.setSingleStep(1)
+        
+        self.progressBar.setMaximum(100)
         
         
         
@@ -1429,7 +1518,8 @@ class CameraWindow(queue.Queue):
         
         self.lines = 2160
         self.columns = 2560
-        self.container = np.zeros((self.lines, self.columns)) 
+        self.container = np.zeros((self.lines, self.columns))
+        self.container[0] = 1000 #To get initial range of the histogram 
         self.imv = pg.ImageView(view = pg.PlotItem())  #(None, 'Camera Window')
         self.imv.setWindowTitle('Camera Window')
         self.scene = self.imv.scene

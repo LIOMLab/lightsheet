@@ -629,9 +629,10 @@ class Motors:
         motor=serial.Serial(port=self.port,baudrate=9600,bytesize=serial.EIGHTBITS,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE)
         
         data = self.position_to_data(relativePosition, unit)
+        
         command = self.generate_command(21,data)
         motor.write(command)
         #All the reply bytes are read, so they doesn't interfere with further operations, suchas self.current_position(unit)
         motor.read(6)
-        
+    
         motor.close()
