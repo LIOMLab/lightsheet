@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>830</width>
+    <width>828</width>
     <height>900</height>
    </rect>
   </property>
@@ -26,7 +26,7 @@
     <cursorShape>ArrowCursor</cursorShape>
    </property>
    <property name="currentIndex">
-    <number>1</number>
+    <number>0</number>
    </property>
    <widget class="QWidget" name="tab">
     <attribute name="title">
@@ -35,7 +35,7 @@
     <widget class="QGroupBox" name="groupBox">
      <property name="geometry">
       <rect>
-       <x>120</x>
+       <x>10</x>
        <y>10</y>
        <width>301</width>
        <height>311</height>
@@ -502,6 +502,71 @@
         <width>81</width>
         <height>22</height>
        </rect>
+      </property>
+     </widget>
+    </widget>
+    <widget class="QGroupBox" name="groupBox_20">
+     <property name="geometry">
+      <rect>
+       <x>320</x>
+       <y>10</y>
+       <width>201</width>
+       <height>311</height>
+      </rect>
+     </property>
+     <property name="title">
+      <string>Calibrate Sample Range</string>
+     </property>
+     <widget class="QPushButton" name="pushButton_calibrateRange">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>30</y>
+        <width>111</width>
+        <height>21</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Calibrate Range</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="pushButton_setUpperLimit">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>100</y>
+        <width>181</width>
+        <height>21</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Set Current Position As Upper Limit</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_calibrateRange">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>60</y>
+        <width>181</width>
+        <height>31</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Press Calibrate Range To Start</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="pushButton_setLowerLimit">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>130</y>
+        <width>181</width>
+        <height>21</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Set Current Position As Lower Limit</string>
       </property>
      </widget>
     </widget>
