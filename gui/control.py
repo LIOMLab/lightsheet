@@ -98,6 +98,7 @@ class Controller(QWidget):
         self.liveModeStarted = False
         self.stackModeStarted = False
         self.cameraOn = True
+        self.standby = False
         
         self.motor1 = Motors(1, 'COM3')             #Vertical motor
         self.motor2 = Motors(2, 'COM3')             #Horizontal motor for sample motion
@@ -152,6 +153,8 @@ class Controller(QWidget):
         self.pushButton_startPreviewMode.clicked.connect(self.start_preview_mode)
         self.pushButton_stopPreviewMode.clicked.connect(self.stop_preview_mode)
         #self.pushButton_closeCamera.clicked.connect(self.close_camera)
+        self.pushButton_standby_on.pressed.connect(self.standby_on)
+        self.pushButton_standby_off.pressed.connect(self.standby_off)
         
         #**********************************************************************
         # Connections for the motion
@@ -478,6 +481,7 @@ class Controller(QWidget):
         self.pushButton_stopStack.setEnabled(False)
         self.pushButton_startPreviewMode.setEnabled(False)
         self.pushButton_stopPreviewMode.setEnabled(False)
+        self.pushButton_standby_on.setEnabled(False)
         
         print('Start live mode')
         
@@ -567,6 +571,7 @@ class Controller(QWidget):
         self.pushButton_stopLiveMode.setEnabled(False)
         self.pushButton_startStack.setEnabled(True)
         self.pushButton_startPreviewMode.setEnabled(True)
+        self.pushButton_standby_on.setEnabled(True)
         
         print('Live mode stopped')
         
@@ -624,6 +629,7 @@ class Controller(QWidget):
             self.pushButton_stopStack.setEnabled(True)
             self.pushButton_startPreviewMode.setEnabled(False)
             self.pushButton_stopPreviewMode.setEnabled(False)
+            self.pushButton_standby_on.setEnabled(False)
             
             
             '''Setting the camera for acquisition'''
@@ -741,6 +747,7 @@ class Controller(QWidget):
         self.pushButton_startStack.setEnabled(True)
         self.pushButton_stopStack.setEnabled(False)
         self.pushButton_startPreviewMode.setEnabled(True)
+        self.pushButton_standby_on.setEnabled(True)
         
         self.frame_saver.stop_saving()
             
@@ -1027,6 +1034,7 @@ class Controller(QWidget):
         self.pushButton_setOptimized.setEnabled(False)
         self.pushButton_saveImage.setEnabled(False)
         self.pushButton_stopPreviewMode.setEnabled(False)
+        self.pushButton_standby_off.setEnabled(False)
         
         self.checkBox_setStartPoint.setEnabled(False)
         self.checkBox_setEndPoint.setEnabled(False)
@@ -1248,6 +1256,7 @@ class Controller(QWidget):
         self.pushButton_stopLiveMode.setEnabled(False)
         self.pushButton_startPreviewMode.setEnabled(False)
         self.pushButton_stopPreviewMode.setEnabled(True)
+        self.pushButton_standby_on.setEnabled(False)
         
         '''Setting tasks'''
         self.preview_lasers_task = nidaqmx.Task()
@@ -1275,6 +1284,59 @@ class Controller(QWidget):
         self.cameraOn = False
         self.camera.close_camera()
         print('Camera closed')
+        
+    def open_camera(self):
+        self.cameraOn=True
+        self.camera = Camera()
+        print('Camera opened')
+        
+    def standby_on(self):
+        self.standby = True
+        self.close_camera()
+        standby_thread = threading.Thread(target = self.standby_thread)
+        standby_thread.start()
+        print('Standby on')
+        
+        self.pushButton_getSingleImage.setEnabled(False)
+        self.pushButton_saveImage.setEnabled(False)
+        self.pushButton_startStack.setEnabled(False)
+        self.pushButton_stopStack.setEnabled(False)
+        self.pushButton_startLiveMode.setEnabled(False)
+        self.pushButton_stopLiveMode.setEnabled(False)
+        self.pushButton_startPreviewMode.setEnabled(False)
+        self.pushButton_stopPreviewMode.setEnabled(False)
+        self.pushButton_standby_on.setEnabled(False)
+        self.pushButton_standby_off.setEnabled(True)
+        
+    def standby_thread(self):
+        standby_task = nidaqmx.Task()
+        standby_task.ao_channels.add_ao_voltage_chan('/Dev1/ao2:3')
+        
+        etl_voltage = 2.5 #volts
+        standby_waveform = np.stack((np.array([etl_voltage]),np.array([etl_voltage])))
+        
+        while self.standby:
+            standby_task.write(standby_waveform, auto_start = True)
+            time.sleep(5) #seconds
+            
+        standby_task.stop()
+        standby_task.close()
+        self.open_camera()
+        print('Standby off')
+        
+    def standby_off(self):
+        self.standby = False
+        
+        self.pushButton_getSingleImage.setEnabled(True)
+        self.pushButton_saveImage.setEnabled(False)
+        self.pushButton_startStack.setEnabled(True)
+        self.pushButton_stopStack.setEnabled(False)
+        self.pushButton_startLiveMode.setEnabled(True)
+        self.pushButton_stopLiveMode.setEnabled(False)
+        self.pushButton_startPreviewMode.setEnabled(True)
+        self.pushButton_stopPreviewMode.setEnabled(False)
+        self.pushButton_standby_on.setEnabled(True)
+        self.pushButton_standby_off.setEnabled(False)
      
      
     def etl_galvos_parameters_changed(self, parameterNumber):
@@ -1440,6 +1502,7 @@ class Controller(QWidget):
         self.pushButton_startLiveMode.setEnabled(True)
         self.pushButton_startPreviewMode.setEnabled(True)
         self.pushButton_stopPreviewMode.setEnabled(False)
+        self.pushButton_standby_on.setEnabled(True)
         
         print('Preview mode stopped')
         
