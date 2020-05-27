@@ -2581,6 +2581,32 @@
     <enum>Qt::Horizontal</enum>
    </property>
   </widget>
+  <widget class="QPushButton" name="pushButton_standby_on">
+   <property name="geometry">
+    <rect>
+     <x>50</x>
+     <y>850</y>
+     <width>81</width>
+     <height>23</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Standby On</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="pushButton_standby_off">
+   <property name="geometry">
+    <rect>
+     <x>150</x>
+     <y>850</y>
+     <width>75</width>
+     <height>23</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Standby Off</string>
+   </property>
+  </widget>
  </widget>
  <resources/>
  <connections/>
