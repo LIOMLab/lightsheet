@@ -42,12 +42,12 @@ parameters["samplerate"]=40000 #100    #20000
 parameters["sweeptime"]=0.4
 parameters["galvo_l_frequency"]=100  #10  #50
 parameters["galvo_l_amplitude"]=2
-parameters["galvo_l_offset"]=0
+parameters["galvo_l_offset"]=-3
 parameters["galvo_l_duty_cycle"]=50
 parameters["galvo_l_phase"]=np.pi/2
 parameters["galvo_r_frequency"]=100  #10
 parameters["galvo_r_amplitude"]=2
-parameters["galvo_r_offset"]=0
+parameters["galvo_r_offset"]=-3
 parameters["galvo_r_duty_cycle"]=50
 parameters["galvo_r_phase"]=np.pi/2
 parameters["etl_l_delay"]=7.5
@@ -99,6 +99,7 @@ class Controller(QWidget):
         self.stackModeStarted = False
         self.cameraOn = True
         self.standby = False
+        self.cameraCalibrationStarted = False
         
         self.motor1 = Motors(1, 'COM3')             #Vertical motor
         self.motor2 = Motors(2, 'COM3')             #Horizontal motor for sample motion
@@ -137,6 +138,9 @@ class Controller(QWidget):
         self.pushButton_selectDirectory.clicked.connect(self.select_directory)
         self.savingAllowed = False
         
+        #For camera calibration
+        #self.camera_focus_relation = np.zeros(10,2)###????
+        
         
         #**********************************************************************
         # Connections for the modes
@@ -155,6 +159,8 @@ class Controller(QWidget):
         #self.pushButton_closeCamera.clicked.connect(self.close_camera)
         self.pushButton_standby_on.pressed.connect(self.standby_on)
         self.pushButton_standby_off.pressed.connect(self.standby_off)
+        
+        #self.pushButton_calibrate_camera.pressed.connect(self.calibrate_camera)##VÉRIFIER
         
         #**********************************************************************
         # Connections for the motion
@@ -267,6 +273,7 @@ class Controller(QWidget):
         self.pushButton_startPreviewMode.setEnabled(False)
         self.pushButton_stopPreviewMode.setEnabled(False)
         print('Getting single image')
+        self.text_zone.setText(self.text_zone.text()+'\n Getting single image')
         
         self.stopLasers = False
         
@@ -455,9 +462,11 @@ class Controller(QWidget):
             #self.frame_saver.f.close()
             
             print('Image saved')
+            self.text_zone.setText(self.text_zone.text()+'\n Image saved')
             
         else:
             print('Select directory and enter a valid filename before saving')
+            self.text_zone.setText(self.text_zone.text()+'\n Select directory and enter a valid filename before saving')
             
     def start_live_mode(self):
         
@@ -482,8 +491,10 @@ class Controller(QWidget):
         self.pushButton_startPreviewMode.setEnabled(False)
         self.pushButton_stopPreviewMode.setEnabled(False)
         self.pushButton_standby_on.setEnabled(False)
+        self.pushButton_calibrate_camera.setEnabled(False)
         
         print('Start live mode')
+        self.text_zone.setText(self.text_zone.text()+'\n Start live mode')
         
         '''Setting the camera for acquisition'''
         self.camera.set_trigger_mode('ExternalExposureControl')
@@ -572,8 +583,10 @@ class Controller(QWidget):
         self.pushButton_startStack.setEnabled(True)
         self.pushButton_startPreviewMode.setEnabled(True)
         self.pushButton_standby_on.setEnabled(True)
+        self.pushButton_calibrate_camera.setEnabled(True)
         
         print('Live mode stopped')
+        self.text_zone.setText(self.text_zone.text()+'\n Live mode stopped')
         
     def stop_live_mode(self):
         self.liveModeStarted = False
@@ -602,9 +615,11 @@ class Controller(QWidget):
         
         if self.checkBox_setStartPoint.isChecked()==False or self.checkBox_setEndPoint.isChecked()==False or self.doubleSpinBox_planeStep.value()==0:
             print('Set starting and ending points and select a non-zero plane step value')
+            self.text_zone.setText(self.text_zone.text()+'\n Set starting and ending points and select a non-zero plane step value')
             
         elif self.savingAllowed == False or self.filename == '':
             print('Select directory and enter a valid filename before saving')
+            self.text_zone.setText(self.text_zone.text()+'\n Select directory and enter a valid filename before saving')
             
         else:
             
@@ -630,6 +645,7 @@ class Controller(QWidget):
             self.pushButton_startPreviewMode.setEnabled(False)
             self.pushButton_stopPreviewMode.setEnabled(False)
             self.pushButton_standby_on.setEnabled(False)
+            self.pushButton_calibrate_camera.setEnabled(False)
             
             
             '''Setting the camera for acquisition'''
@@ -740,6 +756,7 @@ class Controller(QWidget):
         
         
         print('Acquisition done')
+        self.text_zone.setText(self.text_zone.text()+'\n Acquisition done')
         #Current camera position update
         #self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText())) 
         self.pushButton_getSingleImage.setEnabled(True)
@@ -748,6 +765,7 @@ class Controller(QWidget):
         self.pushButton_stopStack.setEnabled(False)
         self.pushButton_startPreviewMode.setEnabled(True)
         self.pushButton_standby_on.setEnabled(True)
+        self.pushButton_calibrate_camera.setEnabled(True)
         
         self.frame_saver.stop_saving()
             
@@ -761,6 +779,7 @@ class Controller(QWidget):
     
     def move_up(self):
         print('Moving up')
+        self.text_zone.setText(self.text_zone.text()+'\n Moving up')
         self.motor1.move_relative_position(-self.doubleSpinBox_incrementVertical.value(),self.comboBox_unit.currentText())
         #Current height update
         self.label_currentHeightNumerical.setText("{} {}".format(round(self.motor1.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText()))
@@ -770,6 +789,7 @@ class Controller(QWidget):
         
     def move_down(self):
         print ('Moving down')
+        self.text_zone.setText(self.text_zone.text()+'\n Moving down')
         self.motor1.move_relative_position(self.doubleSpinBox_incrementVertical.value(),self.comboBox_unit.currentText())
         #Current height update
         self.label_currentHeightNumerical.setText("{} {}".format(round(self.motor1.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText()))
@@ -779,6 +799,7 @@ class Controller(QWidget):
         current_position = self.motor2.current_position(self.comboBox_unit.currentText())
         if current_position+self.doubleSpinBox_incrementHorizontal.value() <= self.horizontal_maximum:
             print ('Sample moving forward')
+            self.text_zone.setText(self.text_zone.text()+'\n Sample moving forward')
             self.motor2.move_relative_position(self.doubleSpinBox_incrementHorizontal.value(),self.comboBox_unit.currentText())
             #Current horizontal position update
             self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()), self.decimals), self.comboBox_unit.currentText()))
@@ -790,6 +811,7 @@ class Controller(QWidget):
         current_position = self.motor2.current_position(self.comboBox_unit.currentText())
         if current_position-self.doubleSpinBox_incrementHorizontal.value() >= self.horizontal_minimum:
             print ('Sample moving backward')
+            self.text_zone.setText(self.text_zone.text()+'\n Sample moving backward')
             self.motor2.move_relative_position(-self.doubleSpinBox_incrementHorizontal.value(),self.comboBox_unit.currentText())
             #Current horizontal position update
             self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText()))
@@ -800,6 +822,7 @@ class Controller(QWidget):
         #Motion of the detection arm to implement (self.motor3)
         originX_current_unit = self.motor2.data_to_position(self.originX, self.comboBox_unit.currentText())
         print('Moving to origin')
+        self.text_zone.setText(self.text_zone.text()+'\n Moving to origin')
         if originX_current_unit >= self.horizontal_minimum and originX_current_unit <= self.horizontal_maximum:
             self.motor2.move_absolute_position(self.originX,'\u03BCStep')
         else:
@@ -812,18 +835,21 @@ class Controller(QWidget):
         
     def move_forward(self):
         print('Camera moving forward')
+        self.text_zone.setText(self.text_zone.text()+'\n Camera moving foward')
         self.motor3.move_relative_position(self.doubleSpinBox_incrementCamera.value(),self.comboBox_unit.currentText())
         #Current camera position update
         self.label_currentCameraNumerical.setText("{} {}".format(round(self.motor3.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText()))
         
     def move_backward(self):
         print('Camera moving backward')
+        self.text_zone.setText(self.text_zone.text()+'\n Camera moving backward')
         self.motor3.move_relative_position(-self.doubleSpinBox_incrementCamera.value(),self.comboBox_unit.currentText())
         #Current camera position update
         self.label_currentCameraNumerical.setText("{} {}".format(round(self.motor3.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText()))
         
     def move_to_focus(self):
         print('Moving to focus')
+        self.text_zone.setText(self.text_zone.text()+'\n Moving to focus')
         self.motor3.move_absolute_position(self.focus,'\u03BCStep')
         #Current camera position update
         self.label_currentCameraNumerical.setText("{} {}".format(round(self.motor3.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText()))
@@ -850,10 +876,12 @@ class Controller(QWidget):
         self.originX = self.motor2.position_to_data(self.motor2.current_position(self.comboBox_unit.currentText()),self.comboBox_unit.currentText())
         self.originZ = 1066666 - self.motor1.position_to_data(self.motor1.current_position(self.comboBox_unit.currentText()),self.comboBox_unit.currentText())
         print('Origin set')
+        self.text_zone.setText(self.text_zone.text()+'\n Origin set')
         
     def set_focus(self):
         self.focus = self.motor3.position_to_data(self.motor3.current_position(self.comboBox_unit.currentText()),self.comboBox_unit.currentText())
         print('Focus set')
+        self.text_zone.setText(self.text_zone.text()+'\n Focus set')
         
     def reset_boundaries(self):
         self.pushButton_setUpperLimit.setEnabled(True)
@@ -1102,16 +1130,16 @@ class Controller(QWidget):
         self.doubleSpinBox_rightGalvoAmplitude.setSingleStep(0.1)
         self.doubleSpinBox_rightGalvoAmplitude.setMaximum(10)
         self.doubleSpinBox_rightGalvoAmplitude.setMinimum(-10)
+        self.doubleSpinBox_leftGalvoOffset.setMaximum(10)
+        self.doubleSpinBox_leftGalvoOffset.setMinimum(-10)
         self.doubleSpinBox_leftGalvoOffset.setValue(self.parameters["galvo_l_offset"])
         self.doubleSpinBox_leftGalvoOffset.setSuffix(" V")
         self.doubleSpinBox_leftGalvoOffset.setSingleStep(0.1)
-        self.doubleSpinBox_leftGalvoOffset.setMaximum(10)
-        self.doubleSpinBox_leftGalvoOffset.setMinimum(-10)
+        self.doubleSpinBox_rightGalvoOffset.setMaximum(10)
+        self.doubleSpinBox_rightGalvoOffset.setMinimum(-10)
         self.doubleSpinBox_rightGalvoOffset.setValue(self.parameters["galvo_r_offset"])
         self.doubleSpinBox_rightGalvoOffset.setSuffix(" V")
         self.doubleSpinBox_rightGalvoOffset.setSingleStep(0.1)
-        self.doubleSpinBox_rightGalvoOffset.setMaximum(10)
-        self.doubleSpinBox_rightGalvoOffset.setMinimum(-10)
         self.doubleSpinBox_leftGalvoFrequency.setValue(self.parameters["galvo_l_frequency"])
         self.doubleSpinBox_leftGalvoFrequency.setSuffix(" Hz")
         self.doubleSpinBox_leftGalvoFrequency.setMaximum(130)
@@ -1185,6 +1213,7 @@ class Controller(QWidget):
         self.pushButton_leftLaserOn.setEnabled(False)
         self.pushButton_rightLaserOn.setEnabled(False)
         print('Lasers on')
+        self.text_zone.setText(self.text_zone.text()+'\n Left laser on')
         
     def lasers_off(self):
         self.allLasersOn = False
@@ -1193,6 +1222,7 @@ class Controller(QWidget):
         self.pushButton_leftLaserOn.setEnabled(True)
         self.pushButton_rightLaserOn.setEnabled(True)
         print('Lasers off')
+        self.text_zone.setText(self.text_zone.text()+'\n Left laser off')
         
     def left_laser_on(self):
         self.leftLaserOn = True
@@ -1200,10 +1230,12 @@ class Controller(QWidget):
         self.pushButton_leftLaserOn.setEnabled(False)
         self.pushButton_leftLaserOff.setEnabled(True)
         print('Left laser on')
+        self.text_zone.setText(self.text_zone.text()+'\n Left laser on')
         
     def left_laser_off(self):
         self.leftLaserOn = False
         print('Left laser off')
+        self.text_zone.setText(self.text_zone.text()+'\n Left laser off')
         self.pushButton_leftLaserOn.setEnabled(True)
         self.pushButton_leftLaserOff.setEnabled(False)
         if self.pushButton_rightLaserOn.isEnabled() == True:
@@ -1215,10 +1247,12 @@ class Controller(QWidget):
         self.pushButton_rightLaserOn.setEnabled(False)
         self.pushButton_rightLaserOff.setEnabled(True)
         print('Left laser on')
+        self.text_zone.setText(self.text_zone.text()+'\n Left laser on')
         
     def right_laser_off(self):
         self.rightLaserOn = False
         print('Left laser off')
+        self.text_zone.setText(self.text_zone.text()+'\n Left laser off')
         self.pushButton_rightLaserOn.setEnabled(True)
         self.pushButton_rightLaserOff.setEnabled(False)
         if self.pushButton_leftLaserOn.isEnabled() == True:
@@ -1237,6 +1271,7 @@ class Controller(QWidget):
     def start_preview_mode(self):
         
         print('Start preview mode')
+        self.text_zone.setText(self.text_zone.text()+'\n Start preview mode')
         
         '''Flags check up'''
         if self.previewModeStarted == True:
@@ -1257,6 +1292,7 @@ class Controller(QWidget):
         self.pushButton_startPreviewMode.setEnabled(False)
         self.pushButton_stopPreviewMode.setEnabled(True)
         self.pushButton_standby_on.setEnabled(False)
+        self.pushButton_calibrate_camera.setEnabled(False)
         
         '''Setting tasks'''
         self.preview_lasers_task = nidaqmx.Task()
@@ -1284,11 +1320,13 @@ class Controller(QWidget):
         self.cameraOn = False
         self.camera.close_camera()
         print('Camera closed')
+        self.text_zone.setText(self.text_zone.text()+'\n Camera closed')
         
     def open_camera(self):
         self.cameraOn=True
         self.camera = Camera()
         print('Camera opened')
+        self.text_zone.setText(self.text_zone.text()+'\n Camera opened')
         
     def standby_on(self):
         self.standby = True
@@ -1296,6 +1334,7 @@ class Controller(QWidget):
         standby_thread = threading.Thread(target = self.standby_thread)
         standby_thread.start()
         print('Standby on')
+        self.text_zone.setText(self.text_zone.text()+'\n Standby on')
         
         self.pushButton_getSingleImage.setEnabled(False)
         self.pushButton_saveImage.setEnabled(False)
@@ -1323,6 +1362,7 @@ class Controller(QWidget):
         standby_task.close()
         self.open_camera()
         print('Standby off')
+        self.text_zone.setText(self.text_zone.text()+'\n Standby off')
         
     def standby_off(self):
         self.standby = False
@@ -1341,45 +1381,117 @@ class Controller(QWidget):
      
     def etl_galvos_parameters_changed(self, parameterNumber):
         if parameterNumber==1:
+            self.doubleSpinBox_leftEtlAmplitude.setMaximum(5-self.doubleSpinBox_leftEtlOffset.value())
             self.parameters["etl_l_amplitude"]=self.doubleSpinBox_leftEtlAmplitude.value()
-        elif parameterNumber==2: 
+            if self.etls_together.isChecked() == True:
+                self.parameters["etl_r_amplitude"]=self.doubleSpinBox_leftEtlAmplitude.value()
+                self.doubleSpinBox_rightEtlAmplitude.setValue(self.parameters["etl_r_amplitude"])
+        elif parameterNumber==2:
+            self.doubleSpinBox_rightEtlAmplitude.setMaximum(5-self.doubleSpinBox_rightEtlOffset.value())
             self.parameters["etl_r_amplitude"]=self.doubleSpinBox_rightEtlAmplitude.value()
+            if self.etls_together.isChecked() == True:
+                self.parameters["etl_l_amplitude"]=self.doubleSpinBox_rightEtlAmplitude.value()
+                self.doubleSpinBox_leftEtlAmplitude.setValue(self.parameters["etl_l_amplitude"])
         elif parameterNumber==3:
+            self.doubleSpinBox_leftEtlOffset.setMaximum(5-self.doubleSpinBox_leftEtlAmplitude.value())
             self.parameters["etl_l_offset"]=self.doubleSpinBox_leftEtlOffset.value()
+            if self.etls_together.isChecked() == True:
+                self.parameters["etl_r_offset"]=self.doubleSpinBox_leftEtlOffset.value()
+                self.doubleSpinBox_rightEtlOffset.setValue(self.parameters["etl_r_offset"])
         elif parameterNumber==4:
+            self.doubleSpinBox_rightEtlOffset.setMaximum(5-self.doubleSpinBox_rightEtlAmplitude.value())
             self.parameters["etl_r_offset"]=self.doubleSpinBox_rightEtlOffset.value()
+            if self.etls_together.isChecked() == True:
+                self.parameters["etl_l_offset"]=self.doubleSpinBox_rightEtlOffset.value()
+                self.doubleSpinBox_leftEtlOffset.setValue(self.parameters["etl_l_offset"])
         elif parameterNumber==5:
             self.parameters["etl_l_delay"]=self.doubleSpinBox_leftEtlDelay.value()
+            if self.etls_together.isChecked() == True:
+                self.parameters["etl_r_delay"]=self.doubleSpinBox_leftEtlDelay.value()
+                self.doubleSpinBox_rightEtlDelay.setValue(self.parameters["etl_r_delay"])
         elif parameterNumber==6:
             self.parameters["etl_r_delay"]=self.doubleSpinBox_rightEtlDelay.value()
+            if self.etls_together.isChecked() == True:
+                self.parameters["etl_l_delay"]=self.doubleSpinBox_rightEtlDelay.value()
+                self.doubleSpinBox_leftEtlDelay.setValue(self.parameters["etl_l_delay"])
         elif parameterNumber==7:
             self.parameters["etl_l_ramp_rising"]=self.doubleSpinBox_leftEtlRising.value()
+            if self.etls_together.isChecked() == True:
+                self.parameters["etl_r_ramp_rising"]=self.doubleSpinBox_leftEtlRising.value()
+                self.doubleSpinBox_rightEtlRising.setValue(self.parameters["etl_r_ramp_rising"])
         elif parameterNumber==8:
             self.parameters["etl_r_ramp_rising"]=self.doubleSpinBox_rightEtlRising.value()
+            if self.etls_together.isChecked() == True:
+                self.parameters["etl_l_ramp_rising"]=self.doubleSpinBox_rightEtlRising.value()
+                self.doubleSpinBox_leftEtlRising.setValue(self.parameters["etl_l_ramp_rising"])
         elif parameterNumber==9:
             self.parameters["etl_l_ramp_falling"]=self.doubleSpinBox_leftEtlFalling.value()
+            if self.etls_together.isChecked() == True:
+                self.parameters["etl_r_ramp_falling"]=self.doubleSpinBox_leftEtlFalling.value()
+                self.doubleSpinBox_rightEtlFalling.setValue(self.parameters["etl_r_ramp_falling"])
         elif parameterNumber==10:
             self.parameters["etl_r_ramp_falling"]=self.doubleSpinBox_rightEtlFalling.value()
+            if self.etls_together.isChecked() == True:
+                self.parameters["etl_l_ramp_falling"]=self.doubleSpinBox_rightEtlFalling.value()
+                self.doubleSpinBox_leftEtlFalling.setValue(self.parameters["etl_l_ramp_falling"])
         elif parameterNumber==11:
+            self.doubleSpinBox_leftGalvoAmplitude.setMaximum(10-self.doubleSpinBox_leftGalvoOffset.value())
+            self.doubleSpinBox_leftGalvoAmplitude.setMinimum(-10-self.doubleSpinBox_leftGalvoOffset.value())
             self.parameters["galvo_l_amplitude"]=self.doubleSpinBox_leftGalvoAmplitude.value()
+            if self.galvos_together.isChecked() == True:
+                self.parameters["galvo_r_amplitude"]=self.doubleSpinBox_leftGalvoAmplitude.value()
+                self.doubleSpinBox_rightGalvoAmplitude.setValue(self.parameters["galvo_r_amplitude"])
         elif parameterNumber==12:
+            self.doubleSpinBox_rightGalvoAmplitude.setMaximum(10-self.doubleSpinBox_rightGalvoOffset.value())
+            self.doubleSpinBox_rightGalvoAmplitude.setMinimum(-10-self.doubleSpinBox_rightGalvoOffset.value())
             self.parameters["galvo_r_amplitude"]=self.doubleSpinBox_rightGalvoAmplitude.value()
+            if self.galvos_together.isChecked() == True:
+                self.parameters["galvo_l_amplitude"]=self.doubleSpinBox_rightGalvoAmplitude.value()
+                self.doubleSpinBox_leftGalvoAmplitude.setValue(self.parameters["galvo_l_amplitude"])
         elif parameterNumber==13:
+            self.doubleSpinBox_leftGalvoOffset.setMaximum(10-self.doubleSpinBox_leftGalvoAmplitude.value())
+            self.doubleSpinBox_leftGalvoOffset.setMinimum(-10-self.doubleSpinBox_leftGalvoAmplitude.value())
             self.parameters["galvo_l_offset"]=self.doubleSpinBox_leftGalvoOffset.value()
+            if self.galvos_together.isChecked() == True:
+                self.parameters["galvo_r_offset"]=self.doubleSpinBox_leftGalvoOffset.value()
+                self.doubleSpinBox_rightGalvoOffset.setValue(self.parameters["galvo_r_offset"])
         elif parameterNumber==14:
+            self.doubleSpinBox_rightGalvoOffset.setMaximum(10-self.doubleSpinBox_rightGalvoAmplitude.value())
+            self.doubleSpinBox_rightGalvoOffset.setMinimum(-10-self.doubleSpinBox_rightGalvoAmplitude.value())
             self.parameters["galvo_r_offset"]=self.doubleSpinBox_rightGalvoOffset.value()
+            if self.galvos_together.isChecked() == True:
+                self.parameters["galvo_l_offset"]=self.doubleSpinBox_rightGalvoOffset.value()
+                self.doubleSpinBox_leftGalvoOffset.setValue(self.parameters["galvo_l_offset"])
         elif parameterNumber==15:
             self.parameters["galvo_l_frequency"]=self.doubleSpinBox_leftGalvoFrequency.value()
+            if self.galvos_together.isChecked() == True:
+                self.parameters["galvo_r_frequency"]=self.doubleSpinBox_leftGalvoFrequency.value()
+                self.doubleSpinBox_rightGalvoFrequency.setValue(self.parameters["galvo_r_frequency"])
         elif parameterNumber==16:
             self.parameters["galvo_r_frequency"]=self.doubleSpinBox_rightGalvoFrequency.value()
+            if self.galvos_together.isChecked() == True:
+                self.parameters["galvo_l_frequency"]=self.doubleSpinBox_rightGalvoFrequency.value()
+                self.doubleSpinBox_leftGalvoFrequency.setValue(self.parameters["galvo_l_frequency"])
         elif parameterNumber==17:
             self.parameters["galvo_l_duty_cycle"]=self.doubleSpinBox_leftGalvoDutyCycle.value()
+            if self.galvos_together.isChecked() == True:
+                self.parameters["galvo_r_duty_cycle"]=self.doubleSpinBox_leftGalvoDutyCycle.value()
+                self.doubleSpinBox_rightGalvoDutyCycle.setValue(self.parameters["galvo_r_duty_cycle"])
         elif parameterNumber==18:
             self.parameters["galvo_r_duty_cycle"]=self.doubleSpinBox_rightGalvoDutyCycle.value()
+            if self.galvos_together.isChecked() == True:
+                self.parameters["galvo_l_duty_cycle"]=self.doubleSpinBox_rightGalvoDutyCycle.value()
+                self.doubleSpinBox_leftGalvoDutyCycle.setValue(self.parameters["galvo_l_duty_cycle"])
         elif parameterNumber==19:
             self.parameters["galvo_l_phase"]=self.doubleSpinBox_leftGalvoPhase.value()
+            if self.galvos_together.isChecked() == True:
+                self.parameters["galvo_r_phase"]=self.doubleSpinBox_leftGalvoPhase.value()
+                self.doubleSpinBox_rightGalvoPhase.setValue(self.parameters["galvo_r_phase"])
         elif parameterNumber==20:
             self.parameters["galvo_r_phase"]=self.doubleSpinBox_rightGalvoPhase.value()
+            if self.galvos_together.isChecked() == True:
+                self.parameters["galvo_l_phase"]=self.doubleSpinBox_rightGalvoPhase.value()
+                self.doubleSpinBox_leftGalvoPhase.setValue(self.parameters["galvo_l_phase"])
         elif parameterNumber==21:
             self.parameters["samplerate"]=self.doubleSpinBox_samplerate.value()
         elif parameterNumber==22:
@@ -1443,8 +1555,8 @@ class Controller(QWidget):
                 while continuer:
                     
                     '''Getting the data to send to the AO'''
-                    leftGalvoVoltage = self.parameters['galvo_l_amplitude']
-                    rightGalvoVoltage = self.parameters['galvo_r_amplitude']
+                    leftGalvoVoltage = self.parameters['galvo_l_amplitude']+self.parameters['galvo_l_offset']
+                    rightGalvoVoltage = self.parameters['galvo_r_amplitude']+self.parameters['galvo_r_offset']
                     leftEtlVoltage = self.parameters['etl_l_amplitude']
                     rightEtlVoltage = self.parameters['etl_r_amplitude']
                     leftLaserVoltage = 0
@@ -1483,6 +1595,7 @@ class Controller(QWidget):
                             self.consumers[i].put(frame)
                         except self.consumers[i].Full:
                             print("Queue is full")
+                            self.text_zone.setText(self.text_zone.text()+'\n Queue is full')
                     elif self.previewModeStarted == False:
                         continuer = False
         
@@ -1505,6 +1618,7 @@ class Controller(QWidget):
         self.pushButton_standby_on.setEnabled(True)
         
         print('Preview mode stopped')
+        self.text_zone.setText(self.text_zone.text()+'\n Preview mode stopped')
         
     def closeEvent(self, event):
         '''Making sure that everything is closed when the user exits the software'''
@@ -1570,6 +1684,97 @@ class Controller(QWidget):
                 self.label_numberOfPlanes.setText(str(self.numberOfPlanes))
         else:
             print('Set a non-zero value to plane step')
+
+#########################
+#    def calibrate_camera(self):
+#        camera_calibration_thread = threading.Thread(target = self.camera_calibration_thread)
+#        camera_calibration_thread.start()
+#        print('Camera calibration started')
+#        self.text_zone.setText(self.text_zone.text()+'\n Camera calibration started')
+#        
+#        self.pushButton_getSingleImage.setEnabled(False)
+#        self.pushButton_saveImage.setEnabled(False)
+#        self.pushButton_startStack.setEnabled(False)
+#        self.pushButton_stopStack.setEnabled(False)
+#        self.pushButton_startLiveMode.setEnabled(False)
+#        self.pushButton_stopLiveMode.setEnabled(False)
+#        self.pushButton_startPreviewMode.setEnabled(False)
+#        self.pushButton_stopPreviewMode.setEnabled(False)
+#        self.pushButton_calibrate_camera.setEnabled(False)
+#        self.pushButton_standby_on.setEnabled(False)
+#        self.pushButton_standby_off.setEnabled(False)
+#        
+#    def calibrate_camera_thread(self):
+#        '''
+#        '''
+#
+#        for i in range(10): #10 planes
+#            
+#            if self.cameraCalibrationStarted == False: #Pas encore implémenté
+#                print('Camera calibration Interrupted')
+#                break
+#            else:
+#                '''Moving sample position'''
+#                position = self.startPoint+i*100 #Step of 100 micro-meters
+#                self.motor2.move_absolute_position(position,'\u03BCm')  #Position in micro-meters
+#                self.camera_focus_relation[i,0]=position
+#                
+#                average_intensities=np.zeros(10)
+#                for j in range(-5,5): #10 positions de caméra?
+#                    position_camera = position+j #VÉRFIER
+#                    self.motor3.move_absolute_position(position_camera,'\u03BCm')  #Position in micro-meters
+#                    '''Acquiring the frame '''
+#                    self.ramps.create_tasks(terminals,'FINITE')
+#                    self.ramps.write_waveforms_to_tasks()                            
+#                    self.ramps.start_tasks()
+#                    self.ramps.run_tasks()
+#                    
+#                    buffer = self.camera.retrieve_multiple_images(self.numberOfSteps, self.ramps.t_halfPeriod, sleep_timeout = 5)
+#                    #frame = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))
+#                    #for i in range(int(self.numberOfSteps)):
+#                    #    if i == int(self.numberOfSteps-1): #Last loop
+#                    #        frame[:,int(i*self.parameters['etl_step']):] = buffer[i,:,int(i*self.parameters['etl_step']):]
+#                    #    else:
+#                    #        frame[:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])] = buffer[i,:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])]
+#                    #       
+#                    #for ii in range(0, len(self.consumers), 4):
+#                    #    if self.consumers[ii+2] == 'CameraWindow':
+#                    #        try:
+#                    #            self.consumers[ii].put(frame)
+#                    #            print('Frame put in CameraWindow')
+#                    #        except:      #self.consumers[ii].Full:
+#                    #            print("CameraWindow queue is full")
+#        
+#                    self.ramps.stop_tasks()                             
+#                    self.ramps.close_tasks()
+#                    
+#                    intensities = np.sort(buffer, axis=None)
+#                    average_intensities[j]=np.average(intensities[-10:]) #10 max intensities considered
+#                
+#                position_camera_max=np.argmax(average_intensities)+position #VÉRIFIER
+#                self.camera_focus_relation[i,1]=position_camera_max
+#                
+#        
+#        self.stopLasers = True
+#           
+#        self.camera.cancel_images()
+#        self.camera.set_recording_state(0)
+#        self.camera.free_buffer()
+#        
+#        
+#        print('Calibration done')
+#        self.text_zone.setText(self.text_zone.text()+'\n Calibration done')
+#        self.pushButton_getSingleImage.setEnabled(True)
+#        self.pushButton_startStack.setEnabled(True)
+#        self.pushButton_startLiveMode.setEnabled(True)
+#        self.pushButton_startPreviewMode.setEnabled(True)
+#        self.pushButton_calibrate_camera.setEnabled(True)
+#        self.pushButton_standby_on.setEnabled(True)
+#        
+#        self.frame_saver.stop_saving()
+#        
+################
+
 
 class CameraWindow(queue.Queue):
     
@@ -1887,6 +2092,3 @@ def save_process(queue, filenames_list, path_root, block_size, conn):    #(queue
     #f.close()
                 
             
-
-          
-        
