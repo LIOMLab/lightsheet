@@ -101,7 +101,7 @@ def etl_stairs(amplitude, number_of_steps, number_of_samples, samples_per_step, 
     if number_of_steps !=1:
         step_amplitude = amplitude/(number_of_steps-1)
     
-        print('Step amplitude: ' + str(step_amplitude))
+        #print('Step amplitude: ' + str(step_amplitude))
         
         array = np.zeros((int(number_of_samples)))
         
@@ -150,10 +150,10 @@ def galvo_trapeze(amplitude, samples_per_half_period, samples_per_delay, number_
        galvos are in motion, i.e. when they are scanning.'''
     
     if amplitude !=0:
-        print('samplesPerHalfPeriod: ' + str(samples_per_half_period))
+        #print('samplesPerHalfPeriod: ' + str(samples_per_half_period))
         step_amplitude = amplitude/(samples_per_half_period-1)
-        print('amplitude: ' + str(amplitude))
-        print('stepAmplitude: ' + str(step_amplitude))
+        #print('amplitude: ' + str(amplitude))
+        #print('stepAmplitude: ' + str(step_amplitude))
         rise_vector = np.arange(0,amplitude+step_amplitude,step_amplitude)
         fall_vector = np.arange(amplitude, 0-step_amplitude, -step_amplitude)
         amplitude_vector = amplitude*np.ones((int(samples_per_delay)))
