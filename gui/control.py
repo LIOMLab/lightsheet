@@ -160,11 +160,11 @@ class Controller(QWidget):
         
         #Might write a function for this button instead of using lambda commands
         self.pushButton_movePosition.clicked.connect(lambda: self.motor2.move_absolute_position(self.doubleSpinBox_choosePosition.value(),self.comboBox_unit.currentText()))
-        self.pushButton_movePosition.clicked.connect(lambda: self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText())))
+        self.pushButton_movePosition.clicked.connect(self.display_sample_horizontal_position)
         
         #Might write a function for this button instead of using lambda commands
         self.pushButton_moveHeight.clicked.connect(lambda: self.motor1.move_absolute_position(self.doubleSpinBox_chooseHeight.value(),self.comboBox_unit.currentText()))
-        self.pushButton_moveHeight.clicked.connect(lambda: self.label_currentHeightNumerical.setText("{} {}".format(round(self.motor1.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText())))
+        self.pushButton_moveHeight.clicked.connect(self.display_sample_vertical_position)
        
         #Might write a function for this button instead of using lambda commands
         self.pushButton_moveCamera.clicked.connect(lambda: self.motor3.move_absolute_position(self.doubleSpinBox_chooseCamera.value(),self.comboBox_unit.currentText()))
@@ -179,7 +179,8 @@ class Controller(QWidget):
         self.pushButton_setUpperLimit.clicked.connect(self.set_upper_boundary)
         self.pushButton_setLowerLimit.clicked.connect(self.set_lower_boundary)
         
-        self.pushButton_calibrateCamera.pressed.connect(self.calibrate_camera)
+        self.pushButton_calibrateCamera.pressed.connect(self.start_calibrate_camera)
+        self.pushButton_cancelCalibrateCamera.pressed.connect(self.stop_calibrate_camera) # pas implémenté
         
         '''Connections for the ETLs and Galvos parameters'''
         self.doubleSpinBox_leftEtlAmplitude.valueChanged.connect(lambda: self.etl_galvos_parameters_changed(1))
@@ -198,192 +199,16 @@ class Controller(QWidget):
     
         
         '''Connections for the lasers'''
-        self.pushButton_lasersOn.clicked.connect(self.lasers_on)
-        self.pushButton_lasersOff.clicked.connect(self.lasers_off)
+        self.pushButton_lasersOn.clicked.connect(self.start_lasers)
+        self.pushButton_lasersOff.clicked.connect(self.stop_lasers)
         self.pushButton_leftLaserOn.clicked.connect(self.start_left_laser)
         self.pushButton_leftLaserOff.clicked.connect(self.stop_left_laser)
         self.pushButton_rightLaserOn.clicked.connect(self.start_right_laser)
         self.pushButton_rightLaserOff.clicked.connect(self.stop_right_laser)
         self.horizontalSlider_leftLaser.sliderReleased.connect(self.left_laser_update)
         self.horizontalSlider_rightLaser.sliderReleased.connect(self.right_laser_update)
-        
-    def back_to_default_parameters(self):
-        '''Change all the modifiable parameters to go back to the initial state'''
-        
-        self.parameters = copy.deepcopy(self.defaultParameters)
-        self.doubleSpinBox_leftEtlAmplitude.setValue(self.parameters["etl_l_amplitude"])
-        self.doubleSpinBox_rightEtlAmplitude.setValue(self.parameters["etl_r_amplitude"])
-        self.doubleSpinBox_leftEtlOffset.setValue(self.parameters["etl_l_offset"])
-        self.doubleSpinBox_rightEtlOffset.setValue(self.parameters["etl_r_offset"])
-        self.doubleSpinBox_leftGalvoAmplitude.setValue(self.parameters["galvo_l_amplitude"])
-        self.doubleSpinBox_rightGalvoAmplitude.setValue(self.parameters["galvo_r_amplitude"])
-        self.doubleSpinBox_leftGalvoOffset.setValue(self.parameters["galvo_l_offset"])
-        self.doubleSpinBox_rightGalvoOffset.setValue(self.parameters["galvo_r_offset"])
-        self.doubleSpinBox_leftGalvoFrequency.setValue(self.parameters["galvo_l_frequency"])
-        self.doubleSpinBox_rightGalvoFrequency.setValue(self.parameters["galvo_r_frequency"])
-        self.doubleSpinBox_samplerate.setValue(self.parameters["samplerate"])    
-        
-    def close_camera(self):
-        self.camera_on = False
-        self.camera.close_camera()
-        print('Camera closed')
-        self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Camera closed')    
-        
-    def closeEvent(self, event):
-        '''Making sure that everything is closed when the user exits the software.
-           This function executes automatically when the user closes the UI.
-           This is an intrinsic function name of Qt, don't change the name even 
-           if it doesn't follow the naming convention'''
-
-        if self.all_lasers_on == True:
-            self.lasers_off()
-            
-        if self.left_laser_on == True:
-            self.stop_left_laser()
-            
-        if self.right_laser_on == True:
-            self.right_laser_off()
-            
-        if self.preview_mode_started == True:
-            self.stop_preview_mode()
-            
-        if self.live_mode_started == True:
-            self.stop_live_mode()
-            
-        if self.stack_mode_started == True:
-            self.stop_stack_mode()
-            
-        if self.camera_on == True:
-            self.close_camera()
-            
-        event.accept()    
-        
-    def etl_galvos_parameters_changed(self, parameterNumber):
-        '''Updates the parameters in the software after a modification by the
-           user'''
-        
-        if parameterNumber==1:
-            self.doubleSpinBox_leftEtlAmplitude.setMaximum(5-self.doubleSpinBox_leftEtlOffset.value())
-            self.parameters["etl_l_amplitude"]=self.doubleSpinBox_leftEtlAmplitude.value()
-            if self.checkBox_checkBox_etlsTogether.isChecked() == True:
-                self.parameters["etl_r_amplitude"]=self.doubleSpinBox_leftEtlAmplitude.value()
-                self.doubleSpinBox_rightEtlAmplitude.setValue(self.parameters["etl_r_amplitude"])
-        elif parameterNumber==2:
-            self.doubleSpinBox_rightEtlAmplitude.setMaximum(5-self.doubleSpinBox_rightEtlOffset.value())
-            self.parameters["etl_r_amplitude"]=self.doubleSpinBox_rightEtlAmplitude.value()
-            if self.checkBox_etlsTogether.isChecked() == True:
-                self.parameters["etl_l_amplitude"]=self.doubleSpinBox_rightEtlAmplitude.value()
-                self.doubleSpinBox_leftEtlAmplitude.setValue(self.parameters["etl_l_amplitude"])
-        elif parameterNumber==3:
-            self.doubleSpinBox_leftEtlOffset.setMaximum(5-self.doubleSpinBox_leftEtlAmplitude.value())
-            self.parameters["etl_l_offset"]=self.doubleSpinBox_leftEtlOffset.value()
-            if self.checkBox_etlsTogether.isChecked() == True:
-                self.parameters["etl_r_offset"]=self.doubleSpinBox_leftEtlOffset.value()
-                self.doubleSpinBox_rightEtlOffset.setValue(self.parameters["etl_r_offset"])
-        elif parameterNumber==4:
-            self.doubleSpinBox_rightEtlOffset.setMaximum(5-self.doubleSpinBox_rightEtlAmplitude.value())
-            self.parameters["etl_r_offset"]=self.doubleSpinBox_rightEtlOffset.value()
-            if self.checkBox_etlsTogether.isChecked() == True:
-                self.parameters["etl_l_offset"]=self.doubleSpinBox_rightEtlOffset.value()
-                self.doubleSpinBox_leftEtlOffset.setValue(self.parameters["etl_l_offset"])
-        elif parameterNumber==5:
-            self.parameters["etl_l_delay"]=self.doubleSpinBox_leftEtlDelay.value()
-            if self.checkBox_etlsTogether.isChecked() == True:
-                self.parameters["etl_r_delay"]=self.doubleSpinBox_leftEtlDelay.value()
-                self.doubleSpinBox_rightEtlDelay.setValue(self.parameters["etl_r_delay"])
-        elif parameterNumber==6:
-            self.parameters["etl_r_delay"]=self.doubleSpinBox_rightEtlDelay.value()
-            if self.checkBox_etlsTogether.isChecked() == True:
-                self.parameters["etl_l_delay"]=self.doubleSpinBox_rightEtlDelay.value()
-                self.doubleSpinBox_leftEtlDelay.setValue(self.parameters["etl_l_delay"])
-        elif parameterNumber==7:
-            self.parameters["etl_l_ramp_rising"]=self.doubleSpinBox_leftEtlRising.value()
-            if self.checkBox_etlsTogether.isChecked() == True:
-                self.parameters["etl_r_ramp_rising"]=self.doubleSpinBox_leftEtlRising.value()
-                self.doubleSpinBox_rightEtlRising.setValue(self.parameters["etl_r_ramp_rising"])
-        elif parameterNumber==8:
-            self.parameters["etl_r_ramp_rising"]=self.doubleSpinBox_rightEtlRising.value()
-            if self.checkBox_etlsTogether.isChecked() == True:
-                self.parameters["etl_l_ramp_rising"]=self.doubleSpinBox_rightEtlRising.value()
-                self.doubleSpinBox_leftEtlRising.setValue(self.parameters["etl_l_ramp_rising"])
-        elif parameterNumber==9:
-            self.parameters["etl_l_ramp_falling"]=self.doubleSpinBox_leftEtlFalling.value()
-            if self.checkBox_etlsTogether.isChecked() == True:
-                self.parameters["etl_r_ramp_falling"]=self.doubleSpinBox_leftEtlFalling.value()
-                self.doubleSpinBox_rightEtlFalling.setValue(self.parameters["etl_r_ramp_falling"])
-        elif parameterNumber==10:
-            self.parameters["etl_r_ramp_falling"]=self.doubleSpinBox_rightEtlFalling.value()
-            if self.checkBox_etlsTogether.isChecked() == True:
-                self.parameters["etl_l_ramp_falling"]=self.doubleSpinBox_rightEtlFalling.value()
-                self.doubleSpinBox_leftEtlFalling.setValue(self.parameters["etl_l_ramp_falling"])
-        elif parameterNumber==11:
-            self.doubleSpinBox_leftGalvoAmplitude.setMaximum(10-self.doubleSpinBox_leftGalvoOffset.value())
-            self.doubleSpinBox_leftGalvoAmplitude.setMinimum(-10-self.doubleSpinBox_leftGalvoOffset.value())
-            self.parameters["galvo_l_amplitude"]=self.doubleSpinBox_leftGalvoAmplitude.value()
-            if self.checkBox_galvosTogether.isChecked() == True:
-                self.parameters["galvo_r_amplitude"]=self.doubleSpinBox_leftGalvoAmplitude.value()
-                self.doubleSpinBox_rightGalvoAmplitude.setValue(self.parameters["galvo_r_amplitude"])
-        elif parameterNumber==12:
-            self.doubleSpinBox_rightGalvoAmplitude.setMaximum(10-self.doubleSpinBox_rightGalvoOffset.value())
-            self.doubleSpinBox_rightGalvoAmplitude.setMinimum(-10-self.doubleSpinBox_rightGalvoOffset.value())
-            self.parameters["galvo_r_amplitude"]=self.doubleSpinBox_rightGalvoAmplitude.value()
-            if self.checkBox_galvosTogether.isChecked() == True:
-                self.parameters["galvo_l_amplitude"]=self.doubleSpinBox_rightGalvoAmplitude.value()
-                self.doubleSpinBox_leftGalvoAmplitude.setValue(self.parameters["galvo_l_amplitude"])
-        elif parameterNumber==13:
-            self.doubleSpinBox_leftGalvoOffset.setMaximum(10-self.doubleSpinBox_leftGalvoAmplitude.value())
-            self.doubleSpinBox_leftGalvoOffset.setMinimum(-10-self.doubleSpinBox_leftGalvoAmplitude.value())
-            self.parameters["galvo_l_offset"]=self.doubleSpinBox_leftGalvoOffset.value()
-            if self.checkBox_galvosTogether.isChecked() == True:
-                self.parameters["galvo_r_offset"]=self.doubleSpinBox_leftGalvoOffset.value()
-                self.doubleSpinBox_rightGalvoOffset.setValue(self.parameters["galvo_r_offset"])
-        elif parameterNumber==14:
-            self.doubleSpinBox_rightGalvoOffset.setMaximum(10-self.doubleSpinBox_rightGalvoAmplitude.value())
-            self.doubleSpinBox_rightGalvoOffset.setMinimum(-10-self.doubleSpinBox_rightGalvoAmplitude.value())
-            self.parameters["galvo_r_offset"]=self.doubleSpinBox_rightGalvoOffset.value()
-            if self.checkBox_galvosTogether.isChecked() == True:
-                self.parameters["galvo_l_offset"]=self.doubleSpinBox_rightGalvoOffset.value()
-                self.doubleSpinBox_leftGalvoOffset.setValue(self.parameters["galvo_l_offset"])
-        elif parameterNumber==15:
-            self.parameters["galvo_l_frequency"]=self.doubleSpinBox_leftGalvoFrequency.value()
-            if self.checkBox_galvosTogether.isChecked() == True:
-                self.parameters["galvo_r_frequency"]=self.doubleSpinBox_leftGalvoFrequency.value()
-                self.doubleSpinBox_rightGalvoFrequency.setValue(self.parameters["galvo_r_frequency"])
-        elif parameterNumber==16:
-            self.parameters["galvo_r_frequency"]=self.doubleSpinBox_rightGalvoFrequency.value()
-            if self.checkBox_galvosTogether.isChecked() == True:
-                self.parameters["galvo_l_frequency"]=self.doubleSpinBox_rightGalvoFrequency.value()
-                self.doubleSpinBox_leftGalvoFrequency.setValue(self.parameters["galvo_l_frequency"])
-        elif parameterNumber==17:
-            self.parameters["galvo_l_duty_cycle"]=self.doubleSpinBox_leftGalvoDutyCycle.value()
-            if self.checkBox_galvosTogether.isChecked() == True:
-                self.parameters["galvo_r_duty_cycle"]=self.doubleSpinBox_leftGalvoDutyCycle.value()
-                self.doubleSpinBox_rightGalvoDutyCycle.setValue(self.parameters["galvo_r_duty_cycle"])
-        elif parameterNumber==18:
-            self.parameters["galvo_r_duty_cycle"]=self.doubleSpinBox_rightGalvoDutyCycle.value()
-            if self.checkBox_galvosTogether.isChecked() == True:
-                self.parameters["galvo_l_duty_cycle"]=self.doubleSpinBox_rightGalvoDutyCycle.value()
-                self.doubleSpinBox_leftGalvoDutyCycle.setValue(self.parameters["galvo_l_duty_cycle"])
-        elif parameterNumber==19:
-            self.parameters["galvo_l_phase"]=self.doubleSpinBox_leftGalvoPhase.value()
-            if self.checkBox_galvosTogether.isChecked() == True:
-                self.parameters["galvo_r_phase"]=self.doubleSpinBox_leftGalvoPhase.value()
-                self.doubleSpinBox_rightGalvoPhase.setValue(self.parameters["galvo_r_phase"])
-        elif parameterNumber==20:
-            self.parameters["galvo_r_phase"]=self.doubleSpinBox_rightGalvoPhase.value()
-            if self.checkBox_galvosTogether.isChecked() == True:
-                self.parameters["galvo_l_phase"]=self.doubleSpinBox_rightGalvoPhase.value()
-                self.doubleSpinBox_leftGalvoPhase.setValue(self.parameters["galvo_l_phase"])
-        elif parameterNumber==21:
-            self.parameters["samplerate"]=self.doubleSpinBox_samplerate.value()
-        elif parameterNumber==22:
-            self.parameters["sweeptime"]=self.doubleSpinBox_sweeptime.value()
-        elif parameterNumber==23:
-            self.parameters["etl_step"]=self.spinBox_etlStep.value()
-        elif parameterNumber==24:
-            self.parameters["camera_delay"]=self.doubleSpinBox_cameraDelay.value()
     
-    def update_all(self):
+    def update_all(self): #À SIMPLIFIER
         '''Updates all the widgets of the motion tab after an unit change'''
         
         unit = self.comboBox_unit.currentText()
@@ -419,8 +244,8 @@ class Controller(QWidget):
             self.doubleSpinBox_chooseCamera.setDecimals(4)
             self.doubleSpinBox_chooseCamera.setMaximum(10.16)
             self.decimals = self.doubleSpinBox_incrementHorizontal.decimals()
-            self.label_currentHeightNumerical.setText("{} {}".format(round(self.motor1.current_position(unit),self.decimals), unit))
-            self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(unit),self.decimals), unit))
+            self.display_sample_vertical_position()
+            self.display_sample_horizontal_position()
             self.label_currentCameraNumerical.setText("{} {}".format(round(self.motor3.current_position(unit),self.decimals), unit))
         elif unit == 'mm':
             self.horizontal_maximum = self.motor2.data_to_position(self.upper_boundary,'mm')
@@ -440,8 +265,8 @@ class Controller(QWidget):
             self.doubleSpinBox_chooseCamera.setDecimals(3)
             self.doubleSpinBox_chooseCamera.setMaximum(101.6)
             self.decimals = self.doubleSpinBox_incrementHorizontal.decimals()
-            self.label_currentHeightNumerical.setText("{} {}".format(round(self.motor1.current_position(unit),self.decimals), unit))
-            self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(unit),self.decimals), unit))
+            self.display_sample_vertical_position()
+            self.display_sample_horizontal_position()
             self.label_currentCameraNumerical.setText("{} {}".format(round(self.motor3.current_position(unit),self.decimals), unit))
         elif unit == '\u03BCm':
             self.horizontal_maximum = self.motor2.data_to_position(self.upper_boundary,'\u03BCm')
@@ -461,8 +286,8 @@ class Controller(QWidget):
             self.doubleSpinBox_chooseCamera.setDecimals(0)
             self.doubleSpinBox_chooseCamera.setMaximum(101600)
             self.decimals = self.doubleSpinBox_incrementHorizontal.decimals()
-            self.label_currentHeightNumerical.setText("{} {}".format(round(self.motor1.current_position(unit),self.decimals), unit))
-            self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(unit),self.decimals), unit))
+            self.display_sample_vertical_position()
+            self.display_sample_horizontal_position()
             self.label_currentCameraNumerical.setText("{} {}".format(round(self.motor3.current_position(unit),self.decimals), unit))
     
     def initialize_other_widgets(self):
@@ -488,6 +313,7 @@ class Controller(QWidget):
         self.pushButton_saveImage.setEnabled(False)
         self.pushButton_stopPreviewMode.setEnabled(False)
         self.pushButton_standbyOff.setEnabled(False)
+        self.pushButton_cancelCalibrateCamera.setEnabled(False)
         
         self.checkBox_setStartPoint.setEnabled(False)
         self.checkBox_setEndPoint.setEnabled(False)
@@ -577,7 +403,212 @@ class Controller(QWidget):
         self.horizontalSlider_rightLaser.setMaximum(250)
         self.horizontalSlider_rightLaser.setMinimum(0)
     
-    def lasers_off(self):
+    def display_sample_horizontal_position(self):
+        '''
+        '''
+        if self.comboBox_unit.currentText()=='cm':
+            correction=10.1599    #10.16 cm, À arranger
+        elif self.comboBox_unit.currentText()=='mm':
+            correction=101.599    #101.6 mm, À arranger
+        elif self.comboBox_unit.currentText()=='\u03BCm':
+            correction=101599    #101600 um, À arranger
+        currentPosition = round(-self.motor2.current_position(self.comboBox_unit.currentText())+correction,self.decimals)
+        currentPositionText = "{} {}".format(currentPosition, self.comboBox_unit.currentText())
+        self.label_currentHorizontalNumerical.setText(currentPositionText)
+    
+    def display_sample_vertical_position(self):
+        '''
+        '''
+        if self.comboBox_unit.currentText()=='cm':
+            correction=5.0799    #5.0799 cm, À arranger
+        elif self.comboBox_unit.currentText()=='mm':
+            correction=50.799    #50.799 mm, À arranger
+        elif self.comboBox_unit.currentText()=='\u03BCm':
+            correction=50799    #50799 um, À arranger
+        currentPosition = round(-self.motor1.current_position(self.comboBox_unit.currentText())+correction,self.decimals)
+        currentPositionText = "{} {}".format(currentPosition, self.comboBox_unit.currentText())
+        self.label_currentHeightNumerical.setText(currentPositionText)
+            
+    def back_to_default_parameters(self):
+        '''Change all the modifiable parameters to go back to the initial state'''
+        
+        self.parameters = copy.deepcopy(self.defaultParameters)
+        self.doubleSpinBox_leftEtlAmplitude.setValue(self.parameters["etl_l_amplitude"])
+        self.doubleSpinBox_rightEtlAmplitude.setValue(self.parameters["etl_r_amplitude"])
+        self.doubleSpinBox_leftEtlOffset.setValue(self.parameters["etl_l_offset"])
+        self.doubleSpinBox_rightEtlOffset.setValue(self.parameters["etl_r_offset"])
+        self.doubleSpinBox_leftGalvoAmplitude.setValue(self.parameters["galvo_l_amplitude"])
+        self.doubleSpinBox_rightGalvoAmplitude.setValue(self.parameters["galvo_r_amplitude"])
+        self.doubleSpinBox_leftGalvoOffset.setValue(self.parameters["galvo_l_offset"])
+        self.doubleSpinBox_rightGalvoOffset.setValue(self.parameters["galvo_r_offset"])
+        self.doubleSpinBox_leftGalvoFrequency.setValue(self.parameters["galvo_l_frequency"])
+        self.doubleSpinBox_rightGalvoFrequency.setValue(self.parameters["galvo_r_frequency"])
+        self.doubleSpinBox_samplerate.setValue(self.parameters["samplerate"])    
+        
+    def close_camera(self):
+        self.camera_on = False
+        self.camera.close_camera()
+        print('Camera closed')
+        self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Camera closed')    
+        
+    def closeEvent(self, event):
+        '''Making sure that everything is closed when the user exits the software.
+           This function executes automatically when the user closes the UI.
+           This is an intrinsic function name of Qt, don't change the name even 
+           if it doesn't follow the naming convention'''
+
+        if self.all_lasers_on == True:
+            self.stop_lasers()
+            
+        if self.left_laser_on == True:
+            self.stop_left_laser()
+            
+        if self.right_laser_on == True:
+            self.right_laser_off()
+            
+        if self.preview_mode_started == True:
+            self.stop_preview_mode()
+            
+        if self.live_mode_started == True:
+            self.stop_live_mode()
+            
+        if self.stack_mode_started == True:
+            self.stop_stack_mode()
+            
+        if self.camera_on == True:
+            self.close_camera()
+        
+        if self.camera_calibration_started == True:
+            self.stop_stack_mode()
+            
+        event.accept()    
+        
+    def etl_galvos_parameters_changed(self, parameterNumber):
+        '''Updates the parameters in the software after a modification by the
+           user'''
+        
+        if parameterNumber==1:
+            self.doubleSpinBox_leftEtlAmplitude.setMaximum(5-self.doubleSpinBox_leftEtlOffset.value())
+            self.parameters["etl_l_amplitude"]=self.doubleSpinBox_leftEtlAmplitude.value()
+            if self.checkBox_etlsTogether.isChecked() == True:
+                self.parameters["etl_r_amplitude"]=self.doubleSpinBox_leftEtlAmplitude.value()
+                self.doubleSpinBox_rightEtlAmplitude.setValue(self.parameters["etl_r_amplitude"])
+        elif parameterNumber==2:
+            self.doubleSpinBox_rightEtlAmplitude.setMaximum(5-self.doubleSpinBox_rightEtlOffset.value())
+            self.parameters["etl_r_amplitude"]=self.doubleSpinBox_rightEtlAmplitude.value()
+            if self.checkBox_etlsTogether.isChecked() == True:
+                self.parameters["etl_l_amplitude"]=self.doubleSpinBox_rightEtlAmplitude.value()
+                self.doubleSpinBox_leftEtlAmplitude.setValue(self.parameters["etl_l_amplitude"])
+        elif parameterNumber==3:
+            self.doubleSpinBox_leftEtlOffset.setMaximum(5-self.doubleSpinBox_leftEtlAmplitude.value())
+            self.parameters["etl_l_offset"]=self.doubleSpinBox_leftEtlOffset.value()
+            if self.checkBox_etlsTogether.isChecked() == True:
+                self.parameters["etl_r_offset"]=self.doubleSpinBox_leftEtlOffset.value()
+                self.doubleSpinBox_rightEtlOffset.setValue(self.parameters["etl_r_offset"])
+        elif parameterNumber==4:
+            self.doubleSpinBox_rightEtlOffset.setMaximum(5-self.doubleSpinBox_rightEtlAmplitude.value())
+            self.parameters["etl_r_offset"]=self.doubleSpinBox_rightEtlOffset.value()
+            if self.checkBox_etlsTogether.isChecked() == True:
+                self.parameters["etl_l_offset"]=self.doubleSpinBox_rightEtlOffset.value()
+                self.doubleSpinBox_leftEtlOffset.setValue(self.parameters["etl_l_offset"])
+        #elif parameterNumber==5:
+        #    self.parameters["etl_l_delay"]=self.doubleSpinBox_leftEtlDelay.value()
+        #    if self.checkBox_etlsTogether.isChecked() == True:
+        #        self.parameters["etl_r_delay"]=self.doubleSpinBox_leftEtlDelay.value()
+        #        self.doubleSpinBox_rightEtlDelay.setValue(self.parameters["etl_r_delay"])
+        #elif parameterNumber==6:
+        #    self.parameters["etl_r_delay"]=self.doubleSpinBox_rightEtlDelay.value()
+        #    if self.checkBox_etlsTogether.isChecked() == True:
+        #        self.parameters["etl_l_delay"]=self.doubleSpinBox_rightEtlDelay.value()
+        #        self.doubleSpinBox_leftEtlDelay.setValue(self.parameters["etl_l_delay"])
+        #elif parameterNumber==7:
+        #    self.parameters["etl_l_ramp_rising"]=self.doubleSpinBox_leftEtlRising.value()
+        #    if self.checkBox_etlsTogether.isChecked() == True:
+        #        self.parameters["etl_r_ramp_rising"]=self.doubleSpinBox_leftEtlRising.value()
+        #        self.doubleSpinBox_rightEtlRising.setValue(self.parameters["etl_r_ramp_rising"])
+        #elif parameterNumber==8:
+        #    self.parameters["etl_r_ramp_rising"]=self.doubleSpinBox_rightEtlRising.value()
+        #    if self.checkBox_etlsTogether.isChecked() == True:
+        #        self.parameters["etl_l_ramp_rising"]=self.doubleSpinBox_rightEtlRising.value()
+        #        self.doubleSpinBox_leftEtlRising.setValue(self.parameters["etl_l_ramp_rising"])
+        #elif parameterNumber==9:
+        #    self.parameters["etl_l_ramp_falling"]=self.doubleSpinBox_leftEtlFalling.value()
+        #    if self.checkBox_etlsTogether.isChecked() == True:
+        #        self.parameters["etl_r_ramp_falling"]=self.doubleSpinBox_leftEtlFalling.value()
+        #        self.doubleSpinBox_rightEtlFalling.setValue(self.parameters["etl_r_ramp_falling"])
+        #elif parameterNumber==10:
+        #    self.parameters["etl_r_ramp_falling"]=self.doubleSpinBox_rightEtlFalling.value()
+        #    if self.checkBox_etlsTogether.isChecked() == True:
+        #        self.parameters["etl_l_ramp_falling"]=self.doubleSpinBox_rightEtlFalling.value()
+        #        self.doubleSpinBox_leftEtlFalling.setValue(self.parameters["etl_l_ramp_falling"])
+        elif parameterNumber==5:
+            self.doubleSpinBox_leftGalvoAmplitude.setMaximum(10-self.doubleSpinBox_leftGalvoOffset.value())
+            self.doubleSpinBox_leftGalvoAmplitude.setMinimum(-10-self.doubleSpinBox_leftGalvoOffset.value())
+            self.parameters["galvo_l_amplitude"]=self.doubleSpinBox_leftGalvoAmplitude.value()
+            if self.checkBox_galvosTogether.isChecked() == True:
+                self.parameters["galvo_r_amplitude"]=self.doubleSpinBox_leftGalvoAmplitude.value()
+                self.doubleSpinBox_rightGalvoAmplitude.setValue(self.parameters["galvo_r_amplitude"])
+        elif parameterNumber==6:
+            self.doubleSpinBox_rightGalvoAmplitude.setMaximum(10-self.doubleSpinBox_rightGalvoOffset.value())
+            self.doubleSpinBox_rightGalvoAmplitude.setMinimum(-10-self.doubleSpinBox_rightGalvoOffset.value())
+            self.parameters["galvo_r_amplitude"]=self.doubleSpinBox_rightGalvoAmplitude.value()
+            if self.checkBox_galvosTogether.isChecked() == True:
+                self.parameters["galvo_l_amplitude"]=self.doubleSpinBox_rightGalvoAmplitude.value()
+                self.doubleSpinBox_leftGalvoAmplitude.setValue(self.parameters["galvo_l_amplitude"])
+        elif parameterNumber==7:
+            self.doubleSpinBox_leftGalvoOffset.setMaximum(10-self.doubleSpinBox_leftGalvoAmplitude.value())
+            self.doubleSpinBox_leftGalvoOffset.setMinimum(-10-self.doubleSpinBox_leftGalvoAmplitude.value())
+            self.parameters["galvo_l_offset"]=self.doubleSpinBox_leftGalvoOffset.value()
+            if self.checkBox_galvosTogether.isChecked() == True:
+                self.parameters["galvo_r_offset"]=self.doubleSpinBox_leftGalvoOffset.value()
+                self.doubleSpinBox_rightGalvoOffset.setValue(self.parameters["galvo_r_offset"])
+        elif parameterNumber==8:
+            self.doubleSpinBox_rightGalvoOffset.setMaximum(10-self.doubleSpinBox_rightGalvoAmplitude.value())
+            self.doubleSpinBox_rightGalvoOffset.setMinimum(-10-self.doubleSpinBox_rightGalvoAmplitude.value())
+            self.parameters["galvo_r_offset"]=self.doubleSpinBox_rightGalvoOffset.value()
+            if self.checkBox_galvosTogether.isChecked() == True:
+                self.parameters["galvo_l_offset"]=self.doubleSpinBox_rightGalvoOffset.value()
+                self.doubleSpinBox_leftGalvoOffset.setValue(self.parameters["galvo_l_offset"])
+        elif parameterNumber==9:
+            self.parameters["galvo_l_frequency"]=self.doubleSpinBox_leftGalvoFrequency.value()
+            if self.checkBox_galvosTogether.isChecked() == True:
+                self.parameters["galvo_r_frequency"]=self.doubleSpinBox_leftGalvoFrequency.value()
+                self.doubleSpinBox_rightGalvoFrequency.setValue(self.parameters["galvo_r_frequency"])
+        elif parameterNumber==10:
+            self.parameters["galvo_r_frequency"]=self.doubleSpinBox_rightGalvoFrequency.value()
+            if self.checkBox_galvosTogether.isChecked() == True:
+                self.parameters["galvo_l_frequency"]=self.doubleSpinBox_rightGalvoFrequency.value()
+                self.doubleSpinBox_leftGalvoFrequency.setValue(self.parameters["galvo_l_frequency"])
+        #elif parameterNumber==17:
+        #    self.parameters["galvo_l_duty_cycle"]=self.doubleSpinBox_leftGalvoDutyCycle.value()
+        #    if self.checkBox_galvosTogether.isChecked() == True:
+        #        self.parameters["galvo_r_duty_cycle"]=self.doubleSpinBox_leftGalvoDutyCycle.value()
+        #        self.doubleSpinBox_rightGalvoDutyCycle.setValue(self.parameters["galvo_r_duty_cycle"])
+        #elif parameterNumber==18:
+        #    self.parameters["galvo_r_duty_cycle"]=self.doubleSpinBox_rightGalvoDutyCycle.value()
+        #    if self.checkBox_galvosTogether.isChecked() == True:
+        #        self.parameters["galvo_l_duty_cycle"]=self.doubleSpinBox_rightGalvoDutyCycle.value()
+        #        self.doubleSpinBox_leftGalvoDutyCycle.setValue(self.parameters["galvo_l_duty_cycle"])
+        #elif parameterNumber==19:
+        #    self.parameters["galvo_l_phase"]=self.doubleSpinBox_leftGalvoPhase.value()
+        #    if self.checkBox_galvosTogether.isChecked() == True:
+        #        self.parameters["galvo_r_phase"]=self.doubleSpinBox_leftGalvoPhase.value()
+        #        self.doubleSpinBox_rightGalvoPhase.setValue(self.parameters["galvo_r_phase"])
+        #elif parameterNumber==20:
+        #    self.parameters["galvo_r_phase"]=self.doubleSpinBox_rightGalvoPhase.value()
+        #    if self.checkBox_galvosTogether.isChecked() == True:
+        #        self.parameters["galvo_l_phase"]=self.doubleSpinBox_rightGalvoPhase.value()
+        #        self.doubleSpinBox_leftGalvoPhase.setValue(self.parameters["galvo_l_phase"])
+        elif parameterNumber==11:
+            self.parameters["samplerate"]=self.doubleSpinBox_samplerate.value()
+        #elif parameterNumber==22:
+        #    self.parameters["sweeptime"]=self.doubleSpinBox_sweeptime.value()
+        elif parameterNumber==12:
+            self.parameters["etl_step"]=self.spinBox_etlStep.value()
+        #elif parameterNumber==24:
+        #    self.parameters["camera_delay"]=self.doubleSpinBox_cameraDelay.value()
+    
+    def stop_lasers(self):
         '''Flag and lasers' pushButton managing for both lasers deactivation'''
         self.all_lasers_on = False
         self.pushButton_lasersOn.setEnabled(True)
@@ -587,7 +618,7 @@ class Controller(QWidget):
         print('Lasers off')
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Lasers off')  
         
-    def lasers_on(self):
+    def start_lasers(self):
         '''Flag and lasers' pushButton managing for both lasers activation'''
         self.all_lasers_on = True
         self.pushButton_lasersOn.setEnabled(False)
@@ -600,32 +631,28 @@ class Controller(QWidget):
     def lasers_thread(self):
         '''This thread allows the modification of lasers' power output while 
           executing another operation'''
-        continuer = True
-        while continuer:
+        laser_on = True
+        while laser_on:
             
-            if self.stop_lasers == True:
-                continuer = False
-            
-            else:
-                left_laser_voltage = 0
-                right_laser_voltage = 0
+            left_laser_voltage = 0
+            right_laser_voltage = 0
                 
-                '''Laser status override already dealt with by enabling 
-                   pushButtons in lasers' functions'''
-                if self.all_lasers_on == True:
-                    left_laser_voltage = self.parameters['laser_l_voltage']
-                    right_laser_voltage = self.parameters['laser_r_voltage']
+            '''Laser status override already dealt with by enabling 
+               pushButtons in lasers' functions'''
+            if self.all_lasers_on == True:
+                left_laser_voltage = self.parameters['laser_l_voltage']
+                right_laser_voltage = self.parameters['laser_r_voltage']
                 
-                if self.left_laser_on == True:
-                    left_laser_voltage = self.parameters['laser_l_voltage']
+            if self.left_laser_on == True:
+                left_laser_voltage = self.parameters['laser_l_voltage']
                 
-                if self.right_laser_on == True:
-                    right_laser_voltage = self.parameters['laser_r_voltage']
+            if self.right_laser_on == True:
+                right_laser_voltage = self.parameters['laser_r_voltage']
                     
-                self.lasers_waveforms = np.stack((np.array([right_laser_voltage]),
-                                                        np.array([left_laser_voltage])))   
+            self.lasers_waveforms = np.stack((np.array([right_laser_voltage]),
+                                                    np.array([left_laser_voltage])))   
                     
-                self.lasers_task.write(self.lasers_waveforms, auto_start=True)
+            self.lasers_task.write(self.lasers_waveforms, auto_start=True)
         
         '''Put the lasers voltage to zero
            This is done at the end, because we do not want to shut down the lasers
@@ -714,7 +741,7 @@ class Controller(QWidget):
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Moving down')
         self.motor1.move_relative_position(self.doubleSpinBox_incrementVertical.value(),self.comboBox_unit.currentText())
         #Current height update
-        self.label_currentHeightNumerical.setText("{} {}".format(round(self.motor1.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText()))
+        self.display_sample_vertical_position()
     
     def move_up(self):
         '''Sample motor upward vertical motion'''
@@ -722,7 +749,7 @@ class Controller(QWidget):
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Moving up')
         self.motor1.move_relative_position(-self.doubleSpinBox_incrementVertical.value(),self.comboBox_unit.currentText())
         #Current height update
-        self.label_currentHeightNumerical.setText("{} {}".format(round(self.motor1.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText()))
+        self.display_sample_vertical_position()
     
     def move_left(self):
         '''Sample motor backward horizontal motion
@@ -734,7 +761,7 @@ class Controller(QWidget):
             self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Sample moving backward')
             self.motor2.move_relative_position(-self.doubleSpinBox_incrementHorizontal.value(),self.comboBox_unit.currentText())
             #Current horizontal position update
-            self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText()))
+            self.display_sample_horizontal_position()
         else:
             print('Out of boundaries')
             self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Out of boundaries')
@@ -749,7 +776,7 @@ class Controller(QWidget):
             self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Sample moving forward')
             self.motor2.move_relative_position(self.doubleSpinBox_incrementHorizontal.value(),self.comboBox_unit.currentText())
             #Current horizontal position update
-            self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()), self.decimals), self.comboBox_unit.currentText()))
+            self.display_sample_horizontal_position()
         else:
             print('Out of boundaries')
             self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Out of boundaries')
@@ -769,8 +796,8 @@ class Controller(QWidget):
             
         self.motor1.move_absolute_position(self.originZ,'\u03BCStep')
         #Current positions update
-        self.label_currentHorizontalNumerical.setText("{} {}".format(round(self.motor2.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText()))
-        self.label_currentHeightNumerical.setText("{} {}".format(round(self.motor1.current_position(self.comboBox_unit.currentText()),self.decimals), self.comboBox_unit.currentText()))
+        self.display_sample_horizontal_position()
+        self.display_sample_vertical_position()
       
     def open_camera(self):
         self.camera_on=True
@@ -818,9 +845,9 @@ class Controller(QWidget):
     def set_data_consumer(self, consumer, wait, consumer_type, update_flag):
         ''' Regroups all the consumers in the same list'''
         self.consumers.append(consumer)
-        self.consumers.append(wait)
-        self.consumers.append(consumer_type)
-        self.consumers.append(update_flag)
+        self.consumers.append(wait)             #Pas implémenté
+        self.consumers.append(consumer_type)    #Nom
+        self.consumers.append(update_flag)      #Pas implémenté
     
     def set_lower_boundary(self):
         '''Set lower limit of sample's horizontal motion 
@@ -964,10 +991,10 @@ class Controller(QWidget):
                 while self.preview_mode_started:
                     
                     '''Getting the data to send to the AO'''
-                    left_galvo_voltage = self.parameters['galvo_l_amplitude']
-                    right_galvo_voltage = self.parameters['galvo_r_amplitude']
-                    left_etl_voltage = self.parameters['etl_l_amplitude']
-                    right_etl_voltage = self.parameters['etl_r_amplitude']
+                    left_galvo_voltage = self.parameters['galvo_l_amplitude']+self.parameters['galvo_l_offset']
+                    right_galvo_voltage = self.parameters['galvo_r_amplitude']+self.parameters['galvo_r_offset']
+                    left_etl_voltage = self.parameters['etl_l_amplitude']+self.parameters['etl_l_offset']
+                    right_etl_voltage = self.parameters['etl_r_amplitude']+self.parameters['etl_r_offset']
                     left_laser_voltage = 0
                     right_laser_voltage = 0
                     
@@ -1122,10 +1149,11 @@ class Controller(QWidget):
                         self.ramps.run_tasks()
                         
                         '''Frame retrieving and reconstruction for display'''
-                        self.buffer = self.camera.retrieve_multiple_images(1, self.ramps.t_halfPeriod, sleep_timeout = 5)
+                        self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
                         frame = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))  #Initializing
-                        for i in range(int(1)):
-                            if i == int(1-1): #Last loop
+                        #
+                        for i in range(int(self.number_of_steps)):
+                            if i == int(self.number_of_steps-1): #Last loop
                                 frame[:,int(i*self.parameters['etl_step']):] = self.buffer[i,:,int(i*self.parameters['etl_step']):]
                             else:
                                 frame[:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])] = self.buffer[i,:,int(i*self.parameters['etl_step']):int(i*self.parameters['etl_step']+self.parameters['etl_step'])]
@@ -1201,6 +1229,8 @@ class Controller(QWidget):
         
         print('Start live mode')
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Start live mode')
+        
+        self.number_of_steps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"])
         
         '''Setting the camera for acquisition'''
         self.camera.set_trigger_mode('ExternalExposureControl')
@@ -1278,7 +1308,7 @@ class Controller(QWidget):
         print('Getting single image')
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Getting single image')
         
-        self.stop_lasers = False
+        self.laser_on = True
         
         '''Setting the camera for acquisition'''
         self.camera.set_trigger_mode('ExternalExposureControl')
@@ -1312,7 +1342,7 @@ class Controller(QWidget):
         self.number_of_steps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"])
         
         '''Frame retrieving and reconstruction for display'''
-        self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_halfPeriod, sleep_timeout = 5)
+        self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
         frame = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))  #Initializing
         for i in range(int(self.number_of_steps)):
             if i == int(self.number_of_steps-1): #Last loop
@@ -1330,7 +1360,7 @@ class Controller(QWidget):
                     self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Queue is full') 
         
         '''Stopping lasers'''
-        self.stop_lasers = True   
+        self.laser_on = False   
         
         '''Stopping camera'''            
         self.camera.cancel_images()
@@ -1419,7 +1449,7 @@ class Controller(QWidget):
                 self.ramps.close_tasks()
                 
         
-        self.stop_lasers = True
+        self.laser_on = False
            
         self.camera.cancel_images()
         self.camera.set_recording_state(0)
@@ -1518,7 +1548,6 @@ class Controller(QWidget):
             self.camera.set_recording_state(1)
             self.camera.insert_buffers_in_queue()
             
-            
             ''' Prepare saving (if we lose planes while saving, add more buffers 
                 to block size, but make sure they don't take all the RAM'''
             self.filename = self.save_directory + '/' + self.filename
@@ -1532,12 +1561,11 @@ class Controller(QWidget):
             self.frame_saver.start_saving(data_type = 'BUFFER')
             
             print(self.frame_saver.filenames_list)
-            self.label_lastCommands.setText(self.label_lastCommands.text()+'\n '+self.frame_saver.filenames_list)
             
             '''Stop lasers thread if one is active (maybe use time.sleep() after
                if thread doesn't close fast enough before starting new lasers
                task)'''
-            self.stop_lasers = False
+            self.laser_on = True
             
             self.lasers_task = nidaqmx.Task()
             self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
@@ -1572,48 +1600,96 @@ class Controller(QWidget):
     def calibrate_camera_thread(self):
         '''
         '''
+        '''Setting tasks'''
+        self.preview_lasers_task = nidaqmx.Task()
+        self.preview_lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
         
-        for i in range(10): #10 planes
+        self.preview_galvos_etls_task = nidaqmx.Task()
+        self.preview_galvos_etls_task.ao_channels.add_ao_voltage_chan(terminals["galvos_etls"])
+        
+        '''Getting the data to send to the AO'''
+        left_galvo_voltage = self.parameters['galvo_l_amplitude']+self.parameters['galvo_l_offset']
+        right_galvo_voltage = self.parameters['galvo_r_amplitude']+self.parameters['galvo_r_offset']
+        
+        left_etl_voltage = self.parameters['etl_l_amplitude']+self.parameters['etl_l_offset']
+        right_etl_voltage = self.parameters['etl_r_amplitude']+self.parameters['etl_r_offset']
+        
+        left_laser_voltage = self.parameters['laser_l_voltage']
+        right_laser_voltage = self.parameters['laser_r_voltage']
+                    
+        '''Writing the data'''
+        preview_galvos_etls_waveforms = np.stack((np.array([right_galvo_voltage]),
+                                                  np.array([left_galvo_voltage]),
+                                                  np.array([right_etl_voltage]),
+                                                  np.array([left_etl_voltage])))
+                    
+        preview_lasers_waveforms = np.stack((np.array([right_laser_voltage]),
+                                             np.array([left_laser_voltage])))
+        
+        self.preview_lasers_task.write(preview_lasers_waveforms, auto_start=True)
+        self.preview_galvos_etls_task.write(preview_galvos_etls_waveforms, auto_start=True)
+        
+        for i in range(10): #10 plans...
             if self.camera_calibration_started == False: ###Pas encore implémenté
                 print('Camera calibration interrupted')
                 self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Camera calibration interrupted')
                 break
             else:
                 '''Moving sample position'''
-                position = self.startPoint+i*100 #Step of 100 micro-meters
-                self.motor2.move_absolute_position(position,'\u03BCm')  #Position in micro-meters
-                self.camera_focus_relation[i,0]=position
-                
-                average_intensities=np.zeros(10)
-                for j in range(-5,5): #10 positions de caméra?
-                    position_camera = position+j #VÉRFIER
-                    self.motor3.move_absolute_position(position_camera,'\u03BCm')  #Position in micro-meters
+                position = self.motor2.current_position('\u03BCm')+i*100    #Step of 100 micro-meters
+                self.motor2.move_absolute_position(position,'\u03BCm')      #Position in micro-meters
+                self.camera_focus_relation[i,0]=self.motor2.current_position('\u03BCm')
                     
-                    '''Acquiring the frame'''
-                    self.ramps.create_tasks(terminals,'FINITE')
-                    self.ramps.write_waveforms_to_tasks()                            
-                    self.ramps.start_tasks()
-                    self.ramps.run_tasks()
+                print('Sample moved to:'+str(position)+'---mesured:'+str(self.motor2.current_position('\u03BCm'))) #debugging
+                    
+                average_intensities=np.zeros(10)
+                for j in range(10): #10 positions de caméra...
+                    camera_increment = j*10 - 50    #de -50 à 50 d'incrément
+                    position_camera = self.motor3.current_position('\u03BCm')+camera_increment #VÉRFIER
+                    self.motor3.move_absolute_position(position_camera,'\u03BCm')  #Position in micro-meters
+                    print('Camera moved to:'+str(position_camera)+'---mesured:'+str(self.motor3.current_position('\u03BCm'))) #debugging
+                    
+                    #'''Acquiring the frame'''
+                    #        
+                    #self.ramps.create_tasks(terminals,'FINITE')
+                    #self.ramps.write_waveforms_to_tasks()                            
+                    #self.ramps.start_tasks()
+                    #self.ramps.run_tasks()
                     
                     '''Retrieving buffer for the plane of the current position, 
                     and frame reconstruction for display'''
-                    buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
-        
-                    self.ramps.stop_tasks()                             
-                    self.ramps.close_tasks()
+                    buffer=self.camera.retrieve_single_image()*1.0
+                    #buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
+                    print(buffer) #debugging
                     
+                    #self.ramps.stop_tasks()                             
+                    #self.ramps.close_tasks()
+                            
                     intensities = np.sort(buffer, axis=None)
-                    average_intensities[j]=np.average(intensities[-10:]) #10 max intensities considered
+                    print('100 most intense pixels:') #debugging
+                    print(intensities[-100:]) #debugging
+                    average_intensities[j]=np.average(intensities[-100:]) #1000 max intensities considered
+                    
+                print('averages:') #debugging
+                print(average_intensities) #debugging
+                self.camera_focus_relation[i,1]=np.argmax(average_intensities)+self.motor3.current_position('\u03BCm') #VÉRIFIER
                 
-                self.camera_focus_relation[i,1]=np.argmax(average_intensities)+position #VÉRIFIER
-                
+            print('Plan '+str(i)+' done') #debugging
         
-        self.stopLasers = True
-           
         self.camera.cancel_images()
         self.camera.set_recording_state(0)
         self.camera.free_buffer()
         
+        self.preview_galvos_etls_task.stop()
+        self.preview_galvos_etls_task.close()
+        
+        '''Put the lasers voltage to zero
+           This is done at the end, because we do not want to shut down the lasers
+           after each sweep to minimize their power fluctuations '''
+        waveforms = np.stack(([0],[0]))
+        self.preview_lasers_task.write(waveforms)
+        self.preview_lasers_task.stop()
+        self.preview_lasers_task.close()
 
         print(self.camera_focus_relation)
         print('Camera calibration done')
@@ -1624,28 +1700,77 @@ class Controller(QWidget):
         self.pushButton_startPreviewMode.setEnabled(True)
         self.pushButton_calibrateCamera.setEnabled(True)
         self.pushButton_standbyOn.setEnabled(True)
-        
-        self.frame_saver.stop_saving()
+        self.pushButton_cancelCalibrateCamera.setEnabled(False)
         
         self.camera_calibration_started = False ###???
-    
-    def calibrate_camera(self):
-        calibrate_camera_thread = threading.Thread(target = self.calibrate_camera_thread)
-        calibrate_camera_thread.start()
-        print('Camera calibration started')
-        self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Camera calibration started')
+
+    def start_calibrate_camera(self):
+        '''Initializes variables for volume saving which will take place in 
+           self.stack_mode_thread afterwards'''
         
+        '''Flags check up'''
+        if self.preview_mode_started == True:
+            self.stop_preview_mode()
+            self.preview_mode_started = False
+        if self.live_mode_started == True:
+            self.stop_live_mode()
+            self.live_mode_started = False
+        if self.stack_mode_started == True:
+            self.stop_stack_mode()
+            self.stack_mode_started = False
+        
+        self.camera_calibration_started = True
+       
+        '''Modes disabling while stack acquisition'''
         self.pushButton_getSingleImage.setEnabled(False)
         self.pushButton_saveImage.setEnabled(False)
-        self.pushButton_startStack.setEnabled(False)
-        self.pushButton_stopStack.setEnabled(False)
         self.pushButton_startLiveMode.setEnabled(False)
         self.pushButton_stopLiveMode.setEnabled(False)
+        self.pushButton_startStack.setEnabled(False)
+        self.pushButton_stopStack.setEnabled(True)
         self.pushButton_startPreviewMode.setEnabled(False)
         self.pushButton_stopPreviewMode.setEnabled(False)
-        self.pushButton_calibrateCamera.setEnabled(False)
         self.pushButton_standbyOn.setEnabled(False)
-        self.pushButton_standbyOff.setEnabled(False)   
+        self.pushButton_standbyOff.setEnabled(False)
+        self.pushButton_calibrateCamera.setEnabled(False)
+        self.pushButton_cancelCalibrateCamera.setEnabled(True)
+            
+        #'''Setting the camera for acquisition'''
+        #self.camera.set_trigger_mode('ExternalExposureControl')
+        #self.camera.arm_camera() 
+        #self.camera.get_sizes() 
+        #self.camera.allocate_buffer(number_of_buffers=2)    
+        #self.camera.set_recording_state(1)
+        #self.camera.insert_buffers_in_queue()
+            
+        '''Setting the camera for acquisition'''
+        self.camera.set_trigger_mode('AutoSequence')
+        self.camera.arm_camera() 
+        self.camera.get_sizes() 
+        self.camera.allocate_buffer()    
+        self.camera.set_recording_state(1)
+        self.camera.insert_buffers_in_queue()
+            
+        #self.ramps=AOETLGalvos(self.parameters)
+        #self.ramps.initialize()                   
+        #self.ramps.create_etl_waveforms(case = 'STAIRS')
+        #self.ramps.create_galvos_waveforms(case = 'TRAPEZE')
+        #self.ramps.create_digital_output_camera_waveform( case = 'STAIRS_FITTING')
+            
+        self.number_of_steps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"])
+        self.columns = self.parameters["columns"]
+        self.etl_step = self.parameters["etl_step"]
+        self.rows = self.parameters["rows"]
+                
+        calibrate_camera_thread = threading.Thread(target = self.calibrate_camera_thread)
+        calibrate_camera_thread.start()
+        
+        print('Camera calibration started')
+        self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Camera calibration started')
+
+    def stop_calibrate_camera(self):
+        self.camera_calibration_started = False
+
 
 class CameraWindow(queue.Queue):
     '''Class for image display'''
