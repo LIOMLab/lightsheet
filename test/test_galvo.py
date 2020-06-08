@@ -20,17 +20,15 @@ def exception_hook(exctype, value, traceback):
 sys.excepthook = exception_hook
 
 '''Initializing the app, controller (class which connects GUI to features), and
-   camera window (where images are displayed)'''
+   at the same time the camera window (where images are displayed)'''
 app = QApplication(sys.argv)
 controller = Controller()
-camera_window = CameraWindow()
-controller.set_camera_window(camera_window)
 
 '''Setting QTimer. update() function of camera window (retrieves an image in its 
    queue and displays it) executes at each time interval specified in 
    timer.start()'''
 timer = pg.QtCore.QTimer()
-timer.timeout.connect(camera_window.update)
+timer.timeout.connect(controller.camera_window.update)
 timer.start(100)
 
 '''Initially, the only consumer is camera_window. Later when the user wished to
