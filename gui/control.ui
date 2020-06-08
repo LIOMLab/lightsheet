@@ -463,7 +463,7 @@
        <rect>
         <x>150</x>
         <y>50</y>
-        <width>47</width>
+        <width>81</width>
         <height>16</height>
        </rect>
       </property>
@@ -580,6 +580,19 @@
       </property>
       <property name="text">
        <string>Cancel Camera Calibration</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="pushButton_calculateFocus">
+      <property name="geometry">
+       <rect>
+        <x>34</x>
+        <y>280</y>
+        <width>131</width>
+        <height>23</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Calculate Camera Focus</string>
       </property>
      </widget>
     </widget>

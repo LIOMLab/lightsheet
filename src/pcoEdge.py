@@ -209,6 +209,10 @@ class Camera:
                                  sleep_timeout = 40, 
                                  poll_timeout = 5e5, 
                                  first_trigger_timeout_in_seconds = 10):
+        '''Returns multiple images, as a 3D numpy array: 
+        -1st dimension: frame
+        -2nd dimension: y value
+        -3rd dimension: x value'''
         
         frame_buffer = np.ones((int(number_of_frames), int(self.y_current_res.value),int(self.x_current_res.value)), dtype = np.uint16)
         pixels_per_frame = ctypes.c_uint32(self.y_current_res.value*self.x_current_res.value)
