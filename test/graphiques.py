@@ -15,26 +15,24 @@ plt.figure(1)
 plt.title("Camera Focus Function") 
 plt.xlabel("Sample Horizontal Position (um)") 
 plt.ylabel("Camera Position (um)") 
-plt.plot(z[:,0],z[:,1]) 
+plt.plot(z[:,0],z[:,1],'o', color='black') 
 plt.show()
 
 x = np.array(z[:,0])
 y = np.array(z[:,1])
 
-x = [ 0, 1, 2, 3, 4, 5]
-y = [12,14,22,39,58,77]
+x = np.array([ 0, 1, 2, 3, 4, 5])
+y = np.array([12,14,22,39,58,77])
+
+xnew=np.linspace(0, 5, 200)
+tck = interpolate.splrep(x,y)
+ynew = interpolate.splev(xnew, tck)
+
 plt.figure(2)
 plt.title("Camera Focus Interpolation") 
 plt.xlabel("Sample Horizontal Position (um)") 
 plt.ylabel("Camera Position (um)") 
-plt.plot(x,y,'o', color='black') 
-plt.show()
-
-tck = interpolate.splrep(x,y, s=0)
-ynew = interpolate.splev(x, tck, der=0)
-plt.figure(3)
-plt.title("Camera Focus Interpolation") 
-plt.xlabel("Sample Horizontal Position (um)") 
-plt.ylabel("Camera Position (um)") 
-plt.plot(x,ynew,'o', color='black') 
+plt.plot(x,y, 'o', label="original")
+plt.plot(xnew,ynew, label="interpolation")
+plt.legend()
 plt.show()
