@@ -7,7 +7,7 @@ import sys
 sys.path.append("..")
 
 from PyQt5.QtWidgets import QApplication
-from gui.control import Controller, CameraWindow
+from gui.control import Controller
 import pyqtgraph as pg
 
 '''This block permits messages display of errors occurring in all the files

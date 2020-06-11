@@ -209,7 +209,7 @@ class Camera:
                                  sleep_timeout = 40, 
                                  poll_timeout = 5e5, 
                                  first_trigger_timeout_in_seconds = 10):
-        '''Returns multiple images, as a 3D numpy array: 
+        '''Returns multiple images, as a 3D numpy array: ?
         -1st dimension: frame
         -2nd dimension: y value
         -3rd dimension: x value'''
