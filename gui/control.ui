@@ -1170,6 +1170,19 @@
       <string>Cancel ETLs and Galvos Calibration</string>
      </property>
     </widget>
+    <widget class="QPushButton" name="pushButton_showEtlInterpolation">
+     <property name="geometry">
+      <rect>
+       <x>190</x>
+       <y>130</y>
+       <width>131</width>
+       <height>23</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Show ETL interpolation</string>
+     </property>
+    </widget>
    </widget>
    <widget class="QWidget" name="tab_4">
     <attribute name="title">

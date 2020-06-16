@@ -16,7 +16,7 @@ import numpy as np
 
 
 
-def camera_digital_output_signal(samples_per_half_period, t_start_exp, samplerate, samples_per_half_delay, number_of_samples, number_of_steps, samples_per_step):
+def camera_digital_output_signal(samples_per_half_period, t_start_exp, samplerate, samples_per_half_delay, number_of_samples, number_of_steps, samples_per_step, min_samples_per_delay):
     '''Set the high level time interval (samples), i.e. the time when the camera 
        exposure is on, each time the galvos are in motion. The waveform is 
        coded by taking into account the mechanism of frame acquisition by the CMOS
@@ -32,7 +32,20 @@ def camera_digital_output_signal(samples_per_half_period, t_start_exp, samplerat
     array = np.full(int(number_of_samples), False)
     
     for i in range(int(number_of_steps)):
-        array[int(samples_before_high_level+i*samples_per_step):int(samples_before_high_level+i*samples_per_step+samples_per_exposition)]=high_level_vector
+        if i == int(number_of_steps-1): #Last loop
+            samples_left = number_of_samples-(samples_before_high_level+i*samples_per_step)
+            #print('Camera')
+            #print('i: {}'.format(i))
+            #print('samples_left: {}'.format(samples_left))
+            #print('min_samples_per_delay: {}'.format(min_samples_per_delay))
+            #print('samples_per_half_period: {}'.format(samples_per_half_period))
+            #print('samples_per_half_delay: {}'.format(samples_per_half_delay))
+            if samples_left < (min_samples_per_delay+samples_per_half_period):
+                pass  #No enough samples for another acquisition, we pass
+            else:
+                array[int(samples_before_high_level+i*samples_per_step):int(samples_before_high_level+i*samples_per_step+samples_per_exposition)]=high_level_vector
+        else:
+            array[int(samples_before_high_level+i*samples_per_step):int(samples_before_high_level+i*samples_per_step+samples_per_exposition)]=high_level_vector
     
     return np.array(array)
 
@@ -99,7 +112,7 @@ def etl_stairs(amplitude, number_of_steps, number_of_samples, samples_per_step, 
        Later, stepAmplitude will be define by the ETL focus position as a function of the voltage applied
        Each ETL may have a different relation to the voltage applied'''
     if number_of_steps !=1:
-        step_amplitude = amplitude/(number_of_steps-1)
+        step_amplitude = amplitude/(number_of_steps-1) 
     
         #print('Step amplitude: ' + str(step_amplitude))
         
@@ -107,13 +120,23 @@ def etl_stairs(amplitude, number_of_steps, number_of_samples, samples_per_step, 
         
         if direction == 'UP':
             for i in range(int(number_of_steps)):
-                step_value = i*step_amplitude*np.ones(int(samples_per_step))
-                array[i*int(samples_per_step):i*int(samples_per_step)+int(samples_per_step)] = step_value
+                if i == int(number_of_steps-1): #Last loop, deals with a shorter step (in case ETL step is not a multiple of the number of columns)
+                    samples_left = number_of_samples-(i*samples_per_step)
+                    step_value = i*step_amplitude*np.ones(int(samples_left))
+                    array[i*int(samples_per_step):i*int(samples_per_step)+int(samples_left)] = step_value
+                else:
+                    step_value = i*step_amplitude*np.ones(int(samples_per_step))
+                    array[i*int(samples_per_step):i*int(samples_per_step)+int(samples_per_step)] = step_value
         
         if direction == 'DOWN':
             for i in range(int(number_of_steps)):
-                step_value = (number_of_steps-1-i)*step_amplitude*np.ones(int(samples_per_step))
-                array[i*int(samples_per_step):i*int(samples_per_step)+int(samples_per_step)] = step_value
+                if i == int(number_of_steps-1): #Last loop, deals with a shorter step (in case ETL step is not a multiple of the number of columns)
+                    samples_left = number_of_samples-(i*samples_per_step)
+                    step_value = (number_of_steps-1-i)*step_amplitude*np.ones(int(samples_left))
+                    array[i*int(samples_per_step):i*int(samples_per_step)+int(samples_left)] = step_value
+                else:
+                    step_value = (number_of_steps-1-i)*step_amplitude*np.ones(int(samples_per_step))
+                    array[i*int(samples_per_step):i*int(samples_per_step)+int(samples_per_step)] = step_value
         
         array = array+offset
     
@@ -145,9 +168,11 @@ def galvo_live_mode_waveform(amplitude, samples_per_half_period, samples_per_del
     
     return np.array(array)
 
-def galvo_trapeze(amplitude, samples_per_half_period, samples_per_delay, number_of_samples, number_of_steps, samples_per_step, samples_per_half_delay, offset):
+def galvo_trapeze(amplitude, samples_per_half_period, samples_per_delay, number_of_samples, number_of_steps, samples_per_step, samples_per_half_delay, min_samples_per_delay, t_start_exp, samplerate, offset):
     '''Trapeze waveform for the galvos. Camera acquires frames only when the 
        galvos are in motion, i.e. when they are scanning.'''
+    
+    samples_before_exposition = np.round(t_start_exp*samplerate)
     
     if amplitude !=0:
         #print('samplesPerHalfPeriod: ' + str(samples_per_half_period))
@@ -164,13 +189,12 @@ def galvo_trapeze(amplitude, samples_per_half_period, samples_per_delay, number_
             
             if i%2==0:   #Even step number, ramp rising
                 if i == int(number_of_steps-1):  #Last iteration, deals with a shorter step (in case ETL step is not a multiple of the number of columns)
-                    samples_left = number_of_samples-(samples_per_half_delay+i*samples_per_step)
-                    if samples_left <= samples_per_half_delay:
-                        pass
-                    elif samples_left <= (samples_per_half_delay+samples_per_half_period):
-                        pass    #If there is not enough samples to make a scan, we pass
+                    samples_left = number_of_samples-(samples_per_half_delay+i*samples_per_step-samples_before_exposition) #samples_before_exposition takes into account the beginning of the camera cycle starting before the rising vector
+                    if samples_left < (min_samples_per_delay+samples_per_half_period): #We stay low, not enough samples to make a scan
+                        pass #There is not enough samples to make a scan, we pass
                     else:
-                        samples_high = samples_left-samples_per_half_delay-samples_per_half_period
+                        samples_left -= samples_before_exposition  #Retrieves samples_before_exposition for proper calculations in the galvo cycle
+                        samples_high = samples_left-samples_per_half_period
                         amplitude_vector = amplitude*np.ones((int(samples_high)))
                         array[int(samples_per_half_delay+i*samples_per_step):int(samples_per_half_delay+i*samples_per_step+len(rise_vector))]=rise_vector
                         array[int(samples_per_half_delay+i*samples_per_step+samples_per_half_period):int(samples_per_half_delay+i*samples_per_step+samples_per_half_period+samples_high)]=amplitude_vector
@@ -181,13 +205,18 @@ def galvo_trapeze(amplitude, samples_per_half_period, samples_per_delay, number_
                 
             else:     #Odd step number, ramp falling
                 if i == int(number_of_steps-1):  #Last iteration, deals with a shorter step (in case ETL step is not a multiple of the number of columns)
-                    samples_left = number_of_samples-(samples_per_half_delay+i*samples_per_step)
-                    if samples_left <= samples_per_half_delay:
-                        pass
-                    elif samples_left <= (samples_per_half_delay+samples_per_half_period):
-                        samples_high = samples_left-samples_per_half_period   #We stay high, not enough samples to make a scan
-                        amplitude_vector = amplitude*np.ones((int(samples_high)))
-                        array[int(samples_per_half_delay+i*samples_per_step):int(samples_per_half_delay+i*samples_per_step+len(amplitude_vector))]=amplitude_vector
+                    samples_left = number_of_samples-(samples_per_half_delay+i*samples_per_step-samples_before_exposition) #samples_before_exposition takes into account the beginning of the camera cycle starting before the falling vector
+                    #print('Galvo')
+                    #print('i: {}'.format(i))
+                    #print('samples_left: {}'.format(samples_left))
+                    #print('min_samples_per_delay: {}'.format(min_samples_per_delay))
+                    #print('samples_per_half_period: {}'.format(samples_per_half_period))
+                    #print('samples_per_half_delay: {}'.format(samples_per_half_delay))
+                    #print('samples_before_exposition: {}'.format(samples_before_exposition))
+                    if samples_left < (min_samples_per_delay+samples_per_half_period): #We stay high, not enough samples to make a scan 
+                        samples_left -= samples_before_exposition #Retrieves samples_before_exposition for proper calculations in the galvo cycle 
+                        amplitude_vector = amplitude*np.ones((int(samples_left)))
+                        array[int(samples_per_half_delay+i*samples_per_step):int(samples_per_half_delay+i*samples_per_step+samples_left)]=amplitude_vector
                     else:
                         array[int(samples_per_half_delay+i*samples_per_step):int(samples_per_half_delay+i*samples_per_step+len(fall_vector))]=fall_vector
                 
