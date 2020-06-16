@@ -61,7 +61,8 @@ class AOETLGalvos(QtCore.QObject):
                                                     samples_per_half_delay = self.samples_per_half_delay, 
                                                     number_of_samples = self.number_of_samples, 
                                                     number_of_steps = self.number_of_steps, 
-                                                    samples_per_step = self.samples_per_step)
+                                                    samples_per_step = self.samples_per_step,
+                                                    min_samples_per_delay = self.min_samples_per_delay)
         elif case == 'LIVE_MODE':
             self.camera_waveform = camera_live_mode_waveform(samples_per_half_period = self.samples_per_half_period,
                                                               t_start_exp = self.parameters["t_start_exp"], 
@@ -110,6 +111,9 @@ class AOETLGalvos(QtCore.QObject):
                                                   number_of_steps = self.number_of_steps, 
                                                   samples_per_step = self.samples_per_step, 
                                                   samples_per_half_delay = self.samples_per_half_delay,
+                                                  min_samples_per_delay = self.min_samples_per_delay,
+                                                  t_start_exp = self.parameters["t_start_exp"], 
+                                                  samplerate = self.parameters["samplerate"],
                                                   offset = self.parameters["galvo_l_offset"])
             
             self.galvo_r_waveform = galvo_trapeze(amplitude = self.parameters["galvo_r_amplitude"], 
@@ -119,6 +123,9 @@ class AOETLGalvos(QtCore.QObject):
                                                   number_of_steps = self.number_of_steps, 
                                                   samples_per_step = self.samples_per_step, 
                                                   samples_per_half_delay = self.samples_per_half_delay,
+                                                  min_samples_per_delay = self.min_samples_per_delay,
+                                                  t_start_exp = self.parameters["t_start_exp"], 
+                                                  samplerate = self.parameters["samplerate"],
                                                   offset = self.parameters["galvo_r_offset"])
         elif case == 'LIVE_MODE':
             self.galvo_l_waveform = galvo_live_mode_waveform(amplitude = self.parameters["galvo_l_amplitude"], 
