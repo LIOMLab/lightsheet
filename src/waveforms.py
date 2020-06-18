@@ -105,7 +105,7 @@ def etl_live_mode_waveform(amplitude, number_of_samples):
     
     return np.array(array)
 
-def etl_stairs(amplitude, number_of_steps, number_of_samples, samples_per_step, offset, direction):
+def etl_stairs(left_slope, left_intercept, right_slope, right_intercept, amplitude, number_of_steps, number_of_samples, samples_per_step, offset, direction):
     '''Step function. The stairs are defined to be upwards or downwards depending 
        on the ETL.
     
@@ -113,6 +113,7 @@ def etl_stairs(amplitude, number_of_steps, number_of_samples, samples_per_step, 
        Each ETL may have a different relation to the voltage applied'''
     if number_of_steps !=1:
         step_amplitude = amplitude/(number_of_steps-1) 
+        ###step_column = 2560/(number_of_steps-1) 
     
         #print('Step amplitude: ' + str(step_amplitude))
         
@@ -123,6 +124,8 @@ def etl_stairs(amplitude, number_of_steps, number_of_samples, samples_per_step, 
                 if i == int(number_of_steps-1): #Last loop, deals with a shorter step (in case ETL step is not a multiple of the number of columns)
                     samples_left = number_of_samples-(i*samples_per_step)
                     step_value = i*step_amplitude*np.ones(int(samples_left))
+                    ###column_value = i*step_column*np.ones(int(samples_left))
+                    ###step_value = left_slope * column_value + left_intercept
                     array[i*int(samples_per_step):i*int(samples_per_step)+int(samples_left)] = step_value
                 else:
                     step_value = i*step_amplitude*np.ones(int(samples_per_step))
@@ -133,6 +136,8 @@ def etl_stairs(amplitude, number_of_steps, number_of_samples, samples_per_step, 
                 if i == int(number_of_steps-1): #Last loop, deals with a shorter step (in case ETL step is not a multiple of the number of columns)
                     samples_left = number_of_samples-(i*samples_per_step)
                     step_value = (number_of_steps-1-i)*step_amplitude*np.ones(int(samples_left))
+                    ###column_value = (number_of_steps-1-i)*step_column*np.ones(int(samples_left))
+                    ###step_value = right_slope * column_value + right_intercept
                     array[i*int(samples_per_step):i*int(samples_per_step)+int(samples_left)] = step_value
                 else:
                     step_value = (number_of_steps-1-i)*step_amplitude*np.ones(int(samples_per_step))
