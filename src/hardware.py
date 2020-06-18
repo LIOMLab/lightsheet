@@ -70,20 +70,24 @@ class AOETLGalvos(QtCore.QObject):
                                                               samples_per_half_delay = self.samples_per_half_delay, 
                                                               number_of_samples = self.number_of_samples)
         
-    def create_etl_waveforms(self, case = 'NONE'):
+    def create_etl_waveforms(self, left_slope, left_intercept, right_slope, right_intercept, case = 'NONE'):
         '''live_mode ramps aren't in use anymore, their presence was for 
            calibrating purposes in the early stages of the microscope. They are
            kept only for reference.'''
         
         if case == 'STAIRS':
-            self.etl_l_waveform = etl_stairs(amplitude = self.parameters["etl_l_amplitude"], 
+            self.etl_l_waveform = etl_stairs(left_slope = left_slope, left_intercept = left_intercept,###
+                                             right_slope = right_slope, right_intercept = right_intercept, ###
+                                             amplitude = self.parameters["etl_l_amplitude"], 
                                              number_of_steps = self.number_of_steps, 
                                              number_of_samples = self.number_of_samples, 
                                              samples_per_step = self.samples_per_step, 
                                              offset = self.parameters["etl_l_offset"], 
                                              direction = 'UP')
             
-            self.etl_r_waveform = etl_stairs(amplitude = self.parameters["etl_r_amplitude"], 
+            self.etl_r_waveform = etl_stairs(left_slope = left_slope, left_intercept = left_intercept,###
+                                             right_slope = right_slope, right_intercept = right_intercept, ###
+                                             amplitude = self.parameters["etl_r_amplitude"], 
                                              number_of_steps = self.number_of_steps, 
                                              number_of_samples = self.number_of_samples, 
                                              samples_per_step = self.samples_per_step, 

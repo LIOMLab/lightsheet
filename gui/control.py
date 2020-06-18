@@ -5,14 +5,14 @@ Created on May 22, 2019
 '''
 
 import sys
-from numpy import linspace
+#from numpy import linspace
 sys.path.append("..")
 
 import os
 import math
 import numpy as np
 from matplotlib import pyplot as plt
-from scipy import interpolate, signal, optimize, ndimage
+from scipy import interpolate, signal, optimize, ndimage, stats
 from PyQt5 import QtGui
 from PyQt5 import uic
 from PyQt5.QtWidgets import QWidget, QFileDialog
@@ -41,6 +41,7 @@ import datetime
 
 '''Default parameters'''
 parameters = dict()
+parameters["sample_name"]='No Sample Name'
 parameters["samplerate"]=40000          # In samples/seconds
 parameters["sweeptime"]=0.4             # In seconds
 parameters["galvo_l_frequency"]=100     # In Hertz
@@ -57,7 +58,7 @@ parameters["laser_l_voltage"]=0.905#1.3 ###0.905     # In Volts
 parameters["laser_r_voltage"]=0.935     # In Volts
 parameters["columns"] = 2560            # In pixels
 parameters["rows"] = 2160               # In pixels 
-parameters["etl_step"] = 100            # In pixels
+parameters["etl_step"] = 50            # In pixels
 parameters["camera_delay"] = 10         # In %
 parameters["min_t_delay"] = 0.0354404   # In seconds
 parameters["t_start_exp"] = 0.017712    # In seconds
@@ -215,6 +216,7 @@ class Controller(QWidget):
         
         '''--Data saving's related widgets--'''
         self.lineEdit_filename.setEnabled(False)
+        self.lineEdit_sampleName.setEnabled(False)
         
         '''--Motion's related widgets--'''
         self.comboBox_unit.insertItems(0,["cm","mm","\u03BCm"])
@@ -923,116 +925,59 @@ class Controller(QWidget):
     def show_etl_interpolation(self):
         '''Shows the etl focus interpolation'''
         
+        ##debugging
+        def func(x, w, x0, xR, offset):
+            return w * (1+((x-x0)/xR)**2)**0.5 + offset
         
-        
-        xgaussian = np.arange(1000,2000)
-        def gaussian(xgaussian,mean,std) :
-            return np.exp(-np.power((xgaussian - mean), 2.) / (2 * np.power(std, 2.)))
-        
-        ###for j in range(int(self.number_of_etls_points)):
-        ###    for k in range(int(self.parameters["columns"])):
-        ###        mean=np.argmax(self.frame[:,k])+1450
-        ###        std=np.std(self.frame[:,k])
-        ###        
-        ###        popt,pcov = optimize.curve_fit(gaussian,xgaussian,self.frame[:,k],p0=[mean,std])
-        ###        clean_std = np.std(gaussian(xgaussian,*popt))
-        ###        
-        ###        self.gaussian_widths[k] = clean_std * 2 * np.sqrt(2*(math.log(2)))
-        ###                        
-        ###        if j==9:
-        ###            print('clean std:')
-        ###            print(clean_std)
-        ###            print('gaussian fit:')
-        ###            print(gaussian(xgaussian,*popt))
-        ###    self.etls_relation[j,1] = np.argmin(self.gaussian_widths)
-        ###
-        
-        
-        x = self.etls_relation[:,0]
-        y = self.etls_relation[:,1]
-        
-        variance = np.var(y)
-        print('variance:') #debugging
-        print(variance)
-        
-        xnew = np.linspace(self.etls_relation[0,0], self.etls_relation[-1,0], 150) ###1000 points
-        f = interpolate.interp1d(x, y, kind='quadratic', fill_value='extrapolate')
-        ynew = f(xnew)
+        plt.figure(0)
+        plt.plot(self.xdata,self.ydata,'.')
+        plt.plot(self.xdata, func(self.xdata, *self.popt), 'r-')
+        plt.xlabel('lateral dimension') 
+        plt.ylabel('width') 
+        plt.title('width vs. position') 
+        plt.show(block=False)   #Prevents the plot from blocking the execution of the code...
+        ##
         
         '''Showing interpolation graph'''
         plt.figure(1)
         plt.title('ETL Focus Interpolation') 
         plt.xlabel('ETL Voltage (V)') 
         plt.ylabel('Focal Point Horizontal Position (column)')
-        plt.plot(x, y, 'o')
-        plt.plot(xnew,ynew)
-        plt.show(block=False)   #Prevents the plot from blocking the execution of the code...
         
-        plt.figure(2)
-        plt.title('ETL widths') 
-        plt.xlabel('Column') 
-        plt.ylabel('Width (pixels)')
-        plt.plot(np.arange(int(self.parameters["columns"])), self.gaussian_widths, 'o')
-        plt.show(block=False)   #Prevents the plot from blocking the execution of the code...
+        x = self.etl_l_relation[:,0]
+        y = self.etl_l_relation[:,1]
+        xnew = np.linspace(self.etl_l_relation[0,0], self.etl_l_relation[-1,0], 1000) ###1000 points
+        f = interpolate.interp1d(x, y, kind='quadratic', fill_value='extrapolate')
+        ynew = f(xnew)
+        plt.plot(x, y, 'o', label='Left ETL')
+        plt.plot(xnew,ynew, label='Left ETL')
+        slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+        ynew = slope * xnew + intercept
+        plt.plot(xnew,ynew, label='Left ETL')
+        ###
+        slope, intercept, r_value, p_value, std_err = stats.linregress(y, x)
+        print(intercept)
+        print(slope * 2559 + intercept)
         
-        np.set_printoptions(threshold=sys.maxsize)
-        print('self.gaussian_widths')
-        liste=list(self.gaussian_widths)
-        print(liste)
-        columns=list(np.arange(self.parameters["columns"]))
-        print(columns)
+        x = self.etl_r_relation[:,0]
+        y = self.etl_r_relation[:,1]
+        xnew = np.linspace(self.etl_r_relation[0,0], self.etl_r_relation[-1,0], 1000) ###1000 points
+        f = interpolate.interp1d(x, y, kind='quadratic', fill_value='extrapolate')
+        ynew = f(xnew)
+        plt.plot(x, y, 'o', label='Right ETL')
+        plt.plot(xnew,ynew, label='Right ETL')
+        slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+        ynew = slope * xnew + intercept
+        plt.plot(xnew,ynew, label='Right ETL')
+        ###
+        slope, intercept, r_value, p_value, std_err = stats.linregress(y, x)
+        print(intercept)
+        print(slope * 2559 + intercept)
         
-        plt.figure(3)
-        plt.title('Colums sums') 
-        plt.xlabel('Column') 
-        plt.ylabel('Sum')
-        plt.plot(np.arange(int(self.parameters["columns"])), self.column_sums, 'o')
-        plt.show(block=False)   #Prevents the plot from blocking the execution of the code...
-    
-        plt.figure(4)#debugging
-        plt.title('Intensity column 1000') 
-        plt.xlabel('Row') 
-        plt.ylabel('Intensity')
-        
-        mean=np.argmax(self.frame[:,1000])+1000
-        std=np.std(self.frame[:,1000])
-        
-        popt,pcov = optimize.curve_fit(gaussian,xgaussian,self.frame[:,1000],p0=[mean,std])
-        #clean_std = popt[1]
-        #print('clean_std')
-        #print(clean_std)
-        #print(np.std(popt))
-        
-        plt.plot(xgaussian, gaussian(xgaussian,*popt),label='column 1000 interpolation')
-        #plt.plot(np.arange(int(self.parameters["rows"])), self.buffer[:,500], 'o')
-        plt.plot(np.arange(1000,2000), self.frame[:,1000], 'o',label='column 1000')
-        #plt.plot(np.arange(int(self.parameters["rows"])), self.buffer[:,1500], 'o')
-        #plt.plot(np.arange(int(self.parameters["rows"])), self.buffer[:,2000], 'o')
-        #plt.plot(np.arange(int(self.parameters["rows"])), self.buffer[1000:2000,2500], 'o')
-        
-        #plt.show(block=False)   #Prevents the plot from blocking the execution of the code...
-        
-        #plt.figure(5)#debugging
-        #plt.title('Intensity column 2500') 
-        #plt.xlabel('Row') 
-        #plt.ylabel('Intensity')
-        
-        mean=np.argmax(self.frame[:,2500])+1000
-        std=np.std(self.frame[:,2500])
-        popt,pcov = optimize.curve_fit(gaussian,xgaussian,self.frame[:,2500],p0=[mean,std])
-        plt.plot(xgaussian, gaussian(xgaussian,*popt),label='column 2500 interpolation')
-        plt.plot(np.arange(1000,2000), self.frame[:,2500], 'o',label='column 2500')
         plt.legend()
         plt.show(block=False)   #Prevents the plot from blocking the execution of the code...
         
         
-        #print('1000:')
-        #print(self.gaussian_widths[1000])
-        #print(np.max(self.buffer[:,1000])/2)
-        #print('2500:')
-        #print(self.gaussian_widths[2500])
-        #print(np.max(self.buffer[:,2500])/2)
-    
     '''Parameters Methods'''
     
     def back_to_default_parameters(self):
@@ -1262,11 +1207,13 @@ class Controller(QWidget):
             self.label_currentDirectory.setText(self.save_directory)
             self.lineEdit_filename.setEnabled(True)
             self.lineEdit_filename.setText('')
+            self.lineEdit_sampleName.setEnabled(True)
             self.saving_allowed = True
         else:
             self.label_currentDirectory.setText('None specified')
             self.lineEdit_filename.setEnabled(False)
             self.lineEdit_filename.setText('Select directory first')
+            self.lineEdit_sampleName.setEnabled(False)
             self.saving_allowed = False
     
     
@@ -1415,8 +1362,8 @@ class Controller(QWidget):
                     '''Setting waveforms'''
                     preview_galvos_etls_waveforms = np.stack((np.array([right_galvo_voltage]),
                                                               np.array([left_galvo_voltage]),
-                                                              np.array([right_etl_voltage]),
-                                                              np.array([left_etl_voltage])))
+                                                              np.array([left_etl_voltage]),
+                                                              np.array([right_etl_voltage])))
                     
                     '''Writing the data'''
                     self.preview_galvos_etls_task.write(preview_galvos_etls_waveforms, auto_start=True)
@@ -1532,7 +1479,7 @@ class Controller(QWidget):
                     self.ramps=AOETLGalvos(self.parameters)
                     self.ramps.initialize()                  
                     self.ramps.create_tasks(terminals,'FINITE') 
-                    self.ramps.create_etl_waveforms(case = 'STAIRS')
+                    self.ramps.create_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept, case = 'STAIRS')###
                     self.ramps.create_galvos_waveforms(case = 'TRAPEZE')
                     self.ramps.create_digital_output_camera_waveform( case = 'STAIRS_FITTING')
                         
@@ -1720,7 +1667,9 @@ class Controller(QWidget):
             self.frame_saver.set_block_size(1) #Block size is a number of buffers
             self.frame_saver.check_existing_files(self.filename, 1, 'singleImage')
             
-            '''We can add attributes here (none implemented yet)'''###???
+            '''File attributes'''
+            if str(self.lineEdit_sampleName.text()) != '':
+                parameters["sample_name"] = str(self.lineEdit_sampleName.text())
             
             '''Saving frame'''
             self.frame_saver.put(self.buffer,1)
@@ -2058,8 +2007,8 @@ class Controller(QWidget):
             ###'''Writing the data'''
             ###preview_galvos_etls_waveforms = np.stack((np.array([right_galvo_voltage]),
             ###                                          np.array([left_galvo_voltage]),
-            ###                                          np.array([right_etl_voltage]),
-            ###                                          np.array([left_etl_voltage])))
+            ###                                          np.array([left_etl_voltage]),
+            ###                                          np.array([right_etl_voltage])))
             ###self.preview_galvos_etls_task.write(preview_galvos_etls_waveforms, auto_start=True)
             
             #'''Acquiring the frame '''
@@ -2282,164 +2231,173 @@ class Controller(QWidget):
         self.galvos_etls_task = nidaqmx.Task()
         self.galvos_etls_task.ao_channels.add_ao_voltage_chan(terminals["galvos_etls"])
         
-        '''Starting lasers'''
-        self.left_laser_activated = True   #Automatically activate lasers ###
-        self.parameters['laser_l_voltage'] = 2.1 #Volts
-        self.start_lasers()
-        
         '''Getting parameters'''
-        self.number_of_galvos_points = 10
         self.number_of_etls_points = 10
+        self.number_of_etls_images = 15
         
-        etl_max_voltage = 3.1      #Volts ###Arbitraire
-        etl_min_voltage = 3        #Volts ###Arbitraire
-        etl_increment_length = (etl_max_voltage - etl_min_voltage) / self.number_of_etls_points
-        
-        self.etls_relation = np.zeros((int(self.number_of_etls_points),2))
+        self.etl_l_relation = np.zeros((int(self.number_of_etls_points),2))
+        self.etl_r_relation = np.zeros((int(self.number_of_etls_points),2))        
         
         '''Finding relation between etls' voltage and focal point vertical's position'''
-        #for i in ['etl_l','etl_r']: #For each etl
-        
-        self.camera.retrieve_single_image()*1.0 ###pour éviter images de bruit
-        self.camera.retrieve_single_image()*1.0
-        
-        for i in range(0, len(self.consumers), 4):
-            if self.consumers[i+2] == "CameraWindow":
-        
-                for j in range(int(self.number_of_etls_points)):
+        for side in ['etl_l','etl_r']: #For each etl
+            '''Parameters'''
+            if side == 'etl_l':
+                etl_max_voltage = 3.8      #Volts ###Arbitraire
+                etl_min_voltage = 3.6 #1.95        #Volts ###Arbitraire
+            if side == 'etl_r':
+                etl_max_voltage = 3.8      #Volts ###Arbitraire
+                etl_min_voltage = 3.6 #1.85        #Volts ###Arbitraire
+            etl_increment_length = (etl_max_voltage - etl_min_voltage) / self.number_of_etls_points
+            
+            '''Starting automatically lasers'''
+            if side == 'etl_l':
+                self.left_laser_activated = True
+            if side == 'etl_r':
+                self.right_laser_activated = True
+            self.parameters['laser_l_voltage'] = 2#.2 #Volts
+            self.parameters['laser_r_voltage'] = 2.5 #Volts
+            self.start_lasers()
+            
+            self.camera.retrieve_single_image()*1.0 ###pour éviter images de bruit
+            self.camera.retrieve_single_image()*1.0
+            
+            for j in range(int(self.number_of_etls_points)): #For each interpolation point
+                
+                if self.etls_galvos_calibration_started == False:
+                    print('Calibration interrupted')
+                    self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Calibration interrupted')
                     
-                    if self.etls_galvos_calibration_started == False:
-                        print('Calibration interrupted')
-                        self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Calibration interrupted')
+                    break
+                else:
+                    '''Getting the data to send to the AO'''
+                    right_etl_voltage = etl_min_voltage + (j * etl_increment_length)
+                    left_etl_voltage = etl_min_voltage + (j * etl_increment_length)
+                    
+                    left_galvo_voltage = 0 #Volts
+                    right_galvo_voltage = 0 #Volts
                         
-                        break 
-                    else:
-                        '''Getting the data to send to the AO'''
-                        #if i == 'etl_l':
-                        #left_etl_voltage = etl_min_voltage + (j * etl_increment_length)
-                        #right_etl_voltage = self.parameters['etl_r_amplitude']+self.parameters['etl_r_offset']
-                        
-                        #if i == 'etl_r':
-                        right_etl_voltage = etl_min_voltage #+ (j * etl_increment_length) ###left-right sont inversés...
-                        left_etl_voltage = self.parameters['etl_l_amplitude']+self.parameters['etl_l_amplitude']
-                            
-                        left_galvo_voltage = -1 ###self.parameters['galvo_l_amplitude']+self.parameters['galvo_l_offset']
-                        right_galvo_voltage = -1 ###self.parameters['galvo_r_amplitude']+self.parameters['galvo_r_offset']
-                            
-                        '''Writing the data'''
+                    '''Writing the data'''
+                    galvos_etls_waveforms = np.stack((np.array([right_galvo_voltage]),
+                                                              np.array([left_galvo_voltage]),
+                                                              np.array([left_etl_voltage]),
+                                                              np.array([right_etl_voltage])))
+                    self.galvos_etls_task.write(galvos_etls_waveforms, auto_start=True)
+                   
+                    '''Retrieving buffer for the plane of the current position'''
+                    self.ramps=AOETLGalvos(self.parameters)
+                    self.ramps.initialize()
+                    self.number_of_steps = 1
+                    self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5) #debugging
+                    self.save_single_image() # debugging
+                    
+                    min_widths = np.zeros(self.number_of_etls_images)
+                    min_width_columns = np.zeros(self.number_of_etls_images)
+                    for y in range(self.number_of_etls_images):
+                        '''Writing the data''' ###nécesssaire?
                         galvos_etls_waveforms = np.stack((np.array([right_galvo_voltage]),
                                                                   np.array([left_galvo_voltage]),
-                                                                  np.array([right_etl_voltage]),
-                                                                  np.array([left_etl_voltage])))
+                                                                  np.array([left_etl_voltage]),
+                                                                  np.array([right_etl_voltage])))
                         self.galvos_etls_task.write(galvos_etls_waveforms, auto_start=True)
-                       
-                        '''Retrieving buffer for the plane of the current position'''
-                        self.ramps=AOETLGalvos(self.parameters)
-                        self.ramps.initialize()
-                        self.number_of_steps = 1
-                        self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
-                        self.save_single_image()
+                    
+                        self.buffer = self.camera.retrieve_single_image()*1.0
                         
-                        self.buffer = self.camera.retrieve_single_image()*1.0 #-325  ###À changer pour que ça enregistre ### 325 est la moyenne d'intensité du bruit
-                        #print(np.shape(self.buffer))
+                        frame = self.buffer
+                        blurred_frame = ndimage.gaussian_filter(frame, sigma=20)
                         
                         '''Retrieving image from camera and putting it in its queue
                                for display'''
-                        frame = self.buffer
-                        try:
-                            self.consumers[i].put(frame)
-                        except self.consumers[i].Full:
-                            print("Queue is full")
-                            self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Queue is full')
-                        
-                        time.sleep(0.5)###
-                        
-                        
+                        for ii in range(0, len(self.consumers), 4):
+                            if self.consumers[ii+2] == "CameraWindow":
+                                try:
+                                    self.consumers[ii].put(frame)
+                                except self.consumers[ii].Full:
+                                    print("Queue is full")
+                                    self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Queue is full')
+                                
+                                
+                                try:
+                                    self.consumers[ii].put(blurred_frame)
+                                except self.consumers[ii].Full:
+                                    print("Queue is full")
+                                    self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Queue is full')
                         
                         '''Calculating focal point horizontal position'''
-                        ###À faire
-                        blurred_frame = ndimage.gaussian_filter(frame, sigma=20)
+                        def func(x, w, x0, xR, offset): #Raleigh length
+                            return w * (1+((x-x0)/xR)**2)**0.5 + offset
                         
-                        try:
-                            self.consumers[i].put(blurred_frame)
-                        except self.consumers[i].Full:
-                            print("Queue is full")
-                            self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Queue is full')
+                        def fwhm(y): #Full width at half maximum
+                            max_y = max(y)  # Find the maximum y value
+                            xs = [x for x in range(len(y)) if y[x] > max_y/2.0]
+                            fwhm_val = max(xs) - min(xs) + 1
+                            return fwhm_val                        
+                        #filtering image:
+                        dset = ndimage.gaussian_filter(self.buffer, sigma=20)
                         
-                        time.sleep(0.5) ###
+                        #reshape image to average over profiles:
+                        height=dset.shape[0]
+                        width=dset.shape[1]
+                        C=20
+                        K=int(width/C) #average over C columns
+                        dset=np.reshape(dset,(height,K,int(width/K)))
+                        dset=np.mean(dset,2)
                         
+                        #get average profile to restrict vertical range
+                        avprofile=np.mean(dset,1)
+                        indmax=np.argmax(avprofile)
+                        rangeAroundPeak=np.arange(indmax-100,indmax+100)
+                        #correct if the range exceeds the original range of the image
+                        rangeAroundPeak = rangeAroundPeak[rangeAroundPeak < height]
+                        rangeAroundPeak = rangeAroundPeak[rangeAroundPeak > -1]
                         
-                        
-                        self.gaussian_widths = np.zeros(int(self.parameters["columns"])) 
-                        self.column_sums = np.zeros(int(self.parameters["columns"])) 
-                        
-                        self.frame = blurred_frame[1000:2000,:]
-                        for h in range(int(self.parameters["columns"])):
-                            self.frame[:,h]-=np.min(self.frame[:,h]) #normalisation
-                            self.frame[:,h]/=np.max(self.frame[:,h])
-                            self.gaussian_widths[h] = np.std(self.frame[:,h]) * 2 * np.sqrt(2*(math.log(2)))
-                            #if j==9:
-                            #    print('std:')
-                            #    print(np.std(self.frame[:,h]))
-                            #    print('width:')
-                            #    print(self.gaussian_widths[h])
-                            
-                            self.column_sums[h] = np.sum(self.frame[:,h])
-                        
-                        
-                        #for k in range(int(self.parameters["columns"])):
-                            #self.column_sums[k] = np.sum(blurred_frame[:,k]) ###
-                            
-                            ###mean=np.argmax(self.frame[:,k])
-                            ####print('mean')
-                            ####print(mean)
-                            ###std=np.std(self.frame[:,k])
-                            ####print('std')
-                            ####print(std)
-                            ###xgaussian = np.arange(1000, 2000)
-                            ###def gaussian(xgaussian,mean,std) :
-                            ###    return np.exp(-np.power((xgaussian - mean), 2.) / (2 * np.power(std, 2.)))
-                            ###
-                            ###popt,pcov = optimize.curve_fit(gaussian,xgaussian,self.frame[:,k],p0=[mean,std])
-                            ###clean_std = np.std(gaussian(xgaussian,*popt))
-                            ####print('clean std')
-                            ####print(clean_std)
-                            ###self.gaussian_widths[k] = clean_std * 2 * np.sqrt(2*(math.log(2)))
-                            ###
-                            ###if j==9:
-                            ###    print('clean std:')
-                            ###    print(clean_std)
-                            ###    print('gaussian fit:')
-                            ###    print(gaussian(xgaussian,*popt))
-                            ###
-                            #column_max = np.max(self.buffer[:,k])
-                            #correction_factor = absolute_max - column_max
-                            #self.buffer[:,k] += correction_factor
-                            
-                            ####self.gaussian_widths[k] = np.std(blurred_frame[:,k]) * 2 * np.sqrt(2*(math.log(2))) ###possiblement essayer scipy.signal.peak_widths
-                                                                                ### self.buffer[1520,k] corrige baise d'intensité
-                            #peak = np.array(np.argmax(self.buffer[:,k]))
-                            #peak = signal.find_peaks(self.buffer[:,k])
-                            #self.gaussian_widths[k] = signal.peak_widths(self.buffer[:,k], peak)
-                        
-                        self.average_width = np.average(self.gaussian_widths)
-                        print('min_width') #debugging
-                        print(np.min(self.gaussian_widths)) #debugging
-                        
-                        ###Afficher gaussien
-                        
-                        '''Saving focal point horizontal positions'''
-                        self.etls_relation[j,0] = right_etl_voltage +10 * j ###
-                        self.etls_relation[j,1] = np.argmin(self.gaussian_widths) #np.min(self.gaussian_widths)
+                        #compute fwhm for each profile:
+                        std_val=[]
+                        for i in range(dset.shape[1]):
+                            curve=(dset[rangeAroundPeak,i]-np.min(dset[rangeAroundPeak,i]))/(np.max(dset[rangeAroundPeak,i])-np.min(dset[rangeAroundPeak,i]))
+                            std_val.append(fwhm(curve)/2*np.sqrt(2*np.log(2)))
+                           
+                        #prepare data for fit:
+                        self.xdata=np.linspace(0,width-1,K)
+                        self.ydata=np.array(std_val)
+                        self.ydata = signal.savgol_filter(self.ydata, 51, 3) # window size 51, polynomial order 3
+                        #fit data:
+                        self.popt, pcov = optimize.curve_fit(func, self.xdata, self.ydata, maxfev=8000)
+                        beamWidth,focusLocation,rayleighRange,offset = self.popt
                         
                         
+                        min_width = int(np.min(func(self.xdata, *self.popt)))
+                        min_widths[y] = min_width
+                        min_width_column = int(np.argmin(func(self.xdata, *self.popt))) * C
+                        min_width_columns[y] = min_width_column
                     
-        print('etl relation:') #debugging
-        print(self.etls_relation) #debugging
+                    if side == 'etl_l':
+                        self.etl_l_relation[j,0] = left_etl_voltage
+                        self.etl_l_relation[j,1] = int(np.average(min_width_columns))
+                    if side == 'etl_r':
+                        self.etl_r_relation[j,0] = right_etl_voltage
+                        self.etl_r_relation[j,1] = int(np.average(min_width_columns))
+                    print(int(np.average(min_widths))) #debugging
+                    #self.parameters["etl_step"] = int(np.average(min_widths))
                 
-        ###Afficher relation
-        print('row 1520:')
-        print(self.buffer[1520,:])
+            self.left_laser_activated = False
+            self.right_laser_activated = False
+        
+        ###
+        self.left_slope, self.left_intercept, r_value, p_value, std_err = stats.linregress(self.etl_l_relation[:,1], self.etl_l_relation[:,0])
+        print(self.left_intercept)
+        print(self.left_slope * 2559 + self.left_intercept)
+        
+        self.right_slope, self.right_intercept, r_value, p_value, std_err = stats.linregress(self.etl_r_relation[:,1], self.etl_r_relation[:,0])
+        print(self.right_intercept)
+        print(self.right_slope * 2559 + self.right_intercept)
+        
+        #left_etl_interpolation = interpolate.interp1d(self.etl_l_relation[:,1], self.etl_l_relation[:,0], kind='quadratic', fill_value='extrapolate') ###
+        #print(left_etl_interpolation(1000))
+        #right_etl_interpolation = interpolate.interp1d(self.etl_r_relation[:,1], self.etl_r_relation[:,0], kind='quadratic', fill_value='extrapolate') ###
+        #print(right_etl_interpolation(1000))
+        
+        #print(left_etl_interpolation(2559))
+        #print(right_etl_interpolation(0))
         
         '''Stopping camera'''
         self.camera.cancel_images()
@@ -2683,7 +2641,7 @@ class FrameSaver():
                         dataset = f.create_dataset(path_root, data = buffer[ii,:,:])
                         
                         '''Attributes'''
-                        dataset.attrs['Sample'] = 'Agarose' #self.sample ###
+                        dataset.attrs['Sample'] = parameters["sample_name"]
                         dataset.attrs['Current sample horizontal position'] = CURRENT_HORIZONTAL_POSITION_TEXT
                         dataset.attrs['Current sample vertical position'] = CURRENT_VERTICAL_POSITION_TEXT
                         dataset.attrs['Current camera horizontal position'] = CURRENT_CAMERA_POSITION_TEXT
