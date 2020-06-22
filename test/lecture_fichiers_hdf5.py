@@ -5,11 +5,11 @@ import h5py
 '''HDF5 files'''
 
 datas=[]
-for i in range(1,9):
+for i in range(1,30):
     if i in range(1,10):
-        nomFichier=(r'C:\Users\liomlight\Desktop\ttt_singleImage_plane_0000'+str(i)+'.hdf5')
+        nomFichier=(r'C:\Users\liomlight\Desktop\test\test_singleImage_plane_0000'+str(i)+'.hdf5')
     elif i in range(11,100):
-        nomFichier=(r'C:\Users\liomlight\Desktop\test7\test10003_stack_plane_000'+str(i)+'.hdf5')
+        nomFichier=(r'C:\Users\liomlight\Desktop\test\test_singleImage_plane_000'+str(i)+'.hdf5')
     elif i in range(101,1000):
         nomFichier=(r'C:\Users\liomlight\Desktop\test7\test10003_stack_plane_00'+str(i)+'.hdf5')
     elif i in range(1001,10000):
