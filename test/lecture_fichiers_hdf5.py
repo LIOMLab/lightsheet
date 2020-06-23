@@ -7,7 +7,7 @@ import h5py
 datas=[]
 for i in range(1,30):
     if i in range(1,10):
-        nomFichier=(r'C:\Users\liomlight\Desktop\test\test_singleImage_plane_0000'+str(i)+'.hdf5')
+        nomFichier=(r'C:\Users\liomlight\Desktop\test_etl\test_singleImage_plane_0000'+str(i)+'.hdf5')
     elif i in range(11,100):
         nomFichier=(r'C:\Users\liomlight\Desktop\test\test_singleImage_plane_000'+str(i)+'.hdf5')
     elif i in range(101,1000):

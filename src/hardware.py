@@ -39,7 +39,79 @@ class AOETLGalvos(QtCore.QObject):
 
     def __init__(self,parameters):
         self.parameters = parameters
+    
+    def initialize(self):
+        '''Should always be executed first as it instantiates the variables 
+           needed for waveforms generation
+           
+           The half period of the galvos is the exposure time, i.e. the time 
+           taken for a single upwards or downwards galvo scan. It is defined 
+           with the left galvo frequency (choice of galvo is arbitrary since 
+           they both should have the same frequency.'''
         
+        self.t_half_period = 0.5*(1/self.parameters["galvo_l_frequency"])     #It is our exposure time (is in the range of the camera)
+        self.samples_per_half_period = np.ceil(self.t_half_period*self.parameters["samplerate"])
+        #print('Samples per half period: '+str(self.samples_per_half_period))
+        
+        self.min_samples_per_delay = np.ceil(self.parameters["min_t_delay"]*self.parameters["samplerate"])
+        #print('Minimum samples per delay: '+str(self.min_samples_per_delay))
+        
+        self.min_samples_per_step = self.min_samples_per_delay + self.samples_per_half_period
+        #print('Minimum samples per step: '+str(self.min_samples_per_step)+'\n')
+        
+        self.rest_samples_added = np.ceil(self.min_samples_per_step*self.parameters["camera_delay"]/100)  #Samples added to allow down time for the camera
+        self.samples_per_step = self.min_samples_per_step + self.rest_samples_added
+        #print('Samples per step: ' + str(self.samples_per_step))
+        
+        self.samples_per_delay = self.samples_per_step-self.samples_per_half_period
+        #print('Samples per delay: '+str(self.samples_per_delay))
+        
+        self.samples_per_half_delay = np.floor(self.samples_per_delay/2)
+        #print('Samples per half delay: '+str(self.samples_per_half_delay)+'\n')
+        
+        #print('Number of columns: '+str(self.parameters["columns"]))
+        #print('Etl step: '+str(self.parameters["etl_step"]) + ' columns')
+        
+        self.number_of_steps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"])
+        #print('Number of steps: ' + str(self.number_of_steps)+'\n')
+        
+        self.number_of_samples = self.number_of_steps*self.samples_per_step
+        #print('Number of samples: '+str(self.number_of_samples))
+        
+        self.sweeptime = self.number_of_samples/self.parameters["samplerate"]
+        #print('Sweeptime: '+str(self.sweeptime)+'s')
+        
+        self.samples = int(self.number_of_samples)
+    
+    def initialize_live_mode(self):
+        '''Should always be executed first as it instantiates the variables 
+           needed for waveforms generation
+           
+           This function isn't currently in use as it was for calibrating
+           purposes in the early stages of the microscope. It is kept for
+           reference'''
+        
+        self.t_half_period = (1/self.parameters["galvo_l_frequency"])     #It is our exposure time (is in the range of the camera)
+        self.samples_per_half_period = np.ceil(self.t_half_period*self.parameters["samplerate"])
+        
+        self.min_samples_per_delay = np.ceil(self.parameters["min_t_delay"]*self.parameters["samplerate"])
+        
+        self.min_samples_per_step = self.min_samples_per_delay + self.samples_per_half_period
+        
+        self.rest_samples_added = np.ceil(self.min_samples_per_step*self.parameters["camera_delay"]/100)  #Samples added to allow down time for the camera
+        self.samples_per_step = self.min_samples_per_step + self.rest_samples_added
+        
+        self.samples_per_delay = self.samples_per_step-self.samples_per_half_period
+        
+        self.samples_per_half_delay = np.floor(self.samples_per_delay/2)
+        
+        self.number_of_samples = self.samples_per_step
+        
+        self.sweeptime = self.number_of_samples/self.parameters["samplerate"]
+        
+        self.samples = int(self.number_of_samples)  
+        
+    
     def close_tasks(self):
         '''Closes the tasks for triggering, analog and counter outputs.
            Tasks should only be closed after they are stopped.
@@ -228,78 +300,7 @@ class AOETLGalvos(QtCore.QObject):
         self.camera_task.triggers.start_trigger.cfg_dig_edge_start_trig('/Dev1/ao/StartTrigger', trigger_edge=Edge.RISING)
         #self.laser_task.triggers.start_trigger.cfg_dig_edge_start_trig('/Dev1/ao/StartTrigger', trigger_edge=Edge.RISING)
         
-    def initialize(self):
-        '''Should always be executed first as it instantiates the variables 
-           needed for waveforms generation
-           
-           The half period of the galvos is the exposure time, i.e. the time 
-           taken for a single upwards or downwards galvo scan. It is defined 
-           with the left galvo frequency (choice of galvo is arbitrary since 
-           they both should have the same frequency.'''
-        
-        self.t_half_period = 0.5*(1/self.parameters["galvo_l_frequency"])     #It is our exposure time (is in the range of the camera)
-        self.samples_per_half_period = np.ceil(self.t_half_period*self.parameters["samplerate"])
-        #print('Samples per half period: '+str(self.samples_per_half_period))
-        
-        self.min_samples_per_delay = np.ceil(self.parameters["min_t_delay"]*self.parameters["samplerate"])
-        #print('Minimum samples per delay: '+str(self.min_samples_per_delay))
-        
-        self.min_samples_per_step = self.min_samples_per_delay + self.samples_per_half_period
-        #print('Minimum samples per step: '+str(self.min_samples_per_step)+'\n')
-        
-        self.rest_samples_added = np.ceil(self.min_samples_per_step*self.parameters["camera_delay"]/100)  #Samples added to allow down time for the camera
-        self.samples_per_step = self.min_samples_per_step + self.rest_samples_added
-        #print('Samples per step: ' + str(self.samples_per_step))
-        
-        self.samples_per_delay = self.samples_per_step-self.samples_per_half_period
-        #print('Samples per delay: '+str(self.samples_per_delay))
-        
-        self.samples_per_half_delay = np.floor(self.samples_per_delay/2)
-        #print('Samples per half delay: '+str(self.samples_per_half_delay)+'\n')
-        
-        #print('Number of columns: '+str(self.parameters["columns"]))
-        #print('Etl step: '+str(self.parameters["etl_step"]) + ' columns')
-        
-        self.number_of_steps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"])
-        #print('Number of steps: ' + str(self.number_of_steps)+'\n')
-        
-        self.number_of_samples = self.number_of_steps*self.samples_per_step
-        #print('Number of samples: '+str(self.number_of_samples))
-        
-        self.sweeptime = self.number_of_samples/self.parameters["samplerate"]
-        #print('Sweeptime: '+str(self.sweeptime)+'s')
-        
-        self.samples = int(self.number_of_samples)
-        
     
-    def initialize_live_mode(self):
-        '''Should always be executed first as it instantiates the variables 
-           needed for waveforms generation
-           
-           This function isn't currently in use as it was for calibrating
-           purposes in the early stages of the microscope. It is kept for
-           reference'''
-        
-        self.t_half_period = (1/self.parameters["galvo_l_frequency"])     #It is our exposure time (is in the range of the camera)
-        self.samples_per_half_period = np.ceil(self.t_half_period*self.parameters["samplerate"])
-        
-        self.min_samples_per_delay = np.ceil(self.parameters["min_t_delay"]*self.parameters["samplerate"])
-        
-        self.min_samples_per_step = self.min_samples_per_delay + self.samples_per_half_period
-        
-        self.rest_samples_added = np.ceil(self.min_samples_per_step*self.parameters["camera_delay"]/100)  #Samples added to allow down time for the camera
-        self.samples_per_step = self.min_samples_per_step + self.rest_samples_added
-        
-        self.samples_per_delay = self.samples_per_step-self.samples_per_half_period
-        
-        self.samples_per_half_delay = np.floor(self.samples_per_delay/2)
-        
-        self.number_of_samples = self.samples_per_step
-        
-        self.sweeptime = self.number_of_samples/self.parameters["samplerate"]
-        
-        self.samples = int(self.number_of_samples)  
-        
     def run_tasks(self):
         '''Runs the tasks for triggering, analog and counter outputs
 
