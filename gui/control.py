@@ -54,11 +54,11 @@ parameters["etl_l_amplitude"]=2         # In Volts
 parameters["etl_l_offset"]=0            # In Volts
 parameters["etl_r_amplitude"]=2         # In Volts
 parameters["etl_r_offset"]=0            # In Volts
-parameters["laser_l_voltage"]=0.905#1.3 ###0.905     # In Volts
+parameters["laser_l_voltage"]=0.905#1.3      # In Volts
 parameters["laser_r_voltage"]=0.935     # In Volts
 parameters["columns"] = 2560            # In pixels
 parameters["rows"] = 2160               # In pixels 
-parameters["etl_step"] = 50            # In pixels
+parameters["etl_step"] = 100#50            # In pixels
 parameters["camera_delay"] = 10         # In %
 parameters["min_t_delay"] = 0.0354404   # In seconds
 parameters["t_start_exp"] = 0.017712    # In seconds
@@ -74,6 +74,8 @@ CURRENT_HORIZONTAL_POSITION_TEXT = ''
 CURRENT_VERTICAL_POSITION_TEXT = ''
 CURRENT_CAMERA_POSITION_TEXT = ''
 
+#SATURATED_PIXELS = []#np.empty((0,2))
+
 class Controller(QWidget):
     '''
     Class for control of the MesoSPIM
@@ -85,12 +87,13 @@ class Controller(QWidget):
         QWidget.__init__(self)
         
         
-        ##
+        ###Test
         self.left_slope = -0.001282893174259485
         self.left_intercept = 4.920315064788371
         self.right_slope = 0.0013507132995247916
         self.right_intercept = 1.8730880902476752
-        ##
+        ###
+        
         '''Loading user interface'''
         basepath= os.path.join(os.path.dirname(__file__))
         uic.loadUi(os.path.join(basepath,"control.ui"), self)
@@ -120,7 +123,7 @@ class Controller(QWidget):
         self.horizontal_forward_boundary_selected = False
         self.horizontal_backward_boundary_selected = False
         self.focus_selected = False
-        self.etls_calibrated = True##False
+        self.etls_calibrated = False#True##False
         
         '''Instantiating the camera window where the frames are displayed'''
         self.camera_window = CameraWindow()
@@ -205,6 +208,9 @@ class Controller(QWidget):
         self.doubleSpinBox_rightGalvoFrequency.valueChanged.connect(lambda: self.update_etl_galvos_parameters(10))
         self.doubleSpinBox_samplerate.valueChanged.connect(lambda: self.update_etl_galvos_parameters(11))
         self.spinBox_etlStep.valueChanged.connect(lambda: self.update_etl_galvos_parameters(12))
+        self.doubleSpinBox_leftLaser.valueChanged.connect(lambda: self.update_etl_galvos_parameters(13))
+        self.doubleSpinBox_rightLaser.valueChanged.connect(lambda: self.update_etl_galvos_parameters(14))
+        
         self.pushButton_defaultParameters.clicked.connect(self.back_to_default_parameters)
         
         '''Connections for the lasers'''
@@ -307,6 +313,9 @@ class Controller(QWidget):
         
         self.spinBox_etlStep.setMaximum(2560)
         
+        self.doubleSpinBox_leftLaser.setMaximum(2.5)
+        self.doubleSpinBox_leftLaser.setMaximum(2.5)
+        
         '''Initialize values'''
         self.doubleSpinBox_leftEtlAmplitude.setValue(self.parameters["etl_l_amplitude"])
         self.doubleSpinBox_rightEtlAmplitude.setValue(self.parameters["etl_r_amplitude"])
@@ -324,6 +333,9 @@ class Controller(QWidget):
         
         self.spinBox_etlStep.setValue(self.parameters["etl_step"])
         
+        self.doubleSpinBox_leftLaser.setValue(self.parameters["laser_l_voltage"])
+        self.doubleSpinBox_rightLaser.setValue(self.parameters["laser_r_voltage"])
+        
         '''Initialize step values'''
         self.doubleSpinBox_leftEtlAmplitude.setSingleStep(0.1)
         self.doubleSpinBox_rightEtlAmplitude.setSingleStep(0.1)
@@ -334,6 +346,9 @@ class Controller(QWidget):
         self.doubleSpinBox_rightGalvoAmplitude.setSingleStep(0.1)
         self.doubleSpinBox_leftGalvoOffset.setSingleStep(0.1)
         self.doubleSpinBox_rightGalvoOffset.setSingleStep(0.1)
+        
+        self.doubleSpinBox_leftLaser.setSingleStep(0.1)
+        self.doubleSpinBox_rightLaser.setSingleStep(0.1)
         
         '''Initialize suffixes'''
         self.doubleSpinBox_leftEtlAmplitude.setSuffix(" V")
@@ -351,6 +366,9 @@ class Controller(QWidget):
         self.doubleSpinBox_samplerate.setSuffix(" samples/s")
         
         self.spinBox_etlStep.setSuffix(" columns")
+        
+        self.doubleSpinBox_leftLaser.setSuffix(" V")
+        self.doubleSpinBox_rightLaser.setSuffix(" V")
         
         '''--Lasers parameters' related widgets--'''
         '''Disable some buttons'''
@@ -403,16 +421,17 @@ class Controller(QWidget):
             self.stop_standby()
         if self.camera_calibration_started == True:
             self.stop_calibrate_camera()
-        ###if self.etls_galvos_calibration_started == True:
-        ###    self.stop_calibrate_etls_galvos()
+        if self.etls_galvos_calibration_started == True:
+            self.stop_calibrate_etls_galvos()
             
         event.accept()
     
     def open_camera(self):
         '''Opens the camera'''
         
-        self.camera_on=True
+        self.camera_on = True
         self.camera = Camera()
+        
         print('Camera opened') 
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Camera opened')
     
@@ -421,6 +440,7 @@ class Controller(QWidget):
         
         self.camera_on = False
         self.camera.close_camera()
+        
         print('Camera closed')
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Camera closed')
     
@@ -1075,6 +1095,10 @@ class Controller(QWidget):
             self.parameters["samplerate"]=self.doubleSpinBox_samplerate.value()
         elif parameterNumber==12:
             self.parameters["etl_step"]=self.spinBox_etlStep.value()
+        elif parameterNumber==13:
+            self.parameters["laser_l_voltage"]=self.doubleSpinBox_leftLaser.value()
+        elif parameterNumber==14:
+            self.parameters["laser_r_voltage"]=self.doubleSpinBox_rightLaser.value()
     
     
     def update_left_laser(self):
@@ -1388,8 +1412,8 @@ class Controller(QWidget):
                     #print(np.average(frame.flatten()))
                     
                     ####???
-                    #self.saturated_pixels = np.empty((0,2))
-                    #self.saturated_pixels.append(np.where(frame==65335))
+                    #global SATURATED_PIXELS
+                    #SATURATED_PIXELS.append()#.append(np.where(frame==65335))
                     
                     ###max_value = np.max(frame.flatten())
                     ###print(max_value)
@@ -2123,10 +2147,10 @@ class Controller(QWidget):
                     self.ramps.stop_tasks()                             
                     self.ramps.close_tasks()    
                     
-                    #self.buffer = self.buffer[1100:1300,600:800] ###cible point
+                    #self.buffer = self.buffer[1720:1760,900:950] #[1100:1300,600:800] ###cible point
                     '''Calculating ideal camera position (with most intense pixels)'''
-                    intensities = np.sort(self.buffer, axis=None)
-                    average_intensities[j] = np.average(intensities[-10:]) #25 max intensities considered
+                    intensities = np.sort(self.buffer, axis=None) #Flatten and sort elements
+                    average_intensities[j] = np.average(intensities[-25:]) #25 max intensities considered
                     variance[j] = np.var(intensities)
                     
                     self.cam_positions[j] = -self.motor_camera.current_position(self.unit)+self.camera_correction #debugging
@@ -2527,7 +2551,7 @@ class CameraWindow(queue.Queue):
         self.columns = 2560
         self.container = np.zeros((self.lines, self.columns))
         self.container[0] = 1000 #To get initial range of the histogram 
-        self.imv = pg.ImageView(view = pg.PlotItem())  
+        self.imv = pg.ImageView(view = pg.PlotItem())
         self.imv.setWindowTitle('Camera Window')
         self.scene = self.imv.scene
         self.imv.show()
@@ -2541,8 +2565,8 @@ class CameraWindow(queue.Queue):
         #positions_gray = [0.0, 1.0] ##512 points in colormap
         #colors_gray = [[0, 0, 0, 255], [255, 255, 255]] #gray scale from 0 to 512
         #color_map_gray = pg.ColorMap(positions_gray, colors_gray)
-        #positions_gray_with_red = [0.0, 0.999, 1.0] ##512 points in colormap
-        #colors_gray_with_red = [[0, 0, 0, 255], [255, 255, 255], [255, 0, 0, 255]] #gray scale from 0 to 511, red at 512
+        #positions_gray_with_red = [0.0, 0.001, 0.002, 1.0] ##512 points in colormap
+        #colors_gray_with_red = [[0, 0, 0], [255, 0, 0],[1, 1, 1], [255, 255, 255]] #gray scale from 0 to 511, red at 512
         #color_map_gray_with_red = pg.ColorMap(positions_gray_with_red, colors_gray_with_red)
         
         #print(color_map) #debugging
@@ -2550,15 +2574,21 @@ class CameraWindow(queue.Queue):
         #np.set_printoptions(threshold=sys.maxsize) #to show full array in print
         #print(color_map.getLookupTable()) #debugging
         #print(color_map.getLookupTable().shape) #debugging
-        #self.imv.setColorMap(color_map_gray)
+        #self.imv.setColorMap(color_map_gray_with_red)
         
         #self.image_item = self.imv.getImageItem() #debugging
         
         ###????
         #win = pg.GraphicsWindow()
-        #image = QtGui.QPixmap.grabWidget(win).toImage()
-        
-        #for pixels in self.saturated_pixels:
+        ##QtGui.QPixmap.
+        #image = QWidget.grab(win).toImage()
+        #
+        #image.setPixel(1,1,16711680) #16711680 is the rgb int for red
+        #image.setPixel(1,2,16711680)
+        #image.setPixel(2,1,16711680)
+        #image.setPixel(2,2,16711680)
+        #
+        #for pixels in SATURATED_PIXELS:
         #    image.setPixel(int(pixels[1]),int(pixels[0]),[255, 0, 0])
         
     def put(self, item, block=True, timeout=None): ###nécessaire?
