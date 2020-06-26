@@ -894,36 +894,19 @@ class Controller(QWidget):
     def show_camera_interpolation(self):
         '''Shows the camera focus interpolation'''
         
-        #self.camera_focus_relation = np.array([[20.15,   94.25], [20.3,   94.2 ], 
-        #                              [20.45,   94.35], [20.6,   94.25],
-        #                              [20.75,   94.25], [20.9,   94.3 ], 
-        #                              [21.05,   94.3 ], [21.2,   94.25],
-        #                              [21.35,   94.4 ], [21.5,   94.25],
-        #                              [21.65,   94.15], [21.8,   94.2 ],
-        #                              [21.95,   94.3 ], [22.1,   94.25],
-        #                              [22.25,   94.25], [22.4,   94.3 ],
-        #                              [22.55,   94.2 ], [22.7,   94.35],
-        #                              [22.85,   94.3 ], [23.,   94.3 ],
-        #                              [23.15,   94.2 ], [23.3,   94.4 ],
-        #                              [23.45,   94.25], [23.6,   94.2 ],
-        #                              [23.75,   94.35], [23.9,   94.3 ],
-        #                              [24.05,   94.25], [24.2,   94.45],
-        #                              [24.35,   94.15], [24.5,   94.45]])
-        #self.camera_focus_relation[:,0]=[ 20.5, 21., 21.5, 22., 22.5, 23., 23.5, 24. , 24.5, 25.] #debugging
-        #self.camera_focus_relation[:,1]=[96.7, 96.7, 96.7, 94., 96.7, 96.7, 96.7, 96.7, 96.7, 96.7]
-        
         x = self.camera_focus_relation[:,0]
         y = self.camera_focus_relation[:,1]
         
-        variance = np.var(y)
-        print('variance:') #debugging
-        print(variance)
+        #variance = np.var(y)
+        #print('variance:'+str(variance)) #debugging
         
         xnew = np.linspace(self.camera_focus_relation[0,0], self.camera_focus_relation[-1,0], 1000) ###1000 points
         #tck = interpolate.splrep(x,y) #tck is a tuple (t,c,k) containing the vector of knots, the B-spline coefficients, and the degree of the spline
         #ynew = interpolate.splev(xnew, tck)
         f = interpolate.interp1d(x, y, kind='quadratic', fill_value='extrapolate')
         ynew = f(xnew)
+        slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+        yreg = slope * xnew + intercept
         
         '''Showing interpolation graph'''
         plt.figure(1)
@@ -932,23 +915,19 @@ class Controller(QWidget):
         plt.ylabel('Camera Position ({})'.format(self.unit))
         plt.plot(x, y, 'o')
         plt.plot(xnew,ynew)
+        plt.plot(xnew,yreg)
         plt.show(block=False)   #Prevents the plot from blocking the execution of the code...
         
-        plt.figure(2)
-        plt.title('Camera Focus Intensities Averages') 
-        plt.xlabel('Camera Horizontal Position ({})'.format(self.unit)) 
-        plt.ylabel('Intensity average')
-        plt.plot(self.cam_positions, self.averages[:,0], 'o')
-        plt.plot(self.cam_positions, self.averages[:,1], 'o')
-        plt.show(block=False)   #Prevents the plot from blocking the execution of the code...
+        def gauss(x,a,x0,sigma):
+            return a*np.exp(-(x-x0)**2/(2*sigma**2))
         
-        #plt.figure(3)
-        #plt.title('Camera Focus Intensities Variances') 
-        #plt.xlabel('Camera Horizontal Position ({})'.format(self.unit)) 
-        #plt.ylabel('Intensity variance')
-        #plt.plot(self.cam_positions, self.variances[:,0], 'o')
-        #plt.plot(self.cam_positions, self.variances[:,1], 'o')
-        #plt.show(block=False)   #Prevents the plot from blocking the execution of the code...
+        n=int(self.number_of_camera_positions)#len(self.donnees)
+        x=np.arange(n)
+        for g in range(int(self.number_of_calibration_planes)):
+            plt.figure(g+2)
+            plt.plot(self.donnees[g,:])
+            plt.plot(x,gauss(x,*self.popt[g]),'ro:',label='fit')
+            plt.show(block=False)
     
     def show_etl_interpolation(self):
         '''Shows the etl focus interpolation'''
@@ -1856,6 +1835,7 @@ class Controller(QWidget):
         '''Set progress bar'''
         progress_value = 0
         progress_increment = 100 // int(self.number_of_planes)
+        self.progressBar_stackMode.setValue(0) #To reset progress bar
         
         for i in range(int(self.number_of_planes)):
             
@@ -1924,7 +1904,9 @@ class Controller(QWidget):
                 self.progressBar_stackMode.setValue(progress_value) ###Corriger QObject::setParent: Cannot set parent, new parent is in a different thread
             
             self.update_position_horizontal()
-            
+        
+        self.progressBar_stackMode.setValue(100) #In case the number of planes is not a multiple of 100
+        
         self.laser_on = False
         
         '''Stopping camera'''
@@ -2003,7 +1985,7 @@ class Controller(QWidget):
         self.camera.set_trigger_mode('ExternalExposureControl')
         self.camera.arm_camera() 
         self.camera.get_sizes() 
-        self.camera.allocate_buffer()    
+        self.camera.allocate_buffer() 
         self.camera.set_recording_state(1)
         self.camera.insert_buffers_in_queue()
         
@@ -2014,17 +1996,16 @@ class Controller(QWidget):
         '''Starting lasers'''
         self.both_lasers_activated = True
         self.start_lasers()
-                        
+        
         '''Creating ETLs, galvos & camera's ramps and waveforms'''
+        self.parameters["etl_step"] = self.parameters["columns"] #To keep ETL constant, scan only 1 column
+        
         self.ramps=AOETLGalvos(self.parameters)
-        self.ramps.initialize()                   
+        self.ramps.initialize()
         self.ramps.create_etl_waveforms(case = 'STAIRS')
         self.ramps.create_galvos_waveforms(case = 'TRAPEZE')
         self.ramps.create_digital_output_camera_waveform( case = 'STAIRS_FITTING')
         
-        #self.buffer = self.camera.retrieve_single_image()*1.0 #The first camera acquisition is noise and is not considered for calibration... 
-        
-            
         '''Getting calibration parameters'''
         if self.doubleSpinBox_numberOfCalibrationPlanes.value() != 0:
             self.number_of_calibration_planes = self.doubleSpinBox_numberOfCalibrationPlanes.value()
@@ -2032,20 +2013,19 @@ class Controller(QWidget):
             self.number_of_camera_positions = self.doubleSpinBox_numberOfCameraPositions.value()
         
         sample_increment_length = (self.horizontal_forward_boundary - self.horizontal_backward_boundary) / self.number_of_calibration_planes
-        #focus_backward_boundary = self.motor_camera.position_to_data(-80 +self.camera_correction, '\mm')
-        focus_backward_boundary = 260000 #263000      ###Arbitraire
-        #focus_forward_boundary = self.motor_camera.position_to_data(-90 +self.camera_correction, '\mm')
-        focus_forward_boundary = 270000  #269000   ###Arbitraire
+        focus_backward_boundary = 250000 #263000   ###Position arbitraire en u-steps
+        focus_forward_boundary = 270000  #269000   ###Position arbitraire en u-steps
         camera_increment_length = (focus_forward_boundary - focus_backward_boundary) / self.number_of_camera_positions
         
         position_depart_sample = self.motor_horizontal.current_position('\u03BCStep')
         position_depart_camera = self.focus
         
         self.camera_focus_relation = np.zeros((int(self.number_of_calibration_planes),2))
-        self.averages = np.zeros((int(self.number_of_camera_positions),2)) #debugging
-        self.variances = np.zeros((int(self.number_of_camera_positions),2)) #debugging
+        metricvar=np.zeros((int(self.number_of_camera_positions)))
+        self.donnees=np.zeros(((int(self.number_of_calibration_planes)),(int(self.number_of_camera_positions)))) #debugging
+        self.popt = np.zeros((int(self.number_of_calibration_planes),3))    #debugging
         
-        for i in range(int(self.number_of_calibration_planes)):
+        for i in range(int(self.number_of_calibration_planes)): #For each sample position
             
             if self.camera_calibration_started == False:
                 print('Camera calibration interrupted')
@@ -2057,12 +2037,6 @@ class Controller(QWidget):
                 position = self.horizontal_forward_boundary - (i * sample_increment_length)    #Increments of +sample_increment_length
                 self.motor_horizontal.move_absolute_position(position,'\u03BCStep')
                 self.update_position_horizontal()
-                #print('Sample moved to:'+str(position)+'---mesured:'+str(-self.motor_horizontal.current_position(self.unit)+self.horizontal_correction)) #debugging
-                
-                average_intensities = np.zeros(int(self.number_of_camera_positions))
-                variance = np.zeros(int(self.number_of_camera_positions))
-                self.cam_positions = np.zeros(int(self.number_of_camera_positions)) #debugging
-                
                 
                 '''Retrieving filename set by the user'''
                 self.filename = str(self.lineEdit_filename.text())
@@ -2079,7 +2053,7 @@ class Controller(QWidget):
                     if str(self.lineEdit_sampleName.text()) != '':
                         parameters["sample_name"] = str(self.lineEdit_sampleName.text())
                     
-                    '''Saving frame'''
+                    '''Starting frame saver'''
                     self.frame_saver.start_saving(data_type = 'TESTS')
                     
                 else:
@@ -2087,12 +2061,11 @@ class Controller(QWidget):
                     self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Select directory and enter a valid filename before saving')
                 
                 
-                for j in range(int(self.number_of_camera_positions)):
+                for j in range(int(self.number_of_camera_positions)+3): #For each camera position ###First 3 images not considered, as they are wrong###
                     '''Moving camera position'''
                     position_camera = focus_forward_boundary - (j * camera_increment_length) #Increments of +camera_increment_length
                     self.motor_camera.move_absolute_position(position_camera,'\u03BCStep')
                     self.update_position_camera()
-                    #print('Camera moved to:'+str(position_camera)+'---mesured:'+str(-self.motor_camera.current_position(self.unit)+self.camera_correction)) #debugging
                     
                     '''Writing waveform to task and running'''
                     self.ramps.create_tasks(terminals,'FINITE')
@@ -2101,94 +2074,82 @@ class Controller(QWidget):
                     self.ramps.run_tasks()
                     
                     '''Retrieving buffer'''
-                    self.number_of_steps = 1
+                    self.number_of_steps = 1 #To retrieve only one image
                     self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
                     
-                    '''Frame reconstruction for display'''
-                    frame = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))  #Initializing frame
-                    
-                    #For each column step
-                    for ij in range(int(self.number_of_steps)-1):
-                        current_step = int(ij*self.parameters['etl_step'])
-                        next_step = int(ij*self.parameters['etl_step']+self.parameters['etl_step'])
-                        frame[:,current_step:next_step] = self.buffer[ij,:,current_step:next_step]
-                    #For the last column step (may be different than the others...)
-                    last_step = int(int(self.number_of_steps-1) * self.parameters['etl_step'])
-                    frame[:,last_step:] = self.buffer[int(self.number_of_steps-1),:,last_step:]
-                    
-                    '''Frame display'''
-                    for ii in range(0, len(self.consumers), 4):
-                        if self.consumers[ii+2] == "CameraWindow":
-                            try:
-                                self.consumers[ii].put(frame)
-                            except:      #self.consumers[i].Full:
-                                print("Queue is full")   
-                                self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Queue is full') 
-                    
-                    #self.parameters["etl_step"] = self.parameters["columns"]
-                    #self.get_single_image()
-                    
-                    
-                        ###self.save_single_image()
+                    if j!=0 and j!=1 and j!=2: ###First 3 images not considered###
+                        '''Frame reconstruction for display'''
+                        frame = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))  #Initializing frame
+                        #For each column step
+                        for ij in range(int(self.number_of_steps)-1):
+                            current_step = int(ij*self.parameters['etl_step'])
+                            next_step = int(ij*self.parameters['etl_step']+self.parameters['etl_step'])
+                            frame[:,current_step:next_step] = self.buffer[ij,:,current_step:next_step]
+                        #For the last column step (may be different than the others...)
+                        last_step = int(int(self.number_of_steps-1) * self.parameters['etl_step'])
+                        frame[:,last_step:] = self.buffer[int(self.number_of_steps-1),:,last_step:]
                         
+                        '''Frame display'''
+                        for ii in range(0, len(self.consumers), 4):
+                            if self.consumers[ii+2] == "CameraWindow":
+                                try:
+                                    self.consumers[ii].put(frame)
+                                except:      #self.consumers[i].Full:
+                                    print("Queue is full")   
+                                    self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Queue is full')
                         
+                        '''Retrieving filename set by the user'''
+                        if self.saving_allowed and self.filename != '':    
+                            '''Saving frame'''
+                            self.frame_saver.put(self.buffer,1)
+                            print('Image put in queue ')
                         
-                    '''Retrieving filename set by the user'''
-                    self.filename = str(self.lineEdit_filename.text())
-                    
-                    if self.saving_allowed and self.filename != '':
-                        
-                        '''Saving frame'''
-                        self.frame_saver.put(self.buffer,1)
-                        
-                        print('Image put ')
+                        '''Filtering frame'''
+                        frame = ndimage.gaussian_filter(frame, sigma=3)
+                        flatframe=frame.flatten()
+                        metricvar[j-3]=np.var(flatframe)
                     
                     '''Ending tasks'''
                     self.ramps.stop_tasks()                             
-                    self.ramps.close_tasks()    
-                    
-                    #self.buffer = self.buffer[1720:1760,900:950] #[1100:1300,600:800] ###cible point
-                    '''Calculating ideal camera position (with most intense pixels)'''
-                    intensities = np.sort(self.buffer, axis=None) #Flatten and sort elements
-                    average_intensities[j] = np.average(intensities[-25:]) #25 max intensities considered
-                    variance[j] = np.var(intensities)
-                    
-                    self.cam_positions[j] = -self.motor_camera.current_position(self.unit)+self.camera_correction #debugging
-                    if i == 1: #debugging
-                        self.averages[j,0] = average_intensities[j]
-                        self.variances[j,0] = variance[j]
-                        
-                    if i == int(self.number_of_camera_positions):
-                        self.variances[j,1] = variance[j]
-                    
-                print('averages:') #debugging
-                print(average_intensities) #debugging
-                
+                    self.ramps.close_tasks()
                 
                 if self.saving_allowed and self.filename != '':
+                    '''Closing frame saver'''
                     self.frame_saver.stop_saving()
                     self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Image saved')
                     print('Images saved')
                 
+                '''Calculating ideal camera position'''
+                def gauss(x,a,x0,sigma):
+                    return a*np.exp(-(x-x0)**2/(2*sigma**2))
                 
+                metricvar=(metricvar-np.min(metricvar))/(np.max(metricvar)-np.min(metricvar))#normalize
+                metricvar = signal.savgol_filter(metricvar, 11, 3) # window size 11, polynomial order 3
+                self.donnees[i,:] = metricvar #debugging
+                
+                n=len(metricvar)
+                x=np.arange(n)            
+                mean = sum(x*metricvar)/n           
+                sigma = sum(metricvar*(x-mean)**2)/n
+                poscenter=np.argmax(metricvar)
+                
+                popt,pcov = optimize.curve_fit(gauss,x,metricvar,p0=[1,mean,sigma],bounds=(0, 'inf'), maxfev=10000)
+                
+                amp,center,variance=popt
+                self.popt[i] = popt
+                print('center:'+str(center))
+                print('amp:'+str(amp))
+                print('variance:'+str(variance))
                 
                 '''Saving focus relation'''
-                self.camera_focus_relation[i-1,0] = -self.motor_horizontal.current_position(self.unit) + self.horizontal_correction
+                self.camera_focus_relation[i,0] = -self.motor_horizontal.current_position(self.unit) + self.horizontal_correction
+                max_variance_camera_position = focus_forward_boundary - (center * camera_increment_length)
+                self.camera_focus_relation[i,1] = -self.motor_camera.data_to_position(max_variance_camera_position, self.unit) + self.camera_correction
                 
-                #Méthode des moyennes
-                max_intensity_camera_position = focus_forward_boundary - (np.argmax(average_intensities) * camera_increment_length)
-                self.camera_focus_relation[i-1,1] = -self.motor_camera.data_to_position(max_intensity_camera_position, self.unit) + self.camera_correction
-                
-                #Méthode des variances
-                #max_variance_camera_position = focus_forward_boundary - (np.argmax(variance) * camera_increment_length)
-                #self.camera_focus_relation[i-1,1] = -self.motor_camera.data_to_position(max_variance_camera_position, self.unit) + self.camera_correction
-                    
-                    
-            print('Plan '+str(i)+' done') #debugging
+            print('--Plan '+str(i)+' done') #debugging
         
         print('relation:') #debugging
         print(self.camera_focus_relation)
-        
         
         '''Returning sample and camera at initial positions'''
         self.motor_horizontal.move_absolute_position(position_depart_sample,'\u03BCStep')
@@ -2343,8 +2304,6 @@ class Controller(QWidget):
                     self.number_of_steps = 1
                     self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5) #debugging
                     self.save_single_image() # debugging
-                    
-                    #time.sleep(1)###
                     
                     ydatas = np.zeros((self.number_of_etls_images,128))  ##128=K
                     for y in range(self.number_of_etls_images):
@@ -2655,7 +2614,7 @@ class FrameSaver():
         if data_type == "BUFFER":
             number_of_files = number_of_planes
         elif data_type == "TESTS":
-            number_of_files = 10 ###10 camera positions
+            number_of_files = 30 ###10 camera positions
         else:
             number_of_files = np.ceil(number_of_planes/self.block_size)
         
@@ -2790,9 +2749,9 @@ class FrameSaver():
             
             f = h5py.File(self.filenames_list[i],'a')
             
-            for _ in range(10): ###10 camera positions
+            counter = 1
+            for _ in range(30): ###10 camera positions
                 in_loop = True
-                counter = 1
                     
                 while in_loop:
                     try:
@@ -2830,7 +2789,6 @@ class FrameSaver():
                             ###dataset.attrs["min_t_delay"] = parameters["min_t_delay"]   # In seconds
                             ###dataset.attrs["t_start_exp"] = parameters["t_start_exp"]   # In seconds
                             
-                            counter += 1
                             
                         in_loop = False
                     
@@ -2839,7 +2797,9 @@ class FrameSaver():
                         
                         if self.started == False:
                             in_loop = False
-            
+                
+                counter += 1
+                
             f.close()
     
     def set_block_size(self, block_size):
