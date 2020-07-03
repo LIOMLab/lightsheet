@@ -15,7 +15,7 @@ from scipy.ndimage import gaussian_filter
 from os import listdir
 from os.path import isfile, join
 
-mypath=r'C:\Users\liomlight\Desktop\test\calib-sample-pos-2'
+mypath=r'C:\Users\liomlight\Desktop\test\calib-sample-pos-1'
 #mypath='/Users/pjmac/Downloads/calib-sample-pos-2'
 #mypath='/Users/pjmac/Downloads/calib-sample-pos-3'
 
