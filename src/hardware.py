@@ -282,6 +282,7 @@ class AOETLGalvos(QtCore.QObject):
         if case == 'STAIRS':
             self.etl_l_waveform = calibrated_etl_stairs(left_slope, left_intercept,###
                                              right_slope, right_intercept, ###
+                                             etl_step=self.parameters["etl_step"], ###
                                              amplitude = self.parameters["etl_l_amplitude"], 
                                              number_of_steps = self.number_of_steps, 
                                              number_of_samples = self.number_of_samples, 
@@ -291,6 +292,7 @@ class AOETLGalvos(QtCore.QObject):
             
             self.etl_r_waveform = calibrated_etl_stairs(left_slope, left_intercept,###
                                              right_slope, right_intercept, ###
+                                             etl_step=self.parameters["etl_step"], ###
                                              amplitude = self.parameters["etl_r_amplitude"], 
                                              number_of_steps = self.number_of_steps, 
                                              number_of_samples = self.number_of_samples, 

@@ -146,16 +146,15 @@ def etl_stairs(amplitude, number_of_steps, number_of_samples, samples_per_step, 
     return np.array(array)
 
 ###
-def calibrated_etl_stairs(left_slope, left_intercept, right_slope, right_intercept, amplitude, number_of_steps, number_of_samples, samples_per_step, offset, direction):
+def calibrated_etl_stairs(left_slope, left_intercept, right_slope, right_intercept, etl_step, amplitude, number_of_steps, number_of_samples, samples_per_step, offset, direction):
     '''Step function. The stairs are defined to be upwards or downwards depending 
        on the ETL.
     
        Later, stepAmplitude will be define by the ETL focus position as a function of the voltage applied
        Each ETL may have a different relation to the voltage applied'''
     if number_of_steps !=1:
-        #step_amplitude = amplitude/(number_of_steps-1) ###
-        step_column = 2560/(number_of_steps-1) ###
-        #step_column=etl_step
+        #step_column = 2560/(number_of_steps-1) ###
+        step_column=etl_step
     
         print('Step column: ' + str(step_column)) #debugging
         
@@ -164,22 +163,22 @@ def calibrated_etl_stairs(left_slope, left_intercept, right_slope, right_interce
         if direction == 'UP':
             for i in range(int(number_of_steps)):
                 if i == int(number_of_steps-1): #Last loop, deals with a shorter step (in case ETL step is not a multiple of the number of columns)
+                    print('last')
                     samples_left = number_of_samples-(i*samples_per_step)
-                    #step_value = i*step_amplitude*np.ones(int(samples_left))###
+                    print('samples_left:'+ str(samples_left))#debugging
                     column_value = i*step_column*np.ones(int(samples_left))###
                     print('left column_value:'+ str(column_value))#debugging
                     step_value = left_slope * column_value + left_intercept###
-                    step_value = np.where(step_value > 5, 5, step_value)###
-                    step_value = np.where(step_value < 0, 0, step_value)###
+                    step_value = np.where(step_value > 5, 5, step_value)
+                    step_value = np.where(step_value < 0, 0, step_value)
                     print('left step_value:'+str(step_value))#debugging
                     array[i*int(samples_per_step):i*int(samples_per_step)+int(samples_left)] = step_value
                 else:
-                    #step_value = i*step_amplitude*np.ones(int(samples_per_step))###
                     column_value = i*step_column*np.ones(int(samples_per_step))###
                     print('left column_value:'+ str(column_value))#debugging
                     step_value = left_slope * column_value + left_intercept###
-                    step_value = np.where(step_value > 5, 5, step_value)###
-                    step_value = np.where(step_value < 0, 0, step_value)###
+                    step_value = np.where(step_value > 5, 5, step_value)
+                    step_value = np.where(step_value < 0, 0, step_value)
                     print('left step_value:'+str(step_value))#debugging
                     array[i*int(samples_per_step):i*int(samples_per_step)+int(samples_per_step)] = step_value
         
@@ -187,21 +186,19 @@ def calibrated_etl_stairs(left_slope, left_intercept, right_slope, right_interce
             for i in range(int(number_of_steps)):
                 if i == int(number_of_steps-1): #Last loop, deals with a shorter step (in case ETL step is not a multiple of the number of columns)
                     samples_left = number_of_samples-(i*samples_per_step)
-                    #step_value = (number_of_steps-1-i)*step_amplitude*np.ones(int(samples_left))###
                     column_value = (number_of_steps-1-i)*step_column*np.ones(int(samples_left))###
                     print('right column_value:'+ str(column_value))#debugging
                     step_value = right_slope * column_value + right_intercept###
-                    step_value = np.where(step_value > 5, 5, step_value)###
-                    step_value = np.where(step_value < 0, 0, step_value)###
+                    step_value = np.where(step_value > 5, 5, step_value)
+                    step_value = np.where(step_value < 0, 0, step_value)
                     print('right step_value:'+str(step_value))#debugging
                     array[i*int(samples_per_step):i*int(samples_per_step)+int(samples_left)] = step_value
                 else:
-                    #step_value = (number_of_steps-1-i)*step_amplitude*np.ones(int(samples_per_step))###
                     column_value = (number_of_steps-1-i)*step_column*np.ones(int(samples_per_step))###
                     print('right column_value:'+ str(column_value))#debugging
                     step_value = right_slope * column_value + right_intercept###
-                    step_value = np.where(step_value > 5, 5, step_value)###
-                    step_value = np.where(step_value < 0, 0, step_value)###
+                    step_value = np.where(step_value > 5, 5, step_value)
+                    step_value = np.where(step_value < 0, 0, step_value)
                     print('right step_value:'+str(step_value))#debugging
                     array[i*int(samples_per_step):i*int(samples_per_step)+int(samples_per_step)] = step_value
         
