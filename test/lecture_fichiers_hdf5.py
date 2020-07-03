@@ -5,14 +5,14 @@ import h5py
 '''HDF5 files'''
 
 datas=[]
-for i in range(1,30):
+for i in range(2,3):
     if i in range(1,10):
-        nomFichier=(r'C:\Users\liomlight\Desktop\test_etl\test_singleImage_plane_0000'+str(i)+'.hdf5')
-    elif i in range(11,100):
-        nomFichier=(r'C:\Users\liomlight\Desktop\test\test_singleImage_plane_000'+str(i)+'.hdf5')
-    elif i in range(101,1000):
+        nomFichier=(r'C:\Users\liomlight\Desktop\test_sleep\test_singleImage_plane_0000'+str(i)+'.hdf5')
+    if i in range(11,100):
+        nomFichier=(r'C:\Users\liomlight\Desktop\single_image\test_singleImage_plane_000'+str(i)+'.hdf5')
+    if i in range(101,1000):
         nomFichier=(r'C:\Users\liomlight\Desktop\test7\test10003_stack_plane_00'+str(i)+'.hdf5')
-    elif i in range(1001,10000):
+    if i in range(1001,10000):
         nomFichier=(r'C:\Users\liomlight\Desktop\test7\test10003_stack_plane_0'+str(i)+'.hdf5')     
     print(nomFichier)
     with h5py.File(nomFichier, "r") as f:
@@ -20,10 +20,14 @@ for i in range(1,30):
             key = list(f.keys())[i]
             group = f[key]
             data=group[()]
-            if np.average(data)<=100:
-                print('-Erreur')
-            else:
-                print('ok')
+            
+            #if np.average(data)<=100:
+            #    print('-Erreur')
+            #else:
+            #    print('ok')
+            print(key)
+            plt.imshow(np.log(np.abs(data)+1),cmap='gray')
+            plt.show()
         print('Plan '+nomFichier+' terminé')
         
         #print("Keys: %s" % f.keys())
@@ -34,8 +38,8 @@ for i in range(1,30):
         #data=group[()] #extraire les données
         #print(data)
         
-        plt.imshow(data)
-        plt.show()
+        #plt.imshow(data)
+        #plt.show()
         
         #a_data_key = list(group.keys())[0]
         #data=group[a_data_key]

@@ -50,7 +50,7 @@ def camera_digital_output_signal(samples_per_half_period, t_start_exp, samplerat
     return np.array(array)
 
 
-def camera_live_mode_waveform(samples_per_half_period, t_start_exp, samplerate, samples_per_half_delay, number_of_samples):
+def camera_live_mode_waveform(samples_per_half_period, t_start_exp, samplerate, samples_per_half_delay, number_of_samples): ###pas utilisé
     '''Not in use anymore, was useful for calibrating purposes, kept for reference'''
     
     samples_per_exposition = samples_per_half_period
@@ -64,7 +64,7 @@ def camera_live_mode_waveform(samples_per_half_period, t_start_exp, samplerate, 
     
     return np.array(array)
 
-def digital_output_signal(
+def digital_output_signal( ###pas utilisé
     samplerate = 100000,    # in samples/second
     sweeptime = 0.4,        # in seconds
     delay = 7.5,            # in percent
@@ -98,7 +98,7 @@ def digital_output_signal(
     
     return np.array(array)
 
-def etl_live_mode_waveform(amplitude, number_of_samples):
+def etl_live_mode_waveform(amplitude, number_of_samples): ###pas utilisé
     '''Not in use anymore, was useful for calibrating purposes, kept for reference'''
     
     array = amplitude*np.ones((int(number_of_samples)))
@@ -213,7 +213,7 @@ def calibrated_etl_stairs(left_slope, left_intercept, right_slope, right_interce
     return np.array(array)
 
 
-def galvo_live_mode_waveform(amplitude, samples_per_half_period, samples_per_delay, number_of_samples, samples_per_half_delay, offset):
+def galvo_live_mode_waveform(amplitude, samples_per_half_period, samples_per_delay, number_of_samples, samples_per_half_delay, offset): ###pas utilisé
     '''Not in use anymore, was useful for calibrating purposes, kept for reference'''
     
     if amplitude !=0:
@@ -297,7 +297,7 @@ def galvo_trapeze(amplitude, samples_per_half_period, samples_per_delay, number_
     
     return np.array(array)
 
-def laser_signal(
+def laser_signal( ###Pas utilisé
             samplerate = 100000,    # in samples/second
             sweeptime = 0.4,        # in seconds
             voltage = 0.9           # in volts
@@ -309,7 +309,7 @@ def laser_signal(
     
     return np.array(array)
 
-def sawtooth(
+def sawtooth( ###Pas utilisé
     samplerate = 100000,    # in samples/second
     sweeptime = 0.4,        # in seconds
     frequency = 10,         # in Hz
@@ -337,7 +337,7 @@ def sawtooth(
 
     return waveform
 
-def single_pulse(
+def single_pulse( ###Pas utilisé
     samplerate=100000,  # in samples/second
     sweeptime=0.4,      # in seconds
     delay=10,           # in percent
@@ -379,7 +379,7 @@ def single_pulse(
     array[pulsedelaysamples:pulsesamples+pulsedelaysamples] = amplitude
     return np.array(array)
 
-def square(
+def square( ###Pas utilisé
     samplerate = 100000,    # in samples/second
     sweeptime = 0.4,        # in seconds
     frequency = 10,         # in Hz
@@ -403,7 +403,7 @@ def square(
 
     return waveform
 
-def tunable_lens_ramp(
+def tunable_lens_ramp( ###Pas utilisé
     samplerate = 100000,    # in samples/second
     sweeptime = 0.4,        # in seconds
     delay = 7.5,            # in percent
