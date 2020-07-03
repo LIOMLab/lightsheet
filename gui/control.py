@@ -41,41 +41,36 @@ import posixpath
 import datetime
 
 parameters = dict()
-#parameters = src.config.parameters ###
+modifiable_parameters = list(["etl_l_amplitude","etl_r_amplitude",
+    "etl_l_offset","etl_r_offset","galvo_l_amplitude","galvo_r_amplitude",
+    "galvo_l_offset","galvo_r_offset","galvo_l_frequency","galvo_r_frequency",
+    "samplerate"])
+
 '''Read modifiable parameters from configuration file'''
 with open(r"C:\git-projects\lightsheet\src\configuration.txt") as file:
-    parameters["etl_l_amplitude"] = float(file.readline())
-    parameters["etl_r_amplitude"] = float(file.readline())
-    parameters["etl_l_offset"] = float(file.readline())
-    parameters["etl_r_offset"] = float(file.readline())
-    parameters["galvo_l_amplitude"] = float(file.readline())
-    parameters["galvo_r_amplitude"] = float(file.readline())
-    parameters["galvo_l_offset"] = float(file.readline())
-    parameters["galvo_r_offset"] = float(file.readline())
-    parameters["galvo_l_frequency"] = float(file.readline())
-    parameters["galvo_r_frequency"] = float(file.readline())
-    parameters["samplerate"] = float(file.readline())
+    for param_string in modifiable_parameters:
+        parameters[param_string] = float(file.readline())
 
 '''Default parameters'''
-#parameters = dict()
 parameters["sample_name"]='No Sample Name'
 parameters["samplerate"]=40000          # In samples/seconds
-parameters["sweeptime"]=0.4             # In seconds
 parameters["galvo_l_frequency"]=100     # In Hertz
 parameters["galvo_l_amplitude"]=6.5 #2       # In Volts
 parameters["galvo_l_offset"]=-3         # In Volts
 parameters["galvo_r_frequency"]=100     # In Hertz
 parameters["galvo_r_amplitude"]=6.5 #2       # In Volts
-parameters["galvo_r_offset"]=-3         # In Volts
+parameters["galvo_r_offset"]=-2.9         # In Volts
 parameters["etl_l_amplitude"]=2         # In Volts
 parameters["etl_l_offset"]=0            # In Volts
 parameters["etl_r_amplitude"]=2         # In Volts
 parameters["etl_r_offset"]=0            # In Volts
 parameters["laser_l_voltage"]=0.905#1.3      # In Volts
 parameters["laser_r_voltage"]=0.935     # In Volts
+
+parameters["sweeptime"]=0.4             # In seconds
 parameters["columns"] = 2560            # In pixels
 parameters["rows"] = 2160               # In pixels 
-parameters["etl_step"] = 100#50            # In pixels
+parameters["etl_step"] = 400#100            # In pixels
 parameters["camera_delay"] = 10         # In %
 parameters["min_t_delay"] = 0.0354404   # In seconds
 parameters["t_start_exp"] = 0.017712    # In seconds
@@ -86,15 +81,18 @@ terminals["galvos_etls"] = '/Dev1/ao0:3'
 terminals["camera"]='/Dev1/port0/line1'
 terminals["lasers"]='/Dev7/ao0:1'
 
-#SATURATED_PIXELS = []#np.empty((0,2))
+
 '''Math functions'''
 def gaussian(x,a,x0,sigma):
+    '''Gaussian Function'''
     return a*np.exp(-(x-x0)**2/(2*sigma**2))
 
-def func(x, w0, x0, xR, offset): #Gaussian beam radium
+def func(x, w0, x0, xR, offset):
+    '''Gaussian Beam Width Function'''
     return w0 * (1+((x-x0)/xR)**2)**0.5 + offset
 
-def fwhm(y): #Full width at half maximum
+def fwhm(y):
+    '''Full width at half maximum'''
     max_y = max(y)  # Find the maximum y value
     xs = [x for x in range(len(y)) if y[x] > max_y/2.0]
     fwhm_val = max(xs) - min(xs) + 1
@@ -109,10 +107,6 @@ class Controller(QWidget):
     
     def __init__(self):
         QWidget.__init__(self)
-        
-        self.current_horizontal_position=0 ###nécessaire?
-        self.current_vertical_position=0
-        self.current_camera_position=0
         
         ###Test
         self.left_slope = -0.001282893174259485
@@ -150,7 +144,7 @@ class Controller(QWidget):
         self.horizontal_forward_boundary_selected = False
         self.horizontal_backward_boundary_selected = False
         self.focus_selected = False
-        self.etls_calibrated = False#True##False
+        self.etls_calibrated = True#False###True
         
         '''Instantiating the camera window where the frames are displayed'''
         self.camera_window = CameraWindow()
@@ -249,8 +243,8 @@ class Controller(QWidget):
         self.pushButton_leftLaserOff.clicked.connect(self.deactivate_left_laser)
         self.pushButton_rightLaserOn.clicked.connect(self.activate_right_laser)
         self.pushButton_rightLaserOff.clicked.connect(self.deactivate_right_laser)
-        self.horizontalSlider_leftLaser.sliderReleased.connect(self.update_left_laser)
-        self.horizontalSlider_rightLaser.sliderReleased.connect(self.update_right_laser)
+        self.horizontalSlider_leftLaser.sliderReleased.connect(self.update_left_laser) ###slider plus utilisé
+        self.horizontalSlider_rightLaser.sliderReleased.connect(self.update_right_laser) ###slider plus utilisé
     
     def initialize_widgets(self):
         '''Initializes the properties of the widgets that are not updated by a 
@@ -270,24 +264,18 @@ class Controller(QWidget):
         self.pushButton_calculateFocus.setEnabled(False)
         self.pushButton_showInterpolation.setEnabled(True) ###changer pour false
         
+        '''Arbitrary default positions (in micro-steps)'''
         self.horizontal_forward_boundary = 428346 ###533333.3333  #Maximum motor position, in micro-steps
         self.horizontal_backward_boundary = 375853 ###0           #Mimimum motor position, in micro-steps
+        self.origin_horizontal = self.horizontal_forward_boundary
+        self.origin_vertical = self.motor_vertical.position_to_data(1.0, 'cm') ###
         
         self.vertical_up_boundary = 1060000.6667        #Maximum motor position, in micro-steps
         self.vertical_down_boundary = 0                 #Mimimum motor position, in micro-steps
         
         self.camera_forward_boundary = 500000           #Maximum motor position, in micro-steps ###À adapter selon le nouveau porte-cuvette
         self.camera_backward_boundary = 0               #Mimimum motor position, in micro-steps
-        
         self.focus = 265000     #Default focus position ###Possiblement à changer
-        
-        self.last_horizontal_position = self.motor_horizontal.current_position('\u03BCStep')
-        self.last_vertical_position = self.motor_vertical.current_position('\u03BCStep')
-        self.last_camera_position = self.motor_camera.current_position('\u03BCStep')
-        
-        '''Arbitrary origin positions (in micro-steps)'''
-        self.origin_horizontal = self.horizontal_forward_boundary
-        self.origin_vertical = self.motor_vertical.position_to_data(1.0, 'cm') ###
         
         '''--Modes' related widgets--'''
         '''Disable some buttons'''
@@ -297,6 +285,7 @@ class Controller(QWidget):
         self.pushButton_stopPreviewMode.setEnabled(False)
         self.pushButton_standbyOff.setEnabled(False)
         self.pushButton_cancelCalibrateCamera.setEnabled(False)
+        self.pushButton_stopEtlsGalvosCalibration.setEnabled(False)
         
         self.checkBox_setStartPoint.setEnabled(False)
         self.checkBox_setEndPoint.setEnabled(False)
@@ -409,6 +398,7 @@ class Controller(QWidget):
         self.label_leftLaserVoltage.setText('{} {}'.format(parameters["laser_l_voltage"], 'V'))
         self.label_rightLaserVoltage.setText('{} {}'.format(parameters["laser_r_voltage"], 'V'))
         
+        ###slider plus utilisé
         '''Initialize sliders
            Note: QSlider only takes integers, the integers are 10x the voltage
            QSlider range is [0,25], voltage range is [0, 2.5]
@@ -430,12 +420,9 @@ class Controller(QWidget):
     
     '''General Methods'''
     
-    def closeEvent(self, event):
-        '''Making sure that everything is closed when the user exits the software.
-           This function executes automatically when the user closes the UI.
-           This is an intrinsic function name of Qt, don't change the name even 
-           if it doesn't follow the naming convention'''
-        
+    def close_modes(self):
+        '''Close all modes if they are active'''
+
         if self.laser_on == True:
             self.stop_lasers()
         if self.preview_mode_started == True:
@@ -444,15 +431,23 @@ class Controller(QWidget):
             self.stop_live_mode()
         if self.stack_mode_started == True:
             self.stop_stack_mode()
-        if self.camera_on == True:
-            self.close_camera()
         if self.standby == True:
             self.stop_standby()
         if self.camera_calibration_started == True:
             self.stop_calibrate_camera()
         if self.etls_calibration_started == True:
             self.stop_calibrate_etls()
-            
+    
+    def closeEvent(self, event):
+        '''Making sure that everything is closed when the user exits the software.
+           This function executes automatically when the user closes the UI.
+           This is an intrinsic function name of Qt, don't change the name even 
+           if it doesn't follow the naming convention'''
+        
+        self.close_modes()
+        if self.camera_on == True:
+            self.close_camera()
+        
         event.accept()
     
     def open_camera(self):
@@ -478,7 +473,7 @@ class Controller(QWidget):
         
         self.consumers.append(consumer)
         self.consumers.append(wait)             ###Pas implémenté
-        self.consumers.append(consumer_type)    ###Nom
+        self.consumers.append(consumer_type)    
         self.consumers.append(update_flag)      ###Pas implémenté
     
     
@@ -584,31 +579,37 @@ class Controller(QWidget):
         self.update_position_horizontal()
         self.update_position_camera()
     
-    def convert_position_horizontal(self):
-        '''Converts a horizontal sample position displayed'''
-        #####
-        
-        
+    def return_current_horizontal_position(self):
+        '''Returns the current horizontal position with respect to the choice of axis'''
+        return -self.motor_horizontal.current_position(self.unit)+self.horizontal_correction #Minus sign and correction to fit choice of axis
+    
+    def return_current_vertical_position(self):
+        '''Returns the current vertical position with respect to the choice of axis'''
+        return -self.motor_vertical.current_position(self.unit)+self.vertical_correction #Minus sign and correction to fit choice of axis
+    
+    def return_current_camera_position(self):
+        '''Returns the current camera position with respect to the choice of axis'''
+        return -self.motor_camera.current_position(self.unit)+self.camera_correction #Minus sign and correction to fit choice of axis
+    
+
     def update_position_horizontal(self):
         '''Updates the current horizontal sample position displayed'''
         
-        self.current_horizontal_position = round(-self.motor_horizontal.current_position(self.unit)+self.horizontal_correction,self.decimals) #Minus sign and correction to fit choice of axis
-        self.current_horizontal_position_text = "{} {}".format(self.current_horizontal_position, self.unit)
+        current_horizontal_position = round(self.return_current_horizontal_position(),self.decimals)
+        self.current_horizontal_position_text = "{} {}".format(current_horizontal_position, self.unit)
         self.label_currentHorizontalNumerical.setText(self.current_horizontal_position_text)
     
     def update_position_vertical(self):
         '''Updates the current vertical sample position displayed'''
         
-        self.current_vertical_position = round(-self.motor_vertical.current_position(self.unit)+self.vertical_correction,self.decimals) #Minus sign and correction to fit choice of axis
+        self.current_vertical_position = round(self.return_current_vertical_position(),self.decimals)
         self.current_vertical_position_text = "{} {}".format(self.current_vertical_position, self.unit)
         self.label_currentHeightNumerical.setText(self.current_vertical_position_text)
         
-        
     def update_position_camera(self):
         '''Updates the current (horizontal) camera position displayed'''
-        
 
-        self.current_camera_position = round(-self.motor_camera.current_position(self.unit)+self.camera_correction,self.decimals) #Minus sign and correction to fit choice of axis
+        self.current_camera_position = round(self.return_current_camera_position(),self.decimals)
         self.current_camera_position_text = "{} {}".format(self.current_camera_position, self.unit)
         self.label_currentCameraNumerical.setText(self.current_camera_position_text)
     
@@ -616,19 +617,23 @@ class Controller(QWidget):
     def move_to_horizontal_position(self):
         '''Moves the sample to a specified horizontal position'''
         
-        current_camera_position = -self.motor_camera.current_position(self.unit) + self.camera_correction #Minus sign and correction to fit choice of axis
+        if self.doubleSpinBox_choosePosition.value() >= self.horizontal_minimum_in_new_axis and self.doubleSpinBox_choosePosition.value() <= self.horizontal_maximum_in_new_axis:
             
-        if (current_camera_position - self.doubleSpinBox_choosePosition.value() >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camera
-            print ('Sample moving to horizontal position')
-            self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Sample moving to horizontal position')
+            if (self.return_current_camera_position() - self.doubleSpinBox_choosePosition.value() >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camera
+                print ('Sample moving to horizontal position')
+                self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Sample moving to horizontal position')
+                
+                horizontal_position = -self.doubleSpinBox_choosePosition.value()+self.horizontal_correction
+                self.motor_horizontal.move_absolute_position(horizontal_position,self.unit)
             
-            horizontal_position = -self.doubleSpinBox_choosePosition.value()+self.horizontal_correction
-            self.motor_horizontal.move_absolute_position(horizontal_position,self.unit)
-        
-            self.update_position_horizontal()
+                self.update_position_horizontal()
+            else:
+                print('Camera prevents sample movement')
+                self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Camera prevents sample movement')
+            
         else:
-            print('Camera prevents sample movement')
-            self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Camera prevents sample movement')
+            print('Out Of Boundaries')
+            self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Out of boundaries')
     
     def move_to_vertical_position(self):
         '''Moves the sample to a specified vertical position'''
@@ -644,9 +649,7 @@ class Controller(QWidget):
     def move_camera_to_position(self):
         '''Moves the sample to a specified vertical position'''
         
-        current_horizontal_position = -self.motor_horizontal.current_position(self.unit) + self.horizontal_correction #Minus sign and correction to fit choice of axis
-            
-        if (self.doubleSpinBox_chooseCamera.value() - current_horizontal_position >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camera
+        if (self.doubleSpinBox_chooseCamera.value() - self.return_current_horizontal_position() >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camera
             print ('Camera moving to position')
             self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Camera moving to position')
             
@@ -679,10 +682,9 @@ class Controller(QWidget):
         
         if self.motor_camera.current_position(self.unit) + self.doubleSpinBox_incrementCamera.value() <= self.camera_maximum_in_old_axis:
             
-            current_horizontal_position = -self.motor_horizontal.current_position(self.unit) + self.horizontal_correction
             next_camera_position = -(self.motor_camera.current_position(self.unit)+self.doubleSpinBox_incrementCamera.value()) + self.camera_correction
             
-            if (next_camera_position - current_horizontal_position >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camea
+            if (next_camera_position - self.return_current_horizontal_position() >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camea
                 print ('Camera moving forward')
                 self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Camera moving forward')
                 self.motor_camera.move_relative_position(self.doubleSpinBox_incrementCamera.value(),self.unit)
@@ -712,10 +714,9 @@ class Controller(QWidget):
                 
                 self.motor_camera.move_absolute_position(self.camera_maximum_in_old_axis,self.unit)
             else:
-                current_horizontal_position = -self.motor_horizontal.current_position(self.unit) + self.horizontal_correction
                 next_camera_position = -self.motor_camera.data_to_position(self.focus, self.unit) + self.camera_correction
                 
-                if (next_camera_position - current_horizontal_position >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camea
+                if (next_camera_position - self.return_current_horizontal_position() >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camea
                     print('Moving to focus')
                     self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Moving to focus')
                     
@@ -768,10 +769,9 @@ class Controller(QWidget):
         
         if self.motor_horizontal.current_position(self.unit) - self.doubleSpinBox_incrementHorizontal.value() >= self.horizontal_minimum_in_old_axis:
             
-            current_camera_position = -self.motor_camera.current_position(self.unit) + self.camera_correction
             next_horizontal_position = -(self.motor_horizontal.current_position(self.unit)-self.doubleSpinBox_incrementHorizontal.value()) + self.horizontal_correction
             
-            if (current_camera_position - next_horizontal_position >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camea
+            if (self.return_current_camera_position() - next_horizontal_position >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camea
                 print ('Sample moving backward')
                 self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Sample moving backward')
                 
@@ -812,10 +812,9 @@ class Controller(QWidget):
         origin_horizontal_current_unit = self.motor_horizontal.data_to_position(self.origin_horizontal, self.unit)
         if origin_horizontal_current_unit >= self.horizontal_minimum_in_old_axis and origin_horizontal_current_unit <= self.horizontal_maximum_in_old_axis:
             
-            current_camera_position = -self.motor_camera.current_position(self.unit) + self.camera_correction
             next_horizontal_position = -origin_horizontal_current_unit + self.horizontal_correction
             
-            if (current_camera_position - next_horizontal_position >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camea
+            if (self.return_current_camera_position() - next_horizontal_position >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camea
                 '''Moving sample to horizontal origin'''
                 self.motor_horizontal.move_absolute_position(self.origin_horizontal,'\u03BCStep')
                 self.update_position_horizontal()
@@ -901,23 +900,11 @@ class Controller(QWidget):
     def calculate_camera_focus(self):
         '''Interpolates the camera focus position'''
         
-        ##x = self.camera_focus_relation[:,0]
-        ##y = self.camera_focus_relation[:,1]
-        
-        #tck = interpolate.splrep(x,y) #tck is a tuple (t,c,k) containing the vector of knots, the B-spline coefficients, and the degree of the spline
-        ##f = interpolate.interp1d(x, y, kind='quadratic', fill_value='extrapolate')
         current_position = -self.motor_horizontal.current_position(self.unit) + self.horizontal_correction
-        ###focus_interpolation = interpolate.splev(current_position,tck) ###Arranger interpolation
-        ##focus_interpolation = f(current_position)
         focus_regression = self.slope_camera * current_position + self.intercept_camera
-        print('focus_regression:'+str(focus_regression)) #debugging
         self.focus = self.motor_camera.position_to_data(-focus_regression+self.camera_correction, self.unit)#self.motor_camera.position_to_data(-focus_interpolation+self.camera_correction, self.unit)
-        
-        ###print('interpolation_coefficients:') #debugging
-        ###print(tck)
+        print('focus_regression:'+str(focus_regression)) #debugging
         print('focus:'+str(self.focus)) #debugging
-        ###print(focus_interpolation)
-        print(round(-self.motor_camera.data_to_position(self.focus, self.unit)+self.camera_correction, self.decimals))
         
         self.focus_selected = True
         
@@ -930,58 +917,79 @@ class Controller(QWidget):
         x = self.camera_focus_relation[:,0]
         y = self.camera_focus_relation[:,1]
         
+        '''Calculatinf linear regression'''
         xnew = np.linspace(self.camera_focus_relation[0,0], self.camera_focus_relation[-1,0], 1000) ###1000 points
-        f = interpolate.interp1d(x, y, kind='quadratic', fill_value='extrapolate') ###enlever
-        ynew = f(xnew) ###enlever
         self.slope_camera, self.intercept_camera, r_value, p_value, std_err = stats.linregress(x, y)
-        print('r_value:'+str(r_value)) #debugging
-        print('p_value:'+str(p_value)) #debugging
-        print('std_err:'+str(std_err)) #debugging
+        #print('r_value:'+str(r_value)) #debugging
+        #print('p_value:'+str(p_value)) #debugging
+        #print('std_err:'+str(std_err)) #debugging
         yreg = self.slope_camera * xnew + self.intercept_camera
         
-        '''Showing interpolation graph'''
-        plt.figure(1)
-        plt.title('Camera Focus Interpolation') 
-        plt.xlabel('Sample Horizontal Position ({})'.format(self.unit)) 
-        plt.ylabel('Camera Position ({})'.format(self.unit))
-        
+        '''Setting colormap'''
         xstart = -self.motor_horizontal.data_to_position(self.horizontal_forward_boundary, 'mm') + self.horizontal_correction
         xend = -self.motor_horizontal.data_to_position(self.horizontal_backward_boundary, 'mm') + self.horizontal_correction
-        #plt.xticks(np.linspace(xstart, xend, self.number_of_calibration_planes))
         ystart = -self.motor_camera.data_to_position(self.focus_forward_boundary, 'mm') + self.camera_correction
         yend = -self.motor_camera.data_to_position(self.focus_backward_boundary, 'mm') + self.camera_correction
-        #plt.yticks(np.linspace(ystart, yend, self.number_of_camera_positions))
         transp = copy.deepcopy(self.donnees)
         for q in range(int(self.number_of_calibration_planes)):
             transp[q,:] = np.flip(transp[q,:])
         transp = np.transpose(transp)
-        plt.imshow(transp, cmap='gray', extent=[xstart,xend, ystart,yend])
-        #
-        #plt.xticks(None)
-        #plt.yticks(None)
-        plt.plot(x, y, 'o')
-        plt.plot(xnew,ynew) ###enlever
-        plt.plot(xnew,yreg)
-        ###plt.plot(x,self.poscenters,'ro')
+
+        '''Showing interpolation graph'''
+        plt.figure(1)
+        plt.title('Camera Focus Regression') 
+        plt.xlabel('Sample Horizontal Position ({})'.format(self.unit)) 
+        plt.ylabel('Camera Position ({})'.format(self.unit))
+        plt.imshow(transp, cmap='gray', extent=[xstart,xend, ystart,yend]) #Colormap
+        plt.plot(x, y, 'o') #Raw data
+        plt.plot(xnew,yreg) #Linear regression
         plt.show(block=False)   #Prevents the plot from blocking the execution of the code...
         
-        n=int(self.number_of_camera_positions)#len(self.donnees)
+        #debugging
+        n=int(self.number_of_camera_positions)
         x=np.arange(n)
         for g in range(int(self.number_of_calibration_planes)):
             plt.figure(g+2)
             plt.plot(self.donnees[g,:])
             plt.plot(x,gaussian(x,*self.popt[g]),'ro:',label='fit')
             plt.show(block=False)
-            
-        self.calculate_camera_focus()####
     
     def show_etl_interpolation(self):
         '''Shows the etl focus interpolation'''
         
-        ##debugging
-        def func(x, w, x0, xR, offset):
-            return w * (1+((x-x0)/xR)**2)**0.5 + offset
+        xl = self.etl_l_relation[:,0]
+        yl = self.etl_l_relation[:,1]
+        #Left linear regression
+        xlnew = np.linspace(self.etl_l_relation[0,0], self.etl_l_relation[-1,0], 1000) ###1000 points
+        lslope, lintercept, r_value, p_value, std_err = stats.linregress(xl, yl)
+        print('r_value:'+str(r_value)) #debugging
+        print('p_value:'+str(p_value)) #debugging
+        print('std_err:'+str(std_err)) #debugging
+        ylnew = lslope * xlnew + lintercept
         
+        xr = self.etl_r_relation[:,0]
+        yr = self.etl_r_relation[:,1]
+        #Right linear regression
+        xrnew = np.linspace(self.etl_r_relation[0,0], self.etl_r_relation[-1,0], 1000) ###1000 points
+        rslope, rintercept, r_value, p_value, std_err = stats.linregress(xr, yr)
+        print('r_value:'+str(r_value)) #debugging
+        print('p_value:'+str(p_value)) #debugging
+        print('std_err:'+str(std_err)) #debugging
+        yrnew = rslope * xrnew + rintercept
+        
+        '''Showing interpolation graph'''
+        plt.figure(1)
+        plt.title('ETL Focus Regression') 
+        plt.xlabel('ETL Voltage (V)') 
+        plt.ylabel('Focal Point Horizontal Position (column)')
+        plt.plot(xl, yl, 'o', label='Left ETL') #Raw left data
+        plt.plot(xlnew,ylnew) #Left regression
+        plt.plot(xr, yr, 'o', label='Right ETL') #Raw right data
+        plt.plot(xrnew,yrnew) #Right regression
+        plt.legend()
+        plt.show(block=False)   #Prevents the plot from blocking the execution of the code...
+        
+        ##debugging
         plt.figure(0)
         plt.plot(self.xdata,self.ydata,'.')
         plt.plot(self.xdata, func(self.xdata, *self.popt), 'r-')
@@ -989,54 +997,13 @@ class Controller(QWidget):
         plt.ylabel('width') 
         plt.title('width vs. position') 
         plt.show(block=False)   #Prevents the plot from blocking the execution of the code...
-        ##
-        
-        '''Showing interpolation graph'''
-        plt.figure(1)
-        plt.title('ETL Focus Interpolation') 
-        plt.xlabel('ETL Voltage (V)') 
-        plt.ylabel('Focal Point Horizontal Position (column)')
-        
-        x = self.etl_l_relation[:,0]
-        y = self.etl_l_relation[:,1]
-        xnew = np.linspace(self.etl_l_relation[0,0], self.etl_l_relation[-1,0], 1000) ###1000 points
-        #f = interpolate.interp1d(x, y, kind='quadratic', fill_value='extrapolate')
-        #ynew = f(xnew)
-        plt.plot(x, y, 'o', label='Left ETL')
-        #plt.plot(xnew,ynew, label='Left ETL')
-        slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
-        ynew = slope * xnew + intercept
-        plt.plot(xnew,ynew, label='Left ETL')
-        ###
-        slope, intercept, r_value, p_value, std_err = stats.linregress(y, x)
-        print(intercept)
-        print(slope * 2559 + intercept)
-        
-        x = self.etl_r_relation[:,0]
-        y = self.etl_r_relation[:,1]
-        xnew = np.linspace(self.etl_r_relation[0,0], self.etl_r_relation[-1,0], 1000) ###1000 points
-        #f = interpolate.interp1d(x, y, kind='quadratic', fill_value='extrapolate')
-        #ynew = f(xnew)
-        plt.plot(x, y, 'o', label='Right ETL')
-        #plt.plot(xnew,ynew, label='Right ETL')
-        slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
-        ynew = slope * xnew + intercept
-        plt.plot(xnew,ynew, label='Right ETL')
-        ###
-        slope, intercept, r_value, p_value, std_err = stats.linregress(y, x)
-        print(intercept)
-        print(slope * 2559 + intercept)
-        
-        plt.legend()
-        plt.show(block=False)   #Prevents the plot from blocking the execution of the code...
-        
         
     '''Parameters Methods'''
     
     def back_to_default_parameters(self):
         '''Change all the modifiable parameters to go back to the initial state'''
         
-        self.parameters = copy.deepcopy(self.defaultParameters) ###Nécessaire?
+        self.parameters = copy.deepcopy(self.defaultParameters)
         
         self.doubleSpinBox_leftEtlAmplitude.setValue(self.parameters["etl_l_amplitude"])
         self.doubleSpinBox_rightEtlAmplitude.setValue(self.parameters["etl_r_amplitude"])
@@ -1053,17 +1020,17 @@ class Controller(QWidget):
     def change_default_parameters(self):
         '''Change all the default modifiable parameters to the current parameters'''
         
-        self.parameters["etl_l_amplitude"] = self.doubleSpinBox_leftEtlAmplitude.value()
-        self.parameters["etl_r_amplitude"] = self.doubleSpinBox_rightEtlAmplitude.value()
-        self.parameters["etl_l_offset"] = self.doubleSpinBox_leftEtlOffset.value()
-        self.parameters["etl_r_offset"] = self.doubleSpinBox_rightEtlOffset.value()
-        self.parameters["galvo_l_amplitude"] = self.doubleSpinBox_leftGalvoAmplitude.value()
-        self.parameters["galvo_r_amplitude"] = self.doubleSpinBox_rightGalvoAmplitude.value()
-        self.parameters["galvo_l_offset"] = self.doubleSpinBox_leftGalvoOffset.value()
-        self.parameters["galvo_r_offset"] = self.doubleSpinBox_rightGalvoOffset.value()
-        self.parameters["galvo_l_frequency"] = self.doubleSpinBox_leftGalvoFrequency.value()
-        self.parameters["galvo_r_frequency"] = self.doubleSpinBox_rightGalvoFrequency.value()
-        self.parameters["samplerate"] = self.doubleSpinBox_samplerate.value()
+        self.defaultParameters["etl_l_amplitude"] = self.doubleSpinBox_leftEtlAmplitude.value()
+        self.defaultParameters["etl_r_amplitude"] = self.doubleSpinBox_rightEtlAmplitude.value()
+        self.defaultParameters["etl_l_offset"] = self.doubleSpinBox_leftEtlOffset.value()
+        self.defaultParameters["etl_r_offset"] = self.doubleSpinBox_rightEtlOffset.value()
+        self.defaultParameters["galvo_l_amplitude"] = self.doubleSpinBox_leftGalvoAmplitude.value()
+        self.defaultParameters["galvo_r_amplitude"] = self.doubleSpinBox_rightGalvoAmplitude.value()
+        self.defaultParameters["galvo_l_offset"] = self.doubleSpinBox_leftGalvoOffset.value()
+        self.defaultParameters["galvo_r_offset"] = self.doubleSpinBox_rightGalvoOffset.value()
+        self.defaultParameters["galvo_l_frequency"] = self.doubleSpinBox_leftGalvoFrequency.value()
+        self.defaultParameters["galvo_r_frequency"] = self.doubleSpinBox_rightGalvoFrequency.value()
+        self.defaultParameters["samplerate"] = self.doubleSpinBox_samplerate.value()
         
     def save_default_parameters(self):
         '''Change all the default parameters of the configuration file to current default parameters'''
@@ -1310,15 +1277,8 @@ class Controller(QWidget):
         '''Closes the camera and initiates thread to keep ETLs'currents at 0A while
            the microscope is not in use'''
         
+        self.close_modes()
         self.standby = True
-        
-        '''Flags check up'''
-        if self.preview_mode_started == True:
-            self.stop_preview_mode()
-        if self.live_mode_started == True:
-            self.stop_live_mode()
-        if self.stack_mode_started == True:
-            self.stop_stack_mode()
         
         '''Close camera'''
         self.close_camera()
@@ -1334,6 +1294,8 @@ class Controller(QWidget):
         self.pushButton_stopPreviewMode.setEnabled(False)
         self.pushButton_standbyOn.setEnabled(False)
         self.pushButton_standbyOff.setEnabled(True)
+        self.pushButton_calibrateCamera.setEnabled(False)
+        self.pushButton_calibrateEtlsGalvos.setEnabled(False)
         
         print('Standby on')
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Standby on')
@@ -1371,6 +1333,8 @@ class Controller(QWidget):
         self.pushButton_startPreviewMode.setEnabled(True)
         self.pushButton_standbyOn.setEnabled(True)
         self.pushButton_standbyOff.setEnabled(False)
+        self.pushButton_calibrateCamera.setEnabled(True)
+        self.pushButton_calibrateEtlsGalvos.setEnabled(True)
         
         print('Standby off')
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Standby off')
@@ -1385,15 +1349,8 @@ class Controller(QWidget):
         '''Initializes variables for preview modes where beam and focal 
            positions are manually controlled by the user'''
         
+        self.close_modes()
         self.preview_mode_started = True
-        
-        '''Flags check up'''
-        if self.standby == True:
-            self.stop_standby()
-        if self.live_mode_started == True:
-            self.stop_live_mode()
-        if self.stack_mode_started == True:
-            self.stop_stack_mode()
         
         '''Modes disabling during preview_mode execution'''
         self.pushButton_getSingleImage.setEnabled(False)
@@ -1406,6 +1363,7 @@ class Controller(QWidget):
         self.pushButton_stopPreviewMode.setEnabled(True)
         self.pushButton_standbyOn.setEnabled(False)
         self.pushButton_calibrateCamera.setEnabled(False)
+        self.pushButton_calibrateEtlsGalvos.setEnabled(False)
         
         print('Preview mode started')
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Preview mode started')
@@ -1460,6 +1418,7 @@ class Controller(QWidget):
                     '''Retrieving image from camera and putting it in its queue
                        for display'''
                     frame = self.camera.retrieve_single_image()*1.0
+                    frame = np.transpose(frame)
                     try:
                         self.consumers[i].put(frame)
                     except self.consumers[i].Full:
@@ -1497,6 +1456,7 @@ class Controller(QWidget):
         self.pushButton_stopPreviewMode.setEnabled(False)
         self.pushButton_standbyOn.setEnabled(True)
         self.pushButton_calibrateCamera.setEnabled(True)
+        self.pushButton_calibrateEtlsGalvos.setEnabled(True)
         
         print('Preview mode stopped') 
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Preview mode stopped')
@@ -1512,15 +1472,8 @@ class Controller(QWidget):
            chosen parameters of the ramps which will be sent for single image 
            saving or volume saving (with stack_mode)'''
         
+        self.close_modes()
         self.live_mode_started = True
-        
-        '''Flags check up'''
-        if self.standby == True:
-            self.stop_standby()
-        if self.preview_mode_started == True:
-            self.stop_preview_mode()
-        if self.stack_mode_started == True:
-            self.stop_stack_mode()
         
         '''Disabling other modes while in live_mode'''
         self.pushButton_getSingleImage.setEnabled(False)
@@ -1533,6 +1486,7 @@ class Controller(QWidget):
         self.pushButton_stopPreviewMode.setEnabled(False)
         self.pushButton_standbyOn.setEnabled(False)
         self.pushButton_calibrateCamera.setEnabled(False)
+        self.pushButton_calibrateEtlsGalvos.setEnabled(False)
         
         print('Live mode started')
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Live mode started')
@@ -1541,7 +1495,7 @@ class Controller(QWidget):
         live_mode_thread = threading.Thread(target = self.live_mode_thread)
         live_mode_thread.start()
     
-    def live_mode_thread(self): ###utiliser get_single_image
+    def live_mode_thread(self):
         '''This thread allows the execution of live_mode while modifying
            parameters in the UI'''
         
@@ -1552,6 +1506,9 @@ class Controller(QWidget):
         self.camera.allocate_buffer()    
         self.camera.set_recording_state(1)
         self.camera.insert_buffers_in_queue()
+        
+        '''Moving the camera to focus'''
+        ###self.move_camera_to_focus() 
         
         '''Creating task for lasers'''
         self.lasers_task = nidaqmx.Task()
@@ -1597,6 +1554,7 @@ class Controller(QWidget):
                     frame[:,last_step:] = buffer[int(self.number_of_steps-1),:,last_step:]
                        
                     '''Frame display'''
+                    frame = np.transpose(frame)
                     for i in range(0, len(self.consumers), 4):
                         if self.consumers[i+2] == "CameraWindow":
                             try:
@@ -1625,6 +1583,7 @@ class Controller(QWidget):
         self.pushButton_startPreviewMode.setEnabled(True)
         self.pushButton_standbyOn.setEnabled(True)
         self.pushButton_calibrateCamera.setEnabled(True)
+        self.pushButton_calibrateEtlsGalvos.setEnabled(True)
         
         print('Live mode stopped')
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Live mode stopped')
@@ -1639,15 +1598,7 @@ class Controller(QWidget):
         '''Generates and display a single frame which can be saved afterwards 
         using self.save_single_image()'''
         
-        '''Flags check up'''
-        if self.standby == True:
-            self.stop_standby()
-        if self.preview_mode_started == True:
-            self.stop_preview_mode()
-        if self.live_mode_started == True:
-            self.stop_live_mode()
-        if self.stack_mode_started == True:
-            self.stop_stack_mode()
+        self.close_modes()
             
         '''Disabling modes while single frame acquisition'''
         self.pushButton_getSingleImage.setEnabled(False)
@@ -1657,6 +1608,8 @@ class Controller(QWidget):
         self.pushButton_stopStack.setEnabled(False)
         self.pushButton_startPreviewMode.setEnabled(False)
         self.pushButton_stopPreviewMode.setEnabled(False)
+        self.pushButton_calibrateCamera.setEnabled(False)
+        self.pushButton_calibrateEtlsGalvos.setEnabled(False)
         
         print('Getting single image')
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Getting single image')
@@ -1668,6 +1621,9 @@ class Controller(QWidget):
         self.camera.allocate_buffer()    
         self.camera.set_recording_state(1)
         self.camera.insert_buffers_in_queue()
+        
+        '''Moving the camera to focus'''
+        ###self.move_camera_to_focus()  
         
         '''Creating laser tasks'''
         self.lasers_task = nidaqmx.Task()
@@ -1708,6 +1664,7 @@ class Controller(QWidget):
         frame[:,last_step:] = self.buffer[int(self.number_of_steps-1),:,last_step:]
         
         '''Frame display'''
+        frame = np.transpose(frame)
         for i in range(0, len(self.consumers), 4):
             if self.consumers[i+2] == "CameraWindow":
                 try:
@@ -1736,6 +1693,8 @@ class Controller(QWidget):
         self.pushButton_startLiveMode.setEnabled(True)
         self.pushButton_startStack.setEnabled(True)
         self.pushButton_startPreviewMode.setEnabled(True)
+        self.pushButton_calibrateCamera.setEnabled(True)
+        self.pushButton_calibrateEtlsGalvos.setEnabled(True)
     
     def save_single_image(self):
         '''Saves the frame generated by self.get_single_image()'''
@@ -1806,13 +1765,7 @@ class Controller(QWidget):
         '''Initializes variables for volume saving which will take place in 
            self.stack_mode_thread afterwards'''
         
-        '''Flags check up'''
-        if self.standby == True:
-            self.stop_standby()
-        if self.preview_mode_started == True:
-            self.stop_preview_mode()
-        if self.live_mode_started == True:
-            self.stop_live_mode()
+        self.close_modes()
         
         '''Retrieving filename set by the user'''       
         self.filename = str(self.lineEdit_filename.text())
@@ -1853,6 +1806,8 @@ class Controller(QWidget):
             self.pushButton_startPreviewMode.setEnabled(False)
             self.pushButton_stopPreviewMode.setEnabled(False)
             self.pushButton_standbyOn.setEnabled(False)
+            self.pushButton_calibrateCamera.setEnabled(False)
+            self.pushButton_calibrateEtlsGalvos.setEnabled(False)
             
             print('Stack mode started -- Number of frames to save: '+str(self.number_of_planes))
             self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Stack mode started -- Number of frames to save: '+str(self.number_of_planes))
@@ -1915,6 +1870,8 @@ class Controller(QWidget):
         progress_increment = 100 // int(self.number_of_planes)
         self.progressBar_stackMode.setValue(0) #To reset progress bar
         
+        frame_list = []
+        
         for i in range(int(self.number_of_planes)):
             
             if self.stack_mode_started == False:
@@ -1928,8 +1885,7 @@ class Controller(QWidget):
                 self.motor_horizontal.move_absolute_position(position,'\u03BCm')  #Position in micro-meters
                 
                 '''Moving the camera to focus'''
-                ###self.calculate_camera_focus()
-                self.move_camera_to_focus()               
+                ###self.move_camera_to_focus()               
                 
                 '''Acquiring the frame '''
                 self.ramps.create_tasks(terminals,'FINITE')
@@ -1953,11 +1909,18 @@ class Controller(QWidget):
                 last_step = int(int(self.number_of_steps-1) * self.parameters['etl_step'])
                 frame[:,last_step:] = self.buffer[int(self.number_of_steps-1),:,last_step:]
                 
+                frame = np.transpose(frame)
+                
+                frame_list.append(frame.tolist())
+                frame3d = np.array(frame_list)
+                print('frame3d')
+                print(frame3d)
+                
                 '''Frame display and buffer saving'''
                 for ii in range(0, len(self.consumers), 4):
                     if self.consumers[ii+2] == 'CameraWindow':
                         try:
-                            self.consumers[ii].put(frame)
+                            self.consumers[ii].put(frame3d)
                             print('Frame put in CameraWindow')
                             self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Frame put in CameraWindow')
                         except:      #self.consumers[ii].Full:
@@ -2005,6 +1968,7 @@ class Controller(QWidget):
         self.pushButton_startPreviewMode.setEnabled(True)
         self.pushButton_standbyOn.setEnabled(True)
         self.pushButton_calibrateCamera.setEnabled(True)
+        self.pushButton_calibrateEtlsGalvos.setEnabled(True)
         
         print('Acquisition done')
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Acquisition done')
@@ -2021,18 +1985,8 @@ class Controller(QWidget):
     def start_calibrate_camera(self):
         '''Initiates camera calibration'''
         
+        self.close_modes()
         self.camera_calibration_started = True
-        
-        '''Flags check up'''
-        if self.standby == True:
-            self.stop_standby()
-        if self.preview_mode_started == True:
-            self.stop_preview_mode()
-        if self.live_mode_started == True:
-            self.stop_live_mode()
-        if self.stack_mode_started == True:
-            self.stop_stack_mode()
-       
        
         '''Modes disabling while stack acquisition'''
         self.pushButton_getSingleImage.setEnabled(False)
@@ -2047,6 +2001,7 @@ class Controller(QWidget):
         self.pushButton_standbyOff.setEnabled(False)
         self.pushButton_calibrateCamera.setEnabled(False)
         self.pushButton_cancelCalibrateCamera.setEnabled(True)
+        self.pushButton_calibrateEtlsGalvos.setEnabled(False)
             
         print('Camera calibration started')
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Camera calibration started')
@@ -2102,7 +2057,6 @@ class Controller(QWidget):
         metricvar=np.zeros((int(self.number_of_camera_positions)))
         self.donnees=np.zeros(((int(self.number_of_calibration_planes)),(int(self.number_of_camera_positions)))) #debugging
         self.popt = np.zeros((int(self.number_of_calibration_planes),3))    #debugging
-        self.poscenters = np.zeros((int(self.number_of_calibration_planes)))    #debugging
         
         for i in range(int(self.number_of_calibration_planes)): #For each sample position
             
@@ -2117,7 +2071,7 @@ class Controller(QWidget):
                 self.motor_horizontal.move_absolute_position(position,'\u03BCStep')
                 self.update_position_horizontal()
                 
-                '''Retrieving filename set by the user'''
+                '''Retrieving filename set by the user''' #debugging
                 self.filename = str(self.lineEdit_filename.text())
                 if self.saving_allowed and self.filename != '':
                     
@@ -2143,9 +2097,8 @@ class Controller(QWidget):
                     '''Moving camera position'''
                     position_camera = self.focus_forward_boundary - (j * camera_increment_length) #Increments of +camera_increment_length
                     self.motor_camera.move_absolute_position(position_camera,'\u03BCStep')
-                    time.sleep(0.5)###
+                    time.sleep(0.5) #To make sure the camera is at the right position
                     self.update_position_camera()
-                
                     
                     '''Writing waveform to task and running'''
                     self.ramps.create_tasks(terminals,'FINITE')
@@ -2158,6 +2111,8 @@ class Controller(QWidget):
                     #self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
                     self.buffer = self.camera.retrieve_single_image()*1.0
                     buffer_copy = copy.deepcopy(self.buffer)###
+                    buffer_copy = np.transpose(buffer_copy)
+                    buffer_copy_save = copy.deepcopy(self.buffer)###
                     
                     for ii in range(0, len(self.consumers), 4):
                         if self.consumers[ii+2] == "CameraWindow":
@@ -2186,9 +2141,9 @@ class Controller(QWidget):
                     #        except:      #self.consumers[i].Full:
                     #            print("Queue is full")   
                     #            self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Queue is full')
-                    buffer_copy_save = copy.deepcopy(self.buffer)###
+                    
 
-                    '''Retrieving filename set by the user'''
+                    '''Retrieving filename set by the user''' #debugging
                     self.frame_saver.set_motor_parameters(self.current_horizontal_position_text,self.current_vertical_position_text,self.current_camera_position_text)
                     if self.saving_allowed and self.filename != '':    
                         '''Saving frame'''
@@ -2204,7 +2159,7 @@ class Controller(QWidget):
                     self.ramps.stop_tasks()                             
                     self.ramps.close_tasks()
                 
-                if self.saving_allowed and self.filename != '':
+                if self.saving_allowed and self.filename != '': #debugging
                     '''Closing frame saver'''
                     self.frame_saver.stop_saving()
                     self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Image saved')
@@ -2227,20 +2182,20 @@ class Controller(QWidget):
                 popt,pcov = optimize.curve_fit(gaussian,x,metricvar,p0=[1,mean,sigma],bounds=(0, 'inf'), maxfev=10000)
                 
                 amp,center,variance=popt
-                self.popt[i] = popt#poscenter#popt
-                print('center:'+str(center))
-                print('amp:'+str(amp))
-                print('variance:'+str(variance))
+                self.popt[i] = popt
+                print('center:'+str(center)) #debugging
+                print('amp:'+str(amp)) #debugging
+                print('variance:'+str(variance)) #debugging
                 
                 '''Saving focus relation'''
                 self.camera_focus_relation[i,0] = -self.motor_horizontal.current_position(self.unit) + self.horizontal_correction
                 max_variance_camera_position = self.focus_forward_boundary - (center * camera_increment_length)
                 self.camera_focus_relation[i,1] = -self.motor_camera.data_to_position(max_variance_camera_position, self.unit) + self.camera_correction
                 
-            print('--Plan '+str(i)+' done') #debugging
+            print('--Calibration of plane '+str(i+1)+'/'+str(self.number_of_calibration_planes)+' done')
         
         print('relation:') #debugging
-        print(self.camera_focus_relation)
+        print(self.camera_focus_relation)#debugging
         
         '''Returning sample and camera at initial positions'''
         self.motor_horizontal.move_absolute_position(position_depart_sample,'\u03BCStep')
@@ -2257,9 +2212,9 @@ class Controller(QWidget):
         self.stop_lasers()
         self.both_lasers_activated = False
         
-        #'''Calculating focus'''
-        #if self.camera_calibration_started == True:
-        #    self.calculate_camera_focus()
+        '''Calculating focus'''
+        if self.camera_calibration_started == True: #To make sure calibration wasn't stopped before the end
+            self.calculate_camera_focus()
         
         print('Camera calibration done')
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Camera calibration done')
@@ -2269,11 +2224,14 @@ class Controller(QWidget):
         self.pushButton_startStack.setEnabled(True)
         self.pushButton_startLiveMode.setEnabled(True)
         self.pushButton_startPreviewMode.setEnabled(True)
-        self.pushButton_calibrateCamera.setEnabled(True)
         self.pushButton_standbyOn.setEnabled(True)
+        self.pushButton_calculateFocus.setEnabled(True)
+        self.pushButton_showInterpolation.setEnabled(True)
+        self.pushButton_calibrateCamera.setEnabled(True)
         self.pushButton_cancelCalibrateCamera.setEnabled(False)
         self.pushButton_calculateFocus.setEnabled(True)
         self.pushButton_showInterpolation.setEnabled(True)
+        self.pushButton_calibrateEtlsGalvos.setEnabled(True)
             
         self.camera_calibration_started = False
 
@@ -2286,18 +2244,8 @@ class Controller(QWidget):
     def start_calibrate_etls(self):
         '''Initiates etls-galvos calibration'''
         
+        self.close_modes()
         self.etls_calibration_started = True
-        
-        '''Flags check up'''
-        if self.standby == True:
-            self.stop_standby()
-        if self.preview_mode_started == True:
-            self.stop_preview_mode()
-        if self.live_mode_started == True:
-            self.stop_live_mode()
-        if self.stack_mode_started == True:
-            self.stop_stack_mode()
-        ###ajouter autres flags de calibration
        
         '''Modes disabling while stack acquisition'''
         self.pushButton_getSingleImage.setEnabled(False)
@@ -2312,6 +2260,8 @@ class Controller(QWidget):
         self.pushButton_standbyOff.setEnabled(False)
         self.pushButton_calibrateCamera.setEnabled(False)
         self.pushButton_cancelCalibrateCamera.setEnabled(True)
+        self.pushButton_calibrateEtlsGalvos.setEnabled(False)
+        self.pushButton_stopEtlsGalvosCalibration.setEnabled(True)
         
         print('ETL calibration started')
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Camera calibration started')
@@ -2339,7 +2289,7 @@ class Controller(QWidget):
         self.galvos_etls_task.ao_channels.add_ao_voltage_chan(terminals["galvos_etls"])
         
         '''Getting parameters'''
-        self.number_of_etls_points = 10 ###
+        self.number_of_etls_points = 20 ###
         self.number_of_etls_images = 10 ###
         
         self.etl_l_relation = np.zeros((int(self.number_of_etls_points),2))
@@ -2367,7 +2317,8 @@ class Controller(QWidget):
             
             self.camera.retrieve_single_image()*1.0 ###pour éviter images de bruit
             
-            for j in range(int(self.number_of_etls_points)): #For each interpolation point
+            #For each interpolation point
+            for j in range(int(self.number_of_etls_points)):
                 
                 if self.etls_calibration_started == False:
                     print('Calibration interrupted')
@@ -2380,8 +2331,8 @@ class Controller(QWidget):
                     left_etl_voltage = etl_min_voltage + (j * etl_increment_length) #Volts
                     
                     left_galvo_voltage = 0 #Volts
-                    right_galvo_voltage = 0 #Volts
-                        
+                    right_galvo_voltage = 0.1 #Volts
+                    
                     '''Writing the data'''
                     galvos_etls_waveforms = np.stack((np.array([right_galvo_voltage]),
                                                               np.array([left_galvo_voltage]),
@@ -2394,22 +2345,20 @@ class Controller(QWidget):
                     self.ramps.initialize()
                     self.number_of_steps = 1
                     self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5) #debugging
-                    self.save_single_image() # debugging
+                    self.save_single_image() #debugging
                     
                     ydatas = np.zeros((self.number_of_etls_images,128))  ##128=K
-                    for y in range(self.number_of_etls_images):
-                        '''Writing the data''' ###nécesssaire?
-                        galvos_etls_waveforms = np.stack((np.array([right_galvo_voltage]),
-                                                                  np.array([left_galvo_voltage]),
-                                                                  np.array([left_etl_voltage]),
-                                                                  np.array([right_etl_voltage])))
-                        self.galvos_etls_task.write(galvos_etls_waveforms, auto_start=True)
                     
+                    #For each image
+                    for y in range(self.number_of_etls_images):
+                        '''Retrieving image from camera and putting it in its queue
+                               for display'''
                         frame = self.camera.retrieve_single_image()*1.0
                         blurred_frame = ndimage.gaussian_filter(frame, sigma=20)
                         
-                        '''Retrieving image from camera and putting it in its queue
-                               for display'''
+                        frame = np.transpose(frame)
+                        blurred_frame = np.transpose(blurred_frame)
+                        
                         for ii in range(0, len(self.consumers), 4):
                             if self.consumers[ii+2] == "CameraWindow":
                                 #Initial frame
@@ -2426,10 +2375,8 @@ class Controller(QWidget):
                                     self.label_lastCommands.setText(self.label_lastCommands.text()+'\n Queue is full')
                         
                         '''Calculating focal point horizontal position'''
-                                              
                         #filtering image:
                         dset = blurred_frame
-                        
                         #reshape image to average over profiles:
                         height=dset.shape[0]
                         width=dset.shape[1]
@@ -2458,84 +2405,63 @@ class Controller(QWidget):
                         
                         ydatas[y,:] = signal.savgol_filter(ydata, 51, 3) # window size 51, polynomial order 3
                     
-                    
-                    good_rayleighRange = 0 ###arbitrary
-                    
+                    #Calculate fit for average of images
                     ydata=np.mean(ydatas,0)
-                    popt, pcov = optimize.curve_fit(func, xdata, ydata, maxfev=10000)
+                    popt, pcov = optimize.curve_fit(func, xdata, ydata, maxfev=10000) #,bounds=(0,'inf')
                     beamWidth,focusLocation,rayleighRange,offset = popt
                     
                     if focusLocation < 0:
                         focusLocation = 0
                     elif focusLocation > 2559:
                         focusLocation = 2559
-                    elif focusLocation >= 1200 and focusLocation <= 1350: #If the focus is in the center of the image
-                        good_rayleighRange = rayleighRange
-                        print('good_rayleighRange:'+str(good_rayleighRange))
-                    print('offset:'+str(int(offset)))
-                    print('beamWidth:'+str(int(beamWidth)))
-                    #min_width = int(func(focusLocation, *popt))##
-                    #print('min_width:'+str(min_width))
-                    print('focusLocation:'+str(int(focusLocation)))
-                    print('rayleighRange:'+str(rayleighRange))
+                    print('offset:'+str(int(offset))) #debugging
+                    print('beamWidth:'+str(int(beamWidth))) #debugging
+                    print('focusLocation:'+str(int(focusLocation))) #debugging
+                    print('rayleighRange:'+str(rayleighRange)) #debugging
                     
                     if j == int(self.number_of_etls_points)-1:###Pour afficher graphique 
                             self.xdata=xdata
                             self.ydata=ydata
                             self.popt=popt
                     
+                    '''Saving relations'''
                     if side == 'etl_l':
                         self.etl_l_relation[j,0] = left_etl_voltage
                         self.etl_l_relation[j,1] = int(focusLocation)
                     if side == 'etl_r':
                         self.etl_r_relation[j,0] = right_etl_voltage
                         self.etl_r_relation[j,1] = int(focusLocation)
-                    print(good_rayleighRange)
-                    if good_rayleighRange != 0:
-                        self.parameters["etl_step"] = 2*np.ceil(good_rayleighRange) #np.ceil(2560/(2*int(good_rayleighRange))) ###
-                    print('etl_step:'+str(self.parameters["etl_step"]))
-                    
                 
+                    print('--Calibration of plane '+str(j+1)+'/'+str(self.number_of_etls_points)+' for '+side+' done')
+            
+            '''Closing lasers after calibration of each side'''    
             self.left_laser_activated = False
             self.right_laser_activated = False
         
-        print(self.etl_l_relation)
-        print(self.etl_r_relation)
+        print(self.etl_l_relation) #debugging
+        print(self.etl_r_relation) #debugging
+        '''Calculating linear regressions'''
+        xl = self.etl_l_relation[:,0]
+        yl = self.etl_l_relation[:,1]
+        #Left linear regression
+        self.left_slope, self.left_intercept, r_value, p_value, std_err = stats.linregress(yl, xl)
+        print('r_value:'+str(r_value)) #debugging
+        print('p_value:'+str(p_value)) #debugging
+        print('std_err:'+str(std_err)) #debugging
+        print('left_slope:'+str(self.left_slope)) #debugging
+        print('left_intercept:'+str(self.left_intercept)) #debugging
+        print(self.left_slope * 2559 + self.left_intercept) #debugging
         
-        ###
-        print('left')
-        self.left_slope, self.left_intercept, r_value, p_value, std_err = stats.linregress(self.etl_l_relation[:,1], self.etl_l_relation[:,0])
-        print('r_value:'+str(r_value))
-        print('p_value:'+str(p_value))
-        print('std_err:'+str(std_err))
-        print('left_intercept'+str(self.left_intercept))
-        print('left_slope'+str(self.left_slope))
-        print(self.left_slope * 2559 + self.left_intercept)
-        
-        #print('limited')
-        #slope, intercept, r_value, p_value, std_err = stats.linregress(self.etl_l_relation[:5,0], self.etl_l_relation[:5,1])
-        #print(slope)
-        
-        print('right')
-        self.right_slope, self.right_intercept, r_value, p_value, std_err = stats.linregress(self.etl_r_relation[:,1], self.etl_r_relation[:,0])
-        print('r_value:'+str(r_value))
-        print('p_value:'+str(p_value))
-        print('std_err:'+str(std_err))
-        print('right_intercept'+str(self.right_intercept))
-        print('right_slope'+str(self.right_slope))
-        print(self.right_slope * 2559 + self.right_intercept)
-        
-        #print('limited')
-        #slope, intercept, r_value, p_value, std_err = stats.linregress(self.etl_r_relation[:5,0], self.etl_r_relation[:5,1])
-        #print(slope)
-        
-        #left_etl_interpolation = interpolate.interp1d(self.etl_l_relation[:,1], self.etl_l_relation[:,0], kind='quadratic', fill_value='extrapolate') ###
-        #print(left_etl_interpolation(1000))
-        #right_etl_interpolation = interpolate.interp1d(self.etl_r_relation[:,1], self.etl_r_relation[:,0], kind='quadratic', fill_value='extrapolate') ###
-        #print(right_etl_interpolation(1000))
-        
-        #print(left_etl_interpolation(2559))
-        #print(right_etl_interpolation(0))
+        xr = self.etl_r_relation[:,0]
+        yr = self.etl_r_relation[:,1]
+        #Right linear regression
+        self.right_slope, self.right_intercept, r_value, p_value, std_err = stats.linregress(yr, xr)
+        print('r_value:'+str(r_value)) #debugging
+        print('p_value:'+str(p_value)) #debugging
+        print('std_err:'+str(std_err)) #debugging
+        print('right_slope:'+str(self.right_slope)) #debugging
+        print('right_intercept:'+str(self.right_intercept)) #debugging
+        print(self.right_slope * 2559 + self.right_intercept) #debugging
         
         '''Stopping camera'''
         self.camera.cancel_images()
@@ -2563,6 +2489,7 @@ class Controller(QWidget):
         self.pushButton_cancelCalibrateCamera.setEnabled(False)
         self.pushButton_calculateFocus.setEnabled(True)
         self.pushButton_showInterpolation.setEnabled(True)
+        self.pushButton_calibrateEtlsGalvos.setEnabled(True)
             
         self.etls_calibration_started = False
         self.etls_calibrated = True
@@ -2599,6 +2526,14 @@ class CameraWindow(queue.Queue):
         self.scene = self.imv.scene
         self.imv.show()
         self.imv.setImage(np.transpose(self.container))
+        #bon test:
+        #test=np.zeros((3,self.columns, self.lines))
+        #test[0,0:100]=1000
+        #test[1,100:200]=1000
+        #test[2,200:300]=1000
+        #xvals=np.array([3,4,5])
+        #self.imv.setImage(test,xvals=xvals)
+        
         
         #position = [0.0, 0.25, 0.5, 0.75, 1.0] ###test chaud-froid
         #colors = [[0, 0, 0], [0, 0, 255], [255, 0, 0], [242, 125, 0], [253, 207, 88]]###test chaud-froid
@@ -2663,7 +2598,7 @@ class CameraWindow(queue.Queue):
             ###if max_pixel >= 65535: #65535 is the max intensity value that the camera can output (2^16-1)
             ###    print('Saturation')
             #
-            self.imv.setImage(np.transpose(frame))
+            self.imv.setImage(frame) ###arranger xvals
             
             _view_box.setState(_state)
             
@@ -2857,27 +2792,8 @@ class FrameSaver():
                             dataset.attrs['Current sample vertical position'] = self.current_vertical_position_txt
                             dataset.attrs['Current camera horizontal position'] = self.current_camera_position_txt
                             
-                            ###dataset.attrs["samplerate"]=parameters["samplerate"]          # In samples/seconds
-                            ###dataset.attrs["sweeptime"]=parameters["sweeptime"]            # In seconds
-                            ###dataset.attrs["galvo_l_frequency"]=parameters["galvo_l_frequency"]     # In Hertz
-                            ###dataset.attrs["galvo_l_amplitude"]=parameters["galvo_l_amplitude"]      # In Volts
-                            ###dataset.attrs["galvo_l_offset"]=parameters["galvo_l_offset"]         # In Volts
-                            ###dataset.attrs["galvo_r_frequency"]=parameters["galvo_r_frequency"]     # In Hertz
-                            ###dataset.attrs["galvo_r_amplitude"]=parameters["galvo_r_amplitude"]      # In Volts
-                            ###dataset.attrs["galvo_r_offset"]=parameters["galvo_r_offset"]         # In Volts
-                            ###dataset.attrs["etl_l_amplitude"]=parameters["etl_l_amplitude"]         # In Volts
-                            ###dataset.attrs["etl_l_offset"]=parameters["etl_l_offset"]            # In Volts
-                            ###dataset.attrs["etl_r_amplitude"]=parameters["etl_r_amplitude"]         # In Volts
-                            ###dataset.attrs["etl_r_offset"]=parameters["etl_r_offset"]            # In Volts
-                            ###dataset.attrs["laser_l_voltage"]=parameters["laser_l_voltage"]    # In Volts
-                            ###dataset.attrs["laser_r_voltage"]=parameters["laser_r_voltage"]     # In Volts
-                            ###dataset.attrs["columns"] = parameters["columns"]           # In pixels
-                            ###dataset.attrs["rows"] = parameters["rows"]               # In pixels 
-                            dataset.attrs["etl_step"] = parameters["etl_step"]            # In pixels
-                            ###dataset.attrs["camera_delay"] = parameters["camera_delay"]       # In %
-                            ###dataset.attrs["min_t_delay"] = parameters["min_t_delay"]   # In seconds
-                            ###dataset.attrs["t_start_exp"] = parameters["t_start_exp"]   # In seconds
-                            
+                            for param_string in modifiable_parameters:
+                                dataset.attrs[param_string]=parameters[param_string]
                             
                         in_loop = False
                     
