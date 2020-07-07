@@ -1110,9 +1110,9 @@
      <widget class="QDoubleSpinBox" name="doubleSpinBox_numberOfEtlVoltages">
       <property name="geometry">
        <rect>
-        <x>290</x>
+        <x>280</x>
         <y>210</y>
-        <width>62</width>
+        <width>81</width>
         <height>22</height>
        </rect>
       </property>
