@@ -221,26 +221,26 @@ def galvo_trapeze(amplitude, samples_per_half_period, samples_per_delay, number_
         array = np.zeros((int(number_of_samples)))
         
         for i in range(int(number_of_steps)):
-            
+            sample_i = samples_per_half_delay + (i * samples_per_step)
             if i%2==0:   #Even step number, ramp rising
                 if i == int(number_of_steps-1):  #Last iteration, deals with a shorter step (in case ETL step is not a multiple of the number of columns)
-                    samples_left = number_of_samples-(samples_per_half_delay+i*samples_per_step-samples_before_exposition) #samples_before_exposition takes into account the beginning of the camera cycle starting before the rising vector
+                    samples_left = number_of_samples-(sample_i-samples_before_exposition) #samples_before_exposition takes into account the beginning of the camera cycle starting before the rising vector
                     if samples_left < (min_samples_per_delay+samples_per_half_period): #We stay low, not enough samples to make a scan
                         pass #There is not enough samples to make a scan, we pass
                     else:
                         samples_left -= samples_before_exposition  #Retrieves samples_before_exposition for proper calculations in the galvo cycle
                         samples_high = samples_left-samples_per_half_period
                         amplitude_vector = amplitude*np.ones((int(samples_high)))
-                        array[int(samples_per_half_delay+i*samples_per_step):int(samples_per_half_delay+i*samples_per_step+len(rise_vector))]=rise_vector
-                        array[int(samples_per_half_delay+i*samples_per_step+samples_per_half_period):int(samples_per_half_delay+i*samples_per_step+samples_per_half_period+samples_high)]=amplitude_vector
-                else: 
+                        array[int(sample_i):int(sample_i+len(rise_vector))]=rise_vector
+                        array[int(sample_i+samples_per_half_period):int(sample_i+samples_per_half_period+samples_high)]=amplitude_vector
+                else:
                     #array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod)]=riseVector    #Rising ramp
-                    array[int(samples_per_half_delay+i*samples_per_step):int(samples_per_half_delay+i*samples_per_step+len(rise_vector))]=rise_vector
-                    array[int(samples_per_half_delay+i*samples_per_step+samples_per_half_period):int(samples_per_half_delay+i*samples_per_step+samples_per_half_period+samples_per_delay)]=amplitude_vector  #Plateau
+                    array[int(sample_i):int(sample_i+len(rise_vector))]=rise_vector
+                    array[int(sample_i+samples_per_half_period):int(sample_i+samples_per_half_period+samples_per_delay)]=amplitude_vector  #Plateau
                 
             else:     #Odd step number, ramp falling
                 if i == int(number_of_steps-1):  #Last iteration, deals with a shorter step (in case ETL step is not a multiple of the number of columns)
-                    samples_left = number_of_samples-(samples_per_half_delay+i*samples_per_step-samples_before_exposition) #samples_before_exposition takes into account the beginning of the camera cycle starting before the falling vector
+                    samples_left = number_of_samples-(sample_i-samples_before_exposition) #samples_before_exposition takes into account the beginning of the camera cycle starting before the falling vector
                     #print('Galvo')
                     #print('i: {}'.format(i))
                     #print('samples_left: {}'.format(samples_left))
@@ -251,13 +251,13 @@ def galvo_trapeze(amplitude, samples_per_half_period, samples_per_delay, number_
                     if samples_left < (min_samples_per_delay+samples_per_half_period): #We stay high, not enough samples to make a scan 
                         samples_left -= samples_before_exposition #Retrieves samples_before_exposition for proper calculations in the galvo cycle 
                         amplitude_vector = amplitude*np.ones((int(samples_left)))
-                        array[int(samples_per_half_delay+i*samples_per_step):int(samples_per_half_delay+i*samples_per_step+samples_left)]=amplitude_vector
+                        array[int(sample_i):int(sample_i+samples_left)]=amplitude_vector
                     else:
-                        array[int(samples_per_half_delay+i*samples_per_step):int(samples_per_half_delay+i*samples_per_step+len(fall_vector))]=fall_vector
+                        array[int(sample_i):int(sample_i+len(fall_vector))]=fall_vector
                 
                 else:        
                     #array[int(samplesPerHalfDelay+i*samplesPerStep):int(samplesPerHalfDelay+i*samplesPerStep+samplesPerHalfPeriod)]=fallVector    #Falling ramp
-                    array[int(samples_per_half_delay+i*samples_per_step):int(samples_per_half_delay+i*samples_per_step+len(fall_vector))]=fall_vector
+                    array[int(sample_i):int(sample_i+len(fall_vector))]=fall_vector
         
         array = array + offset
     else:

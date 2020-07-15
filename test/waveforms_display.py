@@ -307,8 +307,8 @@ print('sweeptime: {} s'.format(sweeptime))
 
 '''Waveforms display'''
 plt.plot(array,camera_waveform, label = 'Camera DO')
-#plt.plot(array,camera_busy_status_waveform, label = 'Camera Busy Status')
-#plt.plot(array,camera_exposure_status_waveform, label = 'Camera Exp Status')
+plt.plot(array,camera_busy_status_waveform, label = 'Camera Busy Status')
+plt.plot(array,camera_exposure_status_waveform, label = 'Camera Exp Status')
 plt.plot(array,galvo_waveform, label = 'Galvos')
 plt.plot(array,etl_r_waveform, label = 'Right ETL')
 plt.plot(array,etl_l_waveform, label = 'Left ETL')
