@@ -44,7 +44,7 @@ parameters = dict()
 modifiable_parameters = list(["etl_l_amplitude","etl_r_amplitude",
     "etl_l_offset","etl_r_offset","galvo_l_amplitude","galvo_r_amplitude",
     "galvo_l_offset","galvo_r_offset","galvo_l_frequency","galvo_r_frequency",
-    "samplerate"])
+    "samplerate","etl_step","laser_l_voltage","laser_r_voltage"])
 
 '''Read modifiable parameters from configuration file'''
 with open(r"C:\git-projects\lightsheet\src\configuration.txt") as file:
@@ -54,6 +54,7 @@ with open(r"C:\git-projects\lightsheet\src\configuration.txt") as file:
 '''Default parameters'''
 parameters["sample_name"]='No Sample Name'
 parameters["samplerate"]=40000          # In samples/seconds
+parameters["etl_step"] = 400 #100            # In pixels
 parameters["galvo_l_frequency"]=100     # In Hertz
 parameters["galvo_l_amplitude"]=6.5 #2       # In Volts
 parameters["galvo_l_offset"]=-3         # In Volts
@@ -64,13 +65,12 @@ parameters["etl_l_amplitude"]=2         # In Volts
 parameters["etl_l_offset"]=0            # In Volts
 parameters["etl_r_amplitude"]=2         # In Volts
 parameters["etl_r_offset"]=0            # In Volts
-parameters["laser_l_voltage"]=0.905#1.3      # In Volts
-parameters["laser_r_voltage"]=0.935     # In Volts
+parameters["laser_l_voltage"]=2.5#0.905#1.3      # In Volts
+parameters["laser_r_voltage"]=2.5#0.935     # In Volts
 
 parameters["sweeptime"]=0.4             # In seconds
 parameters["columns"] = 2560            # In pixels
-parameters["rows"] = 2160               # In pixels 
-parameters["etl_step"] = 400 #100            # In pixels
+parameters["rows"] = 2160               # In pixels
 parameters["camera_delay"] = 10         # In %
 parameters["min_t_delay"] = 0.0354404   # In seconds
 parameters["t_start_exp"] = 0.017712    # In seconds
@@ -135,12 +135,27 @@ class Controller(QWidget):
                                 self.pushButton_startStack,
                                 self.pushButton_calibrateCamera,
                                 self.pushButton_calibrateEtlsGalvos]
-        ###Test
+        
+        self.modifiable_param_buttons = [self.doubleSpinBox_leftEtlAmplitude,
+                                         self.doubleSpinBox_rightEtlAmplitude,
+                                         self.doubleSpinBox_leftEtlOffset,
+                                         self.doubleSpinBox_rightEtlOffset,
+                                         self.doubleSpinBox_leftGalvoAmplitude,
+                                         self.doubleSpinBox_rightGalvoAmplitude,
+                                         self.doubleSpinBox_leftGalvoOffset,
+                                         self.doubleSpinBox_rightGalvoOffset,
+                                         self.doubleSpinBox_leftGalvoFrequency,
+                                         self.doubleSpinBox_rightGalvoFrequency,
+                                         self.doubleSpinBox_samplerate,
+                                         self.spinBox_etlStep,
+                                         self.doubleSpinBox_leftLaser,
+                                         self.doubleSpinBox_rightLaser]
+        
+        '''Default ETL relation values'''###Test
         self.left_slope = -0.001282893174259485
         self.left_intercept = 4.920315064788371
         self.right_slope = 0.0013507132995247916
         self.right_intercept = 1.8730880902476752
-        ###
         
         '''Arbitrary default positions (in micro-steps)'''
         self.horizontal_forward_boundary = 428346   #20mm#533333.3333  #Maximum motor position, in micro-steps
@@ -153,7 +168,7 @@ class Controller(QWidget):
         
         self.camera_forward_boundary = 500000           #Maximum motor position, in micro-steps ##À adapter selon le nouveau porte-cuvette
         self.camera_backward_boundary = 0               #Mimimum motor position, in micro-steps
-        self.focus = 265000     #Default focus position ##Possiblement à changer
+        self.focus = 429133 #265000     #Default focus position ##Possiblement à changer
         
         '''Initializing flags'''
         self.both_lasers_activated = False
@@ -174,7 +189,6 @@ class Controller(QWidget):
         self.horizontal_forward_boundary_selected = False
         self.horizontal_backward_boundary_selected = False
         self.focus_selected = False
-        self.etls_calibrated = True#False
         
         '''Initializing the properties of the widgets'''
         '''--Motion's related widgets--'''
@@ -232,24 +246,7 @@ class Controller(QWidget):
         self.doubleSpinBox_leftLaser.setMaximum(2.5)
         
         '''Initialize values'''
-        self.doubleSpinBox_leftEtlAmplitude.setValue(self.parameters["etl_l_amplitude"])
-        self.doubleSpinBox_rightEtlAmplitude.setValue(self.parameters["etl_r_amplitude"])
-        self.doubleSpinBox_leftEtlOffset.setValue(self.parameters["etl_l_offset"])
-        self.doubleSpinBox_rightEtlOffset.setValue(self.parameters["etl_r_offset"])
-        
-        self.doubleSpinBox_leftGalvoAmplitude.setValue(self.parameters["galvo_l_amplitude"])
-        self.doubleSpinBox_rightGalvoAmplitude.setValue(self.parameters["galvo_r_amplitude"])
-        self.doubleSpinBox_leftGalvoOffset.setValue(self.parameters["galvo_l_offset"])
-        self.doubleSpinBox_rightGalvoOffset.setValue(self.parameters["galvo_r_offset"])
-        self.doubleSpinBox_leftGalvoFrequency.setValue(self.parameters["galvo_l_frequency"])
-        self.doubleSpinBox_rightGalvoFrequency.setValue(self.parameters["galvo_r_frequency"])
-        
-        self.doubleSpinBox_samplerate.setValue(self.parameters["samplerate"])
-        
-        self.spinBox_etlStep.setValue(self.parameters["etl_step"])
-        
-        self.doubleSpinBox_leftLaser.setValue(self.parameters["laser_l_voltage"])
-        self.doubleSpinBox_rightLaser.setValue(self.parameters["laser_r_voltage"])
+        self.back_to_default_parameters()
         
         '''Initialize step values'''
         self.doubleSpinBox_leftEtlAmplitude.setSingleStep(0.1)
@@ -270,20 +267,16 @@ class Controller(QWidget):
         self.doubleSpinBox_rightEtlAmplitude.setSuffix(" V")
         self.doubleSpinBox_leftEtlOffset.setSuffix(" V")
         self.doubleSpinBox_rightEtlOffset.setSuffix(" V")
-        
+        self.doubleSpinBox_leftLaser.setSuffix(" V")
+        self.doubleSpinBox_rightLaser.setSuffix(" V")
         self.doubleSpinBox_leftGalvoAmplitude.setSuffix(" V")
         self.doubleSpinBox_rightGalvoAmplitude.setSuffix(" V")
         self.doubleSpinBox_leftGalvoOffset.setSuffix(" V")
         self.doubleSpinBox_rightGalvoOffset.setSuffix(" V")
         self.doubleSpinBox_leftGalvoFrequency.setSuffix(" Hz")
         self.doubleSpinBox_rightGalvoFrequency.setSuffix(" Hz")
-        
         self.doubleSpinBox_samplerate.setSuffix(" samples/s")
-        
         self.spinBox_etlStep.setSuffix(" columns")
-        
-        self.doubleSpinBox_leftLaser.setSuffix(" V")
-        self.doubleSpinBox_rightLaser.setSuffix(" V")
         
         '''Initializing every other widget that are updated by a change of unit 
             (the motion tab)'''
@@ -293,25 +286,21 @@ class Controller(QWidget):
         self.sig_update_progress.connect(self.progressBar_stackMode.setValue)
         
         '''Disable some buttons'''
-        self.update_buttons(self.default_buttons)
+        buttons_to_disable = [self.lineEdit_filename,
+                              self.lineEdit_sampleName,
+                              self.pushButton_selectDataset,
+                              self.checkBox_setStartPoint,
+                              self.checkBox_setEndPoint,
+                              self.pushButton_setForwardLimit,
+                              self.pushButton_setBackwardLimit,
+                              self.pushButton_lasersOff,
+                              self.pushButton_leftLaserOff,
+                              self.pushButton_rightLaserOff]
         
-        self.lineEdit_filename.setEnabled(False)
-        self.lineEdit_sampleName.setEnabled(False)
+        for button in buttons_to_disable:
+            button.setEnabled(False)
         
-        self.pushButton_selectDataset.setEnabled(False)
-        
-        self.checkBox_setStartPoint.setEnabled(False)
-        self.checkBox_setEndPoint.setEnabled(False)
-        
-        self.pushButton_setForwardLimit.setEnabled(False)
-        self.pushButton_setBackwardLimit.setEnabled(False)
-        
-        self.pushButton_lasersOff.setEnabled(False)
-        self.pushButton_leftLaserOff.setEnabled(False)
-        self.pushButton_rightLaserOff.setEnabled(False)
-        
-        self.pushButton_cancelCalibrateCamera.setEnabled(False)
-        self.pushButton_stopEtlsGalvosCalibration.setEnabled(False)
+        self.update_buttons_modes(self.default_buttons)
         
         '''Connect buttons'''
         '''Connection for unit change'''
@@ -400,8 +389,8 @@ class Controller(QWidget):
     
     '''General Methods'''
     
-    def update_buttons(self,buttons_to_enable):
-        '''Update buttons status : disable buttons, except for those specified to be enabled'''
+    def update_buttons_modes(self,buttons_to_enable):
+        '''Update mode buttons status : disable buttons, except for those specified to be enabled'''
         
         aquisition_buttons = [self.pushButton_standbyOn,
                               self.pushButton_standbyOff,
@@ -414,11 +403,12 @@ class Controller(QWidget):
                               self.pushButton_startStack,
                               self.pushButton_stopStack,
                               self.pushButton_calibrateCamera,
+                              self.pushButton_cancelCalibrateCamera,
                               self.pushButton_calculateFocus,
                               self.pushButton_showCamInterpolation,
                               self.pushButton_calibrateEtlsGalvos,
-                              self.pushButton_showEtlInterpolation
-                              ]
+                              self.pushButton_stopEtlsGalvosCalibration,
+                              self.pushButton_showEtlInterpolation]
         for button in aquisition_buttons:
             if button in buttons_to_enable:
                 button.setEnabled(True)
@@ -428,19 +418,19 @@ class Controller(QWidget):
     def close_modes(self):
         '''Close all thread modes if they are active'''
 
-        if self.laser_on == True:
+        if self.laser_on:
             self.stop_lasers()
-        if self.preview_mode_started == True:
+        if self.preview_mode_started:
             self.stop_preview_mode()
-        if self.live_mode_started == True:
+        if self.live_mode_started:
             self.stop_live_mode()
-        if self.stack_mode_started == True:
+        if self.stack_mode_started:
             self.stop_stack_mode()
-        if self.standby == True:
+        if self.standby:
             self.stop_standby()
-        if self.camera_calibration_started == True:
+        if self.camera_calibration_started:
             self.stop_calibrate_camera()
-        if self.etls_calibration_started == True:
+        if self.etls_calibration_started:
             self.stop_calibrate_etls()
     
     def closeEvent(self, event):
@@ -450,7 +440,7 @@ class Controller(QWidget):
            if it doesn't follow the naming convention'''
         
         self.close_modes()
-        if self.camera_on == True:
+        if self.camera_on:
             self.close_camera()
         
         event.accept()
@@ -541,7 +531,7 @@ class Controller(QWidget):
             self.horizontal_correction = 101.6      #Correction to fit choice of axis
             self.vertical_correction = 10.0         #Correction to fit choice of axis ##À ajuster avec nouveau porte-cuvette
             self.camera_sample_min_distance = 15.0   #Approximate minimal horizontal distance between camera  ##Possiblement à changer
-            self.camera_correction =95.25 + 40.0      #Camera correction to fit choice of axis##À ajuster avec nouveau porte-cuvette
+            self.camera_correction = 95.25 + 40.0      #Camera correction to fit choice of axis##À ajuster avec nouveau porte-cuvette
         elif self.unit == '\u03BCm':
             self.decimals = 0
             
@@ -634,7 +624,7 @@ class Controller(QWidget):
         
     def update_position_camera(self):
         '''Updates the current (horizontal) camera position displayed'''
-
+        
         self.current_camera_position = round(self.return_current_camera_position(),self.decimals)
         self.current_camera_position_text = "{} {}".format(self.current_camera_position, self.unit)
         self.label_currentCameraNumerical.setText(self.current_camera_position_text)
@@ -715,7 +705,7 @@ class Controller(QWidget):
     
     def move_camera_to_focus(self):
         '''Moves camera to focus position'''
-        if self.focus_selected == True:
+        if self.focus_selected:
         
             if self.focus < self.camera_backward_boundary:
                 self.print_controller('Focus out of boundaries')
@@ -856,7 +846,7 @@ class Controller(QWidget):
         self.horizontal_backward_boundary_selected = True
         
         self.pushButton_setBackwardLimit.setEnabled(False)
-        if self.horizontal_forward_boundary_selected == True:
+        if self.horizontal_forward_boundary_selected:
             self.pushButton_calibrateRange.setEnabled(True)
             self.label_calibrateRange.setText('Press Calibrate Range To Start')
     
@@ -870,7 +860,7 @@ class Controller(QWidget):
         self.horizontal_forward_boundary_selected = True
         
         self.pushButton_setForwardLimit.setEnabled(False)
-        if self.horizontal_backward_boundary_selected == True:
+        if self.horizontal_backward_boundary_selected:
             self.pushButton_calibrateRange.setEnabled(True)
             self.label_calibrateRange.setText('Press Calibrate Range To Start')
     
@@ -910,12 +900,12 @@ class Controller(QWidget):
         x = self.camera_focus_relation[:,0]
         y = self.camera_focus_relation[:,1]
         
-        '''Calculatinf linear regression'''
+        '''Calculating linear regression'''
         xnew = np.linspace(self.camera_focus_relation[0,0], self.camera_focus_relation[-1,0], 1000) ##1000 points
         self.slope_camera, self.intercept_camera, r_value, p_value, std_err = stats.linregress(x, y)
-        #print('r_value:'+str(r_value)) #debugging
-        #print('p_value:'+str(p_value)) #debugging
-        #print('std_err:'+str(std_err)) #debugging
+        print('r_value:'+str(r_value)) #debugging
+        print('p_value:'+str(p_value)) #debugging
+        print('std_err:'+str(std_err)) #debugging
         yreg = self.slope_camera * xnew + self.intercept_camera
         
         '''Setting colormap'''
@@ -996,49 +986,21 @@ class Controller(QWidget):
         
         self.parameters = copy.deepcopy(self.defaultParameters)
         
-        self.doubleSpinBox_leftEtlAmplitude.setValue(self.parameters["etl_l_amplitude"])
-        self.doubleSpinBox_rightEtlAmplitude.setValue(self.parameters["etl_r_amplitude"])
-        self.doubleSpinBox_leftEtlOffset.setValue(self.parameters["etl_l_offset"])
-        self.doubleSpinBox_rightEtlOffset.setValue(self.parameters["etl_r_offset"])
-        self.doubleSpinBox_leftGalvoAmplitude.setValue(self.parameters["galvo_l_amplitude"])
-        self.doubleSpinBox_rightGalvoAmplitude.setValue(self.parameters["galvo_r_amplitude"])
-        self.doubleSpinBox_leftGalvoOffset.setValue(self.parameters["galvo_l_offset"])
-        self.doubleSpinBox_rightGalvoOffset.setValue(self.parameters["galvo_r_offset"])
-        self.doubleSpinBox_leftGalvoFrequency.setValue(self.parameters["galvo_l_frequency"])
-        self.doubleSpinBox_rightGalvoFrequency.setValue(self.parameters["galvo_r_frequency"])
-        self.doubleSpinBox_samplerate.setValue(self.parameters["samplerate"])    
+        for param_string, param_button in zip(modifiable_parameters,self.modifiable_param_buttons):
+            param_button.setValue(self.parameters[param_string]) 
     
     def change_default_parameters(self):
         '''Change all the default modifiable parameters to the current parameters'''
         
-        self.defaultParameters["etl_l_amplitude"] = self.doubleSpinBox_leftEtlAmplitude.value()
-        self.defaultParameters["etl_r_amplitude"] = self.doubleSpinBox_rightEtlAmplitude.value()
-        self.defaultParameters["etl_l_offset"] = self.doubleSpinBox_leftEtlOffset.value()
-        self.defaultParameters["etl_r_offset"] = self.doubleSpinBox_rightEtlOffset.value()
-        self.defaultParameters["galvo_l_amplitude"] = self.doubleSpinBox_leftGalvoAmplitude.value()
-        self.defaultParameters["galvo_r_amplitude"] = self.doubleSpinBox_rightGalvoAmplitude.value()
-        self.defaultParameters["galvo_l_offset"] = self.doubleSpinBox_leftGalvoOffset.value()
-        self.defaultParameters["galvo_r_offset"] = self.doubleSpinBox_rightGalvoOffset.value()
-        self.defaultParameters["galvo_l_frequency"] = self.doubleSpinBox_leftGalvoFrequency.value()
-        self.defaultParameters["galvo_r_frequency"] = self.doubleSpinBox_rightGalvoFrequency.value()
-        self.defaultParameters["samplerate"] = self.doubleSpinBox_samplerate.value()
+        for param_string,param_button in zip(modifiable_parameters,self.modifiable_param_buttons):
+            self.defaultParameters[param_string] = param_button.value()
         
     def save_default_parameters(self):
         '''Change all the default parameters of the configuration file to current default parameters'''
         
         with open(r"C:\git-projects\lightsheet\src\configuration.txt","w") as file:
-            file.write(str(parameters["etl_l_amplitude"])+'\n'+
-                       str(parameters["etl_r_amplitude"])+'\n'+
-                       str(parameters["etl_l_offset"])+'\n'+
-                       str(parameters["etl_r_offset"])+'\n'+
-                       str(parameters["galvo_l_amplitude"])+'\n'+
-                       str(parameters["galvo_r_amplitude"])+'\n'+
-                       str(parameters["galvo_l_offset"])+'\n'+
-                       str(parameters["galvo_r_offset"])+'\n'+
-                       str(parameters["galvo_l_frequency"])+'\n'+
-                       str(parameters["galvo_r_frequency"])+'\n'+
-                       str(parameters["samplerate"])
-                       )  
+            for param_string in modifiable_parameters:
+                file.write(str(parameters[param_string]) + '\n')
     
     def update_etl_galvos_parameters(self, parameterNumber):
         '''Updates the parameters in the software after a modification by the
@@ -1047,63 +1009,63 @@ class Controller(QWidget):
         if parameterNumber == 1:
             self.doubleSpinBox_leftEtlAmplitude.setMaximum(5-self.doubleSpinBox_leftEtlOffset.value()) #To prevent ETL's amplitude + offset being > 5V
             self.parameters["etl_l_amplitude"] = self.doubleSpinBox_leftEtlAmplitude.value()
-            if self.checkBox_etlsTogether.isChecked() == True:
+            if self.checkBox_etlsTogether.isChecked():
                 self.parameters["etl_r_amplitude"] = self.doubleSpinBox_leftEtlAmplitude.value()
                 self.doubleSpinBox_rightEtlAmplitude.setValue(self.parameters["etl_r_amplitude"])
         elif parameterNumber == 2:
             self.doubleSpinBox_rightEtlAmplitude.setMaximum(5-self.doubleSpinBox_rightEtlOffset.value()) #To prevent ETL's amplitude + offset being > 5V
             self.parameters["etl_r_amplitude"] = self.doubleSpinBox_rightEtlAmplitude.value()
-            if self.checkBox_etlsTogether.isChecked() == True:
+            if self.checkBox_etlsTogether.isChecked():
                 self.parameters["etl_l_amplitude"] = self.doubleSpinBox_rightEtlAmplitude.value()
                 self.doubleSpinBox_leftEtlAmplitude.setValue(self.parameters["etl_l_amplitude"])
         elif parameterNumber == 3:
             self.doubleSpinBox_leftEtlOffset.setMaximum(5-self.doubleSpinBox_leftEtlAmplitude.value()) #To prevent ETL's amplitude + offset being > 5V
             self.parameters["etl_l_offset"] = self.doubleSpinBox_leftEtlOffset.value()
-            if self.checkBox_etlsTogether.isChecked() == True:
+            if self.checkBox_etlsTogether.isChecked():
                 self.parameters["etl_r_offset"] = self.doubleSpinBox_leftEtlOffset.value()
                 self.doubleSpinBox_rightEtlOffset.setValue(self.parameters["etl_r_offset"])
         elif parameterNumber == 4:
             self.doubleSpinBox_rightEtlOffset.setMaximum(5-self.doubleSpinBox_rightEtlAmplitude.value()) #To prevent ETL's amplitude + offset being > 5V
             self.parameters["etl_r_offset"] = self.doubleSpinBox_rightEtlOffset.value()
-            if self.checkBox_etlsTogether.isChecked() == True:
+            if self.checkBox_etlsTogether.isChecked():
                 self.parameters["etl_l_offset"] = self.doubleSpinBox_rightEtlOffset.value()
                 self.doubleSpinBox_leftEtlOffset.setValue(self.parameters["etl_l_offset"])
         elif parameterNumber == 5:
             self.doubleSpinBox_leftGalvoAmplitude.setMaximum(10-self.doubleSpinBox_leftGalvoOffset.value()) #To prevent galvo's amplitude + offset being > 10V
             self.doubleSpinBox_leftGalvoAmplitude.setMinimum(-10-self.doubleSpinBox_leftGalvoOffset.value()) #To prevent galvo's amplitude + offset being < -10V
             self.parameters["galvo_l_amplitude"] = self.doubleSpinBox_leftGalvoAmplitude.value()
-            if self.checkBox_galvosTogether.isChecked() == True:
+            if self.checkBox_galvosTogether.isChecked():
                 self.parameters["galvo_r_amplitude"] = self.doubleSpinBox_leftGalvoAmplitude.value()
                 self.doubleSpinBox_rightGalvoAmplitude.setValue(self.parameters["galvo_r_amplitude"])
         elif parameterNumber == 6:
             self.doubleSpinBox_rightGalvoAmplitude.setMaximum(10-self.doubleSpinBox_rightGalvoOffset.value()) #To prevent galvo's amplitude + offset being > 10V
             self.doubleSpinBox_rightGalvoAmplitude.setMinimum(-10-self.doubleSpinBox_rightGalvoOffset.value()) #To prevent galvo's amplitude + offset being < -10V
             self.parameters["galvo_r_amplitude"] = self.doubleSpinBox_rightGalvoAmplitude.value()
-            if self.checkBox_galvosTogether.isChecked() == True:
+            if self.checkBox_galvosTogether.isChecked():
                 self.parameters["galvo_l_amplitude"] = self.doubleSpinBox_rightGalvoAmplitude.value()
                 self.doubleSpinBox_leftGalvoAmplitude.setValue(self.parameters["galvo_l_amplitude"])
         elif parameterNumber == 7:
             self.doubleSpinBox_leftGalvoOffset.setMaximum(10-self.doubleSpinBox_leftGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being > 10V
             self.doubleSpinBox_leftGalvoOffset.setMinimum(-10-self.doubleSpinBox_leftGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being < -10V
             self.parameters["galvo_l_offset"] = self.doubleSpinBox_leftGalvoOffset.value()
-            if self.checkBox_galvosTogether.isChecked() == True:
+            if self.checkBox_galvosTogether.isChecked():
                 self.parameters["galvo_r_offset"] = self.doubleSpinBox_leftGalvoOffset.value()
                 self.doubleSpinBox_rightGalvoOffset.setValue(self.parameters["galvo_r_offset"])
         elif parameterNumber == 8:
             self.doubleSpinBox_rightGalvoOffset.setMaximum(10-self.doubleSpinBox_rightGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being > 10V
             self.doubleSpinBox_rightGalvoOffset.setMinimum(-10-self.doubleSpinBox_rightGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being < -10V
             self.parameters["galvo_r_offset"] = self.doubleSpinBox_rightGalvoOffset.value()
-            if self.checkBox_galvosTogether.isChecked() == True:
+            if self.checkBox_galvosTogether.isChecked():
                 self.parameters["galvo_l_offset"] = self.doubleSpinBox_rightGalvoOffset.value()
                 self.doubleSpinBox_leftGalvoOffset.setValue(self.parameters["galvo_l_offset"])
         elif parameterNumber == 9:
             self.parameters["galvo_l_frequency"] = self.doubleSpinBox_leftGalvoFrequency.value()
-            if self.checkBox_galvosTogether.isChecked() == True:
+            if self.checkBox_galvosTogether.isChecked():
                 self.parameters["galvo_r_frequency"] = self.doubleSpinBox_leftGalvoFrequency.value()
                 self.doubleSpinBox_rightGalvoFrequency.setValue(self.parameters["galvo_r_frequency"])
         elif parameterNumber == 10:
             self.parameters["galvo_r_frequency"] = self.doubleSpinBox_rightGalvoFrequency.value()
-            if self.checkBox_galvosTogether.isChecked() == True:
+            if self.checkBox_galvosTogether.isChecked():
                 self.parameters["galvo_l_frequency"] = self.doubleSpinBox_rightGalvoFrequency.value()
                 self.doubleSpinBox_leftGalvoFrequency.setValue(self.parameters["galvo_l_frequency"])
         elif parameterNumber == 11:
@@ -1158,7 +1120,7 @@ class Controller(QWidget):
          
         self.pushButton_leftLaserOn.setEnabled(True)
         self.pushButton_leftLaserOff.setEnabled(False)
-        if self.pushButton_rightLaserOn.isEnabled() == True:
+        if self.pushButton_rightLaserOn.isEnabled():
             self.pushButton_lasersOn.setEnabled(True)
         
         self.print_controller('Left laser off')
@@ -1181,7 +1143,7 @@ class Controller(QWidget):
         
         self.pushButton_rightLaserOn.setEnabled(True)
         self.pushButton_rightLaserOff.setEnabled(False)
-        if self.pushButton_leftLaserOn.isEnabled() == True:
+        if self.pushButton_leftLaserOn.isEnabled():
             self.pushButton_lasersOn.setEnabled(True)
         
         self.print_controller('Left laser off')
@@ -1195,12 +1157,12 @@ class Controller(QWidget):
         left_laser_voltage = 0  #Default voltage of 0V
         right_laser_voltage = 0 #Default voltage of 0V
         
-        if self.both_lasers_activated == True:
+        if self.both_lasers_activated:
             left_laser_voltage = self.parameters['laser_l_voltage']
             right_laser_voltage = self.parameters['laser_r_voltage']   
-        if self.left_laser_activated == True:
+        if self.left_laser_activated:
             left_laser_voltage = self.parameters['laser_l_voltage']  
-        if self.right_laser_activated == True:
+        if self.right_laser_activated:
             right_laser_voltage = self.parameters['laser_r_voltage']
         
         self.lasers_waveforms = np.stack((np.array([right_laser_voltage]),
@@ -1223,11 +1185,11 @@ class Controller(QWidget):
         self.lasers_task.close()
         
         '''Deactivating lasers'''
-        if self.both_lasers_activated == True:
+        if self.both_lasers_activated:
             self.deactivate_both_lasers()
-        if self.left_laser_activated == True:
+        if self.left_laser_activated:
             self.deactivate_left_laser()
-        if self.right_laser_activated == True:
+        if self.right_laser_activated:
             self.deactivate_right_laser()
  
  
@@ -1284,10 +1246,10 @@ class Controller(QWidget):
                 plt.show(block=False)   #Prevents the plot from blocking the execution of the code...
                 self.figure_counter += 1
                 
-                '''Convert to tiff format'''
-                tiff = Image.fromarray(data)
-                tiff_filename = self.open_directory.replace('.hdf5', '.tiff')
-                tiff.save(tiff_filename)
+                ##'''Convert to tiff format'''
+                ##tiff = Image.fromarray(data)
+                ##tiff_filename = self.open_directory.replace('.hdf5', '.tiff')
+                ##tiff.save(tiff_filename)
             
             self.print_controller('Dataset '+self.dataset_name+' of file '+self.open_directory+' displayed')
     
@@ -1315,7 +1277,7 @@ class Controller(QWidget):
         self.standby_task.write(standby_waveform, auto_start = True)
         
         '''Modes disabling while in standby'''
-        self.update_buttons([self.pushButton_standbyOff])
+        self.update_buttons_modes([self.pushButton_standbyOff])
         
         self.print_controller('Standby on')
         
@@ -1332,7 +1294,7 @@ class Controller(QWidget):
         self.open_camera()
         
         '''Modes enabling after standby'''
-        self.update_buttons(self.default_buttons)
+        self.update_buttons_modes(self.default_buttons)
         
         self.print_controller('Standby off')
     
@@ -1341,7 +1303,7 @@ class Controller(QWidget):
         '''Tries to add a frame to a consumer, either the camera window or the saver'''
         
         for consumer in range(0, len(self.consumers), 4):
-            if to_cam_window == True:
+            if to_cam_window:
                 if self.consumers[consumer+2] == 'CameraWindow':
                     try:
                         self.consumers[consumer].put(frame)
@@ -1349,13 +1311,13 @@ class Controller(QWidget):
                     except:      #self.consumers[ii].Full:
                         #print("CameraWindow queue is full") #debugging
                         pass
-            if to_saver == True:
+            if to_saver:
                 if self.consumers[consumer+2] == 'FrameSaver':
                     try:
                         self.consumers[consumer].put(frame,1)
-                        #print('Frame put in FrameSaver') #debugging
+                        print('Frame put in FrameSaver') #debugging
                     except:      #self.consumers[ii].Full:
-                        #print("FrameSaver queue is full") #debugging
+                        print("FrameSaver queue is full") #debugging
                         pass
     
     def start_preview_mode(self):
@@ -1366,7 +1328,7 @@ class Controller(QWidget):
         self.preview_mode_started = True
         
         '''Modes disabling during preview_mode execution'''
-        self.update_buttons([self.pushButton_stopPreviewMode])
+        self.update_buttons_modes([self.pushButton_stopPreviewMode])
         
         self.print_controller('Preview mode started')
         
@@ -1427,7 +1389,7 @@ class Controller(QWidget):
         self.stop_lasers()
         
         '''Enabling modes after preview_mode'''
-        self.update_buttons(self.default_buttons)
+        self.update_buttons_modes(self.default_buttons)
         
         self.print_controller('Preview mode stopped')
     
@@ -1439,31 +1401,18 @@ class Controller(QWidget):
     
     def reconstruct_frame(self,buffer):
         '''Reconstructs a frame from multiple frames'''
-        
-        frame = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))  #Initializing frame
-        
-        #For each column step
-        for i in range(int(self.number_of_steps)-1):
-            current_step = int(i*self.parameters['etl_step'])
-            next_step = int(i*self.parameters['etl_step']+self.parameters['etl_step'])
-            frame[:,current_step:next_step] = buffer[i,:,current_step:next_step]
-        #For the last column step (may be different than the others...)
-        last_step = int(int(self.number_of_steps-1) * self.parameters['etl_step'])
-        frame[:,last_step:] = buffer[int(self.number_of_steps-1),:,last_step:]
-        
-        return frame
     
-        #reconstructed_frame = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))  #Initializing frame
-        #
-        #for frame in range(int(self.number_of_steps)):
-        #    first_column = frame * self.parameters['etl_step']
-        #    next_first_column = first_column + self.parameters['etl_step']
-        #    if frame == int(self.number_of_steps-1):  #For the last column step (may be different than the others...)
-        #        frame[:,first_column:] = buffer[frame,:,first_column:]
-        #    else:
-        #        frame[:,first_column:next_first_column] = buffer[frame,:,first_column:next_first_column]
-        #
-        #return reconstructed_frame
+        reconstructed_frame = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))  #Initializing frame
+        
+        for frame in range(int(self.number_of_steps)):
+            first_column = frame * self.parameters['etl_step']
+            next_first_column = first_column + self.parameters['etl_step']
+            if frame == int(self.number_of_steps-1):  #For the last column step (may be different than the others...)
+                reconstructed_frame[:,first_column:] = buffer[frame,:,first_column:]
+            else:
+                reconstructed_frame[:,first_column:next_first_column] = buffer[frame,:,first_column:next_first_column]
+        
+        return reconstructed_frame
     
     def crop_buffer(self,buffer):
         '''Crops each frame of a buffer for a frame reconstruction'''
@@ -1473,11 +1422,12 @@ class Controller(QWidget):
 
         for frame in range(int(self.number_of_steps)):
             first_column = frame * self.parameters['etl_step'] - column_buffer
-            next_first_column = first_column + self.parameters['etl_step'] + column_buffer
+            next_first_column = first_column + self.parameters['etl_step'] + (2*column_buffer)
             if frame == 0:  #For the first column step
-                reconstructed_buffer[frame,:,0:next_first_column] = buffer[frame,:,0:next_first_column]
+                reconstructed_buffer[frame,:,column_buffer:] = buffer[frame,:,0:(self.parameters['etl_step'] + column_buffer)]
             elif frame == int(self.number_of_steps-1):  #For the last column step (may be different than the others...)
-                reconstructed_buffer[frame,:,0:(self.parameters['etl_step'] + column_buffer)] = buffer[frame,:,first_column:]
+                last_column_step = self.parameters["columns"] - first_column
+                reconstructed_buffer[frame,:,0:last_column_step] = buffer[frame,:,first_column:]
             else:
                 reconstructed_buffer[frame,:,:] = buffer[frame,:,first_column:next_first_column]
         
@@ -1491,13 +1441,9 @@ class Controller(QWidget):
         '''Generate ETLs, galvos & camera's ramps, get a single reconstructed image and display it'''
         
         '''Creating ETLs, galvos & camera's ramps and waveforms'''
-        self.ramps=AOETLGalvos(self.parameters)
-        self.ramps.initialize()                  
+        self.ramps = AOETLGalvos(self.parameters)  
         self.ramps.create_tasks(terminals,'FINITE')
-        if self.etls_calibrated == True: ##
-            self.ramps.create_calibrated_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept, case = 'STAIRS')
-        else: ##
-            self.ramps.create_etl_waveforms(case = 'STAIRS')
+        self.ramps.create_calibrated_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept)
         self.ramps.create_galvos_waveforms(case = 'TRAPEZE')
         self.ramps.create_digital_output_camera_waveform( case = 'STAIRS_FITTING')
         
@@ -1530,7 +1476,7 @@ class Controller(QWidget):
         self.live_mode_started = True
         
         '''Disabling other modes while in live_mode'''
-        self.update_buttons([self.pushButton_stopLiveMode])
+        self.update_buttons_modes([self.pushButton_stopLiveMode])
         
         self.print_controller('Live mode started')
         
@@ -1567,7 +1513,7 @@ class Controller(QWidget):
         self.stop_lasers()
         
         '''Enabling modes after live_mode'''
-        self.update_buttons(self.default_buttons)
+        self.update_buttons_modes(self.default_buttons)
         
         self.print_controller('Live mode stopped')
 
@@ -1584,7 +1530,7 @@ class Controller(QWidget):
         self.close_modes()
             
         '''Disabling modes while single frame acquisition'''
-        self.update_buttons(self.default_buttons)
+        self.update_buttons_modes(self.default_buttons)
         
         self.print_controller('Getting single image')
         
@@ -1621,7 +1567,7 @@ class Controller(QWidget):
         
         '''Enabling modes after single frame acquisition'''
         self.default_buttons.append(self.pushButton_saveImage)
-        self.update_buttons(self.default_buttons)
+        self.update_buttons_modes(self.default_buttons)
     
     def select_directory(self):
         '''Allows the selection of a directory for single_image or stack saving'''
@@ -1636,40 +1582,50 @@ class Controller(QWidget):
             self.lineEdit_filename.setEnabled(True)
             self.lineEdit_filename.setText('')
             self.lineEdit_sampleName.setEnabled(True)
-            self.saving_allowed = True
         else:
             self.label_currentDirectory.setText('None specified')
             self.lineEdit_filename.setEnabled(False)
             self.lineEdit_filename.setText('Select directory first')
             self.lineEdit_sampleName.setEnabled(False)
-            self.saving_allowed = False
+    
+    def get_file_name(self):
+        '''Retrieve filename set by the user'''
+        
+        self.filename = str(self.lineEdit_filename.text())
+        #Removing spaces, dots and commas in filename
+        for symbol in [' ','.',',']:
+            self.filename = self.filename.replace(symbol, '')
+            
+        if (self.save_directory != '') and (self.filename != ''):
+            self.filename = self.save_directory + '/' + self.filename
+            self.saving_allowed = True
+    
+    def get_sample_name(self):
+        '''Retrieve sample name'''
+        
+        if str(self.lineEdit_sampleName.text()) != '':
+            parameters["sample_name"] = str(self.lineEdit_sampleName.text())
     
     def save_single_image(self):
         '''Saves the frame generated by self.get_single_image()'''
         
         '''Retrieving filename set by the user'''
-        self.filename = str(self.lineEdit_filename.text())
+        self.get_file_name()
         
-        '''Removing spaces, dots and commas in filename'''
-        for symbol in [' ','.',',']:
-            self.filename = self.filename.replace(symbol, '')
-        
-        if self.saving_allowed and self.filename != '':
-            self.filename = self.save_directory + '/' + self.filename
-            
+        if self.saving_allowed:
             '''Setting up frame saver'''
             self.frame_saver = FrameSaver()
             self.frame_saver.set_block_size(1) #Block size is a number of buffers ##
             self.frame_saver.add_motor_parameters(self.image_hor_pos_text,self.image_ver_pos_text,self.image_cam_pos_text)
             
             '''Getting sample name'''
-            if str(self.lineEdit_sampleName.text()) != '':
-                parameters["sample_name"] = str(self.lineEdit_sampleName.text())
+            self.get_sample_name()
             
             '''Saving frame'''
-            if self.checkBox_saveAllFrames.isChecked() == True:
+            if self.checkBox_saveAllFrames.isChecked():
                 self.frame_saver.set_files(1,self.filename,'singleImage','ETLscan',True)
-                self.frame_saver.put(self.buffer,1)
+                cropped_buffer = self.crop_buffer(self.buffer)
+                self.frame_saver.put(cropped_buffer,1)
                 self.print_controller('Saving Images (one for each ETL scan)')
             else:
                 self.frame_saver.set_files(1,self.filename,'singleImage','reconstructed_frame')
@@ -1687,7 +1643,7 @@ class Controller(QWidget):
            acquisition'''
         
         if self.doubleSpinBox_planeStep.value() != 0:
-            if (self.checkBox_setStartPoint.isChecked() == True) and (self.checkBox_setEndPoint.isChecked() == True):
+            if self.checkBox_setStartPoint.isChecked() and self.checkBox_setEndPoint.isChecked():
                 self.number_of_planes = np.ceil(abs((self.stack_mode_ending_point-self.stack_mode_starting_point)/self.doubleSpinBox_planeStep.value()))
                 self.number_of_planes += 1   #Takes into account the initial plane
                 self.label_numberOfPlanes.setText(str(self.number_of_planes))
@@ -1708,189 +1664,6 @@ class Controller(QWidget):
         self.stack_mode_starting_point = self.motor_horizontal.current_position('\u03BCm') #Units in micro-meters, because plane step is in micro-meters
         self.checkBox_setStartPoint.setChecked(True)
         self.set_number_of_planes()
-    
-    
-    #def start_stack_mode_mp(self):
-    #    self.close_modes()
-    #    '''Retrieving filename set by the user'''       
-    #    self.filename = str(self.lineEdit_filename.text())
-    #     
-    #    '''Removing spaces, dots and commas''' ###???
-    #    for symbol in [' ','.',',']:
-    #        self.filename = self.filename.replace(symbol, '')
-    #    
-    #    '''Making sure the limits of the volume are set, saving is allowed and 
-    #       filename isn't empty'''
-    #    if (self.checkBox_setStartPoint.isChecked() == False) or (self.checkBox_setEndPoint.isChecked() == False) or (self.doubleSpinBox_planeStep.value() == 0):
-    #        print('Set starting and ending points and select a non-zero plane step value')
-    #    elif (self.saving_allowed == False) or (self.filename == ''):
-    #        print('Select directory and enter a valid filename before saving')
-    #    else:
-    #        '''Setting start & end points and plane step (takes into account the direction of acquisition) '''
-    #        if self.stack_mode_starting_point > self.stack_mode_ending_point:
-    #            self.step = -1*self.doubleSpinBox_planeStep.value()
-    #            self.start_point = self.stack_mode_starting_point
-    #            self.end_point = self.stack_mode_starting_point+self.step*(self.number_of_planes-1)
-    #        else:
-    #            self.step = self.doubleSpinBox_planeStep.value()
-    #            self.start_point = self.stack_mode_starting_point
-    #            self.end_point = self.stack_mode_starting_point+self.step*(self.number_of_planes-1)
-    #            
-    #        self.stack_mode_started = True
-    #        
-    #        '''Modes disabling while stack acquisition'''
-    #        self.update_buttons([self.pushButton_stopStack])
-    #        
-    #        self.print_controller('Stack mode started -- Number of frames to save: '+str(self.number_of_planes))
-    #        
-    #        '''Starting stack mode process'''   
-    #        
-    #        self.p = multiprocessing.Process(target = self.stack_mode_process)
-    #        self.p.start()
-    #        
-    #def stack_mode_process(self): ##utliser get_single_image
-    #    ''' Thread for volume acquisition and saving 
-    #    
-    #    Note: check if there's a NI-Daqmx function to repeat the data sent 
-    #          instead of closing each time the task. This would be useful
-    #          if it is possible to break a task with self.stop_stack_mode
-    #    Simpler solution: Use conditions with self._stack_mode_started status 
-    #                      such as in self.live_mode_thread() and 
-    #                      self.preview_mode_thread()
-    #    
-    #    A progress bar would be nice
-    #    '''
-    #    
-    #    '''Setting the camera for acquisition'''
-    #    self.start_camera_recording('ExternalExposureControl')
-    #    
-    #    ''' Prepare saving (if we lose planes while saving, add more buffers 
-    #        to block size, but make sure they don't take all the RAM'''
-    #    #self.filename = self.save_directory + '/' + self.filename
-    #    #self.frame_saver = FrameSaver()
-    #    #self.frame_saver.set_block_size(3)  #3 buffers allowed in the queue
-    #    #self.frame_saver.set_files(self.number_of_planes, self.filename, 'stack', 'ETL_scan')
-    #    
-    #    #self.set_data_consumer(self.frame_saver, False, "FrameSaver", True) ###???
-    #    #self.frame_saver.start_saving(data_type = 'auto')
-    #    
-    #    '''Creating lasers task'''
-    #    self.lasers_task = nidaqmx.Task()
-    #    self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
-    #    
-    #    '''Starting lasers'''
-    #    self.start_lasers()
-    #    
-    #    '''Creating ETLs, galvos & camera's ramps and waveforms'''
-    #    self.ramps=AOETLGalvos(self.parameters)
-    #    self.ramps.initialize()
-    #    self.ramps.create_etl_waveforms(case = 'STAIRS')
-    #    self.ramps.create_galvos_waveforms(case = 'TRAPEZE')
-    #    self.ramps.create_digital_output_camera_waveform( case = 'STAIRS_FITTING')
-    #    
-    #    '''Set progress bar'''
-    #    progress_value = 0
-    #    progress_increment = int(100/self.number_of_planes)
-    #    self.sig_update_progress.emit(0) #To reset progress bar
-    #    
-    #    frame_list = []
-    #    xvals_list = []
-    #    
-    #    for plane in range(int(self.number_of_planes)):
-    #        
-    #        if self.stack_mode_started == False:
-    #            self.print_controller('Acquisition Interrupted')
-    #            break
-    #        else:
-    #            '''Moving sample position'''
-    #            position = self.start_point+plane*self.step
-    #            self.motor_horizontal.move_absolute_position(position,'\u03BCm')  #Position in micro-meters
-    #            self.update_position_horizontal()
-    #            #self.frame_saver.add_motor_parameters(self.current_horizontal_position_text,self.current_vertical_position_text,self.current_camera_position_text)
-    #            
-    #            '''Moving the camera to focus'''
-    #            ###self.move_camera_to_focus()   
-    #            
-    #            '''Acquiring the frame '''
-    #            self.ramps.create_tasks(terminals,'FINITE')
-    #            self.ramps.write_waveforms_to_tasks()                            
-    #            self.ramps.start_tasks()
-    #            self.ramps.run_tasks()
-    #            
-    #            '''Retrieving buffer'''
-    #            self.number_of_steps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"]) #Number of galvo sweeps in a frame, or alternatively the number of ETL focal step
-    #            self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
-    #            
-    #            '''Frame reconstruction for display'''
-    #            frame = self.reconstruct_frame(self.buffer)
-    #            buffer = np.insert(self.buffer, 0, frame, axis=0)
-    #            transp_frame = np.transpose(frame)
-    #            
-    #            xvals_list.append(plane+1) ###changer pour position horizontale?
-    #            frame_list.append(transp_frame.tolist())
-    #            if len(frame_list) > 3 : ##20 #To prevent the list of frames from being too big
-    #                frame_list.pop(0)
-    #                xvals_list.pop(0)
-    #            
-    #            frame3d = np.array(frame_list)
-    #            
-    #            xvals = np.array(xvals_list)
-    #            self.camera_window.change_xvals(xvals)
-    #            
-    #            '''Frame display and buffer saving'''
-    #            for ii in range(0, len(self.consumers), 4):
-    #                if self.consumers[ii+2] == 'CameraWindow':
-    #                    try:
-    #                        self.consumers[ii].put(frame3d)
-    #                        print('Frame put in CameraWindow')
-    #                    except:      #self.consumers[ii].Full:
-    #                        print("CameraWindow queue is full")
-    #                    
-    #                #if self.consumers[ii+2] == 'FrameSaver':
-    #                #    try:
-    #                #        self.consumers[ii].put(buffer,1)
-    #                #        print('Frame put in FrameSaver')
-    #                #    except:      #self.consumers[ii].Full:
-    #                #        print("FrameSaver queue is full")
-    #            
-    #            '''Ending tasks'''
-    #            self.ramps.stop_tasks()                             
-    #            self.ramps.close_tasks()
-    #            
-    #            '''Update progress bar'''
-    #            progress_value += progress_increment
-    #            self.sig_update_progress.emit(progress_value)
-    #    
-    #    self.finalize_stack_mode_mp()
-    #   
-    #def finalize_stack_mode_mp(self):
-    #    self.sig_update_progress.emit(100) #In case the number of planes is not a multiple of 100
-    #    
-    #    self.camera_window.change_xvals(None) #Return xvals to default
-    #    
-    #    self.laser_on = False
-    #    
-    #    self.frame_saver.stop_saving()
-    #    
-    #    '''Stopping camera'''
-    #    self.camera.cancel_images()
-    #    self.camera.set_recording_state(0)
-    #    self.camera.free_buffer()
-    #            
-    #    '''Stopping laser'''
-    #    self.stop_lasers()
-    #    
-    #    '''Enabling modes after stack mode'''
-    #    self.update_buttons(self.default_buttons)
-    #    
-    #    self.print_controller('Acquisition done')
-    #    self.p.join()    
-    #
-    #def stop_stack_mode_mp(self):
-    #    '''Changes the live_mode flag status to end the thread'''
-    #    self.stack_mode_started = False
-    #
-    
     
     def start_stack_mode(self):
         '''Initializes variables for volume saving which will take place in 
@@ -1915,7 +1688,7 @@ class Controller(QWidget):
             self.stack_mode_started = True
             
             '''Modes disabling while stack acquisition'''
-            self.update_buttons([self.pushButton_stopStack])
+            self.update_buttons_modes([self.pushButton_stopStack])
             
             self.print_controller('Stack mode started -- Number of frames to save: '+str(int(self.number_of_planes)))
             
@@ -1942,26 +1715,20 @@ class Controller(QWidget):
         self.camera_window.change_frame_display_mode('frame3d')
         
         '''Retrieving filename set by the user'''
-        self.filename = str(self.lineEdit_filename.text())
-        '''Removing spaces, dots and commas'''
-        for symbol in [' ','.',',']:
-            self.filename = self.filename.replace(symbol, '')
+        self.get_file_name()
         
         '''Making sure saving is allowed and filename isn't empty'''
-        if self.saving_allowed and self.filename != '':
-            self.filename = self.save_directory + '/' + self.filename
-            
+        if self.saving_allowed:
             '''Setting frame saver'''
             self.frame_saver = FrameSaver()
             self.frame_saver.set_block_size(3) #Block size is a number of buffers
             '''Getting sample name'''
-            if str(self.lineEdit_sampleName.text()) != '':
-                parameters["sample_name"] = str(self.lineEdit_sampleName.text())
+            self.get_sample_name()
             
             self.set_data_consumer(self.frame_saver, False, "FrameSaver", True) ###
             
             '''Starting frame saver'''
-            if self.checkBox_saveAllFrames.isChecked() == True:
+            if self.checkBox_saveAllFrames.isChecked():
                 self.frame_saver.set_files(self.number_of_planes,self.filename,'stack','ETLscan',True)
             else:
                 self.frame_saver.set_files(self.number_of_planes,self.filename,'stack','reconstructed_frame')
@@ -1995,16 +1762,17 @@ class Controller(QWidget):
                 '''Moving the camera to focus'''
                 ##self.move_camera_to_focus()   
                 
-                if self.saving_allowed and self.filename != '':
+                if self.saving_allowed:
                     self.frame_saver.add_motor_parameters(self.current_horizontal_position_text,self.current_vertical_position_text,self.current_camera_position_text)
                 
                 '''Getting image'''
                 self.get_single_image()
                 
                 '''Saving frame'''
-                if self.saving_allowed and self.filename != '':
+                if self.saving_allowed:
                     if self.checkBox_saveAllFrames.isChecked():
-                        self.send_frame_to_consumer(self.buffer,False,True)
+                        cropped_buffer = self.crop_buffer(self.buffer)
+                        self.send_frame_to_consumer(cropped_buffer,False,True)
                         self.print_controller('Saving Images (one for each ETL scan)')
                     else:
                         self.send_frame_to_consumer(self.reconstructed_frame,False,True)
@@ -2016,7 +1784,7 @@ class Controller(QWidget):
         if self.stack_mode_started:
             self.sig_update_progress.emit(100) #In case the number of planes is not a multiple of 100
         
-        if self.saving_allowed and self.filename != '':
+        if self.saving_allowed:
             self.frame_saver.stop_saving()
         
         '''Stopping camera'''
@@ -2027,7 +1795,7 @@ class Controller(QWidget):
         self.both_lasers_activated = False
         
         '''Enabling modes after stack mode'''
-        self.update_buttons(self.default_buttons)
+        self.update_buttons_modes(self.default_buttons)
         
         self.print_controller('Acquisition done')
     
@@ -2046,7 +1814,7 @@ class Controller(QWidget):
         self.camera_calibration_started = True
        
         '''Modes disabling while stack acquisition'''
-        self.update_buttons([self.pushButton_cancelCalibrateCamera])
+        self.update_buttons_modes([self.pushButton_cancelCalibrateCamera])
             
         self.print_controller('Camera calibration started')
             
@@ -2069,15 +1837,6 @@ class Controller(QWidget):
         self.both_lasers_activated = True
         self.start_lasers()
         
-        #'''Creating ETLs, galvos & camera's ramps and waveforms'''
-        #self.parameters["etl_step"] = self.parameters["columns"] #To keep ETL constant, scan only 1 column
-        #
-        #self.ramps=AOETLGalvos(self.parameters)
-        #self.ramps.initialize()
-        #self.ramps.create_etl_waveforms(case = 'STAIRS')
-        #self.ramps.create_galvos_waveforms(case = 'TRAPEZE')
-        #self.ramps.create_digital_output_camera_waveform( case = 'STAIRS_FITTING')
-        
         '''Getting calibration parameters'''
         if self.doubleSpinBox_numberOfCalibrationPlanes.value() != 0:
             self.number_of_calibration_planes = self.doubleSpinBox_numberOfCalibrationPlanes.value()
@@ -2085,8 +1844,8 @@ class Controller(QWidget):
             self.number_of_camera_positions = self.doubleSpinBox_numberOfCameraPositions.value()
         
         sample_increment_length = (self.horizontal_forward_boundary - self.horizontal_backward_boundary) / self.number_of_calibration_planes
-        self.focus_backward_boundary = 245000#int(200000*0.75)#200000#245000#225000#245000#250000 #263000   ##Position arbitraire en u-steps
-        self.focus_forward_boundary = 265000#int(300000*25/20)#300000#265000#255000#265000#270000  #269000   ##Position arbitraire en u-steps
+        self.focus_backward_boundary = 397626#245000#int(200000*0.75)#200000#245000#225000#245000#250000 #263000   ##Position arbitraire en u-steps
+        self.focus_forward_boundary = 447506#265000#int(300000*25/20)#300000#265000#255000#265000#270000  #269000   ##Position arbitraire en u-steps
         camera_increment_length = (self.focus_forward_boundary - self.focus_backward_boundary) / self.number_of_camera_positions
         
         position_depart_sample = self.motor_horizontal.current_position('\u03BCStep')
@@ -2098,19 +1857,17 @@ class Controller(QWidget):
         self.popt = np.zeros((int(self.number_of_calibration_planes),3))    #debugging
         
         '''Retrieving filename set by the user''' #debugging
-        self.filename = str(self.lineEdit_filename.text())
-        if self.saving_allowed and self.filename != '':
-            
-            self.filename = self.save_directory + '/' + self.filename
-            
+        self.get_file_name()
+        
+        if self.saving_allowed:
             '''Setting frame saver'''
             self.frame_saver = FrameSaver()
             self.frame_saver.set_block_size(3) #Block size is a number of buffers
             self.frame_saver.set_files(self.number_of_calibration_planes,self.filename,'cameraCalibration','camera_position')
-            '''File attributes'''
-            if str(self.lineEdit_sampleName.text()) != '':
-                parameters["sample_name"] = str(self.lineEdit_sampleName.text())
+            '''Getting sample name'''
+            self.get_sample_name()
             
+            self.set_data_consumer(self.frame_saver, False, "FrameSaver", True) ###
             '''Starting frame saver'''
             self.frame_saver.start_saving()
         else:
@@ -2169,15 +1926,15 @@ class Controller(QWidget):
                     
 
                     '''Retrieving filename set by the user''' #debugging
-                    if self.saving_allowed and self.filename != '': #debugging
+                    if self.saving_allowed: #debugging
                         self.frame_saver.add_motor_parameters(self.current_horizontal_position_text,self.current_vertical_position_text,self.current_camera_position_text)
                     
                     '''Getting image'''
                     self.get_single_image()
                     
                     '''Saving frame'''
-                    if self.saving_allowed and self.filename != '':
-                        if self.checkBox_saveAllFrames.isChecked() == True:
+                    if self.saving_allowed:
+                        if self.checkBox_saveAllFrames.isChecked():
                             self.send_frame_to_consumer(self.buffer,False,True)
                             self.print_controller('Saving Images (one for each ETL scan)')
                         else:
@@ -2191,9 +1948,6 @@ class Controller(QWidget):
                     flatframe=frame.flatten()
                     metricvar[j]=np.var(flatframe)
                     
-                    #'''Ending tasks'''
-                    #self.ramps.stop_tasks()                             
-                    #self.ramps.close_tasks()
                 
                 #buffer3d = np.array(buffer3d_list)
                 #if self.saving_allowed and self.filename != '': #debugging
@@ -2232,7 +1986,7 @@ class Controller(QWidget):
         print('relation:') #debugging
         print(self.camera_focus_relation)#debugging
         
-        if self.saving_allowed and self.filename != '': #debugging
+        if self.saving_allowed: #debugging
             self.frame_saver.stop_saving()
             self.print_controller('Images saved')
         
@@ -2250,18 +2004,19 @@ class Controller(QWidget):
         self.both_lasers_activated = False
         
         '''Calculating focus'''
-        if self.camera_calibration_started == True: #To make sure calibration wasn't stopped before the end
+        if self.camera_calibration_started: #To make sure calibration wasn't stopped before the end
             x = self.camera_focus_relation[:,0]
             y = self.camera_focus_relation[:,1]
             self.slope_camera, self.intercept_camera, r_value, p_value, std_err = stats.linregress(x, y)
             self.calculate_camera_focus()
             
-            self.default_buttons.append([self.pushButton_calculateFocus,self.pushButton_showCamInterpolation])
+            self.default_buttons.append(self.pushButton_calculateFocus)
+            self.default_buttons.append(self.pushButton_showCamInterpolation)
         
         self.print_controller('Camera calibration done')
             
         '''Enabling modes after camera calibration'''
-        self.update_buttons(self.default_buttons)
+        self.update_buttons_modes(self.default_buttons)
             
         self.camera_calibration_started = False
 
@@ -2278,7 +2033,7 @@ class Controller(QWidget):
         self.etls_calibration_started = True
        
         '''Modes disabling while stack acquisition'''
-        self.update_buttons([self.pushButton_stopEtlsGalvosCalibration])
+        self.update_buttons_modes([self.pushButton_stopEtlsGalvosCalibration])
         
         self.print_controller('ETL calibration started')
         
@@ -2488,14 +2243,13 @@ class Controller(QWidget):
         self.stop_lasers()
         self.both_lasers_activated = False
         
-        if self.etls_calibration_started == True: #To make sure calibration wasn't stopped before the end
+        if self.etls_calibration_started: #To make sure calibration wasn't stopped before the end
             self.default_buttons.append([self.pushButton_showEtlInterpolation])
-            self.etls_calibrated = True
         
         self.print_controller('Calibration done')
             
         '''Enabling modes after camera calibration'''
-        self.update_buttons(self.default_buttons)
+        self.update_buttons_modes(self.default_buttons)
             
         self.etls_calibration_started = False
 
@@ -2572,7 +2326,7 @@ class CameraWindow(queue.Queue):
             
             '''Retrieving and displaying new frame'''
             frame = self.get(False)
-            if self.stack_mode == True:
+            if self.stack_mode:
                 self.frame_list.append(frame.tolist())
                 if len(self.frame_list) > 10 : #To prevent the list of frames from being too big
                     self.frame_list.pop(0)
@@ -2697,14 +2451,14 @@ class FrameSaver():
                 try:
                     '''Retrieve buffer'''
                     buffer = self.queue.get(True,1)
-                    #print('Buffer received') #debugging
+                    print('Buffer received') #debugging
                     if buffer.ndim == 2:
                         buffer = np.expand_dims(buffer, axis=0) #To consider 2D arrays as a 3D arrays
                     for frame in range(buffer.shape[0]): #For each 2D frame
                         '''Create dataset'''
                         path_root = self.datasets_name+u'%03d'%counter
                         self.dataset = f.create_dataset(path_root, data=buffer[frame,:,:])
-                        #print('Dataset created:'+str(path_root)) #debugging
+                        print('Dataset created:'+str(path_root)) #debugging
                         
                         '''Add attributes'''
                         self.add_attribute('Sample', parameters["sample_name"])

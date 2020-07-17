@@ -105,7 +105,7 @@ def etl_live_mode_waveform(amplitude, number_of_samples): ###pas utilisé
     
     return np.array(array)
 
-def etl_stairs(amplitude, number_of_steps, number_of_samples, samples_per_step, offset, direction):
+def etl_stairs(amplitude, number_of_steps, number_of_samples, samples_per_step, offset, direction): ###Plus utilisé
     '''Step function. The stairs are defined to be upwards or downwards depending 
        on the ETL.
     
@@ -145,7 +145,6 @@ def etl_stairs(amplitude, number_of_steps, number_of_samples, samples_per_step, 
 
     return np.array(array)
 
-###
 def calibrated_etl_stairs(left_slope, left_intercept, right_slope, right_intercept, etl_step, amplitude, number_of_steps, number_of_samples, samples_per_step, offset, direction):
     '''Step function. The stairs are defined to be upwards or downwards depending 
        on the ETL.
