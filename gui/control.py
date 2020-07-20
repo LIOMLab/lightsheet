@@ -53,20 +53,20 @@ with open(r"C:\git-projects\lightsheet\src\configuration.txt") as file:
 
 '''Default parameters'''
 parameters["sample_name"]='No Sample Name'
-parameters["samplerate"]=40000          # In samples/seconds
-parameters["etl_step"] = 400 #100            # In pixels
-parameters["galvo_l_frequency"]=100     # In Hertz
-parameters["galvo_l_amplitude"]=6.5 #2       # In Volts
-parameters["galvo_l_offset"]=-3         # In Volts
-parameters["galvo_r_frequency"]=100     # In Hertz
-parameters["galvo_r_amplitude"]=6.5 #2       # In Volts
-parameters["galvo_r_offset"]=-2.9         # In Volts
-parameters["etl_l_amplitude"]=2         # In Volts
-parameters["etl_l_offset"]=0            # In Volts
-parameters["etl_r_amplitude"]=2         # In Volts
-parameters["etl_r_offset"]=0            # In Volts
-parameters["laser_l_voltage"]=2.5#0.905#1.3      # In Volts
-parameters["laser_r_voltage"]=2.5#0.935     # In Volts
+##parameters["samplerate"]=40000          # In samples/seconds
+##parameters["etl_step"] = 400 #100            # In pixels
+##parameters["galvo_l_frequency"]=100     # In Hertz
+##parameters["galvo_l_amplitude"]=6.5 #2       # In Volts
+##parameters["galvo_l_offset"]=-3         # In Volts
+##parameters["galvo_r_frequency"]=100     # In Hertz
+##parameters["galvo_r_amplitude"]=6.5 #2       # In Volts
+##parameters["galvo_r_offset"]=-2.9         # In Volts
+##parameters["etl_l_amplitude"]=2         # In Volts
+##parameters["etl_l_offset"]=0            # In Volts
+##parameters["etl_r_amplitude"]=2         # In Volts
+##parameters["etl_r_offset"]=0            # In Volts
+##parameters["laser_l_voltage"]=2.5#0.905#1.3      # In Volts
+##parameters["laser_r_voltage"]=2.5#0.935     # In Volts
 
 parameters["sweeptime"]=0.4             # In seconds
 parameters["columns"] = 2560            # In pixels
@@ -128,6 +128,8 @@ class Controller(QWidget):
         
         self.consumers = [] ###
         self.figure_counter = 1
+        self.save_directory = ''
+        
         self.default_buttons = [self.pushButton_standbyOn,
                                 self.pushButton_getSingleImage,
                                 self.pushButton_startPreviewMode,
@@ -135,21 +137,20 @@ class Controller(QWidget):
                                 self.pushButton_startStack,
                                 self.pushButton_calibrateCamera,
                                 self.pushButton_calibrateEtlsGalvos]
+        etl_voltages_boxes = [self.doubleSpinBox_leftEtlAmplitude,
+                                self.doubleSpinBox_rightEtlAmplitude,
+                                self.doubleSpinBox_leftEtlOffset,
+                                self.doubleSpinBox_rightEtlOffset]
+        galvo_voltages_boxes = [self.doubleSpinBox_leftGalvoAmplitude,
+                                  self.doubleSpinBox_rightGalvoAmplitude,
+                                  self.doubleSpinBox_leftGalvoOffset,
+                                  self.doubleSpinBox_rightGalvoOffset]
+        galvo_frequencies_boxes = [self.doubleSpinBox_leftGalvoFrequency,
+                                     self.doubleSpinBox_rightGalvoFrequency]
+        laser_boxes = [self.doubleSpinBox_leftLaser,
+                         self.doubleSpinBox_rightLaser]
         
-        self.modifiable_param_buttons = [self.doubleSpinBox_leftEtlAmplitude,
-                                         self.doubleSpinBox_rightEtlAmplitude,
-                                         self.doubleSpinBox_leftEtlOffset,
-                                         self.doubleSpinBox_rightEtlOffset,
-                                         self.doubleSpinBox_leftGalvoAmplitude,
-                                         self.doubleSpinBox_rightGalvoAmplitude,
-                                         self.doubleSpinBox_leftGalvoOffset,
-                                         self.doubleSpinBox_rightGalvoOffset,
-                                         self.doubleSpinBox_leftGalvoFrequency,
-                                         self.doubleSpinBox_rightGalvoFrequency,
-                                         self.doubleSpinBox_samplerate,
-                                         self.spinBox_etlStep,
-                                         self.doubleSpinBox_leftLaser,
-                                         self.doubleSpinBox_rightLaser]
+        self.modifiable_param_boxes = etl_voltages_boxes + galvo_voltages_boxes + galvo_frequencies_boxes + [self.doubleSpinBox_samplerate] + [self.spinBox_etlStep] + laser_boxes 
         
         '''Default ETL relation values'''###Test
         self.left_slope = -0.001282893174259485
@@ -195,7 +196,41 @@ class Controller(QWidget):
         self.comboBox_unit.insertItems(0,["cm","mm","\u03BCm"])
         self.comboBox_unit.setCurrentIndex(1) #Default unit in millimeters
         
-        '''Initialize plane steps'''
+        '''--ETLs and galvos parameters' related widgets--'''
+        '''Initialize maximum and minimum values; suffixes; step values'''
+        
+        for box in etl_voltages_boxes:
+            box.setMaximum(5)
+            box.setSingleStep(0.1)
+            box.setSuffix(" V")
+        for box in galvo_voltages_boxes:
+            box.setMaximum(10)
+            box.setMinimum(-10)
+            box.setSingleStep(0.1)
+            box.setSuffix(" V")
+        for box in galvo_frequencies_boxes:
+            box.setMaximum(130)
+            box.setSuffix(" Hz")
+        for box in laser_boxes:
+            box.setMaximum(2.5)
+            box.setSingleStep(0.1)
+            box.setSuffix(" V")
+        
+        self.doubleSpinBox_samplerate.setMaximum(1000000)
+        self.doubleSpinBox_samplerate.setMinimum(1)
+        self.doubleSpinBox_samplerate.setSuffix(" samples/s")
+        self.spinBox_etlStep.setMaximum(2560)
+        self.spinBox_etlStep.setMinimum(1)
+        self.spinBox_etlStep.setSuffix(" columns")
+        
+        '''Initialize values'''
+        self.back_to_default_parameters()
+        
+        '''Initializing every other widget that are updated by a change of unit 
+            (the motion tab)'''
+        self.update_unit()
+        
+        '''Initialize calibration boxes''' ##
         self.doubleSpinBox_planeStep.setSuffix(' \u03BCm')
         self.doubleSpinBox_planeStep.setDecimals(0)
         self.doubleSpinBox_planeStep.setMaximum(101600) ##???
@@ -219,68 +254,6 @@ class Controller(QWidget):
         self.doubleSpinBox_numberOfEtlVoltages.setValue(10) #10 ETL points by default
         self.doubleSpinBox_numberOfEtlVoltages.setMaximum(10000) ##???
         self.doubleSpinBox_numberOfEtlVoltages.setSingleStep(1)
-        
-        '''--ETLs and galvos parameters' related widgets--'''
-        '''Initialize maximum and minimum values'''
-        self.doubleSpinBox_leftEtlAmplitude.setMaximum(5)
-        self.doubleSpinBox_rightEtlAmplitude.setMaximum(5)
-        self.doubleSpinBox_leftEtlOffset.setMaximum(5)
-        self.doubleSpinBox_rightEtlOffset.setMaximum(5)
-        
-        self.doubleSpinBox_leftGalvoAmplitude.setMaximum(10)
-        self.doubleSpinBox_leftGalvoAmplitude.setMinimum(-10)
-        self.doubleSpinBox_rightGalvoAmplitude.setMaximum(10)
-        self.doubleSpinBox_rightGalvoAmplitude.setMinimum(-10)
-        self.doubleSpinBox_leftGalvoOffset.setMaximum(10)
-        self.doubleSpinBox_leftGalvoOffset.setMinimum(-10)
-        self.doubleSpinBox_rightGalvoOffset.setMaximum(10)
-        self.doubleSpinBox_rightGalvoOffset.setMinimum(-10)
-        self.doubleSpinBox_leftGalvoFrequency.setMaximum(130)
-        self.doubleSpinBox_rightGalvoFrequency.setMaximum(130)
-        
-        self.doubleSpinBox_samplerate.setMaximum(1000000)
-        
-        self.spinBox_etlStep.setMaximum(2560)
-        
-        self.doubleSpinBox_leftLaser.setMaximum(2.5)
-        self.doubleSpinBox_leftLaser.setMaximum(2.5)
-        
-        '''Initialize values'''
-        self.back_to_default_parameters()
-        
-        '''Initialize step values'''
-        self.doubleSpinBox_leftEtlAmplitude.setSingleStep(0.1)
-        self.doubleSpinBox_rightEtlAmplitude.setSingleStep(0.1)
-        self.doubleSpinBox_leftEtlOffset.setSingleStep(0.1)
-        self.doubleSpinBox_rightEtlOffset.setSingleStep(0.1)
-        
-        self.doubleSpinBox_leftGalvoAmplitude.setSingleStep(0.1)
-        self.doubleSpinBox_rightGalvoAmplitude.setSingleStep(0.1)
-        self.doubleSpinBox_leftGalvoOffset.setSingleStep(0.1)
-        self.doubleSpinBox_rightGalvoOffset.setSingleStep(0.1)
-        
-        self.doubleSpinBox_leftLaser.setSingleStep(0.1)
-        self.doubleSpinBox_rightLaser.setSingleStep(0.1)
-        
-        '''Initialize suffixes'''
-        self.doubleSpinBox_leftEtlAmplitude.setSuffix(" V")
-        self.doubleSpinBox_rightEtlAmplitude.setSuffix(" V")
-        self.doubleSpinBox_leftEtlOffset.setSuffix(" V")
-        self.doubleSpinBox_rightEtlOffset.setSuffix(" V")
-        self.doubleSpinBox_leftLaser.setSuffix(" V")
-        self.doubleSpinBox_rightLaser.setSuffix(" V")
-        self.doubleSpinBox_leftGalvoAmplitude.setSuffix(" V")
-        self.doubleSpinBox_rightGalvoAmplitude.setSuffix(" V")
-        self.doubleSpinBox_leftGalvoOffset.setSuffix(" V")
-        self.doubleSpinBox_rightGalvoOffset.setSuffix(" V")
-        self.doubleSpinBox_leftGalvoFrequency.setSuffix(" Hz")
-        self.doubleSpinBox_rightGalvoFrequency.setSuffix(" Hz")
-        self.doubleSpinBox_samplerate.setSuffix(" samples/s")
-        self.spinBox_etlStep.setSuffix(" columns")
-        
-        '''Initializing every other widget that are updated by a change of unit 
-            (the motion tab)'''
-        self.update_unit()
         
         '''Initializing widgets' connections'''
         self.sig_update_progress.connect(self.progressBar_stackMode.setValue)
@@ -359,6 +332,9 @@ class Controller(QWidget):
         self.pushButton_showEtlInterpolation.pressed.connect(self.show_etl_interpolation)
         
         '''Connections for the ETLs and Galvos parameters'''
+        ##for param_string,param_box in zip(modifiable_parameters,self.modifiable_param_boxes):
+        ##    param_box.valueChanged.connect(lambda: self.update_etl_galvos_parameters(param_string,param_box))
+
         self.doubleSpinBox_leftEtlAmplitude.valueChanged.connect(lambda: self.update_etl_galvos_parameters(1))
         self.doubleSpinBox_rightEtlAmplitude.valueChanged.connect(lambda: self.update_etl_galvos_parameters(2))
         self.doubleSpinBox_leftEtlOffset.valueChanged.connect(lambda: self.update_etl_galvos_parameters(3))
@@ -500,54 +476,39 @@ class Controller(QWidget):
         
         self.unit = self.comboBox_unit.currentText()
         
-        '''Update suffixes'''
-        self.doubleSpinBox_incrementHorizontal.setSuffix(" {}".format(self.unit))
-        self.doubleSpinBox_incrementVertical.setSuffix(" {}".format(self.unit))
-        self.doubleSpinBox_incrementCamera.setSuffix(" {}".format(self.unit))
-        self.doubleSpinBox_choosePosition.setSuffix(" {}".format(self.unit))
-        self.doubleSpinBox_chooseHeight.setSuffix(" {}".format(self.unit))
-        self.doubleSpinBox_chooseCamera.setSuffix(" {}".format(self.unit))
-        
-        '''Update default values'''
-        self.doubleSpinBox_incrementHorizontal.setValue(1)
-        self.doubleSpinBox_incrementVertical.setValue(1)
-        self.doubleSpinBox_incrementCamera.setValue(1)
-        self.doubleSpinBox_choosePosition.setValue(0)
-        self.doubleSpinBox_chooseHeight.setValue(0)
-        self.doubleSpinBox_chooseCamera.setValue(0) ##Impossible, car le min est 50mm
-        
-        '''Update maximum and minimum values'''
-        
         if self.unit == 'cm':
             self.decimals = 4
-            
             self.horizontal_correction = 10.16  #Horizontal correction to fit choice of axis
             self.vertical_correction = 1.0      #Vertical correction to fit choice of axis ##À ajuster avec nouveau porte-cuvette
             self.camera_sample_min_distance = 1.5   #Approximate minimal horizontal distance between camera  ##Possiblement à changer
             self.camera_correction = 9.525 + 4.0  #Camera correction to fit choice of axis##À ajuster avec nouveau porte-cuvette +arranger 5cm entre camera et origine
         elif self.unit == 'mm':
             self.decimals = 3
-            
             self.horizontal_correction = 101.6      #Correction to fit choice of axis
             self.vertical_correction = 10.0         #Correction to fit choice of axis ##À ajuster avec nouveau porte-cuvette
             self.camera_sample_min_distance = 15.0   #Approximate minimal horizontal distance between camera  ##Possiblement à changer
             self.camera_correction = 95.25 + 40.0      #Camera correction to fit choice of axis##À ajuster avec nouveau porte-cuvette
         elif self.unit == '\u03BCm':
             self.decimals = 0
-            
             self.horizontal_correction = 101600     #Correction to fit choice of axis
             self.vertical_correction = 10000        #Correction to fit choice of axis ##À ajuster avec nouveau porte-cuvette
             self.camera_sample_min_distance = 15000   #Approximate minimal horizontal distance between camera  ##Possiblement à changer
             self.camera_correction = 95250 + 40000    #Camera correction to fit choice of axis##À ajuster avec nouveau porte-cuvette
         
-        '''Update the number of decimals'''
-        self.doubleSpinBox_incrementHorizontal.setDecimals(self.decimals)
-        self.doubleSpinBox_incrementVertical.setDecimals(self.decimals)
-        self.doubleSpinBox_incrementCamera.setDecimals(self.decimals)
-        self.doubleSpinBox_choosePosition.setDecimals(self.decimals)
-        self.doubleSpinBox_chooseHeight.setDecimals(self.decimals)
-        self.doubleSpinBox_chooseCamera.setDecimals(self.decimals)
+        unit_boxes = [self.doubleSpinBox_incrementHorizontal,
+                      self.doubleSpinBox_incrementVertical,
+                      self.doubleSpinBox_incrementCamera,
+                      self.doubleSpinBox_choosePosition,
+                      self.doubleSpinBox_chooseHeight,
+                      self.doubleSpinBox_chooseCamera]
         
+        '''Update suffixes'''
+        for box in unit_boxes:
+            box.setSuffix(" {}".format(self.unit))
+            box.setValue(1) ##Parfois impossible, car plus petit que valeur min...
+            box.setDecimals(self.decimals)
+        
+        ##
         '''Update maximum and minimum values for horizontal sample motion'''
         self.horizontal_maximum_in_old_axis = self.motor_horizontal.data_to_position(self.horizontal_forward_boundary,self.unit)    #This max is actually the min in our axis system
         self.horizontal_minimum_in_old_axis = self.motor_horizontal.data_to_position(self.horizontal_backward_boundary,self.unit)   #This min is actually the max in our axis system
@@ -986,14 +947,14 @@ class Controller(QWidget):
         
         self.parameters = copy.deepcopy(self.defaultParameters)
         
-        for param_string, param_button in zip(modifiable_parameters,self.modifiable_param_buttons):
-            param_button.setValue(self.parameters[param_string]) 
+        for param_string, param_box in zip(modifiable_parameters,self.modifiable_param_boxes):
+            param_box.setValue(self.parameters[param_string]) 
     
     def change_default_parameters(self):
         '''Change all the default modifiable parameters to the current parameters'''
         
-        for param_string,param_button in zip(modifiable_parameters,self.modifiable_param_buttons):
-            self.defaultParameters[param_string] = param_button.value()
+        for param_string,param_box in zip(modifiable_parameters,self.modifiable_param_boxes):
+            self.defaultParameters[param_string] = param_box.value()
         
     def save_default_parameters(self):
         '''Change all the default parameters of the configuration file to current default parameters'''
@@ -1002,9 +963,32 @@ class Controller(QWidget):
             for param_string in modifiable_parameters:
                 file.write(str(parameters[param_string]) + '\n')
     
-    def update_etl_galvos_parameters(self, parameterNumber):
+    def update_etl_galvos_parameters(self, parameterNumber, parameter_name=None, parameter_button=None):
         '''Updates the parameters in the software after a modification by the
            user'''
+        
+        ##self.parameters[parameter_name] = parameter_button.value()
+        ##
+        ##if parameter_name == "etl_l_amplitude":
+        ##    parameter_button.setMaximum(5-self.doubleSpinBox_leftEtlOffset.value()) #To prevent ETL's amplitude + offset being > 5V
+        ##elif parameter_name == "etl_r_amplitude":
+        ##    parameter_button.setMaximum(5-self.doubleSpinBox_rightEtlOffset.value()) #To prevent ETL's amplitude + offset being > 5V
+        ##elif parameter_name == "etl_l_offset":
+        ##    parameter_button.setMaximum(5-self.doubleSpinBox_leftEtlAmplitude.value()) #To prevent ETL's amplitude + offset being > 5V
+        ##elif parameter_name == "etl_r_offset":
+        ##    parameter_button.setMaximum(5-self.doubleSpinBox_rightEtlAmplitude.value()) #To prevent ETL's amplitude + offset being > 5V
+        ##elif parameter_name == "galvo_l_amplitude":
+        ##    parameter_button.setMaximum(10-self.doubleSpinBox_leftGalvoOffset.value()) #To prevent galvo's amplitude + offset being > 10V
+        ##    parameter_button.setMinimum(-10-self.doubleSpinBox_leftGalvoOffset.value()) #To prevent galvo's amplitude + offset being < -10V
+        ##elif parameter_name == "galvo_r_amplitude":
+        ##    parameter_button.setMaximum(10-self.doubleSpinBox_rightGalvoOffset.value()) #To prevent galvo's amplitude + offset being > 10V
+        ##    parameter_button.setMinimum(-10-self.doubleSpinBox_rightGalvoOffset.value()) #To prevent galvo's amplitude + offset being < -10V
+        ##elif parameter_name == "galvo_l_offset":
+        ##    parameter_button.setMaximum(10-self.doubleSpinBox_leftGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being > 10V
+        ##    parameter_button.setMinimum(-10-self.doubleSpinBox_leftGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being < -10V
+        ##elif parameter_name == "galvo_r_offset":
+        ##    parameter_button.setMaximum(10-self.doubleSpinBox_rightGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being > 10V
+        ##    parameter_button.setMinimum(-10-self.doubleSpinBox_rightGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being < -10V
         
         if parameterNumber == 1:
             self.doubleSpinBox_leftEtlAmplitude.setMaximum(5-self.doubleSpinBox_leftEtlOffset.value()) #To prevent ETL's amplitude + offset being > 5V
@@ -1395,7 +1379,6 @@ class Controller(QWidget):
     
     def stop_preview_mode(self):
         '''Changes the preview_mode flag status to end the thread'''
-        
         self.preview_mode_started = False
     
     
@@ -1405,8 +1388,20 @@ class Controller(QWidget):
         reconstructed_frame = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))  #Initializing frame
         
         for frame in range(int(self.number_of_steps)):
-            first_column = frame * self.parameters['etl_step']
-            next_first_column = first_column + self.parameters['etl_step']
+            '''Uniformize frame intensities'''
+            average = np.average(buffer[frame,0:100,:]) #Average the last column
+            print(str(frame)+' average:'+str(average))
+            #print(buffer[1,:,:] == buffer[3,:,:])
+            #if frame == 0:
+            #    reference_average = average
+            #    #print('reference_average:'+str(reference_average))
+            #else:
+            #    average_ratio = reference_average/average
+            #    #print('average_ratio:'+str(average_ratio))
+            #    buffer[frame,:,:] = buffer[frame,:,:] * average_ratio
+            '''Reconstruct frame'''
+            first_column = int(frame * self.parameters['etl_step'])
+            next_first_column = int(first_column + self.parameters['etl_step'])
             if frame == int(self.number_of_steps-1):  #For the last column step (may be different than the others...)
                 reconstructed_frame[:,first_column:] = buffer[frame,:,first_column:]
             else:
@@ -1418,15 +1413,15 @@ class Controller(QWidget):
         '''Crops each frame of a buffer for a frame reconstruction'''
         
         column_buffer = int(self.parameters["etl_step"]*0.2)
-        reconstructed_buffer = np.zeros((buffer.shape[0],int(self.parameters["rows"]),(self.parameters["etl_step"]+ (2*column_buffer))))  #Initializing frame
+        reconstructed_buffer = np.zeros((buffer.shape[0],int(self.parameters["rows"]),int(self.parameters["etl_step"]+ (2*column_buffer))))  #Initializing frame
 
         for frame in range(int(self.number_of_steps)):
-            first_column = frame * self.parameters['etl_step'] - column_buffer
-            next_first_column = first_column + self.parameters['etl_step'] + (2*column_buffer)
+            first_column = int(frame * self.parameters['etl_step'] - column_buffer)
+            next_first_column = int(first_column + self.parameters['etl_step'] + (2*column_buffer))
             if frame == 0:  #For the first column step
-                reconstructed_buffer[frame,:,column_buffer:] = buffer[frame,:,0:(self.parameters['etl_step'] + column_buffer)]
+                reconstructed_buffer[frame,:,column_buffer:] = buffer[frame,:,0:int(self.parameters['etl_step'] + column_buffer)]
             elif frame == int(self.number_of_steps-1):  #For the last column step (may be different than the others...)
-                last_column_step = self.parameters["columns"] - first_column
+                last_column_step = int(self.parameters["columns"] - first_column)
                 reconstructed_buffer[frame,:,0:last_column_step] = buffer[frame,:,first_column:]
             else:
                 reconstructed_buffer[frame,:,:] = buffer[frame,:,first_column:next_first_column]
@@ -1455,6 +1450,12 @@ class Controller(QWidget):
         '''Retrieving buffer'''
         self.number_of_steps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"]) #Number of galvo sweeps in a frame, or alternatively the number of ETL focal step
         self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
+        ##buffer_list = []
+        ##for _ in range(int(self.number_of_steps)):
+        ##    image = self.camera.retrieve_single_image()*1.0
+        ##    buffer_list.append(image.tolist())
+        ##self.buffer = np.array(buffer_list)
+        ##print(self.buffer.shape)
         
         '''Frame reconstruction for display'''
         self.reconstructed_frame = self.reconstruct_frame(self.buffer)
@@ -1518,8 +1519,7 @@ class Controller(QWidget):
         self.print_controller('Live mode stopped')
 
     def stop_live_mode(self):
-        '''Changes the live_mode flag status to end the thread'''
-        
+        '''Changes the live_mode flag status to end the thread'''    
         self.live_mode_started = False
     
     
@@ -1623,12 +1623,12 @@ class Controller(QWidget):
             
             '''Saving frame'''
             if self.checkBox_saveAllFrames.isChecked():
-                self.frame_saver.set_files(1,self.filename,'singleImage','ETLscan',True)
+                self.frame_saver.set_files(1,self.filename,'singleImage',1,'ETLscan',True)
                 cropped_buffer = self.crop_buffer(self.buffer)
                 self.frame_saver.put(cropped_buffer,1)
                 self.print_controller('Saving Images (one for each ETL scan)')
             else:
-                self.frame_saver.set_files(1,self.filename,'singleImage','reconstructed_frame')
+                self.frame_saver.set_files(1,self.filename,'singleImage',1,'reconstructed_frame')
                 self.frame_saver.put(self.reconstructed_frame,1)
                 self.print_controller('Saving Reconstructed Image')
             
@@ -1729,9 +1729,9 @@ class Controller(QWidget):
             
             '''Starting frame saver'''
             if self.checkBox_saveAllFrames.isChecked():
-                self.frame_saver.set_files(self.number_of_planes,self.filename,'stack','ETLscan',True)
+                self.frame_saver.set_files(self.number_of_planes,self.filename,'stack',1,'ETLscan',True)
             else:
-                self.frame_saver.set_files(self.number_of_planes,self.filename,'stack','reconstructed_frame')
+                self.frame_saver.set_files(1,self.filename,'stack',self.number_of_planes,'reconstructed_frame')
             self.frame_saver.start_saving()
         else:
             print('Select directory and enter a valid filename before saving')
@@ -1800,8 +1800,7 @@ class Controller(QWidget):
         self.print_controller('Acquisition done')
     
     def stop_stack_mode(self):
-        '''Changes the live_mode flag status to end the thread'''
-        
+        '''Changes the live_mode flag status to end the thread'''   
         self.stack_mode_started = False
     
     
@@ -1858,12 +1857,11 @@ class Controller(QWidget):
         
         '''Retrieving filename set by the user''' #debugging
         self.get_file_name()
-        
         if self.saving_allowed:
             '''Setting frame saver'''
             self.frame_saver = FrameSaver()
             self.frame_saver.set_block_size(3) #Block size is a number of buffers
-            self.frame_saver.set_files(self.number_of_calibration_planes,self.filename,'cameraCalibration','camera_position')
+            self.frame_saver.set_files(self.number_of_calibration_planes,self.filename,'cameraCalibration',self.number_of_camera_positions,'camera_position')
             '''Getting sample name'''
             self.get_sample_name()
             
@@ -1873,115 +1871,65 @@ class Controller(QWidget):
         else:
             print('Select directory and enter a valid filename before saving')
         
-        for i in range(int(self.number_of_calibration_planes)): #For each sample position
-            
+        for sample_plane in range(int(self.number_of_calibration_planes)): #For each sample position
             if self.camera_calibration_started == False:
                 self.print_controller('Camera calibration interrupted')
                 break
             else:
                 '''Moving sample position'''
-                position = self.horizontal_forward_boundary - (i * sample_increment_length)    #Increments of +sample_increment_length
+                position = self.horizontal_forward_boundary - (sample_plane * sample_increment_length)    #Increments of +sample_increment_length
                 self.motor_horizontal.move_absolute_position(position,'\u03BCStep')
                 self.update_position_horizontal()
                 
-                #buffer3d_list=[]
-                for j in range(int(self.number_of_camera_positions)): #For each camera position
+                for camera_plane in range(int(self.number_of_camera_positions)): #For each camera position
                     '''Moving camera position'''
-                    position_camera = self.focus_forward_boundary - (j * camera_increment_length) #Increments of +camera_increment_length
+                    position_camera = self.focus_forward_boundary - (camera_plane * camera_increment_length) #Increments of +camera_increment_length
                     self.motor_camera.move_absolute_position(position_camera,'\u03BCStep')
                     time.sleep(0.5) #To make sure the camera is at the right position
                     self.update_position_camera()
-                    
-                    #'''Writing waveform to task and running'''
-                    #self.ramps.create_tasks(terminals,'FINITE')
-                    #self.ramps.write_waveforms_to_tasks()                            
-                    #self.ramps.start_tasks()
-                    #self.ramps.run_tasks()
-                    #
-                    #'''Retrieving buffer'''
-                    #self.number_of_steps = 1 #To retrieve only one image
-                    ##self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
-                    #self.buffer = self.camera.retrieve_single_image()*1.0
-                    #buffer_copy = copy.deepcopy(self.buffer)##
-                    #buffer_copy = np.transpose(buffer_copy)
-                    #buffer_copy_save = copy.deepcopy(self.buffer)##
-                    #
-                    #for ii in range(0, len(self.consumers), 4):
-                    #    if self.consumers[ii+2] == "CameraWindow":
-                    #        try:
-                    #            self.consumers[ii].put(buffer_copy)
-                    #        except self.consumers[ii].Full:
-                    #            print("Queue is full")
-                    
-                    #'''Frame reconstruction for display'''
-                    #frame = self.reconstruct_frame()
-                    #
-                    #'''Frame display'''
-                    #for ii in range(0, len(self.consumers), 4):
-                    #    if self.consumers[ii+2] == "CameraWindow":
-                    #        try:
-                    #            self.consumers[ii].put(buffer_copy[0])
-                    #        except:      #self.consumers[i].Full:
-                    #            print("Queue is full")
-                    
 
                     '''Retrieving filename set by the user''' #debugging
-                    if self.saving_allowed: #debugging
+                    if self.saving_allowed:
                         self.frame_saver.add_motor_parameters(self.current_horizontal_position_text,self.current_vertical_position_text,self.current_camera_position_text)
                     
                     '''Getting image'''
                     self.get_single_image()
                     
-                    '''Saving frame'''
+                    '''Saving frame''' #debugging
                     if self.saving_allowed:
-                        if self.checkBox_saveAllFrames.isChecked():
-                            self.send_frame_to_consumer(self.buffer,False,True)
-                            self.print_controller('Saving Images (one for each ETL scan)')
-                        else:
-                            self.send_frame_to_consumer(self.reconstructed_frame,False,True)
-                            self.print_controller('Saving Reconstructed Image')
-                    
-                    #buffer3d_list.append(buffer_copy_save)
+                        self.send_frame_to_consumer(self.reconstructed_frame,False,True)
+                        self.print_controller('Saving Reconstructed Image')
                     
                     '''Filtering frame'''
                     frame = ndimage.gaussian_filter(self.reconstructed_frame, sigma=3)
-                    flatframe=frame.flatten()
-                    metricvar[j]=np.var(flatframe)
-                    
+                    flatframe = frame.flatten()
+                    metricvar[camera_plane] = np.var(flatframe)
                 
-                #buffer3d = np.array(buffer3d_list)
-                #if self.saving_allowed and self.filename != '': #debugging
-                #    '''Saving frame'''
-                #    self.frame_saver.put(buffer3d,1)
-                #    print('buffer put in queue ')
-                #
                 '''Calculating ideal camera position'''
-                
-                metricvar=(metricvar-np.min(metricvar))/(np.max(metricvar)-np.min(metricvar))#normalize
                 metricvar = signal.savgol_filter(metricvar, 11, 3) # window size 11, polynomial order 3
-                self.donnees[i,:] = metricvar #debugging
+                metricvar = (metricvar - np.min(metricvar))/(np.max(metricvar) - np.min(metricvar))#normalize
+                self.donnees[sample_plane,:] = metricvar #debugging
                 
-                n=len(metricvar)
-                x=np.arange(n)            
+                n = len(metricvar)
+                x = np.arange(n)            
                 mean = sum(x*metricvar)/n           
                 sigma = sum(metricvar*(x-mean)**2)/n
-                poscenter=np.argmax(metricvar)
-                print('poscenter:'+str(poscenter))
-                
+                poscenter = np.argmax(metricvar)
+                print('poscenter:'+str(poscenter)) #debugging
                 popt,pcov = optimize.curve_fit(gaussian,x,metricvar,p0=[1,mean,sigma],bounds=(0, 'inf'), maxfev=10000)
-                
-                amp,center,variance=popt
-                self.popt[i] = popt
+                amp,center,variance = popt
+                self.popt[sample_plane] = popt
                 print('center:'+str(center)) #debugging
                 print('amp:'+str(amp)) #debugging
                 print('variance:'+str(variance)) #debugging
+                print('pcov:'+str(pcov)) #debugging
                 
                 '''Saving focus relation'''
-                self.camera_focus_relation[i,0] = -self.motor_horizontal.current_position(self.unit) + self.horizontal_correction
+                self.camera_focus_relation[sample_plane,0] = -self.motor_horizontal.current_position(self.unit) + self.horizontal_correction
                 max_variance_camera_position = self.focus_forward_boundary - (center * camera_increment_length)
-                self.camera_focus_relation[i,1] = -self.motor_camera.data_to_position(max_variance_camera_position, self.unit) + self.camera_correction
+                self.camera_focus_relation[sample_plane,1] = -self.motor_camera.data_to_position(max_variance_camera_position, self.unit) + self.camera_correction
                 
-            self.print_controller('--Calibration of plane '+str(i+1)+'/'+str(int(self.number_of_calibration_planes))+' done')
+            self.print_controller('--Calibration of plane '+str(sample_plane+1)+'/'+str(int(self.number_of_calibration_planes))+' done')
         
         print('relation:') #debugging
         print(self.camera_focus_relation)#debugging
@@ -2008,6 +1956,9 @@ class Controller(QWidget):
             x = self.camera_focus_relation[:,0]
             y = self.camera_focus_relation[:,1]
             self.slope_camera, self.intercept_camera, r_value, p_value, std_err = stats.linregress(x, y)
+            print('r_value:'+str(r_value)) #debugging
+            print('p_value:'+str(p_value)) #debugging
+            print('std_err:'+str(std_err)) #debugging
             self.calculate_camera_focus()
             
             self.default_buttons.append(self.pushButton_calculateFocus)
@@ -2175,6 +2126,7 @@ class Controller(QWidget):
                     good_ydata=np.mean(ydatas,0)
                     popt, pcov = optimize.curve_fit(func, xdata, good_ydata,bounds=((0.5,0,0,0),(np.inf,np.inf,np.inf,np.inf)), maxfev=10000) #,bounds=(0,np.inf) #,bounds=((0,-np.inf,-np.inf,0),(np.inf,np.inf,np.inf,np.inf))
                     beamWidth,focusLocation,rayleighRange,offset = popt
+                    print('pcov'+str(pcov)) #debugging
                     
                     if focusLocation < 0:
                         focusLocation = 0
@@ -2255,7 +2207,6 @@ class Controller(QWidget):
 
     def stop_calibrate_etls(self):
         '''Interrups elts-galvos calibration'''
-        
         self.etls_calibration_started = False
 
 class CameraWindow(queue.Queue):
@@ -2366,7 +2317,6 @@ class FrameSaver():
     '''Set up methods'''
     
     def __init__(self):
-        self.frame_list = []
         self.filenames_list = [] 
         self.number_of_files = 1
         
@@ -2381,21 +2331,14 @@ class FrameSaver():
         self.vertical_positions_list.append(current_ver_position_txt)
         self.camera_positions_list.append(current_cam_position_txt)
     
-    def set_files(self,number_of_files, files_name, scan_type, datasets_name,save_all=False):
+    def set_files(self,number_of_files, files_name, scan_type, number_of_datasets, datasets_name):
         '''Set the number and name of files to save and makes sure the filenames 
         are unique in the path to avoid overwrite on other files'''
         
         self.number_of_files = number_of_files
         self.files_name = files_name
+        self.number_of_datasets = number_of_datasets
         self.datasets_name = datasets_name
-        if scan_type == 'stack':
-            self.stack_mode = True
-        else:
-            self.stack_mode = False
-        if save_all:
-            self.save_all_frames = True
-        else:
-            self.save_all_frames = False
         
         counter = 0
         for _ in range(int(self.number_of_files)):
@@ -2446,89 +2389,45 @@ class FrameSaver():
             f = h5py.File(self.filenames_list[file],'a')
             
             counter = 1
-            in_loop = True
-            while in_loop:
-                try:
-                    '''Retrieve buffer'''
-                    buffer = self.queue.get(True,1)
-                    print('Buffer received') #debugging
-                    if buffer.ndim == 2:
-                        buffer = np.expand_dims(buffer, axis=0) #To consider 2D arrays as a 3D arrays
-                    for frame in range(buffer.shape[0]): #For each 2D frame
-                        '''Create dataset'''
-                        path_root = self.datasets_name+u'%03d'%counter
-                        self.dataset = f.create_dataset(path_root, data=buffer[frame,:,:])
-                        print('Dataset created:'+str(path_root)) #debugging
-                        
-                        '''Add attributes'''
-                        self.add_attribute('Sample', parameters["sample_name"])
-                        self.add_attribute('Date', str(datetime.date.today()))
-                        if self.save_all_frames:
-                            index = file
-                        else:
-                            if self.stack_mode:###
-                                index = file###
-                            else:###
-                                index = frame
-                        self.add_attribute('Current sample horizontal position', self.horizontal_positions_list[index])
-                        self.add_attribute('Current sample vertical position', self.vertical_positions_list[index])
-                        self.add_attribute('Current camera horizontal position', self.camera_positions_list[index])
-                        
-                        for param_string in modifiable_parameters:
-                            self.add_attribute(param_string, parameters[param_string])
-                        counter += 1
-                    in_loop = False
-                except:
-                    #print('No buffer') #debugging
-                    if self.saving_started == False:
-                        in_loop = False
-            
-            f.close()
-            print('File '+self.filenames_list[file]+' saved')
-    
-    def save_thread_for_tests(self): ##
-        '''Thread for buffer saving'''
-        self.saving_started = True
-        for i in range(len(self.filenames_list)):
-            
-            f = h5py.File(self.filenames_list[i],'a')
-            
-            counter = 1
-            for _ in range(self.number_of_datasets):
+            for dataset in range(int(self.number_of_datasets)):
                 in_loop = True
-                    
                 while in_loop:
                     try:
+                        '''Retrieve buffer'''
                         buffer = self.queue.get(True,1)
-                        print('Buffer received \n')
-                        
-                        for ii in range(1): #buffer.shape[0] ##si retrieve multiple an lieu de single
-                            path_root = 'camera_position'+u'%03d'%counter
-                            dataset = f.create_dataset(path_root, data = buffer[:,:])  #buffer[ii,:,:] ##
+                        print(buffer.shape[0])
+                        print('Buffer received') #debugging
+                        if buffer.ndim == 2:
+                            buffer = np.expand_dims(buffer, axis=0) #To consider 2D arrays as a 3D arrays
+                        for frame in range(buffer.shape[0]): #For each 2D frame
+                            '''Create dataset'''
+                            path_root = self.datasets_name+u'%03d'%counter
+                            self.dataset = f.create_dataset(path_root, data=buffer[frame,:,:])
+                            print('Dataset created:'+str(path_root)) #debugging
                             
-                            '''Attributes'''
-                            dataset.attrs['Sample'] = parameters["sample_name"]
-                            dataset.attrs['Current sample horizontal position'] = self.current_horizontal_position_txt
-                            dataset.attrs['Current sample vertical position'] = self.current_vertical_position_txt
-                            dataset.attrs['Current camera horizontal position'] = self.current_camera_position_txt
-                            
+                            '''Add attributes'''
+                            self.add_attribute('Sample', parameters["sample_name"])
+                            self.add_attribute('Date', str(datetime.date.today()))
+                            if buffer.shape[0] == 1:
+                                pos_index = dataset + file * int(self.number_of_datasets)
+                            else:
+                                pos_index = file
+                            self.add_attribute('Current sample horizontal position', self.horizontal_positions_list[pos_index])
+                            self.add_attribute('Current sample vertical position', self.vertical_positions_list[pos_index])
+                            self.add_attribute('Current camera horizontal position', self.camera_positions_list[pos_index])
                             for param_string in modifiable_parameters:
-                                dataset.attrs[param_string]=parameters[param_string]
-                            
+                                self.add_attribute(param_string, parameters[param_string])
+                            print('attributes ok')
+                            counter += 1
                         in_loop = False
-                    
                     except:
-                        print('No buffer')
-                        
+                        #print('No buffer') #debugging
                         if self.saving_started == False:
                             in_loop = False
-                
-                counter += 1
-                
             f.close()
-            
+            print('File '+self.filenames_list[file]+' saved')
+
     def stop_saving(self):
-        '''Changes the flag status to end the saving thread'''
-        
+        '''Changes the flag status to end the saving thread''' 
         self.saving_started = False
 
