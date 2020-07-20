@@ -5,12 +5,12 @@ Created on August 9, 2019
 '''
 
 import sys
-from array import ArrayType, array
+#from array import ArrayType, array
 sys.path.append("..")
 
 import ctypes
 import numpy as np
-import time
+#import time
 
 '''Saving Dynamic Link Library functions from the manufacturer for Python use '''
 
@@ -108,41 +108,55 @@ class Camera:
         
         self.handle = ctypes.c_void_p(0)
         self.name = ctypes.c_char_p(b''*40)
-        open_camera(self.handle,0)
+        self.open_camera()
         #get_camera_name(self.handle, self.name, 40)
         #self.name = self.name.value.decode('ascii')
         
-    def allocate_buffer(self, number_of_buffers=2):
+    def open_camera(self):
+        '''Returns (as a handle) a connection to a camera'''
+        open_camera(self.handle,0) #Argument 0 not used
+        
+    def allocate_buffer(self, number_of_buffers=10):
+        '''Allocates a certain number of buffer in the camera for image transfer'''
+        
         self.number_of_buffers = number_of_buffers
         self.pointers = []  #Contains all the buffer pointers
-        bytes_in_buffer = self.x_current_res.value*self.y_current_res.value*2   #Times 2 for 16bit images 
-        for i in range(number_of_buffers):
-            sBufNr = ctypes.c_int16(-1)   #Index value attributed by allocate_buffer
+        bytes_in_buffer = self.x_current_res.value * self.y_current_res.value * 2   #Times 2 for 16bit images 
+        for _ in range(number_of_buffers):
+            sBufNr = ctypes.c_int16(-1)   #Index value attributed by allocate_buffer; index of -1 is to create new buffer
             self.pointers.append(ctypes.POINTER(ctypes.c_uint16)())
             hEvent = ctypes.c_void_p(0)   #Not useful for us
             allocate_buffer(self.handle, sBufNr, bytes_in_buffer, self.pointers[-1], hEvent)
             
     def add_buffer_ex(self,buffer_index):
-        add_buffer_ex(self.handle, 0, 0, buffer_index, self.x_current_res.value, self.y_current_res.value, 16)
+        '''Request a single image transfer from the camera to a certain index of the internal buffer '''
+        add_buffer_ex(self.handle, 0, 0, buffer_index, self.x_current_res.value, self.y_current_res.value, 16) #Arguments 0 if the camera is recording; 16: bit resolution
         
     def arm_camera(self):
+        '''Prepare the camera for a following recording (with the current settings)'''
         arm_camera(self.handle)
         
     def cancel_images(self):
+        '''Removes all remaining buffers from the internal queue, reset the 
+        internal queue and also reset the transfer state machine in the camera'''
         cancel_images(self.handle)
         
     def close_camera(self):
         close_camera(self.handle)
             
     def free_buffer(self):
-        for i in range(self.number_of_buffers):
-            free_buffer(self.handle, i)
+        '''Free a previously allocated buffer context with the given index'''
+        for buffer in range(self.number_of_buffers):
+            free_buffer(self.handle, buffer)
             
     def get_acquire_mode(self):
         self.acquire_mode = ctypes.c_uint16()
         get_acquire_mode(self.handle, self.acquire_mode)
         
     def get_buffer_status(self):
+        '''Returns (as arguments) the state of the buffer context (dwStatusDll) 
+            and the state of the last image transfer (dwStatusDrv)'''
+        
         self.dwStatusDll = ctypes.c_uint32()
         self.dwStatusDrv = ctypes.c_uint32()
         get_buffer_status(self.handle, self.buffers_in_queue[0], self.dwStatusDll, self.dwStatusDrv)
@@ -177,7 +191,8 @@ class Camera:
         get_sensor_format(self.handle, self.sensor)
         
     def get_sizes(self):
-        ''' Res : resolution in pixels '''
+        '''Returns (as arguments) the current armed image size of the camera
+            'res' : resolution in pixels '''
         self.x_current_res = ctypes.c_uint16()
         self.y_current_res = ctypes.c_uint16()
         self.x_max_res = ctypes.c_uint16()
@@ -196,13 +211,12 @@ class Camera:
         get_trigger_mode(self.handle, self.trigger_mode)
         
     def insert_buffers_in_queue(self):
+        '''Adds the camera buffers to a queue'''
+        
         self.buffers_in_queue = []
         for i in range(len(self.pointers)):
             self.add_buffer_ex(i)
             self.buffers_in_queue.append(i) 
-            
-    def open_camera(self):
-        open_camera(self.handle,0)
         
     def retrieve_multiple_images(self, number_of_frames, 
                                  exposure_time_in_seconds, 
@@ -218,16 +232,16 @@ class Camera:
         pixels_per_frame = ctypes.c_uint32(self.y_current_res.value*self.x_current_res.value)
         ArrayType = ctypes.c_uint16*pixels_per_frame.value
     
-        for i in range(int(number_of_frames)):
-    
+        for frame in range(int(number_of_frames)):
+
             buffer_number = self.buffers_in_queue.pop(0) #Removed from queue
-                        
-            bufferPTR=ctypes.cast(self.pointers[buffer_number], ctypes.POINTER(ArrayType))
-            frame_buffer[i,:,:] =  np.frombuffer(bufferPTR.contents, dtype=np.uint16).reshape((self.y_current_res.value, self.x_current_res.value))*1.0
-                    
+            
+            bufferPTR = ctypes.cast(self.pointers[buffer_number], ctypes.POINTER(ArrayType))
+            frame_buffer[frame,:,:] = np.frombuffer(bufferPTR.contents, dtype=np.uint16).reshape((self.y_current_res.value, self.x_current_res.value))*1.0
+            
             self.add_buffer_ex(buffer_number)   #Put the buffer back in the queue
             self.buffers_in_queue.append(buffer_number)
-            retrieving_allowed = True
+            #retrieving_allowed = True
                 
         return frame_buffer
         
@@ -235,23 +249,20 @@ class Camera:
         ''' Return the image, a 3D numpy array '''
         #imageDatatype = ctypes.c_uint16*self.xCurrentRes.value*self.yCurrentRes.value
         
-        self.number_of_loops_reached = False
-        self.z=0
+        try_number = 0
         while True:
             self.get_buffer_status()
             
-            if self.dwStatusDll.value == 0xc0008000:
+            if self.dwStatusDll.value == 0xc0008000: #If buffer event is set
                 buffer_number = self.buffers_in_queue.pop(0)  #Removed from queue
                 break
-            
-            if self.z == 1000:
-                self.number_of_loops_reached = True
+            if try_number == 1000: #Stop trying to retrieve buffer after 1000 tries
                 break
-            self.z=+1
+            try_number =+ 1 ###    += 1  ?
         
-        pixels_per_frame = ctypes.c_uint32(self.y_current_res.value*self.x_current_res.value)
-        ArrayType = ctypes.c_uint16*pixels_per_frame.value
-        bufferPTR=ctypes.cast(self.pointers[buffer_number], ctypes.POINTER(ArrayType))
+        pixels_per_frame = ctypes.c_uint32(self.y_current_res.value * self.x_current_res.value)
+        ArrayType = ctypes.c_uint16 * pixels_per_frame.value
+        bufferPTR = ctypes.cast(self.pointers[buffer_number], ctypes.POINTER(ArrayType))
         image = np.frombuffer(bufferPTR.contents, dtype=np.uint16).reshape((self.y_current_res.value, self.x_current_res.value))
         self.add_buffer_ex(buffer_number)   #Put the buffer back in the queue
         self.buffers_in_queue.append(buffer_number)  
@@ -259,10 +270,29 @@ class Camera:
         return image
      
     def set_recording_state(self, state):
-        ''' state = 0 (recording off) ; state = 1 (recordind on)'''
+        '''Set the recording state for the camera
+            0: recording off
+            1: recording on'''
         set_recording_state(self.handle, state)
         
     def set_trigger_mode(self, trigger_mode):
+        '''Set the trigger mode for the camera
+        
+        'AutoSequence':    An exposure of a new image is started automatically best possible compared to the
+                           readout of an image and the current timing parameters. If a CCD is used and
+                           images are taken in a sequence, exposure and sensor readout are started
+                           simultaneously. Signals at the trigger input line are irrelevant
+                           
+        'ExternalExposureStart':    A delay / exposure sequence is started depending on the HW signal at the trigger
+                                    input line or by a force trigger command
+        
+        'ExternalExposureControl':  An exposure sequence is started depending on the HW signal at the trigger input
+                                    line. The exposure time is defined by the pulse length of the HW signal. The delay
+                                    and exposure time values defined by the set / request delay and exposure
+                                    command are ineffective. In double image mode exposure time length of the first
+                                    image is controlled through the HW signal, exposure time of the second image is
+                                    given by the readout time of the first image
+        '''
         
         if trigger_mode == 'AutoSequence':
             set_trigger_mode(self.handle, 0)
