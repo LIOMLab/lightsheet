@@ -4,12 +4,12 @@ import numpy as np
 parameters = dict()
 parameters["samplerate"]=40000          # In samples/seconds
 parameters["sweeptime"]=0.4             # In seconds
-parameters["galvo_l_frequency"]=100     # In Hertz
+parameters["galvo_l_frequency"]=5#100     # In Hertz
 parameters["galvo_l_amplitude"]=2       # In Volts
-parameters["galvo_l_offset"]=0          # In Volts
+parameters["galvo_l_offset"]=0.6          # In Volts
 parameters["galvo_r_frequency"]=100     # In Hertz
 parameters["galvo_r_amplitude"]=2       # In Volts
-parameters["galvo_r_offset"]=0          # In Volts
+parameters["galvo_r_offset"]=0.6           # In Volts
 parameters["etl_l_amplitude"]=2         # In Volts
 parameters["etl_l_offset"]=0            # In Volts
 parameters["etl_r_amplitude"]=2         # In Volts
@@ -203,6 +203,8 @@ def galvo_trapeze(amplitude, samples_per_half_period, samples_per_delay, number_
     else:
         array = np.zeros((int(number_of_samples))) + offset  
     
+    array = array *-1 + amplitude + 2*offset 
+    
     return np.array(array)
 
 
@@ -214,6 +216,7 @@ def galvo_trapeze(amplitude, samples_per_half_period, samples_per_delay, number_
 
 '''Initializing'''
 t_half_period = 0.5*(1/parameters["galvo_l_frequency"])     #It is our exposure time (is in the range of the camera)
+print('t_half_period:'+str(t_half_period))
 samples_per_half_period = np.ceil(t_half_period*parameters["samplerate"])
 
 min_samples_per_delay = np.ceil(parameters["min_t_delay"]*parameters["samplerate"])

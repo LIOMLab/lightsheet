@@ -43,8 +43,10 @@ def camera_digital_output_signal(samples_per_half_period, t_start_exp, samplerat
             if samples_left < (min_samples_per_delay + samples_per_exposition):
                 pass  #No enough samples for another acquisition, we pass
             else:
+                #if step%2 == 0: ###
                 array[high_level_start:high_level_end] = high_level_vector
         else:
+            #if step%2 == 0: ###
             array[high_level_start:high_level_end] = high_level_vector
     
     return np.array(array)
@@ -145,39 +147,44 @@ def etl_stairs(amplitude, number_of_steps, number_of_samples, samples_per_step, 
 
     return np.array(array)
 
-def calibrated_etl_stairs(left_slope, left_intercept, right_slope, right_intercept, etl_step, amplitude, number_of_steps, number_of_samples, samples_per_step, offset, direction):
+def calibrated_etl_stairs(left_slope, left_intercept, right_slope, right_intercept, etl_step, amplitude, number_of_steps, number_of_samples, samples_per_step, offset, direction,activate=False):
     '''Step function. The stairs are defined to be upwards or downwards depending 
        on the ETL.
     
        Later, stepAmplitude will be define by the ETL focus position as a function of the voltage applied
        Each ETL may have a different relation to the voltage applied'''
-    if number_of_steps != 1:
-        #step_column = 2560/(number_of_steps-1) ###
-        step_column = etl_step
     
-        #print('Step column: ' + str(step_column)) #debugging
+    if activate: ###
+        if number_of_steps != 1:
+            #step_column = 2560/(number_of_steps-1) ###
+            step_column = etl_step
         
-        array = np.zeros((int(number_of_samples)))
-        
-        for step in range(int(number_of_steps)):
-            column_value = step * step_column * np.ones(int(samples_per_step))
-            if direction == 'UP': ###DOWN
-                step_value = left_slope * column_value + left_intercept
-            if direction == 'DOWN': ###UP
-                step_value = right_slope * column_value + right_intercept
-        
-            #print('column_value:'+ str(column_value))#debugging
-            step_value = np.where(step_value > 5, 5, step_value) #To make sure not to send >5V to the ETL
-            step_value = np.where(step_value < 0, 0, step_value) #To make sure not to send <0V to the ETL
-            #print('step_value:'+str(step_value))#debugging
-            step_first_column = int(step * samples_per_step)
-            step_last_column = int(step_first_column + samples_per_step)
-            array[step_first_column:step_last_column] = step_value
-        
-        array = array + offset
-    else:
+            #print('Step column: ' + str(step_column)) #debugging
+            
+            array = np.zeros((int(number_of_samples)))
+            
+            for step in range(int(number_of_steps)):
+                column_value = step * step_column * np.ones(int(samples_per_step))
+                if direction == 'UP': ###DOWN
+                    step_value = left_slope * column_value + left_intercept
+                if direction == 'DOWN': ###UP
+                    step_value = right_slope * column_value + right_intercept
+            
+                #print('column_value:'+ str(column_value))#debugging
+                step_value = np.where(step_value > 5, 5, step_value) #To make sure not to send >5V to the ETL
+                step_value = np.where(step_value < 0, 0, step_value) #To make sure not to send <0V to the ETL
+                #print('step_value:'+str(step_value))#debugging
+                step_first_column = int(step * samples_per_step)
+                step_last_column = int(step_first_column + samples_per_step)
+                array[step_first_column:step_last_column] = step_value
+            
+            array = array + offset
+        else:
+            array = amplitude * np.ones((int(number_of_samples))) + offset
+    else: ###
+        print('ETL focus deactivated')
         array = amplitude * np.ones((int(number_of_samples))) + offset
-
+    
     return np.array(array)
 
 
@@ -203,7 +210,7 @@ def galvo_live_mode_waveform(amplitude, samples_per_half_period, samples_per_del
     
     return np.array(array)
 
-def galvo_trapeze(amplitude, samples_per_half_period, samples_per_delay, number_of_samples, number_of_steps, samples_per_step, samples_per_half_delay, min_samples_per_delay, t_start_exp, samplerate, offset):
+def galvo_trapeze(amplitude, samples_per_half_period, samples_per_delay, number_of_samples, number_of_steps, samples_per_step, samples_per_half_delay, min_samples_per_delay, t_start_exp, samplerate, offset,invert=False):
     '''Trapeze waveform for the galvos. Camera acquires frames only when the 
        galvos are in motion, i.e. when they are scanning.'''
     
@@ -267,6 +274,9 @@ def galvo_trapeze(amplitude, samples_per_half_period, samples_per_delay, number_
     else:
         array = np.zeros((int(number_of_samples))) + offset  
     
+    if invert:
+        array = array * -1 + amplitude + 2*offset
+        print('inverted')
     return np.array(array)
 
 def laser_signal( ###Pas utilisé

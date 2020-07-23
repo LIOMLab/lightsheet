@@ -42,7 +42,8 @@ class AOETLGalvos(QtCore.QObject):
     def __init__(self,parameters):
         self.parameters = parameters
         
-        self.t_half_period = 0.5*(1/self.parameters["galvo_l_frequency"])    
+        self.t_half_period = 0.5*(1/self.parameters["galvo_l_frequency"])
+        print('t_half_period:'+str(self.t_half_period))
         #The half period is the exposure time, the time taken for a single upwards or downwards galvo scan. 
         #It is defined  with the left galvo frequency (the right galvo has the same frequency)
         self.samples_per_half_period = np.ceil(self.t_half_period*self.parameters["samplerate"])
@@ -312,7 +313,7 @@ class AOETLGalvos(QtCore.QObject):
             self.etl_r_waveform = etl_live_mode_waveform(amplitude = self.parameters["etl_r_amplitude"], 
                                                          number_of_samples = self.number_of_samples) 
 
-    def create_calibrated_etl_waveforms(self, left_slope, left_intercept, right_slope, right_intercept):
+    def create_calibrated_etl_waveforms(self, left_slope, left_intercept, right_slope, right_intercept,activate=False):
         '''live_mode ramps aren't in use anymore, their presence was for 
            calibrating purposes in the early stages of the microscope. They are
            kept only for reference.'''
@@ -324,7 +325,7 @@ class AOETLGalvos(QtCore.QObject):
                                          number_of_samples = self.number_of_samples, 
                                          samples_per_step = self.samples_per_step, 
                                          offset = self.parameters["etl_l_offset"], 
-                                         direction = 'UP')
+                                         direction = 'UP',activate=activate)
         
         self.etl_r_waveform = calibrated_etl_stairs(left_slope, left_intercept,###
                                          right_slope, right_intercept, ###
@@ -334,9 +335,9 @@ class AOETLGalvos(QtCore.QObject):
                                          number_of_samples = self.number_of_samples, 
                                          samples_per_step = self.samples_per_step, 
                                          offset = self.parameters["etl_r_offset"], 
-                                         direction = 'DOWN')
+                                         direction = 'DOWN',activate=activate)
     
-    def create_galvos_waveforms(self, case = 'NONE'):
+    def create_galvos_waveforms(self, case = 'NONE',invert=False):
         '''live_mode ramps aren't in use anymore, their presence was for 
            calibrating purposes in the early stages of the microscope. They are
            kept only for reference.'''
@@ -352,7 +353,7 @@ class AOETLGalvos(QtCore.QObject):
                                                   min_samples_per_delay = self.min_samples_per_delay,
                                                   t_start_exp = self.parameters["t_start_exp"], 
                                                   samplerate = self.parameters["samplerate"],
-                                                  offset = self.parameters["galvo_l_offset"])
+                                                  offset = self.parameters["galvo_l_offset"],invert=invert)
             
             self.galvo_r_waveform = galvo_trapeze(amplitude = self.parameters["galvo_r_amplitude"], 
                                                   samples_per_half_period = self.samples_per_half_period, 
@@ -364,7 +365,7 @@ class AOETLGalvos(QtCore.QObject):
                                                   min_samples_per_delay = self.min_samples_per_delay,
                                                   t_start_exp = self.parameters["t_start_exp"], 
                                                   samplerate = self.parameters["samplerate"],
-                                                  offset = self.parameters["galvo_r_offset"])
+                                                  offset = self.parameters["galvo_r_offset"],invert=invert)
         elif case == 'LIVE_MODE': ###pas utilisé
             self.galvo_l_waveform = galvo_live_mode_waveform(amplitude = self.parameters["galvo_l_amplitude"], 
                                                              samples_per_half_period = self.samples_per_half_period, 

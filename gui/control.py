@@ -209,7 +209,8 @@ class Controller(QWidget):
             box.setSingleStep(0.1)
             box.setSuffix(" V")
         for box in galvo_frequencies_boxes:
-            box.setMaximum(130)
+            box.setMaximum(130) #corresponds to an exposure time of 3.8462 ms
+            box.setMinimum(5) #corresponds to an exposure time of 100ms
             box.setSuffix(" Hz")
         for box in laser_boxes:
             box.setMaximum(2.5)
@@ -434,6 +435,8 @@ class Controller(QWidget):
         self.camera = Camera()
         
         self.print_controller('Camera opened')
+        
+        self.camera.get_camera_setup()##
     
     def close_camera(self):
         '''Closes the camera'''
@@ -956,12 +959,16 @@ class Controller(QWidget):
         for param_string,param_box in zip(modifiable_parameters,self.modifiable_param_boxes):
             self.defaultParameters[param_string] = param_box.value()
         
+        self.print_controller('Default parameters changed')
+        
     def save_default_parameters(self):
         '''Change all the default parameters of the configuration file to current default parameters'''
         
         with open(r"C:\git-projects\lightsheet\src\configuration.txt","w") as file:
             for param_string in modifiable_parameters:
-                file.write(str(parameters[param_string]) + '\n')
+                file.write(str(self.defaultParameters[param_string]) + '\n')
+        
+        self.print_controller('Default parameters saved in configuration file')
     
     def update_etl_galvos_parameters(self, parameterNumber, parameter_name=None, parameter_button=None):
         '''Updates the parameters in the software after a modification by the
@@ -1392,13 +1399,13 @@ class Controller(QWidget):
             average = np.average(buffer[frame,0:100,:]) #Average the last column
             print(str(frame)+' average:'+str(average))
             #print(buffer[1,:,:] == buffer[3,:,:])
-            #if frame == 0:
-            #    reference_average = average
-            #    #print('reference_average:'+str(reference_average))
-            #else:
-            #    average_ratio = reference_average/average
-            #    #print('average_ratio:'+str(average_ratio))
-            #    buffer[frame,:,:] = buffer[frame,:,:] * average_ratio
+            if frame == 0:
+                reference_average = average
+                #print('reference_average:'+str(reference_average))
+            else:
+                average_ratio = reference_average/average
+                #print('average_ratio:'+str(average_ratio))
+                buffer[frame,:,:] = buffer[frame,:,:] * average_ratio
             '''Reconstruct frame'''
             first_column = int(frame * self.parameters['etl_step'])
             next_first_column = int(first_column + self.parameters['etl_step'])
@@ -1438,15 +1445,21 @@ class Controller(QWidget):
         '''Creating ETLs, galvos & camera's ramps and waveforms'''
         self.ramps = AOETLGalvos(self.parameters)  
         self.ramps.create_tasks(terminals,'FINITE')
-        self.ramps.create_calibrated_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept)
-        self.ramps.create_galvos_waveforms(case = 'TRAPEZE')
-        self.ramps.create_digital_output_camera_waveform( case = 'STAIRS_FITTING')
+        activate=False
+        if self.checkBox_activateEtlFocus.isChecked():
+            activate = True
+        self.ramps.create_calibrated_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept,activate=activate)
+        invert=False
+        if self.checkBox_invertGalvos.isChecked():
+            invert = True
+        self.ramps.create_galvos_waveforms(case = 'TRAPEZE',invert=invert)
+        self.ramps.create_digital_output_camera_waveform(case = 'STAIRS_FITTING')
         
         '''Writing waveform to task and running'''
         self.ramps.write_waveforms_to_tasks()                            
         self.ramps.start_tasks()
         self.ramps.run_tasks()
-            
+        
         '''Retrieving buffer'''
         self.number_of_steps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"]) #Number of galvo sweeps in a frame, or alternatively the number of ETL focal step
         self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
