@@ -875,6 +875,32 @@
        <string>Modify galvometers simultaneously</string>
       </property>
      </widget>
+     <widget class="QCheckBox" name="checkBox_invertGalvos">
+      <property name="geometry">
+       <rect>
+        <x>140</x>
+        <y>220</y>
+        <width>151</width>
+        <height>17</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Invert Galvos waveform</string>
+      </property>
+     </widget>
+     <widget class="QCheckBox" name="checkBox_activateEtlFocus">
+      <property name="geometry">
+       <rect>
+        <x>90</x>
+        <y>250</y>
+        <width>131</width>
+        <height>17</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Activate ETLs focus</string>
+      </property>
+     </widget>
     </widget>
     <widget class="QGroupBox" name="groupBox_6">
      <property name="geometry">
