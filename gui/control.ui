@@ -2044,6 +2044,19 @@
      <string>Save all frames</string>
     </property>
    </widget>
+   <widget class="QCheckBox" name="checkBox_stitching">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>50</y>
+      <width>91</width>
+      <height>17</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Stitch images</string>
+    </property>
+   </widget>
   </widget>
  </widget>
  <resources/>
