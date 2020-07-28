@@ -20,6 +20,7 @@ from PyQt5.QtWidgets import QWidget, QFileDialog, QTableWidgetItem,QAbstractItem
 #from PyQt5.QtGui import QIcon
 #from PyQt5.QtCore import QThread
 
+from functools import partial
 import pyqtgraph as pg
 #import ctypes
 import copy
@@ -40,34 +41,19 @@ import h5py
 import posixpath
 import datetime
 
-parameters = dict()
-modifiable_parameters = list(["etl_l_amplitude","etl_r_amplitude",
-    "etl_l_offset","etl_r_offset","galvo_l_amplitude","galvo_r_amplitude",
-    "galvo_l_offset","galvo_r_offset","galvo_l_frequency","galvo_r_frequency",
-    "samplerate","etl_step","laser_l_voltage","laser_r_voltage"])
+'''Parameters'''
+etl_parameters = ["etl_l_amplitude","etl_r_amplitude","etl_l_offset","etl_r_offset"]
+galvo_parameters = ["galvo_l_amplitude","galvo_r_amplitude","galvo_l_offset","galvo_r_offset","galvo_l_frequency","galvo_r_frequency"]
+laser_parameters = ["laser_l_voltage","laser_r_voltage"]
+modifiable_parameters = etl_parameters + galvo_parameters + ["samplerate","etl_step"] + laser_parameters
 
+parameters = dict()
 '''Read modifiable parameters from configuration file'''
 with open(r"C:\git-projects\lightsheet\src\configuration.txt") as file:
     for param_string in modifiable_parameters:
         parameters[param_string] = float(file.readline())
-
 '''Default parameters'''
 parameters["sample_name"]='No Sample Name'
-##parameters["samplerate"]=40000          # In samples/seconds
-##parameters["etl_step"] = 400 #100            # In pixels
-##parameters["galvo_l_frequency"]=100     # In Hertz
-##parameters["galvo_l_amplitude"]=6.5 #2       # In Volts
-##parameters["galvo_l_offset"]=-3         # In Volts
-##parameters["galvo_r_frequency"]=100     # In Hertz
-##parameters["galvo_r_amplitude"]=6.5 #2       # In Volts
-##parameters["galvo_r_offset"]=-2.9         # In Volts
-##parameters["etl_l_amplitude"]=2         # In Volts
-##parameters["etl_l_offset"]=0            # In Volts
-##parameters["etl_r_amplitude"]=2         # In Volts
-##parameters["etl_r_offset"]=0            # In Volts
-##parameters["laser_l_voltage"]=2.5#0.905#1.3      # In Volts
-##parameters["laser_r_voltage"]=2.5#0.935     # In Volts
-
 parameters["sweeptime"]=0.4             # In seconds
 parameters["columns"] = 2560            # In pixels
 parameters["rows"] = 2160               # In pixels
@@ -126,7 +112,7 @@ class Controller(QWidget):
         self.parameters = copy.deepcopy(parameters)
         self.defaultParameters = copy.deepcopy(parameters)
         
-        self.consumers = [] ###
+        self.consumers = []
         self.figure_counter = 1
         self.save_directory = ''
         
@@ -150,7 +136,7 @@ class Controller(QWidget):
         laser_boxes = [self.doubleSpinBox_leftLaser,
                          self.doubleSpinBox_rightLaser]
         
-        self.modifiable_param_boxes = etl_voltages_boxes + galvo_voltages_boxes + galvo_frequencies_boxes + [self.doubleSpinBox_samplerate] + [self.spinBox_etlStep] + laser_boxes 
+        self.modifiable_param_boxes = etl_voltages_boxes + galvo_voltages_boxes + galvo_frequencies_boxes + [self.doubleSpinBox_samplerate,self.spinBox_etlStep] + laser_boxes 
         
         '''Default ETL relation values'''###Test
         self.left_slope = -0.001282893174259485
@@ -159,17 +145,17 @@ class Controller(QWidget):
         self.right_intercept = 1.8730880902476752
         
         '''Arbitrary default positions (in micro-steps)'''
-        self.horizontal_forward_boundary = 428346   #20mm#533333.3333  #Maximum motor position, in micro-steps
-        self.horizontal_backward_boundary = 349606 #35mm #375853 #30mm #0           #Mimimum motor position, in micro-steps
-        self.origin_horizontal = self.horizontal_forward_boundary
-        self.origin_vertical = self.motor_vertical.position_to_data(1.0, 'cm') ##
-        
-        self.vertical_up_boundary = 1060000.6667        #Maximum motor position, in micro-steps
-        self.vertical_down_boundary = 0                 #Mimimum motor position, in micro-steps
-        
-        self.camera_forward_boundary = 500000           #Maximum motor position, in micro-steps ##À adapter selon le nouveau porte-cuvette
-        self.camera_backward_boundary = 0               #Mimimum motor position, in micro-steps
-        self.focus = 429133 #265000     #Default focus position ##Possiblement à changer
+        self.boundaries = dict()
+        self.boundaries['vertical_up_boundary'] = 19.4
+        self.boundaries['vertical_down_boundary'] = 0
+        self.boundaries['origin_vertical'] = self.boundaries['vertical_down_boundary']
+        self.boundaries['horizontal_forward_boundary'] = 0
+        self.boundaries['horizontal_backward_boundary'] = 10
+        self.boundaries['origin_horizontal'] = self.boundaries['horizontal_forward_boundary']
+        self.boundaries['camera_forward_boundary'] = 30
+        self.boundaries['camera_backward_boundary'] = 115
+        self.boundaries['focus'] = 40 ###
+        self.defaultBoundaries = copy.deepcopy(self.boundaries) #The default boundaries are in mm
         
         '''Initializing flags'''
         self.both_lasers_activated = False
@@ -198,7 +184,6 @@ class Controller(QWidget):
         
         '''--ETLs and galvos parameters' related widgets--'''
         '''Initialize maximum and minimum values; suffixes; step values'''
-        
         for box in etl_voltages_boxes:
             box.setMaximum(5)
             box.setSingleStep(0.1)
@@ -216,7 +201,6 @@ class Controller(QWidget):
             box.setMaximum(2.5)
             box.setSingleStep(0.1)
             box.setSuffix(" V")
-        
         self.doubleSpinBox_samplerate.setMaximum(1000000)
         self.doubleSpinBox_samplerate.setMinimum(1)
         self.doubleSpinBox_samplerate.setSuffix(" samples/s")
@@ -231,7 +215,7 @@ class Controller(QWidget):
             (the motion tab)'''
         self.update_unit()
         
-        '''Initialize calibration boxes''' ##
+        '''Initialize calibration boxes'''
         self.doubleSpinBox_planeStep.setSuffix(' \u03BCm')
         self.doubleSpinBox_planeStep.setDecimals(0)
         self.doubleSpinBox_planeStep.setMaximum(101600) ##???
@@ -270,10 +254,8 @@ class Controller(QWidget):
                               self.pushButton_lasersOff,
                               self.pushButton_leftLaserOff,
                               self.pushButton_rightLaserOff]
-        
         for button in buttons_to_disable:
             button.setEnabled(False)
-        
         self.update_buttons_modes(self.default_buttons)
         
         '''Connect buttons'''
@@ -333,23 +315,9 @@ class Controller(QWidget):
         self.pushButton_showEtlInterpolation.pressed.connect(self.show_etl_interpolation)
         
         '''Connections for the ETLs and Galvos parameters'''
-        ##for param_string,param_box in zip(modifiable_parameters,self.modifiable_param_boxes):
-        ##    param_box.valueChanged.connect(lambda: self.update_etl_galvos_parameters(param_string,param_box))
-
-        self.doubleSpinBox_leftEtlAmplitude.valueChanged.connect(lambda: self.update_etl_galvos_parameters(1))
-        self.doubleSpinBox_rightEtlAmplitude.valueChanged.connect(lambda: self.update_etl_galvos_parameters(2))
-        self.doubleSpinBox_leftEtlOffset.valueChanged.connect(lambda: self.update_etl_galvos_parameters(3))
-        self.doubleSpinBox_rightEtlOffset.valueChanged.connect(lambda: self.update_etl_galvos_parameters(4))
-        self.doubleSpinBox_leftGalvoAmplitude.valueChanged.connect(lambda: self.update_etl_galvos_parameters(5))
-        self.doubleSpinBox_rightGalvoAmplitude.valueChanged.connect(lambda: self.update_etl_galvos_parameters(6))
-        self.doubleSpinBox_leftGalvoOffset.valueChanged.connect(lambda: self.update_etl_galvos_parameters(7))
-        self.doubleSpinBox_rightGalvoOffset.valueChanged.connect(lambda: self.update_etl_galvos_parameters(8))
-        self.doubleSpinBox_leftGalvoFrequency.valueChanged.connect(lambda: self.update_etl_galvos_parameters(9))
-        self.doubleSpinBox_rightGalvoFrequency.valueChanged.connect(lambda: self.update_etl_galvos_parameters(10))
-        self.doubleSpinBox_samplerate.valueChanged.connect(lambda: self.update_etl_galvos_parameters(11))
-        self.spinBox_etlStep.valueChanged.connect(lambda: self.update_etl_galvos_parameters(12))
-        self.doubleSpinBox_leftLaser.valueChanged.connect(lambda: self.update_etl_galvos_parameters(13))
-        self.doubleSpinBox_rightLaser.valueChanged.connect(lambda: self.update_etl_galvos_parameters(14))
+        for param_string,param_box in zip(modifiable_parameters,self.modifiable_param_boxes):
+            param_box.valueChanged.connect(lambda _,parameter_name=param_string,parameter_box=param_box: self.update_etl_galvos_parameters(parameter_name,parameter_box)) 
+            #The parameter '_' (the box signal, a float number) is necessary because the first lambda parameter is always overwritten by the signal return
         
         self.pushButton_defaultParameters.clicked.connect(self.back_to_default_parameters)
         self.pushButton_changeDefaultParameters.clicked.connect(self.change_default_parameters)
@@ -435,8 +403,6 @@ class Controller(QWidget):
         self.camera = Camera()
         
         self.print_controller('Camera opened')
-        
-        self.camera.get_camera_setup()##
     
     def close_camera(self):
         '''Closes the camera'''
@@ -463,7 +429,7 @@ class Controller(QWidget):
         self.camera.set_recording_state(0)
         self.camera.free_buffer()
     
-    def set_data_consumer(self, consumer, wait, consumer_type, update_flag): ###Arranger
+    def set_data_consumer(self, consumer, wait, consumer_type, update_flag):
         ''' Regroups all the consumers in the same list'''
         
         self.consumers.append(consumer)
@@ -479,80 +445,65 @@ class Controller(QWidget):
         
         self.unit = self.comboBox_unit.currentText()
         
+        for boundary_name in self.boundaries:
+            self.boundaries[boundary_name] = self.defaultBoundaries[boundary_name]
+            if self.unit == 'cm':
+                self.boundaries[boundary_name] /= 10
+            elif self.unit == '\u03BCm':
+                self.boundaries[boundary_name] *= 1000
+        
         if self.unit == 'cm':
             self.decimals = 4
-            self.horizontal_correction = 10.16  #Horizontal correction to fit choice of axis
-            self.vertical_correction = 1.0      #Vertical correction to fit choice of axis ##À ajuster avec nouveau porte-cuvette
-            self.camera_sample_min_distance = 1.5   #Approximate minimal horizontal distance between camera  ##Possiblement à changer
-            self.camera_correction = 9.525 + 4.0  #Camera correction to fit choice of axis##À ajuster avec nouveau porte-cuvette +arranger 5cm entre camera et origine
+            self.horizontal_correction = 8.2#10.16  #Horizontal correction to fit choice of axis
+            self.vertical_correction = -3.1#1.0      #Vertical correction to fit choice of axis
+            self.camera_sample_min_distance = 1.5   #Approximate minimal horizontal distance between camera
+            self.camera_correction = 7.525 + 4.0 #9.525  #Camera correction to fit choice of axis
         elif self.unit == 'mm':
             self.decimals = 3
-            self.horizontal_correction = 101.6      #Correction to fit choice of axis
-            self.vertical_correction = 10.0         #Correction to fit choice of axis ##À ajuster avec nouveau porte-cuvette
-            self.camera_sample_min_distance = 15.0   #Approximate minimal horizontal distance between camera  ##Possiblement à changer
-            self.camera_correction = 95.25 + 40.0      #Camera correction to fit choice of axis##À ajuster avec nouveau porte-cuvette
+            self.horizontal_correction = 82#101.6      #Correction to fit choice of axis
+            self.vertical_correction = -31#10.0         #Correction to fit choice of axis
+            self.camera_sample_min_distance = 15   #Approximate minimal horizontal distance between camera
+            self.camera_correction = 75.25 + 40.0  #95.25     #Camera correction to fit choice of axis
         elif self.unit == '\u03BCm':
             self.decimals = 0
-            self.horizontal_correction = 101600     #Correction to fit choice of axis
-            self.vertical_correction = 10000        #Correction to fit choice of axis ##À ajuster avec nouveau porte-cuvette
-            self.camera_sample_min_distance = 15000   #Approximate minimal horizontal distance between camera  ##Possiblement à changer
-            self.camera_correction = 95250 + 40000    #Camera correction to fit choice of axis##À ajuster avec nouveau porte-cuvette
+            self.horizontal_correction = 82000#101600     #Correction to fit choice of axis
+            self.vertical_correction = -31000#10000        #Correction to fit choice of axis
+            self.camera_sample_min_distance = 15000   #Approximate minimal horizontal distance between camera
+            self.camera_correction = 75250 + 40000#95250    #Camera correction to fit choice of axis
         
-        unit_boxes = [self.doubleSpinBox_incrementHorizontal,
+        increment_boxes = [self.doubleSpinBox_incrementHorizontal,
                       self.doubleSpinBox_incrementVertical,
-                      self.doubleSpinBox_incrementCamera,
-                      self.doubleSpinBox_choosePosition,
+                      self.doubleSpinBox_incrementCamera]
+        position_boxes = [self.doubleSpinBox_choosePosition,
                       self.doubleSpinBox_chooseHeight,
                       self.doubleSpinBox_chooseCamera]
+        unit_boxes = increment_boxes + position_boxes
         
         '''Update suffixes'''
         for box in unit_boxes:
             box.setSuffix(" {}".format(self.unit))
-            box.setValue(1) ##Parfois impossible, car plus petit que valeur min...
             box.setDecimals(self.decimals)
+        for box in increment_boxes:
+            box.setMinimum(10**-self.decimals)
+            box.setValue(1)
         
-        ##
         '''Update maximum and minimum values for horizontal sample motion'''
-        self.horizontal_maximum_in_old_axis = self.motor_horizontal.data_to_position(self.horizontal_forward_boundary,self.unit)    #This max is actually the min in our axis system
-        self.horizontal_minimum_in_old_axis = self.motor_horizontal.data_to_position(self.horizontal_backward_boundary,self.unit)   #This min is actually the max in our axis system
-        
-        self.horizontal_maximum_in_new_axis = -self.horizontal_minimum_in_old_axis+self.horizontal_correction #Minus sign and correction to fit choice of axis
-        self.horizontal_minimum_in_new_axis = -self.horizontal_maximum_in_old_axis+self.horizontal_correction #Minus sign and correction to fit choice of axis
-        
-        self.doubleSpinBox_choosePosition.setMinimum(self.horizontal_minimum_in_new_axis)
-        self.doubleSpinBox_choosePosition.setMaximum(self.horizontal_maximum_in_new_axis)
-        
-        maximum_horizontal_increment = self.horizontal_maximum_in_new_axis-self.horizontal_minimum_in_new_axis
+        self.doubleSpinBox_choosePosition.setMinimum(self.boundaries['horizontal_forward_boundary'])
+        self.doubleSpinBox_choosePosition.setMaximum(self.boundaries['horizontal_backward_boundary'])
+        maximum_horizontal_increment = self.boundaries['horizontal_backward_boundary'] - self.boundaries['horizontal_forward_boundary']
         self.doubleSpinBox_incrementHorizontal.setMaximum(maximum_horizontal_increment)
-        self.doubleSpinBox_incrementHorizontal.setMinimum(1)
         
         '''Update maximum and minimum values for vertical sample motion'''
-        self.vertical_maximum_in_old_axis = self.motor_vertical.data_to_position(self.vertical_up_boundary,self.unit)   #This max is actually the min in our axis system
-        self.vertical_minimum_in_old_axis = self.motor_vertical.data_to_position(self.vertical_down_boundary,self.unit) #This min is actually the max in our axis system
-        
-        self.vertical_maximum_in_new_axis = -self.vertical_minimum_in_old_axis+self.vertical_correction #Minus sign and correction to fit choice of axis
-        self.vertical_minimum_in_new_axis = -self.vertical_maximum_in_old_axis+self.vertical_correction #Minus sign and correction to fit choice of axis
-        
-        self.doubleSpinBox_chooseHeight.setMinimum(self.vertical_minimum_in_new_axis)
-        self.doubleSpinBox_chooseHeight.setMaximum(self.vertical_maximum_in_new_axis)
-        
-        maximum_vertical_increment = self.vertical_maximum_in_new_axis-self.vertical_minimum_in_new_axis
+        self.doubleSpinBox_chooseHeight.setMinimum(self.boundaries['vertical_up_boundary'])
+        self.doubleSpinBox_chooseHeight.setMaximum(self.boundaries['vertical_down_boundary'])
+        maximum_vertical_increment = self.boundaries['vertical_up_boundary'] - self.boundaries['vertical_down_boundary']
         self.doubleSpinBox_incrementVertical.setMaximum(maximum_vertical_increment)
-        self.doubleSpinBox_incrementVertical.setMinimum(1)
         
         '''Update maximum and minimum values for camera motion'''
-        self.camera_maximum_in_old_axis = self.motor_camera.data_to_position(self.camera_forward_boundary,self.unit)    #This max is actually the min in our axis system
-        self.camera_minimum_in_old_axis = self.motor_camera.data_to_position(self.camera_backward_boundary,self.unit)   #This min is actually the max in our axis system
-        
-        self.camera_maximum_in_new_axis = -self.camera_minimum_in_old_axis+self.camera_correction #Minus sign and correction to fit choice of axis
-        self.camera_minimum_in_new_axis = -self.camera_maximum_in_old_axis+self.camera_correction #Minus sign and correction to fit choice of axis
-        
-        self.doubleSpinBox_chooseCamera.setMinimum(self.camera_minimum_in_new_axis)
-        self.doubleSpinBox_chooseCamera.setMaximum(self.camera_maximum_in_new_axis)
-        
-        maximum_camera_increment = self.camera_maximum_in_new_axis-self.camera_minimum_in_new_axis
-        self.doubleSpinBox_incrementVertical.setMaximum(maximum_camera_increment)
-        self.doubleSpinBox_incrementCamera.setMinimum(1)
+        self.doubleSpinBox_chooseCamera.setMinimum(self.boundaries['camera_forward_boundary'])
+        self.doubleSpinBox_chooseCamera.setMaximum(self.boundaries['camera_backward_boundary'])
+        maximum_camera_increment = self.boundaries['camera_backward_boundary'] - self.boundaries['camera_forward_boundary']
+        self.doubleSpinBox_incrementCamera.setMaximum(maximum_camera_increment)
         
         '''Update current positions'''
         self.update_position_vertical()
@@ -561,64 +512,50 @@ class Controller(QWidget):
     
     def return_current_horizontal_position(self):
         '''Returns the current horizontal position with respect to the choice of axis'''
-        return -self.motor_horizontal.current_position(self.unit)+self.horizontal_correction #Minus sign and correction to fit choice of axis
+        return round(-self.motor_horizontal.current_position(self.unit)+self.horizontal_correction,self.decimals) #Minus sign and correction to fit choice of axis
     
     def return_current_vertical_position(self):
         '''Returns the current vertical position with respect to the choice of axis'''
-        return -self.motor_vertical.current_position(self.unit)+self.vertical_correction #Minus sign and correction to fit choice of axis
+        return round(self.motor_vertical.current_position(self.unit)+self.vertical_correction,self.decimals) #Minus sign and correction to fit choice of axis
     
     def return_current_camera_position(self):
         '''Returns the current camera position with respect to the choice of axis'''
-        return -self.motor_camera.current_position(self.unit)+self.camera_correction #Minus sign and correction to fit choice of axis
+        return round(-self.motor_camera.current_position(self.unit)+self.camera_correction,self.decimals) #Minus sign and correction to fit choice of axis
     
 
     def update_position_horizontal(self):
         '''Updates the current horizontal sample position displayed'''
-        
-        current_horizontal_position = round(self.return_current_horizontal_position(),self.decimals)
-        self.current_horizontal_position_text = "{} {}".format(current_horizontal_position, self.unit)
+        self.current_horizontal_position_text = "{} {}".format(self.return_current_horizontal_position(), self.unit)
         self.label_currentHorizontalNumerical.setText(self.current_horizontal_position_text)
     
     def update_position_vertical(self):
         '''Updates the current vertical sample position displayed'''
-        
-        self.current_vertical_position = round(self.return_current_vertical_position(),self.decimals)
-        self.current_vertical_position_text = "{} {}".format(self.current_vertical_position, self.unit)
+        self.current_vertical_position_text = "{} {}".format(self.return_current_vertical_position(), self.unit)
         self.label_currentHeightNumerical.setText(self.current_vertical_position_text)
         
     def update_position_camera(self):
         '''Updates the current (horizontal) camera position displayed'''
-        
-        self.current_camera_position = round(self.return_current_camera_position(),self.decimals)
-        self.current_camera_position_text = "{} {}".format(self.current_camera_position, self.unit)
+        self.current_camera_position_text = "{} {}".format(self.return_current_camera_position(), self.unit)
         self.label_currentCameraNumerical.setText(self.current_camera_position_text)
     
     
     def move_to_horizontal_position(self):
         '''Moves the sample to a specified horizontal position'''
-        
-        if self.doubleSpinBox_choosePosition.value() >= self.horizontal_minimum_in_new_axis and self.doubleSpinBox_choosePosition.value() <= self.horizontal_maximum_in_new_axis:
-            
-            if (self.return_current_camera_position() - self.doubleSpinBox_choosePosition.value() >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camera
-                self.print_controller('Sample moving to horizontal position')
-                
-                horizontal_position = -self.doubleSpinBox_choosePosition.value()+self.horizontal_correction
-                self.motor_horizontal.move_absolute_position(horizontal_position,self.unit)
-            
-                self.update_position_horizontal()
-            else:
-                self.print_controller('Camera prevents sample movement')
+
+        if (self.return_current_camera_position() - self.doubleSpinBox_choosePosition.value()) >= self.camera_sample_min_distance:  #To prevent the sample from hitting the camera
+            self.print_controller('Sample moving to horizontal position')
+            horizontal_position = -self.doubleSpinBox_choosePosition.value() + self.horizontal_correction
+            self.motor_horizontal.move_absolute_position(horizontal_position,self.unit)
+            self.update_position_horizontal()
         else:
-            self.print_controller('Out Of Boundaries')
+            self.print_controller('Camera prevents sample movement')
     
     def move_to_vertical_position(self):
         '''Moves the sample to a specified vertical position'''
         
         self.print_controller ('Sample moving to vertical position')
-            
-        vertical_position = -self.doubleSpinBox_chooseHeight.value()+self.vertical_correction #Minus sign and correction to fit choice of axis
+        vertical_position = self.doubleSpinBox_chooseHeight.value() - self.vertical_correction #Minus sign and correction to fit choice of axis
         self.motor_vertical.move_absolute_position(vertical_position,self.unit)
-        
         self.update_position_vertical()
     
     def move_camera_to_position(self):
@@ -626,10 +563,8 @@ class Controller(QWidget):
         
         if (self.doubleSpinBox_chooseCamera.value() - self.return_current_horizontal_position() >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camera
             self.print_controller ('Camera moving to position')
-            
-            camera_position = -self.doubleSpinBox_chooseCamera.value()+self.camera_correction #Minus sign and correction to fit choice of axis
+            camera_position = -self.doubleSpinBox_chooseCamera.value() + self.camera_correction #Minus sign and correction to fit choice of axis
             self.motor_camera.move_absolute_position(camera_position,self.unit)
-            
             self.update_position_camera()
         else:
             self.print_controller('Sample prevents camera movement')
@@ -637,24 +572,19 @@ class Controller(QWidget):
     def move_camera_backward(self):
         '''Camera motor backward horizontal motion'''
         
-        if self.motor_camera.current_position(self.unit) - self.doubleSpinBox_incrementCamera.value() >= self.camera_minimum_in_old_axis:
+        if self.return_current_camera_position() - self.doubleSpinBox_incrementCamera.value() <= self.boundaries['camera_backward_boundary']:
             self.print_controller ('Camera moving backward')
-            
             self.motor_camera.move_relative_position(-self.doubleSpinBox_incrementCamera.value(),self.unit)
         else:
             self.print_controller('Out of boundaries')
-            
-            self.motor_camera.move_absolute_position(self.camera_backward_boundary,'\u03BCStep')
-            
+            self.motor_camera.move_absolute_position(-self.boundaries['camera_backward_boundary']+self.camera_correction,'\u03BCStep')
         self.update_position_camera()
     
     def move_camera_forward(self):
         '''Camera motor forward horizontal motion'''
         
-        if self.motor_camera.current_position(self.unit) + self.doubleSpinBox_incrementCamera.value() <= self.camera_maximum_in_old_axis:
-            
-            next_camera_position = -(self.motor_camera.current_position(self.unit)+self.doubleSpinBox_incrementCamera.value()) + self.camera_correction
-            
+        if self.return_current_camera_position() - self.doubleSpinBox_incrementCamera.value() >= self.boundaries['camera_forward_boundary']:
+            next_camera_position = self.return_current_camera_position() - self.doubleSpinBox_incrementCamera.value()
             if (next_camera_position - self.return_current_horizontal_position() >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camea
                 self.print_controller ('Camera moving forward')
                 self.motor_camera.move_relative_position(self.doubleSpinBox_incrementCamera.value(),self.unit)
@@ -662,122 +592,90 @@ class Controller(QWidget):
                 self.print_controller('Sample prevents camera movement')
         else:
             self.print_controller('Out of boundaries')
-            
-            self.motor_camera.move_absolute_position(self.camera_forward_boundary,'\u03BCStep')
-            
+            self.motor_camera.move_absolute_position(-self.boundaries['camera_forward_boundary']+self.camera_correction,self.unit)
         self.update_position_camera()
     
     def move_camera_to_focus(self):
         '''Moves camera to focus position'''
-        if self.focus_selected:
         
-            if self.focus < self.camera_backward_boundary:
+        if self.focus_selected:
+            if self.boundaries['focus'] > self.boundaries['camera_backward_boundary']:
                 self.print_controller('Focus out of boundaries')
-                
-                self.motor_camera.move_absolute_position(self.camera_minimum_in_old_axis,self.unit)
-            elif self.focus > self.camera_forward_boundary:
+                self.motor_camera.move_absolute_position(-self.boundaries['camera_backward_boundary']+self.camera_correction,self.unit)
+            elif self.boundaries['focus'] < self.boundaries['camera_forward_boundary']:
                 self.print_controller('Focus out of boundaries')
-                
-                self.motor_camera.move_absolute_position(self.camera_maximum_in_old_axis,self.unit)
+                self.motor_camera.move_absolute_position(-self.boundaries['camera_forward_boundary']+self.camera_correction,self.unit)
             else:
-                next_camera_position = -self.motor_camera.data_to_position(self.focus, self.unit) + self.camera_correction
-                
-                if (next_camera_position - self.return_current_horizontal_position() >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camea
+                if (self.boundaries['focus'] - self.return_current_horizontal_position() >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camea
                     self.print_controller('Moving to focus')
-                    
-                    self.motor_camera.move_absolute_position(self.focus,'\u03BCStep')
+                    self.motor_camera.move_absolute_position(-self.boundaries['focus']+self.camera_correction,self.unit)
                 else:
                     self.print_controller('Sample prevents camera movement')
         else:
             self.print_controller('Focus not yet set. Moving camera to default focus')
-            
-            self.motor_camera.move_absolute_position(self.focus,'\u03BCStep')
-        
+            self.motor_camera.move_absolute_position(-self.boundaries['focus']+self.camera_correction,self.unit)
         self.update_position_camera()
     
     def move_sample_down(self):
         '''Sample motor downward vertical motion'''
         
-        if self.motor_vertical.current_position(self.unit) - self.doubleSpinBox_incrementVertical.value() >= self.vertical_minimum_in_old_axis:
+        if self.return_current_vertical_position() - self.doubleSpinBox_incrementVertical.value() >= self.boundaries['vertical_down_boundary']:
             self.print_controller('Sample moving down')
-            
             self.motor_vertical.move_relative_position(self.doubleSpinBox_incrementVertical.value(),self.unit)
         else:
             self.print_controller('Out of boundaries')
-            
-            self.motor_vertical.move_absolute_position(self.vertical_down_boundary,'\u03BCStep')
-            
+            self.motor_vertical.move_absolute_position((self.boundaries['vertical_down_boundary'] - self.vertical_correction),self.unit)
         self.update_position_vertical()
     
     def move_sample_up(self):
         '''Sample motor upward vertical motion'''
         
-        if self.motor_vertical.current_position(self.unit) + self.doubleSpinBox_incrementVertical.value() <= self.vertical_maximum_in_old_axis:
+        if self.return_current_vertical_position() + self.doubleSpinBox_incrementVertical.value() <= self.boundaries['vertical_up_boundary']:
             self.print_controller('Sample moving up')
-            
             self.motor_vertical.move_relative_position(-self.doubleSpinBox_incrementVertical.value(),self.unit)
         else:
             self.print_controller('Out of boundaries')
-            
-            self.motor_vertical.move_absolute_position(self.vertical_up_boundary,'\u03BCStep')
-        
+            self.motor_vertical.move_absolute_position((self.boundaries['vertical_up_boundary'] - self.vertical_correction),self.unit)
         self.update_position_vertical()
     
     def move_sample_backward(self):
         '''Sample motor backward horizontal motion'''
         
-        if self.motor_horizontal.current_position(self.unit) - self.doubleSpinBox_incrementHorizontal.value() >= self.horizontal_minimum_in_old_axis:
-            
-            next_horizontal_position = -(self.motor_horizontal.current_position(self.unit)-self.doubleSpinBox_incrementHorizontal.value()) + self.horizontal_correction
-            
-            if (self.return_current_camera_position() - next_horizontal_position >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camea
-                self.print_controller ('Sample moving backward')
-                
-                self.motor_horizontal.move_relative_position(-self.doubleSpinBox_incrementHorizontal.value(),self.unit)
-            else:
-                self.print_controller('Camera prevents sample movement')
+        next_horizontal_position = self.return_current_horizontal_position() + self.doubleSpinBox_incrementHorizontal.value()
+        if (self.return_current_camera_position() - next_horizontal_position) >= self.camera_sample_min_distance:  #To prevent the sample from hitting the camea
+            self.print_controller ('Sample moving backward')
+            self.motor_horizontal.move_relative_position(-self.doubleSpinBox_incrementHorizontal.value(),self.unit)
         else:
-            self.print_controller('Out of boundaries')
-            
-            self.motor_horizontal.move_absolute_position(self.horizontal_backward_boundary, '\u03BCStep')
-        
+            self.print_controller('Camera prevents sample movement')
         self.update_position_horizontal()
             
     def move_sample_forward(self):
         '''Sample motor forward horizontal motion'''
         
-        if self.motor_horizontal.current_position(self.unit) + self.doubleSpinBox_incrementHorizontal.value() <= self.horizontal_maximum_in_old_axis:
+        if self.return_current_horizontal_position() - self.doubleSpinBox_incrementHorizontal.value() >= self.boundaries['horizontal_forward_boundary']:
             self.print_controller('Sample moving forward')
             self.motor_horizontal.move_relative_position(self.doubleSpinBox_incrementHorizontal.value(),self.unit)
         else:
             self.print_controller('Out of boundaries')
-            
-            self.motor_horizontal.move_absolute_position(self.horizontal_forward_boundary, '\u03BCStep')
-        
+            self.motor_horizontal.move_absolute_position(-self.boundaries['horizontal_forward_boundary']+self.horizontal_correction, self.unit)
         self.update_position_horizontal()
     
     def move_sample_to_origin(self):
         '''Moves vertical and horizontal sample motors to origin position'''
         
         self.print_controller('Moving to origin')
-        
-        origin_horizontal_current_unit = self.motor_horizontal.data_to_position(self.origin_horizontal, self.unit)
-        if origin_horizontal_current_unit >= self.horizontal_minimum_in_old_axis and origin_horizontal_current_unit <= self.horizontal_maximum_in_old_axis:
-            
-            next_horizontal_position = -origin_horizontal_current_unit + self.horizontal_correction
-            
-            if (self.return_current_camera_position() - next_horizontal_position >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camea
+        if self.boundaries['origin_horizontal'] >= self.boundaries['horizontal_forward_boundary'] and self.boundaries['origin_horizontal'] <= self.boundaries['horizontal_backward_boundary']:
+            if (self.return_current_camera_position() - self.boundaries['origin_horizontal']) >= self.camera_sample_min_distance:  #To prevent the sample from hitting the camea
                 '''Moving sample to horizontal origin'''
-                self.motor_horizontal.move_absolute_position(self.origin_horizontal,'\u03BCStep')
+                self.motor_horizontal.move_absolute_position(-self.boundaries['origin_horizontal']+self.horizontal_correction,self.unit)
                 self.update_position_horizontal()
             else:
                 self.print_controller('Camera prevents sample movement')
-            
         else:
             self.print_controller('Sample Horizontal Origin Out Of Boundaries')
         
         '''Moving sample to vertical origin'''
-        self.motor_vertical.move_absolute_position(self.origin_vertical,'\u03BCStep')
+        self.motor_vertical.move_absolute_position(self.boundaries['origin_vertical']-self.vertical_correction,self.unit)
         self.update_position_vertical()
     
     
@@ -787,7 +685,6 @@ class Controller(QWidget):
         
         self.pushButton_setForwardLimit.setEnabled(True)
         self.pushButton_setBackwardLimit.setEnabled(True)
-        
         self.label_calibrateRange.setText("Move Horizontal Position")
         
         self.upperBoundarySelected = False
@@ -795,8 +692,8 @@ class Controller(QWidget):
         self.pushButton_calibrateRange.setEnabled(False)
         
         '''Default boundaries'''
-        self.horizontal_forward_boundary = 428346 #533333.3333  #Maximum motor position, in micro-steps
-        self.horizontal_backward_boundary = 375853 #0           #Minimum motor position, in micro-steps
+        self.boundaries['horizontal_forward_boundary'] = 0 #428346 #533333.3333  #Maximum motor position, in micro-steps
+        self.boundaries['horizontal_backward_boundary'] = 10 #375853 #0           #Minimum motor position, in micro-steps
         
         self.update_unit() 
     
@@ -804,9 +701,9 @@ class Controller(QWidget):
         '''Set lower limit of sample's horizontal motion 
            (to avoid hitting the glass walls)'''
         
-        self.horizontal_backward_boundary = self.motor_horizontal.current_position('\u03BCStep')
+        self.boundaries['horizontal_backward_boundary'] = self.return_current_horizontal_position(self.unit)
+        self.change_default_boundaries(['horizontal_backward_boundary'])
         self.update_unit()
-        
         self.horizontal_backward_boundary_selected = True
         
         self.pushButton_setBackwardLimit.setEnabled(False)
@@ -818,7 +715,8 @@ class Controller(QWidget):
         '''Set upper limit of sample's horizontal motion 
            (to avoid hitting the glass walls)'''
         
-        self.horizontal_forward_boundary = self.motor_horizontal.current_position('\u03BCStep')
+        self.boundaries['horizontal_forward_boundary'] = self.return_current_horizontal_position(self.unit)
+        self.change_default_boundaries(['horizontal_forward_boundary'])
         self.update_unit()
         
         self.horizontal_forward_boundary_selected = True
@@ -831,28 +729,37 @@ class Controller(QWidget):
     def set_sample_origin(self):
         '''Modifies the sample origin position'''
         
-        self.origin_horizontal = self.motor_horizontal.position_to_data(self.motor_horizontal.current_position(self.unit),self.unit)
-        self.origin_vertical = 1066666 - self.motor_vertical.position_to_data(self.motor_vertical.current_position(self.unit),self.unit) ##???
-        
-        origin_text = 'Origin set at (x,z) = ({}, {}) {}'.format(self.origin_horizontal,self.origin_vertical, self.unit)
+        self.boundaries['origin_horizontal'] = self.return_current_vertical_position()
+        self.boundaries['origin_vertical'] = self.return_current_vertical_position()
+        origin_text = 'Origin set at (x,z) = ({}, {}) {}'.format(self.boundaries['origin_horizontal'],self.boundaries['origin_vertical'],self.unit)
         self.print_controller(origin_text)
+        self.change_default_boundaries(['origin_horizontal','origin_vertical'])
+    
+    def change_default_boundaries(self,boundaries_to_change):
+        '''Save default boundaries (with unit in mm)'''
+        
+        for boundary_name in boundaries_to_change:
+            self.defaultBoundaries[boundary_name] = self.boundaries[boundary_name]
+        if self.unit == 'cm':
+            self.defaultBoundaries[boundary_name] /= 10
+        elif self.unit == '\u03BCm':
+            self.defaultBoundaries[boundary_name] *= 1000
     
     def set_camera_focus(self):
         '''Modifies manually the camera focus position'''
         
         self.focus_selected = True
-        self.focus = self.motor_camera.current_position('\u03BCStep')
-        
-        self.print_controller('Focus manually set')
+        self.boundaries['focus'] = self.return_current_camera_position()
+        self.change_default_boundaries(['focus'])
+        self.print_controller('Camera focus manually set a {} mm'.format(self.boundaries['focus']))
         
     def calculate_camera_focus(self):
         '''Interpolates the camera focus position'''
         
         current_position = -self.motor_horizontal.current_position(self.unit) + self.horizontal_correction
         focus_regression = self.slope_camera * current_position + self.intercept_camera
-        self.focus = self.motor_camera.position_to_data(-focus_regression+self.camera_correction, self.unit)#self.motor_camera.position_to_data(-focus_interpolation+self.camera_correction, self.unit)
+        self.boundaries['focus'] = focus_regression
         print('focus_regression:'+str(focus_regression)) #debugging
-        print('focus:'+str(self.focus)) #debugging
         
         self.focus_selected = True
         
@@ -873,10 +780,10 @@ class Controller(QWidget):
         yreg = self.slope_camera * xnew + self.intercept_camera
         
         '''Setting colormap'''
-        xstart = -self.motor_horizontal.data_to_position(self.horizontal_forward_boundary, 'mm') + self.horizontal_correction
-        xend = -self.motor_horizontal.data_to_position(self.horizontal_backward_boundary, 'mm') + self.horizontal_correction
-        ystart = -self.motor_camera.data_to_position(self.focus_forward_boundary, 'mm') + self.camera_correction
-        yend = -self.motor_camera.data_to_position(self.focus_backward_boundary, 'mm') + self.camera_correction
+        xstart = self.boundaries['horizontal_forward_boundary']
+        xend = self.boundaries['horizontal_backward_boundary']
+        ystart = self.focus_forward_boundary
+        yend = self.focus_backward_boundary
         transp = copy.deepcopy(self.donnees)
         for q in range(int(self.number_of_calibration_planes)):
             transp[q,:] = np.flip(transp[q,:])
@@ -949,7 +856,6 @@ class Controller(QWidget):
         '''Change all the modifiable parameters to go back to the initial state'''
         
         self.parameters = copy.deepcopy(self.defaultParameters)
-        
         for param_string, param_box in zip(modifiable_parameters,self.modifiable_param_boxes):
             param_box.setValue(self.parameters[param_string]) 
     
@@ -958,7 +864,6 @@ class Controller(QWidget):
         
         for param_string,param_box in zip(modifiable_parameters,self.modifiable_param_boxes):
             self.defaultParameters[param_string] = param_box.value()
-        
         self.print_controller('Default parameters changed')
         
     def save_default_parameters(self):
@@ -967,107 +872,52 @@ class Controller(QWidget):
         with open(r"C:\git-projects\lightsheet\src\configuration.txt","w") as file:
             for param_string in modifiable_parameters:
                 file.write(str(self.defaultParameters[param_string]) + '\n')
-        
         self.print_controller('Default parameters saved in configuration file')
     
-    def update_etl_galvos_parameters(self, parameterNumber, parameter_name=None, parameter_button=None):
+    def update_etl_galvos_parameters(self, parameter_name, parameter_box):
         '''Updates the parameters in the software after a modification by the
            user'''
         
-        ##self.parameters[parameter_name] = parameter_button.value()
-        ##
-        ##if parameter_name == "etl_l_amplitude":
-        ##    parameter_button.setMaximum(5-self.doubleSpinBox_leftEtlOffset.value()) #To prevent ETL's amplitude + offset being > 5V
-        ##elif parameter_name == "etl_r_amplitude":
-        ##    parameter_button.setMaximum(5-self.doubleSpinBox_rightEtlOffset.value()) #To prevent ETL's amplitude + offset being > 5V
-        ##elif parameter_name == "etl_l_offset":
-        ##    parameter_button.setMaximum(5-self.doubleSpinBox_leftEtlAmplitude.value()) #To prevent ETL's amplitude + offset being > 5V
-        ##elif parameter_name == "etl_r_offset":
-        ##    parameter_button.setMaximum(5-self.doubleSpinBox_rightEtlAmplitude.value()) #To prevent ETL's amplitude + offset being > 5V
-        ##elif parameter_name == "galvo_l_amplitude":
-        ##    parameter_button.setMaximum(10-self.doubleSpinBox_leftGalvoOffset.value()) #To prevent galvo's amplitude + offset being > 10V
-        ##    parameter_button.setMinimum(-10-self.doubleSpinBox_leftGalvoOffset.value()) #To prevent galvo's amplitude + offset being < -10V
-        ##elif parameter_name == "galvo_r_amplitude":
-        ##    parameter_button.setMaximum(10-self.doubleSpinBox_rightGalvoOffset.value()) #To prevent galvo's amplitude + offset being > 10V
-        ##    parameter_button.setMinimum(-10-self.doubleSpinBox_rightGalvoOffset.value()) #To prevent galvo's amplitude + offset being < -10V
-        ##elif parameter_name == "galvo_l_offset":
-        ##    parameter_button.setMaximum(10-self.doubleSpinBox_leftGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being > 10V
-        ##    parameter_button.setMinimum(-10-self.doubleSpinBox_leftGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being < -10V
-        ##elif parameter_name == "galvo_r_offset":
-        ##    parameter_button.setMaximum(10-self.doubleSpinBox_rightGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being > 10V
-        ##    parameter_button.setMinimum(-10-self.doubleSpinBox_rightGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being < -10V
+        self.parameters[parameter_name] = parameter_box.value()
         
-        if parameterNumber == 1:
-            self.doubleSpinBox_leftEtlAmplitude.setMaximum(5-self.doubleSpinBox_leftEtlOffset.value()) #To prevent ETL's amplitude + offset being > 5V
-            self.parameters["etl_l_amplitude"] = self.doubleSpinBox_leftEtlAmplitude.value()
-            if self.checkBox_etlsTogether.isChecked():
-                self.parameters["etl_r_amplitude"] = self.doubleSpinBox_leftEtlAmplitude.value()
-                self.doubleSpinBox_rightEtlAmplitude.setValue(self.parameters["etl_r_amplitude"])
-        elif parameterNumber == 2:
-            self.doubleSpinBox_rightEtlAmplitude.setMaximum(5-self.doubleSpinBox_rightEtlOffset.value()) #To prevent ETL's amplitude + offset being > 5V
-            self.parameters["etl_r_amplitude"] = self.doubleSpinBox_rightEtlAmplitude.value()
-            if self.checkBox_etlsTogether.isChecked():
-                self.parameters["etl_l_amplitude"] = self.doubleSpinBox_rightEtlAmplitude.value()
-                self.doubleSpinBox_leftEtlAmplitude.setValue(self.parameters["etl_l_amplitude"])
-        elif parameterNumber == 3:
-            self.doubleSpinBox_leftEtlOffset.setMaximum(5-self.doubleSpinBox_leftEtlAmplitude.value()) #To prevent ETL's amplitude + offset being > 5V
-            self.parameters["etl_l_offset"] = self.doubleSpinBox_leftEtlOffset.value()
-            if self.checkBox_etlsTogether.isChecked():
-                self.parameters["etl_r_offset"] = self.doubleSpinBox_leftEtlOffset.value()
-                self.doubleSpinBox_rightEtlOffset.setValue(self.parameters["etl_r_offset"])
-        elif parameterNumber == 4:
-            self.doubleSpinBox_rightEtlOffset.setMaximum(5-self.doubleSpinBox_rightEtlAmplitude.value()) #To prevent ETL's amplitude + offset being > 5V
-            self.parameters["etl_r_offset"] = self.doubleSpinBox_rightEtlOffset.value()
-            if self.checkBox_etlsTogether.isChecked():
-                self.parameters["etl_l_offset"] = self.doubleSpinBox_rightEtlOffset.value()
-                self.doubleSpinBox_leftEtlOffset.setValue(self.parameters["etl_l_offset"])
-        elif parameterNumber == 5:
-            self.doubleSpinBox_leftGalvoAmplitude.setMaximum(10-self.doubleSpinBox_leftGalvoOffset.value()) #To prevent galvo's amplitude + offset being > 10V
-            self.doubleSpinBox_leftGalvoAmplitude.setMinimum(-10-self.doubleSpinBox_leftGalvoOffset.value()) #To prevent galvo's amplitude + offset being < -10V
-            self.parameters["galvo_l_amplitude"] = self.doubleSpinBox_leftGalvoAmplitude.value()
-            if self.checkBox_galvosTogether.isChecked():
-                self.parameters["galvo_r_amplitude"] = self.doubleSpinBox_leftGalvoAmplitude.value()
-                self.doubleSpinBox_rightGalvoAmplitude.setValue(self.parameters["galvo_r_amplitude"])
-        elif parameterNumber == 6:
-            self.doubleSpinBox_rightGalvoAmplitude.setMaximum(10-self.doubleSpinBox_rightGalvoOffset.value()) #To prevent galvo's amplitude + offset being > 10V
-            self.doubleSpinBox_rightGalvoAmplitude.setMinimum(-10-self.doubleSpinBox_rightGalvoOffset.value()) #To prevent galvo's amplitude + offset being < -10V
-            self.parameters["galvo_r_amplitude"] = self.doubleSpinBox_rightGalvoAmplitude.value()
-            if self.checkBox_galvosTogether.isChecked():
-                self.parameters["galvo_l_amplitude"] = self.doubleSpinBox_rightGalvoAmplitude.value()
-                self.doubleSpinBox_leftGalvoAmplitude.setValue(self.parameters["galvo_l_amplitude"])
-        elif parameterNumber == 7:
-            self.doubleSpinBox_leftGalvoOffset.setMaximum(10-self.doubleSpinBox_leftGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being > 10V
-            self.doubleSpinBox_leftGalvoOffset.setMinimum(-10-self.doubleSpinBox_leftGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being < -10V
-            self.parameters["galvo_l_offset"] = self.doubleSpinBox_leftGalvoOffset.value()
-            if self.checkBox_galvosTogether.isChecked():
-                self.parameters["galvo_r_offset"] = self.doubleSpinBox_leftGalvoOffset.value()
-                self.doubleSpinBox_rightGalvoOffset.setValue(self.parameters["galvo_r_offset"])
-        elif parameterNumber == 8:
-            self.doubleSpinBox_rightGalvoOffset.setMaximum(10-self.doubleSpinBox_rightGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being > 10V
-            self.doubleSpinBox_rightGalvoOffset.setMinimum(-10-self.doubleSpinBox_rightGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being < -10V
-            self.parameters["galvo_r_offset"] = self.doubleSpinBox_rightGalvoOffset.value()
-            if self.checkBox_galvosTogether.isChecked():
-                self.parameters["galvo_l_offset"] = self.doubleSpinBox_rightGalvoOffset.value()
-                self.doubleSpinBox_leftGalvoOffset.setValue(self.parameters["galvo_l_offset"])
-        elif parameterNumber == 9:
-            self.parameters["galvo_l_frequency"] = self.doubleSpinBox_leftGalvoFrequency.value()
-            if self.checkBox_galvosTogether.isChecked():
-                self.parameters["galvo_r_frequency"] = self.doubleSpinBox_leftGalvoFrequency.value()
-                self.doubleSpinBox_rightGalvoFrequency.setValue(self.parameters["galvo_r_frequency"])
-        elif parameterNumber == 10:
-            self.parameters["galvo_r_frequency"] = self.doubleSpinBox_rightGalvoFrequency.value()
-            if self.checkBox_galvosTogether.isChecked():
-                self.parameters["galvo_l_frequency"] = self.doubleSpinBox_rightGalvoFrequency.value()
-                self.doubleSpinBox_leftGalvoFrequency.setValue(self.parameters["galvo_l_frequency"])
-        elif parameterNumber == 11:
-            self.parameters["samplerate"] = self.doubleSpinBox_samplerate.value()
-        elif parameterNumber == 12:
-            self.parameters["etl_step"] = self.spinBox_etlStep.value()
-        elif parameterNumber == 13:
-            self.parameters["laser_l_voltage"] = self.doubleSpinBox_leftLaser.value()
-        elif parameterNumber == 14:
-            self.parameters["laser_r_voltage"] = self.doubleSpinBox_rightLaser.value()
-
+        if parameter_name == "etl_l_amplitude":
+            parameter_box.setMaximum(5-self.doubleSpinBox_leftEtlOffset.value()) #To prevent ETL's amplitude + offset being > 5V
+            opposed_parameter_box = self.doubleSpinBox_rightEtlAmplitude
+        elif parameter_name == "etl_r_amplitude":
+            parameter_box.setMaximum(5-self.doubleSpinBox_rightEtlOffset.value()) #To prevent ETL's amplitude + offset being > 5V
+            opposed_parameter_box = self.doubleSpinBox_leftEtlAmplitude
+        elif parameter_name == "etl_l_offset":
+            parameter_box.setMaximum(5-self.doubleSpinBox_leftEtlAmplitude.value()) #To prevent ETL's amplitude + offset being > 5V
+            opposed_parameter_box = self.doubleSpinBox_rightEtlOffset
+        elif parameter_name == "etl_r_offset":
+            parameter_box.setMaximum(5-self.doubleSpinBox_rightEtlAmplitude.value()) #To prevent ETL's amplitude + offset being > 5V
+            opposed_parameter_box = self.doubleSpinBox_leftEtlOffset
+        elif parameter_name == "galvo_l_amplitude":
+            parameter_box.setMaximum(10-self.doubleSpinBox_leftGalvoOffset.value()) #To prevent galvo's amplitude + offset being > 10V
+            parameter_box.setMinimum(-10-self.doubleSpinBox_leftGalvoOffset.value()) #To prevent galvo's amplitude + offset being < -10V
+            opposed_parameter_box = self.doubleSpinBox_rightGalvoAmplitude
+        elif parameter_name == "galvo_r_amplitude":
+            parameter_box.setMaximum(10-self.doubleSpinBox_rightGalvoOffset.value()) #To prevent galvo's amplitude + offset being > 10V
+            parameter_box.setMinimum(-10-self.doubleSpinBox_rightGalvoOffset.value()) #To prevent galvo's amplitude + offset being < -10V
+            opposed_parameter_box = self.doubleSpinBox_leftGalvoAmplitude
+        elif parameter_name == "galvo_l_offset":
+            parameter_box.setMaximum(10-self.doubleSpinBox_leftGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being > 10V
+            parameter_box.setMinimum(-10-self.doubleSpinBox_leftGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being < -10V
+            opposed_parameter_box = self.doubleSpinBox_rightGalvoOffset
+        elif parameter_name == "galvo_r_offset":
+            parameter_box.setMaximum(10-self.doubleSpinBox_rightGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being > 10V
+            parameter_box.setMinimum(-10-self.doubleSpinBox_rightGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being < -10V
+            opposed_parameter_box = self.doubleSpinBox_leftGalvoOffset
+        elif parameter_name == "galvo_l_frequency":
+            opposed_parameter_box = self.doubleSpinBox_rightGalvoFrequency
+        elif parameter_name == "galvo_r_frequency":
+            opposed_parameter_box = self.doubleSpinBox_leftGalvoFrequency
+        
+        '''Modify simultaneously left and right parameters, if specified'''
+        if self.checkBox_etlsTogether.isChecked() and (parameter_name in etl_parameters):
+            opposed_parameter_box.setValue(self.parameters[parameter_name])
+        if self.checkBox_galvosTogether.isChecked() and (parameter_name in galvo_parameters):
+            opposed_parameter_box.setValue(self.parameters[parameter_name])
     
     def activate_both_lasers(self):
         '''Flag and lasers' pushButton managing for both lasers activation'''
@@ -1306,9 +1156,9 @@ class Controller(QWidget):
                 if self.consumers[consumer+2] == 'FrameSaver':
                     try:
                         self.consumers[consumer].put(frame,1)
-                        print('Frame put in FrameSaver') #debugging
+                        #print('Frame put in FrameSaver') #debugging
                     except:      #self.consumers[ii].Full:
-                        print("FrameSaver queue is full") #debugging
+                        #print("FrameSaver queue is full") #debugging
                         pass
     
     def start_preview_mode(self):
@@ -1396,8 +1246,8 @@ class Controller(QWidget):
         
         for frame in range(int(self.number_of_steps)):
             '''Uniformize frame intensities'''
-            average = np.average(buffer[frame,0:100,:]) #Average the last column
-            print(str(frame)+' average:'+str(average))
+            average = np.average(buffer[frame,0:100,:]) #Average the  first rows
+            #print(str(frame)+' average:'+str(average))
             #print(buffer[1,:,:] == buffer[3,:,:])
             if frame == 0:
                 reference_average = average
@@ -1435,9 +1285,56 @@ class Controller(QWidget):
         
         return reconstructed_buffer
     
-    def reconstruct_frame_from_cropped_buffer(self,buffer): ##
-        '''Reconstructs a frame from multiple cropped frames'''
+    def reconstruct_frame_from_cropped_buffer(self,cropped_buffer):
+        '''Reconstructs a frame from multiple cropped frames (does some linear image stitching)'''
         
+        column_buffer = int(self.parameters["etl_step"]*0.2)
+        weight_step = 1/(2*column_buffer)
+        reconstructed_frame = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))  #Initializing frame
+        
+        for frame in range(int(self.number_of_steps)):
+            #'''Uniformize frame intensities'''
+            #average = np.average(cropped_buffer[frame,0:100,:]) #Average the first rows
+            #print(str(frame)+' average:'+str(average))
+            ##print(buffer[1,:,:] == buffer[3,:,:])
+            #if frame == 0:
+            #    reference_average = average
+            #    #print('reference_average:'+str(reference_average))
+            #else:
+            #    average_ratio = reference_average/average
+            #    #print('average_ratio:'+str(average_ratio))
+            #    cropped_buffer[frame,:,:] = cropped_buffer[frame,:,:] * average_ratio
+            #
+            '''Reconstruct frame'''
+            first_center_column = int(frame * self.parameters['etl_step'] + column_buffer)
+            #print('first_center_column:'+str(first_center_column))
+            last_center_column = int((frame+1) * self.parameters['etl_step'] - column_buffer)
+            #print('last_center_column:'+str(last_center_column))
+            previous_last_center_column = int(frame * self.parameters['etl_step'] - column_buffer)
+            #print('previous_last_center_column:'+str(previous_last_center_column))
+            
+            if frame == 0:  #For the first column step
+                reconstructed_frame[:,0:last_center_column] = cropped_buffer[frame,:,column_buffer:int(self.parameters['etl_step'])]
+            else:
+                for column in range(2*column_buffer):
+                    frame_column = column + previous_last_center_column
+                    #print('frame_column:'+str(frame_column))
+                    last_buffer_column = column + int(self.parameters['etl_step'])
+                    #print('last_buffer_column:'+str(last_buffer_column))
+                    buffer_weight = column * weight_step
+                    #print('buffer_weight:'+str(buffer_weight))
+                    last_buffer_weight = 1 - column * weight_step
+                    #print('last_buffer_weight:'+str(last_buffer_weight))
+                    reconstructed_frame[:,frame_column] = buffer_weight * cropped_buffer[frame,:,column] + last_buffer_weight*cropped_buffer[(frame-1),:,last_buffer_column]
+                #print('frame_column:'+str(frame_column))
+                if frame == int(self.number_of_steps-1):  #For the last column step (may be different than the others...)
+                    last_column_step = int(self.parameters["columns"] - first_center_column)
+                    #print('last_column_step:'+str(last_column_step))
+                    reconstructed_frame[:,first_center_column:] = cropped_buffer[frame,:,column_buffer:column_buffer+last_column_step]
+                else:
+                    reconstructed_frame[:,first_center_column:last_center_column] = cropped_buffer[frame,:,(2*column_buffer):int(self.parameters['etl_step'])]
+
+        return reconstructed_frame
     
     def get_single_image(self):
         '''Generate ETLs, galvos & camera's ramps, get a single reconstructed image and display it'''
@@ -1463,15 +1360,13 @@ class Controller(QWidget):
         '''Retrieving buffer'''
         self.number_of_steps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"]) #Number of galvo sweeps in a frame, or alternatively the number of ETL focal step
         self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
-        ##buffer_list = []
-        ##for _ in range(int(self.number_of_steps)):
-        ##    image = self.camera.retrieve_single_image()*1.0
-        ##    buffer_list.append(image.tolist())
-        ##self.buffer = np.array(buffer_list)
-        ##print(self.buffer.shape)
         
         '''Frame reconstruction for display'''
-        self.reconstructed_frame = self.reconstruct_frame(self.buffer)
+        cropped_buffer = self.crop_buffer(self.buffer)
+        if self.checkBox_stitching.isChecked():
+            self.reconstructed_frame = self.reconstruct_frame_from_cropped_buffer(cropped_buffer)
+        else:
+            self.reconstructed_frame = self.reconstruct_frame(self.buffer)
         
         '''Frame display'''
         frame = np.transpose(self.reconstructed_frame)
@@ -1855,13 +1750,13 @@ class Controller(QWidget):
         if self.doubleSpinBox_numberOfCameraPositions.value() != 0:
             self.number_of_camera_positions = self.doubleSpinBox_numberOfCameraPositions.value()
         
-        sample_increment_length = (self.horizontal_forward_boundary - self.horizontal_backward_boundary) / self.number_of_calibration_planes
-        self.focus_backward_boundary = 397626#245000#int(200000*0.75)#200000#245000#225000#245000#250000 #263000   ##Position arbitraire en u-steps
-        self.focus_forward_boundary = 447506#265000#int(300000*25/20)#300000#265000#255000#265000#270000  #269000   ##Position arbitraire en u-steps
-        camera_increment_length = (self.focus_forward_boundary - self.focus_backward_boundary) / self.number_of_camera_positions
+        #sample_increment_length = (self.horizontal_forward_boundary - self.horizontal_backward_boundary) / self.number_of_calibration_planes
+        sample_increment_length = (self.boundaries['horizontal_backward_boundary']-self.boundaries['horizontal_forward_boundary']) / (self.number_of_calibration_planes-1) #-1 to account for last position (backward_boundary)
+        self.focus_backward_boundary = 42#397626#245000#int(200000*0.75)#200000#245000#225000#245000#250000 #263000   ##Position arbitraire en u-steps
+        self.focus_forward_boundary = 32#447506#450000 #447506#265000#int(300000*25/20)#300000#265000#255000#265000#270000  #269000   ##Position arbitraire en u-steps
+        camera_increment_length = (self.focus_backward_boundary - self.focus_forward_boundary) / (self.number_of_camera_positions-1) #-1 to account for last position (backward_boundary)
         
         position_depart_sample = self.motor_horizontal.current_position('\u03BCStep')
-        position_depart_camera = self.focus
         
         self.camera_focus_relation = np.zeros((int(self.number_of_calibration_planes),2))
         metricvar=np.zeros((int(self.number_of_camera_positions)))
@@ -1890,14 +1785,15 @@ class Controller(QWidget):
                 break
             else:
                 '''Moving sample position'''
-                position = self.horizontal_forward_boundary - (sample_plane * sample_increment_length)    #Increments of +sample_increment_length
-                self.motor_horizontal.move_absolute_position(position,'\u03BCStep')
+                position = self.boundaries['horizontal_forward_boundary'] + (sample_plane * sample_increment_length)    #Increments of +sample_increment_length
+                self.motor_horizontal.move_absolute_position(-position+self.horizontal_correction,self.unit)
                 self.update_position_horizontal()
                 
                 for camera_plane in range(int(self.number_of_camera_positions)): #For each camera position
                     '''Moving camera position'''
-                    position_camera = self.focus_forward_boundary - (camera_plane * camera_increment_length) #Increments of +camera_increment_length
-                    self.motor_camera.move_absolute_position(position_camera,'\u03BCStep')
+                    position_camera = self.focus_forward_boundary + (camera_plane * camera_increment_length) #Increments of +camera_increment_length
+                    print('position_camera:'+str(position_camera))
+                    self.motor_camera.move_absolute_position(-position_camera+self.camera_correction,'mm')
                     time.sleep(0.5) #To make sure the camera is at the right position
                     self.update_position_camera()
 
@@ -1916,7 +1812,9 @@ class Controller(QWidget):
                     '''Filtering frame'''
                     frame = ndimage.gaussian_filter(self.reconstructed_frame, sigma=3)
                     flatframe = frame.flatten()
-                    metricvar[camera_plane] = np.var(flatframe)
+                    intensities = np.sort(frame,axis=None)
+                    metricvar[camera_plane] = np.average(intensities[-50:])#np.var(flatframe)
+                    print(np.var(flatframe))
                 
                 '''Calculating ideal camera position'''
                 metricvar = signal.savgol_filter(metricvar, 11, 3) # window size 11, polynomial order 3
@@ -1938,9 +1836,10 @@ class Controller(QWidget):
                 print('pcov:'+str(pcov)) #debugging
                 
                 '''Saving focus relation'''
-                self.camera_focus_relation[sample_plane,0] = -self.motor_horizontal.current_position(self.unit) + self.horizontal_correction
-                max_variance_camera_position = self.focus_forward_boundary - (center * camera_increment_length)
-                self.camera_focus_relation[sample_plane,1] = -self.motor_camera.data_to_position(max_variance_camera_position, self.unit) + self.camera_correction
+                self.camera_focus_relation[sample_plane,0] = self.return_current_horizontal_position()
+                max_variance_camera_position = self.focus_forward_boundary + (center * camera_increment_length)
+                print('max_variance_camera_position:'+str(max_variance_camera_position))
+                self.camera_focus_relation[sample_plane,1] = max_variance_camera_position#-self.motor_camera.data_to_position(max_variance_camera_position, self.unit) + self.camera_correction
                 
             self.print_controller('--Calibration of plane '+str(sample_plane+1)+'/'+str(int(self.number_of_calibration_planes))+' done')
         
@@ -1954,7 +1853,7 @@ class Controller(QWidget):
         '''Returning sample and camera at initial positions'''
         self.motor_horizontal.move_absolute_position(position_depart_sample,'\u03BCStep')
         self.update_position_horizontal()
-        self.motor_camera.move_absolute_position(position_depart_camera,'\u03BCStep')
+        self.motor_camera.move_absolute_position(-self.boundaries['focus']+self.camera_correction,self.unit)
         self.update_position_camera()
         
         '''Stopping camera'''
@@ -2052,16 +1951,15 @@ class Controller(QWidget):
             self.popt = np.zeros((int(self.number_of_etls_points),4))
             
             #For each interpolation point
-            for j in range(int(self.number_of_etls_points)):
+            for etl_point in range(int(self.number_of_etls_points)):
                 
                 if self.etls_calibration_started == False:
                     self.print_controller('Calibration interrupted')
-                    
                     break
                 else:
                     '''Getting the data to send to the AO'''
-                    right_etl_voltage = etl_min_voltage + (j * etl_increment_length) #Volts
-                    left_etl_voltage = etl_min_voltage + (j * etl_increment_length) #Volts
+                    right_etl_voltage = etl_min_voltage + (etl_point * etl_increment_length) #Volts
+                    left_etl_voltage = etl_min_voltage + (etl_point * etl_increment_length) #Volts
                     
                     left_galvo_voltage = 0 #Volts
                     right_galvo_voltage = 0.1 #Volts
@@ -2083,7 +1981,7 @@ class Controller(QWidget):
                     ydatas = np.zeros((self.number_of_etls_images,128))  ##128=K
                     
                     #For each image
-                    for y in range(self.number_of_etls_images):
+                    for etl_image in range(self.number_of_etls_images):
                         '''Retrieving image from camera and putting it in its queue
                                for display'''
                         frame = self.camera.retrieve_single_image()*1.0
@@ -2092,18 +1990,20 @@ class Controller(QWidget):
                         frame = np.transpose(frame)
                         blurred_frame = np.transpose(blurred_frame)
                         
-                        for ii in range(0, len(self.consumers), 4):
-                            if self.consumers[ii+2] == "CameraWindow":
-                                #Initial frame
-                                try:
-                                    self.consumers[ii].put(frame)
-                                except self.consumers[ii].Full:
-                                    print("Queue is full")
-                                #Blurred frame
-                                try:
-                                    self.consumers[ii].put(blurred_frame)
-                                except self.consumers[ii].Full:
-                                    print("Queue is full")
+                        self.send_frame_to_consumer(frame)
+                        self.send_frame_to_consumer(blurred_frame)
+                        ##for ii in range(0, len(self.consumers), 4):
+                        ##    if self.consumers[ii+2] == "CameraWindow":
+                        ##        #Initial frame
+                        ##        try:
+                        ##            self.consumers[ii].put(frame)
+                        ##        except self.consumers[ii].Full:
+                        ##            print("Queue is full")
+                        ##        #Blurred frame
+                        ##        try:
+                        ##            self.consumers[ii].put(blurred_frame)
+                        ##        except self.consumers[ii].Full:
+                        ##            print("Queue is full")
                         
                         '''Calculating focal point horizontal position'''
                         #filtering image:
@@ -2132,7 +2032,7 @@ class Controller(QWidget):
                            
                         #prepare data for fit:
                         ydata=np.array(std_val)
-                        ydatas[y,:] = signal.savgol_filter(ydata, 51, 3) # window size 51, polynomial order 3
+                        ydatas[etl_image,:] = signal.savgol_filter(ydata, 51, 3) # window size 51, polynomial order 3
                     
                     #Calculate fit for average of images
                     xdata=np.linspace(0,width-1,K)
@@ -2154,19 +2054,19 @@ class Controller(QWidget):
                     
                     ##Pour afficher graphique
                     if side == 'etl_r':
-                        self.xdata[j]=xdata
-                        self.ydata[j]=good_ydata
-                        self.popt[j]=popt
+                        self.xdata[etl_point]=xdata
+                        self.ydata[etl_point]=good_ydata
+                        self.popt[etl_point]=popt
                     
                     '''Saving relations'''
                     if side == 'etl_l':
-                        self.etl_l_relation[j,0] = left_etl_voltage
-                        self.etl_l_relation[j,1] = int(focusLocation)
+                        self.etl_l_relation[etl_point,0] = left_etl_voltage
+                        self.etl_l_relation[etl_point,1] = int(focusLocation)
                     if side == 'etl_r':
-                        self.etl_r_relation[j,0] = right_etl_voltage
-                        self.etl_r_relation[j,1] = int(focusLocation)
+                        self.etl_r_relation[etl_point,0] = right_etl_voltage
+                        self.etl_r_relation[etl_point,1] = int(focusLocation)
                 
-                    self.print_controller('--Calibration of plane '+str(j+1)+'/'+str(self.number_of_etls_points)+' for '+side+' done')
+                    self.print_controller('--Calibration of plane '+str(etl_point+1)+'/'+str(self.number_of_etls_points)+' for '+side+' done')
             
             '''Closing lasers after calibration of each side'''    
             self.left_laser_activated = False
@@ -2408,15 +2308,15 @@ class FrameSaver():
                     try:
                         '''Retrieve buffer'''
                         buffer = self.queue.get(True,1)
-                        print(buffer.shape[0])
-                        print('Buffer received') #debugging
+                        #print(buffer.shape[0]) #debugging
+                        #print('Buffer received') #debugging
                         if buffer.ndim == 2:
                             buffer = np.expand_dims(buffer, axis=0) #To consider 2D arrays as a 3D arrays
                         for frame in range(buffer.shape[0]): #For each 2D frame
                             '''Create dataset'''
                             path_root = self.datasets_name+u'%03d'%counter
                             self.dataset = f.create_dataset(path_root, data=buffer[frame,:,:])
-                            print('Dataset created:'+str(path_root)) #debugging
+                            #print('Dataset created:'+str(path_root)) #debugging
                             
                             '''Add attributes'''
                             self.add_attribute('Sample', parameters["sample_name"])
@@ -2430,7 +2330,7 @@ class FrameSaver():
                             self.add_attribute('Current camera horizontal position', self.camera_positions_list[pos_index])
                             for param_string in modifiable_parameters:
                                 self.add_attribute(param_string, parameters[param_string])
-                            print('attributes ok')
+                            #print('attributes ok') #debugging
                             counter += 1
                         in_loop = False
                     except:

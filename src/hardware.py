@@ -8,24 +8,23 @@ sys.path.append("..")
 
 import serial
 
-import os
+#import os
 import numpy as np
-import csv
+#import csv
 
 '''National Instruments Imports'''
 import nidaqmx
-from nidaqmx.constants import AcquisitionType, TaskMode
-from nidaqmx.constants import LineGrouping, DigitalWidthUnits, Edge
-from nidaqmx.types import CtrTime
+from nidaqmx.constants import AcquisitionType, LineGrouping, Edge
+#from nidaqmx.constants import TaskMode, DigitalWidthUnits
+#from nidaqmx.types import CtrTime
 
 from PyQt5 import QtCore
 
-from src.waveforms import sawtooth
-from src.waveforms import tunable_lens_ramp
-from src.waveforms import laser_signal
-from src.waveforms import etl_stairs, etl_live_mode_waveform, calibrated_etl_stairs
-from src.waveforms import galvo_trapeze, galvo_live_mode_waveform
-from src.waveforms import camera_digital_output_signal, camera_live_mode_waveform
+#from src.waveforms import sawtooth
+#from src.waveforms import tunable_lens_ramp
+#from src.waveforms import laser_signal
+#from src.waveforms import etl_stairs, etl_live_mode_waveform, galvo_live_mode_waveform, camera_live_mode_waveform
+from src.waveforms import galvo_trapeze, calibrated_etl_stairs, camera_digital_output_signal
 
 
 class AOETLGalvos(QtCore.QObject):
@@ -43,7 +42,7 @@ class AOETLGalvos(QtCore.QObject):
         self.parameters = parameters
         
         self.t_half_period = 0.5*(1/self.parameters["galvo_l_frequency"])
-        print('t_half_period:'+str(self.t_half_period))
+        #print('t_half_period:'+str(self.t_half_period))
         #The half period is the exposure time, the time taken for a single upwards or downwards galvo scan. 
         #It is defined  with the left galvo frequency (the right galvo has the same frequency)
         self.samples_per_half_period = np.ceil(self.t_half_period*self.parameters["samplerate"])
@@ -78,77 +77,6 @@ class AOETLGalvos(QtCore.QObject):
         #print('Sweeptime: '+str(self.sweeptime)+'s') #debugging
         
         self.samples = int(self.number_of_samples)
-    
-    def initialize(self): ###plus utilisé
-        '''Should always be executed first as it instantiates the variables 
-           needed for waveforms generation
-           
-           The half period of the galvos is the exposure time, i.e. the time 
-           taken for a single upwards or downwards galvo scan. It is defined 
-           with the left galvo frequency (choice of galvo is arbitrary since 
-           they both should have the same frequency.'''
-        
-        self.t_half_period = 0.5*(1/self.parameters["galvo_l_frequency"])     #It is our exposure time (is in the range of the camera)
-        self.samples_per_half_period = np.ceil(self.t_half_period*self.parameters["samplerate"])
-        #print('Samples per half period: '+str(self.samples_per_half_period)) #debugging
-        
-        self.min_samples_per_delay = np.ceil(self.parameters["min_t_delay"]*self.parameters["samplerate"])
-        #print('Minimum samples per delay: '+str(self.min_samples_per_delay)) #debugging
-        
-        self.min_samples_per_step = self.min_samples_per_delay + self.samples_per_half_period
-        #print('Minimum samples per step: '+str(self.min_samples_per_step)+'\n') #debugging
-        
-        self.rest_samples_added = np.ceil(self.min_samples_per_step*self.parameters["camera_delay"]/100)  #Samples added to allow down time for the camera
-        self.samples_per_step = self.min_samples_per_step + self.rest_samples_added
-        #print('Samples per step: ' + str(self.samples_per_step)) #debugging
-        
-        self.samples_per_delay = self.samples_per_step-self.samples_per_half_period
-        #print('Samples per delay: '+str(self.samples_per_delay)) #debugging
-        
-        self.samples_per_half_delay = np.floor(self.samples_per_delay/2)
-        #print('Samples per half delay: '+str(self.samples_per_half_delay)+'\n') #debugging
-        
-        #print('Number of columns: '+str(self.parameters["columns"])) #debugging
-        #print('Etl step: '+str(self.parameters["etl_step"]) + ' columns') #debugging
-        
-        self.number_of_steps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"])
-        #print('Number of steps: ' + str(self.number_of_steps)+'\n') #debugging
-        
-        self.number_of_samples = self.number_of_steps*self.samples_per_step
-        #print('Number of samples: '+str(self.number_of_samples)) #debugging
-        
-        self.sweeptime = self.number_of_samples/self.parameters["samplerate"]
-        #print('Sweeptime: '+str(self.sweeptime)+'s') #debugging
-        
-        self.samples = int(self.number_of_samples)
-    
-    def initialize_live_mode(self): ###Pas utilisé
-        '''Should always be executed first as it instantiates the variables 
-           needed for waveforms generation
-           
-           This function isn't currently in use as it was for calibrating
-           purposes in the early stages of the microscope. It is kept for
-           reference'''
-        
-        self.t_half_period = (1/self.parameters["galvo_l_frequency"])     #It is our exposure time (is in the range of the camera)
-        self.samples_per_half_period = np.ceil(self.t_half_period*self.parameters["samplerate"])
-        
-        self.min_samples_per_delay = np.ceil(self.parameters["min_t_delay"]*self.parameters["samplerate"])
-        
-        self.min_samples_per_step = self.min_samples_per_delay + self.samples_per_half_period
-        
-        self.rest_samples_added = np.ceil(self.min_samples_per_step*self.parameters["camera_delay"]/100)  #Samples added to allow down time for the camera
-        self.samples_per_step = self.min_samples_per_step + self.rest_samples_added
-        
-        self.samples_per_delay = self.samples_per_step-self.samples_per_half_period
-        
-        self.samples_per_half_delay = np.floor(self.samples_per_delay/2)
-        
-        self.number_of_samples = self.samples_per_step
-        
-        self.sweeptime = self.number_of_samples/self.parameters["samplerate"]
-        
-        self.samples = int(self.number_of_samples)  
     
     
     '''Tasks methods'''
@@ -279,39 +207,6 @@ class AOETLGalvos(QtCore.QObject):
                                                     number_of_steps = self.number_of_steps, 
                                                     samples_per_step = self.samples_per_step,
                                                     min_samples_per_delay = self.min_samples_per_delay)
-        elif case == 'LIVE_MODE': ###pas utilisé
-            self.camera_waveform = camera_live_mode_waveform(samples_per_half_period = self.samples_per_half_period,
-                                                              t_start_exp = self.parameters["t_start_exp"], 
-                                                              samplerate = self.parameters["samplerate"], 
-                                                              samples_per_half_delay = self.samples_per_half_delay, 
-                                                              number_of_samples = self.number_of_samples)
-        
-    def create_etl_waveforms(self, case = 'NONE'): ###plus utilisé
-        '''live_mode ramps aren't in use anymore, their presence was for 
-           calibrating purposes in the early stages of the microscope. They are
-           kept only for reference.'''
-        
-        if case == 'STAIRS':
-            self.etl_l_waveform = etl_stairs(amplitude = self.parameters["etl_l_amplitude"], 
-                                             number_of_steps = self.number_of_steps, 
-                                             number_of_samples = self.number_of_samples, 
-                                             samples_per_step = self.samples_per_step, 
-                                             offset = self.parameters["etl_l_offset"], 
-                                             direction = 'UP')
-            
-            self.etl_r_waveform = etl_stairs(amplitude = self.parameters["etl_r_amplitude"], 
-                                             number_of_steps = self.number_of_steps, 
-                                             number_of_samples = self.number_of_samples, 
-                                             samples_per_step = self.samples_per_step, 
-                                             offset = self.parameters["etl_r_offset"], 
-                                             direction = 'DOWN')
-            
-        elif case == 'LIVE_MODE': ###pas utilisé
-            self.etl_l_waveform = etl_live_mode_waveform(amplitude = self.parameters["etl_l_amplitude"], 
-                                                         number_of_samples = self.number_of_samples) 
-            
-            self.etl_r_waveform = etl_live_mode_waveform(amplitude = self.parameters["etl_r_amplitude"], 
-                                                         number_of_samples = self.number_of_samples) 
 
     def create_calibrated_etl_waveforms(self, left_slope, left_intercept, right_slope, right_intercept,activate=False):
         '''live_mode ramps aren't in use anymore, their presence was for 
@@ -366,36 +261,6 @@ class AOETLGalvos(QtCore.QObject):
                                                   t_start_exp = self.parameters["t_start_exp"], 
                                                   samplerate = self.parameters["samplerate"],
                                                   offset = self.parameters["galvo_r_offset"],invert=invert)
-        elif case == 'LIVE_MODE': ###pas utilisé
-            self.galvo_l_waveform = galvo_live_mode_waveform(amplitude = self.parameters["galvo_l_amplitude"], 
-                                                             samples_per_half_period = self.samples_per_half_period, 
-                                                             samples_per_delay = self.samples_per_delay, 
-                                                             number_of_samples = self.number_of_samples,
-                                                             samples_per_half_delay = self.samples_per_half_delay, 
-                                                             offset = self.parameters["galvo_l_offset"])
-            
-            self.galvo_r_waveform = galvo_live_mode_waveform(amplitude = self.parameters["galvo_r_amplitude"], 
-                                                             samples_per_half_period = self.samples_per_half_period, 
-                                                             samples_per_delay = self.samples_per_delay, 
-                                                             number_of_samples = self.number_of_samples,
-                                                             samples_per_half_delay = self.samples_per_half_delay, 
-                                                             offset = self.parameters["galvo_r_offset"])
-            
-    
-    def create_lasers_waveforms(self): ###pas utilisé
-        '''The laser_signal() ramp isn't in use anymore, its presence was for 
-           calibrating purposes in the early stages of the microscope. For 
-           future implementation of a distinct laser waveform, this function can
-           be used with the appropriate signal shape imported and coded in 
-           waveform.py'''
-        self.laser_l_waveform = laser_signal(samplerate = self.parameters["samplerate"], 
-                                             sweeptime = self.sweeptime, 
-                                             voltage = self.parameters["laser_l_voltage"])
-        
-        self.laser_r_waveform = laser_signal(samplerate = self.parameters["samplerate"], 
-                                             sweeptime = self.sweeptime, 
-                                             voltage = self.parameters["laser_r_voltage"])
-
   
   
     
