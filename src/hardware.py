@@ -34,50 +34,36 @@ class AOETLGalvos(QtCore.QObject):
              where the lasers'task should be implemented in the following
              functions'''
 
-    sig_update_gui_from_state = QtCore.pyqtSignal(bool) ###utilité?
-    
-    '''Initialization methods'''
+    #sig_update_gui_from_state = QtCore.pyqtSignal(bool) ###utilité?
     
     def __init__(self,parameters):
         self.parameters = parameters
-        
         self.t_half_period = 0.5*(1/self.parameters["galvo_l_frequency"])
-        #print('t_half_period:'+str(self.t_half_period))
         #The half period is the exposure time, the time taken for a single upwards or downwards galvo scan. 
         #It is defined  with the left galvo frequency (the right galvo has the same frequency)
-        self.samples_per_half_period = np.ceil(self.t_half_period*self.parameters["samplerate"])
+        #print('t_half_period:'+str(self.t_half_period)) #debugging
+        self.samples_per_half_period = np.ceil(self.t_half_period*self.parameters["samplerate"]) #Number of samples per exposure time
         #print('Samples per half period: '+str(self.samples_per_half_period)) #debugging
-        
-        self.min_samples_per_delay = np.ceil(self.parameters["min_t_delay"]*self.parameters["samplerate"])
+        self.min_samples_per_delay = np.ceil(self.parameters["min_t_delay"]*self.parameters["samplerate"]) #Number of samples per camera internal delay (delay for acquiring image, excluding exposure time)
         #print('Minimum samples per delay: '+str(self.min_samples_per_delay)) #debugging
-        
-        self.min_samples_per_step = self.min_samples_per_delay + self.samples_per_half_period
+        self.min_samples_per_step = self.min_samples_per_delay + self.samples_per_half_period #Number of samples per image acquisition (including exposure time)
         #print('Minimum samples per step: '+str(self.min_samples_per_step)+'\n') #debugging
-        
-        self.rest_samples_added = np.ceil(self.min_samples_per_step*self.parameters["camera_delay"]/100)  #Samples added to allow down time for the camera
-        self.samples_per_step = self.min_samples_per_step + self.rest_samples_added
+        self.rest_samples_added = np.ceil(self.min_samples_per_step*self.parameters["camera_delay"]/100)  #Number of samples added to each step to allow down time for the camera
+        self.samples_per_step = self.min_samples_per_step + self.rest_samples_added #Number of samples per step (including all delay)
         #print('Samples per step: ' + str(self.samples_per_step)) #debugging
-        
-        self.samples_per_delay = self.samples_per_step - self.samples_per_half_period
+        self.samples_per_delay = self.samples_per_step - self.samples_per_half_period #Number of samples per total delay (internal + added), between each camera exposition
         #print('Samples per delay: '+str(self.samples_per_delay)) #debugging
-        
-        self.samples_per_half_delay = np.floor(self.samples_per_delay/2)
+        self.samples_per_half_delay = np.floor(self.samples_per_delay/2) #Number of samples per half total delay
         #print('Samples per half delay: '+str(self.samples_per_half_delay)+'\n') #debugging
-        
         #print('Number of columns: '+str(self.parameters["columns"])) #debugging
         #print('Etl step: '+str(self.parameters["etl_step"]) + ' columns') #debugging
-        
-        self.number_of_steps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"])
+        self.number_of_steps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"]) #Number of focal length values needed for each ETL to achieve a full scan
         #print('Number of steps: ' + str(self.number_of_steps)+'\n') #debugging
-        
-        self.number_of_samples = self.number_of_steps*self.samples_per_step
-        #print('Number of samples: '+str(self.number_of_samples)) #debugging
-        
-        self.sweeptime = self.number_of_samples/self.parameters["samplerate"]
-        #print('Sweeptime: '+str(self.sweeptime)+'s') #debugging
-        
+        self.number_of_samples = self.number_of_steps*self.samples_per_step #Total number of samples for acquisition
         self.samples = int(self.number_of_samples)
-    
+        #print('Number of samples: '+str(self.number_of_samples)) #debugging
+        self.sweeptime = self.number_of_samples/self.parameters["samplerate"] #Total time for acquisition
+        #print('Sweeptime: '+str(self.sweeptime)+'s') #debugging
     
     '''Tasks methods'''
         
@@ -109,7 +95,6 @@ class AOETLGalvos(QtCore.QObject):
         self.galvo_etl_task = nidaqmx.Task(new_task_name='galvo_etl_ramps')
         self.camera_task = nidaqmx.Task(new_task_name='camera_do_signal')
         #self.laser_task = nidaqmx.Task(new_task_name='laser_ramps')
-
 
         '''Housekeeping: Setting up the AO task for the Galvo and ETLs. It is the master task'''
         self.galvo_etl_task.ao_channels.add_ao_voltage_chan(terminals["galvos_etls"])

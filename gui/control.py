@@ -9,25 +9,25 @@ import sys
 sys.path.append("..")
 
 import os
-import math
+#import math
 import numpy as np
 from matplotlib import pyplot as plt
-from scipy import interpolate, signal, optimize, ndimage, stats
-from PyQt5 import QtGui, QtCore
+from scipy import signal, optimize, ndimage, stats #,interpolate
+from PyQt5 import QtCore #,QtGui
 from PyQt5 import uic
 from PyQt5.QtWidgets import QWidget, QFileDialog, QTableWidgetItem,QAbstractItemView
 #from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QVBoxLayout, QSizePolicy, QMessageBox, QPushButton
 #from PyQt5.QtGui import QIcon
 #from PyQt5.QtCore import QThread
 
-from functools import partial
+#from functools import partial
 import pyqtgraph as pg
 #import ctypes
 import copy
 
 import nidaqmx
 #from nidaqmx.constants import AcquisitionType
-from PIL import Image
+#from PIL import Image
 #import src.config
 from src.hardware import AOETLGalvos
 from src.hardware import Motors
@@ -36,9 +36,9 @@ from src.pcoEdge import Camera
 import threading
 import time
 import queue
-import multiprocessing
+#import multiprocessing
 import h5py
-import posixpath
+#import posixpath
 import datetime
 
 '''Parameters'''
@@ -54,7 +54,7 @@ with open(r"C:\git-projects\lightsheet\src\configuration.txt") as file:
         parameters[param_string] = float(file.readline())
 '''Default parameters'''
 parameters["sample_name"]='No Sample Name'
-parameters["sweeptime"]=0.4             # In seconds
+##parameters["sweeptime"]=0.4             # In seconds
 parameters["columns"] = 2560            # In pixels
 parameters["rows"] = 2160               # In pixels
 parameters["camera_delay"] = 10         # In %
@@ -577,7 +577,7 @@ class Controller(QWidget):
             self.motor_camera.move_relative_position(-self.doubleSpinBox_incrementCamera.value(),self.unit)
         else:
             self.print_controller('Out of boundaries')
-            self.motor_camera.move_absolute_position(-self.boundaries['camera_backward_boundary']+self.camera_correction,'\u03BCStep')
+            self.motor_camera.move_absolute_position(-self.boundaries['camera_backward_boundary']+self.camera_correction,self.unit)
         self.update_position_camera()
     
     def move_camera_forward(self):
@@ -642,11 +642,15 @@ class Controller(QWidget):
         '''Sample motor backward horizontal motion'''
         
         next_horizontal_position = self.return_current_horizontal_position() + self.doubleSpinBox_incrementHorizontal.value()
-        if (self.return_current_camera_position() - next_horizontal_position) >= self.camera_sample_min_distance:  #To prevent the sample from hitting the camea
-            self.print_controller ('Sample moving backward')
-            self.motor_horizontal.move_relative_position(-self.doubleSpinBox_incrementHorizontal.value(),self.unit)
+        if next_horizontal_position <= self.boundaries['horizontal_backward_boundary']:
+            if (self.return_current_camera_position() - next_horizontal_position) >= self.camera_sample_min_distance:  #To prevent the sample from hitting the camea
+                self.print_controller ('Sample moving backward')
+                self.motor_horizontal.move_relative_position(-self.doubleSpinBox_incrementHorizontal.value(),self.unit)
+            else:
+                self.print_controller('Camera prevents sample movement')
         else:
-            self.print_controller('Camera prevents sample movement')
+            self.print_controller('Out of boundaries')
+            self.motor_horizontal.move_absolute_position(-self.boundaries['horizontal_backward_boundary']+self.horizontal_correction,self.unit)
         self.update_position_horizontal()
             
     def move_sample_forward(self):
@@ -701,7 +705,7 @@ class Controller(QWidget):
         '''Set lower limit of sample's horizontal motion 
            (to avoid hitting the glass walls)'''
         
-        self.boundaries['horizontal_backward_boundary'] = self.return_current_horizontal_position(self.unit)
+        self.boundaries['horizontal_backward_boundary'] = self.return_current_horizontal_position()
         self.change_default_boundaries(['horizontal_backward_boundary'])
         self.update_unit()
         self.horizontal_backward_boundary_selected = True
@@ -715,7 +719,7 @@ class Controller(QWidget):
         '''Set upper limit of sample's horizontal motion 
            (to avoid hitting the glass walls)'''
         
-        self.boundaries['horizontal_forward_boundary'] = self.return_current_horizontal_position(self.unit)
+        self.boundaries['horizontal_forward_boundary'] = self.return_current_horizontal_position()
         self.change_default_boundaries(['horizontal_forward_boundary'])
         self.update_unit()
         
@@ -1273,6 +1277,17 @@ class Controller(QWidget):
         reconstructed_buffer = np.zeros((buffer.shape[0],int(self.parameters["rows"]),int(self.parameters["etl_step"]+ (2*column_buffer))))  #Initializing frame
 
         for frame in range(int(self.number_of_steps)):
+            '''Uniformize frame intensities'''
+            average = np.average(buffer[frame,0:100,:]) #Average the  first rows
+            #print(str(frame)+' average:'+str(average))
+            if frame == 0:
+                reference_average = average
+                #print('reference_average:'+str(reference_average))
+            else:
+                average_ratio = reference_average/average
+                #print('average_ratio:'+str(average_ratio))
+                buffer[frame,:,:] = buffer[frame,:,:] * average_ratio
+            '''Crop buffer'''
             first_column = int(frame * self.parameters['etl_step'] - column_buffer)
             next_first_column = int(first_column + self.parameters['etl_step'] + (2*column_buffer))
             if frame == 0:  #For the first column step
@@ -1293,19 +1308,6 @@ class Controller(QWidget):
         reconstructed_frame = np.zeros((int(self.parameters["rows"]), int(self.parameters["columns"])))  #Initializing frame
         
         for frame in range(int(self.number_of_steps)):
-            #'''Uniformize frame intensities'''
-            #average = np.average(cropped_buffer[frame,0:100,:]) #Average the first rows
-            #print(str(frame)+' average:'+str(average))
-            ##print(buffer[1,:,:] == buffer[3,:,:])
-            #if frame == 0:
-            #    reference_average = average
-            #    #print('reference_average:'+str(reference_average))
-            #else:
-            #    average_ratio = reference_average/average
-            #    #print('average_ratio:'+str(average_ratio))
-            #    cropped_buffer[frame,:,:] = cropped_buffer[frame,:,:] * average_ratio
-            #
-            '''Reconstruct frame'''
             first_center_column = int(frame * self.parameters['etl_step'] + column_buffer)
             #print('first_center_column:'+str(first_center_column))
             last_center_column = int((frame+1) * self.parameters['etl_step'] - column_buffer)
@@ -1325,12 +1327,11 @@ class Controller(QWidget):
                     #print('buffer_weight:'+str(buffer_weight))
                     last_buffer_weight = 1 - column * weight_step
                     #print('last_buffer_weight:'+str(last_buffer_weight))
-                    reconstructed_frame[:,frame_column] = buffer_weight * cropped_buffer[frame,:,column] + last_buffer_weight*cropped_buffer[(frame-1),:,last_buffer_column]
+                    reconstructed_frame[:,frame_column] = buffer_weight*cropped_buffer[frame,:,column] + last_buffer_weight*cropped_buffer[(frame-1),:,last_buffer_column]
                 #print('frame_column:'+str(frame_column))
                 if frame == int(self.number_of_steps-1):  #For the last column step (may be different than the others...)
                     last_column_step = int(self.parameters["columns"] - first_center_column)
-                    #print('last_column_step:'+str(last_column_step))
-                    reconstructed_frame[:,first_center_column:] = cropped_buffer[frame,:,column_buffer:column_buffer+last_column_step]
+                    reconstructed_frame[:,first_center_column:] = cropped_buffer[frame,:,(2*column_buffer):(2*column_buffer)+last_column_step]
                 else:
                     reconstructed_frame[:,first_center_column:last_center_column] = cropped_buffer[frame,:,(2*column_buffer):int(self.parameters['etl_step'])]
 
@@ -1605,17 +1606,7 @@ class Controller(QWidget):
             stack_mode_thread.start()
     
     def stack_mode_thread(self):
-        ''' Thread for volume acquisition and saving 
-        
-        Note: check if there's a NI-Daqmx function to repeat the data sent 
-              instead of closing each time the task. This would be useful
-              if it is possible to break a task with self.stop_stack_mode
-        Simpler solution: Use conditions with self._stack_mode_started status 
-                          such as in self.live_mode_thread() and 
-                          self.preview_mode_thread()
-        
-        A progress bar would be nice
-        '''
+        ''' Thread for volume acquisition and saving'''
         
         '''Setting the camera for acquisition'''
         self.start_camera_recording('ExternalExposureControl')
@@ -1691,7 +1682,7 @@ class Controller(QWidget):
                 self.sig_update_progress.emit(progress_value)
         if self.stack_mode_started:
             self.sig_update_progress.emit(100) #In case the number of planes is not a multiple of 100
-        
+
         if self.saving_allowed:
             self.frame_saver.stop_saving()
         
@@ -1790,31 +1781,34 @@ class Controller(QWidget):
                 self.update_position_horizontal()
                 
                 for camera_plane in range(int(self.number_of_camera_positions)): #For each camera position
-                    '''Moving camera position'''
-                    position_camera = self.focus_forward_boundary + (camera_plane * camera_increment_length) #Increments of +camera_increment_length
-                    print('position_camera:'+str(position_camera))
-                    self.motor_camera.move_absolute_position(-position_camera+self.camera_correction,'mm')
-                    time.sleep(0.5) #To make sure the camera is at the right position
-                    self.update_position_camera()
-
-                    '''Retrieving filename set by the user''' #debugging
-                    if self.saving_allowed:
-                        self.frame_saver.add_motor_parameters(self.current_horizontal_position_text,self.current_vertical_position_text,self.current_camera_position_text)
-                    
-                    '''Getting image'''
-                    self.get_single_image()
-                    
-                    '''Saving frame''' #debugging
-                    if self.saving_allowed:
-                        self.send_frame_to_consumer(self.reconstructed_frame,False,True)
-                        self.print_controller('Saving Reconstructed Image')
-                    
-                    '''Filtering frame'''
-                    frame = ndimage.gaussian_filter(self.reconstructed_frame, sigma=3)
-                    flatframe = frame.flatten()
-                    intensities = np.sort(frame,axis=None)
-                    metricvar[camera_plane] = np.average(intensities[-50:])#np.var(flatframe)
-                    print(np.var(flatframe))
+                    if self.camera_calibration_started == False:
+                        break
+                    else:
+                        '''Moving camera position'''
+                        position_camera = self.focus_forward_boundary + (camera_plane * camera_increment_length) #Increments of +camera_increment_length
+                        print('position_camera:'+str(position_camera))
+                        self.motor_camera.move_absolute_position(-position_camera+self.camera_correction,'mm')
+                        time.sleep(0.5) #To make sure the camera is at the right position
+                        self.update_position_camera()
+    
+                        '''Retrieving filename set by the user''' #debugging
+                        if self.saving_allowed:
+                            self.frame_saver.add_motor_parameters(self.current_horizontal_position_text,self.current_vertical_position_text,self.current_camera_position_text)
+                        
+                        '''Getting image'''
+                        self.get_single_image()
+                        
+                        '''Saving frame''' #debugging
+                        if self.saving_allowed:
+                            self.send_frame_to_consumer(self.reconstructed_frame,False,True)
+                            self.print_controller('Saving Reconstructed Image')
+                        
+                        '''Filtering frame'''
+                        frame = ndimage.gaussian_filter(self.reconstructed_frame, sigma=3)
+                        ##flatframe = frame.flatten()
+                        intensities = np.sort(frame,axis=None)
+                        metricvar[camera_plane] = np.average(intensities[-50:]) ##np.var(flatframe)
+                        #print(np.var(flatframe))
                 
                 '''Calculating ideal camera position'''
                 metricvar = signal.savgol_filter(metricvar, 11, 3) # window size 11, polynomial order 3
@@ -1839,6 +1833,8 @@ class Controller(QWidget):
                 self.camera_focus_relation[sample_plane,0] = self.return_current_horizontal_position()
                 max_variance_camera_position = self.focus_forward_boundary + (center * camera_increment_length)
                 print('max_variance_camera_position:'+str(max_variance_camera_position))
+                if max_variance_camera_position > self.focus_backward_boundary:##
+                    max_variance_camera_position = self.focus_backward_boundary
                 self.camera_focus_relation[sample_plane,1] = max_variance_camera_position#-self.motor_camera.data_to_position(max_variance_camera_position, self.unit) + self.camera_correction
                 
             self.print_controller('--Calibration of plane '+str(sample_plane+1)+'/'+str(int(self.number_of_calibration_planes))+' done')
@@ -2029,7 +2025,7 @@ class Controller(QWidget):
                         for i in range(dset.shape[1]):
                             curve=(dset[rangeAroundPeak,i]-np.min(dset[rangeAroundPeak,i]))/(np.max(dset[rangeAroundPeak,i])-np.min(dset[rangeAroundPeak,i]))
                             std_val.append(fwhm(curve)/2*np.sqrt(2*np.log(2)))
-                           
+                        
                         #prepare data for fit:
                         ydata=np.array(std_val)
                         ydatas[etl_image,:] = signal.savgol_filter(ydata, 51, 3) # window size 51, polynomial order 3
@@ -2145,6 +2141,7 @@ class CameraWindow(queue.Queue):
         self.histogram_level = []
         self.frame_counter = 1
         self.stack_mode = False
+        self.saturation = False
         
         '''Set up display window'''
         self.plot_item = pg.PlotItem()
@@ -2208,11 +2205,15 @@ class CameraWindow(queue.Queue):
                 self.imv.setImage(frame)
             
             '''Showing saturated pixels in red'''
+            if self.saturation:
+                self.plot_item.removeItem(self.saturation_plot) #Reset saturationplot
             saturated_pixels = np.array(np.where(frame >= 65335)) #65535 is the max intensity value that the camera can output (2^16-1)
             saturated_pixels = saturated_pixels + 0.5 #To make sure red pixels are at the right position...
             saturated_pixels_list = saturated_pixels.tolist()
-            self.plot_item.plot(saturated_pixels_list[0],saturated_pixels_list[1],pen=None,symbolBrush=(255,0,0),symbol='s',symbolSize=1,pxMode=False)
-            
+            if saturated_pixels_list != []:
+                self.saturation = True
+            self.saturation_plot = self.plot_item.plot(saturated_pixels_list[0],saturated_pixels_list[1],pen=None,symbolBrush=(255,0,0),symbol='s',symbolSize=1,symbolPen=None,pxMode=False)
+            saturated_pixels_list
             '''Keeping old view settings with new image'''
             _view_box.setState(_state)
             if not first_update: #To keep the histogram setting with image refresh
