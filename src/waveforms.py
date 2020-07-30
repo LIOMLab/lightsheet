@@ -23,7 +23,7 @@ def camera_digital_output_signal(samples_per_half_period, t_start_exp, samplerat
        camera documentation for more infos.'''
     
     samples_per_exposition = samples_per_half_period
-    samples_before_exposition = np.round(t_start_exp*samplerate)             #Round, ceil or floor?
+    samples_before_exposition = np.round(t_start_exp*samplerate) #Number of samples to read dark image            #Round, ceil or floor?
     samples_before_high_level = samples_per_half_delay - samples_before_exposition             
     high_level_vector = np.full(int(samples_per_exposition), True)
     
@@ -86,7 +86,7 @@ def calibrated_etl_stairs(left_slope, left_intercept, right_slope, right_interce
         else:
             array = amplitude * np.ones((int(number_of_samples))) + offset
     else: ###
-        print('ETL focus deactivated')
+        #print('ETL focus deactivated')
         array = amplitude * np.ones((int(number_of_samples))) + offset
     
     return np.array(array)
