@@ -15,7 +15,7 @@ from matplotlib import pyplot as plt
 from scipy import signal, optimize, ndimage, stats #,interpolate
 from PyQt5 import QtCore #,QtGui
 from PyQt5 import uic
-from PyQt5.QtWidgets import QWidget, QFileDialog, QTableWidgetItem,QAbstractItemView
+from PyQt5.QtWidgets import QWidget, QFileDialog, QTableWidgetItem, QAbstractItemView,QMessageBox
 #from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QVBoxLayout, QSizePolicy, QMessageBox, QPushButton
 #from PyQt5.QtGui import QIcon
 #from PyQt5.QtCore import QThread
@@ -1064,39 +1064,42 @@ class Controller(QWidget):
             self.label_currentFileDirectory.setText('None specified')
     
     def select_dataset(self):
-        '''Opens a HDF5 dataset and displays its attributes and data as an image'''
+        '''Opens one or many HDF5 datasets and displays its attributes and data as an image'''
         
         if (self.open_directory != '') and (self.listWidget_fileDatasets.count() != 0):
-            self.dataset_name = self.listWidget_fileDatasets.currentItem().text()
-            with h5py.File(self.open_directory, "r") as f:
-                dataset = f[self.dataset_name]
+            for item in range(len(self.listWidget_fileDatasets.selectedItems())):
+                self.dataset_name = self.listWidget_fileDatasets.selectedItems()[item].text()
+                with h5py.File(self.open_directory, "r") as f:
+                    dataset = f[self.dataset_name]
+                    
+                    '''Display attributes of the first selected dataset'''
+                    if item == 0:
+                        self.label_currentDataset.setText(self.dataset_name)
+                        attribute_names = list(dataset.attrs.keys())
+                        attribute_values = list(dataset.attrs.values())
+                        self.tableWidget_fileAttributes.setColumnCount(2)
+                        self.tableWidget_fileAttributes.setRowCount(len(attribute_names))
+                        self.tableWidget_fileAttributes.setHorizontalHeaderItem(0,QTableWidgetItem('Attributes'))
+                        self.tableWidget_fileAttributes.setHorizontalHeaderItem(1,QTableWidgetItem('Values'))
+                        for attribute in range(0,len(attribute_names)):
+                            self.tableWidget_fileAttributes.setItem(attribute,0,QTableWidgetItem(attribute_names[attribute]))
+                            self.tableWidget_fileAttributes.setItem(attribute,1,QTableWidgetItem(str(attribute_values[attribute])))
+                        self.tableWidget_fileAttributes.resizeColumnsToContents()
+                        self.tableWidget_fileAttributes.setEditTriggers(QAbstractItemView.NoEditTriggers) #No editing possible
+                    
+                    '''Display image'''
+                    data = dataset[()]
+                    plt.figure('Figure '+str(self.figure_counter)+': '+self.open_directory+' ('+self.dataset_name+')')
+                    plt.imshow(data,cmap='gray')
+                    plt.show(block=False)   #Prevents the plot from blocking the execution of the code...
+                    self.figure_counter += 1
+                    
+                    ##'''Convert to tiff format'''
+                    ##tiff = Image.fromarray(data)
+                    ##tiff_filename = self.open_directory.replace('.hdf5', '.tiff')
+                    ##tiff.save(tiff_filename)
                 
-                '''Display attributes'''
-                attribute_names = list(dataset.attrs.keys())
-                attribute_values = list(dataset.attrs.values())
-                self.tableWidget_fileAttributes.setColumnCount(2)
-                self.tableWidget_fileAttributes.setRowCount(len(attribute_names))
-                self.tableWidget_fileAttributes.setHorizontalHeaderItem(0,QTableWidgetItem('Attributes'))
-                self.tableWidget_fileAttributes.setHorizontalHeaderItem(1,QTableWidgetItem('Values'))
-                for attribute in range(0,len(attribute_names)):
-                    self.tableWidget_fileAttributes.setItem(attribute,0,QTableWidgetItem(attribute_names[attribute]))
-                    self.tableWidget_fileAttributes.setItem(attribute,1,QTableWidgetItem(str(attribute_values[attribute])))
-                self.tableWidget_fileAttributes.resizeColumnsToContents()
-                self.tableWidget_fileAttributes.setEditTriggers(QAbstractItemView.NoEditTriggers) #No editing possible
-                
-                '''Display image'''
-                data = dataset[()]
-                plt.figure('Figure '+str(self.figure_counter)+': '+self.open_directory+' ('+self.dataset_name+')')
-                plt.imshow(data,cmap='gray')
-                plt.show(block=False)   #Prevents the plot from blocking the execution of the code...
-                self.figure_counter += 1
-                
-                ##'''Convert to tiff format'''
-                ##tiff = Image.fromarray(data)
-                ##tiff_filename = self.open_directory.replace('.hdf5', '.tiff')
-                ##tiff.save(tiff_filename)
-            
-            self.print_controller('Dataset '+self.dataset_name+' of file '+self.open_directory+' displayed')
+                self.print_controller('Dataset '+self.dataset_name+' of file '+self.open_directory+' displayed')
     
     
     '''Acquisition Modes Methods'''
@@ -1115,7 +1118,7 @@ class Controller(QWidget):
         self.standby_task = nidaqmx.Task()
         self.standby_task.ao_channels.add_ao_voltage_chan('/Dev1/ao2:3')
         
-        etl_voltage = 2.5 #In volts
+        etl_voltage = 2.5 #In volts, corresponds to a current of 0
         standby_waveform = np.stack((np.array([etl_voltage]),np.array([etl_voltage])))
         
         '''Inject voltage'''
@@ -1532,7 +1535,7 @@ class Controller(QWidget):
             
             '''Saving frame'''
             if self.checkBox_saveAllFrames.isChecked():
-                self.frame_saver.set_files(1,self.filename,'singleImage',1,'ETLscan',True)
+                self.frame_saver.set_files(1,self.filename,'singleImage',1,'ETLscan')
                 cropped_buffer = self.crop_buffer(self.buffer)
                 self.frame_saver.put(cropped_buffer,1)
                 self.print_controller('Saving Images (one for each ETL scan)')
@@ -1545,7 +1548,7 @@ class Controller(QWidget):
             self.frame_saver.stop_saving()
         else:
             print('Select directory and enter a valid filename before saving')
-    
+
     
     def set_number_of_planes(self):
         '''Calculates the number of planes that will be saved in the stack 
@@ -1593,17 +1596,39 @@ class Controller(QWidget):
                 self.step = self.doubleSpinBox_planeStep.value()
                 self.start_point = self.stack_mode_starting_point
                 self.end_point = self.stack_mode_starting_point+self.step*(self.number_of_planes-1)
-                
-            self.stack_mode_started = True
             
-            '''Modes disabling while stack acquisition'''
-            self.update_buttons_modes([self.pushButton_stopStack])
-            
-            self.print_controller('Stack mode started -- Number of frames to save: '+str(int(self.number_of_planes)))
-            
-            '''Starting stack mode thread'''
-            stack_mode_thread = threading.Thread(target = self.stack_mode_thread)
-            stack_mode_thread.start()
+            if self.saving_allowed:
+                self.start_stack_thread()
+            else:
+                self.show_save_popup()
+    
+    def start_stack_thread(self):
+        '''Starts the thread for stack mode'''
+        
+        self.stack_mode_started = True
+        '''Modes disabling while stack acquisition'''
+        self.update_buttons_modes([self.pushButton_stopStack])
+        self.print_controller('Stack mode started -- Number of frames to save: '+str(int(self.number_of_planes)))
+        '''Starting stack mode thread'''
+        stack_mode_thread = threading.Thread(target = self.stack_mode_thread)
+        stack_mode_thread.start()
+    
+    def show_save_popup(self):
+        '''Asks if the stack acquisition whether is to be done without saving'''
+        
+        save_popup = QMessageBox()
+        save_popup.setWindowTitle('Stack acquisition Warning')
+        save_popup.setText('Make stack acquisition without saving?')
+        save_popup.setIcon(QMessageBox.Question)
+        save_popup.setStandardButtons(QMessageBox.Yes|QMessageBox.No)
+        save_popup.setDefaultButton(QMessageBox.Yes)
+        save_popup.buttonClicked.connect(self.popup_button)
+        save_popup.exec_()
+    
+    def popup_button(self,button):
+        '''Takes action depending on the save_popup button that was clicked'''
+        if button.text() == '&Yes': #& is necessary...
+            self.start_stack_thread()
     
     def stack_mode_thread(self):
         ''' Thread for volume acquisition and saving'''
@@ -1633,7 +1658,7 @@ class Controller(QWidget):
                 self.frame_saver.set_files(1,self.filename,'stack',self.number_of_planes,'reconstructed_frame')
             self.frame_saver.start_saving()
         else:
-            print('Select directory and enter a valid filename before saving')
+            print('Select directory and enter a valid filename to save')
         
         '''Creating lasers task'''
         self.lasers_task = nidaqmx.Task()

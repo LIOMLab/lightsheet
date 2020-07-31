@@ -162,6 +162,11 @@ class AOETLGalvos(QtCore.QObject):
         '''Stops the tasks for triggering, analog and counter outputs
            Master task always last'''
         
+        #etl_voltage = 2.5 #In volts, corresponds to a current of 0
+        #galvo_voltage = 2.5
+        #standby_waveform = np.stack((np.array([galvo_voltage]),np.array([galvo_voltage]),np.array([etl_voltage]),np.array([etl_voltage])))
+        #self.galvo_etl_task.write(standby_waveform, auto_start = True)
+        
         #self.laser_task.stop()
         self.camera_task.stop()
         self.galvo_etl_task.stop()

@@ -105,6 +105,9 @@
         <height>71</height>
        </rect>
       </property>
+      <property name="toolTip">
+       <string>Move the sample forward</string>
+      </property>
       <property name="text">
        <string>Forward</string>
       </property>
@@ -117,6 +120,9 @@
         <width>71</width>
         <height>71</height>
        </rect>
+      </property>
+      <property name="toolTip">
+       <string>Move the sample backward</string>
       </property>
       <property name="text">
        <string>Backward</string>
@@ -131,6 +137,9 @@
         <height>71</height>
        </rect>
       </property>
+      <property name="toolTip">
+       <string>Move the sample to origin</string>
+      </property>
       <property name="text">
        <string>Origin</string>
       </property>
@@ -144,6 +153,9 @@
         <height>71</height>
        </rect>
       </property>
+      <property name="toolTip">
+       <string>Move the sample down</string>
+      </property>
       <property name="text">
        <string>Down</string>
       </property>
@@ -156,6 +168,9 @@
         <width>71</width>
         <height>71</height>
        </rect>
+      </property>
+      <property name="toolTip">
+       <string>Move the sample up</string>
       </property>
       <property name="text">
        <string>Up</string>
@@ -1486,12 +1501,42 @@
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
-      <widget class="QListWidget" name="listWidget_fileDatasets"/>
-      <widget class="QPushButton" name="pushButton_selectDataset">
-       <property name="text">
-        <string>Select Dataset</string>
+      <widget class="QListWidget" name="listWidget_fileDatasets">
+       <property name="selectionMode">
+        <enum>QAbstractItemView::ExtendedSelection</enum>
        </property>
       </widget>
+      <widget class="QPushButton" name="pushButton_selectDataset">
+       <property name="text">
+        <string>Select and Show Dataset(s)</string>
+       </property>
+      </widget>
+     </widget>
+     <widget class="QLabel" name="label_19">
+      <property name="geometry">
+       <rect>
+        <x>430</x>
+        <y>50</y>
+        <width>91</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Current Dataset:</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_currentDataset">
+      <property name="geometry">
+       <rect>
+        <x>520</x>
+        <y>50</y>
+        <width>241</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>None Specified</string>
+      </property>
      </widget>
     </widget>
    </widget>
