@@ -38,9 +38,7 @@ class AOETLGalvos(QtCore.QObject):
     
     def __init__(self,parameters):
         self.parameters = parameters
-        self.t_half_period = 0.5*(1/self.parameters["galvo_l_frequency"])
-        #The half period is the exposure time, the time taken for a single upwards or downwards galvo scan. 
-        #It is defined  with the left galvo frequency (the right galvo has the same frequency)
+        self.t_half_period = 0.5*(1/self.parameters["galvo_frequency"]) #The half period is the exposure time, the time taken for a single upwards or downwards galvo scan
         #print('t_half_period:'+str(self.t_half_period)) #debugging
         self.samples_per_half_period = np.ceil(self.t_half_period*self.parameters["samplerate"]) #Number of samples per exposure time
         #print('Samples per half period: '+str(self.samples_per_half_period)) #debugging

@@ -9,6 +9,7 @@ import sys
 sys.path.append("..")
 
 import os
+import webbrowser
 #import math
 import numpy as np
 from matplotlib import pyplot as plt
@@ -43,7 +44,7 @@ import datetime
 
 '''Parameters'''
 etl_parameters = ["etl_l_amplitude","etl_r_amplitude","etl_l_offset","etl_r_offset"]
-galvo_parameters = ["galvo_l_amplitude","galvo_r_amplitude","galvo_l_offset","galvo_r_offset","galvo_l_frequency","galvo_r_frequency"]
+galvo_parameters = ["galvo_l_amplitude","galvo_r_amplitude","galvo_l_offset","galvo_r_offset","galvo_frequency"]
 laser_parameters = ["laser_l_voltage","laser_r_voltage"]
 modifiable_parameters = etl_parameters + galvo_parameters + ["samplerate","etl_step"] + laser_parameters
 
@@ -131,18 +132,16 @@ class Controller(QWidget):
                                   self.doubleSpinBox_rightGalvoAmplitude,
                                   self.doubleSpinBox_leftGalvoOffset,
                                   self.doubleSpinBox_rightGalvoOffset]
-        galvo_frequencies_boxes = [self.doubleSpinBox_leftGalvoFrequency,
-                                     self.doubleSpinBox_rightGalvoFrequency]
         laser_boxes = [self.doubleSpinBox_leftLaser,
                          self.doubleSpinBox_rightLaser]
         
-        self.modifiable_param_boxes = etl_voltages_boxes + galvo_voltages_boxes + galvo_frequencies_boxes + [self.doubleSpinBox_samplerate,self.spinBox_etlStep] + laser_boxes 
+        self.modifiable_param_boxes = etl_voltages_boxes + galvo_voltages_boxes + [self.doubleSpinBox_galvoFrequency,self.doubleSpinBox_samplerate,self.spinBox_etlStep] + laser_boxes 
         
         '''Default ETL relation values'''###Test
-        self.left_slope = -0.001282893174259485
-        self.left_intercept = 4.920315064788371
-        self.right_slope = 0.0013507132995247916
-        self.right_intercept = 1.8730880902476752
+        self.left_slope = -0.0008978829380085525#-0.001282893174259485
+        self.left_intercept = 4.25548088287623#4.920315064788371
+        self.right_slope = 0.000826220401525251#0.0013507132995247916
+        self.right_intercept = 2.384849899181325#1.8730880902476752
         
         '''Arbitrary default positions (in micro-steps)'''
         self.boundaries = dict()
@@ -150,11 +149,11 @@ class Controller(QWidget):
         self.boundaries['vertical_down_boundary'] = 0
         self.boundaries['origin_vertical'] = self.boundaries['vertical_down_boundary']
         self.boundaries['horizontal_forward_boundary'] = 0
-        self.boundaries['horizontal_backward_boundary'] = 10
+        self.boundaries['horizontal_backward_boundary'] = 15
         self.boundaries['origin_horizontal'] = self.boundaries['horizontal_forward_boundary']
         self.boundaries['camera_forward_boundary'] = 30
         self.boundaries['camera_backward_boundary'] = 115
-        self.boundaries['focus'] = 40 ###
+        self.boundaries['focus'] = 34.5
         self.defaultBoundaries = copy.deepcopy(self.boundaries) #The default boundaries are in mm
         
         '''Initializing flags'''
@@ -193,14 +192,13 @@ class Controller(QWidget):
             box.setMinimum(-10)
             box.setSingleStep(0.1)
             box.setSuffix(" V")
-        for box in galvo_frequencies_boxes:
-            box.setMaximum(130) #corresponds to an exposure time of 3.8462 ms
-            box.setMinimum(5) #corresponds to an exposure time of 100ms
-            box.setSuffix(" Hz")
         for box in laser_boxes:
             box.setMaximum(2.5)
             box.setSingleStep(0.1)
             box.setSuffix(" V")
+        self.doubleSpinBox_galvoFrequency.setMaximum(130) #corresponds to an exposure time of 3.8462 ms
+        self.doubleSpinBox_galvoFrequency.setMinimum(5) #corresponds to an exposure time of 100ms
+        self.doubleSpinBox_galvoFrequency.setSuffix(" Hz")
         self.doubleSpinBox_samplerate.setMaximum(1000000)
         self.doubleSpinBox_samplerate.setMinimum(1)
         self.doubleSpinBox_samplerate.setSuffix(" samples/s")
@@ -259,6 +257,7 @@ class Controller(QWidget):
         self.update_buttons_modes(self.default_buttons)
         
         '''Connect buttons'''
+        self.pushButton_help.clicked.connect(self.open_help)
         '''Connection for unit change'''
         self.comboBox_unit.currentTextChanged.connect(self.update_unit)
         
@@ -333,6 +332,9 @@ class Controller(QWidget):
 
     
     '''General Methods'''
+    def open_help(self):
+        '''Open help documentation for the program (PDF)'''
+        webbrowser.open_new(r'file://C:\git-projects\lightsheet\src\Guide.pdf') ##
     
     def update_buttons_modes(self,buttons_to_enable):
         '''Update mode buttons status : disable buttons, except for those specified to be enabled'''
@@ -912,10 +914,8 @@ class Controller(QWidget):
             parameter_box.setMaximum(10-self.doubleSpinBox_rightGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being > 10V
             parameter_box.setMinimum(-10-self.doubleSpinBox_rightGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being < -10V
             opposed_parameter_box = self.doubleSpinBox_leftGalvoOffset
-        elif parameter_name == "galvo_l_frequency":
-            opposed_parameter_box = self.doubleSpinBox_rightGalvoFrequency
-        elif parameter_name == "galvo_r_frequency":
-            opposed_parameter_box = self.doubleSpinBox_leftGalvoFrequency
+        elif parameter_name == "galvo_frequency":
+            opposed_parameter_box = self.doubleSpinBox_galvoFrequency
         
         '''Modify simultaneously left and right parameters, if specified'''
         if self.checkBox_etlsTogether.isChecked() and (parameter_name in etl_parameters):
@@ -1276,30 +1276,33 @@ class Controller(QWidget):
     def crop_buffer(self,buffer):
         '''Crops each frame of a buffer for a frame reconstruction'''
         
-        column_buffer = int(self.parameters["etl_step"]*0.2)
-        reconstructed_buffer = np.zeros((buffer.shape[0],int(self.parameters["rows"]),int(self.parameters["etl_step"]+ (2*column_buffer))))  #Initializing frame
-
-        for frame in range(int(self.number_of_steps)):
-            '''Uniformize frame intensities'''
-            average = np.average(buffer[frame,0:100,:]) #Average the  first rows
-            #print(str(frame)+' average:'+str(average))
-            if frame == 0:
-                reference_average = average
-                #print('reference_average:'+str(reference_average))
-            else:
-                average_ratio = reference_average/average
-                #print('average_ratio:'+str(average_ratio))
-                buffer[frame,:,:] = buffer[frame,:,:] * average_ratio
-            '''Crop buffer'''
-            first_column = int(frame * self.parameters['etl_step'] - column_buffer)
-            next_first_column = int(first_column + self.parameters['etl_step'] + (2*column_buffer))
-            if frame == 0:  #For the first column step
-                reconstructed_buffer[frame,:,column_buffer:] = buffer[frame,:,0:int(self.parameters['etl_step'] + column_buffer)]
-            elif frame == int(self.number_of_steps-1):  #For the last column step (may be different than the others...)
-                last_column_step = int(self.parameters["columns"] - first_column)
-                reconstructed_buffer[frame,:,0:last_column_step] = buffer[frame,:,first_column:]
-            else:
-                reconstructed_buffer[frame,:,:] = buffer[frame,:,first_column:next_first_column]
+        if buffer.shape[0] == 1:
+            reconstructed_buffer = buffer
+        else:
+            column_buffer = int(self.parameters["etl_step"]*0.2)
+            reconstructed_buffer = np.zeros((buffer.shape[0],int(self.parameters["rows"]),int(self.parameters["etl_step"]+ (2*column_buffer))))  #Initializing frame
+    
+            for frame in range(int(self.number_of_steps)):
+                '''Uniformize frame intensities'''
+                average = np.average(buffer[frame,0:100,:]) #Average the  first rows
+                #print(str(frame)+' average:'+str(average))
+                if frame == 0:
+                    reference_average = average
+                    #print('reference_average:'+str(reference_average))
+                else:
+                    average_ratio = reference_average/average
+                    #print('average_ratio:'+str(average_ratio))
+                    buffer[frame,:,:] = buffer[frame,:,:] * average_ratio
+                '''Crop buffer'''
+                first_column = int(frame * self.parameters['etl_step'] - column_buffer)
+                next_first_column = int(first_column + self.parameters['etl_step'] + (2*column_buffer))
+                if frame == 0:  #For the first column step
+                    reconstructed_buffer[frame,:,column_buffer:] = buffer[frame,:,0:int(self.parameters['etl_step'] + column_buffer)]
+                elif frame == int(self.number_of_steps-1):  #For the last column step (may be different than the others...)
+                    last_column_step = int(self.parameters["columns"] - first_column)
+                    reconstructed_buffer[frame,:,0:last_column_step] = buffer[frame,:,first_column:]
+                else:
+                    reconstructed_buffer[frame,:,:] = buffer[frame,:,first_column:next_first_column]
         
         return reconstructed_buffer
     
@@ -1766,7 +1769,6 @@ class Controller(QWidget):
         if self.doubleSpinBox_numberOfCameraPositions.value() != 0:
             self.number_of_camera_positions = self.doubleSpinBox_numberOfCameraPositions.value()
         
-        #sample_increment_length = (self.horizontal_forward_boundary - self.horizontal_backward_boundary) / self.number_of_calibration_planes
         sample_increment_length = (self.boundaries['horizontal_backward_boundary']-self.boundaries['horizontal_forward_boundary']) / (self.number_of_calibration_planes-1) #-1 to account for last position (backward_boundary)
         self.focus_backward_boundary = 42#397626#245000#int(200000*0.75)#200000#245000#225000#245000#250000 #263000   ##Position arbitraire en u-steps
         self.focus_forward_boundary = 32#447506#450000 #447506#265000#int(300000*25/20)#300000#265000#255000#265000#270000  #269000   ##Position arbitraire en u-steps
@@ -1940,20 +1942,39 @@ class Controller(QWidget):
         
         '''Getting parameters'''
         self.number_of_etls_points = 20 ##
-        self.number_of_etls_images = 10 ##
+        self.number_of_etls_images = 20 ##
         
         self.etl_l_relation = np.zeros((int(self.number_of_etls_points),2))
         self.etl_r_relation = np.zeros((int(self.number_of_etls_points),2))
+        
+        
+        '''Retrieving filename set by the user''' #debugging
+        self.get_file_name()
+        if self.saving_allowed:
+            '''Setting frame saver'''
+            self.frame_saver = FrameSaver()
+            self.frame_saver.set_block_size(3) #Block size is a number of buffers
+            self.frame_saver.set_files(2*self.number_of_etls_points,self.filename,'etlCalibration',self.number_of_etls_images,'etl_image')
+            '''Getting sample name'''
+            self.get_sample_name()
+            
+            self.set_data_consumer(self.frame_saver, False, "FrameSaver", True) ###
+            '''Starting frame saver'''
+            self.frame_saver.start_saving()
+        else:
+            print('Select directory and enter a valid filename before saving')
+        
+        
         
         '''Finding relation between etls' voltage and focal point vertical's position'''
         for side in ['etl_l','etl_r']: #For each etl
             '''Parameters'''
             if side == 'etl_l':
-                etl_max_voltage = 5 #3.5#4.2      #Volts ##Arbitraire
-                etl_min_voltage = 0 #2.5#1.8        #Volts ##Arbitraire
+                etl_max_voltage = 4.2 #3.5#4.2      #Volts ##Arbitraire
+                etl_min_voltage = 2 #2.5#1.8        #Volts ##Arbitraire
             if side == 'etl_r':
-                etl_max_voltage = 5 #3.5#4.2      #Volts ##Arbitraire
-                etl_min_voltage = 0 #2.5#1.8        #Volts ##Arbitraire
+                etl_max_voltage = 4.2 #3.5#4.2      #Volts ##Arbitraire
+                etl_min_voltage = 2 #2.5#1.8        #Volts ##Arbitraire
             etl_increment_length = (etl_max_voltage - etl_min_voltage) / self.number_of_etls_points
             
             '''Starting automatically lasers'''
@@ -1965,7 +1986,7 @@ class Controller(QWidget):
             self.parameters['laser_r_voltage'] = 2.5#2.5 #Volts
             self.start_lasers()
             
-            self.camera.retrieve_single_image()*1.0 ##pour éviter images de bruit
+            #self.camera.retrieve_single_image()*1.0 ##pour éviter images de bruit
             
             self.xdata = np.zeros((int(self.number_of_etls_points),128))
             self.ydata = np.zeros((int(self.number_of_etls_points),128))
@@ -1993,11 +2014,10 @@ class Controller(QWidget):
                     self.galvos_etls_task.write(galvos_etls_waveforms, auto_start=True)
                    
                     '''Retrieving buffer for the plane of the current position'''
-                    self.ramps=AOETLGalvos(self.parameters)
-                    self.ramps.initialize()
-                    self.number_of_steps = 1
-                    self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5) #debugging
-                    self.save_single_image() #debugging
+                    #self.ramps = AOETLGalvos(self.parameters)
+                    #self.number_of_steps = 1
+                    #self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5) #debugging
+                    #self.save_single_image() #debugging
                     
                     ydatas = np.zeros((self.number_of_etls_images,128))  ##128=K
                     
@@ -2005,26 +2025,28 @@ class Controller(QWidget):
                     for etl_image in range(self.number_of_etls_images):
                         '''Retrieving image from camera and putting it in its queue
                                for display'''
+                        time.sleep(1)
                         frame = self.camera.retrieve_single_image()*1.0
                         blurred_frame = ndimage.gaussian_filter(frame, sigma=20)
+                        
+                        
+                        '''Retrieving filename set by the user''' #debugging
+                        if self.saving_allowed:
+                            self.frame_saver.add_motor_parameters(self.current_horizontal_position_text,self.current_vertical_position_text,self.current_camera_position_text)
+                        
+                        '''Saving frame''' #debugging
+                        if self.saving_allowed:
+                            self.send_frame_to_consumer(blurred_frame,False,True)
+                            self.print_controller('Saving Reconstructed Image')
+                        
+                        
+                        
                         
                         frame = np.transpose(frame)
                         blurred_frame = np.transpose(blurred_frame)
                         
                         self.send_frame_to_consumer(frame)
                         self.send_frame_to_consumer(blurred_frame)
-                        ##for ii in range(0, len(self.consumers), 4):
-                        ##    if self.consumers[ii+2] == "CameraWindow":
-                        ##        #Initial frame
-                        ##        try:
-                        ##            self.consumers[ii].put(frame)
-                        ##        except self.consumers[ii].Full:
-                        ##            print("Queue is full")
-                        ##        #Blurred frame
-                        ##        try:
-                        ##            self.consumers[ii].put(blurred_frame)
-                        ##        except self.consumers[ii].Full:
-                        ##            print("Queue is full")
                         
                         '''Calculating focal point horizontal position'''
                         #filtering image:
@@ -2093,6 +2115,13 @@ class Controller(QWidget):
             self.left_laser_activated = False
             self.right_laser_activated = False
         
+        
+        if self.saving_allowed: #debugging
+            self.frame_saver.stop_saving()
+            self.print_controller('Images saved')
+        
+        
+        
         print(self.etl_l_relation) #debugging
         print(self.etl_r_relation) #debugging
         '''Calculating linear regressions'''
@@ -2130,13 +2159,13 @@ class Controller(QWidget):
         self.both_lasers_activated = False
         
         if self.etls_calibration_started: #To make sure calibration wasn't stopped before the end
-            self.default_buttons.append([self.pushButton_showEtlInterpolation])
+            self.default_buttons.append(self.pushButton_showEtlInterpolation)
         
         self.print_controller('Calibration done')
             
         '''Enabling modes after camera calibration'''
         self.update_buttons_modes(self.default_buttons)
-            
+        
         self.etls_calibration_started = False
 
     def stop_calibrate_etls(self):
@@ -2289,7 +2318,7 @@ class FrameSaver():
                 if os.path.isfile(new_filename) == False: #Check for existing files
                     in_loop = False
                     self.filenames_list.append(new_filename)
-        print(self.filenames_list)
+        #print(self.filenames_list) #debugging
     
     def add_attribute(self, attribute, value):
         '''Add an attribute to a dataset: a string associated to a value'''
