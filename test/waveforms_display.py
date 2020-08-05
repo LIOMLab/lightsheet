@@ -127,7 +127,7 @@ def etl_stairs(amplitude, number_of_steps, number_of_samples, samples_per_step, 
                     column_value = 2559*np.ones(int(samples_per_step))###
                 else:
                     column_value = i*step_column*np.ones(int(samples_per_step))###
-                step_value = -0.001282893174259485 * column_value + 4.920315064788371###
+                step_value = -0.0008978829380085525 * column_value + 4.25548088287623###
         
             if direction == 'DOWN': ###UP
                 #print('right')
@@ -135,7 +135,7 @@ def etl_stairs(amplitude, number_of_steps, number_of_samples, samples_per_step, 
                     column_value = 2559*np.ones(int(samples_per_step))###
                 else:
                     column_value = i*step_column*np.ones(int(samples_per_step))###
-                step_value = 0.0013507132995247916 * column_value + 1.8730880902476752###
+                step_value = 0.000826220401525251 * column_value + 2.384849899181325###
         
             #print('column_value:'+ str(column_value))#debugging
             step_value = np.where(step_value > 5, 5, step_value)
