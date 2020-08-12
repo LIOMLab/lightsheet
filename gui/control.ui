@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>816</width>
+    <width>1296</width>
     <height>900</height>
    </rect>
   </property>
@@ -14,6 +14,28 @@
    <string>MesoSPIM Controller</string>
   </property>
   <layout class="QHBoxLayout" name="horizontalLayout_34">
+   <item>
+    <widget class="ImageView" name="graphicsView">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="MinimumExpanding" vsizetype="Expanding">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>500</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="baseSize">
+      <size>
+       <width>700</width>
+       <height>0</height>
+      </size>
+     </property>
+    </widget>
+   </item>
    <item>
     <layout class="QVBoxLayout" name="verticalLayout_2">
      <item>
@@ -113,6 +135,9 @@
                   <property name="text">
                    <string>Up</string>
                   </property>
+                  <property name="shortcut">
+                   <string>Ctrl+Up</string>
+                  </property>
                  </widget>
                 </item>
                 <item row="1" column="0">
@@ -128,6 +153,9 @@
                   </property>
                   <property name="text">
                    <string>Backward</string>
+                  </property>
+                  <property name="shortcut">
+                   <string>Ctrl+Left</string>
                   </property>
                  </widget>
                 </item>
@@ -160,6 +188,9 @@
                   </property>
                   <property name="text">
                    <string>Forward</string>
+                  </property>
+                  <property name="shortcut">
+                   <string>Ctrl+Right</string>
                   </property>
                  </widget>
                 </item>
@@ -365,7 +396,7 @@
                 <item>
                  <widget class="QLabel" name="label_calibrateRange">
                   <property name="text">
-                   <string>Press Calibrate Horizontal Range To Start</string>
+                   <string>Press Calibrate Horizontal Range</string>
                   </property>
                  </widget>
                 </item>
@@ -375,7 +406,7 @@
                    <string>Set the current horizontal position as the forward boundary</string>
                   </property>
                   <property name="text">
-                   <string>Set Current Position As Forward Limit</string>
+                   <string>Set Forward Limit</string>
                   </property>
                  </widget>
                 </item>
@@ -385,7 +416,7 @@
                    <string>Set the current horizontal position as the backward boundary</string>
                   </property>
                   <property name="text">
-                   <string>Set Current Position As Backward Limit</string>
+                   <string>Set Backward Limit</string>
                   </property>
                  </widget>
                 </item>
@@ -484,6 +515,9 @@
                       <property name="text">
                        <string>Backward</string>
                       </property>
+                      <property name="shortcut">
+                       <string>Ctrl+A</string>
+                      </property>
                      </widget>
                     </item>
                     <item>
@@ -500,6 +534,9 @@
                       <property name="text">
                        <string>Focus</string>
                       </property>
+                      <property name="shortcut">
+                       <string/>
+                      </property>
                      </widget>
                     </item>
                     <item>
@@ -515,6 +552,9 @@
                       </property>
                       <property name="text">
                        <string>Forward</string>
+                      </property>
+                      <property name="shortcut">
+                       <string>Ctrl+S</string>
                       </property>
                      </widget>
                     </item>
@@ -596,22 +636,12 @@
                 <item>
                  <layout class="QHBoxLayout" name="horizontalLayout_3">
                   <item>
-                   <widget class="QPushButton" name="pushButton_calibrateCamera">
+                   <widget class="QPushButton" name="pushButton_cameraCalibration">
                     <property name="toolTip">
                      <string>Start camera calibration</string>
                     </property>
                     <property name="text">
-                     <string>Calibrate Camera</string>
-                    </property>
-                   </widget>
-                  </item>
-                  <item>
-                   <widget class="QPushButton" name="pushButton_cancelCalibrateCamera">
-                    <property name="toolTip">
-                     <string>Stop camera calibration</string>
-                    </property>
-                    <property name="text">
-                     <string>Cancel Calibration</string>
+                     <string>Start Camera Calibration</string>
                     </property>
                    </widget>
                   </item>
@@ -1086,12 +1116,12 @@
                 <item>
                  <layout class="QHBoxLayout" name="horizontalLayout_38">
                   <item>
-                   <widget class="QPushButton" name="pushButton_calibrateEtlsGalvos">
+                   <widget class="QPushButton" name="pushButton_etlsCalibration">
                     <property name="toolTip">
                      <string>Start ETLs calibration</string>
                     </property>
                     <property name="text">
-                     <string>Calibrate ETLs</string>
+                     <string>Start ETL Calibration</string>
                     </property>
                    </widget>
                   </item>
@@ -1113,16 +1143,6 @@
                 </item>
                 <item>
                  <layout class="QHBoxLayout" name="horizontalLayout_37">
-                  <item>
-                   <widget class="QPushButton" name="pushButton_stopEtlsGalvosCalibration">
-                    <property name="toolTip">
-                     <string>Stop ETLs calibration</string>
-                    </property>
-                    <property name="text">
-                     <string>Cancel ETLs Calibration</string>
-                    </property>
-                   </widget>
-                  </item>
                   <item>
                    <widget class="QPushButton" name="pushButton_showEtlInterpolation">
                     <property name="toolTip">
@@ -1291,22 +1311,15 @@
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_10">
               <item>
-               <widget class="QPushButton" name="pushButton_startPreviewMode">
+               <widget class="QPushButton" name="pushButton_previewMode">
                 <property name="toolTip">
                  <string>Start preview mode</string>
                 </property>
                 <property name="text">
                  <string>Start Preview Mode</string>
                 </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="pushButton_stopPreviewMode">
-                <property name="toolTip">
-                 <string>Stop preview mode</string>
-                </property>
-                <property name="text">
-                 <string>Stop Preview Mode</string>
+                <property name="shortcut">
+                 <string>Ctrl+P</string>
                 </property>
                </widget>
               </item>
@@ -1315,22 +1328,15 @@
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_11">
               <item>
-               <widget class="QPushButton" name="pushButton_startLiveMode">
+               <widget class="QPushButton" name="pushButton_liveMode">
                 <property name="toolTip">
                  <string>Start live mode</string>
                 </property>
                 <property name="text">
                  <string>Start Live Mode</string>
                 </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="pushButton_stopLiveMode">
-                <property name="toolTip">
-                 <string>Stop live mode</string>
-                </property>
-                <property name="text">
-                 <string>Stop Live Mode</string>
+                <property name="shortcut">
+                 <string>Ctrl+L</string>
                 </property>
                </widget>
               </item>
@@ -1346,22 +1352,12 @@
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_12">
               <item>
-               <widget class="QPushButton" name="pushButton_lasersOn">
+               <widget class="QPushButton" name="pushButton_allLasers">
                 <property name="toolTip">
                  <string>Activate left and right lasers</string>
                 </property>
                 <property name="text">
-                 <string>All Lasers On</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="pushButton_lasersOff">
-                <property name="toolTip">
-                 <string>Deactivate left and right lasers</string>
-                </property>
-                <property name="text">
-                 <string>All Lasers Off</string>
+                 <string>Activate All Lasers</string>
                 </property>
                </widget>
               </item>
@@ -1370,22 +1366,12 @@
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_13">
               <item>
-               <widget class="QPushButton" name="pushButton_leftLaserOn">
+               <widget class="QPushButton" name="pushButton_leftLaser">
                 <property name="toolTip">
                  <string>Activate left laser</string>
                 </property>
                 <property name="text">
-                 <string>Left Laser On</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="pushButton_leftLaserOff">
-                <property name="toolTip">
-                 <string>Deactivate left laser</string>
-                </property>
-                <property name="text">
-                 <string>Left Laser Off</string>
+                 <string>Activate Left Laser</string>
                 </property>
                </widget>
               </item>
@@ -1394,22 +1380,12 @@
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_14">
               <item>
-               <widget class="QPushButton" name="pushButton_rightLaserOn">
+               <widget class="QPushButton" name="pushButton_rightLaser">
                 <property name="toolTip">
                  <string>Activate right laser</string>
                 </property>
                 <property name="text">
-                 <string>Right Laser On</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="pushButton_rightLaserOff">
-                <property name="toolTip">
-                 <string>Deactivate right laser</string>
-                </property>
-                <property name="text">
-                 <string>Right Laser Off</string>
+                 <string>Activate Right Laser</string>
                 </property>
                </widget>
               </item>
@@ -1421,22 +1397,15 @@
          <item>
           <layout class="QHBoxLayout" name="horizontalLayout_15">
            <item>
-            <widget class="QPushButton" name="pushButton_standbyOn">
+            <widget class="QPushButton" name="pushButton_standby">
              <property name="toolTip">
               <string>Activate standby mode</string>
              </property>
              <property name="text">
-              <string>Standby On</string>
+              <string>Start Standby</string>
              </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="pushButton_standbyOff">
-             <property name="toolTip">
-              <string>Deactivate standby mode</string>
-             </property>
-             <property name="text">
-              <string>Standby Off</string>
+             <property name="shortcut">
+              <string>Ctrl+S</string>
              </property>
             </widget>
            </item>
@@ -1469,6 +1438,9 @@
                   </property>
                   <property name="text">
                    <string>Get Single Image</string>
+                  </property>
+                  <property name="shortcut">
+                   <string>Ctrl+I</string>
                   </property>
                  </widget>
                 </item>
@@ -1509,7 +1481,7 @@
               <item>
                <layout class="QHBoxLayout" name="horizontalLayout_17">
                 <item>
-                 <widget class="QPushButton" name="pushButton_startStack">
+                 <widget class="QPushButton" name="pushButton_stackMode">
                   <property name="sizePolicy">
                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                     <horstretch>0</horstretch>
@@ -1522,21 +1494,8 @@
                   <property name="text">
                    <string>Start Stack Mode</string>
                   </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QPushButton" name="pushButton_stopStack">
-                  <property name="sizePolicy">
-                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                    <horstretch>0</horstretch>
-                    <verstretch>0</verstretch>
-                   </sizepolicy>
-                  </property>
-                  <property name="toolTip">
-                   <string>Stop multiple image acquisition</string>
-                  </property>
-                  <property name="text">
-                   <string>Stop Stack Mode</string>
+                  <property name="shortcut">
+                   <string>Ctrl+K</string>
                   </property>
                  </widget>
                 </item>
@@ -1801,7 +1760,7 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>794</width>
+          <width>752</width>
           <height>96</height>
          </rect>
         </property>
@@ -1821,6 +1780,13 @@
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>ImageView</class>
+   <extends>QGraphicsView</extends>
+   <header>pyqtgraph</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

@@ -16,13 +16,13 @@ from matplotlib import pyplot as plt
 from scipy import signal, optimize, ndimage, stats #,interpolate
 from PyQt5 import QtCore #,QtGui
 from PyQt5 import uic
-from PyQt5.QtWidgets import QWidget, QFileDialog, QTableWidgetItem, QAbstractItemView,QMessageBox
+from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem, QAbstractItemView,QMessageBox,QMainWindow#,QWidget,QMenu,QMenuBar,QAction,QStatusBar
 #from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QVBoxLayout, QSizePolicy, QMessageBox, QPushButton
 #from PyQt5.QtGui import QIcon
 #from PyQt5.QtCore import QThread
 
 #from functools import partial
-import pyqtgraph as pg
+#import pyqtgraph as pg
 #import ctypes
 import copy
 
@@ -85,7 +85,7 @@ def fwhm(y):
     fwhm_val = max(xs) - min(xs) + 1
     return fwhm_val  
 
-class Controller(QWidget):
+class Controller(QMainWindow):
     '''
     Class for control of the MesoSPIM
     '''
@@ -93,14 +93,14 @@ class Controller(QWidget):
     sig_update_progress = QtCore.pyqtSignal(int) #Signal for progress bar
     
     def __init__(self):
-        QWidget.__init__(self)
+        QMainWindow.__init__(self)
         
         '''Loading user interface'''
         basepath= os.path.join(os.path.dirname(__file__))
-        uic.loadUi(os.path.join(basepath,"control.ui"), self)
+        uic.loadUi(os.path.join(basepath,"controller.ui"), self)
         
         '''Instantiating the camera window where the frames are displayed'''
-        self.camera_window = CameraWindow()
+        self.camera_window = CameraWindow(self.graphicsView)
         
         '''Instantiating the hardware components'''
         self.motor_vertical = Motors(1, 'COM3')    #Vertical motor
@@ -117,13 +117,13 @@ class Controller(QWidget):
         self.figure_counter = 1
         self.save_directory = ''
         
-        self.default_buttons = [self.pushButton_standbyOn,
+        self.default_buttons = [self.pushButton_standby,
                                 self.pushButton_getSingleImage,
-                                self.pushButton_startPreviewMode,
-                                self.pushButton_startLiveMode,
-                                self.pushButton_startStack,
-                                self.pushButton_calibrateCamera,
-                                self.pushButton_calibrateEtlsGalvos]
+                                self.pushButton_previewMode,
+                                self.pushButton_liveMode,
+                                self.pushButton_stackMode,
+                                self.pushButton_cameraCalibration,
+                                self.pushButton_etlsCalibration]
         etl_voltages_boxes = [self.doubleSpinBox_leftEtlAmplitude,
                                 self.doubleSpinBox_rightEtlAmplitude,
                                 self.doubleSpinBox_leftEtlOffset,
@@ -248,16 +248,19 @@ class Controller(QWidget):
                               self.checkBox_setStartPoint,
                               self.checkBox_setEndPoint,
                               self.pushButton_setForwardLimit,
-                              self.pushButton_setBackwardLimit,
-                              self.pushButton_lasersOff,
-                              self.pushButton_leftLaserOff,
-                              self.pushButton_rightLaserOff]
+                              self.pushButton_setBackwardLimit]
         for button in buttons_to_disable:
             button.setEnabled(False)
+        self.update_laser_buttons()
         self.update_buttons_modes(self.default_buttons)
         
+        '''Connect menu options'''
+        self.action_openDocumentation.triggered.connect(self.open_help)
+        self.action_displayControlsImages.triggered.connect(self.display_controls_images)
+        self.action_displayImages.triggered.connect(self.display_images)
+        self.action_displayControls.triggered.connect(self.display_controls)
+        
         '''Connect buttons'''
-        self.pushButton_help.clicked.connect(self.open_help)
         '''Connection for unit change'''
         self.comboBox_unit.currentTextChanged.connect(self.update_unit)
         
@@ -270,17 +273,13 @@ class Controller(QWidget):
         '''Connections for the modes'''
         self.pushButton_getSingleImage.clicked.connect(self.start_get_single_image)
         self.pushButton_saveImage.clicked.connect(self.save_single_image)
-        self.pushButton_startLiveMode.clicked.connect(self.start_live_mode)
-        self.pushButton_stopLiveMode.clicked.connect(self.stop_live_mode)
-        self.pushButton_startStack.clicked.connect(self.start_stack_mode)
-        self.pushButton_stopStack.clicked.connect(self.stop_stack_mode)
+        self.pushButton_liveMode.clicked.connect(self.live_button)
+        self.pushButton_stackMode.clicked.connect(self.stack_button)
         self.pushButton_setStartPoint.clicked.connect(self.set_stack_mode_starting_point)
         self.pushButton_setEndPoint.clicked.connect(self.set_stack_mode_ending_point)
         self.doubleSpinBox_planeStep.valueChanged.connect(self.set_number_of_planes)
-        self.pushButton_startPreviewMode.clicked.connect(self.start_preview_mode)
-        self.pushButton_stopPreviewMode.clicked.connect(self.stop_preview_mode)
-        self.pushButton_standbyOn.pressed.connect(self.start_standby)
-        self.pushButton_standbyOff.pressed.connect(self.stop_standby)
+        self.pushButton_previewMode.clicked.connect(self.preview_button)
+        self.pushButton_standby.pressed.connect(self.standby_button)
        
         '''Connections for the motion'''
         self.pushButton_motorUp.clicked.connect(self.move_sample_up)
@@ -305,12 +304,10 @@ class Controller(QWidget):
         self.pushButton_setForwardLimit.clicked.connect(self.set_horizontal_forward_boundary)
         self.pushButton_setBackwardLimit.clicked.connect(self.set_horizontal_backward_boundary)
         
-        self.pushButton_calibrateCamera.pressed.connect(self.start_calibrate_camera)
-        self.pushButton_cancelCalibrateCamera.pressed.connect(self.stop_calibrate_camera)
+        self.pushButton_cameraCalibration.pressed.connect(self.camera_calibration_button)
         self.pushButton_showCamInterpolation.pressed.connect(self.show_camera_interpolation)
         
-        self.pushButton_calibrateEtlsGalvos.pressed.connect(self.start_calibrate_etls)
-        self.pushButton_stopEtlsGalvosCalibration.pressed.connect(self.stop_calibrate_etls)
+        self.pushButton_etlsCalibration.pressed.connect(self.etls_calibration_button)
         self.pushButton_showEtlInterpolation.pressed.connect(self.show_etl_interpolation)
         
         '''Connections for the ETLs and Galvos parameters'''
@@ -323,12 +320,9 @@ class Controller(QWidget):
         self.pushButton_saveDefaultParameters.clicked.connect(self.save_default_parameters)
         
         '''Connections for the lasers'''
-        self.pushButton_lasersOn.clicked.connect(self.activate_both_lasers)
-        self.pushButton_lasersOff.clicked.connect(self.deactivate_both_lasers)
-        self.pushButton_leftLaserOn.clicked.connect(self.activate_left_laser)
-        self.pushButton_leftLaserOff.clicked.connect(self.deactivate_left_laser)
-        self.pushButton_rightLaserOn.clicked.connect(self.activate_right_laser)
-        self.pushButton_rightLaserOff.clicked.connect(self.deactivate_right_laser)
+        self.pushButton_allLasers.clicked.connect(self.lasers_button)
+        self.pushButton_leftLaser.clicked.connect(self.left_laser_button)
+        self.pushButton_rightLaser.clicked.connect(self.right_laser_button)
 
     
     '''General Methods'''
@@ -336,25 +330,52 @@ class Controller(QWidget):
         '''Open help documentation for the program (PDF)'''
         webbrowser.open_new(r'file://C:\git-projects\lightsheet\src\Guide.pdf') ##
     
+    def display_controls_images(self):
+        '''Display both the controls and images windows'''
+        self.widget_controls.show()
+        self.graphicsView.show()
+    
+    def display_images(self):
+        '''Only display the images window'''
+        self.widget_controls.hide()
+        self.graphicsView.show()
+    
+    def display_controls(self):
+        '''Only display the controls window'''
+        self.widget_controls.show()
+        self.graphicsView.hide()
+    
+    def update_laser_buttons(self,disable_button=True):
+        '''Deactivate lasers, and enable or disable all laser buttons'''
+        if self.both_lasers_activated:
+            self.lasers_button()
+        elif self.left_laser_activated:
+            self.left_laser_button()
+        elif self.right_laser_activated:
+            self.right_laser_button()
+        
+        buttons_to_disable = [self.pushButton_allLasers,
+                              self.pushButton_leftLaser,
+                              self.pushButton_rightLaser]
+        for button in buttons_to_disable:
+            if disable_button:
+                button.setEnabled(False)
+            else:
+                button.setEnabled(True)
+    
     def update_buttons_modes(self,buttons_to_enable):
         '''Update mode buttons status : disable buttons, except for those specified to be enabled'''
         
-        aquisition_buttons = [self.pushButton_standbyOn,
-                              self.pushButton_standbyOff,
-                              self.pushButton_startPreviewMode,
-                              self.pushButton_stopPreviewMode,
-                              self.pushButton_startLiveMode,
-                              self.pushButton_stopLiveMode,
+        aquisition_buttons = [self.pushButton_standby,
+                              self.pushButton_previewMode,
+                              self.pushButton_liveMode,
                               self.pushButton_getSingleImage,
                               self.pushButton_saveImage,
-                              self.pushButton_startStack,
-                              self.pushButton_stopStack,
-                              self.pushButton_calibrateCamera,
-                              self.pushButton_cancelCalibrateCamera,
+                              self.pushButton_stackMode,
+                              self.pushButton_cameraCalibration,
                               self.pushButton_calculateFocus,
                               self.pushButton_showCamInterpolation,
-                              self.pushButton_calibrateEtlsGalvos,
-                              self.pushButton_stopEtlsGalvosCalibration,
+                              self.pushButton_etlsCalibration,
                               self.pushButton_showEtlInterpolation]
         for button in aquisition_buttons:
             if button in buttons_to_enable:
@@ -368,17 +389,17 @@ class Controller(QWidget):
         if self.laser_on:
             self.stop_lasers()
         if self.preview_mode_started:
-            self.stop_preview_mode()
+            self.preview_mode_started = False
         if self.live_mode_started:
-            self.stop_live_mode()
+            self.live_mode_started = False
         if self.stack_mode_started:
-            self.stop_stack_mode()
+            self.stack_mode_started = False
         if self.standby:
             self.stop_standby()
         if self.camera_calibration_started:
-            self.stop_calibrate_camera()
+            self.camera_calibration_started = False
         if self.etls_calibration_started:
-            self.stop_calibrate_etls()
+            self.etls_calibration_started = False
     
     def closeEvent(self, event):
         '''Making sure that everything is closed when the user exits the software.
@@ -923,75 +944,53 @@ class Controller(QWidget):
         if self.checkBox_galvosTogether.isChecked() and (parameter_name in galvo_parameters):
             opposed_parameter_box.setValue(self.parameters[parameter_name])
     
-    def activate_both_lasers(self):
-        '''Flag and lasers' pushButton managing for both lasers activation'''
+    def lasers_button(self):
+        '''Activate or deactivate lasers, depending on the button status'''
         
-        self.both_lasers_activated = True
-        
-        self.pushButton_lasersOn.setEnabled(False)
-        self.pushButton_lasersOff.setEnabled(True)
-        self.pushButton_leftLaserOn.setEnabled(False)
-        self.pushButton_rightLaserOn.setEnabled(False)
-        
-        self.print_controller('Lasers on')
+        if self.both_lasers_activated:
+            self.both_lasers_activated = False
+            self.print_controller('All Lasers Off')
+            self.pushButton_allLasers.setText('Activate All Lasers')
+            self.pushButton_leftLaser.setEnabled(True)
+            self.pushButton_rightLaser.setEnabled(True)
+        else:
+            self.both_lasers_activated = True
+            self.print_controller('All Lasers On')
+            self.pushButton_allLasers.setText('Deactivate All Lasers')
+            self.pushButton_leftLaser.setEnabled(False)
+            self.pushButton_rightLaser.setEnabled(False)
     
-    def deactivate_both_lasers(self):
-        '''Flag and lasers' pushButton managing for both lasers deactivation'''
+    def left_laser_button(self):
+        '''Activate or deactivate left laser, depending on the button status'''
         
-        self.both_lasers_activated = False
+        if self.left_laser_activated:
+            self.left_laser_activated = False
+            self.print_controller('Left Laser Off')
+            self.pushButton_leftLaser.setText('Activate Left Laser')
+            self.pushButton_allLasers.setEnabled(True)
+            self.pushButton_rightLaser.setEnabled(True)
+        else:
+            self.left_laser_activated = True
+            self.print_controller('Left Laser On')
+            self.pushButton_leftLaser.setText('Deactivate Left Laser')
+            self.pushButton_allLasers.setEnabled(False)
+            self.pushButton_rightLaser.setEnabled(False)
+            
+    def right_laser_button(self):
+        '''Activate or deactivate right laser, depending on the button status'''
         
-        self.pushButton_lasersOn.setEnabled(True)
-        self.pushButton_lasersOff.setEnabled(False)
-        self.pushButton_leftLaserOn.setEnabled(True)
-        self.pushButton_rightLaserOn.setEnabled(True)
-        
-        self.print_controller('Lasers off')
-    
-    def activate_left_laser(self):
-        '''Flag and lasers' pushButton managing for left laser activation'''
-        
-        self.left_laser_activated = True
-        
-        self.pushButton_lasersOn.setEnabled(False)
-        self.pushButton_leftLaserOn.setEnabled(False)
-        self.pushButton_leftLaserOff.setEnabled(True)
-        
-        self.print_controller('Left laser on')
-    
-    def deactivate_left_laser(self):
-        '''Flag and lasers' pushButton managing for left laser deactivation'''
-        
-        self.left_laser_activated = False
-         
-        self.pushButton_leftLaserOn.setEnabled(True)
-        self.pushButton_leftLaserOff.setEnabled(False)
-        if self.pushButton_rightLaserOn.isEnabled():
-            self.pushButton_lasersOn.setEnabled(True)
-        
-        self.print_controller('Left laser off')
-    
-    def activate_right_laser(self):
-        '''Flag and lasers' pushButton managing for right laser activation'''
-        
-        self.right_laser_activated = True
-        
-        self.pushButton_lasersOn.setEnabled(False)
-        self.pushButton_rightLaserOn.setEnabled(False)
-        self.pushButton_rightLaserOff.setEnabled(True)
-        
-        self.print_controller('Left laser on')
-    
-    def deactivate_right_laser(self):
-        '''Flag and lasers' pushButton managing for right laser deactivation'''
-        
-        self.right_laser_activated = False
-        
-        self.pushButton_rightLaserOn.setEnabled(True)
-        self.pushButton_rightLaserOff.setEnabled(False)
-        if self.pushButton_leftLaserOn.isEnabled():
-            self.pushButton_lasersOn.setEnabled(True)
-        
-        self.print_controller('Left laser off')
+        if self.right_laser_activated:
+            self.right_laser_activated = False
+            self.print_controller('Right Laser Off')
+            self.pushButton_rightLaser.setText('Activate Right Laser')
+            self.pushButton_allLasers.setEnabled(True)
+            self.pushButton_leftLaser.setEnabled(True)
+        else:
+            self.right_laser_activated = True
+            self.print_controller('Right Laser On')
+            self.pushButton_rightLaser.setText('Deactivate Right Laser')
+            self.pushButton_allLasers.setEnabled(False)
+            self.pushButton_leftLaser.setEnabled(False)
     
     def start_lasers(self):
         '''Starts the lasers at a certain voltage'''
@@ -1031,11 +1030,11 @@ class Controller(QWidget):
         
         '''Deactivating lasers'''
         if self.both_lasers_activated:
-            self.deactivate_both_lasers()
+            self.both_lasers_activated = False
         if self.left_laser_activated:
-            self.deactivate_left_laser()
+            self.left_laser_activated = False
         if self.right_laser_activated:
-            self.deactivate_right_laser()
+            self.right_laser_activated = False
  
  
     '''File Open Methods'''
@@ -1103,13 +1102,21 @@ class Controller(QWidget):
     
     
     '''Acquisition Modes Methods'''
+    def standby_button(self):
+        '''Start or stop standby, depending on the button status'''
+        if self.standby:
+            self.standby = False
+            self.pushButton_standby.setText('Start Standby')
+            self.stop_standby()
+        else:
+            self.close_modes()
+            self.standby = True
+            self.pushButton_standby.setText('Stop Standby')
+            self.start_standby()
     
     def start_standby(self):
         '''Closes the camera and initiates thread to keep ETLs'currents at 0A while
            the microscope is not in use'''
-        
-        self.close_modes()
-        self.standby = True
         
         '''Close camera'''
         self.close_camera()
@@ -1125,7 +1132,7 @@ class Controller(QWidget):
         self.standby_task.write(standby_waveform, auto_start = True)
         
         '''Modes disabling while in standby'''
-        self.update_buttons_modes([self.pushButton_standbyOff])
+        self.update_buttons_modes([self.pushButton_standby])
         
         self.print_controller('Standby on')
         
@@ -1168,16 +1175,26 @@ class Controller(QWidget):
                         #print("FrameSaver queue is full") #debugging
                         pass
     
+    def preview_button(self):
+        '''Start or stop preview mode, depending on the button status'''
+        if self.preview_mode_started:
+            self.preview_mode_started = False
+            self.pushButton_previewMode.setText('Start Preview Mode')
+            self.update_laser_buttons()
+        else:
+            self.close_modes()
+            self.preview_mode_started = True
+            self.update_buttons_modes([self.pushButton_previewMode])
+            self.pushButton_previewMode.setText('Stop Preview Mode')
+            self.update_laser_buttons(False)
+            self.start_preview_mode()
+    
     def start_preview_mode(self):
         '''Initializes variables for preview modes where beam and focal 
            positions are manually controlled by the user'''
         
-        self.close_modes()
-        self.preview_mode_started = True
-        
         '''Modes disabling during preview_mode execution'''
-        self.update_buttons_modes([self.pushButton_stopPreviewMode])
-        
+        self.update_buttons_modes([self.pushButton_previewMode])
         self.print_controller('Preview mode started')
         
         '''Starting preview mode thread'''
@@ -1240,10 +1257,6 @@ class Controller(QWidget):
         self.update_buttons_modes(self.default_buttons)
         
         self.print_controller('Preview mode stopped')
-    
-    def stop_preview_mode(self):
-        '''Changes the preview_mode flag status to end the thread'''
-        self.preview_mode_started = False
     
     
     def reconstruct_frame(self,buffer):
@@ -1383,16 +1396,26 @@ class Controller(QWidget):
         self.ramps.stop_tasks()                             
         self.ramps.close_tasks()
     
+    def live_button(self):
+        '''Start or stop live mode, depending on the button status'''
+        if self.live_mode_started:
+            self.live_mode_started = False
+            self.pushButton_liveMode.setText('Start Live Mode')
+            self.update_laser_buttons()
+        else:
+            self.close_modes()
+            self.live_mode_started = True
+            self.pushButton_liveMode.setText('Stop Live Mode')
+            self.update_laser_buttons(False)
+            self.start_live_mode()
+    
     def start_live_mode(self):
         '''This mode is for visualizing (and modifying) the effects of the 
            chosen parameters of the ramps which will be sent for single image 
            saving or volume saving (with stack_mode)'''
         
-        self.close_modes()
-        self.live_mode_started = True
-        
         '''Disabling other modes while in live_mode'''
-        self.update_buttons_modes([self.pushButton_stopLiveMode])
+        self.update_buttons_modes([self.pushButton_liveMode])
         
         self.print_controller('Live mode started')
         
@@ -1432,10 +1455,6 @@ class Controller(QWidget):
         self.update_buttons_modes(self.default_buttons)
         
         self.print_controller('Live mode stopped')
-
-    def stop_live_mode(self):
-        '''Changes the live_mode flag status to end the thread'''    
-        self.live_mode_started = False
     
     
     def start_get_single_image(self):
@@ -1580,11 +1599,17 @@ class Controller(QWidget):
         self.checkBox_setStartPoint.setChecked(True)
         self.set_number_of_planes()
     
+    def stack_button(self):
+        '''Start or stop stack mode, depending on the button status'''
+        if self.stack_mode_started:
+            self.stack_mode_started = False
+        else:
+            self.close_modes()
+            self.start_stack_mode()
+    
     def start_stack_mode(self):
         '''Initializes variables for volume saving which will take place in 
            self.stack_mode_thread afterwards'''
-        
-        self.close_modes()
         
         '''Making sure the limits of the volume are set'''
         if (self.checkBox_setStartPoint.isChecked() == False) or (self.checkBox_setEndPoint.isChecked() == False) or (self.doubleSpinBox_planeStep.value() == 0):
@@ -1600,6 +1625,8 @@ class Controller(QWidget):
                 self.start_point = self.stack_mode_starting_point
                 self.end_point = self.stack_mode_starting_point+self.step*(self.number_of_planes-1)
             
+            '''Retrieving filename set by the user'''
+            self.get_file_name()
             if self.saving_allowed:
                 self.start_stack_thread()
             else:
@@ -1608,9 +1635,11 @@ class Controller(QWidget):
     def start_stack_thread(self):
         '''Starts the thread for stack mode'''
         
+        self.pushButton_stackMode.setText('Stop Stack Mode')
+        
         self.stack_mode_started = True
         '''Modes disabling while stack acquisition'''
-        self.update_buttons_modes([self.pushButton_stopStack])
+        self.update_buttons_modes([self.pushButton_stackMode])
         self.print_controller('Stack mode started -- Number of frames to save: '+str(int(self.number_of_planes)))
         '''Starting stack mode thread'''
         stack_mode_thread = threading.Thread(target = self.stack_mode_thread)
@@ -1641,8 +1670,6 @@ class Controller(QWidget):
         
         self.camera_window.change_frame_display_mode('frame3d')
         
-        '''Retrieving filename set by the user'''
-        self.get_file_name()
         
         '''Making sure saving is allowed and filename isn't empty'''
         if self.saving_allowed:
@@ -1669,11 +1696,13 @@ class Controller(QWidget):
         
         '''Starting lasers'''
         self.both_lasers_activated = True
+        ###self.left_laser_activated = True
+        ###self.right_laser_activated = True
         self.start_lasers()
         
         '''Set progress bar'''
         progress_value = 0
-        progress_increment = int(100/self.number_of_planes)
+        progress_increment = 100/self.number_of_planes
         self.sig_update_progress.emit(0) #To reset progress bar
         
         for plane in range(int(self.number_of_planes)):
@@ -1687,7 +1716,8 @@ class Controller(QWidget):
                 self.update_position_horizontal()
                 
                 '''Moving the camera to focus'''
-                ##self.move_camera_to_focus()   
+                ###self.calculate_camera_focus()
+                ###self.move_camera_to_focus()   
                 
                 if self.saving_allowed:
                     self.frame_saver.add_motor_parameters(self.current_horizontal_position_text,self.current_vertical_position_text,self.current_camera_position_text)
@@ -1707,7 +1737,7 @@ class Controller(QWidget):
                 
                 '''Update progress bar'''
                 progress_value += progress_increment
-                self.sig_update_progress.emit(progress_value)
+                self.sig_update_progress.emit(int(progress_value))
         if self.stack_mode_started:
             self.sig_update_progress.emit(100) #In case the number of planes is not a multiple of 100
 
@@ -1722,25 +1752,29 @@ class Controller(QWidget):
         self.both_lasers_activated = False
         
         '''Enabling modes after stack mode'''
+        self.pushButton_stackMode.setText('Start Stack Mode')
         self.update_buttons_modes(self.default_buttons)
         
-        self.print_controller('Acquisition done')
-    
-    def stop_stack_mode(self):
-        '''Changes the live_mode flag status to end the thread'''   
         self.stack_mode_started = False
+        self.print_controller('Acquisition done')
     
     
     '''Calibration Methods'''
+    def camera_calibration_button(self):
+        '''Start or stop camera calibration, depending on the button status'''
+        if self.camera_calibration_started:
+            self.camera_calibration_started = False
+        else:
+            self.close_modes()
+            self.camera_calibration_started = True
+            self.pushButton_cameraCalibration.setText('Stop Camera Calibration')
+            self.start_calibrate_camera()
     
     def start_calibrate_camera(self):
         '''Initiates camera calibration'''
-        
-        self.close_modes()
-        self.camera_calibration_started = True
        
         '''Modes disabling while stack acquisition'''
-        self.update_buttons_modes([self.pushButton_cancelCalibrateCamera])
+        self.update_buttons_modes([self.pushButton_cameraCalibration])
             
         self.print_controller('Camera calibration started')
             
@@ -1813,7 +1847,7 @@ class Controller(QWidget):
                     else:
                         '''Moving camera position'''
                         position_camera = self.focus_forward_boundary + (camera_plane * camera_increment_length) #Increments of +camera_increment_length
-                        print('position_camera:'+str(position_camera))
+                        #print('position_camera:'+str(position_camera))
                         self.motor_camera.move_absolute_position(-position_camera+self.camera_correction,'mm')
                         time.sleep(0.5) #To make sure the camera is at the right position
                         self.update_position_camera()
@@ -1905,21 +1939,24 @@ class Controller(QWidget):
         self.update_buttons_modes(self.default_buttons)
             
         self.camera_calibration_started = False
+        self.pushButton_cameraCalibration.setText('Start Camera Calibration')
 
-    def stop_calibrate_camera(self):
-        '''Interrups camera calibration'''
-        
-        self.camera_calibration_started = False
-
+    
+    def etls_calibration_button(self):
+        '''Start or stop etls calibration, depending on the button status'''
+        if self.etls_calibration_started:
+            self.etls_calibration_started = False
+        else:
+            self.close_modes()
+            self.etls_calibration_started = True
+            self.pushButton_etlsCalibration.setText('Stop ETL Calibration')
+            self.start_calibrate_etls()
     
     def start_calibrate_etls(self):
         '''Initiates etls-galvos calibration'''
-        
-        self.close_modes()
-        self.etls_calibration_started = True
        
         '''Modes disabling while stack acquisition'''
-        self.update_buttons_modes([self.pushButton_stopEtlsGalvosCalibration])
+        self.update_buttons_modes([self.pushButton_etlsCalibration])
         
         self.print_controller('ETL calibration started')
         
@@ -1941,8 +1978,8 @@ class Controller(QWidget):
         self.galvos_etls_task.ao_channels.add_ao_voltage_chan(terminals["galvos_etls"])
         
         '''Getting parameters'''
-        self.number_of_etls_points = 20 ##
-        self.number_of_etls_images = 20 ##
+        self.number_of_etls_points = 2 ##
+        self.number_of_etls_images = 2 ##
         
         self.etl_l_relation = np.zeros((int(self.number_of_etls_points),2))
         self.etl_r_relation = np.zeros((int(self.number_of_etls_points),2))
@@ -2167,15 +2204,13 @@ class Controller(QWidget):
         self.update_buttons_modes(self.default_buttons)
         
         self.etls_calibration_started = False
+        self.pushButton_etlsCalibration.setText('Start ETL Calibration')
 
-    def stop_calibrate_etls(self):
-        '''Interrups elts-galvos calibration'''
-        self.etls_calibration_started = False
 
 class CameraWindow(queue.Queue):
     '''Class for image display'''
     
-    def __init__(self):
+    def __init__(self,graphicsview):
         
         '''Bigger queue size allows more image to be put in its queue. However, 
         since many images can take a lot of RAM and it is not necessary to see 
@@ -2189,6 +2224,8 @@ class CameraWindow(queue.Queue):
         
         queue.Queue.__init__(self,2)   #Set up queue of maxsize 2 (frames)
         
+        self.graphicsview = graphicsview
+        self.plot_item = self.graphicsview.getView()
         
         self.frame_list = []
         self.xvals_list = []
@@ -2197,18 +2234,12 @@ class CameraWindow(queue.Queue):
         self.stack_mode = False
         self.saturation = False
         
-        '''Set up display window'''
-        self.plot_item = pg.PlotItem()
-        self.imv = pg.ImageView(view = self.plot_item)
-        self.imv.setWindowTitle('Camera Window')
-        self.scene = self.imv.scene
-        self.imv.show()
         #Initial displayed frame
         self.lines = 2160
         self.columns = 2560
         self.container = np.zeros((self.lines, self.columns))
-        self.container[0] = 1000 #To get initial range of the histogram 
-        self.imv.setImage(np.transpose(self.container))
+        self.container[0,0] = 1000 #To get initial range of the histogram
+        self.graphicsview.setImage(np.transpose(self.container))
     
     def change_frame_display_mode(self,mode='frame2d'):
         '''Change the mode of the frame display'''
@@ -2229,21 +2260,21 @@ class CameraWindow(queue.Queue):
            Takes the image in its queue and displays it in the window'''
         try:
             '''Retrieving old view settings'''
-            _view = self.imv.getView()
+            _view = self.graphicsview.getView()
             _view_box = _view.getViewBox()
             _state = _view_box.getState()
             
             first_update = False
             if self.histogram_level == []:
                 first_update = True
-            _histo_widget = self.imv.getHistogramWidget()
+            _histo_widget = self.graphicsview.getHistogramWidget()
             self.histogram_level = _histo_widget.getLevels()
             
             '''Retrieving and displaying new frame'''
             frame = self.get(False)
             if self.stack_mode:
                 self.frame_list.append(frame.tolist())
-                if len(self.frame_list) > 10 : #To prevent the list of frames from being too big
+                if len(self.frame_list) > 3: #To prevent the list of frames from being too big
                     self.frame_list.pop(0)
                     self.xvals_list.pop(0)
                 frame3d = np.array(self.frame_list)
@@ -2254,9 +2285,9 @@ class CameraWindow(queue.Queue):
                 xvals = np.array(self.xvals_list)
                 #xvals = np.flip(xvals)
                 #print(xvals) #debugging
-                self.imv.setImage(frame3d,xvals=xvals)
+                self.graphicsview.setImage(frame3d,xvals=xvals)
             else:
-                self.imv.setImage(frame)
+                self.graphicsview.setImage(frame)
             
             '''Showing saturated pixels in red'''
             if self.saturation:
