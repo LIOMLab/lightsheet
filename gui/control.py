@@ -5,6 +5,7 @@ Created on May 22, 2019
 '''
 
 import sys
+from PyQt5.Qt import QDialog
 #from numpy import linspace
 sys.path.append("..")
 
@@ -16,7 +17,7 @@ from matplotlib import pyplot as plt
 from scipy import signal, optimize, ndimage, stats #,interpolate
 from PyQt5 import QtCore #,QtGui
 from PyQt5 import uic
-from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem, QAbstractItemView,QMessageBox,QMainWindow#,QWidget,QMenu,QMenuBar,QAction,QStatusBar
+from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem, QAbstractItemView,QMessageBox,QMainWindow,QLabel#,QWidget,QMenu,QMenuBar,QAction,QStatusBar
 #from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QVBoxLayout, QSizePolicy, QMessageBox, QPushButton
 #from PyQt5.QtGui import QIcon
 #from PyQt5.QtCore import QThread
@@ -50,9 +51,16 @@ modifiable_parameters = etl_parameters + galvo_parameters + ["samplerate","etl_s
 
 parameters = dict()
 '''Read modifiable parameters from configuration file'''
-with open(r"C:\git-projects\lightsheet\src\configuration.txt") as file:
-    for param_string in modifiable_parameters:
-        parameters[param_string] = float(file.readline())
+try:
+    with open(r"C:\git-projects\lightsheet\src\configuration.txt") as file:
+        for param_string in modifiable_parameters:
+            parameters[param_string] = float(file.readline())
+        save_parameters_policy = int(file.readline())
+        default_save_directory = file.readline()
+except:
+    print('Error Reading Configuration File')
+    ###default parameters
+
 '''Default parameters'''
 parameters["sample_name"]='No Sample Name'
 ##parameters["sweeptime"]=0.4             # In seconds
@@ -85,10 +93,40 @@ def fwhm(y):
     fwhm_val = max(xs) - min(xs) + 1
     return fwhm_val  
 
+class Settings_Dialog(QDialog):
+    '''Class for Settings Dialog'''
+    
+    def __init__(self):
+        QDialog.__init__(self)
+        
+        '''Loading user interface'''
+        basepath = os.path.join(os.path.dirname(__file__))
+        uic.loadUi(os.path.join(basepath,"settings.ui"), self)
+        
+        '''Loading preset'''
+        self.comboBox_savePolicy.setCurrentIndex(save_parameters_policy)
+        self.label_saveDirectory.setText(default_save_directory)
+        
+        '''Connecting buttons'''
+        self.pushButton_selectDirectory.clicked.connect(self.select_directory)
+        self.pushButton_selectNone.clicked.connect(self.select_none)
+    
+    def select_directory(self):
+        '''Allows the selection of a default save directory'''
+        
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontResolveSymlinks
+        options |= QFileDialog.ShowDirsOnly
+        default_save_directory = QFileDialog.getExistingDirectory(self, 'Choose Directory', '', options)
+        if default_save_directory != '': #If directory specified
+            self.label_saveDirectory.setText(default_save_directory)
+    
+    def select_none(self):
+        '''Selects no default save directory'''
+        self.label_saveDirectory.setText('None Specified')
+
 class Controller(QMainWindow):
-    '''
-    Class for control of the MesoSPIM
-    '''
+    '''Class for control of the MesoSPIM'''
     
     sig_update_progress = QtCore.pyqtSignal(int) #Signal for progress bar
     
@@ -96,8 +134,13 @@ class Controller(QMainWindow):
         QMainWindow.__init__(self)
         
         '''Loading user interface'''
-        basepath= os.path.join(os.path.dirname(__file__))
+        basepath = os.path.join(os.path.dirname(__file__))
         uic.loadUi(os.path.join(basepath,"controller.ui"), self)
+        self.label_statusBar = QLabel()
+        self.statusbar.addPermanentWidget(self.label_statusBar)
+        
+        '''Instantiating the settings window'''
+        self.settings_dialog = Settings_Dialog()
         
         '''Instantiating the camera window where the frames are displayed'''
         self.camera_window = CameraWindow(self.graphicsView)
@@ -116,6 +159,8 @@ class Controller(QMainWindow):
         self.consumers = []
         self.figure_counter = 1
         self.save_directory = ''
+        self.save_parameters_policy = save_parameters_policy
+        self.default_save_directory = default_save_directory
         
         self.default_buttons = [self.pushButton_standby,
                                 self.pushButton_getSingleImage,
@@ -175,6 +220,9 @@ class Controller(QMainWindow):
         self.horizontal_forward_boundary_selected = False
         self.horizontal_backward_boundary_selected = False
         self.focus_selected = False
+        
+        '''Initializing settings'''
+        self.label_currentDirectory.setText(default_save_directory)
         
         '''Initializing the properties of the widgets'''
         '''--Motion's related widgets--'''
@@ -254,11 +302,20 @@ class Controller(QMainWindow):
         self.update_laser_buttons()
         self.update_buttons_modes(self.default_buttons)
         
+        if default_save_directory != 'None Specified':
+            self.lineEdit_filename.setEnabled(True)
+            self.lineEdit_sampleName.setEnabled(True)
+        
         '''Connect menu options'''
         self.action_openDocumentation.triggered.connect(self.open_help)
         self.action_displayControlsImages.triggered.connect(self.display_controls_images)
         self.action_displayImages.triggered.connect(self.display_images)
         self.action_displayControls.triggered.connect(self.display_controls)
+        self.action_ShowHideCommandLog.triggered.connect(self.show_hide_command_log)
+        self.action_ModifyProgramSettings.triggered.connect(self.open_settings_dialog)
+        
+        '''Connect settings options'''
+        self.settings_dialog.buttonBox.accepted.connect(self.change_settings)
         
         '''Connect buttons'''
         '''Connection for unit change'''
@@ -317,7 +374,6 @@ class Controller(QMainWindow):
         
         self.pushButton_defaultParameters.clicked.connect(self.back_to_default_parameters)
         self.pushButton_changeDefaultParameters.clicked.connect(self.change_default_parameters)
-        self.pushButton_saveDefaultParameters.clicked.connect(self.save_default_parameters)
         
         '''Connections for the lasers'''
         self.pushButton_allLasers.clicked.connect(self.lasers_button)
@@ -326,6 +382,16 @@ class Controller(QMainWindow):
 
     
     '''General Methods'''
+    def open_settings_dialog(self):
+        '''Open the dialog window for modification of settings'''
+        self.settings_dialog.exec_()
+    
+    def change_settings(self):
+        '''Change the configuration settings'''
+        self.save_parameters_policy = self.settings_dialog.comboBox_savePolicy.currentIndex()
+        self.default_save_directory = self.settings_dialog.label_saveDirectory.text()
+        self.print_controller('Configuration Settings Changed')
+    
     def open_help(self):
         '''Open help documentation for the program (PDF)'''
         webbrowser.open_new(r'file://C:\git-projects\lightsheet\src\Guide.pdf') ##
@@ -344,6 +410,13 @@ class Controller(QMainWindow):
         '''Only display the controls window'''
         self.widget_controls.show()
         self.graphicsView.hide()
+        
+    def show_hide_command_log(self):
+        '''Show or hide the command log'''
+        if self.label_lastCommands.isVisible():
+            self.label_lastCommands.hide()
+        else:
+            self.label_lastCommands.show()
     
     def update_laser_buttons(self,disable_button=True):
         '''Deactivate lasers, and enable or disable all laser buttons'''
@@ -357,6 +430,25 @@ class Controller(QMainWindow):
         buttons_to_disable = [self.pushButton_allLasers,
                               self.pushButton_leftLaser,
                               self.pushButton_rightLaser]
+        for button in buttons_to_disable:
+            if disable_button:
+                button.setEnabled(False)
+            else:
+                button.setEnabled(True)
+    
+    def update_motor_buttons(self,disable_button=True):
+        '''Enable or disable all motor buttons'''
+        buttons_to_disable = [self.pushButton_motorUp,
+                              self.pushButton_motorOrigin,
+                              self.pushButton_motorDown,
+                              self.pushButton_motorLeft,
+                              self.pushButton_motorRight,
+                              self.pushButton_movePosition,
+                              self.pushButton_moveHeight,
+                              self.pushButton_backward,
+                              self.pushButton_focus,
+                              self.pushButton_forward,
+                              self.pushButton_moveCamera]
         for button in buttons_to_disable:
             if disable_button:
                 button.setEnabled(False)
@@ -411,12 +503,15 @@ class Controller(QMainWindow):
         if self.camera_on:
             self.close_camera()
         
+        self.save_default_parameters()
+        
         event.accept()
     
     def print_controller(self,text):
-        '''Print text in console and in controller text box'''
+        '''Print text in console, controller text box and status bar'''
         
         print(text)
+        self.statusbar.showMessage(text)
         self.label_lastCommands.setText(self.label_lastCommands.text()+'\n '+text)
     
     def open_camera(self):
@@ -560,7 +655,6 @@ class Controller(QMainWindow):
         '''Updates the current (horizontal) camera position displayed'''
         self.current_camera_position_text = "{} {}".format(self.return_current_camera_position(), self.unit)
         self.label_currentCameraNumerical.setText(self.current_camera_position_text)
-    
     
     def move_to_horizontal_position(self):
         '''Moves the sample to a specified horizontal position'''
@@ -892,14 +986,25 @@ class Controller(QMainWindow):
         for param_string,param_box in zip(modifiable_parameters,self.modifiable_param_boxes):
             self.defaultParameters[param_string] = param_box.value()
         self.print_controller('Default parameters changed')
-        
+    
     def save_default_parameters(self):
         '''Change all the default parameters of the configuration file to current default parameters'''
         
-        with open(r"C:\git-projects\lightsheet\src\configuration.txt","w") as file:
-            for param_string in modifiable_parameters:
-                file.write(str(self.defaultParameters[param_string]) + '\n')
-        self.print_controller('Default parameters saved in configuration file')
+        config_file = r"C:\git-projects\lightsheet\src\configuration.txt"
+        if self.save_parameters_policy == 0: #Save Default Parameters
+            with open(config_file,"w") as file:
+                for param_string in modifiable_parameters:
+                    file.write(str(self.defaultParameters[param_string]) + '\n')
+                file.write(str(self.save_parameters_policy) + '\n')
+                file.write(str(self.default_save_directory))
+            #self.print_controller('Default parameters saved in configuration file')
+        elif self.save_parameters_policy == 1: #Save Last Parameters As Default
+            with open(config_file,"w") as file:
+                for param_box in self.modifiable_param_boxes:
+                    file.write(str(param_box.value()) + '\n')
+                file.write(str(self.save_parameters_policy) + '\n')
+                file.write(str(self.default_save_directory))
+            #self.print_controller('Last Parameters saved as default in configuration file')
     
     def update_etl_galvos_parameters(self, parameter_name, parameter_box):
         '''Updates the parameters in the software after a modification by the
@@ -1196,6 +1301,7 @@ class Controller(QMainWindow):
         '''Modes disabling during preview_mode execution'''
         self.update_buttons_modes([self.pushButton_previewMode])
         self.print_controller('Preview mode started')
+        self.label_statusBar.setText('Current Acquisition Mode: Preview ')
         
         '''Starting preview mode thread'''
         preview_mode_thread = threading.Thread(target = self.preview_mode_thread)
@@ -1257,6 +1363,7 @@ class Controller(QMainWindow):
         self.update_buttons_modes(self.default_buttons)
         
         self.print_controller('Preview mode stopped')
+        self.label_statusBar.setText('')
     
     
     def reconstruct_frame(self,buffer):
@@ -1418,6 +1525,7 @@ class Controller(QMainWindow):
         self.update_buttons_modes([self.pushButton_liveMode])
         
         self.print_controller('Live mode started')
+        self.label_statusBar.setText('Current Acquisition Mode: Live ')
         
         '''Starting live mode thread'''
         live_mode_thread = threading.Thread(target = self.live_mode_thread)
@@ -1455,6 +1563,7 @@ class Controller(QMainWindow):
         self.update_buttons_modes(self.default_buttons)
         
         self.print_controller('Live mode stopped')
+        self.label_statusBar.setText('')
     
     
     def start_get_single_image(self):
@@ -1636,6 +1745,7 @@ class Controller(QMainWindow):
         '''Starts the thread for stack mode'''
         
         self.pushButton_stackMode.setText('Stop Stack Mode')
+        self.label_statusBar.setText('Current Acquisition Mode: Stack ')
         
         self.stack_mode_started = True
         '''Modes disabling while stack acquisition'''
@@ -1695,9 +1805,9 @@ class Controller(QMainWindow):
         self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
         
         '''Starting lasers'''
-        self.both_lasers_activated = True
+        ###self.both_lasers_activated = True
         ###self.left_laser_activated = True
-        ###self.right_laser_activated = True
+        self.right_laser_activated = True
         self.start_lasers()
         
         '''Set progress bar'''
@@ -1757,6 +1867,7 @@ class Controller(QMainWindow):
         
         self.stack_mode_started = False
         self.print_controller('Acquisition done')
+        self.label_statusBar.setText('')
     
     
     '''Calibration Methods'''
@@ -1768,6 +1879,7 @@ class Controller(QMainWindow):
             self.close_modes()
             self.camera_calibration_started = True
             self.pushButton_cameraCalibration.setText('Stop Camera Calibration')
+            self.update_motor_buttons()
             self.start_calibrate_camera()
     
     def start_calibrate_camera(self):
@@ -1804,8 +1916,8 @@ class Controller(QMainWindow):
             self.number_of_camera_positions = self.doubleSpinBox_numberOfCameraPositions.value()
         
         sample_increment_length = (self.boundaries['horizontal_backward_boundary']-self.boundaries['horizontal_forward_boundary']) / (self.number_of_calibration_planes-1) #-1 to account for last position (backward_boundary)
-        self.focus_backward_boundary = 42#397626#245000#int(200000*0.75)#200000#245000#225000#245000#250000 #263000   ##Position arbitraire en u-steps
-        self.focus_forward_boundary = 32#447506#450000 #447506#265000#int(300000*25/20)#300000#265000#255000#265000#270000  #269000   ##Position arbitraire en u-steps
+        self.focus_backward_boundary = 38 #42 #397626#245000#int(200000*0.75)#200000#245000#225000#245000#250000 #263000   ##Position arbitraire en u-steps
+        self.focus_forward_boundary = 31 #447506#450000 #447506#265000#int(300000*25/20)#300000#265000#255000#265000#270000  #269000   ##Position arbitraire en u-steps
         camera_increment_length = (self.focus_backward_boundary - self.focus_forward_boundary) / (self.number_of_camera_positions-1) #-1 to account for last position (backward_boundary)
         
         position_depart_sample = self.motor_horizontal.current_position('\u03BCStep')
@@ -1937,6 +2049,7 @@ class Controller(QMainWindow):
             
         '''Enabling modes after camera calibration'''
         self.update_buttons_modes(self.default_buttons)
+        self.update_motor_buttons(False)
             
         self.camera_calibration_started = False
         self.pushButton_cameraCalibration.setText('Start Camera Calibration')
@@ -1950,6 +2063,7 @@ class Controller(QMainWindow):
             self.close_modes()
             self.etls_calibration_started = True
             self.pushButton_etlsCalibration.setText('Stop ETL Calibration')
+            self.update_motor_buttons()
             self.start_calibrate_etls()
     
     def start_calibrate_etls(self):
@@ -1978,8 +2092,8 @@ class Controller(QMainWindow):
         self.galvos_etls_task.ao_channels.add_ao_voltage_chan(terminals["galvos_etls"])
         
         '''Getting parameters'''
-        self.number_of_etls_points = 2 ##
-        self.number_of_etls_images = 2 ##
+        self.number_of_etls_points = 20 ##
+        self.number_of_etls_images = 20 ##
         
         self.etl_l_relation = np.zeros((int(self.number_of_etls_points),2))
         self.etl_r_relation = np.zeros((int(self.number_of_etls_points),2))
@@ -2202,6 +2316,7 @@ class Controller(QMainWindow):
             
         '''Enabling modes after camera calibration'''
         self.update_buttons_modes(self.default_buttons)
+        self.update_motor_buttons(False)
         
         self.etls_calibration_started = False
         self.pushButton_etlsCalibration.setText('Start ETL Calibration')

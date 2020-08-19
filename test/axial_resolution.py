@@ -5,16 +5,14 @@ import h5py
 
 #nomFichier=(r'C:\Users\liomlight\Desktop\billes_stack\test_stack_plane_00007.hdf5') #test_stack_plane_00004#test_stack_plane_00003#00001
 #nomFichier=(r'C:\Users\liomlight\Desktop\left_laser\test_stack_plane_00001.hdf5') #test_stack_plane_00001
-nomFichier=(r'C:\Users\liomlight\Desktop\right_laser\test_stack_plane_00004.hdf5') #test_stack_plane_00003#test_stack_plane_00002 #test_stack_plane_00001
+#nomFichier=(r'C:\Users\liomlight\Desktop\right_laser\test_stack_plane_00004.hdf5') #test_stack_plane_00003#test_stack_plane_00002 #test_stack_plane_00001
 #nomFichier=(r'C:\Users\liomlight\Desktop\all_lasers\test_stack_plane_00001.hdf5')
+#nomFichier=(r'C:\Users\liomlight\Desktop\left_nouvelle_lentille\test_stack_plane_00003.hdf5')
+nomFichier=(r'C:\Users\liomlight\Desktop\test_laser_brisé\test_stack_plane_00001.hdf5')
 
 def gaussian(x,a,x0,sigma):
     '''Gaussian Function'''
     return a*np.exp(-(x-x0)**2/(2*sigma**2))
-
-def gaussian2d(x,y,a,x0,y0,sigmax,sigmay):
-    '''2D Gaussian Function'''
-    return a*np.exp(-((x-x0)**2/(2*sigmax**2)+(y-y0)**2/(2*sigmay**2)))
 
 def fwhm(y):
     '''Full width at half maximum'''
@@ -25,8 +23,8 @@ def fwhm(y):
     return fwhm_val  
 
 widths = []
-colonne = 1283 #1434#1425 #1216#1177## 1434###1100     #1216      #1312#1906#1300#1148
-rangee =  1003 #1314#831#848 #677#922## 831#937 ###735 #1181   #925#1105#1338
+colonne = 1704 #1357 #1283 #1434#1425 #1216#1177## 1434###1100     #1216      #1312#1906#1300#1148
+rangee =  1962 #884 #1165 ##779 #1003 #1314#831#848 #677#922## 831#937 ###735 #1181   #925#1105#1338
 y=[]
 
 with h5py.File(nomFichier, "r") as f:
@@ -48,7 +46,7 @@ with h5py.File(nomFichier, "r") as f:
     y = (y - np.min(y))/(np.max(y) - np.min(y))
     y2=signal.savgol_filter(y, 31, 3)
     f2 = interpolate.interp1d(x, y, kind='cubic')
-    widt=fwhm(y)
+    widt=fwhm(y2)
     print('fwhm:')
     print(widt)
     widths.append(widt)
