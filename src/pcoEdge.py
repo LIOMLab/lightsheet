@@ -112,11 +112,12 @@ class Camera:
     def __init__(self):
         
         self.handle = ctypes.c_void_p(0)
-        self.name = ctypes.c_char_p(b''*40)
         self.open_camera()
+        #self.name = ctypes.c_char_p(b''*40)
         #get_camera_name(self.handle, self.name, 40)
         #self.name = self.name.value.decode('ascii')
         #print(self.name)
+        self.get_temperature()
         
     def open_camera(self):
         '''Returns (as a handle) a connection to a camera'''
@@ -315,6 +316,7 @@ class Camera:
     def get_sensor_format(self):
         self.sensor = ctypes.c_uint16()
         get_sensor_format(self.handle, self.sensor)
+        print(self.sensor)
         
     def get_temperature(self):
         ''' Gives the temperature in Celcius'''
@@ -322,6 +324,9 @@ class Camera:
         self.cam_temp = ctypes.c_int16()
         self.pow_temp = ctypes.c_int16()
         get_temperature(self.handle, self.ccd_temp, self.cam_temp, self.pow_temp)
+        print(self.ccd_temp)
+        print(self.cam_temp.value)
+        print(self.pow_temp)
         
     def get_trigger_mode(self):
         self.trigger_mode = ctypes.c_uint16()

@@ -17,7 +17,7 @@ from matplotlib import pyplot as plt
 from scipy import signal, optimize, ndimage, stats #,interpolate
 from PyQt5 import QtCore #,QtGui
 from PyQt5 import uic
-from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem, QAbstractItemView,QMessageBox,QMainWindow,QLabel#,QWidget,QMenu,QMenuBar,QAction,QStatusBar
+from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem, QAbstractItemView,QMessageBox,QMainWindow,QLabel,QProgressBar#,QWidget,QMenu,QMenuBar,QAction,QStatusBar
 #from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QVBoxLayout, QSizePolicy, QMessageBox, QPushButton
 #from PyQt5.QtGui import QIcon
 #from PyQt5.QtCore import QThread
@@ -54,13 +54,30 @@ parameters = dict()
 try:
     with open(r"C:\git-projects\lightsheet\src\configuration.txt") as file:
         for param_string in modifiable_parameters:
-            parameters[param_string] = float(file.readline())
-        save_parameters_policy = int(file.readline())
-        default_save_directory = file.readline()
+            parameters[param_string] = float(file.readline().rstrip())
+        save_parameters_policy = int(file.readline().rstrip())
+        default_save_directory = file.readline().rstrip()
+        default_filename = file.readline().rstrip()
 except:
     print('Error Reading Configuration File')
-    ###default parameters
-
+    '''Setting default parameters'''
+    parameters["etl_l_amplitude"] = 2         # In Volts
+    parameters["etl_r_amplitude"] = 2         # In Volts
+    parameters["etl_l_offset"] = 0            # In Volts
+    parameters["etl_r_offset"] = 0            # In Volts
+    parameters["galvo_l_amplitude"] = 2       # In Volts
+    parameters["galvo_r_amplitude"] = 2       # In Volts
+    parameters["galvo_l_offset"] = 0.6          # In Volts
+    parameters["galvo_r_offset"] = 0.6           # In Volts
+    parameters["galvo_frequency"] = 20     # In Hertz
+    parameters["samplerate"] = 40000          # In samples/seconds
+    parameters["etl_step"] =  400            # In pixels
+    parameters["laser_l_voltage"] = 0.905     # In Volts
+    parameters["laser_r_voltage"] = 0.935     # In Volts
+    save_parameters_policy = 0
+    default_save_directory = 'None Specified'
+    default_filename = 'Test'
+    
 '''Default parameters'''
 parameters["sample_name"]='No Sample Name'
 ##parameters["sweeptime"]=0.4             # In seconds
@@ -104,12 +121,18 @@ class Settings_Dialog(QDialog):
         uic.loadUi(os.path.join(basepath,"settings.ui"), self)
         
         '''Loading preset'''
-        self.comboBox_savePolicy.setCurrentIndex(save_parameters_policy)
-        self.label_saveDirectory.setText(default_save_directory)
-        
+        self.load_preset()
         '''Connecting buttons'''
         self.pushButton_selectDirectory.clicked.connect(self.select_directory)
         self.pushButton_selectNone.clicked.connect(self.select_none)
+    
+    def load_preset(self):
+        '''Load preset'''
+        self.comboBox_savePolicy.setCurrentIndex(save_parameters_policy)
+        self.label_saveDirectory.setText(default_save_directory)
+        self.lineEdit_defaultFilename.setText(default_filename)
+        if default_save_directory == 'None Specified':
+            self.lineEdit_defaultFilename.setEnabled(False)
     
     def select_directory(self):
         '''Allows the selection of a default save directory'''
@@ -120,15 +143,52 @@ class Settings_Dialog(QDialog):
         default_save_directory = QFileDialog.getExistingDirectory(self, 'Choose Directory', '', options)
         if default_save_directory != '': #If directory specified
             self.label_saveDirectory.setText(default_save_directory)
+            self.lineEdit_defaultFilename.setEnabled(True)
+        else:
+            self.select_none()
     
     def select_none(self):
         '''Selects no default save directory'''
         self.label_saveDirectory.setText('None Specified')
+        self.lineEdit_defaultFilename.setEnabled(False)
+        
+class Properties_Dialog(QDialog):
+    '''Class for Properties Dialog'''
+    
+    def __init__(self):
+        QDialog.__init__(self)
+        
+        '''Loading user interface'''
+        basepath = os.path.join(os.path.dirname(__file__))
+        uic.loadUi(os.path.join(basepath,"properties.ui"), self)
+        
+        '''Defining attributes'''
+        self.camera_name = ''
+        self.camera_temperature = ''
+    
+    def get_properties(self):
+        self.label_cameraName.setText(self.camera_name)
+        self.label_cameraTemperature.setText(self.camera_temperature)
+        
+class Pixels_Dialog(QDialog):
+    '''Class for Pixels Dialog'''
+    
+    def __init__(self):
+        QDialog.__init__(self)
+        
+        '''Loading user interface'''
+        basepath = os.path.join(os.path.dirname(__file__))
+        uic.loadUi(os.path.join(basepath,"pixels.ui"), self)
+    
+    def set_image(self):
+        pass
 
 class Controller(QMainWindow):
     '''Class for control of the MesoSPIM'''
     
-    sig_update_progress = QtCore.pyqtSignal(int) #Signal for progress bar
+    stack_sig_update_progress = QtCore.pyqtSignal(int) #Signal for stack mode progress bar
+    sig_update_progress = QtCore.pyqtSignal(int) #Signal for progress bar in status bar
+    sig_beep = QtCore.pyqtSignal(bool) #Signal for beep sound
     
     def __init__(self):
         QMainWindow.__init__(self)
@@ -137,10 +197,15 @@ class Controller(QMainWindow):
         basepath = os.path.join(os.path.dirname(__file__))
         uic.loadUi(os.path.join(basepath,"controller.ui"), self)
         self.label_statusBar = QLabel()
+        self.progress_statusBar = QProgressBar()
         self.statusbar.addPermanentWidget(self.label_statusBar)
+        self.statusbar.addPermanentWidget(self.progress_statusBar)
+        self.progress_statusBar.hide()
+        self.progress_statusBar.setFixedWidth(250)
         
-        '''Instantiating the settings window'''
+        '''Instantiating the settings and properties windows'''
         self.settings_dialog = Settings_Dialog()
+        self.properties_dialog = Properties_Dialog()
         
         '''Instantiating the camera window where the frames are displayed'''
         self.camera_window = CameraWindow(self.graphicsView)
@@ -161,6 +226,7 @@ class Controller(QMainWindow):
         self.save_directory = ''
         self.save_parameters_policy = save_parameters_policy
         self.default_save_directory = default_save_directory
+        self.default_filename = default_filename
         
         self.default_buttons = [self.pushButton_standby,
                                 self.pushButton_getSingleImage,
@@ -196,7 +262,7 @@ class Controller(QMainWindow):
         self.boundaries['horizontal_forward_boundary'] = 0
         self.boundaries['horizontal_backward_boundary'] = 15
         self.boundaries['origin_horizontal'] = self.boundaries['horizontal_forward_boundary']
-        self.boundaries['camera_forward_boundary'] = 30
+        self.boundaries['camera_forward_boundary'] = 13.65#30
         self.boundaries['camera_backward_boundary'] = 115
         self.boundaries['focus'] = 34.5
         self.defaultBoundaries = copy.deepcopy(self.boundaries) #The default boundaries are in mm
@@ -287,7 +353,8 @@ class Controller(QMainWindow):
         self.doubleSpinBox_numberOfEtlVoltages.setSingleStep(1)
         
         '''Initializing widgets' connections'''
-        self.sig_update_progress.connect(self.progressBar_stackMode.setValue)
+        self.sig_update_progress.connect(self.progress_statusBar.setValue)
+        self.stack_sig_update_progress.connect(self.progressBar_stackMode.setValue)
         
         '''Disable some buttons'''
         buttons_to_disable = [self.lineEdit_filename,
@@ -304,6 +371,7 @@ class Controller(QMainWindow):
         
         if default_save_directory != 'None Specified':
             self.lineEdit_filename.setEnabled(True)
+            self.lineEdit_filename.setText(self.default_filename)
             self.lineEdit_sampleName.setEnabled(True)
         
         '''Connect menu options'''
@@ -313,9 +381,11 @@ class Controller(QMainWindow):
         self.action_displayControls.triggered.connect(self.display_controls)
         self.action_ShowHideCommandLog.triggered.connect(self.show_hide_command_log)
         self.action_ModifyProgramSettings.triggered.connect(self.open_settings_dialog)
+        self.action_showSystemProperties.triggered.connect(self.open_properties_dialog)
         
         '''Connect settings options'''
         self.settings_dialog.buttonBox.accepted.connect(self.change_settings)
+        self.settings_dialog.buttonBox.rejected.connect(self.settings_dialog.load_preset)
         
         '''Connect buttons'''
         '''Connection for unit change'''
@@ -386,10 +456,16 @@ class Controller(QMainWindow):
         '''Open the dialog window for modification of settings'''
         self.settings_dialog.exec_()
     
+    def open_properties_dialog(self):
+        '''Open the dialog window for showing properties'''
+        self.properties_dialog.get_properties()
+        self.properties_dialog.exec_()
+    
     def change_settings(self):
         '''Change the configuration settings'''
         self.save_parameters_policy = self.settings_dialog.comboBox_savePolicy.currentIndex()
         self.default_save_directory = self.settings_dialog.label_saveDirectory.text()
+        self.default_filename = self.settings_dialog.lineEdit_defaultFilename.text()
         self.print_controller('Configuration Settings Changed')
     
     def open_help(self):
@@ -413,10 +489,10 @@ class Controller(QMainWindow):
         
     def show_hide_command_log(self):
         '''Show or hide the command log'''
-        if self.label_lastCommands.isVisible():
-            self.label_lastCommands.hide()
+        if self.scrollArea_lastCommands.isVisible():
+            self.scrollArea_lastCommands.hide()
         else:
-            self.label_lastCommands.show()
+            self.scrollArea_lastCommands.show()
     
     def update_laser_buttons(self,disable_button=True):
         '''Deactivate lasers, and enable or disable all laser buttons'''
@@ -519,6 +595,7 @@ class Controller(QMainWindow):
         
         self.camera_on = True
         self.camera = Camera()
+        #self.properties_dialog.camera_name = self.camera.name
         
         self.print_controller('Camera opened')
     
@@ -693,6 +770,7 @@ class Controller(QMainWindow):
             self.print_controller ('Camera moving backward')
             self.motor_camera.move_relative_position(-self.doubleSpinBox_incrementCamera.value(),self.unit)
         else:
+            self.sig_beep.emit(True)
             self.print_controller('Out of boundaries')
             self.motor_camera.move_absolute_position(-self.boundaries['camera_backward_boundary']+self.camera_correction,self.unit)
         self.update_position_camera()
@@ -708,6 +786,7 @@ class Controller(QMainWindow):
             else:
                 self.print_controller('Sample prevents camera movement')
         else:
+            self.sig_beep.emit(True)
             self.print_controller('Out of boundaries')
             self.motor_camera.move_absolute_position(-self.boundaries['camera_forward_boundary']+self.camera_correction,self.unit)
         self.update_position_camera()
@@ -717,9 +796,11 @@ class Controller(QMainWindow):
         
         if self.focus_selected:
             if self.boundaries['focus'] > self.boundaries['camera_backward_boundary']:
+                self.sig_beep.emit(True)
                 self.print_controller('Focus out of boundaries')
                 self.motor_camera.move_absolute_position(-self.boundaries['camera_backward_boundary']+self.camera_correction,self.unit)
             elif self.boundaries['focus'] < self.boundaries['camera_forward_boundary']:
+                self.sig_beep.emit(True)
                 self.print_controller('Focus out of boundaries')
                 self.motor_camera.move_absolute_position(-self.boundaries['camera_forward_boundary']+self.camera_correction,self.unit)
             else:
@@ -740,6 +821,7 @@ class Controller(QMainWindow):
             self.print_controller('Sample moving down')
             self.motor_vertical.move_relative_position(self.doubleSpinBox_incrementVertical.value(),self.unit)
         else:
+            self.sig_beep.emit(True)
             self.print_controller('Out of boundaries')
             self.motor_vertical.move_absolute_position((self.boundaries['vertical_down_boundary'] - self.vertical_correction),self.unit)
         self.update_position_vertical()
@@ -751,6 +833,7 @@ class Controller(QMainWindow):
             self.print_controller('Sample moving up')
             self.motor_vertical.move_relative_position(-self.doubleSpinBox_incrementVertical.value(),self.unit)
         else:
+            self.sig_beep.emit(True)
             self.print_controller('Out of boundaries')
             self.motor_vertical.move_absolute_position((self.boundaries['vertical_up_boundary'] - self.vertical_correction),self.unit)
         self.update_position_vertical()
@@ -766,6 +849,7 @@ class Controller(QMainWindow):
             else:
                 self.print_controller('Camera prevents sample movement')
         else:
+            self.sig_beep.emit(True)
             self.print_controller('Out of boundaries')
             self.motor_horizontal.move_absolute_position(-self.boundaries['horizontal_backward_boundary']+self.horizontal_correction,self.unit)
         self.update_position_horizontal()
@@ -777,6 +861,7 @@ class Controller(QMainWindow):
             self.print_controller('Sample moving forward')
             self.motor_horizontal.move_relative_position(self.doubleSpinBox_incrementHorizontal.value(),self.unit)
         else:
+            self.sig_beep.emit(True)
             self.print_controller('Out of boundaries')
             self.motor_horizontal.move_absolute_position(-self.boundaries['horizontal_forward_boundary']+self.horizontal_correction, self.unit)
         self.update_position_horizontal()
@@ -793,6 +878,7 @@ class Controller(QMainWindow):
             else:
                 self.print_controller('Camera prevents sample movement')
         else:
+            self.sig_beep.emit(True)
             self.print_controller('Sample Horizontal Origin Out Of Boundaries')
         
         '''Moving sample to vertical origin'''
@@ -996,14 +1082,16 @@ class Controller(QMainWindow):
                 for param_string in modifiable_parameters:
                     file.write(str(self.defaultParameters[param_string]) + '\n')
                 file.write(str(self.save_parameters_policy) + '\n')
-                file.write(str(self.default_save_directory))
+                file.write(str(self.default_save_directory)+ '\n')
+                file.write(str(self.default_filename))
             #self.print_controller('Default parameters saved in configuration file')
         elif self.save_parameters_policy == 1: #Save Last Parameters As Default
             with open(config_file,"w") as file:
                 for param_box in self.modifiable_param_boxes:
                     file.write(str(param_box.value()) + '\n')
                 file.write(str(self.save_parameters_policy) + '\n')
-                file.write(str(self.default_save_directory))
+                file.write(str(self.default_save_directory)+ '\n')
+                file.write(str(self.default_filename))
             #self.print_controller('Last Parameters saved as default in configuration file')
     
     def update_etl_galvos_parameters(self, parameter_name, parameter_box):
@@ -1165,7 +1253,7 @@ class Controller(QMainWindow):
             
             self.pushButton_selectDataset.setEnabled(True)
         else:
-            self.label_currentFileDirectory.setText('None specified')
+            self.label_currentFileDirectory.setText('None Specified')
     
     def select_dataset(self):
         '''Opens one or many HDF5 datasets and displays its attributes and data as an image'''
@@ -1267,17 +1355,17 @@ class Controller(QMainWindow):
                 if self.consumers[consumer+2] == 'CameraWindow':
                     try:
                         self.consumers[consumer].put(frame)
-                        #print('Frame put in CameraWindow') #debugging
+                        print('Frame put in CameraWindow') #debugging
                     except:      #self.consumers[ii].Full:
-                        #print("CameraWindow queue is full") #debugging
+                        print("CameraWindow queue is full") #debugging
                         pass
             if to_saver:
                 if self.consumers[consumer+2] == 'FrameSaver':
                     try:
                         self.consumers[consumer].put(frame,1)
-                        #print('Frame put in FrameSaver') #debugging
+                        print('Frame put in FrameSaver') #debugging
                     except:      #self.consumers[ii].Full:
-                        #print("FrameSaver queue is full") #debugging
+                        print("FrameSaver queue is full") #debugging
                         pass
     
     def preview_button(self):
@@ -1300,8 +1388,10 @@ class Controller(QMainWindow):
         
         '''Modes disabling during preview_mode execution'''
         self.update_buttons_modes([self.pushButton_previewMode])
-        self.print_controller('Preview mode started')
+        self.print_controller('->Preview mode started')
         self.label_statusBar.setText('Current Acquisition Mode: Preview ')
+        self.progress_statusBar.show()
+        self.sig_update_progress.emit(100)
         
         '''Starting preview mode thread'''
         preview_mode_thread = threading.Thread(target = self.preview_mode_thread)
@@ -1362,8 +1452,10 @@ class Controller(QMainWindow):
         '''Enabling modes after preview_mode'''
         self.update_buttons_modes(self.default_buttons)
         
-        self.print_controller('Preview mode stopped')
+        self.print_controller('->Preview mode stopped')
         self.label_statusBar.setText('')
+        self.progress_statusBar.hide()
+        self.sig_update_progress.emit(0)
     
     
     def reconstruct_frame(self,buffer):
@@ -1524,8 +1616,10 @@ class Controller(QMainWindow):
         '''Disabling other modes while in live_mode'''
         self.update_buttons_modes([self.pushButton_liveMode])
         
-        self.print_controller('Live mode started')
+        self.print_controller('->Live mode started')
         self.label_statusBar.setText('Current Acquisition Mode: Live ')
+        self.progress_statusBar.show()
+        self.sig_update_progress.emit(100)
         
         '''Starting live mode thread'''
         live_mode_thread = threading.Thread(target = self.live_mode_thread)
@@ -1562,8 +1656,10 @@ class Controller(QMainWindow):
         '''Enabling modes after live_mode'''
         self.update_buttons_modes(self.default_buttons)
         
-        self.print_controller('Live mode stopped')
+        self.print_controller('->Live mode stopped')
         self.label_statusBar.setText('')
+        self.progress_statusBar.hide()
+        self.sig_update_progress.emit(0)
     
     
     def start_get_single_image(self):
@@ -1575,7 +1671,7 @@ class Controller(QMainWindow):
         '''Disabling modes while single frame acquisition'''
         self.update_buttons_modes(self.default_buttons)
         
-        self.print_controller('Getting single image')
+        self.print_controller('->Getting single image')
         
         '''Setting the camera for acquisition'''
         self.start_camera_recording('ExternalExposureControl')
@@ -1626,9 +1722,9 @@ class Controller(QMainWindow):
             self.lineEdit_filename.setText('')
             self.lineEdit_sampleName.setEnabled(True)
         else:
-            self.label_currentDirectory.setText('None specified')
+            self.label_currentDirectory.setText('None Specified')
             self.lineEdit_filename.setEnabled(False)
-            self.lineEdit_filename.setText('Select directory first')
+            self.lineEdit_filename.setText('Select Directory First')
             self.lineEdit_sampleName.setEnabled(False)
     
     def get_file_name(self):
@@ -1638,10 +1734,12 @@ class Controller(QMainWindow):
         #Removing spaces, dots and commas in filename
         for symbol in [' ','.',',']:
             self.filename = self.filename.replace(symbol, '')
-            
+        
         if (self.save_directory != '') and (self.filename != ''):
             self.filename = self.save_directory + '/' + self.filename
             self.saving_allowed = True
+        else:
+            self.saving_allowed = False
     
     def get_sample_name(self):
         '''Retrieve sample name'''
@@ -1678,7 +1776,20 @@ class Controller(QMainWindow):
             self.frame_saver.start_saving()
             self.frame_saver.stop_saving()
         else:
-            print('Select directory and enter a valid filename before saving')
+            self.show_single_save_popup()
+            print('Select a directory and enter a valid filename before saving')
+    
+    def show_single_save_popup(self):
+        '''Asks to select a directory and a filename before saving'''
+        
+        self.sig_beep.emit(True)
+        single_save_popup = QMessageBox()
+        single_save_popup.setWindowTitle('Save Single Image Warning')
+        single_save_popup.setText('Select a directory and enter a valid filename before saving')
+        single_save_popup.setIcon(QMessageBox.Warning)
+        single_save_popup.setStandardButtons(QMessageBox.Ok)
+        single_save_popup.setDefaultButton(QMessageBox.Ok)
+        single_save_popup.exec_()
 
     
     def set_number_of_planes(self):
@@ -1723,6 +1834,7 @@ class Controller(QMainWindow):
         '''Making sure the limits of the volume are set'''
         if (self.checkBox_setStartPoint.isChecked() == False) or (self.checkBox_setEndPoint.isChecked() == False) or (self.doubleSpinBox_planeStep.value() == 0):
             print('Set starting and ending points and select a non-zero plane step value')
+            self.show_stack_popup()
         else:
             '''Setting start & end points and plane step (takes into account the direction of acquisition) '''
             if self.stack_mode_starting_point > self.stack_mode_ending_point:
@@ -1739,35 +1851,50 @@ class Controller(QMainWindow):
             if self.saving_allowed:
                 self.start_stack_thread()
             else:
-                self.show_save_popup()
+                self.show_stack_save_popup()
+    
+    def show_stack_popup(self):
+        '''Asks to set starting and ending points and select a non-zero plane step value'''
+        
+        self.sig_beep.emit(True)
+        save_popup = QMessageBox()
+        save_popup.setWindowTitle('Stack Acquisition Warning')
+        save_popup.setText('Set starting and ending points and select a non-zero plane step value')
+        save_popup.setIcon(QMessageBox.Warning)
+        save_popup.setStandardButtons(QMessageBox.Ok)
+        save_popup.setDefaultButton(QMessageBox.Ok)
+        save_popup.exec_()
     
     def start_stack_thread(self):
         '''Starts the thread for stack mode'''
         
         self.pushButton_stackMode.setText('Stop Stack Mode')
         self.label_statusBar.setText('Current Acquisition Mode: Stack ')
+        self.sig_update_progress.emit(0) #To reset progress bar
+        self.progress_statusBar.show()
         
         self.stack_mode_started = True
         '''Modes disabling while stack acquisition'''
         self.update_buttons_modes([self.pushButton_stackMode])
-        self.print_controller('Stack mode started -- Number of frames to save: '+str(int(self.number_of_planes)))
+        self.print_controller('->Stack mode started -- Number of frames to save: '+str(int(self.number_of_planes)))
         '''Starting stack mode thread'''
         stack_mode_thread = threading.Thread(target = self.stack_mode_thread)
         stack_mode_thread.start()
     
-    def show_save_popup(self):
+    def show_stack_save_popup(self):
         '''Asks if the stack acquisition whether is to be done without saving'''
         
+        self.sig_beep.emit(True)
         save_popup = QMessageBox()
-        save_popup.setWindowTitle('Stack acquisition Warning')
+        save_popup.setWindowTitle('Stack Acquisition Question')
         save_popup.setText('Make stack acquisition without saving?')
         save_popup.setIcon(QMessageBox.Question)
         save_popup.setStandardButtons(QMessageBox.Yes|QMessageBox.No)
         save_popup.setDefaultButton(QMessageBox.Yes)
-        save_popup.buttonClicked.connect(self.popup_button)
+        save_popup.buttonClicked.connect(self.stack_popup_button)
         save_popup.exec_()
     
-    def popup_button(self,button):
+    def stack_popup_button(self,button):
         '''Takes action depending on the save_popup button that was clicked'''
         if button.text() == '&Yes': #& is necessary...
             self.start_stack_thread()
@@ -1777,9 +1904,7 @@ class Controller(QMainWindow):
         
         '''Setting the camera for acquisition'''
         self.start_camera_recording('ExternalExposureControl')
-        
         self.camera_window.change_frame_display_mode('frame3d')
-        
         
         '''Making sure saving is allowed and filename isn't empty'''
         if self.saving_allowed:
@@ -1813,6 +1938,7 @@ class Controller(QMainWindow):
         '''Set progress bar'''
         progress_value = 0
         progress_increment = 100/self.number_of_planes
+        self.stack_sig_update_progress.emit(0) #To reset progress bar
         self.sig_update_progress.emit(0) #To reset progress bar
         
         for plane in range(int(self.number_of_planes)):
@@ -1847,8 +1973,10 @@ class Controller(QMainWindow):
                 
                 '''Update progress bar'''
                 progress_value += progress_increment
+                self.stack_sig_update_progress.emit(int(progress_value))
                 self.sig_update_progress.emit(int(progress_value))
         if self.stack_mode_started:
+            self.stack_sig_update_progress.emit(100) #In case the number of planes is not a multiple of 100
             self.sig_update_progress.emit(100) #In case the number of planes is not a multiple of 100
 
         if self.saving_allowed:
@@ -1859,16 +1987,15 @@ class Controller(QMainWindow):
         
         '''Stopping laser'''
         self.stop_lasers()
-        self.both_lasers_activated = False
         
         '''Enabling modes after stack mode'''
         self.pushButton_stackMode.setText('Start Stack Mode')
         self.update_buttons_modes(self.default_buttons)
         
         self.stack_mode_started = False
-        self.print_controller('Acquisition done')
+        self.print_controller('->Stack Mode Acquisition Done')
         self.label_statusBar.setText('')
-    
+        self.progress_statusBar.hide()
     
     '''Calibration Methods'''
     def camera_calibration_button(self):
@@ -1889,6 +2016,8 @@ class Controller(QMainWindow):
         self.update_buttons_modes([self.pushButton_cameraCalibration])
             
         self.print_controller('Camera calibration started')
+        self.label_statusBar.setText('Current Mode: Camera Calibration ')
+        self.progress_statusBar.show()
             
         '''Starting camera calibration thread'''
         calibrate_camera_thread = threading.Thread(target = self.calibrate_camera_thread)
@@ -1943,6 +2072,11 @@ class Controller(QMainWindow):
         else:
             print('Select directory and enter a valid filename before saving')
         
+        '''Set progress bar'''
+        progress_value = 0
+        progress_increment = 100/self.number_of_calibration_planes
+        self.sig_update_progress.emit(0) #To reset progress bar
+        
         for sample_plane in range(int(self.number_of_calibration_planes)): #For each sample position
             if self.camera_calibration_started == False:
                 self.print_controller('Camera calibration interrupted')
@@ -1984,33 +2118,43 @@ class Controller(QMainWindow):
                         #print(np.var(flatframe))
                 
                 '''Calculating ideal camera position'''
-                metricvar = signal.savgol_filter(metricvar, 11, 3) # window size 11, polynomial order 3
-                metricvar = (metricvar - np.min(metricvar))/(np.max(metricvar) - np.min(metricvar))#normalize
-                self.donnees[sample_plane,:] = metricvar #debugging
-                
-                n = len(metricvar)
-                x = np.arange(n)            
-                mean = sum(x*metricvar)/n           
-                sigma = sum(metricvar*(x-mean)**2)/n
-                poscenter = np.argmax(metricvar)
-                print('poscenter:'+str(poscenter)) #debugging
-                popt,pcov = optimize.curve_fit(gaussian,x,metricvar,p0=[1,mean,sigma],bounds=(0, 'inf'), maxfev=10000)
-                amp,center,variance = popt
-                self.popt[sample_plane] = popt
-                print('center:'+str(center)) #debugging
-                print('amp:'+str(amp)) #debugging
-                print('variance:'+str(variance)) #debugging
-                print('pcov:'+str(pcov)) #debugging
-                
-                '''Saving focus relation'''
-                self.camera_focus_relation[sample_plane,0] = self.return_current_horizontal_position()
-                max_variance_camera_position = self.focus_forward_boundary + (center * camera_increment_length)
-                print('max_variance_camera_position:'+str(max_variance_camera_position))
-                if max_variance_camera_position > self.focus_backward_boundary:##
-                    max_variance_camera_position = self.focus_backward_boundary
-                self.camera_focus_relation[sample_plane,1] = max_variance_camera_position#-self.motor_camera.data_to_position(max_variance_camera_position, self.unit) + self.camera_correction
-                
-            self.print_controller('--Calibration of plane '+str(sample_plane+1)+'/'+str(int(self.number_of_calibration_planes))+' done')
+                try:
+                    metricvar = signal.savgol_filter(metricvar, 11, 3) # window size 11, polynomial order 3
+                    metricvar = (metricvar - np.min(metricvar))/(np.max(metricvar) - np.min(metricvar))#normalize
+                    self.donnees[sample_plane,:] = metricvar #debugging
+                    
+                    n = len(metricvar)
+                    x = np.arange(n)            
+                    mean = sum(x*metricvar)/n           
+                    sigma = sum(metricvar*(x-mean)**2)/n
+                    poscenter = np.argmax(metricvar)
+                    print('poscenter:'+str(poscenter)) #debugging
+                    popt,pcov = optimize.curve_fit(gaussian,x,metricvar,p0=[1,mean,sigma],bounds=(0, 'inf'), maxfev=10000)
+                    amp,center,variance = popt
+                    self.popt[sample_plane] = popt
+                    print('center:'+str(center)) #debugging
+                    print('amp:'+str(amp)) #debugging
+                    print('variance:'+str(variance)) #debugging
+                    print('pcov:'+str(pcov)) #debugging
+                    
+                    '''Saving focus relation'''
+                    self.camera_focus_relation[sample_plane,0] = self.return_current_horizontal_position()
+                    max_variance_camera_position = self.focus_forward_boundary + (center * camera_increment_length)
+                    print('max_variance_camera_position:'+str(max_variance_camera_position))
+                    if max_variance_camera_position > self.focus_backward_boundary:##
+                        max_variance_camera_position = self.focus_backward_boundary
+                    self.camera_focus_relation[sample_plane,1] = max_variance_camera_position#-self.motor_camera.data_to_position(max_variance_camera_position, self.unit) + self.camera_correction
+                    
+                    self.print_controller('--Calibration of plane '+str(sample_plane+1)+'/'+str(int(self.number_of_calibration_planes))+' done')
+            
+                    '''Update progress bar'''
+                    progress_value += progress_increment
+                    self.sig_update_progress.emit(int(progress_value))
+                except:
+                    self.camera_calibration_started = False
+                    self.print_controller('Camera calibration failed')
+        if self.camera_calibration_started:
+            self.sig_update_progress.emit(100) #In case the number of planes is not a multiple of 100
         
         print('relation:') #debugging
         print(self.camera_focus_relation)#debugging
@@ -2046,6 +2190,8 @@ class Controller(QMainWindow):
             self.default_buttons.append(self.pushButton_showCamInterpolation)
         
         self.print_controller('Camera calibration done')
+        self.label_statusBar.setText('')
+        self.progress_statusBar.hide()
             
         '''Enabling modes after camera calibration'''
         self.update_buttons_modes(self.default_buttons)
@@ -2147,7 +2293,7 @@ class Controller(QMainWindow):
             for etl_point in range(int(self.number_of_etls_points)):
                 
                 if self.etls_calibration_started == False:
-                    self.print_controller('Calibration interrupted')
+                    self.print_controller('ETL calibration interrupted')
                     break
                 else:
                     '''Getting the data to send to the AO'''
@@ -2190,9 +2336,6 @@ class Controller(QMainWindow):
                             self.send_frame_to_consumer(blurred_frame,False,True)
                             self.print_controller('Saving Reconstructed Image')
                         
-                        
-                        
-                        
                         frame = np.transpose(frame)
                         blurred_frame = np.transpose(blurred_frame)
                         
@@ -2228,49 +2371,52 @@ class Controller(QMainWindow):
                         ydata=np.array(std_val)
                         ydatas[etl_image,:] = signal.savgol_filter(ydata, 51, 3) # window size 51, polynomial order 3
                     
-                    #Calculate fit for average of images
-                    xdata=np.linspace(0,width-1,K)
-                    good_ydata=np.mean(ydatas,0)
-                    popt, pcov = optimize.curve_fit(func, xdata, good_ydata,bounds=((0.5,0,0,0),(np.inf,np.inf,np.inf,np.inf)), maxfev=10000) #,bounds=(0,np.inf) #,bounds=((0,-np.inf,-np.inf,0),(np.inf,np.inf,np.inf,np.inf))
-                    beamWidth,focusLocation,rayleighRange,offset = popt
-                    print('pcov'+str(pcov)) #debugging
+                    '''Calculate focus'''
+                    try:
+                        #Calculate fit for average of images
+                        xdata=np.linspace(0,width-1,K)
+                        good_ydata=np.mean(ydatas,0)
+                        popt, pcov = optimize.curve_fit(func, xdata, good_ydata,bounds=((0.5,0,0,0),(np.inf,np.inf,np.inf,np.inf)), maxfev=10000) #,bounds=(0,np.inf) #,bounds=((0,-np.inf,-np.inf,0),(np.inf,np.inf,np.inf,np.inf))
+                        beamWidth,focusLocation,rayleighRange,offset = popt
+                        print('pcov'+str(pcov)) #debugging
+                        
+                        if focusLocation < 0:
+                            focusLocation = 0
+                        elif focusLocation > 2559:
+                            focusLocation = 2559
+                        np.set_printoptions(threshold=sys.maxsize)
+                        print(func(xdata, *popt))
+                        print('offset:'+str(int(offset))) #debugging
+                        print('beamWidth:'+str(int(beamWidth))) #debugging
+                        print('focusLocation:'+str(int(focusLocation))) #debugging
+                        print('rayleighRange:'+str(rayleighRange)) #debugging
+                        
+                        ##Pour afficher graphique
+                        if side == 'etl_r':
+                            self.xdata[etl_point]=xdata
+                            self.ydata[etl_point]=good_ydata
+                            self.popt[etl_point]=popt
+                        
+                        '''Saving relations'''
+                        if side == 'etl_l':
+                            self.etl_l_relation[etl_point,0] = left_etl_voltage
+                            self.etl_l_relation[etl_point,1] = int(focusLocation)
+                        if side == 'etl_r':
+                            self.etl_r_relation[etl_point,0] = right_etl_voltage
+                            self.etl_r_relation[etl_point,1] = int(focusLocation)
                     
-                    if focusLocation < 0:
-                        focusLocation = 0
-                    elif focusLocation > 2559:
-                        focusLocation = 2559
-                    np.set_printoptions(threshold=sys.maxsize)
-                    print(func(xdata, *popt))
-                    print('offset:'+str(int(offset))) #debugging
-                    print('beamWidth:'+str(int(beamWidth))) #debugging
-                    print('focusLocation:'+str(int(focusLocation))) #debugging
-                    print('rayleighRange:'+str(rayleighRange)) #debugging
-                    
-                    ##Pour afficher graphique
-                    if side == 'etl_r':
-                        self.xdata[etl_point]=xdata
-                        self.ydata[etl_point]=good_ydata
-                        self.popt[etl_point]=popt
-                    
-                    '''Saving relations'''
-                    if side == 'etl_l':
-                        self.etl_l_relation[etl_point,0] = left_etl_voltage
-                        self.etl_l_relation[etl_point,1] = int(focusLocation)
-                    if side == 'etl_r':
-                        self.etl_r_relation[etl_point,0] = right_etl_voltage
-                        self.etl_r_relation[etl_point,1] = int(focusLocation)
-                
-                    self.print_controller('--Calibration of plane '+str(etl_point+1)+'/'+str(self.number_of_etls_points)+' for '+side+' done')
+                        self.print_controller('--Calibration of plane '+str(etl_point+1)+'/'+str(self.number_of_etls_points)+' for '+side+' done')
+                    except:
+                        self.etls_calibration_started = False
+                        self.print_controller('ETL calibration failed')
             
             '''Closing lasers after calibration of each side'''    
             self.left_laser_activated = False
             self.right_laser_activated = False
         
-        
         if self.saving_allowed: #debugging
             self.frame_saver.stop_saving()
             self.print_controller('Images saved')
-        
         
         
         print(self.etl_l_relation) #debugging
@@ -2499,12 +2645,14 @@ class FrameSaver():
             The number of datasets per file is the number of 2D arrays'''
         
         for file in range(len(self.filenames_list)):
+            print('File created:'+str(self.filenames_list[file])) #debugging
             '''Create file'''
             f = h5py.File(self.filenames_list[file],'a')
             
             counter = 1
             for dataset in range(int(self.number_of_datasets)):
                 in_loop = True
+                print('in_loop') #debugging
                 while in_loop:
                     try:
                         '''Retrieve buffer'''
@@ -2517,7 +2665,7 @@ class FrameSaver():
                             '''Create dataset'''
                             path_root = self.datasets_name+u'%03d'%counter
                             self.dataset = f.create_dataset(path_root, data=buffer[frame,:,:])
-                            #print('Dataset created:'+str(path_root)) #debugging
+                            print('Dataset '+str(dataset)+'/'+str(int(self.number_of_datasets))+' created:'+str(path_root)) #debugging
                             
                             '''Add attributes'''
                             self.add_attribute('Sample', parameters["sample_name"])
@@ -2538,6 +2686,7 @@ class FrameSaver():
                         #print('No buffer') #debugging
                         if self.saving_started == False:
                             in_loop = False
+                print('exit in_loop') #debugging
             f.close()
             print('File '+self.filenames_list[file]+' saved')
 

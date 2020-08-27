@@ -2,13 +2,14 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy import signal,interpolate,optimize
 import h5py
+from PIL import Image
 
 #nomFichier=(r'C:\Users\liomlight\Desktop\billes_stack\test_stack_plane_00007.hdf5') #test_stack_plane_00004#test_stack_plane_00003#00001
 #nomFichier=(r'C:\Users\liomlight\Desktop\left_laser\test_stack_plane_00001.hdf5') #test_stack_plane_00001
 #nomFichier=(r'C:\Users\liomlight\Desktop\right_laser\test_stack_plane_00004.hdf5') #test_stack_plane_00003#test_stack_plane_00002 #test_stack_plane_00001
 #nomFichier=(r'C:\Users\liomlight\Desktop\all_lasers\test_stack_plane_00001.hdf5')
 #nomFichier=(r'C:\Users\liomlight\Desktop\left_nouvelle_lentille\test_stack_plane_00003.hdf5')
-nomFichier=(r'C:\Users\liomlight\Desktop\test_laser_brisé\test_stack_plane_00001.hdf5')
+nomFichier=(r'C:\Users\liomlight\Desktop\test_laser_brisé\test_stack_plane_00006.hdf5') #test_stack_plane_00005 # test_stack_plane_00002 #test_stack_plane_00001
 
 def gaussian(x,a,x0,sigma):
     '''Gaussian Function'''
@@ -23,8 +24,8 @@ def fwhm(y):
     return fwhm_val  
 
 widths = []
-colonne = 1704 #1357 #1283 #1434#1425 #1216#1177## 1434###1100     #1216      #1312#1906#1300#1148
-rangee =  1962 #884 #1165 ##779 #1003 #1314#831#848 #677#922## 831#937 ###735 #1181   #925#1105#1338
+colonne = 1412 ##1489#1498 ##1643 #1641 ##1704 #1357 #1283 #1434#1425 #1216#1177## 1434###1100     #1216      #1312#1906#1300#1148
+rangee = 1144##625 #595 #589 ##586 ##1962 #884 #1165 ##779 #1003 #1314#831#848 #677#922## 831#937 ###735 #1181   #925#1105#1338
 y=[]
 
 with h5py.File(nomFichier, "r") as f:
@@ -44,7 +45,7 @@ with h5py.File(nomFichier, "r") as f:
     plt.show()
     y=np.array(y)
     y = (y - np.min(y))/(np.max(y) - np.min(y))
-    y2=signal.savgol_filter(y, 31, 3)
+    y2=signal.savgol_filter(y, 11, 3)
     f2 = interpolate.interp1d(x, y, kind='cubic')
     widt=fwhm(y2)
     print('fwhm:')
