@@ -23,6 +23,7 @@ sys.excepthook = exception_hook
    at the same time the camera window (where images are displayed)'''
 app = QApplication(sys.argv)
 controller = Controller()
+controller.sig_beep.connect(app.beep) #connection for beep sounds
 
 '''Setting QTimer. update() function of camera window (retrieves an image in its 
    queue and displays it) executes at each time interval specified in 
@@ -37,7 +38,7 @@ controller.set_data_consumer(controller.camera_window, False, "CameraWindow", Tr
 
 '''Shows the UI of controller and executes'''
 controller.show()
-app.exec_()  
+app.exec_()
 
 '''Timer is stopped when the user closes the GUI'''
 timer.stop()
