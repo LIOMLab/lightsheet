@@ -155,33 +155,56 @@ class Settings_Dialog(QDialog):
 class Properties_Dialog(QDialog):
     '''Class for Properties Dialog'''
     
-    def __init__(self):
+    def __init__(self, camera):
         QDialog.__init__(self)
         
+        self.camera = camera
         '''Loading user interface'''
         basepath = os.path.join(os.path.dirname(__file__))
         uic.loadUi(os.path.join(basepath,"properties.ui"), self)
         
-        '''Defining attributes'''
-        self.camera_name = ''
-        self.camera_temperature = ''
+        self.pushButton_refresh.clicked.connect(self.refresh_properties)
+        
+        self.get_properties()
     
     def get_properties(self):
-        self.label_cameraName.setText(self.camera_name)
-        self.label_cameraTemperature.setText(self.camera_temperature)
+        '''Set the properties values'''
         
-class Pixels_Dialog(QDialog):
-    '''Class for Pixels Dialog'''
-    
-    def __init__(self):
-        QDialog.__init__(self)
+        self.label_cameraName.setText('pco.edge 5.5m USB global shutter')
+        self.camera.get_sizes()
+        self.label_imageSize.setText(str(self.camera.x_current_res.value)+' x '+str(self.camera.y_current_res.value))
         
-        '''Loading user interface'''
-        basepath = os.path.join(os.path.dirname(__file__))
-        uic.loadUi(os.path.join(basepath,"pixels.ui"), self)
+        self.camera.get_temperature()
+        self.label_cameraTemperature.setText("{} \u2103".format(self.camera.cam_temp.value))
+        self.label_sensorTemperature.setText("{} \u2103".format(self.camera.ccd_temp.value/10))
+        self.label_powerTemperature.setText("{} \u2103".format(self.camera.pow_temp.value))
+        
+        self.camera.get_trigger_mode()
+        self.label_triggerMode.setText(self.camera.trigger_mode)
+        
+        self.camera.get_exposure_time()
+        self.label_delayTime.setText(str(self.camera.delay.value) + self.camera.time_base_delay)
+        self.label_exposureTime.setText(str(self.camera.exposure.value)  +self.camera.time_base_exposure)
+        
+        self.camera.get_acquire_mode()
+        self.label_acquireMode.setText(self.camera.acquire_mode)
+        
+        self.camera.get_storage_mode()
+        self.label_storageMode.setText(self.camera.storage_mode)
+        
+        if self.camera.storage_mode == 'Recorder':
+            self.camera.get_recorder_submode()
+            self.label_recorderMode.setText(self.camera.recorder_mode)
+        
+        self.label_horizontalMotorName.setText('Zaber T-LSM100B')
+        self.label_verticalMotorName.setText('Zaber T-LSM050A')
+        self.label_cameraMotorName.setText('Zaber T-LSM100B')
     
-    def set_image(self):
-        pass
+    def refresh_properties(self):
+        '''Refresh system properties'''
+        
+        self.get_properties()
+        print('System Properties Refreshed')
 
 class Controller(QMainWindow):
     '''Class for control of the MesoSPIM'''
@@ -203,10 +226,6 @@ class Controller(QMainWindow):
         self.progress_statusBar.hide()
         self.progress_statusBar.setFixedWidth(250)
         
-        '''Instantiating the settings and properties windows'''
-        self.settings_dialog = Settings_Dialog()
-        self.properties_dialog = Properties_Dialog()
-        
         '''Instantiating the camera window where the frames are displayed'''
         self.camera_window = CameraWindow(self.graphicsView)
         
@@ -216,6 +235,10 @@ class Controller(QMainWindow):
         self.motor_camera = Motors(3, 'COM3')      #Horizontal motor for camera motion (detection arm)
         
         self.open_camera()
+        
+        '''Instantiating the settings and properties windows'''
+        self.settings_dialog = Settings_Dialog()
+        self.properties_dialog = Properties_Dialog(self.camera)
         
         '''Defining attributes'''
         self.parameters = copy.deepcopy(parameters)
@@ -254,7 +277,7 @@ class Controller(QMainWindow):
         self.right_slope = 0.000826220401525251#0.0013507132995247916
         self.right_intercept = 2.384849899181325#1.8730880902476752
         
-        '''Arbitrary default positions (in micro-steps)'''
+        '''Arbitrary default positions (in mm)'''
         self.boundaries = dict()
         self.boundaries['vertical_up_boundary'] = 19.4
         self.boundaries['vertical_down_boundary'] = 0
@@ -262,9 +285,9 @@ class Controller(QMainWindow):
         self.boundaries['horizontal_forward_boundary'] = 0
         self.boundaries['horizontal_backward_boundary'] = 15
         self.boundaries['origin_horizontal'] = self.boundaries['horizontal_forward_boundary']
-        self.boundaries['camera_forward_boundary'] = 13.65#30
+        self.boundaries['camera_forward_boundary'] = 50.0#13.65#30
         self.boundaries['camera_backward_boundary'] = 115
-        self.boundaries['focus'] = 34.5
+        self.boundaries['focus'] = 55.0#34.5
         self.defaultBoundaries = copy.deepcopy(self.boundaries) #The default boundaries are in mm
         
         '''Initializing flags'''
@@ -449,7 +472,6 @@ class Controller(QMainWindow):
         self.pushButton_allLasers.clicked.connect(self.lasers_button)
         self.pushButton_leftLaser.clicked.connect(self.left_laser_button)
         self.pushButton_rightLaser.clicked.connect(self.right_laser_button)
-
     
     '''General Methods'''
     def open_settings_dialog(self):
@@ -458,7 +480,6 @@ class Controller(QMainWindow):
     
     def open_properties_dialog(self):
         '''Open the dialog window for showing properties'''
-        self.properties_dialog.get_properties()
         self.properties_dialog.exec_()
     
     def change_settings(self):
@@ -651,20 +672,20 @@ class Controller(QMainWindow):
             self.decimals = 4
             self.horizontal_correction = 8.2#10.16  #Horizontal correction to fit choice of axis
             self.vertical_correction = -3.1#1.0      #Vertical correction to fit choice of axis
-            self.camera_sample_min_distance = 1.5   #Approximate minimal horizontal distance between camera
-            self.camera_correction = 7.525 + 4.0 #9.525  #Camera correction to fit choice of axis
+            self.camera_sample_min_distance = 0#1.5   #Approximate minimal horizontal distance between camera
+            self.camera_correction = 10.16+ 5.0  #Camera correction to fit choice of axis
         elif self.unit == 'mm':
             self.decimals = 3
             self.horizontal_correction = 82#101.6      #Correction to fit choice of axis
             self.vertical_correction = -31#10.0         #Correction to fit choice of axis
-            self.camera_sample_min_distance = 15   #Approximate minimal horizontal distance between camera
-            self.camera_correction = 75.25 + 40.0  #95.25     #Camera correction to fit choice of axis
+            self.camera_sample_min_distance = 0#15   #Approximate minimal horizontal distance between camera
+            self.camera_correction = 101.6 + 50.0      #Camera correction to fit choice of axis
         elif self.unit == '\u03BCm':
             self.decimals = 0
             self.horizontal_correction = 82000#101600     #Correction to fit choice of axis
             self.vertical_correction = -31000#10000        #Correction to fit choice of axis
-            self.camera_sample_min_distance = 15000   #Approximate minimal horizontal distance between camera
-            self.camera_correction = 75250 + 40000#95250    #Camera correction to fit choice of axis
+            self.camera_sample_min_distance = 0#15000   #Approximate minimal horizontal distance between camera
+            self.camera_correction = 101600 + 50000    #Camera correction to fit choice of axis
         
         increment_boxes = [self.doubleSpinBox_incrementHorizontal,
                       self.doubleSpinBox_incrementVertical,
@@ -1355,17 +1376,17 @@ class Controller(QMainWindow):
                 if self.consumers[consumer+2] == 'CameraWindow':
                     try:
                         self.consumers[consumer].put(frame)
-                        print('Frame put in CameraWindow') #debugging
+                        #print('Frame put in CameraWindow') #debugging
                     except:      #self.consumers[ii].Full:
-                        print("CameraWindow queue is full") #debugging
+                        #print("CameraWindow queue is full") #debugging
                         pass
             if to_saver:
                 if self.consumers[consumer+2] == 'FrameSaver':
                     try:
                         self.consumers[consumer].put(frame,1)
-                        print('Frame put in FrameSaver') #debugging
+                        #print('Frame put in FrameSaver') #debugging
                     except:      #self.consumers[ii].Full:
-                        print("FrameSaver queue is full") #debugging
+                        #print("FrameSaver queue is full") #debugging
                         pass
     
     def preview_button(self):
@@ -1497,13 +1518,10 @@ class Controller(QMainWindow):
             for frame in range(int(self.number_of_steps)):
                 '''Uniformize frame intensities'''
                 average = np.average(buffer[frame,0:100,:]) #Average the  first rows
-                #print(str(frame)+' average:'+str(average))
                 if frame == 0:
                     reference_average = average
-                    #print('reference_average:'+str(reference_average))
                 else:
                     average_ratio = reference_average/average
-                    #print('average_ratio:'+str(average_ratio))
                     buffer[frame,:,:] = buffer[frame,:,:] * average_ratio
                 '''Crop buffer'''
                 first_column = int(frame * self.parameters['etl_step'] - column_buffer)
@@ -1527,26 +1545,18 @@ class Controller(QMainWindow):
         
         for frame in range(int(self.number_of_steps)):
             first_center_column = int(frame * self.parameters['etl_step'] + column_buffer)
-            #print('first_center_column:'+str(first_center_column))
             last_center_column = int((frame+1) * self.parameters['etl_step'] - column_buffer)
-            #print('last_center_column:'+str(last_center_column))
             previous_last_center_column = int(frame * self.parameters['etl_step'] - column_buffer)
-            #print('previous_last_center_column:'+str(previous_last_center_column))
             
             if frame == 0:  #For the first column step
                 reconstructed_frame[:,0:last_center_column] = cropped_buffer[frame,:,column_buffer:int(self.parameters['etl_step'])]
             else:
                 for column in range(2*column_buffer):
                     frame_column = column + previous_last_center_column
-                    #print('frame_column:'+str(frame_column))
                     last_buffer_column = column + int(self.parameters['etl_step'])
-                    #print('last_buffer_column:'+str(last_buffer_column))
                     buffer_weight = column * weight_step
-                    #print('buffer_weight:'+str(buffer_weight))
                     last_buffer_weight = 1 - column * weight_step
-                    #print('last_buffer_weight:'+str(last_buffer_weight))
                     reconstructed_frame[:,frame_column] = buffer_weight*cropped_buffer[frame,:,column] + last_buffer_weight*cropped_buffer[(frame-1),:,last_buffer_column]
-                #print('frame_column:'+str(frame_column))
                 if frame == int(self.number_of_steps-1):  #For the last column step (may be different than the others...)
                     last_column_step = int(self.parameters["columns"] - first_center_column)
                     reconstructed_frame[:,first_center_column:] = cropped_buffer[frame,:,(2*column_buffer):(2*column_buffer)+last_column_step]
@@ -1581,9 +1591,8 @@ class Controller(QMainWindow):
         self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
         
         '''Frame reconstruction for display'''
-        cropped_buffer = self.crop_buffer(self.buffer)
         if self.checkBox_stitching.isChecked():
-            self.reconstructed_frame = self.reconstruct_frame_from_cropped_buffer(cropped_buffer)
+            self.reconstructed_frame = self.reconstruct_frame_from_cropped_buffer(self.crop_buffer(self.buffer))
         else:
             self.reconstructed_frame = self.reconstruct_frame(self.buffer)
         
@@ -1876,6 +1885,8 @@ class Controller(QMainWindow):
         self.stack_mode_started = True
         '''Modes disabling while stack acquisition'''
         self.update_buttons_modes([self.pushButton_stackMode])
+        self.update_motor_buttons()
+        
         self.print_controller('->Stack mode started -- Number of frames to save: '+str(int(self.number_of_planes)))
         '''Starting stack mode thread'''
         stack_mode_thread = threading.Thread(target = self.stack_mode_thread)
