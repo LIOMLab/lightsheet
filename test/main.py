@@ -5,6 +5,7 @@ Created on May 16, 2019
 '''
 import sys
 sys.path.append("..")
+import qdarkstyle
 
 from PyQt5.QtWidgets import QApplication
 from gui.control import Controller
@@ -19,11 +20,20 @@ def exception_hook(exctype, value, traceback):
     sys.exit(1)
 sys.excepthook = exception_hook
 
+def set_app_stylesheet(stylesheet_code):
+    '''Function that allows stylesheet selection for the app'''
+    if stylesheet_code == 0:
+        app.setStyleSheet('')
+    elif stylesheet_code == 1:
+        dark_stylesheet = qdarkstyle.load_stylesheet_pyqt5()
+        app.setStyleSheet(dark_stylesheet)
+
 '''Initializing the app, controller (class which connects GUI to features), and
    at the same time the camera window (where images are displayed)'''
 app = QApplication(sys.argv)
 controller = Controller()
 controller.sig_beep.connect(app.beep) #connection for beep sounds
+controller.sig_stylesheet.connect(set_app_stylesheet) #connection for app stylesheet
 
 '''Setting QTimer. update() function of camera window (retrieves an image in its 
    queue and displays it) executes at each time interval specified in 

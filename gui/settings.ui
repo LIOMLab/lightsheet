@@ -33,6 +33,9 @@
           <property name="toolTip">
            <string/>
           </property>
+          <property name="whatsThis">
+           <string>Which default parameters the app will use the next time it will be opened</string>
+          </property>
           <property name="text">
            <string>Default Parameters Save Policy:</string>
           </property>
@@ -78,6 +81,9 @@
           </property>
           <property name="toolTip">
            <string/>
+          </property>
+          <property name="whatsThis">
+           <string>Which default save directory the app will use the next time it is opened</string>
           </property>
           <property name="text">
            <string>Default Save Directory:</string>
