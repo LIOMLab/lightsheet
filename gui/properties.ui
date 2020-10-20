@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>223</width>
-    <height>185</height>
+    <height>403</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -40,15 +40,198 @@
         </property>
        </widget>
       </item>
-      <item row="2" column="0">
+      <item row="4" column="0">
        <widget class="QLabel" name="label_4">
         <property name="text">
-         <string>Temperature:</string>
+         <string>Internal Temperature:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="QLabel" name="label_cameraTemperature">
+        <property name="text">
+         <string>None</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="0">
+       <widget class="QLabel" name="label_5">
+        <property name="text">
+         <string>Image Sensor Temperature:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="1">
+       <widget class="QLabel" name="label_sensorTemperature">
+        <property name="text">
+         <string>None</string>
+        </property>
+       </widget>
+      </item>
+      <item row="8" column="0">
+       <widget class="QLabel" name="label_7">
+        <property name="text">
+         <string>Trigger Mode:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="8" column="1">
+       <widget class="QLabel" name="label_triggerMode">
+        <property name="whatsThis">
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; text-decoration: underline;&quot;&gt;Autosequence&lt;/span&gt;&lt;/p&gt;&lt;p&gt;An exposure of a new image is started automatically best possible compared to the readout of an image and the current timing parameters. If a CCD is used and images are taken in a sequence, exposure and sensor readout are started simultaneously. Signals at the trigger input line are irrelevant.&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; text-decoration: underline;&quot;&gt;External Exposure Start&lt;/span&gt;&lt;/p&gt;&lt;p&gt;A delay / exposure sequence is started depending on the HW signal at the trigger input line or by a force trigger command.&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; text-decoration: underline;&quot;&gt;External Exposure Control&lt;/span&gt;&lt;/p&gt;&lt;p&gt;An exposure sequence is started depending on the HW signal at the trigger input line. The exposure time is defined by the pulse length of the HW signal. The delay and exposure time values defined by the set / request delay and exposure command are ineffective. In double image mode exposure time length of the first image is controlled through the HW signal, exposure time of the second image is given by the readout time of the first image.&lt;/p&gt;&lt;p&gt;...&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        </property>
+        <property name="text">
+         <string>None</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <spacer name="verticalSpacer">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>40</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item row="7" column="0">
+       <spacer name="verticalSpacer_2">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>40</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item row="6" column="0">
+       <widget class="QLabel" name="label_8">
+        <property name="text">
+         <string>Power Supply Temperature:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="1">
+       <widget class="QLabel" name="label_powerTemperature">
+        <property name="text">
+         <string>None</string>
+        </property>
+       </widget>
+      </item>
+      <item row="9" column="0">
+       <widget class="QLabel" name="label_9">
+        <property name="text">
+         <string>Delay Time:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="9" column="1">
+       <widget class="QLabel" name="label_delayTime">
+        <property name="whatsThis">
+         <string/>
+        </property>
+        <property name="text">
+         <string>None</string>
+        </property>
+       </widget>
+      </item>
+      <item row="10" column="0">
+       <widget class="QLabel" name="label_11">
+        <property name="text">
+         <string>Exposure Time:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="10" column="1">
+       <widget class="QLabel" name="label_exposureTime">
+        <property name="text">
+         <string>None</string>
+        </property>
+       </widget>
+      </item>
+      <item row="11" column="0">
+       <spacer name="verticalSpacer_3">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>40</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item row="12" column="0">
+       <widget class="QLabel" name="label_10">
+        <property name="text">
+         <string>Acquire Mode:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="12" column="1">
+       <widget class="QLabel" name="label_acquireMode">
+        <property name="whatsThis">
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; text-decoration: underline;&quot;&gt;Auto&lt;/span&gt;&lt;/p&gt;&lt;p&gt;All images will be acquired and stored.&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; text-decoration: underline;&quot;&gt;External&lt;/span&gt;&lt;/p&gt;&lt;p&gt;The external control input is a static enable signal for image acquisition. Depending on the I/O configuration a high or low level at the external input does set the acquire enable state to TRUE. If the acquire enable state is TRUE exposure triggers are accepted and images are acquired. If the acquire enable state is FALSE, all exposure triggers are ignored and no images will be acquired and stored.&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; text-decoration: underline;&quot;&gt;External modulate&lt;/span&gt;&lt;/p&gt;&lt;p&gt;The external control input is a dynamic frame start signal. Depending on the I/O configuration a rising or falling edge at the input will start a single frame in modulation mode.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        </property>
+        <property name="text">
+         <string>None</string>
+        </property>
+       </widget>
+      </item>
+      <item row="13" column="0">
+       <widget class="QLabel" name="label_12">
+        <property name="text">
+         <string>Storage Mode:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="13" column="1">
+       <widget class="QLabel" name="label_storageMode">
+        <property name="whatsThis">
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; text-decoration: underline;&quot;&gt;Recorder&lt;/span&gt;&lt;/p&gt;&lt;p&gt;Images are recorded and stored in the current selected segment of the camera internal memory (CamRAM).&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; text-decoration: underline;&quot;&gt;FIFO buffer&lt;/span&gt;&lt;/p&gt;&lt;p&gt;Camera internal memory (CamRAM) is used as huge FIFO buffer to bypass short bottlenecks in data transmission. If buffer overflows, the oldest images are overwritten.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        </property>
+        <property name="text">
+         <string>None</string>
+        </property>
+       </widget>
+      </item>
+      <item row="14" column="0">
+       <widget class="QLabel" name="label_13">
+        <property name="text">
+         <string>Recorder Mode:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="14" column="1">
+       <widget class="QLabel" name="label_recorderMode">
+        <property name="toolTip">
+         <string>Recorder Mode only valid if Storage Mode is Recorder</string>
+        </property>
+        <property name="whatsThis">
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; text-decoration: underline;&quot;&gt;Sequence&lt;/span&gt;&lt;/p&gt;&lt;p&gt;Recording is stopped, when the last buffer in the segment is reached. No images are overwritten. Recording can be stopped by software. Recording is stopped, when the last buffer in the segment is reached.&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; text-decoration: underline;&quot;&gt;Ring buffer&lt;/span&gt;&lt;/p&gt;&lt;p&gt;Camera records continuously into ring buffer. The oldest images are overwritten, if a buffer overflows occures due to long recording times. Recording must be stopped by software or with an stop event. The oldest image is overwritten, when the segment is full.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        </property>
+        <property name="text">
+         <string>None</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="label_14">
+        <property name="text">
+         <string>Image Size:</string>
         </property>
        </widget>
       </item>
       <item row="2" column="1">
-       <widget class="QLabel" name="label_cameraTemperature">
+       <widget class="QLabel" name="label_imageSize">
         <property name="text">
          <string>None</string>
         </property>
@@ -112,6 +295,13 @@
        </widget>
       </item>
      </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="pushButton_refresh">
+     <property name="text">
+      <string>Refresh Properties</string>
+     </property>
     </widget>
    </item>
   </layout>

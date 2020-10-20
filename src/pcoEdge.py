@@ -62,9 +62,6 @@ get_sizes.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16), ctypes.P
 get_sensor_format = dll.PCO_GetSensorFormat
 get_sensor_format.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16)]
 
-get_acquire_mode = dll.PCO_GetAcquireMode
-get_acquire_mode.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16)]
-
 get_pixel_rate = dll.PCO_GetPixelRate
 get_pixel_rate.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32)]
 
@@ -97,6 +94,15 @@ get_camera_setup = dll.PCO_GetCameraSetup
 get_camera_setup.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(ctypes.c_uint16)]
 
 
+get_acquire_mode = dll.PCO_GetAcquireMode
+get_acquire_mode.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16)]
+
+get_storage_mode = dll.PCO_GetStorageMode
+get_acquire_mode.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16)]
+
+get_recorder_submode = dll.PCO_GetRecorderSubmode
+get_acquire_mode.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16)]
+
 
 class PCO_Buflist(ctypes.Structure):
     _fields_=[("SBufNr", ctypes.c_int16), ("reserved", ctypes.c_uint16), ("dwStatusDll", ctypes.c_uint32), ("DwStatusDrv", ctypes.c_uint32)]
@@ -113,11 +119,10 @@ class Camera:
         
         self.handle = ctypes.c_void_p(0)
         self.open_camera()
-        #self.name = ctypes.c_char_p(b''*40)
-        #get_camera_name(self.handle, self.name, 40)
-        #self.name = self.name.value.decode('ascii')
-        #print(self.name)
-        self.get_temperature()
+        #self.cam_name = ctypes.c_char_p(b''*40)
+        #get_camera_name(self.handle, self.cam_name, 40)
+        #self.cam_name = self.cam_name.value.decode('ascii')
+        #print(self.cam_name)
         
     def open_camera(self):
         '''Returns (as a handle) a connection to a camera'''
@@ -259,7 +264,7 @@ class Camera:
         close_camera(self.handle)
         
         
-    ########
+    '''Get Camera Properties'''
     def get_camera_setup(self): ##pas dans le fichier dll...
         '''Returns (as dwSetup) the shutter mode of the camera'''
         
@@ -275,10 +280,6 @@ class Camera:
         #print(self.dwSetup.contents) #self.dwSetup[0]
         
         pass
-            
-    def get_acquire_mode(self):
-        self.acquire_mode = ctypes.c_uint16()
-        get_acquire_mode(self.handle, self.acquire_mode)
         
     def get_buffer_status(self):
         '''Returns (as arguments) the state of the buffer context (dwStatusDll) 
@@ -287,23 +288,20 @@ class Camera:
         self.dwStatusDll = ctypes.c_uint32()
         self.dwStatusDrv = ctypes.c_uint32()
         get_buffer_status(self.handle, self.buffers_in_queue[0], self.dwStatusDll, self.dwStatusDrv)
-        
-    def get_exposure_time(self):
-        self.delay = ctypes.c_uint32(0)
-        self.exposure = ctypes.c_uint32(0)
-        self.time_base_delay = ctypes.c_uint16(0)
-        self.time_base_exposure = ctypes.c_uint16(1)
-        get_delay_exposure_time(self.handle, self.delay, self.exposure, self.time_base_delay, self.time_base_exposure)
      
     def get_health_status(self):
         self.warn = ctypes.c_uint32()
         self.err = ctypes.c_uint32()
         self.status = ctypes.c_uint32()
         get_camera_health_status(self.handle, self.warn, self.err, self.status)
+        print(self.warn.value)
+        print(self.err.value)
+        print(self.status.value)
         
     def get_pixel_rate(self):
         self.pixel_rate = ctypes.c_uint32()
         get_pixel_rate(self.handle, self.pixel_rate)
+        print(self.pixel_rate.value)
         
     def get_roi(self):
         '''Gives the coordinates of the ROI '''
@@ -319,16 +317,68 @@ class Camera:
         print(self.sensor)
         
     def get_temperature(self):
-        ''' Gives the temperature in Celcius'''
-        self.ccd_temp = ctypes.c_int16()
+        ''' Gives the current internal, sensor and power supply temperatures in Celcius'''
+        self.ccd_temp = ctypes.c_int16() #In tenths of Celcius
         self.cam_temp = ctypes.c_int16()
         self.pow_temp = ctypes.c_int16()
         get_temperature(self.handle, self.ccd_temp, self.cam_temp, self.pow_temp)
-        print(self.ccd_temp)
-        print(self.cam_temp.value)
-        print(self.pow_temp)
+    
+    def get_name(self): ###erreur?
+        '''Gives the camera name'''
+        self.cam_name = ctypes.c_char_p(b''*40)
+        get_camera_name(self.handle, self.cam_name, 40)
+        self.cam_name = self.cam_name.value.decode('ascii')
+        print(self.cam_name)
         
     def get_trigger_mode(self):
-        self.trigger_mode = ctypes.c_uint16()
-        get_trigger_mode(self.handle, self.trigger_mode)
+        '''Gives the current trigger mode'''
+        self.trigger_mode_code = ctypes.c_uint16()
+        get_trigger_mode(self.handle, self.trigger_mode_code)
+        trigger_modes = {0:'Auto Sequence', 
+                         1:'Software Trigger',
+                         2:'External Exposure Start', 
+                         3:'External Exposure Control', 
+                         4:'External Synchronized', 
+                         5:'Fast External Exposure Control', 
+                         6:'External CDS Control', 
+                         7:'Slow External Exposure Control'}
+        self.trigger_mode = trigger_modes[self.trigger_mode_code.value]
+    
+    def get_exposure_time(self):
+        '''Gives the current delay time and exposure time'''
+        self.delay = ctypes.c_uint32(0)
+        self.exposure = ctypes.c_uint32(0)
+        self.time_base_delay_code = ctypes.c_uint16(0)
+        self.time_base_exposure_code = ctypes.c_uint16(1)
+        get_delay_exposure_time(self.handle, self.delay, self.exposure, self.time_base_delay_code, self.time_base_exposure_code)
+        bases = {0:' ns',
+                 1:' us',
+                 2:' ms'}
+        self.time_base_delay = bases[self.time_base_delay_code.value]
+        self.time_base_exposure = bases[self.time_base_exposure_code.value]
+        
+    def get_acquire_mode(self):
+        '''Gives the current acquire mode'''
+        self.acquire_mode_code = ctypes.c_uint16()
+        get_acquire_mode(self.handle, self.acquire_mode_code)
+        acquire_modes = {0:'Auto', 
+                         1:'External',
+                         2:'External Modulate'}
+        self.acquire_mode = acquire_modes[self.acquire_mode_code.value]
+        
+    def get_storage_mode(self):
+        '''Gives the current storage mode'''
+        self.storage_mode_code = ctypes.c_uint16()
+        get_storage_mode(self.handle, self.storage_mode_code)
+        storage_modes = {0:'Recorder', 
+                         1:'FIFO buffer'}
+        self.storage_mode = storage_modes[self.storage_mode_code.value]
+        
+    def get_recorder_submode(self):
+        '''Gives the current recorder mode (only possible if storage mode is recorder)'''
+        self.recorder_mode_code = ctypes.c_uint16()
+        get_recorder_submode(self.handle, self.recorder_mode_code)
+        recorder_modes = {0:'Sequence', 
+                         1:'Ring buffer'}
+        self.recorder_mode = recorder_modes[self.recorder_mode_code.value]
     
