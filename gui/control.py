@@ -212,6 +212,7 @@ class Controller(QMainWindow):
     stack_sig_update_progress = QtCore.pyqtSignal(int) #Signal for stack mode progress bar
     sig_update_progress = QtCore.pyqtSignal(int) #Signal for progress bar in status bar
     sig_beep = QtCore.pyqtSignal(bool) #Signal for beep sound
+    sig_stylesheet = QtCore.pyqtSignal(int) #Signal for app stylesheet
     
     def __init__(self):
         QMainWindow.__init__(self)
@@ -399,6 +400,8 @@ class Controller(QMainWindow):
         
         '''Connect menu options'''
         self.action_openDocumentation.triggered.connect(self.open_help)
+        self.action_lightTheme.triggered.connect(lambda: self.sig_stylesheet.emit(0))
+        self.action_darkTheme.triggered.connect(lambda: self.sig_stylesheet.emit(1))
         self.action_displayControlsImages.triggered.connect(self.display_controls_images)
         self.action_displayImages.triggered.connect(self.display_images)
         self.action_displayControls.triggered.connect(self.display_controls)

@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1195</width>
+    <width>1450</width>
     <height>895</height>
    </rect>
   </property>
@@ -22,6 +22,9 @@
   <property name="windowIcon">
    <iconset>
     <normaloff>../../../Users/liomlight/.designer/backup/liom_logo.png</normaloff>../../../Users/liomlight/.designer/backup/liom_logo.png</iconset>
+  </property>
+  <property name="styleSheet">
+   <string notr="true"/>
   </property>
   <widget class="QWidget" name="centralwidget">
    <property name="sizePolicy">
@@ -44,7 +47,7 @@
       </property>
       <widget class="ImageView" name="graphicsView">
        <property name="sizePolicy">
-        <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
+        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
          <horstretch>0</horstretch>
          <verstretch>0</verstretch>
         </sizepolicy>
@@ -64,7 +67,7 @@
       </widget>
       <widget class="QWidget" name="widget_controls" native="true">
        <property name="sizePolicy">
-        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+        <sizepolicy hsizetype="Ignored" vsizetype="Expanding">
          <horstretch>0</horstretch>
          <verstretch>0</verstretch>
         </sizepolicy>
@@ -76,7 +79,7 @@
         <item>
          <widget class="QSplitter" name="splitter_2">
           <property name="sizePolicy">
-           <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
             <horstretch>0</horstretch>
             <verstretch>0</verstretch>
            </sizepolicy>
@@ -89,7 +92,7 @@
             <item>
              <widget class="QTabWidget" name="tabWidget_2">
               <property name="sizePolicy">
-               <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+               <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
                 <horstretch>0</horstretch>
                 <verstretch>0</verstretch>
                </sizepolicy>
@@ -157,54 +160,46 @@
                        <item>
                         <layout class="QHBoxLayout" name="horizontalLayout_6">
                          <item>
-                          <layout class="QVBoxLayout" name="verticalLayout_11">
-                           <item>
-                            <layout class="QHBoxLayout" name="horizontalLayout_51">
-                             <item>
-                              <widget class="QLabel" name="label_21">
-                               <property name="sizePolicy">
-                                <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-                                 <horstretch>0</horstretch>
-                                 <verstretch>0</verstretch>
-                                </sizepolicy>
-                               </property>
-                               <property name="text">
-                                <string>Current Horizontal Position (z axis):</string>
-                               </property>
-                              </widget>
-                             </item>
-                             <item>
-                              <widget class="QLabel" name="label_currentHorizontalNumerical">
-                               <property name="text">
-                                <string>0</string>
-                               </property>
-                              </widget>
-                             </item>
-                            </layout>
+                          <layout class="QFormLayout" name="formLayout_4">
+                           <item row="0" column="0">
+                            <widget class="QLabel" name="label_21">
+                             <property name="sizePolicy">
+                              <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                               <horstretch>0</horstretch>
+                               <verstretch>0</verstretch>
+                              </sizepolicy>
+                             </property>
+                             <property name="text">
+                              <string>Current Horizontal Position (z axis):</string>
+                             </property>
+                            </widget>
                            </item>
-                           <item>
-                            <layout class="QHBoxLayout" name="horizontalLayout_52">
-                             <item>
-                              <widget class="QLabel" name="label_22">
-                               <property name="sizePolicy">
-                                <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-                                 <horstretch>0</horstretch>
-                                 <verstretch>0</verstretch>
-                                </sizepolicy>
-                               </property>
-                               <property name="text">
-                                <string>Current Vertical Position (y axis):</string>
-                               </property>
-                              </widget>
-                             </item>
-                             <item>
-                              <widget class="QLabel" name="label_currentHeightNumerical">
-                               <property name="text">
-                                <string>0</string>
-                               </property>
-                              </widget>
-                             </item>
-                            </layout>
+                           <item row="0" column="1">
+                            <widget class="QLabel" name="label_currentHorizontalNumerical">
+                             <property name="text">
+                              <string>0</string>
+                             </property>
+                            </widget>
+                           </item>
+                           <item row="1" column="0">
+                            <widget class="QLabel" name="label_22">
+                             <property name="sizePolicy">
+                              <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                               <horstretch>0</horstretch>
+                               <verstretch>0</verstretch>
+                              </sizepolicy>
+                             </property>
+                             <property name="text">
+                              <string>Current Vertical Position (y axis):</string>
+                             </property>
+                            </widget>
+                           </item>
+                           <item row="1" column="1">
+                            <widget class="QLabel" name="label_currentHeightNumerical">
+                             <property name="text">
+                              <string>0</string>
+                             </property>
+                            </widget>
                            </item>
                           </layout>
                          </item>
@@ -825,13 +820,6 @@
                          </property>
                         </widget>
                        </item>
-                       <item>
-                        <widget class="QCheckBox" name="checkBox_activateEtlFocus">
-                         <property name="text">
-                          <string>Activate ETLs focus</string>
-                         </property>
-                        </widget>
-                       </item>
                       </layout>
                      </widget>
                     </item>
@@ -840,20 +828,16 @@
                       <property name="title">
                        <string>General Parameters</string>
                       </property>
-                      <layout class="QVBoxLayout" name="verticalLayout_42">
-                       <item>
-                        <layout class="QFormLayout" name="formLayout_13">
-                         <item row="0" column="0">
-                          <widget class="QLabel" name="label_44">
-                           <property name="text">
-                            <string>Sample Rate:</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="0" column="1">
-                          <widget class="QDoubleSpinBox" name="doubleSpinBox_samplerate"/>
-                         </item>
-                        </layout>
+                      <layout class="QFormLayout" name="formLayout">
+                       <item row="0" column="0">
+                        <widget class="QLabel" name="label_44">
+                         <property name="text">
+                          <string>Sample Rate:</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item row="0" column="1">
+                        <widget class="QDoubleSpinBox" name="doubleSpinBox_samplerate"/>
                        </item>
                       </layout>
                      </widget>
@@ -1067,9 +1051,9 @@
                         </layout>
                        </item>
                        <item>
-                        <widget class="Line" name="line_26">
-                         <property name="orientation">
-                          <enum>Qt::Horizontal</enum>
+                        <widget class="QCheckBox" name="checkBox_activateEtlFocus">
+                         <property name="text">
+                          <string>Activate ETLs focus</string>
                          </property>
                         </widget>
                        </item>
@@ -1142,8 +1126,8 @@
                     </property>
                     <layout class="QVBoxLayout" name="verticalLayout_5">
                      <item>
-                      <layout class="QHBoxLayout" name="horizontalLayout_93">
-                       <item>
+                      <layout class="QFormLayout" name="formLayout_2">
+                       <item row="0" column="0">
                         <widget class="QLabel" name="label_28">
                          <property name="sizePolicy">
                           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
@@ -1156,14 +1140,10 @@
                          </property>
                         </widget>
                        </item>
-                       <item>
+                       <item row="0" column="1">
                         <widget class="QDoubleSpinBox" name="doubleSpinBox_numberOfCalibrationPlanes"/>
                        </item>
-                      </layout>
-                     </item>
-                     <item>
-                      <layout class="QHBoxLayout" name="horizontalLayout_94">
-                       <item>
+                       <item row="1" column="0">
                         <widget class="QLabel" name="label_43">
                          <property name="sizePolicy">
                           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
@@ -1176,7 +1156,7 @@
                          </property>
                         </widget>
                        </item>
-                       <item>
+                       <item row="1" column="1">
                         <widget class="QDoubleSpinBox" name="doubleSpinBox_numberOfCameraPositions"/>
                        </item>
                       </layout>
@@ -1221,8 +1201,8 @@
                     </property>
                     <layout class="QVBoxLayout" name="verticalLayout_6">
                      <item>
-                      <layout class="QHBoxLayout" name="horizontalLayout_98">
-                       <item>
+                      <layout class="QFormLayout" name="formLayout_3">
+                       <item row="0" column="0">
                         <widget class="QLabel" name="label_47">
                          <property name="sizePolicy">
                           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
@@ -1235,7 +1215,7 @@
                          </property>
                         </widget>
                        </item>
-                       <item>
+                       <item row="0" column="1">
                         <widget class="QDoubleSpinBox" name="doubleSpinBox_numberOfEtlVoltages"/>
                        </item>
                       </layout>
@@ -1763,87 +1743,9 @@
                   </widget>
                  </item>
                  <item>
-                  <layout class="QVBoxLayout" name="verticalLayout_57">
+                  <layout class="QHBoxLayout" name="horizontalLayout_92">
                    <item>
-                    <layout class="QHBoxLayout" name="horizontalLayout_92">
-                     <item>
-                      <widget class="QPushButton" name="pushButton_selectDirectory">
-                       <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                         <horstretch>0</horstretch>
-                         <verstretch>0</verstretch>
-                        </sizepolicy>
-                       </property>
-                       <property name="toolTip">
-                        <string>Select a file directory for image saving</string>
-                       </property>
-                       <property name="text">
-                        <string>Select Directory</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
-                      <widget class="QLabel" name="label_42">
-                       <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-                         <horstretch>0</horstretch>
-                         <verstretch>0</verstretch>
-                        </sizepolicy>
-                       </property>
-                       <property name="text">
-                        <string>Current Directory:</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
-                      <widget class="QLabel" name="label_currentDirectory">
-                       <property name="sizePolicy">
-                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-                         <horstretch>0</horstretch>
-                         <verstretch>0</verstretch>
-                        </sizepolicy>
-                       </property>
-                       <property name="text">
-                        <string>None Specified</string>
-                       </property>
-                      </widget>
-                     </item>
-                    </layout>
-                   </item>
-                   <item>
-                    <layout class="QFormLayout" name="formLayout_18">
-                     <item row="0" column="0">
-                      <widget class="QLabel" name="label_45">
-                       <property name="text">
-                        <string>Enter Filename For Saving:</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item row="0" column="1">
-                      <widget class="QLineEdit" name="lineEdit_filename">
-                       <property name="text">
-                        <string>Select Directory First</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item row="1" column="0">
-                      <widget class="QLabel" name="label_46">
-                       <property name="text">
-                        <string>Sample Name For Saving:</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item row="1" column="1">
-                      <widget class="QLineEdit" name="lineEdit_sampleName">
-                       <property name="text">
-                        <string>No Sample Name</string>
-                       </property>
-                      </widget>
-                     </item>
-                    </layout>
-                   </item>
-                   <item>
-                    <widget class="QCheckBox" name="checkBox_saveAllFrames">
+                    <widget class="QPushButton" name="pushButton_selectDirectory">
                      <property name="sizePolicy">
                       <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                        <horstretch>0</horstretch>
@@ -1851,14 +1753,88 @@
                       </sizepolicy>
                      </property>
                      <property name="toolTip">
-                      <string>Save all the camera scans that form each image</string>
+                      <string>Select a file directory for image saving</string>
                      </property>
                      <property name="text">
-                      <string>Save all scans</string>
+                      <string>Select Directory</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QLabel" name="label_42">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="text">
+                      <string>Current Directory:</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QLabel" name="label_currentDirectory">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="text">
+                      <string>None Specified</string>
                      </property>
                     </widget>
                    </item>
                   </layout>
+                 </item>
+                 <item>
+                  <layout class="QFormLayout" name="formLayout_18">
+                   <item row="0" column="0">
+                    <widget class="QLabel" name="label_45">
+                     <property name="text">
+                      <string>Enter Filename For Saving:</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="0" column="1">
+                    <widget class="QLineEdit" name="lineEdit_filename">
+                     <property name="text">
+                      <string>Select Directory First</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="1" column="0">
+                    <widget class="QLabel" name="label_46">
+                     <property name="text">
+                      <string>Sample Name For Saving:</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="1" column="1">
+                    <widget class="QLineEdit" name="lineEdit_sampleName">
+                     <property name="text">
+                      <string>No Sample Name</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <widget class="QCheckBox" name="checkBox_saveAllFrames">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="toolTip">
+                    <string>Save all the camera scans that form each image</string>
+                   </property>
+                   <property name="text">
+                    <string>Save all scans</string>
+                   </property>
+                  </widget>
                  </item>
                 </layout>
                </widget>
@@ -1882,7 +1858,7 @@
              <rect>
               <x>0</x>
               <y>0</y>
-              <width>652</width>
+              <width>907</width>
               <height>69</height>
              </rect>
             </property>
@@ -1916,7 +1892,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1195</width>
+     <width>1450</width>
      <height>21</height>
     </rect>
    </property>
@@ -1932,6 +1908,14 @@
      <addaction name="action_displayImages"/>
      <addaction name="action_displayControls"/>
     </widget>
+    <widget class="QMenu" name="menuSelect_Theme">
+     <property name="title">
+      <string>Select App Theme</string>
+     </property>
+     <addaction name="action_lightTheme"/>
+     <addaction name="action_darkTheme"/>
+    </widget>
+    <addaction name="menuSelect_Theme"/>
     <addaction name="menuSelect_Display_Mode"/>
     <addaction name="action_ShowHideCommandLog"/>
    </widget>
@@ -2014,6 +1998,16 @@
   <action name="action_showSystemProperties">
    <property name="text">
     <string>Show System Properties</string>
+   </property>
+  </action>
+  <action name="action_lightTheme">
+   <property name="text">
+    <string>Select Light Theme</string>
+   </property>
+  </action>
+  <action name="action_darkTheme">
+   <property name="text">
+    <string>Select Dark Theme</string>
    </property>
   </action>
  </widget>
