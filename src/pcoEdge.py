@@ -3,10 +3,11 @@ Created on August 9, 2019
 
 @author: Pierre Girard-Collins
 '''
-
+import os
 import sys
+
 #from array import ArrayType, array
-sys.path.append("..")
+sys.path.append(".")
 
 import ctypes
 import numpy as np
@@ -15,7 +16,7 @@ import pco
 
 '''Saving Dynamic Link Library functions from the manufacturer for Python use '''
 
-dll = ctypes.cdll.LoadLibrary("SC2_Cam.dll")
+dll = ctypes.cdll.LoadLibrary("src/SC2_Cam.dll")
 
 open_camera = dll.PCO_OpenCamera
 open_camera.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_uint16]
@@ -89,11 +90,6 @@ add_buffer_ex.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, cty
 get_buffer_status = dll.PCO_GetBufferStatus
 get_buffer_status.argtypes = [ctypes.c_void_p, ctypes.c_int16, ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(ctypes.c_uint32)]
 
-
-get_camera_setup = dll.PCO_GetCameraSetup
-get_camera_setup.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(ctypes.c_uint16)]
-
-
 get_acquire_mode = dll.PCO_GetAcquireMode
 get_acquire_mode.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16)]
 
@@ -103,26 +99,22 @@ get_acquire_mode.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16)]
 get_recorder_submode = dll.PCO_GetRecorderSubmode
 get_acquire_mode.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16)]
 
+get_cam_description = dll.PCO_GetCameraDescription
+get_cam_description.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16)]
 
-class PCO_Buflist(ctypes.Structure):
+
+class PCO_Buflist(ctypes.Structure): ###Not in used (necessary for wait_for_buffer)
     _fields_=[("SBufNr", ctypes.c_int16), ("reserved", ctypes.c_uint16), ("dwStatusDll", ctypes.c_uint32), ("DwStatusDrv", ctypes.c_uint32)]
 
 wait_for_buffer = dll.PCO_WaitforBuffer
 wait_for_buffer.argtypes = [ctypes.c_void_p, ctypes.c_int16, ctypes.POINTER(PCO_Buflist), ctypes.c_int16]
 
 
-
-
 class Camera:
     
     def __init__(self):
-        
         self.handle = ctypes.c_void_p(0)
         self.open_camera()
-        #self.cam_name = ctypes.c_char_p(b''*40)
-        #get_camera_name(self.handle, self.cam_name, 40)
-        #self.cam_name = self.cam_name.value.decode('ascii')
-        #print(self.cam_name)
         
     def open_camera(self):
         '''Returns (as a handle) a connection to a camera'''
@@ -149,7 +141,7 @@ class Camera:
         
         if trigger_mode == 'AutoSequence':
             set_trigger_mode(self.handle, 0)
-        elif trigger_mode == 'ExternalExposureStart':
+        elif trigger_mode == 'ExternalExposureStart': ##not used
             set_trigger_mode(self.handle, 2)
         elif trigger_mode == 'ExternalExposureControl':
             set_trigger_mode(self.handle, 3)
@@ -168,9 +160,8 @@ class Camera:
         get_sizes(self.handle, self.x_current_res, self.y_current_res, self.x_max_res, self.y_max_res) 
     
     def allocate_buffer(self, number_of_buffers=10):
-        '''Allocates a certain number of buffer attached to the camera handle, for image transfer;
+        '''Allocates internally a certain number of buffer attached to the camera handle, for image transfer;
             returns a pointer to the allocated memory block'''
-        
         self.number_of_buffers = number_of_buffers
         self.pointers = []  #Contains all the buffer pointers
         bytes_in_buffer = self.x_current_res.value * self.y_current_res.value * 2   #Times 2 for 16bit images 
@@ -192,7 +183,6 @@ class Camera:
         
     def insert_buffers_in_queue(self):
         '''Adds the camera buffers to a queue (a Python list)'''
-        
         self.buffers_in_queue = []
         for buffer_index in range(len(self.pointers)):
             self.add_buffer_ex(buffer_index)  #Requests an image to be put in the buffer
@@ -207,7 +197,6 @@ class Camera:
         -1st dimension: frame
         -2nd dimension: y value
         -3rd dimension: x value'''
-        
         frame_buffer = np.ones((int(number_of_frames), int(self.y_current_res.value),int(self.x_current_res.value)), dtype = np.uint16)
         pixels_per_frame = ctypes.c_uint32(self.y_current_res.value * self.x_current_res.value)
         ArrayType = ctypes.c_uint16 * pixels_per_frame.value
@@ -229,18 +218,16 @@ class Camera:
     def retrieve_single_image(self):
         ''' Return the image, a 3D numpy array '''
         #imageDatatype = ctypes.c_uint16*self.xCurrentRes.value*self.yCurrentRes.value
-        
         try_number = 0
         while True:
             self.get_buffer_status()
-            
             if self.dwStatusDll.value == 0xc0008000: #If buffer event is set
                 buffer_number = self.buffers_in_queue.pop(0)  #Removed from queue
                 break
             if try_number == 1000: #Stop trying to retrieve buffer after 1000 tries
                 break
             try_number =+ 1 ###    += 1  ?
-        
+
         pixels_per_frame = ctypes.c_uint32(self.y_current_res.value * self.x_current_res.value)
         ArrayType = ctypes.c_uint16 * pixels_per_frame.value
         bufferPTR = ctypes.cast(self.pointers[buffer_number], ctypes.POINTER(ArrayType))
@@ -261,74 +248,24 @@ class Camera:
             free_buffer(self.handle, buffer)
     
     def close_camera(self):
+        '''Closes an opened camera'''
         close_camera(self.handle)
         
-        
+
     '''Get Camera Properties'''
-    def get_camera_setup(self): ##pas dans le fichier dll...
-        '''Returns (as dwSetup) the shutter mode of the camera'''
-        
-        #self.wType = ctypes.POINTER(ctypes.c_uint16)() #Must be 0 at input
-        #self.wType.contents = ctypes.c_uint16(0)
-        ##self.dwSetup = ctypes.cast(array, ctypes.POINTER(ctypes.c_uint32))
-        #self.dwSetup = ctypes.POINTER(ctypes.c_uint32)() #(ctypes.c_uint32*array_size.value)(ctypes.POINTER(ctypes.c_uint32))#ctypes.cast(array, ctypes.POINTER(ctypes.c_uint32))
-        #self.wLen = ctypes.POINTER(ctypes.c_uint16)()
-        #self.wLen.contents = ctypes.c_uint16(4) #Length of array dwSetup
-        #error = get_camera_setup(self.handle, self.wType, self.dwSetup, self.wLen)
-        #print(error)
-        #print(self.wType.contents.value)
-        #print(self.dwSetup.contents) #self.dwSetup[0]
-        
-        pass
-        
-    def get_buffer_status(self):
-        '''Returns (as arguments) the state of the buffer context (dwStatusDll) 
-            and the state of the last image transfer (dwStatusDrv)'''
-        
-        self.dwStatusDll = ctypes.c_uint32()
-        self.dwStatusDrv = ctypes.c_uint32()
-        get_buffer_status(self.handle, self.buffers_in_queue[0], self.dwStatusDll, self.dwStatusDrv)
-     
-    def get_health_status(self):
-        self.warn = ctypes.c_uint32()
-        self.err = ctypes.c_uint32()
-        self.status = ctypes.c_uint32()
-        get_camera_health_status(self.handle, self.warn, self.err, self.status)
-        print(self.warn.value)
-        print(self.err.value)
-        print(self.status.value)
-        
-    def get_pixel_rate(self):
-        self.pixel_rate = ctypes.c_uint32()
-        get_pixel_rate(self.handle, self.pixel_rate)
-        print(self.pixel_rate.value)
-        
-    def get_roi(self):
-        '''Gives the coordinates of the ROI '''
-        self.roiX0 = ctypes.c_uint16()
-        self.roiY0 = ctypes.c_uint16()
-        self.roiX1 = ctypes.c_uint16()
-        self.roiY1 = ctypes.c_uint16()
-        get_roi(self.handle, self.roiX0, self.roiY0, self.roiX1, self.roiY1)
+    def get_name(self): ###causes error with nidaqmx.Task()
+        '''Gives the camera name'''
+        self.cam_name = ctypes.c_char_p(b''*40)
+        get_camera_name(self.handle, self.cam_name, 40)
+        self.cam_name = self.cam_name.value.decode('ascii')
+        print(self.cam_name)
     
-    def get_sensor_format(self):
-        self.sensor = ctypes.c_uint16()
-        get_sensor_format(self.handle, self.sensor)
-        print(self.sensor)
-        
     def get_temperature(self):
         ''' Gives the current internal, sensor and power supply temperatures in Celcius'''
         self.ccd_temp = ctypes.c_int16() #In tenths of Celcius
         self.cam_temp = ctypes.c_int16()
         self.pow_temp = ctypes.c_int16()
         get_temperature(self.handle, self.ccd_temp, self.cam_temp, self.pow_temp)
-    
-    def get_name(self): ###erreur?
-        '''Gives the camera name'''
-        self.cam_name = ctypes.c_char_p(b''*40)
-        get_camera_name(self.handle, self.cam_name, 40)
-        self.cam_name = self.cam_name.value.decode('ascii')
-        print(self.cam_name)
         
     def get_trigger_mode(self):
         '''Gives the current trigger mode'''
@@ -381,4 +318,40 @@ class Camera:
         recorder_modes = {0:'Sequence', 
                          1:'Ring buffer'}
         self.recorder_mode = recorder_modes[self.recorder_mode_code.value]
+    
+    '''Debugging methods'''
+    def get_roi(self):
+        '''Gives the coordinates of the ROI '''
+        self.roiX0 = ctypes.c_uint16()
+        self.roiY0 = ctypes.c_uint16()
+        self.roiX1 = ctypes.c_uint16()
+        self.roiY1 = ctypes.c_uint16()
+        get_roi(self.handle, self.roiX0, self.roiY0, self.roiX1, self.roiY1)
+        
+    def get_pixel_rate(self):
+        '''Gives the camera pixel rate in Hz, which determines the sensor readout speed'''
+        self.pixel_rate = ctypes.c_uint32()
+        get_pixel_rate(self.handle, self.pixel_rate)
+    
+    def get_sensor_format(self):
+        '''Gives the current sensor format'''
+        self.sensor = ctypes.c_uint16()
+        get_sensor_format(self.handle, self.sensor)
+        sensor_modes = {0:'Standard',
+                        1:'Extended'}
+        self.sensor = sensor_modes[self.sensor.value]
+    
+    def get_buffer_status(self):
+        '''Returns (as arguments) the state of the buffer context (dwStatusDll) 
+            and the state of the last image transfer (dwStatusDrv)'''
+        self.dwStatusDll = ctypes.c_uint32()
+        self.dwStatusDrv = ctypes.c_uint32()
+        get_buffer_status(self.handle, self.buffers_in_queue[0], self.dwStatusDll, self.dwStatusDrv)
+     
+    def get_health_status(self):
+        '''Retrieves info about the current camera status (warnings, errors and status)'''
+        self.warn = ctypes.c_uint32()
+        self.err = ctypes.c_uint32()
+        self.status = ctypes.c_uint32()
+        get_camera_health_status(self.handle, self.warn, self.err, self.status)
     

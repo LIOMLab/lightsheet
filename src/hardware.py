@@ -4,7 +4,7 @@ Created on May 16, 2019
 @author: Pierre Girard-Collins
 '''
 import sys
-sys.path.append("..")
+sys.path.append(".")
 
 import serial
 
@@ -36,13 +36,13 @@ class AOETLGalvos(QtCore.QObject):
 
     #sig_update_gui_from_state = QtCore.pyqtSignal(bool) ###utilité?
     
-    def __init__(self,parameters):
+    def __init__(self, parameters):
         self.parameters = parameters
-        self.t_half_period = 0.5*(1/self.parameters["galvo_frequency"]) #The half period is the exposure time, the time taken for a single upwards or downwards galvo scan
+        self.t_half_period = 0.5*(1/self.parameters["Galvo Frequency"]) #The half period is the exposure time, the time taken for a single upwards or downwards galvo scan
         #print('t_half_period:'+str(self.t_half_period)) #debugging
-        self.samples_per_half_period = np.ceil(self.t_half_period*self.parameters["samplerate"]) #Number of samples per exposure time
+        self.samples_per_half_period = np.ceil(self.t_half_period*self.parameters["Sample Rate"]) #Number of samples per exposure time
         #print('Samples per half period: '+str(self.samples_per_half_period)) #debugging
-        self.min_samples_per_delay = np.ceil(self.parameters["min_t_delay"]*self.parameters["samplerate"]) #Number of samples per camera internal delay (delay for acquiring image, excluding exposure time)
+        self.min_samples_per_delay = np.ceil(self.parameters["min_t_delay"]*self.parameters["Sample Rate"]) #Number of samples per camera internal delay (delay for acquiring image, excluding exposure time)
         #print('Minimum samples per delay: '+str(self.min_samples_per_delay)) #debugging
         self.min_samples_per_step = self.min_samples_per_delay + self.samples_per_half_period #Number of samples per image acquisition (including exposure time)
         #print('Minimum samples per step: '+str(self.min_samples_per_step)+'\n') #debugging
@@ -53,14 +53,14 @@ class AOETLGalvos(QtCore.QObject):
         #print('Samples per delay: '+str(self.samples_per_delay)) #debugging
         self.samples_per_half_delay = np.floor(self.samples_per_delay/2) #Number of samples per half total delay
         #print('Samples per half delay: '+str(self.samples_per_half_delay)+'\n') #debugging
-        #print('Number of columns: '+str(self.parameters["columns"])) #debugging
-        #print('Etl step: '+str(self.parameters["etl_step"]) + ' columns') #debugging
-        self.number_of_steps = np.ceil(self.parameters["columns"]/self.parameters["etl_step"]) #Number of focal length values needed for each ETL to achieve a full scan
+        #print('Number of Columns: '+str(self.parameters["Columns"])) #debugging
+        #print('Etl step: '+str(self.parameters["ETL Step"]) + ' Columns') #debugging
+        self.number_of_steps = np.ceil(self.parameters["Columns"]/self.parameters["ETL Step"]) #Number of focal length values needed for each ETL to achieve a full scan
         #print('Number of steps: ' + str(self.number_of_steps)+'\n') #debugging
         self.number_of_samples = self.number_of_steps*self.samples_per_step #Total number of samples for acquisition
         self.samples = int(self.number_of_samples)
         #print('Number of samples: '+str(self.number_of_samples)) #debugging
-        self.sweeptime = self.number_of_samples/self.parameters["samplerate"] #Total time for acquisition
+        self.sweeptime = self.number_of_samples/self.parameters["Sample Rate"] #Total time for acquisition
         #print('Sweeptime: '+str(self.sweeptime)+'s') #debugging
     
     '''Tasks methods'''
@@ -96,16 +96,16 @@ class AOETLGalvos(QtCore.QObject):
 
         '''Housekeeping: Setting up the AO task for the Galvo and ETLs. It is the master task'''
         self.galvo_etl_task.ao_channels.add_ao_voltage_chan(terminals["galvos_etls"])
-        self.galvo_etl_task.timing.cfg_samp_clk_timing(rate=self.parameters["samplerate"],
+        self.galvo_etl_task.timing.cfg_samp_clk_timing(rate=self.parameters["Sample Rate"],
                                                    sample_mode=mode,
                                                    samps_per_chan=self.samples)
         
         '''Housekeeping: Setting up the DO task for the camera. It is the slave task'''
         self.camera_task.do_channels.add_do_chan(terminals["camera"], line_grouping = LineGrouping.CHAN_PER_LINE)
-        self.camera_task.timing.cfg_samp_clk_timing(rate=self.parameters["samplerate"], sample_mode=mode, samps_per_chan=self.samples)
+        self.camera_task.timing.cfg_samp_clk_timing(rate=self.parameters["Sample Rate"], sample_mode=mode, samps_per_chan=self.samples)
         
         #self.laser_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
-        #self.laser_task.timing.cfg_samp_clk_timing(rate=self.parameters["samplerate"], sample_mode=mode, samps_per_chan=self.samples)
+        #self.laser_task.timing.cfg_samp_clk_timing(rate=self.parameters["Sample Rate"], sample_mode=mode, samps_per_chan=self.samples)
         
         '''Configures the task to start acquiring/generating samples on a rising/falling edge of a digital signal. 
             args: terminal of the trigger source (master), which edge of the digital signal the task start (optionnal)
@@ -121,17 +121,13 @@ class AOETLGalvos(QtCore.QObject):
                                                  self.etl_l_waveform))
        
         self.galvo_etl_task.write(self.galvo_and_etl_waveforms)
-        
         self.camera_task.write(self.camera_waveform)
-        
         #self.lasers_waveforms = np.stack((self.laser_r_waveform,
         #                                  self.laser_l_waveform))
-        
         #self.laser_task.write(self.lasers_waveforms)
     
     def start_tasks(self):
         '''Master task needs to always be started last'''
-        
         #self.laser_task.start()
         self.camera_task.start()
         self.galvo_etl_task.start()
@@ -159,12 +155,10 @@ class AOETLGalvos(QtCore.QObject):
     def stop_tasks(self):
         '''Stops the tasks for triggering, analog and counter outputs
            Master task always last'''
-        
         #etl_voltage = 2.5 #In volts, corresponds to a current of 0
         #galvo_voltage = 2.5
         #standby_waveform = np.stack((np.array([galvo_voltage]),np.array([galvo_voltage]),np.array([etl_voltage]),np.array([etl_voltage])))
         #self.galvo_etl_task.write(standby_waveform, auto_start = True)
-        
         #self.laser_task.stop()
         self.camera_task.stop()
         self.galvo_etl_task.stop()
@@ -173,7 +167,6 @@ class AOETLGalvos(QtCore.QObject):
         '''Closes the tasks for triggering, analog and counter outputs.
            Tasks should only be closed after they are stopped.
            Master task always last. '''
-        
         #self.laser_task.close()
         self.camera_task.close()
         self.galvo_etl_task.close()
@@ -189,7 +182,7 @@ class AOETLGalvos(QtCore.QObject):
         if case == 'STAIRS_FITTING':
             self.camera_waveform = camera_digital_output_signal(samples_per_half_period = self.samples_per_half_period, 
                                                     t_start_exp = self.parameters["t_start_exp"], 
-                                                    samplerate = self.parameters["samplerate"], 
+                                                    samplerate = self.parameters["Sample Rate"], 
                                                     samples_per_half_delay = self.samples_per_half_delay, 
                                                     number_of_samples = self.number_of_samples, 
                                                     number_of_steps = self.number_of_steps, 
@@ -202,22 +195,22 @@ class AOETLGalvos(QtCore.QObject):
            kept only for reference.'''
         self.etl_l_waveform = calibrated_etl_stairs(left_slope, left_intercept,###
                                          right_slope, right_intercept, ###
-                                         etl_step=self.parameters["etl_step"], ###
-                                         amplitude = self.parameters["etl_l_amplitude"], 
+                                         etl_step=self.parameters["ETL Step"], ###
+                                         amplitude = self.parameters["Left ETL Amplitude"], 
                                          number_of_steps = self.number_of_steps, 
                                          number_of_samples = self.number_of_samples, 
                                          samples_per_step = self.samples_per_step, 
-                                         offset = self.parameters["etl_l_offset"], 
+                                         offset = self.parameters["Left ETL Offset"], 
                                          direction = 'UP',activate=activate)
         
         self.etl_r_waveform = calibrated_etl_stairs(left_slope, left_intercept,###
                                          right_slope, right_intercept, ###
-                                         etl_step=self.parameters["etl_step"], ###
-                                         amplitude = self.parameters["etl_r_amplitude"], 
+                                         etl_step=self.parameters["ETL Step"], ###
+                                         amplitude = self.parameters["Right ETL Amplitude"], 
                                          number_of_steps = self.number_of_steps, 
                                          number_of_samples = self.number_of_samples, 
                                          samples_per_step = self.samples_per_step, 
-                                         offset = self.parameters["etl_r_offset"], 
+                                         offset = self.parameters["Right ETL Offset"], 
                                          direction = 'DOWN',activate=activate)
     
     def create_galvos_waveforms(self, case = 'NONE',invert=False):
@@ -226,7 +219,7 @@ class AOETLGalvos(QtCore.QObject):
            kept only for reference.'''
         
         if case == 'TRAPEZE':
-            self.galvo_l_waveform = galvo_trapeze(amplitude = self.parameters["galvo_l_amplitude"], 
+            self.galvo_l_waveform = galvo_trapeze(amplitude = self.parameters["Left Galvo Amplitude"], 
                                                   samples_per_half_period = self.samples_per_half_period, 
                                                   samples_per_delay = self.samples_per_delay, 
                                                   number_of_samples = self.number_of_samples, 
@@ -235,10 +228,10 @@ class AOETLGalvos(QtCore.QObject):
                                                   samples_per_half_delay = self.samples_per_half_delay,
                                                   min_samples_per_delay = self.min_samples_per_delay,
                                                   t_start_exp = self.parameters["t_start_exp"], 
-                                                  samplerate = self.parameters["samplerate"],
-                                                  offset = self.parameters["galvo_l_offset"],invert=invert)
+                                                  samplerate = self.parameters["Sample Rate"],
+                                                  offset = self.parameters["Left Galvo Offset"],invert=invert)
             
-            self.galvo_r_waveform = galvo_trapeze(amplitude = self.parameters["galvo_r_amplitude"], 
+            self.galvo_r_waveform = galvo_trapeze(amplitude = self.parameters["Right Galvo Amplitude"], 
                                                   samples_per_half_period = self.samples_per_half_period, 
                                                   samples_per_delay = self.samples_per_delay, 
                                                   number_of_samples = self.number_of_samples, 
@@ -247,8 +240,8 @@ class AOETLGalvos(QtCore.QObject):
                                                   samples_per_half_delay = self.samples_per_half_delay,
                                                   min_samples_per_delay = self.min_samples_per_delay,
                                                   t_start_exp = self.parameters["t_start_exp"], 
-                                                  samplerate = self.parameters["samplerate"],
-                                                  offset = self.parameters["galvo_r_offset"],invert=invert)
+                                                  samplerate = self.parameters["Sample Rate"],
+                                                  offset = self.parameters["Right Galvo Offset"],invert=invert)
   
   
     
@@ -257,40 +250,117 @@ class Motors:
     
     def __init__(self, device_number, port):
         '''device_number is the number of the device in the daisy chain '''
+        self.error = 0
+        self.error_message = ""
         self.device_number = device_number
         self.port = port
-        self.ID = self.ask_ID()
-        
+        self.ID = 0
+        self.name = ""
+        self.micro_step = 0
+        self.ask_ID()
+
+    def __motorIO__(self, cmd_no, cmd_param):
+        #Default return
+        reply_data = 0
+
+        #Generate 6-byte instruction from cmd_no and cmd_param
+        #Taking into account negative data (such as a relative motion)
+        if cmd_param < 0:
+            cmd_param = pow(256,4) + cmd_param            
+        #Generates bytes 3 to 6
+        byte_6 = int(cmd_param // pow(256,3))
+        cmd_param = cmd_param % pow(256,3)
+        byte_5 = int(cmd_param // pow(256,2))
+        cmd_param = cmd_param % pow(256,2)
+        byte_4 = int(cmd_param // pow(256,1))
+        cmd_param = cmd_param % pow(256,1)
+        byte_3 = int(cmd_param // pow(256,0))
+        #Assemble instruction
+        instruction = []
+        instruction.append(int(self.device_number))
+        instruction.append(int(cmd_no))
+        instruction.append(byte_3)
+        instruction.append(byte_4)
+        instruction.append(byte_5)
+        instruction.append(byte_6)
+
+        try:
+            #Try to open a serial connection
+            motor = serial.Serial(port=self.port, baudrate=9600, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout = 2)
+        except serial.SerialException:
+            self.error = 1
+            self.error_message = "Error - Serial port cannot be found or cannot be configured"
+        else:
+            #We have an open serial port to the motor
+            #Clear I/O buffers
+            motor.reset_input_buffer()
+            motor.reset_output_buffer()
+            #Write instruction bytes to motor
+            motor.write(bytes(instruction))
+            #Read 6-bytes reply
+            reply_bytes = motor.read(6)
+            #Close serial connection to motor  
+            motor.close()
+            #Checks if reply is valid length
+            if len(reply_bytes) == 6:
+                if reply_bytes[0] == self.device_no and reply_bytes[1] == cmd_no:
+                    #Reply has a valid length and fits expected format
+                    #Convert returned bytes into data value (handling negative values)
+                    if reply_bytes[5] > 127:
+                        reply_data = (pow(256,3) * reply_bytes[5] + pow(256,2) * reply_bytes[4] + pow(256,1) * reply_bytes[3] + pow(256,0) * reply_bytes[2]) - pow(256,4)
+                    else:
+                        reply_data = (pow(256,3) * reply_bytes[5] + pow(256,2) * reply_bytes[4] + pow(256,1) * reply_bytes[3] + pow(256,0) * reply_bytes[2])      
+                elif reply_bytes[0] == self.device_no and reply_bytes[1] == 255:
+                    self.error = 1
+                    self.error_message = "Error - Motor reports an error as occured"
+                else:
+                    self.error = 1
+                    self.error_message = "Error - Reply does not fit expected format"
+            else:
+                self.error = 1
+                self.error_message = "Error - No valid reply received"
+        return reply_data
+
+
     def ask_ID(self):
-        '''Returns the ID of the device. 
+        '''Returns the ID of the motor. 
         
         If the ID is 6210, it is the vertical motor
-        If the ID is 6320, it is one of the horizontal motors
+        If the ID is 6320, it is the horizontal motor
+        If the ID is 4152, it is the camera motor
+        If the ID is 0, no motor was found
         ''' 
-        motor = serial.Serial(port=self.port,baudrate=9600,bytesize=serial.EIGHTBITS,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE)
-        
-        command = self.generate_command(50,0)
-        motor.write(command)
-        
-        ID=0
-        #All the bytes are read, so they doesn't interfere with another command later
-        last_read = []
-        for i in range(6):
-            last_read.append(self.byte_to_int(motor.read(1)))
-        
-        #Byte3 (index 2) is the least significant byte of the data read and can determine alone the ID in this case
-        if last_read[2] == 66:
-            ID = 6210
-        elif last_read[2] == 176:
-            ID = 6320
-        
-        motor.close()
-        
-        return ID
+        cmd_no = 50
+        cmd_param = 0 
+        reply_data = self.__motorIO__(cmd_no, cmd_param)
+
+        if not self.error:
+            if reply_data == 6210:   
+                self.ID = 6210
+                self.name = "T-LSM050A"
+                self.micro_step = 0.047625
+            elif reply_data == 6320:
+                self.ID = 6320
+                self.name = "T-LSM100B"
+                self.micro_step = 0.19050
+            elif reply_data == 4152:
+                self.ID = 4152
+                self.name = "T-LSR150B"
+                self.micro_step = 0.49609
+            else:
+                self.error = 1
+                self.error_message = "Error - Unknown Device"
+                self.ID = 0
+                self.name = "Unsupported device"
+                self.micro_step = 0
+        else:
+            self.ID = 0
+            self.name = ""
+            self.micro_step = 0
+        return self.ID
     
     def byte_to_int(self,byte): ###pourquoi pas int.from_bytes(byte)
         '''Converts bytes into an integer'''
-        
         result = 0
         for b in byte:
             result = result * 256 + int(b)
@@ -302,25 +372,16 @@ class Motors:
         Parameter:
             unit: A string. The options are: 'm', 'cm', 'mm', '\u03BCm' (micro meter) and '\u03BCStep' (micro-step)
         '''
-        motor=serial.Serial(port=self.port,baudrate=9600,bytesize=serial.EIGHTBITS,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE)
-        cmdNumber = 60
-        command = self.generate_command(cmdNumber,0)
-        motor.write(command)
-        
-        last_read = []
-        for i in range(6):
-            last_read.append(self.byte_to_int(motor.read(1)))
-        
-        motor.close()
-        
-        data = pow(256,3)*last_read[5]+pow(256,2)*last_read[4]+256*last_read[3]+last_read[2]
+
+        cmd_no = 60
+        cmd_param = 0 
+        reply_data = self.__motorIO__(cmd_no, cmd_param)
         
         #The first two conditions are there to avoid a result with a huge number of decimals for the extremum positions. These could be taken off later
         #by controling the number of decimals to display on the associated label of the GUI
-        if data == 1066666:
+        if reply_data == 1066666:
                 return 0
-            
-        elif data == 533333:
+        elif reply_data == 533333:
                 if unit == "m":
                     return 0.1016
                 elif unit == "cm":
@@ -335,78 +396,19 @@ class Motors:
         #Take into account that the minimum position (home position) of the vertical motor is at its maximum height in the physical structure
         elif self.ID == 6210:
                 if unit == "m":
-                    return 0.0508-self.data_to_position(data,unit)
+                    return 0.0508-self.data_to_position(reply_data,unit)
                 elif unit == "cm":
-                    return 5.08-self.data_to_position(data,unit)
+                    return 5.08-self.data_to_position(reply_data,unit)
                 elif unit == "mm":
-                    return 50.8-self.data_to_position(data,unit)
+                    return 50.8-self.data_to_position(reply_data,unit)
                 elif unit =='\u03BCm':
-                    return 50800-self.data_to_position(data,unit)
+                    return 50800-self.data_to_position(reply_data,unit)
                 elif unit == '\u03BCStep':
-                    return 1066666-self.data_to_position(data,unit)
-                
+                    return 1066666-self.data_to_position(reply_data,unit)
         else:
-            return self.data_to_position(data,unit)
-    
-    def data_to_position(self,data,unit):
-        '''Converts a data into a position 
-        
-        Parameters:
-            data: An integer or a float
-            unit: A string wich specifies the unit into which the position will be converted. 
-                  The options are: 'm', 'cm', 'mm', '\u03BCm' (micro meter) and '\u03BCStep' (micro-step) 
-        '''
-        factor = 0
-        micro_step = 0
-        
-        #The microstep size, necessary for the conversion, differs from each type of device
-        if self.ID == 6210:
-            micro_step = 0.047625
-        elif self.ID == 6320:
-            micro_step = 0.1905
-       
-        if unit == 'm':
-            factor = 1
-        elif unit == 'cm':
-            factor=pow(10,-2)
-        elif unit == 'mm':
-            factor=pow(10,-3)
-        elif unit == '\u03BCm':
-            factor=pow(10,-6)
-        elif unit == '\u03BCStep':
-            factor = micro_step*pow(10,-6)
-            
-        return data*micro_step*pow(10,-6)/factor
-        
-    def generate_command(self,cmd_number,data):
-        '''Generates the command to send to the motor device
-        
-        Parameters:
-            cmdNumber: Determines the type of operation (see Zaber T-LSM series User's Manual for a complete list)
-            data: The value associated to the cmdNumber
-        '''
-        command=[self.device_number,cmd_number]
-        
-        #To take into account negative data (such as a relative motion)
-        if data < 0:
-            data = pow(256,4) + data
-        
-        #Generates bytes 3 to 6
-        byte_6 = int(data//pow(256,3))
-        data = data - byte_6*pow(256,3)
-        byte_5 = int(data//pow(256,2))
-        data = data - byte_5*pow(256,2)
-        byte_4 = int(data//256)
-        data = data - byte_4*256
-        byte_3 = int(data//1)
-        
-        command.append(byte_3)
-        command.append(byte_4)
-        command.append(byte_5)
-        command.append(byte_6)
-        
-        return bytearray(command)
-    
+            return self.data_to_position(reply_data,unit)
+
+
     def move_absolute_position(self, absolute_position, unit):
         '''Moves the device to a specified absolute position.
         
@@ -418,49 +420,41 @@ class Motors:
         For the horizontal motors, position 0 is the home position.
         For the vertical motor, height 0 is the maximum position.
         '''
-        motor=serial.Serial(port=self.port,baudrate=9600,bytesize=serial.EIGHTBITS,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE)
-        
-        data=0
+        position = 0
         if self.ID == 6210:
-            data = 1066666-self.position_to_data(absolute_position,unit)
+            position = 1066666 - self.position_to_data(absolute_position,unit)
         elif self.ID == 6320:
-            data = self.position_to_data(absolute_position,unit)
-        
-        command = self.generate_command(20,data)
-        motor.write(command)
-        #All the reply bytes are read, so they doesn't interfere with further operations, suchas self.current_position(unit)
-        motor.read(6)
-        
-        motor.close()
+            position = self.position_to_data(absolute_position,unit)
+        elif self.ID == 4152:
+            position = self.position_to_data(absolute_position,unit)
+
+        cmd_no = 20
+        cmd_param = position 
+        self.__motorIO__(cmd_no, cmd_param)
+
     
     def move_home(self):
         '''Moves the device to home position. For the vertical motor, it matches the maximum height. '''
-        motor=serial.Serial(port=self.port,baudrate=9600,bytesize=serial.EIGHTBITS,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE)
-        
-        command = self.generate_command(20,0)
-        motor.write(command)
-        #All the reply bytes are read, so they doesn't interfere with further operations, suchas self.current_position(unit)
-        motor.read(6)
-        
-        motor.close()
-        
+        cmd_no = 20
+        cmd_param = 0
+        self.__motorIO__(cmd_no, cmd_param)
+
         
     def move_maximum_position(self):
         '''Moves the device to its maximum position. For the vertical motor it matches the minimum height.  '''
+        position = 0
         if self.ID == 6210:
-            data = 1066666
+            position = 1066666
         elif self.ID == 6320:
-            data = 533333
-        
-        motor=serial.Serial(port=self.port,baudrate=9600,bytesize=serial.EIGHTBITS,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE)
-        
-        command = self.generate_command(20,data)
-        motor.write(command)
-        #All the reply bytes are read, so they doesn't interfere with further operations, suchas self.current_position(unit)
-        motor.read(6)
-        
-        motor.close()
-        
+            position = 533333
+        elif self.ID == 4152:
+            position = 258015
+
+        cmd_no = 20
+        cmd_param = position
+        self.__motorIO__(cmd_no, cmd_param)
+
+
     def move_relative_position(self, relative_position, unit):
         '''Moves the device to a specified relative position
         
@@ -469,18 +463,36 @@ class Motors:
             unit: A string which indicate the scale of the numerical value.
                   The options are: 'm', 'cm', 'mm', '\u03BCm' (micro meter) and '\u03BCStep' (micro-step)
         '''
-        motor=serial.Serial(port=self.port,baudrate=9600,bytesize=serial.EIGHTBITS,parity=serial.PARITY_NONE,stopbits=serial.STOPBITS_ONE)
+        cmd_no = 21
+        cmd_param = self.position_to_data(relative_position, unit)
+        self.__motorIO__(cmd_no, cmd_param)  
+
+
+    def data_to_position(self, data, unit):
+        '''Converts a data into a position 
         
-        data = self.position_to_data(relative_position, unit)
+        Parameters:
+            data: An integer or a float
+            unit: A string wich specifies the unit into which the position will be converted. 
+                  The options are: 'm', 'cm', 'mm', '\u03BCm' (micro meter) and '\u03BCStep' (micro-step) 
+        '''
+        factor = 1
+        micro_step = self.micro_step
         
-        command = self.generate_command(21,data)
-        motor.write(command)
-        #All the reply bytes are read, so they doesn't interfere with further operations, such as self.current_position(unit)
-        motor.read(6)
-    
-        motor.close()    
-    
-    def position_to_data(self,position,unit):
+        if unit == 'm':
+            factor = 1
+        elif unit == 'cm':
+            factor = pow(10,-2)
+        elif unit == 'mm':
+            factor = pow(10,-3)
+        elif unit == '\u03BCm':
+            factor = pow(10,-6)
+        elif unit == '\u03BCStep':
+            factor = micro_step*pow(10,-6)
+            
+        return data*micro_step*pow(10,-6)/factor
+
+    def position_to_data(self, position, unit):
         '''Converts the position into the form of a data 
         
         Parameters:
@@ -488,23 +500,17 @@ class Motors:
             unit: A string which specifies the unit of the numerical position. 
                   The options are: 'm', 'cm', 'mm', '\u03BCm' (micro meter) and '\u03BCStep' (micro-step) 
         '''
-        factor = 0
-        micro_step = 0
-        
-        #The microstep size, necessary for the conversion, differs from each type of device
-        if self.ID == 6210:
-            micro_step = 0.047625
-        elif self.ID == 6320:
-            micro_step = 0.1905
+        factor = 1
+        micro_step = self.micro_step
         
         if unit == 'm':
             factor = 1
         elif unit == 'cm':
-            factor=pow(10,-2)
+            factor = pow(10,-2)
         elif unit == 'mm':
-            factor=pow(10,-3)
+            factor = pow(10,-3)
         elif unit == '\u03BCm':
-            factor=pow(10,-6)
+            factor = pow(10,-6)
         elif unit == '\u03BCStep':
             factor = micro_step*pow(10,-6)
         
