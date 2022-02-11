@@ -1605,7 +1605,6 @@ class Ui_Controller(object):
         self.lineEdit_filename.setText(_translate("Controller", "Select Directory First"))
         self.label_46.setText(_translate("Controller", "Sample Name For Saving:"))
         self.lineEdit_sampleName.setText(_translate("Controller", "No Sample Name"))
-        self.label_lastCommands.setText(_translate("Controller", "--The last commands will show here--"))
         self.menuDisplay.setTitle(_translate("Controller", "Display"))
         self.menuSelect_Display_Mode.setTitle(_translate("Controller", "Select Display Mode"))
         self.menuSelect_Theme.setTitle(_translate("Controller", "Select App Theme"))

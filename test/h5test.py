@@ -1,8 +1,13 @@
 import h5py
 import glob
 
-with h5py.File('stack_links.h5',mode='w') as h5fw:
-    link_cnt = 0 
-    for h5name in glob.glob('C:/Users/Admin/Desktop/lightsheet_data/test-2020-02-02/stack01*.hdf5'):
-        link_cnt += 1
-        h5fw['link'+str(link_cnt)] = h5py.ExternalLink(h5name,'/') 
+with h5py.File('merged.h5',mode='w') as h5fw:
+    dset_suffix = 0
+    for h5name in glob.glob('*.hdf5'):
+        h5fr = h5py.File(h5name,'r') 
+        dset1 = list(h5fr.keys())[0]
+        arr_data = h5fr[dset1][:]
+        newdset = 'frame_' + str(dset_suffix)
+        h5fw.create_dataset(newdset,data=arr_data) 
+        dset_suffix += 1
+        

@@ -248,12 +248,12 @@ class AOETLGalvos(QtCore.QObject):
 class Motors:
     '''Class for Zaber's T-LSM series linear stage motor control'''
     
-    def __init__(self, device_number, port):
+    def __init__(self, port, device_number):
         '''device_number is the number of the device in the daisy chain '''
         self.error = 0
         self.error_message = ""
-        self.device_number = device_number
         self.port = port
+        self.device_number = device_number
         self.ID = 0
         self.name = ""
         self.micro_step = 0
