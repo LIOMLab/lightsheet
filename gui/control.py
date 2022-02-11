@@ -12,12 +12,12 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy import signal, optimize, ndimage, stats #,interpolate
 from PyQt5 import QtCore #,QtGui
-from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem, QAbstractItemView,QMessageBox,QMainWindow,QLabel,QProgressBar#,QWidget,QMenu,QMenuBar,QAction,QStatusBar
+from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem, QAbstractItemView, QMessageBox, QMainWindow, QLabel, QProgressBar#,QWidget,QMenu,QMenuBar,QAction,QStatusBar
 from PyQt5.QtWidgets import QDialog
 
 import nidaqmx
 from src.hardware import AOETLGalvos
-from src.hardware import Motors
+from src.motors import Motors
 from src.pcoEdge import Camera
 #from src.pcoCamera import Camera
 #from src.laser import Laser
@@ -33,6 +33,8 @@ import webbrowser
 from gui.ui_controller import Ui_Controller
 from gui.ui_properties import Ui_Properties
 from gui.ui_settings import Ui_Settings
+
+from gui.config import Configuration
 
 
 '''Parameters'''
@@ -84,6 +86,7 @@ terminals = {}
 terminals["galvos_etls"] = '/Dev1/ao0:3'
 terminals["camera"]      = '/Dev1/port0/line1'
 terminals["lasers"]      = '/Dev7/ao0:1'
+
 
 '''Math functions'''
 def gaussian(x,a,x0,sigma):
@@ -167,10 +170,7 @@ class Properties_Dialog(QDialog):
         self.ui.setupUi(self)   
 
         self.camera = camera
-        self.motor_vertical = motors[0]
-        self.motor_horizontal = motors[1]
-        self.motor_camera = motors[2]
-
+        self.motors = motors
         self.print_controller = print_controller
 
         self.ui.pushButton_refresh.clicked.connect(self.refresh_properties)
@@ -204,13 +204,9 @@ class Properties_Dialog(QDialog):
             self.camera.get_recorder_submode()
             self.ui.label_recorderMode.setText(self.camera.recorder_mode)
         
-        self.ui.label_horizontalMotorName.setText(self.motor_horizontal.name)
-        self.ui.label_verticalMotorName.setText(self.motor_vertical.name)
-        self.ui.label_cameraMotorName.setText(self.motor_camera.name)
-
-        # self.ui.label_horizontalMotorName.setText('Zaber T-LSM100B')
-        # self.ui.label_verticalMotorName.setText('Zaber T-LSM050A')
-        # self.ui.label_cameraMotorName.setText('Zaber T-LSM100B')
+        self.ui.label_horizontalMotorName.setText(self.motors.horizontal.name)
+        self.ui.label_verticalMotorName.setText(self.motors.vertical.name)
+        self.ui.label_cameraMotorName.setText(self.motors.camera.name)
     
     def refresh_properties(self):
         '''Refresh system properties'''
@@ -237,27 +233,30 @@ class Controller_MainWindow(QMainWindow):
         self.ui = Ui_Controller()
         self.ui.setupUi(self)    
 
+        self.cfg = Configuration()
+
         self.label_statusBar = QLabel()
         self.progress_statusBar = QProgressBar()
         self.ui.statusbar.addPermanentWidget(self.label_statusBar)
         self.ui.statusbar.addPermanentWidget(self.progress_statusBar)
         self.progress_statusBar.hide()
         self.progress_statusBar.setFixedWidth(250)
+        self.ui.label_lastCommands.setText('--The last commands will show here--\n')
         
         '''Instantiating the camera window where the frames are displayed'''
         self.camera_window = CameraWindow(self.ui.graphicsView)
 
         '''Instantiating the hardware components'''
+
         '''Instantiating translation stages'''
-        self.motor_vertical   = Motors(1, 'COM3')  #Vertical motor
-        self.motor_horizontal = Motors(2, 'COM3')  #Horizontal motor for sample motion
-        self.motor_camera     = Motors(3, 'COM3')  #Horizontal motor for camera motion (detection arm)
-        self.motors = [self.motor_vertical, self.motor_horizontal, self.motor_camera]
+        self.motors = Motors()
+
         '''Instantiating camera'''
         self.open_camera()
+
         '''Instantiating laser'''
         #self.laser = Laser()
-    
+
         '''Instantiating the settings and properties windows'''
         self.settings_dialog = Settings_Dialog()
         self.properties_dialog = Properties_Dialog(self.camera, self.motors, self.print_controller)
@@ -624,7 +623,8 @@ class Controller_MainWindow(QMainWindow):
         '''Print text in console, in controller text box and in status bar'''
         print(text)
         self.ui.statusbar.showMessage(text)
-        self.ui.label_lastCommands.setText(self.ui.label_lastCommands.text()+'\n '+text)
+        self.ui.label_lastCommands.setText(self.ui.label_lastCommands.text() + text + '\n ')
+        self.ui.scrollArea_lastCommands.verticalScrollBar().setValue(self.ui.scrollArea_lastCommands.verticalScrollBar().maximum())
     
     def open_camera(self):
         '''Opens the camera'''
@@ -734,15 +734,15 @@ class Controller_MainWindow(QMainWindow):
     
     def return_current_horizontal_position(self):
         '''Returns the current horizontal position with respect to the choice of axis'''
-        return round(-self.motor_horizontal.current_position(self.unit)+self.horizontal_correction,self.decimals) #Minus sign and correction to fit choice of axis
+        return round(-self.motors.horizontal.current_position(self.unit)+self.horizontal_correction,self.decimals) #Minus sign and correction to fit choice of axis
     
     def return_current_vertical_position(self):
         '''Returns the current vertical position with respect to the choice of axis'''
-        return round(self.motor_vertical.current_position(self.unit)+self.vertical_correction,self.decimals) #Minus sign and correction to fit choice of axis
+        return round(self.motors.vertical.current_position(self.unit)+self.vertical_correction,self.decimals) #Minus sign and correction to fit choice of axis
     
     def return_current_camera_position(self):
         '''Returns the current camera position with respect to the choice of axis'''
-        return round(-self.motor_camera.current_position(self.unit)+self.camera_correction,self.decimals) #Minus sign and correction to fit choice of axis
+        return round(-self.motors.camera.current_position(self.unit)+self.camera_correction,self.decimals) #Minus sign and correction to fit choice of axis
 
     def update_position_horizontal(self):
         '''Updates the current horizontal sample position displayed'''
@@ -764,7 +764,7 @@ class Controller_MainWindow(QMainWindow):
         if (self.return_current_camera_position() - self.ui.doubleSpinBox_choosePosition.value()) >= self.camera_sample_min_distance:  #To prevent the sample from hitting the camera
             self.print_controller('Sample moving to horizontal position')
             horizontal_position = -self.ui.doubleSpinBox_choosePosition.value() + self.horizontal_correction
-            self.motor_horizontal.move_absolute_position(horizontal_position,self.unit)
+            self.motors.horizontal.move_absolute_position(horizontal_position,self.unit)
             self.update_position_horizontal()
         else:
             self.print_controller('Camera prevents sample movement')
@@ -773,7 +773,7 @@ class Controller_MainWindow(QMainWindow):
         '''Moves the sample to a specified vertical position'''
         self.print_controller ('Sample moving to vertical position')
         vertical_position = self.ui.doubleSpinBox_chooseHeight.value() - self.vertical_correction #Minus sign and correction to fit choice of axis
-        self.motor_vertical.move_absolute_position(vertical_position,self.unit)
+        self.motors.vertical.move_absolute_position(vertical_position,self.unit)
         self.update_position_vertical()
     
     def move_camera_to_position(self):
@@ -781,7 +781,7 @@ class Controller_MainWindow(QMainWindow):
         if (self.ui.doubleSpinBox_chooseCamera.value() - self.return_current_horizontal_position() >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camera
             self.print_controller ('Camera moving to position')
             camera_position = -self.ui.doubleSpinBox_chooseCamera.value() + self.camera_correction #Minus sign and correction to fit choice of axis
-            self.motor_camera.move_absolute_position(camera_position,self.unit)
+            self.motors.camera.move_absolute_position(camera_position,self.unit)
             self.update_position_camera()
         else:
             self.print_controller('Sample prevents camera movement')
@@ -790,11 +790,11 @@ class Controller_MainWindow(QMainWindow):
         '''Camera motor backward horizontal motion'''
         if self.return_current_camera_position() - self.ui.doubleSpinBox_incrementCamera.value() <= self.boundaries['camera_backward_boundary']:
             self.print_controller ('Camera moving backward')
-            self.motor_camera.move_relative_position(-self.ui.doubleSpinBox_incrementCamera.value(),self.unit)
+            self.motors.camera.move_relative_position(-self.ui.doubleSpinBox_incrementCamera.value(),self.unit)
         else:
             self.sig_beep.emit(True)
             self.print_controller('Out of boundaries')
-            self.motor_camera.move_absolute_position(-self.boundaries['camera_backward_boundary']+self.camera_correction,self.unit)
+            self.motors.camera.move_absolute_position(-self.boundaries['camera_backward_boundary']+self.camera_correction,self.unit)
         self.update_position_camera()
     
     def move_camera_forward(self):
@@ -803,13 +803,13 @@ class Controller_MainWindow(QMainWindow):
             next_camera_position = self.return_current_camera_position() - self.ui.doubleSpinBox_incrementCamera.value()
             if (next_camera_position - self.return_current_horizontal_position() >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camea
                 self.print_controller ('Camera moving forward')
-                self.motor_camera.move_relative_position(self.ui.doubleSpinBox_incrementCamera.value(),self.unit)
+                self.motors.camera.move_relative_position(self.ui.doubleSpinBox_incrementCamera.value(),self.unit)
             else:
                 self.print_controller('Sample prevents camera movement')
         else:
             self.sig_beep.emit(True)
             self.print_controller('Out of boundaries')
-            self.motor_camera.move_absolute_position(-self.boundaries['camera_forward_boundary']+self.camera_correction,self.unit)
+            self.motors.camera.move_absolute_position(-self.boundaries['camera_forward_boundary']+self.camera_correction,self.unit)
         self.update_position_camera()
     
     def move_camera_to_focus(self):
@@ -818,42 +818,42 @@ class Controller_MainWindow(QMainWindow):
             if self.boundaries['focus'] > self.boundaries['camera_backward_boundary']:
                 self.sig_beep.emit(True)
                 self.print_controller('Focus out of boundaries')
-                self.motor_camera.move_absolute_position(-self.boundaries['camera_backward_boundary']+self.camera_correction,self.unit)
+                self.motors.camera.move_absolute_position(-self.boundaries['camera_backward_boundary']+self.camera_correction,self.unit)
             elif self.boundaries['focus'] < self.boundaries['camera_forward_boundary']:
                 self.sig_beep.emit(True)
                 self.print_controller('Focus out of boundaries')
-                self.motor_camera.move_absolute_position(-self.boundaries['camera_forward_boundary']+self.camera_correction,self.unit)
+                self.motors.camera.move_absolute_position(-self.boundaries['camera_forward_boundary']+self.camera_correction,self.unit)
             else:
                 if (self.boundaries['focus'] - self.return_current_horizontal_position() >= self.camera_sample_min_distance):  #To prevent the sample from hitting the camea
                     self.print_controller('Moving to focus')
-                    self.motor_camera.move_absolute_position(-self.boundaries['focus']+self.camera_correction,self.unit)
+                    self.motors.camera.move_absolute_position(-self.boundaries['focus']+self.camera_correction,self.unit)
                 else:
                     self.print_controller('Sample prevents camera movement')
         else:
             self.print_controller('Focus not yet set. Moving camera to default focus')
-            self.motor_camera.move_absolute_position(-self.boundaries['focus']+self.camera_correction,self.unit)
+            self.motors.camera.move_absolute_position(-self.boundaries['focus']+self.camera_correction,self.unit)
         self.update_position_camera()
     
     def move_sample_down(self):
         '''Sample motor downward vertical motion'''
         if self.return_current_vertical_position() - self.ui.doubleSpinBox_incrementVertical.value() >= self.boundaries['vertical_down_boundary']:
             self.print_controller('Sample moving down')
-            self.motor_vertical.move_relative_position(self.ui.doubleSpinBox_incrementVertical.value(),self.unit)
+            self.motors.vertical.move_relative_position(self.ui.doubleSpinBox_incrementVertical.value(),self.unit)
         else:
             self.sig_beep.emit(True)
             self.print_controller('Out of boundaries')
-            self.motor_vertical.move_absolute_position((self.boundaries['vertical_down_boundary'] - self.vertical_correction),self.unit)
+            self.motors.vertical.move_absolute_position((self.boundaries['vertical_down_boundary'] - self.vertical_correction),self.unit)
         self.update_position_vertical()
     
     def move_sample_up(self):
         '''Sample motor upward vertical motion'''
         if self.return_current_vertical_position() + self.ui.doubleSpinBox_incrementVertical.value() <= self.boundaries['vertical_up_boundary']:
             self.print_controller('Sample moving up')
-            self.motor_vertical.move_relative_position(-self.ui.doubleSpinBox_incrementVertical.value(),self.unit)
+            self.motors.vertical.move_relative_position(-self.ui.doubleSpinBox_incrementVertical.value(),self.unit)
         else:
             self.sig_beep.emit(True)
             self.print_controller('Out of boundaries')
-            self.motor_vertical.move_absolute_position((self.boundaries['vertical_up_boundary'] - self.vertical_correction),self.unit)
+            self.motors.vertical.move_absolute_position((self.boundaries['vertical_up_boundary'] - self.vertical_correction),self.unit)
         self.update_position_vertical()
     
     def move_sample_backward(self):
@@ -862,24 +862,24 @@ class Controller_MainWindow(QMainWindow):
         if next_horizontal_position <= self.boundaries['horizontal_backward_boundary']:
             if (self.return_current_camera_position() - next_horizontal_position) >= self.camera_sample_min_distance:  #To prevent the sample from hitting the camea
                 self.print_controller ('Sample moving backward')
-                self.motor_horizontal.move_relative_position(-self.ui.doubleSpinBox_incrementHorizontal.value(),self.unit)
+                self.motors.horizontal.move_relative_position(-self.ui.doubleSpinBox_incrementHorizontal.value(),self.unit)
             else:
                 self.print_controller('Camera prevents sample movement')
         else:
             self.sig_beep.emit(True)
             self.print_controller('Out of boundaries')
-            self.motor_horizontal.move_absolute_position(-self.boundaries['horizontal_backward_boundary']+self.horizontal_correction,self.unit)
+            self.motors.horizontal.move_absolute_position(-self.boundaries['horizontal_backward_boundary']+self.horizontal_correction,self.unit)
         self.update_position_horizontal()
             
     def move_sample_forward(self):
         '''Sample motor forward horizontal motion'''
         if self.return_current_horizontal_position() - self.ui.doubleSpinBox_incrementHorizontal.value() >= self.boundaries['horizontal_forward_boundary']:
             self.print_controller('Sample moving forward')
-            self.motor_horizontal.move_relative_position(self.ui.doubleSpinBox_incrementHorizontal.value(),self.unit)
+            self.motors.horizontal.move_relative_position(self.ui.doubleSpinBox_incrementHorizontal.value(),self.unit)
         else:
             self.sig_beep.emit(True)
             self.print_controller('Out of boundaries')
-            self.motor_horizontal.move_absolute_position(-self.boundaries['horizontal_forward_boundary']+self.horizontal_correction, self.unit)
+            self.motors.horizontal.move_absolute_position(-self.boundaries['horizontal_forward_boundary']+self.horizontal_correction, self.unit)
         self.update_position_horizontal()
     
     def move_sample_to_origin(self):
@@ -888,7 +888,7 @@ class Controller_MainWindow(QMainWindow):
         if self.boundaries['origin_horizontal'] >= self.boundaries['horizontal_forward_boundary'] and self.boundaries['origin_horizontal'] <= self.boundaries['horizontal_backward_boundary']:
             if (self.return_current_camera_position() - self.boundaries['origin_horizontal']) >= self.camera_sample_min_distance:  #To prevent the sample from hitting the camea
                 '''Moving sample to horizontal origin'''
-                self.motor_horizontal.move_absolute_position(-self.boundaries['origin_horizontal']+self.horizontal_correction,self.unit)
+                self.motors.horizontal.move_absolute_position(-self.boundaries['origin_horizontal']+self.horizontal_correction,self.unit)
                 self.update_position_horizontal()
             else:
                 self.print_controller('Camera prevents sample movement')
@@ -897,7 +897,7 @@ class Controller_MainWindow(QMainWindow):
             self.print_controller('Sample Horizontal Origin Out Of Boundaries')
         
         '''Moving sample to vertical origin'''
-        self.motor_vertical.move_absolute_position(self.boundaries['origin_vertical']-self.vertical_correction,self.unit)
+        self.motors.vertical.move_absolute_position(self.boundaries['origin_vertical']-self.vertical_correction,self.unit)
         self.update_position_vertical()
     
     
@@ -968,7 +968,7 @@ class Controller_MainWindow(QMainWindow):
         
     def calculate_camera_focus(self):
         '''Interpolates the camera focus position'''
-        current_position = -self.motor_horizontal.current_position(self.unit) + self.horizontal_correction
+        current_position = -self.motors.horizontal.current_position(self.unit) + self.horizontal_correction
         focus_regression = self.slope_camera * current_position + self.intercept_camera
         self.boundaries['focus'] = focus_regression
         print('focus_regression:'+str(focus_regression)) #debugging
@@ -1239,7 +1239,7 @@ class Controller_MainWindow(QMainWindow):
                 for item in range(len(dataset_names)):
                     self.ui.listWidget_fileDatasets.insertItem(item,dataset_names[item])
             self.ui.listWidget_fileDatasets.setCurrentRow(0)
-            self.print_controller('File '+self.open_directory+' opened')
+            self.print_controller('File ' + self.open_directory + ' opened')
             self.ui.pushButton_selectDataset.setEnabled(True)
         else:
             self.ui.label_currentFileDirectory.setText('None Specified')
@@ -1280,7 +1280,7 @@ class Controller_MainWindow(QMainWindow):
                     ##tiff_filename = self.open_directory.replace('.hdf5', '.tiff')
                     ##tiff.save(tiff_filename)
                 
-                self.print_controller('Dataset '+self.dataset_name+' of file '+self.open_directory+' displayed')
+                self.print_controller('Dataset ' + self.dataset_name + ' of file ' + self.open_directory + ' displayed')
     
     
     '''Acquisition Modes Methods'''
@@ -1781,13 +1781,13 @@ class Controller_MainWindow(QMainWindow):
         
     def set_stack_mode_ending_point(self):
         '''Defines the ending point of the recorded stack volume'''
-        self.stack_mode_ending_point = self.motor_horizontal.current_position('\u03BCm') #Units in micro-meters, because plane step is in micro-meters
+        self.stack_mode_ending_point = self.motors.horizontal.current_position('\u03BCm') #Units in micro-meters, because plane step is in micro-meters
         self.ui.checkBox_setEndPoint.setChecked(True)
         self.set_number_of_planes()
         
     def set_stack_mode_starting_point(self):
         '''Defines the starting point where the first plane of the stack volume will be recorded'''
-        self.stack_mode_starting_point = self.motor_horizontal.current_position('\u03BCm') #Units in micro-meters, because plane step is in micro-meters
+        self.stack_mode_starting_point = self.motors.horizontal.current_position('\u03BCm') #Units in micro-meters, because plane step is in micro-meters
         self.ui.checkBox_setStartPoint.setChecked(True)
         self.set_number_of_planes()
     
@@ -1923,7 +1923,7 @@ class Controller_MainWindow(QMainWindow):
             else:
                 '''Moving sample position'''
                 position = self.start_point + (plane * self.step)
-                self.motor_horizontal.move_absolute_position(position,'\u03BCm')  #Position in micro-meters
+                self.motors.horizontal.move_absolute_position(position,'\u03BCm')  #Position in micro-meters
                 self.update_position_horizontal()
                 
                 '''Moving the camera to focus'''
@@ -2022,11 +2022,11 @@ class Controller_MainWindow(QMainWindow):
         self.focus_forward_boundary = 31 #447506#450000 #447506#265000#int(300000*25/20)#300000#265000#255000#265000#270000  #269000   ##Position arbitraire en u-steps
         camera_increment_length = (self.focus_backward_boundary - self.focus_forward_boundary) / (self.number_of_camera_positions-1) #-1 to account for last position (backward_boundary)
         
-        position_depart_sample = self.motor_horizontal.current_position('\u03BCStep')
+        position_depart_sample = self.motors.horizontal.current_position('\u03BCStep')
         
         self.camera_focus_relation = np.zeros((int(self.number_of_calibration_planes),2))
-        metricvar=np.zeros((int(self.number_of_camera_positions)))
-        self.donnees=np.zeros(((int(self.number_of_calibration_planes)),(int(self.number_of_camera_positions)))) #debugging
+        metricvar = np.zeros((int(self.number_of_camera_positions)))
+        self.donnees = np.zeros(((int(self.number_of_calibration_planes)),(int(self.number_of_camera_positions)))) #debugging
         self.popt = np.zeros((int(self.number_of_calibration_planes),3))    #debugging
         
         '''Retrieving filename set by the user''' #debugging
@@ -2057,7 +2057,7 @@ class Controller_MainWindow(QMainWindow):
             else:
                 '''Moving sample position'''
                 position = self.boundaries['horizontal_forward_boundary'] + (sample_plane * sample_increment_length)    #Increments of +sample_increment_length
-                self.motor_horizontal.move_absolute_position(-position+self.horizontal_correction,self.unit)
+                self.motors.horizontal.move_absolute_position(-position+self.horizontal_correction,self.unit)
                 self.update_position_horizontal()
                 
                 for camera_plane in range(int(self.number_of_camera_positions)): #For each camera position
@@ -2067,7 +2067,7 @@ class Controller_MainWindow(QMainWindow):
                         '''Moving camera position'''
                         position_camera = self.focus_forward_boundary + (camera_plane * camera_increment_length) #Increments of +camera_increment_length
                         #print('position_camera:'+str(position_camera))
-                        self.motor_camera.move_absolute_position(-position_camera+self.camera_correction,'mm')
+                        self.motors.camera.move_absolute_position(-position_camera+self.camera_correction,'mm')
                         time.sleep(0.5) #To make sure the camera is at the right position
                         self.update_position_camera()
     
@@ -2116,7 +2116,7 @@ class Controller_MainWindow(QMainWindow):
                     print('max_variance_camera_position:'+str(max_variance_camera_position))
                     if max_variance_camera_position > self.focus_backward_boundary:##
                         max_variance_camera_position = self.focus_backward_boundary
-                    self.camera_focus_relation[sample_plane,1] = max_variance_camera_position#-self.motor_camera.data_to_position(max_variance_camera_position, self.unit) + self.camera_correction
+                    self.camera_focus_relation[sample_plane,1] = max_variance_camera_position#-self.motors.camera.data_to_position(max_variance_camera_position, self.unit) + self.camera_correction
                     
                     self.print_controller('--Calibration of plane '+str(sample_plane+1)+'/'+str(int(self.number_of_calibration_planes))+' done')
             
@@ -2137,9 +2137,9 @@ class Controller_MainWindow(QMainWindow):
             self.print_controller('Images saved')
         
         '''Returning sample and camera at initial positions'''
-        self.motor_horizontal.move_absolute_position(position_depart_sample,'\u03BCStep')
+        self.motors.horizontal.move_absolute_position(position_depart_sample,'\u03BCStep')
         self.update_position_horizontal()
-        self.motor_camera.move_absolute_position(-self.boundaries['focus']+self.camera_correction,self.unit)
+        self.motors.camera.move_absolute_position(-self.boundaries['focus']+self.camera_correction,self.unit)
         self.update_position_camera()
         
         '''Stopping camera'''
@@ -2190,7 +2190,6 @@ class Controller_MainWindow(QMainWindow):
        
         '''Modes disabling while stack acquisition'''
         self.update_buttons_modes([self.ui.pushButton_etlsCalibration])
-        
         self.print_controller('ETL calibration started')
         
         '''Starting camera calibration thread'''
@@ -2233,7 +2232,6 @@ class Controller_MainWindow(QMainWindow):
             self.frame_saver.start_saving()
         else:
             print('Select directory and enter a valid filename before saving')
-        
         
         
         '''Finding relation between etls' voltage and focal point vertical's position'''
