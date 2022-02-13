@@ -19,28 +19,47 @@ class Motors:
     _motors['Device Number Horizontal'] = 2
     _motors['Device Number Camera'] = 3
 
-    '''Default positions (in mm)'''
-    _positions = {}
-    _positions['Vertical Limit Up'] = 19.4
-    _positions['Vertical Limit Down'] = 0
-    _positions['Vertical Origin'] = _positions['Vertical Limit Down']
-    _positions['Horizontal Limit Forward'] = 0
-    _positions['Horizontal Limit Backward'] = 15
-    _positions['Horizontal Origin'] = _positions['Horizontal Limit Forward']
-    _positions['Camera Limit Forward'] = 50.0
-    _positions['Camera Limit Backward'] = 115
-    _positions['Camera Focus'] = 55.0
+    '''Default axis settings (positions in mm)'''
+    _settings = {}
+    _settings['Vertical Inverted'] = False
+    _settings['Vertical Limit High'] = 10.0
+    _settings['Vertical Limit Low'] = 0.0
+    _settings['Vertical Origin'] = 0.0
+    _settings['Horizontal Inverted'] = False
+    _settings['Horizontal Limit High'] = 10.0
+    _settings['Horizontal Limit Low'] = 0.0
+    _settings['Horizontal Origin'] = 0.0
+    _settings['Camera Inverted'] = False
+    _settings['Camera Limit High'] = 50.0
+    _settings['Camera Limit Low'] = 0.0
+    _settings['Camera Origin'] = 0.0
 
     def __init__(self):
         self.cfg_default()
         self.cfg_read()
-        self.vertical   = zaberMotor(self.motors['Port'], self.motors['Device Number Vertical'])    #Vertical motor
-        self.horizontal = zaberMotor(self.motors['Port'], self.motors['Device Number Horizontal'])  #Horizontal motor for sample motion
-        self.camera     = zaberMotor(self.motors['Port'], self.motors['Device Number Camera'])      #Horizontal motor for camera motion (detection arm)
+
+        self.vertical            = zaberMotor(self.motors['Port'], self.motors['Device Number Vertical'])
+        self.vertical.inverted   = bool(self.settings['Vertical Inverted'])
+        self.vertical.limit_high = float(self.settings['Vertical Limit High'])
+        self.vertical.limit_low  = float(self.settings['Vertical Limit Low'])
+        self.vertical.origin     = float(self.settings['Vertical Origin'])
+
+        self.horizontal            = zaberMotor(self.motors['Port'], self.motors['Device Number Horizontal'])
+        self.horizontal.inverted   = bool(self.settings['Horizontal Inverted'])
+        self.horizontal.limit_high = float(self.settings['Horizontal Limit High'])
+        self.horizontal.limit_low  = float(self.settings['Horizontal Limit Low'])
+        self.horizontal.origin     = float(self.settings['Horizontal Origin'])
+
+        self.camera            = zaberMotor(self.motors['Port'], self.motors['Device Number Camera'])
+        self.camera.inverted   = bool(self.settings['Camera Inverted'])
+        self.camera.limit_high = float(self.settings['Camera Limit High'])
+        self.camera.limit_low  = float(self.settings['Camera Limit Low'])
+        self.camera.origin     = float(self.settings['Camera Origin'])
 
     def cfg_default(self):
         # Copy default values to current values
         self.motors = copy.deepcopy(self._motors)
+        self.settings = copy.deepcopy(self._settings)
 
     def cfg_read(self):
         cfg = ConfigParser()
@@ -48,6 +67,8 @@ class Motors:
         cfg.read('config.ini')
         for key, value in cfg['Motors'].items():
             self.motors[key] = value
+        for key, value in cfg['AxisSettings'].items():
+            self.settings[key] = value
 
     def cfg_write(self):
         cfg = ConfigParser()
@@ -55,19 +76,35 @@ class Motors:
         cfg.read('config.ini')
         for key in self.motors:
             cfg.set('Motors', str(key), str(self.motors[key]))
+        for key in self.settings:
+            cfg.set('AxisSettings', str(key), str(self.settings[key]))
+
         with open('config.ini', 'w') as output_file:
             cfg.write(output_file)
     
-    def get_positions(self):
-        return [self.vertical.current_position(), self.horizontal.current_position(), self.camera.current_position()]
-    
     def get_names(self):
-        return [self.vertical.get_name(), self.horizontal.get_name(), self.camera.get_name()]
+        name_vertical = self.vertical.get_name()
+        name_horizontal = self.horizontal.get_name()
+        name_camera = self.camera.get_name()
+        return [name_vertical, name_horizontal, name_camera]
 
+    def get_positions(self, units, decimals):
+        position_vertical = round(self.vertical.get_position(units), decimals)
+        position_horizontal = round(self.horizontal.get_position(units), decimals)
+        position_camera = round(self.camera.get_position(units), decimals)
+        return [position_vertical, position_horizontal, position_camera]
 
 
 class zaberMotor:
-    '''Class for Zaber's T-LSM series linear stage motor control'''
+    '''Class for Zaber's T-LS series linear stage motor control'''
+
+    '''Default attributes'''
+    inverted = False
+    homed = False
+    units = 'mm'
+    limit_high = 10
+    limit_low = 0
+    origin = 0
 
     def __init__(self, port, device_number):
         '''device_number is the number of the device in the daisy chain '''
@@ -77,7 +114,7 @@ class zaberMotor:
         self.device_number = device_number
         self.ID = 0
         self.name = ""
-        self.micro_step = 0
+        self.microstep_size = 0
         self.ask_ID()
 
     def __motorIO__(self, cmd_no, cmd_param):
@@ -146,10 +183,10 @@ class zaberMotor:
     def ask_ID(self):
         '''Returns the ID of the motor. 
         
-        If the ID is 6210, it is the vertical motor
-        If the ID is 6320, it is the horizontal motor
-        If the ID is 4152, it is the camera motor
-        If the ID is 0, no motor was found
+        Supported devices ID are:
+        6210 - T-LSM050A (vertical motor)
+        6320 - T-LSM100B (horizontal motor)
+        4152 - T-LSR150B (camera motor)
         ''' 
         cmd_no = 50
         cmd_param = 0 
@@ -159,116 +196,78 @@ class zaberMotor:
             if reply_data == 6210:   
                 self.ID = 6210
                 self.name = "T-LSM050A"
-                self.micro_step = 0.047625
+                self.microstep_size = 0.047625
             elif reply_data == 6320:
                 self.ID = 6320
                 self.name = "T-LSM100B"
-                self.micro_step = 0.19050
+                self.microstep_size = 0.19050
             elif reply_data == 4152:
                 self.ID = 4152
                 self.name = "T-LSR150B"
-                self.micro_step = 0.49609
+                self.microstep_size = 0.49609
             else:
                 self.error = 1
                 self.error_message = "Error - Unknown Device"
                 self.ID = 0
                 self.name = "Unsupported device"
-                self.micro_step = 1
         else:
             self.ID = 0
             self.name = ""
-            self.micro_step = 1
-        return self.ID
-    
-    def get_name(self):
-        return self.name
-    
-    def get_id(self):
         return self.ID
 
-    def byte_to_int(self,byte): ###pourquoi pas int.from_bytes(byte)
-        '''Converts bytes into an integer'''
-        result = 0
-        for b in byte:
-            result = result * 256 + int(b)
-        return result
-    
-    def current_position(self, unit):
+
+    def get_name(self):
+        return self.name
+
+
+    def get_position(self, units):
         '''Returns the current position of the device. The position is converted into the unit specified. 
         
         Parameter:
-            unit: A string. The options are: 'm', 'cm', 'mm', '\u03BCm' (micro meter) and '\u03BCStep' (micro-step)
+            unit: A string. The options are: 'm', 'cm', 'mm', '\u03BCm' (micrometers) and '\u03BCStep' (microsteps)
         '''
 
         cmd_no = 60
         cmd_param = 0 
         reply_data = self.__motorIO__(cmd_no, cmd_param)
-        
-        #The first two conditions are there to avoid a result with a huge number of decimals for the extremum positions. These could be taken off later
-        #by controling the number of decimals to display on the associated label of the GUI
-        if reply_data == 1066666:
-                return 0
-        elif reply_data == 533333:
-                if unit == "m":
-                    return 0.1016
-                elif unit == "cm":
-                    return 10.16
-                elif unit == "mm":
-                    return 101.6
-                elif unit =='\u03BCm':
-                    return 101600
-                elif unit == '\u03BCStep':
-                    return 533333
-        
-        #Take into account that the minimum position (home position) of the vertical motor is at its maximum height in the physical structure
-        elif self.ID == 6210:
-                if unit == "m":
-                    return 0.0508-self.data_to_position(reply_data,unit)
-                elif unit == "cm":
-                    return 5.08-self.data_to_position(reply_data,unit)
-                elif unit == "mm":
-                    return 50.8-self.data_to_position(reply_data,unit)
-                elif unit =='\u03BCm':
-                    return 50800-self.data_to_position(reply_data,unit)
-                elif unit == '\u03BCStep':
-                    return 1066666-self.data_to_position(reply_data,unit)
-        else:
-            return self.data_to_position(reply_data,unit)
+        position = self.microsteps_to_position(reply_data, units)
+        return position
 
+    def move_home(self):
+        '''Moves the device to home position.'''
+        cmd_no = 1
+        cmd_param = 0
+        self.__motorIO__(cmd_no, cmd_param)
 
-    def move_absolute_position(self, absolute_position, unit):
+    def move_absolute_position(self, absolute_position, units):
         '''Moves the device to a specified absolute position.
         
         Parameters:
             absolutePosition: Numerical value of the absolute position
             unit: A string which indicate the scale of the numerical value.
-                  The options are: 'm', 'cm', 'mm', '\u03BCm' (micro meter) and '\u03BCStep' (micro-step)
+                  The options are: 'm', 'cm', 'mm', '\u03BCm' (micrometers) and '\u03BCStep' (microsteps)
                   
-        For the horizontal motors, position 0 is the home position.
-        For the vertical motor, height 0 is the maximum position.
         '''
-        position = 0
-        if self.ID == 6210:
-            position = 1066666 - self.position_to_data(absolute_position,unit)
-        elif self.ID == 6320:
-            position = self.position_to_data(absolute_position,unit)
-        elif self.ID == 4152:
-            position = self.position_to_data(absolute_position,unit)
-
         cmd_no = 20
-        cmd_param = position 
+        cmd_param = self.position_to_microsteps(absolute_position, units)
         self.__motorIO__(cmd_no, cmd_param)
 
-    
-    def move_home(self):
-        '''Moves the device to home position. For the vertical motor, it matches the maximum height. '''
-        cmd_no = 20
-        cmd_param = 0
-        self.__motorIO__(cmd_no, cmd_param)
 
+    def move_relative_position(self, relative_position, units):
+        '''Moves the device to a specified relative position
         
+        Parameters:
+            relativePosition: Numerical value of the relative motion
+            unit: A string which indicate the scale of the numerical value.
+                  The options are: 'm', 'cm', 'mm', '\u03BCm' (micrometers) and '\u03BCStep' (microsteps)
+        '''
+        cmd_no = 21
+        cmd_param = self.position_to_microsteps(relative_position, units)
+        self.__motorIO__(cmd_no, cmd_param)  
+
+
     def move_maximum_position(self):
-        '''Moves the device to its maximum position. For the vertical motor it matches the minimum height.  '''
+        '''Moves the device to its maximum position.'''
         position = 0
         if self.ID == 6210:
             position = 1066666
@@ -282,64 +281,56 @@ class zaberMotor:
         self.__motorIO__(cmd_no, cmd_param)
 
 
-    def move_relative_position(self, relative_position, unit):
-        '''Moves the device to a specified relative position
-        
-        Parameters:
-            relativePosition: Numerical value of the relative motion
-            unit: A string which indicate the scale of the numerical value.
-                  The options are: 'm', 'cm', 'mm', '\u03BCm' (micro meter) and '\u03BCStep' (micro-step)
-        '''
-        cmd_no = 21
-        cmd_param = self.position_to_data(relative_position, unit)
-        self.__motorIO__(cmd_no, cmd_param)  
-
-
-    def data_to_position(self, data, unit):
+    def microsteps_to_position(self, data, units):
         '''Converts a data into a position 
         
         Parameters:
             data: An integer or a float
             unit: A string wich specifies the unit into which the position will be converted. 
-                  The options are: 'm', 'cm', 'mm', '\u03BCm' (micro meter) and '\u03BCStep' (micro-step) 
+                  The options are: 'm', 'cm', 'mm', '\u03BCm' (micrometers) and '\u03BCStep' (microsteps) 
         '''
-        factor = 1
-        micro_step = self.micro_step
-        
-        if unit == 'm':
+        if units == 'm':
             factor = 1
-        elif unit == 'cm':
+        elif units == 'cm':
             factor = pow(10,-2)
-        elif unit == 'mm':
+        elif units == 'mm':
             factor = pow(10,-3)
-        elif unit == '\u03BCm':
+        elif units == '\u03BCm':
             factor = pow(10,-6)
-        elif unit == '\u03BCStep':
-            factor = micro_step*pow(10,-6)
+        elif units == '\u03BCStep':
+            factor = self.microstep_size * pow(10,-6)
             
-        return data*micro_step*pow(10,-6)/factor
+        if self.microstep_size > 0 and factor > 0:
+            position = data * self.microstep_size * pow(10,-6) / factor
+        else:
+            position = 0
 
-    def position_to_data(self, position, unit):
+        return position
+
+
+    def position_to_microsteps(self, position, units):
         '''Converts the position into the form of a data 
         
         Parameters:
             position: Numerical value of the position
             unit: A string which specifies the unit of the numerical position. 
-                  The options are: 'm', 'cm', 'mm', '\u03BCm' (micro meter) and '\u03BCStep' (micro-step) 
+                  The options are: 'm', 'cm', 'mm', '\u03BCm' (micrometers) and '\u03BCStep' (microsteps) 
         '''
-        factor = 1
-        micro_step = self.micro_step
-        
-        if unit == 'm':
+        if units == 'm':
             factor = 1
-        elif unit == 'cm':
+        elif units == 'cm':
             factor = pow(10,-2)
-        elif unit == 'mm':
+        elif units == 'mm':
             factor = pow(10,-3)
-        elif unit == '\u03BCm':
+        elif units == '\u03BCm':
             factor = pow(10,-6)
-        elif unit == '\u03BCStep':
-            factor = micro_step*pow(10,-6)
+        elif units == '\u03BCStep':
+            factor = self.microstep_size * pow(10,-6)
+
+        if self.microstep_size > 0 and factor > 0:
+            microsteps = position * factor / (self.microstep_size * pow(10,-6))
+        else:
+            microsteps = 0
         
-        return position*factor/(micro_step*pow(10,-6))
+        return microsteps
 
