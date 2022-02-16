@@ -14,7 +14,7 @@ class Lasers:
     _lasers = {}
     _lasers['Terminal'] = '/Dev7/ao0:1'
     _lasers["Voltage Left"] = 0.905   # In Volts
-    _lasers["Voltage Right"] = 0.935  # In Volts
+    _lasers["Voltage Right"] = 0.905  # In Volts
 
     def __init__(self):
         self.cfg_default()

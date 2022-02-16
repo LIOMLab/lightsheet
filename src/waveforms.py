@@ -58,9 +58,9 @@ def calibrated_etl_stairs(left_slope, left_intercept, right_slope, right_interce
        Later, stepAmplitude will be define by the ETL focus position as a function of the voltage applied
        Each ETL may have a different relation to the voltage applied'''
     
-    if activate: ###
+    if activate:
         if number_of_steps != 1:
-            #step_column = 2560/(number_of_steps-1) ###
+            #step_column = 2560/(number_of_steps-1)
             step_column = etl_step
         
             #print('Step column: ' + str(step_column)) #debugging

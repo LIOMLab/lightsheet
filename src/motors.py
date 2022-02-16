@@ -22,39 +22,46 @@ class Motors:
     '''Default axis settings (positions in mm)'''
     _settings = {}
     _settings['Vertical Inverted'] = False
-    _settings['Vertical Limit High'] = 10.0
-    _settings['Vertical Limit Low'] = 0.0
+    _settings['Vertical Units'] = 'mm'
     _settings['Vertical Origin'] = 0.0
+    _settings['Vertical Limit Low'] = 0.0
+    _settings['Vertical Limit High'] = 10.0
     _settings['Horizontal Inverted'] = False
-    _settings['Horizontal Limit High'] = 10.0
-    _settings['Horizontal Limit Low'] = 0.0
+    _settings['Horizontal Units'] = 'mm'
     _settings['Horizontal Origin'] = 0.0
+    _settings['Horizontal Limit Low'] = 0.0
+    _settings['Horizontal Limit High'] = 10.0
     _settings['Camera Inverted'] = False
-    _settings['Camera Limit High'] = 50.0
-    _settings['Camera Limit Low'] = 0.0
+    _settings['Camera Units'] = 'mm'
     _settings['Camera Origin'] = 0.0
+    _settings['Camera Limit Low'] = 0.0
+    _settings['Camera Limit High'] = 50.0
 
     def __init__(self):
         self.cfg_default()
         self.cfg_read()
 
-        self.vertical            = zaberMotor(self.motors['Port'], self.motors['Device Number Vertical'])
-        self.vertical.inverted   = bool(self.settings['Vertical Inverted'])
-        self.vertical.limit_high = float(self.settings['Vertical Limit High'])
-        self.vertical.limit_low  = float(self.settings['Vertical Limit Low'])
-        self.vertical.origin     = float(self.settings['Vertical Origin'])
+        self.vertical = zaberMotor(str(self.motors['Port']), int(self.motors['Device Number Vertical']))
+        self.vertical.set_inverted(bool(self.settings['Vertical Inverted']))
+        self.vertical.set_units(str(self.settings['Vertical Units']))
+        self.vertical.set_origin(float(self.settings['Vertical Origin']), str(self.settings['Vertical Units']))
+        self.vertical.set_limit_low(float(self.settings['Vertical Limit Low']), str(self.settings['Vertical Units']))
+        self.vertical.set_limit_high(float(self.settings['Vertical Limit High']), str(self.settings['Vertical Units']))
 
-        self.horizontal            = zaberMotor(self.motors['Port'], self.motors['Device Number Horizontal'])
-        self.horizontal.inverted   = bool(self.settings['Horizontal Inverted'])
-        self.horizontal.limit_high = float(self.settings['Horizontal Limit High'])
-        self.horizontal.limit_low  = float(self.settings['Horizontal Limit Low'])
-        self.horizontal.origin     = float(self.settings['Horizontal Origin'])
+        self.horizontal = zaberMotor(str(self.motors['Port']), int(self.motors['Device Number Horizontal']))
+        self.horizontal.set_inverted(bool(self.settings['Horizontal Inverted']))
+        self.horizontal.set_units(str(self.settings['Horizontal Units']))
+        self.horizontal.set_origin(float(self.settings['Horizontal Origin']), str(self.settings['Horizontal Units']))
+        self.horizontal.set_limit_low(float(self.settings['Horizontal Limit Low']), str(self.settings['Horizontal Units']))
+        self.horizontal.set_limit_high(float(self.settings['Horizontal Limit High']), str(self.settings['Horizontal Units']))
 
-        self.camera            = zaberMotor(self.motors['Port'], self.motors['Device Number Camera'])
-        self.camera.inverted   = bool(self.settings['Camera Inverted'])
-        self.camera.limit_high = float(self.settings['Camera Limit High'])
-        self.camera.limit_low  = float(self.settings['Camera Limit Low'])
-        self.camera.origin     = float(self.settings['Camera Origin'])
+        self.camera = zaberMotor(self.motors['Port'], int(self.motors['Device Number Camera']))
+        self.camera.set_inverted(bool(self.settings['Camera Inverted']))
+        self.camera.set_units(str(self.settings['Camera Units']))
+        self.camera.set_origin(float(self.settings['Camera Origin']), str(self.settings['Camera Units']))
+        self.camera.set_limit_low(float(self.settings['Camera Limit Low']), str(self.settings['Camera Units']))
+        self.camera.set_limit_high(float(self.settings['Camera Limit High']), str(self.settings['Camera Units']))
+
 
     def cfg_default(self):
         # Copy default values to current values
@@ -82,39 +89,30 @@ class Motors:
         with open('config.ini', 'w') as output_file:
             cfg.write(output_file)
     
-    def get_names(self):
-        name_vertical = self.vertical.get_name()
-        name_horizontal = self.horizontal.get_name()
-        name_camera = self.camera.get_name()
-        return [name_vertical, name_horizontal, name_camera]
-
-    def get_positions(self, units, decimals):
-        position_vertical = round(self.vertical.get_position(units), decimals)
-        position_horizontal = round(self.horizontal.get_position(units), decimals)
-        position_camera = round(self.camera.get_position(units), decimals)
-        return [position_vertical, position_horizontal, position_camera]
 
 
 class zaberMotor:
     '''Class for Zaber's T-LS series linear stage motor control'''
 
     '''Default attributes'''
+    ID = 0
+    name = ""
     inverted = False
     homed = False
+    microstep_size = 0
+    microsteps_max = 0
     units = 'mm'
-    limit_high = 10
-    limit_low = 0
-    origin = 0
+    limit_high_microsteps = 0
+    limit_low_microsteps = 0
+    origin_microsteps = 0
 
-    def __init__(self, port, device_number):
+
+    def __init__(self, port:str, device_number:int):
         '''device_number is the number of the device in the daisy chain '''
         self.error = 0
         self.error_message = ""
         self.port = port
         self.device_number = device_number
-        self.ID = 0
-        self.name = ""
-        self.microstep_size = 0
         self.ask_ID()
 
     def __motorIO__(self, cmd_no, cmd_param):
@@ -144,7 +142,7 @@ class zaberMotor:
 
         try:
             #Try to open a serial connection
-            motor = serial.Serial(port=self.port, baudrate=9600, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout = 2)
+            motor = serial.Serial(port = self.port, baudrate = 9600, bytesize = serial.EIGHTBITS, parity = serial.PARITY_NONE, stopbits = serial.STOPBITS_ONE, timeout = 2)
         except serial.SerialException:
             self.error = 1
             self.error_message = "Error - Serial port cannot be found or cannot be configured"
@@ -161,14 +159,14 @@ class zaberMotor:
             motor.close()
             #Checks if reply is valid length
             if len(reply_bytes) == 6:
-                if reply_bytes[0] == self.device_no and reply_bytes[1] == cmd_no:
+                if reply_bytes[0] == self.device_number and reply_bytes[1] == cmd_no:
                     #Reply has a valid length and fits expected format
                     #Convert returned bytes into data value (handling negative values)
                     if reply_bytes[5] > 127:
                         reply_data = (pow(256,3) * reply_bytes[5] + pow(256,2) * reply_bytes[4] + pow(256,1) * reply_bytes[3] + pow(256,0) * reply_bytes[2]) - pow(256,4)
                     else:
                         reply_data = (pow(256,3) * reply_bytes[5] + pow(256,2) * reply_bytes[4] + pow(256,1) * reply_bytes[3] + pow(256,0) * reply_bytes[2])      
-                elif reply_bytes[0] == self.device_no and reply_bytes[1] == 255:
+                elif reply_bytes[0] == self.device_number and reply_bytes[1] == 255:
                     self.error = 1
                     self.error_message = "Error - Motor reports an error as occured"
                 else:
@@ -188,6 +186,7 @@ class zaberMotor:
         6320 - T-LSM100B (horizontal motor)
         4152 - T-LSR150B (camera motor)
         ''' 
+
         cmd_no = 50
         cmd_param = 0 
         reply_data = self.__motorIO__(cmd_no, cmd_param)
@@ -197,17 +196,20 @@ class zaberMotor:
                 self.ID = 6210
                 self.name = "T-LSM050A"
                 self.microstep_size = 0.047625
+                self.microsteps_max = 1066666
             elif reply_data == 6320:
                 self.ID = 6320
                 self.name = "T-LSM100B"
                 self.microstep_size = 0.19050
+                self.microsteps_max = 533333
             elif reply_data == 4152:
                 self.ID = 4152
                 self.name = "T-LSR150B"
                 self.microstep_size = 0.49609
+                self.microsteps_max = 258015
             else:
                 self.error = 1
-                self.error_message = "Error - Unknown Device"
+                self.error_message = "Error - Unsupported device"
                 self.ID = 0
                 self.name = "Unsupported device"
         else:
@@ -215,10 +217,41 @@ class zaberMotor:
             self.name = ""
         return self.ID
 
+    def set_units(self, units: str):
+        self.units = units
+
+    def set_inverted(self, inverted: bool):
+        self.inverted = inverted
+
+    def set_limit_low(self, position, units):
+        self.limit_low_microsteps = self.position_to_microsteps(position, units)
+
+    def set_limit_high(self, position, units):
+        self.limit_high_microsteps = self.position_to_microsteps(position, units)
+
+    def set_origin(self, position, units):
+        self.origin_microsteps = self.position_to_microsteps(position, units)
+        
+    def get_units(self):
+        return self.units
+
+    def get_inverted(self):
+        return self.inverted
+
+    def get_limit_low(self, units):
+        limit_low_units = self.microsteps_to_position(self.limit_low_microsteps, units)
+        return limit_low_units
+
+    def get_limit_high(self, units):
+        limit_high_units = self.microsteps_to_position(self.limit_high_microsteps, units)
+        return limit_high_units
+
+    def get_origin(self, units):
+        origin_units = self.microsteps_to_position(self.origin_microsteps, units)
+        return origin_units
 
     def get_name(self):
         return self.name
-
 
     def get_position(self, units):
         '''Returns the current position of the device. The position is converted into the unit specified. 
@@ -226,18 +259,21 @@ class zaberMotor:
         Parameter:
             unit: A string. The options are: 'm', 'cm', 'mm', '\u03BCm' (micrometers) and '\u03BCStep' (microsteps)
         '''
-
-        cmd_no = 60
-        cmd_param = 0 
-        reply_data = self.__motorIO__(cmd_no, cmd_param)
-        position = self.microsteps_to_position(reply_data, units)
+        if self.ID != 0:
+            cmd_no = 60
+            cmd_param = 0 
+            reply_data = self.__motorIO__(cmd_no, cmd_param)
+            position = self.microsteps_to_position(reply_data, units)
+        else:
+            position = 0
         return position
 
     def move_home(self):
         '''Moves the device to home position.'''
-        cmd_no = 1
-        cmd_param = 0
-        self.__motorIO__(cmd_no, cmd_param)
+        if self.ID != 0:
+            cmd_no = 1
+            cmd_param = 0
+            self.__motorIO__(cmd_no, cmd_param)
 
     def move_absolute_position(self, absolute_position, units):
         '''Moves the device to a specified absolute position.
@@ -248,9 +284,10 @@ class zaberMotor:
                   The options are: 'm', 'cm', 'mm', '\u03BCm' (micrometers) and '\u03BCStep' (microsteps)
                   
         '''
-        cmd_no = 20
-        cmd_param = self.position_to_microsteps(absolute_position, units)
-        self.__motorIO__(cmd_no, cmd_param)
+        if self.ID != 0:        
+            cmd_no = 20
+            cmd_param = self.position_to_microsteps(absolute_position, units)
+            self.__motorIO__(cmd_no, cmd_param)
 
 
     def move_relative_position(self, relative_position, units):
@@ -261,31 +298,25 @@ class zaberMotor:
             unit: A string which indicate the scale of the numerical value.
                   The options are: 'm', 'cm', 'mm', '\u03BCm' (micrometers) and '\u03BCStep' (microsteps)
         '''
-        cmd_no = 21
-        cmd_param = self.position_to_microsteps(relative_position, units)
-        self.__motorIO__(cmd_no, cmd_param)  
+        if self.ID != 0:
+            cmd_no = 21
+            cmd_param = self.position_to_microsteps(relative_position, units)
+            self.__motorIO__(cmd_no, cmd_param)  
 
 
     def move_maximum_position(self):
         '''Moves the device to its maximum position.'''
-        position = 0
-        if self.ID == 6210:
-            position = 1066666
-        elif self.ID == 6320:
-            position = 533333
-        elif self.ID == 4152:
-            position = 258015
-
-        cmd_no = 20
-        cmd_param = position
-        self.__motorIO__(cmd_no, cmd_param)
+        if self.ID != 0:
+            cmd_no = 20
+            cmd_param = self.microsteps_max
+            self.__motorIO__(cmd_no, cmd_param)
 
 
-    def microsteps_to_position(self, data, units):
-        '''Converts a data into a position 
+    def microsteps_to_position(self, microsteps, units):
+        '''Converts microsteps into position 
         
         Parameters:
-            data: An integer or a float
+            microsteps: Numerical value
             unit: A string wich specifies the unit into which the position will be converted. 
                   The options are: 'm', 'cm', 'mm', '\u03BCm' (micrometers) and '\u03BCStep' (microsteps) 
         '''
@@ -301,7 +332,7 @@ class zaberMotor:
             factor = self.microstep_size * pow(10,-6)
             
         if self.microstep_size > 0 and factor > 0:
-            position = data * self.microstep_size * pow(10,-6) / factor
+            position = microsteps * self.microstep_size * pow(10,-6) / factor
         else:
             position = 0
 
@@ -309,7 +340,7 @@ class zaberMotor:
 
 
     def position_to_microsteps(self, position, units):
-        '''Converts the position into the form of a data 
+        '''Converts position into microsteps 
         
         Parameters:
             position: Numerical value of the position

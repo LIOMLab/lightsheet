@@ -57,7 +57,7 @@ class Configuration:
             self.galvo[key] = value
         for key, value in cfg['ETL'].items():
             self.etl[key] = value
-        for key, value in cfg['Laser'].items():
+        for key, value in cfg['Lasers'].items():
             self.laser[key] = value
         for key, value in cfg['Motors'].items():
             self.motors[key] = value
