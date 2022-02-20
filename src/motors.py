@@ -12,14 +12,14 @@ from configparser import ConfigParser
 
 class Motors:
 
-    '''Default hardware configuration'''
+    # Default hardware configuration
     _motors = {}
     _motors['Port'] = 'COM3'
     _motors['Device Number Vertical'] = 1
     _motors['Device Number Horizontal'] = 2
     _motors['Device Number Camera'] = 3
 
-    '''Default axis settings (positions in mm)'''
+    # Default axis settings
     _settings = {}
     _settings['Vertical Inverted'] = False
     _settings['Vertical Units'] = 'mm'
@@ -37,30 +37,46 @@ class Motors:
     _settings['Camera Limit Low'] = 0.0
     _settings['Camera Limit High'] = 50.0
 
+    # State flags
+    vertical_is_open = False
+    horizontal_is_open = False
+    camera_is_open = False
+
+    # Error status
+    error = 0
+    error_message = ""
+
+
     def __init__(self):
         self.cfg_default()
         self.cfg_read()
 
         self.vertical = zaberMotor(str(self.motors['Port']), int(self.motors['Device Number Vertical']))
-        self.vertical.set_inverted(bool(self.settings['Vertical Inverted']))
-        self.vertical.set_units(str(self.settings['Vertical Units']))
-        self.vertical.set_origin(float(self.settings['Vertical Origin']), str(self.settings['Vertical Units']))
-        self.vertical.set_limit_low(float(self.settings['Vertical Limit Low']), str(self.settings['Vertical Units']))
-        self.vertical.set_limit_high(float(self.settings['Vertical Limit High']), str(self.settings['Vertical Units']))
+        if self.vertical.is_supported:
+            self.vertical_is_open = True
+            self.vertical.set_inverted(bool(self.settings['Vertical Inverted']))
+            self.vertical.set_units(str(self.settings['Vertical Units']))
+            self.vertical.set_origin(float(self.settings['Vertical Origin']), str(self.settings['Vertical Units']))
+            self.vertical.set_limit_low(float(self.settings['Vertical Limit Low']), str(self.settings['Vertical Units']))
+            self.vertical.set_limit_high(float(self.settings['Vertical Limit High']), str(self.settings['Vertical Units']))
 
         self.horizontal = zaberMotor(str(self.motors['Port']), int(self.motors['Device Number Horizontal']))
-        self.horizontal.set_inverted(bool(self.settings['Horizontal Inverted']))
-        self.horizontal.set_units(str(self.settings['Horizontal Units']))
-        self.horizontal.set_origin(float(self.settings['Horizontal Origin']), str(self.settings['Horizontal Units']))
-        self.horizontal.set_limit_low(float(self.settings['Horizontal Limit Low']), str(self.settings['Horizontal Units']))
-        self.horizontal.set_limit_high(float(self.settings['Horizontal Limit High']), str(self.settings['Horizontal Units']))
+        if self.horizontal.is_supported:
+            self.horizontal_is_open = True
+            self.horizontal.set_inverted(bool(self.settings['Horizontal Inverted']))
+            self.horizontal.set_units(str(self.settings['Horizontal Units']))
+            self.horizontal.set_origin(float(self.settings['Horizontal Origin']), str(self.settings['Horizontal Units']))
+            self.horizontal.set_limit_low(float(self.settings['Horizontal Limit Low']), str(self.settings['Horizontal Units']))
+            self.horizontal.set_limit_high(float(self.settings['Horizontal Limit High']), str(self.settings['Horizontal Units']))
 
         self.camera = zaberMotor(self.motors['Port'], int(self.motors['Device Number Camera']))
-        self.camera.set_inverted(bool(self.settings['Camera Inverted']))
-        self.camera.set_units(str(self.settings['Camera Units']))
-        self.camera.set_origin(float(self.settings['Camera Origin']), str(self.settings['Camera Units']))
-        self.camera.set_limit_low(float(self.settings['Camera Limit Low']), str(self.settings['Camera Units']))
-        self.camera.set_limit_high(float(self.settings['Camera Limit High']), str(self.settings['Camera Units']))
+        if self.camera.is_supported:
+            self.camera_is_open = True
+            self.camera.set_inverted(bool(self.settings['Camera Inverted']))
+            self.camera.set_units(str(self.settings['Camera Units']))
+            self.camera.set_origin(float(self.settings['Camera Origin']), str(self.settings['Camera Units']))
+            self.camera.set_limit_low(float(self.settings['Camera Limit Low']), str(self.settings['Camera Units']))
+            self.camera.set_limit_high(float(self.settings['Camera Limit High']), str(self.settings['Camera Units']))
 
 
     def cfg_default(self):
@@ -74,7 +90,7 @@ class Motors:
         cfg.read('config.ini')
         for key, value in cfg['Motors'].items():
             self.motors[key] = value
-        for key, value in cfg['AxisSettings'].items():
+        for key, value in cfg['Axis'].items():
             self.settings[key] = value
 
     def cfg_write(self):
@@ -84,17 +100,45 @@ class Motors:
         for key in self.motors:
             cfg.set('Motors', str(key), str(self.motors[key]))
         for key in self.settings:
-            cfg.set('AxisSettings', str(key), str(self.settings[key]))
+            cfg.set('Axis', str(key), str(self.settings[key]))
 
         with open('config.ini', 'w') as output_file:
             cfg.write(output_file)
+    
+    def vertical_get_name(self):
+        if self.vertical_is_open:
+            vertical_name = str(self.vertical.get_name())
+        else:
+            vertical_name = str('No motor initialized')
+        return vertical_name
+
+    def horizontal_get_name(self):
+        if self.horizontal_is_open:
+            horizontal_name = str(self.horizontal.get_name())
+        else:
+            horizontal_name = str('No motor initialized')
+        return horizontal_name
+
+    def camera_get_name(self):
+        if self.camera_is_open:
+            camera_name = str(self.camera.get_name())
+        else:
+            camera_name = str('No motor initialized')
+        return camera_name
     
 
 
 class zaberMotor:
     '''Class for Zaber's T-LS series linear stage motor control'''
 
-    '''Default attributes'''
+    # State flags
+    is_supported = False
+
+    # Error status
+    error = 0
+    error_message = ""
+
+    # Default attributes
     ID = 0
     name = ""
     inverted = False
@@ -109,8 +153,6 @@ class zaberMotor:
 
     def __init__(self, port:str, device_number:int):
         '''device_number is the number of the device in the daisy chain '''
-        self.error = 0
-        self.error_message = ""
         self.port = port
         self.device_number = device_number
         self.ask_ID()
@@ -177,7 +219,7 @@ class zaberMotor:
                 self.error_message = "Error - No valid reply received"
         return reply_data
 
-
+    
     def ask_ID(self):
         '''Returns the ID of the motor. 
         
@@ -192,22 +234,26 @@ class zaberMotor:
         reply_data = self.__motorIO__(cmd_no, cmd_param)
 
         if not self.error:
-            if reply_data == 6210:   
+            if reply_data == 6210:
+                self.is_supported = True   
                 self.ID = 6210
                 self.name = "T-LSM050A"
                 self.microstep_size = 0.047625
                 self.microsteps_max = 1066666
             elif reply_data == 6320:
+                self.is_supported = True
                 self.ID = 6320
                 self.name = "T-LSM100B"
                 self.microstep_size = 0.19050
                 self.microsteps_max = 533333
             elif reply_data == 4152:
+                self.is_supported = True
                 self.ID = 4152
                 self.name = "T-LSR150B"
                 self.microstep_size = 0.49609
                 self.microsteps_max = 258015
             else:
+                self.is_supported = False
                 self.error = 1
                 self.error_message = "Error - Unsupported device"
                 self.ID = 0

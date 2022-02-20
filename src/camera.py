@@ -7,47 +7,33 @@ sys.path.append(".")
 
 import pco
 import time
+from datetime import datetime
+from datetime import timedelta
 
 class Camera:
     
-    '''Defaults attributes'''
-    open = False
-    name = ''
-    trigger_mode = 'auto sequence'
-    x_max_res = 0
-    y_max_res = 0
-    x_current_res = 0
-    y_current_res = 0
-    delay = 0
-    time_base_delay_code = 'us'
-    exposure = 0
-    time_base_exposure_code = 'us'
-    acquire_mode = 'auto'
-    storage_mode = 'recorder'
-    recorder_mode = 'sequence'
-    temperature_power = 0
-    temperature_camera = 0
-    temperature_sensor = 0
+    # State flags
+    is_open = False
 
+    # Error status
+    error = 0
+    error_message = ""
 
     def __init__(self):
         try:
             self.camera = pco.Camera()
         except:
-
             self.error = 1
             self.error_message = 'Camera not found'
         else:
-            self.open = True
-            self.error = 0
-            self.error_message = ''
-    
+            self.is_open = True
+
 
     def close(self):
         '''Closes an opened camera'''
-        if self.open:
+        if self.is_open:
             self.camera.sdk.close_camera()
-            self.open = False
+            self.is_open = False
 
 
     def set_trigger_mode(self, trigger_mode):
@@ -68,7 +54,7 @@ class Camera:
                                     image is controlled through the HW signal, exposure time of the second image is
                                     given by the readout time of the first image
         '''
-        if self.open:
+        if self.is_open:
             if trigger_mode == 'AutoSequence':
                 self.camera.sdk.set_trigger_mode('auto sequence')
             elif trigger_mode == 'ExternalExposureStart':
@@ -77,143 +63,203 @@ class Camera:
                 self.camera.sdk.set_trigger_mode('external exposure control')
 
 
-#    def arm_camera(self):
-#        '''Prepare the camera for a following recording (with the current settings)'''
-#        self.camera.sdk.arm_camera()
-
     def start_recording_single(self):
-        if self.open:
+        if self.is_open:
             self.camera.record(1, mode='sequence non blocking')
+            # makes sure record is started before we keep going (bug investigation) 
+            while True:
+                running = self.camera.rec.get_status()['is running']
+                if running is True:
+                    break
 
     def start_recording_multiple(self, number_of_images):
-        if self.open:
+        if self.is_open:
             self.camera.record(int(number_of_images), mode='sequence non blocking')
+            # makes sure record is started before we keep going (bug investigation) 
+            while True:
+                running = self.camera.rec.get_status()['is running']
+                if running is True:
+                    break
 
     def get_image(self):
-        if self.open:
-            while True:
-                if self.camera.rec.get_status()['dwProcImgCount'] >= 1:
-                    break
-                time.sleep(0.001)
+        if self.is_open:
+            # implement a 2s timeout in case we never receive the frame (bug investigation)
+            delete_TO = 2
+            wait_until = datetime.now() + timedelta(seconds=delete_TO)
+            break_loop = False
+            while not break_loop:
+                running = self.camera.rec.get_status()['is running']
+                if running is False:
+                    break_loop = True
+                elif wait_until < datetime.now():
+                    print('Timeout! no frame received')
+                    break_loop = True
+                time.sleep(0.01)
+            # 2do: deal with missing data in case of timeout
             image, meta = self.camera.image()
             return image
 
     def get_images(self, number_of_images):
-        if self.open:
-            while True:
-                if self.camera.rec.get_status()['dwProcImgCount'] >= number_of_images:
-                    break
-                time.sleep(0.001)
+        if self.is_open:
+            # implement a 2s timeout in case we never receive enough frames (bug investigation)
+            delete_TO = 2
+            wait_until = datetime.now() + timedelta(seconds=delete_TO)
+            break_loop = False
+            while not break_loop:
+                running = self.camera.rec.get_status()['is running']
+                frames = self.camera.rec.get_status()['dwProcImgCount']
+                if running is False:
+                    break_loop = True
+                elif wait_until < datetime.now():
+                    print('Timeout! frames in buffer: ' + str(frames))
+                    break_loop = True
+                time.sleep(0.01)
+            # 2do: deal with partial data in case of timeout
             images, metadatas = self.camera.images()
             return images
 
-    def get_sizes(self):
-        '''Returns (as arguments) the current armed image size of the camera
-            'res' : resolution in pixels '''
-        if self.open:
-            cam_sizes = {}
-            cam_sizes = self.camera.sdk.get_sizes()
-            self.x_current_res = int(cam_sizes.get('x'))
-            self.y_current_res = int(cam_sizes.get('y'))
-            self.x_max_res = int(cam_sizes.get('x max'))
-            self.y_max_res = int(cam_sizes.get('y max'))
 
-    def set_recording_state(self, state):
-        '''Set the recording state for the camera
-            0: recording off
-            1: recording on'''
-        if self.open:
-            self.camera.sdk.set_recording_state(state)
 
 
     '''Get Camera Properties'''
+
     def get_name(self):
         '''Gives the camera name'''
-        if self.open:
+        if self.is_open:
             cam_name = {}
             cam_name = self.camera.sdk.get_camera_name()
-            self.name = str(cam_name.get('camera name'))
+            name = str(cam_name.get('camera name'))
+        else:
+            name = str('No camera initialized')
+        return name
 
-    def get_temperature(self):
-        ''' Gives the current internal, sensor and power supply temperatures in Celcius'''
-        if self.open:
-            cam_temperature = {}
-            cam_temperature = self.camera.sdk.get_temperature()
-            self.temperature_sensor = float(cam_temperature.get('sensor temperature'))
-            self.temperature_camera = float(cam_temperature.get('camera temperature'))
-            self.temperature_power  = float(cam_temperature.get('power temperature'))
+    def get_camera_temperature(self):
+        ''' Gives the current internal temperatures in Celcius'''
+        if self.is_open:
+            cam_temperatures = {}
+            cam_temperatures = self.camera.sdk.get_temperature()
+            camera_temperature = float(cam_temperatures.get('camera temperature'))
+        else:
+            camera_temperature = float(1000)
+        return camera_temperature
+
+    def get_sensor_temperature(self):
+        ''' Gives the current sensor temperatures in Celcius'''
+        if self.is_open:
+            cam_temperatures = {}
+            cam_temperatures = self.camera.sdk.get_temperature()
+            sensor_temperature = float(cam_temperatures.get('sensor temperature'))
+        else:
+            sensor_temperature = float(1000)
+        return sensor_temperature
+
+    def get_power_temperature(self):
+        ''' Gives the current power supply temperatures in Celcius'''
+        if self.is_open:
+            cam_temperatures = {}
+            cam_temperatures = self.camera.sdk.get_temperature()
+            power_temperature = float(cam_temperatures.get('power temperature'))
+        else:
+            power_temperature = float(1000)
+        return power_temperature
+
+    def get_xsize(self):
+        '''Returns the current armed image x-size of the camera'''
+        if self.is_open:
+            cam_sizes = {}
+            cam_sizes = self.camera.sdk.get_sizes()
+            current_xsize = int(cam_sizes.get('x'))
+        else:
+            current_xsize = 0
+        return current_xsize
+    
+    def get_ysize(self):
+        '''Returns the current armed image y-size of the camera'''
+        if self.is_open:
+            cam_sizes = {}
+            cam_sizes = self.camera.sdk.get_sizes()
+            current_ysize = int(cam_sizes.get('y'))
+        else:
+            current_ysize = 0
+        return current_ysize
 
     def get_trigger_mode(self):
         '''Gives the current trigger mode'''
-        if self.open:
-            cam_trigger = {}
-            cam_trigger = self.camera.sdk.get_trigger_mode()
-            self.trigger_mode = str(cam_trigger.get('trigger mode'))
-
-    def get_exposure_time(self):
-        '''Gives the current delay time and exposure time'''
-        if self.open:
-            cam_delay_exposure_time = {}
-            cam_delay_exposure_time = self.camera.sdk.get_delay_exposure_time()
-            self.delay = int(cam_delay_exposure_time.get('delay'))
-            self.exposure = int(cam_delay_exposure_time.get('exposure'))
-            self.time_base_delay_code = str(cam_delay_exposure_time.get('delay timebase'))
-            self.time_base_exposure_code = str(cam_delay_exposure_time.get('exposure timebase'))
+        if self.is_open:
+            cam_trigger_mode = {}
+            cam_trigger_mode = self.camera.sdk.get_trigger_mode()
+            trigger_mode = str(cam_trigger_mode.get('trigger mode'))
+        else:
+            trigger_mode = str('N/A')
+        return trigger_mode
 
     def get_acquire_mode(self):
         '''Gives the current acquire mode'''
-        if self.open:
+        if self.is_open:
             cam_acquire_mode = {}
             cam_acquire_mode = self.camera.sdk.get_acquire_mode()
-            self.acquire_mode = str(cam_acquire_mode.get('acquire mode'))
+            acquire_mode = str(cam_acquire_mode.get('acquire mode'))
+        else:
+            acquire_mode = str('N/A')
+        return acquire_mode
 
     def get_storage_mode(self):
         '''Gives the current storage mode'''
-        if self.open:
+        if self.is_open:
             cam_storage_mode = {}
             cam_storage_mode = self.camera.sdk.get_storage_mode()
-            self.storage_mode = str(cam_storage_mode.get('storage mode'))
+            storage_mode = str(cam_storage_mode.get('storage mode'))
+        else:
+            storage_mode = str('N/A')
+        return storage_mode
 
     def get_recorder_submode(self):
         '''Gives the current recorder mode (only possible if storage mode is recorder)'''
-        if self.open:
+        if self.is_open:
             cam_recorder_mode = {}
             cam_recorder_mode = self.camera.sdk.get_recorder_submode()
-            self.recorder_mode = str(cam_recorder_mode.get('recorder submode'))
+            recorder_mode = str(cam_recorder_mode.get('recorder submode'))
+        else:
+            recorder_mode = str('N/A')
+        return recorder_mode
 
-    '''Debugging methods'''
-    def get_roi(self):
-        '''Gives the coordinates of the ROI '''
-        if self.open:
-            cam_roi = {}
-            cam_roi = self.camera.sdk.get_roi()
-            self.roiX0 = int(cam_roi.get('x0'))
-            self.roiY0 = int(cam_roi.get('y0'))
-            self.roiX1 = int(cam_roi.get('x1'))
-            self.roiY1 = int(cam_roi.get('y1'))
+    def get_exposure_time(self):
+        if self.is_open:
+            cam_delay_exposure_time = {}
+            cam_delay_exposure_time = self.camera.sdk.get_delay_exposure_time()
+            exposure_time = int(cam_delay_exposure_time.get('exposure'))
+        else:
+            exposure_time = 0
+        return exposure_time
 
-    def get_pixel_rate(self):
-        '''Gives the camera pixel rate in Hz, which determines the sensor readout speed'''
-        if self.open:
-            cam_pixel_rate = {}
-            cam_pixel_rate = self.camera.sdk.get_pixel_rate()
-            self.pixel_rate = int(cam_pixel_rate.get('pixel rate'))
+    def get_exposure_timebase(self):
+        if self.is_open:
+            cam_delay_exposure_time = {}
+            cam_delay_exposure_time = self.camera.sdk.get_delay_exposure_time()
+            exposure_timebase = str(cam_delay_exposure_time.get('exposure timebase'))
+        else:
+            exposure_timebase = str('')
+        return exposure_timebase
 
-    def get_sensor_format(self):
-        '''Gives the current sensor format'''
-        if self.open:
-            cam_sensor = {}
-            self.camera.sdk.get_sensor_format()
-            self.sensor = cam_sensor.get('sensor format')
+    def get_delay_time(self):
+        if self.is_open:
+            cam_delay_exposure_time = {}
+            cam_delay_exposure_time = self.camera.sdk.get_delay_exposure_time()
+            delay_time = int(cam_delay_exposure_time.get('delay'))
+        else:
+            delay_time = 0
+        return delay_time
 
-    def get_health_status(self):
-        '''Retrieves info about the current camera status (warnings, errors and status)'''
-        if self.open:
-            cam_health = {}
-            cam_health = self.camera.sdk.get_camera_health_status()
-            self.warn = int(cam_health.get('warning'))
-            self.err = int(cam_health.get('error'))
-            self.status = int(cam_health.get('status'))
+    def get_delay_timebase(self):
+        if self.is_open:
+            cam_delay_exposure_time = {}
+            cam_delay_exposure_time = self.camera.sdk.get_delay_exposure_time()
+            delay_timebase = str(cam_delay_exposure_time.get('delay timebase'))
+        else:
+            delay_timebase = str('')
+        return delay_timebase
+
+
 
 
 
