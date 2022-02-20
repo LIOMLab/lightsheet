@@ -7,21 +7,13 @@ import os
 import sys
 sys.path.append(".")
 
-import numpy as np
+from PyQt5.QtCore import QObject, QTimer, QThread, pyqtSignal
+from PyQt5.QtWidgets import QMainWindow, QDialog, QFileDialog, QTableWidgetItem, QAbstractItemView, QMessageBox, QLabel, QProgressBar
 
-from matplotlib import pyplot as plt
-from scipy import signal, optimize, ndimage, stats #,interpolate
-from PyQt5 import QtCore #,QtGui
-from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem, QAbstractItemView, QMessageBox, QMainWindow, QLabel, QProgressBar#,QWidget,QMenu,QMenuBar,QAction,QStatusBar
-from PyQt5.QtWidgets import QDialog
+from pyqtgraph import ImageView
+import pyqtgraph as pg
 
-import nidaqmx
-from src.hardware import AOETLGalvos
-from src.motors import Motors
-#from src.pcoEdge import Camera
-from src.camera import Camera
-#from src.lasers import Lasers
-
+import logging
 import copy
 import threading
 import time
@@ -29,12 +21,22 @@ import queue
 import h5py
 import datetime
 import webbrowser
+import nidaqmx
+import numpy as np
+from matplotlib import pyplot as plt
+from scipy import signal, optimize, ndimage, stats
 
 from gui.ui_controller import Ui_Controller
 from gui.ui_properties import Ui_Properties
 from gui.ui_settings import Ui_Settings
 
-from gui.config import Configuration
+from src.hardware import AOETLGalvos
+from src.motors import Motors
+from src.camera import Camera
+from src.lasers import Lasers
+
+
+logging.basicConfig(format="%(message)s", level=logging.INFO)
 
 
 '''Parameters'''
@@ -109,12 +111,6 @@ class Settings_Dialog(QDialog):
     '''Class for Settings Dialog'''
     
     def __init__(self):
-        # QDialog.__init__(self)
-        #
-        # '''Loading user interface'''
-        # basepath = os.path.join(os.path.dirname(__file__))
-        # uic.loadUi(os.path.join(basepath,"settings.ui"), self)
-
         QDialog.__init__(self)
         self.ui = Ui_Settings()
         self.ui.setupUi(self)   
@@ -154,59 +150,38 @@ class Settings_Dialog(QDialog):
 class Properties_Dialog(QDialog):
     '''Class for Properties Dialog'''
     
-    def __init__(self, camera, motors, print_controller):
-        # QDialog.__init__(self)
-        #
-        # '''Loading user interface'''
-        # basepath = os.path.join(os.path.dirname(__file__))
-        # uic.loadUi(os.path.join(basepath,"properties.ui"), self)
-
-        # Requires generating .py file from .ui (Qt Designer file format)
-        # This enable VSCode IntelliSense to work properly on Ui classes
-        # PS command: pyuic5 .\properties.ui -o .\ui_properties.py
-        #
+    def __init__(self, camera: Camera, motors: Motors, print_controller):
         QDialog.__init__(self)
         self.ui = Ui_Properties()
         self.ui.setupUi(self)   
-
+        self.ui.pushButton_refresh.clicked.connect(self.refresh_properties)
+        
         self.camera = camera
         self.motors = motors
         self.print_controller = print_controller
-
-        self.ui.pushButton_refresh.clicked.connect(self.refresh_properties)
         self.get_properties()
     
     def get_properties(self):
-        '''Set the properties values'''
-        self.ui.label_cameraName.setText('pco.edge 5.5m USB global shutter')
-        self.camera.get_sizes()
-        self.ui.label_imageSize.setText(str(self.camera.x_current_res)+' x '+str(self.camera.y_current_res))
-
-        self.camera.get_temperature()
-        self.ui.label_cameraTemperature.setText("{:.1f} \u2103".format(self.camera.temperature_camera))
-        self.ui.label_sensorTemperature.setText("{:.1f} \u2103".format(self.camera.temperature_sensor))
-        self.ui.label_powerTemperature.setText("{:.1f} \u2103".format(self.camera.temperature_power))
+        '''Read properties from the camera'''
+        self.ui.label_cameraName.setText(self.camera.get_name())
+        self.ui.label_imageSize.setText(str(self.camera.get_xsize()) + ' x ' + str(self.camera.get_ysize()))
+        self.ui.label_cameraTemperature.setText("{:.1f} \u2103".format(self.camera.get_camera_temperature()))
+        self.ui.label_sensorTemperature.setText("{:.1f} \u2103".format(self.camera.get_sensor_temperature()))
+        self.ui.label_powerTemperature.setText("{:.1f} \u2103".format(self.camera.get_power_temperature()))
+        self.ui.label_triggerMode.setText(self.camera.get_trigger_mode())
+        self.ui.label_delayTime.setText(str(self.camera.get_delay_time()) + ' ' + self.camera.get_delay_timebase())
+        self.ui.label_exposureTime.setText(str(self.camera.get_exposure_time()) + ' ' + self.camera.get_exposure_timebase())
+        self.ui.label_acquireMode.setText(self.camera.get_acquire_mode())
+        self.ui.label_storageMode.setText(self.camera.get_storage_mode())
+        if self.camera.get_storage_mode() == 'Recorder':
+            self.ui.label_recorderMode.setText(self.camera.get_recorder_submode())
+        else:
+            self.ui.label_recorderMode.setText('N/A')
         
-        self.camera.get_trigger_mode()
-        self.ui.label_triggerMode.setText(self.camera.trigger_mode)
-        
-        self.camera.get_exposure_time()
-        self.ui.label_delayTime.setText(str(self.camera.delay) + ' ' + self.camera.time_base_delay_code)
-        self.ui.label_exposureTime.setText(str(self.camera.exposure) + ' ' + self.camera.time_base_exposure_code)
-        
-        self.camera.get_acquire_mode()
-        self.ui.label_acquireMode.setText(self.camera.acquire_mode)
-        
-        self.camera.get_storage_mode()
-        self.ui.label_storageMode.setText(self.camera.storage_mode)
-        
-        if self.camera.storage_mode == 'Recorder':
-            self.camera.get_recorder_submode()
-            self.ui.label_recorderMode.setText(self.camera.recorder_mode)
-        
-        self.ui.label_horizontalMotorName.setText(self.motors.horizontal.name)
-        self.ui.label_verticalMotorName.setText(self.motors.vertical.name)
-        self.ui.label_cameraMotorName.setText(self.motors.camera.name)
+        '''Read properties from the motors'''
+        self.ui.label_horizontalMotorName.setText(self.motors.horizontal_get_name())
+        self.ui.label_verticalMotorName.setText(self.motors.vertical_get_name())
+        self.ui.label_cameraMotorName.setText(self.motors.camera_get_name())
     
     def refresh_properties(self):
         '''Refresh system properties'''
@@ -216,19 +191,27 @@ class Properties_Dialog(QDialog):
 
 class Controller_MainWindow(QMainWindow):
     '''Class for control of the MesoSPIM'''
-    sig_update_progress = QtCore.pyqtSignal(int) #Signal for progress bar in status bar
-    sig_beep = QtCore.pyqtSignal(bool) #Signal for beep sound
-    sig_stylesheet = QtCore.pyqtSignal(int) #Signal for app stylesheet
-    
+    sig_update_progress = pyqtSignal(int) #Signal for progress bar in status bar
+    sig_beep = pyqtSignal(bool) #Signal for beep sound
+    sig_stylesheet = pyqtSignal(int) #Signal for app stylesheet
+
     def __init__(self):
-        # QMainWindow.__init__(self)
         #
-        # '''Loading user interface'''
+        # See https://fuhm.org/super-harmful/
+        # for explanation why we don't init inherited class with
+        # super(Controller, self).__init__()
+        # but instead manually do so with:
+        # QMainWindow.__init__(self)
+        # 
+        # Ui Approach taken below requires generating .py file from .ui (Qt Designer file format)
+        # This enables VSCode IntelliSense to work properly on Ui classes
+        # PS command: pyuic5 .\properties.ui -o .\ui_properties.py
+        # 
+        # Alternate Ui loading could be done with
         # basepath = os.path.join(os.path.dirname(__file__))
         # uic.loadUi(os.path.join(basepath,"controller.ui"), self)
+        #
 
-        # super(Controller, self).__init__()
-        # see https://fuhm.org/super-harmful/
         QMainWindow.__init__(self)
         self.ui = Ui_Controller()
         self.ui.setupUi(self)    
@@ -241,8 +224,15 @@ class Controller_MainWindow(QMainWindow):
         self.progress_statusBar.setFixedWidth(250)
         self.ui.label_lastCommands.setText('--The last commands will show here--\n')
         
+        
         '''Instantiating the camera window where the frames are displayed'''
         self.camera_window = CameraWindow(self.ui.graphicsView)
+
+        # Start timer to periodically refresh the imageview widget
+        self.timer_imageview = QTimer()
+        self.timer_imageview.timeout.connect(self.camera_window.update)        
+        self.timer_imageview.start(100)
+
 
         '''Defining attributes'''
         #self.cfg = Configuration()
@@ -255,11 +245,10 @@ class Controller_MainWindow(QMainWindow):
         self.motors = Motors()
 
         '''Instantiating camera'''
-        #self.camera = Camera()
-        self.open_camera()
+        self.camera = Camera()
 
-        '''Instantiating laser'''
-        #self.lasers = Lasers()
+        '''Instantiating lasers'''
+        self.lasers = Lasers()
 
         '''Instantiating the settings and properties windows'''
         self.settings_dialog = Settings_Dialog()
@@ -267,6 +256,11 @@ class Controller_MainWindow(QMainWindow):
         
         
         self.consumers = []
+        '''Initially, the only consumer is camera_window. Later when the user wished to
+        save images, a second consumer (FrameSaver) is set in controller'''
+        self.set_data_consumer(self.camera_window, False, "CameraWindow", True)
+        #self.set_data_consumer(self.imageWindow, False, "CameraWindow", True)  
+        
         self.figure_counter = 1
         self.save_directory = ''
         self.save_parameters_policy = save_parameters_policy
@@ -299,19 +293,6 @@ class Controller_MainWindow(QMainWindow):
         self.right_slope = 0.000826220401525251
         self.right_intercept = 2.384849899181325
         
-        '''Arbitrary default positions (in mm)'''
-        #self.boundaries = {}
-        #self.boundaries['vertical_up_boundary'] = 19.4
-        #self.boundaries['vertical_down_boundary'] = 0
-        #self.boundaries['origin_vertical'] = self.boundaries['vertical_down_boundary']
-        #self.boundaries['horizontal_forward_boundary'] = 0
-        #self.boundaries['horizontal_backward_boundary'] = 15
-        #self.boundaries['origin_horizontal'] = self.boundaries['horizontal_forward_boundary']
-        #self.boundaries['camera_forward_boundary'] = 50.0#13.65#30
-        #self.boundaries['camera_backward_boundary'] = 115
-        #self.boundaries['focus'] = 55.0#34.5
-        #self.defaultBoundaries = copy.deepcopy(self.boundaries) #The default boundaries are in mm
-        
         '''Initializing flags'''
         self.both_lasers_activated = False
         self.left_laser_activated = False
@@ -322,7 +303,6 @@ class Controller_MainWindow(QMainWindow):
         self.preview_mode_started = False
         self.live_mode_started = False
         self.stack_mode_started = False
-        self.camera_on = False
         
         self.saving_allowed = False
         self.camera_calibration_started = False
@@ -490,6 +470,31 @@ class Controller_MainWindow(QMainWindow):
         self.ui.pushButton_allLasers.clicked.connect(self.lasers_button)
         self.ui.pushButton_leftLaser.clicked.connect(self.left_laser_button)
         self.ui.pushButton_rightLaser.clicked.connect(self.right_laser_button)
+
+
+    def closeEvent(self, event):
+        '''Making sure that everything is closed when the user exits the software.
+           This function executes automatically when the user closes the UI.
+           This is an intrinsic function name of Qt, don't change the name even 
+           if it doesn't follow the naming convention'''
+        result = QMessageBox.question(self, "Confirm Exit...", "Are you sure you want to exit ?", QMessageBox.Yes | QMessageBox.No)
+        if result == QMessageBox.Yes:
+            self.close_modes()
+            if self.camera.is_open:
+                self.camera.close()
+            self.save_default_parameters()
+            self.timer_imageview.stop()
+            event.accept()
+        else:
+            event.ignore()
+            
+    def print_controller(self,text):
+        '''Print text in console, in controller text box and in status bar'''
+        #print(text)
+        logging.info(text)
+        self.ui.statusbar.showMessage(text)
+        self.ui.label_lastCommands.setText(self.ui.label_lastCommands.text() + text + '\n ')
+        self.ui.scrollArea_lastCommands.verticalScrollBar().setValue(self.ui.scrollArea_lastCommands.verticalScrollBar().maximum())
     
 
     '''General Methods'''
@@ -597,6 +602,8 @@ class Controller_MainWindow(QMainWindow):
     
     def close_modes(self):
         '''Close all thread modes if they are active'''
+        if self.standby:
+            self.stop_standby()
         if self.laser_on:
             self.stop_lasers()
         if self.preview_mode_started:
@@ -605,43 +612,11 @@ class Controller_MainWindow(QMainWindow):
             self.live_mode_started = False
         if self.stack_mode_started:
             self.stack_mode_started = False
-        if self.standby:
-            self.stop_standby()
         if self.camera_calibration_started:
             self.camera_calibration_started = False
         if self.etls_calibration_started:
             self.etls_calibration_started = False
     
-    def closeEvent(self, event):
-        '''Making sure that everything is closed when the user exits the software.
-           This function executes automatically when the user closes the UI.
-           This is an intrinsic function name of Qt, don't change the name even 
-           if it doesn't follow the naming convention'''
-        self.close_modes()
-        if self.camera_on:
-            self.close_camera()
-        self.save_default_parameters()
-        event.accept()
-    
-    def print_controller(self,text):
-        '''Print text in console, in controller text box and in status bar'''
-        print(text)
-        self.ui.statusbar.showMessage(text)
-        self.ui.label_lastCommands.setText(self.ui.label_lastCommands.text() + text + '\n ')
-        self.ui.scrollArea_lastCommands.verticalScrollBar().setValue(self.ui.scrollArea_lastCommands.verticalScrollBar().maximum())
-    
-    def open_camera(self):
-        '''Opens the camera'''
-        self.camera = Camera()
-        self.camera_on = True
-        self.properties_dialog = Properties_Dialog(self.camera, self.motors, self.print_controller)
-        self.print_controller('Camera opened')
-    
-    def close_camera(self):
-        '''Closes the camera'''
-        self.camera_on = False
-        self.camera.close_camera()
-        self.print_controller('Camera closed')
     
     def start_camera_recording(self,trigger_mode):
         '''Starts camera recording with certain settings'''
@@ -897,7 +872,6 @@ class Controller_MainWindow(QMainWindow):
         '''Set lower limit of sample's horizontal motion 
            (to avoid hitting the glass walls)'''
         self.motors.horizontal.set_limit_low(self.motors.horizontal.get_position(self.units), self.units)
-        #self.change_default_boundaries(['horizontal_backward_boundary'])
         self.update_unit()
         self.horizontal_backward_boundary_selected = True
         self.ui.pushButton_setBackwardLimit.setEnabled(False)
@@ -909,7 +883,6 @@ class Controller_MainWindow(QMainWindow):
         '''Set upper limit of sample's horizontal motion 
            (to avoid hitting the glass walls)'''
         self.motors.horizontal.set_limit_high(self.motors.horizontal.get_position(self.units), self.units)
-        #self.change_default_boundaries(['horizontal_forward_boundary'])
         self.update_unit()
         self.horizontal_forward_boundary_selected = True
         self.ui.pushButton_setForwardLimit.setEnabled(False)
@@ -923,23 +896,12 @@ class Controller_MainWindow(QMainWindow):
         self.motors.vertical.set_origin(self.motors.vertical.get_position(self.units), self.units)
         origin_text = 'Origin set at (x,z) = ({}, {}) {}'.format(self.motors.horizontal.get_origin(self.units), self.motors.vertical.get_origin(self.units), self.units)
         self.print_controller(origin_text)
-        #self.change_default_boundaries(['origin_horizontal','origin_vertical'])
-    
-    #def change_default_boundaries(self,boundaries_to_change):
-    #    '''Save default boundaries (with unit in mm)'''
-    #    for boundary_name in boundaries_to_change:
-    #        self.defaultBoundaries[boundary_name] = self.boundaries[boundary_name]
-    #    if self.unit == 'cm':
-    #        self.defaultBoundaries[boundary_name] /= 10
-    #    elif self.unit == '\u03BCm':
-    #        self.defaultBoundaries[boundary_name] *= 1000
-    
+ 
     def set_camera_focus(self):
         '''Modifies manually the camera focus position'''
         self.focus_selected = True
         self.motors.camera.set_origin(self.motors.camera.get_position(self.units), self.units)
         self.print_controller('Camera focus manually set a {} mm'.format(self.motors.camera.get_origin(self.units)))
-        #self.change_default_boundaries(['focus'])
 
     def calculate_camera_focus(self):
         '''Interpolates the camera focus position'''
@@ -1175,7 +1137,7 @@ class Controller_MainWindow(QMainWindow):
                                           np.array([left_laser_voltage])))   
         
         '''Writing voltage'''
-        self.lasers_task.write(self.lasers_waveforms, auto_start=True)
+        self.lasers_task.write(self.lasers_waveforms, auto_start = True)
     
     def stop_lasers(self):
         '''Stops the lasers, puts their voltage to zero'''
@@ -1253,7 +1215,7 @@ class Controller_MainWindow(QMainWindow):
                     self.figure_counter += 1
                     
                     ##'''Convert to tiff format'''
-                    ##tiff = Image.fromarray(data)
+                    ## tiff = Image.fromarray(data)
                     ##tiff_filename = self.open_directory.replace('.hdf5', '.tiff')
                     ##tiff.save(tiff_filename)
                 
@@ -1264,56 +1226,53 @@ class Controller_MainWindow(QMainWindow):
     def standby_button(self):
         '''Start or stop standby, depending on the button status'''
         if self.standby:
-            self.standby = False
             self.ui.pushButton_standby.setText('Start Standby')
             self.stop_standby()
         else:
-            self.close_modes()
-            self.standby = True
             self.ui.pushButton_standby.setText('Stop Standby')
             self.start_standby()
     
     def start_standby(self):
-        '''Closes the camera and initiates thread to keep ETLs'currents at 0A while
+        '''Initiates task to keep ETLs'currents at 0A while
            the microscope is not in use'''
+
+        # Stop acquisition mode if any
+        self.close_modes()
         
-        '''Close camera'''
-        self.close_camera()
-        
-        '''Create ETL standby task'''
+        # Create ETL standby task
         self.standby_task = nidaqmx.Task()
         self.standby_task.ao_channels.add_ao_voltage_chan('/Dev1/ao2:3')
         
         etl_voltage = 2.5 #In volts, corresponds to a current of 0
         standby_waveform = np.stack((np.array([etl_voltage]),np.array([etl_voltage])))
         
-        '''Inject voltage'''
+        # Inject voltage
         self.standby_task.write(standby_waveform, auto_start = True)
         
-        '''Modes disabling while in standby'''
+        # Disable some buttons while in standby
         self.update_buttons_modes([self.pushButton_standby])
         
+        # Set flag and report
+        self.standby = True
         self.print_controller('Standby on')
-        
+
+
     def stop_standby(self):
-        '''Changes the standby flag status to end the thread'''
-        
-        self.standby = False
-        
-        '''Close task'''
+        '''Exit standby mode'''
+
+        # Stop/close ETL standby task
         self.standby_task.stop()
         self.standby_task.close()
         
-        '''Open camera'''
-        self.open_camera()
-        
-        '''Modes enabling after standby'''
+        # Re-enable some buttons after standby
         self.update_buttons_modes(self.default_buttons)
         
+        # Set flag and report
+        self.standby = False
         self.print_controller('Standby off')
     
     
-    def send_frame_to_consumer(self,frame,to_cam_window=True,to_saver=False):
+    def send_frame_to_consumer(self, frame, to_cam_window = True, to_saver = False):
         '''Tries to add a frame to a consumer, either the camera window or the saver'''
         
         for consumer in range(0, len(self.consumers), 4):
@@ -1397,7 +1356,7 @@ class Controller_MainWindow(QMainWindow):
                                                       np.array([left_etl_voltage]),
                                                       np.array([right_etl_voltage])))
             '''Writing the data'''
-            self.preview_galvos_etls_task.write(preview_galvos_etls_waveforms, auto_start=True)
+            self.preview_galvos_etls_task.write(preview_galvos_etls_waveforms, auto_start = True)
             
             '''Retrieving image from camera and putting it in its queue
                for display'''
@@ -1516,30 +1475,42 @@ class Controller_MainWindow(QMainWindow):
         '''Generate ETLs, galvos & camera's ramps, get a single reconstructed image and display it'''
         
         '''Creating ETLs, galvos & camera's ramps and waveforms'''
-        self.ramps = AOETLGalvos(self.parameters)  
-        self.ramps.create_tasks(terminals,'FINITE')
-        activate = False
-        if self.ui.checkBox_activateEtlFocus.isChecked():
-            activate = True
-        self.ramps.create_calibrated_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept, activate=activate)
-        invert = False
-        if self.ui.checkBox_invertGalvos.isChecked():
-            invert = True
-        self.ramps.create_galvos_waveforms(case = 'TRAPEZE', invert=invert)
-        self.ramps.create_digital_output_camera_waveform(case = 'STAIRS_FITTING')
+
+        # TempFIX: While loop to reacquire data in case of missing frames bug
+        while True:
+            self.ramps = AOETLGalvos(self.parameters)  
+            self.ramps.create_tasks(terminals, 'FINITE')
+            activate = False
+            if self.ui.checkBox_activateEtlFocus.isChecked():
+                activate = True
+            self.ramps.create_calibrated_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept, activate = activate)
+            invert = False
+            if self.ui.checkBox_invertGalvos.isChecked():
+                invert = True
+            self.ramps.create_galvos_waveforms(case = 'TRAPEZE', invert = invert)
+            self.ramps.create_digital_output_camera_waveform(case = 'STAIRS_FITTING')
+            
+            '''Writing waveform to task and running'''
+            self.ramps.write_waveforms_to_tasks()                            
         
-        '''Writing waveform to task and running'''
-        self.ramps.write_waveforms_to_tasks()                            
-       
-        self.number_of_steps = np.ceil(self.parameters["Columns"]/self.parameters["ETL Step"]) #Number of galvo sweeps in a frame, or alternatively the number of ETL focal step
-        #self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
+            self.number_of_steps = np.ceil(self.parameters["Columns"]/self.parameters["ETL Step"]) #Number of galvo sweeps in a frame, or alternatively the number of ETL focal step
+            #self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
 
-        self.camera.start_recording_multiple(self.number_of_steps)
-        self.ramps.start_tasks()
-        self.ramps.run_tasks()
+            self.camera.start_recording_multiple(self.number_of_steps)
+            self.ramps.start_tasks()
+            self.ramps.run_tasks()
 
-        '''Retrieving buffer'''
-        buffer_list = self.camera.get_images(self.number_of_steps)
+            '''End tasks'''
+            self.ramps.stop_tasks()                             
+            self.ramps.close_tasks()
+
+            '''Retrieving buffer'''
+            buffer_list = self.camera.get_images(self.number_of_steps)
+            if len(buffer_list) != self.number_of_steps:
+                print('warning: frames dropped - reacquiring')
+            else:
+                break
+        # TempFIX: We should have a complete set now... carry on
         self.buffer = np.dstack(buffer_list)
         self.buffer = np.transpose(self.buffer, (2,0,1))
         
@@ -1553,9 +1524,6 @@ class Controller_MainWindow(QMainWindow):
         frame = np.transpose(self.reconstructed_frame)
         self.send_frame_to_consumer(frame)
         
-        '''End tasks'''
-        self.ramps.stop_tasks()                             
-        self.ramps.close_tasks()
     
     def live_button(self):
         '''Start or stop live mode, depending on the button status'''
@@ -1603,9 +1571,10 @@ class Controller_MainWindow(QMainWindow):
         self.lasers_task = nidaqmx.Task()
         self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
         
+        '''Starting lasers'''
+        self.start_lasers()
+        
         while self.live_mode_started:
-            '''Starting lasers'''
-            self.start_lasers()
             '''Get single image'''
             self.get_single_image()
         
@@ -1949,6 +1918,7 @@ class Controller_MainWindow(QMainWindow):
         '''Enabling modes after stack mode'''
         self.ui.pushButton_stackMode.setText('Start Stack Mode')
         self.update_buttons_modes(self.default_buttons)
+        self.update_motor_buttons(disable_button=False)
         
         self.stack_mode_started = False
         self.print_controller('->Stack Mode Acquisition Done')
@@ -2427,7 +2397,7 @@ class Controller_MainWindow(QMainWindow):
 class CameraWindow(queue.Queue):
     '''Class for image display'''
     
-    def __init__(self, graphicsview):
+    def __init__(self, graphicsview:ImageView):
         '''Bigger queue size allows more image to be put in its queue. However, 
         since many images can take a lot of RAM and it is not necessary to see 
         all the planes that are saved, we keep the queue short. It is more 
@@ -2438,7 +2408,7 @@ class CameraWindow(queue.Queue):
         image display thus potentially avoiding the need of a bigger queue if it 
         is important for the user to see all the frames.'''
         
-        queue.Queue.__init__(self,2)   #Set up queue of maxsize 2 (frames)
+        queue.Queue.__init__(self, 2)   #Set up queue of maxsize 2 (frames)
         
         self.graphicsview = graphicsview
         self.plot_item = self.graphicsview.getView()
@@ -2457,7 +2427,7 @@ class CameraWindow(queue.Queue):
         self.container[0,0] = 1000 #To get initial range of the histogram
         self.graphicsview.setImage(np.transpose(self.container))
     
-    def change_frame_display_mode(self,mode='frame2d'):
+    def change_frame_display_mode(self, mode = 'frame2d'):
         '''Change the mode of the frame display'''
         
         if mode == 'frame2d':
@@ -2472,21 +2442,12 @@ class CameraWindow(queue.Queue):
             queue.Queue.put(self, item, block=block, timeout=timeout)
                  
     def update(self):
-        '''Executes at each interval of the QTimer set in test_galvo.py
+        '''Executes at each interval of the QTimer set in main.py
            Takes the image in its queue and displays it in the window'''
         try:
             '''Retrieving old view settings'''
             _view = self.graphicsview.getView()
             _state = _view.getState()
-
-            #_left_axis = _view.getAxis('left') ##
-            #_bottom_axis = _view.getAxis('bottom') ##
-            #_right_axis = _view.getAxis('right') ##
-            #_top_axis = _view.getAxis('top') ##
-            #_view_box = _view.getViewBox()
-            #_state = _view_box.getState()
-
-            #_view.showAxis('bottom') ##
             
             if self.histogram_level == []:
                 first_update = True
@@ -2514,6 +2475,7 @@ class CameraWindow(queue.Queue):
             else:
                 self.graphicsview.setImage(frame)
             
+            
             '''Showing saturated pixels in red'''
             # if self.saturation:
             #     self.plot_item.removeItem(self.saturation_plot) #Reset saturationplot
@@ -2537,6 +2499,8 @@ class CameraWindow(queue.Queue):
             if self.stack_mode == False:
                 self.frame_counter = 1 #reset
             pass
+        #cm = pg.colormap.get('CET-L9') 
+        #self.graphicsview.setColorMap(cm)
 
 class FrameSaver():
     '''Class for storing buffers (images) in its queue and saving them 
@@ -2552,7 +2516,7 @@ class FrameSaver():
         self.vertical_positions_list = []
         self.camera_positions_list = []
     
-    def add_motor_parameters(self,current_hor_position_txt,current_ver_position_txt,current_cam_position_txt):
+    def add_motor_parameters(self, current_hor_position_txt, current_ver_position_txt, current_cam_position_txt):
         '''Add to a list the different motor positions'''
         self.horizontal_positions_list.append(current_hor_position_txt)
         self.vertical_positions_list.append(current_ver_position_txt)
@@ -2571,7 +2535,7 @@ class FrameSaver():
             in_loop = True
             while in_loop:
                 counter += 1
-                new_filename = self.files_name + '_' + scan_type + '_plane_'+u'%05d'%counter+'.hdf5'
+                new_filename = self.files_name + '_' + scan_type + '_plane_' + u'%05d'%counter + '.hdf5'
                 
                 if os.path.isfile(new_filename) == False: #Check for existing files
                     in_loop = False

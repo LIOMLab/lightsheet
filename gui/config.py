@@ -85,8 +85,9 @@ class Configuration:
         self.motors['Port'] = 'COM6'
 
 
-#mycfg = Configuration()
-#mycfg.read_ini()
-#mycfg.update()
-#mycfg.default()
-#mycfg.write_ini()
+if __name__ == "__main__":
+    mycfg = Configuration()
+    mycfg.read_ini()
+    mycfg.update()
+    mycfg.default()
+    mycfg.write_ini()

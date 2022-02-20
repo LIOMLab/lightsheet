@@ -6,27 +6,32 @@ import sys
 sys.path.append(".")
 
 import copy
+import nidaqmx
+import numpy as np
 from configparser import ConfigParser
+
 
 class Lasers:
         
-    '''Default hardware configuration'''
+    # Default hardware configuration
     _lasers = {}
-    _lasers['Terminal'] = '/Dev7/ao0:1'
-    _lasers["Voltage Left"] = 0.905   # In Volts
-    _lasers["Voltage Right"] = 0.905  # In Volts
+    _lasers['Terminals'] = '/Dev7/ao0:1'
+    _lasers['Laser1 Voltage'] = 0.0  # In Volts
+    _lasers['Laser2 Voltage'] = 0.0  # In Volts
+
+    # State flags
+    laser1_is_open = False
+    laser2_is_open = False
+
+    # Error status
+    error = 0
+    error_message = ""
 
     def __init__(self):
         self.cfg_default()
         self.cfg_read()
-        
-        self.error = 0
-        self.error_message = ""
-        self.laser_on = False
-        self.left_laser_activated = False
-        self.right_laser_activated = False
-    
-
+        self.laser1 = analogLaser(self.lasers.get('Terminals'))
+            
     def cfg_default(self):
         # Copy default values to current values
         self.lasers = copy.deepcopy(self._lasers)
@@ -47,15 +52,56 @@ class Lasers:
         with open('config.ini', 'w') as output_file:
             cfg.write(output_file)
 
-    def turn_laser_on(self):
-        self.laser_on = True
-        self.left_laser_activated = True
-        self.right_laser_activated = True
+    def turn_laser1_on(self):
+        self.laser1.create_task()
+        self.laser1_on = True
+        laser1_voltage = float(self.lasers.get('Laser1 Voltage'))
+        laser2_voltage = float(self.lasers.get('Laser2 Voltage'))
+        lasers_waveforms = np.stack((np.array([laser1_voltage]), np.array([laser2_voltage])))
 
-    def turn_laser_off(self):
-        self.laser_on = False
-        self.left_laser_activated = False
-        self.right_laser_activated = False
+    def turn_laser1_off(self):
+        self.laser1_on = False
+        lasers_waveforms = np.stack((np.array([0.0]), np.array([0.0])))
 
-mylasers = Lasers()
-mylasers.cfg_write()
+
+
+class analogLaser:
+
+    # State flags
+    ao_task_created = False
+
+    def __init__(self, Terminals:str):
+        self.Terminals = Terminals
+
+    def create_task(self):
+        try:
+            self.ao_task = nidaqmx.Task()
+            self.ao_task.ao_channels.add_ao_voltage_chan(self.Terminals)
+        except:
+            self.ao_task.close()
+            print('Could not create analog output task. Device or Terminals invalid?')
+        else:
+            self.ao_task_created = True
+            print('Task created!')
+        
+    def write_task(self):
+        pass
+
+    def start_task(self):
+        pass
+
+    def stop_task(self):
+        pass
+
+    def close_task(self):
+        pass
+
+
+
+if __name__ == "__main__":
+    mylasers = Lasers()
+    mylasers.turn_laser1_on()
+    mylasers.turn_laser1_off()
+
+
+

@@ -21,14 +21,12 @@ from PyQt5 import QtCore
 from src.waveforms import galvo_trapeze, calibrated_etl_stairs, camera_digital_output_signal
 
 
-class AOETLGalvos(QtCore.QObject):
+class AOETLGalvos:
     '''Class for generating and sending AO ramps to ETLs and galvos
        Update: Also includes the ramp for the camera
        Note: Possibility of also including lasers' ramps. Comments indicate 
              where the lasers'task should be implemented in the following
              functions'''
-
-    #sig_update_gui_from_state = QtCore.pyqtSignal(bool) ###utilité?
     
     def __init__(self, parameters):
         self.parameters = parameters
@@ -95,8 +93,8 @@ class AOETLGalvos(QtCore.QObject):
 
         #self.master_trigger_task = nidaqmx.Task()
         '''Create tasks for galvos, ETLs and camera'''
-        self.galvo_etl_task = nidaqmx.Task(new_task_name='galvo_etl_ramps')
-        self.camera_task = nidaqmx.Task(new_task_name='camera_do_signal')
+        self.galvo_etl_task = nidaqmx.Task(new_task_name = 'galvo_etl_ramps')
+        self.camera_task = nidaqmx.Task(new_task_name = 'camera_do_signal')
         #self.laser_task = nidaqmx.Task(new_task_name='laser_ramps')
 
         '''Housekeeping: Setting up the AO task for the Galvo and ETLs. It is the master task'''
@@ -121,7 +119,7 @@ class AOETLGalvos(QtCore.QObject):
         self.galvo_and_etl_waveforms = np.stack((self.galvo_r_waveform, self.galvo_l_waveform, self.etl_r_waveform, self.etl_l_waveform))
        
         self.galvo_etl_task.write(self.galvo_and_etl_waveforms)
-        self.camera_task.write(self.camera_waveform)
+        self.camera_task.write(self.camera_waveform, auto_start = False)
         #self.lasers_waveforms = np.stack((self.laser_r_waveform, self.laser_l_waveform))
         #self.laser_task.write(self.lasers_waveforms)
     
@@ -150,6 +148,7 @@ class AOETLGalvos(QtCore.QObject):
         #self.laser_task.wait_until_done()
         self.camera_task.wait_until_done()
         self.galvo_etl_task.wait_until_done()
+
     
     def stop_tasks(self):
         '''Stops the tasks for triggering, analog and counter outputs
@@ -218,7 +217,7 @@ class AOETLGalvos(QtCore.QObject):
                                                     direction = 'DOWN', 
                                                     activate = activate)
     
-    def create_galvos_waveforms(self, case = 'NONE', invert=False):
+    def create_galvos_waveforms(self, case = 'NONE', invert = False):
         '''live_mode ramps aren't in use anymore, their presence was for 
            calibrating purposes in the early stages of the microscope. They are
            kept only for reference.'''
