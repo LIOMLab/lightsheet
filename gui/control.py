@@ -11,7 +11,6 @@ from PyQt5.QtCore import QObject, QTimer, QThread, pyqtSignal
 from PyQt5.QtWidgets import QMainWindow, QDialog, QFileDialog, QTableWidgetItem, QAbstractItemView, QMessageBox, QLabel, QProgressBar
 
 from pyqtgraph import ImageView
-import pyqtgraph as pg
 
 import logging
 import copy
@@ -32,12 +31,12 @@ from gui.ui_settings import Ui_Settings
 
 from src.hardware import AOETLGalvos
 from src.motors import Motors
+# tmpiz #
 from src.camera import Camera
+#from src.pco2 import Camera
 from src.lasers import Lasers
 
-
 logging.basicConfig(format="%(message)s", level=logging.INFO)
-
 
 '''Parameters'''
 etl_parameters   = ["Left ETL Amplitude","Right ETL Amplitude","Left ETL Offset","Right ETL Offset"]
@@ -163,6 +162,7 @@ class Properties_Dialog(QDialog):
     
     def get_properties(self):
         '''Read properties from the camera'''
+        # tmpiz #
         self.ui.label_cameraName.setText(self.camera.get_name())
         self.ui.label_imageSize.setText(str(self.camera.get_xsize()) + ' x ' + str(self.camera.get_ysize()))
         self.ui.label_cameraTemperature.setText("{:.1f} \u2103".format(self.camera.get_camera_temperature()))
@@ -336,7 +336,7 @@ class Controller_MainWindow(QMainWindow):
             box.setSingleStep(0.1)
             box.setSuffix(" V")
         self.ui.doubleSpinBox_galvoFrequency.setMaximum(130) #corresponds to an exposure time of 3.8462 ms
-        self.ui.doubleSpinBox_galvoFrequency.setMinimum(1) #5Hz corresponds to an exposure time of 100ms
+        self.ui.doubleSpinBox_galvoFrequency.setMinimum(5) #5Hz corresponds to an exposure time of 100ms
         self.ui.doubleSpinBox_galvoFrequency.setSuffix(" Hz")
         self.ui.doubleSpinBox_samplerate.setMaximum(1000000)
         self.ui.doubleSpinBox_samplerate.setMinimum(1)
@@ -480,8 +480,7 @@ class Controller_MainWindow(QMainWindow):
         result = QMessageBox.question(self, "Confirm Exit...", "Are you sure you want to exit ?", QMessageBox.Yes | QMessageBox.No)
         if result == QMessageBox.Yes:
             self.close_modes()
-            if self.camera.is_open:
-                self.camera.close()
+            self.camera.close()
             self.save_default_parameters()
             self.timer_imageview.stop()
             event.accept()
@@ -620,6 +619,9 @@ class Controller_MainWindow(QMainWindow):
     
     def start_camera_recording(self,trigger_mode):
         '''Starts camera recording with certain settings'''
+        # tmpiz #
+        #self.camera.apply_settings(trigger=trigger_mode)
+        #self.camera.arm()
         self.camera.set_trigger_mode(trigger_mode)
         #self.camera.arm_camera() 
         #self.camera.get_sizes() 
@@ -629,6 +631,8 @@ class Controller_MainWindow(QMainWindow):
     
     def stop_camera_recording(self):
         '''Stops camera recording'''
+        # tmpiz #
+        #self.camera.disarm()
         #self.camera.cancel_images()
         #self.camera.set_recording_state('off')
         #self.camera.free_buffer()
@@ -1280,19 +1284,16 @@ class Controller_MainWindow(QMainWindow):
                 if self.consumers[consumer+2] == 'CameraWindow':
                     try:
                         self.consumers[consumer].put(frame)
-                        #print('Frame put in CameraWindow') #debugging
-                    except:      #self.consumers[ii].Full:
-                        #print("CameraWindow queue is full") #debugging
+                    except:
                         pass
             if to_saver:
                 if self.consumers[consumer+2] == 'FrameSaver':
                     try:
                         self.consumers[consumer].put(frame,1)
-                        #print('Frame put in FrameSaver') #debugging
-                    except:      #self.consumers[ii].Full:
-                        #print("FrameSaver queue is full") #debugging
+                    except:
                         pass
     
+
     def preview_button(self):
         '''Start or stop preview mode, depending on the button status'''
         if self.preview_mode_started:
@@ -1327,10 +1328,8 @@ class Controller_MainWindow(QMainWindow):
            parameters of the beams in the UI. There is no scan here, 
            beams only changes when parameters are changed. This the preferred 
            mode for beam calibration'''
-        
-        '''Setting the camera for acquisition'''
-        self.start_camera_recording('AutoSequence')
-        
+
+        # change image display type
         self.camera_window.change_frame_display_mode('frame2d')  
         
         '''Setting tasks'''
@@ -1340,9 +1339,14 @@ class Controller_MainWindow(QMainWindow):
         self.preview_galvos_etls_task = nidaqmx.Task()
         self.preview_galvos_etls_task.ao_channels.add_ao_voltage_chan(terminals["galvos_etls"])
         
+# tmpiz #            
+        '''Setting the camera for acquisition'''
+        #self.start_camera_recording('auto_trigger')
+        self.camera.set_trigger_mode('auto_trigger')
+
         while self.preview_mode_started:
             '''Starting lasers'''
-            self.start_lasers()
+#            self.start_lasers()
             
             '''Setting data values'''
             left_galvo_voltage = self.parameters['Left Galvo Amplitude'] + self.parameters['Left Galvo Offset']
@@ -1357,24 +1361,37 @@ class Controller_MainWindow(QMainWindow):
                                                       np.array([right_etl_voltage])))
             '''Writing the data'''
             self.preview_galvos_etls_task.write(preview_galvos_etls_waveforms, auto_start = True)
-            
+
+          
             '''Retrieving image from camera and putting it in its queue
                for display'''
-            self.camera.start_recording_single()
-            # Get buffer
-            frame = self.camera.get_image()*1.0
+# tmpiz #
+#            cam_images = np.zeros((1, self.camera.height, self.camera.width), dtype=np.uint16)
+#            self.camera.record_to_memory(num_images=cam_images.shape[0], out=cam_images, first_trigger_timeout_seconds=5)
+#            frame = cam_images[0]
+
+            self.camera.start_recorder(1)
+            self.camera.check_recorder(1)
+            self.camera.stop_recorder()
+            frame, meta = self.camera.get_images(1)
+            self.camera.cleanup_recorder()
+            #recorder created every loop by start_recorder 
+            #must be deleted to avoir crash (2do -> create/init & delete recorder outside loop)
+            self.camera.delete_recorder()
+
             frame = np.transpose(frame)
             self.send_frame_to_consumer(frame)
-        
-        '''Stopping camera'''
-        self.stop_camera_recording()
+
+# tmpiz #        
+#        '''Stopping camera'''
+#        self.stop_camera_recording()
         
         '''End tasks'''
         self.preview_galvos_etls_task.stop()
         self.preview_galvos_etls_task.close()
         
         '''Stopping lasers'''
-        self.stop_lasers()
+#        self.stop_lasers()
         
         '''Enabling modes after preview_mode'''
         self.update_buttons_modes(self.default_buttons)
@@ -1388,7 +1405,7 @@ class Controller_MainWindow(QMainWindow):
     def reconstruct_frame(self,buffer):
         '''Reconstructs a frame from multiple frames'''
     
-        reconstructed_frame = np.zeros((int(self.parameters["Rows"]), int(self.parameters["Columns"])))  #Initializing frame
+        reconstructed_frame = np.zeros((int(self.parameters["Rows"]), int(self.parameters["Columns"])), np.uint16)  #Initializing frame
         
         for frame in range(int(self.number_of_steps)):
             '''Uniformize frame intensities'''
@@ -1419,7 +1436,7 @@ class Controller_MainWindow(QMainWindow):
             reconstructed_buffer = buffer
         else:
             column_buffer = int(self.parameters["ETL Step"]*0.2)
-            reconstructed_buffer = np.zeros((buffer.shape[0],int(self.parameters["Rows"]),int(self.parameters["ETL Step"]+ (2*column_buffer))))  #Initializing frame
+            reconstructed_buffer = np.zeros((buffer.shape[0],int(self.parameters["Rows"]),int(self.parameters["ETL Step"]+ (2*column_buffer))), np.uint16)  #Initializing frame
     
             for frame in range(int(self.number_of_steps)):
                 '''Uniformize frame intensities'''
@@ -1447,7 +1464,7 @@ class Controller_MainWindow(QMainWindow):
         
         column_buffer = int(self.parameters["ETL Step"]*0.2)
         weight_step = 1/(2*column_buffer)
-        reconstructed_frame = np.zeros((int(self.parameters["Rows"]), int(self.parameters["Columns"])))  #Initializing frame
+        reconstructed_frame = np.zeros((int(self.parameters["Rows"]), int(self.parameters["Columns"])), np.uint16)  #Initializing frame
         
         for frame in range(int(self.number_of_steps)):
             first_center_column = int(frame * self.parameters['ETL Step'] + column_buffer)
@@ -1475,45 +1492,48 @@ class Controller_MainWindow(QMainWindow):
         '''Generate ETLs, galvos & camera's ramps, get a single reconstructed image and display it'''
         
         '''Creating ETLs, galvos & camera's ramps and waveforms'''
-
-        # TempFIX: While loop to reacquire data in case of missing frames bug
-        while True:
-            self.ramps = AOETLGalvos(self.parameters)  
-            self.ramps.create_tasks(terminals, 'FINITE')
-            activate = False
-            if self.ui.checkBox_activateEtlFocus.isChecked():
-                activate = True
-            self.ramps.create_calibrated_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept, activate = activate)
-            invert = False
-            if self.ui.checkBox_invertGalvos.isChecked():
-                invert = True
-            self.ramps.create_galvos_waveforms(case = 'TRAPEZE', invert = invert)
-            self.ramps.create_digital_output_camera_waveform(case = 'STAIRS_FITTING')
+        self.ramps = AOETLGalvos(self.parameters)  
+        self.ramps.create_tasks(terminals, 'FINITE')
+        activate = False
+        if self.ui.checkBox_activateEtlFocus.isChecked():
+            activate = True
+        self.ramps.create_calibrated_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept, activate = activate)
+        invert = False
+        if self.ui.checkBox_invertGalvos.isChecked():
+            invert = True
+        self.ramps.create_galvos_waveforms(case = 'TRAPEZE', invert = invert)
+        self.ramps.create_digital_output_camera_waveform(case = 'STAIRS_FITTING')
             
-            '''Writing waveform to task and running'''
-            self.ramps.write_waveforms_to_tasks()                            
+        '''Writing waveform to task and running'''
+        self.ramps.write_waveforms_to_tasks()                            
         
-            self.number_of_steps = np.ceil(self.parameters["Columns"]/self.parameters["ETL Step"]) #Number of galvo sweeps in a frame, or alternatively the number of ETL focal step
-            #self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
+        self.number_of_steps = int(np.ceil(self.parameters["Columns"]/self.parameters["ETL Step"])) #Number of galvo sweeps in a frame, or alternatively the number of ETL focal step
+        #self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
 
-            self.camera.start_recording_multiple(self.number_of_steps)
-            self.ramps.start_tasks()
-            self.ramps.run_tasks()
+# tmpiz #
+# note: start_camera_recording('external_exposure')
+# was called before enterint this function
 
-            '''End tasks'''
-            self.ramps.stop_tasks()                             
-            self.ramps.close_tasks()
+#        cam_images = np.zeros((self.number_of_steps, self.camera.height, self.camera.width), dtype=np.uint16)
+#        self.ramps.start_tasks()
+#        self.camera.record_to_memory(num_images=cam_images.shape[0], out=cam_images, first_trigger_timeout_seconds=5)
+#        self.ramps.run_tasks()
+#        self.ramps.stop_tasks()                             
+#        self.ramps.close_tasks()
+            
+        self.camera.start_recorder(self.number_of_steps)
+        self.ramps.start_tasks()
+        self.camera.check_recorder(self.number_of_steps)
+        self.camera.stop_recorder()
+        self.ramps.run_tasks()
+        self.ramps.stop_tasks()                            
+        self.ramps.close_tasks()
+        images, metas = self.camera.get_images(self.number_of_steps)
+        self.camera.cleanup_recorder()
+        self.camera.delete_recorder()
 
-            '''Retrieving buffer'''
-            buffer_list = self.camera.get_images(self.number_of_steps)
-            if len(buffer_list) != self.number_of_steps:
-                print('warning: frames dropped - reacquiring')
-            else:
-                break
-        # TempFIX: We should have a complete set now... carry on
-        self.buffer = np.dstack(buffer_list)
-        self.buffer = np.transpose(self.buffer, (2,0,1))
-        
+        self.buffer = images        
+
         '''Frame reconstruction for display'''
         if self.ui.checkBox_stitching.isChecked():
             self.reconstructed_frame = self.reconstruct_frame_from_cropped_buffer(self.crop_buffer(self.buffer))
@@ -1560,7 +1580,7 @@ class Controller_MainWindow(QMainWindow):
            parameters in the UI'''
         
         '''Setting the camera for acquisition'''
-        self.start_camera_recording('ExternalExposureControl')
+        self.start_camera_recording('external_exposure')
         
         self.camera_window.change_frame_display_mode('frame2d')  
         
@@ -1605,7 +1625,7 @@ class Controller_MainWindow(QMainWindow):
         self.print_controller('->Getting single image')
         
         '''Setting the camera for acquisition'''
-        self.start_camera_recording('ExternalExposureControl')
+        self.start_camera_recording('external_exposure')
         
         self.camera_window.change_frame_display_mode('frame2d')  
         
@@ -1831,7 +1851,7 @@ class Controller_MainWindow(QMainWindow):
         ''' Thread for volume acquisition and saving'''
         
         '''Setting the camera for acquisition'''
-        self.start_camera_recording('ExternalExposureControl')
+        self.start_camera_recording('external_exposure')
         self.camera_window.change_frame_display_mode('frame3d')
         
         '''Making sure saving is allowed and filename isn't empty'''
@@ -1842,7 +1862,7 @@ class Controller_MainWindow(QMainWindow):
             '''Getting sample name'''
             self.get_sample_name()
             
-            self.set_data_consumer(self.frame_saver, False, "FrameSaver", True) ###
+            self.set_data_consumer(self.frame_saver, False, "FrameSaver", True)
             
             '''Starting frame saver'''
             if self.ui.checkBox_saveAllFrames.isChecked():
@@ -1956,7 +1976,7 @@ class Controller_MainWindow(QMainWindow):
             for multiple sample horizontal positions'''
         
         '''Setting the camera for acquisition'''
-        self.start_camera_recording('ExternalExposureControl')
+        self.start_camera_recording('external_exposure')
         
         '''Creating laser tasks'''
         self.lasers_task = nidaqmx.Task()
@@ -2155,7 +2175,7 @@ class Controller_MainWindow(QMainWindow):
         ''' Calibrates the focal position relation with etls-galvos voltage'''
         
         '''Setting the camera for acquisition'''
-        self.start_camera_recording('AutoSequence')
+        self.start_camera_recording('auto_trigger')
         
         '''Setting tasks'''
         self.lasers_task = nidaqmx.Task()
@@ -2458,7 +2478,7 @@ class CameraWindow(queue.Queue):
             
             '''Retrieving and displaying new frame'''
             frame = self.get(False)
-            if self.stack_mode:
+            if self.stack_mode and False: # skipping 3d for display but unsure of other effects... to confirm
                 self.frame_list.append(frame.tolist())
                 if len(self.frame_list) > 3: #To prevent the list of frames from being too big
                     self.frame_list.pop(0)
@@ -2476,6 +2496,10 @@ class CameraWindow(queue.Queue):
                 self.graphicsview.setImage(frame)
             
             
+            # new approach to saturated pixels...
+            #saturated_pixels_mask = frame >= 65535
+            #frame[saturated_pixels_mask] = 0
+
             '''Showing saturated pixels in red'''
             # if self.saturation:
             #     self.plot_item.removeItem(self.saturation_plot) #Reset saturationplot
@@ -2577,13 +2601,10 @@ class FrameSaver():
             counter = 1
             for dataset in range(int(self.number_of_datasets)):
                 in_loop = True
-                print('in_loop') #debugging
                 while in_loop:
                     try:
                         '''Retrieve buffer'''
                         buffer = self.queue.get(True,1)
-                        #print(buffer.shape[0]) #debugging
-                        #print('Buffer received') #debugging
                         if buffer.ndim == 2:
                             buffer = np.expand_dims(buffer, axis=0) #To consider 2D arrays as a 3D arrays
                         for frame in range(buffer.shape[0]): #For each 2D frame
@@ -2604,18 +2625,15 @@ class FrameSaver():
                             self.add_attribute('Current camera horizontal position', self.camera_positions_list[pos_index])
                             for param_string in modifiable_parameters:
                                 self.add_attribute(param_string, parameters[param_string])
-                            #print('attributes ok') #debugging
                             counter += 1
+
                         in_loop = False
                     except:
-                        #print('No buffer') #debugging
                         if self.saving_started == False:
                             in_loop = False
-                print('exit in_loop') #debugging
             f.close()
             self.print_controller('File '+self.filenames_list[file]+' saved')
 
     def stop_saving(self):
         '''Changes the flag status to end the saving thread''' 
         self.saving_started = False
-
