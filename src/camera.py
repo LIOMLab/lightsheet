@@ -14,6 +14,8 @@ class Camera:
     
     # State flags
     is_open = False
+    is_recording = False
+    new_images_available = False
 
     # Error status
     error = 0
@@ -39,86 +41,70 @@ class Camera:
     def set_trigger_mode(self, trigger_mode):
         '''Set the trigger mode for the camera
         
-        'AutoSequence':    An exposure of a new image is started automatically best possible compared to the
-                           readout of an image and the current timing parameters. If a CCD is used and
-                           images are taken in a sequence, exposure and sensor readout are started
-                           simultaneously. Signals at the trigger input line are irrelevant
+        'auto_trigger':         An exposure of a new image is started automatically best possible compared to the
+                                readout of an image and the current timing parameters. If a CCD is used and
+                                images are taken in a sequence, exposure and sensor readout are started
+                                simultaneously. Signals at the trigger input line are irrelevant
                            
-        'ExternalExposureStart':    A delay / exposure sequence is started depending on the HW signal at the trigger
-                                    input line or by a force trigger command
+        'external':             A delay / exposure sequence is started depending on the HW signal at the trigger
+                                input line or by a force trigger command
         
-        'ExternalExposureControl':  An exposure sequence is started depending on the HW signal at the trigger input
-                                    line. The exposure time is defined by the pulse length of the HW signal. The delay
-                                    and exposure time values defined by the set / request delay and exposure
-                                    command are ineffective. In double image mode exposure time length of the first
-                                    image is controlled through the HW signal, exposure time of the second image is
-                                    given by the readout time of the first image
+        'external_exposure':    An exposure sequence is started depending on the HW signal at the trigger input
+                                line. The exposure time is defined by the pulse length of the HW signal. The delay
+                                and exposure time values defined by the set / request delay and exposure
+                                command are ineffective. In double image mode exposure time length of the first
+                                image is controlled through the HW signal, exposure time of the second image is
+                                given by the readout time of the first image
         '''
         if self.is_open:
-            if trigger_mode == 'AutoSequence':
+            if trigger_mode == 'auto_trigger':
                 self.camera.sdk.set_trigger_mode('auto sequence')
-            elif trigger_mode == 'ExternalExposureStart':
+            elif trigger_mode == 'external':
                 self.camera.sdk.set_trigger_mode('external exposure start & software trigger')
-            elif trigger_mode == 'ExternalExposureControl':
+            elif trigger_mode == 'external_exposure':
                 self.camera.sdk.set_trigger_mode('external exposure control')
 
 
-    def start_recording_single(self):
+    def start_recorder(self, number_of_images):
         if self.is_open:
-            self.camera.record(1, mode='sequence non blocking')
-            # makes sure record is started before we keep going (bug investigation) 
-            while True:
-                running = self.camera.rec.get_status()['is running']
-                if running is True:
-                    break
-
-    def start_recording_multiple(self, number_of_images):
-        if self.is_open:
-            self.camera.record(int(number_of_images), mode='sequence non blocking')
-            # makes sure record is started before we keep going (bug investigation) 
-            while True:
-                running = self.camera.rec.get_status()['is running']
-                if running is True:
-                    break
-
-    def get_image(self):
-        if self.is_open:
-            # implement a 2s timeout in case we never receive the frame (bug investigation)
+            self.is_recording = True
+            self.camera.record(int(number_of_images), mode='fifo')
+ 
+            
+    def check_recorder(self, number_of_images):
+        if self.is_open and self.is_recording:
             delete_TO = 2
             wait_until = datetime.now() + timedelta(seconds=delete_TO)
-            break_loop = False
-            while not break_loop:
-                running = self.camera.rec.get_status()['is running']
-                if running is False:
-                    break_loop = True
+            while True:
+                images_in_buffer = self.camera.rec.get_status()['dwProcImgCount']
+                if images_in_buffer >= number_of_images:
+                    print('Done! Images in buffer: ' + str(images_in_buffer))
+                    self.new_images_available = True
+                    break
                 elif wait_until < datetime.now():
-                    print('Timeout! no frame received')
-                    break_loop = True
-                time.sleep(0.01)
-            # 2do: deal with missing data in case of timeout
-            image, meta = self.camera.image()
-            return image
+                    print('Timeout! Images in buffer: ' + str(images_in_buffer))
+                    break
+                else:
+                    time.sleep(0.01)
+
+    def stop_recorder(self):
+        if self.is_open and self.is_recording:
+            self.camera.stop()
+            self.is_recording = False
 
     def get_images(self, number_of_images):
+        if self.is_open and not(self.is_recording) and self.new_images_available:
+            images, metadatas = self.camera.images(blocksize = number_of_images)
+            self.new_images_available = False
+            return images, metadatas
+
+    def cleanup_recorder(self):
         if self.is_open:
-            # implement a 2s timeout in case we never receive enough frames (bug investigation)
-            delete_TO = 2
-            wait_until = datetime.now() + timedelta(seconds=delete_TO)
-            break_loop = False
-            while not break_loop:
-                running = self.camera.rec.get_status()['is running']
-                frames = self.camera.rec.get_status()['dwProcImgCount']
-                if running is False:
-                    break_loop = True
-                elif wait_until < datetime.now():
-                    print('Timeout! frames in buffer: ' + str(frames))
-                    break_loop = True
-                time.sleep(0.01)
-            # 2do: deal with partial data in case of timeout
-            images, metadatas = self.camera.images()
-            return images
+            self.camera.rec.cleanup()
 
-
+    def delete_recorder(self):
+        if self.is_open:
+            self.camera.rec.delete()
 
 
     '''Get Camera Properties'''
