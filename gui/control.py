@@ -31,9 +31,8 @@ from gui.ui_settings import Ui_Settings
 
 from src.hardware import AOETLGalvos
 from src.motors import Motors
-# tmpiz #
 from src.camera import Camera
-#from src.pco2 import Camera
+#from src.pco_camera import Camera
 from src.lasers import Lasers
 
 logging.basicConfig(format="%(message)s", level=logging.INFO)
@@ -162,7 +161,6 @@ class Properties_Dialog(QDialog):
     
     def get_properties(self):
         '''Read properties from the camera'''
-        # tmpiz #
         self.ui.label_cameraName.setText(self.camera.get_name())
         self.ui.label_imageSize.setText(str(self.camera.get_xsize()) + ' x ' + str(self.camera.get_ysize()))
         self.ui.label_cameraTemperature.setText("{:.1f} \u2103".format(self.camera.get_camera_temperature()))
@@ -190,24 +188,26 @@ class Properties_Dialog(QDialog):
 
 
 class Controller_MainWindow(QMainWindow):
-    '''Class for control of the MesoSPIM'''
-    sig_update_progress = pyqtSignal(int) #Signal for progress bar in status bar
-    sig_beep = pyqtSignal(bool) #Signal for beep sound
-    sig_stylesheet = pyqtSignal(int) #Signal for app stylesheet
+    '''Class for the MesoSPIM MainWindow'''
+
+    # Signals
+    sig_update_progress = pyqtSignal(int) #Status bar progress indicator update
+    sig_beep = pyqtSignal(bool) #Beep sound
+    sig_stylesheet = pyqtSignal(int) #App stylesheet change
 
     def __init__(self):
         #
         # See https://fuhm.org/super-harmful/
-        # for explanation why we don't init inherited class with
+        # for explanation why we don't automatically init inherited class with:
         # super(Controller, self).__init__()
-        # but instead manually do so with:
+        # but rather manually do so with:
         # QMainWindow.__init__(self)
         # 
-        # Ui Approach taken below requires generating .py file from .ui (Qt Designer file format)
+        # Ui approach taken below requires generating .py file from .ui (Qt Designer file format)
         # This enables VSCode IntelliSense to work properly on Ui classes
         # PS command: pyuic5 .\properties.ui -o .\ui_properties.py
         # 
-        # Alternate Ui loading could be done with
+        # Previous Ui loading was done directly from .ui file with:
         # basepath = os.path.join(os.path.dirname(__file__))
         # uic.loadUi(os.path.join(basepath,"controller.ui"), self)
         #
@@ -619,10 +619,9 @@ class Controller_MainWindow(QMainWindow):
     
     def start_camera_recording(self,trigger_mode):
         '''Starts camera recording with certain settings'''
-        # tmpiz #
-        #self.camera.apply_settings(trigger=trigger_mode)
-        #self.camera.arm()
-        self.camera.set_trigger_mode(trigger_mode)
+        self.camera.apply_settings(trigger=trigger_mode)
+        self.camera.arm()
+
         #self.camera.arm_camera() 
         #self.camera.get_sizes() 
         #self.camera.allocate_buffer() 
@@ -631,8 +630,8 @@ class Controller_MainWindow(QMainWindow):
     
     def stop_camera_recording(self):
         '''Stops camera recording'''
-        # tmpiz #
-        #self.camera.disarm()
+        self.camera.disarm()
+
         #self.camera.cancel_images()
         #self.camera.set_recording_state('off')
         #self.camera.free_buffer()
@@ -1339,10 +1338,8 @@ class Controller_MainWindow(QMainWindow):
         self.preview_galvos_etls_task = nidaqmx.Task()
         self.preview_galvos_etls_task.ao_channels.add_ao_voltage_chan(terminals["galvos_etls"])
         
-# tmpiz #            
         '''Setting the camera for acquisition'''
-        #self.start_camera_recording('auto_trigger')
-        self.camera.set_trigger_mode('auto_trigger')
+        self.start_camera_recording('auto_trigger')
 
         while self.preview_mode_started:
             '''Starting lasers'''
@@ -1365,26 +1362,16 @@ class Controller_MainWindow(QMainWindow):
           
             '''Retrieving image from camera and putting it in its queue
                for display'''
-# tmpiz #
-#            cam_images = np.zeros((1, self.camera.height, self.camera.width), dtype=np.uint16)
-#            self.camera.record_to_memory(num_images=cam_images.shape[0], out=cam_images, first_trigger_timeout_seconds=5)
-#            frame = cam_images[0]
+            cam_images = np.zeros((1, self.camera.height, self.camera.width), dtype=np.uint16)
+            self.camera.record_to_memory(num_images=cam_images.shape[0], out=cam_images, first_trigger_timeout_seconds=5)
+            frame = cam_images[0]
 
-            self.camera.start_recorder(1)
-            self.camera.check_recorder(1)
-            self.camera.stop_recorder()
-            frame, meta = self.camera.get_images(1)
-            self.camera.cleanup_recorder()
-            #recorder created every loop by start_recorder 
-            #must be deleted to avoir crash (2do -> create/init & delete recorder outside loop)
-            self.camera.delete_recorder()
 
             frame = np.transpose(frame)
             self.send_frame_to_consumer(frame)
 
-# tmpiz #        
 #        '''Stopping camera'''
-#        self.stop_camera_recording()
+        self.stop_camera_recording()
         
         '''End tasks'''
         self.preview_galvos_etls_task.stop()
@@ -1510,27 +1497,14 @@ class Controller_MainWindow(QMainWindow):
         self.number_of_steps = int(np.ceil(self.parameters["Columns"]/self.parameters["ETL Step"])) #Number of galvo sweeps in a frame, or alternatively the number of ETL focal step
         #self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
 
-# tmpiz #
-# note: start_camera_recording('external_exposure')
-# was called before enterint this function
-
-#        cam_images = np.zeros((self.number_of_steps, self.camera.height, self.camera.width), dtype=np.uint16)
-#        self.ramps.start_tasks()
-#        self.camera.record_to_memory(num_images=cam_images.shape[0], out=cam_images, first_trigger_timeout_seconds=5)
-#        self.ramps.run_tasks()
-#        self.ramps.stop_tasks()                             
-#        self.ramps.close_tasks()
-            
-        self.camera.start_recorder(self.number_of_steps)
+# note: start_camera_recording('external_exposure') was called before entering this function
+# tmpiz - test/check tasks order
+        images = np.zeros((self.number_of_steps, self.camera.height, self.camera.width), dtype=np.uint16)
         self.ramps.start_tasks()
-        self.camera.check_recorder(self.number_of_steps)
-        self.camera.stop_recorder()
+        self.camera.record_to_memory(num_images=images.shape[0], out=images, first_trigger_timeout_seconds=5)
         self.ramps.run_tasks()
-        self.ramps.stop_tasks()                            
+        self.ramps.stop_tasks()                             
         self.ramps.close_tasks()
-        images, metas = self.camera.get_images(self.number_of_steps)
-        self.camera.cleanup_recorder()
-        self.camera.delete_recorder()
 
         self.buffer = images        
 
