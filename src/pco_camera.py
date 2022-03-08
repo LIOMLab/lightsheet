@@ -11,31 +11,74 @@ from datetime import datetime
 from datetime import timedelta
 
 class Camera:
-    
-    # State flags
-    is_open = False
-    is_recording = False
-    new_images_available = False
-
-    # Error status
-    error = 0
-    error_message = ""
 
     def __init__(self):
-        try:
-            self.camera = pco.Camera()
-        except:
-            self.error = 1
-            self.error_message = 'Camera not found'
-        else:
-            self.is_open = True
+        # Error status
+        self.error = 0
+        self.error_message = ""
+    
+        # State flags
+        self.is_open = False
+        self.is_recording = False
+        self.new_images_available = False
 
+    def open(self):
+        '''Open a camera'''
+        if not self.is_open:
+            try:
+                self.camera = pco.Camera()
+            except:
+                self.error = 1
+                self.error_message = 'Failed to open the camera'
+            else:
+                self.is_open = True
+        return None
 
     def close(self):
         '''Closes an opened camera'''
         if self.is_open:
-            self.camera.sdk.close_camera()
+            self.camera.close()
             self.is_open = False
+            if self.verbose: 
+                print(" Camera closed.")
+        return None
+
+    def arm(self, num_buffers=None):
+        if self.is_open:
+            if not hasattr(self, '_default_num_buffers'):
+                self._default_num_buffers = 2
+            if num_buffers is None:
+                num_buffers = self._default_num_buffers
+            assert 1 <= num_buffers <= 16
+            self._default_num_buffers = num_buffers
+            if self.armed:
+                self.disarm()
+            if self.verbose: 
+                print("Arming camera...")
+            self.camera.sdk.arm_camera()
+            sizes = {}
+            sizes = self.camera.sdk.get_sizes()
+            self.width = int(sizes.get('x'))
+            self.height = int(sizes.get('y'))
+            self.bytes_per_image = self.width * self.height * 2 # 16 bit images (2 bytes per pixel)
+            self.camera.sdk.set_image_parameters(self.width, self.height)
+            #self.camera.sdk.set_recording_state('on')
+            self.armed = True
+            if self.verbose: print(" Camera armed.")
+        return None
+
+    def disarm(self):
+        if self.is_open:
+            if not hasattr(self, 'armed'):
+                self.armed = False
+            if self.verbose: 
+                print("Disarming camera...")
+            if self.camera.sdk.get_recording_state()['recording state'] == 'on':
+                self.camera.sdk.set_recording_state('off')            
+            self.armed = False
+            if self.verbose: 
+                print(" Camera disarmed.")
+        return None
 
 
     def set_trigger_mode(self, trigger_mode):
@@ -64,13 +107,12 @@ class Camera:
             elif trigger_mode == 'external_exposure':
                 self.camera.sdk.set_trigger_mode('external exposure control')
 
-
     def start_recorder(self, number_of_images):
         if self.is_open:
-            self.is_recording = True
             self.camera.record(int(number_of_images), mode='fifo')
- 
-            
+            self.is_recording = True
+        return None
+             
     def check_recorder(self, number_of_images):
         if self.is_open and self.is_recording:
             delete_TO = 2

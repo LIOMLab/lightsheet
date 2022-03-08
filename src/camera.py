@@ -8,24 +8,18 @@ import numpy as np
 
 class Camera:
 
-    # State flags
-    is_open = False
-
-    # Error status
-    error = 0
-    error_message = ""
-
-
     def __init__(self, verbose=True):
-        # Defaults attributes
-        
+        # Error status
+        self.error = 0
+        self.error_message = ""
 
+        # State flags
+        self.is_open = False
 
-
-
-
+        # Default attributes
         self.verbose = verbose
         self.camera_handle = C.c_void_p(0)
+
         if self.verbose: 
             print("Opening camera...")
         try:
@@ -37,8 +31,8 @@ class Camera:
                 print("Failed to open the camera.")
                 print(" *Is the camera on, and plugged into the computer?")
                 print(" *Is CamWare running? It shouldn't be!")
-            self.error = True
-            self.error_message = ''
+            self.error = 1
+            self.error_message = 'Failed to open the camera'
         else:
             self.is_open = True
             self._get_camera_type()
@@ -909,10 +903,6 @@ dll.get_camera_name.restype = check_error
 dll.reset_settings_to_default = dll.PCO_ResetSettingsToDefault
 dll.reset_settings_to_default.argtypes = [C.c_void_p]
 dll.reset_settings_to_default.restype = check_error
-
-dll.set_recording_state = dll.PCO_SetRecordingState
-dll.set_recording_state.argtypes = [C.c_void_p, C.c_uint16]
-dll.set_recording_state.restype = check_error
 
 dll.remove_buffer = dll.PCO_RemoveBuffer
 dll.remove_buffer.argtypes = [C.c_void_p]

@@ -37,17 +37,18 @@ class Motors:
     _settings['Camera Limit Low'] = 0.0
     _settings['Camera Limit High'] = 50.0
 
-    # State flags
-    vertical_is_open = False
-    horizontal_is_open = False
-    camera_is_open = False
-
-    # Error status
-    error = 0
-    error_message = ""
-
 
     def __init__(self):
+        # Error status
+        self.error = 0
+        self.error_message = ""
+        
+        # State flags
+        self.vertical_is_open = False
+        self.horizontal_is_open = False
+        self.camera_is_open = False
+
+        # Read configuration file
         self.cfg_default()
         self.cfg_read()
 
@@ -131,28 +132,26 @@ class Motors:
 class zaberMotor:
     '''Class for Zaber's T-LS series linear stage motor control'''
 
-    # State flags
-    is_supported = False
-
-    # Error status
-    error = 0
-    error_message = ""
-
-    # Default attributes
-    ID = 0
-    name = ""
-    inverted = False
-    homed = False
-    microstep_size = 0
-    microsteps_max = 0
-    units = 'mm'
-    limit_high_microsteps = 0
-    limit_low_microsteps = 0
-    origin_microsteps = 0
-
-
     def __init__(self, port:str, device_number:int):
-        '''device_number is the number of the device in the daisy chain '''
+        # Error status
+        self.error = 0
+        self.error_message = ""
+
+        # State flags
+        self.is_supported = False
+
+        # Default attributes
+        self.ID = 0
+        self.name = ""
+        self.inverted = False
+        self.homed = False
+        self.microstep_size = 0
+        self.microsteps_max = 0
+        self.units = 'mm'
+        self.limit_high_microsteps = 0
+        self.limit_low_microsteps = 0
+        self.origin_microsteps = 0
+
         self.port = port
         self.device_number = device_number
         self.ask_ID()
@@ -187,7 +186,7 @@ class zaberMotor:
             motor = serial.Serial(port = self.port, baudrate = 9600, bytesize = serial.EIGHTBITS, parity = serial.PARITY_NONE, stopbits = serial.STOPBITS_ONE, timeout = 2)
         except serial.SerialException:
             self.error = 1
-            self.error_message = "Error - Serial port cannot be found or cannot be configured"
+            self.error_message = "Serial port cannot be found or cannot be configured"
         else:
             #We have an open serial port to the motor
             #Clear I/O buffers
@@ -210,13 +209,13 @@ class zaberMotor:
                         reply_data = (pow(256,3) * reply_bytes[5] + pow(256,2) * reply_bytes[4] + pow(256,1) * reply_bytes[3] + pow(256,0) * reply_bytes[2])      
                 elif reply_bytes[0] == self.device_number and reply_bytes[1] == 255:
                     self.error = 1
-                    self.error_message = "Error - Motor reports an error as occured"
+                    self.error_message = "Motor reports an error as occured"
                 else:
                     self.error = 1
-                    self.error_message = "Error - Reply does not fit expected format"
+                    self.error_message = "Reply does not fit expected format"
             else:
                 self.error = 1
-                self.error_message = "Error - No valid reply received"
+                self.error_message = "No valid reply received"
         return reply_data
 
     
@@ -255,7 +254,7 @@ class zaberMotor:
             else:
                 self.is_supported = False
                 self.error = 1
-                self.error_message = "Error - Unsupported device"
+                self.error_message = "Unsupported device"
                 self.ID = 0
                 self.name = "Unsupported device"
         else:
