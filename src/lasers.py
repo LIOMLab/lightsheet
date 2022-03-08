@@ -12,24 +12,25 @@ from configparser import ConfigParser
 
 
 class Lasers:
-        
     # Default hardware configuration
     _lasers = {}
     _lasers['Terminals'] = '/Dev7/ao0:1'
     _lasers['Laser1 Voltage'] = 0.0  # In Volts
     _lasers['Laser2 Voltage'] = 0.0  # In Volts
 
-    # State flags
-    laser1_is_open = False
-    laser2_is_open = False
-
-    # Error status
-    error = 0
-    error_message = ""
-
     def __init__(self):
+        # Error status
+        self.error = 0
+        self.error_message = ""
+
+        # State flags
+        self.laser1_is_open = False
+        self.laser2_is_open = False
+
+        # Read configuration file
         self.cfg_default()
         self.cfg_read()
+        
         self.laser1 = analogLaser(self.lasers.get('Terminals'))
             
     def cfg_default(self):
