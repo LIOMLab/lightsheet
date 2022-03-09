@@ -12,7 +12,7 @@ from datetime import timedelta
 
 class Camera:
 
-    def __init__(self):
+    def __init__(self, verbose=False):
         # Error status
         self.error = 0
         self.error_message = ""
@@ -20,41 +20,45 @@ class Camera:
         # State flags
         self.is_open = False
         self.is_recording = False
-        self.new_images_available = False
+        self.new_images = False
+
+        self.verbose = verbose
 
     def open(self):
         '''Open a camera'''
         if not self.is_open:
             try:
+                if self.verbose:
+                    print('Opening camera...')
                 self.camera = pco.Camera()
             except:
+                if self.verbose:
+                    print(' Failed to open camera.')
                 self.error = 1
                 self.error_message = 'Failed to open the camera'
             else:
+                if self.verbose:
+                    print(' Camera opened.')
                 self.is_open = True
         return None
 
     def close(self):
         '''Closes an opened camera'''
         if self.is_open:
+            if self.verbose: 
+                print('Closing camera...')
             self.camera.close()
             self.is_open = False
             if self.verbose: 
-                print(" Camera closed.")
+                print(' Camera closed.')
         return None
 
     def arm(self, num_buffers=None):
         if self.is_open:
-            if not hasattr(self, '_default_num_buffers'):
-                self._default_num_buffers = 2
-            if num_buffers is None:
-                num_buffers = self._default_num_buffers
-            assert 1 <= num_buffers <= 16
-            self._default_num_buffers = num_buffers
-            if self.armed:
-                self.disarm()
             if self.verbose: 
-                print("Arming camera...")
+                print('Arming camera...')
+            if self.camera.sdk.get_recording_state()['recording state'] == 'on':
+                self.camera.sdk.set_recording_state('off')
             self.camera.sdk.arm_camera()
             sizes = {}
             sizes = self.camera.sdk.get_sizes()
@@ -62,22 +66,19 @@ class Camera:
             self.height = int(sizes.get('y'))
             self.bytes_per_image = self.width * self.height * 2 # 16 bit images (2 bytes per pixel)
             self.camera.sdk.set_image_parameters(self.width, self.height)
-            #self.camera.sdk.set_recording_state('on')
-            self.armed = True
-            if self.verbose: print(" Camera armed.")
+            if self.verbose: 
+                print(' Camera armed.')
         return None
 
     def disarm(self):
         if self.is_open:
-            if not hasattr(self, 'armed'):
-                self.armed = False
             if self.verbose: 
-                print("Disarming camera...")
+                print('Disarming camera...')
             if self.camera.sdk.get_recording_state()['recording state'] == 'on':
                 self.camera.sdk.set_recording_state('off')            
             self.armed = False
             if self.verbose: 
-                print(" Camera disarmed.")
+                print(' Camera disarmed.')
         return None
 
 
@@ -100,31 +101,55 @@ class Camera:
                                 given by the readout time of the first image
         '''
         if self.is_open:
-            if trigger_mode == 'auto_trigger':
-                self.camera.sdk.set_trigger_mode('auto sequence')
-            elif trigger_mode == 'external':
-                self.camera.sdk.set_trigger_mode('external exposure start & software trigger')
-            elif trigger_mode == 'external_exposure':
-                self.camera.sdk.set_trigger_mode('external exposure control')
+            if self.verbose: 
+                print('Setting camera trigger mode ', trigger_mode, '...')
+            if self.is_recording:
+                if self.verbose: 
+                    print(' Cannot set trigger mode while recording.')
+            else:
+                if trigger_mode == 'auto_trigger':
+                    self.camera.sdk.set_trigger_mode('auto sequence')
+                elif trigger_mode == 'external':
+                    self.camera.sdk.set_trigger_mode('external exposure start & software trigger')
+                elif trigger_mode == 'external_exposure':
+                    self.camera.sdk.set_trigger_mode('external exposure control')
+                if self.verbose: 
+                    print(' ', trigger_mode, ' set.')
 
     def start_recorder(self, number_of_images):
         if self.is_open:
-            self.camera.record(int(number_of_images), mode='fifo')
-            self.is_recording = True
+            try:
+                if self.verbose: 
+                    print('Starting camera recording session...')
+                self.camera.record(int(number_of_images), mode='fifo')
+            except:
+                if self.verbose: 
+                    print(' Exception while starting recorder.')
+                self.error = 1
+                self.error_message = 'Failed to start recorder.'
+                self.is_recording = False
+            else:
+                if self.verbose: 
+                    print(' Recording session started.')
+                self.is_recording = True
         return None
              
-    def check_recorder(self, number_of_images):
+    def monitor_recorder(self, number_of_images):
         if self.is_open and self.is_recording:
-            delete_TO = 2
-            wait_until = datetime.now() + timedelta(seconds=delete_TO)
+            if self.verbose: 
+                print('Monitoring camera recording session status...')
+            acq_timeout = 2
+            wait_until = datetime.now() + timedelta(seconds=acq_timeout)
             while True:
                 images_in_buffer = self.camera.rec.get_status()['dwProcImgCount']
                 if images_in_buffer >= number_of_images:
-                    print('Done! Images in buffer: ' + str(images_in_buffer))
-                    self.new_images_available = True
+                    if self.verbose: 
+                        print(' Recording session succeeded:', images_in_buffer, 'images in buffer')
+                    self.new_images = True
                     break
                 elif wait_until < datetime.now():
-                    print('Timeout! Images in buffer: ' + str(images_in_buffer))
+                    if self.verbose: 
+                        print(' Still recording after', acq_timeout, 's.', images_in_buffer, 'images in buffer')
                     break
                 else:
                     time.sleep(0.01)
@@ -134,10 +159,10 @@ class Camera:
             self.camera.stop()
             self.is_recording = False
 
-    def get_images(self, number_of_images):
-        if self.is_open and not(self.is_recording) and self.new_images_available:
-            images, metadatas = self.camera.images(blocksize = number_of_images)
-            self.new_images_available = False
+    def get_images(self):
+        if self.is_open and not(self.is_recording) and self.new_images:
+            images, metadatas = self.camera.images()
+            self.new_images = False
             return images, metadatas
 
     def cleanup_recorder(self):

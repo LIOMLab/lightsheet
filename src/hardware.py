@@ -168,8 +168,8 @@ class AOETLGalvos:
         #self.laser_task.close()
         self.camera_task.close()
         self.galvo_etl_task.close()
-    
-    
+
+
     '''Waveform creation methods'''
         
     def create_digital_output_camera_waveform(self, case = 'NONE'):
