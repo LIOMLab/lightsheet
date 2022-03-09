@@ -290,7 +290,6 @@ class Camera:
                 start_time = time.perf_counter()
                 while True:
                     # Check if a buffer is ready
-                    self.num_polls += 1
                     dll.get_buffer_status(self.camera_handle, self.added_buffers[0], self._dll_status, self._driver_status)
                     if self._dll_status.value == 0xc0008000:
                         buffer_number = self.added_buffers.pop(0)#Removed from queue

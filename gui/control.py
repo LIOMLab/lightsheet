@@ -1363,7 +1363,7 @@ class Controller_MainWindow(QMainWindow):
             '''Retrieving image from camera and putting it in its queue
                for display'''
             cam_images = np.zeros((1, self.camera.height, self.camera.width), dtype=np.uint16)
-            self.camera.record_to_memory(num_images=cam_images.shape[0], out=cam_images, first_trigger_timeout_seconds=5)
+            self.camera.record_to_memory(num_images=cam_images.shape[0], out=cam_images)
             frame = cam_images[0]
 
 
@@ -1501,10 +1501,12 @@ class Controller_MainWindow(QMainWindow):
 # tmpiz - test/check tasks order
         images = np.zeros((self.number_of_steps, self.camera.height, self.camera.width), dtype=np.uint16)
         self.ramps.start_tasks()
-        self.camera.record_to_memory(num_images=images.shape[0], out=images, first_trigger_timeout_seconds=5)
+        # race condition between ramps and camera
+        self.camera.record_to_memory(num_images=images.shape[0], out=images)
         self.ramps.run_tasks()
         self.ramps.stop_tasks()                             
         self.ramps.close_tasks()
+
 
         self.buffer = images        
 
