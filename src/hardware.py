@@ -95,7 +95,6 @@ class AOETLGalvos:
         '''Create tasks for galvos, ETLs and camera'''
         self.galvo_etl_task = nidaqmx.Task(new_task_name = 'galvo_etl_ramps')
         self.camera_task = nidaqmx.Task(new_task_name = 'camera_do_signal')
-        #self.laser_task = nidaqmx.Task(new_task_name='laser_ramps')
 
         '''Housekeeping: Setting up the AO task for the Galvo and ETLs. It is the master task'''
         self.galvo_etl_task.ao_channels.add_ao_voltage_chan(terminals["galvos_etls"])
@@ -103,32 +102,27 @@ class AOETLGalvos:
         
         '''Housekeeping: Setting up the DO task for the camera. It is the slave task'''
         self.camera_task.do_channels.add_do_chan(terminals["camera"], line_grouping = LineGrouping.CHAN_PER_LINE)
-        self.camera_task.timing.cfg_samp_clk_timing(rate = self.parameters["Sample Rate"], sample_mode = mode, samps_per_chan = self.samples)
-        
-        #self.laser_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
-        #self.laser_task.timing.cfg_samp_clk_timing(rate=self.parameters["Sample Rate"], sample_mode=mode, samps_per_chan=self.samples)
-        
+        self.camera_task.timing.cfg_samp_clk_timing(rate = self.parameters["Sample Rate"], sample_mode = mode, samps_per_chan = self.samples)   
+
         '''Configures the task to start acquiring/generating samples on a rising/falling edge of a digital signal. 
             args: terminal of the trigger source (master), which edge of the digital signal the task start (optionnal)
             Important to do this configuration for each slave task'''
         self.camera_task.triggers.start_trigger.cfg_dig_edge_start_trig('/Dev1/ao/StartTrigger', trigger_edge = Edge.RISING)
-        #self.laser_task.triggers.start_trigger.cfg_dig_edge_start_trig('/Dev1/ao/StartTrigger', trigger_edge = Edge.RISING)
+
     
     def write_waveforms_to_tasks(self):
         '''Write the waveforms to the tasks'''
         self.galvo_and_etl_waveforms = np.stack((self.galvo_r_waveform, self.galvo_l_waveform, self.etl_r_waveform, self.etl_l_waveform))
-       
         self.galvo_etl_task.write(self.galvo_and_etl_waveforms)
         self.camera_task.write(self.camera_waveform, auto_start = False)
-        #self.lasers_waveforms = np.stack((self.laser_r_waveform, self.laser_l_waveform))
-        #self.laser_task.write(self.lasers_waveforms)
-    
+
+
     def start_tasks(self):
         '''Master task needs to always be started last'''
-        #self.laser_task.start()
         self.camera_task.start()
         self.galvo_etl_task.start()
-        
+
+
     def run_tasks(self): ###nécessaire?
         '''Runs the tasks for triggering, analog and counter outputs
 
@@ -145,7 +139,6 @@ class AOETLGalvos:
         '''Wait until everything is done - this is effectively a sleep function.
            Master task always last'''
       
-        #self.laser_task.wait_until_done()
         self.camera_task.wait_until_done()
         self.galvo_etl_task.wait_until_done()
 
@@ -153,19 +146,14 @@ class AOETLGalvos:
     def stop_tasks(self):
         '''Stops the tasks for triggering, analog and counter outputs
            Master task always last'''
-        #etl_voltage = 2.5 #In volts, corresponds to a current of 0
-        #galvo_voltage = 2.5
-        #standby_waveform = np.stack((np.array([galvo_voltage]),np.array([galvo_voltage]),np.array([etl_voltage]),np.array([etl_voltage])))
-        #self.galvo_etl_task.write(standby_waveform, auto_start = True)
-        #self.laser_task.stop()
         self.camera_task.stop()
         self.galvo_etl_task.stop()
+
     
     def close_tasks(self):
         '''Closes the tasks for triggering, analog and counter outputs.
            Tasks should only be closed after they are stopped.
            Master task always last. '''
-        #self.laser_task.close()
         self.camera_task.close()
         self.galvo_etl_task.close()
 

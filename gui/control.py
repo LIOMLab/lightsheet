@@ -31,8 +31,8 @@ from gui.ui_settings import Ui_Settings
 
 from src.hardware import AOETLGalvos
 from src.motors import Motors
-from src.camera import Camera
-#from src.pco_camera import Camera
+#from src.camera import Camera
+from src.pco_camera import Camera
 from src.lasers import Lasers
 
 logging.basicConfig(format="%(message)s", level=logging.INFO)
@@ -617,25 +617,6 @@ class Controller_MainWindow(QMainWindow):
             self.etls_calibration_started = False
     
     
-    def start_camera_recording(self,trigger_mode):
-        '''Starts camera recording with certain settings'''
-        self.camera.apply_settings(trigger=trigger_mode)
-        self.camera.arm()
-
-        #self.camera.arm_camera() 
-        #self.camera.get_sizes() 
-        #self.camera.allocate_buffer() 
-        #self.camera.set_recording_state('on')
-        #self.camera.insert_buffers_in_queue()
-    
-    def stop_camera_recording(self):
-        '''Stops camera recording'''
-        self.camera.disarm()
-
-        #self.camera.cancel_images()
-        #self.camera.set_recording_state('off')
-        #self.camera.free_buffer()
-    
     def set_data_consumer(self, consumer, wait, consumer_type, update_flag):
         ''' Regroups all the consumers in the same list'''
         self.consumers.append(consumer)
@@ -1123,7 +1104,10 @@ class Controller_MainWindow(QMainWindow):
     def start_lasers(self):
         '''Starts the lasers at a certain voltage'''
         self.laser_on = True
-        
+
+        self.lasers_task = nidaqmx.Task()
+        self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
+
         '''Setting up voltage'''
         left_laser_voltage = 0  #Default voltage of 0V
         right_laser_voltage = 0 #Default voltage of 0V
@@ -1136,8 +1120,7 @@ class Controller_MainWindow(QMainWindow):
         if self.right_laser_activated:
             right_laser_voltage = self.parameters['Right Laser Voltage']
         
-        self.lasers_waveforms = np.stack((np.array([right_laser_voltage]),
-                                          np.array([left_laser_voltage])))   
+        self.lasers_waveforms = np.stack((np.array([right_laser_voltage]), np.array([left_laser_voltage])))   
         
         '''Writing voltage'''
         self.lasers_task.write(self.lasers_waveforms, auto_start = True)
@@ -1332,18 +1315,17 @@ class Controller_MainWindow(QMainWindow):
         self.camera_window.change_frame_display_mode('frame2d')  
         
         '''Setting tasks'''
-        self.lasers_task = nidaqmx.Task()
-        self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
-        
         self.preview_galvos_etls_task = nidaqmx.Task()
         self.preview_galvos_etls_task.ao_channels.add_ao_voltage_chan(terminals["galvos_etls"])
         
         '''Setting the camera for acquisition'''
-        self.start_camera_recording('auto_trigger')
+        self.camera.set_trigger_mode('auto_trigger')
+        self.camera.arm()
+
+        '''Starting lasers'''
+        self.start_lasers()
 
         while self.preview_mode_started:
-            '''Starting lasers'''
-#            self.start_lasers()
             
             '''Setting data values'''
             left_galvo_voltage = self.parameters['Left Galvo Amplitude'] + self.parameters['Left Galvo Offset']
@@ -1359,26 +1341,26 @@ class Controller_MainWindow(QMainWindow):
             '''Writing the data'''
             self.preview_galvos_etls_task.write(preview_galvos_etls_waveforms, auto_start = True)
 
-          
-            '''Retrieving image from camera and putting it in its queue
-               for display'''
-            cam_images = np.zeros((1, self.camera.height, self.camera.width), dtype=np.uint16)
-            self.camera.record_to_memory(num_images=cam_images.shape[0], out=cam_images)
+            '''Retrieving image from camera and putting it in its queue for display'''
+            self.camera.start_recorder(1)
+            self.camera.monitor_recorder(1)
+            self.camera.stop_recorder()
+            cam_images = self.camera.get_images()
             frame = cam_images[0]
-
+            self.camera.delete_recorder()
 
             frame = np.transpose(frame)
             self.send_frame_to_consumer(frame)
 
-#        '''Stopping camera'''
-        self.stop_camera_recording()
+        '''Stopping lasers'''
+        self.stop_lasers()
+
+        '''Stopping camera'''
+        self.camera.disarm()
         
         '''End tasks'''
         self.preview_galvos_etls_task.stop()
         self.preview_galvos_etls_task.close()
-        
-        '''Stopping lasers'''
-#        self.stop_lasers()
         
         '''Enabling modes after preview_mode'''
         self.update_buttons_modes(self.default_buttons)
@@ -1493,22 +1475,19 @@ class Controller_MainWindow(QMainWindow):
             
         '''Writing waveform to task and running'''
         self.ramps.write_waveforms_to_tasks()                            
-        
         self.number_of_steps = int(np.ceil(self.parameters["Columns"]/self.parameters["ETL Step"])) #Number of galvo sweeps in a frame, or alternatively the number of ETL focal step
-        #self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5)
 
-# note: start_camera_recording('external_exposure') was called before entering this function
-# tmpiz - test/check tasks order
-        images = np.zeros((self.number_of_steps, self.camera.height, self.camera.width), dtype=np.uint16)
+        self.camera.start_recorder(self.number_of_steps)
         self.ramps.start_tasks()
-        # race condition between ramps and camera
-        self.camera.record_to_memory(num_images=images.shape[0], out=images)
+        self.ramps.run_tasks()
+        self.camera.monitor_recorder(self.number_of_steps)
+        self.camera.stop_recorder()
+        images = self.camera.get_images()
+        self.buffer = np.asarray(images)
+        self.camera.delete_recorder()
         self.ramps.run_tasks()
         self.ramps.stop_tasks()                             
         self.ramps.close_tasks()
-
-
-        self.buffer = images        
 
         '''Frame reconstruction for display'''
         if self.ui.checkBox_stitching.isChecked():
@@ -1555,17 +1534,14 @@ class Controller_MainWindow(QMainWindow):
         '''This thread allows the execution of live_mode while modifying
            parameters in the UI'''
         
-        '''Setting the camera for acquisition'''
-        self.start_camera_recording('external_exposure')
-        
         self.camera_window.change_frame_display_mode('frame2d')  
-        
+
         '''Moving the camera to focus'''
         ##self.move_camera_to_focus() 
-        
-        '''Creating task for lasers'''
-        self.lasers_task = nidaqmx.Task()
-        self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
+
+        '''Setting the camera for acquisition'''
+        self.camera.set_trigger_mode('external_exposure')
+        self.camera.arm()
         
         '''Starting lasers'''
         self.start_lasers()
@@ -1574,12 +1550,12 @@ class Controller_MainWindow(QMainWindow):
             '''Get single image'''
             self.get_single_image()
         
-        '''Stopping camera'''
-        self.stop_camera_recording()
-        
         '''Stopping lasers'''
         self.stop_lasers()
-        
+
+        '''Stopping camera'''
+        self.camera.disarm()
+
         '''Enabling modes after live_mode'''
         self.update_buttons_modes(self.default_buttons)
         
@@ -1600,9 +1576,6 @@ class Controller_MainWindow(QMainWindow):
         
         self.print_controller('->Getting single image')
         
-        '''Setting the camera for acquisition'''
-        self.start_camera_recording('external_exposure')
-        
         self.camera_window.change_frame_display_mode('frame2d')  
         
         '''Moving the camera to focus'''
@@ -1613,10 +1586,10 @@ class Controller_MainWindow(QMainWindow):
         self.image_ver_pos_text = self.current_vertical_position_text
         self.image_cam_pos_text = self.current_camera_position_text
         
-        '''Creating laser tasks'''
-        self.lasers_task = nidaqmx.Task()
-        self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
-        
+        '''Setting the camera for acquisition'''
+        self.camera.set_trigger_mode('external_exposure')
+        self.camera.arm()
+
         '''Starting lasers'''
         self.both_lasers_activated = True
         self.start_lasers()
@@ -1624,13 +1597,13 @@ class Controller_MainWindow(QMainWindow):
         '''Get single image'''
         self.get_single_image()
         
-        '''Stopping camera'''            
-        self.stop_camera_recording()
-        
         '''Stopping lasers'''
         self.stop_lasers()
         self.both_lasers_activated = False
-        
+
+        '''Stopping camera'''            
+        self.camera.disarm()
+
         '''Enabling modes after single frame acquisition'''
         self.default_buttons.append(self.ui.pushButton_saveImage)
         self.update_buttons_modes(self.default_buttons)
@@ -1827,7 +1800,9 @@ class Controller_MainWindow(QMainWindow):
         ''' Thread for volume acquisition and saving'''
         
         '''Setting the camera for acquisition'''
-        self.start_camera_recording('external_exposure')
+        self.camera.set_trigger_mode('external_exposure')
+        self.camera.arm()
+
         self.camera_window.change_frame_display_mode('frame3d')
         
         '''Making sure saving is allowed and filename isn't empty'''
@@ -1851,14 +1826,9 @@ class Controller_MainWindow(QMainWindow):
         else:
             print('Select directory and enter a valid filename to save')
         
-        '''Creating lasers task'''
-        self.lasers_task = nidaqmx.Task()
-        self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
         
         '''Starting lasers'''
-        ###self.both_lasers_activated = True
-        ###self.left_laser_activated = True
-        self.right_laser_activated = True
+        self.both_lasers_activated = True
         self.start_lasers()
         
         '''Set progress bar'''
@@ -1906,10 +1876,11 @@ class Controller_MainWindow(QMainWindow):
             self.frame_saver.stop_saving()
         
         '''Stopping camera'''
-        self.stop_camera_recording()  
+        self.camera.disarm() 
         
         '''Stopping laser'''
         self.stop_lasers()
+        self.both_lasers_activated = False
         
         '''Enabling modes after stack mode'''
         self.ui.pushButton_stackMode.setText('Start Stack Mode')
@@ -1952,11 +1923,8 @@ class Controller_MainWindow(QMainWindow):
             for multiple sample horizontal positions'''
         
         '''Setting the camera for acquisition'''
-        self.start_camera_recording('external_exposure')
-        
-        '''Creating laser tasks'''
-        self.lasers_task = nidaqmx.Task()
-        self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
+        self.camera.set_trigger_mode('external_exposure')
+        self.camera.arm()
         
         '''Starting lasers'''
         self.both_lasers_activated = True
@@ -2094,12 +2062,12 @@ class Controller_MainWindow(QMainWindow):
         self.update_position_camera()
         
         '''Stopping camera'''
-        self.stop_camera_recording()
+        self.camera.disarm()
         
         '''Stopping lasers'''
         self.stop_lasers()
         self.both_lasers_activated = False
-        
+
         '''Calculating focus'''
         if self.camera_calibration_started: #To make sure calibration wasn't stopped before the end
             x = self.camera_focus_relation[:,0]
@@ -2151,12 +2119,10 @@ class Controller_MainWindow(QMainWindow):
         ''' Calibrates the focal position relation with etls-galvos voltage'''
         
         '''Setting the camera for acquisition'''
-        self.start_camera_recording('auto_trigger')
+        self.camera.set_trigger_mode('auto_trigger')
+        self.camera.arm()        
         
         '''Setting tasks'''
-        self.lasers_task = nidaqmx.Task()
-        self.lasers_task.ao_channels.add_ao_voltage_chan(terminals["lasers"])
-        
         self.galvos_etls_task = nidaqmx.Task()
         self.galvos_etls_task.ao_channels.add_ao_voltage_chan(terminals["galvos_etls"])
         
@@ -2367,7 +2333,7 @@ class Controller_MainWindow(QMainWindow):
         print(self.right_slope * 2559 + self.right_intercept) #debugging
         
         '''Stopping camera'''
-        self.stop_camera_recording()
+        self.camera.disarm()
         
         '''Ending tasks'''
         self.galvos_etls_task.stop()
@@ -2376,7 +2342,7 @@ class Controller_MainWindow(QMainWindow):
         '''Stopping lasers'''
         self.stop_lasers()
         self.both_lasers_activated = False
-        
+
         if self.etls_calibration_started: #To make sure calibration wasn't stopped before the end
             self.default_buttons.append(self.ui.pushButton_showEtlInterpolation)
         
@@ -2443,7 +2409,7 @@ class CameraWindow(queue.Queue):
         try:
             '''Retrieving old view settings'''
             _view = self.graphicsview.getView()
-            _state = _view.getState()
+#            _state = _view.getState()
             
             if self.histogram_level == []:
                 first_update = True
@@ -2492,7 +2458,7 @@ class CameraWindow(queue.Queue):
             # _axisItems = {'left':_left_axis,'bottom':_bottom_axis,'right':_right_axis,'top':_top_axis} ##
             #_view.setAxisItems(axisItems=_axisItems) ###AttributeError: 'PlotItem' object has no attribute 'setAxisItems'
             #_view_box.setState(_state)
-            _view.setState(_state)
+#            _view.setState(_state)
             if not first_update: #To keep the histogram setting with image refresh
                 _histo_widget.setLevels(self.histogram_level[0],self.histogram_level[1])
         except queue.Empty:
