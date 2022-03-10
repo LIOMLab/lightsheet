@@ -23,6 +23,7 @@ class Camera:
         self.new_images = False
 
         self.verbose = verbose
+        self.open()
 
     def open(self):
         '''Open a camera'''
@@ -81,6 +82,13 @@ class Camera:
                 print(' Camera disarmed.')
         return None
 
+    def set_exposure_time(self, exposure_time:int):
+        '''Set the exposure time (in ms) for the camera'''
+        if self.is_open:
+            if self.verbose: 
+                print('Setting camera exposure time to ' + str(exposure_time) + 'ms')
+            self.camera.sdk.set_delay_exposure_time(0, 'ms', exposure_time, 'ms')
+        return None
 
     def set_trigger_mode(self, trigger_mode):
         '''Set the trigger mode for the camera
@@ -102,7 +110,7 @@ class Camera:
         '''
         if self.is_open:
             if self.verbose: 
-                print('Setting camera trigger mode ', trigger_mode, '...')
+                print('Setting camera trigger mode', trigger_mode, '...')
             if self.is_recording:
                 if self.verbose: 
                     print(' Cannot set trigger mode while recording.')
@@ -114,14 +122,15 @@ class Camera:
                 elif trigger_mode == 'external_exposure':
                     self.camera.sdk.set_trigger_mode('external exposure control')
                 if self.verbose: 
-                    print(' ', trigger_mode, ' set.')
+                    print(' ', trigger_mode, 'set.')
+        return None
 
     def start_recorder(self, number_of_images):
         if self.is_open:
             try:
                 if self.verbose: 
                     print('Starting camera recording session...')
-                self.camera.record(int(number_of_images), mode='fifo')
+                self.camera.record(int(number_of_images), mode='sequence non blocking')
             except:
                 if self.verbose: 
                     print(' Exception while starting recorder.')
@@ -153,26 +162,29 @@ class Camera:
                     break
                 else:
                     time.sleep(0.01)
+        return None
 
     def stop_recorder(self):
         if self.is_open and self.is_recording:
             self.camera.stop()
             self.is_recording = False
+        return None
 
     def get_images(self):
         if self.is_open and not(self.is_recording) and self.new_images:
             images, metadatas = self.camera.images()
             self.new_images = False
-            return images, metadatas
+        return images
 
     def cleanup_recorder(self):
         if self.is_open:
             self.camera.rec.cleanup()
+        return None
 
     def delete_recorder(self):
         if self.is_open:
             self.camera.rec.delete()
-
+        return None
 
     '''Get Camera Properties'''
 
