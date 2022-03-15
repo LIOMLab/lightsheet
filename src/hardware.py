@@ -89,9 +89,6 @@ class AOETLGalvos:
         elif acquisition == 'CONTINUOUS':
             mode = AcquisitionType.CONTINUOUS
         
-        #self.calculate_samples()
-
-        #self.master_trigger_task = nidaqmx.Task()
         '''Create tasks for galvos, ETLs and camera'''
         self.galvo_etl_task = nidaqmx.Task(new_task_name = 'galvo_etl_ramps')
         self.camera_task = nidaqmx.Task(new_task_name = 'camera_do_signal')
@@ -123,22 +120,9 @@ class AOETLGalvos:
         self.galvo_etl_task.start()
 
 
-    def run_tasks(self): ###nécessaire?
-        '''Runs the tasks for triggering, analog and counter outputs
-
-        If the tasks are connected via a shared trigger line (PFI line), then
-        firstly, the master trigger triggers all other task For this to work, 
-        all analog output and counter tasks have to be started so that they are 
-        waiting for the trigger signal. (No PFI line needed, but the related
-        command is the first line in comment for reference purposes)
-        
-        This function is only for FINITE task, we don't call it for CONTINUOUS'''
-        
-        #self.master_trigger_task.write([False, True, True, True, False], auto_start=True)
-        
+    def monitor_tasks(self):
         '''Wait until everything is done - this is effectively a sleep function.
            Master task always last'''
-      
         self.camera_task.wait_until_done()
         self.galvo_etl_task.wait_until_done()
 
@@ -150,7 +134,7 @@ class AOETLGalvos:
         self.galvo_etl_task.stop()
 
     
-    def close_tasks(self):
+    def delete_tasks(self):
         '''Closes the tasks for triggering, analog and counter outputs.
            Tasks should only be closed after they are stopped.
            Master task always last. '''
@@ -161,10 +145,6 @@ class AOETLGalvos:
     '''Waveform creation methods'''
         
     def create_digital_output_camera_waveform(self, case = 'NONE'):
-        '''live_mode ramp isn't in use anymore, its presence was for 
-           calibrating purposes in the early stages of the microscope. It is
-           kept only for reference.'''
-        
         if case == 'STAIRS_FITTING':
             self.camera_waveform = camera_digital_output_signal(samples_per_half_period = self.samples_per_half_period, 
                                                                 t_start_exp = self.parameters["t_start_exp"], 
@@ -176,9 +156,6 @@ class AOETLGalvos:
                                                                 min_samples_per_delay = self.min_samples_per_delay)
 
     def create_calibrated_etl_waveforms(self, left_slope, left_intercept, right_slope, right_intercept, activate=False):
-        '''live_mode ramps aren't in use anymore, their presence was for 
-           calibrating purposes in the early stages of the microscope. They are
-           kept only for reference.'''
         self.etl_l_waveform = calibrated_etl_stairs(left_slope, 
                                                     left_intercept, 
                                                     right_slope, 
@@ -206,10 +183,6 @@ class AOETLGalvos:
                                                     activate = activate)
     
     def create_galvos_waveforms(self, case = 'NONE', invert = False):
-        '''live_mode ramps aren't in use anymore, their presence was for 
-           calibrating purposes in the early stages of the microscope. They are
-           kept only for reference.'''
-        
         if case == 'TRAPEZE':
             self.galvo_l_waveform = galvo_trapeze(  amplitude = self.parameters["Left Galvo Amplitude"], 
                                                     samples_per_half_period = self.samples_per_half_period, 
