@@ -85,11 +85,10 @@ def calibrated_etl_stairs(left_slope, left_intercept, right_slope, right_interce
             array = array + offset
         else:
             array = amplitude * np.ones((int(number_of_samples))) + offset
-    else: ###
-        #print('ETL focus deactivated')
+    else:
         array = amplitude * np.ones((int(number_of_samples))) + offset
-    
     return np.array(array)
+
 
 def galvo_trapeze(amplitude, samples_per_half_period, samples_per_delay, number_of_samples, number_of_steps, samples_per_step, samples_per_half_delay, min_samples_per_delay, t_start_exp, samplerate, offset,invert=False):
     '''Trapeze waveform for the galvos. Camera acquires frames only when the 
@@ -156,6 +155,119 @@ def galvo_trapeze(amplitude, samples_per_half_period, samples_per_delay, number_
         array = np.zeros((int(number_of_samples))) + offset  
     
     if invert:
-        array = array * -1 + amplitude + 2*offset
-        print('inverted')
+        array = array * -1 + amplitude + 2 * offset
     return np.array(array)
+
+
+
+if __name__ == '__main__':
+    from matplotlib import pyplot as plt
+
+    parameters = {}
+    parameters["Left ETL Amplitude"] = 2    # In volts
+    parameters["Right ETL Amplitude"] = 2   # In volts
+    parameters["Left ETL Offset"] = 0       # In volts
+    parameters["Right ETL Offset"] = 0      # In volts
+    parameters["Left Galvo Amplitude"] = 2  # In volts
+    parameters["Right Galvo Amplitude"] = 2 # In volts
+    parameters["Left Galvo Offset"] = 0.6   # In volts
+    parameters["Right Galvo Offset"] = 0.6  # In volts
+    parameters["Galvo Frequency"] = 20      # In hertz
+    parameters["Sample Rate"] = 40000       # In samples/seconds
+    parameters["ETL Step"] =  400           # In pixels
+    parameters["Columns"] = 2560            # In pixels
+    parameters["Rows"] = 2160               # In pixels
+    parameters["camera_delay"] = 10         # In %
+    parameters["min_t_delay"] = 0.0354404   # In seconds
+    parameters["t_start_exp"] = 0.017712    # In seconds
+
+    '''Default ETL relation values'''
+    left_slope = -0.0008978829380085525
+    left_intercept = 4.25548088287623
+    right_slope = 0.000826220401525251
+    right_intercept = 2.384849899181325
+
+
+    #The half period is the exposure time, the time taken for a single upwards or downwards galvo scan
+    t_half_period = 0.5*(1/parameters["Galvo Frequency"])
+
+    #Number of samples per exposure time
+    samples_per_half_period = np.ceil(t_half_period * parameters["Sample Rate"])
+
+    #Number of samples per camera internal delay (delay for acquiring image, excluding exposure time)
+    min_samples_per_delay = np.ceil(parameters["min_t_delay"] * parameters["Sample Rate"])
+
+    #Number of samples per image acquisition (including exposure time)
+    min_samples_per_step = min_samples_per_delay + samples_per_half_period
+
+    #Number of samples added to each step to allow down time for the camera
+    rest_samples_added = np.ceil(min_samples_per_step * parameters["camera_delay"]/100)
+
+    #Number of samples per step (including all delay)
+    samples_per_step = min_samples_per_step + rest_samples_added
+
+    #Number of samples per total delay (internal + added), between each camera exposition
+    samples_per_delay = samples_per_step - samples_per_half_period
+
+    #Number of samples per half total delay
+    samples_per_half_delay = np.floor(samples_per_delay/2)
+
+    #Number of focal length values needed for each ETL to achieve a full scan
+    number_of_steps = np.ceil(parameters["Columns"] / parameters["ETL Step"])
+
+    #Total number of samples for acquisition
+    number_of_samples = number_of_steps * samples_per_step
+    samples = int(number_of_samples)
+
+    #Total time for acquisition
+    sweeptime = number_of_samples / parameters["Sample Rate"]
+
+
+    cam_sig = camera_digital_output_signal(  samples_per_half_period = samples_per_half_period, 
+                                            t_start_exp = parameters["t_start_exp"], 
+                                            samplerate = parameters["Sample Rate"], 
+                                            samples_per_half_delay = samples_per_half_delay, 
+                                            number_of_samples = number_of_samples, 
+                                            number_of_steps = number_of_steps, 
+                                            samples_per_step = samples_per_step,
+                                            min_samples_per_delay = min_samples_per_delay
+                                          )
+    
+
+    galvo_sig = galvo_trapeze(  amplitude = parameters["Left Galvo Amplitude"], 
+                                samples_per_half_period = samples_per_half_period, 
+                                samples_per_delay = samples_per_delay, 
+                                number_of_samples = number_of_samples, 
+                                number_of_steps = number_of_steps, 
+                                samples_per_step = samples_per_step, 
+                                samples_per_half_delay = samples_per_half_delay,
+                                min_samples_per_delay = min_samples_per_delay,
+                                t_start_exp = parameters["t_start_exp"], 
+                                samplerate = parameters["Sample Rate"],
+                                offset = parameters["Left Galvo Offset"], 
+                                invert = False
+                            )
+
+
+    etl_sig = calibrated_etl_stairs(    left_slope, 
+                                        left_intercept, 
+                                        right_slope, 
+                                        right_intercept, 
+                                        etl_step = parameters["ETL Step"], 
+                                        amplitude = parameters["Left ETL Amplitude"], 
+                                        number_of_steps = number_of_steps, 
+                                        number_of_samples = number_of_samples, 
+                                        samples_per_step = samples_per_step, 
+                                        offset = parameters["Left ETL Offset"], 
+                                        direction = 'UP',
+                                        activate = True
+                                    )
+
+
+    time_axis = np.arange(0, cam_sig.size)
+    plt.plot(time_axis,cam_sig)
+    plt.plot(time_axis,galvo_sig) 
+    plt.plot(time_axis,etl_sig) 
+    plt.show()
+
+

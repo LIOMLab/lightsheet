@@ -162,13 +162,13 @@ class Properties_Dialog(QDialog):
     def get_properties(self):
         '''Read properties from the camera'''
         self.ui.label_cameraName.setText(self.camera.get_name())
-        self.ui.label_imageSize.setText(str(self.camera.get_xsize()) + ' x ' + str(self.camera.get_ysize()))
+        self.ui.label_imageSize.setText(str(self.camera.get_xsize()) + " x " + str(self.camera.get_ysize()))
         self.ui.label_cameraTemperature.setText("{:.1f} \u2103".format(self.camera.get_camera_temperature()))
         self.ui.label_sensorTemperature.setText("{:.1f} \u2103".format(self.camera.get_sensor_temperature()))
         self.ui.label_powerTemperature.setText("{:.1f} \u2103".format(self.camera.get_power_temperature()))
         self.ui.label_triggerMode.setText(self.camera.get_trigger_mode())
-        self.ui.label_delayTime.setText(str(self.camera.get_delay_time()) + ' ' + self.camera.get_delay_timebase())
-        self.ui.label_exposureTime.setText(str(self.camera.get_exposure_time()) + ' ' + self.camera.get_exposure_timebase())
+        self.ui.label_delayTime.setText(str(self.camera.get_delay_time()) + " " + self.camera.get_delay_timebase())
+        self.ui.label_exposureTime.setText(str(self.camera.get_exposure_time()) + " " + self.camera.get_exposure_timebase())
         self.ui.label_acquireMode.setText(self.camera.get_acquire_mode())
         self.ui.label_storageMode.setText(self.camera.get_storage_mode())
         if self.camera.get_storage_mode() == 'Recorder':
@@ -1463,40 +1463,52 @@ class Controller_MainWindow(QMainWindow):
         '''Creating ETLs, galvos & camera's ramps and waveforms'''
         self.ramps = AOETLGalvos(self.parameters)  
         self.ramps.create_tasks(terminals, 'FINITE')
-        activate = False
+        
         if self.ui.checkBox_activateEtlFocus.isChecked():
-            activate = True
-        self.ramps.create_calibrated_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept, activate = activate)
-        invert = False
+            self.ramps.create_calibrated_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept, activate = True)
+        else:
+            self.ramps.create_calibrated_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept, activate = False)
+        
         if self.ui.checkBox_invertGalvos.isChecked():
-            invert = True
-        self.ramps.create_galvos_waveforms(case = 'TRAPEZE', invert = invert)
+            self.ramps.create_galvos_waveforms(case = 'TRAPEZE', invert = True)
+        else:
+            self.ramps.create_galvos_waveforms(case = 'TRAPEZE', invert = False)
+
         self.ramps.create_digital_output_camera_waveform(case = 'STAIRS_FITTING')
             
         '''Writing waveform to task and running'''
         self.ramps.write_waveforms_to_tasks()                            
         self.number_of_steps = int(np.ceil(self.parameters["Columns"]/self.parameters["ETL Step"])) #Number of galvo sweeps in a frame, or alternatively the number of ETL focal step
 
+        # Start camera recorder session before we start the scan/trigger task
         self.camera.start_recorder(self.number_of_steps)
         self.ramps.start_tasks()
-        self.ramps.run_tasks()
+
+        # Monitor completion of scan/trigger task and camera recorder session
+        self.ramps.monitor_tasks()
         self.camera.monitor_recorder(self.number_of_steps)
+
+        # Stop task and recorder session
         self.camera.stop_recorder()
+        self.ramps.stop_tasks()                             
+
+        # Recover images from the recorder
         images = self.camera.get_images()
         self.buffer = np.asarray(images)
-        self.camera.delete_recorder()
-        self.ramps.run_tasks()
-        self.ramps.stop_tasks()                             
-        self.ramps.close_tasks()
 
-        '''Frame reconstruction for display'''
+        # Delete task and recorder session
+        self.camera.delete_recorder()
+#        self.ramps.stop_tasks()                             
+        self.ramps.delete_tasks()
+
+        # Frame reconstruction options
         if self.ui.checkBox_stitching.isChecked():
             self.reconstructed_frame = self.reconstruct_frame_from_cropped_buffer(self.crop_buffer(self.buffer))
         else:
             self.reconstructed_frame = self.reconstruct_frame(self.buffer)
-        
-        '''Frame display'''
         frame = np.transpose(self.reconstructed_frame)
+
+        # Send reconstructed frame to consumers
         self.send_frame_to_consumer(frame)
         
     

@@ -54,7 +54,7 @@ class Camera:
                 print(' Camera closed.')
         return None
 
-    def arm(self, num_buffers=None):
+    def arm(self):
         if self.is_open:
             if self.verbose: 
                 print('Arming camera...')
