@@ -260,7 +260,7 @@ if __name__ == '__main__':
                                         samples_per_step = samples_per_step, 
                                         offset = parameters["Left ETL Offset"], 
                                         direction = 'UP',
-                                        activate = True
+                                        activate = False
                                     )
 
 
