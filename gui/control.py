@@ -31,8 +31,7 @@ from gui.ui_settings import Ui_Settings
 
 from src.hardware import AOETLGalvos
 from src.motors import Motors
-#from src.camera import Camera
-from src.pco_camera import Camera
+from src.camera import Camera
 from src.lasers import Lasers
 
 logging.basicConfig(format="%(message)s", level=logging.INFO)
@@ -2421,7 +2420,7 @@ class CameraWindow(queue.Queue):
         try:
             '''Retrieving old view settings'''
             _view = self.graphicsview.getView()
-#            _state = _view.getState()
+            _state = _view.getState()
             
             if self.histogram_level == []:
                 first_update = True
@@ -2470,7 +2469,7 @@ class CameraWindow(queue.Queue):
             # _axisItems = {'left':_left_axis,'bottom':_bottom_axis,'right':_right_axis,'top':_top_axis} ##
             #_view.setAxisItems(axisItems=_axisItems) ###AttributeError: 'PlotItem' object has no attribute 'setAxisItems'
             #_view_box.setState(_state)
-#            _view.setState(_state)
+            _view.setState(_state)
             if not first_update: #To keep the histogram setting with image refresh
                 _histo_widget.setLevels(self.histogram_level[0],self.histogram_level[1])
         except queue.Empty:
