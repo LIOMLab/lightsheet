@@ -14,6 +14,9 @@ import qdarkstyle
 from qdarkstyle.light.palette import LightPalette
 from qdarkstyle.dark.palette import DarkPalette
 
+import logging
+logging.basicConfig(format="%(message)s", level=logging.INFO)
+
 
 def set_app_stylesheet(stylesheet_code):
     '''Function that allows stylesheet selection for the app'''
@@ -43,5 +46,5 @@ controller.sig_stylesheet.connect(set_app_stylesheet) #connection for app styles
 
 # Show controller UI and execute main event loop
 controller.show()
-sys.exit(app.exec())
+sys.exit(app.exec_())
 

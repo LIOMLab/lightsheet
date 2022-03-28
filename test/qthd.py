@@ -3,20 +3,16 @@ from time import sleep
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
-from PyQt5.QtWidgets import (
-    QApplication,
-    QLabel,
-    QMainWindow,
-    QPushButton,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
 
 # Step 1: Create a worker class
 class Worker(QObject):
     finished = pyqtSignal()
     progress = pyqtSignal(int)
 
+    def __init__(self):
+        pass
+    
     def runcount(self):
         """Long-running task."""
         for i in range(5):
