@@ -7,14 +7,17 @@ Created on May 16, 2019
 import sys
 sys.path.append(".")
 
+import logging
+
 from PyQt5.QtWidgets import QApplication
-from gui.control import Controller_MainWindow
 
 import qdarkstyle
 from qdarkstyle.light.palette import LightPalette
 from qdarkstyle.dark.palette import DarkPalette
 
-import logging
+from gui.controller import Controller_MainWindow
+
+
 logging.basicConfig(format="%(message)s", level=logging.INFO)
 
 
@@ -24,12 +27,13 @@ def set_app_stylesheet(stylesheet_code):
         app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt5', palette=LightPalette))
     elif stylesheet_code == 1:
         app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt5', palette=DarkPalette))
-   
 
-'''This block permits messages display of errors occurring in all the files
-   related to the software (not only in the main ones)'''
+
+# This block permits messages display of errors occurring in all the files
+# related to the software (not only in the main ones)
 sys._excepthook = sys.excepthook
 def exception_hook(exctype, value, traceback):
+    '''Permits messages display of errors occurring in all the files'''
     print(exctype, value, traceback)
     sys._excepthook(exctype, value, traceback)
     sys.exit(1)
@@ -47,4 +51,3 @@ controller.sig_stylesheet.connect(set_app_stylesheet) #connection for app styles
 # Show controller UI and execute main event loop
 controller.show()
 sys.exit(app.exec_())
-
