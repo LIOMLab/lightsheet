@@ -27,12 +27,13 @@ from configparser import ConfigParser
 from matplotlib import pyplot as plt
 from scipy import signal, optimize, ndimage, stats
 
-#from gui.ui_controller import Ui_Controller
-from gui.ui_controller_v2 import Ui_Controller
+from gui.ui_controller import Ui_Controller
 from gui.ui_properties import Ui_Properties
 from gui.ui_settings import Ui_Settings
 
-from src.hardware import AOETLGalvos
+from src.config import cfg_read, cfg_write
+from src.gaussianbeam import gaussian, func, fwhm
+from src.hwdaq import HwDAQ
 from src.motors import Motors
 from src.camera import Camera
 from src.lasers import Lasers
@@ -53,149 +54,25 @@ from src.lasers import Lasers
 
 '''Default parameters'''
 parameters = {}
-parameters["Sample Name"]= 'No Sample Name'
-parameters["Columns"] = 2560            # In pixels
-parameters["Rows"] = 2160               # In pixels
-parameters["camera_delay"] = 10         # In %
-parameters["min_t_delay"] = 0.0354404   # In seconds
-parameters["t_start_exp"] = 0.017712    # In seconds
+parameters["Sample Name"] = 'No Sample Name'
 save_parameters_policy = 0
 default_save_directory = 'None Specified'
 default_filename = 'Test'
 
 
-'''Math functions'''
-def gaussian(x,a,x0,sigma):
-    '''1D Gaussian Function'''
-    return a*np.exp(-(x-x0)**2/(2*sigma**2))
-
-def func(x, w0, x0, xR, offset):
-    '''Gaussian Beam Width Function'''
-    return w0 * (1+((x-x0)/xR)**2)**0.5 + offset
-
-def fwhm(y):
-    '''Full width at half maximum'''
-    max_y = max(y)  # Find the maximum y value
-    xs = [x for x in range(len(y)) if y[x] > max_y/2.0]
-    fwhm_val = max(xs) - min(xs) + 1
-    return fwhm_val  
-
-
-class Settings_Dialog(QDialog):
-    '''Class for Settings Dialog'''
-    
-    def __init__(self, status_printer):
-        QDialog.__init__(self)
-        self.ui = Ui_Settings()
-        self.ui.setupUi(self)   
-        self.ui.pushButton_selectDirectory.clicked.connect(self.select_directory)
-        self.ui.pushButton_selectNone.clicked.connect(self.select_none)
-
-        self.status_printer = status_printer
-        self.load_preset()
-
-    def load_preset(self):
-        '''Load preset'''
-        self.ui.comboBox_savePolicy.setCurrentIndex(save_parameters_policy)
-        self.ui.label_saveDirectory.setText(default_save_directory)
-        self.ui.lineEdit_defaultFilename.setText(default_filename)
-        if default_save_directory == 'None Specified':
-            self.ui.lineEdit_defaultFilename.setEnabled(False)
-    
-    def select_directory(self):
-        '''Allows the selection of a default save directory'''
-        options = QFileDialog.Options()
-        options |= QFileDialog.DontResolveSymlinks
-        options |= QFileDialog.ShowDirsOnly
-        default_save_directory = QFileDialog.getExistingDirectory(self, 'Choose Directory', '', options)
-        if default_save_directory != '': #If directory specified
-            self.ui.label_saveDirectory.setText(default_save_directory)
-            self.ui.lineEdit_defaultFilename.setEnabled(True)
-        else:
-            self.select_none()
-    
-    def select_none(self):
-        '''Selects no default save directory'''
-        self.ui.label_saveDirectory.setText('None Specified')
-        self.ui.lineEdit_defaultFilename.setEnabled(False)
-
-
-class Properties_Dialog(QDialog):
-    '''Class for Properties Dialog'''
-    
-    def __init__(self, camera: Camera, motors: Motors, status_printer):
-        QDialog.__init__(self)
-        self.ui = Ui_Properties()
-        self.ui.setupUi(self)   
-        self.ui.pushButton_refresh.clicked.connect(self.refresh_properties)
-        
-        self.camera = camera
-        self.motors = motors
-        self.status_printer = status_printer
-        self.get_properties()
-    
-    def get_properties(self):
-        '''Read properties from the camera'''
-        self.ui.label_cameraName.setText(self.camera.get_name())
-        self.ui.label_imageSize.setText(str(self.camera.get_xsize()) + " x " + str(self.camera.get_ysize()))
-        self.ui.label_cameraTemperature.setText("{:.1f} \u2103".format(self.camera.get_camera_temperature()))
-        self.ui.label_sensorTemperature.setText("{:.1f} \u2103".format(self.camera.get_sensor_temperature()))
-        self.ui.label_powerTemperature.setText("{:.1f} \u2103".format(self.camera.get_power_temperature()))
-        self.ui.label_triggerMode.setText(self.camera.get_trigger_mode())
-        self.ui.label_delayTime.setText(str(self.camera.get_delay_time()) + " " + self.camera.get_delay_timebase())
-        self.ui.label_exposureTime.setText(str(self.camera.get_exposure_time()) + " " + self.camera.get_exposure_timebase())
-        self.ui.label_acquireMode.setText(self.camera.get_acquire_mode())
-        self.ui.label_storageMode.setText(self.camera.get_storage_mode())
-        if self.camera.get_storage_mode() == 'Recorder':
-            self.ui.label_recorderMode.setText(self.camera.get_recorder_submode())
-        else:
-            self.ui.label_recorderMode.setText('N/A')
-        
-        '''Read properties from the motors'''
-        self.ui.label_horizontalMotorName.setText(self.motors.horizontal_get_name())
-        self.ui.label_verticalMotorName.setText(self.motors.vertical_get_name())
-        self.ui.label_cameraMotorName.setText(self.motors.camera_get_name())
-    
-    def refresh_properties(self):
-        '''Refresh system properties'''
-        self.get_properties()
-        self.status_printer('System Properties Refreshed')
-
-
 class Controller_MainWindow(QMainWindow):
     '''Class for the MesoSPIM MainWindow'''
 
-    # Default parameters
+    # Default confgurable settings
     _cfg_settings = {}
-    _cfg_settings['Terminals'] = '/Dev1/ao0:3'       # DAQ board terminals
-    _cfg_settings['Sample Clock Rate'] = '40000'     # In samples/second
-    _cfg_settings['Galvo Frequency'] = '20'          # In Hertz
-    _cfg_settings['Galvo Left Amplitude'] = '2'      # In Volts
-    _cfg_settings['Galvo Right Amplitude'] = '2'     # In Volts
-    _cfg_settings['Galvo Left Offset'] = '0.6'       # In Volts
-    _cfg_settings['Galvo Right Offset'] = '0.6'      # In Volts
-    _cfg_settings['ETL Left Amplitude'] = '2.0'      # In Volts
-    _cfg_settings['ETL Right Amplitude'] = '2.0'     # In Volts
-    _cfg_settings['ETL Left Offset'] = '0'           # In Volts
-    _cfg_settings['ETL Right Offset'] = '0'          # In Volts
-    _cfg_settings['ETL Steps'] = '8'                 # In # of steps (distinct focus regions over FOV)
-    _cfg_settings['Laser Left Amplitude'] = '0.9'    # In Volts
-    _cfg_settings['Laser Right Amplitude'] = '0.9'   # In Volts
-
-    _hard_settings = {}
-    _hard_settings['Image XSize'] = '2560'         # In pixels
-    _hard_settings['Image YSize'] = '2160'         # In pixels
-    _hard_settings['Camera Delay'] = '10'          # In % (duty cycle)
-    _hard_settings['min_t_delay'] = '0.0354404'    # In seconds
-    _hard_settings['t_start_exp'] = '0.017712'     # In seconds
+    _cfg_settings['Units'] = 'mm'
 
     # Default terminals
     _terminals = {}
     _terminals["galvos_etls"] = '/Dev1/ao0:3'
-    _terminals["camera"]      = '/Dev1/port0/line1'
-    _terminals["lasers"]      = '/Dev7/ao0:1'
 
     # Signals
+    sig_status_printer = pyqtSignal(str)
     sig_update_progress = pyqtSignal(int) #Status bar progress indicator update
     sig_beep = pyqtSignal(bool) #Beep sound
     sig_stylesheet = pyqtSignal(int) #App stylesheet change
@@ -227,11 +104,20 @@ class Controller_MainWindow(QMainWindow):
         self.ui.statusbar.addPermanentWidget(self.progress_statusBar)
         self.progress_statusBar.setFixedWidth(250)
         self.progress_statusBar.hide()
-        self.resize(QDesktopWidget().availableGeometry(self).size() * 0.75);
+        self.resize(QDesktopWidget().availableGeometry(self).size() * 0.75)
 
         self.ui.plainTextEdit_cmdLog.appendPlainText("--The last commands will show here--\n")
-        
-        '''Instantiating the camera window where the frames are displayed'''
+
+        # Set configurable settings to default values
+        self.cfg_settings = copy.deepcopy(self._cfg_settings)
+
+        # Update configurable settings with values found in config file
+        self.cfg_settings = cfg_read('config.ini', 'Controller', self.cfg_settings)     
+
+        # Assign configurable settings to instance variables
+        self.units  = str(self.cfg_settings['Units'])   
+
+        # Instantiating the camera window where the frames are displayed
         self.camera_window = CameraWindow(self.ui.imageView)
 
         # Start timer to periodically refresh the imageview widget
@@ -239,20 +125,14 @@ class Controller_MainWindow(QMainWindow):
         self.timer_imageview.timeout.connect(self.camera_window.update)        
         self.timer_imageview.start(100)
 
-        # Set default hardcoded and configurable settings
-        self.hard_settings = copy.deepcopy(self._hard_settings)
-        self.cfg_settings = copy.deepcopy(self._cfg_settings)
-
-        # Read configurable settings file
-        self.cfg_read('config.ini')
-
-        # Update UI with configurable settings
-        self.updateUi_cfg_settings()
-
-        '''Instantiating the hardware components'''
-        self.motors = Motors()
+        # Instantiating the hardware components
+        self.hwdaq = HwDAQ()
         self.camera = Camera()
+        self.motors = Motors()
         self.lasers = Lasers()
+
+        # Update UI with hardware state
+        self.updateUi_hardware_state()
 
         '''Instantiating the settings and properties windows'''
         self.settings_dialog = Settings_Dialog(self.status_printer)
@@ -435,35 +315,6 @@ class Controller_MainWindow(QMainWindow):
         self.ui.pushButton_laserRightActivate.clicked.connect(self.right_laser_button)
 
     
-    def cfg_read(self, cfg_filename):
-        section = 'GalvoETL'
-        values_dict = {}
-        cfg = ConfigParser()
-        cfg.optionxform = str
-        cfg.read(cfg_filename)
-        if cfg.has_section(section):
-            for key, value in cfg[section].items():
-                values_dict[key] = value
-        for key in self.cfg_settings:
-            if key in values_dict:
-                self.cfg_settings[key] = values_dict[key]
-        return None
-
-    def cfg_write(self, cfg_filename):
-        section = 'GalvoETL'
-        values_dict = self.cfg_settings
-        cfg = ConfigParser()
-        cfg.optionxform = str
-        cfg.read(cfg_filename)
-        if not cfg.has_section(section):
-            cfg.add_section(section)
-        for key in values_dict:
-            cfg.set(section, str(key), str(values_dict[key]))
-        with open(cfg_filename, 'w') as output_file:
-            cfg.write(output_file)
-        return None    
-
-
     def closeEvent(self, event):
         '''Making sure that everything is closed when the user exits the software.
            This function executes automatically when the user closes the UI.
@@ -472,7 +323,7 @@ class Controller_MainWindow(QMainWindow):
         result = QMessageBox.question(self, "Confirm Exit...", "Are you sure you want to exit ?", QMessageBox.Yes | QMessageBox.No)
         if result == QMessageBox.Yes:
             self.close_modes()
-            self.camera.close()
+            self.camera.close_camera()
 #            self.save_default_parameters()
             self.timer_imageview.stop()
             event.accept()
@@ -1018,21 +869,23 @@ class Controller_MainWindow(QMainWindow):
 #                file.write(str(self.default_save_directory)+ '\n')
 #                file.write(str(self.default_filename))
 
-    def updateUi_cfg_settings(self):
-        # Apply configurable settings to UI
-        self.ui.doubleSpinBox_paramSampleRate.setValue(float(self.cfg_settings['Sample Clock Rate']))
-        self.ui.doubleSpinBox_galvoFrequency.setValue(float(self.cfg_settings['Galvo Frequency']))
-        self.ui.doubleSpinBox_galvoLeftAmplitude.setValue(float(self.cfg_settings['Galvo Left Amplitude']))
-        self.ui.doubleSpinBox_galvoRightAmplitude.setValue(float(self.cfg_settings['Galvo Right Amplitude']))
-        self.ui.doubleSpinBox_galvoLeftOffset.setValue(float(self.cfg_settings['Galvo Left Offset']))
-        self.ui.doubleSpinBox_galvoRightOffset.setValue(float(self.cfg_settings['Galvo Right Offset']))
-        self.ui.doubleSpinBox_etlLeftAmplitude.setValue(float(self.cfg_settings['ETL Left Amplitude']))
-        self.ui.doubleSpinBox_etlRightAmplitude.setValue(float(self.cfg_settings['ETL Right Amplitude']))
-        self.ui.doubleSpinBox_etlLeftOffset.setValue(float(self.cfg_settings['ETL Left Offset']))
-        self.ui.doubleSpinBox_etlRightOffset.setValue(float(self.cfg_settings['ETL Right Offset']))
-        self.ui.doubleSpinBox_etlSteps.setValue(float(self.cfg_settings['ETL Steps']))
-        self.ui.doubleSpinBox_laserLeftAmplitude.setValue(float(self.cfg_settings['Laser Left Amplitude']))
-        self.ui.doubleSpinBox_laserRightAmplitude.setValue(float(self.cfg_settings['Laser Right Amplitude']))
+    def updateUi_hardware_state(self):
+        
+        # HwDAQ
+        self.ui.doubleSpinBox_paramSampleRate.setValue(self.hwdaq.sample_rate)
+        self.ui.doubleSpinBox_galvoFrequency.setValue(self.hwdaq.galvo_frequency)
+        self.ui.doubleSpinBox_galvoLeftAmplitude.setValue(self.hwdaq.galvo_left_amplitude)
+        self.ui.doubleSpinBox_galvoRightAmplitude.setValue(self.hwdaq.galvo_right_amplitude)
+        self.ui.doubleSpinBox_galvoLeftOffset.setValue(self.hwdaq.galvo_left_offset)
+        self.ui.doubleSpinBox_galvoRightOffset.setValue(self.hwdaq.galvo_right_offset)
+        self.ui.doubleSpinBox_etlLeftAmplitude.setValue(self.hwdaq.etl_left_amplitude)
+        self.ui.doubleSpinBox_etlRightAmplitude.setValue(self.hwdaq.etl_right_amplitude)
+        self.ui.doubleSpinBox_etlLeftOffset.setValue(self.hwdaq.etl_left_offset)
+        self.ui.doubleSpinBox_etlRightOffset.setValue(self.hwdaq.etl_right_offset)
+        self.ui.doubleSpinBox_etlSteps.setValue(self.hwdaq.etl_steps)
+        #Lasers
+        self.ui.doubleSpinBox_laserLeftAmplitude.setValue(self.lasers.left_amplitude)
+        self.ui.doubleSpinBox_laserRightAmplitude.setValue(self.lasers.right_amplitude)
 
     def updateUi_galvo_left_amplitude(self):
         # Adjust Min and Max to prevent amplitude + offset being <-10V or > 10V
@@ -1165,38 +1018,21 @@ class Controller_MainWindow(QMainWindow):
     def start_lasers(self):
         '''Starts the lasers at a certain voltage'''
         self.laser_on = True
-
-        self.lasers_task = nidaqmx.Task()
-        self.lasers_task.ao_channels.add_ao_voltage_chan(self._terminals["lasers"])
-
-        '''Setting up voltage'''
-        left_laser_voltage = 0  #Default voltage of 0V
-        right_laser_voltage = 0 #Default voltage of 0V
-        
-        if self.both_lasers_activated:
-            left_laser_voltage = self.cfg_settings['Left Laser Voltage']
-            right_laser_voltage = self.cfg_settings['Right Laser Voltage']   
-        if self.left_laser_activated:
-            left_laser_voltage = self.cfg_settings['Left Laser Voltage']  
-        if self.right_laser_activated:
-            right_laser_voltage = self.cfg_settings['Right Laser Voltage']
-        
-        self.lasers_waveforms = np.stack((np.array([right_laser_voltage]), np.array([left_laser_voltage])))   
-        
-        '''Writing voltage'''
-        self.lasers_task.write(self.lasers_waveforms, auto_start = True)
+        self.lasers.create_tasks()
+        self.lasers.create_waveforms_on()
+        self.lasers.write_waveforms_to_tasks()
     
     def stop_lasers(self):
         '''Stops the lasers, puts their voltage to zero'''
         self.laser_on = False
         
         '''Writing voltage'''
-        waveforms = np.stack(([0],[0]))
-        self.lasers_task.write(waveforms)
+        self.lasers.create_waveforms_off()
+        self.lasers.write_waveforms_to_tasks()
         
         '''Ending task'''
-        self.lasers_task.stop()
-        self.lasers_task.close()
+        self.lasers.stop_tasks()
+        self.lasers.delete_tasks()
         
         '''Deactivating lasers'''
         if self.both_lasers_activated:
@@ -1378,7 +1214,7 @@ class Controller_MainWindow(QMainWindow):
         
         '''Setting the camera for acquisition'''
         self.camera.set_trigger_mode('auto_trigger')
-        self.camera.arm()
+        self.camera.arm_camera()
 
         '''Starting lasers'''
         self.start_lasers()
@@ -1386,10 +1222,10 @@ class Controller_MainWindow(QMainWindow):
         while self.preview_mode_started:
             
             '''Setting data values'''
-            left_galvo_voltage = self.cfg_settings['Left Galvo Amplitude'] + self.cfg_settings['Left Galvo Offset']
-            right_galvo_voltage = self.cfg_settings['Right Galvo Amplitude'] + self.cfg_settings['Right Galvo Offset']
-            left_etl_voltage = self.cfg_settings['Left ETL Amplitude'] + self.cfg_settings['Left ETL Offset']
-            right_etl_voltage = self.cfg_settings['Right ETL Amplitude'] + self.cfg_settings['Right ETL Offset']
+            left_galvo_voltage = self.hwdaq.galvo_left_amplitude + self.hwdaq.galvo_left_offset
+            right_galvo_voltage = self.hwdaq.galvo_right_amplitude + self.hwdaq.galvo_right_offset
+            left_etl_voltage = self.hwdaq.etl_left_amplitude + self.hwdaq.etl_left_offset
+            right_etl_voltage = self.hwdaq.etl_right_amplitude + self.hwdaq.etl_right_offset
             
             '''Setting waveforms'''
             preview_galvos_etls_waveforms = np.stack((np.array([right_galvo_voltage]),
@@ -1403,7 +1239,7 @@ class Controller_MainWindow(QMainWindow):
             self.camera.start_recorder(1)
             self.camera.monitor_recorder(1)
             self.camera.stop_recorder()
-            cam_images = self.camera.get_images()
+            cam_images = self.camera.copy_recorder_images()
             frame = cam_images[0]
             self.camera.delete_recorder()
 
@@ -1414,7 +1250,7 @@ class Controller_MainWindow(QMainWindow):
         self.stop_lasers()
 
         '''Stopping camera'''
-        self.camera.disarm()
+        self.camera.disarm_camera()
         
         '''End tasks'''
         self.preview_galvos_etls_task.stop()
@@ -1432,8 +1268,8 @@ class Controller_MainWindow(QMainWindow):
     def reconstruct_frame(self,buffer):
         '''Reconstructs a frame from multiple frames'''
     
-        reconstructed_frame = np.zeros((int(self.parameters["Rows"]), int(self.parameters["Columns"])), np.uint16)  #Initializing frame
-        
+        reconstructed_frame = np.zeros((self.hwdaq.image_ysize, self.hwdaq.image_xsize), np.uint16)  #Initializing frame
+
         for frame in range(int(self.number_of_steps)):
             '''Uniformize frame intensities'''
             average = np.average(buffer[frame,0:100,:]) #Average the  first rows
@@ -1447,8 +1283,8 @@ class Controller_MainWindow(QMainWindow):
                 #print('average_ratio:'+str(average_ratio))
                 buffer[frame,:,:] = buffer[frame,:,:] * average_ratio
             '''Reconstruct frame'''
-            first_column = int(frame * self.parameters['ETL Step'])
-            next_first_column = int(first_column + self.parameters['ETL Step'])
+            first_column = int(frame * self.hwdaq.etl_step_size)
+            next_first_column = int(first_column + self.hwdaq.etl_step_size)
             if frame == int(self.number_of_steps-1):  #For the last column step (may be different than the others...)
                 reconstructed_frame[:,first_column:] = buffer[frame,:,first_column:]
             else:
@@ -1458,12 +1294,11 @@ class Controller_MainWindow(QMainWindow):
     
     def crop_buffer(self,buffer):
         '''Crops each frame of a buffer for a frame reconstruction'''
-        
         if buffer.shape[0] == 1:
             reconstructed_buffer = buffer
         else:
-            column_buffer = int(self.parameters["ETL Step"]*0.2)
-            reconstructed_buffer = np.zeros((buffer.shape[0],int(self.parameters["Rows"]),int(self.parameters["ETL Step"]+ (2*column_buffer))), np.uint16)  #Initializing frame
+            column_buffer = int(self.hwdaq.etl_step_size*0.2)
+            reconstructed_buffer = np.zeros((buffer.shape[0],int(self.hwdaq.image_ysize),int(self.hwdaq.etl_step_size + (2*column_buffer))), np.uint16)  #Initializing frame
     
             for frame in range(int(self.number_of_steps)):
                 '''Uniformize frame intensities'''
@@ -1474,12 +1309,12 @@ class Controller_MainWindow(QMainWindow):
                     average_ratio = reference_average/average
                     buffer[frame,:,:] = buffer[frame,:,:] * average_ratio
                 '''Crop buffer'''
-                first_column = int(frame * self.parameters['ETL Step'] - column_buffer)
-                next_first_column = int(first_column + self.parameters['ETL Step'] + (2*column_buffer))
+                first_column = int(frame * self.hwdaq.etl_step_size - column_buffer)
+                next_first_column = int(first_column + self.hwdaq.etl_step_size + (2*column_buffer))
                 if frame == 0:  #For the first column step
-                    reconstructed_buffer[frame,:,column_buffer:] = buffer[frame,:,0:int(self.parameters['ETL Step'] + column_buffer)]
+                    reconstructed_buffer[frame,:,column_buffer:] = buffer[frame,:,0:int(self.hwdaq.etl_step_size + column_buffer)]
                 elif frame == int(self.number_of_steps-1):  #For the last column step (may be different than the others...)
-                    last_column_step = int(self.parameters["Columns"] - first_column)
+                    last_column_step = int(self.hwdaq.image_xsize - first_column)
                     reconstructed_buffer[frame,:,0:last_column_step] = buffer[frame,:,first_column:]
                 else:
                     reconstructed_buffer[frame,:,:] = buffer[frame,:,first_column:next_first_column]
@@ -1489,75 +1324,72 @@ class Controller_MainWindow(QMainWindow):
     def reconstruct_frame_from_cropped_buffer(self,cropped_buffer):
         '''Reconstructs a frame from multiple cropped frames (does some linear image stitching)'''
         
-        column_buffer = int(self.parameters["ETL Step"]*0.2)
+        column_buffer = int(self.hwdaq.etl_step_size*0.2)
         weight_step = 1/(2*column_buffer)
-        reconstructed_frame = np.zeros((int(self.parameters["Rows"]), int(self.parameters["Columns"])), np.uint16)  #Initializing frame
-        
+        reconstructed_frame = np.zeros((self.hwdaq.image_ysize, self.hwdaq.image_xsize), np.uint16)  #Initializing frame
         for frame in range(int(self.number_of_steps)):
-            first_center_column = int(frame * self.parameters['ETL Step'] + column_buffer)
-            last_center_column = int((frame+1) * self.parameters['ETL Step'] - column_buffer)
-            previous_last_center_column = int(frame * self.parameters['ETL Step'] - column_buffer)
+            first_center_column = int(frame * self.hwdaq.etl_step_size + column_buffer)
+            last_center_column = int((frame+1) * self.hwdaq.etl_step_size - column_buffer)
+            previous_last_center_column = int(frame * self.hwdaq.etl_step_size - column_buffer)
             
             if frame == 0:  #For the first column step
-                reconstructed_frame[:,0:last_center_column] = cropped_buffer[frame,:,column_buffer:int(self.parameters['ETL Step'])]
+                reconstructed_frame[:,0:last_center_column] = cropped_buffer[frame,:,column_buffer:self.hwdaq.etl_step_size]
             else:
                 for column in range(2*column_buffer):
                     frame_column = column + previous_last_center_column
-                    last_buffer_column = column + int(self.parameters['ETL Step'])
+                    last_buffer_column = column + self.hwdaq.etl_step_size
                     buffer_weight = column * weight_step
                     last_buffer_weight = 1 - column * weight_step
                     reconstructed_frame[:,frame_column] = buffer_weight*cropped_buffer[frame,:,column] + last_buffer_weight*cropped_buffer[(frame-1),:,last_buffer_column]
                 if frame == int(self.number_of_steps-1):  #For the last column step (may be different than the others...)
-                    last_column_step = int(self.parameters["Columns"] - first_center_column)
+                    last_column_step = int(self.hwdaq.image_xsize - first_center_column)
                     reconstructed_frame[:,first_center_column:] = cropped_buffer[frame,:,(2*column_buffer):(2*column_buffer)+last_column_step]
                 else:
-                    reconstructed_frame[:,first_center_column:last_center_column] = cropped_buffer[frame,:,(2*column_buffer):int(self.parameters['ETL Step'])]
-
+                    reconstructed_frame[:,first_center_column:last_center_column] = cropped_buffer[frame,:,(2*column_buffer):self.hwdaq.etl_step_size]
         return reconstructed_frame
     
     def get_single_image(self):
         '''Generate ETLs, galvos & camera's ramps, get a single reconstructed image and display it'''
         
         '''Creating ETLs, galvos & camera's ramps and waveforms'''
-        self.ramps = AOETLGalvos(self.parameters)  
-        self.ramps.create_tasks(self._terminals, 'FINITE')
+        self.hwdaq.create_tasks(acquisition='FINITE')
         
         if self.ui.checkBox_etlActivate.isChecked():
-            self.ramps.create_calibrated_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept, activate = True)
+            self.hwdaq.create_calibrated_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept, activate = True)
         else:
-            self.ramps.create_calibrated_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept, activate = False)
+            self.hwdaq.create_calibrated_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept, activate = False)
         
         if self.ui.checkBox_galvoInvert.isChecked():
-            self.ramps.create_galvos_waveforms(case = 'TRAPEZE', invert = True)
+            self.hwdaq.create_galvos_waveforms(case = 'TRAPEZE', invert = True)
         else:
-            self.ramps.create_galvos_waveforms(case = 'TRAPEZE', invert = False)
+            self.hwdaq.create_galvos_waveforms(case = 'TRAPEZE', invert = False)
 
-        self.ramps.create_digital_output_camera_waveform(case = 'STAIRS_FITTING')
+        self.hwdaq.create_digital_output_camera_waveform(case = 'STAIRS_FITTING')
             
         '''Writing waveform to task and running'''
-        self.ramps.write_waveforms_to_tasks()                            
-        self.number_of_steps = int(np.ceil(self.parameters["Columns"]/self.parameters["ETL Step"])) #Number of galvo sweeps in a frame, or alternatively the number of ETL focal step
+        self.hwdaq.write_waveforms_to_tasks()
+        self.number_of_steps = self.hwdaq.number_of_steps
 
         # Start camera recorder session before we start the scan/trigger task
         self.camera.start_recorder(self.number_of_steps)
-        self.ramps.start_tasks()
+        self.hwdaq.start_tasks()
 
         # Monitor completion of scan/trigger task and camera recorder session
-        self.ramps.monitor_tasks()
+        self.hwdaq.monitor_tasks()
         self.camera.monitor_recorder(self.number_of_steps)
 
         # Stop task and recorder session
         self.camera.stop_recorder()
-        self.ramps.stop_tasks()                             
+        self.hwdaq.stop_tasks()                             
 
         # Recover images from the recorder
-        images = self.camera.get_images()
+        images = self.camera.copy_recorder_images()
         self.buffer = np.asarray(images)
 
         # Delete task and recorder session
         self.camera.delete_recorder()
 #        self.ramps.stop_tasks()                             
-        self.ramps.delete_tasks()
+        self.hwdaq.delete_tasks()
 
         # Frame reconstruction options
         if self.ui.checkBox_acqStitchFrames.isChecked():
@@ -1609,7 +1441,7 @@ class Controller_MainWindow(QMainWindow):
 
         '''Setting the camera for acquisition'''
         self.camera.set_trigger_mode('external_exposure')
-        self.camera.arm()
+        self.camera.arm_camera()
         
         '''Starting lasers'''
         self.start_lasers()
@@ -1622,7 +1454,7 @@ class Controller_MainWindow(QMainWindow):
         self.stop_lasers()
 
         '''Stopping camera'''
-        self.camera.disarm()
+        self.camera.disarm_camera()
 
         '''Enabling modes after live_mode'''
         self.update_buttons_modes(self.default_buttons)
@@ -1654,7 +1486,7 @@ class Controller_MainWindow(QMainWindow):
         
         '''Setting the camera for acquisition'''
         self.camera.set_trigger_mode('external_exposure')
-        self.camera.arm()
+        self.camera.arm_camera()
 
         '''Starting lasers'''
         self.both_lasers_activated = True
@@ -1668,7 +1500,7 @@ class Controller_MainWindow(QMainWindow):
         self.both_lasers_activated = False
 
         '''Stopping camera'''            
-        self.camera.disarm()
+        self.camera.disarm_camera()
 
         '''Enabling modes after single frame acquisition'''
         self.default_buttons.append(self.ui.pushButton_acqSaveSingleImage)
@@ -1867,7 +1699,7 @@ class Controller_MainWindow(QMainWindow):
         
         '''Setting the camera for acquisition'''
         self.camera.set_trigger_mode('external_exposure')
-        self.camera.arm()
+        self.camera.arm_camera()
        
         '''Making sure saving is allowed and filename isn't empty'''
         if self.saving_allowed:
@@ -1938,7 +1770,7 @@ class Controller_MainWindow(QMainWindow):
             self.frame_saver.stop_saving()
         
         '''Stopping camera'''
-        self.camera.disarm() 
+        self.camera.disarm_camera() 
         
         '''Stopping laser'''
         self.stop_lasers()
@@ -1986,7 +1818,7 @@ class Controller_MainWindow(QMainWindow):
         
         '''Setting the camera for acquisition'''
         self.camera.set_trigger_mode('external_exposure')
-        self.camera.arm()
+        self.camera.arm_camera()
         
         '''Starting lasers'''
         self.both_lasers_activated = True
@@ -2014,7 +1846,7 @@ class Controller_MainWindow(QMainWindow):
         self.get_file_name()
         if self.saving_allowed:
             '''Setting frame saver'''
-            self.frame_saver = FrameSaver()
+            self.frame_saver = FrameSaver(self.status_printer)
             self.frame_saver.set_block_size(3) #Block size is a number of buffers
             self.frame_saver.set_files(self.number_of_calibration_planes,self.filename,'cameraCalibration',self.number_of_camera_positions,'camera_position')
             '''Getting sample name'''
@@ -2124,7 +1956,7 @@ class Controller_MainWindow(QMainWindow):
         self.updateUi_position_camera()
         
         '''Stopping camera'''
-        self.camera.disarm()
+        self.camera.disarm_camera()
         
         '''Stopping lasers'''
         self.stop_lasers()
@@ -2182,7 +2014,7 @@ class Controller_MainWindow(QMainWindow):
         
         '''Setting the camera for acquisition'''
         self.camera.set_trigger_mode('auto_trigger')
-        self.camera.arm()        
+        self.camera.arm_camera()        
         
         '''Setting tasks'''
         self.galvos_etls_task = nidaqmx.Task()
@@ -2200,7 +2032,7 @@ class Controller_MainWindow(QMainWindow):
         self.get_file_name()
         if self.saving_allowed:
             '''Setting frame saver'''
-            self.frame_saver = FrameSaver()
+            self.frame_saver = FrameSaver(self.status_printer)
             self.frame_saver.set_block_size(3) #Block size is a number of buffers
             self.frame_saver.set_files(2*self.number_of_etls_points,self.filename,'etlCalibration',self.number_of_etls_images,'etl_image')
             '''Getting sample name'''
@@ -2217,11 +2049,11 @@ class Controller_MainWindow(QMainWindow):
         for side in ['etl_l','etl_r']: #For each etl
             '''Parameters'''
             if side == 'etl_l':
-                etl_max_voltage = 4.2 #3.5#4.2      #Volts ##Arbitraire
-                etl_min_voltage = 2 #2.5#1.8        #Volts ##Arbitraire
+                etl_max_voltage = 4.2       #Volts ##Arbitraire
+                etl_min_voltage = 2         #Volts ##Arbitraire
             if side == 'etl_r':
-                etl_max_voltage = 4.2 #3.5#4.2      #Volts ##Arbitraire
-                etl_min_voltage = 2 #2.5#1.8        #Volts ##Arbitraire
+                etl_max_voltage = 4.2       #Volts ##Arbitraire
+                etl_min_voltage = 2         #Volts ##Arbitraire
             etl_increment_length = (etl_max_voltage - etl_min_voltage) / self.number_of_etls_points
             
             '''Starting automatically lasers'''
@@ -2229,8 +2061,8 @@ class Controller_MainWindow(QMainWindow):
                 self.left_laser_activated = True
             if side == 'etl_r':
                 self.right_laser_activated = True
-            self.parameters['Left Laser Voltage'] = 2.5#2#.2 #Volts
-            self.parameters['Right Laser Voltage'] = 2.5#2.5 #Volts
+            self.parameters['Left Laser Voltage'] = 2.5 #Volts
+            self.parameters['Right Laser Voltage'] = 2.5 #Volts
             self.start_lasers()
             
             #self.camera.retrieve_single_image()*1.0 ##pour éviter images de bruit
@@ -2395,7 +2227,7 @@ class Controller_MainWindow(QMainWindow):
         print(self.right_slope * 2559 + self.right_intercept) #debugging
         
         '''Stopping camera'''
-        self.camera.disarm()
+        self.camera.disarm_camera()
         
         '''Ending tasks'''
         self.galvos_etls_task.stop()
@@ -2416,6 +2248,92 @@ class Controller_MainWindow(QMainWindow):
         
         self.etls_calibration_started = False
         self.ui.pushButton_calEtlStartCalibration.setText('Start ETL Calibration')
+
+
+class Settings_Dialog(QDialog):
+    '''Class for Settings Dialog'''
+    
+    def __init__(self, status_printer):
+        QDialog.__init__(self)
+        self.ui = Ui_Settings()
+        self.ui.setupUi(self)   
+        self.ui.pushButton_selectDirectory.clicked.connect(self.select_directory)
+        self.ui.pushButton_selectNone.clicked.connect(self.select_none)
+
+        self.status_printer = status_printer
+        self.load_preset()
+
+    def load_preset(self):
+        '''Load preset'''
+        self.ui.comboBox_savePolicy.setCurrentIndex(save_parameters_policy)
+        self.ui.label_saveDirectory.setText(default_save_directory)
+        self.ui.lineEdit_defaultFilename.setText(default_filename)
+        if default_save_directory == 'None Specified':
+            self.ui.lineEdit_defaultFilename.setEnabled(False)
+    
+    def select_directory(self):
+        '''Allows the selection of a default save directory'''
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontResolveSymlinks
+        options |= QFileDialog.ShowDirsOnly
+        default_save_directory = QFileDialog.getExistingDirectory(self, 'Choose Directory', '', options)
+        if default_save_directory != '': #If directory specified
+            self.ui.label_saveDirectory.setText(default_save_directory)
+            self.ui.lineEdit_defaultFilename.setEnabled(True)
+        else:
+            self.select_none()
+    
+    def select_none(self):
+        '''Selects no default save directory'''
+        self.ui.label_saveDirectory.setText('None Specified')
+        self.ui.lineEdit_defaultFilename.setEnabled(False)
+
+
+class Properties_Dialog(QDialog):
+    '''Class for Properties Dialog'''
+    
+    def __init__(self, camera: Camera, motors: Motors, status_printer):
+        QDialog.__init__(self)
+        self.ui = Ui_Properties()
+        self.ui.setupUi(self)   
+        self.ui.pushButton_refresh.clicked.connect(self.refresh_properties)
+        
+        self.camera = camera
+        self.motors = motors
+        self.status_printer = status_printer
+        self.get_properties()
+    
+    def get_properties(self):
+        '''Read properties from the camera'''
+        camera_properties = {}
+        camera_properties = self.camera.get_properties()
+
+        self.ui.label_cameraName.setText(f"{camera_properties.get('camera name', '-')}")
+        self.ui.label_imageSize.setText(f"{camera_properties.get('x', '0')} X {camera_properties.get('y', '0')}")
+        self.ui.label_cameraTemperature.setText(f"{camera_properties.get('camera temperature', 0):.1f} \u2103")
+        self.ui.label_sensorTemperature.setText(f"{camera_properties.get('sensor temperature', 0):.1f} \u2103")
+        self.ui.label_powerTemperature.setText(f"{camera_properties.get('power temperature', 0):.1f} \u2103")
+        self.ui.label_triggerMode.setText(f"{camera_properties.get('trigger mode', '-')}")
+        self.ui.label_delayTime.setText(f"{camera_properties.get('delay', '-')}  {camera_properties.get('delay timebase', 'ms')}")
+        self.ui.label_exposureTime.setText(f"{camera_properties.get('exposure', '-')}  {camera_properties.get('exposure timebase', 'ms')}")
+        self.ui.label_acquireMode.setText(f"{camera_properties.get('acquire mode', '-')}")
+        self.ui.label_storageMode.setText(f"{camera_properties.get('storage mode', '-')}")
+        if camera_properties.get('storage mode', '-') == 'Recorder':
+            self.ui.label_recorderMode.setText(f"{camera_properties.get('recorder submode', '-')}")
+        else:
+            self.ui.label_recorderMode.setText('-')
+        
+        '''Read properties from the motors'''
+        motors_properties = {}
+
+        self.ui.label_horizontalMotorName.setText(self.motors.horizontal_get_name())
+        self.ui.label_verticalMotorName.setText(self.motors.vertical_get_name())
+        self.ui.label_cameraMotorName.setText(self.motors.camera_get_name())
+    
+    def refresh_properties(self):
+        '''Refresh system properties'''
+        self.get_properties()
+        self.status_printer('System Properties Refreshed')
 
 
 class CameraWindow(queue.Queue):
