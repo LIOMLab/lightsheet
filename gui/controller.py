@@ -7,9 +7,8 @@ import os
 import sys
 sys.path.append(".")
 
-from PyQt5.QtCore import QObject, QTimer, QThread, pyqtSignal
+from PyQt5.QtCore import QObject, QTimer, pyqtSignal
 from PyQt5.QtWidgets import QMainWindow, QDialog, QFileDialog, QTableWidgetItem, QAbstractItemView, QMessageBox, QLabel, QProgressBar, QDesktopWidget
-from PyQt5.QtGui import QTextCursor
 
 from pyqtgraph import ImageView
 
@@ -23,7 +22,6 @@ import datetime
 import webbrowser
 import nidaqmx
 import numpy as np
-from configparser import ConfigParser
 from matplotlib import pyplot as plt
 from scipy import signal, optimize, ndimage, stats
 
@@ -32,7 +30,7 @@ from gui.ui_properties import Ui_Properties
 from gui.ui_settings import Ui_Settings
 
 from src.config import cfg_read, cfg_write
-from src.gaussianbeam import gaussian, func, fwhm
+from src.gaussian import gaussian, func, fwhm
 from src.hwdaq import HwDAQ
 from src.motors import Motors
 from src.camera import Camera
@@ -52,12 +50,10 @@ from src.lasers import Lasers
 #mainlog.addHandler(consoleHandler)
 
 
-'''Default parameters'''
-parameters = {}
-parameters["Sample Name"] = 'No Sample Name'
-save_parameters_policy = 0
-default_save_directory = 'None Specified'
-default_filename = 'Test'
+# '''Default parameters'''
+# save_parameters_policy = 0
+# default_save_directory = 'None Specified'
+# default_filename = 'Test'
 
 
 class Controller_MainWindow(QMainWindow):
@@ -66,6 +62,11 @@ class Controller_MainWindow(QMainWindow):
     # Default confgurable settings
     _cfg_settings = {}
     _cfg_settings['Units'] = 'mm'
+    _cfg_settings['Sample Name'] = ''
+    _cfg_settings['ETL Left Slope'] = '0'
+    _cfg_settings['ETL Left Intercept'] = '0'
+    _cfg_settings['ETL Right Slope'] = '0'
+    _cfg_settings['ETL Right Intercept'] = '0'
 
     # Default terminals
     _terminals = {}
@@ -115,7 +116,18 @@ class Controller_MainWindow(QMainWindow):
         self.cfg_settings = cfg_read('config.ini', 'Controller', self.cfg_settings)     
 
         # Assign configurable settings to instance variables
-        self.units  = str(self.cfg_settings['Units'])   
+        self.units              = str(self.cfg_settings['Units'])
+        self.sample_name        = str(self.cfg_settings['Sample Name'])
+        self.figure_counter         = 1
+        self.save_directory         = ''
+        self.save_parameters_policy = 0
+        self.default_save_directory = 'None Specified'
+        self.default_filename       = 'Test'
+
+        self.etl_left_slope         = float(self.cfg_settings['ETL Left Slope'])
+        self.etl_left_intercept     = float(self.cfg_settings['ETL Left Intercept'])
+        self.etl_right_slope        = float(self.cfg_settings['ETL Right Slope'])
+        self.etl_right_intercept    = float(self.cfg_settings['ETL Right Intercept'])
 
         # Instantiating the camera window where the frames are displayed
         self.camera_window = CameraWindow(self.ui.imageView)
@@ -143,11 +155,6 @@ class Controller_MainWindow(QMainWindow):
         self.consumers = []
         self.set_data_consumer(self.camera_window, False, "CameraWindow", True)
         
-        self.figure_counter = 1
-        self.save_directory = ""
-        self.save_parameters_policy = save_parameters_policy
-        self.default_save_directory = default_save_directory
-        self.default_filename = default_filename
         
         self.default_buttons = [self.ui.pushButton_acqStartStandbyMode,
                                 self.ui.pushButton_acqStartPreviewMode,
@@ -159,12 +166,7 @@ class Controller_MainWindow(QMainWindow):
         
 #        self.modifiable_param_boxes = etl_volt_boxes + galvo_volt_boxes + laser_volt_boxes + [self.ui.doubleSpinBox_galvoFrequency,self.ui.doubleSpinBox_paramSampleRate,self.ui.spinBox_etlNumberOfSteps]
         
-        '''Default ETL relation values'''
-        self.left_slope = -0.0008978829380085525
-        self.left_intercept = 4.25548088287623
-        self.right_slope = 0.000826220401525251
-        self.right_intercept = 2.384849899181325
-        
+      
         '''Initializing flags'''
         self.both_lasers_activated = False
         self.left_laser_activated = False
@@ -185,7 +187,7 @@ class Controller_MainWindow(QMainWindow):
         self.focus_selected = False
         
         '''Initializing settings'''
-        self.ui.label_currentSaveDirectory.setText(default_save_directory)
+        self.ui.label_currentSaveDirectory.setText(self.default_save_directory)
         
         '''Initializing the properties of the widgets'''
         # Set units comboBox options (default: millimeters)
@@ -195,8 +197,7 @@ class Controller_MainWindow(QMainWindow):
         '''Initialize values'''
 #        self.back_to_default_parameters()
         
-        '''Initializing every other widget that are updated by a change of unit 
-            (the motion tab)'''
+        '''Initializing every other widget that are updated by a change of unit'''
         self.updateUi_units()
         
         '''Initializing widgets' connections'''
@@ -214,68 +215,40 @@ class Controller_MainWindow(QMainWindow):
         self.update_laser_buttons()
         self.update_buttons_modes(self.default_buttons)
         
-        if default_save_directory != 'None Specified':
+        if self.default_save_directory != 'None Specified':
             self.ui.lineEdit_filename.setEnabled(True)
             self.ui.lineEdit_filename.setText(self.default_filename)
             self.ui.lineEdit_sampleName.setEnabled(True)
         
-        '''Connect menu options'''
+
+        '''Connect settings options'''
+        #self.settings_dialog.ui.buttonBox.accepted.connect(self.change_settings)
+        #self.settings_dialog.ui.buttonBox.rejected.connect(self.settings_dialog.load_preset)
+
+
+        # -------------------------------------------------------------------------------------------------------------------------------
+        # Connections for menu actions
+        # -------------------------------------------------------------------------------------------------------------------------------
+
         self.ui.action_Exit.triggered.connect(self.close)
         self.ui.action_ShowHideControlsPane.triggered.connect(self.updateUi_show_hide_controls_pane)
         self.ui.action_ShowHideImagesPane.triggered.connect(self.updateUi_show_hide_images_pane)
         self.ui.action_ShowHideCommandLog.triggered.connect(self.updateUi_show_hide_command_log)
         self.ui.action_lightTheme.triggered.connect(self.updateUi_light_theme)
         self.ui.action_darkTheme.triggered.connect(self.updateUi_dark_theme)
-
         self.ui.action_ModifyProgramSettings.triggered.connect(self.open_settings_dialog)
         self.ui.action_showSystemProperties.triggered.connect(self.open_properties_dialog)
         self.ui.action_openDocumentation.triggered.connect(self.open_help)
 
-        '''Connect settings options'''
-        self.settings_dialog.ui.buttonBox.accepted.connect(self.change_settings)
-        self.settings_dialog.ui.buttonBox.rejected.connect(self.settings_dialog.load_preset)
-        
-        '''Connect buttons'''
 
-        # Connection for unit change (updateUi)
+        # -------------------------------------------------------------------------------------------------------------------------------
+        # Connections for the 'Motion' tab controls
+        # -------------------------------------------------------------------------------------------------------------------------------
+
+        # Connection for unit change
         self.ui.comboBox_units.currentTextChanged.connect(self.updateUi_units)
 
-        # Connection for galvo parameters change (updateUi)
-        self.ui.doubleSpinBox_galvoLeftAmplitude.valueChanged.connect(self.updateUi_galvo_left_amplitude)
-        self.ui.doubleSpinBox_galvoRightAmplitude.valueChanged.connect(self.updateUi_galvo_right_amplitude)
-        self.ui.doubleSpinBox_galvoLeftOffset.valueChanged.connect(self.updateUi_galvo_left_offset)
-        self.ui.doubleSpinBox_galvoRightOffset.valueChanged.connect(self.updateUi_galvo_right_offset)
-        self.ui.checkBox_galvoSync.stateChanged.connect(self.updateUi_galvo_sync)
-
-        # Connection for etl parameters change (updateUi)
-        self.ui.doubleSpinBox_etlLeftAmplitude.valueChanged.connect(self.updateUi_etl_left_amplitude)
-        self.ui.doubleSpinBox_etlRightAmplitude.valueChanged.connect(self.updateUi_etl_right_amplitude)
-        self.ui.doubleSpinBox_etlLeftOffset.valueChanged.connect(self.updateUi_etl_left_offset)
-        self.ui.doubleSpinBox_etlRightOffset.valueChanged.connect(self.updateUi_etl_right_offset)
-        self.ui.checkBox_etlSync.stateChanged.connect(self.updateUi_etl_sync)
-
-        # Connection for laser parameters change (updateUi)
-        self.ui.doubleSpinBox_laserLeftAmplitude
-        self.ui.doubleSpinBox_laserRightAmplitude
-
-
-        '''Connection for data saving'''
-        self.ui.pushButton_selectSaveDirectory.clicked.connect(self.select_directory)
-        self.ui.pushButton_selectFile.clicked.connect(self.select_file)
-        self.ui.pushButton_selectDataset.clicked.connect(self.select_dataset)
-        
-        '''Connections for the modes'''
-        self.ui.pushButton_acqGetSingleImage.clicked.connect(self.start_get_single_image)
-        self.ui.pushButton_acqSaveSingleImage.clicked.connect(self.save_single_image)
-        self.ui.pushButton_acqStartLiveMode.clicked.connect(self.live_button)
-        self.ui.pushButton_acqStartStackMode.clicked.connect(self.stack_button)
-        self.ui.pushButton_acqSetFirstPlane.clicked.connect(self.set_stack_mode_starting_point)
-        self.ui.pushButton_acqSetLastPlane.clicked.connect(self.set_stack_mode_ending_point)
-        self.ui.doubleSpinBox_acqPlaneStepSize.valueChanged.connect(self.set_number_of_planes)
-        self.ui.pushButton_acqStartPreviewMode.clicked.connect(self.preview_button)
-        self.ui.pushButton_acqStartStandbyMode.clicked.connect(self.standby_button)
-       
-        '''Connections for the motion'''
+        # Connections for the sample and camera motion buttons
         self.ui.pushButton_sampleStepUp.clicked.connect(self.move_sample_up)
         self.ui.pushButton_sampleStepDown.clicked.connect(self.move_sample_down)
         self.ui.pushButton_sampleStepForward.clicked.connect(self.move_sample_forward)
@@ -291,6 +264,41 @@ class Controller_MainWindow(QMainWindow):
         self.ui.pushButton_cameraStepBackward.clicked.connect(self.move_camera_backward)
         self.ui.pushButton_cameraGotoFocus.clicked.connect(self.move_camera_to_focus)
 
+
+        # -------------------------------------------------------------------------------------------------------------------------------
+        # Connections for the 'Parameters' tab controls
+        # -------------------------------------------------------------------------------------------------------------------------------
+
+        # Connection for etl parameters change
+        self.ui.doubleSpinBox_etlLeftAmplitude.valueChanged.connect(self.updateUi_etl_left_amplitude)
+        self.ui.doubleSpinBox_etlRightAmplitude.valueChanged.connect(self.updateUi_etl_right_amplitude)
+        self.ui.doubleSpinBox_etlLeftOffset.valueChanged.connect(self.updateUi_etl_left_offset)
+        self.ui.doubleSpinBox_etlRightOffset.valueChanged.connect(self.updateUi_etl_right_offset)
+        self.ui.checkBox_etlSync.stateChanged.connect(self.updateUi_etl_sync)
+        self.ui.doubleSpinBox_etlSteps.valueChanged.connect(self.updateUi_etl_steps)
+        self.ui.checkBox_etlActivate.stateChanged.connect(self.updateUi_etl_activate)
+
+        # Connection for galvo parameters change
+        self.ui.doubleSpinBox_galvoLeftAmplitude.valueChanged.connect(self.updateUi_galvo_left_amplitude)
+        self.ui.doubleSpinBox_galvoRightAmplitude.valueChanged.connect(self.updateUi_galvo_right_amplitude)
+        self.ui.doubleSpinBox_galvoLeftOffset.valueChanged.connect(self.updateUi_galvo_left_offset)
+        self.ui.doubleSpinBox_galvoRightOffset.valueChanged.connect(self.updateUi_galvo_right_offset)
+        self.ui.checkBox_galvoSync.stateChanged.connect(self.updateUi_galvo_sync)
+        self.ui.doubleSpinBox_galvoFrequency.valueChanged.connect(self.updateUi_galvo_frequency)
+        self.ui.checkBox_galvoInvert.stateChanged.connect(self.updateUi_galvo_invert)
+
+        # Connection for laser parameters change
+        self.ui.doubleSpinBox_laserLeftAmplitude.valueChanged.connect(self.updateUi_laser_left_amplitude)
+        self.ui.doubleSpinBox_laserRightAmplitude.valueChanged.connect(self.updateUi_laser_right_amplitude)
+
+        # Connection for general parameters change
+        self.ui.doubleSpinBox_paramSampleRate.valueChanged.connect(self.updateUi_param_sample_rate)
+
+
+        # -------------------------------------------------------------------------------------------------------------------------------
+        # Connections for the 'Calibration' tab controls
+        # -------------------------------------------------------------------------------------------------------------------------------
+
         self.ui.pushButton_calCameraStartCalibration.clicked.connect(self.camera_calibration_button)
         self.ui.pushButton_calCameraComputeFocus.clicked.connect(self.calculate_camera_focus)
         self.ui.pushButton_calCameraShowInterpolation.clicked.connect(self.show_camera_interpolation)
@@ -299,22 +307,126 @@ class Controller_MainWindow(QMainWindow):
         self.ui.pushButton_calHorizontalStartRangeSelection.clicked.connect(self.reset_boundaries)
         self.ui.pushButton_calHorizontalSetForwardLimit.clicked.connect(self.set_horizontal_forward_boundary)
         self.ui.pushButton_calHorizontalSetBackwardLimit.clicked.connect(self.set_horizontal_backward_boundary)
-        
+
+
+        # -------------------------------------------------------------------------------------------------------------------------------
+        # Connections for the 'File Manager' tab controls
+        # -------------------------------------------------------------------------------------------------------------------------------
+
+        # Connection for file manager (updateUi)
+        self.ui.pushButton_selectFile.clicked.connect(self.updateUi_select_file)
+        self.ui.pushButton_selectDataset.clicked.connect(self.updateUi_select_dataset)
+
+
+        # -------------------------------------------------------------------------------------------------------------------------------
+        # Connections for the 'Manual Acquisition' controls
+        # -------------------------------------------------------------------------------------------------------------------------------
+
+        # Connections for manual modes
+        self.ui.pushButton_acqStartLiveMode.clicked.connect(self.live_button)
+        self.ui.pushButton_acqStartPreviewMode.clicked.connect(self.preview_button)
+        self.ui.pushButton_acqStartStandbyMode.clicked.connect(self.standby_button)
+
+        # Connections for the lasers
+        self.ui.pushButton_laserAllActivate.clicked.connect(self.lasers_button)
+        self.ui.pushButton_laserLeftActivate.clicked.connect(self.left_laser_button)
+        self.ui.pushButton_laserRightActivate.clicked.connect(self.right_laser_button)
+
+
+        # -------------------------------------------------------------------------------------------------------------------------------
+        # Connections for the 'Automatic Acquisition' controls
+        # -------------------------------------------------------------------------------------------------------------------------------
+
+        self.ui.pushButton_acqGetSingleImage.clicked.connect(self.start_get_single_image)
+        self.ui.pushButton_acqSaveSingleImage.clicked.connect(self.save_single_image)
+        self.ui.pushButton_acqStartStackMode.clicked.connect(self.stack_button)
+        self.ui.doubleSpinBox_acqPlaneStepSize.valueChanged.connect(self.set_number_of_planes)
+        self.ui.pushButton_acqSetFirstPlane.clicked.connect(self.set_stack_mode_starting_point)
+        self.ui.pushButton_acqSetLastPlane.clicked.connect(self.set_stack_mode_ending_point)
+
+        # Connection for data saving (updateUi)
+        self.ui.pushButton_selectSaveDirectory.clicked.connect(self.updateUi_select_directory)
+
 
         
+        # TOFIX
+        # etl_parameters   = ["Left ETL Amplitude","Right ETL Amplitude","Left ETL Offset","Right ETL Offset"]
+        # galvo_parameters = ["Left Galvo Amplitude","Right Galvo Amplitude","Left Galvo Offset","Right Galvo Offset","Galvo Frequency"]
+        # laser_parameters = ["Left Laser Voltage","Right Laser Voltage"]
+        # modifiable_parameters = etl_parameters + galvo_parameters + ["Sample Rate","ETL Step"] + laser_parameters
+        #
+        # self.default_buttons = [self.ui.pushButton_standby,
+        #                         self.ui.pushButton_getSingleImage,
+        #                         self.ui.pushButton_previewMode,
+        #                         self.ui.pushButton_liveMode,
+        #                         self.ui.pushButton_stackMode,
+        #                         self.ui.pushButton_cameraCalibration,
+        #                         self.ui.pushButton_etlsCalibration]
+        # etl_voltages_boxes   = [self.ui.doubleSpinBox_leftEtlAmplitude,
+        #                         self.ui.doubleSpinBox_rightEtlAmplitude,
+        #                         self.ui.doubleSpinBox_leftEtlOffset,
+        #                         self.ui.doubleSpinBox_rightEtlOffset]
+        # galvo_voltages_boxes = [self.ui.doubleSpinBox_leftGalvoAmplitude,
+        #                         self.ui.doubleSpinBox_rightGalvoAmplitude,
+        #                         self.ui.doubleSpinBox_leftGalvoOffset,
+        #                         self.ui.doubleSpinBox_rightGalvoOffset]
+        # laser_boxes          = [self.ui.doubleSpinBox_leftLaser,
+        #                         self.ui.doubleSpinBox_rightLaser]
+        #
+        # self.modifiable_param_boxes = etl_voltages_boxes + galvo_voltages_boxes + [self.ui.doubleSpinBox_galvoFrequency,self.ui.doubleSpinBox_samplerate,self.ui.spinBox_etlStep] + laser_boxes 
+
+        '''Connections for the ETLs and Galvos parameters'''
 #        for param_string,param_box in zip(modifiable_parameters,self.modifiable_param_boxes):
 #            param_box.valueChanged.connect(lambda _,parameter_name=param_string,parameter_box=param_box: self.update_etl_galvos_parameters(parameter_name,parameter_box)) 
 #            #The parameter '_' (the box signal, a float number) is necessary because the first lambda parameter is always overwritten by the signal return
         
 #        self.ui.pushButton_defaultParameters.clicked.connect(self.back_to_default_parameters)
 #        self.ui.pushButton_changeDefaultParameters.clicked.connect(self.change_default_parameters)
-        
-        '''Connections for the lasers'''
-        self.ui.pushButton_laserAllActivate.clicked.connect(self.lasers_button)
-        self.ui.pushButton_laserLeftActivate.clicked.connect(self.left_laser_button)
-        self.ui.pushButton_laserRightActivate.clicked.connect(self.right_laser_button)
 
-    
+
+
+    def update_etl_galvos_parameters(self, parameter_name, parameter_box):
+        '''Updates the parameters in the software after a modification by the user'''
+        self.parameters[parameter_name] = parameter_box.value()
+        
+        if parameter_name == "Left ETL Amplitude":
+            parameter_box.setMaximum(5-self.ui.doubleSpinBox_leftEtlOffset.value()) #To prevent ETL's amplitude + offset being > 5V
+            opposed_parameter_box = self.ui.doubleSpinBox_rightEtlAmplitude
+        elif parameter_name == "Right ETL Amplitude":
+            parameter_box.setMaximum(5-self.ui.doubleSpinBox_rightEtlOffset.value()) #To prevent ETL's amplitude + offset being > 5V
+            opposed_parameter_box = self.ui.doubleSpinBox_leftEtlAmplitude
+        elif parameter_name == "Left ETL Offset":
+            parameter_box.setMaximum(5-self.ui.doubleSpinBox_leftEtlAmplitude.value()) #To prevent ETL's amplitude + offset being > 5V
+            opposed_parameter_box = self.ui.doubleSpinBox_rightEtlOffset
+        elif parameter_name == "Right ETL Offset":
+            parameter_box.setMaximum(5-self.ui.doubleSpinBox_rightEtlAmplitude.value()) #To prevent ETL's amplitude + offset being > 5V
+            opposed_parameter_box = self.ui.doubleSpinBox_leftEtlOffset
+        elif parameter_name == "Left Galvo Amplitude":
+            parameter_box.setMaximum(10-self.ui.doubleSpinBox_leftGalvoOffset.value()) #To prevent galvo's amplitude + offset being > 10V
+            parameter_box.setMinimum(-10-self.ui.doubleSpinBox_leftGalvoOffset.value()) #To prevent galvo's amplitude + offset being < -10V
+            opposed_parameter_box = self.ui.doubleSpinBox_rightGalvoAmplitude
+        elif parameter_name == "Right Galvo Amplitude":
+            parameter_box.setMaximum(10-self.ui.doubleSpinBox_rightGalvoOffset.value()) #To prevent galvo's amplitude + offset being > 10V
+            parameter_box.setMinimum(-10-self.ui.doubleSpinBox_rightGalvoOffset.value()) #To prevent galvo's amplitude + offset being < -10V
+            opposed_parameter_box = self.ui.doubleSpinBox_leftGalvoAmplitude
+        elif parameter_name == "Left Galvo Offset":
+            parameter_box.setMaximum(10-self.ui.doubleSpinBox_leftGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being > 10V
+            parameter_box.setMinimum(-10-self.ui.doubleSpinBox_leftGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being < -10V
+            opposed_parameter_box = self.ui.doubleSpinBox_rightGalvoOffset
+        elif parameter_name == "Right Galvo Offset":
+            parameter_box.setMaximum(10-self.ui.doubleSpinBox_rightGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being > 10V
+            parameter_box.setMinimum(-10-self.ui.doubleSpinBox_rightGalvoAmplitude.value()) #To prevent galvo's amplitude + offset being < -10V
+            opposed_parameter_box = self.ui.doubleSpinBox_leftGalvoOffset
+        elif parameter_name == "Galvo Frequency":
+            opposed_parameter_box = self.ui.doubleSpinBox_galvoFrequency
+        
+        '''Modify simultaneously left and right parameters, if specified'''
+        #if self.ui.checkBox_etlsTogether.isChecked() and (parameter_name in etl_parameters):
+        #    opposed_parameter_box.setValue(self.parameters[parameter_name])
+        #if self.ui.checkBox_galvosTogether.isChecked() and (parameter_name in galvo_parameters):
+        #    opposed_parameter_box.setValue(self.parameters[parameter_name])
+
+
     def closeEvent(self, event):
         '''Making sure that everything is closed when the user exits the software.
            This function executes automatically when the user closes the UI.
@@ -330,13 +442,6 @@ class Controller_MainWindow(QMainWindow):
         else:
             event.ignore()
 
-    def updateUi_light_theme(self):
-        self.sig_stylesheet.emit(0)
-        return None
-
-    def updateUi_dark_theme(self):
-        self.sig_stylesheet.emit(1)
-        return None
 
     def status_printer(self,text):
         '''Print text in console, in controller text box and in status bar'''
@@ -355,16 +460,23 @@ class Controller_MainWindow(QMainWindow):
 #        self.ui.scrollArea_lastCommands.verticalScrollBar().setValue(self.ui.scrollArea_lastCommands.verticalScrollBar().maximum())
     
 
-    '''General Methods'''
     def open_settings_dialog(self):
         '''Open the dialog window for modification of settings'''
         self.settings_dialog.exec_()
-    
+
+
     def open_properties_dialog(self):
         '''Open the dialog window for showing properties'''
         self.properties_dialog.open()
         self.properties_dialog.get_properties()
-    
+
+
+    def open_help(self):
+        '''Open help documentation for the program (PDF)'''
+        guide_pdf = os.path.dirname(os.path.abspath(__file__)) + '\..\Guide.pdf'
+        webbrowser.open_new(guide_pdf)
+
+
     def change_settings(self):
         '''Change the configuration settings'''
         self.save_parameters_policy = self.settings_dialog.ui.comboBox_savePolicy.currentIndex()
@@ -372,10 +484,18 @@ class Controller_MainWindow(QMainWindow):
         self.default_filename = self.settings_dialog.ui.lineEdit_defaultFilename.text()
         self.status_printer('Configuration Settings Changed')
     
-    def open_help(self):
-        '''Open help documentation for the program (PDF)'''
-        guide_pdf = os.path.dirname(os.path.abspath(__file__)) + '\..\Guide.pdf'
-        webbrowser.open_new(guide_pdf)
+
+    # -------------------------------------------------------------------------------------------------------------------------------
+    # -------------------------------------------------------------------------------------------------------------------------------
+
+
+    def updateUi_light_theme(self):
+        self.sig_stylesheet.emit(0)
+        return None
+
+    def updateUi_dark_theme(self):
+        self.sig_stylesheet.emit(1)
+        return None
 
     def updateUi_show_hide_images_pane(self):
         if self.ui.imagesPane.isVisible():
@@ -395,8 +515,8 @@ class Controller_MainWindow(QMainWindow):
         else:
             self.ui.plainTextEdit_cmdLog.show()
 
-  # -------------------------------------------------------------------------------------------------------------------------------
-  # -------------------------------------------------------------------------------------------------------------------------------
+    # -------------------------------------------------------------------------------------------------------------------------------
+    # -------------------------------------------------------------------------------------------------------------------------------
     
     def update_laser_buttons(self, disable_button = True):
         '''Deactivate lasers, and enable or disable all laser buttons'''
@@ -870,7 +990,6 @@ class Controller_MainWindow(QMainWindow):
 #                file.write(str(self.default_filename))
 
     def updateUi_hardware_state(self):
-        
         # HwDAQ
         self.ui.doubleSpinBox_paramSampleRate.setValue(self.hwdaq.sample_rate)
         self.ui.doubleSpinBox_galvoFrequency.setValue(self.hwdaq.galvo_frequency)
@@ -890,43 +1009,49 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_galvo_left_amplitude(self):
         # Adjust Min and Max to prevent amplitude + offset being <-10V or > 10V
         self.ui.doubleSpinBox_galvoLeftOffset.setMinimum(-10 + self.ui.doubleSpinBox_galvoLeftAmplitude.value())
-        self.ui.doubleSpinBox_galvoLeftOffset.setMaximum(10 - self.ui.doubleSpinBox_galvoLeftAmplitude.value()) 
+        self.ui.doubleSpinBox_galvoLeftOffset.setMaximum(10 - self.ui.doubleSpinBox_galvoLeftAmplitude.value())
         if self.ui.checkBox_galvoSync.isChecked():
             self.ui.doubleSpinBox_galvoRightAmplitude.setValue(self.ui.doubleSpinBox_galvoLeftAmplitude.value())
             self.ui.doubleSpinBox_galvoRightOffset.setValue(self.ui.doubleSpinBox_galvoLeftOffset.value())
             self.ui.doubleSpinBox_galvoRightOffset.setMinimum(self.ui.doubleSpinBox_galvoLeftOffset.minimum())
-            self.ui.doubleSpinBox_galvoRightOffset.setMaximum(self.ui.doubleSpinBox_galvoLeftOffset.maximum()) 
+            self.ui.doubleSpinBox_galvoRightOffset.setMaximum(self.ui.doubleSpinBox_galvoLeftOffset.maximum())
 
     def updateUi_galvo_right_amplitude(self):
         # Adjust Min and Max to prevent amplitude + offset being <-10V or > 10V
         self.ui.doubleSpinBox_galvoRightOffset.setMinimum(-10 + self.ui.doubleSpinBox_galvoRightAmplitude.value())
-        self.ui.doubleSpinBox_galvoRightOffset.setMaximum(10 - self.ui.doubleSpinBox_galvoRightAmplitude.value()) 
+        self.ui.doubleSpinBox_galvoRightOffset.setMaximum(10 - self.ui.doubleSpinBox_galvoRightAmplitude.value())
         if self.ui.checkBox_galvoSync.isChecked():
             self.ui.doubleSpinBox_galvoLeftAmplitude.setValue(self.ui.doubleSpinBox_galvoRightAmplitude.value())
             self.ui.doubleSpinBox_galvoLeftOffset.setValue(self.ui.doubleSpinBox_galvoRightOffset.value())
             self.ui.doubleSpinBox_galvoLeftOffset.setMinimum(self.ui.doubleSpinBox_galvoRightOffset.minimum())
-            self.ui.doubleSpinBox_galvoLeftOffset.setMaximum(self.ui.doubleSpinBox_galvoRightOffset.maximum()) 
+            self.ui.doubleSpinBox_galvoLeftOffset.setMaximum(self.ui.doubleSpinBox_galvoRightOffset.maximum())
 
     def updateUi_galvo_left_offset(self):
         if self.ui.checkBox_galvoSync.isChecked():
             self.ui.doubleSpinBox_galvoRightAmplitude.setValue(self.ui.doubleSpinBox_galvoLeftAmplitude.value())
             self.ui.doubleSpinBox_galvoRightOffset.setValue(self.ui.doubleSpinBox_galvoLeftOffset.value())
             self.ui.doubleSpinBox_galvoRightOffset.setMinimum(self.ui.doubleSpinBox_galvoLeftOffset.minimum())
-            self.ui.doubleSpinBox_galvoRightOffset.setMaximum(self.ui.doubleSpinBox_galvoLeftOffset.maximum()) 
+            self.ui.doubleSpinBox_galvoRightOffset.setMaximum(self.ui.doubleSpinBox_galvoLeftOffset.maximum())
 
     def updateUi_galvo_right_offset(self):
         if self.ui.checkBox_galvoSync.isChecked():
             self.ui.doubleSpinBox_galvoLeftAmplitude.setValue(self.ui.doubleSpinBox_galvoRightAmplitude.value())
             self.ui.doubleSpinBox_galvoLeftOffset.setValue(self.ui.doubleSpinBox_galvoRightOffset.value())
             self.ui.doubleSpinBox_galvoLeftOffset.setMinimum(self.ui.doubleSpinBox_galvoRightOffset.minimum())
-            self.ui.doubleSpinBox_galvoLeftOffset.setMaximum(self.ui.doubleSpinBox_galvoRightOffset.maximum()) 
+            self.ui.doubleSpinBox_galvoLeftOffset.setMaximum(self.ui.doubleSpinBox_galvoRightOffset.maximum())
 
     def updateUi_galvo_sync(self):
         if self.ui.checkBox_galvoSync.isChecked():
             self.ui.doubleSpinBox_galvoRightAmplitude.setValue(self.ui.doubleSpinBox_galvoLeftAmplitude.value())
             self.ui.doubleSpinBox_galvoRightOffset.setValue(self.ui.doubleSpinBox_galvoLeftOffset.value())
             self.ui.doubleSpinBox_galvoRightOffset.setMinimum(self.ui.doubleSpinBox_galvoLeftOffset.minimum())
-            self.ui.doubleSpinBox_galvoRightOffset.setMaximum(self.ui.doubleSpinBox_galvoLeftOffset.maximum()) 
+            self.ui.doubleSpinBox_galvoRightOffset.setMaximum(self.ui.doubleSpinBox_galvoLeftOffset.maximum())
+
+    def updateUi_galvo_frequency(self):
+        pass
+
+    def updateUi_galvo_invert(self):
+        pass
 
     def updateUi_etl_left_amplitude(self):
         # Adjust Min and Max to prevent amplitude + offset being <-5V or > 5V
@@ -968,6 +1093,21 @@ class Controller_MainWindow(QMainWindow):
             self.ui.doubleSpinBox_etlRightOffset.setValue(self.ui.doubleSpinBox_etlLeftOffset.value())
             self.ui.doubleSpinBox_etlRightOffset.setMinimum(self.ui.doubleSpinBox_etlLeftOffset.minimum())
             self.ui.doubleSpinBox_etlRightOffset.setMaximum(self.ui.doubleSpinBox_etlLeftOffset.maximum())
+
+    def updateUi_etl_steps(self):
+        pass
+
+    def updateUi_etl_activate(self):
+        pass
+
+    def updateUi_laser_left_amplitude(self):
+        pass
+
+    def updateUi_laser_right_amplitude(self):
+        pass
+
+    def updateUi_param_sample_rate(self):
+        pass
 
 
     def lasers_button(self):
@@ -1045,7 +1185,7 @@ class Controller_MainWindow(QMainWindow):
  
     '''File Open Methods'''
         
-    def select_file(self):
+    def updateUi_select_file(self):
         '''Allows the selection of a file (.hdf5), opens it and displays its datasets'''
         
         '''Retrieve File'''
@@ -1066,7 +1206,7 @@ class Controller_MainWindow(QMainWindow):
         else:
             self.ui.label_currentFileDirectory.setText('None Specified')
     
-    def select_dataset(self):
+    def updateUi_select_dataset(self):
         '''Opens one or many HDF5 datasets and displays its attributes and data as an image'''
         
         if (self.open_directory != '') and (self.ui.listWidget_fileDatasets.count() != 0):
@@ -1355,9 +1495,9 @@ class Controller_MainWindow(QMainWindow):
         self.hwdaq.create_tasks(acquisition='FINITE')
         
         if self.ui.checkBox_etlActivate.isChecked():
-            self.hwdaq.create_calibrated_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept, activate = True)
+            self.hwdaq.create_calibrated_etl_waveforms(self.etl_left_slope, self.etl_left_intercept, self.etl_right_slope, self.etl_right_intercept, activate = True)
         else:
-            self.hwdaq.create_calibrated_etl_waveforms(self.left_slope, self.left_intercept, self.right_slope, self.right_intercept, activate = False)
+            self.hwdaq.create_calibrated_etl_waveforms(self.etl_left_slope, self.etl_left_intercept, self.etl_right_slope, self.etl_right_intercept, activate = False)
         
         if self.ui.checkBox_galvoInvert.isChecked():
             self.hwdaq.create_galvos_waveforms(case = 'TRAPEZE', invert = True)
@@ -1506,7 +1646,7 @@ class Controller_MainWindow(QMainWindow):
         self.default_buttons.append(self.ui.pushButton_acqSaveSingleImage)
         self.update_buttons_modes(self.default_buttons)
     
-    def select_directory(self):
+    def updateUi_select_directory(self):
         '''Allows the selection of a directory for single_image or stack saving'''
         
         options = QFileDialog.Options()
@@ -1541,7 +1681,7 @@ class Controller_MainWindow(QMainWindow):
     def get_sample_name(self):
         '''Retrieve sample name'''
         if str(self.ui.lineEdit_sampleName.text()) != '':
-            parameters["Sample Name"] = str(self.ui.lineEdit_sampleName.text())
+            self.sample_name = str(self.ui.lineEdit_sampleName.text())
     
     def save_single_image(self):
         '''Saves the frame generated by self.get_single_image()'''
@@ -1550,13 +1690,14 @@ class Controller_MainWindow(QMainWindow):
         self.get_file_name()
         
         if self.saving_allowed:
+            '''Getting sample name'''
+            self.get_sample_name()
+
             '''Setting up frame saver'''
             self.frame_saver = FrameSaver(self.status_printer)
             self.frame_saver.set_block_size(1) #Block size is a number of buffers ##
+            self.frame_saver.add_sample_name(self.sample_name)
             self.frame_saver.add_motor_parameters(self.image_hor_pos_text,self.image_ver_pos_text,self.image_cam_pos_text)
-            
-            '''Getting sample name'''
-            self.get_sample_name()
             
             '''Saving frame'''
             if self.ui.checkBox_acqSaveAllFrames.isChecked():
@@ -1703,11 +1844,13 @@ class Controller_MainWindow(QMainWindow):
        
         '''Making sure saving is allowed and filename isn't empty'''
         if self.saving_allowed:
-            '''Setting frame saver'''
-            self.frame_saver = FrameSaver(self.status_printer)
-            self.frame_saver.set_block_size(3) #Block size is a number of buffers
             '''Getting sample name'''
             self.get_sample_name()
+
+            '''Setting frame saver'''
+            self.frame_saver = FrameSaver(self.status_printer)
+            self.frame_saver.add_sample_name(self.sample_name)
+            self.frame_saver.set_block_size(3) #Block size is a number of buffers
             
             self.set_data_consumer(self.frame_saver, False, "FrameSaver", True)
             
@@ -1845,12 +1988,14 @@ class Controller_MainWindow(QMainWindow):
         '''Retrieving filename set by the user''' #debugging
         self.get_file_name()
         if self.saving_allowed:
-            '''Setting frame saver'''
-            self.frame_saver = FrameSaver(self.status_printer)
-            self.frame_saver.set_block_size(3) #Block size is a number of buffers
-            self.frame_saver.set_files(self.number_of_calibration_planes,self.filename,'cameraCalibration',self.number_of_camera_positions,'camera_position')
             '''Getting sample name'''
             self.get_sample_name()
+
+            '''Setting frame saver'''
+            self.frame_saver = FrameSaver(self.status_printer)
+            self.frame_saver.add_sample_name(self.sample_name)
+            self.frame_saver.set_block_size(3) #Block size is a number of buffers
+            self.frame_saver.set_files(self.number_of_calibration_planes,self.filename,'cameraCalibration',self.number_of_camera_positions,'camera_position')
             
             self.set_data_consumer(self.frame_saver, False, "FrameSaver", True) ###
             '''Starting frame saver'''
@@ -2031,12 +2176,14 @@ class Controller_MainWindow(QMainWindow):
         '''Retrieving filename set by the user''' #debugging
         self.get_file_name()
         if self.saving_allowed:
-            '''Setting frame saver'''
-            self.frame_saver = FrameSaver(self.status_printer)
-            self.frame_saver.set_block_size(3) #Block size is a number of buffers
-            self.frame_saver.set_files(2*self.number_of_etls_points,self.filename,'etlCalibration',self.number_of_etls_images,'etl_image')
             '''Getting sample name'''
             self.get_sample_name()
+
+            '''Setting frame saver'''
+            self.frame_saver = FrameSaver(self.status_printer)
+            self.frame_saver.add_sample_name(self.sample_name)
+            self.frame_saver.set_block_size(3) #Block size is a number of buffers
+            self.frame_saver.set_files(2*self.number_of_etls_points,self.filename,'etlCalibration',self.number_of_etls_images,'etl_image')
             
             self.set_data_consumer(self.frame_saver, False, "FrameSaver", True) ###
             '''Starting frame saver'''
@@ -2061,8 +2208,6 @@ class Controller_MainWindow(QMainWindow):
                 self.left_laser_activated = True
             if side == 'etl_r':
                 self.right_laser_activated = True
-            self.parameters['Left Laser Voltage'] = 2.5 #Volts
-            self.parameters['Right Laser Voltage'] = 2.5 #Volts
             self.start_lasers()
             
             #self.camera.retrieve_single_image()*1.0 ##pour éviter images de bruit
@@ -2073,8 +2218,7 @@ class Controller_MainWindow(QMainWindow):
             
             #For each interpolation point
             for etl_point in range(int(self.number_of_etls_points)):
-                
-                if self.etls_calibration_started == False:
+                if self.etls_calibration_started is False:
                     self.status_printer('ETL calibration interrupted')
                     break
                 else:
@@ -2086,10 +2230,10 @@ class Controller_MainWindow(QMainWindow):
                     right_galvo_voltage = 0.1 #Volts
                     
                     '''Writing the data'''
-                    galvos_etls_waveforms = np.stack((np.array([right_galvo_voltage]),
-                                                              np.array([left_galvo_voltage]),
-                                                              np.array([left_etl_voltage]),
-                                                              np.array([right_etl_voltage])))
+                    galvos_etls_waveforms = np.stack((  np.array([right_galvo_voltage]),
+                                                        np.array([left_galvo_voltage]),
+                                                        np.array([left_etl_voltage]),
+                                                        np.array([right_etl_voltage])   ))
                     self.galvos_etls_task.write(galvos_etls_waveforms, auto_start=True)
                    
                     '''Retrieving buffer for the plane of the current position'''
@@ -2105,7 +2249,7 @@ class Controller_MainWindow(QMainWindow):
                         '''Retrieving image from camera and putting it in its queue
                                for display'''
                         time.sleep(1)
-                        frame = self.camera.retrieve_single_image()*1.0
+                        frame = self.camera.acquire_single_image()*1.0
                         blurred_frame = ndimage.gaussian_filter(frame, sigma=20)
                         
                         
@@ -2207,24 +2351,24 @@ class Controller_MainWindow(QMainWindow):
         xl = self.etl_l_relation[:,0]
         yl = self.etl_l_relation[:,1]
         #Left linear regression
-        self.left_slope, self.left_intercept, r_value, p_value, std_err = stats.linregress(yl, xl)
+        self.etl_left_slope, self.etl_left_intercept, r_value, p_value, std_err = stats.linregress(yl, xl)
         print('r_value:'+str(r_value)) #debugging
         print('p_value:'+str(p_value)) #debugging
         print('std_err:'+str(std_err)) #debugging
-        print('left_slope:'+str(self.left_slope)) #debugging
-        print('left_intercept:'+str(self.left_intercept)) #debugging
-        print(self.left_slope * 2559 + self.left_intercept) #debugging
+        print('left_slope:'+str(self.etl_left_slope)) #debugging
+        print('left_intercept:'+str(self.etl_left_intercept)) #debugging
+        print(self.etl_left_slope * 2559 + self.etl_left_intercept) #debugging
         
         xr = self.etl_r_relation[:,0]
         yr = self.etl_r_relation[:,1]
         #Right linear regression
-        self.right_slope, self.right_intercept, r_value, p_value, std_err = stats.linregress(yr, xr)
+        self.etl_right_slope, self.etl_right_intercept, r_value, p_value, std_err = stats.linregress(yr, xr)
         print('r_value:'+str(r_value)) #debugging
         print('p_value:'+str(p_value)) #debugging
         print('std_err:'+str(std_err)) #debugging
-        print('right_slope:'+str(self.right_slope)) #debugging
-        print('right_intercept:'+str(self.right_intercept)) #debugging
-        print(self.right_slope * 2559 + self.right_intercept) #debugging
+        print('right_slope:'+str(self.etl_right_slope)) #debugging
+        print('right_intercept:'+str(self.etl_right_intercept)) #debugging
+        print(self.etl_right_slope * 2559 + self.etl_right_intercept) #debugging
         
         '''Stopping camera'''
         self.camera.disarm_camera()
@@ -2249,10 +2393,9 @@ class Controller_MainWindow(QMainWindow):
         self.etls_calibration_started = False
         self.ui.pushButton_calEtlStartCalibration.setText('Start ETL Calibration')
 
-
 class Settings_Dialog(QDialog):
     '''Class for Settings Dialog'''
-    
+   
     def __init__(self, status_printer):
         QDialog.__init__(self)
         self.ui = Ui_Settings()
@@ -2265,11 +2408,12 @@ class Settings_Dialog(QDialog):
 
     def load_preset(self):
         '''Load preset'''
-        self.ui.comboBox_savePolicy.setCurrentIndex(save_parameters_policy)
-        self.ui.label_saveDirectory.setText(default_save_directory)
-        self.ui.lineEdit_defaultFilename.setText(default_filename)
-        if default_save_directory == 'None Specified':
-            self.ui.lineEdit_defaultFilename.setEnabled(False)
+        pass
+        #self.ui.comboBox_savePolicy.setCurrentIndex(save_parameters_policy)
+        #self.ui.label_saveDirectory.setText(default_save_directory)
+        #self.ui.lineEdit_defaultFilename.setText(default_filename)
+        #if default_save_directory == 'None Specified':
+        #    self.ui.lineEdit_defaultFilename.setEnabled(False)
     
     def select_directory(self):
         '''Allows the selection of a default save directory'''
@@ -2282,7 +2426,7 @@ class Settings_Dialog(QDialog):
             self.ui.lineEdit_defaultFilename.setEnabled(True)
         else:
             self.select_none()
-    
+   
     def select_none(self):
         '''Selects no default save directory'''
         self.ui.label_saveDirectory.setText('None Specified')
@@ -2400,13 +2544,17 @@ class FrameSaver():
     '''Set up methods'''
     def __init__(self, status_printer):
         self.status_printer = status_printer
+        self.sample_name = ''
         self.filenames_list = [] 
         self.number_of_files = 1
-        
         self.horizontal_positions_list = []
         self.vertical_positions_list = []
         self.camera_positions_list = []
-    
+
+    def add_sample_name(self, sample_name:str):
+        '''Add to a list the different motor positions'''
+        self.sample_name = sample_name
+
     def add_motor_parameters(self, current_hor_position_txt, current_ver_position_txt, current_cam_position_txt):
         '''Add to a list the different motor positions'''
         self.horizontal_positions_list.append(current_hor_position_txt)
@@ -2480,7 +2628,7 @@ class FrameSaver():
                             print('Dataset '+str(dataset)+'/'+str(int(self.number_of_datasets))+' created:'+str(path_root)) #debugging
                             
                             '''Add attributes'''
-                            self.add_attribute('Sample Name', parameters["Sample Name"])
+                            self.add_attribute('Sample Name', self.sample_name)
                             self.add_attribute('Date', str(datetime.date.today()))
                             if buffer.shape[0] == 1:
                                 pos_index = dataset + file * int(self.number_of_datasets)
