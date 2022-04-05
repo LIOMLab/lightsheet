@@ -63,10 +63,6 @@ class Controller_MainWindow(QMainWindow):
     _cfg_settings = {}
     _cfg_settings['Units'] = 'mm'
     _cfg_settings['Sample Name'] = ''
-    _cfg_settings['ETL Left Slope'] = '0'
-    _cfg_settings['ETL Left Intercept'] = '0'
-    _cfg_settings['ETL Right Slope'] = '0'
-    _cfg_settings['ETL Right Intercept'] = '0'
 
     # Default terminals
     _terminals = {}
@@ -124,10 +120,10 @@ class Controller_MainWindow(QMainWindow):
         self.default_save_directory = 'None Specified'
         self.default_filename       = 'Test'
 
-        self.etl_left_slope         = float(self.cfg_settings['ETL Left Slope'])
-        self.etl_left_intercept     = float(self.cfg_settings['ETL Left Intercept'])
-        self.etl_right_slope        = float(self.cfg_settings['ETL Right Slope'])
-        self.etl_right_intercept    = float(self.cfg_settings['ETL Right Intercept'])
+        self.etl_left_slope         = -0.0008978829380085525
+        self.etl_left_intercept     = 4.25548088287623
+        self.etl_right_slope        = 0.000826220401525251
+        self.etl_right_intercept    = 2.384849899181325
 
         # Instantiating the camera window where the frames are displayed
         self.camera_window = CameraWindow(self.ui.imageView)
@@ -435,6 +431,8 @@ class Controller_MainWindow(QMainWindow):
         result = QMessageBox.question(self, "Confirm Exit...", "Are you sure you want to exit ?", QMessageBox.Yes | QMessageBox.No)
         if result == QMessageBox.Yes:
             self.close_modes()
+            #  seconds for the threads to stop ... TOFIX implement better checks
+            time.sleep(2)
             self.camera.close_camera()
 #            self.save_default_parameters()
             self.timer_imageview.stop()
@@ -1006,86 +1004,154 @@ class Controller_MainWindow(QMainWindow):
         self.ui.doubleSpinBox_laserLeftAmplitude.setValue(self.lasers.left_amplitude)
         self.ui.doubleSpinBox_laserRightAmplitude.setValue(self.lasers.right_amplitude)
 
+
     def updateUi_galvo_left_amplitude(self):
+        # Propagate Ui changes to HwDAQ instance
+        self.hwdaq.galvo_left_amplitude = self.ui.doubleSpinBox_galvoLeftAmplitude.value()
         # Adjust Min and Max to prevent amplitude + offset being <-10V or > 10V
         self.ui.doubleSpinBox_galvoLeftOffset.setMinimum(-10 + self.ui.doubleSpinBox_galvoLeftAmplitude.value())
         self.ui.doubleSpinBox_galvoLeftOffset.setMaximum(10 - self.ui.doubleSpinBox_galvoLeftAmplitude.value())
         if self.ui.checkBox_galvoSync.isChecked():
+            # Set opposite galvo amplitude and offset
             self.ui.doubleSpinBox_galvoRightAmplitude.setValue(self.ui.doubleSpinBox_galvoLeftAmplitude.value())
             self.ui.doubleSpinBox_galvoRightOffset.setValue(self.ui.doubleSpinBox_galvoLeftOffset.value())
+            # Adjust Min and Max to prevent amplitude + offset being <-10V or > 10V
             self.ui.doubleSpinBox_galvoRightOffset.setMinimum(self.ui.doubleSpinBox_galvoLeftOffset.minimum())
             self.ui.doubleSpinBox_galvoRightOffset.setMaximum(self.ui.doubleSpinBox_galvoLeftOffset.maximum())
+            # Propagate Ui changes to HwDAQ instance
+            self.hwdaq.galvo_right_amplitude = self.ui.doubleSpinBox_galvoRightAmplitude.value()
+            self.hwdaq.galvo_right_offset = self.ui.doubleSpinBox_galvoRightOffset.value()
+
 
     def updateUi_galvo_right_amplitude(self):
+        # Propagate Ui changes to HwDAQ instance
+        self.hwdaq.galvo_right_amplitude = self.ui.doubleSpinBox_galvoRightAmplitude.value()
         # Adjust Min and Max to prevent amplitude + offset being <-10V or > 10V
         self.ui.doubleSpinBox_galvoRightOffset.setMinimum(-10 + self.ui.doubleSpinBox_galvoRightAmplitude.value())
         self.ui.doubleSpinBox_galvoRightOffset.setMaximum(10 - self.ui.doubleSpinBox_galvoRightAmplitude.value())
         if self.ui.checkBox_galvoSync.isChecked():
+            # Set opposite galvo amplitude and offset
             self.ui.doubleSpinBox_galvoLeftAmplitude.setValue(self.ui.doubleSpinBox_galvoRightAmplitude.value())
             self.ui.doubleSpinBox_galvoLeftOffset.setValue(self.ui.doubleSpinBox_galvoRightOffset.value())
+            # Adjust Min and Max to prevent amplitude + offset being <-10V or > 10V
             self.ui.doubleSpinBox_galvoLeftOffset.setMinimum(self.ui.doubleSpinBox_galvoRightOffset.minimum())
             self.ui.doubleSpinBox_galvoLeftOffset.setMaximum(self.ui.doubleSpinBox_galvoRightOffset.maximum())
+            # Propagate Ui changes to HwDAQ instance
+            self.hwdaq.galvo_left_amplitude = self.ui.doubleSpinBox_galvoLeftAmplitude.value()
+            self.hwdaq.galvo_left_offset = self.ui.doubleSpinBox_galvoLeftOffset.value()
+
 
     def updateUi_galvo_left_offset(self):
+        # Propagate Ui changes to HwDAQ instance
+        self.hwdaq.galvo_left_offset = self.ui.doubleSpinBox_galvoLeftOffset.value()
         if self.ui.checkBox_galvoSync.isChecked():
+            # Set opposite galvo amplitude and offset
             self.ui.doubleSpinBox_galvoRightAmplitude.setValue(self.ui.doubleSpinBox_galvoLeftAmplitude.value())
             self.ui.doubleSpinBox_galvoRightOffset.setValue(self.ui.doubleSpinBox_galvoLeftOffset.value())
             self.ui.doubleSpinBox_galvoRightOffset.setMinimum(self.ui.doubleSpinBox_galvoLeftOffset.minimum())
             self.ui.doubleSpinBox_galvoRightOffset.setMaximum(self.ui.doubleSpinBox_galvoLeftOffset.maximum())
+            # Propagate Ui changes to HwDAQ instance
+            self.hwdaq.galvo_right_amplitude = self.ui.doubleSpinBox_galvoRightAmplitude.value()
+            self.hwdaq.galvo_right_offset = self.ui.doubleSpinBox_galvoRightOffset.value()
+
 
     def updateUi_galvo_right_offset(self):
+        # Propagate Ui changes to HwDAQ instance
+        self.hwdaq.galvo_right_offset = self.ui.doubleSpinBox_galvoRightOffset.value()
         if self.ui.checkBox_galvoSync.isChecked():
+            # Set opposite galvo amplitude and offset
             self.ui.doubleSpinBox_galvoLeftAmplitude.setValue(self.ui.doubleSpinBox_galvoRightAmplitude.value())
             self.ui.doubleSpinBox_galvoLeftOffset.setValue(self.ui.doubleSpinBox_galvoRightOffset.value())
             self.ui.doubleSpinBox_galvoLeftOffset.setMinimum(self.ui.doubleSpinBox_galvoRightOffset.minimum())
             self.ui.doubleSpinBox_galvoLeftOffset.setMaximum(self.ui.doubleSpinBox_galvoRightOffset.maximum())
+            # Propagate Ui changes to HwDAQ instance
+            self.hwdaq.galvo_left_amplitude = self.ui.doubleSpinBox_galvoLeftAmplitude.value()
+            self.hwdaq.galvo_left_offset = self.ui.doubleSpinBox_galvoLeftOffset.value()
+
 
     def updateUi_galvo_sync(self):
         if self.ui.checkBox_galvoSync.isChecked():
+            # Set left galvo amplitude and offset to right galvo
             self.ui.doubleSpinBox_galvoRightAmplitude.setValue(self.ui.doubleSpinBox_galvoLeftAmplitude.value())
             self.ui.doubleSpinBox_galvoRightOffset.setValue(self.ui.doubleSpinBox_galvoLeftOffset.value())
             self.ui.doubleSpinBox_galvoRightOffset.setMinimum(self.ui.doubleSpinBox_galvoLeftOffset.minimum())
             self.ui.doubleSpinBox_galvoRightOffset.setMaximum(self.ui.doubleSpinBox_galvoLeftOffset.maximum())
+            # Propagate Ui changes to HwDAQ instance
+            self.hwdaq.galvo_right_amplitude = self.ui.doubleSpinBox_galvoRightAmplitude.value()
+            self.hwdaq.galvo_right_offset = self.ui.doubleSpinBox_galvoRightOffset.value()
+
 
     def updateUi_galvo_frequency(self):
-        pass
+        # Propagate Ui changes to HwDAQ instance
+        self.hwdaq.galvo_frequency = self.ui.doubleSpinBox_galvoFrequency.value()
+
 
     def updateUi_galvo_invert(self):
-        pass
+        # Propagate Ui changes to HwDAQ instance
+        self.hwdaq.galvo_inverted = self.ui.checkBox_galvoInvert.isChecked()
+
 
     def updateUi_etl_left_amplitude(self):
+        # Propagate Ui changes to HwDAQ instance
+        self.hwdaq.etl_left_amplitude = self.ui.doubleSpinBox_etlLeftAmplitude.value()
         # Adjust Min and Max to prevent amplitude + offset being <-5V or > 5V
         self.ui.doubleSpinBox_etlLeftOffset.setMinimum(-5 + self.ui.doubleSpinBox_etlLeftAmplitude.value())
         self.ui.doubleSpinBox_etlLeftOffset.setMaximum(5 - self.ui.doubleSpinBox_etlLeftAmplitude.value()) 
         if self.ui.checkBox_etlSync.isChecked():
+            # Set opposite etl amplitude and offset
             self.ui.doubleSpinBox_etlRightAmplitude.setValue(self.ui.doubleSpinBox_etlLeftAmplitude.value())
             self.ui.doubleSpinBox_etlRightOffset.setValue(self.ui.doubleSpinBox_etlLeftOffset.value())
+            # Adjust Min and Max to prevent amplitude + offset being <-5V or > 5V
             self.ui.doubleSpinBox_etlRightOffset.setMinimum(self.ui.doubleSpinBox_etlLeftOffset.minimum())
             self.ui.doubleSpinBox_etlRightOffset.setMaximum(self.ui.doubleSpinBox_etlLeftOffset.maximum())
+            # Propagate Ui changes to HwDAQ instance
+            self.hwdaq.etl_right_amplitude = self.ui.doubleSpinBox_etlRightAmplitude.value()
+            self.hwdaq.etl_right_offset = self.ui.doubleSpinBox_etlRightOffset.value()
+
 
     def updateUi_etl_right_amplitude(self):
+        # Propagate Ui changes to HwDAQ instance
+        self.hwdaq.etl_right_amplitude = self.ui.doubleSpinBox_etlRightAmplitude.value()
         # Adjust Min and Max to prevent amplitude + offset being <-5V or > 5V
         self.ui.doubleSpinBox_etlRightOffset.setMinimum(-5 + self.ui.doubleSpinBox_etlRightAmplitude.value())
         self.ui.doubleSpinBox_etlRightOffset.setMaximum(5 - self.ui.doubleSpinBox_etlRightAmplitude.value()) 
         if self.ui.checkBox_etlSync.isChecked():
+            # Set opposite etl amplitude and offset
             self.ui.doubleSpinBox_etlLeftAmplitude.setValue(self.ui.doubleSpinBox_etlRightAmplitude.value())
             self.ui.doubleSpinBox_etlLeftOffset.setValue(self.ui.doubleSpinBox_etlRightOffset.value())
+            # Adjust Min and Max to prevent amplitude + offset being <-5V or > 5V
             self.ui.doubleSpinBox_etlLeftOffset.setMinimum(self.ui.doubleSpinBox_etlRightOffset.minimum())
             self.ui.doubleSpinBox_etlLeftOffset.setMaximum(self.ui.doubleSpinBox_etlRightOffset.maximum()) 
+            # Propagate Ui changes to HwDAQ instance
+            self.hwdaq.etl_left_amplitude = self.ui.doubleSpinBox_etlLeftAmplitude.value()
+            self.hwdaq.etl_left_offset = self.ui.doubleSpinBox_etlLeftOffset.value()
+
 
     def updateUi_etl_left_offset(self):
+        # Propagate Ui changes to HwDAQ instance
+        self.hwdaq.etl_left_offset = self.ui.doubleSpinBox_etlLeftOffset.value()
         if self.ui.checkBox_etlSync.isChecked():
             self.ui.doubleSpinBox_etlRightAmplitude.setValue(self.ui.doubleSpinBox_etlLeftAmplitude.value())
             self.ui.doubleSpinBox_etlRightOffset.setValue(self.ui.doubleSpinBox_etlLeftOffset.value())
             self.ui.doubleSpinBox_etlRightOffset.setMinimum(self.ui.doubleSpinBox_etlLeftOffset.minimum())
             self.ui.doubleSpinBox_etlRightOffset.setMaximum(self.ui.doubleSpinBox_etlLeftOffset.maximum())
+            # Propagate Ui changes to HwDAQ instance
+            self.hwdaq.etl_right_amplitude = self.ui.doubleSpinBox_etlRightAmplitude.value()
+            self.hwdaq.etl_right_offset = self.ui.doubleSpinBox_etlRightOffset.value()
+
 
     def updateUi_etl_right_offset(self):
+        # Propagate Ui changes to HwDAQ instance
+        self.hwdaq.etl_right_offset = self.ui.doubleSpinBox_etlRightOffset.value()
         if self.ui.checkBox_etlSync.isChecked():
             self.ui.doubleSpinBox_etlLeftAmplitude.setValue(self.ui.doubleSpinBox_etlRightAmplitude.value())
             self.ui.doubleSpinBox_etlLeftOffset.setValue(self.ui.doubleSpinBox_etlRightOffset.value())
             self.ui.doubleSpinBox_etlLeftOffset.setMinimum(self.ui.doubleSpinBox_etlRightOffset.minimum())
             self.ui.doubleSpinBox_etlLeftOffset.setMaximum(self.ui.doubleSpinBox_etlRightOffset.maximum()) 
+            # Propagate Ui changes to HwDAQ instance
+            self.hwdaq.etl_left_amplitude = self.ui.doubleSpinBox_etlLeftAmplitude.value()
+            self.hwdaq.etl_left_offset = self.ui.doubleSpinBox_etlLeftOffset.value()
+
 
     def updateUi_etl_sync(self):
         if self.ui.checkBox_etlSync.isChecked():
@@ -1093,21 +1159,32 @@ class Controller_MainWindow(QMainWindow):
             self.ui.doubleSpinBox_etlRightOffset.setValue(self.ui.doubleSpinBox_etlLeftOffset.value())
             self.ui.doubleSpinBox_etlRightOffset.setMinimum(self.ui.doubleSpinBox_etlLeftOffset.minimum())
             self.ui.doubleSpinBox_etlRightOffset.setMaximum(self.ui.doubleSpinBox_etlLeftOffset.maximum())
+            # Propagate Ui changes to HwDAQ instance
+            self.hwdaq.etl_right_amplitude = self.ui.doubleSpinBox_etlRightAmplitude.value()
+            self.hwdaq.etl_right_offset = self.ui.doubleSpinBox_etlRightOffset.value()
+
 
     def updateUi_etl_steps(self):
-        pass
+        # Propagate Ui changes to HwDAQ instance
+        self.hwdaq.etl_steps = self.ui.doubleSpinBox_etlSteps.value()
+
 
     def updateUi_etl_activate(self):
-        pass
+        # Propagate Ui changes to HwDAQ instance
+        self.hwdaq.etl_activate = self.ui.checkBox_etlActivate.isChecked()
+
 
     def updateUi_laser_left_amplitude(self):
         pass
 
+
     def updateUi_laser_right_amplitude(self):
         pass
 
+
     def updateUi_param_sample_rate(self):
-        pass
+        # Propagate Ui changes to HwDAQ instance
+        self.hwdaq.sample_rate = self.ui.doubleSpinBox_paramSampleRate.value()
 
 
     def lasers_button(self):
@@ -1158,21 +1235,12 @@ class Controller_MainWindow(QMainWindow):
     def start_lasers(self):
         '''Starts the lasers at a certain voltage'''
         self.laser_on = True
-        self.lasers.create_tasks()
-        self.lasers.create_waveforms_on()
-        self.lasers.write_waveforms_to_tasks()
+        self.lasers.turn_on()
     
     def stop_lasers(self):
         '''Stops the lasers, puts their voltage to zero'''
         self.laser_on = False
-        
-        '''Writing voltage'''
-        self.lasers.create_waveforms_off()
-        self.lasers.write_waveforms_to_tasks()
-        
-        '''Ending task'''
-        self.lasers.stop_tasks()
-        self.lasers.delete_tasks()
+        self.lasers.turn_off()
         
         '''Deactivating lasers'''
         if self.both_lasers_activated:
@@ -1347,54 +1415,35 @@ class Controller_MainWindow(QMainWindow):
            parameters of the beams in the UI. There is no scan here, 
            beams only changes when parameters are changed. This the preferred 
            mode for beam calibration'''
-        
-        '''Setting tasks'''
-        self.preview_galvos_etls_task = nidaqmx.Task()
-        self.preview_galvos_etls_task.ao_channels.add_ao_voltage_chan(self._terminals["galvos_etls"])
-        
-        '''Setting the camera for acquisition'''
+       
+        # Setting the camera for self triggered acquisition
         self.camera.set_trigger_mode('auto_trigger')
+        self.camera.set_exposure_time(50)
         self.camera.arm_camera()
 
-        '''Starting lasers'''
-        self.start_lasers()
+#        # Starting lasers
+#        self.start_lasers()
 
         while self.preview_mode_started:
+            # Updating Galvo and ETL voltages
+            self.hwdaq.update_setpoint()
             
-            '''Setting data values'''
-            left_galvo_voltage = self.hwdaq.galvo_left_amplitude + self.hwdaq.galvo_left_offset
-            right_galvo_voltage = self.hwdaq.galvo_right_amplitude + self.hwdaq.galvo_right_offset
-            left_etl_voltage = self.hwdaq.etl_left_amplitude + self.hwdaq.etl_left_offset
-            right_etl_voltage = self.hwdaq.etl_right_amplitude + self.hwdaq.etl_right_offset
-            
-            '''Setting waveforms'''
-            preview_galvos_etls_waveforms = np.stack((np.array([right_galvo_voltage]),
-                                                      np.array([left_galvo_voltage]),
-                                                      np.array([left_etl_voltage]),
-                                                      np.array([right_etl_voltage])))
-            '''Writing the data'''
-            self.preview_galvos_etls_task.write(preview_galvos_etls_waveforms, auto_start = True)
-
-            '''Retrieving image from camera and putting it in its queue for display'''
+            # Recording a single image
             self.camera.start_recorder(1)
             self.camera.monitor_recorder(1)
             self.camera.stop_recorder()
             cam_images = self.camera.copy_recorder_images()
-            frame = cam_images[0]
             self.camera.delete_recorder()
 
-            frame = np.transpose(frame)
+            # Sending image to consumer for display
+            frame = np.transpose(cam_images[0])
             self.send_frame_to_consumer(frame)
 
-        '''Stopping lasers'''
-        self.stop_lasers()
+#        # Stopping lasers
+#        self.stop_lasers()
 
-        '''Stopping camera'''
+        # Stopping camera
         self.camera.disarm_camera()
-        
-        '''End tasks'''
-        self.preview_galvos_etls_task.stop()
-        self.preview_galvos_etls_task.close()
         
         '''Enabling modes after preview_mode'''
         self.update_buttons_modes(self.default_buttons)
@@ -1410,7 +1459,7 @@ class Controller_MainWindow(QMainWindow):
     
         reconstructed_frame = np.zeros((self.hwdaq.image_ysize, self.hwdaq.image_xsize), np.uint16)  #Initializing frame
 
-        for frame in range(int(self.number_of_steps)):
+        for frame in range(int(self.hwdaq.number_of_steps)):
             '''Uniformize frame intensities'''
             average = np.average(buffer[frame,0:100,:]) #Average the  first rows
             #print(str(frame)+' average:'+str(average))
@@ -1425,7 +1474,7 @@ class Controller_MainWindow(QMainWindow):
             '''Reconstruct frame'''
             first_column = int(frame * self.hwdaq.etl_step_size)
             next_first_column = int(first_column + self.hwdaq.etl_step_size)
-            if frame == int(self.number_of_steps-1):  #For the last column step (may be different than the others...)
+            if frame == int(self.hwdaq.number_of_steps-1):  #For the last column step (may be different than the others...)
                 reconstructed_frame[:,first_column:] = buffer[frame,:,first_column:]
             else:
                 reconstructed_frame[:,first_column:next_first_column] = buffer[frame,:,first_column:next_first_column]
@@ -1440,7 +1489,7 @@ class Controller_MainWindow(QMainWindow):
             column_buffer = int(self.hwdaq.etl_step_size*0.2)
             reconstructed_buffer = np.zeros((buffer.shape[0],int(self.hwdaq.image_ysize),int(self.hwdaq.etl_step_size + (2*column_buffer))), np.uint16)  #Initializing frame
     
-            for frame in range(int(self.number_of_steps)):
+            for frame in range(int(self.hwdaq.number_of_steps)):
                 '''Uniformize frame intensities'''
                 average = np.average(buffer[frame,0:100,:]) #Average the  first rows
                 if frame == 0:
@@ -1453,7 +1502,7 @@ class Controller_MainWindow(QMainWindow):
                 next_first_column = int(first_column + self.hwdaq.etl_step_size + (2*column_buffer))
                 if frame == 0:  #For the first column step
                     reconstructed_buffer[frame,:,column_buffer:] = buffer[frame,:,0:int(self.hwdaq.etl_step_size + column_buffer)]
-                elif frame == int(self.number_of_steps-1):  #For the last column step (may be different than the others...)
+                elif frame == int(self.hwdaq.number_of_steps-1):  #For the last column step (may be different than the others...)
                     last_column_step = int(self.hwdaq.image_xsize - first_column)
                     reconstructed_buffer[frame,:,0:last_column_step] = buffer[frame,:,first_column:]
                 else:
@@ -1467,7 +1516,7 @@ class Controller_MainWindow(QMainWindow):
         column_buffer = int(self.hwdaq.etl_step_size*0.2)
         weight_step = 1/(2*column_buffer)
         reconstructed_frame = np.zeros((self.hwdaq.image_ysize, self.hwdaq.image_xsize), np.uint16)  #Initializing frame
-        for frame in range(int(self.number_of_steps)):
+        for frame in range(int(self.hwdaq.number_of_steps)):
             first_center_column = int(frame * self.hwdaq.etl_step_size + column_buffer)
             last_center_column = int((frame+1) * self.hwdaq.etl_step_size - column_buffer)
             previous_last_center_column = int(frame * self.hwdaq.etl_step_size - column_buffer)
@@ -1481,7 +1530,7 @@ class Controller_MainWindow(QMainWindow):
                     buffer_weight = column * weight_step
                     last_buffer_weight = 1 - column * weight_step
                     reconstructed_frame[:,frame_column] = buffer_weight*cropped_buffer[frame,:,column] + last_buffer_weight*cropped_buffer[(frame-1),:,last_buffer_column]
-                if frame == int(self.number_of_steps-1):  #For the last column step (may be different than the others...)
+                if frame == int(self.hwdaq.number_of_steps-1):  #For the last column step (may be different than the others...)
                     last_column_step = int(self.hwdaq.image_xsize - first_center_column)
                     reconstructed_frame[:,first_center_column:] = cropped_buffer[frame,:,(2*column_buffer):(2*column_buffer)+last_column_step]
                 else:
@@ -1490,46 +1539,31 @@ class Controller_MainWindow(QMainWindow):
     
     def get_single_image(self):
         '''Generate ETLs, galvos & camera's ramps, get a single reconstructed image and display it'''
-        
-        '''Creating ETLs, galvos & camera's ramps and waveforms'''
-        self.hwdaq.create_tasks(acquisition='FINITE')
-        
-        if self.ui.checkBox_etlActivate.isChecked():
-            self.hwdaq.create_calibrated_etl_waveforms(self.etl_left_slope, self.etl_left_intercept, self.etl_right_slope, self.etl_right_intercept, activate = True)
-        else:
-            self.hwdaq.create_calibrated_etl_waveforms(self.etl_left_slope, self.etl_left_intercept, self.etl_right_slope, self.etl_right_intercept, activate = False)
-        
-        if self.ui.checkBox_galvoInvert.isChecked():
-            self.hwdaq.create_galvos_waveforms(case = 'TRAPEZE', invert = True)
-        else:
-            self.hwdaq.create_galvos_waveforms(case = 'TRAPEZE', invert = False)
 
-        self.hwdaq.create_digital_output_camera_waveform(case = 'STAIRS_FITTING')
-            
-        '''Writing waveform to task and running'''
-        self.hwdaq.write_waveforms_to_tasks()
-        self.number_of_steps = self.hwdaq.number_of_steps
+        # Creating acquisition tasks
+        self.hwdaq.create_scan()
 
-        # Start camera recorder session before we start the scan/trigger task
-        self.camera.start_recorder(self.number_of_steps)
-        self.hwdaq.start_tasks()
+        # Prime the camera recorder before we start the acquisition taks
+        # Number of frames to acquire is equal to hwdaq.number_of_steps
+        self.camera.start_recorder(self.hwdaq.number_of_steps)
+        self.hwdaq.start_scan()
 
-        # Monitor completion of scan/trigger task and camera recorder session
-        self.hwdaq.monitor_tasks()
-        self.camera.monitor_recorder(self.number_of_steps)
+        # Monitor completion of acquisition tasks and camera recorder
+        self.hwdaq.monitor_scan()
+        self.camera.monitor_recorder(self.hwdaq.number_of_steps)
 
-        # Stop task and recorder session
+        # Stop tasks and recorder
         self.camera.stop_recorder()
-        self.hwdaq.stop_tasks()                             
+        self.hwdaq.stop_scan()                             
 
         # Recover images from the recorder
+        # Images must be copied before we delete the recorder (next step)
         images = self.camera.copy_recorder_images()
         self.buffer = np.asarray(images)
 
-        # Delete task and recorder session
+        # Delete tasks and recorder
         self.camera.delete_recorder()
-#        self.ramps.stop_tasks()                             
-        self.hwdaq.delete_tasks()
+        self.hwdaq.delete_scan()
 
         # Frame reconstruction options
         if self.ui.checkBox_acqStitchFrames.isChecked():
@@ -1573,27 +1607,27 @@ class Controller_MainWindow(QMainWindow):
         live_mode_thread.start()
     
     def live_mode_thread(self):
-        '''This thread allows the execution of live_mode while modifying
+        '''This thread allows the execution of scan_mode while modifying
            parameters in the UI'''
 
         '''Moving the camera to focus'''
         ##self.move_camera_to_focus() 
 
-        '''Setting the camera for acquisition'''
+        # Setting the camera for external exposure control acquisition
         self.camera.set_trigger_mode('external_exposure')
         self.camera.arm_camera()
         
-        '''Starting lasers'''
+        # Starting lasers
         self.start_lasers()
         
         while self.live_mode_started:
-            '''Get single image'''
+            # Get single image
             self.get_single_image()
         
-        '''Stopping lasers'''
+        # Stopping lasers
         self.stop_lasers()
 
-        '''Stopping camera'''
+        # Stopping camera
         self.camera.disarm_camera()
 
         '''Enabling modes after live_mode'''
@@ -2246,12 +2280,11 @@ class Controller_MainWindow(QMainWindow):
                     
                     #For each image
                     for etl_image in range(self.number_of_etls_images):
-                        '''Retrieving image from camera and putting it in its queue
-                               for display'''
                         time.sleep(1)
+
+                        # Retrieving image from camera and putting it in its queue for display
                         frame = self.camera.acquire_single_image()*1.0
                         blurred_frame = ndimage.gaussian_filter(frame, sigma=20)
-                        
                         
                         '''Retrieving filename set by the user''' #debugging
                         if self.saving_allowed:

@@ -35,6 +35,8 @@ class Camera:
 
     # compounded methods
 
+    # Works but slow if repeated in a loop
+    # Setting up trigger_mode and exposure time takes time
     def acquire_single_image(self, exposure_time:int=100):
         '''docstring'''
         single_image = [0]
