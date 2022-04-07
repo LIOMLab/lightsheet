@@ -177,7 +177,7 @@ if __name__ == '__main__':
     parameters["Right Galvo Offset"] = 0.6  # In volts
     parameters["Galvo Frequency"] = 20      # In hertz
     parameters["Sample Rate"] = 40000       # In samples/seconds
-    parameters["ETL Step"] =  400           # In pixels
+    parameters["ETL Step"] =  500           # In pixels
     parameters["Columns"] = 2560            # In pixels
     parameters["Rows"] = 2160               # In pixels
     parameters["camera_delay"] = 10         # In %
@@ -263,7 +263,7 @@ if __name__ == '__main__':
                                         samples_per_step = samples_per_step, 
                                         offset = parameters["Left ETL Offset"], 
                                         direction = 'UP',
-                                        activate = False
+                                        activate = True
                                     )
 
 

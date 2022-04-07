@@ -19,8 +19,8 @@ class Lasers:
     # Default configurable settings
     _cfg_settings = {}
     _cfg_settings['Lasers Terminals'] = '/Dev7/ao0:1'
-    _cfg_settings['Laser Left Voltage'] = 0.0  # In Volts
-    _cfg_settings['Laser Right Voltage'] = 0.0  # In Volts
+    _cfg_settings['Laser Left Voltage'] = 0.0           # In Volts
+    _cfg_settings['Laser Right Voltage'] = 0.0          # In Volts
 
     def __init__(self):
         # Error status

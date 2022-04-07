@@ -156,14 +156,14 @@ class ZaberMotor:
         self.ask_id()
 
     def __motorIO__(self, cmd_no, cmd_param):
-        #Default return
+        # Default return
         reply_data = 0
 
-        #Generate 6-byte instruction from cmd_no and cmd_param
-        #Taking into account negative data (such as a relative motion)
+        # Generate 6-byte instruction from cmd_no and cmd_param
+        # Taking into account negative data (such as a relative motion)
         if cmd_param < 0:
             cmd_param = pow(256,4) + cmd_param
-        #Generates bytes 3 to 6
+        # Generates bytes 3 to 6
         byte_6 = int(cmd_param // pow(256,3))
         cmd_param = cmd_param % pow(256,3)
         byte_5 = int(cmd_param // pow(256,2))
@@ -171,7 +171,7 @@ class ZaberMotor:
         byte_4 = int(cmd_param // pow(256,1))
         cmd_param = cmd_param % pow(256,1)
         byte_3 = int(cmd_param // pow(256,0))
-        #Assemble instruction
+        # Assemble instruction
         instruction = []
         instruction.append(int(self.device_number))
         instruction.append(int(cmd_no))
@@ -181,27 +181,27 @@ class ZaberMotor:
         instruction.append(byte_6)
 
         try:
-            #Try to open a serial connection
+            # Try to open a serial connection
             motor = serial.Serial(port = self.port, baudrate = 9600, bytesize = serial.EIGHTBITS, parity = serial.PARITY_NONE, stopbits = serial.STOPBITS_ONE, timeout = 2)
         except serial.SerialException:
             self.error = 1
             self.error_message = "Serial port cannot be found or cannot be configured"
         else:
-            #We have an open serial port to the motor
-            #Clear I/O buffers
+            # We have an open serial port to the motor
+            # Clear I/O buffers
             motor.reset_input_buffer()
             motor.reset_output_buffer()
-            #Write instruction bytes to motor
+            # Write instruction bytes to motor
             motor.write(bytes(instruction))
-            #Read 6-bytes reply
+            # Read 6-bytes reply
             reply_bytes = motor.read(6)
-            #Close serial connection to motor
+            # Close serial connection to motor
             motor.close()
-            #Checks if reply is valid length
+            # Checks if reply is valid length
             if len(reply_bytes) == 6:
                 if reply_bytes[0] == self.device_number and reply_bytes[1] == cmd_no:
-                    #Reply has a valid length and fits expected format
-                    #Convert returned bytes into data value (handling negative values)
+                    # Reply has a valid length and fits expected format
+                    # Convert returned bytes into data value (handling negative values)
                     if reply_bytes[5] > 127:
                         reply_data = (pow(256,3) * reply_bytes[5] + pow(256,2) * reply_bytes[4] + pow(256,1) * reply_bytes[3] + pow(256,0) * reply_bytes[2]) - pow(256,4)
                     else:
@@ -222,9 +222,9 @@ class ZaberMotor:
         '''Returns the ID of the motor.
 
         Supported devices ID are:
-        6210 - T-LSM050A (vertical motor)
-        6320 - T-LSM100B (horizontal motor)
-        4152 - T-LSR150B (camera motor)
+        6210 -> T-LSM050A (vertical motor)
+        6320 -> T-LSM100B (horizontal motor)
+        4152 -> T-LSR150B (camera motor)
         '''
 
         cmd_no = 50
@@ -355,7 +355,7 @@ class ZaberMotor:
             self.__motorIO__(cmd_no, cmd_param)
 
 
-    def microsteps_to_position(self, microsteps, units):
+    def microsteps_to_position(self, microsteps, units:str='mm'):
         '''Converts microsteps into position
 
         Parameters:
@@ -382,7 +382,7 @@ class ZaberMotor:
         return position
 
 
-    def position_to_microsteps(self, position, units):
+    def position_to_microsteps(self, position, units:str='mm'):
         '''Converts position into microsteps
 
         Parameters:
