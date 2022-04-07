@@ -4,8 +4,10 @@ Created on May 16, 2019
 @authors: Pierre Girard-Collins & flesage
 '''
 
+import os
 import sys
 sys.path.append(".")
+#print(sys.path)
 
 import logging
 
@@ -16,7 +18,6 @@ from qdarkstyle.light.palette import LightPalette
 from qdarkstyle.dark.palette import DarkPalette
 
 from gui.controller import Controller_MainWindow
-
 
 logging.basicConfig(format="%(message)s", level=logging.INFO)
 

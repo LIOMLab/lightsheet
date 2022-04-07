@@ -195,13 +195,6 @@ class HwDAQ:
                                                             min_samples_per_delay = self.min_samples_per_delay)
 
 
-    def etl_enable(self):
-        self.etl_activate = True
-
-    def etl_disable(self):
-        self.etl_activate = False
-
-
     def update_setpoint(self):
         # Computing Galvo + ETL setpoints
         galvo_left_setpoint     = self.galvo_left_amplitude + self.galvo_left_offset
@@ -210,8 +203,8 @@ class HwDAQ:
         etl_right_setpoint      = self.etl_right_amplitude + self.etl_right_offset
         galvo_etl_setpoints     = np.stack((    np.array([galvo_right_setpoint]),
                                                 np.array([galvo_left_setpoint]),
-                                                np.array([etl_left_setpoint]),
-                                                np.array([etl_right_setpoint])   ))
+                                                np.array([etl_right_setpoint]),
+                                                np.array([etl_left_setpoint])   ))
         # Running task
         with nidaqmx.Task(new_task_name = 'galvo_etl_setpoint') as galvo_etl_task:
             galvo_etl_task.ao_channels.add_ao_voltage_chan(self.ao_terminals)
@@ -220,7 +213,7 @@ class HwDAQ:
 
     def create_scan(self):
         '''Creates Galvo + ETL scan task (AO) + Camera Exposure Control task (DO)'''
-
+        
         # Makes sure instance variables are consistant before proceeding with tasks creation & waveforms assignement
         self.compute_scan_waveforms()
 
@@ -238,8 +231,8 @@ class HwDAQ:
 
         # Write waveforms to AO and DO tasks
         galvo_etl_waveforms = np.stack((self.galvo_right_waveform, self.galvo_left_waveform, self.etl_right_waveform, self.etl_left_waveform))
-        self.galvo_etl_task.write(galvo_etl_waveforms)
         self.camera_task.write(self.camera_waveform, auto_start = False)
+        self.galvo_etl_task.write(galvo_etl_waveforms, auto_start = False)
 
     def start_scan(self):
         '''Start both AO and DO tasks'''
