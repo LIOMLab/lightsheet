@@ -15,6 +15,8 @@ from nidaqmx.constants import AcquisitionType, LineGrouping, Edge
 
 from src.config import cfg_read, cfg_write
 from src.waveforms import galvo_trapeze, calibrated_etl_stairs, camera_digital_output_signal
+from src.waveforms2 import galvo_scan, etl_staircase, camera_exposure
+
 
 class HwDAQ:
     '''Class for generating and sending AO ramps to ETLs and galvos
@@ -99,6 +101,102 @@ class HwDAQ:
         self.galvo_activate         = True
         self.etl_activate           = False
         self.compute_scan_waveforms()
+
+
+    def compute_scan_waveforms_new(self):
+        '''Compute Galvo + ETL scan ramps and Camera Exposure waveforms based on instance variables'''
+
+        # Hardware parameters
+        sample_clock_rate = self.sample_rate            # [samples/s]
+        reset_time_ratio = self.camera_delay_ratio      # [% of (exposure + readout) time]
+
+        # From PCO documentation for pco.edge 5.5 USB 3.0
+        camera_line_time = 16.40 * 1e-6                 # [s]
+        camera_ysize = self.image_ysize                 # number of lines
+        camera_xsize = self.image_xsize                 # number of columns
+        # With camera in Global Shutter Mode
+        # Single image acquisition requires readout of two frames (dark frame + exposed frame)
+        # Image readout time = 2 * Frame readout time (dark frame + exposed frame) + Jitter time
+        # Frame readout time = 0.5 * image_ysize * line_time
+        # Jitter time = line_time
+        # Image readout time is therefore: (camera_ysize + 1) * camera_line_time
+        camera_readout_time = (camera_ysize + 1) * camera_line_time
+        # Also in Global Shutter Mode with External Exposure Control
+        # These is a delay between exposure trigger signal and actual start of exposure (due to dark frame readout)
+        # Trigger-to-exposure time delay = Frame readout time + Jitter time 
+        # Trigger-to-exposure time delay is therefore: 0.5 (image_ysize + 1) * line_time
+        camera_trigger_to_exposure_time = 0.5 * (camera_ysize + 1) * camera_line_time
+
+        # User selected experiment parameters
+        #exposure_time = 0.025               # [s]
+        exposure_time = 0.5 / self.galvo_frequency
+        etl_steps = self.etl_steps
+
+        # Number of samples for image exposure time
+        samples_exposure = int(np.ceil(exposure_time * sample_clock_rate))
+        # Number of samples for image readout time
+        samples_readout = int(np.ceil(camera_readout_time * sample_clock_rate))
+        # Number of samples for rest time between images (reset camera, galvo flyback, etl focus update)
+        samples_reset = int(np.ceil((samples_exposure + samples_readout) * reset_time_ratio/100))
+        # Number of samples for one period (image acquisition samples + system reset samples)
+        samples_period = samples_exposure + samples_readout + samples_reset
+        # Number of samples for acquistion sequence (period * number of etl focus positions)
+        samples_total_scan = samples_period * etl_steps
+        # Number of samples for trigger to exposure delay
+        samples_trigger_to_exposure = int(np.ceil(camera_trigger_to_exposure_time * sample_clock_rate))
+
+
+        self.samples_exposure = samples_exposure
+        self.samples_readout = samples_readout
+        self.samples_reset = samples_reset
+        self.samples_period = samples_period
+        self.samples_total_scan = samples_total_scan
+        self.samples_trigger_to_exposure = samples_trigger_to_exposure
+        self.galvo_activated = self.galvo_activate
+        self.etl_activated = self.etl_activate
+
+        # Compute waveforms
+        self.camera_waveform = camera_exposure( samples_exposure = self.samples_exposure,
+                                                samples_readout = self.samples_readout,
+                                                samples_reset = self.samples_reset,
+                                                repeat = self.etl_steps,
+                                                samples_trigger_to_exposure = self.samples_trigger_to_exposure)
+
+        if self.galvo_activated:
+            self.galvo_left_waveform = galvo_scan(  samples_exposure = self.samples_exposure,
+                                                    samples_readout = self.samples_readout,
+                                                    samples_reset = self.samples_reset,
+                                                    repeat = self.etl_steps,
+                                                    amplitude = self.galvo_left_amplitude, 
+                                                    offset = self.galvo_left_offset, 
+                                                    inverted = self.galvo_inverted)
+            self.galvo_right_waveform = galvo_scan( samples_exposure = self.samples_exposure,
+                                                    samples_readout = self.samples_readout,
+                                                    samples_reset = self.samples_reset,
+                                                    repeat = self.etl_steps, 
+                                                    amplitude = self.galvo_right_amplitude, 
+                                                    offset = self.galvo_right_offset, 
+                                                    inverted = self.galvo_inverted)
+        else:
+            self.galvo_left_waveform = np.ones((self.samples_total_scan)) * self.galvo_left_offset
+            self.galvo_right_waveform = np.ones((self.samples_total_scan)) * self.galvo_right_offset
+
+        if self.etl_activated:
+            self.etl_left_waveform = etl_staircase( samples_total_scan = self.samples_total_scan,
+                                                    steps = self.etl_steps,
+                                                    floor = self.etl_left_offset,
+                                                    rise = self.etl_left_amplitude,
+                                                    direction = 'down')
+            self.etl_right_waveform = etl_staircase(samples_total_scan = self.samples_total_scan,
+                                                    steps = self.etl_steps,
+                                                    floor = self.etl_right_offset,
+                                                    rise = self.etl_right_amplitude,
+                                                    direction = 'up')
+        else:
+            self.etl_left_waveform = np.ones((self.samples_total_scan)) * self.etl_left_offset
+            self.etl_right_waveform = np.ones((self.samples_total_scan)) * self.etl_right_offset
+
+
 
     def compute_scan_waveforms(self):
         '''Compute Galvo + ETL scan ramps and Camera Exposure waveforms based on instance variables'''

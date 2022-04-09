@@ -4,7 +4,6 @@ Created on May 16, 2019
 @authors: Pierre Girard-Collins & flesage
 '''
 
-import os
 import sys
 sys.path.append(".")
 #print(sys.path)
