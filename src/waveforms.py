@@ -167,6 +167,12 @@ if __name__ == '__main__':
     from matplotlib import pyplot as plt
 
     parameters = {}
+    parameters["Galvo Frequency"] = 20      # In hertz
+    parameters["Sample Rate"] = 40000       # In samples/seconds
+    parameters["ETL Step"] =  500           # In pixels
+    parameters["camera_delay"] = 10         # In %
+    parameters["min_t_delay"] = 0.0354404   # In seconds
+    parameters["t_start_exp"] = 0.017712    # In seconds
     parameters["Left ETL Amplitude"] = 2    # In volts
     parameters["Right ETL Amplitude"] = 2   # In volts
     parameters["Left ETL Offset"] = 0       # In volts
@@ -175,14 +181,8 @@ if __name__ == '__main__':
     parameters["Right Galvo Amplitude"] = 2 # In volts
     parameters["Left Galvo Offset"] = 0.6   # In volts
     parameters["Right Galvo Offset"] = 0.6  # In volts
-    parameters["Galvo Frequency"] = 20      # In hertz
-    parameters["Sample Rate"] = 40000       # In samples/seconds
-    parameters["ETL Step"] =  500           # In pixels
     parameters["Columns"] = 2560            # In pixels
     parameters["Rows"] = 2160               # In pixels
-    parameters["camera_delay"] = 10         # In %
-    parameters["min_t_delay"] = 0.0354404   # In seconds
-    parameters["t_start_exp"] = 0.017712    # In seconds
 
     '''Default ETL relation values'''
     left_slope = -0.0008978829380085525
@@ -190,43 +190,62 @@ if __name__ == '__main__':
     right_slope = 0.000826220401525251
     right_intercept = 2.384849899181325
 
+    print(f"---------------------------------------------------------")
+    print(f"galvo frequency:", parameters["Galvo Frequency"])
+    print(f"sample rate:", parameters["Sample Rate"])
+    print(f"etl step:", parameters["ETL Step"])
+    print(f"camera delay:", parameters["camera_delay"])
+    print(f"t start exp:", parameters["t_start_exp"])
+
 
     #The half period is the exposure time, the time taken for a single upwards or downwards galvo scan
     t_half_period = 0.5*(1/parameters["Galvo Frequency"])
+    print(f"t_half_period: {t_half_period}")
 
     #Number of samples per exposure time
-    samples_per_half_period = np.ceil(t_half_period * parameters["Sample Rate"])
+    samples_per_half_period = int(np.ceil(t_half_period * parameters["Sample Rate"]))
+    print(f"samples_per_half_period: {samples_per_half_period}")
 
     #Number of samples per camera internal delay (delay for acquiring image, excluding exposure time)
-    min_samples_per_delay = np.ceil(parameters["min_t_delay"] * parameters["Sample Rate"])
+    min_samples_per_delay = int(np.ceil(parameters["min_t_delay"] * parameters["Sample Rate"]))
+    print(f"min_samples_per_delay: {min_samples_per_delay}")
 
     #Number of samples per image acquisition (including exposure time)
     min_samples_per_step = min_samples_per_delay + samples_per_half_period
+    print(f"min_samples_per_step: {min_samples_per_step}")
 
     #Number of samples added to each step to allow down time for the camera
     rest_samples_added = np.ceil(min_samples_per_step * parameters["camera_delay"]/100)
+    print(f"rest_samples_added: {rest_samples_added}")
 
     #Number of samples per step (including all delay)
     samples_per_step = min_samples_per_step + rest_samples_added
+    print(f"samples_per_step: {samples_per_step}")
 
     #Number of samples per total delay (internal + added), between each camera exposition
     samples_per_delay = samples_per_step - samples_per_half_period
+    print(f"samples_per_delay: {samples_per_delay}")
 
     #Number of samples per half total delay
     samples_per_half_delay = np.floor(samples_per_delay/2)
+    print(f"samples_per_half_delay: {samples_per_half_delay}")
 
     #Number of focal length values needed for each ETL to achieve a full scan
-    number_of_steps = np.ceil(parameters["Columns"] / parameters["ETL Step"])
+    number_of_steps = int(np.ceil(parameters["Columns"] / parameters["ETL Step"]))
+    print(f"number_of_steps: {number_of_steps}")
 
     #Total number of samples for acquisition
     number_of_samples = number_of_steps * samples_per_step
     samples = int(number_of_samples)
+    print(f"number_of_samples: {number_of_samples}")
+    print(f"samples: {samples}")
 
     #Total time for acquisition
     sweeptime = number_of_samples / parameters["Sample Rate"]
+    print(f"sweeptime: {sweeptime}")
 
 
-    cam_sig = camera_digital_output_signal(  samples_per_half_period = samples_per_half_period, 
+    cam_sig = camera_digital_output_signal( samples_per_half_period = samples_per_half_period, 
                                             t_start_exp = parameters["t_start_exp"], 
                                             samplerate = parameters["Sample Rate"], 
                                             samples_per_half_delay = samples_per_half_delay, 
