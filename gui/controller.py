@@ -276,7 +276,7 @@ class Controller_MainWindow(QMainWindow):
         self.ui.doubleSpinBox_etlRightOffset.valueChanged.connect(self.updateUi_etl_right_offset)
         self.ui.checkBox_etlSync.stateChanged.connect(self.updateUi_etl_sync)
         self.ui.doubleSpinBox_etlSteps.valueChanged.connect(self.updateUi_etl_steps)
-        self.ui.checkBox_etlActivate.stateChanged.connect(self.updateUi_etl_activate)
+        self.ui.checkBox_etlActivate.stateChanged.connect(self.updateUi_etl_activated)
 
         # Connection for galvo parameters change
         self.ui.doubleSpinBox_galvoLeftAmplitude.valueChanged.connect(self.updateUi_galvo_left_amplitude)
@@ -284,7 +284,7 @@ class Controller_MainWindow(QMainWindow):
         self.ui.doubleSpinBox_galvoLeftOffset.valueChanged.connect(self.updateUi_galvo_left_offset)
         self.ui.doubleSpinBox_galvoRightOffset.valueChanged.connect(self.updateUi_galvo_right_offset)
         self.ui.checkBox_galvoSync.stateChanged.connect(self.updateUi_galvo_sync)
-        self.ui.doubleSpinBox_galvoFrequency.valueChanged.connect(self.updateUi_galvo_frequency)
+        self.ui.doubleSpinBox_galvoFrequency.valueChanged.connect(self.updateUi_galvo_frequency) #FIXME
         self.ui.checkBox_galvoInvert.stateChanged.connect(self.updateUi_galvo_invert)
 
         # Connection for laser parameters change
@@ -983,7 +983,7 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_initial_hardware_state(self):
         # HwDAQ
         self.ui.doubleSpinBox_paramSampleRate.setValue(self.hwdaq.sample_rate)
-        self.ui.doubleSpinBox_galvoFrequency.setValue(self.hwdaq.galvo_frequency)
+        self.ui.doubleSpinBox_galvoFrequency.setValue(self.hwdaq.galvo_frequency) #FIXME
         self.ui.doubleSpinBox_galvoLeftAmplitude.setValue(self.hwdaq.galvo_left_amplitude)
         self.ui.doubleSpinBox_galvoRightAmplitude.setValue(self.hwdaq.galvo_right_amplitude)
         self.ui.doubleSpinBox_galvoLeftOffset.setValue(self.hwdaq.galvo_left_offset)
@@ -1068,6 +1068,7 @@ class Controller_MainWindow(QMainWindow):
             self.hwdaq.galvo_right_amplitude = self.ui.doubleSpinBox_galvoRightAmplitude.value()
             self.hwdaq.galvo_right_offset = self.ui.doubleSpinBox_galvoRightOffset.value()
 
+    #FIXME
     def updateUi_galvo_frequency(self):
         # Propagate Ui changes to HwDAQ instance
         self.hwdaq.galvo_frequency = self.ui.doubleSpinBox_galvoFrequency.value()
@@ -1148,9 +1149,9 @@ class Controller_MainWindow(QMainWindow):
         # Propagate Ui changes to HwDAQ instance
         self.hwdaq.etl_steps = self.ui.doubleSpinBox_etlSteps.value()
 
-    def updateUi_etl_activate(self):
+    def updateUi_etl_activated(self):
         # Propagate Ui changes to HwDAQ instance
-        self.hwdaq.etl_activate = self.ui.checkBox_etlActivate.isChecked()
+        self.hwdaq.etl_activated = self.ui.checkBox_etlActivate.isChecked()
 
     def updateUi_laser_left_amplitude(self):
         # Propagate Ui changes to HwDAQ instance
@@ -1318,7 +1319,7 @@ class Controller_MainWindow(QMainWindow):
         self.standby_task.write(standby_waveform, auto_start = True)
         
         # Disable some buttons while in standby
-        self.update_buttons_modes([self.pushButton_acqStartStandbyMode])
+        self.update_buttons_modes([self.ui.pushButton_acqStartStandbyMode])
         
         # Set flag and report
         self.standby = True
@@ -1431,58 +1432,57 @@ class Controller_MainWindow(QMainWindow):
         self.sig_progress_update.emit(0)
     
     
-    def reconstruct_frame(self,buffer):
+    def reconstruct_frame(self, buffer):
         '''Reconstructs a frame from multiple frames'''
     
-        reconstructed_frame = np.zeros((self.hwdaq.image_ysize, self.hwdaq.image_xsize), np.uint16)  #Initializing frame
+        #Initializing empty frame
+        reconstructed_frame = np.zeros((self.hwdaq.camera_ysize, self.hwdaq.camera_xsize), np.uint16)  
+        tile_width          = self.hwdaq.etl_steps_xsize
 
-        for frame in range(int(self.hwdaq.number_of_steps)):
-            '''Uniformize frame intensities'''
-            average = np.average(buffer[frame,0:100,:]) #Average the  first rows
-            #print(str(frame)+' average:'+str(average))
-            #print(buffer[1,:,:] == buffer[3,:,:])
-            if frame == 0:
-                reference_average = average
-                #print('reference_average:'+str(reference_average))
-            else:
-                average_ratio = reference_average/average
-                #print('average_ratio:'+str(average_ratio))
-                # NOTE - disable intensity normalization
-                # buffer[frame,:,:] = buffer[frame,:,:] * average_ratio
-            '''Reconstruct frame'''
-            first_column = int(frame * self.hwdaq.etl_step_size)
-            next_first_column = int(first_column + self.hwdaq.etl_step_size)
-            if frame == int(self.hwdaq.number_of_steps-1):  #For the last column step (may be different than the others...)
+        for frame in range(self.hwdaq.etl_steps):
+            # # Uniformize frame intensities
+            # average = np.average(buffer[frame,0:100,:]) #Average the  first rows
+            # if frame == 0:
+            #     reference_average = average
+            # else:
+            #     average_ratio = reference_average/average
+            #     #print('average_ratio:'+str(average_ratio))
+            #     # NOTE - disable intensity normalization
+            #     # buffer[frame,:,:] = buffer[frame,:,:] * average_ratio
+
+            # Reconstruct frame
+            first_column = frame * tile_width
+            next_first_column = first_column + tile_width
+            if frame == self.hwdaq.etl_steps-1:  #For the last column step (may be different than the others...)
                 reconstructed_frame[:,first_column:] = buffer[frame,:,first_column:]
             else:
                 reconstructed_frame[:,first_column:next_first_column] = buffer[frame,:,first_column:next_first_column]
-        
         return reconstructed_frame
     
-    def crop_buffer(self,buffer):
+    def crop_buffer(self, buffer):
         '''Crops each frame of a buffer for a frame reconstruction'''
         if buffer.shape[0] == 1:
             reconstructed_buffer = buffer
         else:
-            column_buffer = int(self.hwdaq.etl_step_size*0.2)
-            reconstructed_buffer = np.zeros((buffer.shape[0],int(self.hwdaq.image_ysize),int(self.hwdaq.etl_step_size + (2*column_buffer))), np.uint16)  #Initializing frame
+            column_buffer = int(self.hwdaq.etl_steps_xsize*0.2)
+            reconstructed_buffer = np.zeros((buffer.shape[0],int(self.hwdaq.camera_ysize),int(self.hwdaq.etl_steps_xsize + (2*column_buffer))), np.uint16)  #Initializing frame
     
-            for frame in range(int(self.hwdaq.number_of_steps)):
-                '''Uniformize frame intensities'''
-                average = np.average(buffer[frame,0:100,:]) #Average the  first rows
-                if frame == 0:
-                    reference_average = average
-                else:
-                    average_ratio = reference_average/average
-                    # NOTE - disable intensity normalization
-                    # buffer[frame,:,:] = buffer[frame,:,:] * average_ratio
+            for frame in range(int(self.hwdaq.etl_steps)):
+                # # Uniformize frame intensities
+                # average = np.average(buffer[frame,0:100,:]) #Average the  first rows
+                # if frame == 0:
+                #     reference_average = average
+                # else:
+                #     average_ratio = reference_average/average
+                #     # NOTE - disable intensity normalization
+                #     # buffer[frame,:,:] = buffer[frame,:,:] * average_ratio
                 '''Crop buffer'''
-                first_column = int(frame * self.hwdaq.etl_step_size - column_buffer)
-                next_first_column = int(first_column + self.hwdaq.etl_step_size + (2*column_buffer))
+                first_column = int(frame * self.hwdaq.etl_steps_xsize - column_buffer)
+                next_first_column = int(first_column + self.hwdaq.etl_steps_xsize + (2*column_buffer))
                 if frame == 0:  #For the first column step
-                    reconstructed_buffer[frame,:,column_buffer:] = buffer[frame,:,0:int(self.hwdaq.etl_step_size + column_buffer)]
-                elif frame == int(self.hwdaq.number_of_steps-1):  #For the last column step (may be different than the others...)
-                    last_column_step = int(self.hwdaq.image_xsize - first_column)
+                    reconstructed_buffer[frame,:,column_buffer:] = buffer[frame,:,0:int(self.hwdaq.etl_steps_xsize + column_buffer)]
+                elif frame == int(self.hwdaq.etl_steps-1):  #For the last column step (may be different than the others...)
+                    last_column_step = int(self.hwdaq.camera_xsize - first_column)
                     reconstructed_buffer[frame,:,0:last_column_step] = buffer[frame,:,first_column:]
                 else:
                     reconstructed_buffer[frame,:,:] = buffer[frame,:,first_column:next_first_column]
@@ -1492,28 +1492,28 @@ class Controller_MainWindow(QMainWindow):
     def reconstruct_frame_from_cropped_buffer(self,cropped_buffer):
         '''Reconstructs a frame from multiple cropped frames (does some linear image stitching)'''
         
-        column_buffer = int(self.hwdaq.etl_step_size*0.2)
+        column_buffer = int(self.hwdaq.etl_steps_xsize*0.2)
         weight_step = 1/(2*column_buffer)
-        reconstructed_frame = np.zeros((self.hwdaq.image_ysize, self.hwdaq.image_xsize), np.uint16)  #Initializing frame
-        for frame in range(int(self.hwdaq.number_of_steps)):
-            first_center_column = int(frame * self.hwdaq.etl_step_size + column_buffer)
-            last_center_column = int((frame+1) * self.hwdaq.etl_step_size - column_buffer)
-            previous_last_center_column = int(frame * self.hwdaq.etl_step_size - column_buffer)
+        reconstructed_frame = np.zeros((self.hwdaq.camera_ysize, self.hwdaq.camera_xsize), np.uint16)  #Initializing frame
+        for frame in range(int(self.hwdaq.etl_steps)):
+            first_center_column = int(frame * self.hwdaq.etl_steps_xsize + column_buffer)
+            last_center_column = int((frame+1) * self.hwdaq.etl_steps_xsize - column_buffer)
+            previous_last_center_column = int(frame * self.hwdaq.etl_steps_xsize - column_buffer)
             
             if frame == 0:  #For the first column step
-                reconstructed_frame[:,0:last_center_column] = cropped_buffer[frame,:,column_buffer:self.hwdaq.etl_step_size]
+                reconstructed_frame[:,0:last_center_column] = cropped_buffer[frame,:,column_buffer:self.hwdaq.etl_steps_xsize]
             else:
                 for column in range(2*column_buffer):
                     frame_column = column + previous_last_center_column
-                    last_buffer_column = column + self.hwdaq.etl_step_size
+                    last_buffer_column = column + self.hwdaq.etl_steps_xsize
                     buffer_weight = column * weight_step
                     last_buffer_weight = 1 - column * weight_step
                     reconstructed_frame[:,frame_column] = buffer_weight*cropped_buffer[frame,:,column] + last_buffer_weight*cropped_buffer[(frame-1),:,last_buffer_column]
-                if frame == int(self.hwdaq.number_of_steps-1):  #For the last column step (may be different than the others...)
-                    last_column_step = int(self.hwdaq.image_xsize - first_center_column)
+                if frame == int(self.hwdaq.etl_steps-1):  #For the last column step (may be different than the others...)
+                    last_column_step = int(self.hwdaq.camera_xsize - first_center_column)
                     reconstructed_frame[:,first_center_column:] = cropped_buffer[frame,:,(2*column_buffer):(2*column_buffer)+last_column_step]
                 else:
-                    reconstructed_frame[:,first_center_column:last_center_column] = cropped_buffer[frame,:,(2*column_buffer):self.hwdaq.etl_step_size]
+                    reconstructed_frame[:,first_center_column:last_center_column] = cropped_buffer[frame,:,(2*column_buffer):self.hwdaq.etl_steps_xsize]
         return reconstructed_frame
     
     def get_single_image(self):
@@ -1524,12 +1524,12 @@ class Controller_MainWindow(QMainWindow):
 
         # Prime the camera recorder before we start the acquisition taks
         # Number of frames to acquire is equal to hwdaq.number_of_steps
-        self.camera.start_recorder(self.hwdaq.number_of_steps)
+        self.camera.start_recorder(self.hwdaq.etl_steps)
         self.hwdaq.start_scan()
 
         # Monitor completion of acquisition tasks and camera recorder
         self.hwdaq.monitor_scan()
-        self.camera.monitor_recorder(self.hwdaq.number_of_steps)
+        self.camera.monitor_recorder(self.hwdaq.etl_steps)
 
         # Stop tasks and recorder
         self.camera.stop_recorder()
