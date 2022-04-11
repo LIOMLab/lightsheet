@@ -103,7 +103,7 @@ if __name__ == '__main__':
     camera_xsize = 2560                 # number of columns
 
     # User selected experiment parameters
-    exposure_time = 0.100               # [s]
+    exposure_time = 0.025               # [s]
     reset_delay_ratio = 10               # [% of image time]
     etl_steps = 6
     etl_floor = 2
@@ -151,6 +151,8 @@ if __name__ == '__main__':
     camera_function = camera_exposure(samples_exposure, samples_readout, samples_reset, etl_steps, samples_trigger_to_exposure)
     galvo_function = galvo_scan(samples_exposure, samples_readout, samples_reset, etl_steps, galvo_amplitude, galvo_offset, galvo_inverted)
     etl_function = etl_staircase(samples_total_scan, etl_steps, etl_floor, etl_rise, etl_direction)
+    print(samples_dead)
+    print(samples_dead/sample_clock_rate)
 
     time_axis = np.arange(0, camera_function.size)
     plt.plot(time_axis, camera_function)
