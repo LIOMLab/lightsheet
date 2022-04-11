@@ -8,7 +8,7 @@ import sys
 sys.path.append(".")
 #print(sys.path)
 
-import logging
+#import logging
 
 from PyQt5.QtWidgets import QApplication
 
@@ -18,7 +18,7 @@ from qdarkstyle.dark.palette import DarkPalette
 
 from gui.controller import Controller_MainWindow
 
-logging.basicConfig(format="%(message)s", level=logging.INFO)
+#logging.basicConfig(format="%(message)s", level=logging.INFO)
 
 
 def set_app_stylesheet(stylesheet_code):

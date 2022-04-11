@@ -23,23 +23,23 @@ class HwDAQ:
 
     # Default configurable settings
     _cfg_settings = {}
-    _cfg_settings['AO Terminal'] = '/Dev1/ao0:3'            # DAQ board AO terminals for Galvo + ETL scan ramps
+    _cfg_settings['AO Terminals'] = '/Dev1/ao0:3'           # DAQ board AO terminals for Galvo + ETL scan ramps
     _cfg_settings['DO Terminals'] = '/Dev1/port0/line1'     # DAQ board DO terminals for Camera Exposure Control
     _cfg_settings['Sample Rate'] = '40000'                  # In samples/second
     _cfg_settings['Reset Delay'] = '10'                     # In % of acquisition time (exposure + readout time)
     _cfg_settings['Camera Line Readout'] = '16.40'          # In microseconds
     _cfg_settings['Camera XSize'] = '2560'                  # In pixels
     _cfg_settings['Camera YSize'] = '2160'                  # In pixels
-    _cfg_settings['Galvo Left Amplitude'] = '2.0'           # In Volts
-    _cfg_settings['Galvo Left Offset'] = '0.5'              # In Volts
-    _cfg_settings['Galvo Right Amplitude'] = '2.0'          # In Volts
-    _cfg_settings['Galvo Right Offset'] = '0.5'             # In Volts
+    _cfg_settings['Galvo Left Amplitude'] = '2.0'           # In volts
+    _cfg_settings['Galvo Left Offset'] = '0.5'              # In volts
+    _cfg_settings['Galvo Right Amplitude'] = '2.0'          # In volts
+    _cfg_settings['Galvo Right Offset'] = '0.5'             # In volts
     _cfg_settings['Galvo Inverted'] = 'False'               # Boolean
     _cfg_settings['ETL Steps'] = '5'                        # Number of focus regions over FOV
-    _cfg_settings['ETL Left Amplitude'] = '2.0'             # In Volts
-    _cfg_settings['ETL Right Amplitude'] = '2.0'            # In Volts
-    _cfg_settings['ETL Left Offset'] = '0.5'                # In Volts
-    _cfg_settings['ETL Right Offset'] = '0.5'               # In Volts
+    _cfg_settings['ETL Left Amplitude'] = '2.0'             # In volts
+    _cfg_settings['ETL Right Amplitude'] = '2.0'            # In volts
+    _cfg_settings['ETL Left Offset'] = '0.5'                # In volts
+    _cfg_settings['ETL Right Offset'] = '0.5'               # In volts
 
     def __init__(self):
         # Error status
@@ -56,19 +56,18 @@ class HwDAQ:
         self.etl_right_waveform = None
         self.camera_waveform = None
 
-
         # Set configurable settings to default values
         self.cfg_settings = copy.deepcopy(self._cfg_settings)
 
         # Update configurable settings with values found in config file
         self.cfg_settings = cfg_read('config.ini', 'HwDAQ', self.cfg_settings)
 
-        # Assign configurable settings to instance variables
+        # Assign configurable initial settings to instance variables
         self.ao_terminals           = str(self.cfg_settings['AO Terminals'])
         self.do_terminals           = str(self.cfg_settings['DO Terminals'])
         self.sample_rate            = int(self.cfg_settings['Sample Rate'])
         self.reset_delay            = float(self.cfg_settings['Reset Delay'])
-        self.camera_line_time       = float(self.cfg_settings['Camera Line Readout'])
+        self.camera_line_time       = float(self.cfg_settings['Camera Line Readout']) * 1e-6
         self.camera_xsize           = int(self.cfg_settings['Camera XSize'])
         self.camera_ysize           = int(self.cfg_settings['Camera YSize'])
         self.galvo_left_amplitude   = float(self.cfg_settings['Galvo Left Amplitude'])
@@ -82,34 +81,39 @@ class HwDAQ:
         self.etl_right_amplitude    = float(self.cfg_settings['ETL Right Amplitude'])
         self.etl_right_offset       = float(self.cfg_settings['ETL Right Offset'])
 
-        # Initial hardcoded values
+        # Non-configurable initial settings
         self.do_start_trigger       = self.ao_terminals.rsplit('/',1)[0] + '/ao/StartTrigger'
-        self.exposure_time          = 0.025     # in seconds
-        self.etl_steps_xsize        = int(self.camera_xsize / self.etl_steps)
+        self.exposure_time          = 0.050     # in seconds
         self.galvo_activated        = True      # boolean
         self.etl_activated          = False     # boolean
 
+        #self.compute_scan_waveforms()
+
+
+    def compute_scan_waveforms(self):
+        '''Compute Galvo + ETL scan ramps and Camera Exposure waveforms based on instance variables'''
+
         # From PCO documentation for pco.edge 5.5 USB 3.0
-        # Line readout time = 16.40 us
         # In Global Shutter Mode, image acquisition requires readout of two frames (dark + exposed frame)
         # Image readout time = 2 * Frame readout time (dark frame + exposed frame) + Jitter time
         # with,
-        #   Frame readout time = 0.5 * nbr_of_line * line_time
-        #   Jitter time = line_time
+        #   nbr_lines = Number of sensor lines to read = 2160
+        #   line_time = Line readout time = 16.40 us
+        # Frame readout time = 0.5 * nbr_of_line * line_time
+        # Jitter time = line_time
         # Image readout time = (nbr_of_lines + 1) * line_time
         self.camera_readout_time = (self.camera_ysize + 1) * self.camera_line_time
 
         # In Global Shutter Mode with External Exposure Control
         # A delay exist between exposure trigger signal and actual start of exposure (due to dark frame readout)
         # Trigger-to-exposure time delay = Frame readout time + Jitter time 
-        # Trigger-to-exposure time delay = 0.5 nbr_of_line * line_time + line_time
+        # with,
+        #   nbr_lines = Number of sensor lines to read = 2160
+        #   line_time = Line readout time = 16.40 us
+        # Frame readout time = 0.5 * nbr_of_line * line_time
+        # Jitter time = line_time
+        # Trigger-to-exposure time delay = (0.5 nbr_of_line + 1) * line_time
         self.camera_trigger_to_exposure_time = (0.5 * self.camera_ysize + 1) * self.camera_line_time
-
-        self.compute_scan_waveforms()
-
-
-    def compute_scan_waveforms(self):
-        '''Compute Galvo + ETL scan ramps and Camera Exposure waveforms based on instance variables'''
 
         # Number of samples for image exposure time
         self.samples_exposure = int(np.ceil(self.exposure_time * self.sample_rate))
@@ -172,10 +176,11 @@ class HwDAQ:
         galvo_right_setpoint    = self.galvo_right_amplitude + self.galvo_right_offset
         etl_left_setpoint       = self.etl_left_amplitude + self.etl_left_offset
         etl_right_setpoint      = self.etl_right_amplitude + self.etl_right_offset
+        # FIXME (HARDWARE) - LOOKS LIKE ETL OR GALVO ARE REVERSED (LEFT VS RIGHT)
         galvo_etl_setpoints     = np.stack((    np.array([galvo_right_setpoint]),
                                                 np.array([galvo_left_setpoint]),
-                                                np.array([etl_right_setpoint]),
-                                                np.array([etl_left_setpoint])   ))
+                                                np.array([etl_left_setpoint]),
+                                                np.array([etl_right_setpoint])   ))
         # Running task
         with nidaqmx.Task(new_task_name = 'galvo_etl_setpoint') as galvo_etl_task:
             galvo_etl_task.ao_channels.add_ao_voltage_chan(self.ao_terminals)
@@ -201,7 +206,8 @@ class HwDAQ:
         self.camera_task.triggers.start_trigger.cfg_dig_edge_start_trig(self.do_start_trigger, trigger_edge = Edge.RISING)
 
         # Write waveforms to AO and DO tasks
-        galvo_etl_waveforms = np.stack((self.galvo_right_waveform, self.galvo_left_waveform, self.etl_right_waveform, self.etl_left_waveform))
+        # FIXME (HARDWARE) - LOOKS LIKE ETL OR GALVO ARE REVERSED (LEFT VS RIGHT)
+        galvo_etl_waveforms = np.stack((self.galvo_right_waveform, self.galvo_left_waveform, self.etl_left_waveform, self.etl_right_waveform))
         self.camera_task.write(self.camera_waveform, auto_start = False)
         self.galvo_etl_task.write(galvo_etl_waveforms, auto_start = False)
 

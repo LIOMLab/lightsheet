@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1459</width>
+    <width>1467</width>
     <height>912</height>
    </rect>
   </property>
@@ -20,8 +20,8 @@
    <string>MesoSPIM Controller</string>
   </property>
   <property name="windowIcon">
-   <iconset>
-    <normaloff>liom_logo.png</normaloff>liom_logo.png</iconset>
+   <iconset resource="ui_controller.qrc">
+    <normaloff>:/images/resources/liom_logo.png</normaloff>:/images/resources/liom_logo.png</iconset>
   </property>
   <property name="styleSheet">
    <string notr="true"/>
@@ -1158,9 +1158,9 @@
             </item>
            </layout>
           </widget>
-          <widget class="QWidget" name="tabParameters">
+          <widget class="QWidget" name="tabSettings">
            <attribute name="title">
-            <string>Parameters</string>
+            <string>Settings</string>
            </attribute>
            <layout class="QVBoxLayout" name="verticalLayout_36">
             <item>
@@ -1207,7 +1207,7 @@
                 <item row="0" column="1">
                  <widget class="QGroupBox" name="groupBox_11">
                   <property name="title">
-                   <string>Galvometers Parameters</string>
+                   <string>Galvanometers Settings</string>
                   </property>
                   <layout class="QVBoxLayout" name="verticalLayout_39">
                    <item>
@@ -1431,53 +1431,58 @@
                        <verstretch>0</verstretch>
                       </sizepolicy>
                      </property>
+                     <property name="minimumSize">
+                      <size>
+                       <width>0</width>
+                       <height>20</height>
+                      </size>
+                     </property>
+                     <property name="maximumSize">
+                      <size>
+                       <width>16777215</width>
+                       <height>20</height>
+                      </size>
+                     </property>
+                     <property name="layoutDirection">
+                      <enum>Qt::LeftToRight</enum>
+                     </property>
                      <property name="text">
-                      <string>Sync galvometers parameters</string>
+                      <string>Sync Left/Right</string>
                      </property>
                     </widget>
                    </item>
                    <item>
-                    <layout class="QFormLayout" name="formLayout_12">
-                     <item row="0" column="0">
-                      <widget class="QLabel" name="label_71">
-                       <property name="text">
-                        <string>Frequency:</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item row="0" column="1">
-                      <widget class="QDoubleSpinBox" name="doubleSpinBox_galvoFrequency">
+                    <layout class="QHBoxLayout" name="horizontalLayout_4">
+                     <item>
+                      <widget class="QCheckBox" name="checkBox_galvoActivate">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
                        </property>
-                       <property name="suffix">
-                        <string> Hz</string>
+                       <property name="text">
+                        <string>Activate Galvanometers</string>
                        </property>
-                       <property name="minimum">
-                        <double>5.000000000000000</double>
+                       <property name="checked">
+                        <bool>true</bool>
                        </property>
-                       <property name="maximum">
-                        <double>120.000000000000000</double>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QCheckBox" name="checkBox_galvoInvert">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
+                       <property name="text">
+                        <string>Invert scan</string>
                        </property>
                       </widget>
                      </item>
                     </layout>
-                   </item>
-                   <item>
-                    <widget class="QCheckBox" name="checkBox_galvoInvert">
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="text">
-                      <string>Invert Galvos waveform</string>
-                     </property>
-                    </widget>
                    </item>
                   </layout>
                  </widget>
@@ -1485,7 +1490,7 @@
                 <item row="0" column="0">
                  <widget class="QGroupBox" name="groupBox_13">
                   <property name="title">
-                   <string>ETLs Parameters</string>
+                   <string>ETLs Settings</string>
                   </property>
                   <layout class="QVBoxLayout" name="verticalLayout_45">
                    <item>
@@ -1724,13 +1729,41 @@
                        <verstretch>0</verstretch>
                       </sizepolicy>
                      </property>
+                     <property name="minimumSize">
+                      <size>
+                       <width>0</width>
+                       <height>20</height>
+                      </size>
+                     </property>
+                     <property name="maximumSize">
+                      <size>
+                       <width>16777215</width>
+                       <height>20</height>
+                      </size>
+                     </property>
+                     <property name="layoutDirection">
+                      <enum>Qt::LeftToRight</enum>
+                     </property>
                      <property name="text">
-                      <string>Sync ETLs parameters</string>
+                      <string>Sync Left/Right</string>
                      </property>
                     </widget>
                    </item>
                    <item>
                     <layout class="QHBoxLayout" name="horizontalLayout_70">
+                     <item>
+                      <widget class="QCheckBox" name="checkBox_etlActivate">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
+                       <property name="text">
+                        <string>Activate ETLs</string>
+                       </property>
+                      </widget>
+                     </item>
                      <item>
                       <widget class="QLabel" name="label_35">
                        <property name="sizePolicy">
@@ -1746,6 +1779,12 @@
                      </item>
                      <item>
                       <widget class="QDoubleSpinBox" name="doubleSpinBox_etlSteps">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
                        <property name="decimals">
                         <number>0</number>
                        </property>
@@ -1756,26 +1795,13 @@
                      </item>
                     </layout>
                    </item>
-                   <item>
-                    <widget class="QCheckBox" name="checkBox_etlActivate">
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="text">
-                      <string>Activate ETLs focus</string>
-                     </property>
-                    </widget>
-                   </item>
                   </layout>
                  </widget>
                 </item>
                 <item row="1" column="1">
                  <widget class="QGroupBox" name="groupBox_12">
                   <property name="title">
-                   <string>General Parameters</string>
+                   <string>General Acquisition Settings</string>
                   </property>
                   <layout class="QFormLayout" name="formLayout">
                    <item row="0" column="0">
@@ -1786,7 +1812,7 @@
                     </widget>
                    </item>
                    <item row="0" column="1">
-                    <widget class="QDoubleSpinBox" name="doubleSpinBox_paramSampleRate">
+                    <widget class="QDoubleSpinBox" name="doubleSpinBox_acqSampleRate">
                      <property name="sizePolicy">
                       <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                        <horstretch>0</horstretch>
@@ -1799,8 +1825,43 @@
                      <property name="decimals">
                       <number>0</number>
                      </property>
+                     <property name="minimum">
+                      <double>10000.000000000000000</double>
+                     </property>
                      <property name="maximum">
                       <double>1000000.000000000000000</double>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="1" column="0">
+                    <widget class="QLabel" name="label_6">
+                     <property name="text">
+                      <string>Exposure Time:</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="1" column="1">
+                    <widget class="QDoubleSpinBox" name="doubleSpinBox_acqExposureTime">
+                     <property name="prefix">
+                      <string/>
+                     </property>
+                     <property name="suffix">
+                      <string> ms</string>
+                     </property>
+                     <property name="decimals">
+                      <number>0</number>
+                     </property>
+                     <property name="minimum">
+                      <double>25.000000000000000</double>
+                     </property>
+                     <property name="maximum">
+                      <double>1000.000000000000000</double>
+                     </property>
+                     <property name="singleStep">
+                      <double>5.000000000000000</double>
+                     </property>
+                     <property name="value">
+                      <double>25.000000000000000</double>
                      </property>
                     </widget>
                    </item>
@@ -1810,7 +1871,7 @@
                 <item row="1" column="0">
                  <widget class="QGroupBox" name="groupBox_15">
                   <property name="title">
-                   <string>Lasers Parameters</string>
+                   <string>Lasers Settings</string>
                   </property>
                   <layout class="QHBoxLayout" name="horizontalLayout_68">
                    <item>
@@ -3041,7 +3102,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1459</width>
+     <width>1467</width>
      <height>21</height>
     </rect>
    </property>
@@ -3207,6 +3268,8 @@
    <header>pyqtgraph</header>
   </customwidget>
  </customwidgets>
- <resources/>
+ <resources>
+  <include location="ui_controller.qrc"/>
+ </resources>
  <connections/>
 </ui>
