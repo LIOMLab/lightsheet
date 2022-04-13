@@ -500,19 +500,6 @@
                    <item>
                     <layout class="QHBoxLayout" name="horizontalLayout_55">
                      <item>
-                      <spacer name="horizontalSpacer_9">
-                       <property name="orientation">
-                        <enum>Qt::Horizontal</enum>
-                       </property>
-                       <property name="sizeHint" stdset="0">
-                        <size>
-                         <width>40</width>
-                         <height>20</height>
-                        </size>
-                       </property>
-                      </spacer>
-                     </item>
-                     <item>
                       <widget class="QLabel" name="label_25">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
@@ -521,7 +508,7 @@
                         </sizepolicy>
                        </property>
                        <property name="text">
-                        <string>Horizontal Increment:</string>
+                        <string>Horizontal Step:</string>
                        </property>
                       </widget>
                      </item>
@@ -535,11 +522,30 @@
                        </property>
                        <property name="minimumSize">
                         <size>
-                         <width>55</width>
+                         <width>75</width>
                          <height>0</height>
                         </size>
                        </property>
+                       <property name="suffix">
+                        <string/>
+                       </property>
+                       <property name="decimals">
+                        <number>3</number>
+                       </property>
                       </widget>
+                     </item>
+                     <item>
+                      <spacer name="horizontalSpacer_9">
+                       <property name="orientation">
+                        <enum>Qt::Horizontal</enum>
+                       </property>
+                       <property name="sizeHint" stdset="0">
+                        <size>
+                         <width>40</width>
+                         <height>20</height>
+                        </size>
+                       </property>
+                      </spacer>
                      </item>
                      <item>
                       <widget class="QLabel" name="label_26">
@@ -550,7 +556,7 @@
                         </sizepolicy>
                        </property>
                        <property name="text">
-                        <string>Vertical Increment:</string>
+                        <string>Vertical Step:</string>
                        </property>
                       </widget>
                      </item>
@@ -564,9 +570,12 @@
                        </property>
                        <property name="minimumSize">
                         <size>
-                         <width>55</width>
+                         <width>75</width>
                          <height>0</height>
                         </size>
+                       </property>
+                       <property name="decimals">
+                        <number>3</number>
                        </property>
                       </widget>
                      </item>
@@ -619,6 +628,9 @@
                          <width>100</width>
                          <height>20</height>
                         </size>
+                       </property>
+                       <property name="decimals">
+                        <number>3</number>
                        </property>
                       </widget>
                      </item>
@@ -692,6 +704,9 @@
                          <width>100</width>
                          <height>20</height>
                         </size>
+                       </property>
+                       <property name="decimals">
+                        <number>3</number>
                        </property>
                       </widget>
                      </item>
@@ -1024,7 +1039,7 @@
                         </sizepolicy>
                        </property>
                        <property name="text">
-                        <string>Camera Increment:</string>
+                        <string>Camera Step:</string>
                        </property>
                       </widget>
                      </item>
@@ -1038,9 +1053,12 @@
                        </property>
                        <property name="minimumSize">
                         <size>
-                         <width>55</width>
+                         <width>75</width>
                          <height>0</height>
                         </size>
+                       </property>
+                       <property name="decimals">
+                        <number>3</number>
                        </property>
                       </widget>
                      </item>
@@ -1099,6 +1117,9 @@
                          <width>100</width>
                          <height>20</height>
                         </size>
+                       </property>
+                       <property name="decimals">
+                        <number>3</number>
                        </property>
                       </widget>
                      </item>
