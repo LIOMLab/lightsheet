@@ -6,8 +6,11 @@ Created on April 1st, 2022
 from configparser import ConfigParser
 
 def cfg_read(cfg_filename, cfg_section, cfg_dictionary):
-    '''Reads in a specific section of configuration file and returns updated config dictionary
-       Won't read extraneous keys found in the same section'''
+    """
+    Reads in a specific section of a configuration file and returns updated config dictionary
+    Must provide a base dictionnary of values to read
+    Will ignore extraneous keys found in the configuration file
+    """
     tmp_dictionary = {}
     cfg = ConfigParser()
     cfg.optionxform = str
@@ -21,8 +24,10 @@ def cfg_read(cfg_filename, cfg_section, cfg_dictionary):
     return cfg_dictionary
 
 def cfg_write(cfg_filename, cfg_section, cfg_dictionary):
-    '''Write config dictionary to a specific section of a configuration file
-       Won't erase extraneous keys found in the same section'''
+    """
+    Write config dictionary to a specified section of a configuration file
+    Will not erase other keys found in the same section
+    """
     cfg = ConfigParser()
     cfg.optionxform = str
     cfg.read(cfg_filename)
@@ -35,11 +40,12 @@ def cfg_write(cfg_filename, cfg_section, cfg_dictionary):
     return cfg_dictionary
 
 
+
+# -------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     cfg_in = {}
-    cfg_in['Terminals'] = '/Dev1/ao0:3'
-    cfg_in['Sample Clock Rate'] = '10000'
-    cfg_in['Galvo Frequency'] = '10'
+    cfg_in['AO Terminals'] = '/Dev1/ao0:3'
+    cfg_in['Sample Rate'] = '10000'
     cfg_in['Galvo Left Amplitude'] = '2'
     cfg_in['Galvo Right Amplitude'] = '2'
     cfg_in['Galvo Left Offset'] = '0.6'
@@ -49,10 +55,7 @@ if __name__ == "__main__":
     cfg_in['ETL Left Offset'] = '0'
     cfg_in['ETL Right Offset'] = '0'
     cfg_in['ETL Steps'] = '8'
-    cfg_in['Laser Left Amplitude'] = '0.9'
-    cfg_in['Laser Right Amplitude'] = '0.9'
-    cfg_in['Laser New Amplitude'] = '2.9'
 
     cfg_out = cfg_read('config.ini', 'HwDAQ', cfg_in)
-    cfg_write('config_test.ini', 'HwDAQ', cfg_out)
+    cfg_write('test.ini', 'HwDAQ', cfg_out)
     print(cfg_out)

@@ -9,11 +9,10 @@ sys.path.append(".")
 
 from PyQt5.QtCore import Qt, QObject, QTimer, pyqtSignal
 from PyQt5.QtWidgets import QMainWindow, QDialog, QFileDialog, QTableWidgetItem, QAbstractItemView, QMessageBox, QLabel, QProgressBar, QDesktopWidget
-#from PyQt5.QtGui import QTextCursor
 
 from pyqtgraph import ImageView
 
-#import logging
+import logging
 import copy
 import threading
 import time
@@ -44,11 +43,6 @@ class Controller_MainWindow(QMainWindow):
     # Default confgurable settings
     _cfg_settings = {}
     _cfg_settings['Units'] = 'mm'
-
-    # TODO - Clean up calibrate_etls_thread
-    # Default terminals
-    _terminals = {}
-    _terminals["galvos_etls"] = '/Dev1/ao0:3'
 
     # Signals
     sig_status_update = pyqtSignal(str)
@@ -108,17 +102,20 @@ class Controller_MainWindow(QMainWindow):
         self.units                  = str(self.cfg_settings['Units'])
         self.meta_sample_name       = 'Sample Description'
         self.save_path              = os.path.expanduser('~') + '\Documents'
-        self.save_filename          = datetime.date.today().strftime("%Y-%m-%d_")
+        self.save_filename          = '' #datetime.date.today().strftime("%Y-%m-%d_")
         self.figure_counter         = 1
         self.settings_save_policy   = False
 
-        # Instantiating the camera window where the frames are displayed
+        # Instantiating the camera display port (image consumer)
         self.camera_window = CameraWindow(self.ui.imageView)
 
-        # Start timer to periodically refresh the imageview widget
-        self.timer_imageview = QTimer()
-        self.timer_imageview.timeout.connect(self.camera_window.update)        
-        self.timer_imageview.start(100)
+        # Instantiating the frame saver (image consumer)
+        self.frame_saver = FrameSaver(self)
+
+        # Start timer to periodically (100ms) refresh the camera display port
+        self.timer_camera_window = QTimer()
+        self.timer_camera_window.timeout.connect(self.camera_window.update)        
+        self.timer_camera_window.start(100)
 
         # Instantiating the hardware components
         self.hwdaq = HwDAQ()
@@ -129,15 +126,9 @@ class Controller_MainWindow(QMainWindow):
         # Update UI with hardware state
         self.updateUi_initial_state()
 
-        '''Instantiating the settings and properties windows'''
+        # Instantiating the settings and properties dialogs
         self.settings_dialog = Settings_Dialog(self)
         self.properties_dialog = Properties_Dialog(self)
-        
-        '''Initially, CameraWindow is the only image consumer. Later when the user request 
-        to save images, a second consumer (FrameSaver) is added in controller'''
-        self.consumers = []
-        self.set_data_consumer(self.camera_window, False, "CameraWindow", True)
-        
         
         self.default_buttons = [self.ui.pushButton_acqStartStandbyMode,
                                 self.ui.pushButton_acqStartPreviewMode,
@@ -148,7 +139,6 @@ class Controller_MainWindow(QMainWindow):
                                 self.ui.pushButton_calEtlStartCalibration]
         
 #        self.modifiable_param_boxes = etl_volt_boxes + galvo_volt_boxes + laser_volt_boxes + [self.ui.doubleSpinBox_galvoFrequency,self.ui.doubleSpinBox_acqSampleRate,self.ui.spinBox_etlNumberOfSteps]
-        
       
         '''Initializing flags'''
         self.both_lasers_activated = False
@@ -169,6 +159,9 @@ class Controller_MainWindow(QMainWindow):
         self.horizontal_backward_boundary_selected = False
         self.focus_selected = False
         
+        self.stack_mode_starting_point = None
+        self.stack_mode_ending_point = None
+
         '''Initializing settings'''
         self.ui.label_currentSaveDirectory.setText(self.save_path)
         
@@ -380,7 +373,7 @@ class Controller_MainWindow(QMainWindow):
             time.sleep(1)
             self.camera.close_camera()
 #            self.save_default_parameters()
-            self.timer_imageview.stop()
+            self.timer_camera_window.stop()
             event.accept()
         else:
             event.ignore()
@@ -388,7 +381,7 @@ class Controller_MainWindow(QMainWindow):
 
     def status_printer(self, message:str):
         '''Print text in console, in controller text box and in status bar'''
-        #logging.info(message)
+        logging.info(message)
         self.ui.statusbar.showMessage(message)
         self.ui.plainTextEdit_cmdLog.appendPlainText(message)
         self.ui.plainTextEdit_cmdLog.verticalScrollBar().setValue(self.ui.plainTextEdit_cmdLog.verticalScrollBar().maximum())
@@ -523,13 +516,6 @@ class Controller_MainWindow(QMainWindow):
             self.etls_calibration_started = False
     
     
-    def set_data_consumer(self, consumer, wait, consumer_type, update_flag):
-        ''' Regroups all the consumers in the same list'''
-        self.consumers.append(consumer)
-        self.consumers.append(wait)             ###Pas implémenté
-        self.consumers.append(consumer_type)    
-        self.consumers.append(update_flag)      ###Pas implémenté
-    
     '''Motion Methods'''
     
     def updateUi_units(self):
@@ -539,10 +525,12 @@ class Controller_MainWindow(QMainWindow):
         if self.units == 'mm':
             self.decimals = 3
             self.fixformat = str('{:.3f} {}')
+            self.increment_size = 0.1
         elif self.units == '\u03BCm':
             self.decimals = 0
             self.fixformat = str('{:.0f} {}')
-        
+            self.increment_size = 100
+
         increment_boxes = [self.ui.doubleSpinBox_sampleHStepSize,
                            self.ui.doubleSpinBox_sampleVStepSize,
                            self.ui.doubleSpinBox_cameraStepSize]
@@ -557,7 +545,7 @@ class Controller_MainWindow(QMainWindow):
             box.setDecimals(self.decimals)
         for box in increment_boxes:
             box.setMinimum(10**-self.decimals)
-            box.setValue(1)
+            box.setValue(self.increment_size)
         
         '''Update maximum and minimum values for horizontal sample motion'''
         self.ui.doubleSpinBox_sampleSetHPosition.setMinimum(self.motors.horizontal.get_limit_low(self.units))
@@ -693,11 +681,11 @@ class Controller_MainWindow(QMainWindow):
             self.sig_beep.emit(True)
             self.updateUi_position_horizontal()
 
-    def move_sample_down(self):
-        '''Sample motor downward vertical motion'''
+    def move_sample_up(self):
+        '''Sample motor upward vertical motion'''
         if self.motors.vertical.get_position(self.units) - self.ui.doubleSpinBox_sampleVStepSize.value() >= self.motors.vertical.get_limit_low(self.units):
             self.motors.vertical.move_relative_position(-self.ui.doubleSpinBox_sampleVStepSize.value(), self.units)
-            self.sig_status_update.emit('Sample stepping down')
+            self.sig_status_update.emit('Sample stepping up')
             self.updateUi_position_vertical()
         else:
             self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_low(self.units), self.units)
@@ -705,11 +693,11 @@ class Controller_MainWindow(QMainWindow):
             self.sig_beep.emit(True)
             self.updateUi_position_vertical()
     
-    def move_sample_up(self):
-        '''Sample motor upward vertical motion'''
+    def move_sample_down(self):
+        '''Sample motor downward vertical motion'''
         if self.motors.vertical.get_position(self.units) + self.ui.doubleSpinBox_sampleVStepSize.value() <= self.motors.vertical.get_limit_high(self.units):
             self.motors.vertical.move_relative_position(self.ui.doubleSpinBox_sampleVStepSize.value(), self.units)
-            self.sig_status_update.emit('Sample stepping up')
+            self.sig_status_update.emit('Sample stepping down')
             self.updateUi_position_vertical()
         else:
             self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_high(self.units), self.units)
@@ -1284,24 +1272,6 @@ class Controller_MainWindow(QMainWindow):
         self.standby = False
         self.sig_status_update.emit('Standby off')
     
-    
-    def send_frame_to_consumer(self, frame, to_cam_window = True, to_saver = False):
-        '''Tries to add a frame to a consumer, either the camera window or the saver'''
-        
-        for consumer in range(0, len(self.consumers), 4):
-            if to_cam_window:
-                if self.consumers[consumer+2] == 'CameraWindow':
-                    try:
-                        self.consumers[consumer].put(frame)
-                    except:
-                        pass
-            if to_saver:
-                if self.consumers[consumer+2] == 'FrameSaver':
-                    try:
-                        self.consumers[consumer].put(frame,1)
-                    except:
-                        pass
-    
 
     def preview_button(self):
         '''Start or stop preview mode, depending on the button status'''
@@ -1347,8 +1317,8 @@ class Controller_MainWindow(QMainWindow):
 #        self.start_lasers()
 
         while self.preview_mode_started:
-            # Updating Galvo and ETL voltages
-            self.hwdaq.update_setpoint()
+            # # Updating Galvo and ETL voltages
+            # self.hwdaq.ao_update()
             
             # Recording a single image
             self.camera.start_recorder(1)
@@ -1357,9 +1327,9 @@ class Controller_MainWindow(QMainWindow):
             cam_images = self.camera.copy_recorder_images()
             self.camera.delete_recorder()
 
-            # Sending image to consumer for display
+            # Sending image to display port
             frame = np.transpose(cam_images[0])
-            self.send_frame_to_consumer(frame)
+            self.camera_window.put(frame)
 
 #        # Stopping lasers
 #        self.stop_lasers()
@@ -1469,10 +1439,10 @@ class Controller_MainWindow(QMainWindow):
                     reconstructed_frame[:,first_center_column:last_center_column] = cropped_buffer[frame,:,(2*column_buffer):tile_width]
         return reconstructed_frame
     
-    def get_single_image(self):
-        '''Generate ETLs, galvos & camera's ramps, get a single reconstructed image and display it'''
+    def acquire_image(self):
+        '''Generate ETLs, galvos & camera's waveforms and acquire a single reconstructed image'''
         
-        # Read etl_steps once only to avoid race condition while threaded
+        # Read etl_steps once to avoid race condition while threaded
         number_of_etl_steps = self.hwdaq.etl_steps
 
         # Creating acquisition tasks
@@ -1507,8 +1477,8 @@ class Controller_MainWindow(QMainWindow):
             self.reconstructed_frame = self.reconstruct_frame(self.buffer)
         frame = np.transpose(self.reconstructed_frame)
 
-        # Send reconstructed frame to consumers
-        self.send_frame_to_consumer(frame)
+        # Send reconstructed frame to display port
+        self.camera_window.put(frame)
         
     
     def live_button(self):
@@ -1557,8 +1527,11 @@ class Controller_MainWindow(QMainWindow):
         
         while self.live_mode_started:
             # Get single image
-            self.get_single_image()
+            self.acquire_image()
         
+        # Put ETLs in standby mode (2.5V corresponds to half 0-5V range -> no current through coil)
+        self.hwdaq.ao_etl_update(left_setpoint=2.5, right_setpoint=2.5)
+
         # Stopping lasers
         self.stop_lasers()
 
@@ -1602,8 +1575,11 @@ class Controller_MainWindow(QMainWindow):
         self.start_lasers()
         
         '''Get single image'''
-        self.get_single_image()
-        
+        self.acquire_image()
+
+        # Put ETLs in standby mode (2.5V corresponds to half 0-5V range -> no current through coil)
+        self.hwdaq.ao_etl_update(left_setpoint=2.5, right_setpoint=2.5)
+
         '''Stopping lasers'''
         self.stop_lasers()
         self.both_lasers_activated = False
@@ -1674,7 +1650,7 @@ class Controller_MainWindow(QMainWindow):
             self.get_sample_name()
 
             '''Setting up frame saver'''
-            self.frame_saver = FrameSaver(self)
+            self.frame_saver.reinit()
             self.frame_saver.set_block_size(1) #Block size is a number of buffers ##
             self.frame_saver.add_sample_name(self.meta_sample_name)
             self.frame_saver.add_motor_parameters(self.image_hor_pos_text,self.image_ver_pos_text,self.image_cam_pos_text)
@@ -1683,11 +1659,11 @@ class Controller_MainWindow(QMainWindow):
             if self.ui.checkBox_acqSaveAllFrames.isChecked():
                 self.frame_saver.set_files(1,self.filename,'singleImage',1,'ETLscan')
                 cropped_buffer = self.crop_buffer(self.buffer)
-                self.frame_saver.put(cropped_buffer,1)
+                self.frame_saver.put(cropped_buffer)
                 self.sig_status_update.emit('Saving Images (one for each ETL scan)')
             else:
                 self.frame_saver.set_files(1,self.filename,'singleImage',1,'reconstructed_frame')
-                self.frame_saver.put(self.reconstructed_frame,1)
+                self.frame_saver.put(self.reconstructed_frame)
                 self.sig_status_update.emit('Saving Reconstructed Image')
             
             self.frame_saver.start_saving()
@@ -1710,8 +1686,7 @@ class Controller_MainWindow(QMainWindow):
 
     
     def set_number_of_planes(self):
-        '''Calculates the number of planes that will be saved in the stack 
-           acquisition'''
+        '''Calculates the number of planes that will be saved in the stack acquisition'''
         
         if self.ui.doubleSpinBox_acqPlaneStepSize.value() != 0:
             if self.ui.checkBox_acqFirstPlaneSet.isChecked() and self.ui.checkBox_acqLastPlaneSet.isChecked():
@@ -1828,11 +1803,9 @@ class Controller_MainWindow(QMainWindow):
             self.get_sample_name()
 
             '''Setting frame saver'''
-            self.frame_saver = FrameSaver(self)
+            self.frame_saver.reinit()
             self.frame_saver.add_sample_name(self.meta_sample_name)
             self.frame_saver.set_block_size(3) #Block size is a number of buffers
-            
-            self.set_data_consumer(self.frame_saver, False, "FrameSaver", True)
             
             '''Starting frame saver'''
             if self.ui.checkBox_acqSaveAllFrames.isChecked():
@@ -1871,16 +1844,16 @@ class Controller_MainWindow(QMainWindow):
                     self.frame_saver.add_motor_parameters(self.current_horizontal_position_text,self.current_vertical_position_text,self.current_camera_position_text)
                 
                 '''Getting image'''
-                self.get_single_image()
+                self.acquire_image()
                 
                 '''Saving frame'''
                 if self.saving_allowed:
                     if self.ui.checkBox_acqSaveAllFrames.isChecked():
                         cropped_buffer = self.crop_buffer(self.buffer)
-                        self.send_frame_to_consumer(cropped_buffer,False,True)
+                        self.frame_saver.put(cropped_buffer)
                         self.sig_status_update.emit('Saving Images (one for each ETL scan)')
                     else:
-                        self.send_frame_to_consumer(self.reconstructed_frame,False,True)
+                        self.frame_saver.put(self.reconstructed_frame)
                         self.sig_status_update.emit('Saving Reconstructed Image')
                 
                 '''Update progress bar'''
@@ -1892,13 +1865,16 @@ class Controller_MainWindow(QMainWindow):
         if self.saving_allowed:
             self.frame_saver.stop_saving()
         
-        '''Stopping camera'''
-        self.camera.disarm_camera() 
-        
+        # Put ETLs in standby mode (2.5V corresponds to half 0-5V range -> no current through coil)
+        self.hwdaq.ao_etl_update(left_setpoint=2.5, right_setpoint=2.5)
+       
         '''Stopping laser'''
         self.stop_lasers()
         self.both_lasers_activated = False
-        
+
+        '''Stopping camera'''
+        self.camera.disarm_camera() 
+
         '''Enabling modes after stack mode'''
         self.ui.pushButton_acqStartStackMode.setText('Start Stack Mode')
         self.update_buttons_modes(self.default_buttons)
@@ -1972,12 +1948,11 @@ class Controller_MainWindow(QMainWindow):
             self.get_sample_name()
 
             '''Setting frame saver'''
-            self.frame_saver = FrameSaver(self)
+            self.frame_saver.reinit()
             self.frame_saver.add_sample_name(self.meta_sample_name)
             self.frame_saver.set_block_size(3) #Block size is a number of buffers
             self.frame_saver.set_files(self.number_of_calibration_planes,self.filename,'cameraCalibration',self.number_of_camera_positions,'camera_position')
             
-            self.set_data_consumer(self.frame_saver, False, "FrameSaver", True) ###
             '''Starting frame saver'''
             self.frame_saver.start_saving()
         else:
@@ -2014,11 +1989,11 @@ class Controller_MainWindow(QMainWindow):
                             self.frame_saver.add_motor_parameters(self.current_horizontal_position_text, self.current_vertical_position_text, self.current_camera_position_text)
                         
                         '''Getting image'''
-                        self.get_single_image()
+                        self.acquire_image()
                         
                         '''Saving frame''' #debugging
                         if self.saving_allowed:
-                            self.send_frame_to_consumer(self.reconstructed_frame,False,True)
+                            self.frame_saver.put(self.reconstructed_frame)
                             self.sig_status_update.emit('Saving Reconstructed Image')
                         
                         '''Filtering frame'''
@@ -2079,13 +2054,16 @@ class Controller_MainWindow(QMainWindow):
         self.updateUi_position_horizontal()
         self.motors.camera.move_absolute_position(self.motors.camera.get_origin(self.units), self.units)
         self.updateUi_position_camera()
-        
-        '''Stopping camera'''
-        self.camera.disarm_camera()
-        
+
+        # Put ETLs in standby mode (2.5V corresponds to half 0-5V range -> no current through coil)
+        self.hwdaq.ao_etl_update(left_setpoint=2.5, right_setpoint=2.5)
+
         '''Stopping lasers'''
         self.stop_lasers()
         self.both_lasers_activated = False
+
+        '''Stopping camera'''
+        self.camera.disarm_camera()
 
         '''Calculating focus'''
         if self.camera_calibration_started: #To make sure calibration wasn't stopped before the end
@@ -2137,13 +2115,17 @@ class Controller_MainWindow(QMainWindow):
     def calibrate_etls_thread(self):
         ''' Calibrates the focal position relation with etls-galvos voltage'''
         
+        # TODO - Clean up calibrate_etls_thread
+        _terminals = {}
+        _terminals["galvos_etls"] = '/Dev1/ao0:3'
+
         '''Setting the camera for acquisition'''
         self.camera.set_trigger_mode('auto_trigger')
         self.camera.arm_camera()        
         
         '''Setting tasks'''
         self.galvos_etls_task = nidaqmx.Task()
-        self.galvos_etls_task.ao_channels.add_ao_voltage_chan(self._terminals["galvos_etls"])
+        self.galvos_etls_task.ao_channels.add_ao_voltage_chan(_terminals["galvos_etls"])
         
         '''Getting parameters'''
         self.number_of_etls_points = 20 ##
@@ -2160,12 +2142,11 @@ class Controller_MainWindow(QMainWindow):
             self.get_sample_name()
 
             '''Setting frame saver'''
-            self.frame_saver = FrameSaver(self)
+            self.frame_saver.reinit()
             self.frame_saver.add_sample_name(self.meta_sample_name)
             self.frame_saver.set_block_size(3) #Block size is a number of buffers
             self.frame_saver.set_files(2*self.number_of_etls_points,self.filename,'etlCalibration',self.number_of_etls_images,'etl_image')
             
-            self.set_data_consumer(self.frame_saver, False, "FrameSaver", True) ###
             '''Starting frame saver'''
             self.frame_saver.start_saving()
         else:
@@ -2229,7 +2210,7 @@ class Controller_MainWindow(QMainWindow):
                         time.sleep(1)
 
                         # Retrieving image from camera and putting it in its queue for display
-                        frame = self.camera.acquire_single_image()*1.0
+                        frame = self.camera.grab_single_image()*1.0
                         blurred_frame = ndimage.gaussian_filter(frame, sigma=20)
                         
                         '''Retrieving filename set by the user''' #debugging
@@ -2238,15 +2219,16 @@ class Controller_MainWindow(QMainWindow):
                         
                         '''Saving frame''' #debugging
                         if self.saving_allowed:
-                            self.send_frame_to_consumer(blurred_frame,False,True)
+                            self.frame_saver.put(blurred_frame)
                             self.sig_status_update.emit('Saving Reconstructed Image')
                         
                         frame = np.transpose(frame)
                         blurred_frame = np.transpose(blurred_frame)
                         
-                        self.send_frame_to_consumer(frame)
-                        self.send_frame_to_consumer(blurred_frame)
-                        
+                        self.camera_window.put(frame)
+                        self.camera_window.put(blurred_frame)
+
+
                         '''Calculating focal point horizontal position'''
                         #filtering image:
                         dset = np.transpose(blurred_frame)
@@ -2494,10 +2476,10 @@ class CameraWindow(queue.Queue):
         self.graphicsview.setImage(np.transpose(img_data))
         self.histogram_level = [0, 1000]
 
-    def put(self, item, block=True, timeout=None):
+    def put(self, item):
         '''Put an image in the display queue'''
-        if queue.Queue.full(self) == False: 
-            queue.Queue.put(self, item, block=block, timeout=timeout)
+        if queue.Queue.full(self) == False:
+            queue.Queue.put(self, item)
                  
     def update(self):
         '''Takes an image from the queue (if any) and displays it in the window
@@ -2535,6 +2517,17 @@ class FrameSaver(QObject):
         self.parent = parent
         self.sig_status_update.connect(self.parent.status_printer)
 
+        self.saving_started = False
+        self.sample_name = ''
+        self.filenames_list = [] 
+        self.number_of_files = 1
+        self.horizontal_positions_list = []
+        self.vertical_positions_list = []
+        self.camera_positions_list = []
+
+    def reinit(self):
+        if self.saving_started:
+            self.saving_started = False
         self.sample_name = ''
         self.filenames_list = [] 
         self.number_of_files = 1
@@ -2585,9 +2578,9 @@ class FrameSaver(QObject):
         self.queue = queue.Queue(2*block_size) #Set up queue of maxsize 2*block_size (frames)
     
     '''Saving methods'''
-    def put(self, value, flag):
+    def put(self, item):
         '''Put an image in the save queue'''
-        self.queue.put(value, flag)
+        self.queue.put(item=item, block=True)
     
     def start_saving(self):
         '''Initiates saving thread'''

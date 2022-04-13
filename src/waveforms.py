@@ -7,9 +7,9 @@ Rewrite on April 8th 2022
 import numpy as np
 
 
-def camera_exposure(samples_exposure:int, samples_readout:int, samples_reset:int, repeat:int, samples_trigger_to_exposure:int):
+def camera_squarewave(samples_exposure:int, samples_readout:int, samples_reset:int, repeat:int, samples_trigger_to_exposure:int):
     """
-    Camera exposure control function generator
+    Camera squarewave function generator for external exposure control
     """
     samples_dead = samples_readout + samples_reset
     samples_dead_pre = int(samples_dead/2)
@@ -24,7 +24,7 @@ def camera_exposure(samples_exposure:int, samples_readout:int, samples_reset:int
     return output_vector
 
 
-def galvo_scan(samples_exposure:int, samples_readout:int, samples_reset:int, repeat:int, amplitude:float, offset:float, inverted:bool=False, filtered:bool=True):
+def galvo_ramp(samples_exposure:int, samples_readout:int, samples_reset:int, repeat:int, amplitude:float, offset:float, inverted:bool=False, filtered:bool=True):
     """
     Galvo ramp function generator for one-way scanning 
     """
@@ -51,7 +51,7 @@ def galvo_scan(samples_exposure:int, samples_readout:int, samples_reset:int, rep
     return output_vector
 
 
-def etl_staircase(samples_total_scan:int, steps:int, floor:float, rise:float, direction:str='up'):
+def etl_staircase(samples_total_scan:int, steps:int, floor:float, rise:float, direction:str='up', filtered:bool=True):
     """ 
     Staircase function generator for ETL
     
@@ -85,12 +85,25 @@ def etl_staircase(samples_total_scan:int, steps:int, floor:float, rise:float, di
                 ## making sure we do not to send <0V to the ETL
                 #step_level = np.where(step_level < 0, 0, step_level)
                 output_array[step*step_run:(step+1)*step_run] = step_level
+        if filtered:
+            # First pass (phase shifted)
+            pad = step_run//25
+            win = 2*(step_run//25) + 1
+            tmpvec = np.concatenate((output_array, output_array[-2*pad:]))
+            cusum = np.cumsum(np.insert(tmpvec, 0, 0))
+            output_array = (cusum[win:] - cusum[:-win]) / win
+            # Second pass (centered)
+            pad = step_run//25
+            win = 2*(step_run//25) + 1
+            tmpvec = np.concatenate((output_array[:pad], output_array, output_array[-pad:]))
+            cusum = np.cumsum(np.insert(tmpvec, 0, 0))
+            output_array = (cusum[win:] - cusum[:-win]) / win
     else:
         output_array = np.ones(samples_total_scan) * (floor + rise/2)
     return output_array
 
 
-# -------------------------------------------------------------------------------------------------
+
 # -------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
 
@@ -103,8 +116,8 @@ if __name__ == '__main__':
     camera_xsize = 2560                 # number of columns
 
     # User selected experiment parameters
-    exposure_time = 0.025               # [s]
-    reset_delay_ratio = 10               # [% of image time]
+    exposure_time = 0.050               # [s]
+    reset_delay_ratio = 10              # [% of image time]
     etl_steps = 6
     etl_floor = 2
     etl_rise = 2.25
@@ -148,16 +161,16 @@ if __name__ == '__main__':
     # Time required for an acquisition sequence
     total_scan_time = samples_total_scan / sample_clock_rate
 
-    camera_function = camera_exposure(samples_exposure, samples_readout, samples_reset, etl_steps, samples_trigger_to_exposure)
-    galvo_function = galvo_scan(samples_exposure, samples_readout, samples_reset, etl_steps, galvo_amplitude, galvo_offset, galvo_inverted)
+    camera_function = camera_squarewave(samples_exposure, samples_readout, samples_reset, etl_steps, samples_trigger_to_exposure)
+    galvo_function = galvo_ramp(samples_exposure, samples_readout, samples_reset, etl_steps, galvo_amplitude, galvo_offset, galvo_inverted)
     etl_function = etl_staircase(samples_total_scan, etl_steps, etl_floor, etl_rise, etl_direction)
-    print(samples_dead)
-    print(samples_dead/sample_clock_rate)
+    etl_function2 = etl_staircase(samples_total_scan, etl_steps, etl_floor, etl_rise, etl_direction, False)
 
     time_axis = np.arange(0, camera_function.size)
     plt.plot(time_axis, camera_function)
     plt.plot(time_axis, galvo_function)
     plt.plot(time_axis, etl_function)
+    plt.plot(time_axis, etl_function2)
     plt.show()
 
 

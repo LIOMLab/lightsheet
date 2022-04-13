@@ -37,11 +37,11 @@ class Camera:
 
     # Works but slow if repeated in a loop
     # Setting up trigger_mode and exposure time takes time
-    def acquire_single_image(self, exposure_time:int=100):
+    def grab_single_image(self, exposure_time:int=100):
         '''docstring'''
         single_image = [0]
         if self.verbose:
-            print("Attempting to acquire a single image...")
+            print("Attempting to grab a single image...")
         if self.camera is not None:
             if self.is_recording:
                 if self.verbose:
@@ -57,7 +57,7 @@ class Camera:
                 single_image = self.copy_recorder_images()
                 self.delete_recorder()
                 if self.verbose:
-                    print(" Single image acquired.")
+                    print(" Single image obtained.")
         else:
             if self.verbose:
                 print(" Camera not open. Aborted")

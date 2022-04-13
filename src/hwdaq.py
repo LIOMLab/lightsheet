@@ -14,7 +14,7 @@ import nidaqmx
 from nidaqmx.constants import AcquisitionType, LineGrouping, Edge
 
 from src.config import cfg_read, cfg_write
-from src.waveforms import galvo_scan, etl_staircase, camera_exposure
+from src.waveforms import galvo_ramp, etl_staircase, camera_squarewave
 
 
 class HwDAQ:
@@ -82,11 +82,17 @@ class HwDAQ:
         self.etl_right_offset       = float(self.cfg_settings['ETL Right Offset'])
 
         # Non-configurable initial settings
-        self.do_start_trigger       = self.ao_terminals.rsplit('/',1)[0] + '/ao/StartTrigger'
+        ao_device                   = self.ao_terminals.rsplit('/', 1)[0]
+        ao_channels                 = self.ao_terminals.rsplit('/',1)[1][2:].rsplit(':')
+        self.do_start_trigger       = ao_device + '/ao/StartTrigger'
+        self.galvo_terminals        = ao_device + '/ao' + ao_channels[0] + ':' + str(int(ao_channels[0])+1)
+        self.etl_terminals          = ao_device + '/ao' + str(int(ao_channels[1])-1) + ':' + ao_channels[1]
+
         self.exposure_time          = 0.050     # in seconds
         self.galvo_activated        = True      # boolean
         self.etl_activated          = False     # boolean
 
+        
         #self.compute_scan_waveforms()
 
 
@@ -129,21 +135,21 @@ class HwDAQ:
         self.samples_trigger_to_exposure = int(np.ceil(self.camera_trigger_to_exposure_time * self.sample_rate))
 
         # Compute waveforms
-        self.camera_waveform = camera_exposure( samples_exposure = self.samples_exposure,
-                                                samples_readout = self.samples_readout,
-                                                samples_reset = self.samples_reset,
-                                                repeat = self.etl_steps,
-                                                samples_trigger_to_exposure = self.samples_trigger_to_exposure)
+        self.camera_waveform = camera_squarewave(   samples_exposure = self.samples_exposure,
+                                                    samples_readout = self.samples_readout,
+                                                    samples_reset = self.samples_reset,
+                                                    repeat = self.etl_steps,
+                                                    samples_trigger_to_exposure = self.samples_trigger_to_exposure)
 
         if self.galvo_activated:
-            self.galvo_left_waveform = galvo_scan(  samples_exposure = self.samples_exposure,
+            self.galvo_left_waveform = galvo_ramp(  samples_exposure = self.samples_exposure,
                                                     samples_readout = self.samples_readout,
                                                     samples_reset = self.samples_reset,
                                                     repeat = self.etl_steps,
                                                     amplitude = self.galvo_left_amplitude, 
                                                     offset = self.galvo_left_offset, 
                                                     inverted = self.galvo_inverted)
-            self.galvo_right_waveform = galvo_scan( samples_exposure = self.samples_exposure,
+            self.galvo_right_waveform = galvo_ramp( samples_exposure = self.samples_exposure,
                                                     samples_readout = self.samples_readout,
                                                     samples_reset = self.samples_reset,
                                                     repeat = self.etl_steps, 
@@ -170,12 +176,12 @@ class HwDAQ:
             self.etl_right_waveform = np.ones((self.samples_total)) * self.etl_right_offset
 
 
-    def update_setpoint(self):
+    def ao_update(self):
         # Computing Galvo + ETL setpoints
-        galvo_left_setpoint     = self.galvo_left_amplitude + self.galvo_left_offset
-        galvo_right_setpoint    = self.galvo_right_amplitude + self.galvo_right_offset
-        etl_left_setpoint       = self.etl_left_amplitude + self.etl_left_offset
-        etl_right_setpoint      = self.etl_right_amplitude + self.etl_right_offset
+        galvo_left_setpoint     = self.galvo_left_offset
+        galvo_right_setpoint    = self.galvo_right_offset
+        etl_left_setpoint       = self.etl_left_offset
+        etl_right_setpoint      = self.etl_right_offset
         # FIXME (HARDWARE) - LOOKS LIKE ETL OR GALVO ARE REVERSED (LEFT VS RIGHT)
         galvo_etl_setpoints     = np.stack((    np.array([galvo_right_setpoint]),
                                                 np.array([galvo_left_setpoint]),
@@ -185,6 +191,26 @@ class HwDAQ:
         with nidaqmx.Task(new_task_name = 'galvo_etl_setpoint') as galvo_etl_task:
             galvo_etl_task.ao_channels.add_ao_voltage_chan(self.ao_terminals)
             galvo_etl_task.write(galvo_etl_setpoints, auto_start = True)
+
+
+    def ao_galvo_update(self, left_setpoint:float, right_setpoint:float):
+        # FIXME (HARDWARE) - LOOKS LIKE ETL OR GALVO ARE REVERSED (LEFT VS RIGHT)
+        galvo_setpoints     = np.stack((    np.array([right_setpoint]),
+                                            np.array([left_setpoint])   ))
+        # Running task
+        with nidaqmx.Task(new_task_name = 'galvo_single') as galvo_task:
+            galvo_task.ao_channels.add_ao_voltage_chan(self.etl_terminals)
+            galvo_task.write(galvo_setpoints, auto_start = True)
+
+
+    def ao_etl_update(self, left_setpoint:float, right_setpoint:float):
+        # FIXME (HARDWARE) - LOOKS LIKE ETL OR GALVO ARE REVERSED (LEFT VS RIGHT)
+        etl_setpoints     = np.stack((  np.array([left_setpoint]),
+                                        np.array([right_setpoint])   ))
+        # Running task
+        with nidaqmx.Task(new_task_name = 'etl_single') as etl_task:
+            etl_task.ao_channels.add_ao_voltage_chan(self.etl_terminals)
+            etl_task.write(etl_setpoints, auto_start = True)
 
 
     def create_scan(self):
@@ -232,3 +258,10 @@ class HwDAQ:
         self.camera_task.close()
         self.galvo_etl_task.close()
 
+
+# -------------------------------------------------------------------------------------------------
+if __name__ == '__main__':
+    testhw = HwDAQ()
+    print(testhw.do_start_trigger)
+    print(testhw.galvo_terminals)
+    print(testhw.etl_terminals)
