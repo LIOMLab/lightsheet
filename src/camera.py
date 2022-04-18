@@ -23,7 +23,7 @@ class Camera:
         # Flags
         self.is_armed = False
         self.is_recording = False
-        self.new_data_available = False
+        self.new_data_ready = False
 
         # Other variables
         self.camera = None
@@ -192,11 +192,11 @@ class Camera:
                 if images_in_buffer >= number_of_images:
                     if self.verbose:
                         print(' Recording session succeeded:', images_in_buffer, 'images in buffer')
-                    self.new_data_available = True
+                    self.new_data_ready = True
                     break
                 elif wait_until < datetime.now():
                     if self.verbose:
-                        print(' Still recording after', acq_timeout, 's.', images_in_buffer, 'images in buffer')
+                        print(' Timeout :', images_in_buffer, 'images in buffer after', acq_timeout, 's.',)
                     break
                 else:
                     time.sleep(0.01)
@@ -209,11 +209,11 @@ class Camera:
             self.is_recording = False
         return None
 
-    def copy_recorder_images(self):
+    def copy_recorder_images(self, number_of_images):
         '''docstring'''
-        if self.new_data_available:
-            images, metadatas = self.camera.images()
-            self.new_data_available = False
+        if self.new_data_ready:
+            images, metadatas = self.camera.images(blocksize=number_of_images)
+            self.new_data_ready = False
         else:
             images = [0]
         return images
@@ -223,7 +223,7 @@ class Camera:
         if self.camera is not None:
             self.camera.rec.delete()
             # Deleting the recording session also deletes any remaining images
-            self.new_data_available = False
+            self.new_data_ready = False
         return None
 
 
