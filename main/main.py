@@ -10,6 +10,7 @@ sys.path.append(".")
 
 import logging
 
+from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QApplication
 
 import qdarkstyle
@@ -19,16 +20,6 @@ from qdarkstyle.dark.palette import DarkPalette
 from gui.controller import Controller_MainWindow
 
 logging.basicConfig(format="%(message)s", level=logging.INFO)
-#logging.basicConfig(format="%(message)s", level=logging.DEBUG)
-
-
-def set_app_stylesheet(stylesheet_code):
-    '''Function that allows stylesheet selection for the app'''
-    if stylesheet_code == 0:
-        app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt5', palette=LightPalette))
-    elif stylesheet_code == 1:
-        app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt5', palette=DarkPalette))
-
 
 # This block permits messages display of errors occurring in all the files
 # related to the software (not only in the main ones)
@@ -39,6 +30,15 @@ def exception_hook(exctype, value, traceback):
     sys._excepthook(exctype, value, traceback)
     sys.exit(1)
 sys.excepthook = exception_hook
+
+
+@pyqtSlot(str)
+def set_app_stylesheet(stylesheet_code:str):
+    '''Function that allows stylesheet selection for the app'''
+    if stylesheet_code == 'light':
+        app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt5', palette=LightPalette))
+    elif stylesheet_code == 'dark':
+        app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt5', palette=DarkPalette))
 
 
 # Initializing the app, controller (class which connects GUI to features)
