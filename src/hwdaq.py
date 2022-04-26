@@ -87,7 +87,6 @@ class HwDAQ:
         self.do_start_trigger       = ao_device + '/ao/StartTrigger'
         self.galvo_terminals        = ao_device + '/ao' + ao_channels[0] + ':' + str(int(ao_channels[0])+1)
         self.etl_terminals          = ao_device + '/ao' + str(int(ao_channels[1])-1) + ':' + ao_channels[1]
-
         self.exposure_time          = 0.050     # in seconds
         self.galvo_activated        = True      # boolean
         self.etl_activated          = False     # boolean

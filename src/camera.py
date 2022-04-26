@@ -92,9 +92,9 @@ class Camera:
                                 **cam_recorder_mode,
                                 **cam_delay_exposure_time}
         else:
-            if self.verbose:
-                print("Camera not open - Cannot retrieving properties and current settings")
             cam_properties = {}
+            if self.verbose:
+                print("Camera not open - Cannot retrieve properties")
         return cam_properties
 
 
