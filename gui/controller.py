@@ -120,6 +120,18 @@ class Controller_MainWindow(QMainWindow):
         self.figure_counter         = 1
         self.settings_save_policy   = False
 
+        # Set units comboBox options (default: millimeters)
+        self.ui.comboBox_units.insertItems(0,['mm','\u03BCm'])
+        if self.units == '\u03BCm':
+            self.ui.comboBox_units.setCurrentIndex(1)
+        else:
+            self.ui.comboBox_units.setCurrentIndex(0)
+
+        if self.save_path != 'None Specified':
+            self.ui.lineEdit_filename.setEnabled(True)
+            self.ui.lineEdit_filename.setText(self.save_filename)
+            self.ui.lineEdit_sampleName.setEnabled(True)        
+
         # Flags
         self.both_lasers_activated = False
         self.left_laser_activated = False
@@ -163,15 +175,6 @@ class Controller_MainWindow(QMainWindow):
         self.ui.lineEdit_filename.setEnabled(False)
         self.ui.lineEdit_sampleName.setEnabled(False)
         self.ui.pushButton_selectDataset.setEnabled(False)
-
-        if self.save_path != 'None Specified':
-            self.ui.lineEdit_filename.setEnabled(True)
-            self.ui.lineEdit_filename.setText(self.save_filename)
-            self.ui.lineEdit_sampleName.setEnabled(True)        
-
-        # Set units comboBox options (default: millimeters)
-        self.ui.comboBox_units.insertItems(0,["mm","\u03BCm"])
-        self.ui.comboBox_units.setCurrentIndex(0)
 
         '''Connections'''
         #self.settings_dialog.ui.buttonBox.accepted.connect(self.change_settings)
@@ -558,7 +561,6 @@ class Controller_MainWindow(QMainWindow):
             self.etls_calibration_started = False
     
     
-    '''Motion Methods'''
     def updateUi_initial_hardware_state(self):
 
         # HwDAQ

@@ -27,6 +27,7 @@ class HwDAQ:
     _cfg_settings['DO Terminals'] = '/Dev1/port0/line1'     # DAQ board DO terminals for Camera Exposure Control
     _cfg_settings['Sample Rate'] = '40000'                  # In samples/second
     _cfg_settings['Reset Delay'] = '10'                     # In % of acquisition time (exposure + readout time)
+    _cfg_settings['Camera Shutter Mode'] = 'Global'         # Either 'Global' or 'Lightsheet' (top-to-bottom rolling)
     _cfg_settings['Camera Line Readout'] = '16.40'          # In microseconds
     _cfg_settings['Camera XSize'] = '2560'                  # In pixels
     _cfg_settings['Camera YSize'] = '2160'                  # In pixels
