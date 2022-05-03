@@ -25,7 +25,6 @@ from scipy import signal, optimize, ndimage, stats
 
 from gui.ui_controller import Ui_Controller
 from gui.ui_properties import Ui_Properties
-from gui.ui_settings import Ui_Settings
 
 from src.config import cfg_read, cfg_write
 from src.gaussian import gaussian, func, fwhm
@@ -46,7 +45,7 @@ class Controller_MainWindow(QMainWindow):
     # Signals
     sig_beep = pyqtSignal()
     sig_stylesheet = pyqtSignal(str)
-    sig_status_message = pyqtSignal(str)
+    sig_message = pyqtSignal(str)
     sig_progress_update = pyqtSignal(int)
 
     sig_live_mode_finished = pyqtSignal()
@@ -71,7 +70,8 @@ class Controller_MainWindow(QMainWindow):
         # PS command for resource file:
         # pyrcc5 .\ui_controller.qrc -o .\ui_controller_rc.py
         #
-        # Add following to ui_controller.py
+        # For resource file to be in path
+        # add following two lines to ui_controller.py
         #   import sys
         #   sys.path.append("./gui") 
         #
@@ -97,13 +97,13 @@ class Controller_MainWindow(QMainWindow):
         self.progress_statusBar.setFixedWidth(250)
         self.progress_statusBar.hide()
         self.resize(QDesktopWidget().availableGeometry(self).size() * 0.75)
-        self.ui.plainTextEdit_cmdLog.appendPlainText("-- command history --")
+        self.ui.plainTextEdit_messageLog.appendPlainText("-- message log --")
 
         # Connection for progress bar
         self.sig_progress_update.connect(self.progress_statusBar.setValue)
 
         # Connection for command log 
-        self.sig_status_message.connect(self.updateUi_status_printer)
+        self.sig_message.connect(self.updateUi_message_printer)
 
         # Set configurable settings to default values
         self.cfg_settings = copy.deepcopy(self._cfg_settings)
@@ -115,7 +115,7 @@ class Controller_MainWindow(QMainWindow):
         self.units                  = str(self.cfg_settings['Units'])
         self.meta_sample_name       = 'Sample Description'
         self.save_path              = os.path.expanduser('~') + '\Documents'
-        self.save_filename          = '' #datetime.date.today().strftime("%Y-%m-%d_")
+        self.save_filename          = ''
         self.filename               = ''
         self.figure_counter         = 1
         self.settings_save_policy   = False
@@ -128,16 +128,11 @@ class Controller_MainWindow(QMainWindow):
             self.ui.comboBox_units.setCurrentIndex(0)
 
         if self.save_path != 'None Specified':
-            self.ui.lineEdit_filename.setEnabled(True)
-            self.ui.lineEdit_filename.setText(self.save_filename)
-            self.ui.lineEdit_sampleName.setEnabled(True)        
+            self.ui.lineEdit_saveFilename.setEnabled(True)
+            self.ui.lineEdit_saveFilename.setText(self.save_filename)
+            self.ui.lineEdit_metaSampleName.setEnabled(True)        
 
         # Flags
-        self.both_lasers_activated = False
-        self.left_laser_activated = False
-        self.right_laser_activated = False
-        self.laser_on = False
-        
         self.preview_mode_started = False
         self.live_mode_started = False
         self.stack_mode_started = False
@@ -153,8 +148,7 @@ class Controller_MainWindow(QMainWindow):
         self.stack_mode_starting_point = None
         self.stack_mode_ending_point = None
 
-        self.default_buttons = [self.ui.pushButton_acqStartStandbyMode,
-                                self.ui.pushButton_acqStartPreviewMode,
+        self.default_buttons = [self.ui.pushButton_acqStartPreviewMode,
                                 self.ui.pushButton_acqStartLiveMode,
                                 self.ui.pushButton_acqStartStackMode,
                                 self.ui.pushButton_acqGetSingleImage,
@@ -171,14 +165,10 @@ class Controller_MainWindow(QMainWindow):
         self.ui.pushButton_acqSetLastPlane.setEnabled(True)
 
         # Initial state of some file selection buttons
-        self.ui.label_currentSaveDirectory.setText(self.save_path)
-        self.ui.lineEdit_filename.setEnabled(False)
-        self.ui.lineEdit_sampleName.setEnabled(False)
+        self.ui.lineEdit_saveDirectory.setText(self.save_path)
+        self.ui.lineEdit_saveFilename.setEnabled(False)
+        self.ui.lineEdit_metaSampleName.setEnabled(False)
         self.ui.pushButton_selectDataset.setEnabled(False)
-
-        '''Connections'''
-        #self.settings_dialog.ui.buttonBox.accepted.connect(self.change_settings)
-        #self.settings_dialog.ui.buttonBox.rejected.connect(self.settings_dialog.load_preset)
 
         # -------------------------------------------------------------------------------------------------------------------------------
         # Signal connections for post modes (threads) Ui updates
@@ -203,10 +193,9 @@ class Controller_MainWindow(QMainWindow):
         self.ui.action_Exit.triggered.connect(self.close)
         self.ui.action_ShowHideControlsPane.triggered.connect(self.updateUi_show_hide_controls_pane)
         self.ui.action_ShowHideImagesPane.triggered.connect(self.updateUi_show_hide_images_pane)
-        self.ui.action_ShowHideCommandLog.triggered.connect(self.updateUi_show_hide_command_log)
+        self.ui.action_ShowHideMessageLog.triggered.connect(self.updateUi_show_hide_message_log)
         self.ui.action_lightTheme.triggered.connect(self.updateUi_light_theme)
         self.ui.action_darkTheme.triggered.connect(self.updateUi_dark_theme)
-        self.ui.action_ModifyProgramSettings.triggered.connect(self.open_settings_dialog)
         self.ui.action_showSystemProperties.triggered.connect(self.open_properties_dialog)
         self.ui.action_openDocumentation.triggered.connect(self.open_help)
 
@@ -258,8 +247,8 @@ class Controller_MainWindow(QMainWindow):
         self.ui.checkBox_galvoInvert.stateChanged.connect(self.updateUi_galvo_invert)
 
         # Connection for laser settings changes
-        self.ui.doubleSpinBox_laserLeftAmplitude.valueChanged.connect(self.updateUi_laser_left_amplitude)
-        self.ui.doubleSpinBox_laserRightAmplitude.valueChanged.connect(self.updateUi_laser_right_amplitude)
+        self.ui.doubleSpinBox_laserOneAmplitude.valueChanged.connect(self.updateUi_laser1_amplitude)
+        self.ui.doubleSpinBox_laserTwoAmplitude.valueChanged.connect(self.updateUi_laser2_amplitude)
 
         # Connection for general acquisition settings changes
         self.ui.doubleSpinBox_acqSampleRate.valueChanged.connect(self.updateUi_acq_sample_rate)
@@ -299,9 +288,8 @@ class Controller_MainWindow(QMainWindow):
         self.ui.pushButton_acqStartPreviewMode.clicked.connect(self.updateUi_preview_mode_button)
 
         # Connections for the lasers
-        self.ui.pushButton_laserAllActivate.clicked.connect(self.updateUi_lasers_button)
-        self.ui.pushButton_laserLeftActivate.clicked.connect(self.updateUi_left_laser_button)
-        self.ui.pushButton_laserRightActivate.clicked.connect(self.updateUi_right_laser_button)
+        self.ui.pushButton_laserOneToggle.clicked.connect(self.laser1_toggle_button)
+        self.ui.pushButton_laserTwoToggle.clicked.connect(self.laser2_toggle_button)
 
 
         # -------------------------------------------------------------------------------------------------------------------------------
@@ -309,15 +297,14 @@ class Controller_MainWindow(QMainWindow):
         # -------------------------------------------------------------------------------------------------------------------------------
 
         self.ui.pushButton_acqGetSingleImage.clicked.connect(self.updateUi_single_image_button)
-        self.ui.pushButton_acqSaveSingleImage.clicked.connect(self.updateUi_save_single_image)
         self.ui.pushButton_acqStartStackMode.clicked.connect(self.updateUi_stack_mode_button)
         self.ui.doubleSpinBox_acqPlaneStepSize.valueChanged.connect(self.updateUi_set_number_of_planes)
         self.ui.pushButton_acqSetFirstPlane.clicked.connect(self.updateUi_set_stack_mode_starting_point)
         self.ui.pushButton_acqSetLastPlane.clicked.connect(self.updateUi_set_stack_mode_ending_point)
 
         # Connection for data saving (updateUi)
-        self.ui.pushButton_selectSaveDirectory.clicked.connect(self.updateUi_select_directory)
-
+        self.ui.pushButton_saveSelectDirectory.clicked.connect(self.updateUi_select_directory)
+        self.ui.pushButton_saveCurrentImage.clicked.connect(self.updateUi_save_single_image)
 
         # Start single shot timer to complete init after event loop is started
         self.timer_hardware_init = QTimer()
@@ -345,10 +332,7 @@ class Controller_MainWindow(QMainWindow):
         # Update Ui initial motors state given chosen display units
         self.updateUi_initial_hardware_state()
 
-        self.updateUi_laser_buttons()
-
         # Instantiating the settings and properties dialogs
-        self.settings_dialog = Settings_Dialog(self)
         self.properties_dialog = Properties_Dialog(self)
 
         # Instantiating the display port queue (image consumer)
@@ -399,17 +383,12 @@ class Controller_MainWindow(QMainWindow):
             event.ignore()
             
     @pyqtSlot(str)
-    def updateUi_status_printer(self, message:str):
+    def updateUi_message_printer(self, message:str):
         '''Print text in console, in controller text box and in status bar'''
         logging.info(message)
         self.ui.statusbar.showMessage(message)
-        self.ui.plainTextEdit_cmdLog.appendPlainText(message)
-        self.ui.plainTextEdit_cmdLog.verticalScrollBar().setValue(self.ui.plainTextEdit_cmdLog.verticalScrollBar().maximum())
-
-
-    def open_settings_dialog(self):
-        '''Open the dialog window for modification of settings'''
-        self.settings_dialog.exec_()
+        self.ui.plainTextEdit_messageLog.appendPlainText(message)
+        self.ui.plainTextEdit_messageLog.verticalScrollBar().setValue(self.ui.plainTextEdit_messageLog.verticalScrollBar().maximum())
 
     def open_properties_dialog(self):
         '''Open the dialog window for showing properties'''
@@ -420,19 +399,6 @@ class Controller_MainWindow(QMainWindow):
         '''Open help documentation for the program (PDF)'''
         guide_pdf = os.path.dirname(os.path.abspath(__file__)) + '\..\Guide.pdf'
         webbrowser.open_new(guide_pdf)
-
-
-    def change_settings(self):
-        '''Change the configuration settings'''
-        self.settings_save_policy = self.settings_dialog.ui.comboBox_savePolicy.currentIndex()
-        self.save_path = self.settings_dialog.ui.label_saveDirectory.text()
-        self.save_filename = self.settings_dialog.ui.lineEdit_defaultFilename.text()
-        self.updateUi_status_printer('Configuration Settings Changed')
-    
-
-    # -------------------------------------------------------------------------------------------------------------------------------
-    # -------------------------------------------------------------------------------------------------------------------------------
-
 
     def updateUi_light_theme(self):
         self.sig_stylesheet.emit('light')
@@ -454,11 +420,11 @@ class Controller_MainWindow(QMainWindow):
         else:
             self.ui.controlsPane.show()
 
-    def updateUi_show_hide_command_log(self):
-        if self.ui.plainTextEdit_cmdLog.isVisible():
-            self.ui.plainTextEdit_cmdLog.hide()
+    def updateUi_show_hide_message_log(self):
+        if self.ui.plainTextEdit_messageLog.isVisible():
+            self.ui.plainTextEdit_messageLog.hide()
         else:
-            self.ui.plainTextEdit_cmdLog.show()
+            self.ui.plainTextEdit_messageLog.show()
 
    
     def imageview_enqueue_frame(self, frame:np.uint16):
@@ -482,28 +448,7 @@ class Controller_MainWindow(QMainWindow):
         else:
             self.ui.imageView.setImage(frame, autoRange=False, autoLevels=False, autoHistogramRange=False)
     
-   
-    # -------------------------------------------------------------------------------------------------------------------------------
-    # -------------------------------------------------------------------------------------------------------------------------------
-    
-    def updateUi_laser_buttons(self, disable_button = True):
-        '''Deactivate lasers, and enable or disable all laser buttons'''
-        if self.both_lasers_activated:
-            self.updateUi_lasers_button()
-        elif self.left_laser_activated:
-            self.updateUi_left_laser_button()
-        elif self.right_laser_activated:
-            self.updateUi_right_laser_button()
-        
-        buttons_to_disable = [self.ui.pushButton_laserAllActivate,
-                              self.ui.pushButton_laserLeftActivate,
-                              self.ui.pushButton_laserRightActivate]
-        for button in buttons_to_disable:
-            if disable_button:
-                button.setEnabled(False)
-            else:
-                button.setEnabled(True)
-    
+
     def updateUi_motor_buttons(self, disable_button=True):
         '''Enable or disable all motor buttons'''
         #FIXME
@@ -527,12 +472,11 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_modes_buttons(self, buttons_to_enable):
         '''Update mode buttons status : disable buttons, except for those specified to be enabled'''
         #FIXME
-        aquisition_buttons = [self.ui.pushButton_acqStartStandbyMode,
-                              self.ui.pushButton_acqStartPreviewMode,
+        aquisition_buttons = [self.ui.pushButton_acqStartPreviewMode,
                               self.ui.pushButton_acqStartLiveMode,
                               self.ui.pushButton_acqStartStackMode,
                               self.ui.pushButton_acqGetSingleImage,
-                              self.ui.pushButton_acqSaveSingleImage,
+                              self.ui.pushButton_saveCurrentImage,
                               self.ui.pushButton_calCameraStartCalibration,
                               self.ui.pushButton_calCameraComputeFocus,
                               self.ui.pushButton_calCameraShowInterpolation,
@@ -547,7 +491,7 @@ class Controller_MainWindow(QMainWindow):
     def close_modes(self):
         '''Close all thread modes if they are active'''
         #FIXME
-        if self.laser_on:
+        if self.lasers.laser1_active or self.lasers.laser2_active:
             self.stop_lasers()
         if self.preview_mode_started:
             self.preview_mode_started = False
@@ -577,8 +521,8 @@ class Controller_MainWindow(QMainWindow):
         self.ui.doubleSpinBox_acqExposureTime.setValue(self.hwdaq.exposure_time * 1000) # hwdaq(s) to ui(ms)
 
         # Lasers
-        self.ui.doubleSpinBox_laserLeftAmplitude.setValue(self.lasers.left_amplitude)
-        self.ui.doubleSpinBox_laserRightAmplitude.setValue(self.lasers.right_amplitude)
+        self.ui.doubleSpinBox_laserOneAmplitude.setValue(self.lasers.laser1_power)
+        self.ui.doubleSpinBox_laserTwoAmplitude.setValue(self.lasers.laser2_power)
 
         # Motors
         self.updateUi_units()
@@ -655,20 +599,20 @@ class Controller_MainWindow(QMainWindow):
         '''Moves the sample to a specified horizontal position'''
         if ((self.ui.doubleSpinBox_sampleSetHPosition.value() >= self.motors.horizontal.get_limit_low(self.units)) and (self.ui.doubleSpinBox_sampleSetHPosition.value() <= self.motors.horizontal.get_limit_high(self.units))):
             self.motors.horizontal.move_absolute_position(self.ui.doubleSpinBox_sampleSetHPosition.value(), self.units)
-            self.updateUi_status_printer('Sample moving to horizontal position')
+            self.updateUi_message_printer('Sample moving to horizontal position')
             self.updateUi_position_horizontal()
         else:
-            self.updateUi_status_printer('Out of boundaries')
+            self.updateUi_message_printer('Out of boundaries')
             self.sig_beep.emit()
     
     def updateUi_move_to_vertical_position(self):
         '''Moves the sample to a specified vertical position'''
         if ((self.ui.doubleSpinBox_sampleSetVPosition.value() >= self.motors.vertical.get_limit_low(self.units)) and (self.ui.doubleSpinBox_sampleSetVPosition.value() <= self.motors.vertical.get_limit_high(self.units))):
             self.motors.vertical.move_absolute_position(self.ui.doubleSpinBox_sampleSetVPosition.value(), self.units)
-            self.updateUi_status_printer('Sample moving to vertical position')
+            self.updateUi_message_printer('Sample moving to vertical position')
             self.updateUi_position_vertical()
         else:
-            self.updateUi_status_printer('Out of boundaries')
+            self.updateUi_message_printer('Out of boundaries')
             self.sig_beep.emit()
 
     def updateUi_move_sample_to_origin(self):
@@ -676,29 +620,29 @@ class Controller_MainWindow(QMainWindow):
         if (self.motors.horizontal.get_origin(self.units) <= self.motors.horizontal.get_limit_high(self.units)) and (self.motors.horizontal.get_origin(self.units) >= self.motors.horizontal.get_limit_low(self.units)):
             '''Moving sample to horizontal origin'''
             self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_origin(self.units), self.units)
-            self.updateUi_status_printer('Moving to horizontal origin')
+            self.updateUi_message_printer('Moving to horizontal origin')
             self.updateUi_position_horizontal()
         else:
             self.sig_beep.emit()
-            self.updateUi_status_printer('Horizontal origin out of boundaries')
+            self.updateUi_message_printer('Horizontal origin out of boundaries')
         
         if (self.motors.vertical.get_origin(self.units) <= self.motors.vertical.get_limit_high(self.units)) and (self.motors.vertical.get_origin(self.units) >= self.motors.vertical.get_limit_low(self.units)):
             '''Moving sample to vertical origin'''
             self.motors.vertical.move_absolute_position(self.motors.vertical.get_origin(self.units), self.units)
-            self.updateUi_status_printer('Moving to vertical origin')
+            self.updateUi_message_printer('Moving to vertical origin')
             self.updateUi_position_vertical()
         else:
             self.sig_beep.emit()
-            self.updateUi_status_printer('Vertical origin out of boundaries')
+            self.updateUi_message_printer('Vertical origin out of boundaries')
 
     def updateUi_move_camera_to_position(self):
         '''Moves the sample to a specified vertical position'''
         if ((self.ui.doubleSpinBox_cameraSetPosition.value() >= self.motors.camera.get_limit_low(self.units)) and (self.ui.doubleSpinBox_cameraSetPosition.value() <= self.motors.camera.get_limit_high(self.units))):
             self.motors.camera.move_absolute_position(self.ui.doubleSpinBox_cameraSetPosition.value(), self.units)
-            self.updateUi_status_printer ('Camera moving to position')
+            self.updateUi_message_printer ('Camera moving to position')
             self.updateUi_position_camera()
         else:
-            self.updateUi_status_printer('Out of boundaries')
+            self.updateUi_message_printer('Out of boundaries')
             self.sig_beep.emit()
 
     def updateUi_move_camera_to_focus(self):
@@ -706,32 +650,32 @@ class Controller_MainWindow(QMainWindow):
         if self.focus_selected:
             if self.motors.camera.get_origin(self.units) > self.motors.camera.get_limit_high(self.units):
                 self.motors.camera.move_absolute_position(self.motors.camera.get_limit_high(), self.units)
-                self.updateUi_status_printer('Focus out of boundaries')
+                self.updateUi_message_printer('Focus out of boundaries')
                 self.sig_beep.emit()
                 self.updateUi_position_camera()
             elif self.motors.camera.get_origin(self.units) < self.motors.camera.get_limit_low(self.units):
                 self.motors.camera.move_absolute_position(self.motors.camera.get_limit_low(self.units), self.units)
-                self.updateUi_status_printer('Focus out of boundaries')
+                self.updateUi_message_printer('Focus out of boundaries')
                 self.sig_beep.emit()
                 self.updateUi_position_camera()
             else:
                 self.motors.camera.move_absolute_position(self.motors.camera.get_origin(self.units), self.units)
-                self.updateUi_status_printer('Moving to focus')
+                self.updateUi_message_printer('Moving to focus')
                 self.updateUi_position_camera()
         else:
             self.motors.camera.move_absolute_position(self.motors.camera.get_origin(self.units), self.units)
-            self.updateUi_status_printer('Focus not yet set. Moving camera to default focus')
+            self.updateUi_message_printer('Focus not yet set. Moving camera to default focus')
             self.updateUi_position_camera()
 
     def updateUi_move_sample_backward(self):
         '''Sample motor backward horizontal motion'''
         if self.motors.horizontal.get_position(self.units) - self.ui.doubleSpinBox_sampleHStepSize.value() >= self.motors.horizontal.get_limit_low(self.units):
             self.motors.horizontal.move_relative_position(-self.ui.doubleSpinBox_sampleHStepSize.value(), self.units)
-            self.updateUi_status_printer ('Sample moving backward')
+            self.updateUi_message_printer ('Sample moving backward')
             self.updateUi_position_horizontal()
         else:
             self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_low(self.units), self.units)
-            self.updateUi_status_printer('Out of boundaries')
+            self.updateUi_message_printer('Out of boundaries')
             self.sig_beep.emit()
             self.updateUi_position_horizontal()
 
@@ -739,11 +683,11 @@ class Controller_MainWindow(QMainWindow):
         '''Sample motor forward horizontal motion'''
         if self.motors.horizontal.get_position(self.units) + self.ui.doubleSpinBox_sampleHStepSize.value() <= self.motors.horizontal.get_limit_high(self.units):
             self.motors.horizontal.move_relative_position(self.ui.doubleSpinBox_sampleHStepSize.value(), self.units)
-            self.updateUi_status_printer('Sample moving forward')
+            self.updateUi_message_printer('Sample moving forward')
             self.updateUi_position_horizontal()
         else:
             self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_high(self.units), self.units)
-            self.updateUi_status_printer('Out of boundaries')
+            self.updateUi_message_printer('Out of boundaries')
             self.sig_beep.emit()
             self.updateUi_position_horizontal()
 
@@ -751,11 +695,11 @@ class Controller_MainWindow(QMainWindow):
         '''Sample motor upward vertical motion'''
         if self.motors.vertical.get_position(self.units) - self.ui.doubleSpinBox_sampleVStepSize.value() >= self.motors.vertical.get_limit_low(self.units):
             self.motors.vertical.move_relative_position(-self.ui.doubleSpinBox_sampleVStepSize.value(), self.units)
-            self.updateUi_status_printer('Sample stepping up')
+            self.updateUi_message_printer('Sample stepping up')
             self.updateUi_position_vertical()
         else:
             self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_low(self.units), self.units)
-            self.updateUi_status_printer('Out of boundaries')
+            self.updateUi_message_printer('Out of boundaries')
             self.sig_beep.emit()
             self.updateUi_position_vertical()
     
@@ -763,11 +707,11 @@ class Controller_MainWindow(QMainWindow):
         '''Sample motor downward vertical motion'''
         if self.motors.vertical.get_position(self.units) + self.ui.doubleSpinBox_sampleVStepSize.value() <= self.motors.vertical.get_limit_high(self.units):
             self.motors.vertical.move_relative_position(self.ui.doubleSpinBox_sampleVStepSize.value(), self.units)
-            self.updateUi_status_printer('Sample stepping down')
+            self.updateUi_message_printer('Sample stepping down')
             self.updateUi_position_vertical()
         else:
             self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_high(self.units), self.units)
-            self.updateUi_status_printer('Out of boundaries')
+            self.updateUi_message_printer('Out of boundaries')
             self.sig_beep.emit()
             self.updateUi_position_vertical()
 
@@ -775,11 +719,11 @@ class Controller_MainWindow(QMainWindow):
         '''Camera motor backward horizontal motion'''
         if self.motors.camera.get_position(self.units) - self.ui.doubleSpinBox_cameraStepSize.value() >= self.motors.camera.get_limit_low(self.units):
             self.motors.camera.move_relative_position(-self.ui.doubleSpinBox_cameraStepSize.value(), self.units)
-            self.updateUi_status_printer('Camera stepping backward')
+            self.updateUi_message_printer('Camera stepping backward')
             self.updateUi_position_camera()
         else:
             self.motors.camera.move_absolute_position(self.motors.camera.get_limit_low(self.units), self.units)
-            self.updateUi_status_printer('Out of boundaries')
+            self.updateUi_message_printer('Out of boundaries')
             self.sig_beep.emit()
             self.updateUi_position_camera()
 
@@ -787,11 +731,11 @@ class Controller_MainWindow(QMainWindow):
         '''Camera motor forward horizontal motion'''
         if self.motors.camera.get_position(self.units) + self.ui.doubleSpinBox_cameraStepSize.value() <= self.motors.camera.get_limit_high(self.units):
             self.motors.camera.move_relative_position(self.ui.doubleSpinBox_cameraStepSize.value(), self.units)
-            self.updateUi_status_printer('Camera stepping forward')
+            self.updateUi_message_printer('Camera stepping forward')
             self.updateUi_position_camera()
         else:
             self.motors.camera.move_absolute_position(self.motors.camera.get_limit_high(self.units), self.units)
-            self.updateUi_status_printer('Out of boundaries')
+            self.updateUi_message_printer('Out of boundaries')
             self.sig_beep.emit()
             self.updateUi_position_camera()
 
@@ -840,13 +784,13 @@ class Controller_MainWindow(QMainWindow):
         self.motors.horizontal.set_origin(self.motors.horizontal.get_position(self.units), self.units)
         self.motors.vertical.set_origin(self.motors.vertical.get_position(self.units), self.units)
         origin_text = 'Origin set at (x,z) = ({}, {}) {}'.format(self.motors.horizontal.get_origin(self.units), self.motors.vertical.get_origin(self.units), self.units)
-        self.updateUi_status_printer(origin_text)
+        self.updateUi_message_printer(origin_text)
  
     def updateUi_set_camera_focus(self):
         '''Modifies manually the camera focus position'''
         self.focus_selected = True
         self.motors.camera.set_origin(self.motors.camera.get_position(self.units), self.units)
-        self.updateUi_status_printer('Camera focus manually set a {} mm'.format(self.motors.camera.get_origin(self.units)))
+        self.updateUi_message_printer('Camera focus manually set a {} mm'.format(self.motors.camera.get_origin(self.units)))
 
     def calculate_camera_focus(self):
         '''Interpolates the camera focus position'''
@@ -857,7 +801,7 @@ class Controller_MainWindow(QMainWindow):
         self.motors.camera.set_origin(focus_regression, self.units)
         print('focus_regression:' + str(focus_regression)) #debugging
         self.focus_selected = True
-        self.updateUi_status_printer('Focus automatically set')
+        self.updateUi_message_printer('Focus automatically set')
     
     def show_camera_interpolation(self):
         '''Shows the camera focus interpolation'''
@@ -1105,78 +1049,33 @@ class Controller_MainWindow(QMainWindow):
         # Propagate Ui changes to HwDAQ instance
         self.hwdaq.exposure_time = self.ui.doubleSpinBox_acqExposureTime.value() / 1000  # ui(ms) to hwdaq(s)
 
-    def updateUi_laser_left_amplitude(self):
+    def updateUi_laser1_amplitude(self):
         # Propagate Ui changes to HwDAQ instance
-        self.lasers.left_amplitude = self.ui.doubleSpinBox_laserLeftAmplitude.value()
+        self.lasers.laser1_power = self.ui.doubleSpinBox_laserOneAmplitude.value()
 
-    def updateUi_laser_right_amplitude(self):
+    def updateUi_laser2_amplitude(self):
         # Propagate Ui changes to HwDAQ instance
-        self.lasers.right_amplitude = self.ui.doubleSpinBox_laserRightAmplitude.value()
+        self.lasers.laser2_power = self.ui.doubleSpinBox_laserTwoAmplitude.value()
 
-
-    def updateUi_lasers_button(self):
-        '''Activate or deactivate lasers, depending on the button status'''
-        if self.both_lasers_activated:
-            self.both_lasers_activated = False
-            self.updateUi_status_printer('All Lasers Off')
-            self.ui.pushButton_laserAllActivate.setText('Activate All Lasers')
-            self.ui.pushButton_laserLeftActivate.setEnabled(True)
-            self.ui.pushButton_laserRightActivate.setEnabled(True)
-        else:
-            self.both_lasers_activated = True
-            self.updateUi_status_printer('All Lasers On')
-            self.ui.pushButton_laserAllActivate.setText('Deactivate All Lasers')
-            self.ui.pushButton_laserLeftActivate.setEnabled(False)
-            self.ui.pushButton_laserRightActivate.setEnabled(False)
-    
-    def updateUi_left_laser_button(self):
-        '''Activate or deactivate left laser, depending on the button status'''
-        if self.left_laser_activated:
-            self.left_laser_activated = False
-            self.updateUi_status_printer('Left Laser Off')
-            self.ui.pushButton_laserAllActivate.setEnabled(True)
-            self.ui.pushButton_laserLeftActivate.setText('Activate Left Laser')
-            self.ui.pushButton_laserRightActivate.setEnabled(True)
-        else:
-            self.left_laser_activated = True
-            self.updateUi_status_printer('Left Laser On')
-            self.ui.pushButton_laserAllActivate.setEnabled(False)
-            self.ui.pushButton_laserLeftActivate.setText('Deactivate Left Laser')
-            self.ui.pushButton_laserRightActivate.setEnabled(False)
+    def laser1_toggle_button(self):
+        self.lasers.laser1_toggle()
             
-    def updateUi_right_laser_button(self):
-        '''Activate or deactivate right laser, depending on the button status'''
-        if self.right_laser_activated:
-            self.right_laser_activated = False
-            self.updateUi_status_printer('Right Laser Off')
-            self.ui.pushButton_laserAllActivate.setEnabled(True)
-            self.ui.pushButton_laserLeftActivate.setEnabled(True)
-            self.ui.pushButton_laserRightActivate.setText('Activate Right Laser')
-        else:
-            self.right_laser_activated = True
-            self.updateUi_status_printer('Right Laser On')
-            self.ui.pushButton_laserAllActivate.setEnabled(False)
-            self.ui.pushButton_laserLeftActivate.setEnabled(False)
-            self.ui.pushButton_laserRightActivate.setText('Deactivate Right Laser')
+    def laser2_toggle_button(self):
+        self.lasers.laser2_toggle()
 
     def start_lasers(self):
         '''Starts the lasers at a certain voltage'''
-        self.laser_on = True
-        self.lasers.turn_on()
-    
+        if self.ui.checkBox_laserOneAutomatic.isChecked:
+            self.lasers.laser1_on
+        if self.ui.checkBox_laserTwoAutomatic.isChecked:
+            self.lasers.laser2_on
+
     def stop_lasers(self):
         '''Stops the lasers, puts their voltage to zero'''
-        self.laser_on = False
-        self.lasers.turn_off()
-        
-        '''Deactivating lasers'''
-        if self.both_lasers_activated:
-            self.both_lasers_activated = False
-        if self.left_laser_activated:
-            self.left_laser_activated = False
-        if self.right_laser_activated:
-            self.right_laser_activated = False
- 
+        if self.ui.checkBox_laserOneAutomatic.isChecked:
+            self.lasers.laser1_off
+        if self.ui.checkBox_laserTwoAutomatic.isChecked:
+            self.lasers.laser2_off
  
     '''File Open Methods'''
         
@@ -1196,7 +1095,7 @@ class Controller_MainWindow(QMainWindow):
                 for item in range(len(dataset_names)):
                     self.ui.listWidget_fileDatasets.insertItem(item,dataset_names[item])
             self.ui.listWidget_fileDatasets.setCurrentRow(0)
-            self.updateUi_status_printer('File ' + self.open_directory + ' opened')
+            self.updateUi_message_printer('File ' + self.open_directory + ' opened')
             self.ui.pushButton_selectDataset.setEnabled(True)
         else:
             self.ui.label_currentFileDirectory.setText('None Specified')
@@ -1237,7 +1136,7 @@ class Controller_MainWindow(QMainWindow):
                     ##tiff_filename = self.open_directory.replace('.hdf5', '.tiff')
                     ##tiff.save(tiff_filename)
                 
-                self.updateUi_status_printer('Dataset ' + self.dataset_name + ' of file ' + self.open_directory + ' displayed')
+                self.updateUi_message_printer('Dataset ' + self.dataset_name + ' of file ' + self.open_directory + ' displayed')
     
 
 
@@ -1246,13 +1145,13 @@ class Controller_MainWindow(QMainWindow):
         if self.preview_mode_started:
             self.preview_mode_started = False
             self.ui.pushButton_acqStartPreviewMode.setText('Start Preview Mode')
-            self.updateUi_laser_buttons()
+#            self.updateUi_laser_buttons()
         else:
             self.close_modes()
             self.preview_mode_started = True
             self.updateUi_modes_buttons([self.ui.pushButton_acqStartPreviewMode])
             self.ui.pushButton_acqStartPreviewMode.setText('Stop Preview Mode')
-            self.updateUi_laser_buttons(False)
+#            self.updateUi_laser_buttons(False)
             self.updateUi_pre_preview_mode()
             
             # Starting preview mode thread
@@ -1263,7 +1162,7 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_pre_preview_mode(self):
         # updating ui before starting preview mode thread
         self.updateUi_modes_buttons([self.ui.pushButton_acqStartPreviewMode])
-        self.updateUi_status_printer('->Preview mode started')
+        self.updateUi_message_printer('->Preview mode started')
         self.label_statusBar.setText('Current Acquisition Mode: Preview ')
         self.progress_statusBar.show()
         self.sig_progress_update.emit(100)
@@ -1272,7 +1171,7 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_post_preview_mode(self):
         # updating ui after preview mode thread has completed
         self.updateUi_modes_buttons(self.default_buttons)
-        self.updateUi_status_printer('->Preview mode stopped')
+        self.updateUi_message_printer('->Preview mode stopped')
         self.label_statusBar.setText('')
         self.progress_statusBar.hide()
         self.sig_progress_update.emit(0)
@@ -1322,12 +1221,12 @@ class Controller_MainWindow(QMainWindow):
         if self.live_mode_started:
             self.live_mode_started = False
             self.ui.pushButton_acqStartLiveMode.setText('Start Live Mode')
-            self.updateUi_laser_buttons()
+#            self.updateUi_laser_buttons()
         else:
             self.close_modes()
             self.live_mode_started = True
             self.ui.pushButton_acqStartLiveMode.setText('Stop Live Mode')
-            self.updateUi_laser_buttons(False)
+#            self.updateUi_laser_buttons(False)
             self.updateUi_pre_live_mode()
             
             # Starting live mode thread
@@ -1338,7 +1237,7 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_pre_live_mode(self):
         # updating ui before starting live mode thread
         self.updateUi_modes_buttons([self.ui.pushButton_acqStartLiveMode])
-        self.updateUi_status_printer('->Live mode started')
+        self.updateUi_message_printer('->Live mode started')
         self.label_statusBar.setText('Current Acquisition Mode: Live ')
         self.progress_statusBar.show()
         self.sig_progress_update.emit(100)
@@ -1347,7 +1246,7 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_post_live_mode(self):
         # updating ui after live mode thread has completed
         self.updateUi_modes_buttons(self.default_buttons)
-        self.updateUi_status_printer('->Live mode stopped')
+        self.updateUi_message_printer('->Live mode stopped')
         self.label_statusBar.setText('')
         self.progress_statusBar.hide()
         self.sig_progress_update.emit(0)
@@ -1390,7 +1289,7 @@ class Controller_MainWindow(QMainWindow):
 
         # Disabling modes while single frame acquisition
         self.updateUi_modes_buttons(self.default_buttons)
-        self.updateUi_status_printer('->Getting single image')
+        self.updateUi_message_printer('->Getting single image')
 
         self.get_single_image()
 
@@ -1596,7 +1495,7 @@ class Controller_MainWindow(QMainWindow):
         self.hwdaq.delete_scan()
 
         # Frame reconstruction options
-        if self.ui.checkBox_acqStitchFrames.isChecked():
+        if self.ui.checkBox_saveStitchBlend.isChecked():
             self.reconstructed_frame = self.reconstruct_frame_linear_blend(self.buffer)
         else:
             self.reconstructed_frame = self.reconstruct_frame(self.buffer)
@@ -1616,15 +1515,15 @@ class Controller_MainWindow(QMainWindow):
             self.save_path = os.path.normpath(tmp_directory)
 
         if self.save_path != '':
-            self.ui.label_currentSaveDirectory.setText(self.save_path)
-            self.ui.lineEdit_filename.setEnabled(True)
-            self.ui.lineEdit_filename.setText('')
-            self.ui.lineEdit_sampleName.setEnabled(True)
+            self.ui.lineEdit_saveDirectory.setText(self.save_path)
+            self.ui.lineEdit_saveFilename.setEnabled(True)
+            self.ui.lineEdit_saveFilename.setText('')
+            self.ui.lineEdit_metaSampleName.setEnabled(True)
         else:
-            self.ui.label_currentSaveDirectory.setText('None Specified')
-            self.ui.lineEdit_filename.setEnabled(False)
-            self.ui.lineEdit_filename.setText('Select Directory First')
-            self.ui.lineEdit_sampleName.setEnabled(False)
+            self.ui.lineEdit_saveDirectory.setText('None Specified')
+            self.ui.lineEdit_saveFilename.setEnabled(False)
+            self.ui.lineEdit_saveFilename.setText('Select Directory First')
+            self.ui.lineEdit_metaSampleName.setEnabled(False)
     
     def validate_file_name(self, tmp_string):
         ''' Returns a valid file name. Only alphanumeric, - and _ characters are permitted'''
@@ -1638,7 +1537,7 @@ class Controller_MainWindow(QMainWindow):
 
     def get_file_name(self):
         '''Retrieve filename set by the user'''
-        tmp_string = self.ui.lineEdit_filename.text()
+        tmp_string = self.ui.lineEdit_saveFilename.text()
         tmp_string = self.validate_file_name(tmp_string)
         if tmp_string != '':
             self.filename = tmp_string
@@ -1651,8 +1550,8 @@ class Controller_MainWindow(QMainWindow):
     
     def get_sample_name(self):
         '''Retrieve sample name'''
-        if str(self.ui.lineEdit_sampleName.text()) != '':
-            self.meta_sample_name = str(self.ui.lineEdit_sampleName.text())
+        if str(self.ui.lineEdit_metaSampleName.text()) != '':
+            self.meta_sample_name = str(self.ui.lineEdit_metaSampleName.text())
     
     def updateUi_save_single_image(self):
         '''Saves the frame generated by self.get_single_image()'''
@@ -1671,15 +1570,15 @@ class Controller_MainWindow(QMainWindow):
             self.frame_saver.add_motor_parameters(self.image_hor_pos_text,self.image_ver_pos_text,self.image_cam_pos_text)
             
             '''Saving frame'''
-            if self.ui.checkBox_acqSaveAllFrames.isChecked():
+            if self.ui.checkBox_saveAllCrop.isChecked():
                 self.frame_saver.set_files(1,self.filename,'singleImage',1,'ETLscan')
                 cropped_buffer = self.crop_buffer(self.buffer)
                 self.frame_saver.put(cropped_buffer)
-                self.updateUi_status_printer('Saving Images (one for each ETL scan)')
+                self.updateUi_message_printer('Saving Images (one for each ETL scan)')
             else:
                 self.frame_saver.set_files(1,self.filename,'singleImage',1,'reconstructed_frame')
                 self.frame_saver.put(self.reconstructed_frame)
-                self.updateUi_status_printer('Saving Reconstructed Image')
+                self.updateUi_message_printer('Saving Reconstructed Image')
             
             self.frame_saver.start_saving()
             self.frame_saver.stop_saving()
@@ -1759,7 +1658,7 @@ class Controller_MainWindow(QMainWindow):
         '''Modes disabling while stack acquisition'''
         self.updateUi_modes_buttons([self.ui.pushButton_acqStartStackMode])
         self.updateUi_motor_buttons()
-        self.updateUi_status_printer('->Stack mode started -- Number of frames to save: ' + str(int(self.number_of_planes)))
+        self.updateUi_message_printer('->Stack mode started -- Number of frames to save: ' + str(int(self.number_of_planes)))
 
     @pyqtSlot()
     def updateUi_post_stack_mode(self):
@@ -1769,7 +1668,7 @@ class Controller_MainWindow(QMainWindow):
         self.updateUi_motor_buttons(disable_button=False)
         
         self.stack_mode_started = False
-        self.updateUi_status_printer('->Stack Mode Acquisition Done')
+        self.updateUi_message_printer('->Stack Mode Acquisition Done')
         self.label_statusBar.setText('')
         self.progress_statusBar.hide()
 
@@ -1785,7 +1684,7 @@ class Controller_MainWindow(QMainWindow):
             self.frame_saver.reinit()
             self.frame_saver.add_sample_name(self.meta_sample_name)
             self.frame_saver.set_block_size(3) #Block size is a number of buffers
-            if self.ui.checkBox_acqSaveAllFrames.isChecked():
+            if self.ui.checkBox_saveAllCrop.isChecked():
                 self.frame_saver.set_files(self.number_of_planes,self.filename,'stack',1,'ETLscan')
             else:
                 self.frame_saver.set_files(1,self.filename,'stack',self.number_of_planes,'reconstructed_frame')
@@ -1807,7 +1706,7 @@ class Controller_MainWindow(QMainWindow):
         
         for plane in range(int(self.number_of_planes)):
             if self.stack_mode_started == False:
-                self.sig_status_message.emit('Stack Acquisition Interrupted')
+                self.sig_message.emit('Stack Acquisition Interrupted')
                 break
             else:
                 '''Moving sample position'''
@@ -1830,13 +1729,13 @@ class Controller_MainWindow(QMainWindow):
                 
                 '''Saving frame'''
                 if self.saving_allowed:
-                    if self.ui.checkBox_acqSaveAllFrames.isChecked():
+                    if self.ui.checkBox_saveAllCrop.isChecked():
                         cropped_buffer = self.crop_buffer(self.buffer)
                         self.frame_saver.put(cropped_buffer)
-                        self.sig_status_message.emit('Saving Images (one for each ETL scan)')
+                        self.sig_message.emit('Saving Images (one for each ETL scan)')
                     else:
                         self.frame_saver.put(self.reconstructed_frame)
-                        self.sig_status_message.emit('Saving Reconstructed Image')
+                        self.sig_message.emit('Saving Reconstructed Image')
                 
                 '''Update progress bar'''
                 progress_value += progress_increment
@@ -1880,7 +1779,7 @@ class Controller_MainWindow(QMainWindow):
         '''Modes disabling while stack acquisition'''
         self.updateUi_modes_buttons([self.ui.pushButton_calCameraStartCalibration])
             
-        self.updateUi_status_printer('Camera calibration started')
+        self.updateUi_message_printer('Camera calibration started')
         self.label_statusBar.setText('Current Mode: Camera Calibration ')
         self.progress_statusBar.show()
             
@@ -1958,7 +1857,7 @@ class Controller_MainWindow(QMainWindow):
         
         for sample_plane in range(int(self.number_of_calibration_planes)): #For each sample position
             if self.camera_calibration_started == False:
-                self.sig_status_message.emit('Camera calibration interrupted')
+                self.sig_message.emit('Camera calibration interrupted')
                 break
             else:
                 '''Moving sample position'''
@@ -1987,7 +1886,7 @@ class Controller_MainWindow(QMainWindow):
                         '''Saving frame''' #debugging
                         if self.saving_allowed:
                             self.frame_saver.put(self.reconstructed_frame)
-                            self.sig_status_message.emit('Saving Reconstructed Image')
+                            self.sig_message.emit('Saving Reconstructed Image')
                         
                         '''Filtering frame'''
                         frame = ndimage.gaussian_filter(self.reconstructed_frame, sigma=3)
@@ -2024,14 +1923,14 @@ class Controller_MainWindow(QMainWindow):
                         max_variance_camera_position = self.focus_backward_boundary
                     self.camera_focus_relation[sample_plane,1] = max_variance_camera_position
                     
-                    self.sig_status_message.emit('--Calibration of plane ' + str(sample_plane+1) + '/' + str(int(self.number_of_calibration_planes)) + ' done')
+                    self.sig_message.emit('--Calibration of plane ' + str(sample_plane+1) + '/' + str(int(self.number_of_calibration_planes)) + ' done')
             
                     '''Update progress bar'''
                     progress_value += progress_increment
                     self.sig_progress_update.emit(int(progress_value))
                 except:
                     self.camera_calibration_started = False
-                    self.sig_status_message.emit('Camera calibration failed')
+                    self.sig_message.emit('Camera calibration failed')
         if self.camera_calibration_started:
             self.sig_progress_update.emit(100) #In case the number of planes is not a multiple of 100
         
@@ -2040,7 +1939,7 @@ class Controller_MainWindow(QMainWindow):
         
         if self.saving_allowed: #debugging
             self.frame_saver.stop_saving()
-            self.sig_status_message.emit('Images saved')
+            self.sig_message.emit('Images saved')
         
         '''Returning sample and camera at initial positions'''
         self.motors.horizontal.move_absolute_position(position_depart_sample,'\u03BCStep')
@@ -2071,7 +1970,7 @@ class Controller_MainWindow(QMainWindow):
             self.default_buttons.append(self.ui.pushButton_calCameraComputeFocus)
             self.default_buttons.append(self.ui.pushButton_calCameraShowInterpolation)
         
-        self.sig_status_message.emit('Camera calibration done')
+        self.sig_message.emit('Camera calibration done')
         self.label_statusBar.setText('')
         self.progress_statusBar.hide()
             
@@ -2099,7 +1998,7 @@ class Controller_MainWindow(QMainWindow):
        
         '''Modes disabling while stack acquisition'''
         self.updateUi_modes_buttons([self.ui.pushButton_calEtlStartCalibration])
-        self.updateUi_status_printer('ETL calibration started')
+        self.updateUi_message_printer('ETL calibration started')
         
         '''Starting camera calibration thread'''
         calibrate_etls_thread = threading.Thread(target = self.calibrate_etls_thread)
@@ -2186,7 +2085,7 @@ class Controller_MainWindow(QMainWindow):
             #For each interpolation point
             for etl_point in range(int(self.number_of_etls_points)):
                 if self.etls_calibration_started is False:
-                    self.sig_status_message.emit('ETL calibration interrupted')
+                    self.sig_message.emit('ETL calibration interrupted')
                     break
                 else:
                     '''Getting the data to send to the AO'''
@@ -2226,7 +2125,7 @@ class Controller_MainWindow(QMainWindow):
                         '''Saving frame''' #debugging
                         if self.saving_allowed:
                             self.frame_saver.put(blurred_frame)
-                            self.sig_status_message.emit('Saving Reconstructed Image')
+                            self.sig_message.emit('Saving Reconstructed Image')
                         
                         frame = np.transpose(frame)
                         blurred_frame = np.transpose(blurred_frame)
@@ -2298,10 +2197,10 @@ class Controller_MainWindow(QMainWindow):
                             self.etl_r_relation[etl_point,0] = right_etl_voltage
                             self.etl_r_relation[etl_point,1] = int(focusLocation)
                     
-                        self.sig_status_message.emit('--Calibration of plane '+str(etl_point+1)+'/'+str(self.number_of_etls_points)+' for '+side+' done')
+                        self.sig_message.emit('--Calibration of plane '+str(etl_point+1)+'/'+str(self.number_of_etls_points)+' for '+side+' done')
                     except:
                         self.etls_calibration_started = False
-                        self.sig_status_message.emit('ETL calibration failed')
+                        self.sig_message.emit('ETL calibration failed')
             
             '''Closing lasers after calibration of each side'''    
             self.left_laser_activated = False
@@ -2309,7 +2208,7 @@ class Controller_MainWindow(QMainWindow):
         
         if self.saving_allowed: #debugging
             self.frame_saver.stop_saving()
-            self.sig_status_message.emit('Images saved')
+            self.sig_message.emit('Images saved')
         
         
         print(self.etl_l_relation) #debugging
@@ -2351,7 +2250,7 @@ class Controller_MainWindow(QMainWindow):
         if self.etls_calibration_started: #To make sure calibration wasn't stopped before the end
             self.default_buttons.append(self.ui.pushButton_calEtlShowInterpolation)
         
-        self.sig_status_message.emit('Calibration done')
+        self.sig_message.emit('Calibration done')
             
         '''Enabling modes after camera calibration'''
         self.updateUi_modes_buttons(self.default_buttons)
@@ -2359,50 +2258,6 @@ class Controller_MainWindow(QMainWindow):
         
         self.etls_calibration_started = False
         self.ui.pushButton_calEtlStartCalibration.setText('Start ETL Calibration')
-
-
-class Settings_Dialog(QDialog):
-    '''Class for Settings Dialog'''
-
-    sig_status_message = pyqtSignal(str)
-
-    def __init__(self, parent:Controller_MainWindow):
-        QDialog.__init__(self, parent)
-        self.parent = parent
-
-        self.ui = Ui_Settings()
-        self.ui.setupUi(self)   
-        self.ui.pushButton_selectDirectory.clicked.connect(self.select_directory)
-        self.ui.pushButton_selectNone.clicked.connect(self.select_none)
-        self.sig_status_message.connect(self.parent.updateUi_status_printer)
-
-        self.load_preset()
-
-    def load_preset(self):
-        '''Load preset'''
-        pass
-        #self.ui.comboBox_savePolicy.setCurrentIndex(save_parameters_policy)
-        #self.ui.label_saveDirectory.setText(default_save_directory)
-        #self.ui.lineEdit_defaultFilename.setText(default_filename)
-        #if default_save_directory == 'None Specified':
-        #    self.ui.lineEdit_defaultFilename.setEnabled(False)
-    
-    def select_directory(self):
-        '''Allows the selection of a default save directory'''
-        options = QFileDialog.Options()
-        options |= QFileDialog.DontResolveSymlinks
-        options |= QFileDialog.ShowDirsOnly
-        default_save_directory = QFileDialog.getExistingDirectory(self, 'Choose Directory', '', options)
-        if default_save_directory != '': #If directory specified
-            self.ui.label_saveDirectory.setText(default_save_directory)
-            self.ui.lineEdit_defaultFilename.setEnabled(True)
-        else:
-            self.select_none()
-   
-    def select_none(self):
-        '''Selects no default save directory'''
-        self.ui.label_saveDirectory.setText('None Specified')
-        self.ui.lineEdit_defaultFilename.setEnabled(False)
 
 
 class Properties_Dialog(QDialog):
@@ -2419,7 +2274,7 @@ class Properties_Dialog(QDialog):
         self.ui = Ui_Properties()
         self.ui.setupUi(self)
         self.ui.pushButton_refresh.clicked.connect(self.refresh_properties)
-        self.sig_status_message.connect(self.parent.updateUi_status_printer)
+        self.sig_status_message.connect(self.parent.updateUi_message_printer)
 
         self.get_properties()
     
@@ -2465,7 +2320,7 @@ class FrameSaver(QObject):
     def __init__(self, parent:Controller_MainWindow):
         QObject.__init__(self, parent)
         self.parent = parent
-        self.sig_status_message.connect(self.parent.updateUi_status_printer)
+        self.sig_status_message.connect(self.parent.updateUi_message_printer)
 
         self.saving_started = False
         self.sample_name = ''
