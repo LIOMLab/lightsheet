@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1467</width>
-    <height>912</height>
+    <width>1557</width>
+    <height>1063</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -34,7 +34,7 @@
     </sizepolicy>
    </property>
    <layout class="QGridLayout" name="gridLayout_2">
-    <item row="0" column="0">
+    <item row="1" column="0">
      <widget class="QSplitter" name="splitter">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
@@ -103,16 +103,7 @@
       </widget>
       <widget class="QWidget" name="controlsPane" native="true">
        <layout class="QVBoxLayout" name="verticalLayout_3">
-        <property name="spacing">
-         <number>6</number>
-        </property>
-        <property name="leftMargin">
-         <number>6</number>
-        </property>
         <property name="topMargin">
-         <number>0</number>
-        </property>
-        <property name="rightMargin">
          <number>0</number>
         </property>
         <property name="bottomMargin">
@@ -129,12 +120,18 @@
           <property name="cursor">
            <cursorShape>ArrowCursor</cursorShape>
           </property>
+          <property name="tabPosition">
+           <enum>QTabWidget::North</enum>
+          </property>
+          <property name="tabShape">
+           <enum>QTabWidget::Rounded</enum>
+          </property>
           <property name="currentIndex">
            <number>0</number>
           </property>
           <widget class="QWidget" name="tabMotion">
            <attribute name="title">
-            <string>Motion</string>
+            <string>Motion Control</string>
            </attribute>
            <layout class="QVBoxLayout" name="verticalLayout_2">
             <item>
@@ -1181,7 +1178,7 @@
           </widget>
           <widget class="QWidget" name="tabSettings">
            <attribute name="title">
-            <string>Settings</string>
+            <string>Scan Settings</string>
            </attribute>
            <layout class="QVBoxLayout" name="verticalLayout_36">
             <item>
@@ -1200,22 +1197,12 @@
                </spacer>
               </item>
               <item>
-               <widget class="QPushButton" name="pushButton_defaultParameters">
+               <widget class="QPushButton" name="pushButton_resetSettings">
                 <property name="toolTip">
                  <string>Return all parameters to their default value</string>
                 </property>
                 <property name="text">
-                 <string>Default Parameters</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="pushButton_changeDefaultParameters">
-                <property name="toolTip">
-                 <string>Set the current parameters values as default values</string>
-                </property>
-                <property name="text">
-                 <string>Set Default Parameters</string>
+                 <string>Reset Settings</string>
                 </property>
                </widget>
               </item>
@@ -1900,7 +1887,7 @@
                      <item>
                       <widget class="QLabel" name="label_72">
                        <property name="text">
-                        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Left Laser&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Laser1&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                        </property>
                       </widget>
                      </item>
@@ -1928,12 +1915,12 @@
                           </sizepolicy>
                          </property>
                          <property name="text">
-                          <string>Amplitude:</string>
+                          <string>Power:</string>
                          </property>
                         </widget>
                        </item>
                        <item row="0" column="1">
-                        <widget class="QDoubleSpinBox" name="doubleSpinBox_laserLeftAmplitude">
+                        <widget class="QDoubleSpinBox" name="doubleSpinBox_laserOneAmplitude">
                          <property name="sizePolicy">
                           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                            <horstretch>0</horstretch>
@@ -1941,16 +1928,19 @@
                           </sizepolicy>
                          </property>
                          <property name="suffix">
-                          <string> V</string>
+                          <string> %</string>
+                         </property>
+                         <property name="decimals">
+                          <number>0</number>
                          </property>
                          <property name="minimum">
                           <double>0.000000000000000</double>
                          </property>
                          <property name="maximum">
-                          <double>10.000000000000000</double>
+                          <double>100.000000000000000</double>
                          </property>
                          <property name="singleStep">
-                          <double>0.100000000000000</double>
+                          <double>1.000000000000000</double>
                          </property>
                          <property name="value">
                           <double>0.000000000000000</double>
@@ -1958,6 +1948,13 @@
                         </widget>
                        </item>
                       </layout>
+                     </item>
+                     <item>
+                      <widget class="QCheckBox" name="checkBox_laserOneAutomatic">
+                       <property name="text">
+                        <string>Auto On/Off</string>
+                       </property>
+                      </widget>
                      </item>
                     </layout>
                    </item>
@@ -1973,7 +1970,7 @@
                      <item>
                       <widget class="QLabel" name="label_73">
                        <property name="text">
-                        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Right Laser&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Laser2&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                        </property>
                       </widget>
                      </item>
@@ -2001,12 +1998,12 @@
                           </sizepolicy>
                          </property>
                          <property name="text">
-                          <string>Amplitude:</string>
+                          <string>Power:</string>
                          </property>
                         </widget>
                        </item>
                        <item row="0" column="1">
-                        <widget class="QDoubleSpinBox" name="doubleSpinBox_laserRightAmplitude">
+                        <widget class="QDoubleSpinBox" name="doubleSpinBox_laserTwoAmplitude">
                          <property name="sizePolicy">
                           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                            <horstretch>0</horstretch>
@@ -2014,17 +2011,27 @@
                           </sizepolicy>
                          </property>
                          <property name="suffix">
-                          <string> V</string>
+                          <string> %</string>
+                         </property>
+                         <property name="decimals">
+                          <number>0</number>
                          </property>
                          <property name="maximum">
-                          <double>10.000000000000000</double>
+                          <double>100.000000000000000</double>
                          </property>
                          <property name="singleStep">
-                          <double>0.100000000000000</double>
+                          <double>1.000000000000000</double>
                          </property>
                         </widget>
                        </item>
                       </layout>
+                     </item>
+                     <item>
+                      <widget class="QCheckBox" name="checkBox_laserTwoAutomatic">
+                       <property name="text">
+                        <string>Auto On/Off</string>
+                       </property>
+                      </widget>
                      </item>
                     </layout>
                    </item>
@@ -2553,10 +2560,20 @@
             </item>
            </layout>
           </widget>
+          <widget class="QWidget" name="tabStatus">
+           <attribute name="title">
+            <string>Status</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="verticalLayout_16">
+            <item>
+             <layout class="QGridLayout" name="gridLayout_19"/>
+            </item>
+           </layout>
+          </widget>
          </widget>
         </item>
         <item>
-         <layout class="QHBoxLayout" name="acqControls">
+         <layout class="QHBoxLayout" name="horizontalLayout_5" stretch="2,4,1">
           <item>
            <layout class="QVBoxLayout" name="verticalLayout_52">
             <property name="sizeConstraint">
@@ -2565,242 +2582,151 @@
             <item>
              <widget class="QGroupBox" name="groupBox_17">
               <property name="sizePolicy">
-               <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                 <horstretch>0</horstretch>
                 <verstretch>0</verstretch>
                </sizepolicy>
               </property>
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>126</height>
+               </size>
+              </property>
               <property name="title">
-               <string>Manual Acquisition Modes</string>
+               <string>Manual Acquisition</string>
               </property>
               <layout class="QVBoxLayout" name="verticalLayout_53">
                <item>
-                <widget class="QPushButton" name="pushButton_acqStartPreviewMode">
-                 <property name="sizePolicy">
-                  <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                   <horstretch>0</horstretch>
-                   <verstretch>0</verstretch>
-                  </sizepolicy>
-                 </property>
-                 <property name="toolTip">
-                  <string>Start preview mode</string>
-                 </property>
-                 <property name="text">
-                  <string>Start Preview Mode</string>
-                 </property>
-                 <property name="shortcut">
-                  <string>Ctrl+P</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QPushButton" name="pushButton_acqStartLiveMode">
-                 <property name="sizePolicy">
-                  <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                   <horstretch>0</horstretch>
-                   <verstretch>0</verstretch>
-                  </sizepolicy>
-                 </property>
-                 <property name="toolTip">
-                  <string>Start live mode</string>
-                 </property>
-                 <property name="text">
-                  <string>Start Live Mode</string>
-                 </property>
-                 <property name="shortcut">
-                  <string>Ctrl+L</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="Line" name="line_27">
-                 <property name="sizePolicy">
-                  <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-                   <horstretch>0</horstretch>
-                   <verstretch>0</verstretch>
-                  </sizepolicy>
-                 </property>
-                 <property name="orientation">
-                  <enum>Qt::Horizontal</enum>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QPushButton" name="pushButton_laserAllActivate">
-                 <property name="sizePolicy">
-                  <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                   <horstretch>0</horstretch>
-                   <verstretch>0</verstretch>
-                  </sizepolicy>
-                 </property>
-                 <property name="toolTip">
-                  <string>Activate left and right lasers</string>
-                 </property>
-                 <property name="text">
-                  <string>Activate All Lasers</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QPushButton" name="pushButton_laserLeftActivate">
-                 <property name="sizePolicy">
-                  <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                   <horstretch>0</horstretch>
-                   <verstretch>0</verstretch>
-                  </sizepolicy>
-                 </property>
-                 <property name="toolTip">
-                  <string>Activate left laser</string>
-                 </property>
-                 <property name="text">
-                  <string>Activate Left Laser</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QPushButton" name="pushButton_laserRightActivate">
-                 <property name="sizePolicy">
-                  <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                   <horstretch>0</horstretch>
-                   <verstretch>0</verstretch>
-                  </sizepolicy>
-                 </property>
-                 <property name="toolTip">
-                  <string>Activate right laser</string>
-                 </property>
-                 <property name="text">
-                  <string>Activate Right Laser</string>
-                 </property>
-                </widget>
+                <layout class="QVBoxLayout" name="verticalLayout_15">
+                 <item>
+                  <widget class="QPushButton" name="pushButton_acqStartLiveMode">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="toolTip">
+                    <string>Start live mode</string>
+                   </property>
+                   <property name="text">
+                    <string>Start Live Mode</string>
+                   </property>
+                   <property name="shortcut">
+                    <string>Ctrl+L</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="pushButton_acqGetSingleImage">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="toolTip">
+                    <string>Start single image acquisition</string>
+                   </property>
+                   <property name="text">
+                    <string>Get Single Image</string>
+                   </property>
+                   <property name="shortcut">
+                    <string>Ctrl+I</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <spacer name="verticalSpacer_13">
+                   <property name="orientation">
+                    <enum>Qt::Vertical</enum>
+                   </property>
+                   <property name="sizeType">
+                    <enum>QSizePolicy::Expanding</enum>
+                   </property>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>20</width>
+                     <height>1</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
+                 <item>
+                  <widget class="Line" name="line_7">
+                   <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="pushButton_acqStartPreviewMode">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="toolTip">
+                    <string>Start preview mode</string>
+                   </property>
+                   <property name="text">
+                    <string>Camera Preview Mode</string>
+                   </property>
+                   <property name="shortcut">
+                    <string>Ctrl+P</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
                </item>
               </layout>
              </widget>
             </item>
             <item>
-             <spacer name="verticalSpacer_2">
+             <spacer name="verticalSpacer_10">
               <property name="orientation">
                <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeType">
+               <enum>QSizePolicy::Fixed</enum>
               </property>
               <property name="sizeHint" stdset="0">
                <size>
                 <width>20</width>
-                <height>40</height>
+                <height>1</height>
                </size>
               </property>
              </spacer>
             </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QVBoxLayout" name="verticalLayout_57">
+            <property name="sizeConstraint">
+             <enum>QLayout::SetDefaultConstraint</enum>
+            </property>
             <item>
-             <widget class="QPushButton" name="pushButton_acqStartStandbyMode">
+             <widget class="QGroupBox" name="groupBox_18">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                 <horstretch>0</horstretch>
                 <verstretch>0</verstretch>
                </sizepolicy>
               </property>
-              <property name="toolTip">
-               <string>Activate standby mode</string>
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>126</height>
+               </size>
               </property>
-              <property name="text">
-               <string>Start Standby Mode</string>
+              <property name="title">
+               <string>Automatic Acquisition</string>
               </property>
-              <property name="shortcut">
-               <string>Ctrl+S</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
-          <item>
-           <widget class="QGroupBox" name="groupBox_18">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="title">
-             <string>Automatic Acquisition Modes</string>
-            </property>
-            <layout class="QVBoxLayout" name="verticalLayout_54">
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_84">
+              <layout class="QHBoxLayout" name="horizontalLayout_9">
                <item>
-                <layout class="QVBoxLayout" name="verticalLayout_55">
-                 <item>
-                  <layout class="QHBoxLayout" name="horizontalLayout_85">
-                   <item>
-                    <widget class="QPushButton" name="pushButton_acqGetSingleImage">
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="toolTip">
-                      <string>Start single image acquisition</string>
-                     </property>
-                     <property name="text">
-                      <string>Get Single Image</string>
-                     </property>
-                     <property name="shortcut">
-                      <string>Ctrl+I</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QPushButton" name="pushButton_acqSaveSingleImage">
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="toolTip">
-                      <string>Save single image</string>
-                     </property>
-                     <property name="text">
-                      <string>Save Image</string>
-                     </property>
-                    </widget>
-                   </item>
-                  </layout>
-                 </item>
-                 <item>
-                  <layout class="QHBoxLayout" name="horizontalLayout_3">
-                   <item>
-                    <widget class="QCheckBox" name="checkBox_acqStitchFrames">
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="toolTip">
-                      <string>Overlap the camera scans that form each image</string>
-                     </property>
-                     <property name="text">
-                      <string>Stitch scans</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QCheckBox" name="checkBox_acqSaveAllFrames">
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="toolTip">
-                      <string>Save all the camera scans that form each image</string>
-                     </property>
-                     <property name="text">
-                      <string>Save all scans</string>
-                     </property>
-                    </widget>
-                   </item>
-                  </layout>
-                 </item>
+                <layout class="QVBoxLayout" name="verticalLayout_13">
                  <item>
                   <widget class="QPushButton" name="pushButton_acqStartStackMode">
                    <property name="sizePolicy">
@@ -2820,16 +2746,153 @@
                    </property>
                   </widget>
                  </item>
+                 <item>
+                  <layout class="QHBoxLayout" name="horizontalLayout_89">
+                   <property name="leftMargin">
+                    <number>0</number>
+                   </property>
+                   <property name="rightMargin">
+                    <number>0</number>
+                   </property>
+                   <item>
+                    <widget class="QLabel" name="label_41">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="toolTip">
+                      <string>Number of planes of stack acquisition</string>
+                     </property>
+                     <property name="text">
+                      <string>Number Of Planes:</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QLabel" name="label_acqNumberOfPlanes">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="text">
+                      <string>N/A</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <spacer name="verticalSpacer_7">
+                   <property name="orientation">
+                    <enum>Qt::Vertical</enum>
+                   </property>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>20</width>
+                     <height>1</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
                 </layout>
                </item>
                <item>
-                <layout class="QVBoxLayout" name="verticalLayout_56">
+                <widget class="Line" name="line_6">
+                 <property name="frameShadow">
+                  <enum>QFrame::Raised</enum>
+                 </property>
+                 <property name="orientation">
+                  <enum>Qt::Vertical</enum>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <layout class="QVBoxLayout" name="verticalLayout_14">
+                 <item>
+                  <layout class="QHBoxLayout" name="horizontalLayout_90">
+                   <item>
+                    <widget class="QPushButton" name="pushButton_acqSetFirstPlane">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="toolTip">
+                      <string>Set the current horizontal position as starting point for stack acquisition</string>
+                     </property>
+                     <property name="text">
+                      <string>Set Starting Plane</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QCheckBox" name="checkBox_acqFirstPlaneSet">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="text">
+                      <string/>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <layout class="QHBoxLayout" name="horizontalLayout_91">
+                   <property name="spacing">
+                    <number>6</number>
+                   </property>
+                   <item>
+                    <widget class="QPushButton" name="pushButton_acqSetLastPlane">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="toolTip">
+                      <string>Set the current horizontal position as ending point for stack acquisition</string>
+                     </property>
+                     <property name="text">
+                      <string>Set Ending Plane</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QCheckBox" name="checkBox_acqLastPlaneSet">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="text">
+                      <string/>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
                  <item>
                   <layout class="QHBoxLayout" name="horizontalLayout_88">
+                   <property name="leftMargin">
+                    <number>0</number>
+                   </property>
+                   <property name="rightMargin">
+                    <number>0</number>
+                   </property>
                    <item>
                     <widget class="QLabel" name="label_84">
                      <property name="sizePolicy">
-                      <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                      <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
                        <horstretch>0</horstretch>
                        <verstretch>0</verstretch>
                       </sizepolicy>
@@ -2867,154 +2930,267 @@
                   </layout>
                  </item>
                  <item>
-                  <layout class="QHBoxLayout" name="horizontalLayout_89">
-                   <item>
-                    <widget class="QLabel" name="label_41">
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="toolTip">
-                      <string>Number of planes of stack acquisition</string>
-                     </property>
-                     <property name="text">
-                      <string>Number Of Planes:</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QLabel" name="label_acqNumberOfPlanes">
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="text">
-                      <string>N/A</string>
-                     </property>
-                    </widget>
-                   </item>
-                  </layout>
+                  <spacer name="verticalSpacer_9">
+                   <property name="orientation">
+                    <enum>Qt::Vertical</enum>
+                   </property>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>20</width>
+                     <height>1</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <spacer name="verticalSpacer_14">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeType">
+               <enum>QSizePolicy::Fixed</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>1</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QVBoxLayout" name="verticalLayout_9">
+            <item>
+             <widget class="QGroupBox" name="groupBox_4">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>140</width>
+                <height>126</height>
+               </size>
+              </property>
+              <property name="title">
+               <string>Lasers</string>
+              </property>
+              <layout class="QVBoxLayout" name="verticalLayout_7">
+               <item>
+                <layout class="QVBoxLayout" name="verticalLayout_17">
+                 <item>
+                  <widget class="QPushButton" name="pushButton_laserOneToggle">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="toolTip">
+                    <string>Activate left laser</string>
+                   </property>
+                   <property name="text">
+                    <string>Toggle Laser1</string>
+                   </property>
+                  </widget>
                  </item>
                  <item>
-                  <layout class="QHBoxLayout" name="horizontalLayout_90">
-                   <item>
-                    <widget class="QPushButton" name="pushButton_acqSetFirstPlane">
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="toolTip">
-                      <string>Set the current horizontal position as starting point for stack acquisition</string>
-                     </property>
-                     <property name="text">
-                      <string>Set Horizontal Starting Point</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QCheckBox" name="checkBox_acqFirstPlaneSet">
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="text">
-                      <string/>
-                     </property>
-                    </widget>
-                   </item>
-                  </layout>
+                  <widget class="QPushButton" name="pushButton_laserTwoToggle">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="toolTip">
+                    <string>Activate right laser</string>
+                   </property>
+                   <property name="text">
+                    <string>Toggle Laser2</string>
+                   </property>
+                  </widget>
                  </item>
                  <item>
-                  <layout class="QHBoxLayout" name="horizontalLayout_91">
-                   <item>
-                    <widget class="QPushButton" name="pushButton_acqSetLastPlane">
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="toolTip">
-                      <string>Set the current horizontal position as ending point for stack acquisition</string>
-                     </property>
-                     <property name="text">
-                      <string>Set Horizontal Ending Point</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QCheckBox" name="checkBox_acqLastPlaneSet">
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="text">
-                      <string/>
-                     </property>
-                    </widget>
-                   </item>
-                  </layout>
+                  <spacer name="verticalSpacer_12">
+                   <property name="orientation">
+                    <enum>Qt::Vertical</enum>
+                   </property>
+                   <property name="sizeType">
+                    <enum>QSizePolicy::Expanding</enum>
+                   </property>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>20</width>
+                     <height>1</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <spacer name="verticalSpacer_11">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeType">
+               <enum>QSizePolicy::Fixed</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>1</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_7">
+          <item>
+           <widget class="QGroupBox" name="groupBox_5">
+            <property name="title">
+             <string>Save Settings</string>
+            </property>
+            <layout class="QHBoxLayout" name="horizontalLayout_8" stretch="1,0,0">
+             <item>
+              <layout class="QVBoxLayout" name="verticalLayout_8">
+               <item>
+                <layout class="QHBoxLayout" name="horizontalLayout_92">
+                 <item>
+                  <widget class="QPushButton" name="pushButton_saveSelectDirectory">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="toolTip">
+                    <string>Select a file directory for image saving</string>
+                   </property>
+                   <property name="text">
+                    <string>Select Save Directory</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <spacer name="horizontalSpacer_2">
+                   <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                   </property>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>40</width>
+                     <height>20</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="pushButton_saveCurrentImage">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="toolTip">
+                    <string>Save single image</string>
+                   </property>
+                   <property name="text">
+                    <string>Save Current Image</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <layout class="QGridLayout" name="gridLayout_9">
+                 <item row="0" column="0">
+                  <widget class="QLabel" name="label_8">
+                   <property name="text">
+                    <string>Save Directory:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="2" column="0">
+                  <widget class="QLabel" name="label_46">
+                   <property name="text">
+                    <string>Sample Name:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="1">
+                  <widget class="QLineEdit" name="lineEdit_saveDirectory">
+                   <property name="text">
+                    <string>None Specified</string>
+                   </property>
+                   <property name="readOnly">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="0">
+                  <widget class="QLabel" name="label_45">
+                   <property name="text">
+                    <string>Filename Prefix:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="2" column="1">
+                  <widget class="QLineEdit" name="lineEdit_metaSampleName">
+                   <property name="text">
+                    <string>No Sample Name</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="1">
+                  <widget class="QLineEdit" name="lineEdit_saveFilename">
+                   <property name="text">
+                    <string>Select Directory First</string>
+                   </property>
+                  </widget>
                  </item>
                 </layout>
                </item>
               </layout>
              </item>
              <item>
-              <widget class="Line" name="line_28">
-               <property name="sizePolicy">
-                <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                 <horstretch>0</horstretch>
-                 <verstretch>0</verstretch>
-                </sizepolicy>
+              <widget class="Line" name="line_5">
+               <property name="frameShadow">
+                <enum>QFrame::Raised</enum>
                </property>
                <property name="orientation">
-                <enum>Qt::Horizontal</enum>
+                <enum>Qt::Vertical</enum>
                </property>
               </widget>
              </item>
              <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_92">
+              <layout class="QVBoxLayout" name="verticalLayout_11">
                <item>
-                <widget class="QPushButton" name="pushButton_selectSaveDirectory">
-                 <property name="sizePolicy">
-                  <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                   <horstretch>0</horstretch>
-                   <verstretch>0</verstretch>
-                  </sizepolicy>
-                 </property>
-                 <property name="toolTip">
-                  <string>Select a file directory for image saving</string>
-                 </property>
+                <widget class="QLabel" name="label_7">
                  <property name="text">
-                  <string>Select Directory</string>
+                  <string>Save option:</string>
                  </property>
                 </widget>
                </item>
                <item>
-                <widget class="QLabel" name="label_42">
-                 <property name="sizePolicy">
-                  <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-                   <horstretch>0</horstretch>
-                   <verstretch>0</verstretch>
-                  </sizepolicy>
-                 </property>
-                 <property name="text">
-                  <string>Current Directory:</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QLabel" name="label_currentSaveDirectory">
+                <widget class="QCheckBox" name="checkBox_saveStitch">
                  <property name="sizePolicy">
                   <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
                    <horstretch>0</horstretch>
@@ -3022,39 +3198,52 @@
                   </sizepolicy>
                  </property>
                  <property name="text">
-                  <string>None Specified</string>
+                  <string>Stitched - No blend</string>
                  </property>
                 </widget>
                </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QFormLayout" name="formLayout_18">
-               <item row="0" column="0">
-                <widget class="QLabel" name="label_45">
+               <item>
+                <widget class="QCheckBox" name="checkBox_saveStitchBlend">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="toolTip">
+                  <string>Overlap the camera scans that form each image</string>
+                 </property>
                  <property name="text">
-                  <string>Enter Filename For Saving:</string>
+                  <string>Stitched - Linear blend (20%)</string>
                  </property>
                 </widget>
                </item>
-               <item row="0" column="1">
-                <widget class="QLineEdit" name="lineEdit_filename">
+               <item>
+                <widget class="QCheckBox" name="checkBox_saveAllCrop">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="toolTip">
+                  <string>Save all the camera scans that form each image</string>
+                 </property>
                  <property name="text">
-                  <string>Select Directory First</string>
+                  <string>All frames - Cropped (20%)</string>
                  </property>
                 </widget>
                </item>
-               <item row="1" column="0">
-                <widget class="QLabel" name="label_46">
-                 <property name="text">
-                  <string>Sample Name For Saving:</string>
+               <item>
+                <widget class="QCheckBox" name="checkBox_saveAllFull">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
                  </property>
-                </widget>
-               </item>
-               <item row="1" column="1">
-                <widget class="QLineEdit" name="lineEdit_sampleName">
                  <property name="text">
-                  <string>No Sample Name</string>
+                  <string>All frames - Full</string>
                  </property>
                 </widget>
                </item>
@@ -3066,7 +3255,7 @@
          </layout>
         </item>
         <item>
-         <spacer name="verticalSpacer_1">
+         <spacer name="verticalSpacer_4">
           <property name="orientation">
            <enum>Qt::Vertical</enum>
           </property>
@@ -3079,38 +3268,42 @@
          </spacer>
         </item>
         <item>
-         <widget class="QPlainTextEdit" name="plainTextEdit_cmdLog">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>80</height>
-           </size>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>16777215</width>
-            <height>80</height>
-           </size>
-          </property>
-          <property name="verticalScrollBarPolicy">
-           <enum>Qt::ScrollBarAlwaysOn</enum>
-          </property>
-          <property name="horizontalScrollBarPolicy">
-           <enum>Qt::ScrollBarAlwaysOff</enum>
-          </property>
-          <property name="readOnly">
-           <bool>true</bool>
-          </property>
-          <property name="textInteractionFlags">
-           <set>Qt::NoTextInteraction</set>
-          </property>
-         </widget>
+         <layout class="QHBoxLayout" name="horizontalLayout_10">
+          <item>
+           <widget class="QPlainTextEdit" name="plainTextEdit_messageLog">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>80</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>16777215</width>
+              <height>80</height>
+             </size>
+            </property>
+            <property name="verticalScrollBarPolicy">
+             <enum>Qt::ScrollBarAlwaysOn</enum>
+            </property>
+            <property name="horizontalScrollBarPolicy">
+             <enum>Qt::ScrollBarAlwaysOff</enum>
+            </property>
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+            <property name="textInteractionFlags">
+             <set>Qt::NoTextInteraction</set>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </item>
        </layout>
       </widget>
@@ -3123,7 +3316,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1467</width>
+     <width>1557</width>
      <height>21</height>
     </rect>
    </property>
@@ -3141,7 +3334,7 @@
     <addaction name="menu_Select_Theme"/>
     <addaction name="action_ShowHideImagesPane"/>
     <addaction name="action_ShowHideControlsPane"/>
-    <addaction name="action_ShowHideCommandLog"/>
+    <addaction name="action_ShowHideMessageLog"/>
    </widget>
    <widget class="QMenu" name="menuHelp">
     <property name="title">
@@ -3149,12 +3342,6 @@
     </property>
     <addaction name="action_openDocumentation"/>
     <addaction name="action_showSystemProperties"/>
-   </widget>
-   <widget class="QMenu" name="menuSettings">
-    <property name="title">
-     <string>Settings</string>
-    </property>
-    <addaction name="action_ModifyProgramSettings"/>
    </widget>
    <widget class="QMenu" name="menuFile">
     <property name="title">
@@ -3166,7 +3353,6 @@
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuDisplay"/>
-   <addaction name="menuSettings"/>
    <addaction name="menuHelp"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
@@ -3181,41 +3367,7 @@
     <string>Ctrl+H</string>
    </property>
   </action>
-  <action name="actionOnly_display_images">
-   <property name="text">
-    <string>Only display images</string>
-   </property>
-  </action>
-  <action name="actionOnly_display_controls">
-   <property name="text">
-    <string>Only display controls</string>
-   </property>
-  </action>
-  <action name="action_displayControlsImages">
-   <property name="text">
-    <string>Display Controls and Images</string>
-   </property>
-   <property name="shortcut">
-    <string>F1</string>
-   </property>
-  </action>
-  <action name="action_displayImages">
-   <property name="text">
-    <string>Only Display Images</string>
-   </property>
-   <property name="shortcut">
-    <string>F2</string>
-   </property>
-  </action>
-  <action name="action_displayControls">
-   <property name="text">
-    <string>Only Display Controls</string>
-   </property>
-   <property name="shortcut">
-    <string>F3</string>
-   </property>
-  </action>
-  <action name="action_ShowHideCommandLog">
+  <action name="action_ShowHideMessageLog">
    <property name="checkable">
     <bool>true</bool>
    </property>
@@ -3223,15 +3375,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Show Command Log</string>
-   </property>
-  </action>
-  <action name="action_ModifyProgramSettings">
-   <property name="text">
-    <string>Modify Program Settings</string>
-   </property>
-   <property name="shortcut">
-    <string>F4</string>
+    <string>Show Message Log</string>
    </property>
   </action>
   <action name="action_showSystemProperties">
