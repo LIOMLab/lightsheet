@@ -54,7 +54,7 @@ class Camera:
                 self.start_recorder(1)
                 self.monitor_recorder(1)
                 self.stop_recorder()
-                single_image = self.copy_recorder_images()
+                single_image = self.copy_recorder_images(1)
                 self.delete_recorder()
                 if self.verbose:
                     print(" Single image obtained.")
