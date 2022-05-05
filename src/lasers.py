@@ -2,7 +2,6 @@
 Created on February 8, 2022
 '''
 
-from concurrent.futures.process import _ThreadWakeup
 import sys
 sys.path.append(".")
 
@@ -100,3 +99,4 @@ class Lasers:
                 lasers_task.write(lasers_setpoints, auto_start = True)
         except:
             print('Error setting laser power: NI device is present?')
+            pass

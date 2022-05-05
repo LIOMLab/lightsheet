@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1557</width>
-    <height>1063</height>
+    <width>1564</width>
+    <height>899</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -34,7 +34,7 @@
     </sizepolicy>
    </property>
    <layout class="QGridLayout" name="gridLayout_2">
-    <item row="1" column="0">
+    <item row="0" column="0">
      <widget class="QSplitter" name="splitter">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
@@ -47,6 +47,9 @@
       </property>
       <property name="handleWidth">
        <number>5</number>
+      </property>
+      <property name="childrenCollapsible">
+       <bool>false</bool>
       </property>
       <widget class="QWidget" name="imagesPane" native="true">
        <property name="sizePolicy">
@@ -2600,25 +2603,6 @@
                <item>
                 <layout class="QVBoxLayout" name="verticalLayout_15">
                  <item>
-                  <widget class="QPushButton" name="pushButton_acqStartLiveMode">
-                   <property name="sizePolicy">
-                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                     <horstretch>0</horstretch>
-                     <verstretch>0</verstretch>
-                    </sizepolicy>
-                   </property>
-                   <property name="toolTip">
-                    <string>Start live mode</string>
-                   </property>
-                   <property name="text">
-                    <string>Start Live Mode</string>
-                   </property>
-                   <property name="shortcut">
-                    <string>Ctrl+L</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
                   <widget class="QPushButton" name="pushButton_acqGetSingleImage">
                    <property name="sizePolicy">
                     <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
@@ -2634,6 +2618,25 @@
                    </property>
                    <property name="shortcut">
                     <string>Ctrl+I</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="pushButton_acqStartLiveMode">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="toolTip">
+                    <string>Start live mode</string>
+                   </property>
+                   <property name="text">
+                    <string>Start Live Mode</string>
+                   </property>
+                   <property name="shortcut">
+                    <string>Ctrl+L</string>
                    </property>
                   </widget>
                  </item>
@@ -2813,6 +2816,57 @@
                <item>
                 <layout class="QVBoxLayout" name="verticalLayout_14">
                  <item>
+                  <layout class="QHBoxLayout" name="horizontalLayout_88">
+                   <property name="leftMargin">
+                    <number>0</number>
+                   </property>
+                   <property name="rightMargin">
+                    <number>0</number>
+                   </property>
+                   <item>
+                    <widget class="QLabel" name="label_84">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="toolTip">
+                      <string>The plane step for stack acquisition</string>
+                     </property>
+                     <property name="text">
+                      <string>Plane Step:</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QDoubleSpinBox" name="doubleSpinBox_acqPlaneStepSize">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="suffix">
+                      <string> μm</string>
+                     </property>
+                     <property name="decimals">
+                      <number>0</number>
+                     </property>
+                     <property name="minimum">
+                      <double>1.000000000000000</double>
+                     </property>
+                     <property name="maximum">
+                      <double>100.000000000000000</double>
+                     </property>
+                     <property name="value">
+                      <double>5.000000000000000</double>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
                   <layout class="QHBoxLayout" name="horizontalLayout_90">
                    <item>
                     <widget class="QPushButton" name="pushButton_acqSetFirstPlane">
@@ -2876,54 +2930,6 @@
                      </property>
                      <property name="text">
                       <string/>
-                     </property>
-                    </widget>
-                   </item>
-                  </layout>
-                 </item>
-                 <item>
-                  <layout class="QHBoxLayout" name="horizontalLayout_88">
-                   <property name="leftMargin">
-                    <number>0</number>
-                   </property>
-                   <property name="rightMargin">
-                    <number>0</number>
-                   </property>
-                   <item>
-                    <widget class="QLabel" name="label_84">
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="toolTip">
-                      <string>The plane step for stack acquisition</string>
-                     </property>
-                     <property name="text">
-                      <string>Plane Step:</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QDoubleSpinBox" name="doubleSpinBox_acqPlaneStepSize">
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="suffix">
-                      <string> μm</string>
-                     </property>
-                     <property name="decimals">
-                      <number>0</number>
-                     </property>
-                     <property name="maximum">
-                      <double>100.000000000000000</double>
-                     </property>
-                     <property name="value">
-                      <double>5.000000000000000</double>
                      </property>
                     </widget>
                    </item>
@@ -3121,6 +3127,43 @@
                </item>
                <item>
                 <layout class="QGridLayout" name="gridLayout_9">
+                 <item row="2" column="1">
+                  <widget class="QLineEdit" name="lineEdit_saveSampleName">
+                   <property name="text">
+                    <string/>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="1">
+                  <widget class="QLineEdit" name="lineEdit_saveFilename">
+                   <property name="text">
+                    <string/>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="0">
+                  <widget class="QLabel" name="label_45">
+                   <property name="text">
+                    <string>Filename Prefix:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="1">
+                  <widget class="QLineEdit" name="lineEdit_saveDirectory">
+                   <property name="enabled">
+                    <bool>true</bool>
+                   </property>
+                   <property name="text">
+                    <string/>
+                   </property>
+                   <property name="frame">
+                    <bool>false</bool>
+                   </property>
+                   <property name="readOnly">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
                  <item row="0" column="0">
                   <widget class="QLabel" name="label_8">
                    <property name="text">
@@ -3132,37 +3175,6 @@
                   <widget class="QLabel" name="label_46">
                    <property name="text">
                     <string>Sample Name:</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="0" column="1">
-                  <widget class="QLineEdit" name="lineEdit_saveDirectory">
-                   <property name="text">
-                    <string>None Specified</string>
-                   </property>
-                   <property name="readOnly">
-                    <bool>true</bool>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="1" column="0">
-                  <widget class="QLabel" name="label_45">
-                   <property name="text">
-                    <string>Filename Prefix:</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="2" column="1">
-                  <widget class="QLineEdit" name="lineEdit_metaSampleName">
-                   <property name="text">
-                    <string>No Sample Name</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="1" column="1">
-                  <widget class="QLineEdit" name="lineEdit_saveFilename">
-                   <property name="text">
-                    <string>Select Directory First</string>
                    </property>
                   </widget>
                  </item>
@@ -3185,7 +3197,7 @@
                <item>
                 <widget class="QLabel" name="label_7">
                  <property name="text">
-                  <string>Save option:</string>
+                  <string>Save option (select one):</string>
                  </property>
                 </widget>
                </item>
@@ -3200,6 +3212,9 @@
                  <property name="text">
                   <string>Stitched - No blend</string>
                  </property>
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
                 </widget>
                </item>
                <item>
@@ -3209,9 +3224,6 @@
                    <horstretch>0</horstretch>
                    <verstretch>0</verstretch>
                   </sizepolicy>
-                 </property>
-                 <property name="toolTip">
-                  <string>Overlap the camera scans that form each image</string>
                  </property>
                  <property name="text">
                   <string>Stitched - Linear blend (20%)</string>
@@ -3225,9 +3237,6 @@
                    <horstretch>0</horstretch>
                    <verstretch>0</verstretch>
                   </sizepolicy>
-                 </property>
-                 <property name="toolTip">
-                  <string>Save all the camera scans that form each image</string>
                  </property>
                  <property name="text">
                   <string>All frames - Cropped (20%)</string>
@@ -3316,7 +3325,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1557</width>
+     <width>1564</width>
      <height>21</height>
     </rect>
    </property>
