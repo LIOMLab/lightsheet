@@ -183,11 +183,6 @@ class ZaberMotor:
         try:
             # Try to open a serial connection
             motor = serial.Serial(port = self.port, baudrate = 9600, bytesize = serial.EIGHTBITS, parity = serial.PARITY_NONE, stopbits = serial.STOPBITS_ONE, timeout = 2)
-        except serial.SerialException:
-            self.error = 1
-            self.error_message = "Serial port cannot be found or cannot be configured"
-        else:
-            # We have an open serial port to the motor
             # Clear I/O buffers
             motor.reset_input_buffer()
             motor.reset_output_buffer()
@@ -197,6 +192,11 @@ class ZaberMotor:
             reply_bytes = motor.read(6)
             # Close serial connection to motor
             motor.close()
+        except:
+            self.error = 1
+            self.error_message = "Serial port error"
+            print('Serial port error!')
+        else:
             # Checks if reply is valid length
             if len(reply_bytes) == 6:
                 if reply_bytes[0] == self.device_number and reply_bytes[1] == cmd_no:

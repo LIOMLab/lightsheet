@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1564</width>
+    <width>1479</width>
     <height>899</height>
    </rect>
   </property>
@@ -2851,13 +2851,16 @@
                       <string> μm</string>
                      </property>
                      <property name="decimals">
-                      <number>0</number>
+                      <number>2</number>
                      </property>
                      <property name="minimum">
-                      <double>1.000000000000000</double>
+                      <double>0.250000000000000</double>
                      </property>
                      <property name="maximum">
-                      <double>100.000000000000000</double>
+                      <double>25.000000000000000</double>
+                     </property>
+                     <property name="singleStep">
+                      <double>0.250000000000000</double>
                      </property>
                      <property name="value">
                       <double>5.000000000000000</double>
@@ -3325,7 +3328,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1564</width>
+     <width>1479</width>
      <height>21</height>
     </rect>
    </property>
