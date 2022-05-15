@@ -110,11 +110,12 @@ class Camera:
             except ValueError:
                 if self.verbose:
                     print(" Failed to open camera.")
+                self.camera = None
                 self.error = 1
                 self.error_message = "Failed to open the camera"
             else:
                 if self.verbose:
-                    print(' Camera opened.')
+                    print(" Camera opened.")
         return None
 
     def close_camera(self):
@@ -151,12 +152,12 @@ class Camera:
         '''docstring'''
         if self.camera is not None:
             if self.verbose:
-                print('Disarming camera...')
+                print("Disarming camera...")
             if self.camera.sdk.get_recording_state()['recording state'] == 'on':
                 self.camera.sdk.set_recording_state('off')
             self.is_armed = False
             if self.verbose:
-                print(' Camera disarmed.')
+                print(" Camera disarmed.")
         return None
 
     # Managing recording sessions
@@ -170,33 +171,32 @@ class Camera:
                 self.camera.record(int(number_of_images), mode='sequence non blocking')
             except ValueError:
                 if self.verbose:
-                    print(' Exception while starting recorder.')
+                    print(" Exception while starting recorder.")
                 self.error = 1
-                self.error_message = 'Failed to start recorder.'
+                self.error_message = 'Failed to start recorder'
                 self.is_recording = False
             else:
                 self.is_recording = True
                 if self.verbose:
-                    print(' Recording session started.')
+                    print(" Recording session started.")
         return None
 
-    def monitor_recorder(self, number_of_images):
+    def monitor_recorder(self, number_of_images:int, monitor_timeout:int=2):
         '''docstring'''
         if self.is_recording:
             if self.verbose:
-                print('Monitoring camera recording session status...')
-            acq_timeout = 2
-            wait_until = datetime.now() + timedelta(seconds=acq_timeout)
+                print("Monitoring camera recording session status...")
+            wait_until = datetime.now() + timedelta(seconds=monitor_timeout)
             while True:
                 images_in_buffer = self.camera.rec.get_status()['dwProcImgCount']
                 if images_in_buffer >= number_of_images:
                     if self.verbose:
-                        print(' Recording session succeeded:', images_in_buffer, 'images in buffer')
+                        print(" Recording session succeeded:", images_in_buffer, "images in buffer")
                     self.new_data_ready = True
                     break
                 elif wait_until < datetime.now():
                     if self.verbose:
-                        print(' Timeout :', images_in_buffer, 'images in buffer after', acq_timeout, 's.',)
+                        print(" Timeout :", images_in_buffer, "images in buffer after", monitor_timeout, "s.",)
                     break
                 else:
                     time.sleep(0.01)

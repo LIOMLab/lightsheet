@@ -20,9 +20,9 @@ class Lasers:
     _cfg_settings = {}
     _cfg_settings['Lasers Terminals'] = '/Dev7/ao0:1'
     _cfg_settings['Laser1 Wavelength'] = 405       # In nm
-    _cfg_settings['Laser1 Power'] = 0.0            # In %
+    _cfg_settings['Laser1 Power'] = 0.0            # In Volts
     _cfg_settings['Laser2 Wavelength'] = 405       # in nm
-    _cfg_settings['Laser2 Power'] = 0.0            # In %
+    _cfg_settings['Laser2 Power'] = 0.0            # In Volts
 
     def __init__(self):
         # Error status
