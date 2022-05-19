@@ -114,9 +114,9 @@ class Controller_MainWindow(QMainWindow):
 
         # Assign configurable settings to instance variables
         self.units                  = str(self.cfg_settings['Units'])
-        self.save_path              = '' #os.path.normpath(os.path.expanduser('~') + '\\Desktop\\LightSheetData\\' + str(datetime.date.today()))
+        self.save_directory         = os.path.normpath(os.path.expanduser('~') + '\\Documents\\LightSheetData')
         self.save_filename          = ''
-        self.save_sample_name       = ''
+        self.save_description       = ''
 
         # Set units comboBox options (default: millimeters)
         self.ui.comboBox_units.insertItems(0,['mm','\u03BCm'])
@@ -125,18 +125,18 @@ class Controller_MainWindow(QMainWindow):
         else:
             self.ui.comboBox_units.setCurrentIndex(0)
 
-        if self.save_path != '':
-            self.ui.lineEdit_saveDirectory.setText(self.save_path)
+        if self.save_directory != '':
+            self.ui.lineEdit_saveDirectory.setText(self.save_directory)
             self.ui.lineEdit_saveFilename.setText(self.save_filename)
             self.ui.lineEdit_saveFilename.setEnabled(True)
-            self.ui.lineEdit_saveSampleName.setText(self.save_sample_name)
-            self.ui.lineEdit_saveSampleName.setEnabled(True)
+            self.ui.lineEdit_saveDescription.setText(self.save_description)
+            self.ui.lineEdit_saveDescription.setEnabled(True)
         else:
             self.ui.lineEdit_saveDirectory.setText('')
             self.ui.lineEdit_saveFilename.setText('Filename - Select Save Directory First')
             self.ui.lineEdit_saveFilename.setEnabled(False)
-            self.ui.lineEdit_saveSampleName.setText('Description - Select Save Directory First')
-            self.ui.lineEdit_saveSampleName.setEnabled(False)
+            self.ui.lineEdit_saveDescription.setText('Description - Select Save Directory First')
+            self.ui.lineEdit_saveDescription.setEnabled(False)
 
         # Flags
         self.preview_mode_started = False
@@ -1178,6 +1178,7 @@ class Controller_MainWindow(QMainWindow):
         '''Start or stop preview mode, depending on the button status'''
         if self.preview_mode_started:
             self.preview_mode_started = False
+            self.preview_mode_thread.join()
             self.ui.pushButton_acqStartPreviewMode.setText('Start Preview Mode')
 #            self.updateUi_laser_buttons()
         else:
@@ -1196,8 +1197,8 @@ class Controller_MainWindow(QMainWindow):
 #            self.sig_progress_update.emit(100)
 
             # Starting preview mode thread
-            preview_mode_thread = threading.Thread(target = self.preview_mode_worker)
-            preview_mode_thread.start()
+            self.preview_mode_thread = threading.Thread(target = self.preview_mode_worker)
+            self.preview_mode_thread.start()
 
     # def updateUi_pre_preview_mode(self):
     #     # updating ui before starting preview mode thread
@@ -1262,6 +1263,7 @@ class Controller_MainWindow(QMainWindow):
         '''Start or stop live mode, depending on the button status'''
         if self.live_mode_started:
             self.live_mode_started = False
+            self.live_mode_thread.join()
             self.ui.pushButton_acqStartLiveMode.setText('Start Live Mode')
 #            self.updateUi_laser_buttons()
         else:
@@ -1279,8 +1281,8 @@ class Controller_MainWindow(QMainWindow):
 #            self.sig_progress_update.emit(100)
 
             # Starting live mode thread
-            live_mode_thread = threading.Thread(target = self.live_mode_worker)
-            live_mode_thread.start()
+            self.live_mode_thread = threading.Thread(target = self.live_mode_worker)
+            self.live_mode_thread.start()
   
 
     # def updateUi_pre_live_mode(self):
@@ -1525,7 +1527,7 @@ class Controller_MainWindow(QMainWindow):
         # Record metadata about image/buffer to be acquired
         self.buffer_metadata = {}
         self.buffer_metadata['Date']  = str(datetime.date.today())
-        self.buffer_metadata['Sample Name']  = str(self.ui.lineEdit_saveSampleName.text())
+        self.buffer_metadata['Sample Name']  = str(self.ui.lineEdit_saveDescription.text())
 
         # self.buffer_metadata['Horizontal Position']  = self.motors.horizontal.get_position('mm')
         # self.buffer_metadata['Vertical Position']  = self.motors.vertical.get_position('mm')
@@ -1573,21 +1575,24 @@ class Controller_MainWindow(QMainWindow):
         options = QFileDialog.Options()
         options |= QFileDialog.DontResolveSymlinks
         options |= QFileDialog.ShowDirsOnly
-        tmp_directory = QFileDialog.getExistingDirectory(self, 'Choose Directory', self.save_path, options)
+        tmp_directory = QFileDialog.getExistingDirectory(self, 'Choose Directory', self.save_directory, options)
         if tmp_directory != '':
-            self.save_path = os.path.normpath(tmp_directory)
+            self.save_directory = os.path.normpath(tmp_directory)
 
-        if self.save_path != '':
-            self.ui.lineEdit_saveDirectory.setText(self.save_path)
+        if self.save_directory != '':
+            self.ui.lineEdit_saveDirectory.setText(self.save_directory)
             self.ui.lineEdit_saveFilename.setText('')
             self.ui.lineEdit_saveFilename.setEnabled(True)
-            self.ui.lineEdit_saveSampleName.setEnabled(True)
+            self.ui.lineEdit_saveDescription.setText('')
+            self.ui.lineEdit_saveDescription.setEnabled(True)
         else:
-            self.ui.lineEdit_saveDirectory.setText('None Specified')
-            self.ui.lineEdit_saveFilename.setText('Select Directory First')
+            self.ui.lineEdit_saveDirectory.setText('')
+            self.ui.lineEdit_saveFilename.setText('Filename - Select Save Directory First')
             self.ui.lineEdit_saveFilename.setEnabled(False)
-            self.ui.lineEdit_saveSampleName.setEnabled(False)
-    
+            self.ui.lineEdit_saveDescription.setText('Description - Select Save Directory First')
+            self.ui.lineEdit_saveDescription.setEnabled(False)
+
+
     def validate_file_name(self):
         """
         Validate filename set by the user
@@ -1608,8 +1613,8 @@ class Controller_MainWindow(QMainWindow):
         if tmp_string != '':
             self.save_filename = tmp_string
 
-        if (self.save_path != '') and (self.save_filename != ''):
-            self.save_filename = os.path.normpath(self.save_path + '\\' + self.save_filename)
+        if (self.save_directory != '') and (self.save_filename != ''):
+            self.save_filename = os.path.normpath(self.save_directory + '\\' + self.save_filename)
             self.saving_allowed = True
         else:
             self.saving_allowed = False
@@ -1623,11 +1628,11 @@ class Controller_MainWindow(QMainWindow):
         
         if self.saving_allowed:
             # Getting sample name
-            self.save_sample_name = str(self.ui.lineEdit_saveSampleName.text())
+            self.save_description = str(self.ui.lineEdit_saveDescription.text())
 
             '''Setting up frame saver'''
             self.frame_saver.reinit(1)
-            self.frame_saver.add_sample_name(self.save_sample_name)
+            self.frame_saver.add_sample_name(self.save_description)
             self.frame_saver.add_motor_parameters(self.image_hor_pos_text, self.image_ver_pos_text, self.image_cam_pos_text)
             
             '''Saving frame'''
@@ -1635,7 +1640,11 @@ class Controller_MainWindow(QMainWindow):
                 self.frame_saver.set_files(1,self.save_filename,'singleImage',1,'ETLscan')
                 cropped_buffer = self.crop_buffer(self.buffer)
                 self.frame_saver.enqueue_buffer(cropped_buffer)
-                self.updateUi_message_printer('Saving Images (one for each ETL scan)')
+                self.updateUi_message_printer('Saving Images (one for each ETL scan, cropped)')
+            elif self.ui.checkBox_saveAllFull.isChecked():
+                self.frame_saver.set_files(1,self.save_filename,'singleImage',1,'FullETLscan')
+                self.frame_saver.enqueue_buffer(self.buffer)
+                self.updateUi_message_printer('Saving Images (one for each ETL scan, full)')
             else:
                 self.frame_saver.set_files(1,self.save_filename,'singleImage',1,'reconstructed_frame')
                 self.frame_saver.enqueue_buffer(self.reconstructed_frame)
@@ -1674,6 +1683,7 @@ class Controller_MainWindow(QMainWindow):
         '''Start or stop stack mode, depending on the button status'''
         if self.stack_mode_started:
             self.stack_mode_started = False
+            self.stack_mode_thread.join()
         else:
             self.close_modes()
             '''Making sure the limits of the volume are set'''
@@ -1709,8 +1719,8 @@ class Controller_MainWindow(QMainWindow):
                     self.updateUi_message_printer('->Stack mode started -- Number of frames to save: ' + str(int(self.number_of_planes)))
 
                     '''Starting stack mode thread'''
-                    stack_mode_thread = threading.Thread(target = self.stack_mode_worker)
-                    stack_mode_thread.start()
+                    self.stack_mode_thread = threading.Thread(target = self.stack_mode_worker)
+                    self.stack_mode_thread.start()
 
 #     def updateUi_pre_stack_mode(self):
 #         '''Starts the thread for stack mode'''
@@ -1744,13 +1754,15 @@ class Controller_MainWindow(QMainWindow):
         # Making sure saving is allowed and filename isn't empty
         if self.saving_allowed:
             # Getting sample name
-            self.save_sample_name = str(self.ui.lineEdit_saveSampleName.text())
+            self.save_description = str(self.ui.lineEdit_saveDescription.text())
 
             # Setting frame saver
             self.frame_saver.reinit(3)
-            self.frame_saver.add_sample_name(self.save_sample_name)
+            self.frame_saver.add_sample_name(self.save_description)
             if self.ui.checkBox_saveAllCrop.isChecked():
                 self.frame_saver.set_files(self.number_of_planes, self.save_filename, 'stack', 1, 'ETLscan')
+            elif self.ui.checkBox_saveAllFull.isChecked():
+                self.frame_saver.set_files(self.number_of_planes, self.save_filename, 'stack', 1, 'FullETLscan')             
             else:
                 self.frame_saver.set_files(1, self.save_filename, 'stack', self.number_of_planes, 'reconstructed_frame')
             # Starting frame saver
@@ -1801,7 +1813,10 @@ class Controller_MainWindow(QMainWindow):
                     if self.ui.checkBox_saveAllCrop.isChecked():
                         cropped_buffer = self.crop_buffer(self.buffer)
                         self.frame_saver.enqueue_buffer(cropped_buffer)
-                        self.sig_message.emit('Saving All Images (one for each ETL step)')
+                        self.sig_message.emit('Saving All Images (one for each ETL step, cropped)')
+                    elif self.ui.checkBox_saveAllFull.isChecked():
+                        self.frame_saver.enqueue_buffer(self.buffer)
+                        self.sig_message.emit('Saving All Images (one for each ETL step, full)')                 
                     else:
                         self.frame_saver.enqueue_buffer(self.reconstructed_frame)
                         self.sig_message.emit('Saving Reconstructed Image')
@@ -1835,6 +1850,7 @@ class Controller_MainWindow(QMainWindow):
         '''Start or stop camera calibration, depending on the button status'''
         if self.camera_calibration_started:
             self.camera_calibration_started = False
+            self.calibrate_camera_thread.join()
         else:
             self.close_modes()
             self.camera_calibration_started = True
@@ -1853,8 +1869,8 @@ class Controller_MainWindow(QMainWindow):
         self.ui.statusBar_progress.show()
             
         '''Starting camera calibration thread'''
-        calibrate_camera_thread = threading.Thread(target = self.calibrate_camera_worker)
-        calibrate_camera_thread.start()
+        self.calibrate_camera_thread = threading.Thread(target = self.calibrate_camera_worker)
+        self.calibrate_camera_thread.start()
     
     def calibrate_camera_worker(self):
         ''' Calibrates the camera focus by finding the ideal camera position 
@@ -1906,11 +1922,11 @@ class Controller_MainWindow(QMainWindow):
         self.validate_file_name()
         if self.saving_allowed:
             '''Getting sample name'''
-            self.save_sample_name = str(self.ui.lineEdit_saveSampleName.text())
+            self.save_description = str(self.ui.lineEdit_saveDescription.text())
 
             '''Setting frame saver'''
             self.frame_saver.reinit(3)
-            self.frame_saver.add_sample_name(self.save_sample_name)
+            self.frame_saver.add_sample_name(self.save_description)
             self.frame_saver.set_files(self.number_of_calibration_planes,self.save_filename,'cameraCalibration',self.number_of_camera_positions,'camera_position')
             
             '''Starting frame saver'''
@@ -2058,6 +2074,7 @@ class Controller_MainWindow(QMainWindow):
         '''Start or stop etls calibration, depending on the button status'''
         if self.etls_calibration_started:
             self.etls_calibration_started = False
+            self.calibrate_etls_thread.join()
         else:
             self.close_modes()
             self.etls_calibration_started = True
@@ -2073,8 +2090,8 @@ class Controller_MainWindow(QMainWindow):
         self.updateUi_message_printer('ETL calibration started')
         
         '''Starting camera calibration thread'''
-        calibrate_etls_thread = threading.Thread(target = self.calibrate_etls_worker)
-        calibrate_etls_thread.start()
+        self.calibrate_etls_thread = threading.Thread(target = self.calibrate_etls_worker)
+        self.calibrate_etls_thread.start()
 
 
     def calibrate_etls_worker(self):
@@ -2116,11 +2133,11 @@ class Controller_MainWindow(QMainWindow):
         self.validate_file_name()
         if self.saving_allowed:
             '''Getting sample name'''
-            self.save_sample_name = str(self.ui.lineEdit_saveSampleName.text())
+            self.save_description = str(self.ui.lineEdit_saveDescription.text())
 
             '''Setting frame saver'''
             self.frame_saver.reinit(3)
-            self.frame_saver.add_sample_name(self.save_sample_name)
+            self.frame_saver.add_sample_name(self.save_description)
             self.frame_saver.set_files(2*self.number_of_etls_points,self.save_filename,'etlCalibration',self.number_of_etls_images,'etl_image')
             
             '''Starting frame saver'''
@@ -2344,12 +2361,12 @@ class Properties_Dialog(QDialog):
         self.sig_status_message.connect(self.parent.updateUi_message_printer)
 
         self.get_properties()
-    
+
+
     def get_properties(self):
-        '''Read properties from the camera'''
+        # Read properties from the camera
         camera_properties = {}
         camera_properties = self.camera.get_properties()
-
         self.ui.label_cameraName.setText(f"{camera_properties.get('camera name', '-')}")
         self.ui.label_imageSize.setText(f"{camera_properties.get('x', '0')} X {camera_properties.get('y', '0')}")
         self.ui.label_cameraTemperature.setText(f"{camera_properties.get('camera temperature', 0):.1f} \u2103")
@@ -2365,12 +2382,12 @@ class Properties_Dialog(QDialog):
         else:
             self.ui.label_recorderMode.setText('-')
         
-        '''Read properties from the motors'''
+        # Read properties from the motors
         motors_properties = {}
-
-        self.ui.label_horizontalMotorName.setText(self.motors.horizontal_get_name())
-        self.ui.label_verticalMotorName.setText(self.motors.vertical_get_name())
-        self.ui.label_cameraMotorName.setText(self.motors.camera_get_name())
+        motors_properties = self.motors.get_properties()
+        self.ui.label_horizontalMotorName.setText(f"{motors_properties.get('horizontal name', '-')}")
+        self.ui.label_verticalMotorName.setText(f"{motors_properties.get('vertical name', '-')}")
+        self.ui.label_cameraMotorName.setText(f"{motors_properties.get('camera name', '-')}")
     
     def refresh_properties(self):
         '''Refresh system properties'''
@@ -2489,10 +2506,10 @@ class FrameSaver(QObject):
     def start_saving(self):
         '''Initiates saving thread'''
         self.saving_started = True
-        frame_saver_thread = threading.Thread(target = self.save_worker)
-        frame_saver_thread.start()
+        self.frame_saver_thread = threading.Thread(target = self.frame_saver_worker)
+        self.frame_saver_thread.start()
     
-    def save_worker(self):
+    def frame_saver_worker(self):
         '''Thread for saving 3D arrays (or 2D arrays).
             The number of datasets per file is the number of 2D arrays'''
         for file in range(len(self.filenames_list)):
@@ -2536,7 +2553,7 @@ class FrameSaver(QObject):
             if self.saving_started == False:
                 break
 
-
     def stop_saving(self):
         '''Changes the flag status to end the saving thread'''
         self.saving_started = False
+        #self.frame_saver_thread.join()

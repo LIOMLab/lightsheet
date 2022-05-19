@@ -104,28 +104,12 @@ class Motors:
             self.camera.set_limit_low(self.camera_limit_low, self.camera_units)
             self.camera.set_limit_high(self.camera_limit_high, self.camera_units)
 
-
-
-    def vertical_get_name(self):
-        if self.vertical_is_open:
-            vertical_name = str(self.vertical.get_name())
-        else:
-            vertical_name = str('No motor initialized')
-        return vertical_name
-
-    def horizontal_get_name(self):
-        if self.horizontal_is_open:
-            horizontal_name = str(self.horizontal.get_name())
-        else:
-            horizontal_name = str('No motor initialized')
-        return horizontal_name
-
-    def camera_get_name(self):
-        if self.camera_is_open:
-            camera_name = str(self.camera.get_name())
-        else:
-            camera_name = str('No motor initialized')
-        return camera_name
+    def get_properties(self):
+        motors_properties = {}
+        motors_properties.update({'vertical name': self.vertical.get_name()})
+        motors_properties.update({'horizontal name': self.horizontal.get_name()})
+        motors_properties.update({'camera name': self.camera.get_name()})
+        return motors_properties
 
 
 class ZaberMotor:
@@ -258,7 +242,7 @@ class ZaberMotor:
                 self.name = "Unsupported device"
         else:
             self.id = 0
-            self.name = ""
+            self.name = "Device not found"
         return self.id
 
     def set_units(self, units: str):
