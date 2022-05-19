@@ -3131,7 +3131,7 @@
                <item>
                 <layout class="QGridLayout" name="gridLayout_9">
                  <item row="2" column="1">
-                  <widget class="QLineEdit" name="lineEdit_saveSampleName">
+                  <widget class="QLineEdit" name="lineEdit_saveDescription">
                    <property name="text">
                     <string/>
                    </property>
@@ -3147,7 +3147,7 @@
                  <item row="1" column="0">
                   <widget class="QLabel" name="label_45">
                    <property name="text">
-                    <string>Filename Prefix:</string>
+                    <string>Filename:</string>
                    </property>
                   </widget>
                  </item>
@@ -3177,7 +3177,7 @@
                  <item row="2" column="0">
                   <widget class="QLabel" name="label_46">
                    <property name="text">
-                    <string>Sample Name:</string>
+                    <string>Description:</string>
                    </property>
                   </widget>
                  </item>
