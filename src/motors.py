@@ -8,32 +8,33 @@ sys.path.append(".")
 
 import copy
 import serial
-from src.config import cfg_read, cfg_write
+from src.config import cfg_read, cfg_write, cfg_str2bool
 
 class Motors:
     '''Class for translation stages'''
 
-    # Default configurable settings
-    _cfg_settings = {}
-    _cfg_settings['Port'] = 'COM3'
-    _cfg_settings['Device Number Vertical'] = 1
-    _cfg_settings['Device Number Horizontal'] = 2
-    _cfg_settings['Device Number Camera'] = 3
-    _cfg_settings['Vertical Inverted'] = False
-    _cfg_settings['Vertical Units'] = 'mm'
-    _cfg_settings['Vertical Origin'] = 0.0
-    _cfg_settings['Vertical Limit Low'] = 0.0
-    _cfg_settings['Vertical Limit High'] = 10.0
-    _cfg_settings['Horizontal Inverted'] = False
-    _cfg_settings['Horizontal Units'] = 'mm'
-    _cfg_settings['Horizontal Origin'] = 0.0
-    _cfg_settings['Horizontal Limit Low'] = 0.0
-    _cfg_settings['Horizontal Limit High'] = 10.0
-    _cfg_settings['Camera Inverted'] = False
-    _cfg_settings['Camera Units'] = 'mm'
-    _cfg_settings['Camera Origin'] = 0.0
-    _cfg_settings['Camera Limit Low'] = 0.0
-    _cfg_settings['Camera Limit High'] = 50.0
+    # Configurable settings defaults
+    # Used as base dictionnary for .ini file allowable keys
+    _cfg_defaults = {}
+    _cfg_defaults['Port'] = 'COM3'
+    _cfg_defaults['Device Number Vertical'] = 1
+    _cfg_defaults['Device Number Horizontal'] = 2
+    _cfg_defaults['Device Number Camera'] = 3
+    _cfg_defaults['Vertical Inverted'] = False
+    _cfg_defaults['Vertical Units'] = 'mm'
+    _cfg_defaults['Vertical Origin'] = 0.0
+    _cfg_defaults['Vertical Limit Low'] = 0.0
+    _cfg_defaults['Vertical Limit High'] = 10.0
+    _cfg_defaults['Horizontal Inverted'] = False
+    _cfg_defaults['Horizontal Units'] = 'mm'
+    _cfg_defaults['Horizontal Origin'] = 0.0
+    _cfg_defaults['Horizontal Limit Low'] = 0.0
+    _cfg_defaults['Horizontal Limit High'] = 10.0
+    _cfg_defaults['Camera Inverted'] = False
+    _cfg_defaults['Camera Units'] = 'mm'
+    _cfg_defaults['Camera Origin'] = 0.0
+    _cfg_defaults['Camera Limit Low'] = 0.0
+    _cfg_defaults['Camera Limit High'] = 50.0
 
 
     def __init__(self):
@@ -41,45 +42,15 @@ class Motors:
         self.error = 0
         self.error_message = ""
 
-        # State flags
-        self.vertical_is_open = False
-        self.horizontal_is_open = False
-        self.camera_is_open = False
+        # read configurable settings from config.ini file
+        self._cfg_filename = 'config.ini'
+        self._cfg_section = 'Motors'
+        self.cfg_load_ini()
 
-        # Set configurable settings to default values
-        self.cfg_settings = copy.deepcopy(self._cfg_settings)
-
-        # Update configurable settings with values found in config file
-        self.cfg_settings = cfg_read('config.ini', 'Motors', self.cfg_settings)
-
-        # Assign configurable settings to instance variables
-        self.port                   = str(self.cfg_settings['Port'])
-        self.device_no_vertical     = int(self.cfg_settings['Device Number Vertical'])
-        self.device_no_horizontal   = int(self.cfg_settings['Device Number Horizontal'])
-        self.device_no_camera       = int(self.cfg_settings['Device Number Camera'])
-
-        self.vertical_inverted      = bool(self.cfg_settings['Vertical Inverted'])
-        self.vertical_units         = str(self.cfg_settings['Vertical Units'])
-        self.vertical_origin        = float(self.cfg_settings['Vertical Origin'])
-        self.vertical_limit_low     = float(self.cfg_settings['Vertical Limit Low'])
-        self.vertical_limit_high    = float(self.cfg_settings['Vertical Limit High'])
-
-        self.horizontal_inverted    = bool(self.cfg_settings['Horizontal Inverted'])
-        self.horizontal_units       = str(self.cfg_settings['Horizontal Units'])
-        self.horizontal_origin      = float(self.cfg_settings['Horizontal Origin'])
-        self.horizontal_limit_low   = float(self.cfg_settings['Horizontal Limit Low'])
-        self.horizontal_limit_high  = float(self.cfg_settings['Horizontal Limit High'])
-
-        self.camera_inverted        = bool(self.cfg_settings['Camera Inverted'])
-        self.camera_units           = str(self.cfg_settings['Camera Units'])
-        self.camera_origin          = float(self.cfg_settings['Camera Origin'])
-        self.camera_limit_low       = float(self.cfg_settings['Camera Limit Low'])
-        self.camera_limit_high      = float(self.cfg_settings['Camera Limit High'])
-
-
+        # check existance of vertical, horizontal and camera motors
+        # and apply initial configuration
         self.vertical = ZaberMotor(self.port, self.device_no_vertical)
         if self.vertical.is_supported:
-            self.vertical_is_open = True
             self.vertical.set_inverted(self.vertical_inverted)
             self.vertical.set_units(self.vertical_units)
             self.vertical.set_origin(self.vertical_origin, self.vertical_units)
@@ -88,7 +59,6 @@ class Motors:
 
         self.horizontal = ZaberMotor(self.port, self.device_no_horizontal)
         if self.horizontal.is_supported:
-            self.horizontal_is_open = True
             self.horizontal.set_inverted(self.horizontal_inverted)
             self.horizontal.set_units(self.horizontal_units)
             self.horizontal.set_origin(self.horizontal_origin, self.horizontal_units)
@@ -97,12 +67,63 @@ class Motors:
 
         self.camera = ZaberMotor(self.port, self.device_no_camera)
         if self.camera.is_supported:
-            self.camera_is_open = True
             self.camera.set_inverted(self.camera_inverted)
             self.camera.set_units(self.camera_units)
             self.camera.set_origin(self.camera_origin, self.camera_units)
             self.camera.set_limit_low(self.camera_limit_low, self.camera_units)
             self.camera.set_limit_high(self.camera_limit_high, self.camera_units)
+
+
+    def cfg_load_ini(self):
+        self._cfg = cfg_read(self._cfg_filename, self._cfg_section, self._cfg_defaults)
+        self.cfg_dict2var()
+
+    def cfg_save_ini(self):
+        self.cfg_var2dict()
+        self._cfg = cfg_write(self._cfg_filename, self._cfg_section, self._cfg)
+
+    def cfg_dict2var(self):
+        # set instance variables from configuration dictionary values
+        self.port                   = str(  self._cfg['Port']                       )
+        self.device_no_vertical     = int(  self._cfg['Device Number Vertical']     )
+        self.device_no_horizontal   = int(  self._cfg['Device Number Horizontal']   )
+        self.device_no_camera       = int(  self._cfg['Device Number Camera']       )
+        self.vertical_inverted      = cfg_str2bool(self._cfg['Vertical Inverted']   )
+        self.vertical_units         = str(      self._cfg['Vertical Units']         )
+        self.vertical_origin        = float(    self._cfg['Vertical Origin']        )
+        self.vertical_limit_low     = float(    self._cfg['Vertical Limit Low']     )
+        self.vertical_limit_high    = float(    self._cfg['Vertical Limit High']    )
+        self.horizontal_inverted    = cfg_str2bool(self._cfg['Horizontal Inverted'] )
+        self.horizontal_units       = str(      self._cfg['Horizontal Units']       )
+        self.horizontal_origin      = float(    self._cfg['Horizontal Origin']      )
+        self.horizontal_limit_low   = float(    self._cfg['Horizontal Limit Low']   )
+        self.horizontal_limit_high  = float(    self._cfg['Horizontal Limit High']  )
+        self.camera_inverted        = cfg_str2bool(self._cfg['Camera Inverted']     )
+        self.camera_units           = str(      self._cfg['Camera Units']           )
+        self.camera_origin          = float(    self._cfg['Camera Origin']          )
+        self.camera_limit_low       = float(    self._cfg['Camera Limit Low']       )
+        self.camera_limit_high      = float(    self._cfg['Camera Limit High']      )
+
+    def cfg_var2dict(self):
+        # pack current instance variables into configuration dictionary
+        self._cfg = {}
+        self._cfg['Port']                       = str( self.port                    )
+        self._cfg['Device Number Vertical']     = str( self.device_no_vertical      )
+        self._cfg['Device Number Horizontal']   = str( self.device_no_horizontal    )
+        self._cfg['Device Number Camera']       = str( self.device_no_camera        )
+        self._cfg['Vertical Inverted']          = str( self.vertical_inverted       )
+        self._cfg['Vertical Origin']            = str( self.vertical_origin         )
+        self._cfg['Vertical Limit Low']         = str( self.vertical_limit_low      )
+        self._cfg['Vertical Limit High']        = str( self.vertical_limit_high     )
+        self._cfg['Horizontal Inverted']        = str( self.horizontal_inverted     )
+        self._cfg['Horizontal Origin']          = str( self.horizontal_origin       )
+        self._cfg['Horizontal Limit Low']       = str( self.horizontal_limit_low    )
+        self._cfg['Horizontal Limit High']      = str( self.horizontal_limit_high   )
+        self._cfg['Camera Inverted']            = str( self.camera_inverted         )
+        self._cfg['Camera Origin']              = str( self.camera_origin           )
+        self._cfg['Camera Limit Low']           = str( self.camera_limit_low        )
+        self._cfg['Camera Limit High']          = str( self.camera_limit_high       )
+
 
     def get_properties(self):
         motors_properties = {}
@@ -110,6 +131,13 @@ class Motors:
         motors_properties.update({'horizontal name': self.horizontal.get_name()})
         motors_properties.update({'camera name': self.camera.get_name()})
         return motors_properties
+
+    def get_positions(self):
+        motors_positions = {}
+        motors_positions.update({'vertical position': self.vertical.get_position('mm')})
+        motors_positions.update({'horizontal position': self.horizontal.get_position('mm')})
+        motors_positions.update({'camera position': self.camera.get_position('mm')})
+        return motors_positions
 
 
 class ZaberMotor:

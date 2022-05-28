@@ -2,17 +2,16 @@
 Created on April 1st, 2022
 '''
 
+import configparser
 
-from configparser import ConfigParser
-
-def cfg_read(cfg_filename, cfg_section, cfg_dictionary):
+def cfg_read(cfg_filename:str, cfg_section:str, cfg_dictionary:dict):
     """
     Reads in a specific section of a configuration file and returns updated config dictionary
     Must provide a base dictionnary of values to read
     Will ignore extraneous keys found in the configuration file
     """
     tmp_dictionary = {}
-    cfg = ConfigParser()
+    cfg = configparser.ConfigParser()
     cfg.optionxform = str
     cfg.read(cfg_filename)
     if cfg.has_section(cfg_section):
@@ -23,12 +22,12 @@ def cfg_read(cfg_filename, cfg_section, cfg_dictionary):
             cfg_dictionary[key] = tmp_dictionary[key]
     return cfg_dictionary
 
-def cfg_write(cfg_filename, cfg_section, cfg_dictionary):
+def cfg_write(cfg_filename:str, cfg_section:str, cfg_dictionary:dict):
     """
     Write config dictionary to a specified section of a configuration file
     Will not erase other keys found in the same section
     """
-    cfg = ConfigParser()
+    cfg = configparser.ConfigParser()
     cfg.optionxform = str
     cfg.read(cfg_filename)
     if not cfg.has_section(cfg_section):
@@ -39,6 +38,8 @@ def cfg_write(cfg_filename, cfg_section, cfg_dictionary):
         cfg.write(output_file)
     return cfg_dictionary
 
+def cfg_str2bool(v:str):
+    return v.lower() in ('true', 't', 'yes', '1')
 
 
 # -------------------------------------------------------------------------------------------------
