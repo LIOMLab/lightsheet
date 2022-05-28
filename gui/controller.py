@@ -50,6 +50,7 @@ class Controller_MainWindow(QMainWindow):
     sig_message = pyqtSignal(str)
     sig_progress_update = pyqtSignal(int)
 
+    sig_single_mode_finished = pyqtSignal()
     sig_live_mode_finished = pyqtSignal()
     sig_stack_mode_finished = pyqtSignal()
     sig_preview_mode_finished = pyqtSignal()
@@ -63,6 +64,10 @@ class Controller_MainWindow(QMainWindow):
 
     def __init__(self):
         # NOTES
+        #
+        # Previous Ui loading was done directly from .ui file with:
+        # basepath = os.path.join(os.path.dirname(__file__))
+        # uic.loadUi(os.path.join(basepath,"controller.ui"), self)
         # 
         # Ui approach taken below requires generating .py file from .ui (Qt Designer file format)
         # This enables VSCode IntelliSense to work properly on Ui classes
@@ -77,14 +82,11 @@ class Controller_MainWindow(QMainWindow):
         #   import sys
         #   sys.path.append("./gui") 
         #
-        # Previous Ui loading was done directly from .ui file with:
-        # basepath = os.path.join(os.path.dirname(__file__))
-        # uic.loadUi(os.path.join(basepath,"controller.ui"), self)
-        #
+        # 
         # Also, see https://fuhm.org/super-harmful/
-        # for explanation why we did not automatically init inherited class with:
+        # for explanation why we don't automatically init inherited class with:
         # super(Controller, self).__init__()
-        # but rather manually with: 
+        # but rather explicitly with: 
         # QMainWindow.__init__(self)
         #
 
@@ -139,6 +141,7 @@ class Controller_MainWindow(QMainWindow):
             self.ui.lineEdit_saveDescription.setEnabled(False)
 
         # Flags
+        self.single_mode_started = False
         self.preview_mode_started = False
         self.live_mode_started = False
         self.stack_mode_started = False
@@ -284,7 +287,7 @@ class Controller_MainWindow(QMainWindow):
         # -------------------------------------------------------------------------------------------------------------------------------
         # Connections for the 'Manual Acquisition' controls
         # -------------------------------------------------------------------------------------------------------------------------------
-        self.ui.pushButton_acqGetSingleImage.clicked.connect(self.updateUi_single_image_button)
+        self.ui.pushButton_acqGetSingleImage.clicked.connect(self.updateUi_single_mode_button)
         self.ui.pushButton_acqStartLiveMode.clicked.connect(self.updateUi_live_mode_button)
         self.ui.pushButton_acqStartPreviewMode.clicked.connect(self.updateUi_preview_mode_button)
 
@@ -321,6 +324,7 @@ class Controller_MainWindow(QMainWindow):
         # -------------------------------------------------------------------------------------------------------------------------------
         # Signal connections for post modes (threads) Ui updates
         # -------------------------------------------------------------------------------------------------------------------------------
+        self.sig_single_mode_finished.connect(self.updateUi_post_single_mode)
         self.sig_live_mode_finished.connect(self.updateUi_post_live_mode)
         self.sig_stack_mode_finished.connect(self.updateUi_post_stack_mode)
         self.sig_preview_mode_finished.connect(self.updateUi_post_preview_mode)
@@ -344,7 +348,7 @@ class Controller_MainWindow(QMainWindow):
     def hardware_init(self):
         """
         Completes initialisation of hardware and image consumers
-        Launches timer to periodically refresh displayed image
+        Launches timer to periodically refresh image display port (imageView)
         """
         # Change to busy cursor and display status message
         QApplication.setOverrideCursor(Qt.WaitCursor)
@@ -382,10 +386,12 @@ class Controller_MainWindow(QMainWindow):
 
 
     def closeEvent(self, event):
-        '''Making sure that everything is closed when the user exits the software.
-           This function executes automatically when the user closes the UI.
-           This is an intrinsic function name of Qt, don't change the name even 
-           if it doesn't follow the naming convention'''
+        """
+        Making sure that everything is closed when the user exits the software.
+        This function executes automatically when the user closes the UI.
+        This is an intrinsic function name of Qt, don't change the name even 
+        if it doesn't follow the naming convention
+        """
         result = QMessageBox.question(self, "Confirm Exit...", "Are you sure you want to exit ?", QMessageBox.Yes | QMessageBox.No)
         if result == QMessageBox.Yes:
             QApplication.setOverrideCursor(Qt.WaitCursor)
@@ -419,7 +425,7 @@ class Controller_MainWindow(QMainWindow):
         self.properties_dialog.get_properties()
 
     def open_help(self):
-        '''Open help documentation for the program (PDF)'''
+        '''Open help documentation (PDF)'''
         guide_pdf = os.path.dirname(os.path.abspath(__file__)) + r'\..\Guide.pdf'
         webbrowser.open_new(guide_pdf)
 
@@ -524,8 +530,6 @@ class Controller_MainWindow(QMainWindow):
     def close_modes(self):
         '''Close all thread modes if they are active'''
         #FIXME
-        if self.lasers.laser1_active or self.lasers.laser2_active:
-            self.stop_lasers()
         if self.preview_mode_started:
             self.preview_mode_started = False
         if self.live_mode_started:
@@ -536,7 +540,10 @@ class Controller_MainWindow(QMainWindow):
             self.camera_calibration_started = False
         if self.etls_calibration_started:
             self.etls_calibration_started = False
-    
+        if self.lasers.laser1_active or self.lasers.laser2_active:
+            self.stop_lasers()
+
+
     
     def updateUi_initial_hardware_state(self):
         # HwDAQ
@@ -1171,7 +1178,6 @@ class Controller_MainWindow(QMainWindow):
                     ##tiff.save(tiff_filename)
                 
                 self.updateUi_message_printer('Dataset ' + self.dataset_name + ' of file ' + self.open_directory + ' displayed')
-    
 
 
     def updateUi_preview_mode_button(self):
@@ -1186,7 +1192,6 @@ class Controller_MainWindow(QMainWindow):
             self.preview_mode_started = True
             self.ui.pushButton_acqStartPreviewMode.setText('Stop Preview Mode')
 #            self.updateUi_laser_buttons(False)
-#            self.updateUi_pre_preview_mode()
 
             # updating ui before starting preview mode thread
             self.updateUi_modes_buttons([self.ui.pushButton_acqStartPreviewMode])
@@ -1194,19 +1199,10 @@ class Controller_MainWindow(QMainWindow):
             self.ui.statusBar_label.setText('Current Acquisition Mode: Preview ')
             self.ui.statusBar_progress.setValue(100)
             self.ui.statusBar_progress.show()
-#            self.sig_progress_update.emit(100)
 
             # Starting preview mode thread
             self.preview_mode_thread = threading.Thread(target = self.preview_mode_worker)
             self.preview_mode_thread.start()
-
-    # def updateUi_pre_preview_mode(self):
-    #     # updating ui before starting preview mode thread
-    #     self.updateUi_modes_buttons([self.ui.pushButton_acqStartPreviewMode])
-    #     self.updateUi_message_printer('->Preview mode started')
-    #     self.ui.statusBar_label.setText('Current Acquisition Mode: Preview ')
-    #     self.ui.statusBar_progress.show()
-    #     self.sig_progress_update.emit(100)
             
     @pyqtSlot()
     def updateUi_post_preview_mode(self):
@@ -1216,8 +1212,6 @@ class Controller_MainWindow(QMainWindow):
         self.ui.statusBar_label.setText('')
         self.ui.statusBar_progress.setValue(0)
         self.ui.statusBar_progress.hide()
-#        self.sig_progress_update.emit(0)
-
     
     def preview_mode_worker(self):
         '''This thread allows the visualization and manual control of the 
@@ -1229,9 +1223,6 @@ class Controller_MainWindow(QMainWindow):
         self.camera.set_trigger_mode('auto_trigger')
         self.camera.set_exposure_time(50)
         self.camera.arm_camera()
-
-#        # Starting lasers
-#        self.start_lasers()
 
         while self.preview_mode_started:
             # # Updating Galvo and ETL voltages
@@ -1247,10 +1238,6 @@ class Controller_MainWindow(QMainWindow):
             # Sending first (and should be only) image to display port
             frame = cam_images[0]
             self.frame_viewer.enqueue_frame(frame)
-
-
-#        # Stopping lasers
-#        self.stop_lasers()
 
         # Stopping camera
         self.camera.disarm_camera()
@@ -1271,28 +1258,17 @@ class Controller_MainWindow(QMainWindow):
             self.live_mode_started = True
             self.ui.pushButton_acqStartLiveMode.setText('Stop Live Mode')
 #            self.updateUi_laser_buttons(False)
-#            self.updateUi_pre_live_mode()
             # updating ui before starting live mode thread
             self.updateUi_modes_buttons([self.ui.pushButton_acqStartLiveMode])
             self.updateUi_message_printer('->Live mode started')
             self.ui.statusBar_label.setText('Current Acquisition Mode: Live ')
             self.ui.statusBar_progress.setValue(100)
             self.ui.statusBar_progress.show()
-#            self.sig_progress_update.emit(100)
 
             # Starting live mode thread
             self.live_mode_thread = threading.Thread(target = self.live_mode_worker)
             self.live_mode_thread.start()
-  
 
-    # def updateUi_pre_live_mode(self):
-    #     # updating ui before starting live mode thread
-    #     self.updateUi_modes_buttons([self.ui.pushButton_acqStartLiveMode])
-    #     self.updateUi_message_printer('->Live mode started')
-    #     self.ui.statusBar_label.setText('Current Acquisition Mode: Live ')
-    #     self.ui.statusBar_progress.show()
-    #     self.sig_progress_update.emit(100)
-            
     @pyqtSlot()
     def updateUi_post_live_mode(self):
         # updating ui after live mode thread has completed
@@ -1301,8 +1277,6 @@ class Controller_MainWindow(QMainWindow):
         self.ui.statusBar_label.setText('')
         self.ui.statusBar_progress.setValue(0)
         self.ui.statusBar_progress.hide()
-#        self.sig_progress_update.emit(0)
-
 
     def live_mode_worker(self):
         '''This thread allows the execution of scan_mode while modifying
@@ -1322,7 +1296,7 @@ class Controller_MainWindow(QMainWindow):
             # Refresh scan waveforms every loop (live mode)
             self.hwdaq.compute_scan_waveforms()
             # Get single image
-            self.acquire_image()
+            self.acquire_scan()
         
         # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)
         self.hwdaq.ao_etl_update(left_setpoint=2.5, right_setpoint=2.5)
@@ -1337,66 +1311,116 @@ class Controller_MainWindow(QMainWindow):
         self.sig_live_mode_finished.emit()
 
 
-    def updateUi_single_image_button(self):
+    def updateUi_single_mode_button(self):
         '''Acquire a single image '''
-        self.close_modes()
+        if not self.single_mode_started:
+            self.close_modes()
 
-        # Disabling modes while single frame acquisition
-        self.updateUi_modes_buttons(self.default_buttons)
-        self.updateUi_message_printer('->Getting single image')
+            self.single_mode_started = True
+            # Disabling modes while single frame acquisition
+            self.ui.pushButton_acqGetSingleImage.setText('Acquiring...')
+            self.updateUi_modes_buttons([self.ui.pushButton_acqGetSingleImage])
+            self.updateUi_message_printer('->Getting single image')
 
-        self.get_single_image()
+            # Starting single image thread
+            self.single_mode_thread = threading.Thread(target = self.single_mode_worker)
+            self.single_mode_thread.start()
 
+
+    @pyqtSlot()
+    def updateUi_post_single_mode(self):
         # Re-enabling modes after single frame acquisition
+        self.single_mode_started = False
+        self.ui.pushButton_acqGetSingleImage.setText('Get Single Image')
         self.default_buttons.append(self.ui.pushButton_saveCurrentImage)
         self.updateUi_modes_buttons(self.default_buttons)
 
 
-    def get_single_image(self):
-        '''Generates and display a single frame which can be saved afterwards 
-        using self.save_single_image()'''
+    def single_mode_worker(self):
+        '''Generates and display a single scan which can be saved afterwards'''
         
-        '''Moving the camera to focus'''
+        # Moving the camera to focus
         ##self.move_camera_to_focus()
         
-        '''Getting positions for the image'''
+        # Getting positions for the image
         self.image_hor_pos_text = self.current_horizontal_position_text
         self.image_ver_pos_text = self.current_vertical_position_text
         self.image_cam_pos_text = self.current_camera_position_text
         
-        '''Setting the camera for acquisition'''
+        # Setting the camera for scan acquisition
         self.camera.set_trigger_mode('external_exposure')
         self.camera.arm_camera()
 
-        '''Starting lasers'''
+        # Start lasers
         self.both_lasers_activated = True
         self.start_lasers()
         
         # Refresh scan waveforms with current settings
         self.hwdaq.compute_scan_waveforms()
-        # Get single image
-        self.acquire_image()
+        # Acquire a single scan
+        self.acquire_scan()
 
-        # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)
+        # Put ETLs in standby mode
+        # 2.5V corresponds no current through coil (mid 0-5V adjustable range)
         self.hwdaq.ao_etl_update(left_setpoint=2.5, right_setpoint=2.5)
 
-        '''Stopping lasers'''
+        # Stop lasers
         self.stop_lasers()
         self.both_lasers_activated = False
 
-        '''Stopping camera'''            
+        # Stop camera            
         self.camera.disarm_camera()
+
+        # Emit finished signal
+        self.sig_single_mode_finished.emit()
+
+
+    # def get_single_image(self):
+    #     '''Generates and display a single frame which can be saved afterwards 
+    #     using self.save_single_image()'''
+        
+    #     '''Moving the camera to focus'''
+    #     ##self.move_camera_to_focus()
+        
+    #     '''Getting positions for the image'''
+    #     self.image_hor_pos_text = self.current_horizontal_position_text
+    #     self.image_ver_pos_text = self.current_vertical_position_text
+    #     self.image_cam_pos_text = self.current_camera_position_text
+        
+    #     '''Setting the camera for acquisition'''
+    #     self.camera.set_trigger_mode('external_exposure')
+    #     self.camera.arm_camera()
+
+    #     '''Starting lasers'''
+    #     self.both_lasers_activated = True
+    #     self.start_lasers()
+        
+    #     # Refresh scan waveforms with current settings
+    #     self.hwdaq.compute_scan_waveforms()
+    #     # Acquire a single scan
+    #     self.acquire_scan()
+
+    #     # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)
+    #     self.hwdaq.ao_etl_update(left_setpoint=2.5, right_setpoint=2.5)
+
+    #     '''Stopping lasers'''
+    #     self.stop_lasers()
+    #     self.both_lasers_activated = False
+
+    #     '''Stopping camera'''            
+    #     self.camera.disarm_camera()
 
 
     def crop_buffer(self, buffer):
         '''Crops each frame of a buffer with 20% frame-to-frame overlap'''
-        
-        if buffer.shape[0] == 1: #Single image, nothing to crop
+      
+        image_xsize = buffer.shape[2]
+        image_ysize = buffer.shape[1]
+        tile_count = buffer.shape[0]
+
+        if tile_count == 1:
             cropped_buffer = buffer
         else:
-            image_xsize = buffer.shape[2]
-            image_ysize = buffer.shape[1]
-            tile_count = buffer.shape[0]
             tile_width = int(image_xsize/tile_count)
             tile_width_overlap = int(tile_width*0.2)
 
@@ -1433,13 +1457,14 @@ class Controller_MainWindow(QMainWindow):
         image_ysize = buffer.shape[1]
         tile_count = buffer.shape[0]
 
+        #Initializing empty frame
+        reconstructed_frame = np.zeros((image_ysize, image_xsize), np.uint16)
+
         # Crops each frame of a buffer with no overlap and merge
         if tile_count == 1:
-            reconstructed_frame = buffer
+            reconstructed_frame = buffer[0,:,:]
         else:
             tile_width = int(image_xsize/tile_count)
-            #Initializing empty frame
-            reconstructed_frame = np.zeros((image_ysize, image_xsize), np.uint16)
 
             for frame in range(tile_count):
                 # NOTE - disabled intensity normalization
@@ -1469,8 +1494,11 @@ class Controller_MainWindow(QMainWindow):
         image_ysize = buffer.shape[1]
         tile_count = buffer.shape[0]
 
+        # Initializing empty output frame
+        reconstructed_frame = np.zeros((image_ysize, image_xsize), np.uint16)
+
         if tile_count == 1:
-            cropped_buffer = buffer
+            reconstructed_frame = buffer[0,:,:]
         else:
             # Crops each frame of a buffer with 20% overlap for futher frame reconstruction
             tile_width = int(image_xsize/tile_count)
@@ -1494,9 +1522,6 @@ class Controller_MainWindow(QMainWindow):
             # Reconstruct frame with linear blend for overlapping region
             weight_step = 1/(2*tile_width_overlap)
 
-            # Initializing empty output frame
-            reconstructed_frame = np.zeros((image_ysize, image_xsize), np.uint16)  #Initializing frame
-
             for frame in range(tile_count):
                 first_center_column = int(frame * tile_width + tile_width_overlap)
                 last_center_column = int((frame+1) * tile_width - tile_width_overlap)
@@ -1519,46 +1544,54 @@ class Controller_MainWindow(QMainWindow):
         return reconstructed_frame
 
 
-    def acquire_image(self):
-        '''Generate ETLs, galvos & camera's waveforms and acquire a single reconstructed image'''
+    def acquire_scan(self):
+        '''Generate ETLs, galvos & camera's waveforms and acquire a single reconstructed frame'''
 
-        # TODO - thread lock hwdaq and camera access while we acquire an image
+        # TODO - thread lock hwdaq and camera while we acquire
 
-        # Record metadata about image/buffer to be acquired
-        self.buffer_metadata = {}
-        self.buffer_metadata['Date']  = str(datetime.date.today())
-        self.buffer_metadata['Sample Name']  = str(self.ui.lineEdit_saveDescription.text())
+        # Store metadata about buffer to be acquired
+        self.buffer_metadata_general = {}
+        self.buffer_metadata_general['Date']  = str(datetime.date.today())
+        self.buffer_metadata_general['Sample Name']  = str(self.ui.lineEdit_saveDescription.text())
+
+        self.buffer_metadata_waveforms = {}
+        self.buffer_metadata_waveforms = self.hwdaq.waveform_metadata
+
+        # TODO - motors and lasers and camera (?) metadata
+        self.buffer_metadata_motors = {}
+        self.buffer_metadata_lasers = {}
+        self.buffer_metadata_camera = {}
 
         # self.buffer_metadata['Horizontal Position']  = self.motors.horizontal.get_position('mm')
         # self.buffer_metadata['Vertical Position']  = self.motors.vertical.get_position('mm')
         # self.buffer_metadata['Camera Position']  = self.motors.camera.get_position('mm')
 
-        # Number of frames to acquire from the camera
-        number_of_frames = self.hwdaq.etl_steps
+        # Number of images to be acquired from the camera
+        number_of_images = self.hwdaq.waveform_cycles
 
         # Creating acquisition tasks
-        self.hwdaq.create_scan_tasks()
+        self.hwdaq.create_scanner()
 
         # Prime the camera recorder before we start the acquisition taks
-        self.camera.start_recorder(number_of_frames)
-        self.hwdaq.start_scan_tasks()
+        self.camera.start_recorder(number_of_images)
+        self.hwdaq.start_scanner()
 
         # Monitor completion of acquisition tasks and camera recorder
-        self.camera.monitor_recorder(number_of_frames)
-        self.hwdaq.monitor_scan_tasks()
+        self.camera.monitor_recorder(number_of_images)
+        self.hwdaq.monitor_scanner()
 
         # Stop tasks and recorder
         self.camera.stop_recorder()
-        self.hwdaq.stop_scan_tasks()                             
+        self.hwdaq.stop_scanner()                             
 
         # Recover images from the recorder
-        # Images must be copied before we delete the recorder (next step)
-        frames = self.camera.copy_recorder_images(number_of_frames)
-        self.buffer = np.asarray(frames)
+        # Note: Images must be recovered before deleting the recorder
+        recorded_images = self.camera.copy_recorder_images(number_of_images)
+        self.buffer = np.asarray(recorded_images)
 
         # Delete tasks and recorder
         self.camera.delete_recorder()
-        self.hwdaq.delete_scan_tasks()
+        self.hwdaq.delete_scanner()
 
         # Frame reconstruction options
         if self.ui.checkBox_saveStitchBlend.isChecked():
@@ -1571,7 +1604,7 @@ class Controller_MainWindow(QMainWindow):
 
 
     def updateUi_select_directory(self):
-        '''Allows the selection of a directory for single_image or stack saving'''
+        '''Allows the selection of a directory for single scan or stack saving'''
         options = QFileDialog.Options()
         options |= QFileDialog.DontResolveSymlinks
         options |= QFileDialog.ShowDirsOnly
@@ -1795,7 +1828,6 @@ class Controller_MainWindow(QMainWindow):
                 self.motors.horizontal.move_absolute_position(position,'\u03BCm')  #Position in micro-meters
                 #FIXME - updating ui within secondary thread
                 self.updateUi_position_horizontal()
-                #self.sig_refresh_position_horizontal.emit()
 
                 '''Moving the camera to focus'''
                 #FIXME - Add focus adjustement to stack mode
@@ -1806,7 +1838,7 @@ class Controller_MainWindow(QMainWindow):
                     self.frame_saver.add_motor_parameters(self.current_horizontal_position_text, self.current_vertical_position_text, self.current_camera_position_text)
                 
                 '''Getting image'''
-                self.acquire_image()
+                self.acquire_scan()
                 
                 '''Saving frame'''
                 if self.saving_allowed:
@@ -1969,7 +2001,7 @@ class Controller_MainWindow(QMainWindow):
                             self.frame_saver.add_motor_parameters(self.current_horizontal_position_text, self.current_vertical_position_text, self.current_camera_position_text)
                         
                         '''Getting image'''
-                        self.acquire_image()
+                        self.acquire_scan()
                         
                         '''Saving frame''' #debugging
                         if self.saving_allowed:
@@ -2203,7 +2235,7 @@ class Controller_MainWindow(QMainWindow):
                         time.sleep(1)
 
                         # Retrieving image from camera and putting it in its queue for display
-                        frame = self.camera.grab_single_image()*1.0
+                        frame = self.camera.grab_image()*1.0
                         blurred_frame = ndimage.gaussian_filter(frame, sigma=20)
                         
                         '''Retrieving filename set by the user''' #debugging

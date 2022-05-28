@@ -5,7 +5,7 @@ Created on February 8, 2022
 import sys
 import time
 from datetime import datetime, timedelta
-
+import numpy as np
 import pco
 
 sys.path.append(".")
@@ -16,117 +16,53 @@ class Camera:
     def __init__(self, verbose=False):
         self.verbose = verbose
 
-        # Error status
-        self.error = 0
-        self.error_message = ""
-
-        # Flags
+        # Flags (bool)
         self.is_armed = False
         self.is_recording = False
         self.new_data_ready = False
+        self.recorder_timeout = False
 
         # Other variables
         self.camera = None
-        self.width = None
-        self.height = None
+        self.xsize = None
+        self.ysize = None
         self.bytes_per_image = None
 
         self.open_camera()
-
-    # compounded methods
-
-    # Works but slow if repeated in a loop
-    # Setting up trigger_mode and exposure time takes time
-    def grab_single_image(self, exposure_time:int=100):
-        '''docstring'''
-        single_image = [0]
-        if self.verbose:
-            print("Attempting to grab a single image...")
-        if self.camera is not None:
-            if self.is_recording:
-                if self.verbose:
-                    print(" Recording in progress. Aborted.")
-            else:
-                self.disarm_camera()
-                self.set_trigger_mode('auto_trigger')
-                self.arm_camera()
-                self.set_exposure_time(exposure_time)
-                self.start_recorder(1)
-                self.monitor_recorder(1)
-                self.stop_recorder()
-                single_image = self.copy_recorder_images(1)
-                self.delete_recorder()
-                if self.verbose:
-                    print(" Single image obtained.")
-        else:
-            if self.verbose:
-                print(" Camera not open. Aborted")
-        return single_image
-
-    def get_properties(self):
-        if self.camera is not None:
-            if self.verbose:
-                print("Retrieving camera properties and current settings...")
-            cam_name = {}
-            cam_name = self.camera.sdk.get_camera_name()
-            cam_temperatures = {}
-            cam_temperatures = self.camera.sdk.get_temperature()
-            cam_sizes = {}
-            cam_sizes = self.camera.sdk.get_sizes()
-            cam_trigger_mode = {}
-            cam_trigger_mode = self.camera.sdk.get_trigger_mode()
-            cam_acquire_mode = {}
-            cam_acquire_mode = self.camera.sdk.get_acquire_mode()
-            cam_storage_mode = {}
-            cam_storage_mode = self.camera.sdk.get_storage_mode()
-            cam_recorder_mode = {}
-            cam_recorder_mode = self.camera.sdk.get_recorder_submode()
-            cam_delay_exposure_time = {}
-            cam_delay_exposure_time = self.camera.sdk.get_delay_exposure_time()
-            cam_properties = {  **cam_name,
-                                **cam_temperatures,
-                                **cam_sizes,
-                                **cam_trigger_mode,
-                                **cam_acquire_mode,
-                                **cam_storage_mode,
-                                **cam_recorder_mode,
-                                **cam_delay_exposure_time}
-        else:
-            cam_properties = {}
-            if self.verbose:
-                print("Camera not open - Cannot retrieve properties")
-        return cam_properties
-
 
     # base methods
 
     def open_camera(self):
         '''Open a camera'''
+        if self.verbose:
+            print("Opening camera...")
         if self.camera is None:
             try:
-                if self.verbose:
-                    print("Opening camera...")
                 self.camera = pco.Camera()
             except ValueError:
                 if self.verbose:
                     print(" Failed to open camera.")
                 self.camera = None
-                self.error = 1
-                self.error_message = "Failed to open the camera"
             else:
                 if self.verbose:
                     print(" Camera opened.")
+        else:
+            if self.verbose:
+                print(" Camera already opened.")
         return None
 
     def close_camera(self):
         '''Closes an opened camera'''
+        if self.verbose:
+            print("Closing camera...")
         if self.camera is not None:
-            if self.verbose:
-                print("Closing camera...")
             self.camera.close()
             self.camera = None
             if self.verbose:
                 print(" Camera closed.")
+        else:
+            if self.verbose:
+                print(" Camera already closed.")
         return None
 
     def arm_camera(self):
@@ -139,10 +75,10 @@ class Camera:
             self.camera.sdk.arm_camera()
             sizes = {}
             sizes = self.camera.sdk.get_sizes()
-            self.width = int(sizes.get('x'))
-            self.height = int(sizes.get('y'))
-            self.bytes_per_image = self.width * self.height * 2 # 16 bit images (2 bytes per pixel)
-            self.camera.sdk.set_image_parameters(self.width, self.height)
+            self.xsize = int(sizes.get('x'))
+            self.ysize = int(sizes.get('y'))
+            self.bytes_per_image = self.xsize * self.ysize * 2 # 16 bit images (2 bytes per pixel)
+            self.camera.sdk.set_image_parameters(self.xsize, self.ysize)
             self.is_armed = True
             if self.verbose:
                 print(" Camera armed.")
@@ -172,31 +108,31 @@ class Camera:
             except ValueError:
                 if self.verbose:
                     print(" Exception while starting recorder.")
-                self.error = 1
-                self.error_message = 'Failed to start recorder'
                 self.is_recording = False
             else:
                 self.is_recording = True
+                self.recorder_timeout = False
                 if self.verbose:
                     print(" Recording session started.")
         return None
 
-    def monitor_recorder(self, number_of_images:int, monitor_timeout:int=2):
+    def monitor_recorder(self, number_of_images:int, timeout_s:int=5):
         '''docstring'''
         if self.is_recording:
             if self.verbose:
                 print("Monitoring camera recording session status...")
-            wait_until = datetime.now() + timedelta(seconds=monitor_timeout)
+            wait_until = datetime.now() + timedelta(seconds=timeout_s)
             while True:
                 images_in_buffer = self.camera.rec.get_status()['dwProcImgCount']
                 if images_in_buffer >= number_of_images:
+                    self.new_data_ready = True
                     if self.verbose:
                         print(" Recording session succeeded:", images_in_buffer, "images in buffer")
-                    self.new_data_ready = True
                     break
                 elif wait_until < datetime.now():
+                    self.recorder_timeout = True
                     if self.verbose:
-                        print(" Timeout :", images_in_buffer, "images in buffer after", monitor_timeout, "s.",)
+                        print(" Timeout :", images_in_buffer, "images in buffer after", timeout_s, "s.",)
                     break
                 else:
                     time.sleep(0.01)
@@ -215,7 +151,7 @@ class Camera:
             images, metadatas = self.camera.images(blocksize=number_of_images)
             self.new_data_ready = False
         else:
-            images = [0]
+            images = np.zeros((number_of_images,self.ysize,self.xsize), dtype=np.uint16)
         return images
 
     def delete_recorder(self):
@@ -224,6 +160,7 @@ class Camera:
             self.camera.rec.delete()
             # Deleting the recording session also deletes any remaining images
             self.new_data_ready = False
+            self.recorder_timeout = False
         return None
 
 
@@ -435,3 +372,84 @@ class Camera:
         else:
             delay_timebase = None
         return delay_timebase
+
+    # compounded methods
+
+    def get_properties(self):
+        if self.camera is not None:
+            if self.verbose:
+                print("Retrieving camera properties and current settings...")
+            cam_name = {}
+            cam_name = self.camera.sdk.get_camera_name()
+            cam_temperatures = {}
+            cam_temperatures = self.camera.sdk.get_temperature()
+            cam_sizes = {}
+            cam_sizes = self.camera.sdk.get_sizes()
+            cam_trigger_mode = {}
+            cam_trigger_mode = self.camera.sdk.get_trigger_mode()
+            cam_acquire_mode = {}
+            cam_acquire_mode = self.camera.sdk.get_acquire_mode()
+            cam_storage_mode = {}
+            cam_storage_mode = self.camera.sdk.get_storage_mode()
+            cam_recorder_mode = {}
+            cam_recorder_mode = self.camera.sdk.get_recorder_submode()
+            cam_delay_exposure_time = {}
+            cam_delay_exposure_time = self.camera.sdk.get_delay_exposure_time()
+            cam_properties = {  **cam_name,
+                                **cam_temperatures,
+                                **cam_sizes,
+                                **cam_trigger_mode,
+                                **cam_acquire_mode,
+                                **cam_storage_mode,
+                                **cam_recorder_mode,
+                                **cam_delay_exposure_time}
+        else:
+            cam_properties = {}
+            if self.verbose:
+                print("Camera not open - Cannot retrieve properties")
+        return cam_properties
+  
+
+    def grab_image(self, exposure_time_ms:int=100):
+        """
+        All-in-one function to grab a single image from the camera
+        """
+        # Works but slow if repeated in a loop
+        # (setting up trigger_mode and exposure_time takes time)
+
+        if self.verbose:
+            print("Attempting to grab an image...")
+
+        img_buffer = np.zeros((1,1,1), dtype=np.uint16)
+        if self.camera is not None:
+            if self.is_recording:
+                if self.verbose:
+                    print(" Recording already in progress. Aborted.")
+            else:
+                self.disarm_camera()                        # In case camera was previously armed
+                self.set_trigger_mode('auto_trigger')       # Camera is internally triggered
+                self.arm_camera()                           # Required to apply tigger settings
+                self.set_exposure_time(exposure_time_ms)    # Exposure time can be changed after arming the camera
+                self.start_recorder(1)                      # Start a recording session to acquire one frame
+                self.monitor_recorder(1)                    # Monitors the recording session and returns once one image is acquired (or after default timeout of 5s)
+                self.stop_recorder()                        # Stop the recording session before image is copied to memory
+                img_buffer = self.copy_recorder_images(1)   # Returns a list of images of length 'number_of_images' (in this case, one)
+
+                # Check if we had a timeout before deleting the recorder
+                if self.recorder_timeout:
+                    if self.verbose:
+                        print(" Timeout while acquiting image.")
+                else:
+                    if self.verbose:
+                        print(" Image successfully obtained.")
+
+                self.delete_recorder()                          # Recording session can now be deleted
+        else:
+            if self.verbose:
+                print(" Camera not open. Aborted")
+        return img_buffer[0]                                    # Returning first (and in this case only) image from the buffer
+
+
+if __name__ == '__main__':
+    testcam = Camera(verbose=True)
+    testimage = testcam.grab_image(exposure_time_ms=50)
