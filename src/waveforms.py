@@ -112,10 +112,11 @@ if __name__ == '__main__':
     # Hardware parameters
     sample_clock_rate = 40000           # [samples/s]
     camera_line_time = 16.40 * 1e-6     # [s]
-    camera_ysize = 2160                 # number of lines
-    camera_xsize = 2560                 # number of columns
+    camera_ysize = 2048                 # number of lines
+    camera_xsize = 2048                 # number of columns
 
     # User selected experiment parameters
+    lightsheet = True
     exposure_time = 0.050               # [s]
     reset_delay_ratio = 10              # [% of image time]
     etl_steps = 6
@@ -141,6 +142,8 @@ if __name__ == '__main__':
     # Trigger-to-exposure time delay = Frame readout time + Jitter time 
     # Trigger-to-exposure time delay = 0.5 nbr_of_line * line_time + line_time
     camera_trigger_to_exposure_time = (0.5 * camera_ysize + 1) * camera_line_time
+    if lightsheet:
+        camera_trigger_to_exposure_time = camera_line_time
 
     # Number of samples for image exposure time
     samples_exposure = int(np.ceil(exposure_time * sample_clock_rate))

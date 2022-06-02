@@ -356,12 +356,12 @@ class Controller_MainWindow(QMainWindow):
         self.ui.statusbar.repaint()
 
         # Instantiating the hardware components
-        self.hwdaq = HwDAQ()
         self.camera = Camera()
         self.motors = Motors()
         self.lasers = Lasers()
         self.etls = ETLs()
-        
+        self.hwdaq = HwDAQ()
+
         # Making sure ETLs are in analog mode
         self.etls.open()
         self.etls.set_analog_mode()
@@ -370,7 +370,7 @@ class Controller_MainWindow(QMainWindow):
         self.updateUi_initial_hardware_state()
 
         # Instantiating the display port queue (image consumer)
-        self.frame_viewer = FrameViewer(self)
+        self.frame_viewer = FrameViewer(self, rows=self.camera.ysize, columns=self.camera.xsize)
 
         # Instantiating the frame saver (image consumer)
         self.frame_saver = FrameSaver(self)
@@ -1221,7 +1221,7 @@ class Controller_MainWindow(QMainWindow):
        
         # Setting the camera for self triggered acquisition
         self.camera.set_trigger_mode('auto_trigger')
-        self.camera.set_exposure_time(50)
+        self.camera.set_exposure_time(self.ui.doubleSpinBox_acqExposureTime)
         self.camera.arm_camera()
 
         while self.preview_mode_started:
@@ -2431,14 +2431,11 @@ class Properties_Dialog(QDialog):
 class FrameViewer(QObject):
     '''Class for queueing and displaying images'''
 
-    def __init__(self, parent:Controller_MainWindow):
+    def __init__(self, parent:Controller_MainWindow, rows:int=2000, columns:int=2000):
         QObject.__init__(self, parent)
         self.parent = parent
         self.queue = queue.Queue(3)
-
-        frame_init_rows = 2160
-        frame_init_columns = 2560
-        frame_init = np.zeros((frame_init_rows, frame_init_columns), dtype=np.uint16)
+        frame_init = np.zeros((rows, columns), dtype=np.uint16)
         frame_init[0,0] = 5000
 
         # Set initial view (setImage assumes column-major)
@@ -2457,9 +2454,9 @@ class FrameViewer(QObject):
         except queue.Empty:
             pass
         else:
+            # setImage is column-major
             frame = np.transpose(frame)
             self.parent.ui.imageView.setImage(frame, autoRange=False, autoLevels=False, autoHistogramRange=False)
-
 
 class FrameSaver(QObject):
     '''Class for storing buffers (images) in its queue and saving them 
