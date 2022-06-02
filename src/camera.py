@@ -3,15 +3,25 @@ Created on February 8, 2022
 '''
 
 import sys
+sys.path.append(".")
+
 import time
 from datetime import datetime, timedelta
 import numpy as np
 import pco
 
-sys.path.append(".")
+from src.config import cfg_read, cfg_write, cfg_str2bool
+
 
 class Camera:
     '''Class for PCO cameras'''
+
+    # Configurable settings defaults
+    # Used as base dictionnary for .ini file allowable keys
+    _cfg_defaults = {}
+    _cfg_defaults['Shutter Mode'] = 'Global'
+    _cfg_defaults['Line Time'] = '16.40'
+
 
     def __init__(self, verbose=False):
         self.verbose = verbose
@@ -28,7 +38,36 @@ class Camera:
         self.ysize = None
         self.bytes_per_image = None
 
+        # read configurable settings from config.ini file
+        self._cfg_filename = 'config.ini'
+        self._cfg_section = 'Camera'
+        self.cfg_load_ini()
+
+        # Automatically open camera on instance creation
         self.open_camera()
+
+
+    # config methods
+
+    def cfg_load_ini(self):
+        self._cfg = cfg_read(self._cfg_filename, self._cfg_section, self._cfg_defaults)
+        self.cfg_dict2var()
+
+    def cfg_save_ini(self):
+        self.cfg_var2dict()
+        self._cfg = cfg_write(self._cfg_filename, self._cfg_section, self._cfg)
+
+    def cfg_dict2var(self):
+        # set instance variables from configuration dictionary values
+        self.shutter_mode           = str(      self._cfg['Shutter Mode']   )
+        self.line_time_us           = float(    self._cfg['Line Time']      )
+
+    def cfg_var2dict(self):
+        # pack current instance variables into configuration dictionary
+        self._cfg = {}
+        self._cfg['Shutter Mode']   = str( self.shutter_mode    )
+        self._cfg['Line Time']      = str( self.line_time_us    )
+
 
     # base methods
 
@@ -44,6 +83,13 @@ class Camera:
                     print(" Failed to open camera.")
                 self.camera = None
             else:
+                sizes = {}
+                sizes = self.camera.sdk.get_sizes()
+                self.xsize = int(sizes.get('x'))
+                self.ysize = int(sizes.get('y'))
+                self.bytes_per_image = self.xsize * self.ysize * 2 # 16 bit images (2 bytes per pixel)
+                if self.shutter_mode == 'Lightsheet':
+                    print("Lightsheet Mode")
                 if self.verbose:
                     print(" Camera opened.")
         else:
@@ -451,5 +497,5 @@ class Camera:
 
 
 if __name__ == '__main__':
-    testcam = Camera(verbose=True)
+    testcam = Camera()
     testimage = testcam.grab_image(exposure_time_ms=50)
