@@ -2431,15 +2431,28 @@ class Properties_Dialog(QDialog):
 class FrameViewer(QObject):
     '''Class for queueing and displaying images'''
 
-    def __init__(self, parent:Controller_MainWindow, rows:int=2000, columns:int=2000):
+    def __init__(self, parent:Controller_MainWindow, rows, columns):
         QObject.__init__(self, parent)
         self.parent = parent
         self.queue = queue.Queue(3)
-        frame_init = np.zeros((rows, columns), dtype=np.uint16)
-        frame_init[0,0] = 5000
 
-        # Set initial view (setImage assumes column-major)
+        # Default frame size is 2000x2000 if no valid size provided
+        if rows is not None:
+            self.rows = int(rows)
+        else:
+            self.rows = 2000
+        if columns is not None:
+            self.columns = int(columns)
+        else:
+            self.columns = 2000
+
+        # Empty frame
+        frame_init = np.zeros((self.rows, self.columns), dtype=np.uint16)
+        # Set one pixel to trick histogram initial range (0-2000)
+        frame_init[0,0] = 2000
+        # Transpose since setImage is column-major
         frame_init = np.transpose(frame_init)
+        # Set initial view
         self.parent.ui.imageView.setImage(frame_init)
 
     def enqueue_frame(self, frame:np.uint16):

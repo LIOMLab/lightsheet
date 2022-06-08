@@ -6,7 +6,6 @@ Created on May 16, 2019
 import sys
 sys.path.append(".")
 
-import copy
 import numpy as np
 
 # National Instruments Imports
