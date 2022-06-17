@@ -11,6 +11,7 @@ import sys
 sys.path.append("./gui") 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
+
 class Ui_Controller(object):
     def setupUi(self, Controller):
         Controller.setObjectName("Controller")
@@ -914,6 +915,32 @@ class Ui_Controller(object):
         self.doubleSpinBox_acqExposureTime.setProperty("value", 25.0)
         self.doubleSpinBox_acqExposureTime.setObjectName("doubleSpinBox_acqExposureTime")
         self.formLayout.setWidget(1, QtWidgets.QFormLayout.FieldRole, self.doubleSpinBox_acqExposureTime)
+        self.label_9 = QtWidgets.QLabel(self.groupBox_12)
+        self.label_9.setObjectName("label_9")
+        self.formLayout.setWidget(2, QtWidgets.QFormLayout.LabelRole, self.label_9)
+        self.doubleSpinBox_acqLineTime = QtWidgets.QDoubleSpinBox(self.groupBox_12)
+        self.doubleSpinBox_acqLineTime.setDecimals(3)
+        self.doubleSpinBox_acqLineTime.setMinimum(12.175)
+        self.doubleSpinBox_acqLineTime.setMaximum(200.0)
+        self.doubleSpinBox_acqLineTime.setObjectName("doubleSpinBox_acqLineTime")
+        self.formLayout.setWidget(2, QtWidgets.QFormLayout.FieldRole, self.doubleSpinBox_acqLineTime)
+        self.doubleSpinBox_acqLineExposure = QtWidgets.QDoubleSpinBox(self.groupBox_12)
+        self.doubleSpinBox_acqLineExposure.setDecimals(0)
+        self.doubleSpinBox_acqLineExposure.setMinimum(1.0)
+        self.doubleSpinBox_acqLineExposure.setMaximum(1024.0)
+        self.doubleSpinBox_acqLineExposure.setObjectName("doubleSpinBox_acqLineExposure")
+        self.formLayout.setWidget(3, QtWidgets.QFormLayout.FieldRole, self.doubleSpinBox_acqLineExposure)
+        self.label_10 = QtWidgets.QLabel(self.groupBox_12)
+        self.label_10.setObjectName("label_10")
+        self.formLayout.setWidget(3, QtWidgets.QFormLayout.LabelRole, self.label_10)
+        self.label_11 = QtWidgets.QLabel(self.groupBox_12)
+        self.label_11.setObjectName("label_11")
+        self.formLayout.setWidget(4, QtWidgets.QFormLayout.LabelRole, self.label_11)
+        self.doubleSpinBox_acqLineDelay = QtWidgets.QDoubleSpinBox(self.groupBox_12)
+        self.doubleSpinBox_acqLineDelay.setDecimals(0)
+        self.doubleSpinBox_acqLineDelay.setMaximum(1024.0)
+        self.doubleSpinBox_acqLineDelay.setObjectName("doubleSpinBox_acqLineDelay")
+        self.formLayout.setWidget(4, QtWidgets.QFormLayout.FieldRole, self.doubleSpinBox_acqLineDelay)
         self.gridLayout_4.addWidget(self.groupBox_12, 1, 1, 1, 1)
         self.groupBox_15 = QtWidgets.QGroupBox(self.tabSettings)
         self.groupBox_15.setObjectName("groupBox_15")
@@ -1694,7 +1721,7 @@ class Ui_Controller(object):
         self.menubar.addAction(self.menuHelp.menuAction())
 
         self.retranslateUi(Controller)
-        self.tabControls.setCurrentIndex(0)
+        self.tabControls.setCurrentIndex(1)
         QtCore.QMetaObject.connectSlotsByName(Controller)
 
     def retranslateUi(self, Controller):
@@ -1777,6 +1804,10 @@ class Ui_Controller(object):
         self.doubleSpinBox_acqSampleRate.setSuffix(_translate("Controller", " samples/s"))
         self.label_6.setText(_translate("Controller", "Exposure Time:"))
         self.doubleSpinBox_acqExposureTime.setSuffix(_translate("Controller", " ms"))
+        self.label_9.setText(_translate("Controller", "Line Time:"))
+        self.doubleSpinBox_acqLineTime.setSuffix(_translate("Controller", " μs"))
+        self.label_10.setText(_translate("Controller", "Line Exposure:"))
+        self.label_11.setText(_translate("Controller", "Line Delay:"))
         self.groupBox_15.setTitle(_translate("Controller", "Lasers Settings"))
         self.label_72.setText(_translate("Controller", "<html><head/><body><p><span style=\" font-weight:600;\">Laser1</span></p></body></html>"))
         self.label_50.setText(_translate("Controller", "Power:"))

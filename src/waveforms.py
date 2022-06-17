@@ -103,77 +103,107 @@ def etl_staircase(samples_total_scan:int, steps:int, floor:float, rise:float, di
     return output_array
 
 
+# ------------------------------------------------------------------------
+# ------------------------------------------------------------------------
 
-# -------------------------------------------------------------------------------------------------
-if __name__ == '__main__':
 
-    from matplotlib import pyplot as plt
+def camera_squarewave2(pre_samples:int, active_samples:int, post_samples:int, shift:int, repeat:int, inverted:bool=False):
+    """
+    Camera squarewave function generator for external exposure control
+    """
+    pre_vector = np.full(pre_samples, False)
+    scan_vector = np.full(active_samples, True)
+    post_vector = np.full(post_samples, False)
+    period_vector = np.concatenate((pre_vector, scan_vector, post_vector))
 
-    # Hardware parameters
-    sample_clock_rate = 40000           # [samples/s]
-    camera_line_time = 16.40 * 1e-6     # [s]
-    camera_ysize = 2048                 # number of lines
-    camera_xsize = 2048                 # number of columns
+    if shift!=0:
+        period_vector = np.concatenate((period_vector[-shift:], period_vector[:-shift]))
+    if inverted:
+        period_vector = ~period_vector
+    output_vector = np.tile(period_vector, repeat)
+    return output_vector
 
-    # User selected experiment parameters
-    lightsheet = True
-    exposure_time = 0.050               # [s]
-    reset_delay_ratio = 10              # [% of image time]
-    etl_steps = 6
-    etl_floor = 2
-    etl_rise = 2.25
-    etl_direction = 'up'
-    galvo_amplitude = 2
-    galvo_offset = 1
-    galvo_inverted = False
 
-    # From PCO documentation for pco.edge 5.5 USB 3.0
-    # Line readout time = 16.40 us
-    # In Global Shutter Mode, image acquisition requires readout of two frames (dark + exposed frame)
-    # Image readout time = 2 * Frame readout time (dark frame + exposed frame) + Jitter time
-    # with,
-    #   Frame readout time = 0.5 * nbr_of_line * line_time
-    #   Jitter time = line_time
-    # Image readout time = (nbr_of_lines + 1) * line_time
-    camera_readout_time = (camera_ysize + 1) * camera_line_time
+def galvo_ramp2(activated:bool, pre_samples:int, scan_samples:int, reset_samples:int, post_samples:int, shift:int, repeat:int, amplitude:float, offset:float, inverted:bool, filtered:bool=True):
+    """
+    Galvo ramp function generator for one-way scanning 
+    """
+    period_samples = pre_samples + scan_samples + reset_samples + post_samples
+    if activated:
+        flyback_samples = int(0.75*reset_samples)
+        dead_samples = reset_samples - flyback_samples + post_samples
 
-    # In Global Shutter Mode with External Exposure Control
-    # A delay exist between exposure trigger signal and actual start of exposure (due to dark frame readout)
-    # Trigger-to-exposure time delay = Frame readout time + Jitter time 
-    # Trigger-to-exposure time delay = 0.5 nbr_of_line * line_time + line_time
-    camera_trigger_to_exposure_time = (0.5 * camera_ysize + 1) * camera_line_time
-    if lightsheet:
-        camera_trigger_to_exposure_time = camera_line_time
+        pre_vector = np.zeros(pre_samples)
+        scan_vector = np.linspace(0, 1, scan_samples)
+        flyback_vector = np.linspace(1, 0, flyback_samples)
+        dead_vector = np.zeros(dead_samples)
+        period_vector = np.concatenate((pre_vector, scan_vector, flyback_vector, dead_vector))
 
-    # Number of samples for image exposure time
-    samples_exposure = int(np.ceil(exposure_time * sample_clock_rate))
-    # Number of samples for image readout time
-    samples_readout = int(np.ceil(camera_readout_time * sample_clock_rate))
-    # Number of samples for trigger to exposure delay
-    samples_trigger_to_exposure = int(np.ceil(camera_trigger_to_exposure_time * sample_clock_rate))
-    # Number of samples for image exposure and readout
-    samples_image = samples_exposure + samples_readout
-    # Number of samples for rest time between images (reset camera, galvo flyback, etl focus update)
-    samples_reset = int(np.ceil(samples_image * reset_delay_ratio/100))
-    # Number of samples for one period (image acquisition samples + system reset samples)
-    samples_period = samples_image + samples_reset
-    # Number of samples where no active exposure is taking place (image readout + system reset)
-    samples_dead = samples_readout + samples_reset
-    # Number of samples for acquistion sequence (period * number of etl focus positions)
-    samples_total_scan = samples_period * etl_steps
-    # Time required for an acquisition sequence
-    total_scan_time = samples_total_scan / sample_clock_rate
+        if shift!=0:
+            period_vector = np.concatenate((period_vector[-shift:], period_vector[:-shift]))
+        if inverted:
+            period_vector = amplitude * (-period_vector + 1) + offset
+        else:
+            period_vector = amplitude * period_vector + offset
+        if filtered:
+            # filtering using sliding average
+            pad = reset_samples//10
+            win = 2*pad + 1
+            tmpvec = np.concatenate((period_vector[-pad:], period_vector, period_vector[:pad]))
+            cusum = np.cumsum(np.insert(tmpvec, 0, 0))
+            period_vector = (cusum[win:] - cusum[:-win]) / win
+    else:
+        period_vector = np.ones((period_samples)) * offset
+    output_vector = np.tile(period_vector, repeat)
+    return output_vector
 
-    camera_function = camera_squarewave(samples_exposure, samples_readout, samples_reset, etl_steps, samples_trigger_to_exposure)
-    galvo_function = galvo_ramp(samples_exposure, samples_readout, samples_reset, etl_steps, galvo_amplitude, galvo_offset, galvo_inverted)
-    etl_function = etl_staircase(samples_total_scan, etl_steps, etl_floor, etl_rise, etl_direction)
-    etl_function2 = etl_staircase(samples_total_scan, etl_steps, etl_floor, etl_rise, etl_direction, False)
 
-    time_axis = np.arange(0, camera_function.size)
-    plt.plot(time_axis, camera_function)
-    plt.plot(time_axis, galvo_function)
-    plt.plot(time_axis, etl_function)
-    plt.plot(time_axis, etl_function2)
-    plt.show()
+def etl_staircase2(activated:bool, step_samples:int, nbr_steps:int, shift:int, amplitude:float, offset:float, direction:str='up', filtered:bool=True):
+    """ 
+    Staircase function generator for ETL
+    
+    samples_total_scan  Number of samples for the complete acquisition sequence
+    steps               Number of step (focus regions)
+    amplitude           Height of the staircase (above floor level) -> Signal maximum amplitude = floor + rise
+    offset              Floor level of the staircase
+    direction           Either 'up' (ascending) or down (descending)
+
+    Special case : For a staircase consisting of a single step, level is equal to (floor + 0.5 * rise)
+    """
+    total_samples = step_samples * nbr_steps
+    if activated:
+        if nbr_steps != 1:
+            step_run = step_samples
+            step_rise = amplitude/(nbr_steps-1)
+            if direction == 'down':
+                output_vector = np.ones(total_samples) * (offset + amplitude)
+                for step in range(nbr_steps):
+                    step_level = (offset + amplitude) - step * step_rise * np.ones(step_run)
+                    output_vector[step*step_run:(step+1)*step_run] = step_level
+            else:
+                output_vector = np.ones(total_samples) * offset
+                for step in range(nbr_steps):
+                    step_level = offset + step * step_rise * np.ones(step_run)
+                    output_vector[step*step_run:(step+1)*step_run] = step_level
+            if shift!=0:
+                output_vector = np.concatenate((output_vector[-shift:], output_vector[:-shift]))
+            if filtered:
+                # Filtering using sliding average
+                # Compute padding and window width
+                pad = step_run//25
+                win = 2*(step_run//25) + 1
+                # First pass (centered)
+                tmpvec = np.concatenate((output_vector[:pad], output_vector, output_vector[-pad:]))
+                cusum = np.cumsum(np.insert(tmpvec, 0, 0))
+                output_vector = (cusum[win:] - cusum[:-win]) / win
+                # Second pass (centered)
+                tmpvec = np.concatenate((output_vector[:pad], output_vector, output_vector[-pad:]))
+                cusum = np.cumsum(np.insert(tmpvec, 0, 0))
+                output_vector = (cusum[win:] - cusum[:-win]) / win
+        else:
+            output_vector = np.ones(total_samples) * (offset + amplitude/2)
+    else:
+        output_vector = np.ones((total_samples)) * offset
+    return output_vector
 
 
