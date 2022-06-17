@@ -19,8 +19,10 @@ class Camera:
     # Configurable settings defaults
     # Used as base dictionnary for .ini file allowable keys
     _cfg_defaults = {}
-    _cfg_defaults['Shutter Mode'] = 'Global'
-    _cfg_defaults['Line Time'] = '16.40'
+    _cfg_defaults['Shutter Mode']   = 'Lightsheet'
+    _cfg_defaults['Line Time']      = '12.174'
+    _cfg_defaults['Line Exposure']  = '10'
+    _cfg_defaults['Line Delay']     = '0'
 
 
     def __init__(self, verbose=False):
@@ -60,13 +62,17 @@ class Camera:
     def cfg_dict2var(self):
         # set instance variables from configuration dictionary values
         self.shutter_mode           = str(      self._cfg['Shutter Mode']   )
-        self.line_time_us           = float(    self._cfg['Line Time']      )
+        self.line_time              = float(    self._cfg['Line Time']      )
+        self.line_exposure          = int(      self._cfg['Line Exposure']  )
+        self.line_delay             = int(      self._cfg['Line Delay']     )
 
     def cfg_var2dict(self):
         # pack current instance variables into configuration dictionary
         self._cfg = {}
         self._cfg['Shutter Mode']   = str( self.shutter_mode    )
-        self._cfg['Line Time']      = str( self.line_time_us    )
+        self._cfg['Line Time']      = str( self.line_time       )
+        self._cfg['Line Exposure']  = str( self.line_exposure     )
+        self._cfg['Line Delay']     = str( self.line_delay      )
 
 
     # base methods
@@ -88,8 +94,6 @@ class Camera:
                 self.xsize = int(sizes.get('x'))
                 self.ysize = int(sizes.get('y'))
                 self.bytes_per_image = self.xsize * self.ysize * 2 # 16 bit images (2 bytes per pixel)
-                if self.shutter_mode == 'Lightsheet':
-                    print("Lightsheet Mode")
                 if self.verbose:
                     print(" Camera opened.")
         else:
@@ -219,6 +223,29 @@ class Camera:
                 print("Setting camera exposure time: " + str(exposure_time) + "ms")
             self.camera.sdk.set_delay_exposure_time(0, 'ms', exposure_time, 'ms')
         return None
+
+    def set_lightsheet_mode(self):
+        '''Set lightsheet timing according to current instance settings'''
+        if self.camera is not None:
+            self.camera.sdk.set_cmos_line_timing('on', self.line_time * 1e-6)
+            self.camera.sdk.set_cmos_line_exposure_delay(self.line_exposure, self.line_delay)
+
+            cam_line_timing = {}
+            cam_line_timing = self.camera.sdk.get_cmos_line_timing()
+            line_timing = cam_line_timing.get('line time')
+
+            cam_line_exposure_delay = {}
+            cam_line_exposure_delay = self.camera.sdk.get_cmos_line_exposure_delay()
+            line_exposure = cam_line_exposure_delay.get('lines exposure')
+            line_delay = cam_line_exposure_delay.get('lines delay')
+
+            if self.verbose:
+                print("Camera in lightsheet mode")
+                print("Camera line timing is:", str(line_timing))
+                print("Camera line exposure is:", str(line_exposure))
+                print("Camera line delay is:", str(line_delay))
+        return None
+
 
     def set_trigger_mode(self, trigger_mode:str):
         '''Set the trigger mode for the camera
@@ -418,6 +445,53 @@ class Camera:
         else:
             delay_timebase = None
         return delay_timebase
+
+
+    def get_pixel_rates(self):
+        '''Returns available pixel rates'''
+        if self.camera is not None:
+            cam_description = {}
+            cam_description = self.camera.sdk.get_camera_description()
+            pixel_rates = cam_description.get('pixel rate')
+            if self.verbose:
+                print("Camera available pixel rates:", pixel_rates)
+        else:
+            pixel_rates = {}
+        return pixel_rates
+
+    def get_pixel_rate(self):
+        '''Returns the pixel rate'''
+        if self.camera is not None:
+            cam_pixel_rate = {}
+            cam_pixel_rate = self.camera.sdk.get_pixel_rate()
+            pixel_rate = str(cam_pixel_rate.get('pixel rate'))
+            if self.verbose:
+                print("Camera pixel rate:", pixel_rate)
+        else:
+            pixel_rate = None
+        return pixel_rate
+
+    def get_readout_format(self):
+        """
+        Returns the SCCMOS readout format
+            0x0000  SCCMOS_FORMAT_TOP_BOTTOM
+            0x0100  SCCMOS_FORMAT_TOP_CENTER_BOTTOM_CENTER
+            0x0200  SCCMOS_FORMAT_CENTER_TOP_CENTER_BOTTOM
+            0x0300  SCCMOS_FORMAT_CENTER_TOP_BOTTOM_CENTER
+            0x0400  SCCMOS_FORMAT_TOP_CENTER_CENTER_BOTTOM
+
+        For lightsheet mode, we need 0x0000 (top to bottom rolling shutter)
+        """
+        if self.camera is not None:
+            cam_readout_format = {}
+            cam_readout_format = self.camera.sdk.get_interface_output_format('edge')
+            readout_format = str(cam_readout_format.get('format'))
+            if self.verbose:
+                print("Camera readout format:", readout_format)
+        else:
+            readout_format = None
+        return readout_format
+
 
     # compounded methods
 

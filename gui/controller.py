@@ -261,7 +261,9 @@ class Controller_MainWindow(QMainWindow):
         # Connection for general acquisition settings changes
         self.ui.doubleSpinBox_acqSampleRate.valueChanged.connect(self.updateUi_acq_sample_rate)
         self.ui.doubleSpinBox_acqExposureTime.valueChanged.connect(self.updateUi_acq_exposure_time)
-
+        self.ui.doubleSpinBox_acqLineTime.valueChanged.connect(self.updateUi_acq_line_time)
+        self.ui.doubleSpinBox_acqLineExposure.valueChanged.connect(self.updateUi_acq_line_exposure)
+        self.ui.doubleSpinBox_acqLineDelay.valueChanged.connect(self.updateUi_acq_line_delay)
 
         # -------------------------------------------------------------------------------------------------------------------------------
         # Connections for the 'Calibration' tab controls
@@ -356,7 +358,7 @@ class Controller_MainWindow(QMainWindow):
         self.ui.statusbar.repaint()
 
         # Instantiating the hardware components
-        self.camera = Camera()
+        self.camera = Camera(verbose=True)
         self.motors = Motors()
         self.lasers = Lasers()
         self.etls = ETLs()
@@ -547,17 +549,27 @@ class Controller_MainWindow(QMainWindow):
     
     def updateUi_initial_hardware_state(self):
         # HwDAQ
+        self.ui.checkBox_galvoActivate.setChecked(self.hwdaq.galvo_activated)
+        self.ui.checkBox_galvoInvert.setChecked(self.hwdaq.galvo_inverted)
         self.ui.doubleSpinBox_galvoLeftAmplitude.setValue(self.hwdaq.galvo_left_amplitude)
         self.ui.doubleSpinBox_galvoRightAmplitude.setValue(self.hwdaq.galvo_right_amplitude)
         self.ui.doubleSpinBox_galvoLeftOffset.setValue(self.hwdaq.galvo_left_offset)
         self.ui.doubleSpinBox_galvoRightOffset.setValue(self.hwdaq.galvo_right_offset)
+
+        self.ui.checkBox_etlActivate.setChecked(self.hwdaq.etl_activated)
         self.ui.doubleSpinBox_etlLeftAmplitude.setValue(self.hwdaq.etl_left_amplitude)
         self.ui.doubleSpinBox_etlRightAmplitude.setValue(self.hwdaq.etl_right_amplitude)
         self.ui.doubleSpinBox_etlLeftOffset.setValue(self.hwdaq.etl_left_offset)
         self.ui.doubleSpinBox_etlRightOffset.setValue(self.hwdaq.etl_right_offset)
         self.ui.doubleSpinBox_etlSteps.setValue(self.hwdaq.etl_steps)
+
         self.ui.doubleSpinBox_acqSampleRate.setValue(self.hwdaq.sample_rate)
         self.ui.doubleSpinBox_acqExposureTime.setValue(self.hwdaq.exposure_time * 1000) # hwdaq(s) to ui(ms)
+
+        self.ui.doubleSpinBox_acqLineTime.setValue(self.camera.line_time)
+        self.ui.doubleSpinBox_acqLineExposure.setValue(self.camera.line_exposure)
+        self.ui.doubleSpinBox_acqLineDelay.setValue(self.camera.line_delay)
+
         # Lasers
         self.ui.doubleSpinBox_laserOneAmplitude.setValue(self.lasers.laser1_power)
         self.ui.doubleSpinBox_laserTwoAmplitude.setValue(self.lasers.laser2_power)
@@ -1091,6 +1103,19 @@ class Controller_MainWindow(QMainWindow):
         # Propagate Ui changes to HwDAQ instance
         self.hwdaq.exposure_time = self.ui.doubleSpinBox_acqExposureTime.value() / 1000  # ui(ms) to hwdaq(s)
 
+    def updateUi_acq_line_time(self):
+        # Propagate Ui changes to Camera instance
+        self.camera.line_time = self.ui.doubleSpinBox_acqLineTime.value()
+
+    def updateUi_acq_line_exposure(self):
+        # Propagate Ui changes to Camera instance
+        self.camera.line_exposure = int(self.ui.doubleSpinBox_acqLineExposure.value())
+
+    def updateUi_acq_line_delay(self):
+        # Propagate Ui changes to Camera instance
+        self.camera.line_delay = int(self.ui.doubleSpinBox_acqLineDelay.value())
+
+
     def updateUi_laser1_amplitude(self):
         # Propagate Ui changes to HwDAQ instance
         self.lasers.laser1_power = self.ui.doubleSpinBox_laserOneAmplitude.value()
@@ -1286,13 +1311,32 @@ class Controller_MainWindow(QMainWindow):
         ##self.move_camera_to_focus() 
 
         # Setting the camera for external exposure control acquisition
-        self.camera.set_trigger_mode('external_exposure')
+        # Setting the camera for scan acquisition
+        if self.camera.shutter_mode == 'Lightsheet':
+            print('Lightsheet mode')
+            self.camera.set_trigger_mode('external')
+            self.camera.set_lightsheet_mode()
+        else:
+            print('External exposure control mode')
+            self.camera.set_trigger_mode('external_exposure')
         self.camera.arm_camera()
         
         # Starting lasers
         self.start_lasers()
         
         while self.live_mode_started:
+
+            # Setting the camera for external exposure control acquisition
+            # Setting the camera for scan acquisition
+            if self.camera.shutter_mode == 'Lightsheet':
+                print('Lightsheet mode')
+                self.camera.set_trigger_mode('external')
+                self.camera.set_lightsheet_mode()
+            else:
+                print('External exposure control mode')
+                self.camera.set_trigger_mode('external_exposure')
+            self.camera.arm_camera()
+
             # Refresh scan waveforms every loop (live mode)
             self.hwdaq.compute_scan_waveforms()
             # Get single image
@@ -1348,7 +1392,13 @@ class Controller_MainWindow(QMainWindow):
         self.image_cam_pos_text = self.current_camera_position_text
         
         # Setting the camera for scan acquisition
-        self.camera.set_trigger_mode('external_exposure')
+        if self.camera.shutter_mode == 'Lightsheet':
+            print('Lightsheet mode')
+            self.camera.set_trigger_mode('external')
+            self.camera.set_lightsheet_mode()
+        else:
+            print('External exposure control mode')
+            self.camera.set_trigger_mode('external_exposure')
         self.camera.arm_camera()
 
         # Start lasers
@@ -1373,42 +1423,6 @@ class Controller_MainWindow(QMainWindow):
 
         # Emit finished signal
         self.sig_single_mode_finished.emit()
-
-
-    # def get_single_image(self):
-    #     '''Generates and display a single frame which can be saved afterwards 
-    #     using self.save_single_image()'''
-        
-    #     '''Moving the camera to focus'''
-    #     ##self.move_camera_to_focus()
-        
-    #     '''Getting positions for the image'''
-    #     self.image_hor_pos_text = self.current_horizontal_position_text
-    #     self.image_ver_pos_text = self.current_vertical_position_text
-    #     self.image_cam_pos_text = self.current_camera_position_text
-        
-    #     '''Setting the camera for acquisition'''
-    #     self.camera.set_trigger_mode('external_exposure')
-    #     self.camera.arm_camera()
-
-    #     '''Starting lasers'''
-    #     self.both_lasers_activated = True
-    #     self.start_lasers()
-        
-    #     # Refresh scan waveforms with current settings
-    #     self.hwdaq.compute_scan_waveforms()
-    #     # Acquire a single scan
-    #     self.acquire_scan()
-
-    #     # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)
-    #     self.hwdaq.ao_etl_update(left_setpoint=2.5, right_setpoint=2.5)
-
-    #     '''Stopping lasers'''
-    #     self.stop_lasers()
-    #     self.both_lasers_activated = False
-
-    #     '''Stopping camera'''            
-    #     self.camera.disarm_camera()
 
 
     def crop_buffer(self, buffer):
@@ -1739,7 +1753,6 @@ class Controller_MainWindow(QMainWindow):
                     nosave_answer = QMessageBox.question(self, "Stack Acquisition Question", "Make stack acquisition without saving ?", QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
 
                 if self.saving_allowed or nosave_answer:
-#                    self.updateUi_pre_stack_mode()
                     self.ui.pushButton_acqStartStackMode.setText('Stop Stack Mode')
                     self.ui.statusBar_label.setText('Current Acquisition Mode: Stack ')
                     self.ui.statusBar_progress.setValue(0) #To reset progress bar
@@ -1754,20 +1767,6 @@ class Controller_MainWindow(QMainWindow):
                     '''Starting stack mode thread'''
                     self.stack_mode_thread = threading.Thread(target = self.stack_mode_worker)
                     self.stack_mode_thread.start()
-
-#     def updateUi_pre_stack_mode(self):
-#         '''Starts the thread for stack mode'''
-#         self.ui.pushButton_acqStartStackMode.setText('Stop Stack Mode')
-#         self.ui.statusBar_label.setText('Current Acquisition Mode: Stack ')
-#         self.ui.statusBar_progress.setValue(0) #To reset progress bar
-#         self.ui.statusBar_progress.show()
-# #        self.sig_progress_update.emit(0) #To reset progress bar
-#
-#         self.stack_mode_started = True
-#         '''Modes disabling while stack acquisition'''
-#         self.updateUi_modes_buttons([self.ui.pushButton_acqStartStackMode])
-#         self.updateUi_motor_buttons()
-#         self.updateUi_message_printer('->Stack mode started -- Number of frames to save: ' + str(int(self.number_of_planes)))
 
     @pyqtSlot()
     def updateUi_post_stack_mode(self):
@@ -1801,8 +1800,14 @@ class Controller_MainWindow(QMainWindow):
             # Starting frame saver
             self.frame_saver.start_saving()
 
-        # Setting the camera for acquisition
-        self.camera.set_trigger_mode('external_exposure')
+        # Setting the camera for scan acquisition
+        if self.camera.shutter_mode == 'Lightsheet':
+            print('Lightsheet mode')
+            self.camera.set_trigger_mode('external')
+            self.camera.set_lightsheet_mode()
+        else:
+            print('External exposure control mode')
+            self.camera.set_trigger_mode('external_exposure')
         self.camera.arm_camera()
         
         # Starting lasers
