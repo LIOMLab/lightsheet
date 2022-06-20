@@ -13,13 +13,14 @@ import nidaqmx
 from nidaqmx.constants import AcquisitionType, LineGrouping, Edge
 
 from src.config import cfg_read, cfg_write, cfg_str2bool
-from src.waveforms import galvo_ramp, etl_staircase, camera_squarewave
-from src.waveforms import galvo_ramp2, etl_staircase2, camera_squarewave2
+from src.waveforms import camera_squarewave, galvo_ramp, etl_staircase
+from src.waveforms import camera_squarewave2, galvo_ramp2, etl_staircase2
 
-
-class HwDAQ:
-    '''Class for generating and sending AO ramps to ETLs and galvos
-       Update: Also includes the ramp for the camera'''
+class SigGen:
+    """
+    Class for generating and sending timing signals to galvos, etls and camera
+    
+    """
 
     # Configurable settings defaults
     # Used as base dictionnary for .ini file allowable keys
@@ -71,7 +72,7 @@ class HwDAQ:
 
         # read configurable settings from config.ini file
         self._cfg_filename = 'config.ini'
-        self._cfg_section = 'HwDAQ'
+        self._cfg_section = 'SigGen'
         self.cfg_load_ini()
 
 
@@ -154,12 +155,12 @@ class HwDAQ:
         self._cfg['ETL Right Offset']         = str( self.etl_right_offset              )
 
 
-    def ao_update(self):
+    def update_all(self, left_galvo:float, right_galvo:float, left_etl:float, right_etl:float):
         # FIXME (HARDWARE) - LOOKS LIKE ETL OR GALVO ARE REVERSED (LEFT VS RIGHT)
-        galvo_etl_setpoints     = np.stack((    np.array([self.galvo_right_offset]),
-                                                np.array([self.galvo_left_offset]),
-                                                np.array([self.etl_left_offset]),
-                                                np.array([self.etl_right_offset])   ))
+        galvo_etl_setpoints     = np.stack((    np.array([right_galvo]),
+                                                np.array([left_galvo]),
+                                                np.array([left_etl]),
+                                                np.array([right_etl])   ))
         # Running task
         try:
             with nidaqmx.Task(new_task_name = 'galvo_etl_setpoint') as galvo_etl_task:
@@ -167,29 +168,29 @@ class HwDAQ:
                 galvo_etl_task.write(galvo_etl_setpoints, auto_start = True)
         except:
             self.error = 1
-            self.error_message = 'ao_update error'
-            print('HwDAQ - ao_update error')
+            self.error_message = 'update_all error'
+            print('SigGen - update_all error')
 
 
-    def ao_galvo_update(self, left_setpoint:float, right_setpoint:float):
+    def update_galvos(self, left_galvo:float, right_galvo:float):
         # FIXME (HARDWARE) - LOOKS LIKE ETL OR GALVO ARE REVERSED (LEFT VS RIGHT)
-        galvo_setpoints     = np.stack((    np.array([right_setpoint]),
-                                            np.array([left_setpoint])   ))
+        galvo_setpoints     = np.stack((    np.array([right_galvo]),
+                                            np.array([left_galvo])   ))
         # Running task
         try:
             with nidaqmx.Task(new_task_name = 'galvo_single') as galvo_task:
-                galvo_task.ao_channels.add_ao_voltage_chan(self.etl_terminals)
+                galvo_task.ao_channels.add_ao_voltage_chan(self.galvo_terminals)
                 galvo_task.write(galvo_setpoints, auto_start = True)
         except:
             self.error = 1
-            self.error_message = 'ao_galvo_update error'
-            print('HwDAQ - ao_galvo_update error')
+            self.error_message = 'update_galvos error'
+            print('SigGen - update_galvos error')
 
 
-    def ao_etl_update(self, left_setpoint:float, right_setpoint:float):
+    def update_etls(self, left_etl:float, right_etl:float):
         # FIXME (HARDWARE) - LOOKS LIKE ETL OR GALVO ARE REVERSED (LEFT VS RIGHT)
-        etl_setpoints     = np.stack((  np.array([left_setpoint]),
-                                        np.array([right_setpoint])   ))
+        etl_setpoints     = np.stack((  np.array([left_etl]),
+                                        np.array([right_etl])   ))
         # Running task
         try:
             with nidaqmx.Task(new_task_name = 'etl_single') as etl_task:
@@ -197,8 +198,8 @@ class HwDAQ:
                 etl_task.write(etl_setpoints, auto_start = True)
         except:
             self.error = 1
-            self.error_message = 'ao_etl_update error'
-            print('HwDAQ - ao_etl_update error')
+            self.error_message = 'update_etls error'
+            print('SigGen - update_etls error')
 
 
     def create_scanner(self):
@@ -230,7 +231,7 @@ class HwDAQ:
             self.camera_task = None
             self.error = 1
             self.error_message = 'create_scan error'
-            print('HwDAQ - create_scan error')
+            print('SigGen - create_scan error')
 
 
     def start_scanner(self):
@@ -264,6 +265,8 @@ class HwDAQ:
         if self.camera_mode == 'Global':
             self.compute_scan_waveforms_old()
         elif self.camera_mode == 'Lightsheet':
+            self.compute_scan_waveforms_new()
+        elif self.camera_mode == 'Rolling':
             self.compute_scan_waveforms_new()
         else:
             raise Exception('camera mode not supported')
@@ -400,8 +403,8 @@ class HwDAQ:
         # Essentially self._cfg minus the terminals entries
         self.waveform_metadata = {}
         self.waveform_metadata['Sample Rate']              = str( self.sample_rate                  )
-
         self.waveform_metadata['Camera Mode']              = str( self.camera_mode                  )
+        self.waveform_metadata['Camera Line Time']         = str( self.camera_line_time      * 1e6  )
         self.waveform_metadata['Camera XSize']             = str( self.camera_xsize                 )
         self.waveform_metadata['Camera YSize']             = str( self.camera_ysize                 )
 
@@ -428,23 +431,27 @@ class HwDAQ:
 
         # FIXME
         # Camera Parameters
-        self.camera_lightsheet_exposure_mode = 'line time'
-        self.camera_lightsheet_line_time = 48.0 * 1e-6
-        self.camera_lightsheet_exposed_lines = 16
-        self.camera_lightsheet_delay_lines = 0
-        self.camera_global_line_time = 16.40 * 1e-6
+        self.camera_lightsheet_mode = 'line time'
+        self.camera_exposed_lines = 16
+        self.camera_delay_lines = 0
 
         if self.camera_mode == 'Lightsheet':
-            if self.camera_lightsheet_exposure_mode == 'line time':
-                self.galvo_scan_time = self.camera_lightsheet_line_time * (self.camera_ysize + self.camera_lightsheet_exposed_lines)
-            elif self.camera_lightsheet_exposure_mode == 'scan time':
-                self.camera_lightsheet_line_time = self.galvo_scan_time / (self.camera_ysize + self.camera_lightsheet_exposed_lines)
-            camera_exposure_time = self.camera_lightsheet_line_time * self.camera_lightsheet_exposed_lines
-            camera_delay_time = 3 * self.camera_lightsheet_line_time
+            if self.camera_lightsheet_mode == 'line time':
+                # First take: initial understanding of the PCO timing diagrams
+                #self.galvo_scan_time = self.camera_line_time * (self.camera_ysize + self.camera_exposed_lines)
+                # Take 2: assuming vertical scan amplitude exactly matching camera FOV, galvo line speed must match camera line speed
+                self.galvo_scan_time = self.camera_line_time * self.camera_ysize
+            elif self.camera_lightsheet_mode == 'scan time':
+                # First take
+                #self.camera_line_time = self.galvo_scan_time / (self.camera_ysize + self.camera_exposed_lines)
+                # see above, same idea
+                self.camera_line_time = self.galvo_scan_time / self.camera_ysize
+            camera_exposure_time = self.camera_line_time * self.camera_exposed_lines
+            camera_delay_time = 3 * self.camera_line_time
             camera_delay_samples = int(np.ceil(camera_delay_time * self.sample_rate))
 
             print('lightsheet scan mode')
-            print('line time:', self.camera_lightsheet_line_time)
+            print('line time:', self.camera_line_time)
             print('exposure time :', camera_exposure_time)
 
             # galvo
@@ -472,15 +479,15 @@ class HwDAQ:
             camera_inverted = False
             camera_repeat = self.waveform_cycles
 
-        elif self.camera_mode == 'Global':
+        elif self.camera_mode == 'Rolling':
             camera_exposure_time = self.galvo_scan_time
-            camera_delay_time = (0.5 * self.camera_ysize + 1) * self.camera_global_line_time
+            camera_delay_time = 3 * self.camera_line_time
             camera_delay_samples = int(np.ceil(camera_delay_time * self.sample_rate))
 
-            camera_data_readout_time = (0.5 * self.camera_ysize + 1) * self.camera_global_line_time
+            camera_data_readout_time = (0.5 * self.camera_ysize + 1) * self.camera_line_time
             assert self.galvo_pre_time + self.galvo_reset_time + self.galvo_post_time >= camera_data_readout_time, "Time between galvo scan [reset_time + post_time + next pre-time] is not long enough for camera to complete data readout"
-            print('global mode')
-            print('line time:', self.camera_global_line_time)
+            print('rolling mode')
+            print('line time:', self.camera_line_time)
             print('exposure time :', camera_exposure_time)
 
             # galvo waveform generator inputs
@@ -488,7 +495,43 @@ class HwDAQ:
             galvo_pre_samples = int(np.ceil(self.galvo_pre_time * self.sample_rate))
             galvo_scan_samples = int(np.ceil(self.galvo_scan_time * self.sample_rate))
             galvo_reset_samples = int(np.ceil(self.galvo_reset_time * self.sample_rate))
-            galvo_post_samples = 0
+            galvo_post_samples = int(np.ceil(self.galvo_post_time * self.sample_rate))
+            galvo_period_samples = galvo_pre_samples + galvo_scan_samples + galvo_reset_samples + galvo_post_samples
+            galvo_shift = camera_delay_samples
+            galvo_repeat = self.waveform_cycles
+            galvo_inverted = self.galvo_inverted
+
+            # etl waveform generator inputs
+            etl_activated = self.etl_activated
+            etl_step_samples = galvo_period_samples
+            etl_steps = self.waveform_cycles
+            etl_shift = camera_delay_samples  - int(np.ceil(galvo_reset_samples/2)) - galvo_post_samples
+
+            # camera waveform generator inpurs
+            camera_pre_samples = galvo_pre_samples
+            camera_active_samples = int(np.ceil(camera_exposure_time * self.sample_rate))
+            camera_post_samples = galvo_period_samples - camera_pre_samples - camera_active_samples 
+            camera_shift = 0
+            camera_repeat = self.waveform_cycles
+            camera_inverted = False
+
+        elif self.camera_mode == 'Global':
+            camera_exposure_time = self.galvo_scan_time
+            camera_delay_time = (0.5 * self.camera_ysize + 1) * self.camera_line_time
+            camera_delay_samples = int(np.ceil(camera_delay_time * self.sample_rate))
+
+            camera_data_readout_time = (0.5 * self.camera_ysize + 1) * self.camera_line_time
+            assert self.galvo_pre_time + self.galvo_reset_time + self.galvo_post_time >= camera_data_readout_time, "Time between galvo scan [reset_time + post_time + next pre-time] is not long enough for camera to complete data readout"
+            print('global mode')
+            print('line time:', self.camera_line_time)
+            print('exposure time :', camera_exposure_time)
+
+            # galvo waveform generator inputs
+            galvo_activated = self.galvo_activated
+            galvo_pre_samples = int(np.ceil(self.galvo_pre_time * self.sample_rate))
+            galvo_scan_samples = int(np.ceil(self.galvo_scan_time * self.sample_rate))
+            galvo_reset_samples = int(np.ceil(self.galvo_reset_time * self.sample_rate))
+            galvo_post_samples = int(np.ceil(self.galvo_post_time * self.sample_rate))
             galvo_period_samples = galvo_pre_samples + galvo_scan_samples + galvo_reset_samples + galvo_post_samples
             galvo_shift = camera_delay_samples
             galvo_repeat = self.waveform_cycles
@@ -566,7 +609,7 @@ if __name__ == '__main__':
     
     from matplotlib import pyplot as plt
 
-    test_scanner = HwDAQ()
+    test_scanner = SigGen()
     print(test_scanner.exposure_time)
     test_scanner.compute_scan_waveforms()
     print(test_scanner.waveform_metadata)

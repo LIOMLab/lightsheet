@@ -21,7 +21,7 @@ class Camera:
     _cfg_defaults = {}
     _cfg_defaults['Shutter Mode']   = 'Lightsheet'
     _cfg_defaults['Line Time']      = '12.174'
-    _cfg_defaults['Line Exposure']  = '10'
+    _cfg_defaults['Line Exposure']  = '16'
     _cfg_defaults['Line Delay']     = '0'
 
 
@@ -46,7 +46,7 @@ class Camera:
         self.cfg_load_ini()
 
         # Automatically open camera on instance creation
-        self.open_camera()
+        self.open()
 
 
     # config methods
@@ -77,7 +77,7 @@ class Camera:
 
     # base methods
 
-    def open_camera(self):
+    def open(self):
         '''Open a camera'''
         if self.verbose:
             print("Opening camera...")
@@ -101,7 +101,7 @@ class Camera:
                 print(" Camera already opened.")
         return None
 
-    def close_camera(self):
+    def close(self):
         '''Closes an opened camera'''
         if self.verbose:
             print("Closing camera...")
@@ -115,7 +115,7 @@ class Camera:
                 print(" Camera already closed.")
         return None
 
-    def arm_camera(self):
+    def arm(self):
         '''docstring'''
         if self.camera is not None:
             if self.verbose:
@@ -134,7 +134,78 @@ class Camera:
                 print(" Camera armed.")
         return None
 
-    def disarm_camera(self):
+    def arm_scan(self):
+        if self.camera is not None:
+            if self.shutter_mode == 'Lightsheet':
+                if self.verbose:
+                    print('Arming camera in Lightsheet mode...')
+                if self.camera.sdk.get_recording_state()['recording state'] == 'on':
+                    self.camera.sdk.set_recording_state('off')
+                self.set_trigger_mode('external')
+                self.camera.sdk.set_cmos_line_timing('on', self.line_time * 1e-6)
+                self.camera.sdk.set_cmos_line_exposure_delay(self.line_exposure, self.line_delay)
+
+                cam_line_timing = {}
+                cam_line_timing = self.camera.sdk.get_cmos_line_timing()
+                parameter = cam_line_timing.get('parameter')
+                line_time = cam_line_timing.get('line time')
+
+                cam_line_exposure_delay = {}
+                cam_line_exposure_delay = self.camera.sdk.get_cmos_line_exposure_delay()
+                exposed_lines = cam_line_exposure_delay.get('lines exposure')
+                delay_lines = cam_line_exposure_delay.get('lines delay')
+
+                if self.verbose:
+                    print("CMOS line timing is:", str(parameter))
+                    print("Line time:", str(line_time))
+                    print("Exposed lines:", str(exposed_lines))
+                    print("Delay lines:", str(delay_lines))
+
+            elif self.shutter_mode == 'Rolling':
+                if self.verbose:
+                    print('Arming camera in Rolling Shutter mode...')
+                if self.camera.sdk.get_recording_state()['recording state'] == 'on':
+                    self.camera.sdk.set_recording_state('off')
+                self.set_trigger_mode('external_exposure')
+                self.camera.sdk.set_cmos_line_timing('off', self.line_time * 1e-6)
+                cam_line_timing = {}
+                cam_line_timing = self.camera.sdk.get_cmos_line_timing()
+                parameter = cam_line_timing.get('parameter')
+                line_time = cam_line_timing.get('line time')
+
+                if self.verbose:
+                    print("CMOS line timing is:", str(parameter))
+                    print("Line time:", str(line_time))
+
+            elif self.shutter_mode == 'Global':
+                if self.verbose:
+                    print('Arming camera in Global Shutter mode...')
+                if self.camera.sdk.get_recording_state()['recording state'] == 'on':
+                    self.camera.sdk.set_recording_state('off')
+                self.set_trigger_mode('external_exposure')
+                self.camera.sdk.set_cmos_line_timing('off', self.line_time * 1e-6)
+                cam_line_timing = {}
+                cam_line_timing = self.camera.sdk.get_cmos_line_timing()
+                parameter = cam_line_timing.get('parameter')
+                line_time = cam_line_timing.get('line time')
+                if self.verbose:
+                    print("CMOS line timing is:", str(parameter))
+                    print("Line time:", str(line_time))
+
+            else:
+                raise Exception('Unknown shutter mode selected')
+
+            self.camera.sdk.arm_camera()
+            sizes = {}
+            sizes = self.camera.sdk.get_sizes()
+            self.xsize = int(sizes.get('x'))
+            self.ysize = int(sizes.get('y'))
+            self.bytes_per_image = self.xsize * self.ysize * 2 # 16 bit images (2 bytes per pixel)
+            self.camera.sdk.set_image_parameters(self.xsize, self.ysize)
+            self.is_armed = True
+        return None
+
+    def disarm(self):
         '''docstring'''
         if self.camera is not None:
             if self.verbose:
@@ -492,7 +563,6 @@ class Camera:
             readout_format = None
         return readout_format
 
-
     # compounded methods
 
     def get_properties(self):
@@ -546,9 +616,9 @@ class Camera:
                 if self.verbose:
                     print(" Recording already in progress. Aborted.")
             else:
-                self.disarm_camera()                        # In case camera was previously armed
+                self.disarm()                        # In case camera was previously armed
                 self.set_trigger_mode('auto_trigger')       # Camera is internally triggered
-                self.arm_camera()                           # Required to apply tigger settings
+                self.arm()                           # Required to apply tigger settings
                 self.set_exposure_time(exposure_time_ms)    # Exposure time can be changed after arming the camera
                 self.start_recorder(1)                      # Start a recording session to acquire one frame
                 self.monitor_recorder(1)                    # Monitors the recording session and returns once one image is acquired (or after default timeout of 5s)
