@@ -6,8 +6,8 @@ import configparser
 
 def cfg_read(cfg_filename:str, cfg_section:str, cfg_dictionary:dict):
     """
-    Reads in a specific section of a configuration file and returns updated config dictionary
-    Must provide a base dictionnary of values to read
+    Reads a specific section of a configuration file and returns an updated config dictionary
+    Must provide a base dictionnary of values to update
     Will ignore extraneous keys found in the configuration file
     """
     tmp_dictionary = {}
@@ -25,7 +25,7 @@ def cfg_read(cfg_filename:str, cfg_section:str, cfg_dictionary:dict):
 def cfg_write(cfg_filename:str, cfg_section:str, cfg_dictionary:dict):
     """
     Write config dictionary to a specified section of a configuration file
-    Will not erase other keys found in the same section
+    Will write or update keys from the dictionnary without erasing other keys found in the same section
     """
     cfg = configparser.ConfigParser()
     cfg.optionxform = str
@@ -39,6 +39,10 @@ def cfg_write(cfg_filename:str, cfg_section:str, cfg_dictionary:dict):
     return cfg_dictionary
 
 def cfg_str2bool(v:str):
+    """
+    Convert a string to bool by checking against a 'True' list of words
+    [ bool(str) always returns True except for the empty string ]
+    """
     return v.lower() in ('true', 't', 'yes', '1')
 
 
