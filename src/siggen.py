@@ -31,12 +31,10 @@ class SigGen:
     _cfg_defaults['AO Terminals']             = '/Dev1/ao0:3'         # DAQ board AO terminals for Galvo + ETL scan ramps
     _cfg_defaults['DO Terminals']             = '/Dev1/port0/line1'   # DAQ board DO terminals for Camera Exposure Control
     _cfg_defaults['Sample Rate']              = '40000'               # In samples/second
-
     _cfg_defaults['Galvo Pre Time']           = '0.001'               # [s]
     _cfg_defaults['Galvo Scan Time']          = '0.100'               # [s]
     _cfg_defaults['Galvo Reset Time']         = '0.025'               # [s]
     _cfg_defaults['Galvo Post Time']          = '0.001'               # [s]
-
     _cfg_defaults['Galvo Activated']          = 'True'                # Boolean
     _cfg_defaults['Galvo Inverted']           = 'False'               # Boolean
     _cfg_defaults['Galvo Left Amplitude']     = '1.0'                 # In volts
@@ -49,6 +47,7 @@ class SigGen:
     _cfg_defaults['ETL Left Offset']          = '0.5'                 # In volts
     _cfg_defaults['ETL Right Amplitude']      = '1.0'                 # In volts
     _cfg_defaults['ETL Right Offset']         = '0.5'                 # In volts
+
 
     def __init__(self, camera:Camera):
         # Error status
@@ -77,25 +76,15 @@ class SigGen:
 
     def cfg_load_ini(self):
         self._cfg = cfg_read(self._cfg_filename, self._cfg_section, self._cfg_defaults)
-        self.cfg_dict2var()
 
-
-    def cfg_save_ini(self):
-        self.cfg_var2dict()
-        self._cfg = cfg_write(self._cfg_filename, self._cfg_section, self._cfg)
-
-
-    def cfg_dict2var(self):
         # set instance variables from configuration dictionary values
         self.ao_terminals           = str(          self._cfg['AO Terminals']           )
         self.do_terminals           = str(          self._cfg['DO Terminals']           )
         self.sample_rate            = int(          self._cfg['Sample Rate']            )
-
         self.galvo_pre_time         = float(        self._cfg['Galvo Pre Time']         )
         self.galvo_scan_time        = float(        self._cfg['Galvo Scan Time']        )
         self.galvo_reset_time       = float(        self._cfg['Galvo Reset Time']       )
         self.galvo_post_time        = float(        self._cfg['Galvo Post Time']        )
-
         self.galvo_activated        = cfg_str2bool( self._cfg['Galvo Activated']        )
         self.galvo_inverted         = cfg_str2bool( self._cfg['Galvo Inverted']         )
         self.galvo_left_amplitude   = float(        self._cfg['Galvo Left Amplitude']   )
@@ -116,18 +105,17 @@ class SigGen:
         self.etl_terminals          = ao_device + '/ao' + str(int(ao_channels[1])-1) + ':' + ao_channels[1]
 
 
-    def cfg_var2dict(self):
+
+    def cfg_save_ini(self):
         # pack current instance variables into configuration dictionary
         self._cfg = {}
         self._cfg['AO Terminals']             = str( self.ao_terminals                  )
         self._cfg['DO Terminals']             = str( self.do_terminals                  )
         self._cfg['Sample Rate']              = str( self.sample_rate                   )
-
         self._cfg['Galvo Pre Time']           = str( self.galvo_pre_time                )
         self._cfg['Galvo Scan Time']          = str( self.galvo_scan_time               )
         self._cfg['Galvo Reset Time']         = str( self.galvo_reset_time              )
         self._cfg['Galvo Post Time']          = str( self.galvo_post_time               )
-
         self._cfg['Galvo Activated']          = str( self.galvo_activated               )  
         self._cfg['Galvo Inverted']           = str( self.galvo_inverted                )
         self._cfg['Galvo Left Amplitude']     = str( self.galvo_left_amplitude          )
@@ -140,6 +128,9 @@ class SigGen:
         self._cfg['ETL Left Offset']          = str( self.etl_left_offset               )
         self._cfg['ETL Right Amplitude']      = str( self.etl_right_amplitude           )
         self._cfg['ETL Right Offset']         = str( self.etl_right_offset              )
+
+        self._cfg = cfg_write(self._cfg_filename, self._cfg_section, self._cfg)
+
 
 
     def update_all(self, left_galvo:float, right_galvo:float, left_etl:float, right_etl:float):
@@ -228,17 +219,20 @@ class SigGen:
             self.task_camera.start()
             self.task_galvo_etl.start()
 
+
     def monitor_scanner(self):
         '''Wait for AO and DO tasks to complete'''
         if self.task_galvo_etl is not None and self.task_camera is not None:
             self.task_camera.wait_until_done()
             self.task_galvo_etl.wait_until_done()
 
+
     def stop_scanner(self):
         '''Stop AO and DO tasks'''
         if self.task_galvo_etl is not None and self.task_camera is not None:
             self.task_camera.stop()
             self.task_galvo_etl.stop()
+
 
     def delete_scanner(self):
         '''Delete AO and DO tasks'''
@@ -256,12 +250,6 @@ class SigGen:
         # Essentially self._cfg minus the terminals entries
         self.waveform_metadata = {}
         self.waveform_metadata['Sample Rate']              = str( self.sample_rate                  )
-
-        self.waveform_metadata['Galvo Pre Time']           = str( self.galvo_pre_time               )
-        self.waveform_metadata['Galvo Scan Time']          = str( self.galvo_scan_time              )
-        self.waveform_metadata['Galvo Reset Time']         = str( self.galvo_reset_time             )
-        self.waveform_metadata['Galvo Post Time']          = str( self.galvo_post_time              )
-
         self.waveform_metadata['Galvo Activated']          = str( self.galvo_activated              )
         self.waveform_metadata['Galvo Inverted']           = str( self.galvo_inverted               )
         self.waveform_metadata['Galvo Left Amplitude']     = str( self.galvo_left_amplitude         )
@@ -297,7 +285,9 @@ class SigGen:
 
         if self.camera.shutter_mode == 'Lightsheet':
             # Assuming vertical scan amplitude exactly matching camera FOV, galvo line speed must match camera line speed
+            # TODO Add correction for potential galvo oversan (will require voltage to optical displacement conversion)
             self.galvo_scan_time = self.camera.line_time * self.camera.ysize
+            # In Lightsheet mode, exposure time is overriden by the line time and exposed lines settings
             camera_exposure_time = self.camera.line_time * self.camera.lightsheet_exposed_lines
             camera_delay_time = 3 * self.camera.line_time
             camera_delay_samples = int(np.ceil(camera_delay_time * self.sample_rate))
@@ -328,6 +318,9 @@ class SigGen:
             camera_repeat = self.waveform_cycles
 
         elif self.camera.shutter_mode == 'Rolling':
+            # In Rolling mode, we adjust galvo_scan_time according to requested camera exposure time
+            self.galvo_scan_time = self.camera.exposure_time + (self.camera.line_time * 0.5 * self.camera.ysize)
+            
             camera_exposure_time = self.galvo_scan_time - (self.camera.line_time * 0.5 * self.camera.ysize)
             camera_delay_time = 3 * self.camera.line_time + (self.camera.line_time * 0.5 * self.camera.ysize)
             camera_delay_samples = int(np.ceil(camera_delay_time * self.sample_rate))
@@ -403,6 +396,16 @@ class SigGen:
         self.total_time = self.total_samples / self.sample_rate
 
         print('Camera Exposure Time:', camera_exposure_time)
+
+
+
+
+
+
+
+
+
+
 
         # Compute camera waveform
         self.waveform_camera = camera_squarewave2(  pre_samples = camera_pre_samples,

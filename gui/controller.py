@@ -564,7 +564,7 @@ class Controller_MainWindow(QMainWindow):
         self.ui.doubleSpinBox_etlSteps.setValue(self.siggen.etl_steps)
 
         self.ui.doubleSpinBox_acqSampleRate.setValue(self.siggen.sample_rate)
-        self.ui.doubleSpinBox_acqExposureTime.setValue(self.siggen.galvo_scan_time * 1e3) # siggen(s) to ui(ms)
+        self.ui.doubleSpinBox_acqExposureTime.setValue(self.camera.exposure_time * 1e3) #camera(s) to ui(ms)
 
         self.ui.doubleSpinBox_acqLineTime.setValue(self.camera.lightsheet_line_time * 1e6) #camera(s) to ui(us)
         self.ui.doubleSpinBox_acqLineExposure.setValue(self.camera.lightsheet_exposed_lines)
@@ -1102,7 +1102,7 @@ class Controller_MainWindow(QMainWindow):
 
     def updateUi_acq_exposure_time(self):
         # Propagate Ui changes to hardware instance
-        self.siggen.galvo_scan_time = self.ui.doubleSpinBox_acqExposureTime.value() * 1e-3  # ui(ms) to siggen(s)
+        self.camera.exposure_time = self.ui.doubleSpinBox_acqExposureTime.value() * 1e-3  # ui(ms) to camera(s)
 
     def updateUi_acq_line_time(self):
         # Propagate Ui changes to Camera instance
@@ -1536,7 +1536,9 @@ class Controller_MainWindow(QMainWindow):
 
 
     def acquire_scan(self):
-        '''Generate ETLs, galvos & camera's waveforms and acquire a single reconstructed frame'''
+        """
+        Generate scan tasks using previously computed waveforms and acquire a single reconstructed frame
+        """
 
         # TODO - thread lock siggen and camera while we acquire
 
