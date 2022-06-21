@@ -30,9 +30,9 @@ from gui.ui_properties import Ui_Properties
 from src.config import cfg_read, cfg_write
 from src.gaussian import gaussian, func, fwhm
 
+from src.camera import Camera
 from src.siggen import SigGen
 from src.motors import Motors
-from src.camera import Camera
 from src.lasers import Lasers
 from src.etls import ETLs
 
@@ -357,9 +357,10 @@ class Controller_MainWindow(QMainWindow):
         self.ui.statusbar.showMessage('Initializing hardware, please wait...')
         self.ui.statusbar.repaint()
 
-        # Instantiating the hardware components
-        self.camera = Camera()
-        self.siggen = SigGen()
+        # Instantiating hardware components
+        self.camera = Camera(verbose=True)
+        # Signal Generator needs to know about Camera settings to generate proper scan waveforms
+        self.siggen = SigGen(self.camera)
         self.motors = Motors()
         self.lasers = Lasers()
         self.etls = ETLs()
@@ -546,7 +547,6 @@ class Controller_MainWindow(QMainWindow):
             self.stop_lasers()
 
 
-    
     def updateUi_initial_hardware_state(self):
         # SigGen
         self.ui.checkBox_galvoActivate.setChecked(self.siggen.galvo_activated)
@@ -564,11 +564,11 @@ class Controller_MainWindow(QMainWindow):
         self.ui.doubleSpinBox_etlSteps.setValue(self.siggen.etl_steps)
 
         self.ui.doubleSpinBox_acqSampleRate.setValue(self.siggen.sample_rate)
-        self.ui.doubleSpinBox_acqExposureTime.setValue(self.siggen.exposure_time * 1000) # siggen(s) to ui(ms)
+        self.ui.doubleSpinBox_acqExposureTime.setValue(self.siggen.galvo_scan_time * 1e3) # siggen(s) to ui(ms)
 
-        self.ui.doubleSpinBox_acqLineTime.setValue(self.camera.line_time)
-        self.ui.doubleSpinBox_acqLineExposure.setValue(self.camera.line_exposure)
-        self.ui.doubleSpinBox_acqLineDelay.setValue(self.camera.line_delay)
+        self.ui.doubleSpinBox_acqLineTime.setValue(self.camera.lightsheet_line_time * 1e6) #camera(s) to ui(us)
+        self.ui.doubleSpinBox_acqLineExposure.setValue(self.camera.lightsheet_exposed_lines)
+        self.ui.doubleSpinBox_acqLineDelay.setValue(self.camera.lightsheet_delay_lines)
 
         # Lasers
         self.ui.doubleSpinBox_laserOneAmplitude.setValue(self.lasers.laser1_power)
@@ -1102,19 +1102,19 @@ class Controller_MainWindow(QMainWindow):
 
     def updateUi_acq_exposure_time(self):
         # Propagate Ui changes to hardware instance
-        self.siggen.exposure_time = self.ui.doubleSpinBox_acqExposureTime.value() / 1000  # ui(ms) to siggen(s)
+        self.siggen.galvo_scan_time = self.ui.doubleSpinBox_acqExposureTime.value() * 1e-3  # ui(ms) to siggen(s)
 
     def updateUi_acq_line_time(self):
         # Propagate Ui changes to Camera instance
-        self.camera.line_time = self.ui.doubleSpinBox_acqLineTime.value()
+        self.camera.lightsheet_line_time = self.ui.doubleSpinBox_acqLineTime.value() * 1e-6 # ui(us) to camera(s)
 
     def updateUi_acq_line_exposure(self):
         # Propagate Ui changes to Camera instance
-        self.camera.line_exposure = int(self.ui.doubleSpinBox_acqLineExposure.value())
+        self.camera.lightsheet_exposed_lines = int(self.ui.doubleSpinBox_acqLineExposure.value())
 
     def updateUi_acq_line_delay(self):
         # Propagate Ui changes to Camera instance
-        self.camera.line_delay = int(self.ui.doubleSpinBox_acqLineDelay.value())
+        self.camera.lightsheet_delay_lines = int(self.ui.doubleSpinBox_acqLineDelay.value())
 
 
     def updateUi_laser1_amplitude(self):
