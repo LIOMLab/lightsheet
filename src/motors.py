@@ -75,13 +75,6 @@ class Motors:
 
     def cfg_load_ini(self):
         self._cfg = cfg_read(self._cfg_filename, self._cfg_section, self._cfg_defaults)
-        self.cfg_dict2var()
-
-    def cfg_save_ini(self):
-        self.cfg_var2dict()
-        self._cfg = cfg_write(self._cfg_filename, self._cfg_section, self._cfg)
-
-    def cfg_dict2var(self):
         # set instance variables from configuration dictionary values
         self.port                   = str(          self._cfg['Port']                       )
         self.device_no_vertical     = int(          self._cfg['Device Number Vertical']     )
@@ -103,7 +96,7 @@ class Motors:
         self.camera_limit_low       = float(        self._cfg['Camera Limit Low']           )
         self.camera_limit_high      = float(        self._cfg['Camera Limit High']          )
 
-    def cfg_var2dict(self):
+    def cfg_save_ini(self):
         # pack current instance variables into configuration dictionary
         self._cfg = {}
         self._cfg['Port']                       = str( self.port                    )
@@ -122,6 +115,7 @@ class Motors:
         self._cfg['Camera Origin']              = str( self.camera_origin           )
         self._cfg['Camera Limit Low']           = str( self.camera_limit_low        )
         self._cfg['Camera Limit High']          = str( self.camera_limit_high       )
+        self._cfg = cfg_write(self._cfg_filename, self._cfg_section, self._cfg)
 
 
     def get_properties(self):
@@ -130,6 +124,7 @@ class Motors:
         motors_properties.update({'horizontal name': self.horizontal.get_name()})
         motors_properties.update({'camera name': self.camera.get_name()})
         return motors_properties
+
 
     def get_positions(self):
         motors_positions = {}

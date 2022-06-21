@@ -19,7 +19,8 @@ class Camera:
     # Configurable settings defaults
     # Used as base dictionnary for .ini file allowable keys
     _cfg_defaults = {}
-    _cfg_defaults['Shutter Mode']               = 'Lightsheet' 
+    _cfg_defaults['Shutter Mode']               = 'Lightsheet'
+    _cfg_defaults['Exposure Time']              = '100'
     _cfg_defaults['Lightsheet Line Time']       = '48.80'
     _cfg_defaults['Lightsheet Exposed Lines']   = '16'
     _cfg_defaults['Lightsheet Delay Lines']     = '0'
@@ -53,27 +54,26 @@ class Camera:
     # config methods
 
     def cfg_load_ini(self):
+        # read configuration from ini file
         self._cfg = cfg_read(self._cfg_filename, self._cfg_section, self._cfg_defaults)
-        self.cfg_dict2var()
-
-    def cfg_save_ini(self):
-        self.cfg_var2dict()
-        self._cfg = cfg_write(self._cfg_filename, self._cfg_section, self._cfg)
-
-    def cfg_dict2var(self):
-        # set instance variables from configuration dictionary values
+        # set instance variables from read configuration dictionary values
         self.shutter_mode                   = str(      self._cfg['Shutter Mode']               )
+        self.exposure_time                  = float(    self._cfg['Exposure Time']              )   * 1e-3
         self.lightsheet_line_time           = float(    self._cfg['Lightsheet Line Time']       )   * 1e-6
         self.lightsheet_exposed_lines       = int(      self._cfg['Lightsheet Exposed Lines']   )
         self.lightsheet_delay_lines         = int(      self._cfg['Lightsheet Delay Lines']     )
 
-    def cfg_var2dict(self):
+    def cfg_save_ini(self):
         # pack current instance variables into configuration dictionary
         self._cfg = {}
         self._cfg['Shutter Mode']               = str( self.shutter_mode                        )
+        self._cfg['Exposure Time']              = str( self.exposure_time               * 1e3   )       
         self._cfg['Lightsheet Line Time']       = str( self.lightsheet_line_time        * 1e6   ) 
         self._cfg['Lightsheet Exposed Lines']   = str( self.lightsheet_exposed_lines            )
         self._cfg['Lightsheet Delay Lines']     = str( self.lightsheet_delay_lines              )
+        # write configuration to ini file
+        self._cfg = cfg_write(self._cfg_filename, self._cfg_section, self._cfg)
+
 
     # base methods
 
