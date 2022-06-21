@@ -19,10 +19,10 @@ class Camera:
     # Configurable settings defaults
     # Used as base dictionnary for .ini file allowable keys
     _cfg_defaults = {}
-    _cfg_defaults['Shutter Mode']   = 'Lightsheet'
-    _cfg_defaults['Line Time']      = '12.174'
-    _cfg_defaults['Line Exposure']  = '16'
-    _cfg_defaults['Line Delay']     = '0'
+    _cfg_defaults['Shutter Mode']               = 'Lightsheet' 
+    _cfg_defaults['Lightsheet Line Time']       = '48.80'
+    _cfg_defaults['Lightsheet Exposed Lines']   = '16'
+    _cfg_defaults['Lightsheet Delay Lines']     = '0'
 
 
     def __init__(self, verbose=False):
@@ -39,6 +39,7 @@ class Camera:
         self.xsize = None
         self.ysize = None
         self.bytes_per_image = None
+        self.line_time = None
 
         # read configurable settings from config.ini file
         self._cfg_filename = 'config.ini'
@@ -61,19 +62,18 @@ class Camera:
 
     def cfg_dict2var(self):
         # set instance variables from configuration dictionary values
-        self.shutter_mode           = str(      self._cfg['Shutter Mode']   )
-        self.line_time              = float(    self._cfg['Line Time']      )
-        self.line_exposure          = int(      self._cfg['Line Exposure']  )
-        self.line_delay             = int(      self._cfg['Line Delay']     )
+        self.shutter_mode                   = str(      self._cfg['Shutter Mode']               )
+        self.lightsheet_line_time           = float(    self._cfg['Lightsheet Line Time']       )   * 1e-6
+        self.lightsheet_exposed_lines       = int(      self._cfg['Lightsheet Exposed Lines']   )
+        self.lightsheet_delay_lines         = int(      self._cfg['Lightsheet Delay Lines']     )
 
     def cfg_var2dict(self):
         # pack current instance variables into configuration dictionary
         self._cfg = {}
-        self._cfg['Shutter Mode']   = str( self.shutter_mode    )
-        self._cfg['Line Time']      = str( self.line_time       )
-        self._cfg['Line Exposure']  = str( self.line_exposure     )
-        self._cfg['Line Delay']     = str( self.line_delay      )
-
+        self._cfg['Shutter Mode']               = str( self.shutter_mode                        )
+        self._cfg['Lightsheet Line Time']       = str( self.lightsheet_line_time        * 1e6   ) 
+        self._cfg['Lightsheet Exposed Lines']   = str( self.lightsheet_exposed_lines            )
+        self._cfg['Lightsheet Delay Lines']     = str( self.lightsheet_delay_lines              )
 
     # base methods
 
@@ -94,6 +94,12 @@ class Camera:
                 self.xsize = int(sizes.get('x'))
                 self.ysize = int(sizes.get('y'))
                 self.bytes_per_image = self.xsize * self.ysize * 2 # 16 bit images (2 bytes per pixel)
+                self.camera.sdk.set_image_parameters(self.xsize, self.ysize)
+                self.is_armed = True
+                cam_cmos_line_timing = {}
+                cam_cmos_line_timing = self.camera.sdk.get_cmos_line_timing()
+                self.line_time = cam_cmos_line_timing.get('line time')
+                self.default_line_time = self.line_time
                 if self.verbose:
                     print(" Camera opened.")
         else:
@@ -130,8 +136,14 @@ class Camera:
             self.bytes_per_image = self.xsize * self.ysize * 2 # 16 bit images (2 bytes per pixel)
             self.camera.sdk.set_image_parameters(self.xsize, self.ysize)
             self.is_armed = True
+
+            cam_cmos_line_timing = {}
+            cam_cmos_line_timing = self.camera.sdk.get_cmos_line_timing()
+            self.line_time = cam_cmos_line_timing.get('line time')
+
             if self.verbose:
                 print(" Camera armed.")
+                print(" Line time:", str(self.line_time))
         return None
 
     def arm_scan(self):
@@ -142,24 +154,26 @@ class Camera:
                 if self.camera.sdk.get_recording_state()['recording state'] == 'on':
                     self.camera.sdk.set_recording_state('off')
                 self.set_trigger_mode('external')
-                self.camera.sdk.set_cmos_line_timing('on', self.line_time * 1e-6)
-                self.camera.sdk.set_cmos_line_exposure_delay(self.line_exposure, self.line_delay)
+                self.camera.sdk.set_cmos_line_timing('on', self.lightsheet_line_time)
+                self.camera.sdk.set_cmos_line_exposure_delay(self.lightsheet_exposed_lines, self.lightsheet_delay_lines)
+                self.camera.sdk.arm_camera()
 
-                cam_line_timing = {}
-                cam_line_timing = self.camera.sdk.get_cmos_line_timing()
-                parameter = cam_line_timing.get('parameter')
-                line_time = cam_line_timing.get('line time')
+                cam_cmos_line_timing = {}
+                cam_cmos_line_timing = self.camera.sdk.get_cmos_line_timing()
+                parameter = cam_cmos_line_timing.get('parameter')
+                self.line_time = cam_cmos_line_timing.get('line time')
 
-                cam_line_exposure_delay = {}
-                cam_line_exposure_delay = self.camera.sdk.get_cmos_line_exposure_delay()
-                exposed_lines = cam_line_exposure_delay.get('lines exposure')
-                delay_lines = cam_line_exposure_delay.get('lines delay')
+                cam_cmos_line_exposure_delay = {}
+                cam_cmos_line_exposure_delay = self.camera.sdk.get_cmos_line_exposure_delay()
+                exposed_lines = cam_cmos_line_exposure_delay.get('lines exposure')
+                delay_lines = cam_cmos_line_exposure_delay.get('lines delay')
 
                 if self.verbose:
-                    print("CMOS line timing is:", str(parameter))
-                    print("Line time:", str(line_time))
-                    print("Exposed lines:", str(exposed_lines))
-                    print("Delay lines:", str(delay_lines))
+                    print(" Camera armed.")
+                    print(" Lightsheet mode is:", str(parameter))
+                    print(" Line time:", str(self.line_time))
+                    print(" Exposed lines:", str(exposed_lines))
+                    print(" Delay lines:", str(delay_lines))
 
             elif self.shutter_mode == 'Rolling':
                 if self.verbose:
@@ -167,15 +181,17 @@ class Camera:
                 if self.camera.sdk.get_recording_state()['recording state'] == 'on':
                     self.camera.sdk.set_recording_state('off')
                 self.set_trigger_mode('external_exposure')
-                self.camera.sdk.set_cmos_line_timing('off', self.line_time * 1e-6)
-                cam_line_timing = {}
-                cam_line_timing = self.camera.sdk.get_cmos_line_timing()
-                parameter = cam_line_timing.get('parameter')
-                line_time = cam_line_timing.get('line time')
+                self.camera.sdk.set_cmos_line_timing('off', self.default_line_time)
+                self.camera.sdk.arm_camera()
+
+                cam_cmos_line_timing = {}
+                cam_cmos_line_timing = self.camera.sdk.get_cmos_line_timing()
+                parameter = cam_cmos_line_timing.get('parameter')
+                self.line_time = cam_cmos_line_timing.get('line time')
 
                 if self.verbose:
-                    print("CMOS line timing is:", str(parameter))
-                    print("Line time:", str(line_time))
+                    print(" Camera armed.")
+                    print(" Line time:", str(self.line_time))
 
             elif self.shutter_mode == 'Global':
                 if self.verbose:
@@ -183,19 +199,21 @@ class Camera:
                 if self.camera.sdk.get_recording_state()['recording state'] == 'on':
                     self.camera.sdk.set_recording_state('off')
                 self.set_trigger_mode('external_exposure')
-                self.camera.sdk.set_cmos_line_timing('off', self.line_time * 1e-6)
-                cam_line_timing = {}
-                cam_line_timing = self.camera.sdk.get_cmos_line_timing()
-                parameter = cam_line_timing.get('parameter')
-                line_time = cam_line_timing.get('line time')
+                self.camera.sdk.set_cmos_line_timing('off', self.default_line_time)
+                self.camera.sdk.arm_camera()
+
+                cam_cmos_line_timing = {}
+                cam_cmos_line_timing = self.camera.sdk.get_cmos_line_timing()
+                parameter = cam_cmos_line_timing.get('parameter')
+                self.line_time = cam_cmos_line_timing.get('line time')
+            
                 if self.verbose:
-                    print("CMOS line timing is:", str(parameter))
-                    print("Line time:", str(line_time))
+                    print(" Camera armed.")
+                    print(" Line time:", str(self.line_time))
 
             else:
                 raise Exception('Unknown shutter mode selected')
 
-            self.camera.sdk.arm_camera()
             sizes = {}
             sizes = self.camera.sdk.get_sizes()
             self.xsize = int(sizes.get('x'))
@@ -203,6 +221,7 @@ class Camera:
             self.bytes_per_image = self.xsize * self.ysize * 2 # 16 bit images (2 bytes per pixel)
             self.camera.sdk.set_image_parameters(self.xsize, self.ysize)
             self.is_armed = True
+         
         return None
 
     def disarm(self):
@@ -298,8 +317,8 @@ class Camera:
     def set_lightsheet_mode(self):
         '''Set lightsheet timing according to current instance settings'''
         if self.camera is not None:
-            self.camera.sdk.set_cmos_line_timing('on', self.line_time * 1e-6)
-            self.camera.sdk.set_cmos_line_exposure_delay(self.line_exposure, self.line_delay)
+            self.camera.sdk.set_cmos_line_timing('on', self.lightsheet_line_time)
+            self.camera.sdk.set_cmos_line_exposure_delay(self.lightsheet_exposed_lines, self.lightsheet_delay_lines)
 
             cam_line_timing = {}
             cam_line_timing = self.camera.sdk.get_cmos_line_timing()
