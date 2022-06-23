@@ -30,7 +30,6 @@ class Camera:
         self.verbose = verbose
 
         # Flags (bool)
-        self.is_armed = False
         self.is_recording = False
         self.new_data_ready = False
         self.recorder_timeout = False
@@ -50,8 +49,6 @@ class Camera:
         # Automatically open camera on instance creation
         self.open()
 
-
-    # config methods
 
     def cfg_load_ini(self):
         # read configuration from ini file
@@ -75,8 +72,6 @@ class Camera:
         self._cfg = cfg_write(self._cfg_filename, self._cfg_section, self._cfg)
 
 
-    # base methods
-
     def open(self):
         '''Open a camera'''
         if self.verbose:
@@ -95,7 +90,7 @@ class Camera:
                 self.ysize = int(sizes.get('y'))
                 self.bytes_per_image = self.xsize * self.ysize * 2 # 16 bit images (2 bytes per pixel)
                 self.camera.sdk.set_image_parameters(self.xsize, self.ysize)
-                self.is_armed = True
+
                 cam_cmos_line_timing = {}
                 cam_cmos_line_timing = self.camera.sdk.get_cmos_line_timing()
                 self.line_time = cam_cmos_line_timing.get('line time')
@@ -135,7 +130,6 @@ class Camera:
             self.ysize = int(sizes.get('y'))
             self.bytes_per_image = self.xsize * self.ysize * 2 # 16 bit images (2 bytes per pixel)
             self.camera.sdk.set_image_parameters(self.xsize, self.ysize)
-            self.is_armed = True
 
             cam_cmos_line_timing = {}
             cam_cmos_line_timing = self.camera.sdk.get_cmos_line_timing()
@@ -220,8 +214,6 @@ class Camera:
             self.ysize = int(sizes.get('y'))
             self.bytes_per_image = self.xsize * self.ysize * 2 # 16 bit images (2 bytes per pixel)
             self.camera.sdk.set_image_parameters(self.xsize, self.ysize)
-            self.is_armed = True
-         
         return None
 
     def disarm(self):
@@ -231,7 +223,6 @@ class Camera:
                 print("Disarming camera...")
             if self.camera.sdk.get_recording_state()['recording state'] == 'on':
                 self.camera.sdk.set_recording_state('off')
-            self.is_armed = False
             if self.verbose:
                 print(" Camera disarmed.")
         return None
