@@ -247,9 +247,7 @@ class SigGen:
         '''Compute Galvo + ETL scan ramps and Camera Exposure waveforms based on instance variables'''
 
         # Save current settings to waveform metadata
-        # Essentially self._cfg minus the terminals entries
         self.waveform_metadata = {}
-        self.waveform_metadata['Sample Rate']              = str( self.sample_rate                  )
         self.waveform_metadata['Galvo Activated']          = str( self.galvo_activated              )
         self.waveform_metadata['Galvo Inverted']           = str( self.galvo_inverted               )
         self.waveform_metadata['Galvo Left Amplitude']     = str( self.galvo_left_amplitude         )
@@ -266,23 +264,6 @@ class SigGen:
         # Number of period cycles over the complete waveform (equal to current etl_steps value, but only updated with waveform generation)
         self.waveform_cycles = self.etl_steps
 
-        # # FIXME
-        # # Camera Parameters
-        # self.camera_lightsheet_mode = 'line'
-
-        # if self.camera.shutter_mode == 'Lightsheet':
-        #     if self.camera_lightsheet_mode == 'line':
-        #         # First take: initial understanding of the PCO timing diagrams
-        #         #self.galvo_scan_time = self.camera_line_time * (self.camera_ysize + self.camera_exposed_lines)
-        #         # Assuming vertical scan amplitude exactly matching camera FOV, galvo line speed must match camera line speed
-        #         self.galvo_scan_time = self.camera.line_time * self.camera.ysize
-        #     elif self.camera_lightsheet_mode == 'scan':
-        #         # First take
-        #         #self.camera_line_time = self.galvo_scan_time / (self.camera_ysize + self.camera_exposed_lines)
-        #         # see above, same idea
-        #         self.camera_line_time = self.galvo_scan_time / self.camera.ysize
-
-
         if self.camera.shutter_mode == 'Lightsheet':
             # Assuming vertical scan amplitude exactly matching camera FOV, galvo line speed must match camera line speed
             # TODO Add correction for potential galvo oversan (will require voltage to optical displacement conversion)
@@ -291,101 +272,24 @@ class SigGen:
             camera_exposure_time = self.camera.line_time * self.camera.lightsheet_exposed_lines
             camera_delay_time = 3 * self.camera.line_time
             camera_delay_samples = int(np.ceil(camera_delay_time * self.sample_rate))
-
-            # galvo
-            galvo_activated = self.galvo_activated
-            galvo_pre_samples = int(np.ceil(self.galvo_pre_time * self.sample_rate))
-            galvo_scan_samples = int(np.ceil(self.galvo_scan_time * self.sample_rate))
-            galvo_reset_samples = int(np.ceil(self.galvo_reset_time * self.sample_rate))
-            galvo_post_samples = int(np.ceil(self.galvo_post_time * self.sample_rate))
-            galvo_period_samples = galvo_pre_samples + galvo_scan_samples + galvo_reset_samples + galvo_post_samples
-            galvo_shift = camera_delay_samples
-            galvo_inverted = self.galvo_inverted
-            galvo_repeat = self.waveform_cycles
-
-            # etl
-            etl_activated = self.etl_activated
-            etl_step_samples = galvo_period_samples
-            etl_steps = self.waveform_cycles
-            etl_shift = camera_delay_samples  - int(np.ceil(galvo_reset_samples/2)) - galvo_post_samples
-
-            # camera
-            camera_pre_samples = galvo_pre_samples
-            camera_active_samples = int(np.ceil(camera_exposure_time * self.sample_rate))
-            camera_post_samples = galvo_period_samples - camera_pre_samples - camera_active_samples 
-            camera_shift = 0
-            camera_inverted = False
-            camera_repeat = self.waveform_cycles
-
+        
         elif self.camera.shutter_mode == 'Rolling':
             # In Rolling mode, we adjust galvo_scan_time according to requested camera exposure time
             self.galvo_scan_time = self.camera.exposure_time + (self.camera.line_time * 0.5 * self.camera.ysize)
-            
+            #FIXME clean things up with galvo_scan_time
             camera_exposure_time = self.galvo_scan_time - (self.camera.line_time * 0.5 * self.camera.ysize)
             camera_delay_time = 3 * self.camera.line_time + (self.camera.line_time * 0.5 * self.camera.ysize)
             camera_delay_samples = int(np.ceil(camera_delay_time * self.sample_rate))
-
             camera_data_readout_time = (0.5 * self.camera.ysize + 1) * self.camera.line_time
             assert self.galvo_pre_time + self.galvo_reset_time + self.galvo_post_time >= camera_data_readout_time, "Time between galvo scan [reset_time + post_time + next pre-time] is not long enough for camera to complete data readout"
-
-            # galvo waveform generator inputs
-            galvo_activated = self.galvo_activated
-            galvo_pre_samples = int(np.ceil(self.galvo_pre_time * self.sample_rate))
-            galvo_scan_samples = int(np.ceil(self.galvo_scan_time * self.sample_rate))
-            galvo_reset_samples = int(np.ceil(self.galvo_reset_time * self.sample_rate))
-            galvo_post_samples = int(np.ceil(self.galvo_post_time * self.sample_rate))
-            galvo_period_samples = galvo_pre_samples + galvo_scan_samples + galvo_reset_samples + galvo_post_samples
-            galvo_shift = camera_delay_samples
-            galvo_repeat = self.waveform_cycles
-            galvo_inverted = self.galvo_inverted
-
-            # etl waveform generator inputs
-            etl_activated = self.etl_activated
-            etl_step_samples = galvo_period_samples
-            etl_steps = self.waveform_cycles
-            etl_shift = camera_delay_samples  - int(np.ceil(galvo_reset_samples/2)) - galvo_post_samples
-
-            # camera waveform generator inpurs
-            camera_pre_samples = galvo_pre_samples
-            camera_active_samples = int(np.ceil(camera_exposure_time * self.sample_rate))
-            camera_post_samples = galvo_period_samples - camera_pre_samples - camera_active_samples 
-            camera_shift = 0
-            camera_repeat = self.waveform_cycles
-            camera_inverted = False
-
+        
         elif self.camera.shutter_mode == 'Global':
             camera_exposure_time = self.galvo_scan_time
             camera_delay_time = (0.5 * self.camera.ysize + 1) * self.camera.line_time
             camera_delay_samples = int(np.ceil(camera_delay_time * self.sample_rate))
-
             camera_data_readout_time = (0.5 * self.camera.ysize + 1) * self.camera.line_time
             assert self.galvo_pre_time + self.galvo_reset_time + self.galvo_post_time >= camera_data_readout_time, "Time between galvo scan [reset_time + post_time + next pre-time] is not long enough for camera to complete data readout"
-
-            # galvo waveform generator inputs
-            galvo_activated = self.galvo_activated
-            galvo_pre_samples = int(np.ceil(self.galvo_pre_time * self.sample_rate))
-            galvo_scan_samples = int(np.ceil(self.galvo_scan_time * self.sample_rate))
-            galvo_reset_samples = int(np.ceil(self.galvo_reset_time * self.sample_rate))
-            galvo_post_samples = int(np.ceil(self.galvo_post_time * self.sample_rate))
-            galvo_period_samples = galvo_pre_samples + galvo_scan_samples + galvo_reset_samples + galvo_post_samples
-            galvo_shift = camera_delay_samples
-            galvo_repeat = self.waveform_cycles
-            galvo_inverted = self.galvo_inverted
-
-            # etl waveform generator inputs
-            etl_activated = self.etl_activated
-            etl_step_samples = galvo_period_samples
-            etl_steps = self.waveform_cycles
-            etl_shift = camera_delay_samples  - int(np.ceil(galvo_reset_samples/2)) - galvo_post_samples
-
-            # camera waveform generator inpurs
-            camera_pre_samples = galvo_pre_samples
-            camera_active_samples = int(np.ceil(camera_exposure_time * self.sample_rate))
-            camera_post_samples = galvo_period_samples - camera_pre_samples - camera_active_samples 
-            camera_shift = 0
-            camera_repeat = self.waveform_cycles
-            camera_inverted = False
-
+        
         else:
             raise Exception('camera mode not supported')
 
@@ -395,17 +299,30 @@ class SigGen:
         # Time required for an acquisition sequence
         self.total_time = self.total_samples / self.sample_rate
 
-        print('Camera Exposure Time:', camera_exposure_time)
+        # galvo waveform generator inputs
+        galvo_activated = self.galvo_activated
+        galvo_pre_samples = int(np.ceil(self.galvo_pre_time * self.sample_rate))
+        galvo_scan_samples = int(np.ceil(self.galvo_scan_time * self.sample_rate))
+        galvo_reset_samples = int(np.ceil(self.galvo_reset_time * self.sample_rate))
+        galvo_post_samples = int(np.ceil(self.galvo_post_time * self.sample_rate))
+        galvo_period_samples = galvo_pre_samples + galvo_scan_samples + galvo_reset_samples + galvo_post_samples
+        galvo_shift = camera_delay_samples
+        galvo_repeat = self.waveform_cycles
+        galvo_inverted = self.galvo_inverted
 
+        # etl waveform generator inputs
+        etl_activated = self.etl_activated
+        etl_step_samples = galvo_period_samples
+        etl_steps = self.waveform_cycles
+        etl_shift = camera_delay_samples  - int(np.ceil(galvo_reset_samples/2)) - galvo_post_samples
 
-
-
-
-
-
-
-
-
+        # camera waveform generator inputs
+        camera_pre_samples = galvo_pre_samples
+        camera_active_samples = int(np.ceil(camera_exposure_time * self.sample_rate))
+        camera_post_samples = galvo_period_samples - camera_pre_samples - camera_active_samples 
+        camera_shift = 0
+        camera_repeat = self.waveform_cycles
+        camera_inverted = False
 
         # Compute camera waveform
         self.waveform_camera = camera_squarewave2(  pre_samples = camera_pre_samples,
@@ -414,7 +331,7 @@ class SigGen:
                                                     shift = camera_shift,
                                                     repeat = camera_repeat,
                                                     inverted = camera_inverted)
-        # Compute galvo waveform
+        # Compute galvos waveforms
         self.waveform_galvo_left = galvo_ramp2(     activated = galvo_activated,
                                                     pre_samples = galvo_pre_samples,
                                                     scan_samples = galvo_scan_samples,
@@ -435,7 +352,7 @@ class SigGen:
                                                     amplitude = self.galvo_right_amplitude, 
                                                     offset = self.galvo_right_offset, 
                                                     inverted = galvo_inverted)
-        # Compute etl waveform
+        # Compute etls waveforms
         self.waveform_etl_left = etl_staircase2(    activated = etl_activated,
                                                     step_samples = etl_step_samples,
                                                     nbr_steps = etl_steps,

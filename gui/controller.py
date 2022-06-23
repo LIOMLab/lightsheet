@@ -1528,7 +1528,7 @@ class Controller_MainWindow(QMainWindow):
                         last_buffer_weight = 1 - column * weight_step
                         reconstructed_frame[:,frame_column] = buffer_weight*cropped_buffer[frame,:,column] + last_buffer_weight*cropped_buffer[(frame-1),:,last_buffer_column]
                     if frame == tile_count-1:  #For the last column step (may be different than the others...)
-                        last_column_step = int(self.siggen.camera_xsize - first_center_column)
+                        last_column_step = int(image_xsize - first_center_column)
                         reconstructed_frame[:,first_center_column:] = cropped_buffer[frame,:,(2*tile_width_overlap):(2*tile_width_overlap)+last_column_step]
                     else:
                         reconstructed_frame[:,first_center_column:last_center_column] = cropped_buffer[frame,:,(2*tile_width_overlap):tile_width]
