@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>Dialog</class>
- <widget class="QDialog" name="Dialog">
+ <class>Properties</class>
+ <widget class="QDialog" name="Properties">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -216,7 +216,7 @@
          <string>Recorder Mode only valid if Storage Mode is Recorder</string>
         </property>
         <property name="whatsThis">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; text-decoration: underline;&quot;&gt;Sequence&lt;/span&gt;&lt;/p&gt;&lt;p&gt;Recording is stopped, when the last buffer in the segment is reached. No images are overwritten. Recording can be stopped by software. Recording is stopped, when the last buffer in the segment is reached.&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; text-decoration: underline;&quot;&gt;Ring buffer&lt;/span&gt;&lt;/p&gt;&lt;p&gt;Camera records continuously into ring buffer. The oldest images are overwritten, if a buffer overflows occures due to long recording times. Recording must be stopped by software or with an stop event. The oldest image is overwritten, when the segment is full.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; text-decoration: underline;&quot;&gt;Sequence&lt;/span&gt;&lt;/p&gt;&lt;p&gt;Recording is stopped, when the last buffer in the segment is reached. No images are overwritten. Recording can be stopped by software.&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; text-decoration: underline;&quot;&gt;Ring buffer&lt;/span&gt;&lt;/p&gt;&lt;p&gt;Camera records continuously into ring buffer. The oldest images are overwritten, if a buffer overflows occures due to long recording times. Recording must be stopped by software or with an stop event. The oldest image is overwritten, when the segment is full.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
         <property name="text">
          <string>None</string>
