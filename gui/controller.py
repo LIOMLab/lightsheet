@@ -1169,15 +1169,16 @@ class Controller_MainWindow(QMainWindow):
             self.ui.label_currentFileDirectory.setText('None Specified')
     
     def updateUi_select_dataset(self):
-        '''Opens one or many HDF5 datasets and displays its attributes and data as an image'''
-        
+        """
+        Opens one or many HDF5 datasets and displays its attributes and data as an image
+        """
         if (self.open_directory != '') and (self.ui.listWidget_fileDatasets.count() != 0):
             for item in range(len(self.ui.listWidget_fileDatasets.selectedItems())):
                 self.dataset_name = self.ui.listWidget_fileDatasets.selectedItems()[item].text()
                 with h5py.File(self.open_directory, "r") as f:
                     dataset = f[self.dataset_name]
                     
-                    '''Display attributes of the first selected dataset'''
+                    # Display attributes of the first selected dataset
                     if item == 0:
                         self.ui.label_currentDataset.setText(self.dataset_name)
                         attribute_names = list(dataset.attrs.keys())
@@ -1192,7 +1193,7 @@ class Controller_MainWindow(QMainWindow):
                         self.ui.tableWidget_fileAttributes.resizeColumnsToContents()
                         self.ui.tableWidget_fileAttributes.setEditTriggers(QAbstractItemView.NoEditTriggers) #No editing possible
                     
-                    '''Display image'''
+                    # Display image
                     data = dataset[()]
                     plt.figure(self.open_directory + ' (' + self.dataset_name + ')')
                     plt.imshow(data,cmap = 'gray')

@@ -15,8 +15,7 @@ from nidaqmx.constants import AcquisitionType, LineGrouping, Edge
 from src.camera import Camera
 
 from src.config import cfg_read, cfg_write, cfg_str2bool
-from src.waveforms import camera_squarewave, galvo_ramp, etl_staircase
-from src.waveforms import camera_squarewave2, galvo_ramp2, etl_staircase2
+from src.waveforms import squarewave, sawtooth, staircase
 
 
 class SigGen:
@@ -291,13 +290,7 @@ class SigGen:
             assert self.galvo_pre_time + self.galvo_reset_time + self.galvo_post_time >= camera_data_readout_time, "Time between galvo scan [reset_time + post_time + next pre-time] is not long enough for camera to complete data readout"
         
         else:
-            raise Exception('camera mode not supported')
-
-        # Number of samples for acquistion sequence (period * number of etl focus positions)
-        self.total_samples = galvo_period_samples * self.waveform_cycles
-        
-        # Time required for an acquisition sequence
-        self.total_time = self.total_samples / self.sample_rate
+            raise Exception('camera shutter mode not supported')
 
         # galvo waveform generator inputs
         galvo_activated = self.galvo_activated
@@ -324,55 +317,67 @@ class SigGen:
         camera_repeat = self.waveform_cycles
         camera_inverted = False
 
+        # Number of samples for acquistion sequence (period * number of etl focus positions)
+        self.total_samples = galvo_period_samples * self.waveform_cycles
+        
+        # Time required for an acquisition sequence
+        self.total_time = self.total_samples / self.sample_rate
+
         # Compute camera waveform
-        self.waveform_camera = camera_squarewave2(  pre_samples = camera_pre_samples,
-                                                    active_samples = camera_active_samples,
-                                                    post_samples = camera_post_samples,
-                                                    shift = camera_shift,
-                                                    repeat = camera_repeat,
-                                                    inverted = camera_inverted)
+        self.waveform_camera = squarewave(      pre_samples = camera_pre_samples,
+                                                active_samples = camera_active_samples,
+                                                post_samples = camera_post_samples,
+                                                shift = camera_shift,
+                                                repeat = camera_repeat,
+                                                inverted = camera_inverted)
         # Compute galvos waveforms
-        self.waveform_galvo_left = galvo_ramp2(     activated = galvo_activated,
-                                                    pre_samples = galvo_pre_samples,
-                                                    scan_samples = galvo_scan_samples,
-                                                    reset_samples = galvo_reset_samples,
-                                                    post_samples = galvo_post_samples,
-                                                    shift = galvo_shift,
-                                                    repeat = galvo_repeat,
-                                                    amplitude = self.galvo_left_amplitude, 
-                                                    offset = self.galvo_left_offset, 
-                                                    inverted = galvo_inverted)
-        self.waveform_galvo_right = galvo_ramp2(    activated = galvo_activated,
-                                                    pre_samples = galvo_pre_samples,
-                                                    scan_samples = galvo_scan_samples,
-                                                    reset_samples = galvo_reset_samples,
-                                                    post_samples = galvo_post_samples,
-                                                    shift = galvo_shift,
-                                                    repeat = galvo_repeat,
-                                                    amplitude = self.galvo_right_amplitude, 
-                                                    offset = self.galvo_right_offset, 
-                                                    inverted = galvo_inverted)
+        self.waveform_galvo_left = sawtooth(    activated = galvo_activated,
+                                                pre_samples = galvo_pre_samples,
+                                                trace_samples = galvo_scan_samples,
+                                                retrace_samples = galvo_reset_samples,
+                                                post_samples = galvo_post_samples,
+                                                shift = galvo_shift,
+                                                repeat = galvo_repeat,
+                                                amplitude = self.galvo_left_amplitude, 
+                                                offset = self.galvo_left_offset, 
+                                                inverted = galvo_inverted)
+        
+        self.waveform_galvo_right = sawtooth(   activated = galvo_activated,
+                                                pre_samples = galvo_pre_samples,
+                                                trace_samples = galvo_scan_samples,
+                                                retrace_samples = galvo_reset_samples,
+                                                post_samples = galvo_post_samples,
+                                                shift = galvo_shift,
+                                                repeat = galvo_repeat,
+                                                amplitude = self.galvo_right_amplitude, 
+                                                offset = self.galvo_right_offset, 
+                                                inverted = galvo_inverted)
         # Compute etls waveforms
-        self.waveform_etl_left = etl_staircase2(    activated = etl_activated,
-                                                    step_samples = etl_step_samples,
-                                                    nbr_steps = etl_steps,
-                                                    shift = etl_shift,
-                                                    amplitude = self.etl_left_amplitude, 
-                                                    offset = self.etl_left_offset, 
-                                                    direction = 'down')
-        self.waveform_etl_right = etl_staircase2(   activated = etl_activated,
-                                                    step_samples = etl_step_samples,
-                                                    nbr_steps = etl_steps,
-                                                    shift = etl_shift,
-                                                    amplitude = self.etl_right_amplitude, 
-                                                    offset = self.etl_right_offset, 
-                                                    direction = 'up')
+        self.waveform_etl_left = staircase(     activated = etl_activated,
+                                                step_samples = etl_step_samples,
+                                                nbr_steps = etl_steps,
+                                                shift = etl_shift,
+                                                amplitude = self.etl_left_amplitude, 
+                                                offset = self.etl_left_offset, 
+                                                direction = 'down')
+
+        self.waveform_etl_right = staircase(    activated = etl_activated,
+                                                step_samples = etl_step_samples,
+                                                nbr_steps = etl_steps,
+                                                shift = etl_shift,
+                                                amplitude = self.etl_right_amplitude, 
+                                                offset = self.etl_right_offset, 
+                                                direction = 'up')
 
 
 if __name__ == '__main__':
     
     from matplotlib import pyplot as plt
     test_camera = Camera()
+    if test_camera.camera is None:
+        test_camera.xsize = 2048
+        test_camera.ysize = 2048
+        test_camera.line_time = 16.40 * 1e-6
     test_scanner = SigGen(test_camera)
     test_scanner.compute_scan_waveforms()
     print(test_scanner.waveform_metadata)
