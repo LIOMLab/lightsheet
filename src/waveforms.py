@@ -58,9 +58,9 @@ def sawtooth(activated:bool, pre_samples:int, trace_samples:int, retrace_samples
 
 
 def staircase(activated:bool, step_samples:int, nbr_steps:int, shift:int, amplitude:float, offset:float, direction:str='up', filtered:bool=True):
-    """ 
+    """
     Staircase function generator for ETL
-    
+
     samples_total_scan  Number of samples for the complete acquisition sequence
     steps               Number of step (focus regions)
     amplitude           Height of the staircase (above floor level) -> Signal maximum amplitude = floor + rise
@@ -104,5 +104,3 @@ def staircase(activated:bool, step_samples:int, nbr_steps:int, shift:int, amplit
     else:
         output_vector = np.ones((total_samples)) * offset
     return output_vector
-
-
