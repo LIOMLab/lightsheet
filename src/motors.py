@@ -161,7 +161,7 @@ class ZaberMotor:
         self.device_number = device_number
         self.ask_id()
 
-    def __motorIO__(self, cmd_no, cmd_param):
+    def _motorIO(self, cmd_no, cmd_param):
         # Default return
         reply_data = 0
 
@@ -235,7 +235,7 @@ class ZaberMotor:
 
         cmd_no = 50
         cmd_param = 0
-        reply_data = self.__motorIO__(cmd_no, cmd_param)
+        reply_data = self._motorIO(cmd_no, cmd_param)
 
         if not self.error:
             if reply_data == 6210:
@@ -312,7 +312,7 @@ class ZaberMotor:
         if self.id != 0:
             cmd_no = 60
             cmd_param = 0
-            reply_data = self.__motorIO__(cmd_no, cmd_param)
+            reply_data = self._motorIO(cmd_no, cmd_param)
             position = self.microsteps_to_position(reply_data, units)
         else:
             position = 0
@@ -323,7 +323,7 @@ class ZaberMotor:
         if self.id != 0:
             cmd_no = 1
             cmd_param = 0
-            self.__motorIO__(cmd_no, cmd_param)
+            self._motorIO(cmd_no, cmd_param)
 
     def move_absolute_position(self, absolute_position, units):
         '''Moves the device to a specified absolute position.
@@ -336,7 +336,7 @@ class ZaberMotor:
         if self.id != 0:
             cmd_no = 20
             cmd_param = self.position_to_microsteps(absolute_position, units)
-            self.__motorIO__(cmd_no, cmd_param)
+            self._motorIO(cmd_no, cmd_param)
 
 
     def move_relative_position(self, relative_position, units):
@@ -350,7 +350,7 @@ class ZaberMotor:
         if self.id != 0:
             cmd_no = 21
             cmd_param = self.position_to_microsteps(relative_position, units)
-            self.__motorIO__(cmd_no, cmd_param)
+            self._motorIO(cmd_no, cmd_param)
 
 
     def move_maximum_position(self):
@@ -358,7 +358,7 @@ class ZaberMotor:
         if self.id != 0:
             cmd_no = 20
             cmd_param = self.microsteps_max
-            self.__motorIO__(cmd_no, cmd_param)
+            self._motorIO(cmd_no, cmd_param)
 
 
     def microsteps_to_position(self, microsteps, units:str='mm'):

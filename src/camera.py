@@ -64,8 +64,8 @@ class Camera:
         # pack current instance variables into configuration dictionary
         self._cfg = {}
         self._cfg['Shutter Mode']               = str( self.shutter_mode                        )
-        self._cfg['Exposure Time']              = str( self.exposure_time               * 1e3   )       
-        self._cfg['Lightsheet Line Time']       = str( self.lightsheet_line_time        * 1e6   ) 
+        self._cfg['Exposure Time']              = str( self.exposure_time               * 1e3   )   
+        self._cfg['Lightsheet Line Time']       = str( self.lightsheet_line_time        * 1e6   )
         self._cfg['Lightsheet Exposed Lines']   = str( self.lightsheet_exposed_lines            )
         self._cfg['Lightsheet Delay Lines']     = str( self.lightsheet_delay_lines              )
         # write configuration to ini file
@@ -200,7 +200,7 @@ class Camera:
                 cam_cmos_line_timing = self.camera.sdk.get_cmos_line_timing()
                 parameter = cam_cmos_line_timing.get('parameter')
                 self.line_time = cam_cmos_line_timing.get('line time')
-            
+
                 if self.verbose:
                     print(" Camera armed.")
                     print(" Line time:", str(self.line_time))
@@ -608,7 +608,7 @@ class Camera:
             if self.verbose:
                 print("Camera not open - Cannot retrieve properties")
         return cam_properties
-  
+
 
     def grab_image(self, exposure_time_ms:int=100):
         """
@@ -626,28 +626,27 @@ class Camera:
                 if self.verbose:
                     print(" Recording already in progress. Aborted.")
             else:
-                self.disarm()                        # In case camera was previously armed
+                self.disarm()                               # In case camera was previously armed
                 self.set_trigger_mode('auto_trigger')       # Camera is internally triggered
-                self.arm()                           # Required to apply tigger settings
+                self.arm()                                  # Required to apply tigger settings
                 self.set_exposure_time(exposure_time_ms)    # Exposure time can be changed after arming the camera
                 self.start_recorder(1)                      # Start a recording session to acquire one frame
                 self.monitor_recorder(1)                    # Monitors the recording session and returns once one image is acquired (or after default timeout of 5s)
                 self.stop_recorder()                        # Stop the recording session before image is copied to memory
                 img_buffer = self.copy_recorder_images(1)   # Returns a list of images of length 'number_of_images' (in this case, one)
-
-                # Check if we had a timeout before deleting the recorder
-                if self.recorder_timeout:
+                
+                if self.recorder_timeout:                   # Check if we had a timeout before deleting the recorder
                     if self.verbose:
-                        print(" Timeout while acquiting image.")
+                        print(" Timeout while acquiring image.")
                 else:
                     if self.verbose:
                         print(" Image successfully obtained.")
 
-                self.delete_recorder()                          # Recording session can now be deleted
+                self.delete_recorder()                      # Recording session can now be deleted
         else:
             if self.verbose:
                 print(" Camera not open. Aborted")
-        return img_buffer[0]                                    # Returning first (and in this case only) image from the buffer
+        return img_buffer[0]                                # Returning first (and in this case only) image from the buffer
 
 
 if __name__ == '__main__':
