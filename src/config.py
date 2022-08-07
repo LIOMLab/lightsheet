@@ -1,53 +1,66 @@
-'''Default parameters'''
-parameters = dict()
-#parameters["sample_name"]='No Sample Name'
-#parameters["samplerate"]=40000          # In samples/seconds
-#parameters["sweeptime"]=0.4             # In seconds
-#parameters["galvo_l_frequency"]=100     # In Hertz
-#parameters["galvo_l_amplitude"]=6.5 #2       # In Volts
-#parameters["galvo_l_offset"]=-3         # In Volts
-#parameters["galvo_r_frequency"]=100     # In Hertz
-#parameters["galvo_r_amplitude"]=6.5 #2       # In Volts
-#parameters["galvo_r_offset"]=-3         # In Volts
-#parameters["etl_l_amplitude"]=2         # In Volts
-#parameters["etl_l_offset"]=0            # In Volts
-#parameters["etl_r_amplitude"]=2         # In Volts
-#parameters["etl_r_offset"]=0            # In Volts
-#parameters["laser_l_voltage"]=0.905#1.3      # In Volts
-#parameters["laser_r_voltage"]=0.935     # In Volts
-#parameters["columns"] = 2560            # In pixels
-#parameters["rows"] = 2160               # In pixels 
-#parameters["etl_step"] = 100#50            # In pixels
-#parameters["camera_delay"] = 10         # In %
-#parameters["min_t_delay"] = 0.0354404   # In seconds
-#parameters["t_start_exp"] = 0.017712    # In seconds
+'''
+Created on April 1st, 2022
+'''
+
+import configparser
+
+def cfg_read(cfg_filename:str, cfg_section:str, cfg_dictionary:dict):
+    """
+    Reads a specific section of a configuration file and returns an updated config dictionary
+    Must provide a base dictionnary of values to update
+    Will ignore extraneous keys found in the configuration file
+    """
+    tmp_dictionary = {}
+    cfg = configparser.ConfigParser()
+    cfg.optionxform = str
+    cfg.read(cfg_filename)
+    if cfg.has_section(cfg_section):
+        for key, value in cfg[cfg_section].items():
+            tmp_dictionary[key] = value
+    for key in cfg_dictionary:
+        if key in tmp_dictionary:
+            cfg_dictionary[key] = tmp_dictionary[key]
+    return cfg_dictionary
+
+def cfg_write(cfg_filename:str, cfg_section:str, cfg_dictionary:dict):
+    """
+    Write config dictionary to a specified section of a configuration file
+    Will write or update keys from the dictionnary without erasing other keys found in the same section
+    """
+    cfg = configparser.ConfigParser()
+    cfg.optionxform = str
+    cfg.read(cfg_filename)
+    if not cfg.has_section(cfg_section):
+        cfg.add_section(cfg_section)
+    for key in cfg_dictionary:
+        cfg.set(cfg_section, str(key), str(cfg_dictionary[key]))
+    with open(cfg_filename, 'w', encoding='utf-8') as output_file:
+        cfg.write(output_file)
+    return cfg_dictionary
+
+def cfg_str2bool(v:str):
+    """
+    Convert a string to bool by checking against a 'True' list of words
+    [ bool(str) always returns True except for the empty string ]
+    """
+    return v.lower() in ('true', 't', 'yes', '1')
 
 
-with open(r"C:\git-projects\lightsheet\src\configuration.txt") as file:
-    parameters["etl_l_amplitude"] = float(file.readline())
-    parameters["etl_r_amplitude"] = float(file.readline())
-    parameters["etl_l_offset"] = float(file.readline())
-    parameters["etl_r_offset"] = float(file.readline())
-    parameters["galvo_l_amplitude"] = float(file.readline())
-    parameters["galvo_r_amplitude"] = float(file.readline())
-    parameters["galvo_l_offset"] = float(file.readline())
-    parameters["galvo_r_offset"] = float(file.readline())
-    parameters["galvo_l_frequency"] = float(file.readline())
-    parameters["galvo_r_frequency"] = float(file.readline())
-    parameters["samplerate"] = float(file.readline())
-    
-with open(r"C:\git-projects\lightsheet\src\configuration.txt","w") as file:
-    file.write(str(parameters["etl_l_amplitude"])+'\n'+
-               str(parameters["etl_r_amplitude"])+'\n'+
-               str(parameters["etl_l_offset"])+'\n'+
-               str(parameters["etl_r_offset"])+'\n'+
-               str(parameters["galvo_l_amplitude"])+'\n'+
-               str(parameters["galvo_r_amplitude"])+'\n'+
-               str(parameters["galvo_l_offset"])+'\n'+
-               str(parameters["galvo_r_offset"])+'\n'+
-               str(parameters["galvo_l_frequency"])+'\n'+
-               str(parameters["galvo_r_frequency"])+'\n'+
-               str(parameters["samplerate"])
-               )
+# -------------------------------------------------------------------------------------------------
+if __name__ == "__main__":
+    cfg_in = {}
+    cfg_in['AO Terminals'] = '/Dev1/ao0:3'
+    cfg_in['Sample Rate'] = '10000'
+    cfg_in['Galvo Left Amplitude'] = '2'
+    cfg_in['Galvo Right Amplitude'] = '2'
+    cfg_in['Galvo Left Offset'] = '0.6'
+    cfg_in['Galvo Right Offset'] = '0.6'
+    cfg_in['ETL Left Amplitude'] = '2.0'
+    cfg_in['ETL Right Amplitude'] = '2.0'
+    cfg_in['ETL Left Offset'] = '0'
+    cfg_in['ETL Right Offset'] = '0'
+    cfg_in['ETL Steps'] = '8'
 
-print(parameters)
+    cfg_out = cfg_read('config.ini', 'HwDAQ', cfg_in)
+    cfg_write('test.ini', 'HwDAQ', cfg_out)
+    print(cfg_out)
