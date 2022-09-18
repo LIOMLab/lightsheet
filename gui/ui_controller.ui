@@ -130,7 +130,7 @@
            <enum>QTabWidget::Rounded</enum>
           </property>
           <property name="currentIndex">
-           <number>5</number>
+           <number>0</number>
           </property>
           <widget class="QWidget" name="tabMotion">
            <attribute name="title">
@@ -1215,289 +1215,6 @@
              <layout class="QVBoxLayout" name="verticalLayout_37">
               <item>
                <layout class="QGridLayout" name="gridLayout_4">
-                <item row="0" column="1">
-                 <widget class="QGroupBox" name="groupBox_11">
-                  <property name="title">
-                   <string>Galvanometers Settings</string>
-                  </property>
-                  <layout class="QVBoxLayout" name="verticalLayout_39">
-                   <item>
-                    <layout class="QHBoxLayout" name="horizontalLayout_67">
-                     <item>
-                      <layout class="QVBoxLayout" name="verticalLayout_40">
-                       <item>
-                        <widget class="QLabel" name="label_69">
-                         <property name="text">
-                          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Left Galvo&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-                         </property>
-                        </widget>
-                       </item>
-                       <item>
-                        <widget class="Line" name="line_8">
-                         <property name="sizePolicy">
-                          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-                           <horstretch>0</horstretch>
-                           <verstretch>0</verstretch>
-                          </sizepolicy>
-                         </property>
-                         <property name="orientation">
-                          <enum>Qt::Horizontal</enum>
-                         </property>
-                        </widget>
-                       </item>
-                       <item>
-                        <layout class="QFormLayout" name="formLayout_10">
-                         <item row="0" column="0">
-                          <widget class="QLabel" name="label_61">
-                           <property name="sizePolicy">
-                            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-                             <horstretch>0</horstretch>
-                             <verstretch>0</verstretch>
-                            </sizepolicy>
-                           </property>
-                           <property name="text">
-                            <string>Amplitude:</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="0" column="1">
-                          <widget class="QDoubleSpinBox" name="doubleSpinBox_galvoLeftAmplitude">
-                           <property name="sizePolicy">
-                            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                             <horstretch>0</horstretch>
-                             <verstretch>0</verstretch>
-                            </sizepolicy>
-                           </property>
-                           <property name="suffix">
-                            <string> V</string>
-                           </property>
-                           <property name="maximum">
-                            <double>10.000000000000000</double>
-                           </property>
-                           <property name="singleStep">
-                            <double>0.100000000000000</double>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="1" column="0">
-                          <widget class="QLabel" name="label_62">
-                           <property name="sizePolicy">
-                            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-                             <horstretch>0</horstretch>
-                             <verstretch>0</verstretch>
-                            </sizepolicy>
-                           </property>
-                           <property name="text">
-                            <string>Offset:</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="1" column="1">
-                          <widget class="QDoubleSpinBox" name="doubleSpinBox_galvoLeftOffset">
-                           <property name="sizePolicy">
-                            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                             <horstretch>0</horstretch>
-                             <verstretch>0</verstretch>
-                            </sizepolicy>
-                           </property>
-                           <property name="suffix">
-                            <string> V</string>
-                           </property>
-                           <property name="minimum">
-                            <double>-10.000000000000000</double>
-                           </property>
-                           <property name="maximum">
-                            <double>10.000000000000000</double>
-                           </property>
-                           <property name="singleStep">
-                            <double>0.100000000000000</double>
-                           </property>
-                          </widget>
-                         </item>
-                        </layout>
-                       </item>
-                      </layout>
-                     </item>
-                     <item>
-                      <widget class="Line" name="line_9">
-                       <property name="minimumSize">
-                        <size>
-                         <width>3</width>
-                         <height>0</height>
-                        </size>
-                       </property>
-                       <property name="maximumSize">
-                        <size>
-                         <width>3</width>
-                         <height>16777215</height>
-                        </size>
-                       </property>
-                       <property name="orientation">
-                        <enum>Qt::Vertical</enum>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
-                      <layout class="QVBoxLayout" name="verticalLayout_41">
-                       <item>
-                        <widget class="QLabel" name="label_70">
-                         <property name="text">
-                          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Right Galvo&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-                         </property>
-                        </widget>
-                       </item>
-                       <item>
-                        <widget class="Line" name="line_10">
-                         <property name="sizePolicy">
-                          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-                           <horstretch>0</horstretch>
-                           <verstretch>0</verstretch>
-                          </sizepolicy>
-                         </property>
-                         <property name="orientation">
-                          <enum>Qt::Horizontal</enum>
-                         </property>
-                        </widget>
-                       </item>
-                       <item>
-                        <layout class="QFormLayout" name="formLayout_11">
-                         <item row="0" column="0">
-                          <widget class="QLabel" name="label_65">
-                           <property name="sizePolicy">
-                            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-                             <horstretch>0</horstretch>
-                             <verstretch>0</verstretch>
-                            </sizepolicy>
-                           </property>
-                           <property name="text">
-                            <string>Amplitude:</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="0" column="1">
-                          <widget class="QDoubleSpinBox" name="doubleSpinBox_galvoRightAmplitude">
-                           <property name="sizePolicy">
-                            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                             <horstretch>0</horstretch>
-                             <verstretch>0</verstretch>
-                            </sizepolicy>
-                           </property>
-                           <property name="suffix">
-                            <string> V</string>
-                           </property>
-                           <property name="maximum">
-                            <double>10.000000000000000</double>
-                           </property>
-                           <property name="singleStep">
-                            <double>0.100000000000000</double>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="1" column="0">
-                          <widget class="QLabel" name="label_66">
-                           <property name="sizePolicy">
-                            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-                             <horstretch>0</horstretch>
-                             <verstretch>0</verstretch>
-                            </sizepolicy>
-                           </property>
-                           <property name="text">
-                            <string>Offset:</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="1" column="1">
-                          <widget class="QDoubleSpinBox" name="doubleSpinBox_galvoRightOffset">
-                           <property name="sizePolicy">
-                            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                             <horstretch>0</horstretch>
-                             <verstretch>0</verstretch>
-                            </sizepolicy>
-                           </property>
-                           <property name="suffix">
-                            <string> V</string>
-                           </property>
-                           <property name="minimum">
-                            <double>-10.000000000000000</double>
-                           </property>
-                           <property name="maximum">
-                            <double>10.000000000000000</double>
-                           </property>
-                           <property name="singleStep">
-                            <double>0.100000000000000</double>
-                           </property>
-                          </widget>
-                         </item>
-                        </layout>
-                       </item>
-                      </layout>
-                     </item>
-                    </layout>
-                   </item>
-                   <item>
-                    <widget class="QCheckBox" name="checkBox_galvoSync">
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="minimumSize">
-                      <size>
-                       <width>0</width>
-                       <height>20</height>
-                      </size>
-                     </property>
-                     <property name="maximumSize">
-                      <size>
-                       <width>16777215</width>
-                       <height>20</height>
-                      </size>
-                     </property>
-                     <property name="layoutDirection">
-                      <enum>Qt::LeftToRight</enum>
-                     </property>
-                     <property name="text">
-                      <string>Sync Left/Right</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <layout class="QHBoxLayout" name="horizontalLayout_4">
-                     <item>
-                      <widget class="QCheckBox" name="checkBox_galvoActivate">
-                       <property name="sizePolicy">
-                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-                         <horstretch>0</horstretch>
-                         <verstretch>0</verstretch>
-                        </sizepolicy>
-                       </property>
-                       <property name="text">
-                        <string>Activate Galvanometers</string>
-                       </property>
-                       <property name="checked">
-                        <bool>true</bool>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
-                      <widget class="QCheckBox" name="checkBox_galvoInvert">
-                       <property name="sizePolicy">
-                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-                         <horstretch>0</horstretch>
-                         <verstretch>0</verstretch>
-                        </sizepolicy>
-                       </property>
-                       <property name="text">
-                        <string>Invert scan</string>
-                       </property>
-                      </widget>
-                     </item>
-                    </layout>
-                   </item>
-                  </layout>
-                 </widget>
-                </item>
                 <item row="0" column="0">
                  <widget class="QGroupBox" name="groupBox_13">
                   <property name="title">
@@ -1812,47 +1529,28 @@
                 <item row="1" column="1">
                  <widget class="QGroupBox" name="groupBox_12">
                   <property name="title">
-                   <string>General Acquisition Settings</string>
+                   <string>Camera Settings</string>
                   </property>
                   <layout class="QFormLayout" name="formLayout">
-                   <item row="0" column="0">
-                    <widget class="QLabel" name="label_44">
-                     <property name="text">
-                      <string>Sample Rate:</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item row="0" column="1">
-                    <widget class="QDoubleSpinBox" name="doubleSpinBox_acqSampleRate">
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="suffix">
-                      <string> samples/s</string>
-                     </property>
-                     <property name="decimals">
-                      <number>0</number>
-                     </property>
-                     <property name="minimum">
-                      <double>10000.000000000000000</double>
-                     </property>
-                     <property name="maximum">
-                      <double>1000000.000000000000000</double>
-                     </property>
-                    </widget>
-                   </item>
                    <item row="1" column="0">
-                    <widget class="QLabel" name="label_6">
+                    <widget class="QLabel" name="label_9">
+                     <property name="text">
+                      <string>Shutter Mode:</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="1" column="1">
+                    <widget class="QComboBox" name="comboBox_cameraShutterMode"/>
+                   </item>
+                   <item row="2" column="0">
+                    <widget class="QLabel" name="label_doubleSpinBox_cameraExposureTime">
                      <property name="text">
                       <string>Exposure Time:</string>
                      </property>
                     </widget>
                    </item>
-                   <item row="1" column="1">
-                    <widget class="QDoubleSpinBox" name="doubleSpinBox_acqExposureTime">
+                   <item row="2" column="1">
+                    <widget class="QDoubleSpinBox" name="doubleSpinBox_cameraExposureTime">
                      <property name="prefix">
                       <string/>
                      </property>
@@ -1873,6 +1571,66 @@
                      </property>
                      <property name="value">
                       <double>25.000000000000000</double>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="3" column="0">
+                    <widget class="QLabel" name="label_doubleSpinBox_cameraLineTime">
+                     <property name="text">
+                      <string>Line Time:</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="3" column="1">
+                    <widget class="QDoubleSpinBox" name="doubleSpinBox_cameraLineTime">
+                     <property name="suffix">
+                      <string> μs</string>
+                     </property>
+                     <property name="decimals">
+                      <number>3</number>
+                     </property>
+                     <property name="minimum">
+                      <double>12.175000000000001</double>
+                     </property>
+                     <property name="maximum">
+                      <double>200.000000000000000</double>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="4" column="0">
+                    <widget class="QLabel" name="label_doubleSpinBox_cameraExposedLines">
+                     <property name="text">
+                      <string>Exposed Lines:</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="4" column="1">
+                    <widget class="QDoubleSpinBox" name="doubleSpinBox_cameraExposedLines">
+                     <property name="decimals">
+                      <number>0</number>
+                     </property>
+                     <property name="minimum">
+                      <double>1.000000000000000</double>
+                     </property>
+                     <property name="maximum">
+                      <double>1024.000000000000000</double>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="5" column="0">
+                    <widget class="QLabel" name="label_doubleSpinBox_cameraDelayLines">
+                     <property name="text">
+                      <string>Delay Lines:</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="5" column="1">
+                    <widget class="QDoubleSpinBox" name="doubleSpinBox_cameraDelayLines">
+                     <property name="decimals">
+                      <number>0</number>
+                     </property>
+                     <property name="maximum">
+                      <double>1024.000000000000000</double>
                      </property>
                     </widget>
                    </item>
@@ -1959,6 +1717,19 @@
                        </property>
                       </widget>
                      </item>
+                     <item>
+                      <spacer name="verticalSpacer_8">
+                       <property name="orientation">
+                        <enum>Qt::Vertical</enum>
+                       </property>
+                       <property name="sizeHint" stdset="0">
+                        <size>
+                         <width>20</width>
+                         <height>40</height>
+                        </size>
+                       </property>
+                      </spacer>
+                     </item>
                     </layout>
                    </item>
                    <item>
@@ -2033,6 +1804,302 @@
                       <widget class="QCheckBox" name="checkBox_laserTwoAutomatic">
                        <property name="text">
                         <string>Auto On/Off</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <spacer name="verticalSpacer_15">
+                       <property name="orientation">
+                        <enum>Qt::Vertical</enum>
+                       </property>
+                       <property name="sizeHint" stdset="0">
+                        <size>
+                         <width>20</width>
+                         <height>40</height>
+                        </size>
+                       </property>
+                      </spacer>
+                     </item>
+                    </layout>
+                   </item>
+                  </layout>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <widget class="QGroupBox" name="groupBox_11">
+                  <property name="title">
+                   <string>Galvanometers Settings</string>
+                  </property>
+                  <layout class="QVBoxLayout" name="verticalLayout_39">
+                   <item>
+                    <layout class="QHBoxLayout" name="horizontalLayout_67">
+                     <item>
+                      <layout class="QVBoxLayout" name="verticalLayout_40">
+                       <item>
+                        <widget class="QLabel" name="label_69">
+                         <property name="text">
+                          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Left Galvo&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item>
+                        <widget class="Line" name="line_8">
+                         <property name="sizePolicy">
+                          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                           <horstretch>0</horstretch>
+                           <verstretch>0</verstretch>
+                          </sizepolicy>
+                         </property>
+                         <property name="orientation">
+                          <enum>Qt::Horizontal</enum>
+                         </property>
+                        </widget>
+                       </item>
+                       <item>
+                        <layout class="QFormLayout" name="formLayout_10">
+                         <item row="0" column="0">
+                          <widget class="QLabel" name="label_61">
+                           <property name="sizePolicy">
+                            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                             <horstretch>0</horstretch>
+                             <verstretch>0</verstretch>
+                            </sizepolicy>
+                           </property>
+                           <property name="text">
+                            <string>Amplitude:</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="0" column="1">
+                          <widget class="QDoubleSpinBox" name="doubleSpinBox_galvoLeftAmplitude">
+                           <property name="sizePolicy">
+                            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                             <horstretch>0</horstretch>
+                             <verstretch>0</verstretch>
+                            </sizepolicy>
+                           </property>
+                           <property name="suffix">
+                            <string> V</string>
+                           </property>
+                           <property name="maximum">
+                            <double>10.000000000000000</double>
+                           </property>
+                           <property name="singleStep">
+                            <double>0.100000000000000</double>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="1" column="0">
+                          <widget class="QLabel" name="label_62">
+                           <property name="sizePolicy">
+                            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                             <horstretch>0</horstretch>
+                             <verstretch>0</verstretch>
+                            </sizepolicy>
+                           </property>
+                           <property name="text">
+                            <string>Offset:</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="1" column="1">
+                          <widget class="QDoubleSpinBox" name="doubleSpinBox_galvoLeftOffset">
+                           <property name="sizePolicy">
+                            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                             <horstretch>0</horstretch>
+                             <verstretch>0</verstretch>
+                            </sizepolicy>
+                           </property>
+                           <property name="suffix">
+                            <string> V</string>
+                           </property>
+                           <property name="minimum">
+                            <double>-10.000000000000000</double>
+                           </property>
+                           <property name="maximum">
+                            <double>10.000000000000000</double>
+                           </property>
+                           <property name="singleStep">
+                            <double>0.100000000000000</double>
+                           </property>
+                          </widget>
+                         </item>
+                        </layout>
+                       </item>
+                      </layout>
+                     </item>
+                     <item>
+                      <widget class="Line" name="line_9">
+                       <property name="minimumSize">
+                        <size>
+                         <width>3</width>
+                         <height>0</height>
+                        </size>
+                       </property>
+                       <property name="maximumSize">
+                        <size>
+                         <width>3</width>
+                         <height>16777215</height>
+                        </size>
+                       </property>
+                       <property name="orientation">
+                        <enum>Qt::Vertical</enum>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <layout class="QVBoxLayout" name="verticalLayout_41">
+                       <item>
+                        <widget class="QLabel" name="label_70">
+                         <property name="text">
+                          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Right Galvo&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item>
+                        <widget class="Line" name="line_10">
+                         <property name="sizePolicy">
+                          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                           <horstretch>0</horstretch>
+                           <verstretch>0</verstretch>
+                          </sizepolicy>
+                         </property>
+                         <property name="orientation">
+                          <enum>Qt::Horizontal</enum>
+                         </property>
+                        </widget>
+                       </item>
+                       <item>
+                        <layout class="QFormLayout" name="formLayout_11">
+                         <item row="0" column="0">
+                          <widget class="QLabel" name="label_65">
+                           <property name="sizePolicy">
+                            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                             <horstretch>0</horstretch>
+                             <verstretch>0</verstretch>
+                            </sizepolicy>
+                           </property>
+                           <property name="text">
+                            <string>Amplitude:</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="0" column="1">
+                          <widget class="QDoubleSpinBox" name="doubleSpinBox_galvoRightAmplitude">
+                           <property name="sizePolicy">
+                            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                             <horstretch>0</horstretch>
+                             <verstretch>0</verstretch>
+                            </sizepolicy>
+                           </property>
+                           <property name="suffix">
+                            <string> V</string>
+                           </property>
+                           <property name="maximum">
+                            <double>10.000000000000000</double>
+                           </property>
+                           <property name="singleStep">
+                            <double>0.100000000000000</double>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="1" column="0">
+                          <widget class="QLabel" name="label_66">
+                           <property name="sizePolicy">
+                            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                             <horstretch>0</horstretch>
+                             <verstretch>0</verstretch>
+                            </sizepolicy>
+                           </property>
+                           <property name="text">
+                            <string>Offset:</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="1" column="1">
+                          <widget class="QDoubleSpinBox" name="doubleSpinBox_galvoRightOffset">
+                           <property name="sizePolicy">
+                            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                             <horstretch>0</horstretch>
+                             <verstretch>0</verstretch>
+                            </sizepolicy>
+                           </property>
+                           <property name="suffix">
+                            <string> V</string>
+                           </property>
+                           <property name="minimum">
+                            <double>-10.000000000000000</double>
+                           </property>
+                           <property name="maximum">
+                            <double>10.000000000000000</double>
+                           </property>
+                           <property name="singleStep">
+                            <double>0.100000000000000</double>
+                           </property>
+                          </widget>
+                         </item>
+                        </layout>
+                       </item>
+                      </layout>
+                     </item>
+                    </layout>
+                   </item>
+                   <item>
+                    <widget class="QCheckBox" name="checkBox_galvoSync">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="minimumSize">
+                      <size>
+                       <width>0</width>
+                       <height>20</height>
+                      </size>
+                     </property>
+                     <property name="maximumSize">
+                      <size>
+                       <width>16777215</width>
+                       <height>20</height>
+                      </size>
+                     </property>
+                     <property name="layoutDirection">
+                      <enum>Qt::LeftToRight</enum>
+                     </property>
+                     <property name="text">
+                      <string>Sync Left/Right</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <layout class="QHBoxLayout" name="horizontalLayout_4">
+                     <item>
+                      <widget class="QCheckBox" name="checkBox_galvoActivate">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
+                       <property name="text">
+                        <string>Activate Galvanometers</string>
+                       </property>
+                       <property name="checked">
+                        <bool>true</bool>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QCheckBox" name="checkBox_galvoInvert">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
+                       <property name="text">
+                        <string>Invert scan</string>
                        </property>
                       </widget>
                      </item>
@@ -2570,116 +2637,6 @@
            <layout class="QVBoxLayout" name="verticalLayout_16">
             <item>
              <layout class="QGridLayout" name="gridLayout_19"/>
-            </item>
-           </layout>
-          </widget>
-          <widget class="QWidget" name="tabLightsheet">
-           <attribute name="title">
-            <string>Lightsheet</string>
-           </attribute>
-           <layout class="QVBoxLayout" name="verticalLayout_18">
-            <item>
-             <layout class="QGridLayout" name="gridLayout_12">
-              <item row="2" column="0">
-               <widget class="QLabel" name="label_10">
-                <property name="text">
-                 <string>Line Exposure:</string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="label_9">
-                <property name="text">
-                 <string>Line Time:</string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="1">
-               <widget class="QDoubleSpinBox" name="doubleSpinBox_acqLineTime">
-                <property name="suffix">
-                 <string> μs</string>
-                </property>
-                <property name="decimals">
-                 <number>3</number>
-                </property>
-                <property name="minimum">
-                 <double>12.175000000000001</double>
-                </property>
-                <property name="maximum">
-                 <double>200.000000000000000</double>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="1">
-               <widget class="QDoubleSpinBox" name="doubleSpinBox_acqLineExposure">
-                <property name="decimals">
-                 <number>0</number>
-                </property>
-                <property name="minimum">
-                 <double>1.000000000000000</double>
-                </property>
-                <property name="maximum">
-                 <double>1024.000000000000000</double>
-                </property>
-               </widget>
-              </item>
-              <item row="3" column="0">
-               <widget class="QLabel" name="label_11">
-                <property name="text">
-                 <string>Line Delay:</string>
-                </property>
-               </widget>
-              </item>
-              <item row="3" column="1">
-               <widget class="QDoubleSpinBox" name="doubleSpinBox_acqLineDelay">
-                <property name="decimals">
-                 <number>0</number>
-                </property>
-                <property name="maximum">
-                 <double>1024.000000000000000</double>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="0">
-               <widget class="QLabel" name="label_12">
-                <property name="text">
-                 <string>Scan Time</string>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="1">
-               <widget class="QDoubleSpinBox" name="doubleSpinBox_acqScanTime">
-                <property name="suffix">
-                 <string> ms</string>
-                </property>
-                <property name="decimals">
-                 <number>0</number>
-                </property>
-                <property name="minimum">
-                 <double>10.000000000000000</double>
-                </property>
-                <property name="maximum">
-                 <double>500.000000000000000</double>
-                </property>
-                <property name="value">
-                 <double>100.000000000000000</double>
-                </property>
-               </widget>
-              </item>
-             </layout>
-            </item>
-            <item>
-             <spacer name="verticalSpacer_2">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>20</width>
-                <height>40</height>
-               </size>
-              </property>
-             </spacer>
             </item>
            </layout>
           </widget>

@@ -15,10 +15,10 @@ import copy
 import threading
 import time
 import queue
-import h5py
 import datetime
 import webbrowser
 import nidaqmx
+import h5py
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy import signal, optimize, ndimage, stats
@@ -40,9 +40,10 @@ from src.etls import ETLs
 class Controller_MainWindow(QMainWindow):
     '''Class for the MesoSPIM Controller'''
 
-    # Default confgurable settings
+    # Dictionnary of configurable settings and their default values
     _cfg_settings = {}
     _cfg_settings['Units'] = 'mm'
+    _cfg_settings['Image File Format'] = 'HDF5'
 
     # Signals
     sig_beep = pyqtSignal()
@@ -115,7 +116,20 @@ class Controller_MainWindow(QMainWindow):
         self.cfg_settings = cfg_read('config.ini', 'Controller', self.cfg_settings)
 
         # Assign configurable settings to instance variables
-        self.units                  = str(self.cfg_settings['Units'])
+        if str(self.cfg_settings['Units']) == 'mm':
+            self.units              = 'mm'
+        if str(self.cfg_settings['Units']) == '\u03BCm' or str(self.cfg_settings['Units']) == 'um':
+            self.units              = '\u03BCm'
+        else: # default units
+            self.units              = 'mm'
+
+        if str.lower(self.cfg_settings['Image File Format']) == 'hdf5':
+            self.save_format            = 'hdf5'
+        if str.lower(self.cfg_settings['Image File Format']) == 'tiff':
+            self.save_format            = 'tiff'
+        else: # default file format
+            self.save_format            = 'hdf5'
+
         self.save_directory         = os.path.normpath(os.path.expanduser('~') + '\\Documents\\LightSheetData')
         self.save_filename          = ''
         self.save_description       = ''
@@ -258,12 +272,12 @@ class Controller_MainWindow(QMainWindow):
         self.ui.doubleSpinBox_laserOneAmplitude.valueChanged.connect(self.updateUi_laser1_amplitude)
         self.ui.doubleSpinBox_laserTwoAmplitude.valueChanged.connect(self.updateUi_laser2_amplitude)
 
-        # Connection for general acquisition settings changes
-        self.ui.doubleSpinBox_acqSampleRate.valueChanged.connect(self.updateUi_acq_sample_rate)
-        self.ui.doubleSpinBox_acqExposureTime.valueChanged.connect(self.updateUi_acq_exposure_time)
-        self.ui.doubleSpinBox_acqLineTime.valueChanged.connect(self.updateUi_acq_line_time)
-        self.ui.doubleSpinBox_acqLineExposure.valueChanged.connect(self.updateUi_acq_line_exposure)
-        self.ui.doubleSpinBox_acqLineDelay.valueChanged.connect(self.updateUi_acq_line_delay)
+        # Connection for camera settings changes
+        self.ui.comboBox_cameraShutterMode.currentTextChanged.connect(self.updateUi_camera_shutter_mode)
+        self.ui.doubleSpinBox_cameraExposureTime.valueChanged.connect(self.updateUi_camera_exposure_time)
+        self.ui.doubleSpinBox_cameraLineTime.valueChanged.connect(self.updateUi_camera_line_time)
+        self.ui.doubleSpinBox_cameraExposedLines.valueChanged.connect(self.updateUi_camera_exposed_lines)
+        self.ui.doubleSpinBox_cameraDelayLines.valueChanged.connect(self.updateUi_camera_delay_lines)
 
         # -------------------------------------------------------------------------------------------------------------------------------
         # Connections for the 'Calibration' tab controls
@@ -563,22 +577,29 @@ class Controller_MainWindow(QMainWindow):
         self.ui.doubleSpinBox_etlRightOffset.setValue(self.siggen.etl_right_offset)
         self.ui.doubleSpinBox_etlSteps.setValue(self.siggen.etl_steps)
 
-        self.ui.doubleSpinBox_acqSampleRate.setValue(self.siggen.sample_rate)
-        self.ui.doubleSpinBox_acqExposureTime.setValue(self.camera.exposure_time * 1e3) #camera(s) to ui(ms)
-
-        self.ui.doubleSpinBox_acqLineTime.setValue(self.camera.lightsheet_line_time * 1e6) #camera(s) to ui(us)
-        self.ui.doubleSpinBox_acqLineExposure.setValue(self.camera.lightsheet_exposed_lines)
-        self.ui.doubleSpinBox_acqLineDelay.setValue(self.camera.lightsheet_delay_lines)
+        # Camera
+        self.ui.doubleSpinBox_cameraExposureTime.setValue(self.camera.exposure_time * 1e3) #camera(s) to ui(ms)
+        self.ui.doubleSpinBox_cameraLineTime.setValue(self.camera.lightsheet_line_time * 1e6) #camera(s) to ui(us)
+        self.ui.doubleSpinBox_cameraExposedLines.setValue(self.camera.lightsheet_exposed_lines)
+        self.ui.doubleSpinBox_cameraDelayLines.setValue(self.camera.lightsheet_delay_lines)
+        # Set camera shutter mode comboBox options (default: Rolling)
+        self.ui.comboBox_cameraShutterMode.insertItems(0,['Rolling','Lightsheet'])
+        if self.camera.shutter_mode == 'Lightsheet':
+            self.ui.comboBox_cameraShutterMode.setCurrentIndex(1)
+        else:
+            self.ui.comboBox_cameraShutterMode.setCurrentIndex(0)
+        self.updateUi_camera_shutter_mode()
 
         # Lasers
         self.ui.doubleSpinBox_laserOneAmplitude.setValue(self.lasers.laser1_power)
         self.ui.doubleSpinBox_laserTwoAmplitude.setValue(self.lasers.laser2_power)
+
         # Motors
         self.updateUi_units()
 
 
     def updateUi_units(self):
-        '''Updates all the widgets of the motion tab after an unit change'''
+        '''Updates all the widgets of the motion tab after a unit change'''
         self.units = self.ui.comboBox_units.currentText()
 
         if self.units == 'mm':
@@ -1096,25 +1117,58 @@ class Controller_MainWindow(QMainWindow):
         # Propagate Ui changes to hardware instance
         self.siggen.etl_activated = self.ui.checkBox_etlActivate.isChecked()
 
-    def updateUi_acq_sample_rate(self):
+#    def updateUi_acq_sample_rate(self):
+#        # Propagate Ui changes to hardware instance
+#        self.siggen.sample_rate = self.ui.doubleSpinBox_acqSampleRate.value()
+
+    def updateUi_camera_shutter_mode(self):
         # Propagate Ui changes to hardware instance
-        self.siggen.sample_rate = self.ui.doubleSpinBox_acqSampleRate.value()
+        self.camera.shutter_mode = self.ui.comboBox_cameraShutterMode.currentText()
+        # Update enabled settings
+        if self.camera.shutter_mode == 'Rolling':
+            self.ui.label_doubleSpinBox_cameraExposureTime.setEnabled(True)
+            self.ui.doubleSpinBox_cameraExposureTime.setEnabled(True)
+            self.ui.label_doubleSpinBox_cameraLineTime.setEnabled(False)
+            self.ui.doubleSpinBox_cameraLineTime.setEnabled(False)
+            self.ui.label_doubleSpinBox_cameraExposedLines.setEnabled(False)
+            self.ui.doubleSpinBox_cameraExposedLines.setEnabled(False)
+            self.ui.label_doubleSpinBox_cameraDelayLines.setEnabled(False)
+            self.ui.doubleSpinBox_cameraDelayLines.setEnabled(False)
+        elif self.camera.shutter_mode == 'Lightsheet':
+            self.ui.label_doubleSpinBox_cameraExposureTime.setEnabled(False)
+            self.ui.doubleSpinBox_cameraExposureTime.setEnabled(False)
+            self.ui.label_doubleSpinBox_cameraLineTime.setEnabled(True)
+            self.ui.doubleSpinBox_cameraLineTime.setEnabled(True)
+            self.ui.label_doubleSpinBox_cameraExposedLines.setEnabled(True)
+            self.ui.doubleSpinBox_cameraExposedLines.setEnabled(True)
+            self.ui.label_doubleSpinBox_cameraDelayLines.setEnabled(True)
+            self.ui.doubleSpinBox_cameraDelayLines.setEnabled(True)
+        else:
+            self.ui.label_doubleSpinBox_cameraExposureTime.setEnabled(True)
+            self.ui.doubleSpinBox_cameraExposureTime.setEnabled(True)
+            self.ui.label_doubleSpinBox_cameraLineTime.setEnabled(False)
+            self.ui.doubleSpinBox_cameraLineTime.setEnabled(False)
+            self.ui.label_doubleSpinBox_cameraExposedLines.setEnabled(False)
+            self.ui.doubleSpinBox_cameraExposedLines.setEnabled(False)
+            self.ui.label_doubleSpinBox_cameraDelayLines.setEnabled(False)
+            self.ui.doubleSpinBox_cameraDelayLines.setEnabled(False)
 
-    def updateUi_acq_exposure_time(self):
+
+    def updateUi_camera_exposure_time(self):
         # Propagate Ui changes to hardware instance
-        self.camera.exposure_time = self.ui.doubleSpinBox_acqExposureTime.value() * 1e-3  # ui(ms) to camera(s)
+        self.camera.exposure_time = self.ui.doubleSpinBox_cameraExposureTime.value() * 1e-3  # ui(ms) to camera(s)
 
-    def updateUi_acq_line_time(self):
+    def updateUi_camera_line_time(self):
         # Propagate Ui changes to Camera instance
-        self.camera.lightsheet_line_time = self.ui.doubleSpinBox_acqLineTime.value() * 1e-6 # ui(us) to camera(s)
+        self.camera.lightsheet_line_time = self.ui.doubleSpinBox_cameraLineTime.value() * 1e-6 # ui(us) to camera(s)
 
-    def updateUi_acq_line_exposure(self):
+    def updateUi_camera_exposed_lines(self):
         # Propagate Ui changes to Camera instance
-        self.camera.lightsheet_exposed_lines = int(self.ui.doubleSpinBox_acqLineExposure.value())
+        self.camera.lightsheet_exposed_lines = int(self.ui.doubleSpinBox_cameraExposedLines.value())
 
-    def updateUi_acq_line_delay(self):
+    def updateUi_camera_delay_lines(self):
         # Propagate Ui changes to Camera instance
-        self.camera.lightsheet_delay_lines = int(self.ui.doubleSpinBox_acqLineDelay.value())
+        self.camera.lightsheet_delay_lines = int(self.ui.doubleSpinBox_cameraDelayLines.value())
 
 
     def updateUi_laser1_amplitude(self):
@@ -1248,7 +1302,7 @@ class Controller_MainWindow(QMainWindow):
 
         # Setting the camera for self triggered acquisition
         self.camera.set_trigger_mode('auto_trigger')
-        self.camera.set_exposure_time(self.ui.doubleSpinBox_acqExposureTime)
+        self.camera.set_exposure_time(self.ui.doubleSpinBox_cameraExposureTime)
         self.camera.arm()
 
         while self.preview_mode_started:
@@ -2124,7 +2178,7 @@ class Controller_MainWindow(QMainWindow):
 
         # Setting the camera for acquisition
         self.camera.set_trigger_mode('auto_trigger')
-        self.camera.set_exposure_time(self.ui.doubleSpinBox_acqExposureTime.value())
+        self.camera.set_exposure_time(self.ui.doubleSpinBox_cameraExposureTime.value())
         self.camera.arm()
 
         # Setting tasks
@@ -2457,6 +2511,7 @@ class FrameSaver(QObject):
         QObject.__init__(self, parent)
         self.parent = parent
         self.sig_status_message.connect(self.parent.updateUi_message_printer)
+        self.file_format = self.parent.save_format
 
         self.saving_started = False
         self.block_size = block_size
@@ -2512,10 +2567,6 @@ class FrameSaver(QObject):
                     self.filenames_list.append(new_filename)
                     break
 
-    def add_attribute(self, attribute, value):
-        '''Add an attribute to a dataset: a string associated to a value'''
-        self.dataset.attrs[attribute] = value
-
     '''Saving methods'''
 
     def enqueue_buffer(self, buffer):
@@ -2531,35 +2582,38 @@ class FrameSaver(QObject):
     def frame_saver_worker(self):
         '''Thread for saving 3D arrays (or 2D arrays).
             The number of datasets per file is the number of 2D arrays'''
-        for file in range(len(self.filenames_list)):
-            print('File created:'+str(self.filenames_list[file])) #debugging
+        for idx in range(len(self.filenames_list)):
+            print('File created:'+str(self.filenames_list[idx])) #debugging
             # Create file
-            f = h5py.File(self.filenames_list[file],'a')
+            outfile = h5py.File(self.filenames_list[idx],'a')
 
             counter = 1
             for dataset in range(int(self.number_of_datasets)):
                 while True:
                     try:
                         # Retrieve buffer
-                        buffer = self.queue.get(True, 1)
+                        buffer:np.ndarray = self.queue.get(True, 1)
                         if buffer.ndim == 2:
-                            buffer = np.expand_dims(buffer, axis=0) #To consider 2D arrays as a 3D arrays
+                            buffer = np.expand_dims(buffer, axis=0) #To consider 2D arrays as a 3D array
                         for frame in range(buffer.shape[0]): #For each 2D frame
                             # Create dataset
                             path_root = self.datasets_name+u'%03d'%counter
-                            self.dataset = f.create_dataset(path_root, data=buffer[frame,:,:])
+                            self.dataset = outfile.create_dataset(path_root, data=buffer[frame,:,:])
                             print('Dataset '+str(dataset)+'/'+str(int(self.number_of_datasets))+' created:'+str(path_root)) #debugging
 
                             # Add attributes
-                            self.add_attribute('Sample Name', self.sample_name)
-                            self.add_attribute('Date', str(datetime.date.today()))
+                            self.dataset.attrs['Sample Name']   = self.sample_name
+                            self.dataset.attrs['Date']          = str(datetime.date.today())
+
                             if buffer.shape[0] == 1:
-                                pos_index = dataset + file * int(self.number_of_datasets)
+                                pos_index = dataset + idx * int(self.number_of_datasets)
                             else:
-                                pos_index = file
-                            self.add_attribute('Current sample horizontal position', self.horizontal_positions_list[pos_index])
-                            self.add_attribute('Current sample vertical position', self.vertical_positions_list[pos_index])
-                            self.add_attribute('Current camera horizontal position', self.camera_positions_list[pos_index])
+                                pos_index = idx
+
+                            self.dataset.attrs['Horizontal Position']   = self.horizontal_positions_list[pos_index]
+                            self.dataset.attrs['Vertical Position']     = self.vertical_positions_list[pos_index]
+                            self.dataset.attrs['Camera Position']       = self.camera_positions_list[pos_index]
+
                             counter += 1
                         break
                     except:
@@ -2567,8 +2621,8 @@ class FrameSaver(QObject):
                             break
                 if self.saving_started == False:
                     break
-            f.close()
-            self.sig_status_message.emit('File ' + self.filenames_list[file] + ' saved')
+            outfile.close()
+            self.sig_status_message.emit('File ' + self.filenames_list[idx] + ' saved')
             if self.saving_started == False:
                 break
 
