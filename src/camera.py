@@ -19,7 +19,7 @@ class Camera:
     # Configurable settings defaults
     # Used as base dictionnary for .ini file allowable keys
     _cfg_defaults = {}
-    _cfg_defaults['Shutter Mode']               = 'Lightsheet'
+    _cfg_defaults['Shutter Mode']               = 'Rolling'
     _cfg_defaults['Exposure Time']              = '100'
     _cfg_defaults['Lightsheet Line Time']       = '48.80'
     _cfg_defaults['Lightsheet Exposed Lines']   = '16'
