@@ -19,11 +19,12 @@ class Camera:
     # Configurable settings defaults
     # Used as base dictionnary for .ini file allowable keys
     _cfg_defaults = {}
-    _cfg_defaults['Shutter Mode']               = 'Lightsheet'
+    _cfg_defaults['Shutter Mode']               = 'Rolling'
     _cfg_defaults['Exposure Time']              = '100'
     _cfg_defaults['Lightsheet Line Time']       = '48.80'
     _cfg_defaults['Lightsheet Exposed Lines']   = '16'
     _cfg_defaults['Lightsheet Delay Lines']     = '0'
+    _cfg_defaults['Recorder Timeout']           = '5'
 
 
     def __init__(self, verbose=False):
@@ -32,7 +33,7 @@ class Camera:
         # Flags (bool)
         self.is_recording = False
         self.new_data_ready = False
-        self.recorder_timeout = False
+        self.recorder_timeout_status = False
 
         # Other variables
         self.camera = None
@@ -59,15 +60,18 @@ class Camera:
         self.lightsheet_line_time           = float(    self._cfg['Lightsheet Line Time']       )   * 1e-6
         self.lightsheet_exposed_lines       = int(      self._cfg['Lightsheet Exposed Lines']   )
         self.lightsheet_delay_lines         = int(      self._cfg['Lightsheet Delay Lines']     )
+        self.recorder_timeout_interval      = int(      self._cfg['Recorder Timeout']           )
+
 
     def cfg_save_ini(self):
         # pack current instance variables into configuration dictionary
         self._cfg = {}
         self._cfg['Shutter Mode']               = str( self.shutter_mode                        )
-        self._cfg['Exposure Time']              = str( self.exposure_time               * 1e3   )       
-        self._cfg['Lightsheet Line Time']       = str( self.lightsheet_line_time        * 1e6   ) 
+        self._cfg['Exposure Time']              = str( self.exposure_time               * 1e3   )   
+        self._cfg['Lightsheet Line Time']       = str( self.lightsheet_line_time        * 1e6   )
         self._cfg['Lightsheet Exposed Lines']   = str( self.lightsheet_exposed_lines            )
         self._cfg['Lightsheet Delay Lines']     = str( self.lightsheet_delay_lines              )
+        self._cfg['Recorder Timeout']           = str( self.recorder_timeout_interval           )
         # write configuration to ini file
         self._cfg = cfg_write(self._cfg_filename, self._cfg_section, self._cfg)
 
@@ -131,13 +135,8 @@ class Camera:
             self.bytes_per_image = self.xsize * self.ysize * 2 # 16 bit images (2 bytes per pixel)
             self.camera.sdk.set_image_parameters(self.xsize, self.ysize)
 
-            cam_cmos_line_timing = {}
-            cam_cmos_line_timing = self.camera.sdk.get_cmos_line_timing()
-            self.line_time = cam_cmos_line_timing.get('line time')
-
             if self.verbose:
                 print(" Camera armed.")
-                print(" Line time:", str(self.line_time))
         return None
 
     def arm_scan(self):
@@ -185,6 +184,7 @@ class Camera:
 
                 if self.verbose:
                     print(" Camera armed.")
+                    print(" Lightsheet mode is:", str(parameter))
                     print(" Line time:", str(self.line_time))
 
             elif self.shutter_mode == 'Global':
@@ -200,9 +200,10 @@ class Camera:
                 cam_cmos_line_timing = self.camera.sdk.get_cmos_line_timing()
                 parameter = cam_cmos_line_timing.get('parameter')
                 self.line_time = cam_cmos_line_timing.get('line time')
-            
+
                 if self.verbose:
                     print(" Camera armed.")
+                    print(" Lightsheet mode is:", str(parameter))
                     print(" Line time:", str(self.line_time))
 
             else:
@@ -242,16 +243,18 @@ class Camera:
                 self.is_recording = False
             else:
                 self.is_recording = True
-                self.recorder_timeout = False
+                self.recorder_timeout_status = False
                 if self.verbose:
                     print(" Recording session started.")
         return None
 
-    def monitor_recorder(self, number_of_images:int, timeout_s:int=5):
+    def monitor_recorder(self, number_of_images:int):
         '''docstring'''
         if self.is_recording:
+            timeout_s = self.recorder_timeout_interval
             if self.verbose:
                 print("Monitoring camera recording session status...")
+                print("Timeout interval is " + str(timeout_s) + "s")
             wait_until = datetime.now() + timedelta(seconds=timeout_s)
             while True:
                 images_in_buffer = self.camera.rec.get_status()['dwProcImgCount']
@@ -261,9 +264,9 @@ class Camera:
                         print(" Recording session succeeded:", images_in_buffer, "images in buffer")
                     break
                 elif wait_until < datetime.now():
-                    self.recorder_timeout = True
+                    self.recorder_timeout_status = True
                     if self.verbose:
-                        print(" Timeout :", images_in_buffer, "images in buffer after", timeout_s, "s.",)
+                        print(" Timeout occurred:", images_in_buffer, "images in buffer after", timeout_s, "s.")
                     break
                 else:
                     time.sleep(0.01)
@@ -291,18 +294,18 @@ class Camera:
             self.camera.rec.delete()
             # Deleting the recording session also deletes any remaining images
             self.new_data_ready = False
-            self.recorder_timeout = False
+            self.recorder_timeout_status = False
         return None
 
 
     ### setters
 
-    def set_exposure_time(self, exposure_time:int):
+    def set_exposure_time(self, exposure_time_ms:int):
         '''Set the exposure time (in ms) for the camera'''
         if self.camera is not None:
             if self.verbose:
-                print("Setting camera exposure time: " + str(exposure_time) + "ms")
-            self.camera.sdk.set_delay_exposure_time(0, 'ms', exposure_time, 'ms')
+                print("Setting camera exposure time: " + str(exposure_time_ms) + "ms")
+            self.camera.sdk.set_delay_exposure_time(0, 'ms', exposure_time_ms, 'ms')
         return None
 
     def set_lightsheet_mode(self):
@@ -608,7 +611,7 @@ class Camera:
             if self.verbose:
                 print("Camera not open - Cannot retrieve properties")
         return cam_properties
-  
+
 
     def grab_image(self, exposure_time_ms:int=100):
         """
@@ -626,28 +629,27 @@ class Camera:
                 if self.verbose:
                     print(" Recording already in progress. Aborted.")
             else:
-                self.disarm()                        # In case camera was previously armed
+                self.disarm()                               # In case camera was previously armed
                 self.set_trigger_mode('auto_trigger')       # Camera is internally triggered
-                self.arm()                           # Required to apply tigger settings
+                self.arm()                                  # Required to apply tigger settings
                 self.set_exposure_time(exposure_time_ms)    # Exposure time can be changed after arming the camera
                 self.start_recorder(1)                      # Start a recording session to acquire one frame
-                self.monitor_recorder(1)                    # Monitors the recording session and returns once one image is acquired (or after default timeout of 5s)
+                self.monitor_recorder(1)                    # Monitors the recording session and returns once one image is acquired
                 self.stop_recorder()                        # Stop the recording session before image is copied to memory
                 img_buffer = self.copy_recorder_images(1)   # Returns a list of images of length 'number_of_images' (in this case, one)
-
-                # Check if we had a timeout before deleting the recorder
-                if self.recorder_timeout:
+                
+                if self.recorder_timeout_status:                   # Check if we had a timeout before deleting the recorder
                     if self.verbose:
-                        print(" Timeout while acquiting image.")
+                        print(" Timeout while acquiring image.")
                 else:
                     if self.verbose:
                         print(" Image successfully obtained.")
 
-                self.delete_recorder()                          # Recording session can now be deleted
+                self.delete_recorder()                      # Recording session can now be deleted
         else:
             if self.verbose:
                 print(" Camera not open. Aborted")
-        return img_buffer[0]                                    # Returning first (and in this case only) image from the buffer
+        return img_buffer[0]                                # Returning first (and in this case only) image from the buffer
 
 
 if __name__ == '__main__':

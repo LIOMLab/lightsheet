@@ -20,7 +20,7 @@ class ETLs:
     _cfg_settings = {}
     _cfg_settings['Port ETL Left'] = 'COM5'
     _cfg_settings['Port ETL Right'] = 'COM6'
-    
+
     def __init__(self):
         # Error status
         self.error = 0
@@ -178,7 +178,7 @@ class Optotune(object):
                 resp_content = resp
             if resp_content[0] == b'E':
                 raise(serial.SerialException(
-                    'Command error: {}').format(resp_content))
+                    'Command error: {}'.format(resp_content)))
             return resp_content
 
     def calc_crc(self, data):
@@ -627,4 +627,3 @@ if __name__ == '__main__':
     myetls.set_analog_mode()
     myetls.get_mode()
     myetls.get_temperature()
-
