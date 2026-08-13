@@ -243,7 +243,7 @@ class Controller_MainWindow(QMainWindow):
         self.ui.pushButton_cameraSetFocus.clicked.connect(self.updateUi_set_camera_focus)
         self.ui.pushButton_cameraStepForward.clicked.connect(self.updateUi_move_camera_forward)
         self.ui.pushButton_cameraStepBackward.clicked.connect(self.updateUi_move_camera_backward)
-        self.ui.pushButton_cameraGotoFocus.clicked.connect(self.updateUi_move_camera_to_focus)
+        # self.ui.pushButton_cameraGotoFocus.clicked.connect(self.updateUi_move_camera_to_focus)
 
 
         # -------------------------------------------------------------------------------------------------------------------------------
@@ -507,7 +507,7 @@ class Controller_MainWindow(QMainWindow):
                               self.ui.pushButton_sampleGotoVPosition,
                               self.ui.pushButton_cameraStepBackward,
                               self.ui.pushButton_cameraStepForward,
-                              self.ui.pushButton_cameraGotoFocus,
+                              # self.ui.pushButton_cameraGotoFocus,
                               self.ui.pushButton_cameraGotoPosition]
         for button in buttons_to_disable:
             if disable_button:
@@ -731,12 +731,14 @@ class Controller_MainWindow(QMainWindow):
         '''Moves camera to focus position'''
         if self.focus_selected:
             if self.motors.camera.get_origin(self.units) > self.motors.camera.get_limit_high(self.units):
-                self.motors.camera.move_absolute_position(self.motors.camera.get_limit_high(self.units), self.units)
+                # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_high(self.units), self.units)
+                # rather only report out of boundaries
                 self.updateUi_message_printer('Focus out of boundaries')
                 self.sig_beep.emit()
                 self.updateUi_position_camera()
             elif self.motors.camera.get_origin(self.units) < self.motors.camera.get_limit_low(self.units):
-                self.motors.camera.move_absolute_position(self.motors.camera.get_limit_low(self.units), self.units)
+                # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_low(self.units), self.units)
+                # rather only report out of boundaries
                 self.updateUi_message_printer('Focus out of boundaries')
                 self.sig_beep.emit()
                 self.updateUi_position_camera()
@@ -756,7 +758,8 @@ class Controller_MainWindow(QMainWindow):
             self.updateUi_message_printer ('Sample moving backward')
             self.updateUi_position_horizontal()
         else:
-            self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_low(self.units), self.units)
+            # self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_low(self.units), self.units)
+            # rather only report out of boundaries
             self.updateUi_message_printer('Out of boundaries')
             self.sig_beep.emit()
             self.updateUi_position_horizontal()
@@ -768,7 +771,8 @@ class Controller_MainWindow(QMainWindow):
             self.updateUi_message_printer('Sample moving forward')
             self.updateUi_position_horizontal()
         else:
-            self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_high(self.units), self.units)
+            # self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_high(self.units), self.units)
+            # rather only report out of boundaries
             self.updateUi_message_printer('Out of boundaries')
             self.sig_beep.emit()
             self.updateUi_position_horizontal()
@@ -780,7 +784,8 @@ class Controller_MainWindow(QMainWindow):
             self.updateUi_message_printer('Sample stepping up')
             self.updateUi_position_vertical()
         else:
-            self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_low(self.units), self.units)
+            # self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_low(self.units), self.units)
+            # rather only report out of boundaries
             self.updateUi_message_printer('Out of boundaries')
             self.sig_beep.emit()
             self.updateUi_position_vertical()
@@ -792,7 +797,8 @@ class Controller_MainWindow(QMainWindow):
             self.updateUi_message_printer('Sample stepping down')
             self.updateUi_position_vertical()
         else:
-            self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_high(self.units), self.units)
+            # self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_high(self.units), self.units)
+            # rather only report out of boundaries
             self.updateUi_message_printer('Out of boundaries')
             self.sig_beep.emit()
             self.updateUi_position_vertical()
@@ -804,7 +810,9 @@ class Controller_MainWindow(QMainWindow):
             self.updateUi_message_printer('Camera stepping backward')
             self.updateUi_position_camera()
         else:
-            self.motors.camera.move_absolute_position(self.motors.camera.get_limit_low(self.units), self.units)
+            # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_low(self.units), self.units)
+            # In case of a communication glitch with motor, this was bringing the stage back to min position
+            # rather only report out of boundaries
             self.updateUi_message_printer('Out of boundaries')
             self.sig_beep.emit()
             self.updateUi_position_camera()
@@ -816,7 +824,9 @@ class Controller_MainWindow(QMainWindow):
             self.updateUi_message_printer('Camera stepping forward')
             self.updateUi_position_camera()
         else:
-            self.motors.camera.move_absolute_position(self.motors.camera.get_limit_high(self.units), self.units)
+            # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_high(self.units), self.units)
+            # In case of a communication glitch with motor, this was bringing the stage back to max position
+            # rather only report out of boundaries
             self.updateUi_message_printer('Out of boundaries')
             self.sig_beep.emit()
             self.updateUi_position_camera()
@@ -1302,7 +1312,7 @@ class Controller_MainWindow(QMainWindow):
 
         # Setting the camera for self triggered acquisition
         self.camera.set_trigger_mode('auto_trigger')
-        self.camera.set_exposure_time(self.ui.doubleSpinBox_cameraExposureTime)
+        self.camera.set_exposure_time(int(self.ui.doubleSpinBox_cameraExposureTime.value()))
         self.camera.arm()
 
         while self.preview_mode_started:
@@ -1439,6 +1449,7 @@ class Controller_MainWindow(QMainWindow):
 
         # Refresh scan waveforms with current settings
         self.siggen.compute_scan_waveforms()
+
         # Acquire a single scan
         self.acquire_scan()
 
