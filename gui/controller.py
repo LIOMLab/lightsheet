@@ -2146,8 +2146,17 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
     def updateUi_stack_mode_button(self):
         '''Start or stop stack mode, depending on the button status'''
         if self.stack_mode_started:
+            # Do NOT join the worker thread here — joining blocks the Qt event
+            # loop for the remainder of whatever blocking hardware call
+            # (camera.monitor_recorder up to its timeout, an iBeam serial
+            # round-trip, or a motor move) the worker is currently inside,
+            # freezing the GUI. Just clear the flag; the worker polls
+            # stack_mode_started (and estop_event) at each plane boundary and
+            # at the new pre-move/pre-acquire guards, exits on its own next
+            # poll, and emits sig_stack_mode_finished — already connected to
+            # updateUi_post_stack_mode — which re-enables the UI from the GUI
+            # thread.
             self.stack_mode_started = False
-            self.stack_mode_thread.join()
         else:
             self.close_modes()
             # Making sure the limits of the volume are set
@@ -2220,8 +2229,13 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
         # Setting the camera for scan acquisition
         self.camera.arm_scan()
 
-        # Starting lasers
-        self.start_lasers()
+        # Pre-stop guard: a Stop or E-stop pressed in the instant between
+        # thread start and this line skips energizing the lasers entirely.
+        # The per-plane loop's first-iteration poll then breaks immediately
+        # and the end-of-method cleanup (stop_lasers/disarm/emit) runs
+        # unchanged, so no lasers are left on and the UI re-enables.
+        if self.stack_mode_started and not self.estop_event.is_set():
+            self.start_lasers()
 
         # Set progress bar
         progress_value = 0
@@ -2244,6 +2258,11 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
                 self.sig_message.emit('Stack Acquisition Interrupted')
                 break
             else:
+                # Pre-move guard: a Stop or E-stop requested while the worker
+                # was between blocking calls (after the loop-top poll but
+                # before this motor move) must not start a new blocking call.
+                if not self.stack_mode_started or self.estop_event.is_set(): break
+
                 # Moving sample position
                 position = self.stack_starting_plane + (plane * self.stack_step)
                 try:
@@ -2262,6 +2281,11 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
 
                 if self.saving_allowed:
                     self.frame_saver.add_motor_parameters(self.current_horizontal_position_text, self.current_vertical_position_text, self.current_camera_position_text)
+
+                # Pre-acquire guard: a Stop or E-stop requested while the worker
+                # was between the motor move and this acquisition must not start
+                # the (potentially long, up to recorder-timeout) camera grab.
+                if not self.stack_mode_started or self.estop_event.is_set(): break
 
                 # Getting image
                 self.acquire_scan()
