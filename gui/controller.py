@@ -1881,6 +1881,10 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
 
             # Stopping camera
             self.camera.disarm()
+        except Exception as e:
+            self.sig_message.emit(
+                f"Preview acquisition failed — the run was aborted. Cause: {e}")
+            logging.exception("Preview mode worker failed")
         finally:
             # The finished signal must fire exactly once whether the method
             # completes normally or an exception propagates from
@@ -1967,6 +1971,10 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
 
             # Stopping camera
             self.camera.disarm()
+        except Exception as e:
+            self.sig_message.emit(
+                f"Live acquisition failed — the run was aborted. Cause: {e}")
+            logging.exception("Live mode worker failed")
         finally:
             # The finished signal must fire exactly once whether the method
             # completes normally, breaks out of the loop on E-stop, or an
@@ -2046,6 +2054,10 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
 
             # Stop camera
             self.camera.disarm()
+        except Exception as e:
+            self.sig_message.emit(
+                f"Single image acquisition failed — the run was aborted. Cause: {e}")
+            logging.exception("Single image mode worker failed")
         finally:
             # The finished signal must fire exactly once whether the method
             # returns early (E-stop), completes normally, or an exception
@@ -2570,6 +2582,10 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
 
             # Stopping camera
             self.camera.disarm()
+        except Exception as e:
+            self.sig_message.emit(
+                f"Stack acquisition failed — the run was aborted. Cause: {e}")
+            logging.exception("Stack mode worker failed")
         finally:
             # The finished signal must fire exactly once whether the method
             # completes normally, breaks out of the per-plane loop, or an
