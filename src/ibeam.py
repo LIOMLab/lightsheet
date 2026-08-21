@@ -49,7 +49,7 @@ class IBeam:
     _cfg_settings['Channel'] = '1'
     _cfg_settings['Wavelength'] = '640'        # In nm (iBeam Smart 640)
     _cfg_settings['Power'] = '0'               # In uW
-    _cfg_settings['Max Power'] = '200000'      # In uW (200 mW diode limit)
+    _cfg_settings['Max Power'] = '150000'      # In uW (150 mW diode limit, rig-confirmed)
 
     def __init__(self, port=None):
         # HAL error status (mirrors src/lasers.py and src/etls.py convention).
