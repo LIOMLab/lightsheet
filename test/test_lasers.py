@@ -62,26 +62,43 @@ def test_power_clamp_floor_zero():
 
 
 def test_laser1_on_clamps_to_max_power():
-    '''laser1_on() clamps the commanded power to laser1_max_power before the
-    (failing) write, so the setpoint used is the clamped value, not the raw
-    laser1_power.'''
+    '''laser1_on() must clamp the commanded laser1_power to laser1_max_power
+    before the write attempt. The DAQ stub makes the write fail and revert
+    the active laser's setpoint to 0, so we cannot observe the clamped
+    setpoint post-write on an active laser. Instead we verify the clamp by
+    inspecting _laser1_setpoint AFTER laser1_on() but with the write path
+    disabled: we point laser1_power above max, call laser1_on(), and confirm
+    the setpoint was clamped to max_power before _update_setpoints ran.
+
+    To observe the pre-write clamped setpoint, we stub _update_setpoints so
+    it records the setpoint without attempting the (failing) DAQ write and
+    without reverting state. This exercises the real laser1_on() clamp
+    expression, not Python's min().'''
     lasers = Lasers()
     lasers.laser1_power = 10
     lasers.laser1_max_power = 5
-    lasers.laser1_on()
-    # The write fails (DAQ stub), so the state reverts to off/0 — but the
-    # clamp must have been applied to the setpoint before the write attempt.
-    # We assert via the clamp behavior: a separate call with no failure path
-    # would have produced 5. Since the write fails and reverts to 0, we
-    # instead verify the clamp logic by inspecting that laser1_max_power is
-    # honored: set a power below max and confirm it is preserved pre-write.
-    lasers2 = Lasers()
-    lasers2.laser1_power = 3
-    lasers2.laser1_max_power = 5
-    # Manually apply the same clamp laser1_on uses, without triggering the
-    # failing write, to verify the clamp expression honors max_power.
-    clamped = min(lasers2.laser1_power, lasers2.laser1_max_power)
-    assert clamped == 3
-    # And the over-power case clamps to max_power:
-    clamped_over = min(10, lasers2.laser1_max_power)
-    assert clamped_over == 5
+
+    captured = {}
+    original_update = lasers._update_setpoints
+
+    def capturing_update():
+        # Record the setpoint laser1_on() staged BEFORE the write/revert.
+        captured['setpoint'] = lasers._laser1_setpoint
+
+    lasers._update_setpoints = capturing_update
+    try:
+        lasers.laser1_on()
+    finally:
+        lasers._update_setpoints = original_update
+
+    # The clamp inside laser1_on() must have reduced 10 to 5.
+    assert captured['setpoint'] == 5
+    # And a below-max power is preserved (not clamped upward).
+    lasers.laser1_power = 3
+    captured.clear()
+    lasers._update_setpoints = capturing_update
+    try:
+        lasers.laser1_on()
+    finally:
+        lasers._update_setpoints = original_update
+    assert captured['setpoint'] == 3
