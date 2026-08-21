@@ -1662,7 +1662,22 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
     def start_lasers(self):
         '''Starts the lasers at a certain voltage. Called from acquisition
         worker threads (not the GUI thread), so no further nested thread is
-        needed — only the %-to-absolute scaling at the HAL boundary.'''
+        needed — only the %-to-absolute scaling at the HAL boundary.
+
+        KNOWN VIOLATION (pre-existing): this method reads
+        self.ui.checkBox_laserOneAutomatic.isChecked() and
+        self.ui.checkBox_laserTwoAutomatic.isChecked() directly from a
+        worker thread. Per AGENTS.md §11, cross-thread UI access must go
+        through signals, never direct widget calls from worker threads —
+        the widgets live on the GUI thread and reading them from another
+        thread is undefined behavior per Qt's threading model. The correct
+        fix is to cache the checkbox states on the GUI thread before
+        spawning the worker (in updateUi_*_mode_button) and pass them as
+        args, or read them via a signal. That refactor touches every
+        updateUi_*_mode_button call site and the worker signatures, so it
+        is left for a dedicated change; this comment documents the
+        violation so it is not silently propagated to new code.
+        '''
         if self.ui.checkBox_laserOneAutomatic.isChecked():
             # Scale the staged percentage to Volts before laser1_on reads
             # it (laser1_on clamps to laser1_max_power internally as well).
