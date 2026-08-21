@@ -1620,6 +1620,13 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
         Runs inside the per-laser lock so concurrent amplitude edits are
         serialized."""
         with self._laser2_write_lock:
+            # E-stop cooperative-skip: if E-stop was pressed while this
+            # toggle thread was in flight, do NOT energize. The E-stop path
+            # already drove the iBeam off synchronously on the GUI thread
+            # via ibeam.off(); a queued toggle that calls ibeam.on() would
+            # re-enable emission of a Class IIIB laser past the kill path.
+            if self.estop_event.is_set():
+                return
             if self.lasers.laser2_active:
                 self.ibeam.off()
                 if self.ibeam.error:
@@ -1631,6 +1638,11 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
                 # laser2_active is cleared regardless — the operator intent was off.
                 self.lasers.laser2_active = False
             else:
+                # Re-check before energizing — E-stop may have fired while
+                # we were waiting on the lock or inside the off() branch
+                # above. Do not call ibeam.on() if the kill path has run.
+                if self.estop_event.is_set():
+                    return
                 self.ibeam.on()
                 if self.ibeam.error:
                     self.sig_message.emit(
