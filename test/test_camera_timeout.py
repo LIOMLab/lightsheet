@@ -119,12 +119,9 @@ def test_recorder_timeout_status_blocks_copy():
     the flag (so the post-acquire check in stack_mode_worker can observe
     it and abort the run).
 
-    The first half is verified by a static-source assertion against
-    gui/controller.py::acquire_scan (the real consumer of the flag) — the
-    guard `if self.camera.recorder_timeout_status:` must appear before the
-    `copy_recorder_images` call in the method body. The second half is
-    verified against the real Camera.delete_recorder (no pco SDK needed —
-    it guards on self.camera is not None).'''
+    Verified against the real Camera.delete_recorder (no pco SDK needed —
+    it guards on self.camera is not None). The acquire_scan side of the
+    contract is not asserted by static-source grep; see AGENTS.md §5.'''
     cam = _make_camera()
     # Simulate a timeout: monitor_recorder set the flag, then acquire_scan
     # called delete_recorder before returning.
@@ -137,34 +134,3 @@ def test_recorder_timeout_status_blocks_copy():
         "delete_recorder must not reset recorder_timeout_status — the "
         "stack_mode_worker post-acquire abort check depends on the flag "
         "surviving delete_recorder.")
-
-    # Static-source assertion that acquire_scan actually checks the flag
-    # before copying images. This mirrors test_acquire_scan_disarms_on_timeout
-    # in test_worker_robustness.py — verifying the real consumer of the
-    # flag rather than a local `not` expression that only tests Python's
-    # boolean negation.
-    import os
-    import re
-    _CONTROLLER_SRC = os.path.join(os.path.dirname(__file__), '..', 'gui', 'controller.py')
-    with open(_CONTROLLER_SRC, 'r') as f:
-        src = f.read()
-    m = re.search(r'def acquire_scan\(self\):', src)
-    assert m, "acquire_scan is missing from gui/controller.py"
-    body = src[m.start():]
-    end = re.search(r'\n    def |\n    @pyqtSlot', body[1:])
-    if end:
-        body = body[:end.start() + 1]
-    guard = 'if self.camera.recorder_timeout_status:'
-    copy_call = 'self.camera.copy_recorder_images('
-    guard_idx = body.find(guard)
-    copy_idx = body.find(copy_call)
-    assert guard_idx != -1, (
-        "acquire_scan must check `if self.camera.recorder_timeout_status:` "
-        "before copying images — otherwise a timed-out plane is mistaken "
-        "for a real (dark) frame on disk.")
-    assert copy_idx != -1, (
-        "acquire_scan must call self.camera.copy_recorder_images — the "
-        "guard is meant to gate this call.")
-    assert guard_idx < copy_idx, (
-        "acquire_scan must check recorder_timeout_status BEFORE calling "
-        "copy_recorder_images so a timed-out plane is not copied to disk.")

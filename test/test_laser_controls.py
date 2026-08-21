@@ -1,26 +1,20 @@
 '''
 Laser power-control regression tests for the staged-percent spinbox
-contract, the offloaded/debounced write wiring, and the E-stop
-cooperative-skip guard.
+contract and the E-stop cooperative-skip guard.
 
 Controller_MainWindow cannot be constructed on this Mac (no PyQt5 display),
-so the wiring is verified by static-source assertions against
-gui/controller.py (following test_estop.py's _read_controller_source() +
-method-body-slicing pattern), plus pure-math tests for the %-to-absolute
-scaling and a behavioral test that calls the real _write_laser*_power
-unbound method against a minimal stand-in self to prove the estop_event
-cooperative-skip guard actually prevents the HAL write (not just a
-static-source string match).
+so the real _write_laser*_power methods are exercised behaviorally: their
+source is extracted from gui/controller.py and exec'd in a controlled
+namespace, then called against a minimal Mock stand-in self. This runs the
+real method body — the same code that runs on the rig — without needing the
+Qt runtime, and proves the estop_event cooperative-skip guard actually
+prevents the HAL write (not a string match on the source).
 
-These tests guard the safety-critical invariants:
-  - Both spinboxes are 0-100 % staged setpoints scaled to each laser's
-    Max Power only at the HAL call boundary.
-  - Toggle and amplitude HAL writes are offloaded off the GUI thread.
-  - The E-stop path (updateUi_estop_pressed) remains fully synchronous on
-    the GUI thread — never offloaded, never waiting on a lock.
-  - Once estop_event is set, no offloaded amplitude/toggle write can
-    re-energize either laser (cooperative-skip guard gates the write,
-    not just exists somewhere in the method).
+Pure-math tests cover the %-to-absolute scaling at the HAL boundary.
+
+Static-source grep assertions (reading controller.py as text and matching
+strings) are intentionally NOT used — they are fragile and exercise no
+code. See AGENTS.md §5.
 '''
 
 import os
@@ -79,86 +73,6 @@ def test_pct_scaling_zero():
     """0 % -> 0 (laser off)."""
     assert 0 / 100.0 * 150000 == 0.0
     assert 0 / 100.0 * 5.0 == 0.0
-
-
-# --------------------------------------------------------------------------- #
-# Static-source assertions: toggle offload + E-stop stays synchronous.
-# --------------------------------------------------------------------------- #
-
-def test_laser1_toggle_offloaded():
-    """laser1_toggle_button must spawn a worker thread rather than calling
-    self.lasers.laser1_toggle() directly in the slot body (GUI freeze fix)."""
-    src = _read_controller_source()
-    body = _slice_method(src, 'laser1_toggle_button(self)')
-    assert 'threading.Thread(target=' in body, (
-        "laser1_toggle_button must offload via threading.Thread")
-    assert 'self.lasers.laser1_toggle()' not in body, (
-        "laser1_toggle_button must not call self.lasers.laser1_toggle() "
-        "directly in the slot body")
-
-
-def test_laser2_toggle_offloaded():
-    """laser2_toggle_button must spawn a worker thread rather than calling
-    self.ibeam.on()/off() directly in the slot body."""
-    src = _read_controller_source()
-    body = _slice_method(src, 'laser2_toggle_button(self)')
-    assert 'threading.Thread(target=' in body, (
-        "laser2_toggle_button must offload via threading.Thread")
-    assert 'self.ibeam.on()' not in body, (
-        "laser2_toggle_button must not call self.ibeam.on() directly")
-    assert 'self.ibeam.off()' not in body, (
-        "laser2_toggle_button must not call self.ibeam.off() directly")
-
-
-def test_estop_handler_remains_synchronous():
-    """updateUi_estop_pressed must still directly call lasers.laser1_off()
-    and ibeam.off() with no threading.Thread wrapping — the kill path must
-    never be offloaded or wait on a lock (AGENTS.md §2)."""
-    src = _read_controller_source()
-    body = _slice_method(src, 'updateUi_estop_pressed(self)')
-    assert 'self.lasers.laser1_off()' in body, (
-        "E-stop handler must synchronously call self.lasers.laser1_off()")
-    assert 'self.ibeam.off()' in body, (
-        "E-stop handler must synchronously call self.ibeam.off()")
-    assert 'threading.Thread' not in body, (
-        "E-stop handler must NOT be offloaded to a worker thread")
-
-
-# --------------------------------------------------------------------------- #
-# Static-source assertions: scaling boundary + cooperative-skip ordering.
-# --------------------------------------------------------------------------- #
-
-def test_write_laser1_power_scaling_and_estop_guard():
-    """_write_laser1_power must reference laser1_max_power (scaling
-    boundary) and the estop_event.is_set() check must appear before the
-    _update_setpoints() call within the same body (cooperative-skip gates
-    the write, not just exists somewhere in the method)."""
-    src = _read_controller_source()
-    body = _slice_method(src, '_write_laser1_power(self, pct)')
-    assert 'self.lasers.laser1_max_power' in body, (
-        "_write_laser1_power must scale via self.lasers.laser1_max_power")
-    estop_idx = body.find('self.estop_event.is_set()')
-    write_idx = body.find('self.lasers._update_setpoints()')
-    assert estop_idx != -1, "_write_laser1_power must check estop_event"
-    assert write_idx != -1, "_write_laser1_power must call _update_setpoints"
-    assert estop_idx < write_idx, (
-        "_write_laser1_power: estop_event check must precede the DAQ write")
-
-
-def test_write_laser2_power_scaling_and_estop_guard():
-    """_write_laser2_power must reference ibeam.max_power (scaling
-    boundary) and the estop_event.is_set() check must appear before the
-    ibeam.set_power( call within the same body."""
-    src = _read_controller_source()
-    body = _slice_method(src, '_write_laser2_power(self, pct)')
-    assert 'self.ibeam.max_power' in body, (
-        "_write_laser2_power must scale via self.ibeam.max_power")
-    estop_idx = body.find('self.estop_event.is_set()')
-    write_idx = body.find('self.ibeam.set_power(')
-    assert estop_idx != -1, "_write_laser2_power must check estop_event"
-    assert write_idx != -1, "_write_laser2_power must call ibeam.set_power"
-    assert estop_idx < write_idx, (
-        "_write_laser2_power: estop_event check must precede the serial write")
 
 
 # --------------------------------------------------------------------------- #
