@@ -149,6 +149,15 @@ class Camera:
         return None
 
     def arm_scan(self):
+        # Clear any stale timeout flag from a previous run BEFORE the
+        # hardware-present guard. A worker that died mid-timeout can leave
+        # recorder_timeout_status=True; without this unconditional reset the
+        # next arm_scan() would inherit the poisoned state and the next
+        # acquisition could not recover without an app restart. Resetting
+        # here (rather than only in start_recorder) guarantees every scan
+        # starts from a clean timeout state regardless of how the previous
+        # one ended.
+        self.recorder_timeout_status = False
         if self.camera is not None:
             if self.shutter_mode == 'Lightsheet':
                 if self.verbose:
@@ -272,16 +281,24 @@ class Camera:
     def monitor_recorder(self, number_of_images:int):
         '''Monitor the camera recorder until all images arrive or the timeout
         expires. The timeout scales with the number of images and the
-        per-image time (shutter-mode dependent), floored by a configurable
-        minimum and multiplied by a safety factor — so legitimate long
-        acquisitions are not falsely aborted while genuinely stuck runs
-        still time out. On timeout, recorder_timeout_status is set so the
+        per-image time (shutter-mode dependent), floored by both a
+        configurable minimum (Recorder Timeout Floor) and the legacy flat
+        Recorder Timeout interval (rig-confirmed to work for
+        Rolling/Global-shutter acquisitions), and multiplied by a safety
+        factor — so legitimate long acquisitions are not falsely aborted
+        while genuinely stuck runs still time out. The legacy-interval
+        floor is critical because the per-image time estimate for
+        Rolling/Global mode (pure exposure_time) ignores trigger-wait,
+        readout, and DAQ-cycle overhead, so without it the scaled value
+        can fall below what actually worked under the pre-phase flat
+        timeout. On timeout, recorder_timeout_status is set so the
         caller can abort before any zero-filled frames are saved.
         '''
         if self.is_recording:
             per_image_time = self._compute_per_image_time()
             timeout_s = max(
                 self.recorder_timeout_floor,
+                self.recorder_timeout_interval,
                 number_of_images * per_image_time * self.recorder_timeout_safety_factor
             )
             if self.verbose:
