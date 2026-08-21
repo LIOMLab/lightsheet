@@ -492,9 +492,24 @@ class Controller_MainWindow(QMainWindow):
             self.ui.statusbar.showMessage('Shutting down hardware...')
             self.ui.statusbar.repaint()
             self.close_modes()
-            # FIXME
-            # waits one second for the threaded workers to stop ... implement checks or join
-            time.sleep(1)
+            # Join each acquisition worker thread with a bounded timeout
+            # instead of an unconditional fixed sleep. A worker stuck
+            # inside a blocking hardware call (camera.monitor_recorder up to
+            # its timeout, an iBeam serial round-trip, a motor move) would
+            # otherwise hang shutdown indefinitely; the bounded wait gives
+            # it a chance to exit cleanly while guaranteeing shutdown
+            # proceeds regardless. These thread attributes only exist once
+            # their mode has been started at least once, hence getattr.
+            for attr in ('single_mode_thread', 'preview_mode_thread',
+                         'live_mode_thread', 'stack_mode_thread'):
+                worker_thread = getattr(self, attr, None)
+                if worker_thread is not None and worker_thread.is_alive():
+                    worker_thread.join(timeout=5.0)
+                    if worker_thread.is_alive():
+                        logging.warning(
+                            '%s still alive after 5s join timeout during '
+                            'closeEvent — proceeding with shutdown anyway.',
+                            attr)
             self.camera.close()
             self.etls.close()
             self.ibeam.close()
@@ -1773,52 +1788,55 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
 
     def single_mode_worker(self):
         '''Generates and display a single scan which can be saved afterwards'''
+        try:
+            # Moving the camera to focus
+            ##self.move_camera_to_focus()
 
-        # Moving the camera to focus
-        ##self.move_camera_to_focus()
+            # Getting positions for the image
+            self.image_hor_pos_text = self.current_horizontal_position_text
+            self.image_ver_pos_text = self.current_vertical_position_text
+            self.image_cam_pos_text = self.current_camera_position_text
 
-        # Getting positions for the image
-        self.image_hor_pos_text = self.current_horizontal_position_text
-        self.image_ver_pos_text = self.current_vertical_position_text
-        self.image_cam_pos_text = self.current_camera_position_text
+            # Setting the camera for scan acquisition
+            self.camera.arm_scan()
 
-        # Setting the camera for scan acquisition
-        self.camera.arm_scan()
+            # Start lasers
+            self.start_lasers()
 
-        # Start lasers
-        self.start_lasers()
+            # E-stop poll point — checked before acquire_scan so a mid-acquisition
+            # E-stop (pressed between mode start and the single frame grab) aborts
+            # without acquiring the frame. The lasers are already dark from the
+            # synchronous GUI-thread zeroing in updateUi_estop_pressed.
+            if self.estop_event.is_set():
+                # Put ETLs in standby and stop lasers/camera before exiting so the
+                # post-mode cleanup matches the normal single_mode_worker exit.
+                self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+                self.stop_lasers()
+                self.camera.disarm()
+                return
 
-        # E-stop poll point — checked before acquire_scan so a mid-acquisition
-        # E-stop (pressed between mode start and the single frame grab) aborts
-        # without acquiring the frame. The lasers are already dark from the
-        # synchronous GUI-thread zeroing in updateUi_estop_pressed.
-        if self.estop_event.is_set():
-            # Put ETLs in standby and stop lasers/camera before exiting so the
-            # post-mode cleanup matches the normal single_mode_worker exit.
+            # Refresh scan waveforms with current settings
+            self.siggen.compute_scan_waveforms()
+
+            # Acquire a single scan
+            self.acquire_scan()
+
+            # Put ETLs in standby mode
+            # 2.5V corresponds no current through coil (mid 0-5V adjustable range)
             self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+
+            # Stop lasers
             self.stop_lasers()
+
+            # Stop camera
             self.camera.disarm()
+        finally:
+            # The finished signal must fire exactly once whether the method
+            # returns early (E-stop), completes normally, or an exception
+            # propagates from stop_lasers()/camera.disarm()/anything else.
+            # Without this, a worker that dies mid-cleanup leaves the UI
+            # stuck on "Acquiring..." with no slot to re-enable it.
             self.sig_single_mode_finished.emit()
-            return
-
-        # Refresh scan waveforms with current settings
-        self.siggen.compute_scan_waveforms()
-
-        # Acquire a single scan
-        self.acquire_scan()
-
-        # Put ETLs in standby mode
-        # 2.5V corresponds no current through coil (mid 0-5V adjustable range)
-        self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-
-        # Stop lasers
-        self.stop_lasers()
-
-        # Stop camera
-        self.camera.disarm()
-
-        # Emit finished signal
-        self.sig_single_mode_finished.emit()
 
 
     def crop_buffer(self, buffer):
@@ -2013,6 +2031,14 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
             # consistent state and no spurious NI-DAQmx errors are raised.
             self.siggen.stop_scanner()
             self.siggen.delete_scanner()
+            # Disarm the camera before returning. Camera.disarm() is
+            # idempotent (it only issues the SDK stop-recording call when
+            # the camera reports recording state == 'on'), so calling it
+            # here and again from a caller that reaches its own disarm()
+            # is safe. This ensures a camera left mid-timeout is always
+            # disarmed before any worker that might die afterward gets a
+            # chance to skip its own cleanup.
+            self.camera.disarm()
             return
 
         # Recover images from the recorder
@@ -2208,129 +2234,134 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
 
     def stack_mode_worker(self):
         ''' Thread for volume acquisition and saving'''
+        try:
+            # Making sure saving is allowed and filename isn't empty
+            if self.saving_allowed:
+                # Getting sample name
+                self.save_description = str(self.ui.lineEdit_saveDescription.text())
 
-        # Making sure saving is allowed and filename isn't empty
-        if self.saving_allowed:
-            # Getting sample name
-            self.save_description = str(self.ui.lineEdit_saveDescription.text())
+                # Setting frame saver
+                self.frame_saver.reinit(3)
+                self.frame_saver.add_sample_name(self.save_description)
+                if self.ui.checkBox_saveAllCrop.isChecked():
+                    self.frame_saver.set_files(self.number_of_planes, self.save_filename, 'stack', 1, 'ETLscan')
+                elif self.ui.checkBox_saveAllFull.isChecked():
+                    self.frame_saver.set_files(self.number_of_planes, self.save_filename, 'stack', 1, 'FullETLscan')
+                else:
+                    self.frame_saver.set_files(1, self.save_filename, 'stack', self.number_of_planes, 'reconstructed_frame')
+                # Starting frame saver
+                self.frame_saver.start_saving()
 
-            # Setting frame saver
-            self.frame_saver.reinit(3)
-            self.frame_saver.add_sample_name(self.save_description)
-            if self.ui.checkBox_saveAllCrop.isChecked():
-                self.frame_saver.set_files(self.number_of_planes, self.save_filename, 'stack', 1, 'ETLscan')
-            elif self.ui.checkBox_saveAllFull.isChecked():
-                self.frame_saver.set_files(self.number_of_planes, self.save_filename, 'stack', 1, 'FullETLscan')
-            else:
-                self.frame_saver.set_files(1, self.save_filename, 'stack', self.number_of_planes, 'reconstructed_frame')
-            # Starting frame saver
-            self.frame_saver.start_saving()
+            # Setting the camera for scan acquisition
+            self.camera.arm_scan()
 
-        # Setting the camera for scan acquisition
-        self.camera.arm_scan()
+            # Pre-stop guard: a Stop or E-stop pressed in the instant between
+            # thread start and this line skips energizing the lasers entirely.
+            # The per-plane loop's first-iteration poll then breaks immediately
+            # and the end-of-method cleanup (stop_lasers/disarm/emit) runs
+            # unchanged, so no lasers are left on and the UI re-enables.
+            if self.stack_mode_started and not self.estop_event.is_set():
+                self.start_lasers()
 
-        # Pre-stop guard: a Stop or E-stop pressed in the instant between
-        # thread start and this line skips energizing the lasers entirely.
-        # The per-plane loop's first-iteration poll then breaks immediately
-        # and the end-of-method cleanup (stop_lasers/disarm/emit) runs
-        # unchanged, so no lasers are left on and the UI re-enables.
-        if self.stack_mode_started and not self.estop_event.is_set():
-            self.start_lasers()
+            # Set progress bar
+            progress_value = 0
+            progress_increment = 100/self.number_of_planes
+            self.sig_progress_update.emit(0) #To reset progress bar
 
-        # Set progress bar
-        progress_value = 0
-        progress_increment = 100/self.number_of_planes
-        self.sig_progress_update.emit(0) #To reset progress bar
+            # Compute scan waveforms only once before we start the stack acquisition
+            # Changes to settings won't be effective until we stop/restart mode
+            self.siggen.compute_scan_waveforms()
 
-        # Compute scan waveforms only once before we start the stack acquisition
-        # Changes to settings won't be effective until we stop/restart mode
-        self.siggen.compute_scan_waveforms()
-
-        for plane in range(int(self.number_of_planes)):
-            if self.stack_mode_started == False:
-                self.sig_message.emit('Stack Acquisition Interrupted')
-                break
-            elif self.estop_event.is_set():
-                # E-stop poll point — checked alongside the stack_mode_started
-                # flag at each plane boundary. The lasers are already dark
-                # (driven off synchronously on the GUI thread); this break
-                # stops acquiring new planes.
-                self.sig_message.emit('Stack Acquisition Interrupted')
-                break
-            else:
-                # Pre-move guard: a Stop or E-stop requested while the worker
-                # was between blocking calls (after the loop-top poll but
-                # before this motor move) must not start a new blocking call.
-                if not self.stack_mode_started or self.estop_event.is_set(): break
-
-                # Moving sample position
-                position = self.stack_starting_plane + (plane * self.stack_step)
-                try:
-                    self.motors.horizontal.move_absolute_position(position,'\u03BCm')  #Position in micro-meters
-                except ValueError:
-                    self.sig_message.emit('Move rejected — horizontal would exceed travel limits. Stack acquisition aborted.')
-                    self.sig_beep.emit()
+            for plane in range(int(self.number_of_planes)):
+                if self.stack_mode_started == False:
+                    self.sig_message.emit('Stack Acquisition Interrupted')
                     break
-                #FIXME - updating ui within secondary thread
-                self.updateUi_position_horizontal()
-
-                # Moving the camera to focus
-                #FIXME - Add focus adjustement to stack mode
-                #self.calculate_camera_focus()
-                #self.move_camera_to_focus()
-
-                if self.saving_allowed:
-                    self.frame_saver.add_motor_parameters(self.current_horizontal_position_text, self.current_vertical_position_text, self.current_camera_position_text)
-
-                # Pre-acquire guard: a Stop or E-stop requested while the worker
-                # was between the motor move and this acquisition must not start
-                # the (potentially long, up to recorder-timeout) camera grab.
-                if not self.stack_mode_started or self.estop_event.is_set(): break
-
-                # Getting image
-                self.acquire_scan()
-
-                # Abort the stack if the camera timed out on this plane —
-                # acquire_scan already emitted the timeout warning and cleaned
-                # up the recorder/scanner; do not enqueue a (nonexistent)
-                # frame for this plane or attempt the next one.
-                if self.camera.recorder_timeout_status:
+                elif self.estop_event.is_set():
+                    # E-stop poll point — checked alongside the stack_mode_started
+                    # flag at each plane boundary. The lasers are already dark
+                    # (driven off synchronously on the GUI thread); this break
+                    # stops acquiring new planes.
+                    self.sig_message.emit('Stack Acquisition Interrupted')
                     break
+                else:
+                    # Pre-move guard: a Stop or E-stop requested while the worker
+                    # was between blocking calls (after the loop-top poll but
+                    # before this motor move) must not start a new blocking call.
+                    if not self.stack_mode_started or self.estop_event.is_set(): break
 
-                # Saving frame
-                if self.saving_allowed:
-                    if self.ui.checkBox_saveAllCrop.isChecked():
-                        cropped_buffer = self.crop_buffer(self.buffer)
-                        self.frame_saver.enqueue_buffer(cropped_buffer)
-                        self.sig_message.emit('Saving All Images (one for each ETL step, cropped)')
-                    elif self.ui.checkBox_saveAllFull.isChecked():
-                        self.frame_saver.enqueue_buffer(self.buffer)
-                        self.sig_message.emit('Saving All Images (one for each ETL step, full)')
-                    else:
-                        self.frame_saver.enqueue_buffer(self.reconstructed_frame)
-                        self.sig_message.emit('Saving Reconstructed Image')
+                    # Moving sample position
+                    position = self.stack_starting_plane + (plane * self.stack_step)
+                    try:
+                        self.motors.horizontal.move_absolute_position(position,'\u03BCm')  #Position in micro-meters
+                    except ValueError:
+                        self.sig_message.emit('Move rejected — horizontal would exceed travel limits. Stack acquisition aborted.')
+                        self.sig_beep.emit()
+                        break
+                    #FIXME - updating ui within secondary thread
+                    self.updateUi_position_horizontal()
 
-                # Update progress bar
-                progress_value += progress_increment
-                self.sig_progress_update.emit(int(progress_value))
+                    # Moving the camera to focus
+                    #FIXME - Add focus adjustement to stack mode
+                    #self.calculate_camera_focus()
+                    #self.move_camera_to_focus()
 
-        if self.stack_mode_started:
-            self.sig_progress_update.emit(100) #In case the number of planes is not a multiple of 100
+                    if self.saving_allowed:
+                        self.frame_saver.add_motor_parameters(self.current_horizontal_position_text, self.current_vertical_position_text, self.current_camera_position_text)
 
-        if self.saving_allowed:
-            self.frame_saver.stop_saving()
+                    # Pre-acquire guard: a Stop or E-stop requested while the worker
+                    # was between the motor move and this acquisition must not start
+                    # the (potentially long, up to recorder-timeout) camera grab.
+                    if not self.stack_mode_started or self.estop_event.is_set(): break
 
-        # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)
-        self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+                    # Getting image
+                    self.acquire_scan()
 
-        # Stopping laser
-        self.stop_lasers()
+                    # Abort the stack if the camera timed out on this plane —
+                    # acquire_scan already emitted the timeout warning and cleaned
+                    # up the recorder/scanner; do not enqueue a (nonexistent)
+                    # frame for this plane or attempt the next one.
+                    if self.camera.recorder_timeout_status:
+                        break
 
-        # Stopping camera
-        self.camera.disarm()
+                    # Saving frame
+                    if self.saving_allowed:
+                        if self.ui.checkBox_saveAllCrop.isChecked():
+                            cropped_buffer = self.crop_buffer(self.buffer)
+                            self.frame_saver.enqueue_buffer(cropped_buffer)
+                            self.sig_message.emit('Saving All Images (one for each ETL step, cropped)')
+                        elif self.ui.checkBox_saveAllFull.isChecked():
+                            self.frame_saver.enqueue_buffer(self.buffer)
+                            self.sig_message.emit('Saving All Images (one for each ETL step, full)')
+                        else:
+                            self.frame_saver.enqueue_buffer(self.reconstructed_frame)
+                            self.sig_message.emit('Saving Reconstructed Image')
 
-        # Stack mode finished
-        self.sig_stack_mode_finished.emit()
+                    # Update progress bar
+                    progress_value += progress_increment
+                    self.sig_progress_update.emit(int(progress_value))
+
+            if self.stack_mode_started:
+                self.sig_progress_update.emit(100) #In case the number of planes is not a multiple of 100
+
+            if self.saving_allowed:
+                self.frame_saver.stop_saving()
+
+            # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)
+            self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+
+            # Stopping laser
+            self.stop_lasers()
+
+            # Stopping camera
+            self.camera.disarm()
+        finally:
+            # The finished signal must fire exactly once whether the method
+            # completes normally, breaks out of the per-plane loop, or an
+            # exception propagates from stop_lasers()/camera.disarm()/
+            # anything else in the body. Without this, a worker that dies
+            # mid-cleanup leaves the UI stuck on "Stop Stack Mode" with no
+            # slot to re-enable it.
+            self.sig_stack_mode_finished.emit()
 
 
     '''Calibration Methods'''
