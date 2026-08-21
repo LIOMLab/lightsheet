@@ -691,8 +691,13 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_move_to_horizontal_position(self):
         '''Moves the sample to a specified horizontal position'''
         if ((self.ui.doubleSpinBox_sampleSetHPosition.value() >= self.motors.horizontal.get_limit_low(self.units)) and (self.ui.doubleSpinBox_sampleSetHPosition.value() <= self.motors.horizontal.get_limit_high(self.units))):
-            self.motors.horizontal.move_absolute_position(self.ui.doubleSpinBox_sampleSetHPosition.value(), self.units)
-            self.updateUi_message_printer('Sample moving to horizontal position')
+            try:
+                self.motors.horizontal.move_absolute_position(self.ui.doubleSpinBox_sampleSetHPosition.value(), self.units)
+            except ValueError:
+                self.sig_message.emit('Move rejected — horizontal would exceed travel limits. Move the stage closer to the travel range and retry.')
+                self.sig_beep.emit()
+            else:
+                self.updateUi_message_printer('Sample moving to horizontal position')
             self.updateUi_position_horizontal()
         else:
             self.updateUi_message_printer('Out of boundaries')
@@ -701,8 +706,13 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_move_to_vertical_position(self):
         '''Moves the sample to a specified vertical position'''
         if ((self.ui.doubleSpinBox_sampleSetVPosition.value() >= self.motors.vertical.get_limit_low(self.units)) and (self.ui.doubleSpinBox_sampleSetVPosition.value() <= self.motors.vertical.get_limit_high(self.units))):
-            self.motors.vertical.move_absolute_position(self.ui.doubleSpinBox_sampleSetVPosition.value(), self.units)
-            self.updateUi_message_printer('Sample moving to vertical position')
+            try:
+                self.motors.vertical.move_absolute_position(self.ui.doubleSpinBox_sampleSetVPosition.value(), self.units)
+            except ValueError:
+                self.sig_message.emit('Move rejected — vertical would exceed travel limits. Move the stage closer to the travel range and retry.')
+                self.sig_beep.emit()
+            else:
+                self.updateUi_message_printer('Sample moving to vertical position')
             self.updateUi_position_vertical()
         else:
             self.updateUi_message_printer('Out of boundaries')
@@ -712,8 +722,13 @@ class Controller_MainWindow(QMainWindow):
         '''Moves vertical and horizontal sample motors to origin position'''
         if (self.motors.horizontal.get_origin(self.units) <= self.motors.horizontal.get_limit_high(self.units)) and (self.motors.horizontal.get_origin(self.units) >= self.motors.horizontal.get_limit_low(self.units)):
             # Moving sample to horizontal origin
-            self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_origin(self.units), self.units)
-            self.updateUi_message_printer('Moving to horizontal origin')
+            try:
+                self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_origin(self.units), self.units)
+            except ValueError:
+                self.sig_message.emit('Move rejected — horizontal would exceed travel limits. Move the stage closer to the travel range and retry.')
+                self.sig_beep.emit()
+            else:
+                self.updateUi_message_printer('Moving to horizontal origin')
             self.updateUi_position_horizontal()
         else:
             self.sig_beep.emit()
@@ -721,8 +736,13 @@ class Controller_MainWindow(QMainWindow):
 
         if (self.motors.vertical.get_origin(self.units) <= self.motors.vertical.get_limit_high(self.units)) and (self.motors.vertical.get_origin(self.units) >= self.motors.vertical.get_limit_low(self.units)):
             # Moving sample to vertical origin
-            self.motors.vertical.move_absolute_position(self.motors.vertical.get_origin(self.units), self.units)
-            self.updateUi_message_printer('Moving to vertical origin')
+            try:
+                self.motors.vertical.move_absolute_position(self.motors.vertical.get_origin(self.units), self.units)
+            except ValueError:
+                self.sig_message.emit('Move rejected — vertical would exceed travel limits. Move the stage closer to the travel range and retry.')
+                self.sig_beep.emit()
+            else:
+                self.updateUi_message_printer('Moving to vertical origin')
             self.updateUi_position_vertical()
         else:
             self.sig_beep.emit()
@@ -731,8 +751,13 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_move_camera_to_position(self):
         '''Moves the sample to a specified vertical position'''
         if ((self.ui.doubleSpinBox_cameraSetPosition.value() >= self.motors.camera.get_limit_low(self.units)) and (self.ui.doubleSpinBox_cameraSetPosition.value() <= self.motors.camera.get_limit_high(self.units))):
-            self.motors.camera.move_absolute_position(self.ui.doubleSpinBox_cameraSetPosition.value(), self.units)
-            self.updateUi_message_printer ('Camera moving to position')
+            try:
+                self.motors.camera.move_absolute_position(self.ui.doubleSpinBox_cameraSetPosition.value(), self.units)
+            except ValueError:
+                self.sig_message.emit('Move rejected — camera would exceed travel limits. Move the stage closer to the travel range and retry.')
+                self.sig_beep.emit()
+            else:
+                self.updateUi_message_printer ('Camera moving to position')
             self.updateUi_position_camera()
         else:
             self.updateUi_message_printer('Out of boundaries')
@@ -754,19 +779,34 @@ class Controller_MainWindow(QMainWindow):
                 self.sig_beep.emit()
                 self.updateUi_position_camera()
             else:
-                self.motors.camera.move_absolute_position(self.motors.camera.get_origin(self.units), self.units)
-                self.updateUi_message_printer('Moving to focus')
+                try:
+                    self.motors.camera.move_absolute_position(self.motors.camera.get_origin(self.units), self.units)
+                except ValueError:
+                    self.sig_message.emit('Move rejected — camera would exceed travel limits. Move the stage closer to the travel range and retry.')
+                    self.sig_beep.emit()
+                else:
+                    self.updateUi_message_printer('Moving to focus')
                 self.updateUi_position_camera()
         else:
-            self.motors.camera.move_absolute_position(self.motors.camera.get_origin(self.units), self.units)
-            self.updateUi_message_printer('Focus not yet set. Moving camera to default focus')
+            try:
+                self.motors.camera.move_absolute_position(self.motors.camera.get_origin(self.units), self.units)
+            except ValueError:
+                self.sig_message.emit('Move rejected — camera would exceed travel limits. Move the stage closer to the travel range and retry.')
+                self.sig_beep.emit()
+            else:
+                self.updateUi_message_printer('Focus not yet set. Moving camera to default focus')
             self.updateUi_position_camera()
 
     def updateUi_move_sample_backward(self):
         '''Sample motor backward horizontal motion'''
         if self.motors.horizontal.get_position(self.units) - self.ui.doubleSpinBox_sampleHStepSize.value() >= self.motors.horizontal.get_limit_low(self.units):
-            self.motors.horizontal.move_relative_position(-self.ui.doubleSpinBox_sampleHStepSize.value(), self.units)
-            self.updateUi_message_printer ('Sample moving backward')
+            try:
+                self.motors.horizontal.move_relative_position(-self.ui.doubleSpinBox_sampleHStepSize.value(), self.units)
+            except ValueError:
+                self.sig_message.emit('Move rejected — horizontal would exceed travel limits. Move the stage closer to the travel range and retry.')
+                self.sig_beep.emit()
+            else:
+                self.updateUi_message_printer ('Sample moving backward')
             self.updateUi_position_horizontal()
         else:
             # self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_low(self.units), self.units)
@@ -778,8 +818,13 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_move_sample_forward(self):
         '''Sample motor forward horizontal motion'''
         if self.motors.horizontal.get_position(self.units) + self.ui.doubleSpinBox_sampleHStepSize.value() <= self.motors.horizontal.get_limit_high(self.units):
-            self.motors.horizontal.move_relative_position(self.ui.doubleSpinBox_sampleHStepSize.value(), self.units)
-            self.updateUi_message_printer('Sample moving forward')
+            try:
+                self.motors.horizontal.move_relative_position(self.ui.doubleSpinBox_sampleHStepSize.value(), self.units)
+            except ValueError:
+                self.sig_message.emit('Move rejected — horizontal would exceed travel limits. Move the stage closer to the travel range and retry.')
+                self.sig_beep.emit()
+            else:
+                self.updateUi_message_printer('Sample moving forward')
             self.updateUi_position_horizontal()
         else:
             # self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_high(self.units), self.units)
@@ -791,8 +836,13 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_move_sample_up(self):
         '''Sample motor upward vertical motion'''
         if self.motors.vertical.get_position(self.units) - self.ui.doubleSpinBox_sampleVStepSize.value() >= self.motors.vertical.get_limit_low(self.units):
-            self.motors.vertical.move_relative_position(-self.ui.doubleSpinBox_sampleVStepSize.value(), self.units)
-            self.updateUi_message_printer('Sample stepping up')
+            try:
+                self.motors.vertical.move_relative_position(-self.ui.doubleSpinBox_sampleVStepSize.value(), self.units)
+            except ValueError:
+                self.sig_message.emit('Move rejected — vertical would exceed travel limits. Move the stage closer to the travel range and retry.')
+                self.sig_beep.emit()
+            else:
+                self.updateUi_message_printer('Sample stepping up')
             self.updateUi_position_vertical()
         else:
             # self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_low(self.units), self.units)
@@ -804,8 +854,13 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_move_sample_down(self):
         '''Sample motor downward vertical motion'''
         if self.motors.vertical.get_position(self.units) + self.ui.doubleSpinBox_sampleVStepSize.value() <= self.motors.vertical.get_limit_high(self.units):
-            self.motors.vertical.move_relative_position(self.ui.doubleSpinBox_sampleVStepSize.value(), self.units)
-            self.updateUi_message_printer('Sample stepping down')
+            try:
+                self.motors.vertical.move_relative_position(self.ui.doubleSpinBox_sampleVStepSize.value(), self.units)
+            except ValueError:
+                self.sig_message.emit('Move rejected — vertical would exceed travel limits. Move the stage closer to the travel range and retry.')
+                self.sig_beep.emit()
+            else:
+                self.updateUi_message_printer('Sample stepping down')
             self.updateUi_position_vertical()
         else:
             # self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_high(self.units), self.units)
@@ -817,8 +872,13 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_move_camera_backward(self):
         '''Camera motor backward horizontal motion'''
         if self.motors.camera.get_position(self.units) - self.ui.doubleSpinBox_cameraStepSize.value() >= self.motors.camera.get_limit_low(self.units):
-            self.motors.camera.move_relative_position(-self.ui.doubleSpinBox_cameraStepSize.value(), self.units)
-            self.updateUi_message_printer('Camera stepping backward')
+            try:
+                self.motors.camera.move_relative_position(-self.ui.doubleSpinBox_cameraStepSize.value(), self.units)
+            except ValueError:
+                self.sig_message.emit('Move rejected — camera would exceed travel limits. Move the stage closer to the travel range and retry.')
+                self.sig_beep.emit()
+            else:
+                self.updateUi_message_printer('Camera stepping backward')
             self.updateUi_position_camera()
         else:
             # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_low(self.units), self.units)
@@ -831,8 +891,13 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_move_camera_forward(self):
         '''Camera motor forward horizontal motion'''
         if self.motors.camera.get_position(self.units) + self.ui.doubleSpinBox_cameraStepSize.value() <= self.motors.camera.get_limit_high(self.units):
-            self.motors.camera.move_relative_position(self.ui.doubleSpinBox_cameraStepSize.value(), self.units)
-            self.updateUi_message_printer('Camera stepping forward')
+            try:
+                self.motors.camera.move_relative_position(self.ui.doubleSpinBox_cameraStepSize.value(), self.units)
+            except ValueError:
+                self.sig_message.emit('Move rejected — camera would exceed travel limits. Move the stage closer to the travel range and retry.')
+                self.sig_beep.emit()
+            else:
+                self.updateUi_message_printer('Camera stepping forward')
             self.updateUi_position_camera()
         else:
             # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_high(self.units), self.units)
@@ -1905,7 +1970,12 @@ class Controller_MainWindow(QMainWindow):
             else:
                 # Moving sample position
                 position = self.stack_starting_plane + (plane * self.stack_step)
-                self.motors.horizontal.move_absolute_position(position,'\u03BCm')  #Position in micro-meters
+                try:
+                    self.motors.horizontal.move_absolute_position(position,'\u03BCm')  #Position in micro-meters
+                except ValueError:
+                    self.sig_message.emit('Move rejected — horizontal would exceed travel limits. Stack acquisition aborted.')
+                    self.sig_beep.emit()
+                    break
                 #FIXME - updating ui within secondary thread
                 self.updateUi_position_horizontal()
 

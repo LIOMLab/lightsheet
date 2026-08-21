@@ -319,7 +319,13 @@ class ZaberMotor:
         return position
 
     def move_home(self):
-        '''Moves the device to home position.'''
+        '''Moves the device to its physical home position.
+
+        Sends Zaber command 1 (physical home). This does NOT honor the
+        configured travel limits — the stage homes to its mechanical end,
+        not the configured origin. Not GUI-wired today; documented for any
+        future caller.
+        '''
         if self.id != 0:
             cmd_no = 1
             cmd_param = 0
@@ -328,19 +334,44 @@ class ZaberMotor:
     def move_absolute_position(self, absolute_position, units):
         '''Moves the device to a specified absolute position.
 
+        The target position is validated against the configured travel
+        limits BEFORE any serial command is sent. An out-of-range target
+        raises ValueError so the caller can reject-and-beep instead of
+        silently over-traveling the stage.
+
         Parameters:
             absolutePosition: Numerical value of the absolute position
             unit: A string which indicate the scale of the numerical value.
                   The options are: 'm', 'cm', 'mm', '\u03BCm' (micrometers) and '\u03BCStep' (microsteps)
         '''
         if self.id != 0:
+            target_microsteps = self.position_to_microsteps(absolute_position, units)
+            if target_microsteps < self.limit_low_microsteps:
+                raise ValueError(
+                    f"Target position {absolute_position} {units} is below the low travel limit"
+                )
+            if target_microsteps > self.limit_high_microsteps:
+                raise ValueError(
+                    f"Target position {absolute_position} {units} exceeds the high travel limit"
+                )
             cmd_no = 20
-            cmd_param = self.position_to_microsteps(absolute_position, units)
-            self._motorIO(cmd_no, cmd_param)
+            self._motorIO(cmd_no, target_microsteps)
 
 
     def move_relative_position(self, relative_position, units):
-        '''Moves the device to a specified relative position
+        '''Moves the device to a specified relative position.
+
+        The RESULTING position (current position + delta) is validated
+        against the configured travel limits BEFORE the move command is
+        sent. Validating the resulting position rather than the raw delta
+        catches small deltas that would push the stage past a limit when
+        it is already near the edge of travel. An out-of-range resulting
+        position raises ValueError.
+
+        If the current position cannot be read (the position-query serial
+        call leaves self.error truthy), ValueError is raised before any
+        move is attempted — an unreadable position must not silently pass
+        validation.
 
         Parameters:
             relativePosition: Numerical value of the relative motion
@@ -348,17 +379,26 @@ class ZaberMotor:
                   The options are: 'm', 'cm', 'mm', '\u03BCm' (micrometers) and '\u03BCStep' (microsteps)
         '''
         if self.id != 0:
+            delta_microsteps = self.position_to_microsteps(relative_position, units)
+            # cmd 60 = get current position (matches get_position's internal call)
+            current_microsteps = self._motorIO(60, 0)
+            if self.error:
+                raise ValueError(
+                    "Cannot read current position to validate relative move"
+                )
+            resulting_microsteps = current_microsteps + delta_microsteps
+            if resulting_microsteps < self.limit_low_microsteps:
+                raise ValueError(
+                    f"Relative move would result in {resulting_microsteps} microsteps, "
+                    f"below the low travel limit of {self.limit_low_microsteps}"
+                )
+            if resulting_microsteps > self.limit_high_microsteps:
+                raise ValueError(
+                    f"Relative move would result in {resulting_microsteps} microsteps, "
+                    f"exceeding the high travel limit of {self.limit_high_microsteps}"
+                )
             cmd_no = 21
-            cmd_param = self.position_to_microsteps(relative_position, units)
-            self._motorIO(cmd_no, cmd_param)
-
-
-    def move_maximum_position(self):
-        '''Moves the device to its maximum position.'''
-        if self.id != 0:
-            cmd_no = 20
-            cmd_param = self.microsteps_max
-            self._motorIO(cmd_no, cmd_param)
+            self._motorIO(cmd_no, delta_microsteps)
 
 
     def microsteps_to_position(self, microsteps, units:str='mm'):
