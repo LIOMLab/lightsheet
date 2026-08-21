@@ -1578,7 +1578,22 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
         (scaled to Volts) so the operator sees the chosen power, not 0 V.
         HAL failures are surfaced via sig_message."""
         with self._laser1_write_lock:
+            # E-stop cooperative-skip: if E-stop was pressed while this
+            # toggle thread was in flight (waiting on the lock or before it
+            # was scheduled), do NOT energize. The E-stop path already drove
+            # the laser to 0 V synchronously on the GUI thread via
+            # laser1_off(); a queued toggle that calls laser1_toggle() ->
+            # laser1_on() would re-energize a Class IIIB laser past the
+            # kill path. E-stop must be the final word.
+            if self.estop_event.is_set():
+                return
             self.lasers.laser1_toggle()
+            # Re-check after the toggle — E-stop may have fired mid-toggle
+            # (between laser1_toggle() returning and this line). If it did,
+            # force the laser back off and do not apply the staged power.
+            if self.estop_event.is_set():
+                self.lasers.laser1_off()
+                return
             if self.lasers.error:
                 self.sig_message.emit(
                     f"Laser write failed — laser reverted to OFF. Check the NI DAQ connection (Dev7) and re-enable the laser. Cause: {self.lasers.error_message}")
