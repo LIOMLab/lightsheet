@@ -196,3 +196,115 @@ def test_ibeam_sys_error_response_sets_error():
     # The error message names the rejected command so the operator can see
     # which write the firmware refused.
     assert 'channel 1 power 5000 micro' in ib.error_message
+
+
+# --------------------------------------------------------------------------- #
+# Test 10: set_power must NOT update self._power after a %SYS-E rejection.
+# _send_cmd does not raise on a firmware rejection (it sets self.error and
+# returns normally), so set_power must guard the internal state update on
+# the error surface. Otherwise the HAL records the commanded power as if
+# the write succeeded, masking the rejection from a later get_output_power()
+# fallback. The max_power clamp must remain intact regardless of rejection.
+# --------------------------------------------------------------------------- #
+def test_ibeam_set_power_does_not_update_state_on_rejection():
+    ib, mock_ser = _make_open_ibeam(
+        readline_side_effect=[b'%SYS-E-00025, parameter error\r\n', b'[OK]\r\n'])
+    # Pre-seed a known prior power so we can prove it is unchanged.
+    ib._power = 12345
+    ib.set_power(5000)
+    assert ib.error == 1, "rejection should set the error surface"
+    # The internal power state must NOT advance to the rejected 5000 uW.
+    assert ib._power == 12345, (
+        "set_power must not update self._power when the firmware rejected "
+        "the write — doing so masks the rejection from get_output_power()'s "
+        "fallback path")
+
+
+# --------------------------------------------------------------------------- #
+# Test 11: set_power must still update self._power on a successful write
+# (regression guard for the WR-01 guard — the happy path must still record).
+# --------------------------------------------------------------------------- #
+def test_ibeam_set_power_updates_state_on_success():
+    ib, mock_ser = _make_open_ibeam(
+        readline_side_effect=[b'[OK]\r\n'])
+    ib._power = 0
+    ib.set_power(7500)
+    assert ib.error == 0
+    assert ib._power == 7500, (
+        "set_power must update self._power when the firmware accepts the write")
+
+
+# --------------------------------------------------------------------------- #
+# Test 12: on() must NOT set self._is_on = True when 'laser on' is rejected.
+# _send_cmd('laser on') sets self.error on a %SYS-E reply without raising,
+# so on() must guard the _is_on update on the error surface to avoid the
+# HAL believing emission is enabled when the firmware refused.
+# --------------------------------------------------------------------------- #
+def test_ibeam_on_does_not_set_is_on_on_rejection():
+    # 'laser on' is rejected; the subsequent enable_channel() also reads a
+    # rejection so the error surface stays set across both writes.
+    ib, mock_ser = _make_open_ibeam(
+        readline_side_effect=[b'%SYS-E-00030, laser locked\r\n', b'[OK]\r\n',
+                              b'%SYS-E-00030, laser locked\r\n', b'[OK]\r\n'])
+    ib._is_on = False
+    ib.on()
+    assert ib.error == 1, "rejection should set the error surface"
+    assert ib._is_on is False, (
+        "on() must not set self._is_on = True when 'laser on' was rejected "
+        "by the firmware — the HAL would otherwise believe emission is "
+        "enabled when the diode is dark")
+
+
+# --------------------------------------------------------------------------- #
+# Test 13: on() must still set self._is_on = True on a successful write
+# (regression guard for the WR-02 guard).
+# --------------------------------------------------------------------------- #
+def test_ibeam_on_sets_is_on_on_success():
+    ib, mock_ser = _make_open_ibeam(
+        readline_side_effect=[b'[OK]\r\n', b'[OK]\r\n'])
+    ib._is_on = False
+    ib.on()
+    assert ib.error == 0
+    assert ib._is_on is True, (
+        "on() must set self._is_on = True when the firmware accepts 'laser on'")
+
+
+# --------------------------------------------------------------------------- #
+# Test 14: _send_cmd must clear a stale self.error on a successful command.
+# Without this, a stale error from a prior failed command persists across
+# later successful commands and is mistaken for a current-call failure by
+# any caller that checks the error surface after _send_cmd returns.
+# --------------------------------------------------------------------------- #
+def test_ibeam_send_cmd_clears_stale_error_on_success():
+    ib, mock_ser = _make_open_ibeam(
+        readline_side_effect=[b'[OK]\r\n'])
+    # Plant a stale error from a hypothetical prior failed command.
+    ib.error = 1
+    ib.error_message = 'stale prior failure'
+    # A successful command must reset the error surface before the round-trip
+    # so the post-call error state reflects THIS command only.
+    ib._send_cmd('status laser')
+    assert ib.error == 0, (
+        "_send_cmd must clear a stale self.error at the top of a successful "
+        "round-trip so a prior failure does not leak into the current call's "
+        "error surface")
+    assert ib.error_message == '', (
+        "_send_cmd must clear a stale self.error_message on a successful "
+        "round-trip")
+
+
+# --------------------------------------------------------------------------- #
+# Test 15: _send_cmd must (re)set the error surface when the current command
+# is rejected, even if the error surface was previously clear. Regression
+# guard pairing with the stale-clear: clearing at the top must not prevent
+# a fresh rejection from being recorded.
+# --------------------------------------------------------------------------- #
+def test_ibeam_send_cmd_sets_error_on_fresh_rejection():
+    ib, mock_ser = _make_open_ibeam(
+        readline_side_effect=[b'%SYS-E-00099, rejected\r\n', b'[OK]\r\n'])
+    assert ib.error == 0  # precondition: clean surface
+    ib._send_cmd('status laser')
+    assert ib.error == 1, (
+        "_send_cmd must set self.error when the current command is rejected, "
+        "even though it clears the surface at the top of the round-trip")
+    assert '%SYS-E-00099' in ib.error_message
