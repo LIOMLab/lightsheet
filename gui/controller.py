@@ -2215,11 +2215,11 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
                 "The acquisition was aborted. Reduce the number of images per plane or check the camera USB connection, then restart the run.")
             logging.warning("Camera recorder timeout during acquire_scan")
             self.camera.delete_recorder()
-            # Stop the scanner before deleting the DAQ task — the normal
-            # path calls stop_scanner() then delete_scanner(); the timeout
-            # path must do the same so the DAQ hardware is left in a
-            # consistent state and no spurious NI-DAQmx errors are raised.
-            self.siggen.stop_scanner()
+            # Delete the DAQ scanner task. The scanner was already stopped
+            # above (before the timeout check) — NI-DAQmx Task.stop() is
+            # idempotent, so a second stop_scanner() here was redundant and
+            # is omitted. delete_scanner() tears down the task so the DAQ
+            # hardware is left in a consistent state.
             self.siggen.delete_scanner()
             # Disarm the camera before returning. Camera.disarm() is
             # idempotent (it only issues the SDK stop-recording call when
