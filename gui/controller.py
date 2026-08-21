@@ -1197,17 +1197,17 @@ class Controller_MainWindow(QMainWindow):
 
     def start_lasers(self):
         '''Starts the lasers at a certain voltage'''
-        if self.ui.checkBox_laserOneAutomatic.isChecked:
-            self.lasers.laser1_on
-        if self.ui.checkBox_laserTwoAutomatic.isChecked:
-            self.lasers.laser2_on
+        if self.ui.checkBox_laserOneAutomatic.isChecked():
+            self.lasers.laser1_on()
+        if self.ui.checkBox_laserTwoAutomatic.isChecked():
+            self.lasers.laser2_on()
 
     def stop_lasers(self):
         '''Stops the lasers, puts their voltage to zero'''
-        if self.ui.checkBox_laserOneAutomatic.isChecked:
-            self.lasers.laser1_off
-        if self.ui.checkBox_laserTwoAutomatic.isChecked:
-            self.lasers.laser2_off
+        if self.ui.checkBox_laserOneAutomatic.isChecked():
+            self.lasers.laser1_off()
+        if self.ui.checkBox_laserTwoAutomatic.isChecked():
+            self.lasers.laser2_off()
 
     '''File Open Methods'''
 
