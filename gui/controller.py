@@ -1809,32 +1809,36 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
            parameters of the beams in the UI. There is no scan here,
            beams only changes when parameters are changed. This the preferred
            mode for beam calibration'''
+        try:
+            # Setting the camera for self triggered acquisition
+            self.camera.set_trigger_mode('auto_trigger')
+            self.camera.set_exposure_time(int(self.ui.doubleSpinBox_cameraExposureTime.value()))
+            self.camera.arm()
 
-        # Setting the camera for self triggered acquisition
-        self.camera.set_trigger_mode('auto_trigger')
-        self.camera.set_exposure_time(int(self.ui.doubleSpinBox_cameraExposureTime.value()))
-        self.camera.arm()
+            while self.preview_mode_started:
+                # # Updating Galvo and ETL voltages
+                # self.siggen.update_all()
 
-        while self.preview_mode_started:
-            # # Updating Galvo and ETL voltages
-            # self.siggen.update_all()
+                # Recording a single image
+                self.camera.start_recorder(1)
+                self.camera.monitor_recorder(1)
+                self.camera.stop_recorder()
+                cam_images = self.camera.copy_recorder_images(1)
+                self.camera.delete_recorder()
 
-            # Recording a single image
-            self.camera.start_recorder(1)
-            self.camera.monitor_recorder(1)
-            self.camera.stop_recorder()
-            cam_images = self.camera.copy_recorder_images(1)
-            self.camera.delete_recorder()
+                # Sending first (and should be only) image to display port
+                frame = cam_images[0]
+                self.frame_viewer.enqueue_frame(frame)
 
-            # Sending first (and should be only) image to display port
-            frame = cam_images[0]
-            self.frame_viewer.enqueue_frame(frame)
-
-        # Stopping camera
-        self.camera.disarm()
-
-        # Emit finished signal
-        self.sig_preview_mode_finished.emit()
+            # Stopping camera
+            self.camera.disarm()
+        finally:
+            # The finished signal must fire exactly once whether the method
+            # completes normally or an exception propagates from
+            # start_lasers()/acquire_scan()/camera.disarm()/anything else in
+            # the body. Without this, a worker that dies mid-cleanup leaves
+            # the UI stuck on "Stop Preview Mode" with no slot to re-enable it.
+            self.sig_preview_mode_finished.emit()
 
 
     def updateUi_live_mode_button(self):
@@ -1872,43 +1876,48 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
     def live_mode_worker(self):
         '''This thread allows the execution of scan_mode while modifying
            parameters in the UI'''
-
-        # Moving the camera to focus
-        ##self.move_camera_to_focus()
+        try:
+            # Moving the camera to focus
+            ##self.move_camera_to_focus()
 
 #        # Setting the camera for scan acquisition
 #        self.camera.arm_scan()
 
-        # Starting lasers
-        self.start_lasers()
+            # Starting lasers
+            self.start_lasers()
 
-        while self.live_mode_started:
-            # E-stop poll point — checked at the top of each iteration before
-            # any frame acquisition work. The lasers are already dark (driven
-            # off synchronously on the GUI thread in updateUi_estop_pressed);
-            # this break just stops acquiring new frames.
-            if self.estop_event.is_set():
-                break
+            while self.live_mode_started:
+                # E-stop poll point — checked at the top of each iteration before
+                # any frame acquisition work. The lasers are already dark (driven
+                # off synchronously on the GUI thread in updateUi_estop_pressed);
+                # this break just stops acquiring new frames.
+                if self.estop_event.is_set():
+                    break
 
-            # Setting the camera for scan acquisition
-            self.camera.arm_scan()
+                # Setting the camera for scan acquisition
+                self.camera.arm_scan()
 
-            # Refresh scan waveforms every loop (live mode)
-            self.siggen.compute_scan_waveforms()
-            # Get single image
-            self.acquire_scan()
+                # Refresh scan waveforms every loop (live mode)
+                self.siggen.compute_scan_waveforms()
+                # Get single image
+                self.acquire_scan()
 
-        # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)
-        self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+            # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)
+            self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
 
-        # Stopping lasers
-        self.stop_lasers()
+            # Stopping lasers
+            self.stop_lasers()
 
-        # Stopping camera
-        self.camera.disarm()
-
-        # Emit finished signal
-        self.sig_live_mode_finished.emit()
+            # Stopping camera
+            self.camera.disarm()
+        finally:
+            # The finished signal must fire exactly once whether the method
+            # completes normally, breaks out of the loop on E-stop, or an
+            # exception propagates from start_lasers()/acquire_scan()/
+            # stop_lasers()/camera.disarm()/anything else in the body.
+            # Without this, a worker that dies mid-cleanup leaves the UI
+            # stuck on "Stop Live Mode" with no slot to re-enable it.
+            self.sig_live_mode_finished.emit()
 
 
     def updateUi_single_mode_button(self):
