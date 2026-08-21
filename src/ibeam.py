@@ -135,6 +135,13 @@ class IBeam:
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
+            # The operator intent was off; the actual emission state is
+            # unknown (the command may or may not have reached the laser).
+            # False is the safer default for a Class IIIB laser — the GUI
+            # treats the laser as off and the operator is warned (via the
+            # error surface) to manually verify, rather than the GUI
+            # showing it as on and the operator assuming it is off.
+            self._is_on = False
         return None
 
     def set_power(self, power_uw):

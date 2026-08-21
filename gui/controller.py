@@ -618,7 +618,7 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_disable_buttons(self, buttons_to_disable):
         '''Disable buttons'''
         for button in buttons_to_disable:
-            button.setEnabled(True)
+            button.setEnabled(False)
 
     def close_modes(self):
         '''Close all thread modes if they are active'''
@@ -1786,7 +1786,6 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
         self.camera.arm_scan()
 
         # Start lasers
-        self.both_lasers_activated = True
         self.start_lasers()
 
         # E-stop poll point — checked before acquire_scan so a mid-acquisition
@@ -1798,7 +1797,6 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
             # post-mode cleanup matches the normal single_mode_worker exit.
             self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
             self.stop_lasers()
-            self.both_lasers_activated = False
             self.camera.disarm()
             self.sig_single_mode_finished.emit()
             return
@@ -1815,9 +1813,8 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
 
         # Stop lasers
         self.stop_lasers()
-        self.both_lasers_activated = False
 
-        # Stop camera       
+        # Stop camera
         self.camera.disarm()
 
         # Emit finished signal
@@ -2122,7 +2119,7 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
         else:
             self.sig_beep.emit()
             QMessageBox.warning(self, "Save Warning", "Select a directory and enter a valid filename before saving", QMessageBox.Ok, QMessageBox.Ok)
-            print('Select a directory and enter a valid filename before saving')
+            self.sig_message.emit('Select a directory and enter a valid filename before saving')
 
     def updateUi_set_stack_mode_starting_point(self):
         '''Defines the starting point where the first plane of the stack volume will be recorded'''
@@ -2144,7 +2141,7 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
                 self.number_of_planes += 1   #Takes into account the initial plane
                 self.ui.label_acqNumberOfPlanes.setText(str(self.number_of_planes))
         else:
-            print('Set a non-zero value to plane step')
+            self.sig_message.emit('Set a non-zero value to plane step')
 
     def updateUi_stack_mode_button(self):
         '''Start or stop stack mode, depending on the button status'''
@@ -2155,7 +2152,7 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
             self.close_modes()
             # Making sure the limits of the volume are set
             if (self.ui.checkBox_acqFirstPlaneSet.isChecked() == False) or (self.ui.checkBox_acqLastPlaneSet.isChecked() == False) or (self.ui.doubleSpinBox_acqPlaneStepSize.value() == 0):
-                print('Set starting and ending points and select a non-zero plane step value')
+                self.sig_message.emit('Set starting and ending points and select a non-zero plane step value')
                 self.sig_beep.emit()
                 QMessageBox.warning(self, "Stack Acquisition Warning", "Set starting and ending points and select a non-zero plane step value", QMessageBox.Ok, QMessageBox.Ok)
             else:
@@ -2224,7 +2221,6 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
         self.camera.arm_scan()
 
         # Starting lasers
-        self.both_lasers_activated = True
         self.start_lasers()
 
         # Set progress bar
@@ -2305,7 +2301,6 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
 
         # Stopping laser
         self.stop_lasers()
-        self.both_lasers_activated = False
 
         # Stopping camera
         self.camera.disarm()
