@@ -1774,8 +1774,16 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
     def updateUi_preview_mode_button(self):
         '''Start or stop preview mode, depending on the button status'''
         if self.preview_mode_started:
+            # Do NOT join the worker thread here — joining blocks the Qt event
+            # loop for the remainder of whatever blocking hardware call
+            # (camera.monitor_recorder up to its timeout, or a serial
+            # round-trip) the worker is currently inside, freezing the GUI.
+            # Just clear the flag; the worker polls preview_mode_started at
+            # the top of its loop and exits on its own, emitting
+            # sig_preview_mode_finished — already connected to
+            # updateUi_post_preview_mode — which re-enables the UI from the
+            # GUI thread.
             self.preview_mode_started = False
-            self.preview_mode_thread.join()
             self.ui.pushButton_acqStartPreviewMode.setText('Start Preview Mode')
 #            self.updateUi_laser_buttons()
         else:
@@ -1844,8 +1852,16 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
     def updateUi_live_mode_button(self):
         '''Start or stop live mode, depending on the button status'''
         if self.live_mode_started:
+            # Do NOT join the worker thread here — joining blocks the Qt event
+            # loop for the remainder of whatever blocking hardware call
+            # (camera.monitor_recorder up to its timeout, an iBeam serial
+            # round-trip, or a motor move) the worker is currently inside,
+            # freezing the GUI. Just clear the flag; the worker polls
+            # live_mode_started (and estop_event) at each iteration and exits
+            # on its own, emitting sig_live_mode_finished — already connected
+            # to updateUi_post_live_mode — which re-enables the UI from the
+            # GUI thread.
             self.live_mode_started = False
-            self.live_mode_thread.join()
             self.ui.pushButton_acqStartLiveMode.setText('Start Live Mode')
 #            self.updateUi_laser_buttons()
         else:
