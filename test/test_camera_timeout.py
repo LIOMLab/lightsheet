@@ -117,9 +117,14 @@ def test_recorder_timeout_status_blocks_copy():
     acquire_scan checks recorder_timeout_status and returns early (before
     copy_recorder_images) on timeout, AND delete_recorder must NOT reset
     the flag (so the post-acquire check in stack_mode_worker can observe
-    it and abort the run). This test verifies both halves of that
-    contract against the real Camera methods (no pco SDK needed —
-    delete_recorder guards on self.camera is not None).'''
+    it and abort the run).
+
+    The first half is verified by a static-source assertion against
+    gui/controller.py::acquire_scan (the real consumer of the flag) — the
+    guard `if self.camera.recorder_timeout_status:` must appear before the
+    `copy_recorder_images` call in the method body. The second half is
+    verified against the real Camera.delete_recorder (no pco SDK needed —
+    it guards on self.camera is not None).'''
     cam = _make_camera()
     # Simulate a timeout: monitor_recorder set the flag, then acquire_scan
     # called delete_recorder before returning.
@@ -133,16 +138,33 @@ def test_recorder_timeout_status_blocks_copy():
         "stack_mode_worker post-acquire abort check depends on the flag "
         "surviving delete_recorder.")
 
-    # The acquire_scan abort predicate: on a True timeout status the caller
-    # must NOT invoke copy_recorder_images. This mirrors the exact guard
-    # acquire_scan uses before calling copy_recorder_images.
-    should_copy = not cam.recorder_timeout_status
-    assert should_copy is False
-
-    # And start_recorder resets the flag for the next plane, so a timeout
-    # on one plane does not poison the next.
-    cam.is_recording = False  # start_recorder only resets when recording starts
-    # Simulate a successful start_recorder path: the flag is cleared at the
-    # start of each plane. We verify the reset directly.
-    cam.recorder_timeout_status = False
-    assert cam.recorder_timeout_status is False
+    # Static-source assertion that acquire_scan actually checks the flag
+    # before copying images. This mirrors test_acquire_scan_disarms_on_timeout
+    # in test_worker_robustness.py — verifying the real consumer of the
+    # flag rather than a local `not` expression that only tests Python's
+    # boolean negation.
+    import os
+    import re
+    _CONTROLLER_SRC = os.path.join(os.path.dirname(__file__), '..', 'gui', 'controller.py')
+    with open(_CONTROLLER_SRC, 'r') as f:
+        src = f.read()
+    m = re.search(r'def acquire_scan\(self\):', src)
+    assert m, "acquire_scan is missing from gui/controller.py"
+    body = src[m.start():]
+    end = re.search(r'\n    def |\n    @pyqtSlot', body[1:])
+    if end:
+        body = body[:end.start() + 1]
+    guard = 'if self.camera.recorder_timeout_status:'
+    copy_call = 'self.camera.copy_recorder_images('
+    guard_idx = body.find(guard)
+    copy_idx = body.find(copy_call)
+    assert guard_idx != -1, (
+        "acquire_scan must check `if self.camera.recorder_timeout_status:` "
+        "before copying images — otherwise a timed-out plane is mistaken "
+        "for a real (dark) frame on disk.")
+    assert copy_idx != -1, (
+        "acquire_scan must call self.camera.copy_recorder_images — the "
+        "guard is meant to gate this call.")
+    assert guard_idx < copy_idx, (
+        "acquire_scan must check recorder_timeout_status BEFORE calling "
+        "copy_recorder_images so a timed-out plane is not copied to disk.")
