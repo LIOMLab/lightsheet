@@ -752,7 +752,14 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
 
         # Lasers
         self.ui.doubleSpinBox_laserOneAmplitude.setValue(self.lasers.laser1_power)
-        self.ui.doubleSpinBox_laserTwoAmplitude.setValue(self.lasers.laser2_power)
+        # Laser 2 is the iBeam (serial, COM4) — its power spinbox is in
+        # microwatts, bounded by the iBeam's rig-confirmed max power
+        # (150000 uW = 150 mW). The DAQ AO laser2_power (Volts) is no longer
+        # the iBeam power source; the iBeam power comes from this spinbox
+        # (in uW) via IBeam.set_power.
+        self.ui.doubleSpinBox_laserTwoAmplitude.setMinimum(0)
+        self.ui.doubleSpinBox_laserTwoAmplitude.setMaximum(self.ibeam.max_power)
+        self.ui.doubleSpinBox_laserTwoAmplitude.setValue(self.ibeam._power)
 
         # Wavelength labels — read from the live Lasers/IBeam instances so the
         # operator sees the real configured wavelength (no hardcoded numbers).
@@ -1439,9 +1446,11 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
     def updateUi_laser2_amplitude(self):
         # Laser 2 is physically the iBeam (COM4), not the DAQ — route the
         # spinbox change to the iBeam HAL in real time when active. The
-        # Max Power clamp lives inside IBeam.set_power (HAL boundary), so
-        # this is the one and only laser-2 power write path.
-        self.lasers.laser2_power = self.ui.doubleSpinBox_laserTwoAmplitude.value()
+        # spinbox value is in microwatts (the range is set to the iBeam's
+        # max_power in updateUi_initial_hardware_state). The Max Power clamp
+        # lives inside IBeam.set_power (HAL boundary), so this is the one
+        # and only laser-2 power write path. self.lasers.laser2_power (Volts)
+        # is NOT updated here — it is the unused DAQ AO channel setpoint.
         if self.lasers.laser2_active:
             self.ibeam.set_power(self.ui.doubleSpinBox_laserTwoAmplitude.value())
             if self.ibeam.error:

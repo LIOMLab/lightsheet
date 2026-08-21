@@ -87,14 +87,14 @@ def test_ibeam_set_power_formats_micro_command():
 # --------------------------------------------------------------------------- #
 def test_ibeam_set_power_clamps_to_max_power():
     ib, mock_ser = _make_open_ibeam()
-    # Default max_power from config defaults is 200000 uW (200 mW).
-    assert ib.max_power == 200000
+    # Default max_power from config defaults is 150000 uW (150 mW, rig-confirmed).
+    assert ib.max_power == 150000
     ib.set_power(300000)
     text = _last_write_text(mock_ser)
-    assert '200000' in text
+    assert '150000' in text
     assert '300000' not in text
-    assert 'channel 1 power 200000 micro' in text
-    assert ib._power == 200000
+    assert 'channel 1 power 150000 micro' in text
+    assert ib._power == 150000
 
 
 # --------------------------------------------------------------------------- #
