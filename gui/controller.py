@@ -233,6 +233,17 @@ class Controller_MainWindow(QMainWindow):
         self.laser1_power_pct = 0.0
         self.laser2_power_pct = 0.0
 
+        # Auto-laser checkbox states sampled on the GUI thread before an
+        # acquisition worker starts. The workers must never read the widgets
+        # themselves — Qt widgets belong to the GUI thread, and reading one
+        # from a worker is undefined behaviour per Qt's threading model
+        # (AGENTS.md §11) that can stall the worker mid-acquisition.
+        # _cache_auto_laser_flags() refreshes these at every GUI-thread
+        # entry point that leads to a worker calling start_lasers()/
+        # stop_lasers().
+        self._auto_laser1 = False
+        self._auto_laser2 = False
+
         # Per-laser write locks serializing concurrent offloaded writes to
         # the same laser (amplitude edits vs. toggle). Reentrant (RLock) so
         # _toggle_laser* can call _write_laser*_power under the same lock
@@ -667,9 +678,26 @@ class Controller_MainWindow(QMainWindow):
         for button in buttons_to_disable:
             button.setEnabled(False)
 
+    def _cache_auto_laser_flags(self):
+        """Sample the auto-laser checkboxes. GUI thread only.
+
+        Acquisition workers run start_lasers()/stop_lasers() off the GUI
+        thread and must read these cached bools rather than the widgets,
+        which belong to the GUI thread (AGENTS.md §11). Called at every
+        entry point that leads to a worker calling start_lasers()/
+        stop_lasers(): close_modes (which calls stop_lasers directly) and
+        the three updateUi_*_mode_button handlers that spawn a worker.
+        """
+        self._auto_laser1 = self.ui.checkBox_laserOneAutomatic.isChecked()
+        self._auto_laser2 = self.ui.checkBox_laserTwoAutomatic.isChecked()
+
     def close_modes(self):
         '''Close all thread modes if they are active'''
         #FIXME
+        # Sample the auto-laser checkboxes on the GUI thread before any
+        # stop_lasers() call below — stop_lasers runs off the GUI thread
+        # in some call paths and must read the cached bools, not widgets.
+        self._cache_auto_laser_flags()
         if self.preview_mode_started:
             self.preview_mode_started = False
         if self.live_mode_started:
@@ -1678,21 +1706,12 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
         worker threads (not the GUI thread), so no further nested thread is
         needed — only the %-to-absolute scaling at the HAL boundary.
 
-        KNOWN VIOLATION (pre-existing): this method reads
-        self.ui.checkBox_laserOneAutomatic.isChecked() and
-        self.ui.checkBox_laserTwoAutomatic.isChecked() directly from a
-        worker thread. Per AGENTS.md §11, cross-thread UI access must go
-        through signals, never direct widget calls from worker threads —
-        the widgets live on the GUI thread and reading them from another
-        thread is undefined behavior per Qt's threading model. The correct
-        fix is to cache the checkbox states on the GUI thread before
-        spawning the worker (in updateUi_*_mode_button) and pass them as
-        args, or read them via a signal. That refactor touches every
-        updateUi_*_mode_button call site and the worker signatures, so it
-        is left for a dedicated change; this comment documents the
-        violation so it is not silently propagated to new code.
+        The auto-laser flags (self._auto_laser1 / self._auto_laser2) are
+        sampled on the GUI thread by _cache_auto_laser_flags() before the
+        worker is spawned, so this method reads only cached bools and never
+        touches a Qt widget (AGENTS.md §11).
         '''
-        if self.ui.checkBox_laserOneAutomatic.isChecked():
+        if self._auto_laser1:
             # Scale the staged percentage to Volts before laser1_on reads
             # it (laser1_on clamps to laser1_max_power internally as well).
             self.lasers.laser1_power = (
@@ -1710,7 +1729,7 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
                 self.sig_message.emit(
                     f"Laser write failed — laser reverted to OFF. Check the NI DAQ connection (Dev7) and re-enable the laser. Cause: {self.lasers.error_message}")
                 self.lasers.error = 0
-        if self.ui.checkBox_laserTwoAutomatic.isChecked():
+        if self._auto_laser2:
             # Laser 2 is the iBeam (serial, COM4), not the DAQ AO channel.
             # Drive the iBeam directly so the physical laser and the
             # laser2_active flag agree. Verify the serial on() succeeded
@@ -1735,10 +1754,12 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
 
     def stop_lasers(self):
         '''Stops the lasers, puts their voltage to zero. Called from
-        acquisition worker threads (not the GUI thread).'''
-        if self.ui.checkBox_laserOneAutomatic.isChecked():
+        acquisition worker threads (not the GUI thread). Reads only the
+        cached auto-laser flags sampled on the GUI thread by
+        _cache_auto_laser_flags() — never a Qt widget (AGENTS.md §11).'''
+        if self._auto_laser1:
             self.lasers.laser1_off()
-        if self.ui.checkBox_laserTwoAutomatic.isChecked():
+        if self._auto_laser2:
             # Laser 2 is the iBeam (serial, COM4). Drive it off directly.
             # laser2_active is cleared regardless of the serial outcome —
             # the operator intent was off, and the GUI must not show the
@@ -1921,6 +1942,11 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
             self.ui.statusBar_progress.setValue(100)
             self.ui.statusBar_progress.show()
 
+            # Sample the auto-laser checkboxes on the GUI thread before
+            # spawning the worker — the worker reads the cached bools in
+            # start_lasers()/stop_lasers(), never the widgets (AGENTS.md §11).
+            self._cache_auto_laser_flags()
+
             # Starting live mode thread
             self.live_mode_thread = threading.Thread(target = self.live_mode_worker)
             self.live_mode_thread.start()
@@ -1995,6 +2021,11 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
             self.ui.pushButton_acqGetSingleImage.setText('Acquiring...')
             self.updateUi_modes_buttons([self.ui.pushButton_acqGetSingleImage])
             self.updateUi_message_printer('->Getting single image')
+
+            # Sample the auto-laser checkboxes on the GUI thread before
+            # spawning the worker — the worker reads the cached bools in
+            # start_lasers()/stop_lasers(), never the widgets (AGENTS.md §11).
+            self._cache_auto_laser_flags()
 
             # Starting single image thread
             self.single_mode_thread = threading.Thread(target = self.single_mode_worker)
@@ -2443,6 +2474,12 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
                     self.updateUi_modes_buttons([self.ui.pushButton_acqStartStackMode])
                     self.updateUi_motor_buttons()
                     self.updateUi_message_printer('->Stack mode started -- Number of frames to save: ' + str(int(self.number_of_planes)))
+
+                    # Sample the auto-laser checkboxes on the GUI thread
+                    # before spawning the worker — the worker reads the
+                    # cached bools in start_lasers()/stop_lasers(), never
+                    # the widgets (AGENTS.md §11).
+                    self._cache_auto_laser_flags()
 
                     # Starting stack mode thread
                     self.stack_mode_thread = threading.Thread(target = self.stack_mode_worker)
