@@ -206,7 +206,12 @@ class ZaberMotor:
             # Checks if reply is valid length
             if len(reply_bytes) == 6:
                 if reply_bytes[0] == self.device_number and reply_bytes[1] == cmd_no:
-                    # Reply has a valid length and fits expected format
+                    # Reply has a valid length and fits expected format.
+                    # Clear any previous error so a transient serial glitch
+                    # does not permanently block relative moves (which query
+                    # position and check self.error before moving).
+                    self.error = 0
+                    self.error_message = ""
                     # Convert returned bytes into data value (handling negative values)
                     if reply_bytes[5] > 127:
                         reply_data = (pow(256,3) * reply_bytes[5] + pow(256,2) * reply_bytes[4] + pow(256,1) * reply_bytes[3] + pow(256,0) * reply_bytes[2]) - pow(256,4)

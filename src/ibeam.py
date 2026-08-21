@@ -225,14 +225,18 @@ class IBeam:
 
             response_lines = []
             while True:
-                line = self.ser.readline().decode('ascii', errors='replace').strip()
+                raw = self.ser.readline()
+                if raw == b'':
+                    # readline returns b'' on timeout (no bytes received
+                    # within the serial timeout window). Break so a stuck
+                    # device does not loop forever. A genuine blank response
+                    # line is b'\r\n' (decodes to '' after strip) and is NOT
+                    # a timeout — it is appended below and the loop continues
+                    # until the [OK]/CMD> terminator arrives.
+                    break
+                line = raw.decode('ascii', errors='replace').strip()
                 response_lines.append(line)
                 if line == '[OK]' or line.startswith('CMD>'):
-                    break
-                # Guard against a runaway read loop if the device stops
-                # responding: readline returns b'' on timeout, which decodes
-                # to an empty string.
-                if line == '':
                     break
 
             time.sleep(self._inter_command_gap)
