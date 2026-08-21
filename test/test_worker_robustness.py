@@ -10,8 +10,9 @@ against regressions where the fixes are accidentally removed or weakened.
 Covered fixes:
   1. Stop Stack Mode no longer joins the worker thread on the GUI thread
      (the GUI-freeze fix).
-  2. single_mode_worker and stack_mode_worker wrap their bodies in try/finally
-     so the finished signal always fires exactly once.
+  2. single_mode_worker, stack_mode_worker, live_mode_worker, and
+     preview_mode_worker wrap their bodies in try/finally so the finished
+     signal always fires exactly once.
   3. acquire_scan disarms the camera on its timeout-return path.
   4. closeEvent joins worker threads with a bounded timeout instead of an
      unconditional fixed sleep.
@@ -73,11 +74,18 @@ def test_workers_have_try_finally_with_finished_signal():
     """Each worker body must contain exactly one `finally:` block, and the
     corresponding sig_*_mode_finished.emit() call must appear AFTER the
     `finally:` keyword (string-index comparison) so the signal fires exactly
-    once whether the method returns early, completes normally, or raises."""
+    once whether the method returns early, completes normally, or raises.
+
+    Covers single_mode_worker, stack_mode_worker, live_mode_worker, and
+    preview_mode_worker — all four acquisition workers must follow the same
+    try/finally + finished-signal pattern so an exception in any of them
+    re-enables the UI instead of leaving it stuck on 'Stop <Mode>'."""
     src = _read_controller_source()
     workers = {
         'single_mode_worker': 'self.sig_single_mode_finished.emit()',
         'stack_mode_worker': 'self.sig_stack_mode_finished.emit()',
+        'live_mode_worker': 'self.sig_live_mode_finished.emit()',
+        'preview_mode_worker': 'self.sig_preview_mode_finished.emit()',
     }
     for worker, emit_call in workers.items():
         body = _slice_method(src, worker)
