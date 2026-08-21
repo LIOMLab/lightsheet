@@ -223,6 +223,23 @@ class Controller_MainWindow(QMainWindow):
         self.camera_calibration_started = False
         self.etls_calibration_started = False
 
+        # Operator-facing staged laser power setpoints in percent (0-100).
+        # These are the single persistent source of truth for the spinbox
+        # values, decoupled from the HAL's Volts/microwatt state so the
+        # staged percentage survives laser on/off and E-stop disarm/re-arm
+        # cycles within a running session — it only resets to 0 on app
+        # restart. Set once at startup; only mutated by the debounced
+        # amplitude handlers (_apply_laser*_amplitude).
+        self.laser1_power_pct = 0.0
+        self.laser2_power_pct = 0.0
+
+        # Per-laser write locks serializing concurrent offloaded writes to
+        # the same laser (amplitude edits vs. toggle). The E-stop path
+        # intentionally does NOT acquire these — it must remain lock-free
+        # so a stuck toggle thread can never delay the kill path.
+        self._laser1_write_lock = threading.Lock()
+        self._laser2_write_lock = threading.Lock()
+
         self.saving_allowed = False
         self.focus_selected = False
         self.horizontal_forward_boundary_selected = False
@@ -768,16 +785,14 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
             self.ui.comboBox_cameraShutterMode.setCurrentIndex(0)
         self.updateUi_camera_shutter_mode()
 
-        # Lasers
-        self.ui.doubleSpinBox_laserOneAmplitude.setValue(self.lasers.laser1_power)
-        # Laser 2 is the iBeam (serial, COM4) — its power spinbox is in
-        # microwatts, bounded by the iBeam's rig-confirmed max power
-        # (150000 uW = 150 mW). The DAQ AO laser2_power (Volts) is no longer
-        # the iBeam power source; the iBeam power comes from this spinbox
-        # (in uW) via IBeam.set_power.
-        self.ui.doubleSpinBox_laserTwoAmplitude.setMinimum(0)
-        self.ui.doubleSpinBox_laserTwoAmplitude.setMaximum(self.ibeam.max_power)
-        self.ui.doubleSpinBox_laserTwoAmplitude.setValue(self.ibeam._power)
+        # Lasers — both spinboxes are 0-100 % staged setpoints (per the
+        # .ui source). Seed from the persistent controller-side percentage,
+        # not the live HAL state, so the staged value survives laser on/off
+        # and E-stop disarm/re-arm cycles within the session. The %-to-
+        # absolute conversion (pct/100 * Max Power) happens once, at the
+        # HAL call boundary inside _write_laser1_power/_write_laser2_power.
+        self.ui.doubleSpinBox_laserOneAmplitude.setValue(self.laser1_power_pct)
+        self.ui.doubleSpinBox_laserTwoAmplitude.setValue(self.laser2_power_pct)
 
         # Wavelength labels — read from the live Lasers/IBeam instances so the
         # operator sees the real configured wavelength (no hardcoded numbers).
