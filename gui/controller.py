@@ -8,7 +8,8 @@ import sys
 sys.path.append(".")
 
 from PyQt5.QtCore import Qt, QObject, QTimer, pyqtSignal, pyqtSlot
-from PyQt5.QtWidgets import QApplication, QMainWindow, QDialog, QFileDialog, QTableWidgetItem, QAbstractItemView, QMessageBox, QLabel, QProgressBar, QDesktopWidget, QButtonGroup
+from PyQt5.QtGui import QKeySequence
+from PyQt5.QtWidgets import QApplication, QMainWindow, QDialog, QFileDialog, QTableWidgetItem, QAbstractItemView, QMessageBox, QLabel, QProgressBar, QDesktopWidget, QButtonGroup, QToolBar, QPushButton, QShortcut
 
 import logging
 import copy
@@ -95,6 +96,65 @@ class Controller_MainWindow(QMainWindow):
         QMainWindow.__init__(self)
         self.ui = Ui_Controller()
         self.ui.setupUi(self)
+
+        # E-stop cooperative-abort event. Starts clear (not set) so the
+        # system boots ARMED — worker loops run normally until the operator
+        # actuates the E-stop. Polled at the top of every acquisition worker
+        # loop (live/single/stack) so a mid-acquisition E-stop stops new
+        # frame acquisition at the next safe boundary. The synchronous
+        # laser-zeroing happens on the GUI thread in updateUi_estop_pressed,
+        # independent of when the worker threads reach their poll point.
+        self.estop_event = threading.Event()
+        # Track the Arm/Reset two-press state so a single press never returns
+        # the system straight from ACTUATED to ARMED (D-01: reset only permits
+        # re-arm, never re-energizes). False = button reads "Arm/Reset"
+        # (actuated or armed); True = button reads "Arm" (disarmed, one more
+        # press re-arms).
+        self._estop_disarmed = False
+
+        # Safety toolbar — created programmatically (not in the generated
+        # .ui file) so it survives pyuic5 regeneration. Holds the E-stop
+        # status indicator, the E-stop button, and the Arm/Reset button.
+        self.toolBar_estop = QToolBar("Safety", self)
+        self.toolBar_estop.setMovable(False)
+        self.addToolBar(Qt.TopToolBarArea, self.toolBar_estop)
+
+        # E-stop status indicator (green = ARMED, red = ACTUATED, gray = DISARMED)
+        self.label_estopStatus = QLabel("● ARMED")
+        self.label_estopStatus.setMinimumWidth(140)
+        self.label_estopStatus.setStyleSheet("color: #34C759; font-weight: bold;")
+        self.toolBar_estop.addWidget(self.label_estopStatus)
+
+        self.toolBar_estop.addSeparator()
+
+        # E-stop button — 18px Bold white "E-STOP" on red fill, 96x48 min
+        # (prominent two-finger panic target). Checkable so the latch state
+        # is queryable, though the visual state is driven by QSS in the
+        # press handler rather than Qt's checked styling.
+        self.pushButton_estop = QPushButton("E-STOP")
+        self.pushButton_estop.setCheckable(True)
+        self.pushButton_estop.setMinimumSize(96, 48)
+        self.pushButton_estop.setStyleSheet(
+            "QPushButton { background-color: #FF3B30; color: white; "
+            "font-size: 18px; font-weight: bold; border: 2px solid black; }")
+        self.pushButton_estop.setToolTip(
+            "Emergency stop (F12) — drives all lasers to 0 V and aborts the current acquisition")
+        self.pushButton_estop.clicked.connect(self.updateUi_estop_pressed)
+        self.toolBar_estop.addWidget(self.pushButton_estop)
+
+        # Arm/Reset button — 88x32 min (smaller than E-stop so the panic
+        # stroke hits E-stop first). Two-press sequence: first press after
+        # an E-stop DISARMS (gray), second press re-ARMS (green). Never
+        # re-energizes a laser itself.
+        self.pushButton_armReset = QPushButton("Arm/Reset")
+        self.pushButton_armReset.setMinimumSize(88, 32)
+        self.pushButton_armReset.clicked.connect(self.updateUi_arm_reset_pressed)
+        self.toolBar_estop.addWidget(self.pushButton_armReset)
+
+        # F12 hotkey — fires regardless of which widget has focus.
+        self.shortcut_estop = QShortcut(QKeySequence("F12"), self)
+        self.shortcut_estop.setContext(Qt.ApplicationShortcut)
+        self.shortcut_estop.activated.connect(self.updateUi_estop_pressed)
 
         # Resize mainwindow
         #self.resize(QDesktopWidget().availableGeometry(self).size() * 0.75)
@@ -575,6 +635,90 @@ class Controller_MainWindow(QMainWindow):
             self.etls_calibration_started = False
         if self.lasers.laser1_active or self.lasers.laser2_active:
             self.stop_lasers()
+
+    @pyqtSlot()
+    def updateUi_estop_pressed(self):
+        """E-stop button / F12 hotkey handler.
+
+        Synchronously zeroes both lasers on the GUI thread the instant it
+fires, then sets the cooperative-abort Event so worker threads stop acquiring
+new frames at their next poll point. Idempotent (re-press re-sets the Event
+and re-writes 0 V). Never re-energizes — re-arming requires the two-press
+Arm/Reset sequence in updateUi_arm_reset_pressed.
+        """
+        # 1. Cooperative-abort Event — workers poll this at the top of
+        #    live_mode_worker, before acquire_scan in single_mode_worker,
+        #    and alongside stack_mode_started in stack_mode_worker.
+        self.estop_event.set()
+        # 2. DAQ laser -> 0 V, synchronous on the GUI thread (independent
+        #    of worker scheduling — the laser is dark before any worker
+        #    reaches its next poll point).
+        self.lasers.laser1_off()
+        # 3. iBeam off (serial write, GUI thread). On failure, warn the
+        #    operator explicitly that the iBeam may still be emitting —
+        #    never silently show a clean state. laser2_active is cleared
+        #    regardless of the serial outcome.
+        try:
+            self.ibeam.off()
+        except Exception:
+            self.sig_message.emit(
+                "E-STOP: iBeam off command failed — the iBeam (640 nm) may "
+                "STILL BE ON. Manually verify the iBeam is off before "
+                "approaching the microscope.")
+        self.lasers.laser2_active = False
+
+        # 4. Latch the UI into ACTUATED: red indicator, yellow 4px border
+        #    on the E-stop button ("latched — Arm/Reset before re-energizing").
+        #    Re-presses are idempotent — re-applying the same QSS is a no-op.
+        self.label_estopStatus.setText("● E-STOP ACTUATED")
+        self.label_estopStatus.setStyleSheet("color: #FF3B30; font-weight: bold;")
+        self.pushButton_estop.setStyleSheet(
+            "QPushButton { background-color: #FF3B30; color: white; "
+            "font-size: 18px; font-weight: bold; border: 4px solid #FFC107; }")
+
+        # 5. Warn the operator. Re-energizing requires Arm/Reset then Arm.
+        self.sig_message.emit(
+            "E-STOP actuated — all lasers driven to 0 V and the acquisition "
+            "was aborted. Press Arm/Reset, then Arm, to re-enable lasers.")
+
+    @pyqtSlot()
+    def updateUi_arm_reset_pressed(self):
+        """Arm/Reset button handler — the two-press re-arm sequence.
+
+        First press (while ACTUATED): clears the E-stop Event and transitions
+        to DISARMED (gray indicator, button label -> "Arm"). Lasers are NOT
+        re-energized — they stay off until the operator explicitly toggles one
+        or starts an acquisition.
+
+        Second press (while DISARMED, button labeled "Arm"): transitions back
+        to ARMED (green indicator, button label -> "Arm/Reset"). The system
+        is now ready; energizing still requires a separate deliberate action.
+
+        Never re-energizes a laser itself (D-01).
+        """
+        if self._estop_disarmed:
+            # Second press: re-arm. System returns to ARMED; lasers stay off
+            # until the operator explicitly toggles one or starts a run.
+            self._estop_disarmed = False
+            self.label_estopStatus.setText("● ARMED")
+            self.label_estopStatus.setStyleSheet(
+                "color: #34C759; font-weight: bold;")
+            self.pushButton_estop.setStyleSheet(
+                "QPushButton { background-color: #FF3B30; color: white; "
+                "font-size: 18px; font-weight: bold; border: 2px solid black; }")
+            self.pushButton_armReset.setText("Arm/Reset")
+        else:
+            # First press after an E-stop: clear the cooperative-abort Event
+            # and transition to DISARMED. Lasers remain off.
+            self.estop_event.clear()
+            self._estop_disarmed = True
+            self.label_estopStatus.setText("● DISARMED")
+            self.label_estopStatus.setStyleSheet(
+                "color: #8E8E93; font-weight: bold;")
+            self.pushButton_estop.setStyleSheet(
+                "QPushButton { background-color: #8E8E93; color: white; "
+                "font-size: 18px; font-weight: bold; border: 2px solid black; }")
+            self.pushButton_armReset.setText("Arm")
 
 
     def updateUi_initial_hardware_state(self):
@@ -1490,6 +1634,13 @@ class Controller_MainWindow(QMainWindow):
         self.start_lasers()
 
         while self.live_mode_started:
+            # E-stop poll point — checked at the top of each iteration before
+            # any frame acquisition work. The lasers are already dark (driven
+            # off synchronously on the GUI thread in updateUi_estop_pressed);
+            # this break just stops acquiring new frames.
+            if self.estop_event.is_set():
+                break
+
             # Setting the camera for scan acquisition
             self.camera.arm_scan()
 
@@ -1553,6 +1704,20 @@ class Controller_MainWindow(QMainWindow):
         # Start lasers
         self.both_lasers_activated = True
         self.start_lasers()
+
+        # E-stop poll point — checked before acquire_scan so a mid-acquisition
+        # E-stop (pressed between mode start and the single frame grab) aborts
+        # without acquiring the frame. The lasers are already dark from the
+        # synchronous GUI-thread zeroing in updateUi_estop_pressed.
+        if self.estop_event.is_set():
+            # Put ETLs in standby and stop lasers/camera before exiting so the
+            # post-mode cleanup matches the normal single_mode_worker exit.
+            self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+            self.stop_lasers()
+            self.both_lasers_activated = False
+            self.camera.disarm()
+            self.sig_single_mode_finished.emit()
+            return
 
         # Refresh scan waveforms with current settings
         self.siggen.compute_scan_waveforms()
@@ -1984,6 +2149,13 @@ class Controller_MainWindow(QMainWindow):
 
         for plane in range(int(self.number_of_planes)):
             if self.stack_mode_started == False:
+                self.sig_message.emit('Stack Acquisition Interrupted')
+                break
+            elif self.estop_event.is_set():
+                # E-stop poll point — checked alongside the stack_mode_started
+                # flag at each plane boundary. The lasers are already dark
+                # (driven off synchronously on the GUI thread); this break
+                # stops acquiring new planes.
                 self.sig_message.emit('Stack Acquisition Interrupted')
                 break
             else:
