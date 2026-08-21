@@ -4,8 +4,9 @@ Mock-serial unit tests for the Toptica iBeam Smart HAL driver (src/ibeam.py).
 These tests run on Mac with no physical device: `serial.Serial` is patched so
 the IBeam class's serial I/O is captured against MagicMocks. The protocol
 assumptions (115200 8-N-1, `laser on`/`laser off`, `channel <ch> power <uW>
-micro`, `[OK]`/`CMD>` terminators) were confirmed against the physical rig on
-COM4 (iBeam Smart 640, SN iBEAM-SMART-640-S-G1-15601).
+micro`, `enable <ch>` per-channel enable, `[OK]`/`CMD>` terminators, `%SYS-E`
+firmware error replies) were confirmed against the physical rig on COM4
+(iBeam Smart 640, SN iBEAM-SMART-640-S-G1-15601).
 '''
 
 import sys
@@ -46,15 +47,27 @@ def _last_write_text(mock_ser):
     return written.decode('ascii')
 
 
+def _write_sequence(mock_ser):
+    """Return the full decoded write sequence, in issue order, as a list of str."""
+    return [c.args[0].decode('ascii') for c in mock_ser.write.call_args_list]
+
+
 # --------------------------------------------------------------------------- #
-# Test 1: on() writes `laser on` with CRLF terminator
+# Test 1: on() writes `laser on` (and now `enable <ch>`) with CRLF terminators.
+# After the channel-enable wiring, the LAST write from on() is `enable 1`, not
+# `laser on`, so this asserts on the full write sequence instead of the last
+# write.
 # --------------------------------------------------------------------------- #
 def test_ibeam_on_writes_laser_on_command():
     ib, mock_ser = _make_open_ibeam()
     ib.on()
-    text = _last_write_text(mock_ser)
-    assert 'laser on' in text
-    assert text.endswith('\r\n')
+    writes = _write_sequence(mock_ser)
+    # The writes issued by on() are those after the open() handshake. The
+    # open() handshake itself writes `echo off` then `enable 1`, so filter to
+    # the laser-on / enable pair that on() appends.
+    on_writes = [w for w in writes if 'laser on' in w or w.startswith('enable ')]
+    assert any('laser on' in w for w in on_writes), f"no laser on write: {on_writes}"
+    assert all(w.endswith('\r\n') for w in on_writes), f"missing CRLF: {on_writes}"
 
 
 # --------------------------------------------------------------------------- #
@@ -127,3 +140,59 @@ def test_ibeam_no_serial_connection_sets_error():
     assert ib.error == 1
     assert ib.error_message != ''
     assert ib._is_on is False
+
+
+# --------------------------------------------------------------------------- #
+# Test 7: open() sends `echo off` then `enable <ch>` (channel live before any
+#         power command can be issued).
+# --------------------------------------------------------------------------- #
+def test_ibeam_open_sends_enable_channel():
+    with patch('src.ibeam.serial.Serial') as MockSerial:
+        mock_ser = MagicMock()
+        MockSerial.return_value = mock_ser
+        mock_ser.readline.return_value = b'[OK]\r\n'
+        ib = ibeam_mod.IBeam(port='COM4')
+        ib.open()
+    writes = _write_sequence(mock_ser)
+    decoded = [w.rstrip('\r\n') for w in writes]
+    assert 'echo off' in decoded, f"no echo off: {decoded}"
+    assert 'enable 1' in decoded, f"no enable 1: {decoded}"
+    # The channel enable must come AFTER echo off so the channel is live
+    # before any subsequent power command reaches the output.
+    assert decoded.index('echo off') < decoded.index('enable 1'), decoded
+
+
+# --------------------------------------------------------------------------- #
+# Test 8: on() sends `laser on` then `enable <ch>` (channel re-enabled with
+#         each emission enable).
+# --------------------------------------------------------------------------- #
+def test_ibeam_on_sends_enable_channel():
+    ib, mock_ser = _make_open_ibeam()
+    # Snapshot the write count after open() so we can isolate on()'s writes.
+    pre_count = len(mock_ser.write.call_args_list)
+    ib.on()
+    on_writes = _write_sequence(mock_ser)[pre_count:]
+    decoded = [w.rstrip('\r\n') for w in on_writes]
+    assert 'laser on' in decoded, f"no laser on: {decoded}"
+    assert 'enable 1' in decoded, f"no enable 1: {decoded}"
+    # `laser on` must precede `enable 1` so the global emission is on before
+    # the channel enable is (re)asserted.
+    assert decoded.index('laser on') < decoded.index('enable 1'), decoded
+    assert ib._is_on is True
+    assert ib.error == 0
+
+
+# --------------------------------------------------------------------------- #
+# Test 9: a `%SYS-E` firmware rejection sets the HAL error surface naming the
+#         rejected command, without raising.
+# --------------------------------------------------------------------------- #
+def test_ibeam_sys_error_response_sets_error():
+    ib, mock_ser = _make_open_ibeam(
+        readline_side_effect=[b'%SYS-E-00025, parameter error\r\n', b'[OK]\r\n'])
+    # Must not raise; the call simply returns.
+    ib.set_power(5000)
+    assert ib.error == 1
+    assert '%SYS-E' in ib.error_message
+    # The error message names the rejected command so the operator can see
+    # which write the firmware refused.
+    assert 'channel 1 power 5000 micro' in ib.error_message
