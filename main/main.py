@@ -9,6 +9,7 @@ sys.path.append(".")
 #print(sys.path)
 
 import logging
+import warnings
 
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QApplication
@@ -19,6 +20,32 @@ from qdarkstyle.light.palette import LightPalette
 from qdarkstyle.dark.palette import DarkPalette
 
 logging.basicConfig(format="%(message)s", level=logging.INFO)
+
+# Workaround for a nidaqmx 0.6.x Task.__del__ bug: after the context manager
+# closes a Task (close() -> clear()), the internal _saved_name attribute is
+# removed, but __del__ still runs during garbage collection and tries to
+# format a DaqResourceWarning using self._saved_name — raising AttributeError
+# ("Exception ignored in <function Task.__del__>"). The exception is swallowed
+# by Python (exceptions in __del__ are ignored) but printed to stderr, which
+# surfaces as confusing noise during safety-critical actions like E-stop.
+# Guard the attribute access so the resource-leak warning still fires for
+# genuinely unclosed tasks (where _saved_name survives) while silencing the
+# spurious AttributeError for properly-closed ones.
+try:
+    import nidaqmx
+    from nidaqmx.errors import DaqResourceWarning
+
+    def _safe_task_del(self):
+        saved_name = getattr(self, '_saved_name', None)
+        if saved_name:
+            warnings.warn(
+                'Task "{}" was not explicitly closed and may still be '
+                'reserved.'.format(saved_name), DaqResourceWarning)
+
+    nidaqmx.Task.__del__ = _safe_task_del
+except Exception:
+    # nidaqmx not installed (macOS dev path uses the conftest stub) — skip.
+    pass
 
 # This block permits messages display of errors occurring in all the files
 sys._excepthook = sys.excepthook
