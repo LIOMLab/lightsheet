@@ -241,7 +241,17 @@ def test_write_laser2_power_skips_when_estop_set():
 
 def test_write_laser1_power_writes_when_estop_clear_and_active():
     """When estop_event is clear and laser1 is active, _write_laser1_power
-    must scale and call _update_setpoints (the happy path)."""
+    must scale the staged percentage to Volts, write that value to
+    _laser1_setpoint (the attribute _update_setpoints actually sends to the
+    DAQ — NOT laser1_power, which is never read by the DAQ write path), and
+    call _update_setpoints (the happy path).
+
+    Asserting _laser1_setpoint (not just laser1_power) is the regression
+    guard for the bug where _write_laser1_power set laser1_power but the
+    DAQ writes _laser1_setpoint — the staged-percent spinbox was functionally
+    dead while the laser was on. A test that only asserted laser1_power
+    passed despite the laser power never changing on the rig.
+    """
     write_laser1_power = _load_method('_write_laser1_power(self, pct)')
 
     estop_event = threading.Event()  # clear
@@ -250,6 +260,10 @@ def test_write_laser1_power_writes_when_estop_clear_and_active():
     lasers.laser1_active = True
     lasers.laser1_max_power = 5.0
     lasers.error = 0
+    # Initialise the setpoint the way Lasers.__init__ does, so the assertion
+    # checks the method actually overwrites it with the scaled value rather
+    # than a Mock auto-attribute that compares equal to anything.
+    lasers._laser1_setpoint = 0
 
     standin = Mock()
     standin.estop_event = estop_event
@@ -259,8 +273,16 @@ def test_write_laser1_power_writes_when_estop_clear_and_active():
 
     write_laser1_power(standin, 50.0)
 
-    # 50 % of 5 V = 2.5 V was set on lasers.laser1_power before the write.
+    # 50 % of 5 V = 2.5 V must be set on lasers.laser1_power (the staged
+    # value the operator sees) AND on lasers._laser1_setpoint (the value
+    # _update_setpoints writes to the DAQ). The setpoint assertion is the
+    # critical one — without it the test passes even when the DAQ output
+    # never changes.
     assert lasers.laser1_power == 2.5
+    assert lasers._laser1_setpoint == 2.5, (
+        "_write_laser1_power must set _laser1_setpoint (the DAQ-bound "
+        "attribute), not just laser1_power — otherwise the staged-percent "
+        "spinbox never reaches the laser while it is on.")
     lasers._update_setpoints.assert_called_once()
 
 
