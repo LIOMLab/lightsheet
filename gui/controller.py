@@ -498,8 +498,17 @@ class Controller_MainWindow(QMainWindow):
         # Open the Toptica iBeam serial laser (COM4). Failure is non-fatal —
         # the DAQ laser path still works if the iBeam is offline — but surface
         # the error so the operator knows the red laser is unavailable.
+        # open() calls enable_channel() internally; enable_channel() catches
+        # SerialException and sets self.error without re-raising, so a plain
+        # try/except around open() cannot detect a channel-enable failure —
+        # the error surface must be inspected after open() returns.
         try:
             self.ibeam.open()
+            if self.ibeam.error:
+                self.sig_message.emit(
+                    f'iBeam opened but channel enable failed: '
+                    f'{self.ibeam.error_message}')
+                self.ibeam.error = 0
         except Exception as e:
             self.sig_message.emit(f'iBeam open failed: {e}')
 

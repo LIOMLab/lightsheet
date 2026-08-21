@@ -389,3 +389,38 @@ def test_acquire_scan_surfaces_siggen_error():
     assert break_idx != -1, (
         "stack_mode_worker must break the stack loop when "
         "self.siggen.error is set after acquire_scan")
+
+
+# --------------------------------------------------------------------------- #
+# Test 9: hardware_init must check self.ibeam.error after self.ibeam.open().
+# IBeam.open() calls enable_channel() internally; enable_channel() catches
+# SerialException and sets self.error without re-raising, so a plain
+# try/except around open() cannot detect a channel-enable failure. The
+# controller must inspect the error surface after open() returns and emit
+# an operator message via sig_message so the operator is told the diode
+# channel is not enabled (the firmware accepts subsequent power writes but
+# the diode stays dark). The error surface must be cleared after the
+# message is emitted so a stale error does not propagate to the first
+# on()/set_power() call.
+# --------------------------------------------------------------------------- #
+def test_hardware_init_checks_ibeam_error_after_open():
+    src = _read_controller_source()
+    body = _slice_method(src, 'hardware_init')
+    open_idx = body.find('self.ibeam.open()')
+    assert open_idx != -1, "hardware_init missing self.ibeam.open()"
+    err_check = 'if self.ibeam.error:'
+    err_idx = body.find(err_check, open_idx)
+    assert err_idx != -1, (
+        "hardware_init must check `if self.ibeam.error:` after "
+        "self.ibeam.open() so a channel-enable failure (which open() "
+        "swallows into the error surface without raising) is surfaced to "
+        "the operator instead of presenting as a silent dark diode")
+    emit_idx = body.find('self.sig_message.emit(', err_idx)
+    assert emit_idx != -1, (
+        "hardware_init must emit an operator message via sig_message when "
+        "self.ibeam.error is set after open()")
+    reset_idx = body.find('self.ibeam.error = 0', emit_idx)
+    assert reset_idx != -1, (
+        "hardware_init must reset self.ibeam.error = 0 after emitting so a "
+        "stale channel-enable error does not propagate to the first "
+        "on()/set_power() call")
