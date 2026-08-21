@@ -35,6 +35,7 @@ from src.siggen import SigGen
 from src.motors import Motors
 from src.lasers import Lasers
 from src.etls import ETLs
+from src.ibeam import IBeam
 
 
 class Controller_MainWindow(QMainWindow):
@@ -378,10 +379,19 @@ class Controller_MainWindow(QMainWindow):
         self.motors = Motors()
         self.lasers = Lasers()
         self.etls = ETLs()
+        self.ibeam = IBeam()
 
         # Making sure ETLs are in analog mode
         self.etls.open()
         self.etls.set_analog_mode()
+
+        # Open the Toptica iBeam serial laser (COM4). Failure is non-fatal —
+        # the DAQ laser path still works if the iBeam is offline — but surface
+        # the error so the operator knows the red laser is unavailable.
+        try:
+            self.ibeam.open()
+        except Exception as e:
+            self.sig_message.emit(f'iBeam open failed: {e}')
 
         # Update Ui with initial hardware state
         self.updateUi_initial_hardware_state()
@@ -420,6 +430,7 @@ class Controller_MainWindow(QMainWindow):
             time.sleep(1)
             self.camera.close()
             self.etls.close()
+            self.ibeam.close()
             self.timer_imageview.stop()
             QApplication.restoreOverrideCursor()
             event.accept()
