@@ -11,11 +11,16 @@ Protocol assumptions were confirmed against the physical rig on COM4 via SSH
 (iBeam Smart 640, SN iBEAM-SMART-640-S-G1-15601, firmware iBPs-001A01-05):
   - 115200 baud, 8-N-1
   - `laser on` / `laser off`    -> global emission enable/disable
+  - `enable <ch>`               -> per-channel enable (gates channel power)
   - `channel <ch> power <uW> micro` -> set channel power in microwatts
   - `status laser`              -> replies `ON` or `OFF`
   - `show level power`          -> multiline `CH<n>, PWR: <value> mW`
   - `show serial` / `version`   -> identification queries
   - `reset system`              -> reboot (recovery path for protocol desync)
+
+Device-level rejections are signalled by a `%SYS-E...` reply line; `_send_cmd`
+surfaces these on the HAL error surface (`self.error` / `self.error_message`)
+so a firmware rejection is not mistaken for success.
 
 The iBeam Smart has a known reply-lag firmware quirk: rapid command sequences
 can cause response misattribution. Mitigations: a per-instance lock
@@ -88,6 +93,10 @@ class IBeam:
             self.ser.open()
             # Disable command echo so replies are not doubled.
             self._send_cmd('echo off')
+            # Enable the configured diode channel so a subsequent channel
+            # power command actually reaches the output. Without `enable <ch>`
+            # the firmware accepts the power write but the diode stays dark.
+            self.enable_channel()
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
@@ -120,6 +129,11 @@ class IBeam:
         """Enable laser emission (global enable)."""
         try:
             self._send_cmd('laser on')
+            # Re-enable the configured diode channel with each emission
+            # enable. The channel enable is independent of the global
+            # `laser on` state; reasserting it here guarantees a power
+            # command issued afterwards reaches the output.
+            self.enable_channel()
             self._is_on = True
         except serial.SerialException as e:
             self.error = 1
@@ -142,6 +156,24 @@ class IBeam:
             # error surface) to manually verify, rather than the GUI
             # showing it as on and the operator assuming it is off.
             self._is_on = False
+        return None
+
+    def enable_channel(self, channel=None):
+        """Enable a diode channel so channel power commands take effect.
+
+        The iBeam Smart protocol gates output on both the global emission
+        state (`laser on`) and a per-channel enable. Without `enable <ch>`
+        a `channel <ch> power ... micro` command is accepted by the
+        firmware but does not change the output.
+
+        channel: 1-based channel index; defaults to the configured channel.
+        """
+        ch = self.channel if channel is None else int(channel)
+        try:
+            self._send_cmd(f'enable {ch}')
+        except serial.SerialException as e:
+            self.error = 1
+            self.error_message = str(e)
         return None
 
     def set_power(self, power_uw):
@@ -244,6 +276,19 @@ class IBeam:
                 line = raw.decode('ascii', errors='replace').strip()
                 response_lines.append(line)
                 if line == '[OK]' or line.startswith('CMD>'):
+                    break
+
+            # Surface a device-level rejection on the HAL error surface
+            # instead of letting it look like success. The firmware prefixes
+            # error replies with a `%SYS-E` code (e.g.
+            # `%SYS-E-00025, parameter error`). The controller polls
+            # self.error after every write and emits the operator message
+            # from there; we do not raise so the existing call sites keep
+            # working unchanged.
+            for line in response_lines:
+                if line.startswith('%SYS-E'):
+                    self.error = 1
+                    self.error_message = f'iBeam rejected "{cmd}": {line}'
                     break
 
             time.sleep(self._inter_command_gap)
