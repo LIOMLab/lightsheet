@@ -19,21 +19,23 @@ import src.ibeam as ibeam_mod
 def _make_open_ibeam(readline_value=None, readline_side_effect=None):
     """Construct IBeam(port='COM4') and open() it against a mocked serial.Serial.
 
-    Returns (ibeam, mock_ser). The mock serial's readline returns the [OK]
-    terminator by default so _send_cmd's read loop exits cleanly; callers can
-    override with readline_side_effect for response-parsing tests.
+    Returns (ibeam, mock_ser). During open() the mock serial's readline returns
+    the [OK] terminator so the echo-off handshake exits cleanly; the optional
+    readline_side_effect is applied AFTER open() so it is available for the
+    test's own _send_cmd / status calls (otherwise open()'s echo-off would
+    consume the side_effect list).
     """
     with patch('src.ibeam.serial.Serial') as MockSerial:
         mock_ser = MagicMock()
         MockSerial.return_value = mock_ser
-        if readline_side_effect is not None:
-            mock_ser.readline.side_effect = readline_side_effect
-        elif readline_value is not None:
-            mock_ser.readline.return_value = readline_value
-        else:
-            mock_ser.readline.return_value = b'[OK]\r\n'
+        mock_ser.readline.return_value = b'[OK]\r\n'
         ib = ibeam_mod.IBeam(port='COM4')
         ib.open()
+    # Now that open() is done, swap in the test-specific readline behaviour.
+    if readline_side_effect is not None:
+        mock_ser.readline.side_effect = readline_side_effect
+    elif readline_value is not None:
+        mock_ser.readline.return_value = readline_value
     return ib, mock_ser
 
 
