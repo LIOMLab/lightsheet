@@ -1698,6 +1698,18 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
             self.lasers.laser1_power = (
                 self.laser1_power_pct / 100.0 * self.lasers.laser1_max_power)
             self.lasers.laser1_on()
+            # Surface a DAQ AO write failure to the operator. Lasers.
+            # _update_setpoints catches the write failure on /Dev7/ao0:1,
+            # sets self.error = 1, reverts laser1_active = False, and
+            # deliberately does NOT raise (hardware-absence tolerance). The
+            # caller is responsible for reading the flag — every other
+            # laser-1 call site does; this branch was the only one that did
+            # not, so a failed laser-1 start during acquisition was a silent
+            # no-op (PSU dark, no message).
+            if self.lasers.error:
+                self.sig_message.emit(
+                    f"Laser write failed — laser reverted to OFF. Check the NI DAQ connection (Dev7) and re-enable the laser. Cause: {self.lasers.error_message}")
+                self.lasers.error = 0
         if self.ui.checkBox_laserTwoAutomatic.isChecked():
             # Laser 2 is the iBeam (serial, COM4), not the DAQ AO channel.
             # Drive the iBeam directly so the physical laser and the
