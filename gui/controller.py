@@ -2259,7 +2259,32 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
         number_of_images = self.siggen.waveform_cycles
 
         # Creating acquisition tasks
+        # Clear any error left over from a previous acquisition so the check
+        # below reflects this create_scanner() call only.
+        self.siggen.error = 0
         self.siggen.create_scanner()
+        # create_scanner() wraps its DAQ task creation in a bare except that
+        # sets self.siggen.error = 1 + a generic 'create_scan error' message
+        # but never raises. Without this check a failed create_scanner()
+        # leaves task_galvo_etl / task_camera as None, start_scanner() /
+        # monitor_scanner() become no-ops, and the camera waits out its full
+        # recorder timeout with nothing to report — a silent 15 s timeout
+        # that is impossible to diagnose. Surface it here, before the
+        # recorder is primed, so the operator sees the real DAQ fault
+        # instead of a camera timeout. The recorder is never primed on this
+        # path, so there is no recorder to delete; the scanner task objects
+        # are None so delete_scanner() is a safe no-op, and disarm() returns
+        # the camera to a consistent state. Do NOT clear self.siggen.error
+        # here — the stack worker inspects it to decide whether to abort the
+        # remaining planes, and the reset above clears it at the start of
+        # the next acquisition.
+        if self.siggen.error:
+            self.sig_message.emit(
+                f"Scan task creation failed — the acquisition was aborted before the camera was triggered. Check the NI DAQ connection (Dev1). Cause: {self.siggen.error_message}")
+            logging.warning("SigGen create_scanner failed during acquire_scan")
+            self.siggen.delete_scanner()
+            self.camera.disarm()
+            return
 
         # Prime the camera recorder before we start the acquisition taks
         self.camera.start_recorder(number_of_images)
@@ -2586,6 +2611,15 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
                     # up the recorder/scanner; do not enqueue a (nonexistent)
                     # frame for this plane or attempt the next one.
                     if self.camera.recorder_timeout_status:
+                        break
+
+                    # A DAQ scan-task failure would recur on every remaining
+                    # plane — abort the stack instead of emitting the same
+                    # message N times. acquire_scan already emitted the
+                    # operator message and cleaned up the scanner/camera for
+                    # this plane; the post-loop stop_lasers/disarm cleanup
+                    # runs unchanged.
+                    if self.siggen.error:
                         break
 
                     # Saving frame
