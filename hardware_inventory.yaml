@@ -40,10 +40,10 @@ devices:
       serial_number: null
       role: Zaber motor stages
     - port: COM4
-      description: USB Serial Port
+      description: Toptica iBeam Smart 640nm laser (FTDI USB Serial Port)
       vid_pid: 0403:6001
       serial_number: FTESFCRWA
-      role: auxiliary serial adapter
+      role: Toptica iBeam Smart 640nm laser
     - port: COM1
       description: Port de communication
       hwid: ACPI\PNP0501\0
