@@ -754,6 +754,24 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
         self.ui.doubleSpinBox_laserOneAmplitude.setValue(self.lasers.laser1_power)
         self.ui.doubleSpinBox_laserTwoAmplitude.setValue(self.lasers.laser2_power)
 
+        # Wavelength labels — read from the live Lasers/IBeam instances so the
+        # operator sees the real configured wavelength (no hardcoded numbers).
+        self.ui.label_72.setText(
+            f"<html><head/><body><p><span style=\" font-weight:600; font-size:18px;\">"
+            f"{self.lasers.laser1_wavelength} nm</span></p></body></html>")
+        self.ui.label_73.setText(
+            f"<html><head/><body><p><span style=\" font-weight:600; font-size:18px;\">"
+            f"{self.ibeam.wavelength} nm</span></p></body></html>")
+
+        # Toggle button text + tooltips so the operator can find each laser by
+        # wavelength rather than the generic "Laser1"/"Laser2" placeholder.
+        self.ui.pushButton_laserOneToggle.setText(f"Toggle {self.lasers.laser1_wavelength} nm")
+        self.ui.pushButton_laserTwoToggle.setText(f"Toggle {self.ibeam.wavelength} nm")
+        self.ui.pushButton_laserOneToggle.setToolTip(
+            f"Toggle {self.lasers.laser1_wavelength} nm laser (DAQ AO Dev7/ao0)")
+        self.ui.pushButton_laserTwoToggle.setToolTip(
+            f"Toggle Toptica iBeam ({self.ibeam.wavelength} nm, COM4)")
+
         # Motors
         self.updateUi_units()
 
