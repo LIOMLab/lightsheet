@@ -321,12 +321,21 @@ class Camera:
         return images
 
     def delete_recorder(self):
-        '''docstring'''
+        '''Delete the camera recorder session.
+
+        Does NOT reset recorder_timeout_status — that flag is set by
+        monitor_recorder when a timeout occurs and must survive long enough
+        for the acquisition worker (e.g. stack_mode_worker) to inspect it
+        after acquire_scan returns and abort the run. Resetting it here
+        would clear the timeout before the worker's post-acquire check,
+        making the stack-mode abort dead code. start_recorder resets the
+        flag to False at the beginning of each plane, so the next plane
+        starts with a clean timeout state.
+        '''
         if self.camera is not None:
             self.camera.rec.delete()
             # Deleting the recording session also deletes any remaining images
             self.new_data_ready = False
-            self.recorder_timeout_status = False
         return None
 
 
