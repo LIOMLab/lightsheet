@@ -134,7 +134,14 @@ class IBeam:
             # `laser on` state; reasserting it here guarantees a power
             # command issued afterwards reaches the output.
             self.enable_channel()
-            self._is_on = True
+            # Only mark the laser as on if neither the `laser on` write nor
+            # the channel enable was rejected by the firmware. _send_cmd and
+            # enable_channel both set self.error on a %SYS-E reply without
+            # raising, so guard the state update on the error surface to
+            # avoid the HAL believing emission is enabled when the firmware
+            # refused.
+            if not self.error:
+                self._is_on = True
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
@@ -186,7 +193,14 @@ class IBeam:
         power_uw = max(0, min(power_uw, self.max_power))
         try:
             self._send_cmd(f'channel {self.channel} power {power_uw} micro')
-            self._power = power_uw
+            # Only record the commanded power if the firmware accepted the
+            # write. _send_cmd does not raise on a %SYS-E rejection — it
+            # sets self.error and returns normally — so guard the state
+            # update on the error surface to keep the HAL's internal power
+            # consistent with the actual hardware state. The max_power clamp
+            # above is a physical-safety control and is NOT affected.
+            if not self.error:
+                self._power = power_uw
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
@@ -258,6 +272,13 @@ class IBeam:
         with self._lock:
             if self.ser is None:
                 raise serial.SerialException('Serial not connected')
+
+            # Clear any stale error from a prior command so this command's
+            # result is not masked by a previous failure. The error surface
+            # is reset before the serial round-trip and only re-set below if
+            # this command itself fails (a %SYS-E reply) or raises.
+            self.error = 0
+            self.error_message = ''
 
             self.ser.reset_input_buffer()
             self.ser.write(f'{cmd}\r\n'.encode('ascii'))
