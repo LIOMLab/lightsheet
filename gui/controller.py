@@ -1886,6 +1886,19 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
             self.camera.arm()
 
             while self.preview_mode_started:
+                # E-stop poll point — checked at the top of each iteration
+                # before any frame acquisition work. The lasers are already
+                # dark (driven off synchronously on the GUI thread in
+                # updateUi_estop_pressed); this break just stops acquiring
+                # new frames. Preview mode does not drive lasers or scan
+                # generation, but the camera stays armed and grabbing until
+                # the operator manually stops — polling estop_event aligns
+                # preview_mode_worker with live/single/stack per the
+                # AGENTS.md §2 rule that E-stop is polled in all acquisition
+                # worker loops.
+                if self.estop_event.is_set():
+                    break
+
                 # # Updating Galvo and ETL voltages
                 # self.siggen.update_all()
 

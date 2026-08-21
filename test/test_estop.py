@@ -146,10 +146,15 @@ def test_estop_event_set_in_handler():
 
 
 def test_worker_loops_poll_estop_event():
-    """Each acquisition worker (single_mode_worker, stack_mode_worker) must
-    poll estop_event.is_set() so a mid-acquisition E-stop aborts the run."""
+    """Each acquisition worker (single_mode_worker, stack_mode_worker,
+    live_mode_worker, preview_mode_worker) must poll estop_event.is_set()
+    so a mid-acquisition E-stop aborts the run. AGENTS.md §2 hard rule:
+    E-stop must be polled in all acquisition worker loops — preview mode
+    is not exempt even though it does not drive lasers, because the camera
+    stays armed and grabbing until the operator manually stops."""
     src = _read_controller_source()
-    for worker in ('single_mode_worker', 'stack_mode_worker'):
+    for worker in ('single_mode_worker', 'stack_mode_worker',
+                   'live_mode_worker', 'preview_mode_worker'):
         m = re.search(r'def ' + worker + r'\(self\):', src)
         assert m, f"{worker} is missing"
         body = src[m.start():]
@@ -157,4 +162,5 @@ def test_worker_loops_poll_estop_event():
         if end:
             body = body[:end.start() + 1]
         assert 'self.estop_event.is_set()' in body, (
-            f"{worker} must poll self.estop_event.is_set()")
+            f"{worker} must poll self.estop_event.is_set() so a "
+            f"mid-acquisition E-stop aborts the run (AGENTS.md §2)")
