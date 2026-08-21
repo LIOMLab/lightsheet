@@ -1193,18 +1193,44 @@ class Controller_MainWindow(QMainWindow):
 
 
     def updateUi_laser1_amplitude(self):
-        # Propagate Ui changes to hardware instance
+        # Propagate Ui changes to hardware instance and write to the DAQ in
+        # real time when laser 1 is active (no debounce — the operator
+        # expects immediate power response).
         self.lasers.laser1_power = self.ui.doubleSpinBox_laserOneAmplitude.value()
+        if self.lasers.laser1_active:
+            self.lasers._update_setpoints()
+            if self.lasers.error:
+                self.sig_message.emit(
+                    f"Laser write failed — laser reverted to OFF. Check the NI DAQ connection (Dev7) and re-enable the laser. Cause: {self.lasers.error_message}")
+                self.lasers.error = 0
 
     def updateUi_laser2_amplitude(self):
-        # Propagate Ui changes to hardware instance
+        # Laser 2 is physically the iBeam (COM4), not the DAQ — route the
+        # spinbox change to the iBeam HAL in real time when active. The
+        # Max Power clamp lives inside IBeam.set_power (HAL boundary), so
+        # this is the one and only laser-2 power write path.
         self.lasers.laser2_power = self.ui.doubleSpinBox_laserTwoAmplitude.value()
+        if self.lasers.laser2_active:
+            self.ibeam.set_power(self.ui.doubleSpinBox_laserTwoAmplitude.value())
+            if self.ibeam.error:
+                self.sig_message.emit(
+                    f"iBeam (640 nm) write failed — laser reverted to OFF. Check the COM4 USB cable and the iBeam power, then re-enable. Cause: {self.ibeam.error_message}")
+                self.ibeam.error = 0
 
     def laser1_toggle_button(self):
         self.lasers.laser1_toggle()
 
     def laser2_toggle_button(self):
-        self.lasers.laser2_toggle()
+        # laser2_active is the single source of truth for the iBeam on/off
+        # state (start_lasers/stop_lasers and the E-stop read it). Drive
+        # the iBeam directly so the flag and the physical laser agree.
+        if self.lasers.laser2_active:
+            self.lasers.laser2_active = False
+            self.ibeam.off()
+        else:
+            self.lasers.laser2_active = True
+            self.ibeam.on()
+            self.ibeam.set_power(self.lasers.laser2_power)
 
     def start_lasers(self):
         '''Starts the lasers at a certain voltage'''
