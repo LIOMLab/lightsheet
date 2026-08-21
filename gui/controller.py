@@ -654,17 +654,20 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
         #    of worker scheduling — the laser is dark before any worker
         #    reaches its next poll point).
         self.lasers.laser1_off()
-        # 3. iBeam off (serial write, GUI thread). On failure, warn the
-        #    operator explicitly that the iBeam may still be emitting —
-        #    never silently show a clean state. laser2_active is cleared
-        #    regardless of the serial outcome.
-        try:
-            self.ibeam.off()
-        except Exception:
+        # 3. iBeam off (serial write, GUI thread). IBeam.off() catches
+        #    SerialException internally and sets self.error rather than
+        #    re-raising, so a try/except here can never fire for a serial
+        #    failure. Check the error surface instead and warn the operator
+        #    explicitly that the iBeam may still be emitting — never silently
+        #    show a clean state. laser2_active is cleared regardless of the
+        #    serial outcome.
+        self.ibeam.off()
+        if self.ibeam.error:
             self.sig_message.emit(
                 "E-STOP: iBeam off command failed — the iBeam (640 nm) may "
                 "STILL BE ON. Manually verify the iBeam is off before "
                 "approaching the microscope.")
+            self.ibeam.error = 0
         self.lasers.laser2_active = False
 
         # 4. Latch the UI into ACTUATED: red indicator, yellow 4px border
@@ -1464,14 +1467,39 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
     def laser2_toggle_button(self):
         # laser2_active is the single source of truth for the iBeam on/off
         # state (start_lasers/stop_lasers and the E-stop read it). Drive
-        # the iBeam directly so the flag and the physical laser agree.
+        # the iBeam directly so the flag and the physical laser agree, and
+        # verify each serial command before mutating the flag — never show
+        # the iBeam as active when the serial command failed (Class IIIB
+        # state-mismatch hazard).
         if self.lasers.laser2_active:
-            self.lasers.laser2_active = False
             self.ibeam.off()
+            if self.ibeam.error:
+                self.sig_message.emit(
+                    f"iBeam off failed — the iBeam (640 nm) may STILL BE ON. "
+                    f"Manually verify the iBeam is off before approaching the microscope. "
+                    f"Cause: {self.ibeam.error_message}")
+                self.ibeam.error = 0
+            # laser2_active is cleared regardless — the operator intent was off.
+            self.lasers.laser2_active = False
         else:
-            self.lasers.laser2_active = True
             self.ibeam.on()
-            self.ibeam.set_power(self.lasers.laser2_power)
+            if self.ibeam.error:
+                self.sig_message.emit(
+                    f"iBeam on failed — laser stays OFF. Check COM4 and the iBeam power. "
+                    f"Cause: {self.ibeam.error_message}")
+                self.ibeam.error = 0
+                return
+            self.lasers.laser2_active = True
+            # Spinbox value is in microwatts (range set in
+            # updateUi_initial_hardware_state to the iBeam max power).
+            self.ibeam.set_power(self.ui.doubleSpinBox_laserTwoAmplitude.value())
+            if self.ibeam.error:
+                self.sig_message.emit(
+                    f"iBeam (640 nm) power write failed — laser reverted to OFF. "
+                    f"Check the COM4 USB cable and the iBeam power. Cause: {self.ibeam.error_message}")
+                self.ibeam.error = 0
+                self.ibeam.off()
+                self.lasers.laser2_active = False
 
     def start_lasers(self):
         '''Starts the lasers at a certain voltage'''
