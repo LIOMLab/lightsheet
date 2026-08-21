@@ -1478,14 +1478,43 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
         if self.ui.checkBox_laserOneAutomatic.isChecked():
             self.lasers.laser1_on()
         if self.ui.checkBox_laserTwoAutomatic.isChecked():
-            self.lasers.laser2_on()
+            # Laser 2 is the iBeam (serial, COM4), not the DAQ AO channel.
+            # Drive the iBeam directly so the physical laser and the
+            # laser2_active flag agree. Verify the serial on() succeeded
+            # before marking the laser active — never show "on" when the
+            # serial command failed (Class IIIB state-mismatch hazard).
+            self.ibeam.on()
+            if self.ibeam.error:
+                self.sig_message.emit(
+                    f"iBeam on failed — laser reverted to OFF. Check COM4 and the iBeam power. Cause: {self.ibeam.error_message}")
+                self.ibeam.error = 0
+            else:
+                self.lasers.laser2_active = True
+                # Spinbox value is in microwatts (range set in
+                # updateUi_initial_hardware_state to the iBeam max power).
+                self.ibeam.set_power(self.ui.doubleSpinBox_laserTwoAmplitude.value())
+                if self.ibeam.error:
+                    self.sig_message.emit(
+                        f"iBeam (640 nm) power write failed — laser reverted to OFF. Check the COM4 USB cable and the iBeam power. Cause: {self.ibeam.error_message}")
+                    self.ibeam.error = 0
+                    self.ibeam.off()
+                    self.lasers.laser2_active = False
 
     def stop_lasers(self):
         '''Stops the lasers, puts their voltage to zero'''
         if self.ui.checkBox_laserOneAutomatic.isChecked():
             self.lasers.laser1_off()
         if self.ui.checkBox_laserTwoAutomatic.isChecked():
-            self.lasers.laser2_off()
+            # Laser 2 is the iBeam (serial, COM4). Drive it off directly.
+            # laser2_active is cleared regardless of the serial outcome —
+            # the operator intent was off, and the GUI must not show the
+            # iBeam as active after a stop request.
+            self.ibeam.off()
+            if self.ibeam.error:
+                self.sig_message.emit(
+                    f"iBeam off failed — the iBeam (640 nm) may STILL BE ON. Manually verify the iBeam is off before approaching the microscope. Cause: {self.ibeam.error_message}")
+                self.ibeam.error = 0
+            self.lasers.laser2_active = False
 
     '''File Open Methods'''
 
