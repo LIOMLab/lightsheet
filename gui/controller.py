@@ -1524,6 +1524,20 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
             if self.lasers.laser1_active:
                 volts = pct / 100.0 * self.lasers.laser1_max_power
                 self.lasers.laser1_power = volts
+                # _update_setpoints writes _laser1_setpoint to the DAQ, not
+                # laser1_power (the only other writer of _laser1_setpoint is
+                # laser1_on). Without updating _laser1_setpoint here the DAQ
+                # would re-emit the stale setpoint and the staged-percent
+                # spinbox would be functionally dead while the laser is on.
+                self.lasers._laser1_setpoint = volts
+                # Re-check E-stop immediately before the DAQ write — E-stop
+                # is intentionally lock-free (it runs on the GUI thread and
+                # zeroes the setpoint via laser1_off() without taking this
+                # lock), so it can fire between the top-of-method check and
+                # this point. If it did, force the setpoint back to 0 so the
+                # DAQ write cannot re-energize the laser past the kill path.
+                if self.estop_event.is_set():
+                    self.lasers._laser1_setpoint = 0
                 self.lasers._update_setpoints()
                 if self.lasers.error:
                     self.sig_message.emit(
