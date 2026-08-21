@@ -173,9 +173,7 @@ class Controller_MainWindow(QMainWindow):
         self.default_buttons = [self.ui.pushButton_acqStartPreviewMode,
                                 self.ui.pushButton_acqStartLiveMode,
                                 self.ui.pushButton_acqStartStackMode,
-                                self.ui.pushButton_acqGetSingleImage,
-                                self.ui.pushButton_calCameraStartCalibration,
-                                self.ui.pushButton_calEtlStartCalibration]
+                                self.ui.pushButton_acqGetSingleImage]
 
         # Initial state of modes buttons
         #self.updateUi_modes_buttons(self.default_buttons)
@@ -190,6 +188,15 @@ class Controller_MainWindow(QMainWindow):
         self.ui.pushButton_calCameraShowInterpolation.setEnabled(False)
         self.ui.pushButton_calEtlStartCalibration.setEnabled(False)
         self.ui.pushButton_calEtlShowInterpolation.setEnabled(False)
+
+        # The Camera Calibration and ETL Calibration workflows are dead code
+        # (their worker bodies were never rebuilt after an earlier refactor).
+        # Hide the start buttons programmatically rather than editing the
+        # generated .ui file. The slot methods and signal connections are
+        # kept so the buttons can be re-enabled later; the worker bodies are
+        # stripped to no-ops below. Restorable from git history.
+        self.ui.pushButton_calCameraStartCalibration.setVisible(False)
+        self.ui.pushButton_calEtlStartCalibration.setVisible(False)
 
 
         # Initial state of First and Last plane selection (for Stack Mode)
@@ -534,10 +541,8 @@ class Controller_MainWindow(QMainWindow):
                               self.ui.pushButton_acqStartStackMode,
                               self.ui.pushButton_acqGetSingleImage,
                               self.ui.pushButton_saveCurrentImage,
-                              self.ui.pushButton_calCameraStartCalibration,
                               self.ui.pushButton_calCameraComputeFocus,
                               self.ui.pushButton_calCameraShowInterpolation,
-                              self.ui.pushButton_calEtlStartCalibration,
                               self.ui.pushButton_calEtlShowInterpolation]
         for button in aquisition_buttons:
             if button in buttons_to_enable:
@@ -2077,200 +2082,17 @@ class Controller_MainWindow(QMainWindow):
         self.calibrate_camera_thread.start()
 
     def calibrate_camera_worker(self):
-        ''' Calibrates the camera focus by finding the ideal camera position
-            for multiple sample horizontal positions'''
+        '''Camera calibration worker.
 
-        print('calibrate_camera: code refactoring in progress')
-
-        self.ui.statusBar_label.setText('')
-        self.ui.statusBar_progress.hide()
-
-        # Enabling modes after camera calibration
-        self.updateUi_modes_buttons(self.default_buttons)
-        self.updateUi_motor_buttons(False)
-
-        self.camera_calibration_started = False
-        self.ui.pushButton_calCameraStartCalibration.setText('Start Camera Calibration')
-
-        self.sig_beep.emit()
+        The calibration workflow that this worker used to drive was never
+        rebuilt after an earlier refactor and had become dead code (it
+        printed a placeholder message and returned before any of the
+        unreachable calibration logic). The body is now a no-op. The start
+        button is hidden in __init__; the slot method and its signal
+        connection are retained so a scoped rebuild can restore the
+        workflow from git history.
+        '''
         return None
-
-        # Setting the camera for acquisition
-        self.camera.set_trigger_mode('external_exposure')
-        self.camera.arm()
-
-        # Starting lasers
-        self.both_lasers_activated = True
-        self.start_lasers()
-
-        # Getting calibration parameters
-        if self.ui.doubleSpinBox_calNumberOfPlanes.value() != 0:
-            self.number_of_calibration_planes = self.ui.doubleSpinBox_calNumberOfPlanes.value()
-        if self.ui.doubleSpinBox_calNumberOfCameraPositions.value() != 0:
-            self.number_of_camera_positions = self.ui.doubleSpinBox_calNumberOfCameraPositions.value()
-
-        sample_increment_length = (self.motors.horizontal.get_limit_high(self.units) - self.motors.horizontal.get_limit_low(self.units)) / (self.number_of_calibration_planes - 1) #-1 to account for last position
-        self.focus_backward_boundary = 38 ##Position arbitraire en u-steps
-        self.focus_forward_boundary = 31 ##Position arbitraire en u-steps
-        camera_increment_length = (self.focus_backward_boundary - self.focus_forward_boundary) / (self.number_of_camera_positions-1) #-1 to account for last position
-
-        position_depart_sample = self.motors.horizontal.get_position('\u03BCStep')
-
-        self.camera_focus_relation = np.zeros((int(self.number_of_calibration_planes),2))
-        metricvar = np.zeros((int(self.number_of_camera_positions)))
-        self.donnees = np.zeros(((int(self.number_of_calibration_planes)),(int(self.number_of_camera_positions)))) #debugging
-        self.popt = np.zeros((int(self.number_of_calibration_planes),3))    #debugging
-
-        # Check that filename is valid and saving is allowed
-        self.validate_file_name()
-        if self.saving_allowed:
-            # Getting sample name
-            self.save_description = str(self.ui.lineEdit_saveDescription.text())
-
-            # Setting frame saver
-            self.frame_saver.reinit(3)
-            self.frame_saver.add_sample_name(self.save_description)
-            self.frame_saver.set_files(self.number_of_calibration_planes,self.save_filename,'cameraCalibration',self.number_of_camera_positions,'camera_position')
-
-            # Starting frame saver
-            self.frame_saver.start_saving()
-        else:
-            print('Select directory and enter a valid filename before saving')
-
-        # Set progress bar
-        progress_value = 0
-        progress_increment = 100/self.number_of_calibration_planes
-        self.sig_progress_update.emit(0) #To reset progress bar
-
-        # Compute scan waveforms only once before we start the calibration
-        # Changes to settings won't be effective until we stop/restart mode
-        self.siggen.compute_scan_waveforms()
-
-        for sample_plane in range(int(self.number_of_calibration_planes)): #For each sample position
-            if self.camera_calibration_started == False:
-                self.sig_message.emit('Camera calibration interrupted')
-                break
-            else:
-                # Moving sample position
-                position = self.motors.horizontal.get_limit_low(self.units) + (sample_plane * sample_increment_length)    #Increments of +sample_increment_length
-                self.motors.horizontal.move_absolute_position(position, self.units)
-                self.updateUi_position_horizontal()
-
-                for camera_plane in range(int(self.number_of_camera_positions)): #For each camera position
-                    if self.camera_calibration_started == False:
-                        break
-                    else:
-                        # Moving camera position
-                        position_camera = self.focus_forward_boundary + (camera_plane * camera_increment_length) #Increments of +camera_increment_length
-                        #print('position_camera:'+str(position_camera))
-                        self.motors.camera.move_absolute_position(position_camera, 'mm')
-                        time.sleep(0.5) #To make sure the camera is at the right position
-                        self.updateUi_position_camera()
-
-                        # Retrieving filename set by the user #debugging
-                        if self.saving_allowed:
-                            self.frame_saver.add_motor_parameters(self.current_horizontal_position_text, self.current_vertical_position_text, self.current_camera_position_text)
-
-                        # Getting image
-                        self.acquire_scan()
-
-                        # Saving frame #debugging
-                        if self.saving_allowed:
-                            self.frame_saver.enqueue_buffer(self.reconstructed_frame)
-                            self.sig_message.emit('Saving Reconstructed Image')
-
-                        # Filtering frame
-                        frame = ndimage.gaussian_filter(self.reconstructed_frame, sigma=3)
-                        ##flatframe = frame.flatten()
-                        intensities = np.sort(frame,axis=None)
-                        metricvar[camera_plane] = np.average(intensities[-50:]) ##np.var(flatframe)
-                        #print(np.var(flatframe))
-
-                # Calculating ideal camera position
-                try:
-                    metricvar = signal.savgol_filter(metricvar, 11, 3) # window size 11, polynomial order 3
-                    metricvar = (metricvar - np.min(metricvar))/(np.max(metricvar) - np.min(metricvar))#normalize
-                    self.donnees[sample_plane,:] = metricvar #debugging
-
-                    n = len(metricvar)
-                    x = np.arange(n)
-                    mean = sum(x*metricvar)/n
-                    sigma = sum(metricvar*(x-mean)**2)/n
-                    poscenter = np.argmax(metricvar)
-                    print('poscenter:' + str(poscenter)) #debugging
-                    popt, pcov = optimize.curve_fit(gaussian, x, metricvar, p0=[1,mean,sigma], bounds=(0, 'inf'), maxfev=10000)
-                    amp, center, variance = popt
-                    self.popt[sample_plane] = popt
-                    print('center:' + str(center)) #debugging
-                    print('amp:' + str(amp)) #debugging
-                    print('variance:' + str(variance)) #debugging
-                    print('pcov:' + str(pcov)) #debugging
-
-                    # Saving focus relation
-                    self.camera_focus_relation[sample_plane,0] = self.motors.horizontal.get_position(self.units)
-                    max_variance_camera_position = self.focus_forward_boundary + (center * camera_increment_length)
-                    print('max_variance_camera_position:'+str(max_variance_camera_position))
-                    if max_variance_camera_position > self.focus_backward_boundary:
-                        max_variance_camera_position = self.focus_backward_boundary
-                    self.camera_focus_relation[sample_plane,1] = max_variance_camera_position
-
-                    self.sig_message.emit('--Calibration of plane ' + str(sample_plane+1) + '/' + str(int(self.number_of_calibration_planes)) + ' done')
-
-                    # Update progress bar
-                    progress_value += progress_increment
-                    self.sig_progress_update.emit(int(progress_value))
-                except:
-                    self.camera_calibration_started = False
-                    self.sig_message.emit('Camera calibration failed')
-        if self.camera_calibration_started:
-            self.sig_progress_update.emit(100) #In case the number of planes is not a multiple of 100
-
-        print('relation:') #debugging
-        print(self.camera_focus_relation)#debugging
-
-        if self.saving_allowed: #debugging
-            self.frame_saver.stop_saving()
-            self.sig_message.emit('Images saved')
-
-        # Returning sample and camera at initial positions
-        self.motors.horizontal.move_absolute_position(position_depart_sample,'\u03BCStep')
-        self.updateUi_position_horizontal()
-        self.motors.camera.move_absolute_position(self.motors.camera.get_origin(self.units), self.units)
-        self.updateUi_position_camera()
-
-        # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)
-        self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-
-        # Stopping lasers
-        self.stop_lasers()
-        self.both_lasers_activated = False
-
-        # Stopping camera
-        self.camera.disarm()
-
-        # Calculating focus
-        if self.camera_calibration_started: #To make sure calibration wasn't stopped before the end
-            x = self.camera_focus_relation[:,0]
-            y = self.camera_focus_relation[:,1]
-            self.slope_camera, self.intercept_camera, r_value, p_value, std_err = stats.linregress(x, y)
-            print('r_value:'+str(r_value)) #debugging
-            print('p_value:'+str(p_value)) #debugging
-            print('std_err:'+str(std_err)) #debugging
-            self.calculate_camera_focus()
-
-            self.default_buttons.append(self.ui.pushButton_calCameraComputeFocus)
-            self.default_buttons.append(self.ui.pushButton_calCameraShowInterpolation)
-
-        self.sig_message.emit('Camera calibration done')
-        self.ui.statusBar_label.setText('')
-        self.ui.statusBar_progress.hide()
-
-        # Enabling modes after camera calibration
-        self.updateUi_modes_buttons(self.default_buttons)
-        self.updateUi_motor_buttons(False)
-
-        self.camera_calibration_started = False
-        self.ui.pushButton_calCameraStartCalibration.setText('Start Camera Calibration')
 
 
     def etls_calibration_button(self):
@@ -2298,251 +2120,17 @@ class Controller_MainWindow(QMainWindow):
 
 
     def calibrate_etls_worker(self):
-        ''' Calibrates the focal position relation with etls-galvos voltage'''
-        print('calibrate_etls: code refactoring in progress')
-        self.etls_calibration_started = False
+        '''ETL/galvo calibration worker.
 
-        '''Enabling modes after camera calibration'''
-        self.updateUi_modes_buttons(self.default_buttons)
-        self.updateUi_motor_buttons(False)
-
-        self.etls_calibration_started = False
-        self.ui.pushButton_calEtlStartCalibration.setText('Start ETL Calibration')
-
+        The calibration workflow that this worker used to drive was never
+        rebuilt after an earlier refactor and had become dead code (it
+        printed a placeholder message and returned before any of the
+        unreachable calibration logic). The body is now a no-op. The start
+        button is hidden in __init__; the slot method and its signal
+        connection are retained so a scoped rebuild can restore the
+        workflow from git history.
+        '''
         return None
-
-        # TODO - Clean up calibrate_etls_thread
-        _terminals = {}
-        _terminals["galvos_etls"] = '/Dev1/ao0:3'
-
-        # Setting the camera for acquisition
-        self.camera.set_trigger_mode('auto_trigger')
-        self.camera.set_exposure_time(self.ui.doubleSpinBox_cameraExposureTime.value())
-        self.camera.arm()
-
-        # Setting tasks
-        self.galvos_etls_task = nidaqmx.Task()
-        self.galvos_etls_task.ao_channels.add_ao_voltage_chan(_terminals["galvos_etls"])
-
-        # Getting parameters
-        self.number_of_etls_points = 20 ##
-        self.number_of_etls_images = 20 ##
-
-        self.etl_l_relation = np.zeros((int(self.number_of_etls_points),2))
-        self.etl_r_relation = np.zeros((int(self.number_of_etls_points),2))
-
-        # Check that filename is valid and saving is allowed
-        self.validate_file_name()
-        if self.saving_allowed:
-            # Getting sample name
-            self.save_description = str(self.ui.lineEdit_saveDescription.text())
-
-            # Setting frame saver
-            self.frame_saver.reinit(3)
-            self.frame_saver.add_sample_name(self.save_description)
-            self.frame_saver.set_files(2*self.number_of_etls_points,self.save_filename,'etlCalibration',self.number_of_etls_images,'etl_image')
-
-            # Starting frame saver
-            self.frame_saver.start_saving()
-        else:
-            print('Select directory and enter a valid filename before saving')
-
-        # Finding relation between etls' voltage and focal point vertical's position
-        for side in ['etl_l','etl_r']: #For each etl
-            # Parameters
-            if side == 'etl_l':
-                etl_max_voltage = 4.2       #Volts ##Arbitraire
-                etl_min_voltage = 2         #Volts ##Arbitraire
-            if side == 'etl_r':
-                etl_max_voltage = 4.2       #Volts ##Arbitraire
-                etl_min_voltage = 2         #Volts ##Arbitraire
-            etl_increment_length = (etl_max_voltage - etl_min_voltage) / self.number_of_etls_points
-
-            # Starting automatically lasers
-            if side == 'etl_l':
-                self.left_laser_activated = True
-            if side == 'etl_r':
-                self.right_laser_activated = True
-            self.start_lasers()
-
-            #self.camera.retrieve_single_image()*1.0 ##pour éviter images de bruit
-
-            self.xdata = np.zeros((int(self.number_of_etls_points),128))
-            self.ydata = np.zeros((int(self.number_of_etls_points),128))
-            self.popt = np.zeros((int(self.number_of_etls_points),4))
-
-            #For each interpolation point
-            for etl_point in range(int(self.number_of_etls_points)):
-                if self.etls_calibration_started is False:
-                    self.sig_message.emit('ETL calibration interrupted')
-                    break
-                else:
-                    # Getting the data to send to the AO
-                    right_etl_voltage = etl_min_voltage + (etl_point * etl_increment_length) #Volts
-                    left_etl_voltage = etl_min_voltage + (etl_point * etl_increment_length) #Volts
-
-                    left_galvo_voltage = 0 #Volts
-                    right_galvo_voltage = 0.1 #Volts
-
-                    # Writing the data
-                    galvos_etls_waveforms = np.stack((  np.array([right_galvo_voltage]),
-                                                        np.array([left_galvo_voltage]),
-                                                        np.array([left_etl_voltage]),
-                                                        np.array([right_etl_voltage])   ))
-                    self.galvos_etls_task.write(galvos_etls_waveforms, auto_start=True)
-
-                    # Retrieving buffer for the plane of the current position
-                    #self.ramps = AOETLGalvos(self.parameters)
-                    #self.number_of_steps = 1
-                    #self.buffer = self.camera.retrieve_multiple_images(self.number_of_steps, self.ramps.t_half_period, sleep_timeout = 5) #debugging
-                    #self.save_single_image() #debugging
-
-                    ydatas = np.zeros((self.number_of_etls_images,128))  ##128=K
-
-                    #For each image
-                    for etl_image in range(self.number_of_etls_images):
-                        time.sleep(1)
-
-                        # Retrieving image from camera and putting it in its queue for display
-                        frame = self.camera.grab_image()*1.0
-                        blurred_frame = ndimage.gaussian_filter(frame, sigma=20)
-
-                        # Retrieving filename set by the user #debugging
-                        if self.saving_allowed:
-                            self.frame_saver.add_motor_parameters(self.current_horizontal_position_text,self.current_vertical_position_text,self.current_camera_position_text)
-
-                        # Saving frame #debugging
-                        if self.saving_allowed:
-                            self.frame_saver.enqueue_buffer(blurred_frame)
-                            self.sig_message.emit('Saving Reconstructed Image')
-
-                        self.frame_viewer.enqueue_frame(frame)
-                        self.frame_viewer.enqueue_frame(blurred_frame)
-
-                        # Calculating focal point horizontal position
-                        #filtering image:
-                        #dset = np.transpose(blurred_frame)
-                        #reshape image to average over profiles:
-                        height=dset.shape[0]
-                        width=dset.shape[1]
-                        C=20
-                        K=int(width/C) #average over C columns
-                        dset=np.reshape(dset,(height,K,int(width/K)))
-                        dset=np.mean(dset,2)
-
-                        #get average profile to restrict vertical range
-                        avprofile=np.mean(dset,1)
-                        indmax=np.argmax(avprofile)
-                        rangeAroundPeak=np.arange(indmax-100,indmax+100)
-                        #correct if the range exceeds the original range of the image
-                        rangeAroundPeak = rangeAroundPeak[rangeAroundPeak < height]
-                        rangeAroundPeak = rangeAroundPeak[rangeAroundPeak > -1]
-
-                        #compute fwhm for each profile:
-                        std_val=[]
-                        for i in range(dset.shape[1]):
-                            curve=(dset[rangeAroundPeak,i]-np.min(dset[rangeAroundPeak,i]))/(np.max(dset[rangeAroundPeak,i])-np.min(dset[rangeAroundPeak,i]))
-                            std_val.append(fwhm(curve)/2*np.sqrt(2*np.log(2)))
-
-                        #prepare data for fit:
-                        ydata=np.array(std_val)
-                        ydatas[etl_image,:] = signal.savgol_filter(ydata, 51, 3) # window size 51, polynomial order 3
-
-                    # Calculate focus
-                    try:
-                        #Calculate fit for average of images
-                        xdata=np.linspace(0,width-1,K)
-                        good_ydata=np.mean(ydatas,0)
-                        popt, pcov = optimize.curve_fit(func, xdata, good_ydata,bounds=((0.5,0,0,0),(np.inf,np.inf,np.inf,np.inf)), maxfev=10000) #,bounds=(0,np.inf) #,bounds=((0,-np.inf,-np.inf,0),(np.inf,np.inf,np.inf,np.inf))
-                        beamWidth,focusLocation,rayleighRange,offset = popt
-                        print('pcov'+str(pcov)) #debugging
-
-                        if focusLocation < 0:
-                            focusLocation = 0
-                        elif focusLocation > 2559:
-                            focusLocation = 2559
-                        np.set_printoptions(threshold=sys.maxsize)
-                        print(func(xdata, *popt))
-                        print('offset:'+str(int(offset))) #debugging
-                        print('beamWidth:'+str(int(beamWidth))) #debugging
-                        print('focusLocation:'+str(int(focusLocation))) #debugging
-                        print('rayleighRange:'+str(rayleighRange)) #debugging
-
-                        ##Pour afficher graphique
-                        if side == 'etl_r':
-                            self.xdata[etl_point]=xdata
-                            self.ydata[etl_point]=good_ydata
-                            self.popt[etl_point]=popt
-
-                        # Saving relations
-                        if side == 'etl_l':
-                            self.etl_l_relation[etl_point,0] = left_etl_voltage
-                            self.etl_l_relation[etl_point,1] = int(focusLocation)
-                        if side == 'etl_r':
-                            self.etl_r_relation[etl_point,0] = right_etl_voltage
-                            self.etl_r_relation[etl_point,1] = int(focusLocation)
-
-                        self.sig_message.emit('--Calibration of plane '+str(etl_point+1)+'/'+str(self.number_of_etls_points)+' for '+side+' done')
-                    except:
-                        self.etls_calibration_started = False
-                        self.sig_message.emit('ETL calibration failed')
-
-            # Closing lasers after calibration of each side
-            self.left_laser_activated = False
-            self.right_laser_activated = False
-
-        if self.saving_allowed: #debugging
-            self.frame_saver.stop_saving()
-            self.sig_message.emit('Images saved')
-
-
-        print(self.etl_l_relation) #debugging
-        print(self.etl_r_relation) #debugging
-        # Calculating linear regressions
-        xl = self.etl_l_relation[:,0]
-        yl = self.etl_l_relation[:,1]
-        # Left linear regression
-        self.etl_left_slope, self.etl_left_intercept, r_value, p_value, std_err = stats.linregress(yl, xl)
-        print('r_value:'+str(r_value)) #debugging
-        print('p_value:'+str(p_value)) #debugging
-        print('std_err:'+str(std_err)) #debugging
-        print('left_slope:'+str(self.etl_left_slope)) #debugging
-        print('left_intercept:'+str(self.etl_left_intercept)) #debugging
-        print(self.etl_left_slope * 2559 + self.etl_left_intercept) #debugging
-
-        xr = self.etl_r_relation[:,0]
-        yr = self.etl_r_relation[:,1]
-        # Right linear regression
-        self.etl_right_slope, self.etl_right_intercept, r_value, p_value, std_err = stats.linregress(yr, xr)
-        print('r_value:'+str(r_value)) #debugging
-        print('p_value:'+str(p_value)) #debugging
-        print('std_err:'+str(std_err)) #debugging
-        print('right_slope:'+str(self.etl_right_slope)) #debugging
-        print('right_intercept:'+str(self.etl_right_intercept)) #debugging
-        print(self.etl_right_slope * 2559 + self.etl_right_intercept) #debugging
-
-        # Stopping camera
-        self.camera.disarm()
-
-        # Ending tasks
-        self.galvos_etls_task.stop()
-        self.galvos_etls_task.close()
-
-        # Stopping lasers
-        self.stop_lasers()
-        self.both_lasers_activated = False
-
-        if self.etls_calibration_started: #To make sure calibration wasn't stopped before the end
-            self.default_buttons.append(self.ui.pushButton_calEtlShowInterpolation)
-
-        self.sig_message.emit('Calibration done')
-
-        # Enabling modes after camera calibration
-        self.updateUi_modes_buttons(self.default_buttons)
-        self.updateUi_motor_buttons(False)
-
-        self.etls_calibration_started = False
-        self.ui.pushButton_calEtlStartCalibration.setText('Start ETL Calibration')
 
 
 class Properties_Dialog(QDialog):
