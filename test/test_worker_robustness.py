@@ -21,6 +21,15 @@ Covered fixes:
   6. The four acquisition workers have an except clause before their finally
      that emits a cause message via sig_message, so an unhandled exception
      is reported to the operator instead of dying silently to stderr.
+  7. start_lasers()/stop_lasers() read only cached auto-laser bools
+     (self._auto_laser1 / self._auto_laser2) sampled on the GUI thread by
+     _cache_auto_laser_flags() before the worker is spawned — no acquisition
+     worker reads a Qt widget directly (AGENTS.md §11 hard rule).
+  8. acquire_scan surfaces self.siggen.error after create_scanner() and
+     returns before the camera recorder is primed, so a DAQ scan-task
+     creation failure is reported to the operator instead of presenting as
+     a silent 15 s camera recorder timeout; stack_mode_worker breaks the
+     stack loop on the first such failure instead of repeating it per plane.
 '''
 
 import os
@@ -223,3 +232,160 @@ def test_closeEvent_uses_bounded_join_not_sleep():
     assert '.join(timeout=' in body, (
         "closeEvent must join worker threads with .join(timeout= so "
         "shutdown is bounded")
+
+
+# --------------------------------------------------------------------------- #
+# Test 7: start_lasers()/stop_lasers() must read only cached auto-laser bools
+# sampled on the GUI thread — no acquisition worker may read a Qt widget
+# directly (AGENTS.md §11 hard rule).
+# --------------------------------------------------------------------------- #
+def test_start_lasers_uses_cached_auto_flags():
+    """The auto-laser checkbox states must be sampled on the GUI thread by
+    _cache_auto_laser_flags() before any acquisition worker is spawned, and
+    the workers (which call start_lasers()/stop_lasers() off the GUI thread)
+    must read only the cached bools self._auto_laser1 / self._auto_laser2.
+
+    Reading a Qt widget from a non-GUI thread is undefined behaviour per
+    Qt's threading model (AGENTS.md §11) and can stall or kill the worker
+    mid-acquisition — between camera.arm_scan() and the DAQ scanner task
+    creation — leaving the camera armed and recording while the scanner
+    tasks are never created, which presents as a silent 15 s camera
+    recorder timeout with no error. The fix is structural: the only
+    widget reads in the file live inside the single GUI-thread helper,
+    invoked at every entry point that leads to a worker calling
+    start_lasers()/stop_lasers()."""
+    src = _read_controller_source()
+
+    # The two checkbox object names may appear in exactly one place each —
+    # inside _cache_auto_laser_flags — proving no worker-reachable code
+    # reads a widget.
+    assert src.count('checkBox_laserOneAutomatic') == 1, (
+        "checkBox_laserOneAutomatic must be read in exactly one place "
+        "(_cache_auto_laser_flags); a second occurrence means a worker "
+        "thread is reading a Qt widget directly (AGENTS.md §11 violation)")
+    assert src.count('checkBox_laserTwoAutomatic') == 1, (
+        "checkBox_laserTwoAutomatic must be read in exactly one place "
+        "(_cache_auto_laser_flags); a second occurrence means a worker "
+        "thread is reading a Qt widget directly (AGENTS.md §11 violation)")
+
+    cache_body = _slice_method(src, '_cache_auto_laser_flags')
+    assert 'checkBox_laserOneAutomatic' in cache_body, (
+        "checkBox_laserOneAutomatic must be read inside "
+        "_cache_auto_laser_flags")
+    assert 'checkBox_laserTwoAutomatic' in cache_body, (
+        "checkBox_laserTwoAutomatic must be read inside "
+        "_cache_auto_laser_flags")
+
+    # start_lasers and stop_lasers read only the cached bools.
+    for name in ('start_lasers', 'stop_lasers'):
+        body = _slice_method(src, name)
+        assert 'self._auto_laser1' in body, (
+            f"{name} must read self._auto_laser1 (the cached flag), not "
+            f"the Qt widget directly")
+        assert 'self._auto_laser2' in body, (
+            f"{name} must read self._auto_laser2 (the cached flag), not "
+            f"the Qt widget directly")
+        assert 'checkBox_laserOneAutomatic' not in body, (
+            f"{name} must not read checkBox_laserOneAutomatic directly — "
+            f"it is a worker-thread method and Qt widgets belong to the "
+            f"GUI thread (AGENTS.md §11)")
+        assert 'checkBox_laserTwoAutomatic' not in body, (
+            f"{name} must not read checkBox_laserTwoAutomatic directly — "
+            f"it is a worker-thread method and Qt widgets belong to the "
+            f"GUI thread (AGENTS.md §11)")
+
+    # _cache_auto_laser_flags() is invoked at exactly four GUI-thread sites:
+    # close_modes (which calls stop_lasers) and the three mode-button
+    # handlers that spawn a worker.
+    assert src.count('self._cache_auto_laser_flags()') == 4, (
+        "_cache_auto_laser_flags() must be called at exactly four sites "
+        "(close_modes + the three mode-button handlers); fewer means a "
+        "worker can act on a stale flag value")
+    for name in ('close_modes', 'updateUi_live_mode_button',
+                 'updateUi_single_mode_button',
+                 'updateUi_stack_mode_button'):
+        body = _slice_method(src, name)
+        assert 'self._cache_auto_laser_flags()' in body, (
+            f"{name} must call self._cache_auto_laser_flags() before "
+            f"spawning a worker / calling stop_lasers so the worker reads "
+            f"current checkbox states, not stale ones")
+
+
+# --------------------------------------------------------------------------- #
+# Test 8: acquire_scan must surface self.siggen.error after create_scanner()
+# and return before the camera recorder is primed; stack_mode_worker must
+# break the stack loop on the first scan-task failure.
+# --------------------------------------------------------------------------- #
+def test_acquire_scan_surfaces_siggen_error():
+    """create_scanner() (src/siggen.py) wraps its DAQ task creation in a
+    bare except that sets self.siggen.error = 1 and a generic
+    'create_scan error' message but never raises. Without a check in
+    acquire_scan, a failed create_scanner() leaves task_galvo_etl /
+    task_camera as None, start_scanner() / monitor_scanner() become
+    no-ops, and the camera waits out its full recorder timeout with
+    nothing to report — a silent 15 s timeout that is impossible to
+    diagnose. acquire_scan must clear the stale flag before
+    create_scanner(), check it immediately after, emit an operator
+    message via sig_message, tear down the scanner and disarm the camera,
+    and return BEFORE start_recorder() primes the recorder. The stack
+    worker must then break the loop so the same failure is not repeated
+    once per remaining plane."""
+    src = _read_controller_source()
+    body = _slice_method(src, 'acquire_scan')
+
+    create_idx = body.find('self.siggen.create_scanner()')
+    assert create_idx != -1, "acquire_scan missing self.siggen.create_scanner()"
+
+    # Stale-state reset must precede create_scanner() so the post-check
+    # reflects this call only.
+    reset_idx = body.find('self.siggen.error = 0')
+    assert reset_idx != -1 and reset_idx < create_idx, (
+        "acquire_scan must reset self.siggen.error = 0 BEFORE "
+        "create_scanner() so a stale error from a prior acquisition does "
+        "not trip the post-check")
+
+    # The error check must gate the recorder: it must appear after
+    # create_scanner() and before start_recorder().
+    err_check = 'if self.siggen.error:'
+    err_idx = body.find(err_check, create_idx)
+    assert err_idx != -1, (
+        "acquire_scan must check `if self.siggen.error:` after "
+        "create_scanner() so a DAQ scan-task creation failure is surfaced")
+    recorder_idx = body.find('self.camera.start_recorder(', create_idx)
+    assert recorder_idx != -1, (
+        "acquire_scan missing self.camera.start_recorder(")
+    assert err_idx < recorder_idx, (
+        "acquire_scan: the `if self.siggen.error:` check must appear "
+        "BEFORE self.camera.start_recorder() so a scan-task failure "
+        "aborts before the recorder is primed (otherwise the camera "
+        "still waits out its full timeout)")
+
+    # The error block must emit an operator message and return.
+    block_end = body.find('\n        ', err_idx + len(err_check))
+    # Find the return at the method's if-block indent (8 spaces).
+    return_m = re.search(r'\n            return\b', body[err_idx:])
+    assert return_m, (
+        "acquire_scan siggen.error block must return so the recorder is "
+        "never primed after a scan-task creation failure")
+    err_block = body[err_idx:err_idx + return_m.end()]
+    assert 'self.sig_message.emit(' in err_block, (
+        "acquire_scan siggen.error block must emit an operator message "
+        "via sig_message so the DAQ failure is reported, not silent")
+    assert 'self.siggen.delete_scanner()' in err_block, (
+        "acquire_scan siggen.error block must delete the scanner so the "
+        "DAQ hardware is left in a consistent state")
+    assert 'self.camera.disarm()' in err_block, (
+        "acquire_scan siggen.error block must disarm the camera so it is "
+        "not left armed after the abort")
+
+    # stack_mode_worker must break the stack loop on the first scan-task
+    # failure so the same failure is not repeated once per remaining plane.
+    stack_body = _slice_method(src, 'stack_mode_worker')
+    stack_err_idx = stack_body.find('if self.siggen.error:')
+    assert stack_err_idx != -1, (
+        "stack_mode_worker must check `if self.siggen.error:` so a DAQ "
+        "scan-task failure aborts the stack instead of recurring per plane")
+    break_idx = stack_body.find('break', stack_err_idx)
+    assert break_idx != -1, (
+        "stack_mode_worker must break the stack loop when "
+        "self.siggen.error is set after acquire_scan")
