@@ -1,3 +1,28 @@
 **/__pycache__/
 .idea/
 .vscode/
+
+# === OpenGSD (gsd-core) — keep ALL GSD-produced files out of git ===
+.cursor/
+.windsurf/
+.devin/
+.planning/
+.planning/tmp/
+/AGENTS.md
+/CLAUDE.md
+/GEMINI.md
+graphify-out/
+handoffs/
+memories/
+context/
+specs/
+.gsd/
+.gsd-id
+.gsd-worktrees/
+.gsd-profile
+.agents/
+.bg-shell/
+skills-lock.json
+
+# Python virtual environment
+.venv/
