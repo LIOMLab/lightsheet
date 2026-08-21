@@ -1745,6 +1745,20 @@ class Controller_MainWindow(QMainWindow):
         self.camera.stop_recorder()
         self.siggen.stop_scanner()
 
+        # Abort on recorder timeout — never copy zero-filled frames to disk.
+        # The recorder timeout flag is set by monitor_recorder when the camera
+        # did not return the expected frames in time. Returning here before
+        # copy_recorder_images ensures a timed-out plane is not mistaken for
+        # a real (dark) frame on disk.
+        if self.camera.recorder_timeout_status:
+            self.sig_message.emit(
+                "Camera timeout — plane was not recorded (camera did not return frames in time). "
+                "The acquisition was aborted. Reduce the number of images per plane or check the camera USB connection, then restart the run.")
+            logging.warning("Camera recorder timeout during acquire_scan")
+            self.camera.delete_recorder()
+            self.siggen.delete_scanner()
+            return
+
         # Recover images from the recorder
         # Note: Images must be recovered before deleting the recorder
         recorded_images = self.camera.copy_recorder_images(number_of_images)
@@ -1989,6 +2003,13 @@ class Controller_MainWindow(QMainWindow):
 
                 # Getting image
                 self.acquire_scan()
+
+                # Abort the stack if the camera timed out on this plane —
+                # acquire_scan already emitted the timeout warning and cleaned
+                # up the recorder/scanner; do not enqueue a (nonexistent)
+                # frame for this plane or attempt the next one.
+                if self.camera.recorder_timeout_status:
+                    break
 
                 # Saving frame
                 if self.saving_allowed:
