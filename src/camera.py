@@ -25,6 +25,8 @@ class Camera:
     _cfg_defaults['Lightsheet Exposed Lines']   = '16'
     _cfg_defaults['Lightsheet Delay Lines']     = '0'
     _cfg_defaults['Recorder Timeout']           = '5'
+    _cfg_defaults['Recorder Timeout Floor']     = '5'
+    _cfg_defaults['Recorder Timeout Safety Factor'] = '3.0'
 
 
     def __init__(self, verbose=False):
@@ -61,6 +63,8 @@ class Camera:
         self.lightsheet_exposed_lines       = int(      self._cfg['Lightsheet Exposed Lines']   )
         self.lightsheet_delay_lines         = int(      self._cfg['Lightsheet Delay Lines']     )
         self.recorder_timeout_interval      = int(      self._cfg['Recorder Timeout']           )
+        self.recorder_timeout_floor         = int(      self._cfg['Recorder Timeout Floor']     )
+        self.recorder_timeout_safety_factor = float(    self._cfg['Recorder Timeout Safety Factor'] )
 
 
     def cfg_save_ini(self):
@@ -252,10 +256,34 @@ class Camera:
                     print(" Recording session started.")
         return None
 
+    def _compute_per_image_time(self):
+        '''Estimate the time required to acquire a single image, in seconds,
+        based on the current shutter mode.
+
+        Lightsheet mode exposes a fixed number of lines per image, so the
+        per-image time is line_time * exposed_lines. Rolling/Global modes
+        are exposure-time-bound, so the per-image time is the exposure time.
+        '''
+        if self.shutter_mode == 'Lightsheet':
+            return self.line_time * self.lightsheet_exposed_lines
+        else:  # Rolling or Global
+            return self.exposure_time
+
     def monitor_recorder(self, number_of_images:int):
-        '''docstring'''
+        '''Monitor the camera recorder until all images arrive or the timeout
+        expires. The timeout scales with the number of images and the
+        per-image time (shutter-mode dependent), floored by a configurable
+        minimum and multiplied by a safety factor — so legitimate long
+        acquisitions are not falsely aborted while genuinely stuck runs
+        still time out. On timeout, recorder_timeout_status is set so the
+        caller can abort before any zero-filled frames are saved.
+        '''
         if self.is_recording:
-            timeout_s = self.recorder_timeout_interval
+            per_image_time = self._compute_per_image_time()
+            timeout_s = max(
+                self.recorder_timeout_floor,
+                number_of_images * per_image_time * self.recorder_timeout_safety_factor
+            )
             if self.verbose:
                 print("Monitoring camera recording session status...")
                 print("Timeout interval is " + str(timeout_s) + "s")
