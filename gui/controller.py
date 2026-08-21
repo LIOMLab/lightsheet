@@ -1484,10 +1484,24 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
         # keystrokes coalesce into a single committed write. The actual
         # (scaled, thread-offloaded) HAL write happens in _apply_laser1_amplitude
         # when the timer fires. No hardware write happens here.
+        #
+        # Capture the spinbox value into laser1_power_pct NOW (on the GUI
+        # thread) rather than only when the debounce timer fires. This keeps
+        # the staged percentage current for _toggle_laser1's just-on path,
+        # which reads laser1_power_pct — without this, toggling the laser
+        # within the 300ms debounce window after a spinbox edit would apply
+        # the OLD percentage and the operator would see the wrong power for
+        # 300ms until the debounce fires. The debounce timer still governs
+        # when the actual DAQ write happens; this only updates the staged
+        # value the toggle reads.
+        self.laser1_power_pct = self.ui.doubleSpinBox_laserOneAmplitude.value()
         self._laser1_amplitude_timer.start(300)
 
     def updateUi_laser2_amplitude(self):
         # Debounce-only slot for laser 2 (iBeam). See updateUi_laser1_amplitude.
+        # Capture the staged percentage now for the same reason as laser 1:
+        # _toggle_laser2's just-on path reads laser2_power_pct.
+        self.laser2_power_pct = self.ui.doubleSpinBox_laserTwoAmplitude.value()
         self._laser2_amplitude_timer.start(300)
 
     def _apply_laser1_amplitude(self):
