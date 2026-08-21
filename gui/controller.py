@@ -445,6 +445,19 @@ class Controller_MainWindow(QMainWindow):
         self.timer_hardware_init.timeout.connect(self.hardware_init)
         self.timer_hardware_init.start(100)
 
+        # Debounce timers for the laser amplitude spinboxes. Each valueChanged
+        # restarts the timer; only 300ms after the last edit does the timeout
+        # slot fire, coalescing rapid keystrokes into a single committed write
+        # (one HAL round-trip instead of one per keystroke). The timeout slot
+        # stores the staged percentage and offloads the scaled HAL write to a
+        # short-lived worker thread so the GUI event loop is never blocked.
+        self._laser1_amplitude_timer = QTimer()
+        self._laser1_amplitude_timer.setSingleShot(True)
+        self._laser1_amplitude_timer.timeout.connect(self._apply_laser1_amplitude)
+        self._laser2_amplitude_timer = QTimer()
+        self._laser2_amplitude_timer.setSingleShot(True)
+        self._laser2_amplitude_timer.timeout.connect(self._apply_laser2_amplitude)
+
 
     def hardware_init(self):
         """
@@ -1465,31 +1478,76 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
 
 
     def updateUi_laser1_amplitude(self):
-        # Propagate Ui changes to hardware instance and write to the DAQ in
-        # real time when laser 1 is active (no debounce — the operator
-        # expects immediate power response).
-        self.lasers.laser1_power = self.ui.doubleSpinBox_laserOneAmplitude.value()
-        if self.lasers.laser1_active:
-            self.lasers._update_setpoints()
-            if self.lasers.error:
-                self.sig_message.emit(
-                    f"Laser write failed — laser reverted to OFF. Check the NI DAQ connection (Dev7) and re-enable the laser. Cause: {self.lasers.error_message}")
-                self.lasers.error = 0
+        # Debounce-only slot: restart the 300ms single-shot timer so rapid
+        # keystrokes coalesce into a single committed write. The actual
+        # (scaled, thread-offloaded) HAL write happens in _apply_laser1_amplitude
+        # when the timer fires. No hardware write happens here.
+        self._laser1_amplitude_timer.start(300)
 
     def updateUi_laser2_amplitude(self):
-        # Laser 2 is physically the iBeam (COM4), not the DAQ — route the
-        # spinbox change to the iBeam HAL in real time when active. The
-        # spinbox value is in microwatts (the range is set to the iBeam's
-        # max_power in updateUi_initial_hardware_state). The Max Power clamp
-        # lives inside IBeam.set_power (HAL boundary), so this is the one
-        # and only laser-2 power write path. self.lasers.laser2_power (Volts)
-        # is NOT updated here — it is the unused DAQ AO channel setpoint.
-        if self.lasers.laser2_active:
-            self.ibeam.set_power(self.ui.doubleSpinBox_laserTwoAmplitude.value())
-            if self.ibeam.error:
-                self.sig_message.emit(
-                    f"iBeam (640 nm) write failed — laser reverted to OFF. Check the COM4 USB cable and the iBeam power, then re-enable. Cause: {self.ibeam.error_message}")
-                self.ibeam.error = 0
+        # Debounce-only slot for laser 2 (iBeam). See updateUi_laser1_amplitude.
+        self._laser2_amplitude_timer.start(300)
+
+    def _apply_laser1_amplitude(self):
+        """Debounce timeout slot (GUI thread): store the staged percentage
+        and offload the scaled DAQ write to a worker thread so the GUI event
+        loop is never blocked on a DAQ round-trip."""
+        pct = self.ui.doubleSpinBox_laserOneAmplitude.value()
+        self.laser1_power_pct = pct
+        threading.Thread(target=self._write_laser1_power, args=(pct,),
+                         daemon=True).start()
+
+    def _apply_laser2_amplitude(self):
+        """Debounce timeout slot (GUI thread): store the staged percentage
+        and offload the scaled iBeam serial write to a worker thread."""
+        pct = self.ui.doubleSpinBox_laserTwoAmplitude.value()
+        self.laser2_power_pct = pct
+        threading.Thread(target=self._write_laser2_power, args=(pct,),
+                         daemon=True).start()
+
+    def _write_laser1_power(self, pct):
+        """Worker-thread HAL write for laser 1. Scales the staged percentage
+        to Volts at the HAL boundary (pct/100 * laser1_max_power), then calls
+        the existing Lasers write path whose own clamp still applies as a
+        second physical-safety layer.
+
+        Cooperative-skip: checks estop_event immediately before the DAQ write
+        and skips entirely if set — the E-stop has already driven laser 1 off
+        with its own synchronous write, and a queued amplitude write must not
+        re-energize or mutate its state after that point.
+        """
+        with self._laser1_write_lock:
+            if self.estop_event.is_set():
+                return
+            if self.lasers.laser1_active:
+                volts = pct / 100.0 * self.lasers.laser1_max_power
+                self.lasers.laser1_power = volts
+                self.lasers._update_setpoints()
+                if self.lasers.error:
+                    self.sig_message.emit(
+                        f"Laser write failed — laser reverted to OFF. Check the NI DAQ connection (Dev7) and re-enable the laser. Cause: {self.lasers.error_message}")
+                    self.lasers.error = 0
+
+    def _write_laser2_power(self, pct):
+        """Worker-thread HAL write for laser 2 (iBeam). Scales the staged
+        percentage to microwatts at the HAL boundary (pct/100 * max_power),
+        then calls IBeam.set_power whose own clamp still applies as a second
+        physical-safety layer.
+
+        Cooperative-skip: checks estop_event immediately before the serial
+        write and skips entirely if set — the E-stop has already driven the
+        iBeam off with its own synchronous write.
+        """
+        with self._laser2_write_lock:
+            if self.estop_event.is_set():
+                return
+            if self.lasers.laser2_active:
+                microwatts = pct / 100.0 * self.ibeam.max_power
+                self.ibeam.set_power(microwatts)
+                if self.ibeam.error:
+                    self.sig_message.emit(
+                        f"iBeam (640 nm) write failed — laser reverted to OFF. Check the COM4 USB cable and the iBeam power, then re-enable. Cause: {self.ibeam.error_message}")
+                    self.ibeam.error = 0
 
     def laser1_toggle_button(self):
         self.lasers.laser1_toggle()
