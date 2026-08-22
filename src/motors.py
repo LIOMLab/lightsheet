@@ -3,11 +3,8 @@ Created on February 10, 2022
 
 '''
 
-import sys
-sys.path.append(".")
-
 import serial
-from src.config import cfg_read, cfg_write, cfg_str2bool
+from lightsheet.config import cfg_read, cfg_write, cfg_str2bool
 
 class Motors:
     '''Class for translation stages'''

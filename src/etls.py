@@ -3,15 +3,12 @@ Created on April 20, 2022
 
 '''
 
-import sys
-sys.path.append(".")
-
 import copy
 import serial
 import time
 from ctypes import c_ushort
 
-from src.config import cfg_read, cfg_write
+from lightsheet.config import cfg_read, cfg_write
 
 class ETLs:
     '''Class for ETLs'''

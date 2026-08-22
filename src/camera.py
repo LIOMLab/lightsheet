@@ -2,15 +2,12 @@
 Created on February 8, 2022
 '''
 
-import sys
-sys.path.append(".")
-
 import time
 from datetime import datetime, timedelta
 import numpy as np
 import pco
 
-from src.config import cfg_read, cfg_write, cfg_str2bool
+from lightsheet.config import cfg_read, cfg_write, cfg_str2bool
 
 
 class Camera:
