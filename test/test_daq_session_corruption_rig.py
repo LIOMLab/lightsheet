@@ -35,7 +35,10 @@ import pytest
 
 
 def _real_nidaqmx_available():
-    spec = importlib.util.find_spec('nidaqmx')
+    try:
+        spec = importlib.util.find_spec('nidaqmx')
+    except ValueError:
+        return False
     if spec is None:
         return False
     try:
