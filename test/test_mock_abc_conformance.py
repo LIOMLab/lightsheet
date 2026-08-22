@@ -33,6 +33,10 @@ from lightsheet.hal import (
     ICameraCore,
     IETLs,
     IETLsCore,
+    IIBeam,
+    IIBeamCore,
+    ILasers,
+    ILasersCore,
     IMotors,
     IMotorsCore,
     IOptotune,
@@ -40,6 +44,8 @@ from lightsheet.hal import (
     ISigGenCore,
     MockCamera,
     MockETLs,
+    MockIBeam,
+    MockLasers,
     MockMotors,
     MockSigGen,
 )
@@ -337,3 +343,133 @@ def test_mock_optotune_is_ioptotune() -> None:
     against the ABC, not the concrete class."""
     etls = MockETLs()
     assert isinstance(etls.etl_left, IOptotune)
+
+
+# --------------------------------------------------------------------------- #
+# Lasers family (Plan 03)
+# --------------------------------------------------------------------------- #
+
+
+def test_mock_lasers_is_ilasers() -> None:
+    """MockLasers must be an ILasers (and through inheritance an ILasersCore)
+    so the controller's HAL-typed seams accept it unchanged."""
+    lasers = MockLasers()
+    assert isinstance(lasers, ILasers)
+    assert isinstance(lasers, ILasersCore)
+
+
+def test_mock_lasers_has_hal_error_surface() -> None:
+    lasers = MockLasers()
+    assert lasers.error == 0
+    assert lasers.error_message == ""
+
+
+def test_mock_lasers_populates_controller_read_attrs() -> None:
+    """The controller reads ``lasers.laser1_wavelength`` /
+    ``lasers.laser1_max_power`` / ``lasers.laser1_active`` etc. as direct
+    attributes (D-04). A MockLasers must populate them on construct so the
+    controller's startup reads (wavelength labels, max-power spinbox
+    bounds) do not receive None."""
+    lasers = MockLasers()
+    assert lasers.laser1_wavelength is not None
+    assert lasers.laser2_wavelength is not None
+    assert lasers.laser1_max_power is not None
+    assert lasers.laser2_max_power is not None
+    assert lasers.laser1_active is False
+    assert lasers.laser2_active is False
+
+
+def test_mock_lasers_set_power_clamps_to_max() -> None:
+    """MockLasers.set_power MUST clamp the commanded power to the configured
+    Max Power at the HAL boundary (AGENTS.md §2 — physical-safety control
+    for a Class IIIB laser). A mock that removed the clamp would let the
+    controller's safety checks atrophy under demo mode, masking a
+    regression that would over-drive the laser AO channels on the rig."""
+    lasers = MockLasers()
+    # set_power(channel=1, value way above max) must reduce to laser1_max_power.
+    lasers.set_power(1, 999999)
+    assert lasers.laser1_power == lasers.laser1_max_power, (
+        "set_power must clamp to laser1_max_power at the HAL boundary "
+        "(AGENTS.md §2) — a mock that removed the clamp would mask a "
+        "real-device over-power regression"
+    )
+    # And channel 2.
+    lasers.set_power(2, 999999)
+    assert lasers.laser2_power == lasers.laser2_max_power
+
+
+def test_mock_lasers_lifecycle_toggles_active_flag() -> None:
+    """laser1_on/laser1_off toggle the laser1_active flag (no DAQ write).
+    The controller reads laser1_active to decide whether to show the laser
+    as energized, so the mock must keep the flag in sync with the on/off
+    calls just like the real Lasers does."""
+    lasers = MockLasers()
+    assert lasers.laser1_active is False
+    lasers.laser1_on()
+    assert lasers.laser1_active is True
+    lasers.laser1_off()
+    assert lasers.laser1_active is False
+    lasers.laser2_on()
+    assert lasers.laser2_active is True
+    lasers.laser2_off()
+    assert lasers.laser2_active is False
+
+
+# --------------------------------------------------------------------------- #
+# IBeam family (Plan 03)
+# --------------------------------------------------------------------------- #
+
+
+def test_mock_ibeam_is_iibeam() -> None:
+    """MockIBeam must be an IIBeam (and through inheritance an IIBeamCore)
+    so the controller's HAL-typed seams accept it unchanged."""
+    ibeam = MockIBeam()
+    assert isinstance(ibeam, IIBeam)
+    assert isinstance(ibeam, IIBeamCore)
+
+
+def test_mock_ibeam_has_hal_error_surface() -> None:
+    ibeam = MockIBeam()
+    assert ibeam.error == 0
+    assert ibeam.error_message == ""
+
+
+def test_mock_ibeam_populates_controller_read_attrs() -> None:
+    """The controller reads ``ibeam.wavelength`` / ``ibeam.max_power`` as
+    direct attributes (D-04) — wavelength for the GUI label, max_power for
+    the spinbox upper bound. A MockIBeam must populate them on construct."""
+    ibeam = MockIBeam()
+    assert ibeam.wavelength is not None
+    assert ibeam.max_power is not None
+    assert ibeam.error == 0
+
+
+def test_mock_ibeam_off_is_synchronous() -> None:
+    """MockIBeam.off() MUST be synchronous — set ``_is_on=False`` and
+    ``_power=0`` and return None immediately, with no thread/queue offload
+    (AGENTS.md §2 — the E-stop kill path drives ``ibeam.off()`` on the GUI
+    thread; offloading it would break the synchronous-off safety contract
+    for a Class IIIB laser). A mock that queued off() would let the
+    controller's E-stop path atrophy under demo mode, masking a regression
+    that would delay laser shutdown on the rig."""
+    ibeam = MockIBeam()
+    ibeam.on()
+    assert ibeam._is_on is True
+    # off() must return None and synchronously clear _is_on.
+    result = ibeam.off()
+    assert result is None
+    assert ibeam._is_on is False, (
+        "off() must synchronously set _is_on=False — no queue/thread offload "
+        "(AGENTS.md §2 E-stop kill path)"
+    )
+    assert ibeam._power == 0
+
+
+def test_mock_ibeam_set_power_clamps_to_max() -> None:
+    """MockIBeam.set_power MUST clamp to max_power at the HAL boundary
+    (AGENTS.md §2 — physical-safety control for a Class IIIB laser)."""
+    ibeam = MockIBeam()
+    ibeam.set_power(999999)
+    assert ibeam._power == ibeam.max_power, (
+        "set_power must clamp to max_power at the HAL boundary (AGENTS.md §2)"
+    )
