@@ -18,7 +18,7 @@ class Camera:
 
     # Configurable settings defaults
     # Used as base dictionnary for .ini file allowable keys
-    _cfg_defaults: dict = {}  # noqa: RUF012 - class-level config template, populated at definition, never mutated at runtime
+    _cfg_defaults: dict[str, str] = {}  # noqa: RUF012 - class-level config template, populated at definition, never mutated at runtime
     _cfg_defaults["Shutter Mode"] = "Rolling"
     _cfg_defaults["Exposure Time"] = "100"
     _cfg_defaults["Lightsheet Line Time"] = "48.80"

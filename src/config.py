@@ -18,7 +18,7 @@ def cfg_read(
     """
     tmp_dictionary = {}
     cfg = configparser.ConfigParser()
-    cfg.optionxform = str
+    cfg.optionxform = str  # ty: ignore[invalid-assignment]  # preserve case (AGENTS.md §9); ty stubs type optionxform as a method
     cfg.read(cfg_filename)
     if cfg.has_section(cfg_section):
         for key, value in cfg[cfg_section].items():
@@ -38,7 +38,7 @@ def cfg_write(
     keys found in the same section.
     """
     cfg = configparser.ConfigParser()
-    cfg.optionxform = str
+    cfg.optionxform = str  # ty: ignore[invalid-assignment]  # preserve case (AGENTS.md §9); ty stubs type optionxform as a method
     cfg.read(cfg_filename)
     if not cfg.has_section(cfg_section):
         cfg.add_section(cfg_section)

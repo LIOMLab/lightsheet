@@ -55,7 +55,7 @@ class Controller_MainWindow(QMainWindow):
     """Class for the MesoSPIM Controller"""
 
     # Dictionnary of configurable settings and their default values
-    _cfg_settings: dict = {}  # noqa: RUF012 - class-level config template, populated at definition, never mutated at runtime
+    _cfg_settings: dict[str, str] = {}  # noqa: RUF012 - class-level config template, populated at definition, never mutated at runtime
     _cfg_settings["Units"] = "mm"
     _cfg_settings["Image File Format"] = "HDF5"
 

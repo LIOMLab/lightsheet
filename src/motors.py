@@ -16,7 +16,7 @@ class Motors:
 
     # Configurable settings defaults
     # Used as base dictionnary for .ini file allowable keys
-    _cfg_defaults: dict = {}  # noqa: RUF012 - class-level config template, populated at definition, never mutated at runtime
+    _cfg_defaults: dict[str, str] = {}  # noqa: RUF012 - class-level config template, populated at definition, never mutated at runtime
     _cfg_defaults["Port"] = "COM3"
     _cfg_defaults["Device Number Vertical"] = "1"
     _cfg_defaults["Device Number Horizontal"] = "2"
