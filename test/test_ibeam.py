@@ -278,6 +278,43 @@ def test_ibeam_on_sets_is_on_on_success() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Test 13b: on() must NOT set self._is_on = True when 'laser on' is rejected
+# but the subsequent 'enable 1' succeeds. This is the WR-01 mixed-rejection
+# case: _send_cmd resets self.error=0 at the top of every round-trip, so a
+# successful 'enable 1' would clear the 'laser on' rejection and leave the
+# HAL believing emission is enabled when the global enable was refused. on()
+# must check self.error BETWEEN 'laser on' and enable_channel() and bail
+# before re-enabling if 'laser on' was rejected. Safety-relevant (Class IIIB).
+# --------------------------------------------------------------------------- #
+def test_ibeam_on_rejected_laser_on_but_enable_succeeds() -> None:
+    # 'laser on' is rejected (%SYS-E then [OK] terminator); the subsequent
+    # 'enable 1' succeeds ([OK]). Today the enable-1 round-trip clears the
+    # laser-on rejection (self.error reset to 0 at the top of _send_cmd),
+    # so the `if not self.error: self._is_on = True` guard flips _is_on to
+    # True even though the global emission enable was refused — the bug.
+    ib, _ = _make_open_ibeam(
+        readline_side_effect=[
+            b"%SYS-E-00030, laser locked\r\n",
+            b"[OK]\r\n",
+            b"[OK]\r\n",
+            b"[OK]\r\n",
+        ]
+    )
+    ib._is_on = False
+    ib.on()
+    assert ib.error == 1, (
+        "on() must surface the 'laser on' rejection on the error surface "
+        "even when the subsequent 'enable 1' succeeds — the between-sub-"
+        "commands error check must bail before re-enabling"
+    )
+    assert ib._is_on is False, (
+        "on() must not set self._is_on = True when 'laser on' was rejected "
+        "but 'enable 1' succeeded — the enable-1 stale-clear must not mask "
+        "the laser-on rejection (Class IIIB laser safety)"
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Test 14: _send_cmd must clear a stale self.error on a successful command.
 # Without this, a stale error from a prior failed command persists across
 # later successful commands and is mistaken for a current-call failure by
