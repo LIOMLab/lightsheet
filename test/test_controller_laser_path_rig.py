@@ -238,3 +238,65 @@ def test_start_lasers_real_daq_then_siggen_create(standin):
             siggen.delete_scanner()
         except Exception:
             pass
+
+
+def test_real_lasers_laser1_on_nonzero_voltage_no_crash():
+    '''The real Lasers.laser1_on() at a nonzero voltage — the exact GUI path.
+
+    The operator's 555nm toggle called _toggle_laser1 -> laser1_toggle ->
+    laser1_on -> _update_setpoints, which writes a nonzero voltage to
+    Dev7/ao0. This test calls the real Lasers method (not a re-implemented
+    nidaqmx.Task) at a small nonzero voltage to reproduce the access
+    violation. Gated on RIG_LASER_VOLTAGE (energizes the laser).
+    '''
+    import os
+    voltage_pct = os.environ.get('RIG_LASER_VOLTAGE')
+    if not voltage_pct:
+        pytest.skip('set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1')
+    voltage = float(voltage_pct)
+
+    from src.lasers import Lasers
+    lasers = Lasers()
+    lasers.laser1_power = voltage
+    lasers.laser1_on()
+    assert lasers.error == 0, (
+        f'Lasers.laser1_on({voltage}V) failed: {lasers.error_message}')
+    lasers.laser1_off()
+
+
+def test_real_lasers_laser1_on_daemon_thread_nonzero():
+    '''Real Lasers.laser1_on on a daemon thread (exact GUI toggle path).
+
+    The GUI's _toggle_laser1 runs laser1_toggle on a daemon thread. This
+    reproduces that exactly: real Lasers instance, nonzero voltage, daemon
+    thread. Gated on RIG_LASER_VOLTAGE.
+    '''
+    import os
+    voltage_pct = os.environ.get('RIG_LASER_VOLTAGE')
+    if not voltage_pct:
+        pytest.skip('set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1')
+    voltage = float(voltage_pct)
+
+    from src.lasers import Lasers
+    lasers = Lasers()
+    lasers.laser1_power = voltage
+    errors = []
+    done = threading.Event()
+
+    def worker():
+        try:
+            lasers.laser1_on()
+            if lasers.error:
+                errors.append(('laser1_on', lasers.error_message))
+            lasers.laser1_off()
+        except BaseException as e:  # noqa: BLE001
+            errors.append(('worker', repr(e)))
+        done.set()
+
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+    done.wait(timeout=15)
+    t.join(timeout=5)
+    assert not errors, (
+        'Daemon-thread real Lasers.laser1_on crashed:\n'
+        + '\n'.join(f'{tag}: {e}' for tag, e in errors))
