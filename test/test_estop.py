@@ -26,14 +26,14 @@ isolation. Do not grep the source.
 import threading
 
 
-def test_estop_event_starts_clear():
+def test_estop_event_starts_clear() -> None:
     """A fresh threading.Event (mirroring self.estop_event's initial state)
     is unset — the system starts ARMED, not actuated."""
     estop_event = threading.Event()
     assert estop_event.is_set() is False
 
 
-def test_estop_event_set_is_idempotent():
+def test_estop_event_set_is_idempotent() -> None:
     """Calling .set() twice leaves the Event set with no error — re-pressing
     E-stop is safe and does not raise."""
     estop_event = threading.Event()
@@ -42,7 +42,7 @@ def test_estop_event_set_is_idempotent():
     assert estop_event.is_set() is True
 
 
-def test_estop_event_clear_after_set():
+def test_estop_event_clear_after_set() -> None:
     """The Arm/Reset sequence: .set() then .clear() leaves the Event unset,
     so worker loops resume on the next acquisition."""
     estop_event = threading.Event()
@@ -51,7 +51,7 @@ def test_estop_event_clear_after_set():
     assert estop_event.is_set() is False
 
 
-def test_worker_poll_logic_breaks_on_set():
+def test_worker_poll_logic_breaks_on_set() -> None:
     """A worker loop polling `if estop_event.is_set(): break` at the top of
     each iteration runs zero body iterations when the Event is pre-set.
 

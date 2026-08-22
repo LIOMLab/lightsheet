@@ -14,9 +14,10 @@ importable, the stub is skipped so the real driver is used on the rig.
 
 import sys
 import types
+from collections.abc import Callable
 
 
-def _make_nidaqmx_stub():
+def _make_nidaqmx_stub() -> types.ModuleType:
     """Build a nidaqmx stub that imports fine but raises on Task() creation.
 
     Reproduces the "imports fine, Task() raises" behavior that the laser
@@ -43,7 +44,7 @@ def _make_nidaqmx_stub():
     class Task:
         """Stub Task — raises on construction (no driver runtime)."""
 
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args: object, **kwargs: object) -> None:
             raise Error("no NI-DAQmx driver runtime available on this platform")
 
         # Common API surface used by src/lasers.py and src/siggen.py —
@@ -61,21 +62,21 @@ def _make_nidaqmx_stub():
     return nidaqmx
 
 
-def _make_pco_stub():
+def _make_pco_stub() -> types.ModuleType:
     """Build a pco stub whose Camera() raises on construction."""
     pco = types.ModuleType("pco")
 
     class Camera:
         """Stub Camera — raises on construction (no PCO SDK)."""
 
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args: object, **kwargs: object) -> None:
             raise RuntimeError("no PCO camera SDK available on this platform")
 
     pco.Camera = Camera
     return pco
 
 
-def _make_serial_stub():
+def _make_serial_stub() -> types.ModuleType:
     """Build a serial stub mirroring the pyserial public surface used by
     src/etls.py and src/motors.py. Only used as a fallback when the real
     pyserial package is not importable."""
@@ -89,25 +90,25 @@ def _make_serial_stub():
         pass
 
     class Serial:
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args: object, **kwargs: object) -> None:
             raise SerialException("no serial port available on this platform")
 
-        def open(self):
+        def open(self) -> None:
             raise SerialException("no serial port available")
 
-        def close(self):
+        def close(self) -> None:
             pass
 
-        def write(self, data):
+        def write(self, data: bytes) -> int:
             return 0
 
-        def read(self, size=1):
+        def read(self, size: int = 1) -> bytes:
             return b""
 
-        def readline(self):
+        def readline(self) -> bytes:
             return b""
 
-        def reset_input_buffer(self):
+        def reset_input_buffer(self) -> None:
             pass
 
     serial.Serial = Serial
@@ -118,7 +119,11 @@ def _make_serial_stub():
     return serial
 
 
-def _ensure_stub(name, builder, real_check=None):
+def _ensure_stub(
+    name: str,
+    builder: Callable[[], types.ModuleType],
+    real_check: Callable[[types.ModuleType], None] | None = None,
+) -> None:
     """Register a stub module for `name` if the real package is not usable.
 
     A package may be installed but broken on this platform (e.g. nidaqmx
@@ -146,13 +151,13 @@ def _ensure_stub(name, builder, real_check=None):
         sys.modules[name] = builder()
 
 
-def _nidaqmx_real_check(mod):
+def _nidaqmx_real_check(mod: types.ModuleType) -> None:
     """Smoke check: nidaqmx is only usable if Task() can be constructed
     (i.e. the driver runtime is present)."""
     mod.Task()
 
 
-def _pco_real_check(mod):
+def _pco_real_check(mod: types.ModuleType) -> None:
     """Smoke check: pco is only usable if Camera() can be constructed
     (i.e. the PCO SDK + Windows DLLs are present)."""
     mod.Camera()

@@ -13,7 +13,7 @@ import pytest
 from lightsheet.motors import ZaberMotor
 
 
-def _make_motor():
+def _make_motor() -> ZaberMotor:
     """Build a ZaberMotor-like instance without running __init__'s serial
     hardware probe. Attributes match a T-LSM050A (id 6210)."""
     motor = ZaberMotor.__new__(ZaberMotor)
@@ -34,7 +34,7 @@ def _make_motor():
     return motor
 
 
-def test_move_absolute_rejects_over_high_limit():
+def test_move_absolute_rejects_over_high_limit() -> None:
     """An absolute move past the high travel limit must raise ValueError
     before any serial command is sent — protecting the objective/sample."""
     motor = _make_motor()
@@ -43,7 +43,7 @@ def test_move_absolute_rejects_over_high_limit():
         motor.move_absolute_position(999, "mm")
 
 
-def test_move_absolute_accepts_within_limits():
+def test_move_absolute_accepts_within_limits() -> None:
     """An absolute move within the travel range must not raise ValueError.
     The serial call itself will fail silently on Mac (no port), setting
     self.error — that is expected and not asserted here."""
@@ -55,14 +55,14 @@ def test_move_absolute_accepts_within_limits():
         pytest.fail("move_absolute_position raised ValueError for an in-range move")
 
 
-def test_move_absolute_rejects_below_low_limit():
+def test_move_absolute_rejects_below_low_limit() -> None:
     """An absolute move below the low travel limit must raise ValueError."""
     motor = _make_motor()
     with pytest.raises(ValueError):
         motor.move_absolute_position(-1, "mm")
 
 
-def test_move_relative_rejects_resulting_position_over_limit():
+def test_move_relative_rejects_resulting_position_over_limit() -> None:
     """A relative move whose RESULTING position would exceed the high limit
     must raise ValueError. The check validates the resulting position, not
     the raw delta — a small delta near the top of travel is still rejected."""
@@ -72,7 +72,7 @@ def test_move_relative_rejects_resulting_position_over_limit():
     # because the limit check raises first.
     near_high = motor.limit_high_microsteps - 1000  # ~50.79 mm in microsteps
 
-    def fake_motorIO(cmd_no, cmd_param):
+    def fake_motorIO(cmd_no: int, cmd_param: int) -> int:
         # cmd 60 = get position; return a near-the-top position
         if cmd_no == 60:
             motor.error = 0
@@ -91,7 +91,7 @@ def test_move_relative_rejects_resulting_position_over_limit():
         motor.move_relative_position(5, "mm")
 
 
-def test_move_maximum_position_removed():
+def test_move_maximum_position_removed() -> None:
     """move_maximum_position is confirmed dead code (no GUI caller) and
     must be deleted from the ZaberMotor class."""
     assert hasattr(ZaberMotor, "move_maximum_position") is False

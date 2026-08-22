@@ -9,7 +9,7 @@ Lasers._update_setpoints fires naturally — no extra mocking is required.
 from lightsheet.lasers import Lasers
 
 
-def test_write_failure_reverts_state():
+def test_write_failure_reverts_state() -> None:
     """laser1_on() under a DAQ write failure must revert laser1_active and
     the setpoint to off/zero and populate the error surface."""
     lasers = Lasers()
@@ -20,7 +20,7 @@ def test_write_failure_reverts_state():
     assert isinstance(lasers.error_message, str) and lasers.error_message != ""
 
 
-def test_write_failure_reverts_both_lasers():
+def test_write_failure_reverts_both_lasers() -> None:
     """Both lasers share one nidaqmx.Task write, so a write failure reverts
     both laser states together."""
     lasers = Lasers()
@@ -29,7 +29,7 @@ def test_write_failure_reverts_both_lasers():
     assert lasers._laser2_setpoint == 0
 
 
-def test_power_clamp_laser1():
+def test_power_clamp_laser1() -> None:
     """_update_setpoints clamps laser1 setpoint to laser1_max_power before
     attempting the write."""
     lasers = Lasers()
@@ -40,7 +40,7 @@ def test_power_clamp_laser1():
     assert lasers._laser1_setpoint == 5
 
 
-def test_power_clamp_laser2():
+def test_power_clamp_laser2() -> None:
     """_update_setpoints clamps laser2 setpoint to laser2_max_power before
     attempting the write."""
     lasers = Lasers()
@@ -51,7 +51,7 @@ def test_power_clamp_laser2():
     assert lasers._laser2_setpoint == 5
 
 
-def test_power_clamp_floor_zero():
+def test_power_clamp_floor_zero() -> None:
     """No negative voltages — setpoint is clamped to a floor of 0."""
     lasers = Lasers()
     lasers.laser1_max_power = 5
@@ -61,7 +61,7 @@ def test_power_clamp_floor_zero():
     assert lasers._laser1_setpoint == 0
 
 
-def test_laser1_on_clamps_to_max_power():
+def test_laser1_on_clamps_to_max_power() -> None:
     """laser1_on() must clamp the commanded laser1_power to laser1_max_power
     before the write attempt. The DAQ stub makes the write fail and revert
     the active laser's setpoint to 0, so we cannot observe the clamped
@@ -81,7 +81,7 @@ def test_laser1_on_clamps_to_max_power():
     captured = {}
     original_update = lasers._update_setpoints
 
-    def capturing_update():
+    def capturing_update() -> None:
         # Record the setpoint laser1_on() staged BEFORE the write/revert.
         captured["setpoint"] = lasers._laser1_setpoint
 

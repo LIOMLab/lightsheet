@@ -16,7 +16,7 @@ import pytest
 from lightsheet.camera import Camera
 
 
-def _make_camera(shutter_mode="Lightsheet"):
+def _make_camera(shutter_mode: str = "Lightsheet") -> Camera:
     """Build a Camera-like instance without running __init__'s pco.Camera()
     hardware probe (fails on Mac without the PCO SDK)."""
     cam = Camera.__new__(Camera)
@@ -39,19 +39,19 @@ def _make_camera(shutter_mode="Lightsheet"):
     return cam
 
 
-def test_compute_per_image_time_lightsheet():
+def test_compute_per_image_time_lightsheet() -> None:
     """In Lightsheet mode the per-image time is line_time * exposed_lines."""
     cam = _make_camera(shutter_mode="Lightsheet")
     assert cam._compute_per_image_time() == pytest.approx(0.00780 * 25)
 
 
-def test_compute_per_image_time_rolling():
+def test_compute_per_image_time_rolling() -> None:
     """In Rolling/Global mode the per-image time is the exposure time."""
     cam = _make_camera(shutter_mode="Rolling")
     assert cam._compute_per_image_time() == pytest.approx(0.1)
 
 
-def test_timeout_formula_floor_applies():
+def test_timeout_formula_floor_applies() -> None:
     """Small acquisitions use the floor, not a too-short computed value.
     The legacy flat Recorder Timeout interval (rig-confirmed to work) is a
     hard floor the scaled value can never fall below:
@@ -69,7 +69,7 @@ def test_timeout_formula_floor_applies():
     assert timeout_s == 15
 
 
-def test_timeout_formula_scales_with_images():
+def test_timeout_formula_scales_with_images() -> None:
     """Large acquisitions scale past both the floor and the legacy interval:
     max(5, 15, 1000 * 0.1 * 3.0) == 300."""
     cam = _make_camera(shutter_mode="Rolling")
@@ -82,7 +82,7 @@ def test_timeout_formula_scales_with_images():
     assert timeout_s == 300
 
 
-def test_timeout_never_falls_below_legacy_interval():
+def test_timeout_never_falls_below_legacy_interval() -> None:
     """Rolling/Global mode: the per-image time estimate is the exposure time
     alone, which ignores trigger-wait/readout/DAQ-cycle overhead, so the
     scaled value can underestimate real per-image wall time. A modest
@@ -100,7 +100,7 @@ def test_timeout_never_falls_below_legacy_interval():
     assert timeout_s == 15
 
 
-def test_arm_scan_resets_recorder_timeout_status_without_hardware():
+def test_arm_scan_resets_recorder_timeout_status_without_hardware() -> None:
     """arm_scan() must clear recorder_timeout_status unconditionally —
     BEFORE the `if self.camera is not None:` guard — so a worker that died
     mid-timeout on the previous run (leaving the flag True) cannot poison
@@ -117,7 +117,7 @@ def test_arm_scan_resets_recorder_timeout_status_without_hardware():
     )
 
 
-def test_recorder_timeout_status_blocks_copy():
+def test_recorder_timeout_status_blocks_copy() -> None:
     """When recorder_timeout_status is True, copy_recorder_images must not
     be reached by the acquire path. The contract that enforces this is:
     acquire_scan checks recorder_timeout_status and returns early (before
