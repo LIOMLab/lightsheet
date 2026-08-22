@@ -96,8 +96,7 @@ def standin() -> Mock:
     by the running app the open fails gracefully and ibeam.error is set —
     the laser-1 (DAQ) path is still exercisable.
     """
-    from lightsheet.ibeam import IBeam
-    from lightsheet.lasers import Lasers
+    from lightsheet.hal import IBeam, Lasers
 
     s = Mock()
     s.lasers = Lasers()
@@ -256,7 +255,7 @@ def test_real_lasers_laser1_on_nonzero_voltage_no_crash() -> None:
         pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
     voltage = float(voltage_pct)
 
-    from lightsheet.lasers import Lasers
+    from lightsheet.hal import Lasers
 
     lasers = Lasers()
     lasers.laser1_power = voltage
@@ -281,7 +280,7 @@ def test_real_lasers_laser1_on_daemon_thread_nonzero() -> None:
         pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
     voltage = float(voltage_pct)
 
-    from lightsheet.lasers import Lasers
+    from lightsheet.hal import Lasers
 
     lasers = Lasers()
     lasers.laser1_power = voltage

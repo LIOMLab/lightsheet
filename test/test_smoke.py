@@ -7,7 +7,7 @@ also succeed at collection time.
 
 
 def test_lasers_imports() -> None:
-    from lightsheet.lasers import Lasers
+    from lightsheet.hal import Lasers
 
     assert Lasers is not None
 
