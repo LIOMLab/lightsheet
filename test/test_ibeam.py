@@ -1,5 +1,5 @@
 """
-Mock-serial unit tests for the Toptica iBeam Smart HAL driver (src/ibeam.py).
+Mock-serial unit tests for the Toptica iBeam Smart HAL driver (lightsheet/ibeam.py).
 
 These tests run on Mac with no physical device: `serial.Serial` is patched so
 the IBeam class's serial I/O is captured against MagicMocks. The protocol
