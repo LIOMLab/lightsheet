@@ -1,4 +1,4 @@
-'''
+"""
 Pytest auto-loaded configuration.
 
 Stubs the absent hardware SDKs (nidaqmx, pco, and serial as a fallback) into
@@ -10,28 +10,30 @@ SDKs are not installed.
 
 Each stub is gated by importlib.util.find_spec: if a real package is already
 importable, the stub is skipped so the real driver is used on the rig.
-'''
+"""
 
 import sys
 import types
 
 
 def _make_nidaqmx_stub():
-    '''Build a nidaqmx stub that imports fine but raises on Task() creation.
+    """Build a nidaqmx stub that imports fine but raises on Task() creation.
 
     Reproduces the "imports fine, Task() raises" behavior that the laser
     tests rely on when no NI-DAQmx driver runtime is available.
-    '''
-    nidaqmx = types.ModuleType('nidaqmx')
+    """
+    nidaqmx = types.ModuleType("nidaqmx")
 
-    errors = types.ModuleType('nidaqmx.errors')
+    errors = types.ModuleType("nidaqmx.errors")
 
     class Error(Exception):
-        '''Base nidaqmx error (mirrors nidaqmx.errors.Error).'''
+        """Base nidaqmx error (mirrors nidaqmx.errors.Error)."""
+
         pass
 
     class DaqError(Error):
-        '''DAQ-specific error subclass.'''
+        """DAQ-specific error subclass."""
+
         pass
 
     errors.Error = Error
@@ -39,10 +41,10 @@ def _make_nidaqmx_stub():
     nidaqmx.errors = errors
 
     class Task:
-        '''Stub Task — raises on construction (no driver runtime).'''
+        """Stub Task — raises on construction (no driver runtime)."""
+
         def __init__(self, *args, **kwargs):
-            raise Error(
-                'no NI-DAQmx driver runtime available on this platform')
+            raise Error("no NI-DAQmx driver runtime available on this platform")
 
         # Common API surface used by src/lasers.py and src/siggen.py —
         # these are never reached because __init__ raises, but defining
@@ -60,27 +62,27 @@ def _make_nidaqmx_stub():
 
 
 def _make_pco_stub():
-    '''Build a pco stub whose Camera() raises on construction.'''
-    pco = types.ModuleType('pco')
+    """Build a pco stub whose Camera() raises on construction."""
+    pco = types.ModuleType("pco")
 
     class Camera:
-        '''Stub Camera — raises on construction (no PCO SDK).'''
+        """Stub Camera — raises on construction (no PCO SDK)."""
+
         def __init__(self, *args, **kwargs):
-            raise RuntimeError(
-                'no PCO camera SDK available on this platform')
+            raise RuntimeError("no PCO camera SDK available on this platform")
 
     pco.Camera = Camera
     return pco
 
 
 def _make_serial_stub():
-    '''Build a serial stub mirroring the pyserial public surface used by
+    """Build a serial stub mirroring the pyserial public surface used by
     src/etls.py and src/motors.py. Only used as a fallback when the real
-    pyserial package is not importable.'''
-    serial = types.ModuleType('serial')
+    pyserial package is not importable."""
+    serial = types.ModuleType("serial")
 
     EIGHTBITS = 8
-    PARITY_NONE = 'N'
+    PARITY_NONE = "N"
     STOPBITS_ONE = 1
 
     class SerialException(Exception):
@@ -88,11 +90,10 @@ def _make_serial_stub():
 
     class Serial:
         def __init__(self, *args, **kwargs):
-            raise SerialException(
-                'no serial port available on this platform')
+            raise SerialException("no serial port available on this platform")
 
         def open(self):
-            raise SerialException('no serial port available')
+            raise SerialException("no serial port available")
 
         def close(self):
             pass
@@ -101,10 +102,10 @@ def _make_serial_stub():
             return 0
 
         def read(self, size=1):
-            return b''
+            return b""
 
         def readline(self):
-            return b''
+            return b""
 
         def reset_input_buffer(self):
             pass
@@ -118,14 +119,14 @@ def _make_serial_stub():
 
 
 def _ensure_stub(name, builder, real_check=None):
-    '''Register a stub module for `name` if the real package is not usable.
+    """Register a stub module for `name` if the real package is not usable.
 
     A package may be installed but broken on this platform (e.g. nidaqmx
     missing transitive deps, pco using Windows-only ctypes.windll). We try
     to import the real package and, if `real_check` is provided, run it
     against the imported module; if either raises, we fall back to the stub
     so the HAL modules that depend on it can still be imported for testing.
-    '''
+    """
     usable = False
     try:
         mod = __import__(name)
@@ -140,26 +141,26 @@ def _ensure_stub(name, builder, real_check=None):
         # submodules) in sys.modules. Clear any such entries before
         # registering the stub so a later `import <name>` returns the stub.
         for key in list(sys.modules.keys()):
-            if key == name or key.startswith(name + '.'):
+            if key == name or key.startswith(name + "."):
                 del sys.modules[key]
         sys.modules[name] = builder()
 
 
 def _nidaqmx_real_check(mod):
-    '''Smoke check: nidaqmx is only usable if Task() can be constructed
-    (i.e. the driver runtime is present).'''
+    """Smoke check: nidaqmx is only usable if Task() can be constructed
+    (i.e. the driver runtime is present)."""
     mod.Task()
 
 
 def _pco_real_check(mod):
-    '''Smoke check: pco is only usable if Camera() can be constructed
-    (i.e. the PCO SDK + Windows DLLs are present).'''
+    """Smoke check: pco is only usable if Camera() can be constructed
+    (i.e. the PCO SDK + Windows DLLs are present)."""
     mod.Camera()
 
 
 # Inject stubs before any test module is collected. pytest loads conftest.py
 # prior to collection, so these sys.modules entries are visible to every
 # `from lightsheet.* import ...` line in test/test_*.py.
-_ensure_stub('nidaqmx', _make_nidaqmx_stub, real_check=_nidaqmx_real_check)
-_ensure_stub('pco', _make_pco_stub, real_check=_pco_real_check)
-_ensure_stub('serial', _make_serial_stub)
+_ensure_stub("nidaqmx", _make_nidaqmx_stub, real_check=_nidaqmx_real_check)
+_ensure_stub("pco", _make_pco_stub, real_check=_pco_real_check)
+_ensure_stub("serial", _make_serial_stub)
