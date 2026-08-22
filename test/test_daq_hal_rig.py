@@ -88,7 +88,7 @@ def _siggen_create_scanner(ao_terminals, do_terminals, errors):
         do_start_trigger = ao_device + '/ao/StartTrigger'
         task_do.triggers.start_trigger.cfg_dig_edge_start_trig(
             do_start_trigger, trigger_edge=Edge.RISING)
-        task_do.write(np.zeros(total_samples, dtype=np.uint8), auto_start=False)
+        task_do.write(np.zeros(total_samples, dtype=bool), auto_start=False)
         task_ao.write(np.zeros((4, total_samples)), auto_start=False)
     except BaseException as e:  # noqa: BLE001
         errors.append(('siggen_create', repr(e)))
@@ -143,4 +143,47 @@ def test_siggen_after_laser_write_no_cascade():
     _siggen_create_scanner(ao_terminals, do_terminals, errors)
     assert not errors, (
         'Laser write -> siggen create cascade failed:\n'
+        + '\n'.join(repr(e) for _, e in errors[:5]))
+
+
+def test_laser_ao_write_0v_repeated_no_intermittent_failure():
+    '''Laser AO write at 0 V must succeed repeatedly (intermittency check).
+
+    The access violation the operator saw during UAT may have been
+    transient or caused by prior crashed-task state. If 0 V writes succeed
+    reliably across many iterations, the DAQ write path itself is sound
+    and the earlier failure was state-related, not a code defect.
+    '''
+    lasers_terminals, _, _ = _read_config_terminals()
+    errors = []
+    for _ in range(25):
+        _laser_ao_write_0v(lasers_terminals, errors)
+    assert not errors, (
+        'Repeated laser AO write (0 V) failed intermittently:\n'
+        + '\n'.join(repr(e) for _, e in errors[:5]))
+
+
+def test_laser_write_on_daemon_thread_mimics_toggle():
+    '''Laser AO write from a daemon thread (mimics _toggle_laser1) must work.
+
+    The phase offloads laser writes to daemon threads. If the access
+    violation is thread-related (e.g. nidaqmx Task destructor racing with
+    thread exit), this reproduces it. Writes 0 V (laser OFF — safe).
+    '''
+    import threading
+    lasers_terminals, _, _ = _read_config_terminals()
+    errors = []
+    done = threading.Event()
+
+    def worker():
+        for _ in range(20):
+            _laser_ao_write_0v(lasers_terminals, errors)
+        done.set()
+
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+    done.wait(timeout=30)
+    t.join(timeout=5)
+    assert not errors, (
+        'Daemon-thread laser AO write (0 V) failed:\n'
         + '\n'.join(repr(e) for _, e in errors[:5]))
