@@ -76,7 +76,7 @@ def _slice_method(src: str, method_sig: str) -> str:
     next top-level ``def``/``@pyqtSlot`` decorator."""
     m = re.search(r"def " + re.escape(method_sig) + r":", src)
     assert m, f"{method_sig} is missing"
-    body = src[m.start():]
+    body = src[m.start() :]
     end = re.search(r"\n    def |\n    @pyqtSlot", body[1:])
     if end:
         body = body[: end.start() + 1]
