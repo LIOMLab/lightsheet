@@ -117,6 +117,9 @@ class Lasers:
             # keep their (clamped) pre-staged setpoint; only active ones
             # are reverted. Surface the failure via the error surface the
             # GUI polls after every write.
+            import traceback
+            tb = traceback.format_exc()
+            print('Lasers._update_setpoints FAILED:\n', tb, flush=True)
             self.error = 1
             self.error_message = str(e)
             if self.laser1_active:

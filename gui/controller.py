@@ -2076,9 +2076,11 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
 
             # Setting the camera for scan acquisition
             self.camera.arm_scan()
+            print('single_mode_worker: camera armed, starting lasers', flush=True)
 
             # Start lasers
             self.start_lasers()
+            print('single_mode_worker: start_lasers done, computing waveforms', flush=True)
 
             # E-stop poll point — checked before acquire_scan so a mid-acquisition
             # E-stop (pressed between mode start and the single frame grab) aborts
@@ -2094,9 +2096,11 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
 
             # Refresh scan waveforms with current settings
             self.siggen.compute_scan_waveforms()
+            print('single_mode_worker: waveforms computed, calling acquire_scan', flush=True)
 
             # Acquire a single scan
             self.acquire_scan()
+            print('single_mode_worker: acquire_scan returned', flush=True)
 
             # Put ETLs in standby mode
             # 2.5V corresponds no current through coil (mid 0-5V adjustable range)
