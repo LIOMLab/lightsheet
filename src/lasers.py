@@ -27,7 +27,7 @@ class Lasers:
     _cfg_settings["Laser2 Power"] = 0.0  # In Volts
     _cfg_settings["Laser2 Max Power"] = 5.0  # In Volts — HAL-boundary clamp
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Error status
         self.error = 0
         self.error_message = ""
@@ -59,39 +59,39 @@ class Lasers:
         self._laser1_setpoint = 0
         self._laser2_setpoint = 0
 
-    def laser1_on(self):
+    def laser1_on(self) -> None:
         self.laser1_active = True
         self._laser1_setpoint = min(self.laser1_power, self.laser1_max_power)
         self._update_setpoints()
 
-    def laser1_off(self):
+    def laser1_off(self) -> None:
         self.laser1_active = False
         self._laser1_setpoint = 0
         self._update_setpoints()
 
-    def laser1_toggle(self):
+    def laser1_toggle(self) -> None:
         if self.laser1_active:
             self.laser1_off()
         else:
             self.laser1_on()
 
-    def laser2_on(self):
+    def laser2_on(self) -> None:
         self.laser2_active = True
         self._laser2_setpoint = min(self.laser2_power, self.laser2_max_power)
         self._update_setpoints()
 
-    def laser2_off(self):
+    def laser2_off(self) -> None:
         self.laser2_active = False
         self._laser2_setpoint = 0
         self._update_setpoints()
 
-    def laser2_toggle(self):
+    def laser2_toggle(self) -> None:
         if self.laser2_active:
             self.laser2_off()
         else:
             self.laser2_on()
 
-    def _update_setpoints(self):
+    def _update_setpoints(self) -> None:
         # Clamp setpoints to [0, Max Power] at the HAL boundary before any
         # DAQ write attempt — physical-safety control so an over-driven
         # voltage can never reach the laser AO channels, regardless of the

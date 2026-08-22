@@ -14,7 +14,7 @@ def squarewave(
     shift: int,
     repeat: int,
     inverted: bool = False,
-):
+) -> np.ndarray:
     """
     Camera squarewave function generator for external exposure start or control
     """
@@ -43,7 +43,7 @@ def sawtooth(
     offset: float,
     inverted: bool,
     filtered: bool = True,
-):
+) -> np.ndarray:
     """
     Galvo sawtooth function generator for one-way scanning
     """
@@ -91,7 +91,7 @@ def staircase(
     offset: float,
     direction: str = "up",
     filtered: bool = True,
-):
+) -> np.ndarray:
     """
     Staircase function generator for ETL
 

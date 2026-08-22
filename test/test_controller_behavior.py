@@ -92,7 +92,7 @@ def test_start_lasers_surfaces_laser1_daq_error() -> None:
     """When Lasers.laser1_on() leaves self.lasers.error set, start_lasers
     must emit an operator message naming the cause and reset the flag — a
     failed laser-1 DAQ start is no longer a silent no-op (G-01-1)."""
-    start_lasers = _load_method("start_lasers(self)")
+    start_lasers = _load_method("start_lasers(self) -> None")
 
     lasers = Mock()
     lasers.laser1_max_power = 5.0
@@ -132,7 +132,7 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy() -> None:
     scanner, disarm the camera, and return BEFORE copy_recorder_images is
     ever reached — a timed-out plane can never be saved as zero-filled
     frames (BUG-01)."""
-    acquire_scan = _load_method("acquire_scan(self)")
+    acquire_scan = _load_method("acquire_scan(self) -> None")
 
     siggen = Mock()
     siggen.error = 0
@@ -177,7 +177,7 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder() -> None:
     delete the scanner, disarm the camera, and return BEFORE
     start_recorder() is ever called — a DAQ scan-task failure is no longer
     masked as a silent 15 s camera timeout (G-01-5)."""
-    acquire_scan = _load_method("acquire_scan(self)")
+    acquire_scan = _load_method("acquire_scan(self) -> None")
 
     siggen = Mock()
     siggen.error = 0
@@ -244,7 +244,7 @@ def test_start_lasers_reads_cached_flags_not_widgets() -> None:
     widget (AGENTS.md §11 cross-thread rule, G-01-5). With the auto-laser1
     flag True and a UI that raises on checkbox access, start_lasers must
     energize laser 1 without touching the widget."""
-    start_lasers = _load_method("start_lasers(self)")
+    start_lasers = _load_method("start_lasers(self) -> None")
 
     lasers = Mock()
     lasers.laser1_max_power = 5.0
@@ -276,7 +276,7 @@ def test_preview_mode_worker_breaks_on_estop_before_frame_acquisition() -> None:
     per-frame acquisition work (start_recorder / copy_recorder_images), and
     the finished signal must still fire exactly once from the finally block
     (CR-01 — preview now aligns with live/single/stack per AGENTS.md §2)."""
-    preview_mode_worker = _load_method("preview_mode_worker(self)")
+    preview_mode_worker = _load_method("preview_mode_worker(self) -> None")
 
     estop_event = threading.Event()
     estop_event.set()  # E-stop actuated before the loop starts
@@ -313,7 +313,7 @@ def test_wavelength_labels_set_from_live_instances() -> None:
     instances — not hardcoded numbers — so the operator sees the real
     configured wavelength (LSR-05)."""
     updateUi_initial_hardware_state = _load_method(
-        "updateUi_initial_hardware_state(self)"
+        "updateUi_initial_hardware_state(self) -> None"
     )
 
     siggen = Mock()
