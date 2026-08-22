@@ -168,7 +168,12 @@ LASERS_CONTRACT = ConformanceContract(
         "error",
         "error_message",
     ),
-    setter_methods=("set_power",),
+    # set_power is NOT in the setter_methods contract: the real Lasers class
+    # does not implement set_power (the controller sets laser1_power directly
+    # and calls laser1_on()). MockLasers keeps set_power as a concrete extra
+    # for the demo path and the power-clamp safety test. A future refactor
+    # that adds set_power to the real Lasers class can re-add it here.
+    setter_methods=(),
 )
 
 ETLS_CONTRACT = ConformanceContract(
