@@ -12,6 +12,12 @@ substantially diverged and maintained as its own codebase.
 
 This repository follows a `develop` > `main` git-flow:
 
+> **Post-reconciliation state:** the legacy `master` branch was renamed to
+> `main` and deleted from the remote. `main` is now the GitHub default branch.
+> `develop` was branched from the `v2022.9` head and carries the active
+> modernization work. The `v2022.9` and `auto_focus` branches are retained for
+> historical reference.
+
 - **`main`** — holds releasable states. This is the remote default branch on
   GitHub. Tagged releases are cut from `main`. The deployed rig is re-pointed
   to `main` only after a rig smoke test passes.
