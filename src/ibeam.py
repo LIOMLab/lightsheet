@@ -48,7 +48,7 @@ class IBeam:
     """HAL class for the Toptica iBeam Smart serial laser."""
 
     # Default configurable settings (overlaid with config.ini `[iBeam]`).
-    _cfg_settings: dict = {}  # noqa: RUF012 - class-level config template, populated at definition, never mutated at runtime
+    _cfg_settings: dict[str, str] = {}  # noqa: RUF012 - class-level config template, populated at definition, never mutated at runtime
     _cfg_settings["Port"] = "COM4"
     _cfg_settings["Baud Rate"] = "115200"
     _cfg_settings["Channel"] = "1"

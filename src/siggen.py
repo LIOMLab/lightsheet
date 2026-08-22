@@ -24,7 +24,7 @@ class SigGen:
 
     # Configurable settings defaults
     # Used as base dictionnary for .ini file allowable keys
-    _cfg_defaults: dict = {}  # noqa: RUF012 - class-level config template, populated at definition, never mutated at runtime
+    _cfg_defaults: dict[str, str] = {}  # noqa: RUF012 - class-level config template, populated at definition, never mutated at runtime
     _cfg_defaults["AO Terminals"] = (
         "/Dev1/ao0:3"  # DAQ board AO terminals for Galvo + ETL scan ramps
     )

@@ -18,7 +18,7 @@ class ETLs:
     """Class for ETLs"""
 
     # Default configurable settings
-    _cfg_settings: dict = {}  # noqa: RUF012 - class-level config template, populated at definition, never mutated at runtime
+    _cfg_settings: dict[str, str] = {}  # noqa: RUF012 - class-level config template, populated at definition, never mutated at runtime
     _cfg_settings["Port ETL Left"] = "COM5"
     _cfg_settings["Port ETL Right"] = "COM6"
 
@@ -222,7 +222,7 @@ class Optotune:
         r = self._send_cmd(b"Start", include_crc=False)
         return r
 
-    def firmwaretype(self) -> bytes:
+    def firmwaretype(self) -> int:
         """
         Return firmware type (ID #0103)
         """
@@ -230,7 +230,7 @@ class Optotune:
         self._firmwaretype = r[1]
         return self._firmwaretype
 
-    def firmwarebranch(self) -> bytes:
+    def firmwarebranch(self) -> int:
         """
         Return firmware branch (ID #0104)
         """
@@ -328,7 +328,7 @@ class Optotune:
         self._deviceid = r[2:]
         return self._deviceid
 
-    def gain(self, value: float | None = None) -> float | tuple[bytes, float, float]:
+    def gain(self, value: float | None = None) -> float | tuple[int, float, float]:
         """
         Get/set the gain variable for focal power drift compensation (ID #1100)
 
@@ -563,7 +563,7 @@ class Optotune:
         self._status = r[1:]
         return self._status
 
-    def eeprom_read(self, value: int) -> bytes:
+    def eeprom_read(self, value: int) -> int:
         """
         Read byte from EEPROM (ID #0609)
 
@@ -590,7 +590,7 @@ class Optotune:
         r = self._send_cmd(b"GAA")
         return int.from_bytes(r[3:5], byteorder="big", signed=False)
 
-    def eeprom_write(self, address: int, value: int) -> bytes:
+    def eeprom_write(self, address: int, value: int) -> int:
         """
         Write byte to EEPROM (ID #9998)
 
