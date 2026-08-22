@@ -2,16 +2,13 @@
 Created on February 8, 2022
 '''
 
-import sys
-sys.path.append(".")
-
 import copy
 import numpy as np
 
 import nidaqmx
 #from nidaqmx.constants import AcquisitionType, LineGrouping, Edge
 
-from src.config import cfg_read, cfg_write
+from lightsheet.config import cfg_read, cfg_write
 
 class Lasers:
     '''Class for generating and sending AO signals to modulate lasers'''

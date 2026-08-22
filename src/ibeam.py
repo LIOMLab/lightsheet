@@ -32,16 +32,13 @@ config.ini `[iBeam] Max Power`) is a physical-safety control enforced inside
 the HAL method so any caller (GUI, future script, E-stop path) is bounded.
 '''
 
-import sys
-sys.path.append(".")
-
 import copy
 import threading
 import time
 
 import serial
 
-from src.config import cfg_read
+from lightsheet.config import cfg_read
 
 
 class IBeam:

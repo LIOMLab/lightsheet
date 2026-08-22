@@ -3,8 +3,6 @@ Created on May 16, 2019
 
 @author: Pierre Girard-Collins
 '''
-import sys
-sys.path.append(".")
 
 import numpy as np
 
@@ -12,10 +10,10 @@ import numpy as np
 import nidaqmx
 from nidaqmx.constants import AcquisitionType, LineGrouping, Edge
 
-from src.camera import Camera
+from lightsheet.camera import Camera
 
-from src.config import cfg_read, cfg_write, cfg_str2bool
-from src.waveforms import squarewave, sawtooth, staircase
+from lightsheet.config import cfg_read, cfg_write, cfg_str2bool
+from lightsheet.waveforms import squarewave, sawtooth, staircase
 
 
 class SigGen:
