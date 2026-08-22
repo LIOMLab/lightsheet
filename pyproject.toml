@@ -67,3 +67,15 @@ unsound-return-statement = "error"
 
 [tool.ty.terminal]
 error-on-warning = true
+
+[dependency-groups]
+dev = [
+    "h5py-stubs>=0.1.2",
+    "pyqt5-stubs>=5.15.6.0",
+    "pytest>=9.1.1",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.16.4",
+    "scipy-stubs>=1.15.3.0",
+    "ty>=0.0.74",
+    "types-pyserial>=3.5.0.20260712",
+]
