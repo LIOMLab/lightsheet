@@ -101,10 +101,67 @@ def test_ibeam_off_is_synchronous(device_factory: object) -> None:
 def test_ibeam_set_power_clamps_to_max(device_factory: object) -> None:
     """SAFETY (AGENTS.md §2): set_power MUST clamp to max_power at the HAL
     boundary. This assertion runs behind both [real, mock] — the same
-    safety invariant the Mock* tests check."""
+    safety invariant the Mock* tests check.
+
+    The real ``IBeam.set_power`` requires ``open()`` first: ``_send_cmd``
+    raises ``SerialException`` when ``self.ser`` is ``None``, leaving
+    ``_power`` at 0 and the clamp unverified. So the real path calls
+    ``dev.open()`` before ``dev.set_power(999999)`` so the real serial
+    write path succeeds and ``_power`` updates to the clamped
+    ``max_power``. ``MockIBeam.open()`` is a no-op, so calling ``open()``
+    before ``set_power`` is mock-transparent — the mock path still
+    asserts ``dev._power == dev.max_power``.
+
+    The finally-cleanup branches on ``isinstance(dev, MockIBeam)``:
+    - Mock path: skip ``off()``/``close()`` entirely. ``MockIBeam.off()``
+      sets ``_power = 0``, which would mutate the value the test just
+      verified, and is unnecessary for a software-only mock.
+    - Real path: call ``dev.off()`` then ``dev.close()`` to turn the
+      laser off and release the serial port. The test called
+      ``open()`` + ``set_power()`` which staged channel power, so
+      ``off()`` + ``close()`` reverts to a safe state. Guarded with
+      try/except so a failure in ``off()`` does not skip ``close()``.
+
+    Real-path open() note: ``IBeam.open()`` opens the serial port and
+    sends ``echo off`` + ``enable <ch>``. The ``enable <ch>`` command
+    gates the channel power output but does NOT energize the laser (no
+    ``laser on`` command is sent). ``set_power(999999)`` sends
+    ``channel <ch> power 150000 micro`` — this stages the clamped max
+    power but the laser is not globally enabled (no ``laser on``), so
+    the diode stays dark. This respects AGENTS.md §2 (no energization
+    without explicit operator action) while still verifying the clamp.
+    The ``off()`` + ``close()`` cleanup is defensive (turns off +
+    releases the port) in case any future firmware variant auto-enables
+    on channel power.
+    """
     dev = device_factory()
-    dev.set_power(999999)
-    assert dev._power == dev.max_power, (
-        "set_power must clamp to max_power at the HAL boundary "
-        "(AGENTS.md §2 — Class IIIB laser safety)"
-    )
+    is_mock = isinstance(dev, MockIBeam)
+    try:
+        # open() is a no-op on the mock; on the real path it opens the
+        # serial port + enables the channel so set_power's serial write
+        # succeeds (without open, _send_cmd raises SerialException when
+        # self.ser is None, leaving _power at 0 and the clamp unverified).
+        dev.open()
+        dev.set_power(999999)
+        assert dev._power == dev.max_power, (
+            "set_power must clamp to max_power at the HAL boundary "
+            "(AGENTS.md §2 — Class IIIB laser safety)"
+        )
+    finally:
+        if not is_mock:
+            # Real-path cleanup — turn the laser off and release the
+            # serial port. The test called open() + set_power() which
+            # staged channel power, so off() + close() reverts to a
+            # safe state. Guarded so a failure in off() does not skip
+            # close().
+            try:
+                dev.off()
+            except Exception:
+                pass
+            try:
+                dev.close()
+            except Exception:
+                pass
+        # Mock path: skip cleanup — MockIBeam.off() would set _power=0
+        # post-assertion (mutating the value the test just verified) and
+        # is unnecessary for a software-only mock.
