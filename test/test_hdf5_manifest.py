@@ -15,12 +15,13 @@ here.
 """
 
 import datetime
+from pathlib import Path
 
 import h5py
 import numpy as np
 
 
-def test_hdf5_manifest_dtype_and_attrs(tmp_path) -> None:
+def test_hdf5_manifest_dtype_and_attrs(tmp_path: Path) -> None:
     """A canonical plane written via h5py has dtype uint16 + the 5 attrs."""
     path = tmp_path / "plane.hdf5"
     ysize, xsize = 16, 16
@@ -59,7 +60,7 @@ def test_hdf5_manifest_dtype_and_attrs(tmp_path) -> None:
         assert ds.attrs["Camera Position"] == cam_pos
 
 
-def test_hdf5_manifest_multiple_datasets(tmp_path) -> None:
+def test_hdf5_manifest_multiple_datasets(tmp_path: Path) -> None:
     """Multiple datasets in one file (a multi-plane stack) each carry the
     5-attr manifest — mirrors FrameSaver's per-frame dataset creation."""
     path = tmp_path / "stack.hdf5"

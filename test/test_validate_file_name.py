@@ -39,7 +39,7 @@ def _read_controller_source() -> str:
 def _slice_method(src: str, method_sig: str) -> str:
     m = re.search(r"def " + re.escape(method_sig) + r":", src)
     assert m, f"{method_sig} is missing"
-    body = src[m.start():]
+    body = src[m.start() :]
     end = re.search(r"\n    def |\n    @pyqtSlot", body[1:])
     if end:
         body = body[: end.start() + 1]
@@ -108,8 +108,7 @@ def _standin(text: str, save_dir: str = "C:\\data") -> Mock:
         "all-unsafe-rejected",
     ],
 )
-def test_safe_char_sanitizes(raw: str, expected_substring: str,
-                             allows: bool) -> None:
+def test_safe_char_sanitizes(raw: str, expected_substring: str, allows: bool) -> None:
     """validate_file_name sanitizes the filename via safe_char + rstrip('_')
     and joins it to save_directory; saving_allowed is True only when both
     are non-empty."""
@@ -118,8 +117,7 @@ def test_safe_char_sanitizes(raw: str, expected_substring: str,
     if allows:
         assert s.saving_allowed is True
         assert expected_substring in s.save_filename, (
-            f"expected {expected_substring!r} in save_filename="
-            f"{s.save_filename!r}"
+            f"expected {expected_substring!r} in save_filename={s.save_filename!r}"
         )
     else:
         assert s.saving_allowed is False
