@@ -61,10 +61,36 @@ def configure() -> None:
 
     log_dir_value = cfg["Log Dir"].strip()
     log_dir = Path(log_dir_value) if log_dir_value else _default_log_dir()
-    log_dir.mkdir(parents=True, exist_ok=True)
 
     root = logging.getLogger()
     root.setLevel(level)
+
+    # Ensure the log directory exists before attaching the file handler. A
+    # configured Log Dir that is unwritable (read-only mount, missing parent,
+    # permissions) must NOT crash the app on startup — the GUI has not yet
+    # appeared, so an unhandled exception here is an unrecoverable black-screen
+    # for the operator. Fall back to the platform default, then to the system
+    # temp dir, attaching a StreamHandler warning so the failure is visible on
+    # the console rather than silent.
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        fallback = _default_log_dir()
+        try:
+            fallback.mkdir(parents=True, exist_ok=True)
+            log_dir = fallback
+        except OSError:
+            import tempfile
+
+            log_dir = Path(tempfile.gettempdir()) / "lightsheet-logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+        # Stream-only warning (file handler is not attached yet) — emitted to
+        # stderr so the operator sees why logs are not where they configured.
+        logging.getLogger(__name__).warning(
+            "Configured Log Dir '%s' is not writable — falling back to %s",
+            log_dir_value or log_dir,
+            log_dir,
+        )
 
     # Remove existing handlers so repeated configure() calls do not duplicate
     # them. We attach handlers explicitly rather than relying on the
