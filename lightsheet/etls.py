@@ -9,6 +9,7 @@ import time
 from ctypes import c_ushort
 
 import serial
+
 from lightsheet.config import cfg_read
 
 logger = logging.getLogger(__name__)

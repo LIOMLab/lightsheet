@@ -13,6 +13,7 @@ arm_scan() unconditional reset.
 """
 
 import pytest
+
 from lightsheet.camera import Camera
 
 

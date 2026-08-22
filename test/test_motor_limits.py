@@ -10,6 +10,7 @@ motor documented in ask_id()'s docstring.
 """
 
 import pytest
+
 from lightsheet.motors import ZaberMotor
 
 

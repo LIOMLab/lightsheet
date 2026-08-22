@@ -39,6 +39,7 @@ import threading
 import time
 
 import serial
+
 from lightsheet.config import cfg_read
 
 logger = logging.getLogger(__name__)
