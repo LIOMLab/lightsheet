@@ -1,4 +1,4 @@
-'''
+"""
 Toptica iBeam Smart serial HAL driver.
 
 Drives the red Toptica iBeam Smart laser over its virtual COM port (FTDI
@@ -30,47 +30,47 @@ before every command.
 This is a Class IIIB laser. The `set_power` clamp to `max_power` (loaded from
 config.ini `[iBeam] Max Power`) is a physical-safety control enforced inside
 the HAL method so any caller (GUI, future script, E-stop path) is bounded.
-'''
+"""
 
+import contextlib
 import copy
 import logging
 import threading
 import time
 
 import serial
-
 from lightsheet.config import cfg_read
 
 logger = logging.getLogger(__name__)
 
 
 class IBeam:
-    '''HAL class for the Toptica iBeam Smart serial laser.'''
+    """HAL class for the Toptica iBeam Smart serial laser."""
 
     # Default configurable settings (overlaid with config.ini `[iBeam]`).
-    _cfg_settings = {}
-    _cfg_settings['Port'] = 'COM4'
-    _cfg_settings['Baud Rate'] = '115200'
-    _cfg_settings['Channel'] = '1'
-    _cfg_settings['Wavelength'] = '640'        # In nm (iBeam Smart 640)
-    _cfg_settings['Power'] = '0'               # In uW
-    _cfg_settings['Max Power'] = '150000'      # In uW (150 mW diode limit, rig-confirmed)
+    _cfg_settings: dict = {}  # noqa: RUF012 - class-level config template, populated at definition, never mutated at runtime
+    _cfg_settings["Port"] = "COM4"
+    _cfg_settings["Baud Rate"] = "115200"
+    _cfg_settings["Channel"] = "1"
+    _cfg_settings["Wavelength"] = "640"  # In nm (iBeam Smart 640)
+    _cfg_settings["Power"] = "0"  # In uW
+    _cfg_settings["Max Power"] = "150000"  # In uW (150 mW diode limit, rig-confirmed)
 
     def __init__(self, port=None):
         # HAL error status (mirrors src/lasers.py and src/etls.py convention).
         self.error = 0
-        self.error_message = ''
+        self.error_message = ""
 
         # Load configurable settings, then assign to instance variables.
         self.cfg_settings = copy.deepcopy(self._cfg_settings)
-        self.cfg_settings = cfg_read('config.ini', 'iBeam', self.cfg_settings)
+        self.cfg_settings = cfg_read("config.ini", "iBeam", self.cfg_settings)
 
-        self.port              = port if port is not None else str(self.cfg_settings['Port'])
-        self.baud_rate         = int(self.cfg_settings['Baud Rate'])
-        self.channel           = int(self.cfg_settings['Channel'])
-        self.wavelength        = int(self.cfg_settings['Wavelength'])
-        self._power            = int(self.cfg_settings['Power'])
-        self.max_power         = int(self.cfg_settings['Max Power'])
+        self.port = port if port is not None else str(self.cfg_settings["Port"])
+        self.baud_rate = int(self.cfg_settings["Baud Rate"])
+        self.channel = int(self.cfg_settings["Channel"])
+        self.wavelength = int(self.cfg_settings["Wavelength"])
+        self._power = int(self.cfg_settings["Power"])
+        self.max_power = int(self.cfg_settings["Max Power"])
 
         # Serial connection + laser state.
         self.ser = None
@@ -92,7 +92,7 @@ class IBeam:
             self.ser.timeout = 3.0
             self.ser.open()
             # Disable command echo so replies are not doubled.
-            self._send_cmd('echo off')
+            self._send_cmd("echo off")
             # Enable the configured diode channel so a subsequent channel
             # power command actually reaches the output. Without `enable <ch>`
             # the firmware accepts the power write but the diode stays dark.
@@ -101,12 +101,10 @@ class IBeam:
             self.error = 1
             self.error_message = str(e)
             if self.ser is not None:
-                try:
+                with contextlib.suppress(Exception):
                     self.ser.close()
-                except Exception:
-                    pass
                 self.ser = None
-            logger.exception('IBeam open failed')
+            logger.exception("IBeam open failed")
             raise
         return None
 
@@ -119,7 +117,7 @@ class IBeam:
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
-            logger.exception('IBeam close failed')
+            logger.exception("IBeam close failed")
         finally:
             self.ser = None
         return None
@@ -130,7 +128,7 @@ class IBeam:
     def on(self):
         """Enable laser emission (global enable)."""
         try:
-            self._send_cmd('laser on')
+            self._send_cmd("laser on")
             # Re-enable the configured diode channel with each emission
             # enable. The channel enable is independent of the global
             # `laser on` state; reasserting it here guarantees a power
@@ -147,13 +145,13 @@ class IBeam:
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
-            logger.exception('IBeam on failed')
+            logger.exception("IBeam on failed")
         return None
 
     def off(self):
         """Disable laser emission (global disable)."""
         try:
-            self._send_cmd('laser off')
+            self._send_cmd("laser off")
             self._is_on = False
             self._power = 0
         except serial.SerialException as e:
@@ -166,7 +164,7 @@ class IBeam:
             # error surface) to manually verify, rather than the GUI
             # showing it as on and the operator assuming it is off.
             self._is_on = False
-            logger.exception('IBeam off failed')
+            logger.exception("IBeam off failed")
         return None
 
     def enable_channel(self, channel=None):
@@ -181,11 +179,11 @@ class IBeam:
         """
         ch = self.channel if channel is None else int(channel)
         try:
-            self._send_cmd(f'enable {ch}')
+            self._send_cmd(f"enable {ch}")
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
-            logger.exception('IBeam enable_channel failed')
+            logger.exception("IBeam enable_channel failed")
         return None
 
     def set_power(self, power_uw):
@@ -197,7 +195,7 @@ class IBeam:
         """
         power_uw = max(0, min(power_uw, self.max_power))
         try:
-            self._send_cmd(f'channel {self.channel} power {power_uw} micro')
+            self._send_cmd(f"channel {self.channel} power {power_uw} micro")
             # Only record the commanded power if the firmware accepted the
             # write. _send_cmd does not raise on a %SYS-E rejection — it
             # sets self.error and returns normally — so guard the state
@@ -209,7 +207,7 @@ class IBeam:
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
-            logger.exception('IBeam set_power failed')
+            logger.exception("IBeam set_power failed")
         return None
 
     def get_output_power(self):
@@ -220,18 +218,18 @@ class IBeam:
         fallback if the reply cannot be parsed.
         """
         try:
-            response = self._send_cmd('show level power')
+            response = self._send_cmd("show level power")
             for line in response:
-                if f'CH{self.channel}' in line and 'PWR:' in line:
+                if f"CH{self.channel}" in line and "PWR:" in line:
                     # e.g. "CH1, PWR: 75.000 mW"
                     try:
-                        value_part = line.split('PWR:')[1].strip()
+                        value_part = line.split("PWR:")[1].strip()
                         # value_part looks like "75.000 mW" or "5000 uW"
                         token, unit = value_part.split()
                         value = float(token)
-                        if unit.lower() == 'mw':
+                        if unit.lower() == "mw":
                             return int(value * 1000)
-                        elif unit.lower() == 'uw':
+                        elif unit.lower() == "uw":
                             return int(value)
                     except (ValueError, IndexError):
                         # Malformed line -> fall through to fallback.
@@ -239,32 +237,32 @@ class IBeam:
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
-            logger.exception('IBeam get_output_power failed')
+            logger.exception("IBeam get_output_power failed")
         return self._power
 
     def is_enabled(self):
         """Return True if laser emission is currently enabled."""
         try:
-            response = self._send_cmd('status laser')
+            response = self._send_cmd("status laser")
             for line in response:
-                if line == 'ON':
+                if line == "ON":
                     return True
-                elif line == 'OFF':
+                elif line == "OFF":
                     return False
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
-            logger.exception('IBeam is_enabled failed')
+            logger.exception("IBeam is_enabled failed")
         return False
 
     def reboot(self):
         """Send `reset system` to recover from protocol desync."""
         try:
-            self._send_cmd('reset system')
+            self._send_cmd("reset system")
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
-            logger.exception('IBeam reboot failed')
+            logger.exception("IBeam reboot failed")
         return None
 
     # ------------------------------------------------------------------ #
@@ -280,22 +278,22 @@ class IBeam:
         """
         with self._lock:
             if self.ser is None:
-                raise serial.SerialException('Serial not connected')
+                raise serial.SerialException("Serial not connected")
 
             # Clear any stale error from a prior command so this command's
             # result is not masked by a previous failure. The error surface
             # is reset before the serial round-trip and only re-set below if
             # this command itself fails (a %SYS-E reply) or raises.
             self.error = 0
-            self.error_message = ''
+            self.error_message = ""
 
             self.ser.reset_input_buffer()
-            self.ser.write(f'{cmd}\r\n'.encode('ascii'))
+            self.ser.write(f"{cmd}\r\n".encode("ascii"))
 
             response_lines = []
             while True:
                 raw = self.ser.readline()
-                if raw == b'':
+                if raw == b"":
                     # readline returns b'' on timeout (no bytes received
                     # within the serial timeout window). Break so a stuck
                     # device does not loop forever. A genuine blank response
@@ -303,9 +301,9 @@ class IBeam:
                     # a timeout — it is appended below and the loop continues
                     # until the [OK]/CMD> terminator arrives.
                     break
-                line = raw.decode('ascii', errors='replace').strip()
+                line = raw.decode("ascii", errors="replace").strip()
                 response_lines.append(line)
-                if line == '[OK]' or line.startswith('CMD>'):
+                if line == "[OK]" or line.startswith("CMD>"):
                     break
 
             # Surface a device-level rejection on the HAL error surface
@@ -316,7 +314,7 @@ class IBeam:
             # from there; we do not raise so the existing call sites keep
             # working unchanged.
             for line in response_lines:
-                if line.startswith('%SYS-E'):
+                if line.startswith("%SYS-E"):
                     self.error = 1
                     self.error_message = f'iBeam rejected "{cmd}": {line}'
                     break
@@ -325,9 +323,9 @@ class IBeam:
             return response_lines
 
 
-# -------------------------------------------------------------------------------------------------
-if __name__ == '__main__':
+# ------------------------------------------------------------------------------------
+if __name__ == "__main__":
     ib = IBeam()
     ib.open()
-    print('serial:', ib.ser)
+    print("serial:", ib.ser)
     ib.close()

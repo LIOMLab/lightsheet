@@ -46,13 +46,13 @@ def main() -> int:
     # PyQt5 / controller / qdarkstyle imports are deferred to inside main()
     # so the nicaiu preload above runs first. ruff's E402 (module-level
     # import-not-at-top) is suppressed for this file via per-file-ignores.
+    import qdarkstyle
     from PyQt5.QtCore import pyqtSlot
     from PyQt5.QtWidgets import QApplication
-    from gui.controller import Controller_MainWindow
-
-    import qdarkstyle
-    from qdarkstyle.light.palette import LightPalette
     from qdarkstyle.dark.palette import DarkPalette
+    from qdarkstyle.light.palette import LightPalette
+
+    from gui.controller import Controller_MainWindow
 
     # Workaround for a nidaqmx 0.6.x Task.__del__ bug: after the context manager
     # closes a Task (close() -> clear()), the internal _saved_name attribute is
@@ -72,9 +72,10 @@ def main() -> int:
             saved_name = getattr(self, "_saved_name", None)
             if saved_name:
                 warnings.warn(
-                    'Task "{}" was not explicitly closed and may still be '
-                    "reserved.".format(saved_name),
+                    f'Task "{saved_name}" was not explicitly closed and may still be '
+                    "reserved.",
                     DaqResourceWarning,
+                    stacklevel=2,
                 )
 
         nidaqmx.Task.__del__ = _safe_task_del  # type: ignore[attr-defined]
@@ -95,9 +96,7 @@ def main() -> int:
 
     # Initializing the app, controller (class which connects GUI to features)
     app = QApplication(sys.argv)
-    app.setStyleSheet(
-        qdarkstyle.load_stylesheet(qt_api="pyqt5", palette=LightPalette)
-    )
+    app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api="pyqt5", palette=LightPalette))
 
     @pyqtSlot(str)
     def set_app_stylesheet(stylesheet_code: str) -> None:
