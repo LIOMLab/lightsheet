@@ -11,11 +11,12 @@ from ctypes import c_ushort
 import serial
 
 from lightsheet.config import cfg_read
+from lightsheet.hal.interfaces import IETLs, IOptotune
 
 logger = logging.getLogger(__name__)
 
 
-class ETLs:
+class ETLs(IETLs):
     """Class for ETLs"""
 
     # Default configurable settings
@@ -94,7 +95,7 @@ class ETLs:
             self.etl_right.close()
 
 
-class Optotune:
+class Optotune(IOptotune):
     def __init__(self, port: str | None = None) -> None:
         self.port = port
         self.crc_table = self._init_crc_table()

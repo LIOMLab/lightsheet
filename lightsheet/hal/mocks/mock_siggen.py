@@ -51,9 +51,11 @@ class MockSigGen(ISigGen):
     no-ops ending with ``return None`` (AGENTS.md §10).
     """
 
-    # Override the ISigGenCore @property abstract slots with plain class
-    # attributes so the class is concrete (instantiable). __init__ sets the
-    # real synthetic values as instance attributes.
+    # Class-level defaults provide pre-__init__ synthetic values (the ABC
+    # now declares these as annotations, so the override is no longer
+    # required for ABC satisfaction, but the defaults are kept so the mock
+    # has sensible values before __init__ runs). __init__ sets the real
+    # synthetic values as instance attributes.
     galvo_left_amplitude: float = 0.0
     galvo_right_amplitude: float = 0.0
     galvo_left_offset: float = 0.0
@@ -114,12 +116,6 @@ class MockSigGen(ISigGen):
         return None
 
     def close(self) -> None:
-        return None
-
-    def arm(self) -> None:
-        return None
-
-    def disarm(self) -> None:
         return None
 
     def create_scanner(self) -> None:
@@ -333,4 +329,16 @@ class MockSigGen(ISigGen):
         return None
 
     def update_etls(self, left_etl: float, right_etl: float) -> None:
+        return None
+
+    # ------------------------------------------------------------------ #
+    # Extended config surface (ISigGen) — no-op stubs. The mock has no
+    # config.ini to read or persist; the synthetic defaults are already
+    # set in __init__.
+    # ------------------------------------------------------------------ #
+
+    def cfg_load_ini(self) -> None:
+        return None
+
+    def cfg_save_ini(self) -> None:
         return None
