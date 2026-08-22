@@ -56,6 +56,16 @@ def exception_hook(exctype, value, traceback):
     sys.exit(1)
 sys.excepthook = exception_hook
 
+# DEBUG: probe the DAQ driver at the earliest possible point — after the
+# nidaqmx import + __del__ patch, before QApplication or any Qt/widget
+# code. If this fails, the corruption happens at import time.
+try:
+    t = nidaqmx.Task(new_task_name='main_early_probe')
+    print('main.py early DAQ probe (pre-QApp): Task() OK', flush=True)
+    t.close()
+except BaseException as e:
+    print('main.py early DAQ probe (pre-QApp): Task() FAILED:', repr(e), flush=True)
+
 @pyqtSlot(str)
 def set_app_stylesheet(stylesheet_code:str):
     '''Function that allows stylesheet selection for the app'''
@@ -67,6 +77,16 @@ def set_app_stylesheet(stylesheet_code:str):
 # Initializing the app, controller (class which connects GUI to features)
 app = QApplication(sys.argv)
 app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt5', palette=LightPalette))
+
+# DEBUG: probe the DAQ driver right after QApplication + stylesheet, before
+# Controller_MainWindow construction, to pin down when nidaqmx corrupts.
+try:
+    t = nidaqmx.Task(new_task_name='main_pre_controller_probe')
+    print('main.py pre-controller DAQ probe: Task() OK', flush=True)
+    t.close()
+except BaseException as e:
+    print('main.py pre-controller DAQ probe: Task() FAILED:', repr(e), flush=True)
+
 controller = Controller_MainWindow()
 controller.sig_beep.connect(app.beep) #connection for beep sounds
 controller.sig_stylesheet.connect(set_app_stylesheet) #connection for app stylesheet
