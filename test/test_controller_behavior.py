@@ -1,4 +1,4 @@
-'''
+"""
 Behavioral regression tests for Phase 01 controller methods that cannot be
 exercised by importing Controller_MainWindow on the Mac dev box (PyQt5 is not
 installed, so `from gui.controller import Controller_MainWindow` raises
@@ -29,7 +29,7 @@ tests):
        acquisition; the finished signal still fires exactly once (LSR-04 / CR-01)
   G6 — updateUi_initial_hardware_state sets wavelength labels from the live
        Lasers/IBeam instances, not hardcoded numbers (LSR-05)
-'''
+"""
 
 import datetime
 import logging
@@ -38,23 +38,23 @@ import re
 import threading
 from unittest.mock import Mock
 
-_CONTROLLER_SRC = os.path.join(os.path.dirname(__file__), '..', 'gui', 'controller.py')
+_CONTROLLER_SRC = os.path.join(os.path.dirname(__file__), "..", "gui", "controller.py")
 
 
 def _read_controller_source():
-    with open(_CONTROLLER_SRC, 'r') as f:
+    with open(_CONTROLLER_SRC) as f:
         return f.read()
 
 
 def _slice_method(src, method_sig):
     """Return the body of a method, from its `def <sig>:` line up to the
     next top-level def/@pyqtSlot decorator."""
-    m = re.search(r'def ' + re.escape(method_sig) + r':', src)
+    m = re.search(r"def " + re.escape(method_sig) + r":", src)
     assert m, f"{method_sig} is missing"
-    body = src[m.start():]
-    end = re.search(r'\n    def |\n    @pyqtSlot', body[1:])
+    body = src[m.start() :]
+    end = re.search(r"\n    def |\n    @pyqtSlot", body[1:])
     if end:
-        body = body[:end.start() + 1]
+        body = body[: end.start() + 1]
     return body
 
 
@@ -64,11 +64,11 @@ def _load_method(method_sig, extra_globals=None):
     with module-level names the body references (datetime, logging, ...)."""
     src = _read_controller_source()
     body = _slice_method(src, method_sig)
-    namespace = {'datetime': datetime, 'logging': logging}
+    namespace = {"datetime": datetime, "logging": logging}
     if extra_globals:
         namespace.update(extra_globals)
-    exec(compile(body, _CONTROLLER_SRC, 'exec'), namespace)
-    func_name = method_sig.split('(')[0].strip()
+    exec(compile(body, _CONTROLLER_SRC, "exec"), namespace)
+    func_name = method_sig.split("(")[0].strip()
     return namespace[func_name]
 
 
@@ -76,16 +76,17 @@ def _load_method(method_sig, extra_globals=None):
 # G1 — start_lasers surfaces a laser-1 DAQ write failure (LSR-01 / G-01-1)
 # --------------------------------------------------------------------------- #
 
+
 def test_start_lasers_surfaces_laser1_daq_error():
     """When Lasers.laser1_on() leaves self.lasers.error set, start_lasers
     must emit an operator message naming the cause and reset the flag — a
     failed laser-1 DAQ start is no longer a silent no-op (G-01-1)."""
-    start_lasers = _load_method('start_lasers(self)')
+    start_lasers = _load_method("start_lasers(self)")
 
     lasers = Mock()
     lasers.laser1_max_power = 5.0
     lasers.error = 1  # laser1_on() "failed" the DAQ write
-    lasers.error_message = 'daq write failed'
+    lasers.error_message = "daq write failed"
 
     standin = Mock()
     standin._auto_laser1 = True
@@ -99,10 +100,11 @@ def test_start_lasers_surfaces_laser1_daq_error():
     # An operator message was emitted naming the failure.
     assert standin.sig_message.emit.called, (
         "start_lasers must emit sig_message when self.lasers.error is set "
-        "after laser1_on() — a silent no-op is the G-01-1 regression.")
+        "after laser1_on() — a silent no-op is the G-01-1 regression."
+    )
     msg = standin.sig_message.emit.call_args[0][0]
-    assert 'Laser write failed' in msg
-    assert 'daq write failed' in msg
+    assert "Laser write failed" in msg
+    assert "daq write failed" in msg
     # The flag is reset so the warning fires once per failure.
     assert lasers.error == 0
 
@@ -112,17 +114,18 @@ def test_start_lasers_surfaces_laser1_daq_error():
 #      (BUG-01)
 # --------------------------------------------------------------------------- #
 
+
 def test_acquire_scan_aborts_on_recorder_timeout_before_copy():
     """When camera.recorder_timeout_status is True after monitor_recorder,
     acquire_scan must emit the timeout warning, tear down the recorder and
     scanner, disarm the camera, and return BEFORE copy_recorder_images is
     ever reached — a timed-out plane can never be saved as zero-filled
     frames (BUG-01)."""
-    acquire_scan = _load_method('acquire_scan(self)')
+    acquire_scan = _load_method("acquire_scan(self)")
 
     siggen = Mock()
     siggen.error = 0
-    siggen.error_message = ''
+    siggen.error_message = ""
     siggen.waveform_cycles = 1
     siggen.waveform_metadata = {}
 
@@ -144,7 +147,7 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy():
     # The operator was warned.
     assert standin.sig_message.emit.called
     msg = standin.sig_message.emit.call_args[0][0]
-    assert 'Camera timeout' in msg
+    assert "Camera timeout" in msg
     # Teardown ran and the camera was disarmed before returning.
     camera.delete_recorder.assert_called_once()
     siggen.delete_scanner.assert_called_once()
@@ -156,24 +159,26 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy():
 #      recorder is primed (BUG-01 / G-01-5)
 # --------------------------------------------------------------------------- #
 
+
 def test_acquire_scan_surfaces_siggen_error_before_recorder():
     """When create_scanner() sets self.siggen.error (its bare-except on DAQ
     task creation failure), acquire_scan must emit an operator message,
     delete the scanner, disarm the camera, and return BEFORE
     start_recorder() is ever called — a DAQ scan-task failure is no longer
     masked as a silent 15 s camera timeout (G-01-5)."""
-    acquire_scan = _load_method('acquire_scan(self)')
+    acquire_scan = _load_method("acquire_scan(self)")
 
     siggen = Mock()
     siggen.error = 0
-    siggen.error_message = ''
+    siggen.error_message = ""
     siggen.waveform_cycles = 1
     siggen.waveform_metadata = {}
 
     def _fail_create_scanner():
         # create_scanner() sets siggen.error without raising.
         siggen.error = 1
-        siggen.error_message = 'create_scan error'
+        siggen.error_message = "create_scan error"
+
     siggen.create_scanner.side_effect = _fail_create_scanner
 
     camera = Mock()
@@ -192,8 +197,8 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder():
     # The operator saw the real DAQ cause.
     assert standin.sig_message.emit.called
     msg = standin.sig_message.emit.call_args[0][0]
-    assert 'Scan task creation failed' in msg
-    assert 'create_scan error' in msg
+    assert "Scan task creation failed" in msg
+    assert "create_scan error" in msg
     # Teardown ran.
     siggen.delete_scanner.assert_called_once()
     camera.disarm.assert_called_once()
@@ -204,6 +209,7 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder():
 #      (BUG-01 / G-01-5)
 # --------------------------------------------------------------------------- #
 
+
 class _WidgetRaisingUI:
     """A stand-in for self.ui whose laser auto-checkboxes raise
     AttributeError on access. If start_lasers ever reverts to reading
@@ -212,11 +218,12 @@ class _WidgetRaisingUI:
     bools (self._auto_laser1 / self._auto_laser2), not Qt widgets."""
 
     def __getattr__(self, name):
-        if name in ('checkBox_laserOneAutomatic', 'checkBox_laserTwoAutomatic'):
+        if name in ("checkBox_laserOneAutomatic", "checkBox_laserTwoAutomatic"):
             raise AttributeError(
                 f"start_lasers must not read Qt widget {name} from a worker "
                 f"thread — use the cached self._auto_laser* flag "
-                f"(AGENTS.md §11).")
+                f"(AGENTS.md §11)."
+            )
         return Mock()
 
 
@@ -226,7 +233,7 @@ def test_start_lasers_reads_cached_flags_not_widgets():
     widget (AGENTS.md §11 cross-thread rule, G-01-5). With the auto-laser1
     flag True and a UI that raises on checkbox access, start_lasers must
     energize laser 1 without touching the widget."""
-    start_lasers = _load_method('start_lasers(self)')
+    start_lasers = _load_method("start_lasers(self)")
 
     lasers = Mock()
     lasers.laser1_max_power = 5.0
@@ -251,13 +258,14 @@ def test_start_lasers_reads_cached_flags_not_widgets():
 #      acquisition; the finished signal fires exactly once (LSR-04 / CR-01)
 # --------------------------------------------------------------------------- #
 
+
 def test_preview_mode_worker_breaks_on_estop_before_frame_acquisition():
     """With estop_event set before the worker loop starts, the E-stop poll
     at the top of preview_mode_worker's while loop must break before any
     per-frame acquisition work (start_recorder / copy_recorder_images), and
     the finished signal must still fire exactly once from the finally block
     (CR-01 — preview now aligns with live/single/stack per AGENTS.md §2)."""
-    preview_mode_worker = _load_method('preview_mode_worker(self)')
+    preview_mode_worker = _load_method("preview_mode_worker(self)")
 
     estop_event = threading.Event()
     estop_event.set()  # E-stop actuated before the loop starts
@@ -287,13 +295,15 @@ def test_preview_mode_worker_breaks_on_estop_before_frame_acquisition():
 #      Lasers/IBeam instances (LSR-05)
 # --------------------------------------------------------------------------- #
 
+
 def test_wavelength_labels_set_from_live_instances():
     """updateUi_initial_hardware_state must set the wavelength labels from
     the live self.lasers.laser1_wavelength and self.ibeam.wavelength
     instances — not hardcoded numbers — so the operator sees the real
     configured wavelength (LSR-05)."""
     updateUi_initial_hardware_state = _load_method(
-        'updateUi_initial_hardware_state(self)')
+        "updateUi_initial_hardware_state(self)"
+    )
 
     siggen = Mock()
     siggen.galvo_activated = False
@@ -314,7 +324,7 @@ def test_wavelength_labels_set_from_live_instances():
     camera.lightsheet_line_time = 0.0001
     camera.lightsheet_exposed_lines = 1
     camera.lightsheet_delay_lines = 0
-    camera.shutter_mode = 'Rolling'
+    camera.shutter_mode = "Rolling"
 
     lasers = Mock()
     lasers.laser1_wavelength = 555  # green DAQ laser
@@ -339,14 +349,15 @@ def test_wavelength_labels_set_from_live_instances():
 
     label_72_text = standin.ui.label_72.setText.call_args[0][0]
     label_73_text = standin.ui.label_73.setText.call_args[0][0]
-    assert '555' in label_72_text, (
+    assert "555" in label_72_text, (
         "label_72 must show the live lasers.laser1_wavelength (555), not a "
-        "hardcoded number.")
-    assert '640' in label_73_text, (
-        "label_73 must show the live ibeam.wavelength (640), not a hardcoded "
-        "number.")
+        "hardcoded number."
+    )
+    assert "640" in label_73_text, (
+        "label_73 must show the live ibeam.wavelength (640), not a hardcoded number."
+    )
     # Toggle buttons are relabeled with the live wavelengths too.
     toggle1_text = standin.ui.pushButton_laserOneToggle.setText.call_args[0][0]
     toggle2_text = standin.ui.pushButton_laserTwoToggle.setText.call_args[0][0]
-    assert '555' in toggle1_text
-    assert '640' in toggle2_text
+    assert "555" in toggle1_text
+    assert "640" in toggle2_text

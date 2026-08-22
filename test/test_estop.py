@@ -1,4 +1,4 @@
-'''
+"""
 Stdlib threading.Event semantics tests for the E-stop cooperative-abort path.
 
 These tests document the exact threading.Event behavior that
@@ -21,7 +21,7 @@ greps — those are fragile and exercise no code. See AGENTS.md §5: when a
 class cannot be instantiated on Mac, exercise the real method via exec of
 its extracted body against a Mock stand-in, or test the HAL logic in
 isolation. Do not grep the source.
-'''
+"""
 
 import threading
 
