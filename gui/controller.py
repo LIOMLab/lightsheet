@@ -482,6 +482,17 @@ class Controller_MainWindow(QMainWindow):
         self.ui.statusbar.showMessage('Initializing hardware, please wait...')
         self.ui.statusbar.repaint()
 
+        # DEBUG: probe the DAQ driver at the very start of hardware_init,
+        # before any HAL is constructed, to see if the nidaqmx session is
+        # already corrupt.
+        try:
+            import nidaqmx
+            t = nidaqmx.Task(new_task_name='hwinit_probe_pre')
+            print('hardware_init pre-HAL DAQ probe: Task() OK', flush=True)
+            t.close()
+        except BaseException as e:
+            print('hardware_init pre-HAL DAQ probe: Task() FAILED:', repr(e), flush=True)
+
         # Instantiating hardware components
         self.camera = Camera(verbose=True)
         # Signal Generator needs to know about Camera settings to generate proper scan waveforms
@@ -494,6 +505,16 @@ class Controller_MainWindow(QMainWindow):
         # Making sure ETLs are in analog mode
         self.etls.open()
         self.etls.set_analog_mode()
+
+        # DEBUG: probe the DAQ driver after all HAL construction + ETL open,
+        # right before iBeam open, to see if anything corrupted the session.
+        try:
+            import nidaqmx
+            t = nidaqmx.Task(new_task_name='hwinit_probe_post_etl')
+            print('hardware_init post-ETL DAQ probe: Task() OK', flush=True)
+            t.close()
+        except BaseException as e:
+            print('hardware_init post-ETL DAQ probe: Task() FAILED:', repr(e), flush=True)
 
         # Open the Toptica iBeam serial laser (COM4). Failure is non-fatal —
         # the DAQ laser path still works if the iBeam is offline — but surface

@@ -41,6 +41,15 @@ class Lasers:
         # Set configurable settings to default values
         self.cfg_settings = copy.deepcopy(self._cfg_settings)
 
+        # DEBUG: probe the DAQ driver at Lasers construction time to see if
+        # the nidaqmx session is already corrupt before any laser write.
+        try:
+            t = nidaqmx.Task(new_task_name='lasers_init_probe')
+            print('Lasers.__init__ DAQ probe: Task() OK', flush=True)
+            t.close()
+        except BaseException as e:
+            print('Lasers.__init__ DAQ probe: Task() FAILED:', repr(e), flush=True)
+
         # Update configurable settings with values found in config file
         self.cfg_settings = cfg_read('config.ini', 'Lasers', self.cfg_settings)
 
