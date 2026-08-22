@@ -592,13 +592,21 @@ class Controller_MainWindow(QMainWindow):
         self.ui.statusbar.showMessage("Initializing hardware, please wait...")
         self.ui.statusbar.repaint()
 
-        # Instantiating hardware components. Under demo mode the 4 non-laser
-        # device families (Camera, SigGen, Motors, ETLs) construct Mock*
-        # instances so no hardware init runs on a dev box; the 2 laser
-        # families (IBeam, Lasers) stay as their real classes for now —
-        # Plan 03 adds them to the demo branch.
+        # Instantiating hardware components. Under demo mode all 6 device
+        # families (Camera, SigGen, Motors, ETLs, Lasers, IBeam) construct
+        # Mock* instances so no hardware init runs on a dev box. The
+        # camera-before-siggen dependency ordering is preserved under both
+        # branches (the mock camera still carries the xsize/ysize/line_time
+        # the SigGen waveform timing derives from).
         if self._demo_mode:
-            from lightsheet.hal import MockCamera, MockETLs, MockMotors, MockSigGen
+            from lightsheet.hal import (
+                MockCamera,
+                MockETLs,
+                MockIBeam,
+                MockLasers,
+                MockMotors,
+                MockSigGen,
+            )
 
             self.camera = MockCamera(verbose=True)
             # Signal Generator needs to know about Camera settings to generate
@@ -607,14 +615,16 @@ class Controller_MainWindow(QMainWindow):
             # xsize/ysize/line_time the SigGen waveform timing derives from).
             self.siggen = MockSigGen(self.camera)
             self.motors = MockMotors()
+            self.lasers = MockLasers()
             self.etls = MockETLs()
+            self.ibeam = MockIBeam()
         else:
             self.camera = Camera(verbose=True)
             self.siggen = SigGen(self.camera)
             self.motors = Motors()
+            self.lasers = Lasers()
             self.etls = ETLs()
-        self.lasers = Lasers()
-        self.ibeam = IBeam()
+            self.ibeam = IBeam()
 
         # Making sure ETLs are in analog mode
         self.etls.open()
