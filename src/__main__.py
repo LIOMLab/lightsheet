@@ -24,14 +24,16 @@ def main() -> int:
     # with "OSError: exception: access violation reading 0x0000000000000000"
     # inside DAQmxCreateTask. Preloading nicaiu.dll maps the driver into the
     # process before Qt's DLLs load, so the driver initializes correctly.
-    # This is a Windows-only DLL-conflict workaround; on macOS the ctypes
-    # call fails silently and the stub nidaqmx is used instead.
-    try:
-        import ctypes
+    # This is a Windows-only DLL-conflict workaround; on macOS ctypes has no
+    # WinDLL attribute and the stub nidaqmx is used instead, so the preload
+    # is guarded to win32 only.
+    if sys.platform == "win32":
+        try:
+            import ctypes
 
-        ctypes.WinDLL("nicaiu.dll")
-    except (OSError, FileNotFoundError, ImportError):
-        pass
+            ctypes.WinDLL("nicaiu.dll")
+        except (OSError, FileNotFoundError, ImportError):
+            pass
 
     # Configure the root logger before any hardware init and before the GUI
     # starts: a RotatingFileHandler (5 MB x 5) + StreamHandler with the

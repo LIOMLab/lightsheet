@@ -31,6 +31,11 @@ class Camera:
     def __init__(self, verbose: bool = False) -> None:
         self.verbose = verbose
 
+        # HAL error surface (per AGENTS.md §10 — a physically-absent device
+        # sets self.error / self.error_message instead of raising)
+        self.error = 0
+        self.error_message = ""
+
         # Flags (bool)
         self.is_recording = False
         self.new_data_ready = False
@@ -85,9 +90,11 @@ class Camera:
         if self.camera is None:
             try:
                 self.camera = pco.Camera()
-            except ValueError:
+            except (ValueError, SystemError, OSError, RuntimeError):
                 logger.exception("Failed to open camera.")
                 self.camera = None
+                self.error = 1
+                self.error_message = "Camera not available on this platform"
             else:
                 sizes = {}
                 sizes = self.camera.sdk.get_sizes()
