@@ -66,6 +66,13 @@ ignore = ["ANN401"]
 [tool.ruff.format]
 # defaults
 
+[tool.pytest.ini_options]
+addopts = "-n auto"
+testpaths = ["test"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
 [tool.ty.rules]
 missing-type-argument = "error"
 unsound-return-statement = "error"
