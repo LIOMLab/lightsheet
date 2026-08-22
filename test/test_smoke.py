@@ -19,7 +19,7 @@ def test_motors_imports() -> None:
 
 
 def test_camera_imports() -> None:
-    from lightsheet.camera import Camera
+    from lightsheet.hal import Camera
 
     assert Camera is not None
 
