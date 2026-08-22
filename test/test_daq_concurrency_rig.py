@@ -50,22 +50,24 @@ pytestmark = pytest.mark.skipif(
 
 # Dev1 galvo + ETL AO terminals (NOT the laser — laser is Dev7/ao0:1).
 # 0 V to a galvo holds it at rest; no hardware motion risk.
-_GALVO_ETL_TERMINALS = '/Dev1/ao0:3'
-_GALVO_TERMINALS = '/Dev1/ao0:1'
-_ZERO_VOLTS = [0.0, 0.0, 0.0, 0.0]
+# Laser-like and siggen-like use NON-overlapping channel ranges so a
+# resource-reservation conflict (-50103) is NOT the failure mode — any
+# error here is pure concurrency corruption (the access-violation bug).
+_LASER_LIKE_TERMINALS = '/Dev1/ao0:1'    # 2 channels, mimics Dev7/ao0:1
+_SIGGEN_LIKE_TERMINALS = '/Dev1/ao2:3'   # 2 channels, non-overlapping
 
 
 def _laser_like_write(errors):
     '''Mimic Lasers._update_setpoints: create a Task, add AO chan, write.
 
-    Uses Dev1 galvo channels at 0 V instead of Dev7 laser channels — same
+    Uses Dev1 ao0:1 at 0 V instead of Dev7 laser channels — same
     nidaqmx.Task() + add_ao_voltage_chan + write call pattern, no laser.
     '''
     import nidaqmx
     import numpy as np
     try:
         with nidaqmx.Task(new_task_name='concurrency_laser_like') as task:
-            task.ao_channels.add_ao_voltage_chan(_GALVO_TERMINALS)
+            task.ao_channels.add_ao_voltage_chan(_LASER_LIKE_TERMINALS)
             task.write(np.stack((np.array([0.0]), np.array([0.0]))),
                        auto_start=True)
     except BaseException as e:  # noqa: BLE001 — capture access violations too
@@ -75,19 +77,19 @@ def _laser_like_write(errors):
 def _siggen_like_create(errors):
     '''Mimic SigGen.create_scanner: create a Task, add AO channels, write.
 
-    Uses Dev1 galvo/ETL channels at 0 V. Same nidaqmx.Task() creation
-    pattern as the real create_scanner, no laser, no camera trigger.
-    Uses auto_start=True so the write succeeds without a separate timing
-    config — the point is to exercise concurrent Task() creation, not the
-    exact finite-scan timing path.
+    Uses Dev1 ao2:3 at 0 V (non-overlapping with the laser-like channels).
+    Same nidaqmx.Task() creation pattern as the real create_scanner, no
+    laser, no camera trigger. auto_start=True so the write succeeds without
+    a separate timing config — the point is concurrent Task() creation.
     '''
     import nidaqmx
     import numpy as np
     task_ao = None
     try:
         task_ao = nidaqmx.Task(new_task_name='concurrency_siggen_ao')
-        task_ao.ao_channels.add_ao_voltage_chan(_GALVO_ETL_TERMINALS)
-        task_ao.write(np.zeros((4, 4)), auto_start=True)
+        task_ao.ao_channels.add_ao_voltage_chan(_SIGGEN_LIKE_TERMINALS)
+        task_ao.write(np.stack((np.array([0.0]), np.array([0.0]))),
+                      auto_start=True)
     except BaseException as e:  # noqa: BLE001 — capture access violations too
         errors.append(repr(e))
     finally:
