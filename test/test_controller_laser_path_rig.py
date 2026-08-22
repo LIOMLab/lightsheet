@@ -57,7 +57,7 @@ _CONTROLLER_SRC = os.path.join(
 
 
 def _read_controller_source():
-    with open(_CONTROLLER_SRC, 'r') as f:
+    with open(_CONTROLLER_SRC, 'r', encoding='utf-8', errors='replace') as f:
         return f.read()
 
 
