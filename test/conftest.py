@@ -23,8 +23,17 @@ import os
 import sys
 import types
 from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
+
+if TYPE_CHECKING:
+    # pyserial is installed on the Mac dev box (and types-pyserial provides
+    # the stubs ty reads). Importing under TYPE_CHECKING gives ty the real
+    # serial types for static analysis of the stub builder below, while the
+    # runtime stub injection (_make_serial_stub, gated by find_spec) still
+    # runs so the Mac path stubs at runtime if the real import ever fails.
+    import serial  # noqa: F401  # ty static-analysis only; not used at runtime
 
 # Module-level hardware gate (D-15). Parametrize marks are evaluated at
 # collection time, before any fixture resolves, so the conformance tests'
@@ -67,9 +76,9 @@ def _make_nidaqmx_stub() -> types.ModuleType:
 
         pass
 
-    errors.Error = Error
-    errors.DaqError = DaqError
-    nidaqmx.errors = errors
+    cast(Any, errors).Error = Error
+    cast(Any, errors).DaqError = DaqError
+    cast(Any, nidaqmx).errors = errors
 
     class Task:
         """Stub Task — raises on construction (no driver runtime)."""
@@ -81,14 +90,14 @@ def _make_nidaqmx_stub() -> types.ModuleType:
         # these are never reached because __init__ raises, but defining
         # them keeps attribute lookups on the class from blowing up if a
         # test inspects the type.
-        ao_channels = None
-        timing = None
-        write = None
-        start = None
-        stop = None
-        close = None
+        ao_channels: Any = None
+        timing: Any = None
+        write: Any = None
+        start: Any = None
+        stop: Any = None
+        close: Any = None
 
-    nidaqmx.Task = Task
+    cast(Any, nidaqmx).Task = Task
 
     # constants submodule — lightsheet/hal/real/siggen.py imports
     # ``from nidaqmx.constants import AcquisitionType, Edge, LineGrouping``
@@ -113,10 +122,10 @@ def _make_nidaqmx_stub() -> types.ModuleType:
         CHAN_PER_LINE = 1
         CHAN_FOR_ALL_LINES = 2
 
-    constants.AcquisitionType = AcquisitionType
-    constants.Edge = Edge
-    constants.LineGrouping = LineGrouping
-    nidaqmx.constants = constants
+    cast(Any, constants).AcquisitionType = AcquisitionType
+    cast(Any, constants).Edge = Edge
+    cast(Any, constants).LineGrouping = LineGrouping
+    cast(Any, nidaqmx).constants = constants
     # Register the submodules in sys.modules so ``from nidaqmx.constants
     # import ...`` and ``from nidaqmx.errors import ...`` resolve via the
     # stub when the real nidaqmx is not usable. The parent nidaqmx module
@@ -139,7 +148,7 @@ def _make_pco_stub() -> types.ModuleType:
         def __init__(self, *args: object, **kwargs: object) -> None:
             raise RuntimeError("no PCO camera SDK available on this platform")
 
-    pco.Camera = Camera
+    cast(Any, pco).Camera = Camera
     return pco
 
 
@@ -178,11 +187,11 @@ def _make_serial_stub() -> types.ModuleType:
         def reset_input_buffer(self) -> None:
             pass
 
-    serial.Serial = Serial
-    serial.SerialException = SerialException
-    serial.EIGHTBITS = EIGHTBITS
-    serial.PARITY_NONE = PARITY_NONE
-    serial.STOPBITS_ONE = STOPBITS_ONE
+    cast(Any, serial).Serial = Serial
+    cast(Any, serial).SerialException = SerialException
+    cast(Any, serial).EIGHTBITS = EIGHTBITS
+    cast(Any, serial).PARITY_NONE = PARITY_NONE
+    cast(Any, serial).STOPBITS_ONE = STOPBITS_ONE
     return serial
 
 

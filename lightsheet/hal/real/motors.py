@@ -467,6 +467,18 @@ class ZaberMotor:
             unit: A string which specifies the unit of the numerical position.
                   Options: 'm', 'cm', 'mm', '\u03bcm' (micrometers),
                   '\u03bcStep' (microsteps)
+
+        Returns:
+            int: microsteps, truncated toward zero. The truncation matches the
+            Zaber T-LS ``_motorIO`` byte-packing, which packs the integer part
+            of the command parameter into the serial frame (``int(cmd_param //
+            pow(256,3))`` etc.) — floor division on a non-negative microstep
+            count is equivalent to truncation toward zero here. Using ``int()``
+            rather than ``//`` preserves this behavior for any negative
+            position a caller might pass (floor would shift by one microstep,
+            a hardware risk near a travel limit). Rig-verify at end-of-milestone
+            that the rounding only matters for sub-microstep positions near a
+            limit boundary.
         """
         if units == "m":
             factor = 1
@@ -484,4 +496,4 @@ class ZaberMotor:
         else:
             microsteps = 0
 
-        return microsteps
+        return int(microsteps)
