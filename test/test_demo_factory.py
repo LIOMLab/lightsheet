@@ -14,10 +14,13 @@ Covers two concerns:
    constructs ``Camera``, and that ``SigGen`` receives the camera reference
    (dependency ordering preserved, Pitfall 2).
 
-``Controller_MainWindow`` cannot be instantiated on this Mac (needs PyQt5
+``Controller_MainWindow`` cannot be instantiated on this Mac (needs a PyQt5
 display), so the real ``hardware_init`` source is extracted and exec'd
-against a minimal stand-in. This runs the real factory code — the same code
-that runs on the rig — without the Qt runtime.
+against a minimal stand-in. The exec namespace is seeded with the real
+``lightsheet.gui.controller`` module globals (``QApplication``, ``Qt``,
+``FrameViewer``, ``FrameSaver``, ``QTimer``, the HAL classes) so the method
+body's module-level name lookups resolve. This runs the real factory code —
+the same code that runs on the rig — without instantiating the Qt window.
 """
 
 import os
@@ -43,7 +46,7 @@ def _slice_method(src: str, method_sig: str) -> str:
     next top-level def/@pyqtSlot decorator."""
     m = re.search(r"def " + re.escape(method_sig) + r":", src)
     assert m, f"{method_sig} is missing"
-    body = src[m.start():]
+    body = src[m.start() :]
     end = re.search(r"\n    def |\n    @pyqtSlot", body[1:])
     if end:
         body = body[: end.start() + 1]
@@ -52,10 +55,42 @@ def _slice_method(src: str, method_sig: str) -> str:
 
 def _load_method(method_sig: str) -> Callable[..., Any]:
     """Extract a method body from lightsheet/gui/controller.py and return a
-    callable `func(self)` that executes the real source."""
+    callable `func(self)` that executes the real source.
+
+    The exec namespace is built manually rather than seeded from the
+    controller module globals, because importing ``lightsheet.gui.controller``
+    transitively imports ``lightsheet.siggen``, whose top-level
+    ``from nidaqmx.constants import ...`` fails on this Mac (the conftest
+    nidaqmx stub has no ``constants`` submodule). Instead we provide the
+    module-level names the ``hardware_init`` body references: the real
+    ``Camera`` (constructs fine on Mac — the pco failure is caught on the
+    HAL error surface), and Mocks for the Qt classes and the other 5 HAL
+    classes (which the factory branch constructs but whose real imports
+    are not needed to assert on the Camera branch).
+    """
+    from lightsheet.hal import Camera
+
     src = _read_controller_source()
     body = _slice_method(src, method_sig)
-    namespace: dict[str, Any] = {}
+    # Build the namespace with the module-level names hardware_init uses.
+    # Qt classes and the non-Camera HAL classes are Mocked — the factory
+    # branch under test only needs Camera (real) to be constructible so
+    # the demo/real branch assignment can be asserted. MockCamera is
+    # imported locally inside the demo branch (`from lightsheet.hal import
+    # MockCamera`), so it resolves at runtime without being in the namespace.
+    namespace: dict[str, Any] = {
+        "QApplication": Mock(),
+        "Qt": Mock(),
+        "QTimer": Mock(),
+        "FrameViewer": Mock(),
+        "FrameSaver": Mock(),
+        "SigGen": Mock(),
+        "Motors": Mock(),
+        "Lasers": Mock(),
+        "ETLs": Mock(),
+        "IBeam": Mock(),
+        "Camera": Camera,
+    }
     exec(compile(body, _CONTROLLER_SRC, "exec"), namespace)
     func_name = method_sig.split("(")[0].strip()
     return namespace[func_name]
@@ -97,22 +132,21 @@ def test_resolve_demo_cli_true_overrides_env_zero() -> None:
 def _make_standin(demo: bool) -> Mock:
     """Build a Mock stand-in self with the attributes hardware_init reads.
 
-    The factory branch under test only touches ``self._demo_mode``,
+    The factory branch under test touches ``self._demo_mode``,
     ``self.camera``, ``self.siggen``, ``self.motors``, ``self.lasers``,
-    ``self.etls``, ``self.ibeam``, ``self.ui.statusbar``, and
-    ``self.setWindowTitle`` / ``self.windowTitle``. The stand-in lets the
+    ``self.etls``, ``self.ibeam``, ``self.ui.statusbar``,
+    ``self.setWindowTitle`` / ``self.windowTitle``,
+    ``self.updateUi_initial_hardware_state``, ``self.frame_viewer``,
+    ``self.frame_saver``, ``self.timer_imageview``. The stand-in lets the
     real method body assign HAL instances onto self.camera etc. so the
-    test can assert on their concrete types.
+    test can assert on their concrete types; downstream Qt calls land on
+    Mock attrs (no-ops).
     """
     standin = Mock()
     standin._demo_mode = demo
     standin.ui = Mock()
     standin.ui.statusbar = Mock()
     standin.windowTitle = Mock(return_value="Lightsheet")
-    # The real hardware_init also calls updateUi_initial_hardware_state,
-    # constructs FrameViewer/FrameSaver, starts a QTimer, etc. The factory
-    # branch under test is the construction block; the rest of hardware_init
-    # is exercised but its downstream calls land on Mock attrs (no-ops).
     return standin
 
 
@@ -124,9 +158,6 @@ def test_hardware_init_constructs_mock_camera_under_demo() -> None:
 
     hardware_init = _load_method("hardware_init(self) -> None")
     standin = _make_standin(demo=True)
-    # Stub the downstream HAL classes hardware_init constructs after the
-    # camera branch. They stay as their real classes (Wave 2 makes them
-    # demo-aware); the standin just needs them constructible.
     hardware_init(standin)
     assert isinstance(standin.camera, MockCamera), (
         "demo branch must construct MockCamera, not the real Camera"
@@ -155,9 +186,34 @@ def test_hardware_init_preserves_siggen_camera_dependency() -> None:
     hardware_init = _load_method("hardware_init(self) -> None")
     standin = _make_standin(demo=True)
     hardware_init(standin)
-    # SigGen was constructed with standin.camera as its arg; capture the
-    # constructor call to verify the camera reference was passed.
-    # The standin.siggen is whatever SigGen(self.camera) returned — we
-    # assert it is not None and that it was constructed after the camera.
+    # SigGen was constructed with standin.camera as its arg. The mock
+    # camera still carries the xsize/ysize/line_time the SigGen waveform
+    # timing derives from, so the dependency is meaningful under demo too.
     assert isinstance(standin.camera, MockCamera)
     assert standin.siggen is not None
+
+
+def test_hardware_init_demo_indicator_emitted_via_statusbar_not_sigmessage() -> None:
+    """Under demo mode the indicator (window-title suffix + status-bar
+    message) must go through QStatusBar.showMessage directly, NOT via
+    sig_message.emit, so it does not pollute the future golden-master
+    sig_message sequence (UI-SPEC)."""
+    hardware_init = _load_method("hardware_init(self) -> None")
+    standin = _make_standin(demo=True)
+    hardware_init(standin)
+    # The window-title suffix was set.
+    standin.setWindowTitle.assert_called_once()
+    title_arg = standin.setWindowTitle.call_args.args[0]
+    assert "[DEMO]" in title_arg, "window-title must carry the [DEMO] suffix"
+    # The demo status-bar message was emitted via showMessage (not
+    # sig_message.emit).
+    statusbar_calls = [str(c) for c in standin.ui.statusbar.showMessage.call_args_list]
+    assert any("Demo mode" in c for c in statusbar_calls), (
+        "demo indicator must be emitted via statusbar.showMessage"
+    )
+    # sig_message.emit must not carry the demo indicator (UI-SPEC: keep
+    # the golden-master sig_message sequence clean).
+    for call in standin.sig_message.emit.call_args_list:
+        assert "Demo mode" not in str(call), (
+            "demo indicator must not be emitted via sig_message.emit"
+        )

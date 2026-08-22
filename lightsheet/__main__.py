@@ -10,14 +10,44 @@ and controller live as function locals rather than module globals, and
 ``set_app_stylesheet`` becomes a closure over the local ``app``.
 """
 
+import argparse
 import logging
+import os
 import sys
 import warnings
 
 logger = logging.getLogger(__name__)
 
 
+def _resolve_demo(cli_demo: bool, env: str | None) -> bool:
+    """Merge the ``--demo`` CLI flag and the ``LIGHTSHEET_DEMO`` env var into
+    a single demo-mode boolean with CLI-overrides-env precedence.
+
+    - ``--demo`` set -> demo active regardless of env.
+    - ``LIGHTSHEET_DEMO=1`` -> demo active (env opt-in).
+    - ``LIGHTSHEET_DEMO=0`` or unset -> demo inactive unless ``--demo``.
+
+    Under demo mode the controller's ``hardware_init`` factory constructs
+    ``Mock*`` HAL instances (no hardware init) and this bootstrap skips the
+    ``nicaiu.dll`` preload (no DAQmx task is ever created in demo mode).
+    """
+    return bool(cli_demo or env == "1")
+
+
 def main() -> int:
+    # Parse --demo and read LIGHTSHEET_DEMO=1 before any hardware preload.
+    # CLI flag overrides env var (D-10): --demo forces demo mode even if
+    # LIGHTSHEET_DEMO is unset or "0"; without --demo, LIGHTSHEET_DEMO=1
+    # opts in. One read site for the demo flag.
+    parser = argparse.ArgumentParser(description="Lightsheet microscope controller")
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="run with mock HAL (no hardware init); overrides LIGHTSHEET_DEMO",
+    )
+    args, _ = parser.parse_known_args()
+    demo = _resolve_demo(args.demo, os.environ.get("LIGHTSHEET_DEMO"))
+
     # Preload the NI-DAQmx C library before any PyQt5 import. PyQt5 (and
     # qdarkstyle) load Qt DLLs that corrupt the NI-DAQmx driver's internal
     # state when loaded first — every subsequent nidaqmx.Task() call crashes
@@ -26,8 +56,11 @@ def main() -> int:
     # process before Qt's DLLs load, so the driver initializes correctly.
     # This is a Windows-only DLL-conflict workaround; on macOS ctypes has no
     # WinDLL attribute and the stub nidaqmx is used instead, so the preload
-    # is guarded to win32 only.
-    if sys.platform == "win32":
+    # is guarded to win32 only. Skipped under demo mode — no DAQmx task is
+    # ever created in demo mode, so the preload is unnecessary and a demo
+    # session on the rig cannot accidentally energize hardware via a stale
+    # DAQ task.
+    if sys.platform == "win32" and not demo:
         try:
             import ctypes
 
@@ -112,7 +145,7 @@ def main() -> int:
                 qdarkstyle.load_stylesheet(qt_api="pyqt5", palette=DarkPalette)
             )
 
-    controller = Controller_MainWindow()
+    controller = Controller_MainWindow(demo=demo)
     controller.sig_beep.connect(app.beep)  # connection for beep sounds
     controller.sig_stylesheet.connect(set_app_stylesheet)  # stylesheet selection
 
