@@ -177,7 +177,7 @@ class Optotune:
         else:
             self.ser.write(cmd)
         if wait_for_resp:
-            resp = self.ser.read_until("\r\n")
+            resp = self.ser.read_until(b"\r\n")
             if include_crc:
                 resp_crc = resp[-4:-2]
                 resp_content = resp[:-4]
@@ -185,7 +185,7 @@ class Optotune:
                     raise (serial.SerialException(f"CRC mismatch: {resp}"))
             else:
                 resp_content = resp
-            if resp_content[0] == b"E":
+            if resp_content[:1] == b"E":
                 raise (serial.SerialException(f"Command error: {resp_content}"))
             return resp_content
 
