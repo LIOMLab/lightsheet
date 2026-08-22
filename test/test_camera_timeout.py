@@ -14,7 +14,7 @@ arm_scan() unconditional reset.
 
 import pytest
 
-from src.camera import Camera
+from lightsheet.camera import Camera
 
 
 def _make_camera(shutter_mode='Lightsheet'):

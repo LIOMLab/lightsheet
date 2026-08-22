@@ -19,8 +19,6 @@ code. See AGENTS.md §5.
 
 import os
 import re
-import sys
-sys.path.append(".")
 
 import threading
 from unittest.mock import Mock

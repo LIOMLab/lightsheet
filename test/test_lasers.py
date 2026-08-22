@@ -6,7 +6,7 @@ Mac (no NI-DAQmx driver runtime), so the typed-except path in
 Lasers._update_setpoints fires naturally — no extra mocking is required.
 '''
 
-from src.lasers import Lasers
+from lightsheet.lasers import Lasers
 
 
 def test_write_failure_reverts_state():

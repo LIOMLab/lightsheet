@@ -23,9 +23,6 @@ its extracted body against a Mock stand-in, or test the HAL logic in
 isolation. Do not grep the source.
 '''
 
-import sys
-sys.path.append(".")
-
 import threading
 
 

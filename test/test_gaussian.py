@@ -6,7 +6,7 @@ input, and empty input because max() was called on an empty sequence.
 After the fix these return 0; normal Gaussian input is unchanged.
 '''
 
-from src.gaussian import fwhm
+from lightsheet.gaussian import fwhm
 
 
 def test_fwhm_flat_input():
