@@ -175,3 +175,81 @@ def test_laser_write_daemon_thread_then_siggen_main_thread():
         'Daemon-thread laser write + main-thread siggen create produced '
         'errors (thread-race session corruption):\n'
         + '\n'.join(f'{t}: {e}' for t, e in errors[:5]))
+
+
+def test_repeated_laser_write_nonzero_eventually_corrupts():
+    '''Many laser writes at nonzero V — does state accumulate and crash?
+
+    The GUI creates many short-lived Tasks over a session. If Task objects
+    are GC'd asynchronously while new Tasks are created, the nidaqmx C
+    library's global state may corrupt after enough iterations. This test
+    hammers the laser write path to see if a crash emerges from
+    accumulation rather than a single call.
+    '''
+    voltage = os.environ.get('RIG_LASER_VOLTAGE')
+    if not voltage:
+        pytest.skip('set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1')
+    voltage = float(voltage)
+
+    errors = []
+    import gc
+    for i in range(50):
+        _laser_write(voltage, errors, tag=f'laser_iter_{i}')
+        # Force GC between iterations to surface any use-after-free from
+        # Task __del__ running against a freed handle.
+        gc.collect()
+        if errors:
+            break
+
+    assert not errors, (
+        'Repeated laser write (nonzero V) corrupted the session after '
+        f'{len(errors)} iterations:\n'
+        + '\n'.join(f'{t}: {e}' for t, e in errors[:5]))
+
+
+def test_laser_write_with_concurrent_siggen_create_stress():
+    '''Stress: many concurrent laser + siggen Task creations.
+
+    The GUI's toggle thread and acquisition worker can overlap. Hammer
+    both paths concurrently to surface a rare race that a single paired
+    call doesn't hit.
+    '''
+    voltage = os.environ.get('RIG_LASER_VOLTAGE')
+    if not voltage:
+        pytest.skip('set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1')
+    voltage = float(voltage)
+
+    errors = []
+    stop = threading.Event()
+
+    def laser_loop():
+        i = 0
+        while not stop.is_set():
+            _laser_write(voltage, errors, tag=f'laser_stress_{i}')
+            i += 1
+            if errors:
+                stop.set()
+                return
+
+    def siggen_loop():
+        i = 0
+        while not stop.is_set():
+            _siggen_create(errors, tag=f'siggen_stress_{i}')
+            i += 1
+            if errors:
+                stop.set()
+                return
+
+    t1 = threading.Thread(target=laser_loop, daemon=True)
+    t2 = threading.Thread(target=siggen_loop, daemon=True)
+    t1.start()
+    t2.start()
+    # Let them run concurrently for 3 seconds — enough to surface a race.
+    time.sleep(3.0)
+    stop.set()
+    t1.join(timeout=10)
+    t2.join(timeout=10)
+
+    assert not errors, (
+        'Concurrent laser + siggen stress corrupted the session:\n'
+        + '\n'.join(f'{t}: {e}' for t, e in errors[:5]))
