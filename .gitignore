@@ -29,3 +29,8 @@ skills-lock.json
 
 # Editable-install metadata produced by `pip install -e .`
 *.egg-info/
+
+# Rig-specific calibrated config snapshot — captured from the microscope PC over
+# SSH by scripts/snapshot-rig-config.sh. Intentionally untracked: holds rig COM
+# ports and per-instrument calibration values that must never enter git history.
+config.rig-specific.ini
