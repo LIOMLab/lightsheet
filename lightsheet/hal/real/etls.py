@@ -154,7 +154,7 @@ class Optotune:
         cmd: bytes,
         include_crc: bool | None = None,
         wait_for_resp: bool | None = None,
-    ) -> bytes:
+    ) -> bytes | None:
         """
         Send a command
 
@@ -188,6 +188,25 @@ class Optotune:
             if resp_content[:1] == b"E":
                 raise (serial.SerialException(f"Command error: {resp_content}"))
             return resp_content
+        return None
+
+    def _send_cmd_resp(
+        self,
+        cmd: bytes,
+        include_crc: bool | None = None,
+    ) -> bytes:
+        """Send a command that expects a response, asserting the reply is present.
+
+        ``_send_cmd`` returns ``bytes | None`` (None when ``wait_for_resp`` is
+        False). The read-path callers index the reply unconditionally, so this
+        helper wraps ``_send_cmd`` with ``wait_for_resp=True`` and asserts the
+        reply is not None before returning it — turning a latent IndexError on
+        None into an explicit SerialException at the call site.
+        """
+        r = self._send_cmd(cmd, include_crc=include_crc, wait_for_resp=True)
+        if r is None:
+            raise serial.SerialException("no response from Optotune")
+        return r
 
     def calc_crc(self, data: bytes) -> bytes:
         """
@@ -220,14 +239,14 @@ class Optotune:
         """
         Return 'start' to confirm connection (ID #0101)
         """
-        r = self._send_cmd(b"Start", include_crc=False)
+        r = self._send_cmd_resp(b"Start", include_crc=False)
         return r
 
     def firmwaretype(self) -> int:
         """
         Return firmware type (ID #0103)
         """
-        r = self._send_cmd(b"H")
+        r = self._send_cmd_resp(b"H")
         self._firmwaretype = r[1]
         return self._firmwaretype
 
@@ -235,7 +254,7 @@ class Optotune:
         """
         Return firmware branch (ID #0104)
         """
-        r = self._send_cmd(b"F")
+        r = self._send_cmd_resp(b"F")
         self._firmwarebranch = r[1]
         return self._firmwarebranch
 
@@ -243,7 +262,7 @@ class Optotune:
         """
         Return part number (ID #0105)
         """
-        r = self._send_cmd(b"J")
+        r = self._send_cmd_resp(b"J")
         self._partnumber = r[1:4]
         return self._partnumber
 
@@ -258,7 +277,7 @@ class Optotune:
             The upper software current limit
         """
         if value is None:
-            r = self._send_cmd(b"CrUA\x00\x00")
+            r = self._send_cmd_resp(b"CrUA\x00\x00")
         else:
             if value > self._current_max:
                 raise (
@@ -268,7 +287,7 @@ class Optotune:
                 )
             data = int(value * 4095 / self._current_max)
             data = data.to_bytes(2, byteorder="big", signed=True)
-            r = self._send_cmd(b"CwUA" + data)
+            r = self._send_cmd_resp(b"CwUA" + data)
         self._current_upper = (
             int.from_bytes(r[3:5], byteorder="big", signed=True)
             * self._current_max
@@ -287,7 +306,7 @@ class Optotune:
             The lower software current limit
         """
         if value is None:
-            r = self._send_cmd(b"CrLA\x00\x00")
+            r = self._send_cmd_resp(b"CrLA\x00\x00")
         else:
             if value > self._current_max:
                 raise (
@@ -297,7 +316,7 @@ class Optotune:
                 )
             data = int(value * 4095 / self._current_max)
             data = data.to_bytes(2, byteorder="big", signed=True)
-            r = self._send_cmd(b"CwLA" + data)
+            r = self._send_cmd_resp(b"CwLA" + data)
         self._current_lower = (
             int.from_bytes(r[3:5], byteorder="big", signed=True)
             * self._current_max
@@ -312,7 +331,7 @@ class Optotune:
         Returns:
             Major Revison, Minor Revision, Build and Revison
         """
-        r = self._send_cmd(b"V")
+        r = self._send_cmd_resp(b"V")
         self._firmwarerevision = "{}.{}.{}.{}".format(
             r[1],
             r[2],
@@ -325,7 +344,7 @@ class Optotune:
         """
         Return device ID (ID #0901)
         """
-        r = self._send_cmd(b"IR\x00\x00\x00\x00\x00\x00\x00\x00")
+        r = self._send_cmd_resp(b"IR\x00\x00\x00\x00\x00\x00\x00\x00")
         self._deviceid = r[2:]
         return self._deviceid
 
@@ -342,7 +361,7 @@ class Optotune:
             Test
         """
         if value is None:
-            r = self._send_cmd(b"Or\x00\x00")
+            r = self._send_cmd_resp(b"Or\x00\x00")
             self._gain = int.from_bytes(r[2:], byteorder="big") / 100
             return self._gain
         else:
@@ -350,7 +369,7 @@ class Optotune:
                 raise (ValueError("Gain must be between 0 and 5."))
             data = int(value * 100)
             data = data.to_bytes(2, byteorder="big", signed=False)
-            r = self._send_cmd(b"Ow" + data)
+            r = self._send_cmd_resp(b"Ow" + data)
             status = r[2]
             # XYZ: CHECK VERSION
             focal_max = (int.from_bytes(r[3:5], byteorder="big") / 200) - 5
@@ -361,7 +380,7 @@ class Optotune:
         """
         Return serial number (ID #0102)
         """
-        r = self._send_cmd(b"X")
+        r = self._send_cmd_resp(b"X")
         self._serialnumber = r[1:]
         return self._serialnumber
 
@@ -376,7 +395,7 @@ class Optotune:
             The current
         """
         if value is None:
-            r = self._send_cmd(b"Ar\x00\x00")
+            r = self._send_cmd_resp(b"Ar\x00\x00")
             self._current = (
                 int.from_bytes(r[1:], byteorder="big", signed=True)
                 * self._current_max
@@ -403,7 +422,7 @@ class Optotune:
             Test
         """
         if value is None:
-            r = self._send_cmd(b"PrUA\x00\x00\x00\x00")
+            r = self._send_cmd_resp(b"PrUA\x00\x00\x00\x00")
             self._siggen_upper = (
                 int.from_bytes(r[3:5], byteorder="big", signed=True)
                 * self._current_max
@@ -430,7 +449,7 @@ class Optotune:
             Test
         """
         if value is None:
-            r = self._send_cmd(b"PrLA\x00\x00\x00\x00")
+            r = self._send_cmd_resp(b"PrLA\x00\x00\x00\x00")
             self._siggen_lower = (
                 int.from_bytes(r[3:5], byteorder="big", signed=True)
                 * self._current_max
@@ -457,7 +476,7 @@ class Optotune:
             Test
         """
         if value is None:
-            r = self._send_cmd(b"PrFA\x00\x00\x00\x00")
+            r = self._send_cmd_resp(b"PrFA\x00\x00\x00\x00")
             self._siggen_freq = int.from_bytes(r[3:7], byteorder="big")
         else:
             data = int(value * 1000)
@@ -479,7 +498,7 @@ class Optotune:
             Better implement and test
         """
         if value is None:
-            r = self._send_cmd(b"PrTA\x00\x00\x00\x00")
+            r = self._send_cmd_resp(b"PrTA\x00\x00\x00\x00")
             return (
                 int.from_bytes(r[5:7], byteorder="big", signed=True) / 200 - 5,
                 int.from_bytes(r[3:5], byteorder="big", signed=True) / 200 - 5,
@@ -490,7 +509,7 @@ class Optotune:
             data = (value[1] * 16).to_bytes(2, byteorder="big", signed=True) + (
                 value[0] * 16
             ).to_bytes(2, byteorder="big", signed=True)
-            r = self._send_cmd(b"PwTA" + data)
+            r = self._send_cmd_resp(b"PwTA" + data)
             return (
                 int.from_bytes(r[5:7], byteorder="big", signed=True) / 200 - 5,
                 int.from_bytes(r[3:5], byteorder="big", signed=True) / 200 - 5,
@@ -510,7 +529,7 @@ class Optotune:
             Fix return format
         """
         if value is None:
-            r = self._send_cmd(b"PrDA\x00\x00\x00\x00")
+            r = self._send_cmd_resp(b"PrDA\x00\x00\x00\x00")
             self._focalpower = (
                 int.from_bytes(r[2:4], byteorder="big", signed=True) / 200 - 5
             )
@@ -533,7 +552,7 @@ class Optotune:
             The maximum firmware output current
         """
         if value is None:
-            r = self._send_cmd(b"CrMA\x00\x00")
+            r = self._send_cmd_resp(b"CrMA\x00\x00")
             self._current_max = (
                 int.from_bytes(r[3:5], byteorder="big", signed=True) / 100
             )
@@ -550,7 +569,7 @@ class Optotune:
         """
         Return lens temperature (ID #0501)
         """
-        r = self._send_cmd(b"TCA")
+        r = self._send_cmd_resp(b"TCA")
         self._temp_reading = (
             int.from_bytes(r[3:5], byteorder="big", signed=True) * 0.0625
         )
@@ -560,7 +579,7 @@ class Optotune:
         """
         Return firmware status information (ID #0503)
         """
-        r = self._send_cmd(b"Sr")
+        r = self._send_cmd_resp(b"Sr")
         self._status = r[1:]
         return self._status
 
@@ -578,7 +597,7 @@ class Optotune:
             Test
         """
         data = int(value).to_bytes(1, byteorder="big", signed=True)
-        r = self._send_cmd(b"Zr" + data)
+        r = self._send_cmd_resp(b"Zr" + data)
         return r[1]
 
     def analog_input(self) -> int:
@@ -588,7 +607,7 @@ class Optotune:
         Todo:
             Test
         """
-        r = self._send_cmd(b"GAA")
+        r = self._send_cmd_resp(b"GAA")
         return int.from_bytes(r[3:5], byteorder="big", signed=False)
 
     def eeprom_write(self, address: int, value: int) -> int:
@@ -607,7 +626,7 @@ class Optotune:
         """
         data_a = int(address).to_bytes(1, byteorder="big", signed=True)
         data_b = int(value).to_bytes(1, byteorder="big", signed=True)
-        r = self._send_cmd(b"Zw" + data_a + data_b)
+        r = self._send_cmd_resp(b"Zw" + data_a + data_b)
         return r[1]
 
     def eeprom_contents(self) -> bytes:
@@ -617,7 +636,7 @@ class Optotune:
         Todo:
             Test
         """
-        r = self._send_cmd(b"D\x00\x00")
+        r = self._send_cmd_resp(b"D\x00\x00")
         return r[1:]
 
     def mode(self, mode_str: str | None = None) -> str:
@@ -641,7 +660,7 @@ class Optotune:
                 6: "analog",
                 7: "position",
             }
-            r = self._send_cmd(b"MMA")
+            r = self._send_cmd_resp(b"MMA")
             self._mode = modes[r[3]]
         else:
             if mode_str == "sinusoidal":  # ID #0301
