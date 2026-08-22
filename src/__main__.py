@@ -14,6 +14,8 @@ import logging
 import sys
 import warnings
 
+logger = logging.getLogger(__name__)
+
 
 def main() -> int:
     # Preload the NI-DAQmx C library before any PyQt5 import. PyQt5 (and
@@ -31,6 +33,16 @@ def main() -> int:
     except (OSError, FileNotFoundError, ImportError):
         pass
 
+    # Configure the root logger before any hardware init and before the GUI
+    # starts: a RotatingFileHandler (5 MB x 5) + StreamHandler with the
+    # mesoSPIM timestamped format, driven by the [Logging] section of
+    # config.ini. Replaces the bare one-shot logging setup that used to live
+    # here. Must run after the nicaiu preload above and before the first Qt
+    # import below.
+    from lightsheet.logging_setup import configure as configure_logging
+
+    configure_logging()
+
     # PyQt5 / controller / qdarkstyle imports are deferred to inside main()
     # so the nicaiu preload above runs first. ruff's E402 (module-level
     # import-not-at-top) is suppressed for this file via per-file-ignores.
@@ -41,8 +53,6 @@ def main() -> int:
     import qdarkstyle
     from qdarkstyle.light.palette import LightPalette
     from qdarkstyle.dark.palette import DarkPalette
-
-    logging.basicConfig(format="%(message)s", level=logging.INFO)
 
     # Workaround for a nidaqmx 0.6.x Task.__del__ bug: after the context manager
     # closes a Task (close() -> clear()), the internal _saved_name attribute is
