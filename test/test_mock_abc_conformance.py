@@ -607,11 +607,13 @@ def test_abc_gap_b_surface_additions() -> None:
         ISigGen,
     )
 
-    assert {"get_limit_low", "get_limit_high", "get_origin"} <= IMotorCore.__abstractmethods__, (
+    motor_core_getters = {"get_limit_low", "get_limit_high", "get_origin"}
+    assert motor_core_getters <= IMotorCore.__abstractmethods__, (
         f"IMotorCore must declare the 3 controller-called getters: "
         f"{IMotorCore.__abstractmethods__}"
     )
-    assert {"get_units", "get_inverted", "ask_id", "move_home"} <= IMotor.__abstractmethods__, (
+    motor_ext_getters = {"get_units", "get_inverted", "ask_id", "move_home"}
+    assert motor_ext_getters <= IMotor.__abstractmethods__, (
         f"IMotor must declare the 4 extended getters: "
         f"{IMotor.__abstractmethods__}"
     )
