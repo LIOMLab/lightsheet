@@ -16,6 +16,7 @@ check (power clamping) runs on both paths.
 This is a BEHAVIOR test (AGENTS.md §5).
 """
 
+import contextlib
 import os
 
 import pytest
@@ -147,11 +148,7 @@ def test_lasers_set_power_clamps_to_max(device_factory: object) -> None:
     finally:
         # Cleanup — revert setpoints to 0 and active flags to False.
         # Guard each off() so a failure in one does not skip the other.
-        try:
+        with contextlib.suppress(Exception):
             dev.laser1_off()
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             dev.laser2_off()
-        except Exception:
-            pass

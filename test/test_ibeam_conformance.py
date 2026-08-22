@@ -18,6 +18,7 @@ the Mock* tests run, now behind the [real, mock] parametrize).
 This is a BEHAVIOR test (AGENTS.md §5).
 """
 
+import contextlib
 import os
 
 import pytest
@@ -154,14 +155,10 @@ def test_ibeam_set_power_clamps_to_max(device_factory: object) -> None:
             # staged channel power, so off() + close() reverts to a
             # safe state. Guarded so a failure in off() does not skip
             # close().
-            try:
+            with contextlib.suppress(Exception):
                 dev.off()
-            except Exception:
-                pass
-            try:
+            with contextlib.suppress(Exception):
                 dev.close()
-            except Exception:
-                pass
         # Mock path: skip cleanup — MockIBeam.off() would set _power=0
         # post-assertion (mutating the value the test just verified) and
         # is unnecessary for a software-only mock.
