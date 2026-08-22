@@ -67,14 +67,14 @@ class MockCamera(ICamera):
         # Flags (bool) — mirror the real Camera's instance surface.
         self.is_recording = False
         self.new_data_ready = False
-        self.recorder_timeout_status = False
 
         # Other variables — populated by open() with synthetic defaults.
+        # xsize / ysize / line_time / recorder_timeout_status keep their
+        # class-level defaults (set above) so the ABC's abstract @property
+        # slots are shadowed before __init__ runs; open() overwrites them
+        # with the real synthetic values.
         self.camera = None
-        self.xsize: int | None = None
-        self.ysize: int | None = None
         self.bytes_per_image: int | None = None
-        self.line_time: float | None = None
 
         # Configurable settings — synthetic defaults (no config.ini read
         # required; D-09 — deterministic). MockCamera with empty/missing
@@ -213,3 +213,35 @@ class MockCamera(ICamera):
     def set_shutter_mode(self, shutter_mode: str) -> None:
         self.shutter_mode = str(shutter_mode)
         return None
+
+    def set_trigger_mode(self, trigger_mode: str) -> None:
+        """No-op — the mock camera has no hardware trigger to configure."""
+        return None
+
+    def set_lightsheet_mode(self) -> None:
+        """No-op — the mock camera has no hardware timing registers to set."""
+        return None
+
+    def get_name(self) -> str | None:
+        """Return the synthetic camera name used by the Properties dialog."""
+        return "MockCamera"
+
+    def get_properties(self) -> dict[str, object]:
+        """Return synthetic camera properties matching the keys the
+        controller's ``Properties_Dialog.get_properties`` reads
+        (camera name, x/y sizes, camera/sensor/power temperatures,
+        trigger/acquire/storage modes, recorder submode). The values are
+        deterministic synthetic defaults (D-09) so the dialog renders
+        without raising under demo mode."""
+        return {
+            "camera name": "MockCamera",
+            "x": self.xsize,
+            "y": self.ysize,
+            "camera temperature": 20.0,
+            "sensor temperature": 20.0,
+            "power temperature": 20.0,
+            "trigger mode": "auto trigger",
+            "acquire mode": "auto",
+            "storage mode": "Recorder",
+            "recorder submode": "sequence non blocking",
+        }
