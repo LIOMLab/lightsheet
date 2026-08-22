@@ -37,15 +37,12 @@ from scipy import stats
 
 # FIXME - Free functions to integrate into own class (or at least cleanup/rename)
 from lightsheet.config import cfg_read
-from lightsheet.etls import ETLs
 from lightsheet.gaussian import func, gaussian
 from lightsheet.gui.ui_controller import Ui_Controller
 from lightsheet.gui.ui_properties import Ui_Properties
-from lightsheet.hal import Camera
+from lightsheet.hal import Camera, ETLs, Motors, SigGen
 from lightsheet.ibeam import IBeam
 from lightsheet.lasers import Lasers
-from lightsheet.motors import Motors
-from lightsheet.siggen import SigGen
 
 logger = logging.getLogger(__name__)
 

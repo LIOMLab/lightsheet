@@ -12,7 +12,7 @@ import numpy as np
 from nidaqmx.constants import AcquisitionType, Edge, LineGrouping
 
 from lightsheet.config import cfg_read, cfg_str2bool, cfg_write
-from lightsheet.hal.real.camera import Camera
+from lightsheet.hal.real.camera import Camera  # real→real dep (D-01)
 from lightsheet.waveforms import sawtooth, squarewave, staircase
 
 logger = logging.getLogger(__name__)
