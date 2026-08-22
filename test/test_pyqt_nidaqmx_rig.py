@@ -17,8 +17,6 @@ import time
 
 import pytest
 
-sys.path.append('.')
-
 
 def _real_nidaqmx_available():
     try:
@@ -174,12 +172,12 @@ def test_laser_task_with_full_hal_under_qapp():
     app = QApplication.instance() or QApplication(sys.argv)
 
     # Construct the full HAL as hardware_init does.
-    from src.camera import Camera
-    from src.siggen import SigGen
-    from src.motors import Motors
-    from src.lasers import Lasers
-    from src.etls import ETLs
-    from src.ibeam import IBeam
+    from lightsheet.camera import Camera
+    from lightsheet.siggen import SigGen
+    from lightsheet.motors import Motors
+    from lightsheet.lasers import Lasers
+    from lightsheet.etls import ETLs
+    from lightsheet.ibeam import IBeam
     camera = Camera()
     siggen = SigGen(camera)
     motors = Motors()

@@ -2,23 +2,23 @@
 Smoke test: proves the conftest.py hardware-SDK stubs let the HAL modules
 import on this Mac (where nidaqmx/pyserial/pco are not installed for real).
 
-If this test passes, every later plan's `from src.* import ...` will also
-succeed at collection time.
+If this test passes, every test module's `from lightsheet.* import ...` will
+also succeed at collection time.
 '''
 
 
 def test_lasers_imports():
-    from src.lasers import Lasers
+    from lightsheet.lasers import Lasers
     assert Lasers is not None
 
 
 def test_motors_imports():
-    from src.motors import Motors
+    from lightsheet.motors import Motors
     assert Motors is not None
 
 
 def test_camera_imports():
-    from src.camera import Camera
+    from lightsheet.camera import Camera
     assert Camera is not None
 
 

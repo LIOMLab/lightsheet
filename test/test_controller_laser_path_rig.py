@@ -25,13 +25,10 @@ Rig-only: skipped when the real nidaqmx driver is absent (Mac stub).
 import importlib.util
 import os
 import re
-import sys
 import threading
 from unittest.mock import Mock
 
 import pytest
-
-sys.path.append('.')
 
 
 def _real_nidaqmx_available():
@@ -94,8 +91,8 @@ def standin():
     by the running app the open fails gracefully and ibeam.error is set —
     the laser-1 (DAQ) path is still exercisable.
     '''
-    from src.lasers import Lasers
-    from src.ibeam import IBeam
+    from lightsheet.lasers import Lasers
+    from lightsheet.ibeam import IBeam
 
     s = Mock()
     s.lasers = Lasers()
@@ -200,8 +197,8 @@ def test_start_lasers_real_daq_then_siggen_create(standin):
     the nidaqmx session in a state where a subsequent siggen task
     creation on Dev1 fails — the cascade behind the create_scan error.
     '''
-    from src.camera import Camera
-    from src.siggen import SigGen
+    from lightsheet.camera import Camera
+    from lightsheet.siggen import SigGen
 
     start_lasers = _load_method('start_lasers(self)')
     # Enable auto-laser 1 so start_lasers actually writes to Dev7.
@@ -258,7 +255,7 @@ def test_real_lasers_laser1_on_nonzero_voltage_no_crash():
         pytest.skip('set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1')
     voltage = float(voltage_pct)
 
-    from src.lasers import Lasers
+    from lightsheet.lasers import Lasers
     lasers = Lasers()
     lasers.laser1_power = voltage
     lasers.laser1_on()
@@ -280,7 +277,7 @@ def test_real_lasers_laser1_on_daemon_thread_nonzero():
         pytest.skip('set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1')
     voltage = float(voltage_pct)
 
-    from src.lasers import Lasers
+    from lightsheet.lasers import Lasers
     lasers = Lasers()
     lasers.laser1_power = voltage
     errors = []

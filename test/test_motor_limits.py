@@ -11,7 +11,7 @@ motor documented in ask_id()'s docstring.
 
 import pytest
 
-from src.motors import ZaberMotor
+from lightsheet.motors import ZaberMotor
 
 
 def _make_motor():

@@ -9,12 +9,9 @@ firmware error replies) were confirmed against the physical rig on COM4
 (iBeam Smart 640, SN iBEAM-SMART-640-S-G1-15601).
 '''
 
-import sys
-sys.path.append(".")
-
 from unittest.mock import patch, MagicMock
 
-import src.ibeam as ibeam_mod
+import lightsheet.ibeam as ibeam_mod
 
 
 def _make_open_ibeam(readline_value=None, readline_side_effect=None):
@@ -26,7 +23,7 @@ def _make_open_ibeam(readline_value=None, readline_side_effect=None):
     test's own _send_cmd / status calls (otherwise open()'s echo-off would
     consume the side_effect list).
     """
-    with patch('src.ibeam.serial.Serial') as MockSerial:
+    with patch('lightsheet.ibeam.serial.Serial') as MockSerial:
         mock_ser = MagicMock()
         MockSerial.return_value = mock_ser
         mock_ser.readline.return_value = b'[OK]\r\n'
@@ -147,7 +144,7 @@ def test_ibeam_no_serial_connection_sets_error():
 #         power command can be issued).
 # --------------------------------------------------------------------------- #
 def test_ibeam_open_sends_enable_channel():
-    with patch('src.ibeam.serial.Serial') as MockSerial:
+    with patch('lightsheet.ibeam.serial.Serial') as MockSerial:
         mock_ser = MagicMock()
         MockSerial.return_value = mock_ser
         mock_ser.readline.return_value = b'[OK]\r\n'

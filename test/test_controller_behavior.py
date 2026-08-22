@@ -35,11 +35,8 @@ import datetime
 import logging
 import os
 import re
-import sys
 import threading
 from unittest.mock import Mock
-
-sys.path.append(".")
 
 _CONTROLLER_SRC = os.path.join(os.path.dirname(__file__), '..', 'gui', 'controller.py')
 
