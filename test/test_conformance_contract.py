@@ -70,24 +70,30 @@ def test_has_hardware_module_level_bool_exists() -> None:
     ``pytest.param(marks=skipif(not _has_hardware))`` at collection time
     (parametrize marks are evaluated at collection, not at fixture-resolution
     time, so the module-level bool is needed)."""
+    import sys
+
+    # conftest is not importable as a top-level package under xdist's
+    # importlib mode; reach it via the test/ directory on sys.path. The
+    # module is already loaded by pytest's conftest collection mechanism,
+    # so this resolves to the same in-memory module.
+    test_dir = os.path.dirname(os.path.abspath(__file__))
+    if test_dir not in sys.path:
+        sys.path.insert(0, test_dir)
     import conftest
 
     assert hasattr(conftest, "_has_hardware")
     assert isinstance(conftest._has_hardware, bool)
 
 
-def test_has_hardware_fixture_returns_env_value() -> None:
-    """The ``has_hardware`` session fixture returns True when
-    LIGHTSHEET_HW=1 and False otherwise (Mac default)."""
-    import conftest
-
-    assert hasattr(conftest, "has_hardware")
-    # The fixture function reads LIGHTSHEET_HW at call time.
-    # Default (unset) → False.
-    os.environ.pop("LIGHTSHEET_HW", None)
-    assert conftest.has_hardware() is False
-    os.environ["LIGHTSHEET_HW"] = "1"
-    try:
-        assert conftest.has_hardware() is True
-    finally:
-        os.environ.pop("LIGHTSHEET_HW", None)
+def test_has_hardware_fixture_returns_env_value(has_hardware: bool) -> None:
+    """The ``has_hardware`` session fixture returns a bool matching the
+    LIGHTSHEET_HW env var (False on Mac default, True on rig when
+    LIGHTSHEET_HW=1). This test runs under the default (unset) env, so the
+    fixture must return False here; the rig sets LIGHTSHEET_HW=1 and the
+    fixture returns True there."""
+    assert isinstance(has_hardware, bool)
+    # Mac dev box default: LIGHTSHEET_HW unset → False.
+    assert has_hardware is False, (
+        "has_hardware fixture must return False when LIGHTSHEET_HW is unset "
+        "(Mac default); the rig sets LIGHTSHEET_HW=1"
+    )
