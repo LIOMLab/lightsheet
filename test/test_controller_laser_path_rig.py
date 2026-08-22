@@ -8,7 +8,7 @@ cannot reproduce a corruption that builds up from the GUI's specific call
 sequence. This test closes that gap.
 
 It extracts the real _toggle_laser1 / _write_laser1_power / start_lasers
-method bodies from gui/controller.py (the AGENTS.md §5 exec-against-stand-in
+method bodies from lightsheet/gui/controller.py (the AGENTS.md §5 exec-against-stand-in
 pattern, same as test/test_laser_controls.py) and runs them against a
 stand-in self holding REAL Lasers and IBeam instances constructed exactly
 as hardware_init constructs them. This is the actual controller code running
