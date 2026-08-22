@@ -45,7 +45,6 @@ from lightsheet.hal import (
 )
 from lightsheet.waveforms import sawtooth, squarewave, staircase
 
-
 # --------------------------------------------------------------------------- #
 # Camera family (Plan 01)
 # --------------------------------------------------------------------------- #
@@ -283,8 +282,9 @@ def test_mock_motors_relative_move_enforces_travel_limits() -> None:
     motors = MockMotors()
     axis = motors.vertical
     # Move near the top, then attempt a +large relative move past the limit.
-    # The mock tracks position in software; place it near the high limit.
-    axis.position = axis.limit_high_microsteps - 1
+    # The mock tracks position in software (position_microsteps); place it
+    # near the high limit so a +50 mm delta would push past it.
+    axis.position_microsteps = axis.limit_high_microsteps - 1
     with pytest.raises(ValueError):
         axis.move_relative_position(50, "mm")
 

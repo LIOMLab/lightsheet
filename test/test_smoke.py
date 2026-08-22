@@ -13,7 +13,7 @@ def test_lasers_imports() -> None:
 
 
 def test_motors_imports() -> None:
-    from lightsheet.motors import Motors
+    from lightsheet.hal import Motors
 
     assert Motors is not None
 

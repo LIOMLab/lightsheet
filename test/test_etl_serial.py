@@ -13,7 +13,7 @@ EL-10-30 serial protocol.
 
 from unittest.mock import MagicMock
 
-import lightsheet.etls as etls_mod
+import lightsheet.hal.real.etls as etls_mod
 
 
 def _make_optotune(

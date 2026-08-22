@@ -24,6 +24,11 @@ def _make_nidaqmx_stub() -> types.ModuleType:
     tests rely on when no NI-DAQmx driver runtime is available.
     """
     nidaqmx = types.ModuleType("nidaqmx")
+    # Mark the stub as a package so ``from nidaqmx.constants import ...``
+    # (used by lightsheet/hal/real/siggen.py at module load time) resolves
+    # via sys.modules. A bare ModuleType without __path__ is not a package
+    # and submodule imports fail with "nidaqmx is not a package".
+    nidaqmx.__path__ = []  # type: ignore[attr-defined]
 
     errors = types.ModuleType("nidaqmx.errors")
 
@@ -59,6 +64,43 @@ def _make_nidaqmx_stub() -> types.ModuleType:
         close = None
 
     nidaqmx.Task = Task
+
+    # constants submodule — lightsheet/hal/real/siggen.py imports
+    # ``from nidaqmx.constants import AcquisitionType, Edge, LineGrouping``
+    # at module load time. The real nidaqmx package exposes these as enums;
+    # the stub exposes them as simple enum.IntEnum members so the import
+    # succeeds on the Mac (the values are never used because Task() raises
+    # before any DAQ call reaches them). This keeps the stub minimal (D-11)
+    # while letting the hal/real/ modules import for testing.
+    import enum
+
+    constants = types.ModuleType("nidaqmx.constants")
+
+    class AcquisitionType(enum.IntEnum):
+        FINITE = 1
+        CONTINUOUS = 2
+
+    class Edge(enum.IntEnum):
+        RISING = 1
+        FALLING = 2
+
+    class LineGrouping(enum.IntEnum):
+        CHAN_PER_LINE = 1
+        CHAN_FOR_ALL_LINES = 2
+
+    constants.AcquisitionType = AcquisitionType
+    constants.Edge = Edge
+    constants.LineGrouping = LineGrouping
+    nidaqmx.constants = constants
+    # Register the submodules in sys.modules so ``from nidaqmx.constants
+    # import ...`` and ``from nidaqmx.errors import ...`` resolve via the
+    # stub when the real nidaqmx is not usable. The parent nidaqmx module
+    # is registered by _ensure_stub; the submodules must be registered
+    # here because the import machinery looks them up in sys.modules
+    # before falling back to the parent's attributes.
+    sys.modules["nidaqmx.constants"] = constants
+    sys.modules["nidaqmx.errors"] = errors
+
     return nidaqmx
 
 

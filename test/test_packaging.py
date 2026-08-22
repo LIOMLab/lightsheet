@@ -102,11 +102,12 @@ def test_gui_controller_imports_from_foreign_cwd(tmp_path: Path) -> None:
 
 def test_lightsheet_hal_modules_import_as_top_level(tmp_path: Path) -> None:
     """The HAL modules import via the installed ``lightsheet`` package from
-    a foreign CWD. After the Phase 3 reorg (D-01), ``camera`` lives under
-    ``lightsheet.hal`` (re-exported from ``lightsheet.hal.real.camera``);
-    the remaining five device families (siggen, motors, lasers, ibeam, etls)
-    stay flat at ``lightsheet/`` top level until Wave 2 moves them, and
-    ``logging_setup`` stays top-level permanently.
+    a foreign CWD. After the Phase 3 Wave 2 reorg (D-01), ``camera``,
+    ``siggen``, ``motors``, and ``etls`` live under ``lightsheet.hal``
+    (re-exported from ``lightsheet.hal.real.*``); the remaining two device
+    families (``lasers``, ``ibeam``) stay flat at ``lightsheet/`` top level
+    until Wave 3 moves them, and ``logging_setup`` stays top-level
+    permanently.
 
     A subprocess rooted in an empty temp directory imports the full set.
     The real nidaqmx / pco / pyserial packages are installed in the venv
@@ -116,9 +117,8 @@ def test_lightsheet_hal_modules_import_as_top_level(tmp_path: Path) -> None:
         [
             sys.executable,
             "-c",
-            "from lightsheet.hal import Camera; "
-            "from lightsheet import siggen, motors, lasers, "
-            "ibeam, etls, logging_setup",
+            "from lightsheet.hal import Camera, SigGen, Motors, ETLs; "
+            "from lightsheet import lasers, ibeam, logging_setup",
         ],
         cwd=tmp_path,
         capture_output=True,
