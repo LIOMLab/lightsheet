@@ -20,17 +20,19 @@ code. See AGENTS.md §5.
 import os
 import re
 import threading
+from collections.abc import Callable
+from typing import Any
 from unittest.mock import Mock
 
 _CONTROLLER_SRC = os.path.join(os.path.dirname(__file__), "..", "gui", "controller.py")
 
 
-def _read_controller_source():
+def _read_controller_source() -> str:
     with open(_CONTROLLER_SRC) as f:
         return f.read()
 
 
-def _slice_method(src, method_sig):
+def _slice_method(src: str, method_sig: str) -> str:
     """Return the body of a method, from its `def <sig>:` line up to the
     next top-level def/@pyqtSlot decorator."""
     m = re.search(r"def " + re.escape(method_sig) + r":", src)
@@ -47,27 +49,27 @@ def _slice_method(src, method_sig):
 # --------------------------------------------------------------------------- #
 
 
-def test_pct_scaling_laser1_midrange():
+def test_pct_scaling_laser1_midrange() -> None:
     """50 % of a 5 V max -> 2.5 V (laser 1, DAQ AO)."""
     pct = 50
     max_power = 5.0
     assert pct / 100.0 * max_power == 2.5
 
 
-def test_pct_scaling_laser2_midrange():
+def test_pct_scaling_laser2_midrange() -> None:
     """50 % of a 150000 uW max -> 75000 uW (laser 2, iBeam)."""
     pct = 50
     max_power = 150000
     assert pct / 100.0 * max_power == 75000.0
 
 
-def test_pct_scaling_full():
+def test_pct_scaling_full() -> None:
     """100 % -> full Max Power (both lasers)."""
     assert 100 / 100.0 * 5.0 == 5.0
     assert 100 / 100.0 * 150000 == 150000.0
 
 
-def test_pct_scaling_zero():
+def test_pct_scaling_zero() -> None:
     """0 % -> 0 (laser off)."""
     assert 0 / 100.0 * 150000 == 0.0
     assert 0 / 100.0 * 5.0 == 0.0
@@ -85,7 +87,7 @@ def test_pct_scaling_zero():
 # --------------------------------------------------------------------------- #
 
 
-def _load_method(method_sig):
+def _load_method(method_sig: str) -> Callable[..., Any]:
     """Extract a method body from gui/controller.py and return a callable
     `func(self, pct)` that executes the real source."""
     src = _read_controller_source()
@@ -99,7 +101,7 @@ def _load_method(method_sig):
     return namespace[func_name]
 
 
-def test_write_laser1_power_skips_when_estop_set():
+def test_write_laser1_power_skips_when_estop_set() -> None:
     """When estop_event is set, _write_laser1_power must NOT call
     _update_setpoints (the DAQ write is skipped)."""
     write_laser1_power = _load_method("_write_laser1_power(self, pct)")
@@ -124,7 +126,7 @@ def test_write_laser1_power_skips_when_estop_set():
     standin.sig_message.emit.assert_not_called()
 
 
-def test_write_laser2_power_skips_when_estop_set():
+def test_write_laser2_power_skips_when_estop_set() -> None:
     """When estop_event is set, _write_laser2_power must NOT call
     ibeam.set_power (the serial write is skipped)."""
     write_laser2_power = _load_method("_write_laser2_power(self, pct)")
@@ -152,7 +154,7 @@ def test_write_laser2_power_skips_when_estop_set():
     standin.sig_message.emit.assert_not_called()
 
 
-def test_write_laser1_power_writes_when_estop_clear_and_active():
+def test_write_laser1_power_writes_when_estop_clear_and_active() -> None:
     """When estop_event is clear and laser1 is active, _write_laser1_power
     must scale the staged percentage to Volts, write that value to
     _laser1_setpoint (the attribute _update_setpoints actually sends to the
@@ -200,7 +202,7 @@ def test_write_laser1_power_writes_when_estop_clear_and_active():
     lasers._update_setpoints.assert_called_once()
 
 
-def test_write_laser1_power_skips_when_laser_inactive():
+def test_write_laser1_power_skips_when_laser_inactive() -> None:
     """When laser1 is inactive, _write_laser1_power must not write (no
     point energizing a laser the operator has toggled off)."""
     write_laser1_power = _load_method("_write_laser1_power(self, pct)")

@@ -18,7 +18,7 @@ import threading
 import pytest
 
 
-def _real_nidaqmx_available():
+def _real_nidaqmx_available() -> bool:
     try:
         spec = importlib.util.find_spec("nidaqmx")
     except ValueError:
@@ -40,7 +40,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _have_pyqt5():
+def _have_pyqt5() -> bool:
     try:
         import PyQt5  # noqa: F401
 
@@ -49,7 +49,7 @@ def _have_pyqt5():
         return False
 
 
-def _laser_terminals():
+def _laser_terminals() -> str:
     import configparser
 
     cfg = configparser.ConfigParser()
@@ -58,7 +58,7 @@ def _laser_terminals():
     return cfg["Lasers"]["Lasers Terminals"]
 
 
-def _do_laser_write(voltage, errors, tag):
+def _do_laser_write(voltage: float, errors: list[tuple[str, str]], tag: str) -> None:
     import nidaqmx
     import numpy as np
 
@@ -72,7 +72,7 @@ def _do_laser_write(voltage, errors, tag):
         errors.append((tag, repr(e)))
 
 
-def test_laser_task_from_qtimer_slot():
+def test_laser_task_from_qtimer_slot() -> None:
     """Laser Task created from a QTimer slot inside QApplication.exec_.
 
     Mirrors the GUI: the laser write fires from a Qt slot (the debounce
@@ -94,7 +94,7 @@ def test_laser_task_from_qtimer_slot():
     errors = []
     results = []
 
-    def fire():
+    def fire() -> None:
         _do_laser_write(voltage, errors, tag="qtimer_slot")
         results.append("done")
         app.quit()
@@ -111,7 +111,7 @@ def test_laser_task_from_qtimer_slot():
     assert results == ["done"]
 
 
-def test_laser_task_from_daemon_thread_under_qapp():
+def test_laser_task_from_daemon_thread_under_qapp() -> None:
     """Laser Task from a daemon thread spawned by a Qt slot (exact GUI path).
 
     The GUI's _toggle_laser1 spawns a daemon thread from the toggle-button
@@ -134,16 +134,16 @@ def test_laser_task_from_daemon_thread_under_qapp():
     errors = []
     done = threading.Event()
 
-    def worker():
+    def worker() -> None:
         _do_laser_write(voltage, errors, tag="daemon_thread")
         done.set()
 
-    def spawn():
+    def spawn() -> None:
         t = threading.Thread(target=worker, daemon=True)
         t.start()
 
         # Poll from the GUI thread until the worker is done, then quit.
-        def check():
+        def check() -> None:
             if done.is_set():
                 app.quit()
             else:
@@ -163,7 +163,7 @@ def test_laser_task_from_daemon_thread_under_qapp():
     )
 
 
-def test_laser_task_with_full_hal_under_qapp():
+def test_laser_task_with_full_hal_under_qapp() -> None:
     """Full hardware_init + laser Task from a QTimer slot under QApp.
 
     The closest repro to the GUI: construct Camera/SigGen/Motors/Lasers/
@@ -204,7 +204,7 @@ def test_laser_task_with_full_hal_under_qapp():
     errors = []
     results = []
 
-    def fire():
+    def fire() -> None:
         # The exact GUI laser-write path: real Lasers._update_setpoints
         # via laser1_on, on the GUI thread (this slot).
         lasers.laser1_power = voltage

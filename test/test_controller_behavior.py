@@ -36,17 +36,19 @@ import logging
 import os
 import re
 import threading
+from collections.abc import Callable
+from typing import Any
 from unittest.mock import Mock
 
 _CONTROLLER_SRC = os.path.join(os.path.dirname(__file__), "..", "gui", "controller.py")
 
 
-def _read_controller_source():
+def _read_controller_source() -> str:
     with open(_CONTROLLER_SRC) as f:
         return f.read()
 
 
-def _slice_method(src, method_sig):
+def _slice_method(src: str, method_sig: str) -> str:
     """Return the body of a method, from its `def <sig>:` line up to the
     next top-level def/@pyqtSlot decorator."""
     m = re.search(r"def " + re.escape(method_sig) + r":", src)
@@ -58,7 +60,9 @@ def _slice_method(src, method_sig):
     return body
 
 
-def _load_method(method_sig, extra_globals=None):
+def _load_method(
+    method_sig: str, extra_globals: dict[str, Any] | None = None
+) -> Callable[..., Any]:
     """Extract a method body from gui/controller.py and return a callable
     that executes the real source. `extra_globals` seeds the exec namespace
     with module-level names the body references (datetime, logging, ...)."""
@@ -77,7 +81,7 @@ def _load_method(method_sig, extra_globals=None):
 # --------------------------------------------------------------------------- #
 
 
-def test_start_lasers_surfaces_laser1_daq_error():
+def test_start_lasers_surfaces_laser1_daq_error() -> None:
     """When Lasers.laser1_on() leaves self.lasers.error set, start_lasers
     must emit an operator message naming the cause and reset the flag — a
     failed laser-1 DAQ start is no longer a silent no-op (G-01-1)."""
@@ -115,7 +119,7 @@ def test_start_lasers_surfaces_laser1_daq_error():
 # --------------------------------------------------------------------------- #
 
 
-def test_acquire_scan_aborts_on_recorder_timeout_before_copy():
+def test_acquire_scan_aborts_on_recorder_timeout_before_copy() -> None:
     """When camera.recorder_timeout_status is True after monitor_recorder,
     acquire_scan must emit the timeout warning, tear down the recorder and
     scanner, disarm the camera, and return BEFORE copy_recorder_images is
@@ -160,7 +164,7 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy():
 # --------------------------------------------------------------------------- #
 
 
-def test_acquire_scan_surfaces_siggen_error_before_recorder():
+def test_acquire_scan_surfaces_siggen_error_before_recorder() -> None:
     """When create_scanner() sets self.siggen.error (its bare-except on DAQ
     task creation failure), acquire_scan must emit an operator message,
     delete the scanner, disarm the camera, and return BEFORE
@@ -174,7 +178,7 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder():
     siggen.waveform_cycles = 1
     siggen.waveform_metadata = {}
 
-    def _fail_create_scanner():
+    def _fail_create_scanner() -> None:
         # create_scanner() sets siggen.error without raising.
         siggen.error = 1
         siggen.error_message = "create_scan error"
@@ -217,7 +221,7 @@ class _WidgetRaisingUI:
     method raises and this test fails — proving the worker reads the cached
     bools (self._auto_laser1 / self._auto_laser2), not Qt widgets."""
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Mock:
         if name in ("checkBox_laserOneAutomatic", "checkBox_laserTwoAutomatic"):
             raise AttributeError(
                 f"start_lasers must not read Qt widget {name} from a worker "
@@ -227,7 +231,7 @@ class _WidgetRaisingUI:
         return Mock()
 
 
-def test_start_lasers_reads_cached_flags_not_widgets():
+def test_start_lasers_reads_cached_flags_not_widgets() -> None:
     """start_lasers runs on an acquisition worker thread and must read only
     the cached auto-laser flags sampled on the GUI thread — never a Qt
     widget (AGENTS.md §11 cross-thread rule, G-01-5). With the auto-laser1
@@ -259,7 +263,7 @@ def test_start_lasers_reads_cached_flags_not_widgets():
 # --------------------------------------------------------------------------- #
 
 
-def test_preview_mode_worker_breaks_on_estop_before_frame_acquisition():
+def test_preview_mode_worker_breaks_on_estop_before_frame_acquisition() -> None:
     """With estop_event set before the worker loop starts, the E-stop poll
     at the top of preview_mode_worker's while loop must break before any
     per-frame acquisition work (start_recorder / copy_recorder_images), and
@@ -296,7 +300,7 @@ def test_preview_mode_worker_breaks_on_estop_before_frame_acquisition():
 # --------------------------------------------------------------------------- #
 
 
-def test_wavelength_labels_set_from_live_instances():
+def test_wavelength_labels_set_from_live_instances() -> None:
     """updateUi_initial_hardware_state must set the wavelength labels from
     the live self.lasers.laser1_wavelength and self.ibeam.wavelength
     instances — not hardcoded numbers — so the operator sees the real

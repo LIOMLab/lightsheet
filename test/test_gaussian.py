@@ -9,22 +9,22 @@ After the fix these return 0; normal Gaussian input is unchanged.
 from lightsheet.gaussian import fwhm
 
 
-def test_fwhm_flat_input():
+def test_fwhm_flat_input() -> None:
     """Flat input has no half-max crossing — width is undefined, return 0."""
     assert fwhm([5, 5, 5, 5, 5]) == 0
 
 
-def test_fwhm_all_below_half_max():
+def test_fwhm_all_below_half_max() -> None:
     """All-zero input: max_y/2.0 == 0, no x satisfies y[x] > 0, return 0."""
     assert fwhm([0, 0, 0, 0, 0]) == 0
 
 
-def test_fwhm_empty():
+def test_fwhm_empty() -> None:
     """Empty input must not raise; return 0."""
     assert fwhm([]) == 0
 
 
-def test_fwhm_normal_gaussian():
+def test_fwhm_normal_gaussian() -> None:
     """Regression guard: real Gaussian data must return the same positive
     integer width as the pre-fix implementation."""
     assert fwhm([0, 1, 5, 10, 5, 1, 0]) > 0

@@ -27,12 +27,14 @@ import importlib.util
 import os
 import re
 import threading
+from collections.abc import Callable
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
 
 
-def _real_nidaqmx_available():
+def _real_nidaqmx_available() -> bool:
     try:
         spec = importlib.util.find_spec("nidaqmx")
     except ValueError:
@@ -57,12 +59,12 @@ pytestmark = pytest.mark.skipif(
 _CONTROLLER_SRC = os.path.join(os.path.dirname(__file__), "..", "gui", "controller.py")
 
 
-def _read_controller_source():
+def _read_controller_source() -> str:
     with open(_CONTROLLER_SRC, encoding="utf-8", errors="replace") as f:
         return f.read()
 
 
-def _slice_method(src, method_sig):
+def _slice_method(src: str, method_sig: str) -> str:
     m = re.search(r"def " + re.escape(method_sig) + r":", src)
     assert m, f"{method_sig} is missing"
     body = src[m.start() :]
@@ -72,7 +74,7 @@ def _slice_method(src, method_sig):
     return body
 
 
-def _load_method(method_sig):
+def _load_method(method_sig: str) -> Callable[..., Any]:
     src = _read_controller_source()
     body = _slice_method(src, method_sig)
     namespace = {}
@@ -82,7 +84,7 @@ def _load_method(method_sig):
 
 
 @pytest.fixture
-def standin():
+def standin() -> Mock:
     """A stand-in Controller_MainWindow self with REAL HAL instances.
 
     Constructed exactly as hardware_init constructs them (Lasers(), IBeam()),
@@ -115,7 +117,7 @@ def standin():
     return s
 
 
-def test_toggle_laser1_real_daq_no_access_violation(standin):
+def test_toggle_laser1_real_daq_no_access_violation(standin: Mock) -> None:
     """The real _toggle_laser1 (daemon-thread toggle) against real Lasers.
 
     Reproduces the "manual 555nm" path the operator ran during UAT, where
@@ -136,7 +138,7 @@ def test_toggle_laser1_real_daq_no_access_violation(standin):
     )
 
 
-def test_toggle_laser1_on_daemon_thread_real_daq(standin):
+def test_toggle_laser1_on_daemon_thread_real_daq(standin: Mock) -> None:
     """_toggle_laser1 spawned on a daemon thread (as the GUI does it).
 
     The phase offloads the toggle to a daemon thread. If the access
@@ -147,7 +149,7 @@ def test_toggle_laser1_on_daemon_thread_real_daq(standin):
     errors = []
     done = threading.Event()
 
-    def worker():
+    def worker() -> None:
         try:
             toggle(standin)
         except BaseException as e:
@@ -164,7 +166,7 @@ def test_toggle_laser1_on_daemon_thread_real_daq(standin):
     )
 
 
-def test_write_laser1_power_real_daq_repeated(standin):
+def test_write_laser1_power_real_daq_repeated(standin: Mock) -> None:
     """The real _write_laser1_power (debounce-slot worker) repeatedly.
 
     Reproduces the spinbox-edit path: each debounce timeout spawns a daemon
@@ -187,7 +189,7 @@ def test_write_laser1_power_real_daq_repeated(standin):
     )
 
 
-def test_start_lasers_real_daq_then_siggen_create(standin):
+def test_start_lasers_real_daq_then_siggen_create(standin: Mock) -> None:
     """The real start_lasers (acquisition worker path) then siggen create.
 
     Reproduces the single_mode_worker sequence: start_lasers() energizes
@@ -237,7 +239,7 @@ def test_start_lasers_real_daq_then_siggen_create(standin):
             siggen.delete_scanner()
 
 
-def test_real_lasers_laser1_on_nonzero_voltage_no_crash():
+def test_real_lasers_laser1_on_nonzero_voltage_no_crash() -> None:
     """The real Lasers.laser1_on() at a nonzero voltage — the exact GUI path.
 
     The operator's 555nm toggle called _toggle_laser1 -> laser1_toggle ->
@@ -264,7 +266,7 @@ def test_real_lasers_laser1_on_nonzero_voltage_no_crash():
     lasers.laser1_off()
 
 
-def test_real_lasers_laser1_on_daemon_thread_nonzero():
+def test_real_lasers_laser1_on_daemon_thread_nonzero() -> None:
     """Real Lasers.laser1_on on a daemon thread (exact GUI toggle path).
 
     The GUI's _toggle_laser1 runs laser1_toggle on a daemon thread. This
@@ -285,7 +287,7 @@ def test_real_lasers_laser1_on_daemon_thread_nonzero():
     errors = []
     done = threading.Event()
 
-    def worker():
+    def worker() -> None:
         try:
             lasers.laser1_on()
             if lasers.error:

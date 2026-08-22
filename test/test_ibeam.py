@@ -14,7 +14,10 @@ from unittest.mock import MagicMock, patch
 import lightsheet.ibeam as ibeam_mod
 
 
-def _make_open_ibeam(readline_value=None, readline_side_effect=None):
+def _make_open_ibeam(
+    readline_value: bytes | None = None,
+    readline_side_effect: list[bytes] | None = None,
+) -> tuple[ibeam_mod.IBeam, MagicMock]:
     """Construct IBeam(port='COM4') and open() it against a mocked serial.Serial.
 
     Returns (ibeam, mock_ser). During open() the mock serial's readline returns
@@ -37,14 +40,14 @@ def _make_open_ibeam(readline_value=None, readline_side_effect=None):
     return ib, mock_ser
 
 
-def _last_write_text(mock_ser):
+def _last_write_text(mock_ser: MagicMock) -> str:
     """Return the most recent bytes written to the mocked serial as a str."""
     assert mock_ser.write.called, "serial.Serial.write was never called"
     written = mock_ser.write.call_args_list[-1].args[0]
     return written.decode("ascii")
 
 
-def _write_sequence(mock_ser):
+def _write_sequence(mock_ser: MagicMock) -> list[str]:
     """Return the full decoded write sequence, in issue order, as a list of str."""
     return [c.args[0].decode("ascii") for c in mock_ser.write.call_args_list]
 
@@ -55,7 +58,7 @@ def _write_sequence(mock_ser):
 # `laser on`, so this asserts on the full write sequence instead of the last
 # write.
 # --------------------------------------------------------------------------- #
-def test_ibeam_on_writes_laser_on_command():
+def test_ibeam_on_writes_laser_on_command() -> None:
     ib, mock_ser = _make_open_ibeam()
     ib.on()
     writes = _write_sequence(mock_ser)
@@ -70,7 +73,7 @@ def test_ibeam_on_writes_laser_on_command():
 # --------------------------------------------------------------------------- #
 # Test 2: off() writes `laser off` and toggles _is_on
 # --------------------------------------------------------------------------- #
-def test_ibeam_off_writes_laser_off_command():
+def test_ibeam_off_writes_laser_off_command() -> None:
     ib, mock_ser = _make_open_ibeam()
     ib.on()
     assert ib._is_on is True
@@ -84,7 +87,7 @@ def test_ibeam_off_writes_laser_off_command():
 # --------------------------------------------------------------------------- #
 # Test 3: set_power formats `channel <ch> power <uW> micro`
 # --------------------------------------------------------------------------- #
-def test_ibeam_set_power_formats_micro_command():
+def test_ibeam_set_power_formats_micro_command() -> None:
     ib, mock_ser = _make_open_ibeam()
     ib.set_power(5000)
     text = _last_write_text(mock_ser)
@@ -95,7 +98,7 @@ def test_ibeam_set_power_formats_micro_command():
 # --------------------------------------------------------------------------- #
 # Test 4: set_power clamps to max_power (HAL-boundary safety control)
 # --------------------------------------------------------------------------- #
-def test_ibeam_set_power_clamps_to_max_power():
+def test_ibeam_set_power_clamps_to_max_power() -> None:
     ib, mock_ser = _make_open_ibeam()
     # Default max_power from config defaults is 150000 uW (150 mW, rig-confirmed).
     assert ib.max_power == 150000
@@ -111,7 +114,7 @@ def test_ibeam_set_power_clamps_to_max_power():
 # Test 5: _send_cmd returns without raising on [OK] terminator and
 #         is_enabled() parses an ON/OFF status line.
 # --------------------------------------------------------------------------- #
-def test_ibeam_response_parsing_ok_terminator():
+def test_ibeam_response_parsing_ok_terminator() -> None:
     # status laser reply: a status line then the [OK] terminator.
     ib, mock_ser = _make_open_ibeam(readline_side_effect=[b"ON\r\n", b"[OK]\r\n"])
     # _send_cmd should return the collected lines without raising.
@@ -128,7 +131,7 @@ def test_ibeam_response_parsing_ok_terminator():
 # --------------------------------------------------------------------------- #
 # Test 6: calling on() with no serial connection sets error state, no raise
 # --------------------------------------------------------------------------- #
-def test_ibeam_no_serial_connection_sets_error():
+def test_ibeam_no_serial_connection_sets_error() -> None:
     ib = ibeam_mod.IBeam()  # no open() -> self.ser is None
     assert ib.ser is None
     # Must not raise.
@@ -142,7 +145,7 @@ def test_ibeam_no_serial_connection_sets_error():
 # Test 7: open() sends `echo off` then `enable <ch>` (channel live before any
 #         power command can be issued).
 # --------------------------------------------------------------------------- #
-def test_ibeam_open_sends_enable_channel():
+def test_ibeam_open_sends_enable_channel() -> None:
     with patch("lightsheet.ibeam.serial.Serial") as MockSerial:
         mock_ser = MagicMock()
         MockSerial.return_value = mock_ser
@@ -162,7 +165,7 @@ def test_ibeam_open_sends_enable_channel():
 # Test 8: on() sends `laser on` then `enable <ch>` (channel re-enabled with
 #         each emission enable).
 # --------------------------------------------------------------------------- #
-def test_ibeam_on_sends_enable_channel():
+def test_ibeam_on_sends_enable_channel() -> None:
     ib, mock_ser = _make_open_ibeam()
     # Snapshot the write count after open() so we can isolate on()'s writes.
     pre_count = len(mock_ser.write.call_args_list)
@@ -182,7 +185,7 @@ def test_ibeam_on_sends_enable_channel():
 # Test 9: a `%SYS-E` firmware rejection sets the HAL error surface naming the
 #         rejected command, without raising.
 # --------------------------------------------------------------------------- #
-def test_ibeam_sys_error_response_sets_error():
+def test_ibeam_sys_error_response_sets_error() -> None:
     ib, _ = _make_open_ibeam(
         readline_side_effect=[b"%SYS-E-00025, parameter error\r\n", b"[OK]\r\n"]
     )
@@ -203,7 +206,7 @@ def test_ibeam_sys_error_response_sets_error():
 # the write succeeded, masking the rejection from a later get_output_power()
 # fallback. The max_power clamp must remain intact regardless of rejection.
 # --------------------------------------------------------------------------- #
-def test_ibeam_set_power_does_not_update_state_on_rejection():
+def test_ibeam_set_power_does_not_update_state_on_rejection() -> None:
     ib, _ = _make_open_ibeam(
         readline_side_effect=[b"%SYS-E-00025, parameter error\r\n", b"[OK]\r\n"]
     )
@@ -223,7 +226,7 @@ def test_ibeam_set_power_does_not_update_state_on_rejection():
 # Test 11: set_power must still update self._power on a successful write
 # (regression guard for the WR-01 guard — the happy path must still record).
 # --------------------------------------------------------------------------- #
-def test_ibeam_set_power_updates_state_on_success():
+def test_ibeam_set_power_updates_state_on_success() -> None:
     ib, _ = _make_open_ibeam(readline_side_effect=[b"[OK]\r\n"])
     ib._power = 0
     ib.set_power(7500)
@@ -239,7 +242,7 @@ def test_ibeam_set_power_updates_state_on_success():
 # so on() must guard the _is_on update on the error surface to avoid the
 # HAL believing emission is enabled when the firmware refused.
 # --------------------------------------------------------------------------- #
-def test_ibeam_on_does_not_set_is_on_on_rejection():
+def test_ibeam_on_does_not_set_is_on_on_rejection() -> None:
     # 'laser on' is rejected; the subsequent enable_channel() also reads a
     # rejection so the error surface stays set across both writes.
     ib, _ = _make_open_ibeam(
@@ -264,7 +267,7 @@ def test_ibeam_on_does_not_set_is_on_on_rejection():
 # Test 13: on() must still set self._is_on = True on a successful write
 # (regression guard for the WR-02 guard).
 # --------------------------------------------------------------------------- #
-def test_ibeam_on_sets_is_on_on_success():
+def test_ibeam_on_sets_is_on_on_success() -> None:
     ib, _ = _make_open_ibeam(readline_side_effect=[b"[OK]\r\n", b"[OK]\r\n"])
     ib._is_on = False
     ib.on()
@@ -280,7 +283,7 @@ def test_ibeam_on_sets_is_on_on_success():
 # later successful commands and is mistaken for a current-call failure by
 # any caller that checks the error surface after _send_cmd returns.
 # --------------------------------------------------------------------------- #
-def test_ibeam_send_cmd_clears_stale_error_on_success():
+def test_ibeam_send_cmd_clears_stale_error_on_success() -> None:
     ib, _ = _make_open_ibeam(readline_side_effect=[b"[OK]\r\n"])
     # Plant a stale error from a hypothetical prior failed command.
     ib.error = 1
@@ -304,7 +307,7 @@ def test_ibeam_send_cmd_clears_stale_error_on_success():
 # guard pairing with the stale-clear: clearing at the top must not prevent
 # a fresh rejection from being recorded.
 # --------------------------------------------------------------------------- #
-def test_ibeam_send_cmd_sets_error_on_fresh_rejection():
+def test_ibeam_send_cmd_sets_error_on_fresh_rejection() -> None:
     ib, _ = _make_open_ibeam(
         readline_side_effect=[b"%SYS-E-00099, rejected\r\n", b"[OK]\r\n"]
     )
