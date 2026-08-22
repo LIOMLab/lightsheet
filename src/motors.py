@@ -3,8 +3,13 @@ Created on February 10, 2022
 
 '''
 
+import logging
+
 import serial
 from lightsheet.config import cfg_read, cfg_write, cfg_str2bool
+
+logger = logging.getLogger(__name__)
+
 
 class Motors:
     '''Class for translation stages'''
@@ -198,7 +203,7 @@ class ZaberMotor:
         except:
             self.error = 1
             self.error_message = "Serial port error"
-            print('Serial port error!')
+            logger.exception('Serial port error!')
         else:
             # Checks if reply is valid length
             if len(reply_bytes) == 6:

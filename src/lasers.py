@@ -3,12 +3,17 @@ Created on February 8, 2022
 '''
 
 import copy
+import logging
+
 import numpy as np
 
 import nidaqmx
 #from nidaqmx.constants import AcquisitionType, LineGrouping, Edge
 
 from lightsheet.config import cfg_read, cfg_write
+
+logger = logging.getLogger(__name__)
+
 
 class Lasers:
     '''Class for generating and sending AO signals to modulate lasers'''
@@ -122,3 +127,4 @@ class Lasers:
                 self._laser2_setpoint = 0
             self.laser1_active = False
             self.laser2_active = False
+            logger.exception('Lasers _update_setpoints failed')
