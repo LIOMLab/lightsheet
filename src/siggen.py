@@ -49,7 +49,7 @@ class SigGen:
     _cfg_defaults["ETL Right Amplitude"] = "1.0"  # In volts
     _cfg_defaults["ETL Right Offset"] = "0.5"  # In volts
 
-    def __init__(self, camera: Camera):
+    def __init__(self, camera: Camera) -> None:
         # Error status
         self.error = 0
         self.error_message = ""
@@ -76,7 +76,7 @@ class SigGen:
         self._cfg_section = "SigGen"
         self.cfg_load_ini()
 
-    def cfg_load_ini(self):
+    def cfg_load_ini(self) -> None:
         self._cfg = cfg_read(self._cfg_filename, self._cfg_section, self._cfg_defaults)
 
         # set instance variables from configuration dictionary values
@@ -110,7 +110,7 @@ class SigGen:
             ao_device + "/ao" + str(int(ao_channels[1]) - 1) + ":" + ao_channels[1]
         )
 
-    def cfg_save_ini(self):
+    def cfg_save_ini(self) -> None:
         # pack current instance variables into configuration dictionary
         self._cfg = {}
         self._cfg["AO Terminals"] = str(self.ao_terminals)
@@ -137,7 +137,7 @@ class SigGen:
 
     def update_all(
         self, left_galvo: float, right_galvo: float, left_etl: float, right_etl: float
-    ):
+    ) -> None:
         # FIXME (HARDWARE) - LOOKS LIKE ETL OR GALVO ARE REVERSED (LEFT VS RIGHT)
         galvo_etl_setpoints = np.stack(
             (
@@ -157,7 +157,7 @@ class SigGen:
             self.error_message = "update_all error"
             logger.exception("SigGen - update_all error")
 
-    def update_galvos(self, left_galvo: float, right_galvo: float):
+    def update_galvos(self, left_galvo: float, right_galvo: float) -> None:
         # FIXME (HARDWARE) - LOOKS LIKE ETL OR GALVO ARE REVERSED (LEFT VS RIGHT)
         galvo_setpoints = np.stack((np.array([right_galvo]), np.array([left_galvo])))
         # Running task
@@ -170,7 +170,7 @@ class SigGen:
             self.error_message = "update_galvos error"
             logger.exception("SigGen - update_galvos error")
 
-    def update_etls(self, left_etl: float, right_etl: float):
+    def update_etls(self, left_etl: float, right_etl: float) -> None:
         # FIXME (HARDWARE) - LOOKS LIKE ETL OR GALVO ARE REVERSED (LEFT VS RIGHT)
         etl_setpoints = np.stack((np.array([left_etl]), np.array([right_etl])))
         # Running task
@@ -183,7 +183,7 @@ class SigGen:
             self.error_message = "update_etls error"
             logger.exception("SigGen - update_etls error")
 
-    def create_scanner(self):
+    def create_scanner(self) -> None:
         """Creates Galvo + ETL scan task (AO) + Camera Exposure Control task (DO)"""
 
         # Stack galvo and etl waveforms into single array
@@ -233,26 +233,26 @@ class SigGen:
             self.error_message = "create_scan error"
             logger.exception("SigGen - create_scan error")
 
-    def start_scanner(self):
+    def start_scanner(self) -> None:
         """Start both AO and DO tasks"""
         if self.task_galvo_etl is not None and self.task_camera is not None:
             # Master task needs to be started last
             self.task_camera.start()
             self.task_galvo_etl.start()
 
-    def monitor_scanner(self):
+    def monitor_scanner(self) -> None:
         """Wait for AO and DO tasks to complete"""
         if self.task_galvo_etl is not None and self.task_camera is not None:
             self.task_camera.wait_until_done()
             self.task_galvo_etl.wait_until_done()
 
-    def stop_scanner(self):
+    def stop_scanner(self) -> None:
         """Stop AO and DO tasks"""
         if self.task_galvo_etl is not None and self.task_camera is not None:
             self.task_camera.stop()
             self.task_galvo_etl.stop()
 
-    def delete_scanner(self):
+    def delete_scanner(self) -> None:
         """Delete AO and DO tasks"""
         if self.task_galvo_etl is not None and self.task_camera is not None:
             self.task_camera.close()
@@ -260,7 +260,7 @@ class SigGen:
             self.task_galvo_etl.close()
             self.task_galvo_etl = None
 
-    def compute_scan_waveforms(self):
+    def compute_scan_waveforms(self) -> None:
         """Compute Galvo + ETL scan ramps and Camera Exposure waveforms."""
 
         if self.camera.shutter_mode == "Lightsheet":

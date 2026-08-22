@@ -104,7 +104,7 @@ def _load_method(method_sig: str) -> Callable[..., Any]:
 def test_write_laser1_power_skips_when_estop_set() -> None:
     """When estop_event is set, _write_laser1_power must NOT call
     _update_setpoints (the DAQ write is skipped)."""
-    write_laser1_power = _load_method("_write_laser1_power(self, pct)")
+    write_laser1_power = _load_method("_write_laser1_power(self, pct: float) -> None")
 
     estop_event = threading.Event()
     estop_event.set()
@@ -129,7 +129,7 @@ def test_write_laser1_power_skips_when_estop_set() -> None:
 def test_write_laser2_power_skips_when_estop_set() -> None:
     """When estop_event is set, _write_laser2_power must NOT call
     ibeam.set_power (the serial write is skipped)."""
-    write_laser2_power = _load_method("_write_laser2_power(self, pct)")
+    write_laser2_power = _load_method("_write_laser2_power(self, pct: float) -> None")
 
     estop_event = threading.Event()
     estop_event.set()
@@ -167,7 +167,7 @@ def test_write_laser1_power_writes_when_estop_clear_and_active() -> None:
     dead while the laser was on. A test that only asserted laser1_power
     passed despite the laser power never changing on the rig.
     """
-    write_laser1_power = _load_method("_write_laser1_power(self, pct)")
+    write_laser1_power = _load_method("_write_laser1_power(self, pct: float) -> None")
 
     estop_event = threading.Event()  # clear
 
@@ -205,7 +205,7 @@ def test_write_laser1_power_writes_when_estop_clear_and_active() -> None:
 def test_write_laser1_power_skips_when_laser_inactive() -> None:
     """When laser1 is inactive, _write_laser1_power must not write (no
     point energizing a laser the operator has toggled off)."""
-    write_laser1_power = _load_method("_write_laser1_power(self, pct)")
+    write_laser1_power = _load_method("_write_laser1_power(self, pct: float) -> None")
 
     estop_event = threading.Event()  # clear
 

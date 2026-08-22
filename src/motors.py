@@ -37,7 +37,7 @@ class Motors:
     _cfg_defaults["Camera Limit Low"] = "0.0"
     _cfg_defaults["Camera Limit High"] = "50.0"
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Error status
         self.error = 0
         self.error_message = ""
@@ -77,7 +77,7 @@ class Motors:
             self.camera.set_limit_low(self.camera_limit_low, self.camera_units)
             self.camera.set_limit_high(self.camera_limit_high, self.camera_units)
 
-    def cfg_load_ini(self):
+    def cfg_load_ini(self) -> None:
         self._cfg = cfg_read(self._cfg_filename, self._cfg_section, self._cfg_defaults)
         # set instance variables from configuration dictionary values
         self.port = str(self._cfg["Port"])
@@ -100,7 +100,7 @@ class Motors:
         self.camera_limit_low = float(self._cfg["Camera Limit Low"])
         self.camera_limit_high = float(self._cfg["Camera Limit High"])
 
-    def cfg_save_ini(self):
+    def cfg_save_ini(self) -> None:
         # pack current instance variables into configuration dictionary
         self._cfg = {}
         self._cfg["Port"] = str(self.port)
@@ -121,14 +121,14 @@ class Motors:
         self._cfg["Camera Limit High"] = str(self.camera_limit_high)
         self._cfg = cfg_write(self._cfg_filename, self._cfg_section, self._cfg)
 
-    def get_properties(self):
+    def get_properties(self) -> dict[str, str]:
         motors_properties = {}
         motors_properties.update({"vertical name": self.vertical.get_name()})
         motors_properties.update({"horizontal name": self.horizontal.get_name()})
         motors_properties.update({"camera name": self.camera.get_name()})
         return motors_properties
 
-    def get_positions(self):
+    def get_positions(self) -> dict[str, float]:
         motors_positions = {}
         motors_positions.update({"vertical position": self.vertical.get_position("mm")})
         motors_positions.update(
@@ -141,7 +141,7 @@ class Motors:
 class ZaberMotor:
     """Class for Zaber's T-LS series linear stage motor control"""
 
-    def __init__(self, port: str, device_number: int):
+    def __init__(self, port: str, device_number: int) -> None:
         # Error status
         self.error = 0
         self.error_message = ""
@@ -165,7 +165,7 @@ class ZaberMotor:
         self.device_number = device_number
         self.ask_id()
 
-    def _motorIO(self, cmd_no, cmd_param):
+    def _motorIO(self, cmd_no: int, cmd_param: int) -> int:
         # Default return
         reply_data = 0
 
@@ -249,7 +249,7 @@ class ZaberMotor:
                 self.error_message = "No valid reply received"
         return reply_data
 
-    def ask_id(self):
+    def ask_id(self) -> int:
         """Returns the ID of the motor.
 
         Supported devices ID are:
@@ -292,45 +292,45 @@ class ZaberMotor:
             self.name = "Device not found"
         return self.id
 
-    def set_units(self, units: str):
+    def set_units(self, units: str) -> None:
         self.units = units
 
-    def set_inverted(self, inverted: bool):
+    def set_inverted(self, inverted: bool) -> None:
         self.inverted = inverted
 
-    def set_limit_low(self, position, units):
+    def set_limit_low(self, position: float, units: str) -> None:
         self.limit_low_microsteps = self.position_to_microsteps(position, units)
 
-    def set_limit_high(self, position, units):
+    def set_limit_high(self, position: float, units: str) -> None:
         self.limit_high_microsteps = self.position_to_microsteps(position, units)
 
-    def set_origin(self, position, units):
+    def set_origin(self, position: float, units: str) -> None:
         self.origin_microsteps = self.position_to_microsteps(position, units)
 
-    def get_units(self):
+    def get_units(self) -> str:
         return self.units
 
-    def get_inverted(self):
+    def get_inverted(self) -> bool:
         return self.inverted
 
-    def get_limit_low(self, units):
+    def get_limit_low(self, units: str) -> float:
         limit_low_units = self.microsteps_to_position(self.limit_low_microsteps, units)
         return limit_low_units
 
-    def get_limit_high(self, units):
+    def get_limit_high(self, units: str) -> float:
         limit_high_units = self.microsteps_to_position(
             self.limit_high_microsteps, units
         )
         return limit_high_units
 
-    def get_origin(self, units):
+    def get_origin(self, units: str) -> float:
         origin_units = self.microsteps_to_position(self.origin_microsteps, units)
         return origin_units
 
-    def get_name(self):
+    def get_name(self) -> str:
         return self.name
 
-    def get_position(self, units):
+    def get_position(self, units: str) -> float:
         """Returns the current position of the device, converted to the unit specified.
 
         Parameter:
@@ -346,7 +346,7 @@ class ZaberMotor:
             position = 0
         return position
 
-    def move_home(self):
+    def move_home(self) -> None:
         """Moves the device to its physical home position.
 
         Sends Zaber command 1 (physical home). This does NOT honor the
@@ -359,7 +359,7 @@ class ZaberMotor:
             cmd_param = 0
             self._motorIO(cmd_no, cmd_param)
 
-    def move_absolute_position(self, absolute_position, units):
+    def move_absolute_position(self, absolute_position: float, units: str) -> None:
         """Moves the device to a specified absolute position.
 
         The target position is validated against the configured travel
@@ -388,7 +388,7 @@ class ZaberMotor:
             cmd_no = 20
             self._motorIO(cmd_no, target_microsteps)
 
-    def move_relative_position(self, relative_position, units):
+    def move_relative_position(self, relative_position: float, units: str) -> None:
         """Moves the device to a specified relative position.
 
         The RESULTING position (current position + delta) is validated
@@ -431,7 +431,7 @@ class ZaberMotor:
             cmd_no = 21
             self._motorIO(cmd_no, delta_microsteps)
 
-    def microsteps_to_position(self, microsteps, units: str = "mm"):
+    def microsteps_to_position(self, microsteps: int, units: str = "mm") -> float:
         """Converts microsteps into position
 
         Parameters:
@@ -458,7 +458,7 @@ class ZaberMotor:
 
         return position
 
-    def position_to_microsteps(self, position, units: str = "mm"):
+    def position_to_microsteps(self, position: float, units: str = "mm") -> int:
         """Converts position into microsteps
 
         Parameters:

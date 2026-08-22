@@ -28,7 +28,7 @@ class Camera:
     _cfg_defaults["Recorder Timeout Floor"] = "5"
     _cfg_defaults["Recorder Timeout Safety Factor"] = "3.0"
 
-    def __init__(self, verbose=False):
+    def __init__(self, verbose: bool = False) -> None:
         self.verbose = verbose
 
         # Flags (bool)
@@ -51,7 +51,7 @@ class Camera:
         # Automatically open camera on instance creation
         self.open()
 
-    def cfg_load_ini(self):
+    def cfg_load_ini(self) -> None:
         # read configuration from ini file
         self._cfg = cfg_read(self._cfg_filename, self._cfg_section, self._cfg_defaults)
         # set instance variables from read configuration dictionary values
@@ -66,7 +66,7 @@ class Camera:
             self._cfg["Recorder Timeout Safety Factor"]
         )
 
-    def cfg_save_ini(self):
+    def cfg_save_ini(self) -> None:
         # pack current instance variables into configuration dictionary
         self._cfg = {}
         self._cfg["Shutter Mode"] = str(self.shutter_mode)
@@ -78,7 +78,7 @@ class Camera:
         # write configuration to ini file
         self._cfg = cfg_write(self._cfg_filename, self._cfg_section, self._cfg)
 
-    def open(self):
+    def open(self) -> None:
         """Open a camera"""
         if self.verbose:
             print("Opening camera...")
@@ -109,7 +109,7 @@ class Camera:
                 print(" Camera already opened.")
         return None
 
-    def close(self):
+    def close(self) -> None:
         """Closes an opened camera"""
         if self.verbose:
             print("Closing camera...")
@@ -123,7 +123,7 @@ class Camera:
                 print(" Camera already closed.")
         return None
 
-    def arm(self):
+    def arm(self) -> None:
         """docstring"""
         if self.camera is not None:
             if self.verbose:
@@ -149,7 +149,7 @@ class Camera:
                 print(" Line time:", str(self.line_time))
         return None
 
-    def arm_scan(self):
+    def arm_scan(self) -> None:
         # Clear any stale timeout flag from a previous run BEFORE the
         # hardware-present guard. A worker that died mid-timeout can leave
         # recorder_timeout_status=True; without this unconditional reset the
@@ -241,7 +241,7 @@ class Camera:
             self.camera.sdk.set_image_parameters(self.xsize, self.ysize)
         return None
 
-    def disarm(self):
+    def disarm(self) -> None:
         """docstring"""
         if self.camera is not None:
             if self.verbose:
@@ -254,7 +254,7 @@ class Camera:
 
     # Managing recording sessions
 
-    def start_recorder(self, number_of_images):
+    def start_recorder(self, number_of_images: int) -> None:
         """docstring"""
         if self.camera is not None:
             try:
@@ -271,7 +271,7 @@ class Camera:
                     print(" Recording session started.")
         return None
 
-    def _compute_per_image_time(self):
+    def _compute_per_image_time(self) -> float:
         """Estimate the time required to acquire a single image, in seconds,
         based on the current shutter mode.
 
@@ -284,7 +284,7 @@ class Camera:
         else:  # Rolling or Global
             return self.exposure_time
 
-    def monitor_recorder(self, number_of_images: int):
+    def monitor_recorder(self, number_of_images: int) -> None:
         """Monitor the camera recorder until all images arrive or the timeout
         expires. The timeout scales with the number of images and the
         per-image time (shutter-mode dependent), floored by both a
@@ -337,14 +337,14 @@ class Camera:
                     time.sleep(0.01)
         return None
 
-    def stop_recorder(self):
+    def stop_recorder(self) -> None:
         """docstring"""
         if self.is_recording:
             self.camera.stop()
             self.is_recording = False
         return None
 
-    def copy_recorder_images(self, number_of_images):
+    def copy_recorder_images(self, number_of_images: int) -> np.ndarray:
         """docstring"""
         if self.new_data_ready:
             images, _metadatas = self.camera.images(blocksize=number_of_images)
@@ -355,7 +355,7 @@ class Camera:
             )
         return images
 
-    def delete_recorder(self):
+    def delete_recorder(self) -> None:
         """Delete the camera recorder session.
 
         Does NOT reset recorder_timeout_status — that flag is set by
@@ -375,7 +375,7 @@ class Camera:
 
     ### setters
 
-    def set_exposure_time(self, exposure_time_ms: int):
+    def set_exposure_time(self, exposure_time_ms: int) -> None:
         """Set the exposure time (in ms) for the camera"""
         if self.camera is not None:
             if self.verbose:
@@ -383,7 +383,7 @@ class Camera:
             self.camera.sdk.set_delay_exposure_time(0, "ms", exposure_time_ms, "ms")
         return None
 
-    def set_lightsheet_mode(self):
+    def set_lightsheet_mode(self) -> None:
         """Set lightsheet timing according to current instance settings"""
         if self.camera is not None:
             self.camera.sdk.set_cmos_line_timing("on", self.lightsheet_line_time)
@@ -407,7 +407,7 @@ class Camera:
                 print("Camera line delay is:", str(line_delay))
         return None
 
-    def set_trigger_mode(self, trigger_mode: str):
+    def set_trigger_mode(self, trigger_mode: str) -> None:
         """Set the trigger mode for the camera
 
         'auto_trigger':         Exposure of a new image is started automatically,
@@ -446,7 +446,7 @@ class Camera:
 
     ### getters
 
-    def get_name(self):
+    def get_name(self) -> str | None:
         """Returns the camera name"""
         if self.camera is not None:
             cam_name = {}
@@ -458,7 +458,7 @@ class Camera:
             name = None
         return name
 
-    def get_camera_temperature(self):
+    def get_camera_temperature(self) -> float | None:
         """Returns the current internal temperatures in Celcius"""
         if self.camera is not None:
             cam_temperatures = {}
@@ -470,7 +470,7 @@ class Camera:
             camera_temperature = None
         return camera_temperature
 
-    def get_sensor_temperature(self):
+    def get_sensor_temperature(self) -> float | None:
         """Returns the current sensor temperatures in Celcius"""
         if self.camera is not None:
             cam_temperatures = {}
@@ -482,7 +482,7 @@ class Camera:
             sensor_temperature = None
         return sensor_temperature
 
-    def get_power_temperature(self):
+    def get_power_temperature(self) -> float | None:
         """Returns the current power supply temperatures in Celcius"""
         if self.camera is not None:
             cam_temperatures = {}
@@ -494,7 +494,7 @@ class Camera:
             power_temperature = None
         return power_temperature
 
-    def get_xsize(self):
+    def get_xsize(self) -> int | None:
         """Returns the current armed image x-size of the camera"""
         if self.camera is not None:
             cam_sizes = {}
@@ -506,7 +506,7 @@ class Camera:
             current_xsize = None
         return current_xsize
 
-    def get_ysize(self):
+    def get_ysize(self) -> int | None:
         """Returns the current armed image y-size of the camera"""
         if self.camera is not None:
             cam_sizes = {}
@@ -518,7 +518,7 @@ class Camera:
             current_ysize = None
         return current_ysize
 
-    def get_trigger_mode(self):
+    def get_trigger_mode(self) -> str | None:
         """Returns the current trigger mode"""
         if self.camera is not None:
             cam_trigger_mode = {}
@@ -530,7 +530,7 @@ class Camera:
             trigger_mode = None
         return trigger_mode
 
-    def get_acquire_mode(self):
+    def get_acquire_mode(self) -> str | None:
         """Returns the current acquire mode"""
         if self.camera is not None:
             cam_acquire_mode = {}
@@ -542,7 +542,7 @@ class Camera:
             acquire_mode = None
         return acquire_mode
 
-    def get_storage_mode(self):
+    def get_storage_mode(self) -> str | None:
         """Returns the current storage mode"""
         if self.camera is not None:
             cam_storage_mode = {}
@@ -554,7 +554,7 @@ class Camera:
             storage_mode = None
         return storage_mode
 
-    def get_recorder_submode(self):
+    def get_recorder_submode(self) -> str | None:
         """Returns the current recorder mode (only if storage mode is recorder)"""
         if self.camera is not None:
             cam_recorder_mode = {}
@@ -566,7 +566,7 @@ class Camera:
             recorder_mode = None
         return recorder_mode
 
-    def get_exposure_time(self):
+    def get_exposure_time(self) -> int | None:
         """Returns the current exposure time"""
         if self.camera is not None:
             cam_delay_exposure_time = {}
@@ -578,7 +578,7 @@ class Camera:
             exposure_time = None
         return exposure_time
 
-    def get_exposure_timebase(self):
+    def get_exposure_timebase(self) -> str | None:
         """Returns the exposure timebase"""
         if self.camera is not None:
             cam_delay_exposure_time = {}
@@ -590,7 +590,7 @@ class Camera:
             exposure_timebase = None
         return exposure_timebase
 
-    def get_delay_time(self):
+    def get_delay_time(self) -> int | None:
         """Returns the current delay time"""
         if self.camera is not None:
             cam_delay_exposure_time = {}
@@ -602,7 +602,7 @@ class Camera:
             delay_time = None
         return delay_time
 
-    def get_delay_timebase(self):
+    def get_delay_timebase(self) -> str | None:
         """Returns the delay timebase"""
         if self.camera is not None:
             cam_delay_exposure_time = {}
@@ -614,7 +614,7 @@ class Camera:
             delay_timebase = None
         return delay_timebase
 
-    def get_pixel_rates(self):
+    def get_pixel_rates(self) -> dict[str, object] | list:
         """Returns available pixel rates"""
         if self.camera is not None:
             cam_description = {}
@@ -626,7 +626,7 @@ class Camera:
             pixel_rates = {}
         return pixel_rates
 
-    def get_pixel_rate(self):
+    def get_pixel_rate(self) -> str | None:
         """Returns the pixel rate"""
         if self.camera is not None:
             cam_pixel_rate = {}
@@ -638,7 +638,7 @@ class Camera:
             pixel_rate = None
         return pixel_rate
 
-    def get_readout_format(self):
+    def get_readout_format(self) -> str | None:
         """
         Returns the SCCMOS readout format
             0x0000  SCCMOS_FORMAT_TOP_BOTTOM
@@ -661,7 +661,7 @@ class Camera:
 
     # compounded methods
 
-    def get_properties(self):
+    def get_properties(self) -> dict[str, object]:
         if self.camera is not None:
             if self.verbose:
                 print("Retrieving camera properties and current settings...")
@@ -697,7 +697,7 @@ class Camera:
                 print("Camera not open - Cannot retrieve properties")
         return cam_properties
 
-    def grab_image(self, exposure_time_ms: int = 100):
+    def grab_image(self, exposure_time_ms: int = 100) -> np.ndarray:
         """
         All-in-one function to grab a single image from the camera
         """

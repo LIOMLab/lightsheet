@@ -6,17 +6,17 @@ import numpy as np
 
 
 # Math functions
-def gaussian(x, a, x0, sigma):
+def gaussian(x: np.ndarray, a: float, x0: float, sigma: float) -> np.ndarray:
     """1D Gaussian Function"""
     return a * np.exp(-((x - x0) ** 2) / (2 * sigma**2))
 
 
-def func(x, w0, x0, xR, offset):
+def func(x: np.ndarray, w0: float, x0: float, xR: float, offset: float) -> np.ndarray:
     """Gaussian Beam Width Function"""
     return w0 * (1 + ((x - x0) / xR) ** 2) ** 0.5 + offset
 
 
-def fwhm(y):
+def fwhm(y: list[float]) -> int:
     """Full width at half maximum"""
     if len(y) == 0:
         return 0

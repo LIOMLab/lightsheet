@@ -67,10 +67,3 @@ unsound-return-statement = "error"
 
 [tool.ty.terminal]
 error-on-warning = true
-
-[[tool.ty.overrides]]
-include = ["gui/controller.py"]
-
-[tool.ty.overrides.rules]
-missing-type-argument = "warn"
-unsound-return-statement = "warn"

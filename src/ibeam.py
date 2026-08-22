@@ -56,7 +56,7 @@ class IBeam:
     _cfg_settings["Power"] = "0"  # In uW
     _cfg_settings["Max Power"] = "150000"  # In uW (150 mW diode limit, rig-confirmed)
 
-    def __init__(self, port=None):
+    def __init__(self, port: str | None = None) -> None:
         # HAL error status (mirrors src/lasers.py and src/etls.py convention).
         self.error = 0
         self.error_message = ""
@@ -83,7 +83,7 @@ class IBeam:
     # ------------------------------------------------------------------ #
     # Lifecycle
     # ------------------------------------------------------------------ #
-    def open(self):
+    def open(self) -> None:
         """Open the serial port and disable command echo."""
         try:
             self.ser = serial.Serial()
@@ -108,7 +108,7 @@ class IBeam:
             raise
         return None
 
-    def close(self):
+    def close(self) -> None:
         """Turn the laser off and release the serial port."""
         try:
             if self.ser is not None:
@@ -125,7 +125,7 @@ class IBeam:
     # ------------------------------------------------------------------ #
     # Laser control
     # ------------------------------------------------------------------ #
-    def on(self):
+    def on(self) -> None:
         """Enable laser emission (global enable)."""
         try:
             self._send_cmd("laser on")
@@ -148,7 +148,7 @@ class IBeam:
             logger.exception("IBeam on failed")
         return None
 
-    def off(self):
+    def off(self) -> None:
         """Disable laser emission (global disable)."""
         try:
             self._send_cmd("laser off")
@@ -167,7 +167,7 @@ class IBeam:
             logger.exception("IBeam off failed")
         return None
 
-    def enable_channel(self, channel=None):
+    def enable_channel(self, channel: int | None = None) -> None:
         """Enable a diode channel so channel power commands take effect.
 
         The iBeam Smart protocol gates output on both the global emission
@@ -186,7 +186,7 @@ class IBeam:
             logger.exception("IBeam enable_channel failed")
         return None
 
-    def set_power(self, power_uw):
+    def set_power(self, power_uw: int) -> None:
         """Set channel power in microwatts, clamped to [0, max_power].
 
         The clamp is a physical-safety control: it bounds the maximum power
@@ -210,7 +210,7 @@ class IBeam:
             logger.exception("IBeam set_power failed")
         return None
 
-    def get_output_power(self):
+    def get_output_power(self) -> int:
         """Read the current channel output power in microwatts.
 
         Sends `show level power` and parses the `CH<n>, PWR: <value> mW` line
@@ -240,7 +240,7 @@ class IBeam:
             logger.exception("IBeam get_output_power failed")
         return self._power
 
-    def is_enabled(self):
+    def is_enabled(self) -> bool:
         """Return True if laser emission is currently enabled."""
         try:
             response = self._send_cmd("status laser")
@@ -255,7 +255,7 @@ class IBeam:
             logger.exception("IBeam is_enabled failed")
         return False
 
-    def reboot(self):
+    def reboot(self) -> None:
         """Send `reset system` to recover from protocol desync."""
         try:
             self._send_cmd("reset system")
@@ -268,7 +268,7 @@ class IBeam:
     # ------------------------------------------------------------------ #
     # Serial I/O
     # ------------------------------------------------------------------ #
-    def _send_cmd(self, cmd):
+    def _send_cmd(self, cmd: str) -> list[str]:
         """Send an ASCII command and read lines until the [OK] or CMD> terminator.
 
         Acquires the per-instance lock, flushes the input buffer (reply-lag

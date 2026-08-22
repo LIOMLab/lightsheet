@@ -22,7 +22,7 @@ class ETLs:
     _cfg_settings["Port ETL Left"] = "COM5"
     _cfg_settings["Port ETL Right"] = "COM6"
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Error status
         self.error = 0
         self.error_message = ""
@@ -39,7 +39,7 @@ class ETLs:
         self.port_etl_left = str(self.cfg_settings["Port ETL Left"])
         self.port_etl_right = str(self.cfg_settings["Port ETL Right"])
 
-    def open(self):
+    def open(self) -> None:
         try:
             self.etl_left = Optotune(self.port_etl_left)
             self.etl_left.connect()
@@ -58,31 +58,31 @@ class ETLs:
         else:
             print("Right ETL detected")
 
-    def set_analog_mode(self):
+    def set_analog_mode(self) -> None:
         if self.etl_left is not None:
             self.etl_left.mode("analog")
         if self.etl_right is not None:
             self.etl_right.mode("analog")
 
-    def set_current_mode(self):
+    def set_current_mode(self) -> None:
         if self.etl_left is not None:
             self.etl_left.mode("current")
         if self.etl_right is not None:
             self.etl_right.mode("current")
 
-    def get_mode(self):
+    def get_mode(self) -> None:
         if self.etl_left is not None:
             print(f"Left ETL mode is {self.etl_left.mode()}")
         if self.etl_right is not None:
             print(f"Right ETL mode is {self.etl_right.mode()}")
 
-    def get_temperature(self):
+    def get_temperature(self) -> None:
         if self.etl_left is not None:
             print(f"Left ETL temperature: {self.etl_left.temp_reading()}")
         if self.etl_right is not None:
             print(f"Right ETL temperature: {self.etl_right.temp_reading()}")
 
-    def close(self):
+    def close(self) -> None:
         if self.etl_left is not None:
             print("Resetting and closing Left ETL")
             self.etl_left.handshake()
@@ -94,21 +94,26 @@ class ETLs:
 
 
 class Optotune:
-    def __init__(self, port=None):
+    def __init__(self, port: str | None = None) -> None:
         self.port = port
         self.crc_table = self._init_crc_table()
         self.ser = None
         self._current = None
         self._current_max = 292.84
 
-    def __enter__(self):
+    def __enter__(self) -> "Optotune":
         self.connect()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object | None,
+    ) -> None:
         self.close(soft_close=False)
 
-    def connect(self):
+    def connect(self) -> None:
         """
         Open the serial port and connect
         """
@@ -125,7 +130,7 @@ class Optotune:
             self.ser = None
             raise
 
-    def close(self, soft_close=None):
+    def close(self, soft_close: bool | None = None) -> None:
         """
         Close the serial port
 
@@ -143,7 +148,12 @@ class Optotune:
             self.ser.close()
             del self.ser
 
-    def _send_cmd(self, cmd, include_crc=None, wait_for_resp=None):
+    def _send_cmd(
+        self,
+        cmd: bytes,
+        include_crc: bool | None = None,
+        wait_for_resp: bool | None = None,
+    ) -> bytes:
         """
         Send a command
 
@@ -178,7 +188,7 @@ class Optotune:
                 raise (serial.SerialException(f"Command error: {resp_content}"))
             return resp_content
 
-    def calc_crc(self, data):
+    def calc_crc(self, data: bytes) -> bytes:
         """
         Calculate a CRC
         """
@@ -188,7 +198,7 @@ class Optotune:
             crc = (crc >> 8) ^ self.crc_table[(tmp & 0x00FF)]
         return crc.to_bytes(2, byteorder="little")
 
-    def _init_crc_table(self, polynomial=None):
+    def _init_crc_table(self, polynomial: int | None = None) -> list[int]:
         """
         Initialize the lookup table for CRC calculation
         """
@@ -205,14 +215,14 @@ class Optotune:
             table.append(crc)
         return table
 
-    def handshake(self):
+    def handshake(self) -> bytes:
         """
         Return 'start' to confirm connection (ID #0101)
         """
         r = self._send_cmd(b"Start", include_crc=False)
         return r
 
-    def firmwaretype(self):
+    def firmwaretype(self) -> bytes:
         """
         Return firmware type (ID #0103)
         """
@@ -220,7 +230,7 @@ class Optotune:
         self._firmwaretype = r[1]
         return self._firmwaretype
 
-    def firmwarebranch(self):
+    def firmwarebranch(self) -> bytes:
         """
         Return firmware branch (ID #0104)
         """
@@ -228,7 +238,7 @@ class Optotune:
         self._firmwarebranch = r[1]
         return self._firmwarebranch
 
-    def partnumber(self):
+    def partnumber(self) -> bytes:
         """
         Return part number (ID #0105)
         """
@@ -236,7 +246,7 @@ class Optotune:
         self._partnumber = r[1:4]
         return self._partnumber
 
-    def current_upper(self, value=None):
+    def current_upper(self, value: float | None = None) -> float:
         """
         Get/set upper software current limit (ID #0402)
 
@@ -265,7 +275,7 @@ class Optotune:
         )
         return self._current_upper
 
-    def current_lower(self, value=None):
+    def current_lower(self, value: float | None = None) -> float:
         """
         Get/set lower software current limit (ID #0403)
 
@@ -294,7 +304,7 @@ class Optotune:
         )
         return self._current_lower
 
-    def firmwareversion(self):
+    def firmwareversion(self) -> str:
         """
         Return the firmware version (ID #0701)
 
@@ -310,7 +320,7 @@ class Optotune:
         )
         return self._firmwarerevision
 
-    def deviceid(self):
+    def deviceid(self) -> bytes:
         """
         Return device ID (ID #0901)
         """
@@ -318,7 +328,7 @@ class Optotune:
         self._deviceid = r[2:]
         return self._deviceid
 
-    def gain(self, value=None):
+    def gain(self, value: float | None = None) -> float | tuple[bytes, float, float]:
         """
         Get/set the gain variable for focal power drift compensation (ID #1100)
 
@@ -346,7 +356,7 @@ class Optotune:
             focal_min = (int.from_bytes(r[5:7], byteorder="big") / 200) - 5
             return (status, focal_max, focal_min)
 
-    def serialnumber(self):
+    def serialnumber(self) -> bytes:
         """
         Return serial number (ID #0102)
         """
@@ -354,7 +364,7 @@ class Optotune:
         self._serialnumber = r[1:]
         return self._serialnumber
 
-    def current(self, value=None):
+    def current(self, value: float | None = None) -> float:
         """
         Get/set current (ID #0201)
 
@@ -378,7 +388,7 @@ class Optotune:
             self._current = value
         return self._current
 
-    def siggen_upper(self, value=None):
+    def siggen_upper(self, value: float | None = None) -> float:
         """
         Get/set signal generator upper current swing limit (ID #0305)
 
@@ -405,7 +415,7 @@ class Optotune:
             self._siggen_upper = value
         return self._siggen_upper
 
-    def siggen_lower(self, value=None):
+    def siggen_lower(self, value: float | None = None) -> float:
         """
         Get/set signal generator lower current swing limit (ID #0306)
 
@@ -432,7 +442,7 @@ class Optotune:
             self._siggen_lower = value
         return self._siggen_lower
 
-    def siggen_freq(self, value=None):
+    def siggen_freq(self, value: float | None = None) -> float:
         """
         Get/set signal generator frequency (ID #0307)
 
@@ -455,7 +465,9 @@ class Optotune:
             self._siggen_freq = value
         return self._siggen_freq
 
-    def temp_limits(self, value=None):
+    def temp_limits(
+        self, value: tuple[float, float] | None = None
+    ) -> tuple[float, float]:
         """
         Get/set the upper and lower temperature limits to channel A (ID #0309)
 
@@ -483,7 +495,7 @@ class Optotune:
                 int.from_bytes(r[3:5], byteorder="big", signed=True) / 200 - 5,
             )
 
-    def focalpower(self, value=None):
+    def focalpower(self, value: float | None = None) -> float:
         """
         Get/set focal power (ID #0310)
 
@@ -509,7 +521,7 @@ class Optotune:
             self._focalpower = value
         return self._focalpower
 
-    def current_max(self, value=None):
+    def current_max(self, value: float | None = None) -> float:
         """
         Get/set maximum firmware output current (ID #0401)
 
@@ -533,7 +545,7 @@ class Optotune:
             self._current_max = value
         return self._current_max
 
-    def temp_reading(self):
+    def temp_reading(self) -> float:
         """
         Return lens temperature (ID #0501)
         """
@@ -543,7 +555,7 @@ class Optotune:
         )
         return self._temp_reading
 
-    def get_status(self):
+    def get_status(self) -> bytes:
         """
         Return firmware status information (ID #0503)
         """
@@ -551,7 +563,7 @@ class Optotune:
         self._status = r[1:]
         return self._status
 
-    def eeprom_read(self, value):
+    def eeprom_read(self, value: int) -> bytes:
         """
         Read byte from EEPROM (ID #0609)
 
@@ -568,7 +580,7 @@ class Optotune:
         r = self._send_cmd(b"Zr" + data)
         return r[1]
 
-    def analog_input(self):
+    def analog_input(self) -> int:
         """
         Return analog reading (ID #1001)
 
@@ -578,7 +590,7 @@ class Optotune:
         r = self._send_cmd(b"GAA")
         return int.from_bytes(r[3:5], byteorder="big", signed=False)
 
-    def eeprom_write(self, address, value):
+    def eeprom_write(self, address: int, value: int) -> bytes:
         """
         Write byte to EEPROM (ID #9998)
 
@@ -597,7 +609,7 @@ class Optotune:
         r = self._send_cmd(b"Zw" + data_a + data_b)
         return r[1]
 
-    def eeprom_contents(self):
+    def eeprom_contents(self) -> bytes:
         """
         Dump contents of EEPROM (ID #9999)
 
@@ -607,7 +619,7 @@ class Optotune:
         r = self._send_cmd(b"D\x00\x00")
         return r[1:]
 
-    def mode(self, mode_str=None):
+    def mode(self, mode_str: str | None = None) -> str:
         """
         Get/set operation mode (ID #0301, 0302, 0303, 0304, 0308, 0321)
 
