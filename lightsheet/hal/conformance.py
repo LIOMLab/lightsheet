@@ -128,10 +128,10 @@ CAMERA_CONTRACT = ConformanceContract(
         "stop_recorder",
         "delete_recorder",
     ),
-    # read_attrs mirrors every @property + @abstractmethod slot declared on
-    # ICameraCore (D-15 — the contract is the structural drift catch, so it
-    # must be at least as strict as the ABC). error / error_message are the
-    # cross-cutting HAL error surface (AGENTS.md §10) declared on the ABC.
+    # read_attrs mirrors every class-level annotation declared on ICameraCore
+    # (D-15 — the contract is the structural drift catch, so it must be at
+    # least as strict as the ABC). error / error_message are the cross-cutting
+    # HAL error surface (AGENTS.md §10) declared on the ABC.
     read_attrs=(
         "xsize",
         "ysize",
@@ -149,19 +149,17 @@ CAMERA_CONTRACT = ConformanceContract(
 
 SIGGEN_CONTRACT = ConformanceContract(
     lifecycle_methods=(
-        "arm",
-        "disarm",
         "compute_scan_waveforms",
         "create_scanner",
         "start_scanner",
         "stop_scanner",
         "delete_scanner",
     ),
-    # read_attrs mirrors every @property + @abstractmethod slot declared on
-    # ISigGenCore (D-15). The previous contract listed only the galvo
-    # amplitudes + error surface, so a mock that dropped an ETL attr or
-    # waveform_cycles/waveform_metadata would pass conformance — weakening
-    # the drift catch. Complete the list to match the ABC.
+    # read_attrs mirrors every class-level annotation declared on ISigGenCore
+    # (D-15). The previous contract listed only the galvo amplitudes + error
+    # surface, so a mock that dropped an ETL attr or waveform_cycles/
+    # waveform_metadata would pass conformance — weakening the drift catch.
+    # Complete the list to match the ABC.
     read_attrs=(
         "galvo_left_amplitude",
         "galvo_right_amplitude",
@@ -203,11 +201,10 @@ LASERS_CONTRACT = ConformanceContract(
         "laser2_on",
         "laser2_off",
     ),
-    # read_attrs mirrors every @property + @abstractmethod slot declared on
-    # ILasersCore (D-15). The previous contract listed only the laser1
-    # attrs + error surface, so a mock that dropped a laser2 attr would
-    # pass conformance — weakening the drift catch. Complete the list to
-    # match the ABC.
+    # read_attrs mirrors every class-level annotation declared on ILasersCore
+    # (D-15). The previous contract listed only the laser1 attrs + error
+    # surface, so a mock that dropped a laser2 attr would pass conformance
+    # — weakening the drift catch. Complete the list to match the ABC.
     read_attrs=(
         "laser1_wavelength",
         "laser2_wavelength",
