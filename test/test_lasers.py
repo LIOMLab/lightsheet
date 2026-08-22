@@ -1,5 +1,6 @@
 """
-Unit tests for src/lasers.py — laser write-failure state revert and Max Power clamping.
+Unit tests for lightsheet/lasers.py — laser write-failure state revert
+and Max Power clamping.
 
 The conftest.py stub makes nidaqmx.Task() raise nidaqmx.errors.Error on this
 Mac (no NI-DAQmx driver runtime), so the typed-except path in
