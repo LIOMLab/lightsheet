@@ -2,7 +2,7 @@
 Stdlib threading.Event semantics tests for the E-stop cooperative-abort path.
 
 These tests document the exact threading.Event behavior that
-gui/controller.py relies on for the E-stop:
+lightsheet/gui/controller.py relies on for the E-stop:
 
   - The system starts ARMED: a fresh threading.Event() is clear (not set),
     so worker loops run normally.

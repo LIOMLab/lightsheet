@@ -5,7 +5,7 @@ Mac the conftest stub makes nidaqmx.Task() raise, so the module-level skip
 fires and the test is a no-op.
 
 Hypothesis: the laser-safety phase offloaded laser DAQ writes to daemon
-worker threads (gui/controller.py _write_laser1_power / _toggle_laser1 etc.)
+worker threads (lightsheet/gui/controller.py _write_laser1_power / _toggle_laser1 etc.)
 that call nidaqmx.Task(...) + AO writes concurrently with the acquisition
 worker's siggen.create_scanner() (also nidaqmx.Task). nidaqmx is not
 thread-safe for concurrent task creation — two threads creating/using DAQ

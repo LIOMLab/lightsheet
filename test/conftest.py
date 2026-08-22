@@ -47,7 +47,7 @@ def _make_nidaqmx_stub() -> types.ModuleType:
         def __init__(self, *args: object, **kwargs: object) -> None:
             raise Error("no NI-DAQmx driver runtime available on this platform")
 
-        # Common API surface used by src/lasers.py and src/siggen.py —
+        # Common API surface used by lightsheet/lasers.py and lightsheet/siggen.py —
         # these are never reached because __init__ raises, but defining
         # them keeps attribute lookups on the class from blowing up if a
         # test inspects the type.
@@ -78,7 +78,7 @@ def _make_pco_stub() -> types.ModuleType:
 
 def _make_serial_stub() -> types.ModuleType:
     """Build a serial stub mirroring the pyserial public surface used by
-    src/etls.py and src/motors.py. Only used as a fallback when the real
+    lightsheet/etls.py and lightsheet/motors.py. Only used as a fallback when the real
     pyserial package is not importable."""
     serial = types.ModuleType("serial")
 
