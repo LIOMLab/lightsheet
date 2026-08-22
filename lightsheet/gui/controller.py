@@ -75,7 +75,12 @@ class Controller_MainWindow(QMainWindow):
     sig_refresh_position_vertical = pyqtSignal()  # TODO
     sig_refresh_position_camera = pyqtSignal()  # TODO
 
-    def __init__(self) -> None:
+    def __init__(self, demo: bool = False) -> None:
+        # Demo mode flag — when True, hardware_init constructs Mock* HAL
+        # instances (no hardware init) so the app runs on a dev box without
+        # the microscope. Set from the --demo CLI flag / LIGHTSHEET_DEMO=1
+        # env var parsed in lightsheet.__main__.main().
+        self._demo_mode = demo
         # NOTES
         #
         # Previous Ui loading was done directly from .ui file with:
@@ -592,9 +597,20 @@ class Controller_MainWindow(QMainWindow):
         self.ui.statusbar.showMessage("Initializing hardware, please wait...")
         self.ui.statusbar.repaint()
 
-        # Instantiating hardware components
-        self.camera = Camera(verbose=True)
+        # Instantiating hardware components. The Camera branch is demo-aware
+        # (constructs MockCamera under demo so no hardware init runs on a dev
+        # box); the other 5 device families stay as their real classes for
+        # now — Wave 2 expands the demo branch to cover all 6 devices.
+        if self._demo_mode:
+            from lightsheet.hal import MockCamera
+
+            self.camera = MockCamera(verbose=True)
+        else:
+            self.camera = Camera(verbose=True)
         # Signal Generator needs to know about Camera settings to generate proper scan waveforms  # noqa: E501
+        # Dependency ordering must be preserved under both branches (the
+        # mock camera still carries the xsize/ysize/line_time the SigGen
+        # waveform timing derives from).
         self.siggen = SigGen(self.camera)
         self.motors = Motors()
         self.lasers = Lasers()
@@ -639,9 +655,18 @@ class Controller_MainWindow(QMainWindow):
         self.timer_imageview.timeout.connect(self.frame_viewer.updateUi_refresh_view)
         self.timer_imageview.start(100)
 
-        # Init done, restore normal cursor
+        # Init done, restore normal cursor. Under demo mode emit the demo
+        # indicator (window-title suffix + status-bar message) directly via
+        # QStatusBar.showMessage — NOT via sig_message.emit — so it does not
+        # pollute the future golden-master sig_message sequence (UI-SPEC).
         QApplication.restoreOverrideCursor()
-        self.ui.statusbar.showMessage("Ready", 2000)
+        if self._demo_mode:
+            self.setWindowTitle(self.windowTitle() + " [DEMO]")
+            self.ui.statusbar.showMessage(
+                "Demo mode — no hardware connected (mock HAL)", 5000
+            )
+        else:
+            self.ui.statusbar.showMessage("Ready", 2000)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """
