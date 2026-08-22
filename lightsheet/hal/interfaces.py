@@ -653,18 +653,23 @@ class ILasers(ILasersCore):
     ``Lasers`` class. Mocks implement this; the TST-04 conformance
     parametrization runs against this surface behind both ``[real, mock]``.
 
-    ``set_power(channel, value)`` MUST clamp the commanded power to the
-    configured ``Max Power`` for that channel at the HAL boundary
-    (AGENTS.md §2 — physical-safety control for a Class IIIB laser). The
-    concrete ``Lasers._update_setpoints`` clamps via ``min(value, max_power)``;
-    ``MockLasers.set_power`` preserves the clamp in software.
+    Power clamping (AGENTS.md §2 — physical-safety control for a Class
+    IIIB laser) happens inside the concrete ``Lasers._update_setpoints``
+    (clamps via ``min(value, max_power)``) and inside ``MockLasers.set_power``.
+    ``set_power(channel, value)`` is NOT part of the ABC contract today:
+    the real ``Lasers`` class does not implement it (the controller sets
+    ``self.lasers.laser1_power = volts`` directly and calls
+    ``laser1_on()``), so declaring it on the ABC would make the real class
+    fail its own ABC. ``MockLasers.set_power`` is kept as a concrete extra
+    for the demo path and for the power-clamp safety test. A future
+    refactor that adds ``set_power`` to the real ``Lasers`` class can
+    re-add it to the ABC.
+
+    ``_update_setpoints`` is a private implementation detail of the
+    concrete ``Lasers`` class (the leading underscore convention); it is
+    NOT part of the controller-facing surface and is not declared on the
+    ABC. ``MockLasers`` implements it as a concrete method.
     """
-
-    @abstractmethod
-    def set_power(self, channel: int, value: float) -> None: ...
-
-    @abstractmethod
-    def _update_setpoints(self) -> None: ...
 
     @abstractmethod
     def laser1_toggle(self) -> None: ...
