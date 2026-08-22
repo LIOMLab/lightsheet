@@ -46,3 +46,4 @@ def test_etls_conformance(device_factory: object) -> None:
     ETLS_CONTRACT.assert_lifecycle(dev)
     ETLS_CONTRACT.assert_error_surface(dev)
     ETLS_CONTRACT.assert_read_attrs(dev)
+    ETLS_CONTRACT.assert_setter_methods(dev)

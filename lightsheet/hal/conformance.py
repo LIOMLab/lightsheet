@@ -99,6 +99,17 @@ class ConformanceContract:
                 f"{type(dev).__name__} missing controller-read attribute {attr!r}"
             )
 
+    def assert_setter_methods(self, dev: object) -> None:
+        """Assert every setter method exists on ``dev`` (``hasattr`` check).
+        Setters are NOT called — they may have side effects (DAQ writes,
+        serial commands) outside conformance scope. A missing setter is a
+        structural break that would surface as an ``AttributeError`` when
+        the controller invokes it."""
+        for method in self.setter_methods:
+            assert hasattr(dev, method), (
+                f"{type(dev).__name__} missing setter method {method!r}"
+            )
+
 
 # --------------------------------------------------------------------------- #
 # Per-device contract constants (D-15 — derived from the core ABCs in
@@ -117,11 +128,19 @@ CAMERA_CONTRACT = ConformanceContract(
         "stop_recorder",
         "delete_recorder",
     ),
+    # read_attrs mirrors every @property + @abstractmethod slot declared on
+    # ICameraCore (D-15 — the contract is the structural drift catch, so it
+    # must be at least as strict as the ABC). error / error_message are the
+    # cross-cutting HAL error surface (AGENTS.md §10) declared on the ABC.
     read_attrs=(
         "xsize",
         "ysize",
         "exposure_time",
         "shutter_mode",
+        "line_time",
+        "lightsheet_exposed_lines",
+        "lightsheet_delay_lines",
+        "recorder_timeout_status",
         "error",
         "error_message",
     ),
@@ -138,9 +157,22 @@ SIGGEN_CONTRACT = ConformanceContract(
         "stop_scanner",
         "delete_scanner",
     ),
+    # read_attrs mirrors every @property + @abstractmethod slot declared on
+    # ISigGenCore (D-15). The previous contract listed only the galvo
+    # amplitudes + error surface, so a mock that dropped an ETL attr or
+    # waveform_cycles/waveform_metadata would pass conformance — weakening
+    # the drift catch. Complete the list to match the ABC.
     read_attrs=(
         "galvo_left_amplitude",
         "galvo_right_amplitude",
+        "galvo_left_offset",
+        "galvo_right_offset",
+        "etl_left_amplitude",
+        "etl_right_amplitude",
+        "etl_left_offset",
+        "etl_right_offset",
+        "waveform_cycles",
+        "waveform_metadata",
         "error",
         "error_message",
     ),
@@ -149,7 +181,18 @@ SIGGEN_CONTRACT = ConformanceContract(
 
 MOTORS_CONTRACT = ConformanceContract(
     lifecycle_methods=(),
-    read_attrs=("error", "error_message"),
+    # The Motors container ABC (IMotorsCore) declares only the per-axis
+    # handles (vertical/horizontal/camera) + the error surface. The
+    # per-axis IMotorCore read attrs (limit_low_microsteps etc.) are
+    # covered by the per-axis mock-abc conformance test, not the
+    # container contract.
+    read_attrs=(
+        "vertical",
+        "horizontal",
+        "camera",
+        "error",
+        "error_message",
+    ),
     setter_methods=(),
 )
 
@@ -160,11 +203,20 @@ LASERS_CONTRACT = ConformanceContract(
         "laser2_on",
         "laser2_off",
     ),
+    # read_attrs mirrors every @property + @abstractmethod slot declared on
+    # ILasersCore (D-15). The previous contract listed only the laser1
+    # attrs + error surface, so a mock that dropped a laser2 attr would
+    # pass conformance — weakening the drift catch. Complete the list to
+    # match the ABC.
     read_attrs=(
         "laser1_wavelength",
+        "laser2_wavelength",
         "laser1_max_power",
+        "laser2_max_power",
         "laser1_power",
+        "laser2_power",
         "laser1_active",
+        "laser2_active",
         "error",
         "error_message",
     ),

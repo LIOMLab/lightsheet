@@ -46,6 +46,7 @@ def test_camera_conformance(device_factory: object) -> None:
     CAMERA_CONTRACT.assert_lifecycle(dev)
     CAMERA_CONTRACT.assert_error_surface(dev)
     CAMERA_CONTRACT.assert_read_attrs(dev)
+    CAMERA_CONTRACT.assert_setter_methods(dev)
 
 
 def test_camera_conformance_empty_config_flagged_unverified() -> None:

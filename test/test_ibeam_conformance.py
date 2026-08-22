@@ -54,6 +54,7 @@ def test_ibeam_conformance(device_factory: object) -> None:
     IBEAM_CONTRACT.assert_lifecycle(dev)
     IBEAM_CONTRACT.assert_error_surface(dev)
     IBEAM_CONTRACT.assert_read_attrs(dev)
+    IBEAM_CONTRACT.assert_setter_methods(dev)
 
 
 @pytest.mark.parametrize(
