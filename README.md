@@ -76,14 +76,17 @@ re-point.
 ## Running the app
 
 ```bash
+uv run lightsheet                 # preferred — ensures dependencies from uv.lock are installed
 .venv/bin/lightsheet              # console script (installed by `pip install -e .`)
 .venv/bin/python -m lightsheet    # debug fallback
 ```
 
-Both forms resolve to `lightsheet.__main__:main` and work from any CWD. On
-the Mac dev box this starts the GUI with hardware init failing gracefully
-(HAL classes catch SDK errors and set `self.error`) — useful for UI/layout
-checks, not for real acquisition.
+All three forms resolve to `lightsheet.__main__:main` and work from any
+CWD. `uv run lightsheet` is preferred because it reconciles the `.venv`
+against `uv.lock` before launching, so the dependencies the app needs are
+guaranteed present. On the Mac dev box this starts the GUI with hardware
+init failing gracefully (HAL classes catch SDK errors and set
+`self.error`) — useful for UI/layout checks, not for real acquisition.
 
 ## Development
 
