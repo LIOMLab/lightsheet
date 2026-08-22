@@ -5,7 +5,6 @@ Created on May 22, 2019
 '''
 import os
 import sys
-sys.path.append(".")
 
 from PyQt5.QtCore import Qt, QObject, QTimer, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QKeySequence
@@ -28,15 +27,15 @@ from gui.ui_controller import Ui_Controller
 from gui.ui_properties import Ui_Properties
 
 #FIXME - Free functions to integrate into own class (or at least cleanup/rename)
-from src.config import cfg_read, cfg_write
-from src.gaussian import gaussian, func, fwhm
+from lightsheet.config import cfg_read, cfg_write
+from lightsheet.gaussian import gaussian, func, fwhm
 
-from src.camera import Camera
-from src.siggen import SigGen
-from src.motors import Motors
-from src.lasers import Lasers
-from src.etls import ETLs
-from src.ibeam import IBeam
+from lightsheet.camera import Camera
+from lightsheet.siggen import SigGen
+from lightsheet.motors import Motors
+from lightsheet.lasers import Lasers
+from lightsheet.etls import ETLs
+from lightsheet.ibeam import IBeam
 
 
 class Controller_MainWindow(QMainWindow):
@@ -80,11 +79,13 @@ class Controller_MainWindow(QMainWindow):
         # PS command for resource file:
         # pyrcc5 .\ui_controller.qrc -o .\ui_controller_rc.py
         #
-        # For resource file to be in path
-        # add following two lines to ui_controller.py
-        #   import sys
-        #   sys.path.append("./gui")
-        #
+        # The generated ui_controller.py uses a bare 'import ui_controller_rc'
+        # for its resource module. That bare import relies on the gui/ directory
+        # being on the search path; the gui and lightsheet packages themselves
+        # resolve through the editable install (pip install -e .), so no search
+        # path mutation is needed here for the project's own modules. The
+        # generated resource import is a pyuic5 artifact that will be replaced
+        # by a package-qualified import when the UI is regenerated.
         #
         # Also, see https://fuhm.org/super-harmful/
         # for explanation why we don't automatically init inherited class with:
