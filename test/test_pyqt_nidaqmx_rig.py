@@ -183,12 +183,9 @@ def test_laser_task_with_full_hal_under_qapp() -> None:
     app = QApplication.instance() or QApplication(sys.argv)
 
     # Construct the full HAL as hardware_init does.
-    from lightsheet.camera import Camera
-    from lightsheet.etls import ETLs
+    from lightsheet.hal import Camera, ETLs, Motors, SigGen
     from lightsheet.ibeam import IBeam
     from lightsheet.lasers import Lasers
-    from lightsheet.motors import Motors
-    from lightsheet.siggen import SigGen
 
     camera = Camera()
     siggen = SigGen(camera)  # noqa: F841 -- constructed for hardware-init side effects

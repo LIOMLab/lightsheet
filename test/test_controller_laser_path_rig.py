@@ -200,8 +200,7 @@ def test_start_lasers_real_daq_then_siggen_create(standin: Mock) -> None:
     the nidaqmx session in a state where a subsequent siggen task
     creation on Dev1 fails — the cascade behind the create_scan error.
     """
-    from lightsheet.camera import Camera
-    from lightsheet.siggen import SigGen
+    from lightsheet.hal import Camera, SigGen
 
     start_lasers = _load_method("start_lasers(self)")
     # Enable auto-laser 1 so start_lasers actually writes to Dev7.
