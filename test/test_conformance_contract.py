@@ -33,13 +33,15 @@ def test_conformance_contract_is_dataclass_with_required_fields() -> None:
 
 def test_conformance_contract_has_assert_methods() -> None:
     """ConformanceContract must expose assert_lifecycle / assert_error_surface
-    / assert_read_attrs methods — the single assertion body the parametrized
-    conformance tests call behind both [real, mock] (D-15)."""
+    / assert_read_attrs / assert_setter_methods methods — the single
+    assertion body the parametrized conformance tests call behind both
+    [real, mock] (D-15)."""
     from lightsheet.hal.conformance import ConformanceContract
 
     assert callable(getattr(ConformanceContract, "assert_lifecycle", None))
     assert callable(getattr(ConformanceContract, "assert_error_surface", None))
     assert callable(getattr(ConformanceContract, "assert_read_attrs", None))
+    assert callable(getattr(ConformanceContract, "assert_setter_methods", None))
 
 
 @pytest.mark.parametrize(

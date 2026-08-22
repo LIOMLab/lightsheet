@@ -45,3 +45,4 @@ def test_siggen_conformance(device_factory: object) -> None:
     SIGGEN_CONTRACT.assert_lifecycle(dev)
     SIGGEN_CONTRACT.assert_error_surface(dev)
     SIGGEN_CONTRACT.assert_read_attrs(dev)
+    SIGGEN_CONTRACT.assert_setter_methods(dev)

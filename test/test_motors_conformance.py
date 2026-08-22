@@ -48,6 +48,7 @@ def test_motors_conformance(device_factory: object) -> None:
     MOTORS_CONTRACT.assert_lifecycle(dev)
     MOTORS_CONTRACT.assert_error_surface(dev)
     MOTORS_CONTRACT.assert_read_attrs(dev)
+    MOTORS_CONTRACT.assert_setter_methods(dev)
 
 
 def test_motors_conformance_boundary_state_flagged_unverified() -> None:
