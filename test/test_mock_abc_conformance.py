@@ -473,3 +473,158 @@ def test_mock_ibeam_set_power_clamps_to_max() -> None:
     assert ibeam._power == ibeam.max_power, (
         "set_power must clamp to max_power at the HAL boundary (AGENTS.md §2)"
     )
+
+
+# --------------------------------------------------------------------------- #
+# ABC shape — @property pattern fix + surface completion (Plan 07)
+#
+# The controller-read attributes on the core ABCs were declared as
+# @property + @abstractmethod slots, but the real classes implement them
+# as plain instance attributes set in __init__. A @property + @abstractmethod
+# slot is NOT satisfied by a plain instance attribute (Python's ABC check
+# runs at instantiation, before __init__, and an abstract property descriptor
+# requires a class-level override). This blocks real-class inheritance: a
+# real class that inherits the ABC becomes abstract and cannot instantiate.
+# The fix replaces the @property + @abstractmethod slots with class-level
+# annotations (the model is the existing error/error_message annotations),
+# so a plain instance attr in __init__ satisfies the contract.
+#
+# The ABC surface is also completed: mock-only methods the real classes lack
+# are removed (no mock/real divergence), and the real class's public getters
+# not yet declared are added so future mock omissions fail at ABC
+# instantiation with a clear TypeError instead of crashing at runtime.
+# --------------------------------------------------------------------------- #
+
+
+def test_abc_core_read_attrs_are_annotations_not_abstract_properties() -> None:
+    """The controller-read attributes on every core ABC must be class-level
+    annotations, NOT @property + @abstractmethod slots. A @property +
+    @abstractmethod slot blocks real-class inheritance because a plain
+    instance attribute (what the real classes set in __init__) does not
+    satisfy an abstract property descriptor."""
+    from lightsheet.hal.interfaces import (
+        ICameraCore,
+        IIBeamCore,
+        ILasersCore,
+        IMotorCore,
+        IMotorsCore,
+        ISigGenCore,
+    )
+
+    camera_read_attrs = {
+        "xsize", "ysize", "exposure_time", "shutter_mode", "line_time",
+        "lightsheet_exposed_lines", "lightsheet_delay_lines",
+        "recorder_timeout_status",
+    }
+    assert not (camera_read_attrs & ICameraCore.__abstractmethods__), (
+        f"ICameraCore still has read attrs as abstract: "
+        f"{camera_read_attrs & ICameraCore.__abstractmethods__}"
+    )
+
+    siggen_read_attrs = {
+        "galvo_left_amplitude", "galvo_right_amplitude",
+        "galvo_left_offset", "galvo_right_offset",
+        "etl_left_amplitude", "etl_right_amplitude",
+        "etl_left_offset", "etl_right_offset",
+        "waveform_cycles", "waveform_metadata",
+    }
+    assert not (siggen_read_attrs & ISigGenCore.__abstractmethods__), (
+        f"ISigGenCore still has read attrs as abstract: "
+        f"{siggen_read_attrs & ISigGenCore.__abstractmethods__}"
+    )
+
+    motor_read_attrs = {
+        "limit_low_microsteps", "limit_high_microsteps",
+        "microstep_size", "device_number",
+    }
+    assert not (motor_read_attrs & IMotorCore.__abstractmethods__), (
+        f"IMotorCore still has read attrs as abstract: "
+        f"{motor_read_attrs & IMotorCore.__abstractmethods__}"
+    )
+
+    motors_read_attrs = {"vertical", "horizontal", "camera"}
+    assert not (motors_read_attrs & IMotorsCore.__abstractmethods__), (
+        f"IMotorsCore still has read attrs as abstract: "
+        f"{motors_read_attrs & IMotorsCore.__abstractmethods__}"
+    )
+
+    lasers_read_attrs = {
+        "laser1_wavelength", "laser2_wavelength",
+        "laser1_max_power", "laser2_max_power",
+        "laser1_power", "laser2_power",
+        "laser1_active", "laser2_active",
+    }
+    assert not (lasers_read_attrs & ILasersCore.__abstractmethods__), (
+        f"ILasersCore still has read attrs as abstract: "
+        f"{lasers_read_attrs & ILasersCore.__abstractmethods__}"
+    )
+
+    ibeam_read_attrs = {"wavelength", "max_power", "_power", "_is_on"}
+    assert not (ibeam_read_attrs & IIBeamCore.__abstractmethods__), (
+        f"IIBeamCore still has read attrs as abstract: "
+        f"{ibeam_read_attrs & IIBeamCore.__abstractmethods__}"
+    )
+
+
+def test_abc_mock_only_methods_removed() -> None:
+    """Mock-only methods the real classes lack must be removed from the
+    extended ABCs. A method that exists ONLY on the mock and not on the real
+    class IS the mock/real divergence the conformance suite exists to catch,
+    so it must not survive as an ABC declaration."""
+    from lightsheet.hal.interfaces import ICamera, IIBeam, ISigGenCore
+
+    assert "set_shutter_mode" not in ICamera.__abstractmethods__, (
+        "set_shutter_mode must be removed from ICamera (real Camera lacks it)"
+    )
+    assert "arm" not in ISigGenCore.__abstractmethods__, (
+        "arm must be removed from ISigGenCore (real SigGen lacks it)"
+    )
+    assert "disarm" not in ISigGenCore.__abstractmethods__, (
+        "disarm must be removed from ISigGenCore (real SigGen lacks it)"
+    )
+    assert "status_laser" not in IIBeam.__abstractmethods__, (
+        "status_laser must be removed from IIBeam (real IBeam lacks it)"
+    )
+    assert "show_level_power" not in IIBeam.__abstractmethods__, (
+        "show_level_power must be removed from IIBeam (real IBeam lacks it)"
+    )
+
+
+def test_abc_gap_b_surface_additions() -> None:
+    """The extended ABCs must declare the full public surface of the real
+    classes so future mock omissions fail at ABC instantiation (TypeError)
+    instead of at runtime (AttributeError). The IMotorCore core ABC must
+    declare the 3 controller-called getters (get_limit_low/get_limit_high/
+    get_origin — 46 controller call sites); the IMotor extended ABC declares
+    get_units/get_inverted/ask_id/move_home (real surface, not controller-
+    called). ICamera/ISigGen/IMotors declare cfg_load_ini/cfg_save_ini and
+    the camera extended getters."""
+    from lightsheet.hal.interfaces import (
+        ICamera,
+        IMotor,
+        IMotorCore,
+        IMotors,
+        ISigGen,
+    )
+
+    assert {"get_limit_low", "get_limit_high", "get_origin"} <= IMotorCore.__abstractmethods__, (
+        f"IMotorCore must declare the 3 controller-called getters: "
+        f"{IMotorCore.__abstractmethods__}"
+    )
+    assert {"get_units", "get_inverted", "ask_id", "move_home"} <= IMotor.__abstractmethods__, (
+        f"IMotor must declare the 4 extended getters: "
+        f"{IMotor.__abstractmethods__}"
+    )
+    assert {"cfg_load_ini", "cfg_save_ini", "get_trigger_mode", "get_acquire_mode",
+            "get_pixel_rate"} <= ICamera.__abstractmethods__, (
+        f"ICamera must declare the extended getters: "
+        f"{ICamera.__abstractmethods__}"
+    )
+    assert {"cfg_load_ini", "cfg_save_ini"} <= ISigGen.__abstractmethods__, (
+        f"ISigGen must declare cfg_load_ini/cfg_save_ini: "
+        f"{ISigGen.__abstractmethods__}"
+    )
+    assert {"cfg_load_ini", "cfg_save_ini"} <= IMotors.__abstractmethods__, (
+        f"IMotors must declare cfg_load_ini/cfg_save_ini: "
+        f"{IMotors.__abstractmethods__}"
+    )
