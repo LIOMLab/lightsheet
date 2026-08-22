@@ -1,9 +1,10 @@
 """Behavior tests for the editable install (PKG-01).
 
-Proves that ``lightsheet.*`` (physical ``src/``) and ``gui`` resolve as
-installed top-level packages from any CWD — i.e. via the editable install,
-not via a ``sys.path.append`` hack or CWD-relative resolution. Also locks
-in the registered ``lightsheet`` console-script entry point.
+Proves that ``lightsheet`` (with ``lightsheet.gui`` as a subpackage)
+resolves as an installed top-level package from any CWD — i.e. via the
+editable install, not via a ``sys.path.append`` hack or CWD-relative
+resolution. Also locks in the registered ``lightsheet`` console-script
+entry point.
 
 These are runtime behavior tests: they execute real imports (including a
 subprocess rooted in an empty temp directory) and assert on the installed
@@ -37,11 +38,11 @@ def test_lightsheet_pure_modules_import() -> None:
 
 def test_lightsheet_imports_from_foreign_cwd(tmp_path: Path) -> None:
     """A subprocess rooted in an empty temp directory (no repo files
-    present) imports ``lightsheet.config`` and ``gui`` successfully —
-    proving resolution comes from the installed distribution, not from
-    the CWD."""
+    present) imports ``lightsheet.config`` and ``lightsheet.gui``
+    successfully — proving resolution comes from the installed
+    distribution, not from the CWD."""
     result = subprocess.run(
-        [sys.executable, "-c", "import lightsheet.config, gui"],
+        [sys.executable, "-c", "import lightsheet.config, lightsheet.gui"],
         cwd=tmp_path,
         capture_output=True,
         text=True,
@@ -65,9 +66,10 @@ def test_console_script_entry_point_registered() -> None:
 
 
 def test_gui_controller_imports() -> None:
-    """``gui.controller.Controller_MainWindow`` imports where PyQt5 is
-    available; skipped otherwise (PyQt5 is not stubbed by conftest)."""
+    """``lightsheet.gui.controller.Controller_MainWindow`` imports where
+    PyQt5 is available; skipped otherwise (PyQt5 is not stubbed by
+    conftest)."""
     try:
-        from gui.controller import Controller_MainWindow  # noqa: F401
+        from lightsheet.gui.controller import Controller_MainWindow  # noqa: F401
     except ImportError as exc:
         pytest.skip(f"PyQt5 not installed: {exc}")
