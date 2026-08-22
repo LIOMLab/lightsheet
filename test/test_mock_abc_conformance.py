@@ -628,3 +628,94 @@ def test_abc_gap_b_surface_additions() -> None:
         f"IMotors must declare cfg_load_ini/cfg_save_ini: "
         f"{IMotors.__abstractmethods__}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Real-class ABC inheritance — the structural seam for Phase 5 dependency
+# injection. Phase 5 DI type-hints like ``def __init__(self, camera: ICameraCore)``
+# only type-check the real class if the real class actually inherits the ABC.
+# Today no real class inherits, so ABC incompleteness never surfaced as a
+# TypeError at instantiation — it surfaced later as a runtime AttributeError
+# (the mock motor crash) or as conformance tests written against the wrong
+# surface. Making the real classes inherit turns ABC incompleteness into an
+# instantiation-time TypeError, which is the structural drift catch the
+# conformance suite exists to provide.
+# --------------------------------------------------------------------------- #
+
+
+def test_real_classes_inherit_their_abc() -> None:
+    """Every real HAL class must inherit its extended ABC so Phase 5
+    dependency-injection type-hints type-check against the real class, not
+    just the mock. Inheritance must not add a new instantiation failure —
+    each real class's __abstractmethods__ must be empty (verified via
+    class-level introspection, NOT by constructing hardware-bound classes
+    on Mac)."""
+    from lightsheet.hal import (
+        Camera,
+        ETLs,
+        IBeam,
+        ICamera,
+        IETLs,
+        IIBeam,
+        ILasers,
+        IMotor,
+        IMotors,
+        IOptotune,
+        ISigGen,
+        Lasers,
+        Motors,
+        SigGen,
+    )
+    from lightsheet.hal.real.etls import Optotune
+    from lightsheet.hal.real.motors import ZaberMotor
+
+    cases = [
+        (Camera, ICamera, "Camera"),
+        (SigGen, ISigGen, "SigGen"),
+        (ZaberMotor, IMotor, "ZaberMotor"),
+        (Motors, IMotors, "Motors"),
+        (ETLs, IETLs, "ETLs"),
+        (Optotune, IOptotune, "Optotune"),
+        (Lasers, ILasers, "Lasers"),
+        (IBeam, IIBeam, "IBeam"),
+    ]
+    for cls, abc, name in cases:
+        assert issubclass(cls, abc), (
+            f"{name} must inherit {abc.__name__} so Phase 5 DI type-hints "
+            f"type-check against the real class"
+        )
+        assert cls.__abstractmethods__ == frozenset(), (
+            f"{name} still has abstract methods after inheritance: "
+            f"{cls.__abstractmethods__} — inheritance must not add a new "
+            f"instantiation failure"
+        )
+
+
+def test_mock_motor_has_controller_called_getters() -> None:
+    """MockMotor must expose get_limit_low / get_limit_high / get_origin /
+    get_units / get_inverted, mirroring ZaberMotor. The controller's
+    updateUi_units call graph reads these (46 call sites) — a mock that
+    omits them crashes the demo GUI at runtime with AttributeError instead
+    of failing at ABC instantiation with a clear TypeError. This is the
+    regression test for the mock motor crash: a future mock that drops
+    these getters fails this test instead of crashing the demo GUI."""
+    motors = MockMotors()
+    axis = motors.horizontal
+    assert hasattr(axis, "get_limit_low"), "MockMotor must expose get_limit_low"
+    assert hasattr(axis, "get_limit_high"), "MockMotor must expose get_limit_high"
+    assert hasattr(axis, "get_origin"), "MockMotor must expose get_origin"
+    assert hasattr(axis, "get_units"), "MockMotor must expose get_units"
+    assert hasattr(axis, "get_inverted"), "MockMotor must expose get_inverted"
+
+    # Return types mirror ZaberMotor: float for position getters, str/bool
+    # for units/inverted.
+    v = axis.get_limit_low("mm")
+    assert isinstance(v, float), f"get_limit_low must return float, got {type(v)}"
+    v = axis.get_limit_high("mm")
+    assert isinstance(v, float), f"get_limit_high must return float, got {type(v)}"
+    v = axis.get_origin("mm")
+    assert isinstance(v, float), f"get_origin must return float, got {type(v)}"
+    u = axis.get_units()
+    assert isinstance(u, str), f"get_units must return str, got {type(u)}"
+    inv = axis.get_inverted()
+    assert isinstance(inv, bool), f"get_inverted must return bool, got {type(inv)}"
