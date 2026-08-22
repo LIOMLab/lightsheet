@@ -11,11 +11,19 @@ Layered ABCs (D-04):
   methods/attributes ``lightsheet/gui/controller.py`` invokes or reads on a
   camera instance. The controller reads HAL state as *direct attributes*
   (``camera.xsize``, ``camera.exposure_time``), not via ``get_*`` methods, so
-  those attributes are declared here as ``@property`` + ``@abstractmethod``
-  slots. Phase 5 dependency-injection seams type-hint against the core ABC.
+  those attributes are declared here as **class-level annotations** (not
+  ``@property`` + ``@abstractmethod`` slots). The real classes implement
+  them as plain instance attributes set in ``__init__``/``open``, and a
+  ``@property`` + ``@abstractmethod`` slot is NOT satisfied by a plain
+  instance attribute (Python's ABC check runs at instantiation, before
+  ``__init__``, and an abstract property descriptor requires a class-level
+  override, not an instance attr). The class-level annotation preserves the
+  type-checker hint for Phase 5 DI without blocking real-class inheritance.
+  Phase 5 dependency-injection seams type-hint against the core ABC.
 - ``ICamera`` is the **extended** ABC — the full public method surface of
-  the concrete ``Camera`` class. Mocks implement the extended ABC; the
-  TST-04 conformance parametrization runs the same assertions behind both
+  the concrete ``Camera`` class. Both the real class and the mock inherit
+  the extended ABC (which transitively inherits the core ABC); the TST-04
+  conformance parametrization runs the same assertions behind both
   ``[real, mock]`` against this surface.
 
 This module imports only ``abc`` — no vendor SDKs, no numpy. The ABC is a
@@ -35,9 +43,15 @@ class ICameraCore(ABC):
     ``self.camera.exposure_time``, ``self.camera.shutter_mode``,
     ``self.camera.line_time``, ``self.camera.lightsheet_exposed_lines``,
     ``self.camera.lightsheet_delay_lines``, ``self.camera.recorder_timeout_status``.
-    These MUST be declared as ``@property`` + ``@abstractmethod`` slots (D-04)
-    so Phase 5 DI seams type-check the attribute surface, not just method
-    signatures.
+    These are declared as **class-level annotations** (not ``@property`` +
+    ``@abstractmethod`` slots) because the real ``Camera`` class implements
+    them as plain instance attributes set in ``__init__``/``open``. A
+    ``@property`` + ``@abstractmethod`` slot is NOT satisfied by a plain
+    instance attribute (Python's ABC check runs at instantiation, before
+    ``__init__``, and an abstract property descriptor requires a class-level
+    override, not an instance attr). The class-level annotation preserves
+    the type-checker hint for Phase 5 DI without blocking real-class
+    inheritance.
 
     The cross-cutting HAL error surface (``error`` / ``error_message``,
     AGENTS.md §10) is declared as a class-level annotation so every concrete
@@ -49,42 +63,16 @@ class ICameraCore(ABC):
     error: int
     error_message: str
 
-    # Controller-read attributes (D-04) — declared as @property + @abstractmethod
-    # slots because the controller reads them as direct attributes, not via
-    # getters. Concrete classes implement them as plain instance attributes
-    # (the @property decorator here is the ABC contract; the concrete impl
-    # satisfies it by setting the attribute in __init__/open).
-    @property
-    @abstractmethod
-    def xsize(self) -> int | None: ...
-
-    @property
-    @abstractmethod
-    def ysize(self) -> int | None: ...
-
-    @property
-    @abstractmethod
-    def exposure_time(self) -> float: ...
-
-    @property
-    @abstractmethod
-    def shutter_mode(self) -> str: ...
-
-    @property
-    @abstractmethod
-    def line_time(self) -> float | None: ...
-
-    @property
-    @abstractmethod
-    def lightsheet_exposed_lines(self) -> int: ...
-
-    @property
-    @abstractmethod
-    def lightsheet_delay_lines(self) -> int: ...
-
-    @property
-    @abstractmethod
-    def recorder_timeout_status(self) -> bool: ...
+    # Controller-read attributes (D-04) — class-level annotations. The real
+    # and mock classes set them as plain instance attributes in __init__/open.
+    xsize: int | None
+    ysize: int | None
+    exposure_time: float
+    shutter_mode: str
+    line_time: float | None
+    lightsheet_exposed_lines: int
+    lightsheet_delay_lines: int
+    recorder_timeout_status: bool
 
     # Lifecycle verbs (AGENTS.md §10) — abstract methods returning None.
     @abstractmethod
@@ -117,8 +105,16 @@ class ICameraCore(ABC):
 
 class ICamera(ICameraCore):
     """Extended Camera surface — the full public method set of the concrete
-    ``Camera`` class. Mocks implement this; TST-04 conformance parametrization
-    runs against this surface behind both ``[real, mock]``.
+    ``Camera`` class. Both the real class and the mock inherit this; TST-04
+    conformance parametrization runs against this surface behind both
+    ``[real, mock]``.
+
+    These getters and config methods are the full public surface the
+    Properties dialog and future rig integration tests exercise, not the
+    controller call graph (the controller calls only ``get_properties``).
+    They are declared on the extended ABC so a mock that omits one fails
+    ABC instantiation with a clear ``TypeError`` instead of crashing at
+    runtime.
     """
 
     @abstractmethod
@@ -143,9 +139,6 @@ class ICamera(ICameraCore):
     def set_exposure_time(self, exposure_time_ms: int) -> None: ...
 
     @abstractmethod
-    def set_shutter_mode(self, shutter_mode: str) -> None: ...
-
-    @abstractmethod
     def set_trigger_mode(self, trigger_mode: str) -> None: ...
 
     @abstractmethod
@@ -159,6 +152,48 @@ class ICamera(ICameraCore):
 
     @abstractmethod
     def copy_recorder_images(self, number_of_images: int) -> Any: ...
+
+    # Extended getters — the full public getter/config surface of the real
+    # Camera class. The controller does not call these; the Properties dialog
+    # and rig integration tests do.
+    @abstractmethod
+    def get_trigger_mode(self) -> str | None: ...
+
+    @abstractmethod
+    def get_acquire_mode(self) -> str | None: ...
+
+    @abstractmethod
+    def get_storage_mode(self) -> str | None: ...
+
+    @abstractmethod
+    def get_recorder_submode(self) -> str | None: ...
+
+    @abstractmethod
+    def get_exposure_time(self) -> int | None: ...
+
+    @abstractmethod
+    def get_exposure_timebase(self) -> str | None: ...
+
+    @abstractmethod
+    def get_delay_time(self) -> int | None: ...
+
+    @abstractmethod
+    def get_delay_timebase(self) -> str | None: ...
+
+    @abstractmethod
+    def get_pixel_rates(self) -> dict[str, object] | list: ...
+
+    @abstractmethod
+    def get_pixel_rate(self) -> str | None: ...
+
+    @abstractmethod
+    def get_readout_format(self) -> str | None: ...
+
+    @abstractmethod
+    def cfg_load_ini(self) -> None: ...
+
+    @abstractmethod
+    def cfg_save_ini(self) -> None: ...
 
 
 # =========================================================================== #
@@ -175,60 +210,39 @@ class ISigGenCore(ABC):
     ``self.siggen.galvo_right_offset``, ``self.siggen.etl_left_amplitude``,
     ``self.siggen.etl_right_amplitude``, ``self.siggen.etl_left_offset``,
     ``self.siggen.etl_right_offset``, ``self.siggen.waveform_cycles``,
-    ``self.siggen.waveform_metadata``. These are declared as ``@property`` +
-    ``@abstractmethod`` slots (D-04) so Phase 5 DI seams type-check the
-    attribute surface.
+    ``self.siggen.waveform_metadata``. These are declared as **class-level
+    annotations** (not ``@property`` + ``@abstractmethod`` slots) because
+    the real ``SigGen`` class implements them as plain instance attributes
+    set in ``__init__``. A ``@property`` + ``@abstractmethod`` slot is NOT
+    satisfied by a plain instance attribute (Python's ABC check runs at
+    instantiation, before ``__init__``). The class-level annotation preserves
+    the type-checker hint for Phase 5 DI without blocking real-class
+    inheritance.
 
     The cross-cutting HAL error surface (``error`` / ``error_message``,
     AGENTS.md §10) is declared as a class-level annotation.
+
+    ``arm`` / ``disarm`` are NOT declared here: the real ``SigGen`` class
+    does not implement them and the controller never calls them. The ABC
+    is pinned to that call graph.
     """
 
     # HAL error surface (AGENTS.md §10).
     error: int
     error_message: str
 
-    # Controller-read attributes (D-04) — declared as @property + @abstractmethod
-    # slots because the controller reads them as direct attributes, not via
-    # getters. Concrete classes implement them as plain instance attributes.
-    @property
-    @abstractmethod
-    def galvo_left_amplitude(self) -> float: ...
-
-    @property
-    @abstractmethod
-    def galvo_right_amplitude(self) -> float: ...
-
-    @property
-    @abstractmethod
-    def galvo_left_offset(self) -> float: ...
-
-    @property
-    @abstractmethod
-    def galvo_right_offset(self) -> float: ...
-
-    @property
-    @abstractmethod
-    def etl_left_amplitude(self) -> float: ...
-
-    @property
-    @abstractmethod
-    def etl_right_amplitude(self) -> float: ...
-
-    @property
-    @abstractmethod
-    def etl_left_offset(self) -> float: ...
-
-    @property
-    @abstractmethod
-    def etl_right_offset(self) -> float: ...
-
-    @property
-    @abstractmethod
-    def waveform_cycles(self) -> int | None: ...
-
-    @property
-    @abstractmethod
-    def waveform_metadata(self) -> dict | None: ...
+    # Controller-read attributes (D-04) — class-level annotations. The real
+    # and mock classes set them as plain instance attributes in __init__.
+    galvo_left_amplitude: float
+    galvo_right_amplitude: float
+    galvo_left_offset: float
+    galvo_right_offset: float
+    etl_left_amplitude: float
+    etl_right_amplitude: float
+    etl_left_offset: float
+    etl_right_offset: float
+    waveform_cycles: int | None
+    waveform_metadata: dict | None
 
     # Lifecycle verbs (AGENTS.md §10) — abstract methods returning None.
     # ``open`` / ``close`` are NOT declared here: the real ``SigGen`` class
@@ -236,12 +250,6 @@ class ISigGenCore(ABC):
     # lifecycle verbs; the controller never calls them. The ABC is pinned
     # to that call graph. Concrete mock classes may still expose them as
     # no-op extras.
-    @abstractmethod
-    def arm(self) -> None: ...
-
-    @abstractmethod
-    def disarm(self) -> None: ...
-
     @abstractmethod
     def compute_scan_waveforms(self) -> None: ...
 
@@ -260,8 +268,9 @@ class ISigGenCore(ABC):
 
 class ISigGen(ISigGenCore):
     """Extended SigGen surface — the full public method set of the concrete
-    ``SigGen`` class. Mocks implement this; the TST-04 conformance
-    parametrization runs against this surface behind both ``[real, mock]``.
+    ``SigGen`` class. Both the real class and the mock inherit this; TST-04
+    conformance parametrization runs against this surface behind both
+    ``[real, mock]``.
     """
 
     @abstractmethod
@@ -278,6 +287,14 @@ class ISigGen(ISigGenCore):
     @abstractmethod
     def monitor_scanner(self) -> None: ...
 
+    # Extended config surface — the controller does not call these; the
+    # real SigGen exposes them for config.ini load/save.
+    @abstractmethod
+    def cfg_load_ini(self) -> None: ...
+
+    @abstractmethod
+    def cfg_save_ini(self) -> None: ...
+
 
 # =========================================================================== #
 # Motors family (container + per-axis)
@@ -290,12 +307,22 @@ class IMotorCore(ABC):
     The controller reads per-axis motor state as direct attributes —
     ``motor.limit_low_microsteps``, ``motor.limit_high_microsteps``,
     ``motor.microstep_size``, ``motor.device_number``. These are declared
-    as ``@property`` + ``@abstractmethod`` slots (D-04). The controller
-    queries position via ``get_position(units)`` (a serial command on the
-    real Zaber stage), never as a direct ``motor.position`` attribute, so
-    ``position`` is NOT part of the core ABC contract — concrete classes
-    may expose it as a plain attribute (the mock does, for software
-    tracking) but the ABC is pinned to the controller's actual call graph.
+    as **class-level annotations** (not ``@property`` + ``@abstractmethod``
+    slots) because the real ``ZaberMotor`` class implements them as plain
+    instance attributes set in ``__init__``. The controller queries position
+    via ``get_position(units)`` (a serial command on the real Zaber stage),
+    never as a direct ``motor.position`` attribute, so ``position`` is NOT
+    part of the core ABC contract — concrete classes may expose it as a
+    plain attribute (the mock does, for software tracking) but the ABC is
+    pinned to the controller's actual call graph.
+
+    The 3 getters ``get_limit_low`` / ``get_limit_high`` / ``get_origin``
+    are declared on the core ABC because the controller's
+    ``updateUi_units`` / ``updateUi_check_positions`` /
+    ``updateUi_check_stepsize`` / ``updateUi_set_origin`` /
+    ``updateUi_set_focus`` / ``updateUi_set_colormap`` call graph reads
+    them (46 call sites). They are the controller-called surface, so they
+    belong on the core ABC that Phase 5 DI type-hints against.
 
     Travel-limit enforcement (AGENTS.md §2) is a physical-safety contract:
     ``move_absolute_position`` and ``move_relative_position`` MUST raise
@@ -307,21 +334,12 @@ class IMotorCore(ABC):
     error: int
     error_message: str
 
-    @property
-    @abstractmethod
-    def limit_low_microsteps(self) -> int: ...
-
-    @property
-    @abstractmethod
-    def limit_high_microsteps(self) -> int: ...
-
-    @property
-    @abstractmethod
-    def microstep_size(self) -> float: ...
-
-    @property
-    @abstractmethod
-    def device_number(self) -> int: ...
+    # Controller-read attributes (D-04) — class-level annotations. The real
+    # and mock classes set them as plain instance attributes in __init__.
+    limit_low_microsteps: int
+    limit_high_microsteps: int
+    microstep_size: float
+    device_number: int
 
     # Lifecycle / motion verbs. move_absolute_position / move_relative_position
     # raise ValueError on over-travel (AGENTS.md §2 — physical safety).
@@ -337,10 +355,30 @@ class IMotorCore(ABC):
     @abstractmethod
     def microsteps_to_position(self, microsteps: int, units: str = "mm") -> float: ...
 
+    # Controller-called getters (D-05 core — 46 call sites in controller.py:
+    # updateUi_units / updateUi_check_positions / updateUi_check_stepsize /
+    # updateUi_set_origin / updateUi_set_focus / updateUi_set_colormap).
+    @abstractmethod
+    def get_limit_low(self, units: str) -> float: ...
+
+    @abstractmethod
+    def get_limit_high(self, units: str) -> float: ...
+
+    @abstractmethod
+    def get_origin(self, units: str) -> float: ...
+
 
 class IMotor(IMotorCore):
     """Extended per-axis motor surface — the full public method set of the
-    concrete ``ZaberMotor`` class. Mocks implement this."""
+    concrete ``ZaberMotor`` class. Both the real class and the mock inherit
+    this.
+
+    ``get_units`` / ``get_inverted`` are part of the real ``ZaberMotor``
+    public surface but not the controller call graph. ``ask_id`` /
+    ``move_home`` are real-class lifecycle extras not GUI-wired today. They
+    are declared on the extended ABC so a mock that omits one fails ABC
+    instantiation with a clear ``TypeError`` instead of crashing at runtime.
+    """
 
     @abstractmethod
     def get_position(self, units: str) -> float: ...
@@ -363,47 +401,65 @@ class IMotor(IMotorCore):
     @abstractmethod
     def set_origin(self, position: float, units: str) -> None: ...
 
+    # Extended getters — real ZaberMotor public surface, not controller-called.
+    @abstractmethod
+    def get_units(self) -> str: ...
+
+    @abstractmethod
+    def get_inverted(self) -> bool: ...
+
+    # Real-class lifecycle extras — not GUI-wired today.
+    @abstractmethod
+    def ask_id(self) -> int: ...
+
+    @abstractmethod
+    def move_home(self) -> None: ...
+
 
 class IMotorsCore(ABC):
     """Controller-reachable Motors container surface (D-05).
 
     The controller reads the per-axis motor handles as direct attributes —
     ``motors.vertical``, ``motors.horizontal``, ``motors.camera``. These are
-    declared as ``@property`` + ``@abstractmethod`` slots (D-04).
+    declared as **class-level annotations** (not ``@property`` +
+    ``@abstractmethod`` slots) because the real ``Motors`` class implements
+    them as plain instance attributes set in ``__init__`` (via the per-axis
+    ``ZaberMotor`` constructors).
 
-    The real ``Motors`` class initializes hardware in ``__init__`` (via the
-    per-axis ``ZaberMotor`` constructors) and does not expose ``open()`` /
-    ``close()`` lifecycle verbs; the controller never calls them. The ABC
-    is pinned to that call graph, so ``open`` / ``close`` are NOT declared
-    here. Concrete mock classes may still expose them as no-op extras.
+    The real ``Motors`` class does not expose ``open()`` / ``close()``
+    lifecycle verbs; the controller never calls them. The ABC is pinned to
+    that call graph, so ``open`` / ``close`` are NOT declared here. Concrete
+    mock classes may still expose them as no-op extras.
     """
 
     # HAL error surface (AGENTS.md §10).
     error: int
     error_message: str
 
-    @property
-    @abstractmethod
-    def vertical(self) -> IMotorCore: ...
-
-    @property
-    @abstractmethod
-    def horizontal(self) -> IMotorCore: ...
-
-    @property
-    @abstractmethod
-    def camera(self) -> IMotorCore: ...
+    # Controller-read attributes (D-04) — class-level annotations. The real
+    # and mock classes set them as plain instance attributes in __init__.
+    vertical: "IMotorCore"
+    horizontal: "IMotorCore"
+    camera: "IMotorCore"
 
 
 class IMotors(IMotorsCore):
     """Extended Motors container surface — the full public method set of the
-    concrete ``Motors`` class. Mocks implement this."""
+    concrete ``Motors`` class. Both the real class and the mock inherit this."""
 
     @abstractmethod
     def get_properties(self) -> dict[str, str]: ...
 
     @abstractmethod
     def get_positions(self) -> dict[str, float]: ...
+
+    # Extended config surface — the controller does not call these; the
+    # real Motors exposes them for config.ini load/save.
+    @abstractmethod
+    def cfg_load_ini(self) -> None: ...
+
+    @abstractmethod
+    def cfg_save_ini(self) -> None: ...
 
 
 # =========================================================================== #
@@ -580,9 +636,11 @@ class ILasersCore(ABC):
     ``self.lasers.laser2_wavelength``, ``self.lasers.laser1_max_power``,
     ``self.lasers.laser2_max_power``, ``self.lasers.laser1_power``,
     ``self.lasers.laser2_power``, ``self.lasers.laser1_active``,
-    ``self.lasers.laser2_active``. These are declared as ``@property`` +
-    ``@abstractmethod`` slots (D-04) so Phase 5 DI seams type-check the
-    attribute surface.
+    ``self.lasers.laser2_active``. These are declared as **class-level
+    annotations** (not ``@property`` + ``@abstractmethod`` slots) because
+    the real ``Lasers`` class implements them as plain instance attributes
+    set in ``__init__``. The class-level annotation preserves the
+    type-checker hint for Phase 5 DI without blocking real-class inheritance.
 
     The cross-cutting HAL error surface (``error`` / ``error_message``,
     AGENTS.md §10) is declared as a class-level annotation.
@@ -597,40 +655,16 @@ class ILasersCore(ABC):
     error: int
     error_message: str
 
-    # Controller-read attributes (D-04) — declared as @property + @abstractmethod
-    # slots because the controller reads them as direct attributes, not via
-    # getters. Concrete classes implement them as plain instance attributes.
-    @property
-    @abstractmethod
-    def laser1_wavelength(self) -> int: ...
-
-    @property
-    @abstractmethod
-    def laser2_wavelength(self) -> int: ...
-
-    @property
-    @abstractmethod
-    def laser1_max_power(self) -> float: ...
-
-    @property
-    @abstractmethod
-    def laser2_max_power(self) -> float: ...
-
-    @property
-    @abstractmethod
-    def laser1_power(self) -> float: ...
-
-    @property
-    @abstractmethod
-    def laser2_power(self) -> float: ...
-
-    @property
-    @abstractmethod
-    def laser1_active(self) -> bool: ...
-
-    @property
-    @abstractmethod
-    def laser2_active(self) -> bool: ...
+    # Controller-read attributes (D-04) — class-level annotations. The real
+    # and mock classes set them as plain instance attributes in __init__.
+    laser1_wavelength: int
+    laser2_wavelength: int
+    laser1_max_power: float
+    laser2_max_power: float
+    laser1_power: float
+    laser2_power: float
+    laser1_active: bool
+    laser2_active: bool
 
     # Lifecycle verbs (AGENTS.md §10) — abstract methods returning None.
     # The 2-channel on/off surface mirrors the concrete Lasers class; Phase 4
@@ -694,10 +728,11 @@ class IIBeamCore(ABC):
     The controller (``lightsheet/gui/controller.py``) reads IBeam state as
     *direct attributes* — ``self.ibeam.wavelength``, ``self.ibeam.max_power``,
     ``self.ibeam.error``. The internal ``_power`` / ``_is_on`` state is
-    declared as ``@property`` + ``@abstractmethod`` slots (D-04) so the
-    concrete class's internal-state surface is part of the contract (the
-    controller's E-stop path reads ``ibeam._is_on`` indirectly via
-    ``ibeam.off()``).
+    declared as **class-level annotations** (not ``@property`` +
+    ``@abstractmethod`` slots) so the concrete class's internal-state surface
+    is part of the contract (the controller's E-stop path reads
+    ``ibeam._is_on`` indirectly via ``ibeam.off()``). The real and mock
+    classes set them as plain instance attributes in ``__init__``.
 
     The cross-cutting HAL error surface (``error`` / ``error_message``,
     AGENTS.md §10) is declared as a class-level annotation.
@@ -718,24 +753,17 @@ class IIBeamCore(ABC):
     error: int
     error_message: str
 
-    # Controller-read attributes (D-04).
-    @property
-    @abstractmethod
-    def wavelength(self) -> int: ...
-
-    @property
-    @abstractmethod
-    def max_power(self) -> int: ...
+    # Controller-read attributes (D-04) — class-level annotations. The real
+    # and mock classes set them as plain instance attributes in __init__.
+    wavelength: int
+    max_power: int
 
     # Internal state — declared on the core ABC so the synchronous-off /
-    # power-clamp safety contracts are part of the typed surface.
-    @property
-    @abstractmethod
-    def _power(self) -> int: ...
-
-    @property
-    @abstractmethod
-    def _is_on(self) -> bool: ...
+    # power-clamp safety contracts are part of the typed surface. Class-level
+    # annotations (not @property + @abstractmethod) because the real and mock
+    # classes set them as plain instance attributes in __init__.
+    _power: int
+    _is_on: bool
 
     # Lifecycle verbs (AGENTS.md §10). off() is synchronous — E-stop kill
     # path (AGENTS.md §2). set_power clamps to max_power (AGENTS.md §2).
@@ -760,8 +788,9 @@ class IIBeamCore(ABC):
 
 class IIBeam(IIBeamCore):
     """Extended IBeam surface — the full public method set of the concrete
-    ``IBeam`` class. Mocks implement this; the TST-04 conformance
-    parametrization runs against this surface behind both ``[real, mock]``.
+    ``IBeam`` class. Both the real class and the mock inherit this; TST-04
+    conformance parametrization runs against this surface behind both
+    ``[real, mock]``.
     """
 
     @abstractmethod
@@ -772,9 +801,3 @@ class IIBeam(IIBeamCore):
 
     @abstractmethod
     def is_enabled(self) -> bool: ...
-
-    @abstractmethod
-    def status_laser(self) -> bool: ...
-
-    @abstractmethod
-    def show_level_power(self) -> list[str]: ...
