@@ -49,10 +49,17 @@ echo "snapshot: rig 'lightsheet-rig' reachable."
 # --- Capture (rig -> local only) ---------------------------------------------
 # Pull the remote file into a temp next to the destination, then atomically
 # move it into place. Never scp in the other direction.
+#
+# -O forces the legacy SCP protocol (runs the transfer through the remote
+# login shell) instead of the SFTP subsystem that OpenSSH 9+ defaults to.
+# This matters because the rig's login shell is MINGW64/Git Bash, where the
+# /c/Users/... path form resolves; the SFTP subsystem interprets /c/... as a
+# literal Unix absolute path and reports "No such file or directory". -O keeps
+# the single rig->local scp transfer grep-verifiable while working on the rig.
 TMP_CAPTURE="$(mktemp "${SNAPSHOT}.XXXXXX")"
 trap 'rm -f "${TMP_CAPTURE}"' EXIT
 
-if ! scp -o BatchMode=yes -o ConnectTimeout=10 "lightsheet-rig:${REMOTE_CONFIG}" "${TMP_CAPTURE}"; then
+if ! scp -O -o BatchMode=yes -o ConnectTimeout=10 "lightsheet-rig:${REMOTE_CONFIG}" "${TMP_CAPTURE}"; then
     echo "snapshot: scp of '${REMOTE_CONFIG}' from the rig failed." >&2
     echo "snapshot: no file written." >&2
     exit 1
