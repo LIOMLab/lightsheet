@@ -15,16 +15,6 @@ import webbrowser
 
 import h5py
 import numpy as np
-from lightsheet.camera import Camera
-
-# FIXME - Free functions to integrate into own class (or at least cleanup/rename)
-from lightsheet.config import cfg_read
-from lightsheet.etls import ETLs
-from lightsheet.gaussian import func, gaussian
-from lightsheet.ibeam import IBeam
-from lightsheet.lasers import Lasers
-from lightsheet.motors import Motors
-from lightsheet.siggen import SigGen
 from matplotlib import pyplot as plt
 from PyQt5.QtCore import QObject, Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QCloseEvent, QKeySequence
@@ -45,8 +35,18 @@ from PyQt5.QtWidgets import (
 )
 from scipy import stats
 
+from lightsheet.camera import Camera
+
+# FIXME - Free functions to integrate into own class (or at least cleanup/rename)
+from lightsheet.config import cfg_read
+from lightsheet.etls import ETLs
+from lightsheet.gaussian import func, gaussian
 from lightsheet.gui.ui_controller import Ui_Controller
 from lightsheet.gui.ui_properties import Ui_Properties
+from lightsheet.ibeam import IBeam
+from lightsheet.lasers import Lasers
+from lightsheet.motors import Motors
+from lightsheet.siggen import SigGen
 
 logger = logging.getLogger(__name__)
 

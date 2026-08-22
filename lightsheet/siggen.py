@@ -9,10 +9,11 @@ import logging
 # National Instruments Imports
 import nidaqmx
 import numpy as np
+from nidaqmx.constants import AcquisitionType, Edge, LineGrouping
+
 from lightsheet.camera import Camera
 from lightsheet.config import cfg_read, cfg_str2bool, cfg_write
 from lightsheet.waveforms import sawtooth, squarewave, staircase
-from nidaqmx.constants import AcquisitionType, Edge, LineGrouping
 
 logger = logging.getLogger(__name__)
 

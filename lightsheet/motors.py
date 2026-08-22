@@ -6,6 +6,7 @@ Created on February 10, 2022
 import logging
 
 import serial
+
 from lightsheet.config import cfg_read, cfg_str2bool, cfg_write
 
 logger = logging.getLogger(__name__)
