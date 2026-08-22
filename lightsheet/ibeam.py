@@ -57,7 +57,7 @@ class IBeam:
     _cfg_settings["Max Power"] = "150000"  # In uW (150 mW diode limit, rig-confirmed)
 
     def __init__(self, port: str | None = None) -> None:
-        # HAL error status (mirrors src/lasers.py and src/etls.py convention).
+        # HAL error status (mirrors lightsheet/lasers.py and lightsheet/etls.py).
         self.error = 0
         self.error_message = ""
 

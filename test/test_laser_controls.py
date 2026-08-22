@@ -4,7 +4,7 @@ contract and the E-stop cooperative-skip guard.
 
 Controller_MainWindow cannot be constructed on this Mac (no PyQt5 display),
 so the real _write_laser*_power methods are exercised behaviorally: their
-source is extracted from gui/controller.py and exec'd in a controlled
+source is extracted from lightsheet/gui/controller.py and exec'd in a controlled
 namespace, then called against a minimal Mock stand-in self. This runs the
 real method body — the same code that runs on the rig — without needing the
 Qt runtime, and proves the estop_event cooperative-skip guard actually
@@ -81,14 +81,14 @@ def test_pct_scaling_zero() -> None:
 #
 # Controller_MainWindow cannot be imported on this Mac (PyQt5 is not
 # installed), so we extract the real _write_laser*_power method source from
-# gui/controller.py and exec it in a controlled namespace, then call it
+# lightsheet/gui/controller.py and exec it in a controlled namespace, then call it
 # with a minimal stand-in self. This exercises the real method body — the
 # same code that runs on the rig — without needing the Qt runtime.
 # --------------------------------------------------------------------------- #
 
 
 def _load_method(method_sig: str) -> Callable[..., Any]:
-    """Extract a method body from gui/controller.py and return a callable
+    """Extract a method body from lightsheet/gui/controller.py and return a callable
     `func(self, pct)` that executes the real source."""
     src = _read_controller_source()
     body = _slice_method(src, method_sig)

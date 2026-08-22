@@ -1,10 +1,10 @@
 """
 Behavioral regression tests for Phase 01 controller methods that cannot be
 exercised by importing Controller_MainWindow on the Mac dev box (PyQt5 is not
-installed, so `from gui.controller import Controller_MainWindow` raises
+installed, so `from lightsheet.gui.controller import Controller_MainWindow` raises
 ModuleNotFoundError).
 
-Each test extracts the REAL method body from gui/controller.py and exec's it
+Each test extracts the REAL method body from lightsheet/gui/controller.py and exec's it
 in a controlled namespace, then calls the resulting function against a minimal
 Mock stand-in `self`. This runs the same code that runs on the rig — proving
 runtime behavior, not a string match on the source. See AGENTS.md §5: never
@@ -63,10 +63,10 @@ def _slice_method(src: str, method_sig: str) -> str:
 def _load_method(
     method_sig: str, extra_globals: dict[str, Any] | None = None
 ) -> Callable[..., Any]:
-    """Extract a method body from gui/controller.py and return a callable
+    """Extract a method body from lightsheet/gui/controller.py and return a callable
     that executes the real source. `extra_globals` seeds the exec namespace
     with module-level names the body references (datetime, logging, logger,
-    ...). `logger` is the module-level logger gui/controller.py declares;
+    ...). `logger` is the module-level logger lightsheet/gui/controller.py declares;
     seeding it here lets the migrated logger.* calls resolve when the body
     is exec'd in isolation."""
     src = _read_controller_source()
