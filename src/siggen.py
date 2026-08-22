@@ -190,35 +190,22 @@ class SigGen:
 
         try:
             # Creating and setting up the galvo + ETL scan task (AO)
-            print('create_scanner: creating AO task', flush=True)
             self.task_galvo_etl = nidaqmx.Task(new_task_name = 'galvo_etl_scan')
-            print('create_scanner: adding AO voltage chan', flush=True)
             self.task_galvo_etl.ao_channels.add_ao_voltage_chan(self.ao_terminals)
-            print('create_scanner: cfg AO samp clk timing', flush=True)
             self.task_galvo_etl.timing.cfg_samp_clk_timing(rate = self.sample_rate, sample_mode = AcquisitionType.FINITE, samps_per_chan = self.total_samples)
 
             # Creating and setting up the camera exposure control task (DO)
-            print('create_scanner: creating DO task', flush=True)
             self.task_camera = nidaqmx.Task(new_task_name = 'camera_scan')
-            print('create_scanner: adding DO chan', flush=True)
             self.task_camera.do_channels.add_do_chan(self.do_terminals, line_grouping = LineGrouping.CHAN_PER_LINE)
-            print('create_scanner: cfg DO samp clk timing', flush=True)
             self.task_camera.timing.cfg_samp_clk_timing(rate = self.sample_rate, sample_mode = AcquisitionType.FINITE, samps_per_chan = self.total_samples)
 
             # Setup DO task to be triggered by AO start_trigger signal (AO is master task)
-            print('create_scanner: cfg DO start trigger', flush=True)
             self.task_camera.triggers.start_trigger.cfg_dig_edge_start_trig(self.do_start_trigger, trigger_edge = Edge.RISING)
 
             # Write waveforms to AO and DO tasks (to be started later)
-            print('create_scanner: writing DO waveform', flush=True)
             self.task_camera.write(self.waveform_camera, auto_start = False)
-            print('create_scanner: writing AO waveform', flush=True)
             self.task_galvo_etl.write(galvo_etl_waveforms, auto_start = False)
-            print('create_scanner: done', flush=True)
         except:
-            import traceback
-            tb = traceback.format_exc()
-            print('SigGen.create_scanner FAILED:\n', tb, flush=True)
             self.task_galvo_etl = None
             self.task_camera = None
             self.error = 1

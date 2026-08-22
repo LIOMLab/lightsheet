@@ -19,7 +19,11 @@ import pytest
 
 
 def _real_nidaqmx_available():
-    spec = importlib.util.find_spec('nidaqmx')
+    try:
+        spec = importlib.util.find_spec('nidaqmx')
+    except ValueError:
+        # Stub module in sys.modules (Mac conftest) has __spec__ = None.
+        return False
     if spec is None:
         return False
     try:

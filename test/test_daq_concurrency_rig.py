@@ -31,7 +31,10 @@ import pytest
 
 def _real_nidaqmx_available():
     '''True only if the real nidaqmx driver runtime is present (rig).'''
-    spec = importlib.util.find_spec('nidaqmx')
+    try:
+        spec = importlib.util.find_spec('nidaqmx')
+    except ValueError:
+        return False
     if spec is None:
         return False
     try:
