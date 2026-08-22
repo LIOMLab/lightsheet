@@ -2,12 +2,15 @@
 Created on February 8, 2022
 '''
 
+import logging
 import time
 from datetime import datetime, timedelta
 import numpy as np
 import pco
 
 from lightsheet.config import cfg_read, cfg_write, cfg_str2bool
+
+logger = logging.getLogger(__name__)
 
 
 class Camera:
@@ -85,8 +88,7 @@ class Camera:
             try:
                 self.camera = pco.Camera()
             except ValueError:
-                if self.verbose:
-                    print(" Failed to open camera.")
+                logger.exception('Failed to open camera.')
                 self.camera = None
             else:
                 sizes = {}
@@ -252,8 +254,7 @@ class Camera:
                     print("Starting camera recording session...")
                 self.camera.record(int(number_of_images), mode='sequence non blocking')
             except ValueError:
-                if self.verbose:
-                    print(" Exception while starting recorder.")
+                logger.exception('Exception while starting recorder.')
                 self.is_recording = False
             else:
                 self.is_recording = True

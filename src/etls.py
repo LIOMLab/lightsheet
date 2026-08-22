@@ -4,11 +4,15 @@ Created on April 20, 2022
 '''
 
 import copy
+import logging
 import serial
 import time
 from ctypes import c_ushort
 
 from lightsheet.config import cfg_read, cfg_write
+
+logger = logging.getLogger(__name__)
+
 
 class ETLs:
     '''Class for ETLs'''
@@ -42,7 +46,7 @@ class ETLs:
             self.etl_left.connect()
         except:
             self.etl_left = None
-            print('Left ETL error')
+            logger.exception('Left ETL error')
         else:
             print('Left ETL detected')
 
@@ -51,7 +55,7 @@ class ETLs:
             self.etl_right.connect()
         except:
             self.etl_right = None
-            print('Right ETL error')
+            logger.exception('Right ETL error')
         else:
             print('Right ETL detected')
 

@@ -4,6 +4,8 @@ Created on May 16, 2019
 @author: Pierre Girard-Collins
 '''
 
+import logging
+
 import numpy as np
 
 # National Instruments Imports
@@ -14,6 +16,8 @@ from lightsheet.camera import Camera
 
 from lightsheet.config import cfg_read, cfg_write, cfg_str2bool
 from lightsheet.waveforms import squarewave, sawtooth, staircase
+
+logger = logging.getLogger(__name__)
 
 
 class SigGen:
@@ -146,7 +150,7 @@ class SigGen:
         except:
             self.error = 1
             self.error_message = 'update_all error'
-            print('SigGen - update_all error')
+            logger.exception('SigGen - update_all error')
 
 
     def update_galvos(self, left_galvo:float, right_galvo:float):
@@ -161,7 +165,7 @@ class SigGen:
         except:
             self.error = 1
             self.error_message = 'update_galvos error'
-            print('SigGen - update_galvos error')
+            logger.exception('SigGen - update_galvos error')
 
 
     def update_etls(self, left_etl:float, right_etl:float):
@@ -176,7 +180,7 @@ class SigGen:
         except:
             self.error = 1
             self.error_message = 'update_etls error'
-            print('SigGen - update_etls error')
+            logger.exception('SigGen - update_etls error')
 
 
     def create_scanner(self):
@@ -208,7 +212,7 @@ class SigGen:
             self.task_camera = None
             self.error = 1
             self.error_message = 'create_scan error'
-            print('SigGen - create_scan error')
+            logger.exception('SigGen - create_scan error')
 
 
     def start_scanner(self):
