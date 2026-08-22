@@ -231,12 +231,11 @@ class ISigGenCore(ABC):
     def waveform_metadata(self) -> dict | None: ...
 
     # Lifecycle verbs (AGENTS.md §10) — abstract methods returning None.
-    @abstractmethod
-    def open(self) -> None: ...
-
-    @abstractmethod
-    def close(self) -> None: ...
-
+    # ``open`` / ``close`` are NOT declared here: the real ``SigGen`` class
+    # initializes the DAQ in ``__init__`` and does not expose open/close
+    # lifecycle verbs; the controller never calls them. The ABC is pinned
+    # to that call graph. Concrete mock classes may still expose them as
+    # no-op extras.
     @abstractmethod
     def arm(self) -> None: ...
 
@@ -289,10 +288,14 @@ class IMotorCore(ABC):
     """Controller-reachable per-axis motor surface (D-05).
 
     The controller reads per-axis motor state as direct attributes —
-    ``motor.position``, ``motor.limit_low_microsteps``,
-    ``motor.limit_high_microsteps``, ``motor.microstep_size``,
-    ``motor.device_number``. These are declared as ``@property`` +
-    ``@abstractmethod`` slots (D-04).
+    ``motor.limit_low_microsteps``, ``motor.limit_high_microsteps``,
+    ``motor.microstep_size``, ``motor.device_number``. These are declared
+    as ``@property`` + ``@abstractmethod`` slots (D-04). The controller
+    queries position via ``get_position(units)`` (a serial command on the
+    real Zaber stage), never as a direct ``motor.position`` attribute, so
+    ``position`` is NOT part of the core ABC contract — concrete classes
+    may expose it as a plain attribute (the mock does, for software
+    tracking) but the ABC is pinned to the controller's actual call graph.
 
     Travel-limit enforcement (AGENTS.md §2) is a physical-safety contract:
     ``move_absolute_position`` and ``move_relative_position`` MUST raise
@@ -303,10 +306,6 @@ class IMotorCore(ABC):
     # HAL error surface (AGENTS.md §10).
     error: int
     error_message: str
-
-    @property
-    @abstractmethod
-    def position(self) -> float: ...
 
     @property
     @abstractmethod
@@ -371,6 +370,12 @@ class IMotorsCore(ABC):
     The controller reads the per-axis motor handles as direct attributes —
     ``motors.vertical``, ``motors.horizontal``, ``motors.camera``. These are
     declared as ``@property`` + ``@abstractmethod`` slots (D-04).
+
+    The real ``Motors`` class initializes hardware in ``__init__`` (via the
+    per-axis ``ZaberMotor`` constructors) and does not expose ``open()`` /
+    ``close()`` lifecycle verbs; the controller never calls them. The ABC
+    is pinned to that call graph, so ``open`` / ``close`` are NOT declared
+    here. Concrete mock classes may still expose them as no-op extras.
     """
 
     # HAL error surface (AGENTS.md §10).
@@ -388,12 +393,6 @@ class IMotorsCore(ABC):
     @property
     @abstractmethod
     def camera(self) -> IMotorCore: ...
-
-    @abstractmethod
-    def open(self) -> None: ...
-
-    @abstractmethod
-    def close(self) -> None: ...
 
 
 class IMotors(IMotorsCore):

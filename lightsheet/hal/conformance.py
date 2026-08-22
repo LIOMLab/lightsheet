@@ -130,8 +130,6 @@ CAMERA_CONTRACT = ConformanceContract(
 
 SIGGEN_CONTRACT = ConformanceContract(
     lifecycle_methods=(
-        "open",
-        "close",
         "arm",
         "disarm",
         "compute_scan_waveforms",
@@ -150,7 +148,7 @@ SIGGEN_CONTRACT = ConformanceContract(
 )
 
 MOTORS_CONTRACT = ConformanceContract(
-    lifecycle_methods=("open", "close"),
+    lifecycle_methods=(),
     read_attrs=("error", "error_message"),
     setter_methods=(),
 )
