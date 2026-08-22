@@ -101,22 +101,23 @@ def test_gui_controller_imports_from_foreign_cwd(tmp_path: Path) -> None:
 
 
 def test_lightsheet_hal_modules_import_as_top_level(tmp_path: Path) -> None:
-    """The HAL modules (camera, siggen, motors, lasers, ibeam, etls) plus
-    logging_setup import as top-level ``lightsheet.X`` modules — proving
-    they remain flat at the ``lightsheet/`` top level (D-04), not moved
-    into a ``lightsheet/hal/`` subpackage.
+    """The HAL modules import via the installed ``lightsheet`` package from
+    a foreign CWD. After the Phase 3 reorg (D-01), ``camera`` lives under
+    ``lightsheet.hal`` (re-exported from ``lightsheet.hal.real.camera``);
+    the remaining five device families (siggen, motors, lasers, ibeam, etls)
+    stay flat at ``lightsheet/`` top level until Wave 2 moves them, and
+    ``logging_setup`` stays top-level permanently.
 
-    A subprocess rooted in an empty temp directory imports all seven
-    modules. The real nidaqmx / pco / pyserial packages are installed in
-    the venv (they just cannot construct hardware objects on the Mac), so
-    the imports succeed in the subprocess. This would fail with
-    ``ModuleNotFoundError`` if the modules were relocated to
-    ``lightsheet/hal/``."""
+    A subprocess rooted in an empty temp directory imports the full set.
+    The real nidaqmx / pco / pyserial packages are installed in the venv
+    (they just cannot construct hardware objects on the Mac), so the
+    imports succeed in the subprocess."""
     result = subprocess.run(
         [
             sys.executable,
             "-c",
-            "from lightsheet import camera, siggen, motors, lasers, "
+            "from lightsheet.hal import Camera; "
+            "from lightsheet import siggen, motors, lasers, "
             "ibeam, etls, logging_setup",
         ],
         cwd=tmp_path,
