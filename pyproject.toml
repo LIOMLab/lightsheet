@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lightsheet"
+version = "0.1.0"
+description = "Light-sheet fluorescence microscope controller (PyQt5 desktop app)"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "numpy>=1.22.3",
+    "PyQt5>=5.15.6",
+    "nidaqmx>=0.6.0",
+    "pco>=0.1.3",
+    "pyserial>=3.5",
+    "h5py>=3.6.0",
+    "scipy>=1.8.0",
+    "pyqtgraph>=0.12.4",
+    "tifffile>=2022.2.9",
+    "matplotlib>=3.5.1",
+    "QDarkStyle>=3.0.3",
+]
+
+[project.scripts]
+lightsheet = "lightsheet.__main__:main"
+
+[tool.setuptools]
+package-dir = {"lightsheet" = "src"}
+packages = ["lightsheet", "gui"]
+
+[tool.uv]
+required-environments = ["sys_platform == 'win32'", "sys_platform == 'darwin'"]
+
+[tool.ruff]
+extend-exclude = [
+    "gui/ui_controller.py",
+    "gui/ui_controller_rc.py",
+    "gui/ui_properties.py",
+    "test/axial_resolution.py",
+    "test/convert_tiff_to_hdf5.py",
+    "test/daqmx.py",
+    "test/filename.py",
+    "test/graphiques.py",
+    "test/h5test.py",
+    "test/hdf5_to_tiff.py",
+    "test/imagej.py",
+    "test/qthd.py",
+    "test/read_hdf5.py",
+    "test/resolution.py",
+    "test/script_camera_calibration.py",
+    "test/waveforms_display.py",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "ANN"]
+ignore = ["ANN401"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/__main__.py" = ["E402"]
+
+[tool.ruff.format]
+# defaults
+
+[tool.ty.rules]
+missing-type-argument = "error"
+unsound-return-statement = "error"
+
+[tool.ty.terminal]
+error-on-warning = true
+
+[[tool.ty.overrides]]
+include = ["gui/controller.py"]
+
+[tool.ty.overrides.rules]
+missing-type-argument = "warn"
+unsound-return-statement = "warn"

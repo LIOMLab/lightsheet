@@ -26,3 +26,6 @@ skills-lock.json
 
 # Python virtual environment
 .venv/
+
+# Editable-install metadata produced by `pip install -e .`
+*.egg-info/
