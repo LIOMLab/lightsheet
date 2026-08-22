@@ -8,12 +8,12 @@ directory. An autouse fixture snapshots and restores the root logger's
 handlers and level so no handler leaks across tests.
 """
 
+import contextlib
 import logging
 import logging.handlers
 from pathlib import Path
 
 import pytest
-
 from lightsheet.logging_setup import configure
 
 
@@ -32,10 +32,8 @@ def _save_root_logger() -> object:
     yield
     for handler in list(root.handlers):
         root.removeHandler(handler)
-        try:
+        with contextlib.suppress(Exception):
             handler.close()
-        except Exception:
-            pass
     for handler in saved_handlers:
         root.addHandler(handler)
     root.setLevel(saved_level)
@@ -49,7 +47,9 @@ def test_configure_attaches_rotating_file_and_stream_handlers(
     monkeypatch.chdir(tmp_path)
     configure()
     root = logging.getLogger()
-    has_rotating = any(isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers)
+    has_rotating = any(
+        isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers
+    )
     has_stream = any(isinstance(h, logging.StreamHandler) for h in root.handlers)
     assert has_rotating, f"no RotatingFileHandler in {root.handlers}"
     assert has_stream, f"no StreamHandler in {root.handlers}"
@@ -96,5 +96,9 @@ def test_logger_exception_writes_to_log_file(
         handler.flush()
     log_files = list((tmp_path / "logs").glob("*.log"))
     assert log_files, f"no *.log file under {tmp_path / 'logs'}"
-    contents = "\n".join(p.read_text(encoding="utf-8") for p in log_files)
+    parts = []
+    for log_path in log_files:
+        with open(log_path, encoding="utf-8") as log_file:
+            parts.append(log_file.read())
+    contents = "\n".join(parts)
     assert "boom" in contents
