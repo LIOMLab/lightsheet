@@ -47,9 +47,11 @@ class MockLasers(ILasers):
     through the mock refactor).
     """
 
-    # Override the ILasersCore @property abstract slots with plain class
-    # attributes so the class is concrete (instantiable). __init__ sets the
-    # real synthetic values as instance attributes.
+    # Class-level defaults provide pre-__init__ synthetic values (the ABC
+    # now declares these as annotations, so the override is no longer
+    # required for ABC satisfaction, but the defaults are kept so the mock
+    # has sensible values before __init__ runs). __init__ sets the real
+    # synthetic values as instance attributes.
     laser1_wavelength: int = 0
     laser2_wavelength: int = 0
     laser1_max_power: float = 0.0

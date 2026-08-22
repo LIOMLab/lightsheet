@@ -45,9 +45,11 @@ class MockCamera(ICamera):
     attributes, which is the surface the controller reads (D-04).
     """
 
-    # Override the ICameraCore @property abstract slots with plain class
-    # attributes so the class is concrete (instantiable). __init__/open()
-    # set the real synthetic values as instance attributes.
+    # Class-level defaults provide pre-__init__ synthetic values (the ABC
+    # now declares these as annotations, so the override is no longer
+    # required for ABC satisfaction, but the defaults are kept so the mock
+    # has sensible values before open() runs). __init__/open() set the real
+    # synthetic values as instance attributes.
     xsize: int | None = None
     ysize: int | None = None
     exposure_time: float = 0.0
@@ -210,10 +212,6 @@ class MockCamera(ICamera):
         self.exposure_time = float(exposure_time_ms) * 1e-3
         return None
 
-    def set_shutter_mode(self, shutter_mode: str) -> None:
-        self.shutter_mode = str(shutter_mode)
-        return None
-
     def set_trigger_mode(self, trigger_mode: str) -> None:
         """No-op — the mock camera has no hardware trigger to configure."""
         return None
@@ -225,6 +223,50 @@ class MockCamera(ICamera):
     def get_name(self) -> str | None:
         """Return the synthetic camera name used by the Properties dialog."""
         return "MockCamera"
+
+    # Stubs for the extended ICamera getters — return synthetic defaults
+    # mirroring real Camera's not-open path (the mock has no PCO SDK to query).
+    def get_trigger_mode(self) -> str | None:
+        return None
+
+    def get_acquire_mode(self) -> str | None:
+        return None
+
+    def get_storage_mode(self) -> str | None:
+        return None
+
+    def get_recorder_submode(self) -> str | None:
+        return None
+
+    def get_exposure_time(self) -> int | None:
+        return None
+
+    def get_exposure_timebase(self) -> str | None:
+        return None
+
+    def get_delay_time(self) -> int | None:
+        return None
+
+    def get_delay_timebase(self) -> str | None:
+        return None
+
+    def get_pixel_rates(self) -> dict[str, object] | list:
+        return {}
+
+    def get_pixel_rate(self) -> str | None:
+        return None
+
+    def get_readout_format(self) -> str | None:
+        return None
+
+    def cfg_load_ini(self) -> None:
+        # No-op — mock has no config.ini to read; the synthetic defaults
+        # are already set in __init__.
+        return None
+
+    def cfg_save_ini(self) -> None:
+        # No-op — mock does not persist config.
+        return None
 
     def get_properties(self) -> dict[str, object]:
         """Return synthetic camera properties matching the keys the

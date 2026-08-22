@@ -12,13 +12,14 @@ import numpy as np
 from nidaqmx.constants import AcquisitionType, Edge, LineGrouping
 
 from lightsheet.config import cfg_read, cfg_str2bool, cfg_write
+from lightsheet.hal.interfaces import ISigGen
 from lightsheet.hal.real.camera import Camera  # real→real dep (D-01)
 from lightsheet.waveforms import sawtooth, squarewave, staircase
 
 logger = logging.getLogger(__name__)
 
 
-class SigGen:
+class SigGen(ISigGen):
     """
     Class for generating and sending timing signals to galvos, etls and camera
     """

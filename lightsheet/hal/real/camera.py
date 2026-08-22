@@ -10,11 +10,12 @@ import numpy as np
 import pco
 
 from lightsheet.config import cfg_read, cfg_write
+from lightsheet.hal.interfaces import ICamera
 
 logger = logging.getLogger(__name__)
 
 
-class Camera:
+class Camera(ICamera):
     """Class for PCO cameras"""
 
     # Configurable settings defaults

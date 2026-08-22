@@ -8,11 +8,12 @@ import logging
 import serial
 
 from lightsheet.config import cfg_read, cfg_str2bool, cfg_write
+from lightsheet.hal.interfaces import IMotor, IMotors
 
 logger = logging.getLogger(__name__)
 
 
-class Motors:
+class Motors(IMotors):
     """Class for translation stages"""
 
     # Configurable settings defaults
@@ -139,7 +140,7 @@ class Motors:
         return motors_positions
 
 
-class ZaberMotor:
+class ZaberMotor(IMotor):
     """Class for Zaber's T-LS series linear stage motor control"""
 
     def __init__(self, port: str, device_number: int) -> None:

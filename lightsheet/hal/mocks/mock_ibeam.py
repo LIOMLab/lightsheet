@@ -51,9 +51,11 @@ class MockIBeam(IIBeam):
     ``set_power`` clamps to ``max_power`` (AGENTS.md §2).
     """
 
-    # Override the IIBeamCore @property abstract slots with plain class
-    # attributes so the class is concrete (instantiable). __init__ sets the
-    # real synthetic values as instance attributes.
+    # Class-level defaults provide pre-__init__ synthetic values (the ABC
+    # now declares these as annotations, so the override is no longer
+    # required for ABC satisfaction, but the defaults are kept so the mock
+    # has sensible values before __init__ runs). __init__ sets the real
+    # synthetic values as instance attributes.
     wavelength: int = 0
     max_power: int = 0
     _power: int = 0
@@ -153,14 +155,3 @@ class MockIBeam(IIBeam):
         # The real IBeam.is_enabled() sends `status laser` and parses ON/OFF.
         # The mock returns the tracked _is_on state.
         return self._is_on
-
-    def status_laser(self) -> bool:
-        # Alias for is_enabled() — the controller's status-poll path.
-        return self._is_on
-
-    def show_level_power(self) -> list[str]:
-        # The real IBeam.show_level_power() sends `show level power` and
-        # returns the reply lines. The mock returns a synthetic reply
-        # matching the real format so any future reply-parsing test has a
-        # deterministic fixture.
-        return [f"CH{self.channel}, PWR: {self._power / 1000.0:.3f} mW", "[OK]"]

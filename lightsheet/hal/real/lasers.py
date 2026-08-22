@@ -10,11 +10,12 @@ import numpy as np
 
 # from nidaqmx.constants import AcquisitionType, LineGrouping, Edge
 from lightsheet.config import cfg_read
+from lightsheet.hal.interfaces import ILasers
 
 logger = logging.getLogger(__name__)
 
 
-class Lasers:
+class Lasers(ILasers):
     """Class for generating and sending AO signals to modulate lasers"""
 
     # Default configurable settings

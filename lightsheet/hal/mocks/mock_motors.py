@@ -35,9 +35,11 @@ class MockMotor(IMotor):
     BEFORE any state change (AGENTS.md §2).
     """
 
-    # Override the IMotorCore @property abstract slots with plain class
-    # attributes so the class is concrete (instantiable). __init__ sets the
-    # real synthetic values as instance attributes.
+    # Class-level defaults provide pre-__init__ synthetic values (the ABC
+    # now declares these as annotations, so the override is no longer
+    # required for ABC satisfaction, but the defaults are kept so the mock
+    # has sensible values before open() runs). __init__ sets the real
+    # synthetic values as instance attributes.
     position: float = 0.0
     limit_low_microsteps: int = 0
     limit_high_microsteps: int = 0
@@ -194,6 +196,42 @@ class MockMotor(IMotor):
         self.origin_microsteps = self.position_to_microsteps(position, units)
         return None
 
+    # ------------------------------------------------------------------ #
+    # Controller-called getters (IMotorCore) — the 3 getters the
+    # controller's updateUi_units/updateUi_check_positions/updateUi_set_origin
+    # call graph reads (46 call sites). Mirror ZaberMotor.get_limit_low/
+    # get_limit_high/get_origin (real/motors.py:317-329).
+    # ------------------------------------------------------------------ #
+
+    def get_limit_low(self, units: str) -> float:
+        return self.microsteps_to_position(self.limit_low_microsteps, units)
+
+    def get_limit_high(self, units: str) -> float:
+        return self.microsteps_to_position(self.limit_high_microsteps, units)
+
+    def get_origin(self, units: str) -> float:
+        return self.microsteps_to_position(self.origin_microsteps, units)
+
+    # ------------------------------------------------------------------ #
+    # Extended surface (IMotor) — getters + lifecycle extras not
+    # GUI-wired. Mirror ZaberMotor.get_units/get_inverted/ask_id/move_home.
+    # ------------------------------------------------------------------ #
+
+    def get_units(self) -> str:
+        return self.units
+
+    def get_inverted(self) -> bool:
+        return self.inverted
+
+    def ask_id(self) -> int:
+        # Mock has no serial hardware; self.id stays 0 set in __init__.
+        # The mock is always "supported" so no hardware probe is needed.
+        return self.id
+
+    def move_home(self) -> None:
+        # Mock has no physical home; no-op per the mock lifecycle pattern.
+        return None
+
 
 class MockMotors(IMotors):
     """Mock Motors container for demo mode — implements IMotors with no
@@ -206,9 +244,11 @@ class MockMotors(IMotors):
     controller's safety checks exercise the same code path under demo.
     """
 
-    # Override the IMotorsCore @property abstract slots with plain class
-    # attributes so the class is concrete (instantiable). __init__ sets the
-    # real instances as instance attributes.
+    # Class-level defaults provide pre-__init__ synthetic values (the ABC
+    # now declares these as annotations, so the override is no longer
+    # required for ABC satisfaction, but the defaults are kept so the mock
+    # has sensible values before __init__ runs). __init__ sets the real
+    # instances as instance attributes.
     vertical: IMotor | None = None
     horizontal: IMotor | None = None
     camera: IMotor | None = None
@@ -271,3 +311,15 @@ class MockMotors(IMotors):
             "horizontal position": self.horizontal.get_position("mm"),
             "camera position": self.camera.get_position("mm"),
         }
+
+    # ------------------------------------------------------------------ #
+    # Extended config surface (IMotors) — no-op stubs. The mock has no
+    # config.ini to read or persist; the synthetic defaults are already
+    # set in __init__.
+    # ------------------------------------------------------------------ #
+
+    def cfg_load_ini(self) -> None:
+        return None
+
+    def cfg_save_ini(self) -> None:
+        return None
