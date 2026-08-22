@@ -45,8 +45,8 @@ from PyQt5.QtWidgets import (
 )
 from scipy import stats
 
-from gui.ui_controller import Ui_Controller
-from gui.ui_properties import Ui_Properties
+from lightsheet.gui.ui_controller import Ui_Controller
+from lightsheet.gui.ui_properties import Ui_Properties
 
 logger = logging.getLogger(__name__)
 

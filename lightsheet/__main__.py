@@ -54,7 +54,7 @@ def main() -> int:
     from qdarkstyle.dark.palette import DarkPalette
     from qdarkstyle.light.palette import LightPalette
 
-    from gui.controller import Controller_MainWindow
+    from lightsheet.gui.controller import Controller_MainWindow
 
     # Workaround for a nidaqmx 0.6.x Task.__del__ bug: after the context manager
     # closes a Task (close() -> clear()), the internal _saved_name attribute is
