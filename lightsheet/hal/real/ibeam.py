@@ -130,6 +130,15 @@ class IBeam:
         """Enable laser emission (global enable)."""
         try:
             self._send_cmd("laser on")
+            # Bail before re-enabling the channel if the global emission
+            # enable was rejected. _send_cmd resets self.error=0 at the top
+            # of every round-trip, so the subsequent enable_channel() call
+            # would clear a 'laser on' rejection and leave the HAL believing
+            # emission is enabled when the firmware refused. Checking here —
+            # between the two sub-commands — preserves the rejection on the
+            # error surface (Class IIIB laser safety).
+            if self.error:
+                return
             # Re-enable the configured diode channel with each emission
             # enable. The channel enable is independent of the global
             # `laser on` state; reasserting it here guarantees a power
