@@ -56,7 +56,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-_CONTROLLER_SRC = os.path.join(os.path.dirname(__file__), "..", "gui", "controller.py")
+_CONTROLLER_SRC = os.path.join(os.path.dirname(__file__), "..", "lightsheet", "gui", "controller.py")
 
 
 def _read_controller_source() -> str:
