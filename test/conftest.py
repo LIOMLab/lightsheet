@@ -9,11 +9,37 @@ succeed on this Mac, where the vendor SDKs are not installed.
 
 Each stub is gated by importlib.util.find_spec: if a real package is already
 importable, the stub is skipped so the real driver is used on the rig.
+
+The ``has_hardware`` fixture + module-level ``_has_hardware`` bool gate the
+TST-04 conformance suite's ``[real, mock]`` parametrize: the real id is
+skipped on Mac (``LIGHTSHEET_HW`` unset) via
+``pytest.param(marks=pytest.mark.skipif(not _has_hardware, ...))`` and runs
+on the rig when ``LIGHTSHEET_HW=1``. The module-level bool is needed because
+parametrize marks are evaluated at collection time, not at fixture-resolution
+time, so the fixture cannot be used inside ``skipif``.
 """
 
+import os
 import sys
 import types
 from collections.abc import Callable
+
+import pytest
+
+# Module-level hardware gate (D-15). Parametrize marks are evaluated at
+# collection time, before any fixture resolves, so the conformance tests'
+# ``pytest.param(real, marks=pytest.mark.skipif(not _has_hardware, ...))``
+# needs a module-level bool, not a fixture. Set LIGHTSHEET_HW=1 on the rig
+# to run the real conformance path; leave it unset on the Mac dev box.
+_has_hardware: bool = os.environ.get("LIGHTSHEET_HW", "0") == "1"
+
+
+@pytest.fixture(scope="session")
+def has_hardware() -> bool:
+    """Session fixture exposing the hardware-gate bool to tests that want
+    to read it at runtime (e.g. to assert the skipif gate logic). Mirrors
+    the module-level ``_has_hardware`` but resolves at fixture-call time."""
+    return os.environ.get("LIGHTSHEET_HW", "0") == "1"
 
 
 def _make_nidaqmx_stub() -> types.ModuleType:
