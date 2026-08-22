@@ -8,7 +8,7 @@
 controller's ``self.etls.open(); self.etls.set_analog_mode()`` call sites
 are unchanged between real and demo runs.
 
-``MockOptutune``'s ~30 CRC-protected serial commands raise
+``MockOptotune``'s ~30 CRC-protected serial commands raise
 ``NotImplementedError`` (D-06). They cannot be verified against real
 hardware on the Mac dev box; rig-verification task HW2-01 covers them. A
 mock that silently succeeded would mask a real-device protocol regression,
@@ -165,7 +165,7 @@ class MockETLs(IETLs):
 
     def open(self) -> None:
         # The real ETLs.open() constructs Optotune per lens and calls
-        # connect(); the mock's MockOptutune.connect() is a no-op, so just
+        # connect(); the mock's MockOptotune.connect() is a no-op, so just
         # leave the per-lens instances in place.
         return None
 
@@ -174,7 +174,7 @@ class MockETLs(IETLs):
 
     def set_analog_mode(self) -> None:
         # The real ETLs.set_analog_mode() calls etl.mode("analog") on each
-        # lens; the mock's MockOptutune.mode("analog") is a no-op.
+        # lens; the mock's MockOptotune.mode("analog") is a no-op.
         if self.etl_left is not None:
             self.etl_left.mode("analog")
         if self.etl_right is not None:
