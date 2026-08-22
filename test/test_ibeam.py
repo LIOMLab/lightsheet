@@ -11,7 +11,7 @@ firmware error replies) were confirmed against the physical rig on COM4
 
 from unittest.mock import MagicMock, patch
 
-import lightsheet.ibeam as ibeam_mod
+import lightsheet.hal.real.ibeam as ibeam_mod
 
 
 def _make_open_ibeam(
@@ -26,7 +26,7 @@ def _make_open_ibeam(
     test's own _send_cmd / status calls (otherwise open()'s echo-off would
     consume the side_effect list).
     """
-    with patch("lightsheet.ibeam.serial.Serial") as MockSerial:
+    with patch("lightsheet.hal.real.ibeam.serial.Serial") as MockSerial:
         mock_ser = MagicMock()
         MockSerial.return_value = mock_ser
         mock_ser.readline.return_value = b"[OK]\r\n"
@@ -146,7 +146,7 @@ def test_ibeam_no_serial_connection_sets_error() -> None:
 #         power command can be issued).
 # --------------------------------------------------------------------------- #
 def test_ibeam_open_sends_enable_channel() -> None:
-    with patch("lightsheet.ibeam.serial.Serial") as MockSerial:
+    with patch("lightsheet.hal.real.ibeam.serial.Serial") as MockSerial:
         mock_ser = MagicMock()
         MockSerial.return_value = mock_ser
         mock_ser.readline.return_value = b"[OK]\r\n"

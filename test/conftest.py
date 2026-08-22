@@ -3,10 +3,9 @@ Pytest auto-loaded configuration.
 
 Stubs the absent hardware SDKs (nidaqmx, pco, and serial as a fallback) into
 sys.modules BEFORE pytest collects any test/test_*.py file. This lets every
-test module's `from lightsheet.lasers import Lasers` /
-`from lightsheet.ibeam import IBeam` / `from lightsheet.motors import Motors` /
-`from lightsheet.camera import Camera` succeed on this Mac, where the vendor
-SDKs are not installed.
+test module's `from lightsheet.hal import Lasers, IBeam, Motors, Camera` (and
+the deeper `import lightsheet.hal.real.ibeam` for mock-serial patch paths)
+succeed on this Mac, where the vendor SDKs are not installed.
 
 Each stub is gated by importlib.util.find_spec: if a real package is already
 importable, the stub is skipped so the real driver is used on the rig.

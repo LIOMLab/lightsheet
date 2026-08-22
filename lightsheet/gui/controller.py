@@ -40,9 +40,7 @@ from lightsheet.config import cfg_read
 from lightsheet.gaussian import func, gaussian
 from lightsheet.gui.ui_controller import Ui_Controller
 from lightsheet.gui.ui_properties import Ui_Properties
-from lightsheet.hal import Camera, ETLs, Motors, SigGen
-from lightsheet.ibeam import IBeam
-from lightsheet.lasers import Lasers
+from lightsheet.hal import Camera, ETLs, IBeam, Lasers, Motors, SigGen
 
 logger = logging.getLogger(__name__)
 

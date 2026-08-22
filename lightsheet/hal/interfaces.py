@@ -536,3 +536,229 @@ class IOptotune(ABC):
 
     @abstractmethod
     def mode(self, mode_str: str | None = None) -> str: ...
+
+
+# =========================================================================== #
+# Lasers family (NI-DAQ AO, 2 channels)
+# =========================================================================== #
+#
+# Phase 3 mocks the existing concrete ``Lasers`` class behind per-device ABCs
+# (``ILasersCore`` / ``ILasers``) in the same shape as the other device
+# families — NO unified ``ILaser`` ABC this phase. The member names here
+# (``on`` / ``off`` / ``set_power`` + ``wavelength`` / ``power`` /
+# ``max_power`` / ``active`` attrs) are chosen so the future unified
+# ``ILaser`` ABC can adopt them unchanged — the Phase 4 refactor is a
+# re-wrap, not a rename.
+#
+# The concrete ``Lasers`` class exposes a 2-channel surface
+# (``laser1_*`` / ``laser2_*``) rather than a single-channel ``on``/``off``/
+# ``set_power`` surface. The ABC mirrors that 2-channel surface exactly
+# (``laser1_on`` / ``laser1_off`` / ``laser2_on`` / ``laser2_off`` +
+# ``set_power(channel, value)``) so the controller's existing call sites
+# (``self.lasers.laser1_on()`` etc.) type-check unchanged. Phase 4's
+# ``ILaser`` will split the per-channel surface into a single-channel ABC
+# instantiated twice; the member names picked here are what that split will
+# adopt.
+
+
+class ILasersCore(ABC):
+    """Controller-reachable Lasers surface (D-05: pinned to controller call graph).
+
+    The controller (``lightsheet/gui/controller.py``) reads Lasers state as
+    *direct attributes* — ``self.lasers.laser1_wavelength``,
+    ``self.lasers.laser2_wavelength``, ``self.lasers.laser1_max_power``,
+    ``self.lasers.laser2_max_power``, ``self.lasers.laser1_power``,
+    ``self.lasers.laser2_power``, ``self.lasers.laser1_active``,
+    ``self.lasers.laser2_active``. These are declared as ``@property`` +
+    ``@abstractmethod`` slots (D-04) so Phase 5 DI seams type-check the
+    attribute surface.
+
+    The cross-cutting HAL error surface (``error`` / ``error_message``,
+    AGENTS.md §10) is declared as a class-level annotation.
+
+    Member names (``laser1_on`` / ``laser1_off`` / ``laser2_on`` /
+    ``laser2_off`` + ``wavelength`` / ``power`` / ``max_power`` / ``active``
+    attrs) are chosen so the future unified ``ILaser`` ABC can adopt them
+    unchanged — Phase 4's refactor is a re-wrap, not a rename.
+    """
+
+    # HAL error surface (AGENTS.md §10).
+    error: int
+    error_message: str
+
+    # Controller-read attributes (D-04) — declared as @property + @abstractmethod
+    # slots because the controller reads them as direct attributes, not via
+    # getters. Concrete classes implement them as plain instance attributes.
+    @property
+    @abstractmethod
+    def laser1_wavelength(self) -> int: ...
+
+    @property
+    @abstractmethod
+    def laser2_wavelength(self) -> int: ...
+
+    @property
+    @abstractmethod
+    def laser1_max_power(self) -> float: ...
+
+    @property
+    @abstractmethod
+    def laser2_max_power(self) -> float: ...
+
+    @property
+    @abstractmethod
+    def laser1_power(self) -> float: ...
+
+    @property
+    @abstractmethod
+    def laser2_power(self) -> float: ...
+
+    @property
+    @abstractmethod
+    def laser1_active(self) -> bool: ...
+
+    @property
+    @abstractmethod
+    def laser2_active(self) -> bool: ...
+
+    # Lifecycle verbs (AGENTS.md §10) — abstract methods returning None.
+    # The 2-channel on/off surface mirrors the concrete Lasers class; Phase 4
+    # splits this into a single-channel ILaser instantiated twice.
+    @abstractmethod
+    def laser1_on(self) -> None: ...
+
+    @abstractmethod
+    def laser1_off(self) -> None: ...
+
+    @abstractmethod
+    def laser2_on(self) -> None: ...
+
+    @abstractmethod
+    def laser2_off(self) -> None: ...
+
+
+class ILasers(ILasersCore):
+    """Extended Lasers surface — the full public method set of the concrete
+    ``Lasers`` class. Mocks implement this; the TST-04 conformance
+    parametrization runs against this surface behind both ``[real, mock]``.
+
+    ``set_power(channel, value)`` MUST clamp the commanded power to the
+    configured ``Max Power`` for that channel at the HAL boundary
+    (AGENTS.md §2 — physical-safety control for a Class IIIB laser). The
+    concrete ``Lasers._update_setpoints`` clamps via ``min(value, max_power)``;
+    ``MockLasers.set_power`` preserves the clamp in software.
+    """
+
+    @abstractmethod
+    def set_power(self, channel: int, value: float) -> None: ...
+
+    @abstractmethod
+    def _update_setpoints(self) -> None: ...
+
+    @abstractmethod
+    def laser1_toggle(self) -> None: ...
+
+    @abstractmethod
+    def laser2_toggle(self) -> None: ...
+
+
+# =========================================================================== #
+# IBeam family (Toptica iBeam Smart serial, single channel)
+# =========================================================================== #
+#
+# Same re-wrap-not-rename contract as Lasers: the member names here
+# (``on`` / ``off`` / ``set_power`` + ``wavelength`` / ``power`` /
+# ``max_power`` / ``error`` / ``active`` attrs) are what Phase 4's unified
+# ``ILaser`` ABC will adopt unchanged.
+
+
+class IIBeamCore(ABC):
+    """Controller-reachable IBeam surface (D-05: pinned to controller call graph).
+
+    The controller (``lightsheet/gui/controller.py``) reads IBeam state as
+    *direct attributes* — ``self.ibeam.wavelength``, ``self.ibeam.max_power``,
+    ``self.ibeam.error``. The internal ``_power`` / ``_is_on`` state is
+    declared as ``@property`` + ``@abstractmethod`` slots (D-04) so the
+    concrete class's internal-state surface is part of the contract (the
+    controller's E-stop path reads ``ibeam._is_on`` indirectly via
+    ``ibeam.off()``).
+
+    The cross-cutting HAL error surface (``error`` / ``error_message``,
+    AGENTS.md §10) is declared as a class-level annotation.
+
+    ``off()`` is the E-stop kill path (AGENTS.md §2 — Class IIIB laser
+    safety): it MUST be synchronous (set ``_is_on=False`` and return None
+    immediately, no queue/thread offload) so the GUI-thread E-stop handler
+    can drive the laser off without waiting on a background task. The
+    concrete ``IBeam.off()`` and ``MockIBeam.off()`` both preserve this
+    contract.
+
+    ``set_power(value)`` MUST clamp to ``max_power`` at the HAL boundary
+    (AGENTS.md §2 — physical-safety control). The concrete ``IBeam.set_power``
+    and ``MockIBeam.set_power`` both preserve the clamp.
+    """
+
+    # HAL error surface (AGENTS.md §10).
+    error: int
+    error_message: str
+
+    # Controller-read attributes (D-04).
+    @property
+    @abstractmethod
+    def wavelength(self) -> int: ...
+
+    @property
+    @abstractmethod
+    def max_power(self) -> int: ...
+
+    # Internal state — declared on the core ABC so the synchronous-off /
+    # power-clamp safety contracts are part of the typed surface.
+    @property
+    @abstractmethod
+    def _power(self) -> int: ...
+
+    @property
+    @abstractmethod
+    def _is_on(self) -> bool: ...
+
+    # Lifecycle verbs (AGENTS.md §10). off() is synchronous — E-stop kill
+    # path (AGENTS.md §2). set_power clamps to max_power (AGENTS.md §2).
+    @abstractmethod
+    def on(self) -> None: ...
+
+    @abstractmethod
+    def off(self) -> None: ...
+
+    @abstractmethod
+    def set_power(self, power_uw: int) -> None: ...
+
+    @abstractmethod
+    def open(self) -> None: ...
+
+    @abstractmethod
+    def close(self) -> None: ...
+
+    @abstractmethod
+    def enable_channel(self, channel: int | None = None) -> None: ...
+
+
+class IIBeam(IIBeamCore):
+    """Extended IBeam surface — the full public method set of the concrete
+    ``IBeam`` class. Mocks implement this; the TST-04 conformance
+    parametrization runs against this surface behind both ``[real, mock]``.
+    """
+
+    @abstractmethod
+    def reboot(self) -> None: ...
+
+    @abstractmethod
+    def get_output_power(self) -> int: ...
+
+    @abstractmethod
+    def is_enabled(self) -> bool: ...
+
+    @abstractmethod
+    def status_laser(self) -> bool: ...
+
+    @abstractmethod
+    def show_level_power(self) -> list[str]: ...
