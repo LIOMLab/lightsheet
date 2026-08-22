@@ -34,3 +34,6 @@ skills-lock.json
 # SSH by scripts/snapshot-rig-config.sh. Intentionally untracked: holds rig COM
 # ports and per-instrument calibration values that must never enter git history.
 config.rig-specific.ini
+
+# macOS dev default log directory created by logging_setup.configure().
+logs/
