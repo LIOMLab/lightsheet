@@ -73,28 +73,29 @@ def _laser_like_write(errors):
 
 
 def _siggen_like_create(errors):
-    '''Mimic SigGen.create_scanner: create two Tasks, add channels, write.
+    '''Mimic SigGen.create_scanner: create a Task, add AO channels, write.
 
     Uses Dev1 galvo/ETL channels at 0 V. Same nidaqmx.Task() creation
     pattern as the real create_scanner, no laser, no camera trigger.
+    Uses auto_start=True so the write succeeds without a separate timing
+    config — the point is to exercise concurrent Task() creation, not the
+    exact finite-scan timing path.
     '''
     import nidaqmx
     import numpy as np
+    task_ao = None
     try:
         task_ao = nidaqmx.Task(new_task_name='concurrency_siggen_ao')
         task_ao.ao_channels.add_ao_voltage_chan(_GALVO_ETL_TERMINALS)
-        zeros = np.zeros((4, 4))
-        task_ao.write(zeros, auto_start=False)
-        task_ao.start()
-        task_ao.wait_until_done(timeout=2.0)
-        task_ao.stop()
-        task_ao.close()
-    except BaseException as e:  # noqa: BLE001
+        task_ao.write(np.zeros((4, 4)), auto_start=True)
+    except BaseException as e:  # noqa: BLE001 — capture access violations too
         errors.append(repr(e))
-        try:
-            task_ao.close()
-        except Exception:
-            pass
+    finally:
+        if task_ao is not None:
+            try:
+                task_ao.close()
+            except Exception:
+                pass
 
 
 def test_concurrent_daq_task_creation_does_not_corrupt_session():
