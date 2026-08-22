@@ -48,7 +48,6 @@ class MockMotor(IMotor):
         self,
         device_number: int,
         microstep_size: float,
-        microsteps_max: int,
         limit_low_microsteps: int,
         limit_high_microsteps: int,
     ) -> None:
@@ -58,7 +57,6 @@ class MockMotor(IMotor):
 
         self.device_number = device_number
         self.microstep_size = microstep_size
-        self.microsteps_max = microsteps_max
         self.limit_low_microsteps = limit_low_microsteps
         self.limit_high_microsteps = limit_high_microsteps
         self.origin_microsteps = 0
@@ -228,7 +226,6 @@ class MockMotors(IMotors):
         self.vertical = MockMotor(
             device_number=1,
             microstep_size=0.047625,
-            microsteps_max=1066666,
             limit_low_microsteps=0,
             limit_high_microsteps=1066666,
         )
@@ -236,7 +233,6 @@ class MockMotors(IMotors):
         self.horizontal = MockMotor(
             device_number=2,
             microstep_size=0.19050,
-            microsteps_max=533333,
             limit_low_microsteps=0,
             limit_high_microsteps=533333,
         )
@@ -244,7 +240,6 @@ class MockMotors(IMotors):
         self.camera = MockMotor(
             device_number=3,
             microstep_size=0.49609,
-            microsteps_max=258015,
             limit_low_microsteps=0,
             limit_high_microsteps=258015,
         )
