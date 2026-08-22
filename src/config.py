@@ -3,6 +3,10 @@ Created on April 1st, 2022
 '''
 
 import configparser
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def cfg_read(cfg_filename:str, cfg_section:str, cfg_dictionary:dict):
     """

@@ -11,6 +11,7 @@ from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import QApplication, QMainWindow, QDialog, QFileDialog, QTableWidgetItem, QAbstractItemView, QMessageBox, QLabel, QProgressBar, QDesktopWidget, QButtonGroup, QToolBar, QPushButton, QShortcut
 
 import logging
+logger = logging.getLogger(__name__)
 import copy
 import threading
 import time
@@ -559,7 +560,7 @@ class Controller_MainWindow(QMainWindow):
                 if worker_thread is not None and worker_thread.is_alive():
                     worker_thread.join(timeout=5.0)
                     if worker_thread.is_alive():
-                        logging.warning(
+                        logger.warning(
                             '%s still alive after 5s join timeout during '
                             'closeEvent — proceeding with shutdown anyway.',
                             attr)
@@ -575,7 +576,7 @@ class Controller_MainWindow(QMainWindow):
     @pyqtSlot(str)
     def updateUi_message_printer(self, message:str):
         '''Print text in console, in controller text box and in status bar'''
-        logging.info(message)
+        logger.info(message)
         self.ui.statusbar.showMessage(message, 2000)
         self.ui.plainTextEdit_messageLog.appendPlainText(message)
         self.ui.plainTextEdit_messageLog.verticalScrollBar().setValue(self.ui.plainTextEdit_messageLog.verticalScrollBar().maximum())
@@ -1928,7 +1929,7 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
         except Exception as e:
             self.sig_message.emit(
                 f"Preview acquisition failed — the run was aborted. Cause: {e}")
-            logging.exception("Preview mode worker failed")
+            logger.exception("Preview mode worker failed")
         finally:
             # The finished signal must fire exactly once whether the method
             # completes normally or an exception propagates from
@@ -2023,7 +2024,7 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
         except Exception as e:
             self.sig_message.emit(
                 f"Live acquisition failed — the run was aborted. Cause: {e}")
-            logging.exception("Live mode worker failed")
+            logger.exception("Live mode worker failed")
         finally:
             # The finished signal must fire exactly once whether the method
             # completes normally, breaks out of the loop on E-stop, or an
@@ -2111,7 +2112,7 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
         except Exception as e:
             self.sig_message.emit(
                 f"Single image acquisition failed — the run was aborted. Cause: {e}")
-            logging.exception("Single image mode worker failed")
+            logger.exception("Single image mode worker failed")
         finally:
             # The finished signal must fire exactly once whether the method
             # returns early (E-stop), completes normally, or an exception
@@ -2304,7 +2305,7 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
         if self.siggen.error:
             self.sig_message.emit(
                 f"Scan task creation failed — the acquisition was aborted before the camera was triggered. Check the NI DAQ connection (Dev1). Cause: {self.siggen.error_message}")
-            logging.warning("SigGen create_scanner failed during acquire_scan")
+            logger.warning("SigGen create_scanner failed during acquire_scan")
             self.siggen.delete_scanner()
             self.camera.disarm()
             return
@@ -2330,7 +2331,7 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
             self.sig_message.emit(
                 "Camera timeout — plane was not recorded (camera did not return frames in time). "
                 "The acquisition was aborted. Reduce the number of images per plane or check the camera USB connection, then restart the run.")
-            logging.warning("Camera recorder timeout during acquire_scan")
+            logger.warning("Camera recorder timeout during acquire_scan")
             self.camera.delete_recorder()
             # Delete the DAQ scanner task. The scanner was already stopped
             # above (before the timeout check) — NI-DAQmx Task.stop() is
@@ -2679,7 +2680,7 @@ Arm/Reset sequence in updateUi_arm_reset_pressed.
         except Exception as e:
             self.sig_message.emit(
                 f"Stack acquisition failed — the run was aborted. Cause: {e}")
-            logging.exception("Stack mode worker failed")
+            logger.exception("Stack mode worker failed")
         finally:
             # The finished signal must fire exactly once whether the method
             # completes normally, breaks out of the per-plane loop, or an

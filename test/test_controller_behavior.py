@@ -65,10 +65,17 @@ def _load_method(
 ) -> Callable[..., Any]:
     """Extract a method body from gui/controller.py and return a callable
     that executes the real source. `extra_globals` seeds the exec namespace
-    with module-level names the body references (datetime, logging, ...)."""
+    with module-level names the body references (datetime, logging, logger,
+    ...). `logger` is the module-level logger gui/controller.py declares;
+    seeding it here lets the migrated logger.* calls resolve when the body
+    is exec'd in isolation."""
     src = _read_controller_source()
     body = _slice_method(src, method_sig)
-    namespace = {"datetime": datetime, "logging": logging}
+    namespace = {
+        "datetime": datetime,
+        "logging": logging,
+        "logger": logging.getLogger("test_controller_behavior"),
+    }
     if extra_globals:
         namespace.update(extra_globals)
     exec(compile(body, _CONTROLLER_SRC, "exec"), namespace)

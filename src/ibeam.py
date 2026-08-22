@@ -33,12 +33,15 @@ the HAL method so any caller (GUI, future script, E-stop path) is bounded.
 '''
 
 import copy
+import logging
 import threading
 import time
 
 import serial
 
 from lightsheet.config import cfg_read
+
+logger = logging.getLogger(__name__)
 
 
 class IBeam:
@@ -103,6 +106,7 @@ class IBeam:
                 except Exception:
                     pass
                 self.ser = None
+            logger.exception('IBeam open failed')
             raise
         return None
 
@@ -115,6 +119,7 @@ class IBeam:
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
+            logger.exception('IBeam close failed')
         finally:
             self.ser = None
         return None
@@ -142,6 +147,7 @@ class IBeam:
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
+            logger.exception('IBeam on failed')
         return None
 
     def off(self):
@@ -160,6 +166,7 @@ class IBeam:
             # error surface) to manually verify, rather than the GUI
             # showing it as on and the operator assuming it is off.
             self._is_on = False
+            logger.exception('IBeam off failed')
         return None
 
     def enable_channel(self, channel=None):
@@ -178,6 +185,7 @@ class IBeam:
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
+            logger.exception('IBeam enable_channel failed')
         return None
 
     def set_power(self, power_uw):
@@ -201,6 +209,7 @@ class IBeam:
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
+            logger.exception('IBeam set_power failed')
         return None
 
     def get_output_power(self):
@@ -230,6 +239,7 @@ class IBeam:
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
+            logger.exception('IBeam get_output_power failed')
         return self._power
 
     def is_enabled(self):
@@ -244,6 +254,7 @@ class IBeam:
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
+            logger.exception('IBeam is_enabled failed')
         return False
 
     def reboot(self):
@@ -253,6 +264,7 @@ class IBeam:
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
+            logger.exception('IBeam reboot failed')
         return None
 
     # ------------------------------------------------------------------ #
