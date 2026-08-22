@@ -451,6 +451,11 @@ class ZaberMotor:
             factor = pow(10, -6)
         elif units == "\u03bcStep":
             factor = self.microstep_size * pow(10, -6)
+        else:
+            # Unknown unit — fall back to factor=0 so the downstream
+            # `factor > 0` guard yields 0 rather than UnboundLocalError.
+            # Matches MockMotor.microsteps_to_position (mock-vs-real parity).
+            factor = 0
 
         if self.microstep_size > 0 and factor > 0:
             position = microsteps * self.microstep_size * pow(10, -6) / factor
@@ -490,6 +495,11 @@ class ZaberMotor:
             factor = pow(10, -6)
         elif units == "\u03bcStep":
             factor = self.microstep_size * pow(10, -6)
+        else:
+            # Unknown unit — fall back to factor=0 so the downstream
+            # `factor > 0` guard yields 0 rather than UnboundLocalError.
+            # Matches MockMotor.position_to_microsteps (mock-vs-real parity).
+            factor = 0
 
         if self.microstep_size > 0 and factor > 0:
             microsteps = position * factor / (self.microstep_size * pow(10, -6))
