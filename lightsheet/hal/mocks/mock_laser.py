@@ -95,7 +95,7 @@ class MockLaser(ILaser):
     def on(self) -> None:
         # The real DAQLaser.on() writes the staged power to the DAQ AO
         # channel. The mock has no hardware to fail against, so it sets
-        # active=True unconditionally (mirrors MockIBeam.on()).
+        # active=True unconditionally (the mock has no failure mode).
         self.active = True
         return None
 

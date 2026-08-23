@@ -15,7 +15,7 @@ Behavior covered (per the plan's <behavior> block):
   ``150.0 / 60.0 == 2.5`` Volts; on this Mac the conftest nidaqmx stub
   makes ``nidaqmx.Task()`` raise ``nidaqmx.errors.Error``, so ``on()`` must
   set ``error == 1``, a non-empty ``error_message``, and ``active == False``
-  (write-failure revert, mirroring ``Lasers._update_setpoints``).
+  (write-failure revert, mirroring the legacy Lasers._update_setpoints).
 - ``off()`` is synchronous: returns ``None`` and leaves ``active == False``
   and ``power == 0.0`` immediately (no thread/queue offload — E-stop kill
   path).
@@ -94,7 +94,7 @@ def test_on_write_failure_reverts_state() -> None:
     """on() while power == 150.0 attempts a DAQ write of 150.0/60.0 == 2.5 V.
     The conftest nidaqmx stub makes nidaqmx.Task() raise nidaqmx.errors.Error,
     so on() must set error == 1, a non-empty error_message, and active ==
-    False (write-failure revert, mirroring Lasers._update_setpoints)."""
+    False (write-failure revert, mirroring the legacy Lasers._update_setpoints)."""
     laser = _make_l1()
     laser.set_power(150.0)
     assert laser.power == 150.0

@@ -16,11 +16,10 @@ absorbs that churn in one place so downstream code and tests import from the
 Wave 1 (Plan 01) re-exported only the Camera family. Wave 2 (Plan 02)
 expanded the shim to cover SigGen, Motors, and ETLs. Wave 3 (Plan 03)
 added Lasers and IBeam. Wave 5 (Plan 05) retired the legacy 2-channel
-``Lasers``/``MockLasers``/``MockIBeam`` classes and the ``ILasers``/
-``IIBeam`` ABCs — the unified ``ILaser`` family (``DAQLaser`` /
-``IBeamSmartLaser`` / ``MockLaser``) is now the sole laser architecture.
-``IBeam`` remains importable as the internal serial engine
-``IBeamSmartLaser`` wraps.
+laser container and mock classes along with their ABCs — the unified
+``ILaser`` family (``DAQLaser`` / ``IBeamSmartLaser`` / ``MockLaser``)
+is now the sole laser architecture. ``IBeam`` remains importable as the
+internal serial engine ``IBeamSmartLaser`` wraps.
 
 Explicit ``__all__`` avoids leaking private symbols from ``interfaces.py``
 and the ``real/`` / ``mocks/`` subpackages.
@@ -58,6 +57,7 @@ __all__ = [
     "DAQLaser",
     "ETLs",
     "IBeam",
+    "IBeamSmartLaser",
     "ICamera",
     "ICameraCore",
     "IETLs",
@@ -70,7 +70,6 @@ __all__ = [
     "IOptotune",
     "ISigGen",
     "ISigGenCore",
-    "IBeamSmartLaser",
     "MockCamera",
     "MockETLs",
     "MockLaser",

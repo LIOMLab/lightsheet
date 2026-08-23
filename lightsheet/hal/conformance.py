@@ -194,58 +194,19 @@ MOTORS_CONTRACT = ConformanceContract(
     setter_methods=(),
 )
 
-LASERS_CONTRACT = ConformanceContract(
-    lifecycle_methods=(
-        "laser1_on",
-        "laser1_off",
-        "laser2_on",
-        "laser2_off",
-    ),
-    # read_attrs mirrors every class-level annotation declared on ILasersCore
-    # (D-15). The previous contract listed only the laser1 attrs + error
-    # surface, so a mock that dropped a laser2 attr would pass conformance
-    # — weakening the drift catch. Complete the list to match the ABC.
-    read_attrs=(
-        "laser1_wavelength",
-        "laser2_wavelength",
-        "laser1_max_power",
-        "laser2_max_power",
-        "laser1_power",
-        "laser2_power",
-        "laser1_active",
-        "laser2_active",
-        "error",
-        "error_message",
-    ),
-    # set_power is NOT in the setter_methods contract: the real Lasers class
-    # does not implement set_power (the controller sets laser1_power directly
-    # and calls laser1_on()). MockLasers keeps set_power as a concrete extra
-    # for the demo path and the power-clamp safety test. A future refactor
-    # that adds set_power to the real Lasers class can re-add it here.
-    setter_methods=(),
-)
-
 ETLS_CONTRACT = ConformanceContract(
     lifecycle_methods=("open", "close", "set_analog_mode"),
     read_attrs=("error", "error_message"),
     setter_methods=(),
 )
 
-IBEAM_CONTRACT = ConformanceContract(
-    lifecycle_methods=("open", "close", "on", "off", "enable_channel"),
-    read_attrs=("wavelength", "max_power", "error", "error_message"),
-    setter_methods=("set_power",),
-)
-
 # Unified single-channel ILaser surface (mW-canonical). ``set_power`` IS in
 # the setter contract because the controller calls it (the controller holds
-# ``list[ILaser]`` and invokes ``set_power(mw)`` on each instance). This
-# differs from the legacy ``LASERS_CONTRACT`` which deliberately excludes
-# ``set_power`` because the legacy 2-channel ``Lasers`` class does not
-# expose it. ``on`` / ``off`` are existence checks only — they have side
-# effects (DAQ writes, serial commands) outside conformance scope; the
-# synchronous-off + two-layer-clamp safety invariants are behavior checks
-# that live in the per-device conformance test file.
+# ``list[ILaser]`` and invokes ``set_power(mw)`` on each instance). ``on``
+# / ``off`` are existence checks only — they have side effects (DAQ writes,
+# serial commands) outside conformance scope; the synchronous-off +
+# two-layer-clamp safety invariants are behavior checks that live in the
+# per-device conformance test file.
 LASER_CONTRACT = ConformanceContract(
     lifecycle_methods=("on", "off"),
     read_attrs=(
