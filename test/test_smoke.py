@@ -52,3 +52,35 @@ def test_device_bundle_barrel_reexport_smoke() -> None:
     from lightsheet.hal.bundle import DeviceBundle as direct
 
     assert barrel_reexport is direct
+
+
+def test_dead_calibration_symbols_absent() -> None:
+    """The dead Camera/ETL calibration worker stubs, their start buttons,
+    their ``*_calibration_started`` flags, and the ``sig_calibrate_*_finished``
+    signals have been deleted from ``Controller_MainWindow``.
+
+    This is an import-level ``hasattr`` assertion (AGENTS.md §5 — no
+    static-source grep): it proves the symbols are gone from the live class
+    object, not just absent from a text scan. ``Controller_MainWindow``
+    cannot be instantiated on the Mac (needs PyQt5 display), so the check
+    runs against the class itself — ``hasattr(cls, name)`` is true for any
+    name declared as a class attribute (pyqtSignal, method, instance-attr
+    initialized in ``__init__`` is NOT visible here, but the deleted
+    symbols were either pyqtSignal class attrs or method defs, both of
+    which ``hasattr`` on the class catches).
+    """
+    from lightsheet.gui.controller import Controller_MainWindow
+
+    for name in (
+        "calibrate_camera_worker",
+        "calibrate_etls_worker",
+        "camera_calibration_started",
+        "etls_calibration_started",
+        "sig_calibrate_camera_finished",
+        "sig_calibrate_etl_finished",
+    ):
+        assert not hasattr(Controller_MainWindow, name), (
+            f"Controller_MainWindow still exposes dead calibration symbol "
+            f"{name!r} — the god-object split's Task 2 deletion was "
+            f"incomplete."
+        )
