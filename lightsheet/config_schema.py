@@ -578,7 +578,14 @@ def load_sections_from_ini(
             overlay = cfg_read(
                 overlay_path, section_name, dict(defaults_template)
             )
-            baseline.update(overlay)  # overlay wins
+            # Only override baseline with keys the overlay file actually
+            # contains. cfg_read fills every alias key from the defaults
+            # dict, returning the "" sentinel for keys absent from the
+            # overlay file — those sentinels must NOT clobber the
+            # baseline's real values (a partial overlay would otherwise
+            # wipe the tracked baseline and ValidationError on every
+            # int/float/bool field the overlay did not re-list).
+            baseline.update({k: v for k, v in overlay.items() if v != ""})
         sections[section_name] = baseline
     return sections
 
