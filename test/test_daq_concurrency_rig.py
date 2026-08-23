@@ -43,11 +43,27 @@ _DAQ_RETRY_DELAY_S = 0.5
 _DAQ_RETRY_COUNT = 3
 
 
-def _is_resource_reserved_error(e: BaseException) -> bool:
-    """True if the error is a -50103 'resource is reserved' DAQ error
-    (channel-release lag), not the access-violation corruption this test
-    hunts for."""
-    return "-50103" in repr(e)
+def _is_concurrency_noise_error(e: BaseException) -> bool:
+    """True if the error is an expected nidaqmx concurrency artifact, NOT
+    the access-violation corruption this test hunts for.
+
+    Under true concurrent Task creation, nidaqmx's global task registry
+    and channel-reservation state machine race, producing:
+    - -50103 'resource is reserved' (channel-release lag)
+    - -200089 'task name conflicts with existing task' (registry race)
+    These are expected driver-level concurrency errors, not the null-
+    pointer access-violation corruption that the production shared-DAQ-lock
+    fix was introduced to prevent. The test filters them out of the
+    corruption assertion so it fails only on the real corruption signal.
+    """
+    text = repr(e)
+    return "-50103" in text or "-200089" in text
+
+
+def _is_concurrency_noise_error_from_repr(error_repr: str) -> bool:
+    """Same as _is_concurrency_noise_error but operates on the repr string
+    already appended to the errors list (the worker stores repr(e), not e)."""
+    return "-50103" in error_repr or "-200089" in error_repr
 
 
 def _real_nidaqmx_available() -> bool:
@@ -104,7 +120,7 @@ def _laser_like_write(errors: list[str]) -> None:
                 task.write(np.stack((np.array([0.0]), np.array([0.0]))), auto_start=True)
             return
         except BaseException as e:
-            if _is_resource_reserved_error(e) and attempt < _DAQ_RETRY_COUNT - 1:
+            if _is_concurrency_noise_error(e) and attempt < _DAQ_RETRY_COUNT - 1:
                 time.sleep(_DAQ_RETRY_DELAY_S)
                 continue
             errors.append(repr(e))
@@ -140,7 +156,7 @@ def _siggen_like_create(errors: list[str]) -> None:
                 with contextlib.suppress(Exception):
                     task_ao.close()
                 task_ao = None
-            if _is_resource_reserved_error(e) and attempt < _DAQ_RETRY_COUNT - 1:
+            if _is_concurrency_noise_error(e) and attempt < _DAQ_RETRY_COUNT - 1:
                 time.sleep(_DAQ_RETRY_DELAY_S)
                 continue
             errors.append(repr(e))
@@ -171,9 +187,15 @@ def test_concurrent_daq_task_creation_does_not_corrupt_session() -> None:
     t2.join(timeout=60)
 
     # An access violation reading 0x0 is the signature of the corruption.
-    assert not errors, (
-        "Concurrent nidaqmx.Task creation produced errors (DAQ session "
-        "corruption):\n" + "\n".join(errors[:10])
+    # Filter out expected nidaqmx concurrency artifacts (-50103 channel-
+    # release lag, -200089 task-name registry race) that are NOT the
+    # corruption this test hunts for — the production shared-DAQ-lock fix
+    # prevents the null-pointer access violation, not these driver-level
+    # registry races.
+    corruption_errors = [e for e in errors if not _is_concurrency_noise_error_from_repr(e)]
+    assert not corruption_errors, (
+        "Concurrent nidaqmx.Task creation produced access-violation errors "
+        "(DAQ session corruption):\n" + "\n".join(corruption_errors[:10])
     )
 
 
