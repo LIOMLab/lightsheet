@@ -306,6 +306,54 @@ def test_ibeam_smart_get_output_power_returns_none_on_error() -> None:
     )
 
 
+def test_ibeam_smart_get_output_power_returns_none_on_unmatched_response() -> None:
+    """When the ``show level power`` reply contains no line matching
+    ``CH{channel}`` (e.g. the firmware returned an unexpected format or
+    an empty reply after the terminator), ``get_output_power()`` MUST
+    return ``None`` — not the stale commanded ``self.power``. Returning
+    the stale commanded value would present it as a live readback to the
+    operator, potentially stale by minutes. The inner ``IBeam.error``
+    stays 0 (no ``%SYS-E`` and no SerialException), so the adapter must
+    check for ``None`` explicitly rather than relying on the error
+    surface alone."""
+    adapter, _ = _make_open_ibeam_smart(
+        # Reply with no CH1 line — e.g. a truncated/unexpected format.
+        readline_side_effect=[b"CMD>\r\n"]
+    )
+    # Pre-seed a known commanded power so we can prove it is NOT returned.
+    adapter.power = 75.0
+    adapter._ibeam._power = 75000
+    result = adapter.get_output_power()
+    assert result is None, (
+        "get_output_power must return None when no CH{channel} line is "
+        "found in the response — returning the stale commanded power would "
+        "present it as a live readback (potentially stale by minutes)"
+    )
+    # The inner error surface stays clean (no %SYS-E, no SerialException),
+    # so the None return is the only signal the adapter has.
+    assert adapter._ibeam.error == 0
+
+
+def test_ibeam_smart_get_output_power_returns_none_on_empty_response() -> None:
+    """When the ``show level power`` reply is empty (readline times out
+    immediately, returning b'' which _send_cmd treats as a terminator),
+    ``get_output_power()`` MUST return ``None`` — not the stale commanded
+    value. This is the firmware-desync / unresponsive-device case."""
+    adapter, _ = _make_open_ibeam_smart(
+        # readline returns b'' immediately (timeout) -> _send_cmd breaks
+        # with an empty response_lines list.
+        readline_side_effect=[b""]
+    )
+    adapter.power = 50.0
+    adapter._ibeam._power = 50000
+    result = adapter.get_output_power()
+    assert result is None, (
+        "get_output_power must return None on an empty response — the "
+        "device is unresponsive or desynced, not reporting the last "
+        "commanded power"
+    )
+
+
 # --------------------------------------------------------------------------- #
 # open() / close(): delegate to inner IBeam, mirror error surface onto adapter.
 # --------------------------------------------------------------------------- #
