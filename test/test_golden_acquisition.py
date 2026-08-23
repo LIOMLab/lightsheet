@@ -24,6 +24,15 @@ Two scenarios are replayed:
   failed ..."). Closes Pitfall 2 for this error path: a dropped or
   re-sequenced emission on the create-scanner failure branch is now
   catchable, not just the happy path.
+* ``preview_auto_laser`` — the D-05 preview-auto-laser fold. Runs
+  ``preview_mode_worker`` (not ``acquire_scan``) with a real
+  ``HardwareManager`` backing the ``self._hw`` reference. On the happy
+  path (MockLaser, no HAL error) the ``sig_message`` sequence is empty —
+  the fold's ``start_lasers``/``stop_lasers`` calls introduced no stray
+  emission on the message channel. This is the ONE scenario that
+  differs from a hypothetical pre-split re-recording: before the fold,
+  ``preview_mode_worker`` did not call ``start_lasers``/``stop_lasers``
+  at all.
 """
 
 import json
@@ -38,6 +47,7 @@ _GOLDEN_DIR = os.path.join(os.path.dirname(__file__), "golden")
 _SCENARIOS = [
     "default",
     "siggen_create_scanner_fail",
+    "preview_auto_laser",
 ]
 
 
