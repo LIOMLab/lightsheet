@@ -105,7 +105,8 @@ def standin() -> Mock:
     assert on operator messages. The iBeam is opened (as hardware_init
     does); if COM4 is held by the running app the open fails gracefully
     and the laser's .error is set — the laser-1 (DAQ) path is still
-    exercisable.
+    exercisable. The iBeam serial port is closed on teardown so it does
+    not leak into subsequent tests in the same xdist group.
     """
     from lightsheet.hal import DAQLaser, IBeamSmartLaser
 
@@ -133,7 +134,14 @@ def standin() -> Mock:
     s._messages = messages
     # HardwareManager methods access GUI-thread state via self._shell.*
     s._shell = s
-    return s
+    yield s
+    # Close the iBeam serial port so it does not leak into subsequent
+    # tests in the same xdist group (e.g. test_laser_conformance[ibeam_real]).
+    with contextlib.suppress(Exception):
+        laser2._ibeam.close()
+    # Drive laser 1 off to release the DAQ AO channel reservation.
+    with contextlib.suppress(Exception):
+        laser1.off()
 
 
 def test_toggle_laser1_real_daq_no_access_violation(standin: Mock) -> None:
