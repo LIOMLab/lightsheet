@@ -602,3 +602,198 @@ def test_close_modes_calls_stop_lasers_when_a_laser_active() -> None:
     close_modes(standin)
 
     standin.stop_lasers.assert_called_once()
+
+
+# --------------------------------------------------------------------------- #
+# Per-laser status indicator tests — _poll_laser_status computes a status
+# string per requested laser index (error > active > inactive precedence)
+# and emits sig_laser_status(idx, status); updateUi_laser_status maps that
+# string to the ● ON / ● OFF / ● ERR label text + semantic color. The gated
+# L2 poll (_poll_laser2_status_gated) skips silently when the iBeam
+# per-instance lock is held so a periodic status query never blocks on a
+# write in progress and never misattributes a reply.
+# --------------------------------------------------------------------------- #
+
+
+def _make_status_laser(
+    label: str,
+    active: bool = False,
+    error: int = 0,
+    error_message: str = "",
+) -> Mock:
+    """Build a Mock ILaser stand-in for the status-poll path.
+
+    _poll_laser_status reads .error, .active, and .label and emits
+    sig_laser_status. The per-instance RLock lives on ._lock (the gated
+    L2 poll probes it with acquire(blocking=False)).
+    """
+    laser = Mock()
+    laser.label = label
+    laser.active = active
+    laser.error = error
+    laser.error_message = error_message
+    laser._lock = threading.RLock()
+    return laser
+
+
+def test_poll_laser_status_active_emits_active() -> None:
+    """_poll_laser_status([0]) on an active, error-free laser emits
+    sig_laser_status(0, 'active')."""
+    poll = _load_method("_poll_laser_status(self, indices: list[int]) -> None")
+
+    laser1 = _make_status_laser("Laser 1 (561 nm)", active=True, error=0)
+
+    standin = Mock()
+    standin.lasers = [laser1, Mock()]
+    standin.sig_laser_status = Mock()
+
+    poll(standin, [0])
+
+    standin.sig_laser_status.emit.assert_called_once_with(0, "active")
+
+
+def test_poll_laser_status_inactive_emits_inactive() -> None:
+    """_poll_laser_status([0]) on an inactive, error-free laser emits
+    sig_laser_status(0, 'inactive')."""
+    poll = _load_method("_poll_laser_status(self, indices: list[int]) -> None")
+
+    laser1 = _make_status_laser("Laser 1 (561 nm)", active=False, error=0)
+
+    standin = Mock()
+    standin.lasers = [laser1, Mock()]
+    standin.sig_laser_status = Mock()
+
+    poll(standin, [0])
+
+    standin.sig_laser_status.emit.assert_called_once_with(0, "inactive")
+
+
+def test_poll_laser_status_error_wins_over_active() -> None:
+    """_poll_laser_status([1]) on a laser with error=1 AND active=True
+    emits 'error' — the HAL error surface is authoritative (AGENTS.md §10)
+    so an errored-but-still-active laser shows ERR, not ON."""
+    poll = _load_method("_poll_laser_status(self, indices: list[int]) -> None")
+
+    laser2 = _make_status_laser(
+        "Laser 2 (640 nm)", active=True, error=1, error_message="serial fault"
+    )
+
+    standin = Mock()
+    standin.lasers = [Mock(), laser2]
+    standin.sig_laser_status = Mock()
+
+    poll(standin, [1])
+
+    standin.sig_laser_status.emit.assert_called_once_with(1, "error")
+
+
+def test_poll_laser_status_both_indices_emits_twice() -> None:
+    """_poll_laser_status([0, 1]) emits once per index — used by the
+    E-stop / start_lasers / stop_lasers refresh-after-action paths that
+    touch both lasers."""
+    poll = _load_method("_poll_laser_status(self, indices: list[int]) -> None")
+
+    laser1 = _make_status_laser("Laser 1 (561 nm)", active=True, error=0)
+    laser2 = _make_status_laser("Laser 2 (640 nm)", active=False, error=0)
+
+    standin = Mock()
+    standin.lasers = [laser1, laser2]
+    standin.sig_laser_status = Mock()
+
+    poll(standin, [0, 1])
+
+    assert standin.sig_laser_status.emit.call_count == 2
+    standin.sig_laser_status.emit.assert_any_call(0, "active")
+    standin.sig_laser_status.emit.assert_any_call(1, "inactive")
+
+
+def test_updateUi_laser_status_active_sets_on_label() -> None:
+    """updateUi_laser_status(0, 'active') sets label_laserOneStatus text
+    to '● ON' and a green bold stylesheet."""
+    slot = _load_method("updateUi_laser_status(self, idx: int, status: str) -> None")
+
+    standin = Mock()
+    standin.label_laserOneStatus = Mock()
+    standin.label_laserTwoStatus = Mock()
+
+    slot(standin, 0, "active")
+
+    standin.label_laserOneStatus.setText.assert_called_once_with("● ON")
+    style = standin.label_laserOneStatus.setStyleSheet.call_args[0][0]
+    assert "#34C759" in style
+    assert "bold" in style
+
+
+def test_updateUi_laser_status_inactive_sets_off_label() -> None:
+    """updateUi_laser_status(0, 'inactive') sets label_laserOneStatus text
+    to '● OFF' and a gray bold stylesheet."""
+    slot = _load_method("updateUi_laser_status(self, idx: int, status: str) -> None")
+
+    standin = Mock()
+    standin.label_laserOneStatus = Mock()
+    standin.label_laserTwoStatus = Mock()
+
+    slot(standin, 0, "inactive")
+
+    standin.label_laserOneStatus.setText.assert_called_once_with("● OFF")
+    style = standin.label_laserOneStatus.setStyleSheet.call_args[0][0]
+    assert "#8E8E93" in style
+    assert "bold" in style
+
+
+def test_updateUi_laser_status_error_sets_err_label_for_laser2() -> None:
+    """updateUi_laser_status(1, 'error') sets label_laserTwoStatus text
+    to '● ERR' and a red bold stylesheet."""
+    slot = _load_method("updateUi_laser_status(self, idx: int, status: str) -> None")
+
+    standin = Mock()
+    standin.label_laserOneStatus = Mock()
+    standin.label_laserTwoStatus = Mock()
+
+    slot(standin, 1, "error")
+
+    standin.label_laserTwoStatus.setText.assert_called_once_with("● ERR")
+    style = standin.label_laserTwoStatus.setStyleSheet.call_args[0][0]
+    assert "#FF3B30" in style
+    assert "bold" in style
+
+
+def test_poll_laser2_status_gated_skips_when_lock_held() -> None:
+    """_poll_laser2_status_gated must NOT call _poll_laser_status when
+    self.lasers[1]._lock is held by an in-progress write — the poll
+    probes the lock with acquire(blocking=False) and skips silently on
+    failure so a periodic status query never blocks on a write and
+    never misattributes a reply."""
+    gated = _load_method("_poll_laser2_status_gated(self) -> None")
+
+    laser2 = _make_status_laser("Laser 2 (640 nm)", active=True, error=0)
+    # Hold the lock for the duration of the gated call — the probe's
+    # acquire(blocking=False) must return False.
+    laser2._lock.acquire()
+    try:
+        standin = Mock()
+        standin.lasers = [Mock(), laser2]
+        standin._poll_laser_status = Mock()
+
+        gated(standin)
+
+        standin._poll_laser_status.assert_not_called()
+    finally:
+        laser2._lock.release()
+
+
+def test_poll_laser2_status_gated_polls_when_lock_free() -> None:
+    """_poll_laser2_status_gated must call _poll_laser_status([1]) when
+    the iBeam lock is free — the probe acquires (blocking=False),
+    releases immediately, then proceeds with the poll."""
+    gated = _load_method("_poll_laser2_status_gated(self) -> None")
+
+    laser2 = _make_status_laser("Laser 2 (640 nm)", active=True, error=0)
+
+    standin = Mock()
+    standin.lasers = [Mock(), laser2]
+    standin._poll_laser_status = Mock()
+
+    gated(standin)
+
+    standin._poll_laser_status.assert_called_once_with([1])
