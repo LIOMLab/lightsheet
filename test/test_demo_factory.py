@@ -220,3 +220,104 @@ def test_hardware_init_demo_indicator_emitted_via_statusbar_not_sigmessage() -> 
         assert "Demo mode" not in str(call), (
             "demo indicator must not be emitted via sig_message.emit"
         )
+
+
+# --------------------------------------------------------------------------- #
+# Bundle-consuming hardware_init — post-composition-root tests.
+# After the main() composition root lands, hardware_init no longer branches
+# on _demo_mode to construct HAL; it assigns from the injected DeviceBundle.
+# --------------------------------------------------------------------------- #
+
+
+def _make_bundle_standin(demo: bool) -> Mock:
+    """Build a Mock stand-in self pre-populated with a DeviceBundle built
+    from Mock* HAL stand-ins, matching the new bundle-consuming
+    hardware_init contract."""
+    from lightsheet.hal import (
+        DeviceBundle,
+        MockCamera,
+        MockETLs,
+        MockLaser,
+        MockMotors,
+        MockSigGen,
+    )
+
+    camera = MockCamera(verbose=True)
+    siggen = MockSigGen(camera)
+    motors = MockMotors()
+    lasers = (
+        MockLaser(
+            wavelength=555,
+            max_power_mw=300.0,
+            mw_per_volt=60.0,
+            label="Laser 1 (555 nm)",
+        ),
+        MockLaser(
+            wavelength=640,
+            max_power_mw=150.0,
+            label="Laser 2 (640 nm)",
+        ),
+    )
+    etls = MockETLs()
+    bundle = DeviceBundle(
+        camera=camera,
+        siggen=siggen,
+        motors=motors,
+        etls=etls,
+        lasers=lasers,
+    )
+
+    standin = Mock()
+    standin._demo_mode = demo
+    standin._bundle = bundle
+    standin.ui = Mock()
+    standin.ui.statusbar = Mock()
+    standin.windowTitle = Mock(return_value="Lightsheet")
+    return standin
+
+
+def test_hardware_init_assigns_from_bundle() -> None:
+    """hardware_init must assign HAL handles from the injected bundle,
+    not construct them itself. After execution, standin.camera IS
+    standin._bundle.camera (identity, not a new instance)."""
+    hardware_init = _load_method("hardware_init(self) -> None")
+    standin = _make_bundle_standin(demo=True)
+    hardware_init(standin)
+    assert standin.camera is standin._bundle.camera, (
+        "hardware_init must assign self.camera from the bundle, not construct"
+    )
+    assert standin.siggen is standin._bundle.siggen
+    assert standin.motors is standin._bundle.motors
+    assert standin.etls is standin._bundle.etls
+    assert standin.lasers == list(standin._bundle.lasers), (
+        "hardware_init must assign self.lasers as a list copy of the bundle tuple"
+    )
+
+
+def test_hardware_init_does_not_construct_hal_classes() -> None:
+    """hardware_init must NOT import or construct MockCamera/Camera/SigGen/
+    Motors/DAQLaser/IBeamSmartLaser/ETLs/Mock* — those constructions moved
+    to main()'s _build_demo_bundle / DeviceRegistry. Asserts on the
+    extracted method source text (the SAME body exec'd by the other tests,
+    per AGENTS.md §5 — not a separate static-source grep)."""
+    src = _read_controller_source()
+    body = _slice_method(src, "hardware_init(self) -> None")
+    forbidden = [
+        "MockCamera(",
+        "MockSigGen(",
+        "MockMotors(",
+        "MockLaser(",
+        "MockETLs(",
+        "Camera(",
+        "SigGen(",
+        "Motors(",
+        "DAQLaser(",
+        "IBeamSmartLaser(",
+        "ETLs(",
+        "from lightsheet.hal import",
+    ]
+    found = [p for p in forbidden if p in body]
+    assert not found, (
+        f"hardware_init must not construct or import HAL classes — "
+        f"found forbidden patterns: {found}"
+    )
