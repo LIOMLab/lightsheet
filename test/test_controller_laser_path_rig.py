@@ -70,7 +70,9 @@ def _read_source(path: str) -> str:
 
 
 def _slice_method(src: str, method_sig: str) -> str:
-    m = re.search(r"def " + re.escape(method_sig) + r":", src)
+    # Match the method signature allowing optional return-type annotations
+    # (e.g. "def foo(self):" or "def foo(self) -> None:" or "def foo(self, pct):").
+    m = re.search(r"def " + re.escape(method_sig) + r"\s*(->\s*[^:]+)?:", src)
     assert m, f"{method_sig} is missing"
     body = src[m.start() :]
     end = re.search(r"\n    def |\n    @pyqtSlot", body[1:])

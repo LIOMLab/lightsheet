@@ -87,6 +87,14 @@ def test_logger_exception_writes_to_log_file(
     """A logger.exception(...) call writes a timestamped entry containing the
     message text to a *.log file under tmp_path/logs/."""
     monkeypatch.chdir(tmp_path)
+    # Write a config.ini with Log Dir = logs so the log directory is
+    # relative to the CWD (tmp_path) on both Mac and Windows. Without this,
+    # _default_log_dir() returns ~/Documents/LightSheetData/logs on Windows,
+    # not tmp_path/logs.
+    (tmp_path / "config.ini").write_text(
+        "[Logging]\nLevel = INFO\nLog Dir = logs\n",
+        encoding="utf-8",
+    )
     configure()
     test_logger = logging.getLogger("test_module")
     try:
