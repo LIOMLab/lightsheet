@@ -186,18 +186,20 @@ class Controller_MainWindow(QMainWindow):
         # encoding, matching the E-stop status-label precedent. Updated via
         # sig_laser_status -> updateUi_laser_status (AGENTS.md §11 — no
         # direct widget mutation from a timer callback).
+        #
+        # Both columns already end with an Expanding vertical spacer
+        # (spacerItem8 / spacerItem9) from the .ui file. We insert the
+        # status + readback widgets BEFORE that spacer (at index 4) so they
+        # sit right after the checkbox in both columns and the spacer pushes
+        # them up from below — keeping the two columns horizontally aligned.
+        # Using addWidget() would append after the spacer and push the
+        # labels to the bottom, breaking alignment.
         self.label_laserOneStatus = QLabel("● OFF")
         self.label_laserOneStatus.setMinimumWidth(140)
         self.label_laserOneStatus.setStyleSheet(
             "color: #8E8E93; font-weight: bold;"
         )
-        self.ui.verticalLayout_43.addWidget(self.label_laserOneStatus)
-
-        # Anchor the column from the top so the L1 status + readback labels
-        # align horizontally with L2's, even though L2 has an extra Refresh
-        # button below its readback (the button extends downward without
-        # pushing the shared rows up).
-        self.ui.verticalLayout_43.setAlignment(Qt.AlignTop)
+        self.ui.verticalLayout_43.insertWidget(4, self.label_laserOneStatus)
 
         # L1 power readback field — DAQLaser has no hardware readback, so
         # this shows the staged mW (pct/100 * max_power_mw) returned by
@@ -211,19 +213,14 @@ class Controller_MainWindow(QMainWindow):
             "Laser 1 staged power (mW) — DAQ analog output has no hardware "
             "readback; this is the commanded value derived from the percentage"
         )
-        self.ui.verticalLayout_43.addWidget(self.label_laserOneReadback)
+        self.ui.verticalLayout_43.insertWidget(5, self.label_laserOneReadback)
 
         self.label_laserTwoStatus = QLabel("● OFF")
         self.label_laserTwoStatus.setMinimumWidth(140)
         self.label_laserTwoStatus.setStyleSheet(
             "color: #8E8E93; font-weight: bold;"
         )
-        self.ui.verticalLayout_44.addWidget(self.label_laserTwoStatus)
-
-        # Anchor from the top — mirrors verticalLayout_43 so both columns'
-        # status + readback labels align horizontally (the L2 Refresh
-        # button below extends downward without shifting the shared rows).
-        self.ui.verticalLayout_44.setAlignment(Qt.AlignTop)
+        self.ui.verticalLayout_44.insertWidget(4, self.label_laserTwoStatus)
 
         # iBeam power readback field (LSD-04) + manual Refresh button.
         # The readback is a read-only QLabel showing '{value:.1f} mW'
@@ -232,12 +229,15 @@ class Controller_MainWindow(QMainWindow):
         # failure / unsupported variant. The Refresh button re-queries
         # on demand (the gated ~1s poll also refreshes it). Both are
         # parented into the L2 column programmatically per AGENTS.md §8.
+        # Inserted before the expanding spacer (same pattern as L1) so the
+        # status + readback labels align with L1's; the Refresh button goes
+        # after the readback (still before the spacer) and only L2 has it.
         self.label_laserTwoReadback = QLabel("N/A")
         self.label_laserTwoReadback.setMinimumWidth(80)
         self.label_laserTwoReadback.setToolTip(
             "iBeam power readback — click Refresh Power to re-query"
         )
-        self.ui.verticalLayout_44.addWidget(self.label_laserTwoReadback)
+        self.ui.verticalLayout_44.insertWidget(5, self.label_laserTwoReadback)
 
         self.pushButton_laserTwoRefresh = QPushButton("Refresh Power")
         self.pushButton_laserTwoRefresh.setToolTip(
@@ -247,7 +247,7 @@ class Controller_MainWindow(QMainWindow):
         self.pushButton_laserTwoRefresh.clicked.connect(
             self.updateUi_laser2_refresh_clicked
         )
-        self.ui.verticalLayout_44.addWidget(self.pushButton_laserTwoRefresh)
+        self.ui.verticalLayout_44.insertWidget(6, self.pushButton_laserTwoRefresh)
 
         # Connect the status signal to its GUI-thread slot once, here in
         # __init__, so every emit (from any poll path or refresh-after-
