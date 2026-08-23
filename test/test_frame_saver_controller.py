@@ -193,3 +193,55 @@ def test_pass_through_methods_route_to_frame_saver() -> None:
 
     fs.stop_saving()
     fs.frame_saver.stop_saving.assert_called_once()
+
+
+def test_frame_saver_worker_surfaces_h5py_error_and_stops(tmp_path) -> None:
+    """IN-04: a non-timeout exception (h5py write error, disk full, HDF5
+    corruption) in frame_saver_worker must surface to the operator via
+    sig_status_message and set saving_started=False so the worker stops,
+    rather than silently retrying on a corrupt file.
+
+    Simulates the error by pointing filenames_list at a path inside a
+    read-only directory so h5py.File(..., "a") raises OSError on open.
+    The worker should emit a "Save error: ..." message and flip
+    saving_started to False.
+    """
+    bundle = _make_bundle()
+    shell = _make_shell()
+    fs = FrameSaverController(bundle, shell)
+    saver = fs.frame_saver
+
+    # Read-only directory so h5py.File(path, "a") raises OSError/PermissionError.
+    ro_dir = tmp_path / "readonly"
+    ro_dir.mkdir()
+    ro_dir.chmod(0o555)
+    bad_path = str(ro_dir / "plane_00001.hdf5")
+
+    saver.filenames_list = [bad_path]
+    saver.number_of_datasets = 1
+    saver.datasets_name = "dataset_"
+    saver.sample_name = "test"
+    saver.horizontal_positions_list = ["0"]
+    saver.vertical_positions_list = ["0"]
+    saver.camera_positions_list = ["0"]
+    saver.saving_started = True
+
+    # Run the worker synchronously (no thread) — the error path is
+    # independent of threading; it's a try/except in the worker body.
+    saver.frame_saver_worker()
+
+    # The error must have surfaced via sig_status_message (routed to the
+    # shell slot). At least one message should mention "Save error".
+    error_msgs = [m for m in shell.message_printer_calls if m.startswith("Save error")]
+    assert error_msgs, (
+        "frame_saver_worker must emit a 'Save error: ...' message on a "
+        "non-timeout exception; got: " + repr(shell.message_printer_calls)
+    )
+    # The worker must have stopped (saving_started flipped to False).
+    assert saver.saving_started is False, (
+        "frame_saver_worker must set saving_started=False on a save error "
+        "so it does not keep writing to a corrupt file"
+    )
+
+    # Restore permissions so tmp_path cleanup can remove the directory.
+    ro_dir.chmod(0o755)

@@ -222,14 +222,26 @@ class FrameSaver(QObject):
         The number of datasets per file is the number of 2D arrays"""
         for idx in range(len(self.filenames_list)):
             logger.info("File created: %s", self.filenames_list[idx])
-            # Create file
-            outfile = h5py.File(self.filenames_list[idx], "a")
-            # Write per-laser metadata as file-level root attrs once per
-            # file, read from the live list[ILaser] the controller holds
-            # (never re-parsed from config.ini — fixes the config-drift
-            # metadata bug). All configured lasers are included, even
-            # inactive ones (power=0, active=False), for reproducibility.
-            self._write_laser_metadata(outfile)
+            try:
+                # Create file
+                outfile = h5py.File(self.filenames_list[idx], "a")
+                # Write per-laser metadata as file-level root attrs once per
+                # file, read from the live list[ILaser] the controller holds
+                # (never re-parsed from config.ini — fixes the config-drift
+                # metadata bug). All configured lasers are included, even
+                # inactive ones (power=0, active=False), for reproducibility.
+                self._write_laser_metadata(outfile)
+            except Exception as e:
+                # A file-creation or metadata-write error (disk full,
+                # permission denied, HDF5 corruption at open) must surface
+                # to the operator and stop the worker — same IN-04 contract
+                # as the per-dataset error handler below. Without this, a
+                # failure to open the file would propagate out of the worker
+                # thread as an unhandled exception and the operator would
+                # see no message, just a silently-dead save worker.
+                self.sig_status_message.emit(f"Save error: {e}")
+                self.saving_started = False
+                break
 
             counter = 1
             for dataset in range(int(self.number_of_datasets)):
