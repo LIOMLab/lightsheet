@@ -1097,7 +1097,7 @@ class Controller_MainWindow(QMainWindow):
         # above) stays in the shell, direct on self.lasers, lock-free.
         self._hw._poll_laser_status([0, 1])
         self._hw._refresh_laser_readback(0)
-        self._hw._refresh_laser_readback(1)
+        self._hw._refresh_laser2_readback_async()
 
         # 4. Latch the UI into ACTUATED: red indicator, yellow 4px border
         #    on the E-stop button ("latched — Arm/Reset before re-energizing").
@@ -1269,8 +1269,8 @@ class Controller_MainWindow(QMainWindow):
         DAQLaser and the mock laser backend return the staged mW power),
         so no demo-mode
         gate is needed."""
-        self._refresh_laser_readback(1)
-        self._poll_laser_status([1])
+        self._hw._refresh_laser2_readback_async()
+        self._hw._poll_laser_status([1])
 
     @pyqtSlot(int, str)
     def updateUi_laser_status(self, idx: int, status: str) -> None:

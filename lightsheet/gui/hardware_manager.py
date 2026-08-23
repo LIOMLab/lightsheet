@@ -53,6 +53,11 @@ class HardwareManager:
         # to shell.lasers (the shell's list copy of the bundle's tuple).
         # The per-laser RLock already lives on each ILaser instance.
         self.lasers = list(bundle.lasers)
+        # Tracks the in-flight async iBeam readback thread so the 1s status
+        # timer cannot stack readback threads when the serial round-trip
+        # (~3s firmware latency) exceeds the timer interval. See
+        # _refresh_laser2_readback_async.
+        self._laser2_readback_thread: threading.Thread | None = None
         # NOTE: __init__ deliberately performs NO laser HAL lifecycle
         # calls (no .open()/.on()/.set_power()). It runs synchronously in
         # main()'s composition root BEFORE controller.show() — calling
@@ -401,17 +406,52 @@ class HardwareManager:
         release it immediately and proceed with the status poll + the
         readback refresh. The status poll reads only instant in-HAL
         attributes (.error / .active — no serial I/O, no misattribution
-        risk); the readback refresh acquires the lock itself for the
-        serial round-trip. The probe-then-release pattern means a write
-        can start between the probe and the readback's own acquire, but
-        the readback's acquire(blocking=False) will then skip — the
-        operator simply sees the next tick's reading.
+        risk); the readback refresh is offloaded to a daemon thread via
+        _refresh_laser2_readback_async so the ~3s iBeam serial round-trip
+        never blocks the GUI event loop. The probe-then-release pattern
+        means a write can start between the probe and the readback's own
+        acquire, but the readback's acquire(blocking=False) will then
+        skip — the operator simply sees the next tick's reading.
         """
         if not self.lasers[1]._lock.acquire(blocking=False):
             return
         self.lasers[1]._lock.release()
         self._poll_laser_status([1])
-        self._refresh_laser_readback(1)
+        self._refresh_laser2_readback_async()
+
+    def _refresh_laser2_readback_async(self) -> None:
+        """Offload the iBeam (L2) serial readback to a daemon thread.
+
+        The iBeam serial round-trip (show level power) takes ~3s due to
+        firmware response latency. Running it on the GUI thread — as the
+        1s status QTimer and the refresh-after-action call sites
+        previously did — freezes the UI for the duration of every
+        round-trip. This spawns a daemon thread to call
+        _refresh_laser_readback(1), which performs the serial query and
+        emits the result via sig_laser_readback (a thread-safe Qt signal
+        — the QLabel mutation happens on the GUI thread in the slot, per
+        AGENTS.md §11).
+
+        A guard on self._laser2_readback_thread prevents stacking when
+        the 1s timer fires faster than the ~3s round-trip completes: if
+        a prior readback is still in flight, this call is a no-op and
+        the next timer tick retries. The L1/DAQLaser readback
+        (_refresh_laser_readback(0)) stays synchronous — it returns the
+        staged mW power with no serial I/O, so there is nothing to
+        offload.
+        """
+        if (
+            self._laser2_readback_thread is not None
+            and self._laser2_readback_thread.is_alive()
+        ):
+            return
+        self._laser2_readback_thread = threading.Thread(
+            target=self._refresh_laser_readback,
+            args=(1,),
+            daemon=True,
+            name="ibeam-readback",
+        )
+        self._laser2_readback_thread.start()
 
     def _refresh_laser_readback(self, idx: int) -> None:
         """Query self.lasers[idx].get_output_power() and emit the readback
