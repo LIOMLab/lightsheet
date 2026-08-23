@@ -370,11 +370,11 @@ class AcquisitionCoordinator:
 
         # Frame reconstruction options
         if self._shell.ui.checkBox_saveStitchBlend.isChecked():
-            self._shell.reconstructed_frame = self._shell.reconstruct_frame_linear_blend(
+            self._shell.reconstructed_frame = self._shell._fs.reconstruct_frame_linear_blend(
                 self._shell.buffer
             )
         else:
-            self._shell.reconstructed_frame = self._shell.reconstruct_frame(self._shell.buffer)
+            self._shell.reconstructed_frame = self._shell._fs.reconstruct_frame(self._shell.buffer)
 
         # Send reconstructed frame to display port
         self._shell._fs.enqueue_frame(self._shell.reconstructed_frame)
@@ -520,7 +520,7 @@ class AcquisitionCoordinator:
                     # Saving frame
                     if self._shell.saving_allowed:
                         if self._shell.ui.checkBox_saveAllCrop.isChecked():
-                            cropped_buffer = self._shell.crop_buffer(self._shell.buffer)
+                            cropped_buffer = self._shell._fs.crop_buffer(self._shell.buffer)
                             self._shell._fs.enqueue_buffer(cropped_buffer)
                             self._shell.sig_message.emit(
                                 "Saving All Images (one for each ETL step, cropped)"
