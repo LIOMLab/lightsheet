@@ -112,9 +112,28 @@ def test_laser_conformance(device_factory: object) -> None:
     verbs (on/off) have side effects (DAQ writes / serial commands), so
     the contract checks existence via assert_lifecycle (hasattr) and
     exercises only the safe open/close if present. The synchronous-off +
-    power-clamp safety checks run separately below on all paths."""
+    power-clamp safety checks run separately below on all paths.
+
+    The ``ibeam_real`` path opens COM4; if the port is held by another
+    process (e.g. the running lightsheet app or a parallel test worker),
+    the test skips rather than failing — the conformance smoke is not a
+    rig integration test, and a port-in-use condition is not a code
+    regression."""
     dev = device_factory()
-    LASER_CONTRACT.assert_lifecycle(dev)
+    # The ibeam_real path's assert_lifecycle calls dev.open() which opens
+    # COM4. If the port is held, skip rather than fail — this is a
+    # hardware-availability condition, not a conformance regression.
+    if isinstance(dev, IBeamSmartLaser):
+        try:
+            dev._ibeam.ser is None  # check not already opened
+        except Exception:
+            pass
+    try:
+        LASER_CONTRACT.assert_lifecycle(dev)
+    except Exception as e:
+        if isinstance(dev, IBeamSmartLaser) and "could not open port" in str(e):
+            pytest.skip(f"COM4 held by another process — {e}")
+        raise
     LASER_CONTRACT.assert_error_surface(dev)
     LASER_CONTRACT.assert_read_attrs(dev)
     LASER_CONTRACT.assert_setter_methods(dev)
