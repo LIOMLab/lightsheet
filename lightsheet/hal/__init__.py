@@ -49,6 +49,7 @@ from lightsheet.hal.mocks.mock_lasers import MockLasers
 from lightsheet.hal.mocks.mock_motors import MockMotors
 from lightsheet.hal.mocks.mock_siggen import MockSigGen
 from lightsheet.hal.real.camera import Camera
+from lightsheet.hal.real.daqlaser import DAQLaser
 from lightsheet.hal.real.etls import ETLs
 from lightsheet.hal.real.ibeam import IBeam
 from lightsheet.hal.real.lasers import Lasers
@@ -57,6 +58,7 @@ from lightsheet.hal.real.siggen import SigGen
 
 __all__ = [
     "Camera",
+    "DAQLaser",
     "ETLs",
     "IBeam",
     "ICamera",

@@ -124,29 +124,56 @@ def test_native_unit_volts_clamp_in_write_volts() -> None:
     [0, max_power / mw_per_volt] independently of the mW-layer clamp in
     set_power (two-layer clamp).
 
-    We exercise _write_volts directly with an over-range volts value and
-    confirm the clamp reduces it before the (failing) DAQ write. Because
-    the conftest stub makes nidaqmx.Task() raise, _write_volts sets the
-    error surface and reverts active — but the clamp itself runs before
-    the Task() construction, so we can verify it by stubbing the DAQ write
-    out and capturing the clamped volts value.
+    We exercise _write_volts directly with over-range volts values and
+    confirm the clamp reduces them before the DAQ write. The conftest
+    nidaqmx stub makes nidaqmx.Task() raise, which would mask the clamped
+    value (the error path runs before we can observe what was written), so
+    we patch nidaqmx.Task with a capturing stub that records the volts
+    array passed to task.write. The clamp inside _write_volts runs before
+    the Task is constructed, so the captured value reflects the clamp.
     """
+    import nidaqmx
+
     laser = _make_l1()
-    captured = {}
+    captured: dict[str, object] = {}
 
-    def fake_write(volts: float) -> None:
-        # Record the volts value _write_volts would have written after
-        # clamping. Replaces the real nidaqmx.Task write so we observe the
-        # clamped value without the stub raising.
-        captured["volts"] = volts
+    class _CapturingTask:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            self.ao_channels = _CapturingChannels()
+            self._volts = None
 
-    laser._write_volts = fake_write  # type: ignore[method-assign]
-    # 999 V is far above max_power/mw_per_volt = 300/60 = 5.0 V.
-    laser._write_volts(999.0)
-    assert captured["volts"] == pytest.approx(5.0)
-    # Floor clamp: -10 V -> 0 V.
-    laser._write_volts(-10.0)
-    assert captured["volts"] == pytest.approx(0.0)
-    # In-range value passes through unchanged.
-    laser._write_volts(2.5)
-    assert captured["volts"] == pytest.approx(2.5)
+        def write(self, data, auto_start: bool = True) -> None:  # noqa: ANN001
+            self._volts = data
+            captured["volts"] = data
+
+        def __enter__(self) -> "_CapturingTask":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    class _CapturingChannels:
+        def add_ao_voltage_chan(self, terminal: str) -> None:
+            captured["terminal"] = terminal
+
+    original_task = nidaqmx.Task
+    nidaqmx.Task = _CapturingTask  # type: ignore[attr-defined]
+    try:
+        # 999 V is far above max_power/mw_per_volt = 300/60 = 5.0 V.
+        laser._write_volts(999.0)
+        written = captured["volts"]
+        # _write_volts writes np.array([volts]); the single element is the
+        # clamped value.
+        assert float(written[0]) == pytest.approx(5.0)
+        # Floor clamp: -10 V -> 0 V.
+        laser._write_volts(-10.0)
+        written = captured["volts"]
+        assert float(written[0]) == pytest.approx(0.0)
+        # In-range value passes through unchanged.
+        laser._write_volts(2.5)
+        written = captured["volts"]
+        assert float(written[0]) == pytest.approx(2.5)
+        # Terminal passed through to add_ao_voltage_chan unchanged.
+        assert captured["terminal"] == "/Dev7/ao0"
+    finally:
+        nidaqmx.Task = original_task  # type: ignore[attr-defined]
