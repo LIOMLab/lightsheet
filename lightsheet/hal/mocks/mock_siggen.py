@@ -34,6 +34,7 @@ import logging
 
 import numpy as np
 
+from lightsheet.channel_map import ChannelMap
 from lightsheet.hal.interfaces import ICameraCore, ISigGen
 from lightsheet.waveforms import sawtooth, squarewave, staircase
 
@@ -107,6 +108,15 @@ class MockSigGen(ISigGen):
         # DAQ task handles — always None under the mock (no DAQ).
         self.task_galvo_etl = None
         self.task_camera = None
+
+        # Channel-reversal + per-channel clamp policy (RFR-04 mechanism).
+        # The mock ships a default-constructed ChannelMap
+        # (galvo_left_right_swap=False) so any future collaborator reading
+        # self.siggen.channel_map behaves identically on --demo and on the
+        # rig. The mock stays a standalone, software-only class (D-08) — no
+        # config.ini read; the attribute is a plain default ChannelMap().
+        self.galvo_left_right_swap = False
+        self.channel_map = ChannelMap()
 
     # ------------------------------------------------------------------ #
     # Lifecycle verbs — no-ops ending with ``return None`` (AGENTS.md §10).
