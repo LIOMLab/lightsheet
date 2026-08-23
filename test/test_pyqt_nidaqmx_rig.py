@@ -166,9 +166,9 @@ def test_laser_task_from_daemon_thread_under_qapp() -> None:
 def test_laser_task_with_full_hal_under_qapp() -> None:
     """Full hardware_init + laser Task from a QTimer slot under QApp.
 
-    The closest repro to the GUI: construct Camera/SigGen/Motors/Lasers/
-    ETLs/IBeam as hardware_init does, start the event loop, then fire the
-    laser write from a QTimer slot. Gated on RIG_LASER_VOLTAGE.
+    The closest repro to the GUI: construct Camera/SigGen/Motors/
+    DAQLaser/ETLs/IBeam as hardware_init does, start the event loop, then
+    fire the laser write from a QTimer slot. Gated on RIG_LASER_VOLTAGE.
     """
     if not _have_pyqt5():
         pytest.skip("PyQt5 not available")
@@ -182,31 +182,47 @@ def test_laser_task_with_full_hal_under_qapp() -> None:
 
     app = QApplication.instance() or QApplication(sys.argv)
 
-    # Construct the full HAL as hardware_init does.
-    from lightsheet.hal import Camera, ETLs, IBeam, Lasers, Motors, SigGen
+    # Construct the full HAL as hardware_init does. The controller holds
+    # list[ILaser] — index 0 is the DAQLaser (DAQ AO), index 1 is the
+    # IBeamSmartLaser wrapping the IBeam serial engine.
+    from lightsheet.hal import (
+        Camera,
+        DAQLaser,
+        ETLs,
+        IBeam,
+        Motors,
+        SigGen,
+    )
 
     camera = Camera()
     siggen = SigGen(camera)  # noqa: F841 -- constructed for hardware-init side effects
     motors = Motors()  # noqa: F841 -- constructed for hardware-init side effects
-    lasers = Lasers()
-    etls = ETLs()
-    etls.open()
-    etls.set_analog_mode()
     ibeam = IBeam()
     with contextlib.suppress(Exception):
         ibeam.open()
+    laser1 = DAQLaser(
+        channel="/Dev7/ao0",
+        wavelength=561,
+        mw_per_volt=60.0,
+        max_power_mw=300.0,
+        label="Laser 1 (561 nm)",
+    )
+    etls = ETLs()
+    etls.open()
+    etls.set_analog_mode()
 
     errors = []
     results = []
 
     def fire() -> None:
-        # The exact GUI laser-write path: real Lasers._update_setpoints
-        # via laser1_on, on the GUI thread (this slot).
-        lasers.laser1_power = voltage
-        lasers.laser1_on()
-        if lasers.error:
-            errors.append(("laser1_on", lasers.error_message))
-        lasers.laser1_off()
+        # The exact GUI laser-write path: set_power(mw) + on(), on the GUI
+        # thread (this slot). voltage is a fraction of max_power (300 mW).
+        mw = voltage / 5.0 * laser1.max_power
+        laser1.set_power(mw)
+        laser1.on()
+        if laser1.error:
+            errors.append(("laser1_on", laser1.error_message))
+        laser1.off()
         results.append("done")
         app.quit()
 

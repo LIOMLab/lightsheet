@@ -19,7 +19,6 @@ the Mock* tests run, now behind the [real, mock] parametrize).
 This is a BEHAVIOR test (AGENTS.md §5).
 """
 
-import contextlib
 import os
 
 import pytest
@@ -219,7 +218,7 @@ def test_mock_laser_off_is_synchronous() -> None:
 
 def test_mock_laser_on_sets_active() -> None:
     """MockLaser.on() sets active=True unconditionally (no hardware to fail
-    against, mirroring MockIBeam.on())."""
+    against)."""
     dev = _make_mock_l1()
     assert dev.active is False
     dev.on()
@@ -251,4 +250,3 @@ def test_ibeam_smart_off_is_synchronous() -> None:
         "IBeamSmartLaser.off() must synchronously set active=False — no "
         "queue/thread offload (AGENTS.md §2 E-stop kill path for a Class IIIB laser)"
     )
-

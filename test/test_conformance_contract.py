@@ -50,9 +50,8 @@ def test_conformance_contract_has_assert_methods() -> None:
         "CAMERA_CONTRACT",
         "SIGGEN_CONTRACT",
         "MOTORS_CONTRACT",
-        "LASERS_CONTRACT",
         "ETLS_CONTRACT",
-        "IBEAM_CONTRACT",
+        "LASER_CONTRACT",
     ],
 )
 def test_per_device_contract_constant_exists(contract_name: str) -> None:

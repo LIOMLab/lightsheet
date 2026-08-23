@@ -2,17 +2,17 @@
 
 The pytest DAQ probes (test_daq_hal_rig.py) call nidaqmx.Task() directly in
 a clean process — they do NOT exercise the GUI's actual code path
-(_toggle_laser1 on a daemon thread, start_lasers -> _update_setpoints, the
-real Lasers/IBeam instances hardware_init constructs). A clean-process probe
-cannot reproduce a corruption that builds up from the GUI's specific call
-sequence. This test closes that gap.
+(_toggle_laser1 on a daemon thread, start_lasers -> set_power, the real
+DAQLaser/IBeamSmartLaser instances hardware_init constructs). A
+clean-process probe cannot reproduce a corruption that builds up from the
+GUI's specific call sequence. This test closes that gap.
 
 It extracts the real _toggle_laser1 / _write_laser1_power / start_lasers
 method bodies from lightsheet/gui/controller.py (the AGENTS.md §5 exec-against-stand-in
 pattern, same as test/test_laser_controls.py) and runs them against a
-stand-in self holding REAL Lasers and IBeam instances constructed exactly
-as hardware_init constructs them. This is the actual controller code running
-against the actual DAQ — not raw nidaqmx calls.
+stand-in self holding REAL DAQLaser and IBeamSmartLaser instances
+constructed exactly as hardware_init constructs them. This is the actual
+controller code running against the actual DAQ — not raw nidaqmx calls.
 
 Safety: all laser power is 0 V / 0 uW. laser1_power_pct = 0 so
 _write_laser1_power writes 0 V to Dev7/ao0 (laser OFF — the safe state).
@@ -247,12 +247,12 @@ def test_start_lasers_real_daq_then_siggen_create(standin: Mock) -> None:
             siggen.delete_scanner()
 
 
-def test_real_lasers_laser1_on_nonzero_voltage_no_crash() -> None:
-    """The real Lasers.laser1_on() at a nonzero voltage — the exact GUI path.
+def test_real_daqlaser_on_nonzero_voltage_no_crash() -> None:
+    """The real DAQLaser.on() at a nonzero voltage — the exact GUI path.
 
-    The operator's 555nm toggle called _toggle_laser1 -> laser1_toggle ->
-    laser1_on -> _update_setpoints, which writes a nonzero voltage to
-    Dev7/ao0. This test calls the real Lasers method (not a re-implemented
+    The operator's 561nm toggle called _toggle_laser1 -> self.lasers[0].on(),
+    which writes a nonzero voltage to Dev7/ao0 via the DAQLaser backend.
+    This test calls the real DAQLaser method (not a re-implemented
     nidaqmx.Task) at a small nonzero voltage to reproduce the access
     violation. Gated on RIG_LASER_VOLTAGE (energizes the laser).
     """
@@ -263,23 +263,30 @@ def test_real_lasers_laser1_on_nonzero_voltage_no_crash() -> None:
         pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
     voltage = float(voltage_pct)
 
-    from lightsheet.hal import Lasers
+    from lightsheet.hal import DAQLaser
 
-    lasers = Lasers()
-    lasers.laser1_power = voltage
-    lasers.laser1_on()
-    assert lasers.error == 0, (
-        f"Lasers.laser1_on({voltage}V) failed: {lasers.error_message}"
+    # voltage is a fraction of the 5V full-scale; convert to mW via
+    # mw_per_volt=60 (300 mW max / 5V).
+    mw = voltage / 5.0 * 300.0
+    laser = DAQLaser(
+        channel="/Dev7/ao0",
+        wavelength=561,
+        mw_per_volt=60.0,
+        max_power_mw=300.0,
+        label="Laser 1 (561 nm)",
     )
-    lasers.laser1_off()
+    laser.set_power(mw)
+    laser.on()
+    assert laser.error == 0, f"DAQLaser.on({voltage}V) failed: {laser.error_message}"
+    laser.off()
 
 
-def test_real_lasers_laser1_on_daemon_thread_nonzero() -> None:
-    """Real Lasers.laser1_on on a daemon thread (exact GUI toggle path).
+def test_real_daqlaser_on_daemon_thread_nonzero() -> None:
+    """Real DAQLaser.on on a daemon thread (exact GUI toggle path).
 
-    The GUI's _toggle_laser1 runs laser1_toggle on a daemon thread. This
-    reproduces that exactly: real Lasers instance, nonzero voltage, daemon
-    thread. Gated on RIG_LASER_VOLTAGE.
+    The GUI's _toggle_laser1 runs the toggle on a daemon thread. This
+    reproduces that exactly: real DAQLaser instance, nonzero voltage,
+    daemon thread. Gated on RIG_LASER_VOLTAGE.
     """
     import os
 
@@ -288,19 +295,26 @@ def test_real_lasers_laser1_on_daemon_thread_nonzero() -> None:
         pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
     voltage = float(voltage_pct)
 
-    from lightsheet.hal import Lasers
+    from lightsheet.hal import DAQLaser
 
-    lasers = Lasers()
-    lasers.laser1_power = voltage
+    mw = voltage / 5.0 * 300.0
+    laser = DAQLaser(
+        channel="/Dev7/ao0",
+        wavelength=561,
+        mw_per_volt=60.0,
+        max_power_mw=300.0,
+        label="Laser 1 (561 nm)",
+    )
+    laser.set_power(mw)
     errors = []
     done = threading.Event()
 
     def worker() -> None:
         try:
-            lasers.laser1_on()
-            if lasers.error:
-                errors.append(("laser1_on", lasers.error_message))
-            lasers.laser1_off()
+            laser.on()
+            if laser.error:
+                errors.append(("laser_on", laser.error_message))
+            laser.off()
         except BaseException as e:
             errors.append(("worker", repr(e)))
         done.set()
@@ -309,6 +323,6 @@ def test_real_lasers_laser1_on_daemon_thread_nonzero() -> None:
     t.start()
     done.wait(timeout=15)
     t.join(timeout=5)
-    assert not errors, "Daemon-thread real Lasers.laser1_on crashed:\n" + "\n".join(
+    assert not errors, "Daemon-thread real DAQLaser.on crashed:\n" + "\n".join(
         f"{tag}: {e}" for tag, e in errors
     )

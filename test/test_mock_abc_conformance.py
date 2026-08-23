@@ -33,10 +33,6 @@ from lightsheet.hal import (
     ICameraCore,
     IETLs,
     IETLsCore,
-    IIBeam,
-    IIBeamCore,
-    ILasers,
-    ILasersCore,
     IMotors,
     IMotorsCore,
     IOptotune,
@@ -44,8 +40,6 @@ from lightsheet.hal import (
     ISigGenCore,
     MockCamera,
     MockETLs,
-    MockIBeam,
-    MockLasers,
     MockMotors,
     MockSigGen,
 )
@@ -346,136 +340,6 @@ def test_mock_optotune_is_ioptotune() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Lasers family (Plan 03)
-# --------------------------------------------------------------------------- #
-
-
-def test_mock_lasers_is_ilasers() -> None:
-    """MockLasers must be an ILasers (and through inheritance an ILasersCore)
-    so the controller's HAL-typed seams accept it unchanged."""
-    lasers = MockLasers()
-    assert isinstance(lasers, ILasers)
-    assert isinstance(lasers, ILasersCore)
-
-
-def test_mock_lasers_has_hal_error_surface() -> None:
-    lasers = MockLasers()
-    assert lasers.error == 0
-    assert lasers.error_message == ""
-
-
-def test_mock_lasers_populates_controller_read_attrs() -> None:
-    """The controller reads ``lasers.laser1_wavelength`` /
-    ``lasers.laser1_max_power`` / ``lasers.laser1_active`` etc. as direct
-    attributes (D-04). A MockLasers must populate them on construct so the
-    controller's startup reads (wavelength labels, max-power spinbox
-    bounds) do not receive None."""
-    lasers = MockLasers()
-    assert lasers.laser1_wavelength is not None
-    assert lasers.laser2_wavelength is not None
-    assert lasers.laser1_max_power is not None
-    assert lasers.laser2_max_power is not None
-    assert lasers.laser1_active is False
-    assert lasers.laser2_active is False
-
-
-def test_mock_lasers_set_power_clamps_to_max() -> None:
-    """MockLasers.set_power MUST clamp the commanded power to the configured
-    Max Power at the HAL boundary (AGENTS.md §2 — physical-safety control
-    for a Class IIIB laser). A mock that removed the clamp would let the
-    controller's safety checks atrophy under demo mode, masking a
-    regression that would over-drive the laser AO channels on the rig."""
-    lasers = MockLasers()
-    # set_power(channel=1, value way above max) must reduce to laser1_max_power.
-    lasers.set_power(1, 999999)
-    assert lasers.laser1_power == lasers.laser1_max_power, (
-        "set_power must clamp to laser1_max_power at the HAL boundary "
-        "(AGENTS.md §2) — a mock that removed the clamp would mask a "
-        "real-device over-power regression"
-    )
-    # And channel 2.
-    lasers.set_power(2, 999999)
-    assert lasers.laser2_power == lasers.laser2_max_power
-
-
-def test_mock_lasers_lifecycle_toggles_active_flag() -> None:
-    """laser1_on/laser1_off toggle the laser1_active flag (no DAQ write).
-    The controller reads laser1_active to decide whether to show the laser
-    as energized, so the mock must keep the flag in sync with the on/off
-    calls just like the real Lasers does."""
-    lasers = MockLasers()
-    assert lasers.laser1_active is False
-    lasers.laser1_on()
-    assert lasers.laser1_active is True
-    lasers.laser1_off()
-    assert lasers.laser1_active is False
-    lasers.laser2_on()
-    assert lasers.laser2_active is True
-    lasers.laser2_off()
-    assert lasers.laser2_active is False
-
-
-# --------------------------------------------------------------------------- #
-# IBeam family (Plan 03)
-# --------------------------------------------------------------------------- #
-
-
-def test_mock_ibeam_is_iibeam() -> None:
-    """MockIBeam must be an IIBeam (and through inheritance an IIBeamCore)
-    so the controller's HAL-typed seams accept it unchanged."""
-    ibeam = MockIBeam()
-    assert isinstance(ibeam, IIBeam)
-    assert isinstance(ibeam, IIBeamCore)
-
-
-def test_mock_ibeam_has_hal_error_surface() -> None:
-    ibeam = MockIBeam()
-    assert ibeam.error == 0
-    assert ibeam.error_message == ""
-
-
-def test_mock_ibeam_populates_controller_read_attrs() -> None:
-    """The controller reads ``ibeam.wavelength`` / ``ibeam.max_power`` as
-    direct attributes (D-04) — wavelength for the GUI label, max_power for
-    the spinbox upper bound. A MockIBeam must populate them on construct."""
-    ibeam = MockIBeam()
-    assert ibeam.wavelength is not None
-    assert ibeam.max_power is not None
-    assert ibeam.error == 0
-
-
-def test_mock_ibeam_off_is_synchronous() -> None:
-    """MockIBeam.off() MUST be synchronous — set ``_is_on=False`` and
-    ``_power=0`` and return None immediately, with no thread/queue offload
-    (AGENTS.md §2 — the E-stop kill path drives ``ibeam.off()`` on the GUI
-    thread; offloading it would break the synchronous-off safety contract
-    for a Class IIIB laser). A mock that queued off() would let the
-    controller's E-stop path atrophy under demo mode, masking a regression
-    that would delay laser shutdown on the rig."""
-    ibeam = MockIBeam()
-    ibeam.on()
-    assert ibeam._is_on is True
-    # off() must return None and synchronously clear _is_on.
-    result = ibeam.off()
-    assert result is None
-    assert ibeam._is_on is False, (
-        "off() must synchronously set _is_on=False — no queue/thread offload "
-        "(AGENTS.md §2 E-stop kill path)"
-    )
-    assert ibeam._power == 0
-
-
-def test_mock_ibeam_set_power_clamps_to_max() -> None:
-    """MockIBeam.set_power MUST clamp to max_power at the HAL boundary
-    (AGENTS.md §2 — physical-safety control for a Class IIIB laser)."""
-    ibeam = MockIBeam()
-    ibeam.set_power(999999)
-    assert ibeam._power == ibeam.max_power, (
-        "set_power must clamp to max_power at the HAL boundary (AGENTS.md §2)"
-    )
-
-
-# --------------------------------------------------------------------------- #
 # ABC shape — @property pattern fix + surface completion (Plan 07)
 #
 # The controller-read attributes on the core ABCs were declared as
@@ -504,16 +368,19 @@ def test_abc_core_read_attrs_are_annotations_not_abstract_properties() -> None:
     satisfy an abstract property descriptor."""
     from lightsheet.hal.interfaces import (
         ICameraCore,
-        IIBeamCore,
-        ILasersCore,
         IMotorCore,
         IMotorsCore,
         ISigGenCore,
     )
 
     camera_read_attrs = {
-        "xsize", "ysize", "exposure_time", "shutter_mode", "line_time",
-        "lightsheet_exposed_lines", "lightsheet_delay_lines",
+        "xsize",
+        "ysize",
+        "exposure_time",
+        "shutter_mode",
+        "line_time",
+        "lightsheet_exposed_lines",
+        "lightsheet_delay_lines",
         "recorder_timeout_status",
     }
     assert not (camera_read_attrs & ICameraCore.__abstractmethods__), (
@@ -522,11 +389,16 @@ def test_abc_core_read_attrs_are_annotations_not_abstract_properties() -> None:
     )
 
     siggen_read_attrs = {
-        "galvo_left_amplitude", "galvo_right_amplitude",
-        "galvo_left_offset", "galvo_right_offset",
-        "etl_left_amplitude", "etl_right_amplitude",
-        "etl_left_offset", "etl_right_offset",
-        "waveform_cycles", "waveform_metadata",
+        "galvo_left_amplitude",
+        "galvo_right_amplitude",
+        "galvo_left_offset",
+        "galvo_right_offset",
+        "etl_left_amplitude",
+        "etl_right_amplitude",
+        "etl_left_offset",
+        "etl_right_offset",
+        "waveform_cycles",
+        "waveform_metadata",
     }
     assert not (siggen_read_attrs & ISigGenCore.__abstractmethods__), (
         f"ISigGenCore still has read attrs as abstract: "
@@ -534,8 +406,10 @@ def test_abc_core_read_attrs_are_annotations_not_abstract_properties() -> None:
     )
 
     motor_read_attrs = {
-        "limit_low_microsteps", "limit_high_microsteps",
-        "microstep_size", "device_number",
+        "limit_low_microsteps",
+        "limit_high_microsteps",
+        "microstep_size",
+        "device_number",
     }
     assert not (motor_read_attrs & IMotorCore.__abstractmethods__), (
         f"IMotorCore still has read attrs as abstract: "
@@ -548,30 +422,13 @@ def test_abc_core_read_attrs_are_annotations_not_abstract_properties() -> None:
         f"{motors_read_attrs & IMotorsCore.__abstractmethods__}"
     )
 
-    lasers_read_attrs = {
-        "laser1_wavelength", "laser2_wavelength",
-        "laser1_max_power", "laser2_max_power",
-        "laser1_power", "laser2_power",
-        "laser1_active", "laser2_active",
-    }
-    assert not (lasers_read_attrs & ILasersCore.__abstractmethods__), (
-        f"ILasersCore still has read attrs as abstract: "
-        f"{lasers_read_attrs & ILasersCore.__abstractmethods__}"
-    )
-
-    ibeam_read_attrs = {"wavelength", "max_power", "_power", "_is_on"}
-    assert not (ibeam_read_attrs & IIBeamCore.__abstractmethods__), (
-        f"IIBeamCore still has read attrs as abstract: "
-        f"{ibeam_read_attrs & IIBeamCore.__abstractmethods__}"
-    )
-
 
 def test_abc_mock_only_methods_removed() -> None:
     """Mock-only methods the real classes lack must be removed from the
     extended ABCs. A method that exists ONLY on the mock and not on the real
     class IS the mock/real divergence the conformance suite exists to catch,
     so it must not survive as an ABC declaration."""
-    from lightsheet.hal.interfaces import ICamera, IIBeam, ISigGenCore
+    from lightsheet.hal.interfaces import ICamera, ISigGenCore
 
     assert "set_shutter_mode" not in ICamera.__abstractmethods__, (
         "set_shutter_mode must be removed from ICamera (real Camera lacks it)"
@@ -581,12 +438,6 @@ def test_abc_mock_only_methods_removed() -> None:
     )
     assert "disarm" not in ISigGenCore.__abstractmethods__, (
         "disarm must be removed from ISigGenCore (real SigGen lacks it)"
-    )
-    assert "status_laser" not in IIBeam.__abstractmethods__, (
-        "status_laser must be removed from IIBeam (real IBeam lacks it)"
-    )
-    assert "show_level_power" not in IIBeam.__abstractmethods__, (
-        "show_level_power must be removed from IIBeam (real IBeam lacks it)"
     )
 
 
@@ -614,21 +465,22 @@ def test_abc_gap_b_surface_additions() -> None:
     )
     motor_ext_getters = {"get_units", "get_inverted", "ask_id", "move_home"}
     assert motor_ext_getters <= IMotor.__abstractmethods__, (
-        f"IMotor must declare the 4 extended getters: "
-        f"{IMotor.__abstractmethods__}"
+        f"IMotor must declare the 4 extended getters: {IMotor.__abstractmethods__}"
     )
-    assert {"cfg_load_ini", "cfg_save_ini", "get_trigger_mode", "get_acquire_mode",
-            "get_pixel_rate"} <= ICamera.__abstractmethods__, (
-        f"ICamera must declare the extended getters: "
-        f"{ICamera.__abstractmethods__}"
+    assert {
+        "cfg_load_ini",
+        "cfg_save_ini",
+        "get_trigger_mode",
+        "get_acquire_mode",
+        "get_pixel_rate",
+    } <= ICamera.__abstractmethods__, (
+        f"ICamera must declare the extended getters: {ICamera.__abstractmethods__}"
     )
     assert {"cfg_load_ini", "cfg_save_ini"} <= ISigGen.__abstractmethods__, (
-        f"ISigGen must declare cfg_load_ini/cfg_save_ini: "
-        f"{ISigGen.__abstractmethods__}"
+        f"ISigGen must declare cfg_load_ini/cfg_save_ini: {ISigGen.__abstractmethods__}"
     )
     assert {"cfg_load_ini", "cfg_save_ini"} <= IMotors.__abstractmethods__, (
-        f"IMotors must declare cfg_load_ini/cfg_save_ini: "
-        f"{IMotors.__abstractmethods__}"
+        f"IMotors must declare cfg_load_ini/cfg_save_ini: {IMotors.__abstractmethods__}"
     )
 
 
@@ -655,16 +507,12 @@ def test_real_classes_inherit_their_abc() -> None:
     from lightsheet.hal import (
         Camera,
         ETLs,
-        IBeam,
         ICamera,
         IETLs,
-        IIBeam,
-        ILasers,
         IMotor,
         IMotors,
         IOptotune,
         ISigGen,
-        Lasers,
         Motors,
         SigGen,
     )
@@ -678,8 +526,6 @@ def test_real_classes_inherit_their_abc() -> None:
         (Motors, IMotors, "Motors"),
         (ETLs, IETLs, "ETLs"),
         (Optotune, IOptotune, "Optotune"),
-        (Lasers, ILasers, "Lasers"),
-        (IBeam, IIBeam, "IBeam"),
     ]
     for cls, abc, name in cases:
         assert issubclass(cls, abc), (

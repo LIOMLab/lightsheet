@@ -553,9 +553,7 @@ class IOptotune(ABC):
     def deviceid(self) -> bytes: ...
 
     @abstractmethod
-    def gain(
-        self, value: float | None = None
-    ) -> float | tuple[int, float, float]: ...
+    def gain(self, value: float | None = None) -> float | tuple[int, float, float]: ...
 
     @abstractmethod
     def serialnumber(self) -> bytes: ...
@@ -609,10 +607,10 @@ class IOptotune(ABC):
 # Unified single-channel Laser ABC (mW-canonical)
 # =========================================================================== #
 #
-# The unified ``ILaser`` ABC adopts the member names picked on ``IIBeamCore``
+# The unified ``ILaser`` ABC adopts the member names
 # (``on`` / ``off`` / ``set_power`` + ``wavelength`` / ``power`` /
-# ``max_power`` / ``active`` / ``error`` / ``error_message`` attrs) unchanged
-# — this is a re-wrap of those names onto a single-channel ABC, not a rename.
+# ``max_power`` / ``active`` / ``error`` / ``error_message`` attrs)
+# — a single-channel ABC instantiated once per configured laser.
 #
 # Power is **mW-canonical at the interface** (D-01): ``set_power(mw)`` takes
 # milliwatts and ``power`` / ``max_power`` attrs are in mW. Each backend
@@ -628,7 +626,7 @@ class IOptotune(ABC):
 # ``@property`` + ``@abstractmethod``) — Python's ABC check runs at
 # instantiation, before ``__init__`` sets instance attrs, and an abstract
 # property descriptor is not satisfied by a plain instance attr (same
-# pattern as ``ICameraCore`` / ``IIBeamCore``).
+# pattern as ``ICameraCore``).
 #
 # ``off()`` is synchronous — the E-stop kill path (AGENTS.md §2). Concrete
 # backends MUST set ``active=False`` (and ``power=0.0`` where appropriate)

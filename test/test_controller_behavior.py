@@ -28,7 +28,7 @@ tests):
   G5 — preview_mode_worker polls estop_event and breaks before frame
        acquisition; the finished signal still fires exactly once (LSR-04 / CR-01)
   G6 — updateUi_initial_hardware_state sets wavelength labels from the live
-       Lasers/IBeam instances, not hardcoded numbers (LSR-05)
+       list[ILaser] instances, not hardcoded numbers (LSR-05)
 """
 
 import datetime
@@ -306,7 +306,7 @@ def test_preview_mode_worker_breaks_on_estop_before_frame_acquisition() -> None:
 
 # --------------------------------------------------------------------------- #
 # G6 — updateUi_initial_hardware_state sets wavelength labels from the live
-#      Lasers/IBeam instances (LSR-05)
+#      list[ILaser] instances (LSR-05)
 # --------------------------------------------------------------------------- #
 
 

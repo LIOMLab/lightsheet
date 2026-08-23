@@ -7,9 +7,11 @@ also succeed at collection time.
 
 
 def test_lasers_imports() -> None:
-    from lightsheet.hal import Lasers
+    from lightsheet.hal import DAQLaser, IBeamSmartLaser, MockLaser
 
-    assert Lasers is not None
+    assert DAQLaser is not None
+    assert IBeamSmartLaser is not None
+    assert MockLaser is not None
 
 
 def test_motors_imports() -> None:

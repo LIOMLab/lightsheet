@@ -116,7 +116,10 @@ def test_lightsheet_hal_modules_import_as_top_level(tmp_path: Path) -> None:
         [
             sys.executable,
             "-c",
-            "from lightsheet.hal import Camera, SigGen, Motors, ETLs, Lasers, IBeam; "
+            "from lightsheet.hal import ("
+            "Camera, SigGen, Motors, ETLs, IBeam, "
+            "DAQLaser, IBeamSmartLaser, MockLaser"
+            "); "
             "from lightsheet import logging_setup",
         ],
         cwd=tmp_path,

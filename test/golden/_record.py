@@ -21,8 +21,8 @@ so the safety net's integrity is auditable):
   produce bit-identical waveform arrays.
 * ``MockCamera`` returns ``np.zeros((n, ysize, xsize), dtype=uint16)``
   canned frames — deterministic shape and content.
-* ``MockMotors`` / ``MockLasers`` / ``MockETLs`` / ``MockIBeam`` track
-  state in plain instance attributes with no I/O.
+* ``MockMotors`` / ``MockETLs`` / ``MockLaser`` track state in plain
+  instance attributes with no I/O.
 
 The harness execs the REAL ``Controller_MainWindow.acquire_scan`` body
 (via the ``_load_method`` exec-against-Mock pattern from
@@ -52,8 +52,7 @@ import numpy as np
 from lightsheet.hal import (
     MockCamera,
     MockETLs,
-    MockIBeam,
-    MockLasers,
+    MockLaser,
     MockMotors,
     MockSigGen,
 )
@@ -118,9 +117,14 @@ def _build_standin() -> Mock:
     standin.camera = camera
     standin.siggen = siggen
     standin.motors = MockMotors()
-    standin.lasers = MockLasers()
+    # The controller holds list[ILaser] (Wave 3 rewrite). acquire_scan does
+    # not reference self.lasers, but the stand-in mirrors hardware_init's
+    # shape so a future body change that does read laser state is caught.
+    standin.lasers = [
+        MockLaser(wavelength=561, max_power_mw=300.0, label="Laser 1 (561 nm)"),
+        MockLaser(wavelength=640, max_power_mw=150.0, label="Laser 2 (640 nm)"),
+    ]
     standin.etls = MockETLs()
-    standin.ibeam = MockIBeam()
 
     # Signal mocks — emit calls are captured via call_args_list.
     standin.sig_message = Mock()
