@@ -267,14 +267,15 @@ class Controller_MainWindow(QMainWindow):
         self._auto_laser1 = False
         self._auto_laser2 = False
 
-        # Per-laser write locks serializing concurrent offloaded writes to
-        # the same laser (amplitude edits vs. toggle). Reentrant (RLock) so
-        # _toggle_laser* can call _write_laser*_power under the same lock
-        # without deadlocking. The E-stop path intentionally does NOT
-        # acquire these — it must remain lock-free so a stuck toggle thread
-        # can never delay the kill path.
-        self._laser1_write_lock = threading.RLock()
-        self._laser2_write_lock = threading.RLock()
+        # Per-laser write locks live on each ILaser instance
+        # (self.lasers[i]._lock), set in DAQLaser.__init__ /
+        # IBeamSmartLaser.__init__ / MockLaser.__init__. The daemon-thread
+        # write paths (_write_laser*_power, _toggle_laser*) acquire
+        # self.lasers[i]._lock. Reentrant (RLock) so _toggle_laser* can
+        # call _write_laser*_power under the same lock without deadlocking.
+        # The E-stop path intentionally does NOT acquire any laser lock —
+        # it must remain lock-free so a stuck toggle thread holding a
+        # laser's lock can never delay the kill path (AGENTS.md §2).
 
         self.saving_allowed = False
         self.focus_selected = False
@@ -925,7 +926,7 @@ class Controller_MainWindow(QMainWindow):
             self.camera_calibration_started = False
         if self.etls_calibration_started:
             self.etls_calibration_started = False
-        if self.lasers.laser1_active or self.lasers.laser2_active:
+        if self.lasers[0].active or self.lasers[1].active:
             self.stop_lasers()
 
     @pyqtSlot()
@@ -942,26 +943,24 @@ class Controller_MainWindow(QMainWindow):
         #    live_mode_worker, before acquire_scan in single_mode_worker,
         #    and alongside stack_mode_started in stack_mode_worker.
         self.estop_event.set()
-        # 2. DAQ laser -> 0 V, synchronous on the GUI thread (independent
-        #    of worker scheduling — the laser is dark before any worker
-        #    reaches its next poll point).
-        self.lasers.laser1_off()
-        # 3. iBeam off (serial write, GUI thread). IBeam.off() catches
-        #    SerialException internally and sets self.error rather than
-        #    re-raising, so a try/except here can never fire for a serial
-        #    failure. Check the error surface instead and warn the operator
-        #    explicitly that the iBeam may still be emitting — never silently
-        #    show a clean state. laser2_active is cleared regardless of the
-        #    serial outcome.
-        self.ibeam.off()
-        if self.ibeam.error:
-            self.sig_message.emit(
-                "E-STOP: iBeam off command failed — the iBeam (640 nm) may "
-                "STILL BE ON. Manually verify the iBeam is off before "
-                "approaching the microscope."
-            )
-            self.ibeam.error = 0
-        self.lasers.laser2_active = False
+        # 2. Drive BOTH lasers off synchronously on the GUI thread. The
+        #    kill path is lock-free — it does NOT acquire self.lasers[i]._lock
+        #    — so a stuck daemon write thread holding a laser's lock can
+        #    never delay the kill path (AGENTS.md §2). Each backend's off()
+        #    catches its own SDK errors internally and sets laser.error
+        #    rather than re-raising, so a try/except here can never fire
+        #    for a hardware failure. Check the error surface after each
+        #    off() and warn the operator explicitly that the laser may
+        #    still be emitting — never silently show a clean state.
+        for laser in self.lasers:
+            laser.off()
+            if laser.error:
+                self.sig_message.emit(
+                    f"E-STOP: {laser.label} off command failed — may "
+                    f"STILL BE ON. Manually verify before approaching the "
+                    f"microscope. Cause: {laser.error_message}"
+                )
+                laser.error = 0
 
         # 4. Latch the UI into ACTUATED: red indicator, yellow 4px border
         #    on the E-stop button ("latched — Arm/Reset before re-energizing").
