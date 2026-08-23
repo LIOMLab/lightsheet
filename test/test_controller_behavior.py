@@ -392,9 +392,12 @@ def test_wavelength_labels_set_from_live_instances() -> None:
     standin.lasers = [laser1, laser2]
     standin.laser1_power_pct = 0
     standin.laser2_power_pct = 0
-    # updateUi_initial_hardware_state calls these two helpers at the end;
-    # as auto-Mock callables they are no-ops here.
-    standin.updateUi_camera_shutter_mode = Mock()
+    # updateUi_initial_hardware_state calls these helpers at the end;
+    # as auto-Mock callables they are no-ops here. updateUi_camera_shutter_mode
+    # now lives on the AcquisitionCoordinator (extracted from the shell), so
+    # the retargeted call site reads self._acq.updateUi_camera_shutter_mode();
+    # a generic Mock sub-attribute satisfies it.
+    standin._acq = Mock()
     standin.updateUi_units = Mock()
 
     updateUi_initial_hardware_state(standin)
