@@ -60,6 +60,48 @@ from lightsheet.hal import (
 logger = logging.getLogger(__name__)
 
 
+def _parse_calibration_curve(
+    raw: str,
+) -> list[tuple[float, float]] | None:
+    """Parse a ``Laser1 Calibration Curve`` config string into a list of
+    ``(V, mW)`` breakpoints.
+
+    Format: semicolon-separated ``"V,mW"`` pairs, e.g.
+    ``"0,0;0.8,0;1.5,30;5,236.6"``. Whitespace around pairs and the comma
+    is tolerated. Empty/whitespace-only string -> ``None`` (no curve,
+    linear-through-origin estimate). Malformed entries (non-numeric, wrong
+    arity) are logged and the whole curve is rejected -> ``None`` (falls
+    back to linear mode rather than constructing a DAQLaser with a
+    half-parsed curve). Strictly-increasing V + non-negative mW validation
+    happens in ``DAQLaser.__init__``; this helper only handles parsing.
+    """
+    if not raw:
+        return None
+    pairs: list[tuple[float, float]] = []
+    for chunk in raw.split(";"):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        parts = [p.strip() for p in chunk.split(",")]
+        if len(parts) != 2:
+            logger.error(
+                "calibration curve entry %r is not a 'V,mW' pair — "
+                "rejecting the whole curve",
+                chunk,
+            )
+            return None
+        try:
+            pairs.append((float(parts[0]), float(parts[1])))
+        except ValueError:
+            logger.error(
+                "calibration curve entry %r has non-numeric values — "
+                "rejecting the whole curve",
+                chunk,
+            )
+            return None
+    return pairs or None
+
+
 class UnresolvedDeviceError(Exception):
     """Raised when one or more manifest devices cannot be resolved on the
     USB-serial bus. The message lists every unresolved role (collect-all,
@@ -203,8 +245,16 @@ class DeviceRegistry:
                 "Laser1 Power": 0.0,
                 "Laser1 Max Power": 5.0,
                 "Laser1 mW per Volt": 60.0,
+                "Laser1 Calibration Curve": "",
             },
         )
+        # Optional V->mW calibration curve (display-only). Config format:
+        # semicolon-separated "V,mW" pairs, e.g. "0,0;0.8,0;1.5,30;5,236.6".
+        # Empty/absent -> None (linear-through-origin estimate, current
+        # behavior). Parsed to a list of (float, float) tuples; DAQLaser
+        # validates strictly-increasing V + non-negative mW on construct.
+        _curve_raw = str(_l1_cfg.get("Laser1 Calibration Curve", "")).strip()
+        _calibration_curve = _parse_calibration_curve(_curve_raw)
         lasers = (
             DAQLaser(
                 terminal="/Dev7/ao0",
@@ -213,6 +263,7 @@ class DeviceRegistry:
                 max_power_mw=float(_l1_cfg["Laser1 Max Power"])
                 * float(_l1_cfg["Laser1 mW per Volt"]),
                 label="Laser 1 (555 nm)",
+                calibration_curve=_calibration_curve,
             ),
             IBeamSmartLaser(label="Laser 2 (640 nm)"),
         )

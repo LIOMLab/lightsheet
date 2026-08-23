@@ -250,6 +250,13 @@ class LasersSettings(_NoEnvBaseSettings):
     laser1_power: float = Field(alias="Laser1 Power")
     laser1_max_power: float = Field(alias="Laser1 Max Power")
     laser1_mw_per_volt: float = Field(alias="Laser1 mW per Volt")
+    # Optional V->mW calibration curve (display-only). Semicolon-separated
+    # "V,mW" pairs. Empty/absent -> linear-through-origin estimate. Optional
+    # with a default so the existing config.ini (no curve key) still
+    # validates under extra="forbid".
+    laser1_calibration_curve: str = Field(
+        alias="Laser1 Calibration Curve", default=""
+    )
 
 
 class LasersSettingsOverlay(_NoEnvBaseSettings):
@@ -261,6 +268,9 @@ class LasersSettingsOverlay(_NoEnvBaseSettings):
     laser1_power: float = Field(alias="Laser1 Power")
     laser1_max_power: float = Field(alias="Laser1 Max Power")
     laser1_mw_per_volt: float = Field(alias="Laser1 mW per Volt")
+    laser1_calibration_curve: str = Field(
+        alias="Laser1 Calibration Curve", default=""
+    )
 
 
 class IBeamSettings(_NoEnvBaseSettings):
