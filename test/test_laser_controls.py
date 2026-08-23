@@ -103,128 +103,320 @@ def _load_method(method_sig: str) -> Callable[..., Any]:
     return namespace[func_name]
 
 
+def _make_write_laser(
+    label: str,
+    active: bool = True,
+    max_power: float = 5.0,
+    error: int = 0,
+    error_message: str = "",
+) -> Mock:
+    """Build a Mock ILaser stand-in for the _write_laser*_power paths.
+
+    The write paths read .active, .max_power, .error, .error_message,
+    .label, and call .set_power(mw). The per-instance RLock lives on
+    ._lock (the daemon-thread write path acquires it).
+    """
+    laser = Mock()
+    laser.label = label
+    laser.active = active
+    laser.max_power = max_power
+    laser.error = error
+    laser.error_message = error_message
+    laser._lock = threading.RLock()
+    return laser
+
+
 def test_write_laser1_power_skips_when_estop_set() -> None:
     """When estop_event is set, _write_laser1_power must NOT call
-    _update_setpoints (the DAQ write is skipped)."""
+    self.lasers[0].set_power (the HAL write is skipped)."""
     write_laser1_power = _load_method("_write_laser1_power(self, pct: float) -> None")
 
     estop_event = threading.Event()
     estop_event.set()
 
-    lasers = Mock()
-    lasers.laser1_active = True
-    lasers.laser1_max_power = 5.0
-    lasers.error = 0
+    laser1 = _make_write_laser("Laser 1 (561 nm)", active=True, max_power=300.0)
 
     standin = Mock()
     standin.estop_event = estop_event
-    standin.lasers = lasers
-    standin._laser1_write_lock = threading.RLock()
+    standin.lasers = [laser1, Mock()]
     standin.sig_message = Mock()
 
     write_laser1_power(standin, 50.0)
 
-    lasers._update_setpoints.assert_not_called()
+    laser1.set_power.assert_not_called()
     standin.sig_message.emit.assert_not_called()
 
 
 def test_write_laser2_power_skips_when_estop_set() -> None:
     """When estop_event is set, _write_laser2_power must NOT call
-    ibeam.set_power (the serial write is skipped)."""
+    self.lasers[1].set_power (the HAL write is skipped)."""
     write_laser2_power = _load_method("_write_laser2_power(self, pct: float) -> None")
 
     estop_event = threading.Event()
     estop_event.set()
 
-    lasers = Mock()
-    lasers.laser2_active = True
-
-    ibeam = Mock()
-    ibeam.max_power = 150000
-    ibeam.error = 0
+    laser2 = _make_write_laser("Laser 2 (640 nm)", active=True, max_power=150.0)
 
     standin = Mock()
     standin.estop_event = estop_event
-    standin.lasers = lasers
-    standin.ibeam = ibeam
-    standin._laser2_write_lock = threading.RLock()
+    standin.lasers = [Mock(), laser2]
     standin.sig_message = Mock()
 
     write_laser2_power(standin, 50.0)
 
-    ibeam.set_power.assert_not_called()
+    laser2.set_power.assert_not_called()
     standin.sig_message.emit.assert_not_called()
 
 
 def test_write_laser1_power_writes_when_estop_clear_and_active() -> None:
-    """When estop_event is clear and laser1 is active, _write_laser1_power
-    must scale the staged percentage to Volts, write that value to
-    _laser1_setpoint (the attribute _update_setpoints actually sends to the
-    DAQ — NOT laser1_power, which is never read by the DAQ write path), and
-    call _update_setpoints (the happy path).
-
-    Asserting _laser1_setpoint (not just laser1_power) is the regression
-    guard for the bug where _write_laser1_power set laser1_power but the
-    DAQ writes _laser1_setpoint — the staged-percent spinbox was functionally
-    dead while the laser was on. A test that only asserted laser1_power
-    passed despite the laser power never changing on the rig.
-    """
+    """When estop_event is clear and laser 1 is active, _write_laser1_power
+    must scale the staged percentage to mW (pct/100 * max_power) and call
+    self.lasers[0].set_power(mw). The mW value is the canonical ILaser
+    unit; the backend (DAQLaser) converts mW -> V internally."""
     write_laser1_power = _load_method("_write_laser1_power(self, pct: float) -> None")
 
     estop_event = threading.Event()  # clear
 
-    lasers = Mock()
-    lasers.laser1_active = True
-    lasers.laser1_max_power = 5.0
-    lasers.error = 0
-    # Initialise the setpoint the way Lasers.__init__ does, so the assertion
-    # checks the method actually overwrites it with the scaled value rather
-    # than a Mock auto-attribute that compares equal to anything.
-    lasers._laser1_setpoint = 0
+    laser1 = _make_write_laser("Laser 1 (561 nm)", active=True, max_power=300.0)
 
     standin = Mock()
     standin.estop_event = estop_event
-    standin.lasers = lasers
-    standin._laser1_write_lock = threading.RLock()
+    standin.lasers = [laser1, Mock()]
     standin.sig_message = Mock()
 
     write_laser1_power(standin, 50.0)
 
-    # 50 % of 5 V = 2.5 V must be set on lasers.laser1_power (the staged
-    # value the operator sees) AND on lasers._laser1_setpoint (the value
-    # _update_setpoints writes to the DAQ). The setpoint assertion is the
-    # critical one — without it the test passes even when the DAQ output
-    # never changes.
-    assert lasers.laser1_power == 2.5
-    assert lasers._laser1_setpoint == 2.5, (
-        "_write_laser1_power must set _laser1_setpoint (the DAQ-bound "
-        "attribute), not just laser1_power — otherwise the staged-percent "
-        "spinbox never reaches the laser while it is on."
-    )
-    lasers._update_setpoints.assert_called_once()
+    # 50 % of 300 mW = 150 mW must be passed to set_power.
+    laser1.set_power.assert_called_once_with(150.0)
 
 
 def test_write_laser1_power_skips_when_laser_inactive() -> None:
-    """When laser1 is inactive, _write_laser1_power must not write (no
+    """When laser 1 is inactive, _write_laser1_power must not write (no
     point energizing a laser the operator has toggled off)."""
     write_laser1_power = _load_method("_write_laser1_power(self, pct: float) -> None")
 
     estop_event = threading.Event()  # clear
 
-    lasers = Mock()
-    lasers.laser1_active = False
-    lasers.laser1_max_power = 5.0
-    lasers.error = 0
+    laser1 = _make_write_laser("Laser 1 (561 nm)", active=False, max_power=300.0)
 
     standin = Mock()
     standin.estop_event = estop_event
-    standin.lasers = lasers
-    standin._laser1_write_lock = threading.RLock()
+    standin.lasers = [laser1, Mock()]
     standin.sig_message = Mock()
 
     write_laser1_power(standin, 50.0)
 
-    lasers._update_setpoints.assert_not_called()
+    laser1.set_power.assert_not_called()
+
+
+def test_write_laser2_power_writes_when_estop_clear_and_active() -> None:
+    """When estop_event is clear and laser 2 is active, _write_laser2_power
+    must scale the staged percentage to mW (pct/100 * max_power) and call
+    self.lasers[1].set_power(mw)."""
+    write_laser2_power = _load_method("_write_laser2_power(self, pct: float) -> None")
+
+    estop_event = threading.Event()  # clear
+
+    laser2 = _make_write_laser("Laser 2 (640 nm)", active=True, max_power=150.0)
+
+    standin = Mock()
+    standin.estop_event = estop_event
+    standin.lasers = [Mock(), laser2]
+    standin.sig_message = Mock()
+
+    write_laser2_power(standin, 50.0)
+
+    # 50 % of 150 mW = 75 mW must be passed to set_power.
+    laser2.set_power.assert_called_once_with(75.0)
+
+
+def test_write_laser1_power_surfaces_error_and_resets() -> None:
+    """When self.lasers[0].set_power leaves .error set, _write_laser1_power
+    must emit a sig_message naming the laser's label + error_message and
+    reset .error = 0."""
+    write_laser1_power = _load_method("_write_laser1_power(self, pct: float) -> None")
+
+    estop_event = threading.Event()  # clear
+
+    def _fail_set_power(mw: float) -> None:
+        laser1.error = 1
+        laser1.error_message = "daq write failed"
+
+    laser1 = _make_write_laser("Laser 1 (561 nm)", active=True, max_power=300.0)
+    laser1.set_power.side_effect = _fail_set_power
+
+    standin = Mock()
+    standin.estop_event = estop_event
+    standin.lasers = [laser1, Mock()]
+    standin.sig_message = Mock()
+
+    write_laser1_power(standin, 50.0)
+
+    assert standin.sig_message.emit.called
+    msg = standin.sig_message.emit.call_args[0][0]
+    assert "Laser 1 (561 nm)" in msg
+    assert "daq write failed" in msg
+    assert laser1.error == 0
+
+
+# --------------------------------------------------------------------------- #
+# Toggle + start_lasers/stop_lasers rewrite tests — the toggle bodies and
+# the acquisition-worker start/stop paths collapse to one shape operating
+# on self.lasers[i] uniformly (no laser-2-specific self.ibeam branch).
+# --------------------------------------------------------------------------- #
+
+
+def test_toggle_laser1_off_when_active() -> None:
+    """_toggle_laser1 calls self.lasers[0].off() when the laser is active."""
+    toggle = _load_method("_toggle_laser1(self) -> None")
+
+    estop_event = threading.Event()  # clear
+    laser1 = _make_write_laser("Laser 1 (561 nm)", active=True, max_power=300.0)
+
+    standin = Mock()
+    standin.estop_event = estop_event
+    standin.lasers = [laser1, Mock()]
+    standin.sig_message = Mock()
+    standin.laser1_power_pct = 50.0
+
+    toggle(standin)
+
+    laser1.off.assert_called_once()
+    laser1.on.assert_not_called()
+
+
+def test_toggle_laser1_on_when_inactive() -> None:
+    """_toggle_laser1 calls self.lasers[0].on() when the laser is inactive,
+    then applies the staged percentage via _write_laser1_power."""
+    toggle = _load_method("_toggle_laser1(self) -> None")
+
+    estop_event = threading.Event()  # clear
+    laser1 = _make_write_laser("Laser 1 (561 nm)", active=False, max_power=300.0)
+
+    standin = Mock()
+    standin.estop_event = estop_event
+    standin.lasers = [laser1, Mock()]
+    standin.sig_message = Mock()
+    standin.laser1_power_pct = 50.0
+    standin._write_laser1_power = Mock()
+
+    toggle(standin)
+
+    laser1.on.assert_called_once()
+    # After a successful on(), the staged percentage is applied.
+    standin._write_laser1_power.assert_called_once_with(50.0)
+
+
+def test_toggle_laser2_on_when_inactive() -> None:
+    """_toggle_laser2 calls self.lasers[1].on() when inactive, then applies
+    the staged percentage via _write_laser2_power. Symmetric with laser 1 —
+    no laser-2-specific self.ibeam branch."""
+    toggle = _load_method("_toggle_laser2(self) -> None")
+
+    estop_event = threading.Event()  # clear
+    laser2 = _make_write_laser("Laser 2 (640 nm)", active=False, max_power=150.0)
+
+    standin = Mock()
+    standin.estop_event = estop_event
+    standin.lasers = [Mock(), laser2]
+    standin.sig_message = Mock()
+    standin.laser2_power_pct = 50.0
+    standin._write_laser2_power = Mock()
+
+    toggle(standin)
+
+    laser2.on.assert_called_once()
+    standin._write_laser2_power.assert_called_once_with(50.0)
+
+
+def test_toggle_laser1_skips_when_estop_set() -> None:
+    """_toggle_laser1 must NOT energize when estop_event is set — the
+    E-stop path already drove the laser off synchronously; a queued toggle
+    must not re-energize a Class IIIB laser past the kill path."""
+    toggle = _load_method("_toggle_laser1(self) -> None")
+
+    estop_event = threading.Event()
+    estop_event.set()
+    laser1 = _make_write_laser("Laser 1 (561 nm)", active=False, max_power=300.0)
+
+    standin = Mock()
+    standin.estop_event = estop_event
+    standin.lasers = [laser1, Mock()]
+    standin.sig_message = Mock()
+    standin.laser1_power_pct = 50.0
+
+    toggle(standin)
+
+    laser1.on.assert_not_called()
+
+
+def test_start_lasers_drives_both_auto_lasers() -> None:
+    """start_lasers drives self.lasers[0] and self.lasers[1] uniformly
+    (.on() / .set_power(mw)) for the auto-selected lasers — no
+    laser-2-specific self.ibeam branch."""
+    start_lasers = _load_method("start_lasers(self) -> None")
+
+    laser1 = _make_write_laser("Laser 1 (561 nm)", active=False, max_power=300.0)
+    laser2 = _make_write_laser("Laser 2 (640 nm)", active=False, max_power=150.0)
+
+    standin = Mock()
+    standin._auto_laser1 = True
+    standin._auto_laser2 = True
+    standin.laser1_power_pct = 50.0
+    standin.laser2_power_pct = 50.0
+    standin.lasers = [laser1, laser2]
+    standin.sig_message = Mock()
+
+    start_lasers(standin)
+
+    laser1.on.assert_called_once()
+    laser2.on.assert_called_once()
+    # 50 % of 300 mW = 150 mW; 50 % of 150 mW = 75 mW.
+    laser1.set_power.assert_called_once_with(150.0)
+    laser2.set_power.assert_called_once_with(75.0)
+
+
+def test_start_lasers_skips_non_auto_lasers() -> None:
+    """start_lasers only energizes lasers whose auto-checkbox was sampled
+    True; the other laser is untouched."""
+    start_lasers = _load_method("start_lasers(self) -> None")
+
+    laser1 = _make_write_laser("Laser 1 (561 nm)", active=False, max_power=300.0)
+    laser2 = _make_write_laser("Laser 2 (640 nm)", active=False, max_power=150.0)
+
+    standin = Mock()
+    standin._auto_laser1 = True
+    standin._auto_laser2 = False
+    standin.laser1_power_pct = 50.0
+    standin.laser2_power_pct = 50.0
+    standin.lasers = [laser1, laser2]
+    standin.sig_message = Mock()
+
+    start_lasers(standin)
+
+    laser1.on.assert_called_once()
+    laser2.on.assert_not_called()
+
+
+def test_stop_lasers_drives_both_auto_lasers_off() -> None:
+    """stop_lasers drives self.lasers[0].off() / self.lasers[1].off()
+    uniformly for the auto-selected lasers — no laser-2-specific
+    self.ibeam branch."""
+    stop_lasers = _load_method("stop_lasers(self) -> None")
+
+    laser1 = _make_write_laser("Laser 1 (561 nm)", active=True, max_power=300.0)
+    laser2 = _make_write_laser("Laser 2 (640 nm)", active=True, max_power=150.0)
+
+    standin = Mock()
+    standin._auto_laser1 = True
+    standin._auto_laser2 = True
+    standin.lasers = [laser1, laser2]
+    standin.sig_message = Mock()
+
+    stop_lasers(standin)
+
+    laser1.off.assert_called_once()
+    laser2.off.assert_called_once()
 
 
 # --------------------------------------------------------------------------- #
