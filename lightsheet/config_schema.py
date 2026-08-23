@@ -28,6 +28,8 @@ lowercased and accepted.
 """
 
 import logging
+import os
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -35,6 +37,8 @@ from typing import Any
 from pydantic import Field, ValidationError, field_validator
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from lightsheet.config import cfg_read
 
 logger = logging.getLogger(__name__)
 
@@ -534,3 +538,143 @@ def collect_config_errors(
                     f"[{section_name}] {key} = {value}: {violation}."
                 )
     return result
+
+
+# ---------------------------------------------------------------------------
+# INI loading helper — reads all sections from config.ini (baseline) + the
+# optional rig-specific overlay, returning a per-section dict of raw string
+# values ready for collect_config_errors. cfg_read only returns keys present
+# in its defaults dict, so the defaults dict is built from each section
+# model's Field aliases to capture every file key.
+# ---------------------------------------------------------------------------
+
+
+def load_sections_from_ini(
+    baseline_path: str, overlay_path: str | None
+) -> dict[str, dict[str, str]]:
+    """Load all config.ini sections as raw string dicts, ready for
+    ``collect_config_errors``.
+
+    For each section in ``_SECTION_MODELS``, reads the baseline file via
+    ``cfg_read`` (using the strict model's Field aliases as the defaults
+    dict so every file key is captured), then merges the overlay file's
+    values on top if ``overlay_path`` exists (overlay values win via dict
+    update). Returns a ``dict[section_name, dict[key, raw_string_value]]``.
+    """
+    sections: dict[str, dict[str, str]] = {}
+    for section_name, (strict_cls, _overlay_cls) in _SECTION_MODELS.items():
+        # Build the defaults dict from the strict model's Field aliases so
+        # cfg_read captures every file key (cfg_read only returns keys
+        # present in the defaults dict — passing {} would yield {}).
+        defaults_template: dict[str, str] = {}
+        for field_info in strict_cls.model_fields.values():
+            key = field_info.alias or field_info.name
+            defaults_template[key] = ""
+        # cfg_read mutates the passed dict in place, so pass a fresh copy.
+        baseline = cfg_read(
+            baseline_path, section_name, dict(defaults_template)
+        )
+        if overlay_path is not None and os.path.exists(overlay_path):
+            overlay = cfg_read(
+                overlay_path, section_name, dict(defaults_template)
+            )
+            baseline.update(overlay)  # overlay wins
+        sections[section_name] = baseline
+    return sections
+
+
+# ---------------------------------------------------------------------------
+# ConfigValidator — collect-all validation with a modal QDialog abort path.
+# validate_or_abort() runs collect_config_errors on the sections dict, shows
+# a modal QDialog listing all errors (red, startup-blocking) and warnings
+# (amber, advisory), then aborts via sys.exit(1) if any errors exist. If
+# only warnings are present, the operator may proceed. PyQt5 is imported
+# inside _show_dialog so the module stays importable without Qt for the
+# pure-logic collect_config_errors tests.
+# ---------------------------------------------------------------------------
+
+
+class ConfigValidator:
+    """Collect-all config validation with a modal QDialog abort path.
+
+    The composition root (``main()``) calls ``validate_or_abort`` AFTER the
+    DeviceBundle exists but BEFORE any collaborator or the shell is
+    constructed (UI-SPEC order-of-operations). A REJECT-classified error
+    aborts via ``sys.exit(1)`` before any Qt window shows.
+    """
+
+    def validate_or_abort(
+        self, sections: dict[str, dict[str, str]]
+    ) -> None:
+        """Run collect-all validation on the sections dict. If any errors
+        or warnings exist, show a modal QDialog. If any errors exist,
+        abort via ``sys.exit(1)`` after the dialog is dismissed."""
+        result = collect_config_errors(sections)
+        if not result.errors and not result.warnings:
+            return
+        self._show_dialog(result.errors, result.warnings)
+        if result.errors:
+            sys.exit(1)
+
+    def _show_dialog(
+        self, errors: list[str], warnings: list[str]
+    ) -> None:
+        """Show the collect-all config-error QDialog (D-03 / PKG-04).
+
+        Layout: errors block (red header + per-error rows) first, then
+        warnings block (amber header + per-warning rows), then a
+        right-aligned button row with "Exit" (always, default) and
+        "Proceed with warnings" (only if 0 errors and ≥1 warning).
+        """
+        from PyQt5.QtWidgets import (
+            QDialog,
+            QHBoxLayout,
+            QLabel,
+            QPushButton,
+            QVBoxLayout,
+        )
+
+        dlg = QDialog()
+        dlg.setWindowTitle("Configuration validation")
+        dlg.setMinimumWidth(480)
+        layout = QVBoxLayout(dlg)
+
+        if errors:
+            header = QLabel("✕ Errors — startup blocked")
+            header.setStyleSheet("color: #FF3B30; font-weight: bold;")
+            layout.addWidget(header)
+            for e in errors:
+                row = QLabel(f"✕ {e}")
+                row.setWordWrap(True)
+                layout.addWidget(row)
+
+        if warnings:
+            if errors:
+                spacer = QLabel()
+                spacer.setFixedHeight(32)
+                layout.addWidget(spacer)
+            header = QLabel("⚠ Warnings — review before proceeding")
+            header.setStyleSheet("color: #FF9500; font-weight: bold;")
+            layout.addWidget(header)
+            for w in warnings:
+                row = QLabel(f"⚠ {w}")
+                row.setWordWrap(True)
+                layout.addWidget(row)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        exit_btn = QPushButton("Exit")
+        exit_btn.setDefault(True)
+        exit_btn.clicked.connect(dlg.reject)
+        btn_layout.addWidget(exit_btn)
+
+        if warnings and not errors:
+            proceed_btn = QPushButton("Proceed with warnings")
+            proceed_btn.setStyleSheet("color: #34C759;")
+            proceed_btn.clicked.connect(dlg.accept)
+            btn_layout.addWidget(proceed_btn)
+
+        layout.addLayout(btn_layout)
+        dlg.setModal(True)
+        dlg.exec_()
