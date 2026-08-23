@@ -45,7 +45,7 @@ the inner engine, and exposes ``get_output_power()`` in mW for the GUI
 readback field.
 
 **mW -> µW conversion (D-01):** ``set_power(mw)`` takes milliwatts; ``power``
-/ ``max_power`` attrs are in mW. The adapter converts mW to µW (× 1000) and
+/ ``max_power`` attrs are in mW. The adapter converts mW to µW (x 1000) and
 delegates the actual serial round-trip to ``self._ibeam.set_power(uw)``.
 
 **Two-layer clamp (AGENTS.md §2 — Class IIIB laser safety):**
@@ -391,7 +391,7 @@ class IBeamSmartLaser(ILaser):
     """``ILaser`` adapter for the Toptica iBeam Smart (L2, COM4 serial).
 
     Wraps the rig-confirmed ``IBeam`` serial engine (defined above in this
-    same module). mW -> µW (× 1000). ``off()`` is synchronous (E-stop kill
+    same module). mW -> µW (x 1000). ``off()`` is synchronous (E-stop kill
     path). ``_lock`` is the same object as the inner ``IBeam._lock`` (lock
     identity).
     """
@@ -482,7 +482,7 @@ class IBeamSmartLaser(ILaser):
         """Set the staged laser power in milliwatts (mW canonical).
 
         Clamps ``mw`` to ``[0.0, max_power]`` (mW) at the adapter layer
-        (first safety layer, AGENTS.md §2), converts to µW (× 1000), and
+        (first safety layer, AGENTS.md §2), converts to µW (x 1000), and
         delegates the serial round-trip to ``self._ibeam.set_power(uw)``.
         The inner ``IBeam.set_power`` clamps the µW value to its own
         ``max_power`` independently (second safety layer). On a firmware
