@@ -92,7 +92,9 @@ def _expect_unresolved(ports: list[tuple]) -> UnresolvedDeviceError:
 
 
 def test_ibeam_resolves_by_vid_pid_serial() -> None:
-    ports = [_IBEAM_PORT]
+    # All 4 vid_pid-bearing ports present — the iBeam must resolve by
+    # VID/PID + serial alone (config.ini Port never consulted for it).
+    ports = [_IBEAM_PORT, _ETL_LEFT_PORT, _ETL_RIGHT_PORT, _ZABER_PORT]
     resolved = _resolve_ports(ports)
     assert resolved[ROLE_IBEAM] == "COM4"
 
@@ -104,7 +106,9 @@ def test_ibeam_resolves_by_vid_pid_serial() -> None:
 
 
 def test_zaber_null_serial_resolves_by_config_port() -> None:
-    ports = [_ZABER_PORT]
+    # All 4 vid_pid-bearing ports present — the null-serial Zaber resolves
+    # by VID/PID + config.ini [Motors] Port disambiguator.
+    ports = [_IBEAM_PORT, _ETL_LEFT_PORT, _ETL_RIGHT_PORT, _ZABER_PORT]
     resolved = _resolve_ports(ports)
     assert resolved[ROLE_ZABER] == "COM7"
 
@@ -115,7 +119,15 @@ def test_zaber_null_serial_resolves_by_config_port() -> None:
 
 
 def test_zaber_ambiguous_disambiguated_by_config_port() -> None:
-    ports = [_ZABER_PORT, (0x067B, 0x2303, None, "COM9")]
+    # All 4 manifest ports + a second 067B:2303 at COM9 — config.ini
+    # [Motors] Port = COM7 disambiguates the ambiguous VID/PID match.
+    ports = [
+        _IBEAM_PORT,
+        _ETL_LEFT_PORT,
+        _ETL_RIGHT_PORT,
+        _ZABER_PORT,
+        (0x067B, 0x2303, None, "COM9"),
+    ]
     resolved = _resolve_ports(ports)
     assert resolved[ROLE_ZABER] == "COM7"
 
@@ -127,7 +139,15 @@ def test_zaber_ambiguous_disambiguated_by_config_port() -> None:
 
 
 def test_zaber_ambiguous_no_config_match_raises() -> None:
-    ports = [(0x067B, 0x2303, None, "COM8"), (0x067B, 0x2303, None, "COM9")]
+    # iBeam + ETLs present (they resolve), but TWO 067B:2303 ports at COM8
+    # and COM9 — NEITHER matches config.ini [Motors] Port = COM7.
+    ports = [
+        _IBEAM_PORT,
+        _ETL_LEFT_PORT,
+        _ETL_RIGHT_PORT,
+        (0x067B, 0x2303, None, "COM8"),
+        (0x067B, 0x2303, None, "COM9"),
+    ]
     err = _expect_unresolved(ports)
     assert "Zaber" in str(err) or ROLE_ZABER in str(err)
 
@@ -140,7 +160,9 @@ def test_zaber_ambiguous_no_config_match_raises() -> None:
 
 
 def test_missing_serial_numbered_device_raises() -> None:
-    ports: list[tuple] = []  # no ports at all → iBeam missing
+    # ETLs + Zaber present, iBeam absent — UnresolvedDeviceError must
+    # contain the VID/PID (0403/6001) or serial (FTESFCRWA).
+    ports = [_ETL_LEFT_PORT, _ETL_RIGHT_PORT, _ZABER_PORT]
     err = _expect_unresolved(ports)
     msg = str(err)
     assert "0403" in msg or "6001" in msg or "FTESFCRWA" in msg

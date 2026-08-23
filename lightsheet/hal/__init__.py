@@ -51,11 +51,13 @@ from lightsheet.hal.real.etls import ETLs
 from lightsheet.hal.real.ibeam_smart import IBeam, IBeamSmartLaser
 from lightsheet.hal.real.motors import Motors
 from lightsheet.hal.real.siggen import SigGen
+from lightsheet.hal.registry import DeviceRegistry, UnresolvedDeviceError
 
 __all__ = [
     "Camera",
     "DAQLaser",
     "DeviceBundle",
+    "DeviceRegistry",
     "ETLs",
     "IBeam",
     "IBeamSmartLaser",
@@ -78,4 +80,5 @@ __all__ = [
     "MockSigGen",
     "Motors",
     "SigGen",
+    "UnresolvedDeviceError",
 ]
