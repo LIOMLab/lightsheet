@@ -1006,9 +1006,13 @@ class Controller_MainWindow(QMainWindow):
         Acquisition workers run start_lasers()/stop_lasers() off the GUI
         thread and must read these cached bools rather than the widgets,
         which belong to the GUI thread (AGENTS.md §11). Called at every
-        entry point that leads to a worker calling start_lasers()/
-        stop_lasers(): close_modes (which calls stop_lasers directly) and
-        the three updateUi_*_mode_button handlers that spawn a worker.
+        mode-*start* entry point that leads to a worker calling
+        start_lasers()/stop_lasers(): the three updateUi_*_mode_button
+        handlers that spawn a worker. close_modes deliberately does NOT
+        re-cache — it relies on the start-of-run flags so an operator
+        unchecking an auto-laser checkbox mid-run cannot leave a laser
+        energized after Stop (the cached flag stays True from mode start,
+        so stop_lasers() drives that laser off).
         """
         self._auto_laser1 = self.ui.checkBox_laserOneAutomatic.isChecked()
         self._auto_laser2 = self.ui.checkBox_laserTwoAutomatic.isChecked()
@@ -1016,10 +1020,21 @@ class Controller_MainWindow(QMainWindow):
     def close_modes(self) -> None:
         """Close all thread modes if they are active"""
         # FIXME
-        # Sample the auto-laser checkboxes on the GUI thread before any
-        # stop_lasers() call below — stop_lasers runs off the GUI thread
-        # in some call paths and must read the cached bools, not widgets.
-        self._cache_auto_laser_flags()
+        # Do NOT re-sample the auto-laser checkboxes here. The flags were
+        # cached at mode *start* by the updateUi_*_mode_button handler
+        # that spawned the worker (e.g. line ~1587), and stop_lasers()
+        # must use those start-of-run flags — not a fresh re-cache. If the
+        # operator unchecks an auto-laser checkbox mid-run, a re-cache
+        # here would flip _auto_laser* to False and stop_lasers() would
+        # skip that laser, leaving a Class IIIB laser energized after the
+        # operator pressed Stop. The E-stop path is unaffected (it
+        # iterates self.lasers unconditionally), but the normal Stop path
+        # must not re-cache. The cached flags persist from mode start;
+        # close_modes is called on the GUI thread by the mode-button
+        # handlers and by shutdown, all of which run after a mode-button
+        # handler cached the flags (or no mode was started, in which case
+        # the lasers[].active guard below prevents stop_lasers() from
+        # running on stale flags).
         if self.preview_mode_started:
             self.preview_mode_started = False
         if self.live_mode_started:
