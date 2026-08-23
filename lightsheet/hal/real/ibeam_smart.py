@@ -279,12 +279,17 @@ class IBeam:
             logger.exception("IBeam set_power failed")
         return None
 
-    def get_output_power(self) -> int:
+    def get_output_power(self) -> int | None:
         """Read the current channel output power in microwatts.
 
         Sends `show level power` and parses the `CH<n>, PWR: <value> mW` line
-        for this driver's channel. Returns the last commanded power as a
-        fallback if the reply cannot be parsed.
+        for this driver's channel. Returns the parsed value in µW, or
+        ``None`` when no matching ``CH{channel}`` line is found (e.g. the
+        firmware returned an unexpected format or an empty reply after the
+        terminator) so the adapter can surface "no reading" to the GUI
+        rather than presenting the last commanded power as a live
+        readback. ``None`` is also returned on a serial error (the HAL
+        error surface is set in that case).
         """
         try:
             response = self._send_cmd("show level power")
@@ -301,13 +306,17 @@ class IBeam:
                         elif unit.lower() == "uw":
                             return int(value)
                     except (ValueError, IndexError):
-                        # Malformed line -> fall through to fallback.
+                        # Malformed line -> fall through to None fallback.
                         break
+            # No matching CH line found in the response (or the response
+            # was empty after the terminator). Return None so the adapter
+            # surfaces "no reading" instead of the stale commanded value.
+            return None
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
             logger.exception("IBeam get_output_power failed")
-        return self._power
+            return None
 
     def is_enabled(self) -> bool:
         """Return True if laser emission is currently enabled."""
@@ -510,11 +519,12 @@ class IBeamSmartLaser(ILaser):
         the multi-channel ``show level power`` reply by ``CH{channel}`` —
         the adapter does NOT re-implement that parse). Returns the µW value
         divided by 1000.0 (mW), or ``None`` on an inner error (parse
-        failure / firmware rejection) so the GUI readback field can
-        distinguish "no reading" from "reading is 0".
+        failure / firmware rejection) or when the inner method returns
+        ``None`` (no matching ``CH{channel}`` line in the response) so the
+        GUI readback field can distinguish "no reading" from "reading is 0".
         """
         uw = self._ibeam.get_output_power()
-        if self._ibeam.error:
+        if uw is None or self._ibeam.error:
             return None
         return uw / 1000.0
 

@@ -356,3 +356,52 @@ def test_ibeam_send_cmd_sets_error_on_fresh_rejection() -> None:
         "even though it clears the surface at the top of the round-trip"
     )
     assert "%SYS-E-00099" in ib.error_message
+
+
+# --------------------------------------------------------------------------- #
+# Test 16: get_output_power() must return None (not the stale commanded
+# self._power) when no CH{channel} line is found in the response. Returning
+# the stale value would present it as a live readback to the operator. The
+# error surface stays 0 (no %SYS-E, no SerialException), so None is the only
+# signal the adapter has that the parse did not match.
+# --------------------------------------------------------------------------- #
+def test_ibeam_get_output_power_returns_none_on_unmatched_response() -> None:
+    ib, _ = _make_open_ibeam(readline_side_effect=[b"CMD>\r\n"])
+    ib._power = 75000  # pre-seed a known prior power
+    result = ib.get_output_power()
+    assert result is None, (
+        "get_output_power must return None when no CH{channel} line is "
+        "found — returning self._power would present the stale commanded "
+        "value as a live readback"
+    )
+    assert ib.error == 0, (
+        "no %SYS-E and no SerialException -> error surface stays clean; "
+        "the None return is the only parse-failure signal"
+    )
+
+
+def test_ibeam_get_output_power_returns_none_on_empty_response() -> None:
+    """An empty reply (readline timeout -> b'' terminator) must return
+    None, not the stale commanded value."""
+    ib, _ = _make_open_ibeam(readline_side_effect=[b""])
+    ib._power = 50000
+    result = ib.get_output_power()
+    assert result is None
+    assert ib.error == 0
+
+
+def test_ibeam_get_output_power_returns_value_on_matching_line() -> None:
+    """Regression guard: the happy path (matching CH1 line) must still
+    return the parsed µW value, not None."""
+    ib, _ = _make_open_ibeam(
+        readline_side_effect=[
+            b"CH1, PWR: 75.000 mW\r\n",
+            b"CH2, PWR: 150.000 mW\r\n",
+            b"CMD>\r\n",
+        ]
+    )
+    result = ib.get_output_power()
+    assert result == 75000, (
+        f"get_output_power must return 75000 uW from the CH1 line; "
+        f"got {result!r}"
+    )
