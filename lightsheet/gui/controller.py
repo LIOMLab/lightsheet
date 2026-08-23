@@ -193,6 +193,12 @@ class Controller_MainWindow(QMainWindow):
         )
         self.ui.verticalLayout_43.addWidget(self.label_laserOneStatus)
 
+        # Anchor the column from the top so the L1 status + readback labels
+        # align horizontally with L2's, even though L2 has an extra Refresh
+        # button below its readback (the button extends downward without
+        # pushing the shared rows up).
+        self.ui.verticalLayout_43.setAlignment(Qt.AlignTop)
+
         # L1 power readback field — DAQLaser has no hardware readback, so
         # this shows the staged mW (pct/100 * max_power_mw) returned by
         # get_output_power() (which returns self.power). Updated on the
@@ -213,6 +219,11 @@ class Controller_MainWindow(QMainWindow):
             "color: #8E8E93; font-weight: bold;"
         )
         self.ui.verticalLayout_44.addWidget(self.label_laserTwoStatus)
+
+        # Anchor from the top — mirrors verticalLayout_43 so both columns'
+        # status + readback labels align horizontally (the L2 Refresh
+        # button below extends downward without shifting the shared rows).
+        self.ui.verticalLayout_44.setAlignment(Qt.AlignTop)
 
         # iBeam power readback field (LSD-04) + manual Refresh button.
         # The readback is a read-only QLabel showing '{value:.1f} mW'
