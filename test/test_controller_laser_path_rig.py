@@ -89,26 +89,34 @@ def _load_method(method_sig: str) -> Callable[..., Any]:
 def standin() -> Mock:
     """A stand-in Controller_MainWindow self with REAL HAL instances.
 
-    Constructed exactly as hardware_init constructs them (Lasers(), IBeam()),
-    plus the per-laser locks, estop_event, and staged-percent fields the
-    laser methods read. sig_message is captured so we can assert on operator
-    messages. The iBeam is opened (as hardware_init does); if COM4 is held
-    by the running app the open fails gracefully and ibeam.error is set —
-    the laser-1 (DAQ) path is still exercisable.
+    Constructed exactly as hardware_init constructs them: self.lasers is a
+    list[ILaser] = [DAQLaser(/Dev7/ao0, 561nm), IBeamSmartLaser(640nm)].
+    The per-laser write locks live on the ILaser instances
+    (self.lasers[i]._lock). estop_event and staged-percent fields are set
+    as the laser methods read them. sig_message is captured so we can
+    assert on operator messages. The iBeam is opened (as hardware_init
+    does); if COM4 is held by the running app the open fails gracefully
+    and the laser's .error is set — the laser-1 (DAQ) path is still
+    exercisable.
     """
-    from lightsheet.hal import IBeam, Lasers
+    from lightsheet.hal import DAQLaser, IBeamSmartLaser
 
     s = Mock()
-    s.lasers = Lasers()
-    s.ibeam = IBeam()
+    laser1 = DAQLaser(
+        terminal="/Dev7/ao0",
+        wavelength=561,
+        mw_per_volt=60.0,
+        max_power_mw=300.0,
+        label="Laser 1 (561 nm)",
+    )
+    laser2 = IBeamSmartLaser(label="Laser 2 (640 nm)")
+    s.lasers = [laser1, laser2]
     # COM4 may be held by the running app; laser-1 path still testable.
     with contextlib.suppress(Exception):
-        s.ibeam.open()
+        laser2._ibeam.open()
     s.estop_event = threading.Event()
-    s._laser1_write_lock = threading.RLock()
-    s._laser2_write_lock = threading.RLock()
-    s.laser1_power_pct = 0.0  # 0 V — laser OFF, safe
-    s.laser2_power_pct = 0.0  # 0 uW — iBeam OFF, safe
+    s.laser1_power_pct = 0.0  # 0 mW — laser OFF, safe
+    s.laser2_power_pct = 0.0  # 0 mW — iBeam OFF, safe
     s._auto_laser1 = False
     s._auto_laser2 = False
     messages = []
@@ -119,23 +127,23 @@ def standin() -> Mock:
 
 
 def test_toggle_laser1_real_daq_no_access_violation(standin: Mock) -> None:
-    """The real _toggle_laser1 (daemon-thread toggle) against real Lasers.
+    """The real _toggle_laser1 (daemon-thread toggle) against real DAQLaser.
 
     Reproduces the "manual 555nm" path the operator ran during UAT, where
-    _toggle_laser1 is spawned on a daemon thread and calls laser1_toggle()
-    -> _update_setpoints (a real nidaqmx.Task write to Dev7/ao0). With
-    laser1_power_pct = 0 the write is 0 V (laser OFF — safe). The test
-    asserts no access violation escapes and the Lasers error surface is
-    clean afterward.
+    _toggle_laser1 is spawned on a daemon thread and calls
+    self.lasers[0].on()/.off() (a real nidaqmx.Task write to Dev7/ao0).
+    With laser1_power_pct = 0 the write is 0 mW (laser OFF — safe). The
+    test asserts no access violation escapes and the laser's error surface
+    is clean afterward.
     """
     toggle = _load_method("_toggle_laser1(self)")
     toggle(standin)
     # No access violation means the call returned without crashing the
-    # process. The Lasers HAL should not be in an error state after a 0 V
+    # process. The laser HAL should not be in an error state after a 0 mW
     # write to a present Dev7.
-    assert standin.lasers.error == 0, (
-        "Lasers HAL reported an error after a 0 V toggle write: "
-        f"{standin.lasers.error_message}"
+    assert standin.lasers[0].error == 0, (
+        "Laser 1 HAL reported an error after a 0 mW toggle write: "
+        f"{standin.lasers[0].error_message}"
     )
 
 
@@ -162,8 +170,8 @@ def test_toggle_laser1_on_daemon_thread_real_daq(standin: Mock) -> None:
     done.wait(timeout=15)
     t.join(timeout=5)
     assert not errors, "Daemon-thread _toggle_laser1 crashed:\n" + "\n".join(errors)
-    assert standin.lasers.error == 0, (
-        f"Lasers HAL error after daemon-thread toggle: {standin.lasers.error_message}"
+    assert standin.lasers[0].error == 0, (
+        f"Laser 1 HAL error after daemon-thread toggle: {standin.lasers[0].error_message}"
     )
 
 
@@ -171,13 +179,13 @@ def test_write_laser1_power_real_daq_repeated(standin: Mock) -> None:
     """The real _write_laser1_power (debounce-slot worker) repeatedly.
 
     Reproduces the spinbox-edit path: each debounce timeout spawns a daemon
-    thread running _write_laser1_power. 0 V — laser OFF, safe. Repeats to
+    thread running _write_laser1_power. 0 mW — laser OFF, safe. Repeats to
     catch intermittent corruption from repeated Task create/write/close
     cycles on the real Dev7 AO channels.
     """
     write = _load_method("_write_laser1_power(self, pct)")
     # Mark laser active so the write path actually runs.
-    standin.lasers.laser1_active = True
+    standin.lasers[0].active = True
     errors = []
     for _ in range(15):
         try:
@@ -185,8 +193,8 @@ def test_write_laser1_power_real_daq_repeated(standin: Mock) -> None:
         except BaseException as e:
             errors.append(repr(e))
     assert not errors, "_write_laser1_power crashed on real DAQ:\n" + "\n".join(errors)
-    assert standin.lasers.error == 0, (
-        f"Lasers HAL error after repeated 0 V writes: {standin.lasers.error_message}"
+    assert standin.lasers[0].error == 0, (
+        f"Laser 1 HAL error after repeated 0 mW writes: {standin.lasers[0].error_message}"
     )
 
 
@@ -194,7 +202,7 @@ def test_start_lasers_real_daq_then_siggen_create(standin: Mock) -> None:
     """The real start_lasers (acquisition worker path) then siggen create.
 
     Reproduces the single_mode_worker sequence: start_lasers() energizes
-    the DAQ laser (0 V here — safe), then acquire_scan would call
+    the DAQ laser (0 mW here — safe), then acquire_scan would call
     siggen.create_scanner(). This tests whether a laser DAQ write leaves
     the nidaqmx session in a state where a subsequent siggen task
     creation on Dev1 fails — the cascade behind the create_scan error.
@@ -204,7 +212,7 @@ def test_start_lasers_real_daq_then_siggen_create(standin: Mock) -> None:
     start_lasers = _load_method("start_lasers(self)")
     # Enable auto-laser 1 so start_lasers actually writes to Dev7.
     standin._auto_laser1 = True
-    standin.laser1_power_pct = 0.0  # 0 V — safe
+    standin.laser1_power_pct = 0.0  # 0 mW — safe
 
     # Build a real SigGen as hardware_init does. Camera construction may
     # fail if the PCO SDK / camera is in use; if so, skip the siggen part
@@ -218,8 +226,8 @@ def test_start_lasers_real_daq_then_siggen_create(standin: Mock) -> None:
         have_siggen = False
 
     start_lasers(standin)
-    assert standin.lasers.error == 0, (
-        f"start_lasers DAQ write failed: {standin.lasers.error_message}"
+    assert standin.lasers[0].error == 0, (
+        f"start_lasers DAQ write failed: {standin.lasers[0].error_message}"
     )
 
     if have_siggen:
