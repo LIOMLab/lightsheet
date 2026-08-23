@@ -193,6 +193,20 @@ class Controller_MainWindow(QMainWindow):
         )
         self.ui.verticalLayout_43.addWidget(self.label_laserOneStatus)
 
+        # L1 power readback field — DAQLaser has no hardware readback, so
+        # this shows the staged mW (pct/100 * max_power_mw) returned by
+        # get_output_power() (which returns self.power). Updated on the
+        # 100ms display timer (same cadence as the L1 status poll) and on
+        # refresh-after-action call sites. Mirrors the L2 readback label
+        # structure so the two laser columns are visually symmetric.
+        self.label_laserOneReadback = QLabel("0.0 mW")
+        self.label_laserOneReadback.setMinimumWidth(80)
+        self.label_laserOneReadback.setToolTip(
+            "Laser 1 staged power (mW) — DAQ analog output has no hardware "
+            "readback; this is the commanded value derived from the percentage"
+        )
+        self.ui.verticalLayout_43.addWidget(self.label_laserOneReadback)
+
         self.label_laserTwoStatus = QLabel("● OFF")
         self.label_laserTwoStatus.setMinimumWidth(140)
         self.label_laserTwoStatus.setStyleSheet(
@@ -773,10 +787,15 @@ class Controller_MainWindow(QMainWindow):
         # Start timer to periodically (100ms) refresh the display port.
         # The L1 status poll rides this same timer (additive connection —
         # zero added serial cost, L1 status is a pure in-HAL active-flag
-        # read) so the DAQ laser status is genuinely live at 100ms.
+        # read) so the DAQ laser status is genuinely live at 100ms. The L1
+        # readback refresh rides it too — DAQLaser has no hardware
+        # readback, so get_output_power() returns the staged mW (pure
+        # in-HAL attribute read, no serial I/O), and the 100ms cadence
+        # keeps the L1 mW field live as the operator edits the percentage.
         self.timer_imageview = QTimer()
         self.timer_imageview.timeout.connect(self.frame_viewer.updateUi_refresh_view)
         self.timer_imageview.timeout.connect(lambda: self._poll_laser_status([0]))
+        self.timer_imageview.timeout.connect(lambda: self._refresh_laser_readback(0))
         self.timer_imageview.start(100)
 
         # L2 (iBeam) status poll — a separate gated QTimer at the
@@ -1053,7 +1072,8 @@ class Controller_MainWindow(QMainWindow):
         # Refresh-after-action: both status labels reflect the post-E-stop
         # state immediately (the periodic timers would otherwise lag).
         self._poll_laser_status([0, 1])
-        self._refresh_laser2_readback()
+        self._refresh_laser_readback(0)
+        self._refresh_laser_readback(1)
 
         # 4. Latch the UI into ACTUATED: red indicator, yellow 4px border
         #    on the E-stop button ("latched — Arm/Reset before re-energizing").
@@ -1234,14 +1254,14 @@ class Controller_MainWindow(QMainWindow):
             return
         self.lasers[1]._lock.release()
         self._poll_laser_status([1])
-        self._refresh_laser2_readback()
+        self._refresh_laser_readback(1)
 
-    def _refresh_laser2_readback(self) -> None:
-        """Query self.lasers[1].get_output_power() and update
-        label_laserTwoReadback. Acquires the iBeam per-instance lock with
-        acquire(blocking=False): if held by an in-progress write, return
-        silently (no-op — the operator can retry). On success, query and
-        update the label, then release in finally.
+    def _refresh_laser_readback(self, idx: int) -> None:
+        """Query self.lasers[idx].get_output_power() and update the
+        per-laser readback label. Acquires the laser's per-instance lock
+        with acquire(blocking=False): if held by an in-progress write,
+        return silently (no-op — the operator can retry). On success,
+        query and update the label, then release in finally.
 
         On a populated readback (float mW): sets the label to
         '{value:.1f} mW'. On a None readback (parse failure / unsupported
@@ -1249,24 +1269,30 @@ class Controller_MainWindow(QMainWindow):
         commanded power — with a tooltip explaining the fallback so the
         operator can distinguish a live readback from a stale commanded
         value.
+
+        Works for both lasers: idx=0 (L1/DAQLaser — get_output_power()
+        returns the staged mW, never None in practice) and idx=1 (L2/iBeam
+        — get_output_power() queries the serial readback, may return None).
+        The readback labels are indexed in parallel with self.lasers.
         """
-        if not self.lasers[1]._lock.acquire(blocking=False):
+        labels = [self.label_laserOneReadback, self.label_laserTwoReadback]
+        label = labels[idx]
+        laser = self.lasers[idx]
+        if not laser._lock.acquire(blocking=False):
             return
         try:
-            value = self.lasers[1].get_output_power()
+            value = laser.get_output_power()
             if value is not None:
-                self.label_laserTwoReadback.setText(f"{value:.1f} mW")
+                label.setText(f"{value:.1f} mW")
             else:
-                self.label_laserTwoReadback.setText(
-                    f"{self.lasers[1].power:.1f} mW (cmd)"
-                )
-                self.label_laserTwoReadback.setToolTip(
-                    "iBeam power readback unavailable (parse failure or "
-                    "this variant does not support readback). Showing "
-                    "last commanded value may be stale."
+                label.setText(f"{laser.power:.1f} mW (cmd)")
+                label.setToolTip(
+                    "Power readback unavailable (parse failure or this "
+                    "variant does not support readback). Showing last "
+                    "commanded value may be stale."
                 )
         finally:
-            self.lasers[1]._lock.release()
+            laser._lock.release()
 
     @pyqtSlot()
     def updateUi_laser2_refresh_clicked(self) -> None:
@@ -1280,7 +1306,7 @@ class Controller_MainWindow(QMainWindow):
         ILaser contract (IBeamSmartLaser queries the serial engine;
         DAQLaser / MockLaser return the staged mW power), so no demo-mode
         gate is needed."""
-        self._refresh_laser2_readback()
+        self._refresh_laser_readback(1)
         self._poll_laser_status([1])
 
     @pyqtSlot(int, str)
@@ -2339,6 +2365,7 @@ class Controller_MainWindow(QMainWindow):
                 # post-write state immediately, not just on the 100ms
                 # timer tick.
                 self._poll_laser_status([0])
+                self._refresh_laser_readback(0)
 
     def _write_laser2_power(self, pct: float) -> None:
         """Worker-thread HAL write for laser 2. Scales the staged percentage
@@ -2372,7 +2399,7 @@ class Controller_MainWindow(QMainWindow):
                 # the post-write state immediately (the gated ~1s poll
                 # would otherwise lag up to a second behind the write).
                 self._poll_laser_status([1])
-                self._refresh_laser2_readback()
+                self._refresh_laser_readback(1)
 
     def laser1_toggle_button(self) -> None:
         # Slot only spawns a worker thread — the DAQ toggle (and the
@@ -2422,6 +2449,7 @@ class Controller_MainWindow(QMainWindow):
             # post-toggle state immediately (the 100ms timer would
             # otherwise lag up to 100ms behind the toggle).
             self._poll_laser_status([0])
+            self._refresh_laser_readback(0)
 
     def laser2_toggle_button(self) -> None:
         # Slot only spawns a worker thread — the iBeam serial on/off (and
@@ -2482,7 +2510,7 @@ class Controller_MainWindow(QMainWindow):
             # post-toggle state immediately (the gated ~1s poll would
             # otherwise lag up to a second behind the toggle).
             self._poll_laser_status([1])
-            self._refresh_laser2_readback()
+            self._refresh_laser_readback(1)
 
     def start_lasers(self) -> None:
         """Starts the lasers at a certain power. Called from acquisition
@@ -2531,7 +2559,8 @@ class Controller_MainWindow(QMainWindow):
         # Refresh-after-action: both status labels reflect the post-start
         # state immediately (the periodic timers would otherwise lag).
         self._poll_laser_status([0, 1])
-        self._refresh_laser2_readback()
+        self._refresh_laser_readback(0)
+        self._refresh_laser_readback(1)
 
     def stop_lasers(self) -> None:
         """Stops the lasers. Called from acquisition worker threads (not the
@@ -2560,7 +2589,8 @@ class Controller_MainWindow(QMainWindow):
         # Refresh-after-action: both status labels reflect the post-stop
         # state immediately (the periodic timers would otherwise lag).
         self._poll_laser_status([0, 1])
-        self._refresh_laser2_readback()
+        self._refresh_laser_readback(0)
+        self._refresh_laser_readback(1)
 
     # File Open Methods
 
