@@ -16,8 +16,17 @@ operator presence required.
 
 import contextlib
 import importlib.util
+import time
 
 import pytest
+
+# DAQ channel-release delay: Windows nidaqmx has a brief delay between
+# Task.close() and the channel becoming available for a new task. Under
+# parallel execution (even within a single xdist group), a prior test's
+# task may not have fully released the channel when the next test starts.
+# Retry with this delay to avoid a spurious "resource is reserved" failure.
+_DAQ_RETRY_DELAY_S = 0.5
+_DAQ_RETRY_COUNT = 3
 
 
 def _real_nidaqmx_available() -> bool:
@@ -61,58 +70,80 @@ def _read_config_terminals() -> tuple[str, str, str]:
 
 
 def _laser_ao_write_0v(terminals: str, errors: list[tuple[str, str]]) -> None:
-    """Replicate Lasers._update_setpoints exactly, writing 0 V."""
+    """Replicate Lasers._update_setpoints exactly, writing 0 V.
+
+    Retries on DAQ resource-reserved errors (-50103) to tolerate the
+    Windows nidaqmx channel-release delay under parallel execution."""
     import nidaqmx
     import numpy as np
 
-    try:
-        with nidaqmx.Task(new_task_name="probe_laser") as task:
-            task.ao_channels.add_ao_voltage_chan(terminals)
-            task.write(np.stack((np.array([0.0]), np.array([0.0]))), auto_start=True)
-    except BaseException as e:
-        errors.append(("laser_write", repr(e)))
+    for attempt in range(_DAQ_RETRY_COUNT):
+        try:
+            with nidaqmx.Task(new_task_name="probe_laser") as task:
+                task.ao_channels.add_ao_voltage_chan(terminals)
+                task.write(np.stack((np.array([0.0]), np.array([0.0]))), auto_start=True)
+            return
+        except BaseException as e:
+            if "-50103" in repr(e) and attempt < _DAQ_RETRY_COUNT - 1:
+                time.sleep(_DAQ_RETRY_DELAY_S)
+                continue
+            errors.append(("laser_write", repr(e)))
+            return
 
 
 def _siggen_create_scanner(
     ao_terminals: str, do_terminals: str, errors: list[tuple[str, str]]
 ) -> None:
-    """Replicate SigGen.create_scanner exactly (AO + DO tasks), 0 V / low."""
+    """Replicate SigGen.create_scanner exactly (AO + DO tasks), 0 V / low.
+
+    Retries on DAQ resource-reserved errors (-50103) to tolerate the
+    Windows nidaqmx channel-release delay under parallel execution."""
     import nidaqmx
     import numpy as np
     from nidaqmx.constants import AcquisitionType, Edge, LineGrouping
 
-    task_ao = None
-    task_do = None
-    try:
-        total_samples = 400
-        # AO scan task
-        task_ao = nidaqmx.Task(new_task_name="probe_siggen_ao")
-        task_ao.ao_channels.add_ao_voltage_chan(ao_terminals)
-        task_ao.timing.cfg_samp_clk_timing(
-            rate=40000, sample_mode=AcquisitionType.FINITE, samps_per_chan=total_samples
-        )
-        # DO camera trigger task
-        task_do = nidaqmx.Task(new_task_name="probe_siggen_do")
-        task_do.do_channels.add_do_chan(
-            do_terminals, line_grouping=LineGrouping.CHAN_PER_LINE
-        )
-        task_do.timing.cfg_samp_clk_timing(
-            rate=40000, sample_mode=AcquisitionType.FINITE, samps_per_chan=total_samples
-        )
-        ao_device = ao_terminals.rsplit("/", 1)[0]
-        do_start_trigger = ao_device + "/ao/StartTrigger"
-        task_do.triggers.start_trigger.cfg_dig_edge_start_trig(
-            do_start_trigger, trigger_edge=Edge.RISING
-        )
-        task_do.write(np.zeros(total_samples, dtype=bool), auto_start=False)
-        task_ao.write(np.zeros((4, total_samples)), auto_start=False)
-    except BaseException as e:
-        errors.append(("siggen_create", repr(e)))
-    finally:
-        for t in (task_do, task_ao):
-            if t is not None:
-                with contextlib.suppress(Exception):
-                    t.close()
+    for attempt in range(_DAQ_RETRY_COUNT):
+        task_ao = None
+        task_do = None
+        try:
+            total_samples = 400
+            # AO scan task
+            task_ao = nidaqmx.Task(new_task_name="probe_siggen_ao")
+            task_ao.ao_channels.add_ao_voltage_chan(ao_terminals)
+            task_ao.timing.cfg_samp_clk_timing(
+                rate=40000, sample_mode=AcquisitionType.FINITE, samps_per_chan=total_samples
+            )
+            # DO camera trigger task
+            task_do = nidaqmx.Task(new_task_name="probe_siggen_do")
+            task_do.do_channels.add_do_chan(
+                do_terminals, line_grouping=LineGrouping.CHAN_PER_LINE
+            )
+            task_do.timing.cfg_samp_clk_timing(
+                rate=40000, sample_mode=AcquisitionType.FINITE, samps_per_chan=total_samples
+            )
+            ao_device = ao_terminals.rsplit("/", 1)[0]
+            do_start_trigger = ao_device + "/ao/StartTrigger"
+            task_do.triggers.start_trigger.cfg_dig_edge_start_trig(
+                do_start_trigger, trigger_edge=Edge.RISING
+            )
+            task_do.write(np.zeros(total_samples, dtype=bool), auto_start=False)
+            task_ao.write(np.zeros((4, total_samples)), auto_start=False)
+            return
+        except BaseException as e:
+            if "-50103" in repr(e) and attempt < _DAQ_RETRY_COUNT - 1:
+                for t in (task_do, task_ao):
+                    if t is not None:
+                        with contextlib.suppress(Exception):
+                            t.close()
+                time.sleep(_DAQ_RETRY_DELAY_S)
+                continue
+            errors.append(("siggen_create", repr(e)))
+        finally:
+            for t in (task_do, task_ao):
+                if t is not None:
+                    with contextlib.suppress(Exception):
+                        t.close()
+        return
 
 
 def test_siggen_create_scanner_standalone() -> None:
