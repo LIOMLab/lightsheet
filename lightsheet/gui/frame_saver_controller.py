@@ -1,4 +1,4 @@
-"""FrameSaverController — Phase 5 god-object split collaborator.
+"""FrameSaverController — god-object split collaborator.
 
 Owns the ``FrameSaver`` + ``FrameViewer`` QObject instances and routes the
 shell's save/enqueue calls through to them. The QObjects themselves stay
@@ -6,7 +6,7 @@ defined in ``lightsheet/gui/controller.py`` (per PATTERNS.md — they
 already have the right shape and are not re-engineered); this collaborator
 just owns/routes to them.
 
-This is a plain-Python object (NOT a ``QObject``) per RESEARCH.md Pattern
+This is a plain-Python object (NOT a ``QObject``) per the plain-Python collaborator pattern
 1: collaborators emit through a shell reference, never declare their own
 ``pyqtSignal``, and never call ``.connect()``. The one exception is the
 ``FrameSaver.sig_status_message`` → ``shell.updateUi_message_printer``

@@ -28,6 +28,9 @@ from unittest.mock import Mock
 _CONTROLLER_SRC = os.path.join(
     os.path.dirname(__file__), "..", "lightsheet", "gui", "controller.py"
 )
+_HW_SRC = os.path.join(
+    os.path.dirname(__file__), "..", "lightsheet", "gui", "hardware_manager.py"
+)
 
 
 def _read_controller_source() -> str:
@@ -90,16 +93,19 @@ def test_pct_scaling_zero() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def _load_method(method_sig: str) -> Callable[..., Any]:
-    """Extract a method body from lightsheet/gui/controller.py and return a callable
-    `func(self, pct)` that executes the real source."""
-    src = _read_controller_source()
+def _load_method(method_sig: str, src_path: str = _CONTROLLER_SRC) -> Callable[..., Any]:
+    """Extract a method body from the given source file and return a callable
+    `func(self, pct)` that executes the real source. Defaults to
+    controller.py; pass `_HW_SRC` for the methods moved to
+    HardwareManager (Phase 5 god-object split)."""
+    with open(src_path) as f:
+        src = f.read()
     body = _slice_method(src, method_sig)
     # The body starts with `def <sig>:` — strip the docstring/def line and
     # re-wrap as a standalone function. _slice_method returns from the
     # `def` line, so the whole thing is already a valid function def.
     namespace = {}
-    exec(compile(body, _CONTROLLER_SRC, "exec"), namespace)
+    exec(compile(body, src_path, "exec"), namespace)
     func_name = method_sig.split("(")[0].strip()
     return namespace[func_name]
 
@@ -130,7 +136,7 @@ def _make_write_laser(
 def test_write_laser1_power_skips_when_estop_set() -> None:
     """When estop_event is set, _write_laser1_power must NOT call
     self.lasers[0].set_power (the HAL write is skipped)."""
-    write_laser1_power = _load_method("_write_laser1_power(self, pct: float) -> None")
+    write_laser1_power = _load_method("_write_laser1_power(self, pct: float) -> None", src_path=_HW_SRC)
 
     estop_event = threading.Event()
     estop_event.set()
@@ -138,6 +144,7 @@ def test_write_laser1_power_skips_when_estop_set() -> None:
     laser1 = _make_write_laser("Laser 1 (555 nm)", active=True, max_power=300.0)
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.estop_event = estop_event
     standin.lasers = [laser1, Mock()]
     standin.sig_message = Mock()
@@ -151,7 +158,7 @@ def test_write_laser1_power_skips_when_estop_set() -> None:
 def test_write_laser2_power_skips_when_estop_set() -> None:
     """When estop_event is set, _write_laser2_power must NOT call
     self.lasers[1].set_power (the HAL write is skipped)."""
-    write_laser2_power = _load_method("_write_laser2_power(self, pct: float) -> None")
+    write_laser2_power = _load_method("_write_laser2_power(self, pct: float) -> None", src_path=_HW_SRC)
 
     estop_event = threading.Event()
     estop_event.set()
@@ -159,6 +166,7 @@ def test_write_laser2_power_skips_when_estop_set() -> None:
     laser2 = _make_write_laser("Laser 2 (640 nm)", active=True, max_power=150.0)
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.estop_event = estop_event
     standin.lasers = [Mock(), laser2]
     standin.sig_message = Mock()
@@ -174,13 +182,14 @@ def test_write_laser1_power_writes_when_estop_clear_and_active() -> None:
     must scale the staged percentage to mW (pct/100 * max_power) and call
     self.lasers[0].set_power(mw). The mW value is the canonical ILaser
     unit; the backend (DAQLaser) converts mW -> V internally."""
-    write_laser1_power = _load_method("_write_laser1_power(self, pct: float) -> None")
+    write_laser1_power = _load_method("_write_laser1_power(self, pct: float) -> None", src_path=_HW_SRC)
 
     estop_event = threading.Event()  # clear
 
     laser1 = _make_write_laser("Laser 1 (555 nm)", active=True, max_power=300.0)
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.estop_event = estop_event
     standin.lasers = [laser1, Mock()]
     standin.sig_message = Mock()
@@ -194,13 +203,14 @@ def test_write_laser1_power_writes_when_estop_clear_and_active() -> None:
 def test_write_laser1_power_skips_when_laser_inactive() -> None:
     """When laser 1 is inactive, _write_laser1_power must not write (no
     point energizing a laser the operator has toggled off)."""
-    write_laser1_power = _load_method("_write_laser1_power(self, pct: float) -> None")
+    write_laser1_power = _load_method("_write_laser1_power(self, pct: float) -> None", src_path=_HW_SRC)
 
     estop_event = threading.Event()  # clear
 
     laser1 = _make_write_laser("Laser 1 (555 nm)", active=False, max_power=300.0)
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.estop_event = estop_event
     standin.lasers = [laser1, Mock()]
     standin.sig_message = Mock()
@@ -214,13 +224,14 @@ def test_write_laser2_power_writes_when_estop_clear_and_active() -> None:
     """When estop_event is clear and laser 2 is active, _write_laser2_power
     must scale the staged percentage to mW (pct/100 * max_power) and call
     self.lasers[1].set_power(mw)."""
-    write_laser2_power = _load_method("_write_laser2_power(self, pct: float) -> None")
+    write_laser2_power = _load_method("_write_laser2_power(self, pct: float) -> None", src_path=_HW_SRC)
 
     estop_event = threading.Event()  # clear
 
     laser2 = _make_write_laser("Laser 2 (640 nm)", active=True, max_power=150.0)
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.estop_event = estop_event
     standin.lasers = [Mock(), laser2]
     standin.sig_message = Mock()
@@ -235,7 +246,7 @@ def test_write_laser1_power_surfaces_error_and_resets() -> None:
     """When self.lasers[0].set_power leaves .error set, _write_laser1_power
     must emit a sig_message naming the laser's label + error_message and
     reset .error = 0."""
-    write_laser1_power = _load_method("_write_laser1_power(self, pct: float) -> None")
+    write_laser1_power = _load_method("_write_laser1_power(self, pct: float) -> None", src_path=_HW_SRC)
 
     estop_event = threading.Event()  # clear
 
@@ -247,6 +258,7 @@ def test_write_laser1_power_surfaces_error_and_resets() -> None:
     laser1.set_power.side_effect = _fail_set_power
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.estop_event = estop_event
     standin.lasers = [laser1, Mock()]
     standin.sig_message = Mock()
@@ -269,12 +281,13 @@ def test_write_laser1_power_surfaces_error_and_resets() -> None:
 
 def test_toggle_laser1_off_when_active() -> None:
     """_toggle_laser1 calls self.lasers[0].off() when the laser is active."""
-    toggle = _load_method("_toggle_laser1(self) -> None")
+    toggle = _load_method("_toggle_laser1(self) -> None", src_path=_HW_SRC)
 
     estop_event = threading.Event()  # clear
     laser1 = _make_write_laser("Laser 1 (555 nm)", active=True, max_power=300.0)
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.estop_event = estop_event
     standin.lasers = [laser1, Mock()]
     standin.sig_message = Mock()
@@ -289,7 +302,7 @@ def test_toggle_laser1_off_when_active() -> None:
 def test_toggle_laser1_on_when_inactive() -> None:
     """_toggle_laser1 calls self.lasers[0].on() when the laser is inactive,
     then applies the staged percentage via _write_laser1_power."""
-    toggle = _load_method("_toggle_laser1(self) -> None")
+    toggle = _load_method("_toggle_laser1(self) -> None", src_path=_HW_SRC)
 
     estop_event = threading.Event()  # clear
     laser1 = _make_write_laser("Laser 1 (555 nm)", active=False, max_power=300.0)
@@ -298,6 +311,7 @@ def test_toggle_laser1_on_when_inactive() -> None:
     laser1.on.side_effect = lambda: setattr(laser1, "active", True)
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.estop_event = estop_event
     standin.lasers = [laser1, Mock()]
     standin.sig_message = Mock()
@@ -315,7 +329,7 @@ def test_toggle_laser2_on_when_inactive() -> None:
     """_toggle_laser2 calls self.lasers[1].on() when inactive, then applies
     the staged percentage via _write_laser2_power. Symmetric with laser 1 —
     no laser-2-specific self.ibeam branch."""
-    toggle = _load_method("_toggle_laser2(self) -> None")
+    toggle = _load_method("_toggle_laser2(self) -> None", src_path=_HW_SRC)
 
     estop_event = threading.Event()  # clear
     laser2 = _make_write_laser("Laser 2 (640 nm)", active=False, max_power=150.0)
@@ -324,6 +338,7 @@ def test_toggle_laser2_on_when_inactive() -> None:
     laser2.on.side_effect = lambda: setattr(laser2, "active", True)
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.estop_event = estop_event
     standin.lasers = [Mock(), laser2]
     standin.sig_message = Mock()
@@ -340,13 +355,14 @@ def test_toggle_laser1_skips_when_estop_set() -> None:
     """_toggle_laser1 must NOT energize when estop_event is set — the
     E-stop path already drove the laser off synchronously; a queued toggle
     must not re-energize a Class IIIB laser past the kill path."""
-    toggle = _load_method("_toggle_laser1(self) -> None")
+    toggle = _load_method("_toggle_laser1(self) -> None", src_path=_HW_SRC)
 
     estop_event = threading.Event()
     estop_event.set()
     laser1 = _make_write_laser("Laser 1 (555 nm)", active=False, max_power=300.0)
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.estop_event = estop_event
     standin.lasers = [laser1, Mock()]
     standin.sig_message = Mock()
@@ -361,12 +377,13 @@ def test_start_lasers_drives_both_auto_lasers() -> None:
     """start_lasers drives self.lasers[0] and self.lasers[1] uniformly
     (.on() / .set_power(mw)) for the auto-selected lasers — no
     laser-2-specific self.ibeam branch."""
-    start_lasers = _load_method("start_lasers(self) -> None")
+    start_lasers = _load_method("start_lasers(self) -> None", src_path=_HW_SRC)
 
     laser1 = _make_write_laser("Laser 1 (555 nm)", active=False, max_power=300.0)
     laser2 = _make_write_laser("Laser 2 (640 nm)", active=False, max_power=150.0)
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin._auto_laser1 = True
     standin._auto_laser2 = True
     standin.laser1_power_pct = 50.0
@@ -386,12 +403,13 @@ def test_start_lasers_drives_both_auto_lasers() -> None:
 def test_start_lasers_skips_non_auto_lasers() -> None:
     """start_lasers only energizes lasers whose auto-checkbox was sampled
     True; the other laser is untouched."""
-    start_lasers = _load_method("start_lasers(self) -> None")
+    start_lasers = _load_method("start_lasers(self) -> None", src_path=_HW_SRC)
 
     laser1 = _make_write_laser("Laser 1 (555 nm)", active=False, max_power=300.0)
     laser2 = _make_write_laser("Laser 2 (640 nm)", active=False, max_power=150.0)
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin._auto_laser1 = True
     standin._auto_laser2 = False
     standin.laser1_power_pct = 50.0
@@ -409,12 +427,13 @@ def test_stop_lasers_drives_both_auto_lasers_off() -> None:
     """stop_lasers drives self.lasers[0].off() / self.lasers[1].off()
     uniformly for the auto-selected lasers — no laser-2-specific
     self.ibeam branch."""
-    stop_lasers = _load_method("stop_lasers(self) -> None")
+    stop_lasers = _load_method("stop_lasers(self) -> None", src_path=_HW_SRC)
 
     laser1 = _make_write_laser("Laser 1 (555 nm)", active=True, max_power=300.0)
     laser2 = _make_write_laser("Laser 2 (640 nm)", active=True, max_power=150.0)
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin._auto_laser1 = True
     standin._auto_laser2 = True
     standin.lasers = [laser1, laser2]
@@ -467,6 +486,7 @@ def test_estop_drives_both_lasers_off_in_loop() -> None:
     laser2 = _make_laser_mock("Laser 2 (640 nm)")
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.estop_event = estop_event
     standin.lasers = [laser1, laser2]
     standin.sig_message = Mock()
@@ -496,6 +516,7 @@ def test_estop_emits_per_laser_warning_on_error() -> None:
     )
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.estop_event = estop_event
     standin.lasers = [laser1, laser2]
     standin.sig_message = Mock()
@@ -546,6 +567,7 @@ def test_estop_acquires_no_laser_lock() -> None:
     laser2._lock = _NoLockAcquire()
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.estop_event = estop_event
     standin.lasers = [laser1, laser2]
     standin.sig_message = Mock()
@@ -569,15 +591,17 @@ def test_close_modes_reads_lasers_index_active() -> None:
     laser2.active = False
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.lasers = [laser1, laser2]
     standin.sig_message = Mock()
     # close_modes reads several *_mode_started flags + calls
     # _cache_auto_laser_flags; all are auto-Mock attrs (no-ops).
-    standin.stop_lasers = Mock()
+    # stop_lasers is now routed through self._hw (HardwareManager).
+    standin._hw = Mock()
 
     close_modes(standin)
 
-    standin.stop_lasers.assert_not_called()
+    standin._hw.stop_lasers.assert_not_called()
 
 
 def test_close_modes_calls_stop_lasers_when_a_laser_active() -> None:
@@ -591,13 +615,14 @@ def test_close_modes_calls_stop_lasers_when_a_laser_active() -> None:
     laser2.active = True  # laser 2 is on -> must stop
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.lasers = [laser1, laser2]
     standin.sig_message = Mock()
-    standin.stop_lasers = Mock()
+    standin._hw = Mock()
 
     close_modes(standin)
 
-    standin.stop_lasers.assert_called_once()
+    standin._hw.stop_lasers.assert_called_once()
 
 
 # --------------------------------------------------------------------------- #
@@ -635,11 +660,12 @@ def _make_status_laser(
 def test_poll_laser_status_active_emits_active() -> None:
     """_poll_laser_status([0]) on an active, error-free laser emits
     sig_laser_status(0, 'active')."""
-    poll = _load_method("_poll_laser_status(self, indices: list[int]) -> None")
+    poll = _load_method("_poll_laser_status(self, indices: list[int]) -> None", src_path=_HW_SRC)
 
     laser1 = _make_status_laser("Laser 1 (555 nm)", active=True, error=0)
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.lasers = [laser1, Mock()]
     standin.sig_laser_status = Mock()
 
@@ -651,11 +677,12 @@ def test_poll_laser_status_active_emits_active() -> None:
 def test_poll_laser_status_inactive_emits_inactive() -> None:
     """_poll_laser_status([0]) on an inactive, error-free laser emits
     sig_laser_status(0, 'inactive')."""
-    poll = _load_method("_poll_laser_status(self, indices: list[int]) -> None")
+    poll = _load_method("_poll_laser_status(self, indices: list[int]) -> None", src_path=_HW_SRC)
 
     laser1 = _make_status_laser("Laser 1 (555 nm)", active=False, error=0)
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.lasers = [laser1, Mock()]
     standin.sig_laser_status = Mock()
 
@@ -668,13 +695,14 @@ def test_poll_laser_status_error_wins_over_active() -> None:
     """_poll_laser_status([1]) on a laser with error=1 AND active=True
     emits 'error' — the HAL error surface is authoritative (AGENTS.md §10)
     so an errored-but-still-active laser shows ERR, not ON."""
-    poll = _load_method("_poll_laser_status(self, indices: list[int]) -> None")
+    poll = _load_method("_poll_laser_status(self, indices: list[int]) -> None", src_path=_HW_SRC)
 
     laser2 = _make_status_laser(
         "Laser 2 (640 nm)", active=True, error=1, error_message="serial fault"
     )
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.lasers = [Mock(), laser2]
     standin.sig_laser_status = Mock()
 
@@ -687,12 +715,13 @@ def test_poll_laser_status_both_indices_emits_twice() -> None:
     """_poll_laser_status([0, 1]) emits once per index — used by the
     E-stop / start_lasers / stop_lasers refresh-after-action paths that
     touch both lasers."""
-    poll = _load_method("_poll_laser_status(self, indices: list[int]) -> None")
+    poll = _load_method("_poll_laser_status(self, indices: list[int]) -> None", src_path=_HW_SRC)
 
     laser1 = _make_status_laser("Laser 1 (555 nm)", active=True, error=0)
     laser2 = _make_status_laser("Laser 2 (640 nm)", active=False, error=0)
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.lasers = [laser1, laser2]
     standin.sig_laser_status = Mock()
 
@@ -709,6 +738,7 @@ def test_updateUi_laser_status_active_sets_on_label() -> None:
     slot = _load_method("updateUi_laser_status(self, idx: int, status: str) -> None")
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.label_laserOneStatus = Mock()
     standin.label_laserTwoStatus = Mock()
 
@@ -726,6 +756,7 @@ def test_updateUi_laser_status_inactive_sets_off_label() -> None:
     slot = _load_method("updateUi_laser_status(self, idx: int, status: str) -> None")
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.label_laserOneStatus = Mock()
     standin.label_laserTwoStatus = Mock()
 
@@ -743,6 +774,7 @@ def test_updateUi_laser_status_error_sets_err_label_for_laser2() -> None:
     slot = _load_method("updateUi_laser_status(self, idx: int, status: str) -> None")
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.label_laserOneStatus = Mock()
     standin.label_laserTwoStatus = Mock()
 
@@ -765,7 +797,7 @@ def test_poll_laser2_status_gated_skips_when_lock_held() -> None:
     thread would still let the gated probe acquire it. A non-reentrant
     Lock stand-in models the cross-thread 'held by another thread'
     condition: acquire(blocking=False) returns False once it's held."""
-    gated = _load_method("_poll_laser2_status_gated(self) -> None")
+    gated = _load_method("_poll_laser2_status_gated(self) -> None", src_path=_HW_SRC)
 
     laser2 = _make_status_laser("Laser 2 (640 nm)", active=True, error=0)
     # Use a non-reentrant Lock so acquire(blocking=False) fails once held
@@ -774,6 +806,7 @@ def test_poll_laser2_status_gated_skips_when_lock_held() -> None:
     laser2._lock.acquire()
     try:
         standin = Mock()
+        standin._shell = standin  # HardwareManager reads self._shell.*
         standin.lasers = [Mock(), laser2]
         standin._poll_laser_status = Mock()
 
@@ -788,11 +821,12 @@ def test_poll_laser2_status_gated_polls_when_lock_free() -> None:
     """_poll_laser2_status_gated must call _poll_laser_status([1]) when
     the iBeam lock is free — the probe acquires (blocking=False),
     releases immediately, then proceeds with the poll."""
-    gated = _load_method("_poll_laser2_status_gated(self) -> None")
+    gated = _load_method("_poll_laser2_status_gated(self) -> None", src_path=_HW_SRC)
 
     laser2 = _make_status_laser("Laser 2 (640 nm)", active=True, error=0)
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.lasers = [Mock(), laser2]
     standin._poll_laser_status = Mock()
 
@@ -843,12 +877,13 @@ def test_refresh_laser2_readback_populated() -> None:
     """_refresh_laser_readback(1) on a stand-in where the lock is free and
     get_output_power() returns 75.0 emits (1, '75.0 mW', '') on
     sig_laser_readback — the GUI-thread slot applies it to the label."""
-    refresh = _load_method("_refresh_laser_readback(self, idx: int) -> None")
+    refresh = _load_method("_refresh_laser_readback(self, idx: int) -> None", src_path=_HW_SRC)
 
     laser2 = _make_readback_laser(power=75.0)
     laser2.get_output_power.return_value = 75.0
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.lasers = [Mock(), laser2]
     standin.sig_laser_readback = Mock()
 
@@ -863,12 +898,13 @@ def test_refresh_laser2_readback_degraded_shows_commanded_fallback() -> None:
     returns None (parse failure / unsupported variant) emits
     (1, '{power:.1f} mW (cmd)', <degraded tooltip>) on sig_laser_readback
     so the GUI-thread slot can show the commanded fallback + tooltip."""
-    refresh = _load_method("_refresh_laser_readback(self, idx: int) -> None")
+    refresh = _load_method("_refresh_laser_readback(self, idx: int) -> None", src_path=_HW_SRC)
 
     laser2 = _make_readback_laser(power=42.0)
     laser2.get_output_power.return_value = None
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.lasers = [Mock(), laser2]
     standin.sig_laser_readback = Mock()
 
@@ -887,13 +923,14 @@ def test_refresh_laser2_readback_lock_skip_is_noop() -> None:
     emitting on sig_laser_readback — the lock-skip no-op contract. Uses a
     non-reentrant Lock to model the cross-thread 'held by the daemon
     write thread' condition."""
-    refresh = _load_method("_refresh_laser_readback(self, idx: int) -> None")
+    refresh = _load_method("_refresh_laser_readback(self, idx: int) -> None", src_path=_HW_SRC)
 
     laser2 = _make_readback_laser()
     laser2._lock = threading.Lock()
     laser2._lock.acquire()
     try:
         standin = Mock()
+        standin._shell = standin  # HardwareManager reads self._shell.*
         standin.lasers = [Mock(), laser2]
         standin.sig_laser_readback = Mock()
 
@@ -910,12 +947,13 @@ def test_refresh_laser2_readback_releases_lock_in_finally() -> None:
     block when acquire(blocking=False) succeeded — even if
     get_output_power raises. Verified by acquiring the lock after the
     call returns (a non-released lock would block)."""
-    refresh = _load_method("_refresh_laser_readback(self, idx: int) -> None")
+    refresh = _load_method("_refresh_laser_readback(self, idx: int) -> None", src_path=_HW_SRC)
 
     laser2 = _make_readback_laser()
     laser2.get_output_power.side_effect = RuntimeError("serial glitch")
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.lasers = [Mock(), laser2]
     standin.sig_laser_readback = Mock()
 
@@ -941,13 +979,14 @@ def test_refresh_laser1_readback_shows_staged_mw() -> None:
     self.power (the staged mW derived from pct/100 * max_power_mw). The
     100ms display timer drives this refresh so the L1 mW field stays live
     as the operator edits the percentage."""
-    refresh = _load_method("_refresh_laser_readback(self, idx: int) -> None")
+    refresh = _load_method("_refresh_laser_readback(self, idx: int) -> None", src_path=_HW_SRC)
 
     laser1 = _make_readback_laser(power=12.5, max_power=50.0)
     laser1.label = "Laser 1 (555 nm)"
     laser1.get_output_power.return_value = 12.5
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.lasers = [laser1, Mock()]
     standin.sig_laser_readback = Mock()
 
@@ -976,6 +1015,7 @@ def test_updateUi_laser_readback_live_clears_tooltip() -> None:
     )
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.label_laserOneReadback = Mock()
     standin.label_laserTwoReadback = Mock()
 
@@ -996,6 +1036,7 @@ def test_updateUi_laser_readback_degraded_sets_tooltip() -> None:
     )
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.label_laserOneReadback = Mock()
     standin.label_laserTwoReadback = Mock()
 
@@ -1017,6 +1058,7 @@ def test_updateUi_laser_readback_l1_routes_to_l1_label() -> None:
     )
 
     standin = Mock()
+    standin._shell = standin  # HardwareManager reads self._shell.*
     standin.label_laserOneReadback = Mock()
     standin.label_laserTwoReadback = Mock()
 

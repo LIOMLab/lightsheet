@@ -1,4 +1,4 @@
-"""FrameSaverController extraction tests (Phase 5 god-object split).
+"""FrameSaverController extraction tests (god-object split).
 
 ``FrameSaverController`` is a plain-Python collaborator that owns the
 ``FrameSaver`` + ``FrameViewer`` QObject instances and routes the
