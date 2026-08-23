@@ -55,7 +55,12 @@ _MOTORS_CAMERA_LIMIT_HIGH_MM: float = 35.0
 
 # --- Non-safety recommended ranges (WARN, not REJECT) ---
 _GALVO_VOLTAGE_LIMIT: float = 10.0  # ±10 V NI-6363 AO range
-_ETL_CURRENT_LIMIT_MA: float = 292.84  # 0–292.84 mA Optotune EL-10-30
+# ETL drive is a 0–5 V analog input to the EL-10-30 lens driver, which
+# maps it to its 0–292.84 mA coil-current range internally. The config
+# [SigGen] ETL Left/Right Amplitude values are volts (the DAQ AO drive),
+# so the warn check compares volts against the 5 V analog input range,
+# not the 292.84 mA coil-current limit.
+_ETL_VOLTAGE_LIMIT: float = 5.0  # 0–5 V Optotune EL-10-30 analog input
 
 
 # ---------------------------------------------------------------------------
@@ -410,8 +415,8 @@ class LoggingSettingsOverlay(_NoEnvBaseSettings):
 # Collect-all entry point — iterate ALL sections, collect every error +
 # warning into two lists BEFORE any dialog is shown (UI-SPEC collect-all).
 # REJECT (safety out-of-range, unknown key, wrong type, missing required) ->
-# errors list. WARN (non-safety out-of-range: galvo >±10 V, ETL >0–292.84 mA,
-# negative exposure) -> warnings list. Construction uses the STRICT tier for
+# errors list. WARN (non-safety out-of-range: galvo >±10 V, ETL drive
+# >0–5 V, negative exposure) -> warnings list. Construction uses the STRICT tier for
 # baseline-tier error classification; the same field_validators run on the
 # overlay tier when 05-05-PLAN's composition root wires the overlay merge.
 # ---------------------------------------------------------------------------
@@ -447,7 +452,7 @@ def _galvo_amplitude_warn(v: float) -> bool:
 
 
 def _etl_amplitude_warn(v: float) -> bool:
-    return v < 0.0 or v > _ETL_CURRENT_LIMIT_MA
+    return v < 0.0 or v > _ETL_VOLTAGE_LIMIT
 
 
 def _exposure_time_warn(v: float) -> bool:
@@ -458,8 +463,8 @@ _WARN_CHECKS: dict[str, list[tuple[str, Callable[[Any], bool], str]]] = {
     "SigGen": [
         ("galvo_left_amplitude", _galvo_amplitude_warn, "is above the galvo voltage limit"),
         ("galvo_right_amplitude", _galvo_amplitude_warn, "is above the galvo voltage limit"),
-        ("etl_left_amplitude", _etl_amplitude_warn, "is outside the ETL current range"),
-        ("etl_right_amplitude", _etl_amplitude_warn, "is outside the ETL current range"),
+        ("etl_left_amplitude", _etl_amplitude_warn, "is outside the ETL drive voltage range"),
+        ("etl_right_amplitude", _etl_amplitude_warn, "is outside the ETL drive voltage range"),
     ],
     "Camera": [
         ("exposure_time", _exposure_time_warn, "is negative"),

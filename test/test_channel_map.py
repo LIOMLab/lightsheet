@@ -3,9 +3,9 @@ RFR-04 pure-logic tests for lightsheet.channel_map.
 
 ChannelMap is the channel-reversal MECHANISM (RFR-04): a frozen, pure-logic
 dataclass that swaps galvo left/right ordering and clamps per-channel
-voltage/current to the AGENTS.md §2 hardware limits (±10 V galvos /
-0–292.84 mA ETLs). The actual flip against real hardware is rig-verification
-work (HW2-02) and is explicitly NOT attempted here.
+voltage to the AGENTS.md §2 hardware limits (±10 V galvos / 0–5 V ETL
+drive). The actual flip against real hardware is rig-verification work
+(HW2-02) and is explicitly NOT attempted here.
 
 Mirrors the established test/test_waveforms.py style: direct import, no
 fixtures, no mocks, single-assert tests with docstrings. No static-source
@@ -65,16 +65,21 @@ def test_clamp_galvo() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# clamp_etl — 0–292.84 mA (Optotune EL-10-30 datasheet, AGENTS.md §2)
+# clamp_etl — 0–5 V (Optotune EL-10-30 analog input range, AGENTS.md §2)
 # --------------------------------------------------------------------------- #
 
 
 def test_clamp_etl() -> None:
-    """ETL current clamped to [0, etl_current_limit_ma]; in-range unchanged."""
+    """ETL drive voltage clamped to [0, etl_voltage_limit]; in-range
+    unchanged. The DAQ AO channel writes volts to the EL-10-30's 0–5 V
+    analog input; the lens driver maps that to its 0–292.84 mA
+    coil-current range internally. Call sites pass volts, so the clamp
+    ceiling is the 5 V analog input limit, not the mA coil-current
+    limit."""
     cm = ChannelMap()
-    assert cm.clamp_etl(300.0) == 292.84
-    assert cm.clamp_etl(-5.0) == 0.0
-    assert cm.clamp_etl(150.0) == 150.0
+    assert cm.clamp_etl(7.5) == 5.0
+    assert cm.clamp_etl(-1.0) == 0.0
+    assert cm.clamp_etl(2.5) == 2.5
 
 
 # --------------------------------------------------------------------------- #
@@ -98,8 +103,8 @@ def test_channel_map_frozen() -> None:
 
 
 def test_channel_map_defaults() -> None:
-    """Default ChannelMap() has swap=False, galvo 10V, ETL 292.84 mA."""
+    """Default ChannelMap() has swap=False, galvo 10V, ETL 5V drive."""
     cm = ChannelMap()
     assert cm.galvo_left_right_swap is False
     assert cm.galvo_voltage_limit == 10.0
-    assert cm.etl_current_limit_ma == 292.84
+    assert cm.etl_voltage_limit == 5.0

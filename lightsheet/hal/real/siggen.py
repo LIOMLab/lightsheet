@@ -248,10 +248,10 @@ class SigGen(ISigGen):
             self.channel_map.galvo_voltage_limit,
         )
         etl_left_clipped = np.clip(
-            self.waveform_etl_left, 0.0, self.channel_map.etl_current_limit_ma
+            self.waveform_etl_left, 0.0, self.channel_map.etl_voltage_limit
         )
         etl_right_clipped = np.clip(
-            self.waveform_etl_right, 0.0, self.channel_map.etl_current_limit_ma
+            self.waveform_etl_right, 0.0, self.channel_map.etl_voltage_limit
         )
         galvo_etl_waveforms = np.stack(
             (
