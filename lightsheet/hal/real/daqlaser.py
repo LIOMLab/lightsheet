@@ -69,6 +69,22 @@ class DAQLaser(ILaser):
         self.error = 0
         self.error_message = ""
 
+        # Validate the mW->V calibration before storing it. A config.ini
+        # typo (e.g. `Laser1 mW per Volt = 0`) would otherwise cause a
+        # ZeroDivisionError on the first _write_volts clamp and propagate
+        # up through the daemon write thread. Surface the misconfiguration
+        # on the HAL error surface per AGENTS.md §10 rather than crashing.
+        if mw_per_volt <= 0:
+            self.error = 1
+            self.error_message = (
+                f"mw_per_volt must be > 0, got {mw_per_volt!r}"
+            )
+            logger.error(
+                "DAQLaser(%s) constructed with invalid mw_per_volt=%r",
+                label,
+                mw_per_volt,
+            )
+
         # DAQ AO channel + calibration (D-01).
         self.terminal = terminal
         self.wavelength = wavelength
@@ -97,6 +113,23 @@ class DAQLaser(ILaser):
         shown as energized that is actually dark.
         """
         # Native-unit clamp (V) — independent of the mW clamp in set_power.
+        # Defense-in-depth: a zero/invalid mw_per_volt would raise
+        # ZeroDivisionError inside the clamp below, which is NOT caught by
+        # the typed-except (nidaqmx.errors.Error / RuntimeError / OSError).
+        # Guard explicitly so a config typo surfaced on the HAL error
+        # surface in __init__ does not crash the daemon write thread.
+        if self.mw_per_volt <= 0:
+            self.error = 1
+            self.error_message = (
+                f"mw_per_volt is zero/invalid ({self.mw_per_volt!r}); "
+                f"cannot convert mW -> V"
+            )
+            self.active = False
+            logger.error(
+                "DAQLaser._write_volts aborting: mw_per_volt=%r",
+                self.mw_per_volt,
+            )
+            return
         volts = max(0.0, min(volts, self.max_power / self.mw_per_volt))
         try:
             with nidaqmx.Task(new_task_name="laser_ao") as task:
