@@ -50,12 +50,14 @@ from unittest.mock import Mock
 import numpy as np
 
 from lightsheet.hal import (
+    DeviceBundle,
     MockCamera,
     MockETLs,
     MockLaser,
     MockMotors,
     MockSigGen,
 )
+from lightsheet.gui.hardware_manager import HardwareManager
 
 _CONTROLLER_SRC = os.path.join(
     os.path.dirname(__file__), "..", "..", "lightsheet", "gui", "controller.py"
@@ -161,6 +163,64 @@ def _build_standin() -> Mock:
     return standin
 
 
+def _build_preview_standin() -> Mock:
+    """Build the Mock stand-in ``self`` for ``preview_mode_worker``.
+
+    ``preview_mode_worker`` lives on ``AcquisitionCoordinator`` and reads
+    its own ``self.camera`` attribute plus shell-owned state via
+    ``self._shell.*`` (``preview_mode_started``, ``estop_event``,
+    ``ui.doubleSpinBox_cameraExposureTime``, ``_fs``,
+    ``sig_message``, ``sig_preview_mode_finished``) and laser control via
+    ``self._hw`` (the D-05 fold's ``start_lasers``/``stop_lasers`` calls).
+    The stand-in IS the coordinator (``self``); ``self._hw`` is a real
+    ``HardwareManager`` backed by a ``DeviceBundle`` of Mock devices so
+    the D-05 fold's laser start/stop calls exercise the real
+    ``HardwareManager.start_lasers``/``stop_lasers`` path (which emits
+    ``sig_message`` only on a HAL error — MockLaser does not error, so
+    the happy-path fixture is an empty list, proving the fold introduced
+    no stray emission on the message channel).
+
+    ``preview_mode_started`` is ``False`` so the while loop is skipped —
+    the scenario exercises the arm → start_lasers → stop_lasers → disarm
+    path deterministically without entering the frame-grab loop.
+    """
+    import threading
+
+    camera = MockCamera()
+    siggen = MockSigGen(camera)
+    motors = MockMotors()
+    etls = MockETLs()
+    lasers = (
+        MockLaser(wavelength=555, max_power_mw=300.0, label="Laser 1 (555 nm)"),
+        MockLaser(wavelength=640, max_power_mw=150.0, label="Laser 2 (640 nm)"),
+    )
+    bundle = DeviceBundle(
+        camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers
+    )
+
+    shell = Mock()
+    shell.ui.doubleSpinBox_cameraExposureTime.value.return_value = 100
+    shell.preview_mode_started = False  # skip the frame-grab loop
+    shell.estop_event = threading.Event()
+    # Auto-laser flags + staged power — start_lasers/stop_lasers read these.
+    shell._auto_laser1 = True
+    shell._auto_laser2 = True
+    shell.laser1_power_pct = 50.0
+    shell.laser2_power_pct = 50.0
+    shell._fs = Mock()
+    shell.sig_message = Mock()
+    shell.sig_progress_update = Mock()
+    shell.sig_preview_mode_finished = Mock()
+
+    hw = HardwareManager(bundle, shell)
+
+    standin = Mock()
+    standin.camera = camera
+    standin._hw = hw
+    standin._shell = shell
+    return standin
+
+
 def capture_acquisition_sequence(scenario: str) -> list[dict]:
     """Run the real acquire_scan body against a Mock stand-in and return
     the ordered ``sig_message`` / ``sig_progress_update`` emit sequence.
@@ -181,13 +241,39 @@ def capture_acquisition_sequence(scenario: str) -> list[dict]:
       path: a dropped or re-sequenced emission on the
       create-scanner failure branch is now catchable, not just the happy
       path.
+    * ``"preview_auto_laser"`` — the D-05 preview-auto-laser fold. Runs
+      ``preview_mode_worker`` (not ``acquire_scan``) against a stand-in
+      whose ``self._hw`` is a real ``HardwareManager`` backed by Mock
+      devices. The D-05 fold inserted ``self._hw.start_lasers()`` after
+      ``camera.arm()`` and ``self._hw.stop_lasers()`` before
+      ``camera.disarm()``; on the happy path (MockLaser, no HAL error)
+      the ``sig_message`` sequence is empty — the fold introduced no
+      stray emission on the message channel. This is the ONE scenario
+      expected to differ from a hypothetical pre-split re-recording:
+      before the fold, ``preview_mode_worker`` did not call
+      ``start_lasers``/``stop_lasers`` at all; now it does, and a future
+      change that makes the preview path emit on the happy path (or
+      re-sequences the laser calls relative to arm/disarm) is caught
+      here.
 
     The sequence is a list of ``{"type": "sig_message" |
     "sig_progress", "value": <first positional arg>}`` dicts in emission
     order.
     """
-    if scenario not in ("default", "siggen_create_scanner_fail"):
+    if scenario not in ("default", "siggen_create_scanner_fail", "preview_auto_laser"):
         raise ValueError(f"unknown scenario: {scenario!r}")
+
+    if scenario == "preview_auto_laser":
+        standin = _build_preview_standin()
+        worker = _load_method("preview_mode_worker(self) -> None", src_path=_ACQ_SRC)
+        worker(standin)
+        sequence: list[dict] = []
+        for call in standin._shell.sig_message.emit.call_args_list:
+            sequence.append({"type": "sig_message", "value": call.args[0]})
+        for call in standin._shell.sig_progress_update.emit.call_args_list:
+            sequence.append({"type": "sig_progress", "value": call.args[0]})
+        return sequence
+
     standin = _build_standin()
     if scenario == "siggen_create_scanner_fail":
         # Mirror the real SigGen.create_scanner bare-except branch: it sets
@@ -202,7 +288,7 @@ def capture_acquisition_sequence(scenario: str) -> list[dict]:
     acquire_scan = _load_method("acquire_scan(self) -> None", src_path=_ACQ_SRC)
     acquire_scan(standin)
 
-    sequence: list[dict] = []
+    sequence = []
     for call in standin._shell.sig_message.emit.call_args_list:
         sequence.append({"type": "sig_message", "value": call.args[0]})
     for call in standin._shell.sig_progress_update.emit.call_args_list:
@@ -225,6 +311,7 @@ if __name__ == "__main__":
         "siggen_create_scanner_fail": os.path.join(
             base, "siggen_create_scanner_fail.json"
         ),
+        "preview_auto_laser": os.path.join(base, "preview_auto_laser.json"),
     }
     for name, path in scenarios.items():
         record_acquisition(path, name)
