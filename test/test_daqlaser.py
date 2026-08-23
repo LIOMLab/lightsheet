@@ -119,6 +119,61 @@ def test_off_is_synchronous() -> None:
     assert laser.power == 0.0
 
 
+def test_off_is_lock_free() -> None:
+    """SAFETY (AGENTS.md §2): DAQLaser.off() MUST NOT acquire self._lock.
+    The E-stop kill path is the most safety-critical operation in the
+    system; a daemon set_power holding the RLock on another thread must
+    never delay the kill path. The per-write nidaqmx.Task is independent
+    of any concurrent write, so the lock is not needed for the 0 V write.
+
+    Verify by pre-acquiring the lock on the test thread (simulating a
+    daemon write holding it on another thread — RLock is reentrant so
+    acquiring it here would NOT block a lock-acquiring off() on the same
+    thread, but a lock-acquiring off() on a DIFFERENT thread would block).
+    The decisive check is that off() completes while the lock is held by
+    a different thread: spawn a worker that holds the lock, then call
+    off() from the main thread and assert it returns within a tight
+    timeout. A lock-acquiring off() would deadlock/timeout.
+    """
+    import threading
+
+    laser = _make_l1()
+    held = threading.Event()
+    release = threading.Event()
+
+    def hold_lock() -> None:
+        with laser._lock:
+            held.set()
+            release.wait(timeout=5.0)
+
+    holder = threading.Thread(target=hold_lock, daemon=True)
+    holder.start()
+    held.wait(timeout=5.0)
+    try:
+        # off() must complete even though another thread holds the lock.
+        # Use a bounded join to detect a lock-acquiring regression: if
+        # off() tried to acquire self._lock, it would block until
+        # release.set() and the call would not return promptly.
+        done = threading.Event()
+
+        def call_off() -> None:
+            laser.off()
+            done.set()
+
+        off_thread = threading.Thread(target=call_off, daemon=True)
+        off_thread.start()
+        assert done.wait(timeout=2.0), (
+            "DAQLaser.off() did not return within 2 s while another thread "
+            "held self._lock — it must be lock-free so the E-stop kill path "
+            "is never delayed by a daemon write (AGENTS.md §2)"
+        )
+        assert laser.active is False
+        assert laser.power == 0.0
+    finally:
+        release.set()
+        holder.join(timeout=5.0)
+
+
 def test_open_is_noop_returning_none() -> None:
     """open() is a no-op lifecycle verb (AGENTS.md §10): DAQLaser opens its
     nidaqmx.Task per-write inside _write_volts, so there is no persistent

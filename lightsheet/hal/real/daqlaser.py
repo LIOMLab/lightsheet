@@ -20,8 +20,11 @@ channel.
    layer.
 
 **Synchronous ``off()`` (AGENTS.md §2 — E-stop kill path):** ``off()``
-acquires the per-instance ``RLock``, writes 0 V, sets ``active=False`` and
-``power=0.0``, and returns ``None`` immediately — no thread/queue offload.
+writes 0 V, sets ``active=False`` and ``power=0.0``, and returns ``None``
+immediately — no thread/queue offload. It is **lock-free**: the per-write
+``nidaqmx.Task`` is opened and closed inside ``_write_volts`` and is
+independent of any concurrent write, so a daemon ``set_power`` holding
+the ``RLock`` on another thread can never delay the E-stop kill path.
 The GUI-thread E-stop handler calls this directly; offloading it would
 break the synchronous-off safety contract.
 
@@ -160,11 +163,21 @@ class DAQLaser(ILaser):
         ``None`` immediately — no thread/queue offload. The GUI-thread
         E-stop handler calls this directly; offloading it would break the
         synchronous-off safety contract for a Class IIIB laser.
+
+        Lock-free: the per-write ``nidaqmx.Task`` is opened and closed
+        inside ``_write_volts`` and is independent of any concurrent
+        write, so a daemon ``set_power`` holding ``self._lock`` on
+        another thread can never delay the E-stop kill path. The
+        ``active`` / ``power`` writes are plain CPython bool / float
+        attribute stores (atomic under the GIL); a racing ``set_power``
+        may stage a new mW value after this returns, but the 0 V DAQ
+        write is what actually drives the laser off and that has already
+        been issued. The next ``set_power`` / ``on`` call on a non-E-stop
+        path will re-write the staged value under the lock.
         """
-        with self._lock:
-            self._write_volts(0.0)
-            self.active = False
-            self.power = 0.0
+        self._write_volts(0.0)
+        self.active = False
+        self.power = 0.0
 
     def open(self) -> None:
         """No-op lifecycle verb (AGENTS.md §10).
