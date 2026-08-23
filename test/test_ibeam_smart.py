@@ -7,7 +7,7 @@ every serial round-trip is delegated to the unmodified inner ``IBeam`` engine
 (per-instance lock, 50 ms inter-command gap, input-buffer flush — the reply-lag
 mitigations validated at 0/12 misattribution at 1 s and 0.5 s cadence on COM4).
 
-These tests run on Mac with no physical device: ``lightsheet.hal.real.ibeam.
+These tests run on Mac with no physical device: ``lightsheet.hal.real.ibeam_smart.
 serial.Serial`` is patched the same way ``test_ibeam.py`` patches it, so the
 inner ``IBeam``'s serial I/O is captured against MagicMocks. The adapter's
 mW<->µW conversion, lock identity, synchronous ``off()``, and error-surface
@@ -27,7 +27,7 @@ This is a BEHAVIOR test (AGENTS.md §5) — no static-source grep.
 
 from unittest.mock import MagicMock, patch
 
-import lightsheet.hal.real.ibeam as ibeam_mod
+import lightsheet.hal.real.ibeam_smart as ibeam_mod
 import lightsheet.hal.real.ibeam_smart as ibeam_smart_mod
 
 
@@ -50,7 +50,7 @@ def _make_open_ibeam_smart(
     ``adapter._ibeam.open()`` under the patch so the inner engine's serial
     I/O is mocked for the subsequent adapter-method round-trips.
     """
-    with patch("lightsheet.hal.real.ibeam.serial.Serial") as MockSerial:
+    with patch("lightsheet.hal.real.ibeam_smart.serial.Serial") as MockSerial:
         mock_ser = MagicMock()
         MockSerial.return_value = mock_ser
         mock_ser.readline.return_value = b"[OK]\r\n"
