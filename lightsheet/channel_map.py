@@ -10,7 +10,9 @@ four ``np.stack((...))`` write sites — this module only defines the contract.
 
 Hardware limits enforced per AGENTS.md §2:
 - Galvo AO: ±10 V (NI-6363 AO range)
-- ETL current: 0–292.84 mA (Optotune EL-10-30 datasheet)
+- ETL drive: 0–5 V (Optotune EL-10-30 analog input range; the DAQ AO
+  channel drives the ETL's 0–5 V analog input, which the lens driver
+  maps to its 0–292.84 mA coil-current range internally)
 """
 
 from dataclasses import dataclass
@@ -39,9 +41,15 @@ class ChannelMap:
     """
 
     galvo_left_right_swap: bool = False
-    # Per-channel voltage/current clamps (AGENTS.md §2 / RFR-04)
+    # Per-channel voltage clamps (AGENTS.md §2 / RFR-04). Both clamps
+    # operate in the volts the DAQ AO channel writes — the galvo AO
+    # channel writes ±10 V directly, and the ETL AO channel writes the
+    # 0–5 V analog input that the EL-10-30 lens driver maps to its
+    # 0–292.84 mA coil-current range internally. The call sites
+    # (SigGen.update_etls / update_all / create_scanner) all pass volts,
+    # so the ETL clamp must be a volt-range clamp, not a mA clamp.
     galvo_voltage_limit: float = 10.0  # ±10 V (NI-6363 AO range)
-    etl_current_limit_ma: float = 292.84  # 0–292.84 mA (Optotune EL-10-30)
+    etl_voltage_limit: float = 5.0  # 0–5 V (EL-10-30 analog input range)
 
     def order_galvos(self, left: float, right: float) -> tuple[float, float]:
         """Return galvo (left, right) setpoints, swapped if configured."""
@@ -52,5 +60,13 @@ class ChannelMap:
         return max(-self.galvo_voltage_limit, min(self.galvo_voltage_limit, v))
 
     def clamp_etl(self, v: float) -> float:
-        """Clamp an ETL current (mA) to [0, etl_current_limit_ma]."""
-        return max(0.0, min(self.etl_current_limit_ma, v))
+        """Clamp an ETL drive voltage to [0, etl_voltage_limit] V.
+
+        The EL-10-30 analog input range is 0–5 V; the DAQ AO channel
+        writes volts, and the lens driver maps that to its 0–292.84 mA
+        coil-current range internally. Call sites pass volts (e.g.
+        ``update_etls(left_etl=2.5, right_etl=2.5)`` where 2.5 V is the
+        mid-range no-current drive), so the clamp ceiling is the 5 V
+        analog input limit, not the 292.84 mA coil-current limit.
+        """
+        return max(0.0, min(self.etl_voltage_limit, v))
