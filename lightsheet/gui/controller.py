@@ -2094,63 +2094,67 @@ class Controller_MainWindow(QMainWindow):
 
     def _write_laser1_power(self, pct: float) -> None:
         """Worker-thread HAL write for laser 1. Scales the staged percentage
-        to Volts at the HAL boundary (pct/100 * laser1_max_power), then calls
-        the existing Lasers write path whose own clamp still applies as a
-        second physical-safety layer.
+        to mW at the HAL boundary (pct/100 * max_power) and calls
+        self.lasers[0].set_power(mw). The DAQLaser backend converts mW -> V
+        internally and clamps both units (two-layer safety, AGENTS.md §2).
 
-        Cooperative-skip: checks estop_event immediately before the DAQ write
+        Cooperative-skip: checks estop_event immediately before the HAL write
         and skips entirely if set — the E-stop has already driven laser 1 off
         with its own synchronous write, and a queued amplitude write must not
-        re-energize or mutate its state after that point.
+        re-energize or mutate its state after that point. The lock lives on
+        the ILaser instance (self.lasers[0]._lock), not the controller.
         """
-        with self._laser1_write_lock:
+        with self.lasers[0]._lock:
             if self.estop_event.is_set():
                 return
-            if self.lasers.laser1_active:
-                volts = pct / 100.0 * self.lasers.laser1_max_power
-                self.lasers.laser1_power = volts
-                # _update_setpoints writes _laser1_setpoint to the DAQ, not
-                # laser1_power (the only other writer of _laser1_setpoint is
-                # laser1_on). Without updating _laser1_setpoint here the DAQ
-                # would re-emit the stale setpoint and the staged-percent
-                # spinbox would be functionally dead while the laser is on.
-                self.lasers._laser1_setpoint = volts
-                # Re-check E-stop immediately before the DAQ write — E-stop
+            if self.lasers[0].active:
+                mw = pct / 100.0 * self.lasers[0].max_power
+                # Re-check E-stop immediately before the HAL write — E-stop
                 # is intentionally lock-free (it runs on the GUI thread and
-                # zeroes the setpoint via laser1_off() without taking this
-                # lock), so it can fire between the top-of-method check and
-                # this point. If it did, force the setpoint back to 0 so the
-                # DAQ write cannot re-energize the laser past the kill path.
+                # zeroes the laser via .off() without taking this lock), so
+                # it can fire between the top-of-method check and this
+                # point. If it did, force mw = 0 so the HAL write cannot
+                # re-energize the laser past the kill path.
                 if self.estop_event.is_set():
-                    self.lasers._laser1_setpoint = 0
-                self.lasers._update_setpoints()
-                if self.lasers.error:
+                    mw = 0.0
+                self.lasers[0].set_power(mw)
+                if self.lasers[0].error:
                     self.sig_message.emit(
-                        f"Laser write failed — laser reverted to OFF. Check the NI DAQ connection (Dev7) and re-enable the laser. Cause: {self.lasers.error_message}"  # noqa: E501
+                        f"{self.lasers[0].label} write failed — laser "
+                        f"reverted to OFF. Check the hardware connection "
+                        f"and re-enable the laser. Cause: "
+                        f"{self.lasers[0].error_message}"
                     )
-                    self.lasers.error = 0
+                    self.lasers[0].error = 0
 
     def _write_laser2_power(self, pct: float) -> None:
-        """Worker-thread HAL write for laser 2 (iBeam). Scales the staged
-        percentage to microwatts at the HAL boundary (pct/100 * max_power),
-        then calls IBeam.set_power whose own clamp still applies as a second
-        physical-safety layer.
+        """Worker-thread HAL write for laser 2. Scales the staged percentage
+        to mW at the HAL boundary (pct/100 * max_power) and calls
+        self.lasers[1].set_power(mw). The IBeamSmartLaser adapter converts
+        mW -> µW internally and the inner IBeam.set_power clamps µW as a
+        second physical-safety layer.
 
-        Cooperative-skip: checks estop_event immediately before the serial
-        write and skips entirely if set — the E-stop has already driven the
-        iBeam off with its own synchronous write.
+        Cooperative-skip: checks estop_event immediately before the HAL write
+        and skips entirely if set — the E-stop has already driven laser 2 off
+        with its own synchronous write. The lock lives on the ILaser instance
+        (self.lasers[1]._lock, identity-shared with the inner IBeam._lock).
         """
-        with self._laser2_write_lock:
+        with self.lasers[1]._lock:
             if self.estop_event.is_set():
                 return
-            if self.lasers.laser2_active:
-                microwatts = pct / 100.0 * self.ibeam.max_power
-                self.ibeam.set_power(microwatts)
-                if self.ibeam.error:
+            if self.lasers[1].active:
+                mw = pct / 100.0 * self.lasers[1].max_power
+                if self.estop_event.is_set():
+                    mw = 0.0
+                self.lasers[1].set_power(mw)
+                if self.lasers[1].error:
                     self.sig_message.emit(
-                        f"iBeam (640 nm) write failed — laser reverted to OFF. Check the COM4 USB cable and the iBeam power, then re-enable. Cause: {self.ibeam.error_message}"  # noqa: E501
+                        f"{self.lasers[1].label} write failed — laser "
+                        f"reverted to OFF. Check the COM4 USB cable and the "
+                        f"iBeam power, then re-enable. Cause: "
+                        f"{self.lasers[1].error_message}"
                     )
-                    self.ibeam.error = 0
+                    self.lasers[1].error = 0
 
     def laser1_toggle_button(self) -> None:
         # Slot only spawns a worker thread — the DAQ toggle (and the
@@ -2160,33 +2164,38 @@ class Controller_MainWindow(QMainWindow):
         threading.Thread(target=self._toggle_laser1, daemon=True).start()
 
     def _toggle_laser1(self) -> None:
-        """Worker-thread toggle for laser 1. Toggles the DAQ laser, and if
+        """Worker-thread toggle for laser 1. Toggles self.lasers[0], and if
         it was just turned on, immediately applies the staged percentage
-        (scaled to Volts) so the operator sees the chosen power, not 0 V.
-        HAL failures are surfaced via sig_message."""
-        with self._laser1_write_lock:
+        (scaled to mW) so the operator sees the chosen power, not 0.
+        HAL failures are surfaced via sig_message. The lock lives on the
+        ILaser instance (self.lasers[0]._lock)."""
+        with self.lasers[0]._lock:
             # E-stop cooperative-skip: if E-stop was pressed while this
             # toggle thread was in flight (waiting on the lock or before it
             # was scheduled), do NOT energize. The E-stop path already drove
-            # the laser to 0 V synchronously on the GUI thread via
-            # laser1_off(); a queued toggle that calls laser1_toggle() ->
-            # laser1_on() would re-energize a Class IIIB laser past the
-            # kill path. E-stop must be the final word.
+            # the laser off synchronously on the GUI thread via .off();
+            # a queued toggle that calls .on() would re-energize a Class
+            # IIIB laser past the kill path. E-stop must be the final word.
             if self.estop_event.is_set():
                 return
-            self.lasers.laser1_toggle()
+            if self.lasers[0].active:
+                self.lasers[0].off()
+            else:
+                self.lasers[0].on()
             # Re-check after the toggle — E-stop may have fired mid-toggle
-            # (between laser1_toggle() returning and this line). If it did,
+            # (between .on()/.off() returning and this line). If it did,
             # force the laser back off and do not apply the staged power.
             if self.estop_event.is_set():
-                self.lasers.laser1_off()
+                self.lasers[0].off()
                 return
-            if self.lasers.error:
+            if self.lasers[0].error:
                 self.sig_message.emit(
-                    f"Laser write failed — laser reverted to OFF. Check the NI DAQ connection (Dev7) and re-enable the laser. Cause: {self.lasers.error_message}"  # noqa: E501
+                    f"{self.lasers[0].label} write failed — laser reverted "
+                    f"to OFF. Check the hardware connection and re-enable "
+                    f"the laser. Cause: {self.lasers[0].error_message}"
                 )
-                self.lasers.error = 0
-            elif self.lasers.laser1_active:
+                self.lasers[0].error = 0
+            elif self.lasers[0].active:
                 # Just turned on — apply the staged percentage (scaled).
                 # _write_laser1_power re-acquires the same RLock (reentrant)
                 # and checks estop_event before the write.
@@ -2200,59 +2209,63 @@ class Controller_MainWindow(QMainWindow):
         threading.Thread(target=self._toggle_laser2, daemon=True).start()
 
     def _toggle_laser2(self) -> None:
-        """Worker-thread toggle for laser 2 (iBeam). Reproduces the
-        on/off branching with the same state-mismatch safeguards: verify
-        each serial command before mutating laser2_active — never show the
-        iBeam as active when the serial command failed (Class IIIB hazard).
-        When turning on, applies the staged percentage (scaled to uW).
-        Runs inside the per-laser lock so concurrent amplitude edits are
-        serialized."""
-        with self._laser2_write_lock:
+        """Worker-thread toggle for laser 2. Symmetric with _toggle_laser1
+        — both operate on self.lasers[i] uniformly. The IBeamSmartLaser
+        adapter's .on() mirrors active from the inner _is_on and guards on
+        the inner error surface, so the controller no longer needs its own
+        iBeam-specific verify-before-mark-active branch. The lock lives on
+        the ILaser instance (self.lasers[1]._lock, identity-shared with the
+        inner IBeam._lock)."""
+        with self.lasers[1]._lock:
             # E-stop cooperative-skip: if E-stop was pressed while this
             # toggle thread was in flight, do NOT energize. The E-stop path
-            # already drove the iBeam off synchronously on the GUI thread
-            # via ibeam.off(); a queued toggle that calls ibeam.on() would
-            # re-enable emission of a Class IIIB laser past the kill path.
+            # already drove the laser off synchronously on the GUI thread
+            # via .off(); a queued toggle that calls .on() would re-enable
+            # emission of a Class IIIB laser past the kill path.
             if self.estop_event.is_set():
                 return
-            if self.lasers.laser2_active:
-                self.ibeam.off()
-                if self.ibeam.error:
+            if self.lasers[1].active:
+                self.lasers[1].off()
+                if self.lasers[1].error:
                     self.sig_message.emit(
-                        f"iBeam off failed — the iBeam (640 nm) may STILL BE ON. "
-                        f"Manually verify the iBeam is off before approaching the microscope. "  # noqa: E501
-                        f"Cause: {self.ibeam.error_message}"
+                        f"{self.lasers[1].label} off failed — the laser may "
+                        f"STILL BE ON. Manually verify the laser is off "
+                        f"before approaching the microscope. Cause: "
+                        f"{self.lasers[1].error_message}"
                     )
-                    self.ibeam.error = 0
-                # laser2_active is cleared regardless — the operator intent was off.
-                self.lasers.laser2_active = False
+                    self.lasers[1].error = 0
             else:
                 # Re-check before energizing — E-stop may have fired while
                 # we were waiting on the lock or inside the off() branch
-                # above. Do not call ibeam.on() if the kill path has run.
+                # above. Do not call .on() if the kill path has run.
                 if self.estop_event.is_set():
                     return
-                self.ibeam.on()
-                if self.ibeam.error:
+                self.lasers[1].on()
+                if self.lasers[1].error:
                     self.sig_message.emit(
-                        f"iBeam on failed — laser stays OFF. Check COM4 and the iBeam power. "  # noqa: E501
-                        f"Cause: {self.ibeam.error_message}"
+                        f"{self.lasers[1].label} on failed — laser stays "
+                        f"OFF. Check COM4 and the iBeam power. Cause: "
+                        f"{self.lasers[1].error_message}"
                     )
-                    self.ibeam.error = 0
+                    self.lasers[1].error = 0
                     return
-                self.lasers.laser2_active = True
-                # Apply the staged percentage (scaled to microwatts).
+                # Apply the staged percentage (scaled to mW).
                 # _write_laser2_power re-acquires the same RLock (reentrant)
                 # and checks estop_event before the write.
                 self._write_laser2_power(self.laser2_power_pct)
-                if self.ibeam.error:
-                    self.ibeam.off()
-                    self.lasers.laser2_active = False
+                if self.lasers[1].error:
+                    self.lasers[1].off()
 
     def start_lasers(self) -> None:
-        """Starts the lasers at a certain voltage. Called from acquisition
+        """Starts the lasers at a certain power. Called from acquisition
         worker threads (not the GUI thread), so no further nested thread is
         needed — only the %-to-absolute scaling at the HAL boundary.
+
+        Drives self.lasers[0] and self.lasers[1] uniformly: stage the
+        scaled power via .set_power(mw) BEFORE .on() so the DAQLaser
+        backend writes the staged power when it energizes the AO channel,
+        and the IBeamSmartLaser adapter stages the channel power before
+        enabling global emission.
 
         The auto-laser flags (self._auto_laser1 / self._auto_laser2) are
         sampled on the GUI thread by _cache_auto_laser_flags() before the
@@ -2260,71 +2273,60 @@ class Controller_MainWindow(QMainWindow):
         touches a Qt widget (AGENTS.md §11).
         """
         if self._auto_laser1:
-            # Scale the staged percentage to Volts before laser1_on reads
-            # it (laser1_on clamps to laser1_max_power internally as well).
-            self.lasers.laser1_power = (
-                self.laser1_power_pct / 100.0 * self.lasers.laser1_max_power
-            )
-            self.lasers.laser1_on()
-            # Surface a DAQ AO write failure to the operator. Lasers.
-            # _update_setpoints catches the write failure on /Dev7/ao0:1,
-            # sets self.error = 1, reverts laser1_active = False, and
-            # deliberately does NOT raise (hardware-absence tolerance). The
-            # caller is responsible for reading the flag — every other
-            # laser-1 call site does; this branch was the only one that did
-            # not, so a failed laser-1 start during acquisition was a silent
-            # no-op (PSU dark, no message).
-            if self.lasers.error:
+            mw = self.laser1_power_pct / 100.0 * self.lasers[0].max_power
+            self.lasers[0].set_power(mw)
+            self.lasers[0].on()
+            # Surface a HAL write failure to the operator. The backend's
+            # .on() catches the write failure, sets .error = 1, mirrors
+            # .active = False, and deliberately does NOT raise (hardware-
+            # absence tolerance). The caller is responsible for reading the
+            # flag — a failed laser start during acquisition was previously
+            # a silent no-op (PSU dark, no message).
+            if self.lasers[0].error:
                 self.sig_message.emit(
-                    f"Laser write failed — laser reverted to OFF. Check the NI DAQ connection (Dev7) and re-enable the laser. Cause: {self.lasers.error_message}"  # noqa: E501
+                    f"{self.lasers[0].label} on failed — laser reverted to "
+                    f"OFF. Check the NI DAQ connection (Dev7) and re-enable "
+                    f"the laser. Cause: {self.lasers[0].error_message}"
                 )
-                self.lasers.error = 0
+                self.lasers[0].error = 0
         if self._auto_laser2:
-            # Laser 2 is the iBeam (serial, COM4), not the DAQ AO channel.
-            # Drive the iBeam directly so the physical laser and the
-            # laser2_active flag agree. Verify the serial on() succeeded
-            # before marking the laser active — never show "on" when the
-            # serial command failed (Class IIIB state-mismatch hazard).
-            self.ibeam.on()
-            if self.ibeam.error:
+            mw = self.laser2_power_pct / 100.0 * self.lasers[1].max_power
+            self.lasers[1].set_power(mw)
+            self.lasers[1].on()
+            if self.lasers[1].error:
                 self.sig_message.emit(
-                    f"iBeam on failed — laser reverted to OFF. Check COM4 and the iBeam power. Cause: {self.ibeam.error_message}"  # noqa: E501
+                    f"{self.lasers[1].label} on failed — laser reverted to "
+                    f"OFF. Check COM4 and the iBeam power. Cause: "
+                    f"{self.lasers[1].error_message}"
                 )
-                self.ibeam.error = 0
-            else:
-                self.lasers.laser2_active = True
-                # Apply the staged percentage (scaled to microwatts) via
-                # the shared write helper (estop-aware, lock-serialized).
-                self._write_laser2_power(self.laser2_power_pct)
-                if self.ibeam.error:
-                    self.sig_message.emit(
-                        f"iBeam (640 nm) power write failed — laser reverted to OFF. Check the COM4 USB cable and the iBeam power. Cause: {self.ibeam.error_message}"  # noqa: E501
-                    )
-                    self.ibeam.error = 0
-                    self.ibeam.off()
-                    self.lasers.laser2_active = False
+                self.lasers[1].error = 0
 
     def stop_lasers(self) -> None:
-        """Stops the lasers, puts their voltage to zero. Called from
-        acquisition worker threads (not the GUI thread). Reads only the
-        cached auto-laser flags sampled on the GUI thread by
-        _cache_auto_laser_flags() — never a Qt widget (AGENTS.md §11)."""
+        """Stops the lasers. Called from acquisition worker threads (not the
+        GUI thread). Drives self.lasers[0] and self.lasers[1] uniformly via
+        .off(). Reads only the cached auto-laser flags sampled on the GUI
+        thread by _cache_auto_laser_flags() — never a Qt widget
+        (AGENTS.md §11)."""
         if self._auto_laser1:
-            self.lasers.laser1_off()
-        if self._auto_laser2:
-            # Laser 2 is the iBeam (serial, COM4). Drive it off directly.
-            # laser2_active is cleared regardless of the serial outcome —
-            # the operator intent was off, and the GUI must not show the
-            # iBeam as active after a stop request.
-            self.ibeam.off()
-            if self.ibeam.error:
+            self.lasers[0].off()
+            if self.lasers[0].error:
                 self.sig_message.emit(
-                    f"iBeam off failed — the iBeam (640 nm) may STILL BE ON. Manually verify the iBeam is off before approaching the microscope. Cause: {self.ibeam.error_message}"  # noqa: E501
+                    f"{self.lasers[0].label} off failed — the laser may "
+                    f"STILL BE ON. Manually verify before approaching the "
+                    f"microscope. Cause: {self.lasers[0].error_message}"
                 )
-                self.ibeam.error = 0
-            self.lasers.laser2_active = False
+                self.lasers[0].error = 0
+        if self._auto_laser2:
+            self.lasers[1].off()
+            if self.lasers[1].error:
+                self.sig_message.emit(
+                    f"{self.lasers[1].label} off failed — the laser may "
+                    f"STILL BE ON. Manually verify before approaching the "
+                    f"microscope. Cause: {self.lasers[1].error_message}"
+                )
+                self.lasers[1].error = 0
 
-    """File Open Methods"""
+    # File Open Methods
 
     def updateUi_select_file(self) -> None:
         """Allows the selection of a file (.hdf5), opens it and displays its datasets"""
@@ -3412,7 +3414,7 @@ class Controller_MainWindow(QMainWindow):
             # slot to re-enable it.
             self.sig_stack_mode_finished.emit()
 
-    """Calibration Methods"""
+    # Calibration Methods
 
     def camera_calibration_button(self) -> None:
         """Start or stop camera calibration, depending on the button status"""
@@ -3700,7 +3702,7 @@ class FrameSaver(QObject):
                     self.filenames_list.append(new_filename)
                     break
 
-    """Saving methods"""
+    # Saving methods
 
     def enqueue_buffer(self, buffer: np.ndarray) -> None:
         """Put an image in the save queue"""

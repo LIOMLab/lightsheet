@@ -292,6 +292,9 @@ def test_toggle_laser1_on_when_inactive() -> None:
 
     estop_event = threading.Event()  # clear
     laser1 = _make_write_laser("Laser 1 (561 nm)", active=False, max_power=300.0)
+    # .on() must flip .active to True so the toggle body's post-on branch
+    # applies the staged percentage (a real ILaser's .on() does this).
+    laser1.on.side_effect = lambda: setattr(laser1, "active", True)
 
     standin = Mock()
     standin.estop_event = estop_event
@@ -315,6 +318,9 @@ def test_toggle_laser2_on_when_inactive() -> None:
 
     estop_event = threading.Event()  # clear
     laser2 = _make_write_laser("Laser 2 (640 nm)", active=False, max_power=150.0)
+    # .on() must flip .active to True so the toggle body's post-on branch
+    # applies the staged percentage (a real ILaser's .on() does this).
+    laser2.on.side_effect = lambda: setattr(laser2, "active", True)
 
     standin = Mock()
     standin.estop_event = estop_event

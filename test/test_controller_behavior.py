@@ -91,35 +91,35 @@ def _load_method(
 
 
 def test_start_lasers_surfaces_laser1_daq_error() -> None:
-    """When Lasers.laser1_on() leaves self.lasers.error set, start_lasers
-    must emit an operator message naming the cause and reset the flag — a
-    failed laser-1 DAQ start is no longer a silent no-op (G-01-1)."""
+    """When self.lasers[0].on() leaves .error set, start_lasers must emit
+    an operator message naming the cause and reset the flag — a failed
+    laser-1 DAQ start is no longer a silent no-op (G-01-1)."""
     start_lasers = _load_method("start_lasers(self) -> None")
 
-    lasers = Mock()
-    lasers.laser1_max_power = 5.0
-    lasers.error = 1  # laser1_on() "failed" the DAQ write
-    lasers.error_message = "daq write failed"
+    laser1 = Mock()
+    laser1.label = "Laser 1 (561 nm)"
+    laser1.max_power = 300.0
+    laser1.error = 1  # .on() "failed" the DAQ write
+    laser1.error_message = "daq write failed"
 
     standin = Mock()
     standin._auto_laser1 = True
     standin._auto_laser2 = False
     standin.laser1_power_pct = 50
-    standin.lasers = lasers
+    standin.lasers = [laser1, Mock()]
     standin.sig_message = Mock()
 
     start_lasers(standin)
 
     # An operator message was emitted naming the failure.
     assert standin.sig_message.emit.called, (
-        "start_lasers must emit sig_message when self.lasers.error is set "
-        "after laser1_on() — a silent no-op is the G-01-1 regression."
+        "start_lasers must emit sig_message when self.lasers[0].error is "
+        "set after .on() — a silent no-op is the G-01-1 regression."
     )
     msg = standin.sig_message.emit.call_args[0][0]
-    assert "Laser write failed" in msg
     assert "daq write failed" in msg
     # The flag is reset so the warning fires once per failure.
-    assert lasers.error == 0
+    assert laser1.error == 0
 
 
 # --------------------------------------------------------------------------- #
@@ -248,22 +248,23 @@ def test_start_lasers_reads_cached_flags_not_widgets() -> None:
     energize laser 1 without touching the widget."""
     start_lasers = _load_method("start_lasers(self) -> None")
 
-    lasers = Mock()
-    lasers.laser1_max_power = 5.0
-    lasers.error = 0
+    laser1 = Mock()
+    laser1.label = "Laser 1 (561 nm)"
+    laser1.max_power = 300.0
+    laser1.error = 0
 
     standin = Mock()
     standin.ui = _WidgetRaisingUI()
     standin._auto_laser1 = True
     standin._auto_laser2 = False
     standin.laser1_power_pct = 50
-    standin.lasers = lasers
+    standin.lasers = [laser1, Mock()]
     standin.sig_message = Mock()
 
     # Must not raise — if it read the widget, _WidgetRaisingUI raises.
     start_lasers(standin)
 
-    lasers.laser1_on.assert_called_once()
+    laser1.on.assert_called_once()
 
 
 # --------------------------------------------------------------------------- #
