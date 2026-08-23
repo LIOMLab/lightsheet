@@ -8,7 +8,8 @@ never re-parsed from config.ini (fixes the config-drift metadata bug).
 
 FrameSaver inherits QObject and cannot be constructed without PyQt5, so
 the real _write_laser_metadata method body is extracted from
-lightsheet/gui/controller.py and exec'd in a controlled namespace, then
+lightsheet/gui/frame_saver_controller.py (where FrameSaver is defined
+after the god-object split) and exec'd in a controlled namespace, then
 called against a minimal stand-in self whose .parent.lasers holds the
 live list[ILaser]. This exercises the real method body — the same code
 that runs on the rig — without needing the Qt runtime.
@@ -22,13 +23,13 @@ from unittest.mock import Mock
 
 from lightsheet.hal.mocks.mock_laser import MockLaser
 
-_CONTROLLER_SRC = os.path.join(
-    os.path.dirname(__file__), "..", "lightsheet", "gui", "controller.py"
+_FRAME_SAVER_SRC = os.path.join(
+    os.path.dirname(__file__), "..", "lightsheet", "gui", "frame_saver_controller.py"
 )
 
 
 def _read_controller_source() -> str:
-    with open(_CONTROLLER_SRC) as f:
+    with open(_FRAME_SAVER_SRC) as f:
         return f.read()
 
 
@@ -47,15 +48,16 @@ def _slice_method(src: str, method_sig: str) -> str:
 
 
 def _load_method(method_sig: str):
-    """Extract a method body from lightsheet/gui/controller.py and return
-    a callable `func(self, outfile)` that executes the real source."""
+    """Extract a method body from lightsheet/gui/frame_saver_controller.py
+    and return a callable `func(self, outfile)` that executes the real
+    source."""
     src = _read_controller_source()
     body = _slice_method(src, method_sig)
     # Seed the exec namespace with modules the method body references
     # (the type hint `h5py.File` is evaluated at function definition time
     # inside the exec — h5py must be present in the namespace).
     namespace = {"h5py": h5py}
-    exec(compile(body, _CONTROLLER_SRC, "exec"), namespace)
+    exec(compile(body, _FRAME_SAVER_SRC, "exec"), namespace)
     func_name = method_sig.split("(")[0].strip()
     return namespace[func_name]
 
