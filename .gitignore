@@ -37,3 +37,4 @@ config.rig-specific.ini
 
 # macOS dev default log directory created by logging_setup.configure().
 logs/
+.gsd-graph/
