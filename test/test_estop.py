@@ -104,3 +104,31 @@ def test_hardware_manager_has_no_estop_method() -> None:
     assert not hasattr(HardwareManager, "e_stop"), (
         "HardwareManager must NOT declare an e_stop method"
     )
+
+
+# --------------------------------------------------------------------------- #
+# regression gate — MotorController must NOT own an estop method.
+# MotorController is a motion collaborator (motor-move + focus/interpolation-
+# display slots), NOT a safety kill-path owner. The E-stop kill path stays in
+# the shell (updateUi_estop_pressed) with a direct list[ILaser] ref, lock-free,
+# on the GUI thread. A future maintainer who sees MotorController.estop() will
+# be tempted to queue/thread it — the single most safety-critical regression
+# risk. Mirrors the HardwareManager anti-pattern check.
+# --------------------------------------------------------------------------- #
+
+
+def test_motor_controller_has_no_estop_method() -> None:
+    """MotorController must NOT declare an estop/kill/e_stop method — motion
+    collaborators are not safety kill-path owners (safety anti-pattern)."""
+    from lightsheet.gui.motor_controller import MotorController
+
+    assert not hasattr(MotorController, "estop"), (
+        "MotorController must NOT declare an estop method (safety anti-pattern) "
+        "— the E-stop kill path stays in the shell, lock-free on the GUI thread."
+    )
+    assert not hasattr(MotorController, "kill"), (
+        "MotorController must NOT declare a kill method"
+    )
+    assert not hasattr(MotorController, "e_stop"), (
+        "MotorController must NOT declare an e_stop method"
+    )
