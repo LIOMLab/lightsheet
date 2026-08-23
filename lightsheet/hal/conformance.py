@@ -236,3 +236,26 @@ IBEAM_CONTRACT = ConformanceContract(
     read_attrs=("wavelength", "max_power", "error", "error_message"),
     setter_methods=("set_power",),
 )
+
+# Unified single-channel ILaser surface (mW-canonical). ``set_power`` IS in
+# the setter contract because the controller calls it (the controller holds
+# ``list[ILaser]`` and invokes ``set_power(mw)`` on each instance). This
+# differs from the legacy ``LASERS_CONTRACT`` which deliberately excludes
+# ``set_power`` because the legacy 2-channel ``Lasers`` class does not
+# expose it. ``on`` / ``off`` are existence checks only — they have side
+# effects (DAQ writes, serial commands) outside conformance scope; the
+# synchronous-off + two-layer-clamp safety invariants are behavior checks
+# that live in the per-device conformance test file.
+LASER_CONTRACT = ConformanceContract(
+    lifecycle_methods=("on", "off"),
+    read_attrs=(
+        "wavelength",
+        "power",
+        "max_power",
+        "active",
+        "label",
+        "error",
+        "error_message",
+    ),
+    setter_methods=("set_power",),
+)
