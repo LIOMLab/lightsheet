@@ -614,24 +614,33 @@ class ConfigValidator:
         self, sections: dict[str, dict[str, str]]
     ) -> None:
         """Run collect-all validation on the sections dict. If any errors
-        or warnings exist, show a modal QDialog. If any errors exist,
-        abort via ``sys.exit(1)`` after the dialog is dismissed."""
+        or warnings exist, show a modal QDialog. Abort via ``sys.exit(1)``
+        if any errors exist OR the operator clicked "Exit" on a
+        warnings-only dialog (reject result). On a warnings-only dialog
+        the operator may click "Proceed with warnings" (accept) to
+        continue."""
         result = collect_config_errors(sections)
         if not result.errors and not result.warnings:
             return
-        self._show_dialog(result.errors, result.warnings)
-        if result.errors:
+        accepted = self._show_dialog(result.errors, result.warnings)
+        if result.errors or not accepted:
             sys.exit(1)
 
     def _show_dialog(
         self, errors: list[str], warnings: list[str]
-    ) -> None:
+    ) -> bool:
         """Show the collect-all config-error QDialog (D-03 / PKG-04).
 
         Layout: errors block (red header + per-error rows) first, then
         warnings block (amber header + per-warning rows), then a
         right-aligned button row with "Exit" (always, default) and
         "Proceed with warnings" (only if 0 errors and ≥1 warning).
+
+        Returns ``True`` if the operator clicked "Proceed with warnings"
+        (``QDialog.Accepted``) and ``False`` otherwise (``QDialog.Rejected``
+        — the "Exit" button, window close, or ESC). The caller uses this
+        to decide whether to abort on the warnings-only path: an errors
+        dialog always aborts regardless of the return value.
         """
         from PyQt5.QtWidgets import (
             QDialog,
@@ -684,4 +693,4 @@ class ConfigValidator:
 
         layout.addLayout(btn_layout)
         dlg.setModal(True)
-        dlg.exec_()
+        return dlg.exec_() == QDialog.Accepted
