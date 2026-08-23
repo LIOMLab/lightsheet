@@ -763,12 +763,18 @@ def test_poll_laser2_status_gated_skips_when_lock_held() -> None:
     self.lasers[1]._lock is held by an in-progress write — the poll
     probes the lock with acquire(blocking=False) and skips silently on
     failure so a periodic status query never blocks on a write and
-    never misattributes a reply."""
+    never misattributes a reply.
+
+    The real _lock is an RLock (reentrant), so holding it from this
+    thread would still let the gated probe acquire it. A non-reentrant
+    Lock stand-in models the cross-thread 'held by another thread'
+    condition: acquire(blocking=False) returns False once it's held."""
     gated = _load_method("_poll_laser2_status_gated(self) -> None")
 
     laser2 = _make_status_laser("Laser 2 (640 nm)", active=True, error=0)
-    # Hold the lock for the duration of the gated call — the probe's
-    # acquire(blocking=False) must return False.
+    # Use a non-reentrant Lock so acquire(blocking=False) fails once held
+    # (models the cross-thread 'held by the daemon write thread' case).
+    laser2._lock = threading.Lock()
     laser2._lock.acquire()
     try:
         standin = Mock()

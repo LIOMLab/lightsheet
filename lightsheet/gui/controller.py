@@ -70,6 +70,14 @@ class Controller_MainWindow(QMainWindow):
     sig_refresh_position_vertical = pyqtSignal()  # TODO
     sig_refresh_position_camera = pyqtSignal()  # TODO
 
+    # Per-laser status indicator (LSR-06). QTimer-driven polls (the L1
+    # 100ms display timer and the L2 gated ~1s iBeam timer) and the
+    # refresh-after-action call sites emit (idx, status) on this signal;
+    # the GUI-thread slot updateUi_laser_status mutates the QLabel. No
+    # QTimer callback or worker thread ever writes a QLabel directly
+    # (AGENTS.md §11 — cross-thread UI updates go through signals).
+    sig_laser_status = pyqtSignal(int, str)
+
     def __init__(self, demo: bool = False) -> None:
         # Demo mode flag — when True, hardware_init constructs Mock* HAL
         # instances (no hardware init) so the app runs on a dev box without
@@ -169,6 +177,33 @@ class Controller_MainWindow(QMainWindow):
         self.shortcut_estop = QShortcut(QKeySequence("F12"), self)
         self.shortcut_estop.setContext(Qt.ApplicationShortcut)
         self.shortcut_estop.activated.connect(self.updateUi_estop_pressed)
+
+        # Per-laser status indicators (LSR-06). Added programmatically per
+        # AGENTS.md §8 (generated UI files are never hand-edited) — parented
+        # into the existing groupBox_15 laser-panel column layouts
+        # (verticalLayout_43 = L1 column, verticalLayout_44 = L2 column).
+        # The labels show ● ON / ● OFF / ● ERR with green/gray/red bold
+        # encoding, matching the E-stop status-label precedent. Updated via
+        # sig_laser_status -> updateUi_laser_status (AGENTS.md §11 — no
+        # direct widget mutation from a timer callback).
+        self.label_laserOneStatus = QLabel("● OFF")
+        self.label_laserOneStatus.setMinimumWidth(140)
+        self.label_laserOneStatus.setStyleSheet(
+            "color: #8E8E93; font-weight: bold;"
+        )
+        self.ui.verticalLayout_43.addWidget(self.label_laserOneStatus)
+
+        self.label_laserTwoStatus = QLabel("● OFF")
+        self.label_laserTwoStatus.setMinimumWidth(140)
+        self.label_laserTwoStatus.setStyleSheet(
+            "color: #8E8E93; font-weight: bold;"
+        )
+        self.ui.verticalLayout_44.addWidget(self.label_laserTwoStatus)
+
+        # Connect the status signal to its GUI-thread slot once, here in
+        # __init__, so every emit (from any poll path or refresh-after-
+        # action call site) routes through the slot.
+        self.sig_laser_status.connect(self.updateUi_laser_status)
 
         # Resize mainwindow
         # self.resize(QDesktopWidget().availableGeometry(self).size() * 0.75)
@@ -705,10 +740,28 @@ class Controller_MainWindow(QMainWindow):
         # Instantiating the frame saver (image consumer)
         self.frame_saver = FrameSaver(self)
 
-        # Start timer to periodically (100ms) refresh the display port
+        # Start timer to periodically (100ms) refresh the display port.
+        # The L1 status poll rides this same timer (additive connection —
+        # zero added serial cost, L1 status is a pure in-HAL active-flag
+        # read) so the DAQ laser status is genuinely live at 100ms.
         self.timer_imageview = QTimer()
         self.timer_imageview.timeout.connect(self.frame_viewer.updateUi_refresh_view)
+        self.timer_imageview.timeout.connect(lambda: self._poll_laser_status([0]))
         self.timer_imageview.start(100)
+
+        # L2 (iBeam) status poll — a separate gated QTimer at the
+        # config-tunable [iBeam] Status Poll Interval (default 1.0s,
+        # rig-validated 0/12 misattribution at 1s and 0.5s). The poll
+        # callback (_poll_laser2_status_gated) probes the iBeam
+        # per-instance lock and skips silently while a power write is in
+        # progress, so a periodic status query never blocks on a write
+        # and never misattributes a reply.
+        _ibeam_cfg = cfg_read("config.ini", "iBeam", {"Status Poll Interval": 1.0})
+        self.timer_laser2_status = QTimer()
+        self.timer_laser2_status.timeout.connect(self._poll_laser2_status_gated)
+        self.timer_laser2_status.start(
+            int(float(_ibeam_cfg["Status Poll Interval"]) * 1000)
+        )
 
         # Init done, restore normal cursor. Under demo mode emit the demo
         # indicator (window-title suffix + status-bar message) directly via
@@ -771,6 +824,7 @@ class Controller_MainWindow(QMainWindow):
             # this shutdown path calls it.
             self.lasers[1]._ibeam.close()
             self.timer_imageview.stop()
+            self.timer_laser2_status.stop()
             QApplication.restoreOverrideCursor()
             event.accept()
         else:
@@ -961,6 +1015,9 @@ class Controller_MainWindow(QMainWindow):
                     f"microscope. Cause: {laser.error_message}"
                 )
                 laser.error = 0
+        # Refresh-after-action: both status labels reflect the post-E-stop
+        # state immediately (the periodic timers would otherwise lag).
+        self._poll_laser_status([0, 1])
 
         # 4. Latch the UI into ACTUATED: red indicator, yellow 4px border
         #    on the E-stop button ("latched — Arm/Reset before re-energizing").
@@ -1097,6 +1154,70 @@ class Controller_MainWindow(QMainWindow):
 
         # Motors
         self.updateUi_units()
+
+    def _poll_laser_status(self, indices: list[int]) -> None:
+        """Compute a status string per requested laser index and emit
+        sig_laser_status(idx, status). Called from the L1 100ms display
+        timer, the L2 gated ~1s iBeam timer, and the refresh-after-action
+        call sites (toggle / write / start / stop / E-stop).
+
+        Status precedence is error > active > inactive: an errored-but-
+        still-active laser shows ERR, not ON (the HAL error surface is
+        authoritative — AGENTS.md §10). The emit crosses through the Qt
+        signal/slot queue so the QLabel mutation happens on the GUI
+        thread (AGENTS.md §11 — no direct widget write from a timer).
+        """
+        for i in indices:
+            laser = self.lasers[i]
+            if laser.error:
+                status = "error"
+            elif laser.active:
+                status = "active"
+            else:
+                status = "inactive"
+            self.sig_laser_status.emit(i, status)
+
+    def _poll_laser2_status_gated(self) -> None:
+        """Gated L2 status poll driven by the ~1s iBeam status QTimer.
+
+        Probes self.lasers[1]._lock with acquire(blocking=False): if the
+        lock is held by an in-progress power write, skip this cycle
+        silently (no error surfaced — the operator can retry via the
+        Refresh button or wait for the next tick). If the lock is free,
+        release it immediately and proceed with the status poll. The
+        lock is a "is a write in progress right now" probe, not held
+        during the poll itself — this prevents a periodic status query
+        from blocking on a write and from misattributing a reply to a
+        concurrent command.
+        """
+        if not self.lasers[1]._lock.acquire(blocking=False):
+            return
+        self.lasers[1]._lock.release()
+        self._poll_laser_status([1])
+
+    @pyqtSlot(int, str)
+    def updateUi_laser_status(self, idx: int, status: str) -> None:
+        """GUI-thread slot — maps a (idx, status) emit from
+        sig_laser_status to the per-laser QLabel text + semantic color.
+        status is 'active' / 'inactive' / 'error' (set by
+        _poll_laser_status). The label list is indexed by laser index.
+        """
+        labels = [self.label_laserOneStatus, self.label_laserTwoStatus]
+        if status == "active":
+            labels[idx].setText("● ON")
+            labels[idx].setStyleSheet(
+                "color: #34C759; font-weight: bold;"
+            )
+        elif status == "inactive":
+            labels[idx].setText("● OFF")
+            labels[idx].setStyleSheet(
+                "color: #8E8E93; font-weight: bold;"
+            )
+        else:  # "error"
+            labels[idx].setText("● ERR")
+            labels[idx].setStyleSheet(
+                "color: #FF3B30; font-weight: bold;"
+            )
 
     def updateUi_units(self) -> None:
         """Updates all the widgets of the motion tab after a unit change"""
@@ -2126,6 +2247,10 @@ class Controller_MainWindow(QMainWindow):
                         f"{self.lasers[0].error_message}"
                     )
                     self.lasers[0].error = 0
+                # Refresh-after-action: the status label reflects the
+                # post-write state immediately, not just on the 100ms
+                # timer tick.
+                self._poll_laser_status([0])
 
     def _write_laser2_power(self, pct: float) -> None:
         """Worker-thread HAL write for laser 2. Scales the staged percentage
@@ -2155,6 +2280,10 @@ class Controller_MainWindow(QMainWindow):
                         f"{self.lasers[1].error_message}"
                     )
                     self.lasers[1].error = 0
+                # Refresh-after-action: the iBeam status label reflects
+                # the post-write state immediately (the gated ~1s poll
+                # would otherwise lag up to a second behind the write).
+                self._poll_laser_status([1])
 
     def laser1_toggle_button(self) -> None:
         # Slot only spawns a worker thread — the DAQ toggle (and the
@@ -2200,6 +2329,10 @@ class Controller_MainWindow(QMainWindow):
                 # _write_laser1_power re-acquires the same RLock (reentrant)
                 # and checks estop_event before the write.
                 self._write_laser1_power(self.laser1_power_pct)
+            # Refresh-after-action: the status label reflects the
+            # post-toggle state immediately (the 100ms timer would
+            # otherwise lag up to 100ms behind the toggle).
+            self._poll_laser_status([0])
 
     def laser2_toggle_button(self) -> None:
         # Slot only spawns a worker thread — the iBeam serial on/off (and
@@ -2248,6 +2381,7 @@ class Controller_MainWindow(QMainWindow):
                         f"{self.lasers[1].error_message}"
                     )
                     self.lasers[1].error = 0
+                    self._poll_laser_status([1])
                     return
                 # Apply the staged percentage (scaled to mW).
                 # _write_laser2_power re-acquires the same RLock (reentrant)
@@ -2255,6 +2389,10 @@ class Controller_MainWindow(QMainWindow):
                 self._write_laser2_power(self.laser2_power_pct)
                 if self.lasers[1].error:
                     self.lasers[1].off()
+            # Refresh-after-action: the iBeam status label reflects the
+            # post-toggle state immediately (the gated ~1s poll would
+            # otherwise lag up to a second behind the toggle).
+            self._poll_laser_status([1])
 
     def start_lasers(self) -> None:
         """Starts the lasers at a certain power. Called from acquisition
@@ -2300,6 +2438,9 @@ class Controller_MainWindow(QMainWindow):
                     f"{self.lasers[1].error_message}"
                 )
                 self.lasers[1].error = 0
+        # Refresh-after-action: both status labels reflect the post-start
+        # state immediately (the periodic timers would otherwise lag).
+        self._poll_laser_status([0, 1])
 
     def stop_lasers(self) -> None:
         """Stops the lasers. Called from acquisition worker threads (not the
@@ -2325,6 +2466,9 @@ class Controller_MainWindow(QMainWindow):
                     f"microscope. Cause: {self.lasers[1].error_message}"
                 )
                 self.lasers[1].error = 0
+        # Refresh-after-action: both status labels reflect the post-stop
+        # state immediately (the periodic timers would otherwise lag).
+        self._poll_laser_status([0, 1])
 
     # File Open Methods
 
