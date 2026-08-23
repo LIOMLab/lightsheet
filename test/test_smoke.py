@@ -5,6 +5,12 @@ If this test passes, every test module's ``from lightsheet.* import ...`` will
 also succeed at collection time.
 """
 
+import os
+
+import pytest
+
+_has_hardware: bool = os.environ.get("LIGHTSHEET_HW", "0") == "1"
+
 
 def test_lasers_imports() -> None:
     from lightsheet.hal import DAQLaser, IBeamSmartLaser, MockLaser
@@ -28,18 +34,22 @@ def test_camera_imports() -> None:
 
 def test_nidaqmx_stub_raises_on_task() -> None:
     """The nidaqmx stub imports fine but Task() raises — mirrors the
-    "no driver runtime" behavior the laser tests rely on."""
+    "no driver runtime" behavior the laser tests rely on. Mac-only: on
+    the rig the real nidaqmx.Task() succeeds."""
+    if _has_hardware:
+        pytest.skip("Mac-only stub-raises check — real nidaqmx on the rig")
     import nidaqmx
-    import pytest
 
     with pytest.raises(nidaqmx.errors.Error):
         nidaqmx.Task()
 
 
 def test_pco_stub_raises_on_camera() -> None:
-    """The pco stub imports fine but Camera() raises."""
+    """The pco stub imports fine but Camera() raises. Mac-only: on the
+    rig the real pco.Camera() succeeds."""
+    if _has_hardware:
+        pytest.skip("Mac-only stub-raises check — real pco on the rig")
     import pco
-    import pytest
 
     with pytest.raises(RuntimeError):
         pco.Camera()
