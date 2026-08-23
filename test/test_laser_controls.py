@@ -225,3 +225,182 @@ def test_write_laser1_power_skips_when_laser_inactive() -> None:
     write_laser1_power(standin, 50.0)
 
     lasers._update_setpoints.assert_not_called()
+
+
+# --------------------------------------------------------------------------- #
+# E-stop rewrite tests — updateUi_estop_pressed drives BOTH lasers off via
+# self.lasers[i].off() in a loop, synchronously on the GUI thread, with NO
+# lock acquisition anywhere in the method body (a stuck daemon write thread
+# holding a laser's lock must never delay the kill path). close_modes reads
+# self.lasers[i].active (not the old 2-channel container laser1_active /
+# laser2_active reads).
+#
+# These tests exec the real method bodies against a list[ILaser]-shaped
+# stand-in. They fail against the pre-rewrite source (which calls
+# self.lasers.laser1_off() / self.ibeam.off() and reads
+# self.lasers.laser1_active / self.lasers.laser2_active) and pass after the
+# rewrite.
+# --------------------------------------------------------------------------- #
+
+
+def _make_laser_mock(
+    label: str, error: int = 0, error_message: str = ""
+) -> Mock:
+    """Build a Mock ILaser stand-in with the surface the E-stop loop reads:
+    .off(), .error, .error_message, .label, .active, ._lock."""
+    laser = Mock()
+    laser.label = label
+    laser.error = error
+    laser.error_message = error_message
+    laser.active = True
+    laser._lock = threading.RLock()
+    return laser
+
+
+def test_estop_drives_both_lasers_off_in_loop() -> None:
+    """updateUi_estop_pressed must call .off() on BOTH self.lasers[0] and
+    self.lasers[1] (a loop over self.lasers), synchronously on the GUI
+    thread. The pre-rewrite code calls self.lasers.laser1_off() and
+    self.ibeam.off() — neither is a method on a list[ILaser] stand-in, so
+    this test fails until the method is rewritten to the loop form."""
+    estop = _load_method("updateUi_estop_pressed(self) -> None")
+
+    estop_event = threading.Event()
+    laser1 = _make_laser_mock("Laser 1 (561 nm)")
+    laser2 = _make_laser_mock("Laser 2 (640 nm)")
+
+    standin = Mock()
+    standin.estop_event = estop_event
+    standin.lasers = [laser1, laser2]
+    standin.sig_message = Mock()
+    # The UI latch widgets the method sets at the end.
+    standin.label_estopStatus = Mock()
+    standin.pushButton_estop = Mock()
+
+    estop(standin)
+
+    laser1.off.assert_called_once()
+    laser2.off.assert_called_once()
+    # The cooperative-abort Event was set (step 1, preserved verbatim).
+    assert estop_event.is_set()
+
+
+def test_estop_emits_per_laser_warning_on_error() -> None:
+    """When a laser's .off() leaves .error set, updateUi_estop_pressed must
+    emit a sig_message naming that laser's .label and .error_message, then
+    reset .error = 0 — mirroring the existing per-laser warning pattern but
+    templated on laser.label so both lasers share one code path."""
+    estop = _load_method("updateUi_estop_pressed(self) -> None")
+
+    estop_event = threading.Event()
+    laser1 = _make_laser_mock("Laser 1 (561 nm)")
+    laser2 = _make_laser_mock(
+        "Laser 2 (640 nm)", error=1, error_message="serial write failed"
+    )
+
+    standin = Mock()
+    standin.estop_event = estop_event
+    standin.lasers = [laser1, laser2]
+    standin.sig_message = Mock()
+    standin.label_estopStatus = Mock()
+    standin.pushButton_estop = Mock()
+
+    estop(standin)
+
+    # laser2 had an error — a warning was emitted naming its label + cause.
+    warning_msgs = [
+        str(c.args[0]) for c in standin.sig_message.emit.call_args_list
+    ]
+    assert any(
+        "Laser 2 (640 nm)" in m and "serial write failed" in m
+        for m in warning_msgs
+    ), (
+        "E-stop must emit a per-laser warning naming laser.label and "
+        "laser.error_message when .off() fails."
+    )
+    # The error was reset after the warning.
+    assert laser2.error == 0
+
+
+def test_estop_acquires_no_laser_lock() -> None:
+    """The E-stop kill path must NOT acquire self.lasers[i]._lock anywhere
+    in the method body — a stuck daemon write thread holding a laser's lock
+    must never delay the kill path (AGENTS.md §2). This test records any
+    attempt to enter a laser's _lock by wrapping both lasers' locks in a
+    raising context manager; if the E-stop body acquires either lock, the
+    method raises and the test fails."""
+    estop = _load_method("updateUi_estop_pressed(self) -> None")
+
+    class _NoLockAcquire:
+        """A lock stand-in whose __enter__ raises — proves the E-stop body
+        never acquires it."""
+
+        def __enter__(self) -> "_NoLockAcquire":
+            raise AssertionError(
+                "E-stop must not acquire self.lasers[i]._lock — the kill "
+                "path is lock-free so a stuck daemon write thread can never "
+                "delay it (AGENTS.md §2)."
+            )
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+    estop_event = threading.Event()
+    laser1 = _make_laser_mock("Laser 1 (561 nm)")
+    laser2 = _make_laser_mock("Laser 2 (640 nm)")
+    laser1._lock = _NoLockAcquire()
+    laser2._lock = _NoLockAcquire()
+
+    standin = Mock()
+    standin.estop_event = estop_event
+    standin.lasers = [laser1, laser2]
+    standin.sig_message = Mock()
+    standin.label_estopStatus = Mock()
+    standin.pushButton_estop = Mock()
+
+    # Must not raise — if the body acquires either lock, _NoLockAcquire raises.
+    estop(standin)
+
+
+def test_close_modes_reads_lasers_index_active() -> None:
+    """close_modes must read self.lasers[0].active or self.lasers[1].active
+    (the list[ILaser] surface), not the old self.lasers.laser1_active /
+    self.lasers.laser2_active 2-channel container reads. When both lasers
+    are inactive, stop_lasers must NOT be called."""
+    close_modes = _load_method("close_modes(self) -> None")
+
+    laser1 = _make_laser_mock("Laser 1 (561 nm)")
+    laser2 = _make_laser_mock("Laser 2 (640 nm)")
+    laser1.active = False
+    laser2.active = False
+
+    standin = Mock()
+    standin.lasers = [laser1, laser2]
+    standin.sig_message = Mock()
+    # close_modes reads several *_mode_started flags + calls
+    # _cache_auto_laser_flags; all are auto-Mock attrs (no-ops).
+    standin.stop_lasers = Mock()
+
+    close_modes(standin)
+
+    standin.stop_lasers.assert_not_called()
+
+
+def test_close_modes_calls_stop_lasers_when_a_laser_active() -> None:
+    """close_modes must call stop_lasers when either laser is active —
+    reading self.lasers[0].active or self.lasers[1].active."""
+    close_modes = _load_method("close_modes(self) -> None")
+
+    laser1 = _make_laser_mock("Laser 1 (561 nm)")
+    laser2 = _make_laser_mock("Laser 2 (640 nm)")
+    laser1.active = False
+    laser2.active = True  # laser 2 is on -> must stop
+
+    standin = Mock()
+    standin.lasers = [laser1, laser2]
+    standin.sig_message = Mock()
+    standin.stop_lasers = Mock()
+
+    close_modes(standin)
+
+    standin.stop_lasers.assert_called_once()
