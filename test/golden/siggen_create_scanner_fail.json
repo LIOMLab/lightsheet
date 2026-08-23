@@ -1,0 +1,6 @@
+[
+  {
+    "type": "sig_message",
+    "value": "Scan task creation failed \u2014 the acquisition was aborted before the camera was triggered. Check the NI DAQ connection (Dev1). Cause: create_scan error"
+  }
+]
