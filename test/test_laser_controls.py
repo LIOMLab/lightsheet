@@ -803,3 +803,130 @@ def test_poll_laser2_status_gated_polls_when_lock_free() -> None:
     gated(standin)
 
     standin._poll_laser_status.assert_called_once_with([1])
+
+
+# --------------------------------------------------------------------------- #
+# iBeam power readback tests (LSD-04) — _refresh_laser2_readback queries
+# self.lasers[1].get_output_power() under the iBeam per-instance lock and
+# updates label_laserTwoReadback. The lock is probed with
+# acquire(blocking=False): if held by an in-progress write, the refresh is
+# a silent no-op (the operator can retry via the Refresh button). On
+# success the lock is always released in the finally block. A None
+# readback (parse failure / unsupported variant) shows the last commanded
+# power with a (cmd) suffix + tooltip.
+# --------------------------------------------------------------------------- #
+
+
+def _make_readback_laser(
+    active: bool = True,
+    power: float = 75.0,
+    max_power: float = 150.0,
+) -> Mock:
+    """Build a Mock ILaser stand-in for the readback path. The lock is a
+    real threading.RLock so acquire(blocking=False)/release work."""
+    laser = Mock()
+    laser.label = "Laser 2 (640 nm)"
+    laser.active = active
+    laser.power = power
+    laser.max_power = max_power
+    laser.error = 0
+    laser.error_message = ""
+    laser._lock = threading.RLock()
+    laser.get_output_power = Mock()
+    return laser
+
+
+def test_refresh_laser2_readback_populated() -> None:
+    """_refresh_laser2_readback on a stand-in where the lock is free and
+    get_output_power() returns 75.0 sets label_laserTwoReadback text to
+    '75.0 mW'."""
+    refresh = _load_method("_refresh_laser2_readback(self) -> None")
+
+    laser2 = _make_readback_laser(power=75.0)
+    laser2.get_output_power.return_value = 75.0
+
+    standin = Mock()
+    standin.lasers = [Mock(), laser2]
+    standin.label_laserTwoReadback = Mock()
+
+    refresh(standin)
+
+    laser2.get_output_power.assert_called_once()
+    standin.label_laserTwoReadback.setText.assert_called_once_with("75.0 mW")
+
+
+def test_refresh_laser2_readback_degraded_shows_commanded_fallback() -> None:
+    """_refresh_laser2_readback on a stand-in where get_output_power()
+    returns None (parse failure / unsupported variant) sets the label to
+    '{power:.1f} mW (cmd)' and sets the degraded-readback tooltip."""
+    refresh = _load_method("_refresh_laser2_readback(self) -> None")
+
+    laser2 = _make_readback_laser(power=42.0)
+    laser2.get_output_power.return_value = None
+
+    standin = Mock()
+    standin.lasers = [Mock(), laser2]
+    standin.label_laserTwoReadback = Mock()
+
+    refresh(standin)
+
+    text = standin.label_laserTwoReadback.setText.call_args[0][0]
+    assert text == "42.0 mW (cmd)"
+    standin.label_laserTwoReadback.setToolTip.assert_called_once()
+    tooltip = standin.label_laserTwoReadback.setToolTip.call_args[0][0]
+    assert "readback unavailable" in tooltip or "parse failure" in tooltip
+
+
+def test_refresh_laser2_readback_lock_skip_is_noop() -> None:
+    """_refresh_laser2_readback on a stand-in where the lock is held
+    returns silently without calling get_output_power() and without
+    mutating the label — the lock-skip no-op contract. Uses a
+    non-reentrant Lock to model the cross-thread 'held by the daemon
+    write thread' condition."""
+    refresh = _load_method("_refresh_laser2_readback(self) -> None")
+
+    laser2 = _make_readback_laser()
+    laser2._lock = threading.Lock()
+    laser2._lock.acquire()
+    try:
+        standin = Mock()
+        standin.lasers = [Mock(), laser2]
+        standin.label_laserTwoReadback = Mock()
+
+        refresh(standin)
+
+        laser2.get_output_power.assert_not_called()
+        standin.label_laserTwoReadback.setText.assert_not_called()
+    finally:
+        laser2._lock.release()
+
+
+def test_refresh_laser2_readback_releases_lock_in_finally() -> None:
+    """_refresh_laser2_readback always releases the lock in the finally
+    block when acquire(blocking=False) succeeded — even if
+    get_output_power raises. Verified by acquiring the lock after the
+    call returns (a non-released lock would block)."""
+    refresh = _load_method("_refresh_laser2_readback(self) -> None")
+
+    laser2 = _make_readback_laser()
+    laser2.get_output_power.side_effect = RuntimeError("serial glitch")
+
+    standin = Mock()
+    standin.lasers = [Mock(), laser2]
+    standin.label_laserTwoReadback = Mock()
+
+    # The method must not let the exception escape (or if it does, the
+    # lock is still released). Wrap so we can assert the lock is free
+    # afterward regardless.
+    try:
+        refresh(standin)
+    except RuntimeError:
+        pass
+
+    # The lock must be releasable (free) — acquire(blocking=False)
+    # succeeds iff it was released by the finally block.
+    assert laser2._lock.acquire(blocking=False), (
+        "_refresh_laser2_readback did not release the iBeam lock in the "
+        "finally block — a held lock would block the next write."
+    )
+    laser2._lock.release()
