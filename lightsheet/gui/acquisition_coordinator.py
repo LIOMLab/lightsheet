@@ -24,13 +24,13 @@ The E-stop kill path stays in the thin shell — the coordinator's worker
 bodies only *poll* ``self._shell.estop_event`` cooperatively; they never
 drive a laser off directly.
 
-The ONE tolerated cross-tier read this phase (Pitfall 7) lives here:
+The ONE tolerated cross-tier read in this collaborator lives here:
 ``acquire_scan`` reads ``self._shell.ui.*`` widgets (save-option
 checkboxes, save-description line edit) directly. The golden harness's
 existing ``standin.ui.lineEdit_saveDescription.text.return_value`` seam
 depends on this access pattern surviving. Refactoring it into a
-shell-side pre-sampled arg is a larger change than this phase's scope and
-is deferred.
+shell-side pre-sampled arg is a larger change than this extraction's
+scope and is deferred.
 """
 
 from __future__ import annotations
@@ -93,6 +93,16 @@ class AcquisitionCoordinator:
             )
             self.camera.arm()
 
+            # Start the auto-selected lasers after camera.arm() and before
+            # the preview loop, mirroring live_mode_worker's shape. Preview
+            # mode now drives the lasers so the operator can see the beam
+            # while adjusting parameters — the previous shape left the
+            # lasers dark during preview, defeating the mode's purpose for
+            # beam calibration. start_lasers/stop_lasers read the cached
+            # auto-laser flags sampled on the GUI thread by
+            # _cache_auto_laser_flags() in updateUi_preview_mode_button.
+            self._hw.start_lasers()
+
             while self._shell.preview_mode_started:
                 # E-stop poll point — checked at the top of each iteration
                 # before any frame acquisition work. The lasers are already
@@ -120,6 +130,12 @@ class AcquisitionCoordinator:
                 # Sending first (and should be only) image to display port
                 frame = cam_images[0]
                 self._shell._fs.enqueue_frame(frame)
+
+            # Stop the lasers before camera.disarm(), mirroring
+            # live_mode_worker's cleanup shape. The lasers were started after
+            # camera.arm() above; stopping them here ensures no laser is left
+            # energized when the camera is disarmed and the mode exits.
+            self._hw.stop_lasers()
 
             # Stopping camera
             self.camera.disarm()
