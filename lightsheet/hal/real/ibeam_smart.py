@@ -133,7 +133,12 @@ class IBeam:
 
         # Reply-lag mitigations.
         self._inter_command_gap = 0.05  # 50 ms starting point
-        self._lock = threading.Lock()
+        # Reentrant (RLock) so the controller's nested acquisition pattern
+        # (adapter lock -> inner _send_cmd lock, both aliased to this same
+        # object via IBeamSmartLaser._lock = self._ibeam._lock) does not
+        # deadlock. Matches the ILaser ABC contract (_lock: threading.RLock)
+        # and the DAQLaser / MockLaser backends.
+        self._lock = threading.RLock()
 
     # ------------------------------------------------------------------ #
     # Lifecycle
