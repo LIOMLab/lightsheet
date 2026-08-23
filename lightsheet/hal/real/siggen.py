@@ -11,6 +11,7 @@ import nidaqmx
 import numpy as np
 from nidaqmx.constants import AcquisitionType, Edge, LineGrouping
 
+from lightsheet.channel_map import ChannelMap
 from lightsheet.config import cfg_read, cfg_str2bool, cfg_write
 from lightsheet.hal.interfaces import ISigGen
 from lightsheet.hal.real.camera import Camera  # real→real dep (D-01)
@@ -50,6 +51,9 @@ class SigGen(ISigGen):
     _cfg_defaults["ETL Left Offset"] = "0.5"  # In volts
     _cfg_defaults["ETL Right Amplitude"] = "1.0"  # In volts
     _cfg_defaults["ETL Right Offset"] = "0.5"  # In volts
+    _cfg_defaults["Galvo Left Right Swap"] = (
+        "False"  # Boolean — rig-verification flip, mechanism only
+    )
 
     def __init__(self, camera: Camera) -> None:
         # Error status
@@ -101,6 +105,16 @@ class SigGen(ISigGen):
         self.etl_left_offset = float(self._cfg["ETL Left Offset"])
         self.etl_right_amplitude = float(self._cfg["ETL Right Amplitude"])
         self.etl_right_offset = float(self._cfg["ETL Right Offset"])
+        self.galvo_left_right_swap = cfg_str2bool(self._cfg["Galvo Left Right Swap"])
+        # Channel-reversal + per-channel clamp policy (RFR-04 mechanism).
+        # galvo_left_right_swap defaults to False — the actual flip against
+        # real hardware is rig-verification work (HW2-02) and is NOT
+        # attempted from the dev Mac (AGENTS.md §13). The clamp methods are
+        # applied unconditionally at all four np.stack sites, independent of
+        # the swap flag (threat T-05-12 mitigation).
+        self.channel_map = ChannelMap(
+            galvo_left_right_swap=self.galvo_left_right_swap
+        )
 
         ao_device = self.ao_terminals.rsplit("/", 1)[0]
         ao_channels = self.ao_terminals.rsplit("/", 1)[1][2:].rsplit(":")
@@ -134,19 +148,30 @@ class SigGen(ISigGen):
         self._cfg["ETL Left Offset"] = str(self.etl_left_offset)
         self._cfg["ETL Right Amplitude"] = str(self.etl_right_amplitude)
         self._cfg["ETL Right Offset"] = str(self.etl_right_offset)
+        self._cfg["Galvo Left Right Swap"] = str(self.galvo_left_right_swap)
 
         self._cfg = cfg_write(self._cfg_filename, self._cfg_section, self._cfg)
 
     def update_all(
         self, left_galvo: float, right_galvo: float, left_etl: float, right_etl: float
     ) -> None:
-        # FIXME (HARDWARE) - LOOKS LIKE ETL OR GALVO ARE REVERSED (LEFT VS RIGHT)
+        # Channel-reversal mechanism (RFR-04): order_galvos is called with
+        # (right, left) positionally so galvo_left_right_swap=False returns
+        # (right, left) unchanged — preserving today's literal stack order
+        # exactly — and only =True returns (left, right), the swap the FIXME
+        # comments describe. The actual flip is rig-verification work
+        # (HW2-02); the default ships behavior-preserving (AGENTS.md §13).
+        # Per-channel clamps are applied unconditionally, independent of the
+        # swap flag (threat T-05-12 mitigation).
+        galvo_first, galvo_second = self.channel_map.order_galvos(
+            right_galvo, left_galvo
+        )
         galvo_etl_setpoints = np.stack(
             (
-                np.array([right_galvo]),
-                np.array([left_galvo]),
-                np.array([left_etl]),
-                np.array([right_etl]),
+                np.array([self.channel_map.clamp_galvo(galvo_first)]),
+                np.array([self.channel_map.clamp_galvo(galvo_second)]),
+                np.array([self.channel_map.clamp_etl(left_etl)]),
+                np.array([self.channel_map.clamp_etl(right_etl)]),
             )
         )
         # Running task
@@ -160,8 +185,17 @@ class SigGen(ISigGen):
             logger.exception("SigGen - update_all error")
 
     def update_galvos(self, left_galvo: float, right_galvo: float) -> None:
-        # FIXME (HARDWARE) - LOOKS LIKE ETL OR GALVO ARE REVERSED (LEFT VS RIGHT)
-        galvo_setpoints = np.stack((np.array([right_galvo]), np.array([left_galvo])))
+        # Channel-reversal mechanism (RFR-04) — see update_all for the
+        # (right, left) positional call rationale. Clamp is unconditional.
+        galvo_first, galvo_second = self.channel_map.order_galvos(
+            right_galvo, left_galvo
+        )
+        galvo_setpoints = np.stack(
+            (
+                np.array([self.channel_map.clamp_galvo(galvo_first)]),
+                np.array([self.channel_map.clamp_galvo(galvo_second)]),
+            )
+        )
         # Running task
         try:
             with nidaqmx.Task(new_task_name="galvo_single") as task_update_galvos:
@@ -173,8 +207,14 @@ class SigGen(ISigGen):
             logger.exception("SigGen - update_galvos error")
 
     def update_etls(self, left_etl: float, right_etl: float) -> None:
-        # FIXME (HARDWARE) - LOOKS LIKE ETL OR GALVO ARE REVERSED (LEFT VS RIGHT)
-        etl_setpoints = np.stack((np.array([left_etl]), np.array([right_etl])))
+        # ETL channels are not subject to the galvo left/right swap; the
+        # per-channel clamp is applied unconditionally (threat T-05-12).
+        etl_setpoints = np.stack(
+            (
+                np.array([self.channel_map.clamp_etl(left_etl)]),
+                np.array([self.channel_map.clamp_etl(right_etl)]),
+            )
+        )
         # Running task
         try:
             with nidaqmx.Task(new_task_name="etl_single") as task_update_etls:
@@ -188,14 +228,37 @@ class SigGen(ISigGen):
     def create_scanner(self) -> None:
         """Creates Galvo + ETL scan task (AO) + Camera Exposure Control task (DO)"""
 
-        # Stack galvo and etl waveforms into single array
-        # FIXME (HARDWARE) - LOOKS LIKE ETL OR GALVO ARE REVERSED (LEFT VS RIGHT)
+        # Channel-reversal mechanism (RFR-04) — order_galvos called with
+        # (waveform_right, waveform_left) positionally so swap=False returns
+        # (right, left) unchanged, preserving today's literal stack order.
+        # Array clamps use np.clip against the channel_map limits; the galvo
+        # ±10V clamp and the ETL non-negative ceiling are applied
+        # unconditionally, independent of the swap flag (threat T-05-12).
+        galvo_first, galvo_second = self.channel_map.order_galvos(
+            self.waveform_galvo_right, self.waveform_galvo_left
+        )
+        galvo_first = np.clip(
+            galvo_first,
+            -self.channel_map.galvo_voltage_limit,
+            self.channel_map.galvo_voltage_limit,
+        )
+        galvo_second = np.clip(
+            galvo_second,
+            -self.channel_map.galvo_voltage_limit,
+            self.channel_map.galvo_voltage_limit,
+        )
+        etl_left_clipped = np.clip(
+            self.waveform_etl_left, 0.0, self.channel_map.etl_current_limit_ma
+        )
+        etl_right_clipped = np.clip(
+            self.waveform_etl_right, 0.0, self.channel_map.etl_current_limit_ma
+        )
         galvo_etl_waveforms = np.stack(
             (
-                self.waveform_galvo_right,
-                self.waveform_galvo_left,
-                self.waveform_etl_left,
-                self.waveform_etl_right,
+                galvo_first,
+                galvo_second,
+                etl_left_clipped,
+                etl_right_clipped,
             )
         )
 
