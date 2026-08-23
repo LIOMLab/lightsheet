@@ -60,6 +60,9 @@ from lightsheet.hal import (
 _CONTROLLER_SRC = os.path.join(
     os.path.dirname(__file__), "..", "..", "lightsheet", "gui", "controller.py"
 )
+_ACQ_SRC = os.path.join(
+    os.path.dirname(__file__), "..", "..", "lightsheet", "gui", "acquisition_coordinator.py"
+)
 
 # Module-level logger the exec'd body references (controller.py:45).
 _logger = logging.getLogger("lightsheet.gui.controller")
@@ -82,21 +85,24 @@ def _slice_method(src: str, method_sig: str) -> str:
     return body
 
 
-def _load_method(method_sig: str) -> Callable[..., Any]:
-    """Extract a method body from controller.py and return a callable.
+def _load_method(method_sig: str, src_path: str = _CONTROLLER_SRC) -> Callable[..., Any]:
+    """Extract a method body from the given source file and return a callable.
 
-    The exec namespace is seeded with the module-level names the body
-    references (``datetime``, ``logger``, ``np``) so the function resolves
-    them at call time via its ``__globals__``.
+    Defaults to controller.py; pass ``_ACQ_SRC`` for ``acquire_scan`` (moved
+    to ``AcquisitionCoordinator`` in the god-object split). The exec
+    namespace is seeded with the module-level names the body references
+    (``datetime``, ``logger``, ``np``) so the function resolves them at
+    call time via its ``__globals__``.
     """
-    src = _read_controller_source()
+    with open(src_path) as f:
+        src = f.read()
     body = _slice_method(src, method_sig)
     namespace: dict[str, Any] = {
         "datetime": datetime,
         "logger": _logger,
         "np": np,
     }
-    exec(compile(body, _CONTROLLER_SRC, "exec"), namespace)
+    exec(compile(body, src_path, "exec"), namespace)
     func_name = method_sig.split("(")[0].strip()
     return namespace[func_name]
 
@@ -104,20 +110,28 @@ def _load_method(method_sig: str) -> Callable[..., Any]:
 def _build_standin() -> Mock:
     """Build the Mock stand-in ``self`` for acquire_scan.
 
-    Wires the six Mock* HAL classes plus the UI widgets and attributes
-    acquire_scan reads. The siggen's waveforms are pre-computed so
-    ``waveform_cycles`` / ``waveform_metadata`` are populated (the real
-    controller calls ``compute_scan_waveforms`` before ``acquire_scan``).
+    acquire_scan now lives on ``AcquisitionCoordinator`` (god-object split).
+    The coordinator reads its own ``self.camera`` / ``self.siggen`` /
+    ``self.motors`` attributes and shell-owned state via ``self._shell.*``
+    (``sig_message``, ``sig_progress_update``, ``ui.*`` widgets, ``_fs``,
+    ``buffer`` / ``reconstructed_frame`` / ``buffer_metadata_*``,
+    ``reconstruct_frame`` / ``reconstruct_frame_linear_blend``). The
+    stand-in mirrors that shape: it IS the coordinator (``self``), with
+    ``self._shell`` a Mock exposing the shell-owned attributes acquire_scan
+    reads. The siggen's waveforms are pre-computed so ``waveform_cycles`` /
+    ``waveform_metadata`` are populated (the real coordinator calls
+    ``compute_scan_waveforms`` before ``acquire_scan``).
     """
     camera = MockCamera()
     siggen = MockSigGen(camera)
     siggen.compute_scan_waveforms()
 
     standin = Mock()
+    # Coordinator's own HAL handles.
     standin.camera = camera
     standin.siggen = siggen
     standin.motors = MockMotors()
-    # The controller holds list[ILaser] (Wave 3 rewrite). acquire_scan does
+    # The coordinator holds list[ILaser] (Wave 3 rewrite). acquire_scan does
     # not reference self.lasers, but the stand-in mirrors hardware_init's
     # shape so a future body change that does read laser state is caught.
     standin.lasers = [
@@ -126,16 +140,23 @@ def _build_standin() -> Mock:
     ]
     standin.etls = MockETLs()
 
+    # Shell reference — acquire_scan reads shell-owned state via self._shell.*
+    shell = Mock()
     # Signal mocks — emit calls are captured via call_args_list.
-    standin.sig_message = Mock()
-    standin.sig_progress_update = Mock()
-
-    # UI widgets acquire_scan reads.
-    standin.ui.lineEdit_saveDescription.text.return_value = "sample"
-    standin.ui.checkBox_saveStitchBlend.isChecked.return_value = False
-
-    # frame_viewer.enqueue_frame receives the reconstructed frame.
-    standin.frame_viewer = Mock()
+    shell.sig_message = Mock()
+    shell.sig_progress_update = Mock()
+    # UI widgets acquire_scan reads via self._shell.ui.* (Pitfall 7 — the
+    # ONE tolerated cross-tier read this phase).
+    shell.ui.lineEdit_saveDescription.text.return_value = "sample"
+    shell.ui.checkBox_saveStitchBlend.isChecked.return_value = False
+    # FrameSaverController enqueue_frame receives the reconstructed frame.
+    shell._fs = Mock()
+    # Frame-reconstruction helpers stay on the shell — acquire_scan calls
+    # self._shell.reconstruct_frame(self._shell.buffer). Plain Mock
+    # callables return Mock instances; the enqueue_frame capture is what
+    # the golden replay asserts on (the emission sequence), not the frame
+    # content.
+    standin._shell = shell
 
     return standin
 
@@ -178,13 +199,13 @@ def capture_acquisition_sequence(scenario: str) -> list[dict]:
             standin.siggen.error_message = "create_scan error"
 
         standin.siggen.create_scanner = _fail_create_scanner
-    acquire_scan = _load_method("acquire_scan(self) -> None")
+    acquire_scan = _load_method("acquire_scan(self) -> None", src_path=_ACQ_SRC)
     acquire_scan(standin)
 
     sequence: list[dict] = []
-    for call in standin.sig_message.emit.call_args_list:
+    for call in standin._shell.sig_message.emit.call_args_list:
         sequence.append({"type": "sig_message", "value": call.args[0]})
-    for call in standin.sig_progress_update.emit.call_args_list:
+    for call in standin._shell.sig_progress_update.emit.call_args_list:
         sequence.append({"type": "sig_progress", "value": call.args[0]})
     return sequence
 

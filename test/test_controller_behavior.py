@@ -46,6 +46,9 @@ _CONTROLLER_SRC = os.path.join(
 _HW_SRC = os.path.join(
     os.path.dirname(__file__), "..", "lightsheet", "gui", "hardware_manager.py"
 )
+_ACQ_SRC = os.path.join(
+    os.path.dirname(__file__), "..", "lightsheet", "gui", "acquisition_coordinator.py"
+)
 
 
 def _read_controller_source() -> str:
@@ -146,7 +149,7 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy() -> None:
     scanner, disarm the camera, and return BEFORE copy_recorder_images is
     ever reached — a timed-out plane can never be saved as zero-filled
     frames (BUG-01)."""
-    acquire_scan = _load_method("acquire_scan(self) -> None")
+    acquire_scan = _load_method("acquire_scan(self) -> None", src_path=_ACQ_SRC)
 
     siggen = Mock()
     siggen.error = 0
@@ -160,18 +163,23 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy() -> None:
     standin = Mock()
     standin.siggen = siggen
     standin.camera = camera
-    standin.sig_message = Mock()
-    # acquire_scan reads self.ui.lineEdit_saveDescription.text() for metadata
-    # before the timeout check; a Mock ui satisfies that without exercising Qt.
-    standin.ui = Mock()
+    # acquire_scan now lives on AcquisitionCoordinator and reads shell-owned
+    # state via self._shell.* (sig_message, ui.*, _fs, buffer, etc.).
+    shell = Mock()
+    shell.sig_message = Mock()
+    # acquire_scan reads self._shell.ui.lineEdit_saveDescription.text() for
+    # metadata before the timeout check; a Mock ui satisfies that without
+    # exercising Qt.
+    shell.ui = Mock()
+    standin._shell = shell
 
     acquire_scan(standin)
 
     # The defining assertion: copy_recorder_images must NOT be called.
     camera.copy_recorder_images.assert_not_called()
     # The operator was warned.
-    assert standin.sig_message.emit.called
-    msg = standin.sig_message.emit.call_args[0][0]
+    assert shell.sig_message.emit.called
+    msg = shell.sig_message.emit.call_args[0][0]
     assert "Camera timeout" in msg
     # Teardown ran and the camera was disarmed before returning.
     camera.delete_recorder.assert_called_once()
@@ -191,7 +199,7 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder() -> None:
     delete the scanner, disarm the camera, and return BEFORE
     start_recorder() is ever called — a DAQ scan-task failure is no longer
     masked as a silent 15 s camera timeout (G-01-5)."""
-    acquire_scan = _load_method("acquire_scan(self) -> None")
+    acquire_scan = _load_method("acquire_scan(self) -> None", src_path=_ACQ_SRC)
 
     siggen = Mock()
     siggen.error = 0
@@ -212,16 +220,20 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder() -> None:
     standin = Mock()
     standin.siggen = siggen
     standin.camera = camera
-    standin.sig_message = Mock()
-    standin.ui = Mock()
+    # acquire_scan now lives on AcquisitionCoordinator and reads shell-owned
+    # state via self._shell.* (sig_message, ui.*, _fs, buffer, etc.).
+    shell = Mock()
+    shell.sig_message = Mock()
+    shell.ui = Mock()
+    standin._shell = shell
 
     acquire_scan(standin)
 
     # The recorder was never primed — the failure surfaced before it.
     camera.start_recorder.assert_not_called()
     # The operator saw the real DAQ cause.
-    assert standin.sig_message.emit.called
-    msg = standin.sig_message.emit.call_args[0][0]
+    assert shell.sig_message.emit.called
+    msg = shell.sig_message.emit.call_args[0][0]
     assert "Scan task creation failed" in msg
     assert "create_scan error" in msg
     # Teardown ran.
@@ -296,7 +308,9 @@ def test_preview_mode_worker_breaks_on_estop_before_frame_acquisition() -> None:
     per-frame acquisition work (start_recorder / copy_recorder_images), and
     the finished signal must still fire exactly once from the finally block
     (CR-01 — preview now aligns with live/single/stack per AGENTS.md §2)."""
-    preview_mode_worker = _load_method("preview_mode_worker(self) -> None")
+    preview_mode_worker = _load_method(
+        "preview_mode_worker(self) -> None", src_path=_ACQ_SRC
+    )
 
     estop_event = threading.Event()
     estop_event.set()  # E-stop actuated before the loop starts
@@ -304,13 +318,19 @@ def test_preview_mode_worker_breaks_on_estop_before_frame_acquisition() -> None:
     camera = Mock()
 
     standin = Mock()
-    standin.estop_event = estop_event
-    standin.preview_mode_started = True
     standin.camera = camera
-    standin.ui = Mock()  # doubleSpinBox_cameraExposureTime.value() for setup
-    standin.frame_viewer = Mock()
-    standin.sig_message = Mock()
-    standin.sig_preview_mode_finished = Mock()
+    # preview_mode_worker now lives on AcquisitionCoordinator and reads
+    # shell-owned state via self._shell.* (estop_event,
+    # preview_mode_started, ui.*, _fs, sig_message,
+    # sig_preview_mode_finished).
+    shell = Mock()
+    shell.estop_event = estop_event
+    shell.preview_mode_started = True
+    shell.ui = Mock()  # doubleSpinBox_cameraExposureTime.value() for setup
+    shell._fs = Mock()
+    shell.sig_message = Mock()
+    shell.sig_preview_mode_finished = Mock()
+    standin._shell = shell
 
     preview_mode_worker(standin)
 
@@ -318,7 +338,7 @@ def test_preview_mode_worker_breaks_on_estop_before_frame_acquisition() -> None:
     camera.start_recorder.assert_not_called()
     camera.copy_recorder_images.assert_not_called()
     # The finished signal fired exactly once (the finally block).
-    assert standin.sig_preview_mode_finished.emit.call_count == 1
+    assert shell.sig_preview_mode_finished.emit.call_count == 1
 
 
 # --------------------------------------------------------------------------- #
