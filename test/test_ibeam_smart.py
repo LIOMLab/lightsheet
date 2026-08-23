@@ -29,7 +29,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import lightsheet.hal.real.ibeam_smart as ibeam_mod
 import lightsheet.hal.real.ibeam_smart as ibeam_smart_mod
 
 
@@ -137,7 +136,9 @@ def test_ibeam_smart_set_power_clamps_mw_at_adapter_layer() -> None:
         f"set_power(999.0 mW) must clamp to 150.0 mW and issue 150000 micro; "
         f"got {text!r}"
     )
-    assert "999000" not in text, "the unclamped 999.0 mW -> 999000 uW must not reach the serial line"
+    assert "999000" not in text, (
+        "the unclamped 999.0 mW -> 999000 uW must not reach the serial line"
+    )
     assert adapter.power == 150.0, (
         "adapter must mirror self.power = 150.0 (clamped mW) on success"
     )
