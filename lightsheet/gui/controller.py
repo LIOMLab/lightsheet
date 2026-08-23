@@ -742,14 +742,20 @@ class Controller_MainWindow(QMainWindow):
         # SerialException and sets self.error without re-raising, so a plain
         # try/except around open() cannot detect a channel-enable failure —
         # the error surface must be inspected after open() returns.
+        #
+        # The ILaser.open() contract is uniform across backends:
+        # IBeamSmartLaser.open() delegates to the inner serial engine and
+        # mirrors its error surface onto the adapter; MockLaser.open() is a
+        # no-op (no hardware to open), so the same call site works in demo
+        # mode without a demo-mode gate.
         try:
-            self.lasers[1]._ibeam.open()
-            if self.lasers[1]._ibeam.error:
+            self.lasers[1].open()
+            if self.lasers[1].error:
                 self.sig_message.emit(
                     f"iBeam opened but channel enable failed: "
-                    f"{self.lasers[1]._ibeam.error_message}"
+                    f"{self.lasers[1].error_message}"
                 )
-                self.lasers[1]._ibeam.error = 0
+                self.lasers[1].error = 0
         except Exception as e:
             self.sig_message.emit(f"iBeam open failed: {e}")
 
@@ -783,6 +789,11 @@ class Controller_MainWindow(QMainWindow):
         _ibeam_cfg = cfg_read("config.ini", "iBeam", {"Status Poll Interval": 1.0})
         self.timer_laser2_status = QTimer()
         self.timer_laser2_status.timeout.connect(self._poll_laser2_status_gated)
+        # The L2 gated poll calls get_output_power() — now part of the
+        # ILaser contract on every backend (IBeamSmartLaser queries the
+        # serial engine; DAQLaser / MockLaser return the staged mW power).
+        # The timer starts in both real and demo mode so the L2 status
+        # indicator + readback field stay live under demo too.
         self.timer_laser2_status.start(
             int(float(_ibeam_cfg["Status Poll Interval"]) * 1000)
         )
@@ -843,10 +854,10 @@ class Controller_MainWindow(QMainWindow):
                         )
             self.camera.close()
             self.etls.close()
-            # Laser 2 (iBeam) serial close — a real-hardware lifecycle verb
-            # the adapter does not re-expose at the ILaser layer since only
-            # this shutdown path calls it.
-            self.lasers[1]._ibeam.close()
+            # Laser 2 (iBeam) lifecycle close — ILaser.close() delegates to
+            # the inner serial engine on IBeamSmartLaser and is a no-op on
+            # MockLaser, so the same call site works in real and demo mode.
+            self.lasers[1].close()
             self.timer_imageview.stop()
             self.timer_laser2_status.stop()
             QApplication.restoreOverrideCursor()
@@ -1259,11 +1270,16 @@ class Controller_MainWindow(QMainWindow):
 
     @pyqtSlot()
     def updateUi_laser2_refresh_clicked(self) -> None:
-        """Manual Refresh Power button handler — re-queries the iBeam
+        """Manual Refresh Power button handler — re-queries the L2 laser
         status + power readback on demand. The readback refresh and the
-        status poll each acquire the iBeam lock independently with
-        acquire(blocking=False); if a power write is in progress, both
-        are silent no-ops (the operator can retry)."""
+        status poll each acquire the L2 per-instance lock independently
+        with acquire(blocking=False); if a power write is in progress,
+        both are silent no-ops (the operator can retry).
+
+        Works uniformly across backends: ``get_output_power()`` is on the
+        ILaser contract (IBeamSmartLaser queries the serial engine;
+        DAQLaser / MockLaser return the staged mW power), so no demo-mode
+        gate is needed."""
         self._refresh_laser2_readback()
         self._poll_laser_status([1])
 

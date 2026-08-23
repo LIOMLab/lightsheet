@@ -436,6 +436,35 @@ class IBeamSmartLaser(ILaser):
         self.error = self._ibeam.error
         self.error_message = self._ibeam.error_message
 
+    def open(self) -> None:
+        """Open the inner iBeam serial port (COM4) and enable the configured
+        diode channel. Delegates to ``self._ibeam.open()`` (which also calls
+        ``enable_channel()`` internally) and then mirrors the inner engine's
+        error surface onto the adapter's ``self.error`` / ``self.error_message``
+        so the controller can read the adapter surface uniformly after open
+        — the controller no longer reaches through to ``self._ibeam.error``.
+
+        Replaces the controller's ``self.lasers[1]._ibeam.open()``
+        reach-through; ``MockLaser.open()`` is a no-op so the same
+        controller call site works in demo mode.
+        """
+        self._ibeam.open()
+        self.error = self._ibeam.error
+        self.error_message = self._ibeam.error_message
+
+    def close(self) -> None:
+        """Release the inner iBeam serial port. Delegates to
+        ``self._ibeam.close()`` (which turns the laser off and closes the
+        serial port) and mirrors the inner error surface onto the adapter.
+
+        Replaces the controller's ``self.lasers[1]._ibeam.close()``
+        reach-through; ``MockLaser.close()`` is a no-op so the same
+        controller call site works in demo mode.
+        """
+        self._ibeam.close()
+        self.error = self._ibeam.error
+        self.error_message = self._ibeam.error_message
+
     def off(self) -> None:
         """Synchronous E-stop kill path (AGENTS.md §2).
 

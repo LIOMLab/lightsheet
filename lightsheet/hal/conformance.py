@@ -206,9 +206,15 @@ ETLS_CONTRACT = ConformanceContract(
 # / ``off`` are existence checks only — they have side effects (DAQ writes,
 # serial commands) outside conformance scope; the synchronous-off +
 # two-layer-clamp safety invariants are behavior checks that live in the
-# per-device conformance test file.
+# per-device conformance test file. ``open`` / ``close`` are the HAL
+# lifecycle verbs (AGENTS.md §10) the controller calls in ``hardware_init``
+# and ``closeEvent`` — they are exercised by ``assert_lifecycle`` (no-ops
+# on DAQLaser / MockLaser, real open/close on IBeamSmartLaser which is
+# skipped on Mac). ``get_output_power`` is a read getter; it is an
+# existence check here (it issues a serial round-trip on the real iBeam),
+# the per-device test files exercise the mW/None behavior.
 LASER_CONTRACT = ConformanceContract(
-    lifecycle_methods=("on", "off"),
+    lifecycle_methods=("on", "off", "open", "close"),
     read_attrs=(
         "wavelength",
         "power",
@@ -217,6 +223,7 @@ LASER_CONTRACT = ConformanceContract(
         "label",
         "error",
         "error_message",
+        "_lock",
     ),
-    setter_methods=("set_power",),
+    setter_methods=("set_power", "get_output_power"),
 )

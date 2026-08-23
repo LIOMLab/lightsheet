@@ -36,6 +36,7 @@ by the mock's own logic (the mock tracks mW directly).
 """
 
 import logging
+import threading
 
 from lightsheet.hal.interfaces import ILaser
 
@@ -86,6 +87,15 @@ class MockLaser(ILaser):
         self.power = 0.0
         self.active = False
 
+        # Per-instance RLock — the controller's daemon-thread write paths
+        # (_write_laser*_power, _toggle_laser*) and the L2 gated status
+        # poll acquire self.lasers[i]._lock. The lock must live on every
+        # ILaser instance (D-02 lock relocation), including the mock, so
+        # demo mode exercises the same lock-acquisition paths as the rig.
+        # Reentrant (RLock) so _toggle_laser* can call _write_laser*_power
+        # under the same lock without deadlocking.
+        self._lock = threading.RLock()
+
     # ------------------------------------------------------------------ #
     # Lifecycle verbs — no-ops over hardware (no DAQ write, no serial I/O).
     # End with ``return None`` (AGENTS.md §10). off() is synchronous —
@@ -108,6 +118,27 @@ class MockLaser(ILaser):
         self.active = False
         self.power = 0.0
         return None
+
+    def open(self) -> None:
+        # No-op lifecycle verb (AGENTS.md §10). MockLaser has no hardware
+        # to open — the controller's ``self.lasers[i].open()`` call site
+        # works uniformly across real and demo backends. Returns None so
+        # the ILaser open() contract is satisfied.
+        return None
+
+    def close(self) -> None:
+        # No-op lifecycle verb (AGENTS.md §10). MockLaser has no hardware
+        # to release — mirrors ``open()``. Returns None.
+        return None
+
+    def get_output_power(self) -> float | None:
+        # MockLaser has no hardware readback. Returns the staged
+        # ``self.power`` (mW) so the controller's L2 readback field works
+        # uniformly in demo mode (degrades to the commanded value, same as
+        # DAQLaser). Never returns None — the staged value is always
+        # available; the None return is part of the ILaser contract for
+        # backends with a real readback that can fail.
+        return self.power
 
     # ------------------------------------------------------------------ #
     # Setters (ILaser surface).

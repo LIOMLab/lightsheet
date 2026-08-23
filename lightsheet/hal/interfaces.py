@@ -31,6 +31,7 @@ pure-Python declarative contract; vendor and numpy imports live in
 ``real/`` and ``mocks/``.
 """
 
+import threading
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -666,7 +667,39 @@ class ILaser(ABC):
     active: bool  # live state for status indicator
     label: str  # e.g. "Laser 1 (555 nm)" for metadata
 
+    # Per-instance RLock for daemon-thread write serialization. The
+    # controller's _write_laser*_power / _toggle_laser* paths acquire
+    # ``self.lasers[i]._lock``; the L2 gated status poll
+    # (``_poll_laser2_status_gated``) probes it with
+    # ``acquire(blocking=False)``. Reentrant (RLock) so ``_toggle_laser*``
+    # can call ``_write_laser*_power`` under the same lock without
+    # deadlocking. Concrete backends set it in ``__init__`` (DAQLaser /
+    # MockLaser create a fresh ``threading.RLock()``; IBeamSmartLaser
+    # aliases the inner ``IBeam._lock`` for lock identity).
+    _lock: threading.RLock
+
     # Lifecycle verbs (AGENTS.md §10) — abstract methods returning None.
+    @abstractmethod
+    def open(self) -> None:
+        """Open the device connection (serial port / DAQ task initialization
+        as needed). For backends with no persistent connection to open
+        (DAQLaser opens its nidaqmx.Task per-write, MockLaser has no
+        hardware), this is a no-op returning ``None``. The controller calls
+        this in ``hardware_init`` for the L2 (iBeam) laser; the adapter
+        mirrors the inner engine's error surface onto ``self.error`` /
+        ``self.error_message`` after the inner open so the controller can
+        read the adapter surface uniformly.
+        """
+        ...
+
+    @abstractmethod
+    def close(self) -> None:
+        """Release the device connection. For backends with no persistent
+        connection (DAQLaser, MockLaser), this is a no-op returning
+        ``None``. The controller calls this in ``closeEvent``.
+        """
+        ...
+
     @abstractmethod
     def on(self) -> None:
         """Energize the laser (write the staged power to the device)."""
@@ -690,5 +723,19 @@ class ILaser(ABC):
         Clamps ``mw`` to ``[0.0, max_power]`` (mW) as the first safety
         layer. Each backend's native-unit write path clamps again as a
         second, independent safety layer (AGENTS.md §2 — two-layer clamp).
+        """
+        ...
+
+    @abstractmethod
+    def get_output_power(self) -> float | None:
+        """Read the current output power in milliwatts (mW).
+
+        Returns the live hardware readback where the device supports it
+        (IBeamSmartLaser queries the serial engine via ``show level
+        power``), or the staged ``self.power`` where the backend has no
+        hardware readback (DAQLaser analog output has no readback;
+        MockLaser tracks staged power in software). Returns ``None`` on a
+        readback failure (parse error / firmware rejection) so the caller
+        can distinguish "no reading" from "reading is 0".
         """
         ...

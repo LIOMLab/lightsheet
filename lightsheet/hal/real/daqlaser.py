@@ -133,6 +133,38 @@ class DAQLaser(ILaser):
             self.active = False
             self.power = 0.0
 
+    def open(self) -> None:
+        """No-op lifecycle verb (AGENTS.md §10).
+
+        DAQLaser opens its ``nidaqmx.Task`` per-write inside
+        ``_write_volts`` — there is no persistent DAQ connection to open
+        here. Returns ``None`` so the controller can call
+        ``self.lasers[i].open()`` uniformly across backends.
+        """
+        return None
+
+    def close(self) -> None:
+        """No-op lifecycle verb (AGENTS.md §10).
+
+        Mirrors ``open()``: DAQLaser holds no persistent DAQ connection
+        (the per-write ``nidaqmx.Task`` is closed by its ``with`` block),
+        so there is nothing to release here. Returns ``None`` so the
+        controller can call ``self.lasers[i].close()`` uniformly.
+        """
+        return None
+
+    def get_output_power(self) -> float | None:
+        """Return the staged output power in milliwatts (mW).
+
+        NI-DAQ analog output has no hardware power readback channel, so
+        this returns the staged ``self.power`` (mW) — the controller's L2
+        readback field degrades gracefully to the commanded value on the
+        DAQ laser. Never returns ``None`` (the staged value is always
+        available); the ``None` return is part of the ``ILaser`` contract
+        for backends with a real readback that can fail.
+        """
+        return self.power
+
     def set_power(self, mw: float) -> None:
         """Set the staged laser power in milliwatts (mW canonical).
 
