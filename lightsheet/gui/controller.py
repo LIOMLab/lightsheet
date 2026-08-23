@@ -200,6 +200,30 @@ class Controller_MainWindow(QMainWindow):
         )
         self.ui.verticalLayout_44.addWidget(self.label_laserTwoStatus)
 
+        # iBeam power readback field (LSD-04) + manual Refresh button.
+        # The readback is a read-only QLabel showing '{value:.1f} mW'
+        # from self.lasers[1].get_output_power(), or a degraded
+        # '{power:.1f} mW (cmd)' fallback with a tooltip on parse
+        # failure / unsupported variant. The Refresh button re-queries
+        # on demand (the gated ~1s poll also refreshes it). Both are
+        # parented into the L2 column programmatically per AGENTS.md §8.
+        self.label_laserTwoReadback = QLabel("N/A")
+        self.label_laserTwoReadback.setMinimumWidth(80)
+        self.label_laserTwoReadback.setToolTip(
+            "iBeam power readback — click Refresh Power to re-query"
+        )
+        self.ui.verticalLayout_44.addWidget(self.label_laserTwoReadback)
+
+        self.pushButton_laserTwoRefresh = QPushButton("Refresh Power")
+        self.pushButton_laserTwoRefresh.setToolTip(
+            "Re-query iBeam status and power readback now "
+            "(skipped while a power write is in progress)"
+        )
+        self.pushButton_laserTwoRefresh.clicked.connect(
+            self.updateUi_laser2_refresh_clicked
+        )
+        self.ui.verticalLayout_44.addWidget(self.pushButton_laserTwoRefresh)
+
         # Connect the status signal to its GUI-thread slot once, here in
         # __init__, so every emit (from any poll path or refresh-after-
         # action call site) routes through the slot.
@@ -1018,6 +1042,7 @@ class Controller_MainWindow(QMainWindow):
         # Refresh-after-action: both status labels reflect the post-E-stop
         # state immediately (the periodic timers would otherwise lag).
         self._poll_laser_status([0, 1])
+        self._refresh_laser2_readback()
 
         # 4. Latch the UI into ACTUATED: red indicator, yellow 4px border
         #    on the E-stop button ("latched — Arm/Reset before re-energizing").
@@ -1178,21 +1203,68 @@ class Controller_MainWindow(QMainWindow):
             self.sig_laser_status.emit(i, status)
 
     def _poll_laser2_status_gated(self) -> None:
-        """Gated L2 status poll driven by the ~1s iBeam status QTimer.
+        """Gated L2 status + readback poll driven by the ~1s iBeam status
+        QTimer.
 
         Probes self.lasers[1]._lock with acquire(blocking=False): if the
         lock is held by an in-progress power write, skip this cycle
         silently (no error surfaced — the operator can retry via the
         Refresh button or wait for the next tick). If the lock is free,
-        release it immediately and proceed with the status poll. The
-        lock is a "is a write in progress right now" probe, not held
-        during the poll itself — this prevents a periodic status query
-        from blocking on a write and from misattributing a reply to a
-        concurrent command.
+        release it immediately and proceed with the status poll + the
+        readback refresh. The status poll reads only instant in-HAL
+        attributes (.error / .active — no serial I/O, no misattribution
+        risk); the readback refresh acquires the lock itself for the
+        serial round-trip. The probe-then-release pattern means a write
+        can start between the probe and the readback's own acquire, but
+        the readback's acquire(blocking=False) will then skip — the
+        operator simply sees the next tick's reading.
         """
         if not self.lasers[1]._lock.acquire(blocking=False):
             return
         self.lasers[1]._lock.release()
+        self._poll_laser_status([1])
+        self._refresh_laser2_readback()
+
+    def _refresh_laser2_readback(self) -> None:
+        """Query self.lasers[1].get_output_power() and update
+        label_laserTwoReadback. Acquires the iBeam per-instance lock with
+        acquire(blocking=False): if held by an in-progress write, return
+        silently (no-op — the operator can retry). On success, query and
+        update the label, then release in finally.
+
+        On a populated readback (float mW): sets the label to
+        '{value:.1f} mW'. On a None readback (parse failure / unsupported
+        variant): sets the label to '{power:.1f} mW (cmd)' — the last
+        commanded power — with a tooltip explaining the fallback so the
+        operator can distinguish a live readback from a stale commanded
+        value.
+        """
+        if not self.lasers[1]._lock.acquire(blocking=False):
+            return
+        try:
+            value = self.lasers[1].get_output_power()
+            if value is not None:
+                self.label_laserTwoReadback.setText(f"{value:.1f} mW")
+            else:
+                self.label_laserTwoReadback.setText(
+                    f"{self.lasers[1].power:.1f} mW (cmd)"
+                )
+                self.label_laserTwoReadback.setToolTip(
+                    "iBeam power readback unavailable (parse failure or "
+                    "this variant does not support readback). Showing "
+                    "last commanded value may be stale."
+                )
+        finally:
+            self.lasers[1]._lock.release()
+
+    @pyqtSlot()
+    def updateUi_laser2_refresh_clicked(self) -> None:
+        """Manual Refresh Power button handler — re-queries the iBeam
+        status + power readback on demand. The readback refresh and the
+        status poll each acquire the iBeam lock independently with
+        acquire(blocking=False); if a power write is in progress, both
+        are silent no-ops (the operator can retry)."""
+        self._refresh_laser2_readback()
         self._poll_laser_status([1])
 
     @pyqtSlot(int, str)
@@ -2284,6 +2356,7 @@ class Controller_MainWindow(QMainWindow):
                 # the post-write state immediately (the gated ~1s poll
                 # would otherwise lag up to a second behind the write).
                 self._poll_laser_status([1])
+                self._refresh_laser2_readback()
 
     def laser1_toggle_button(self) -> None:
         # Slot only spawns a worker thread — the DAQ toggle (and the
@@ -2393,6 +2466,7 @@ class Controller_MainWindow(QMainWindow):
             # post-toggle state immediately (the gated ~1s poll would
             # otherwise lag up to a second behind the toggle).
             self._poll_laser_status([1])
+            self._refresh_laser2_readback()
 
     def start_lasers(self) -> None:
         """Starts the lasers at a certain power. Called from acquisition
@@ -2441,6 +2515,7 @@ class Controller_MainWindow(QMainWindow):
         # Refresh-after-action: both status labels reflect the post-start
         # state immediately (the periodic timers would otherwise lag).
         self._poll_laser_status([0, 1])
+        self._refresh_laser2_readback()
 
     def stop_lasers(self) -> None:
         """Stops the lasers. Called from acquisition worker threads (not the
@@ -2469,6 +2544,7 @@ class Controller_MainWindow(QMainWindow):
         # Refresh-after-action: both status labels reflect the post-stop
         # state immediately (the periodic timers would otherwise lag).
         self._poll_laser_status([0, 1])
+        self._refresh_laser2_readback()
 
     # File Open Methods
 
