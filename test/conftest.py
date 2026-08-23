@@ -207,7 +207,23 @@ def _ensure_stub(
     to import the real package and, if `real_check` is provided, run it
     against the imported module; if either raises, we fall back to the stub
     so the HAL modules that depend on it can still be imported for testing.
+
+    Idempotent: if `sys.modules[name]` is already one of our stubs (marked
+    with `_lightsheet_stub = True`), return without re-installing. This
+    matters because conftest.py runs `_ensure_stub` at module import time,
+    and some tests re-import conftest under a bare module name (e.g.
+    test_conformance_contract.py reaches `import conftest` via sys.path to
+    read `_has_hardware`). Without idempotency, that re-import re-runs
+    `_ensure_stub`, which finds the stub's own `Task()` raises (real_check
+    fails), deletes the existing stub, and installs a FRESH stub object —
+    breaking any module that already bound the old `nidaqmx` reference
+    (e.g. daqlaser.py) and any test that monkeypatches `nidaqmx.Task`
+    after the re-install.
     """
+    existing = sys.modules.get(name)
+    if existing is not None and getattr(existing, "_lightsheet_stub", False):
+        return
+
     usable = False
     try:
         mod = __import__(name)
@@ -224,7 +240,13 @@ def _ensure_stub(
         for key in list(sys.modules.keys()):
             if key == name or key.startswith(name + "."):
                 del sys.modules[key]
-        sys.modules[name] = builder()
+        stub = builder()
+        # Mark the stub so a re-run of _ensure_stub (e.g. via a re-import of
+        # conftest from another test) recognizes it as already-installed
+        # and does not replace it with a fresh object — see idempotency
+        # note above.
+        stub._lightsheet_stub = True  # ty: ignore[unresolved-attribute]
+        sys.modules[name] = stub
 
 
 def _nidaqmx_real_check(mod: types.ModuleType) -> None:

@@ -78,6 +78,16 @@ class Controller_MainWindow(QMainWindow):
     # (AGENTS.md §11 — cross-thread UI updates go through signals).
     sig_laser_status = pyqtSignal(int, str)
 
+    # Per-laser power readback (LSR-06). _refresh_laser_readback emits
+    # (idx, text, tooltip) on this signal from any thread (QTimer callback
+    # or acquisition worker); the GUI-thread slot updateUi_laser_readback
+    # mutates the readback QLabel. Mirrors sig_laser_status so no worker
+    # thread ever writes a QLabel directly (AGENTS.md §11). The tooltip is
+    # "" for a live readback (clears any prior stale-value warning) or the
+    # stale-value explanation when the readback fell back to the commanded
+    # power.
+    sig_laser_readback = pyqtSignal(int, str, str)
+
     def __init__(self, demo: bool = False) -> None:
         # Demo mode flag — when True, hardware_init constructs Mock* HAL
         # instances (no hardware init) so the app runs on a dev box without
@@ -253,6 +263,11 @@ class Controller_MainWindow(QMainWindow):
         # __init__, so every emit (from any poll path or refresh-after-
         # action call site) routes through the slot.
         self.sig_laser_status.connect(self.updateUi_laser_status)
+        # Connect the readback signal to its GUI-thread slot once, here in
+        # __init__, so every emit (from any refresh path, GUI-thread timer
+        # or acquisition worker) routes through the slot — no worker thread
+        # ever writes a readback QLabel directly (AGENTS.md §11).
+        self.sig_laser_readback.connect(self.updateUi_laser_readback)
 
         # Resize mainwindow
         # self.resize(QDesktopWidget().availableGeometry(self).size() * 0.75)
@@ -1283,42 +1298,60 @@ class Controller_MainWindow(QMainWindow):
         self._refresh_laser_readback(1)
 
     def _refresh_laser_readback(self, idx: int) -> None:
-        """Query self.lasers[idx].get_output_power() and update the
-        per-laser readback label. Acquires the laser's per-instance lock
-        with acquire(blocking=False): if held by an in-progress write,
-        return silently (no-op — the operator can retry). On success,
-        query and update the label, then release in finally.
+        """Query self.lasers[idx].get_output_power() and emit the readback
+        text + tooltip on sig_laser_readback for the GUI-thread slot to
+        apply. Acquires the laser's per-instance lock with
+        acquire(blocking=False): if held by an in-progress write, return
+        silently (no-op — the operator can retry). On success, query and
+        emit, then release in finally.
 
-        On a populated readback (float mW): sets the label to
-        '{value:.1f} mW'. On a None readback (parse failure / unsupported
-        variant): sets the label to '{power:.1f} mW (cmd)' — the last
-        commanded power — with a tooltip explaining the fallback so the
-        operator can distinguish a live readback from a stale commanded
-        value.
+        Thread-safe by design: the HAL query (get_output_power) is
+        lock-protected and the QLabel mutation is deferred to the
+        GUI-thread slot via the signal, so this method is safe to call
+        from any thread (QTimer callback or acquisition worker) per
+        AGENTS.md §11 — no worker thread ever writes a QLabel directly.
+
+        On a populated readback (float mW): emits text '{value:.1f} mW'
+        with an empty tooltip (clears any prior stale-value warning). On a
+        None readback (parse failure / unsupported variant): emits text
+        '{power:.1f} mW (cmd)' — the last commanded power — with a tooltip
+        explaining the fallback so the operator can distinguish a live
+        readback from a stale commanded value.
 
         Works for both lasers: idx=0 (L1/DAQLaser — get_output_power()
         returns the staged mW, never None in practice) and idx=1 (L2/iBeam
         — get_output_power() queries the serial readback, may return None).
-        The readback labels are indexed in parallel with self.lasers.
         """
-        labels = [self.label_laserOneReadback, self.label_laserTwoReadback]
-        label = labels[idx]
         laser = self.lasers[idx]
         if not laser._lock.acquire(blocking=False):
             return
         try:
             value = laser.get_output_power()
             if value is not None:
-                label.setText(f"{value:.1f} mW")
+                self.sig_laser_readback.emit(idx, f"{value:.1f} mW", "")
             else:
-                label.setText(f"{laser.power:.1f} mW (cmd)")
-                label.setToolTip(
+                self.sig_laser_readback.emit(
+                    idx,
+                    f"{laser.power:.1f} mW (cmd)",
                     "Power readback unavailable (parse failure or this "
                     "variant does not support readback). Showing last "
-                    "commanded value may be stale."
+                    "commanded value may be stale.",
                 )
         finally:
             laser._lock.release()
+
+    @pyqtSlot(int, str, str)
+    def updateUi_laser_readback(self, idx: int, text: str, tooltip: str) -> None:
+        """GUI-thread slot — maps a (idx, text, tooltip) emit from
+        sig_laser_readback to the per-laser readback QLabel. text is the
+        formatted power string ('{value:.1f} mW' or '{power:.1f} mW (cmd)');
+        tooltip is the stale-value explanation for the fallback case, or
+        '' for a live readback (which clears any prior stale-value
+        tooltip). The label list is indexed by laser index.
+        """
+        labels = [self.label_laserOneReadback, self.label_laserTwoReadback]
+        labels[idx].setText(text)
+        labels[idx].setToolTip(tooltip)
 
     @pyqtSlot()
     def updateUi_laser2_refresh_clicked(self) -> None:
