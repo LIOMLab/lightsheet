@@ -21,6 +21,12 @@ greps — those are fragile and exercise no code. See AGENTS.md §5: when a
 class cannot be instantiated on Mac, exercise the real method via exec of
 its extracted body against a Mock stand-in, or test the HAL logic in
 isolation. Do not grep the source.
+
+Pitfall 3 regression gate (Phase 5 god-object split): HardwareManager must
+NOT declare an estop/kill/e_stop method — the E-stop kill path stays in the
+shell with a direct list[ILaser] ref, lock-free, on the GUI thread. A future
+maintainer who sees HardwareManager.estop() will be tempted to queue/thread
+it — the single most safety-critical regression risk.
 """
 
 import threading
@@ -73,3 +79,28 @@ def test_worker_poll_logic_breaks_on_set() -> None:
             break
 
     assert iterations == 0
+
+
+# --------------------------------------------------------------------------- #
+# Pitfall 3 regression gate — HardwareManager must NOT own an estop method.
+# The E-stop kill path stays in the shell (updateUi_estop_pressed) with a
+# direct list[ILaser] ref, lock-free, on the GUI thread. This gate runs at
+# every future commit touching lightsheet/gui/hardware_manager.py.
+# --------------------------------------------------------------------------- #
+
+
+def test_hardware_manager_has_no_estop_method() -> None:
+    """HardwareManager must NOT declare an estop/kill/e_stop method — the
+    E-stop kill path stays in the shell (D-04 anti-pattern, Pitfall 3)."""
+    from lightsheet.gui.hardware_manager import HardwareManager
+
+    assert not hasattr(HardwareManager, "estop"), (
+        "HardwareManager must NOT declare an estop method (D-04 anti-pattern) "
+        "— the E-stop kill path stays in the shell, lock-free on the GUI thread."
+    )
+    assert not hasattr(HardwareManager, "kill"), (
+        "HardwareManager must NOT declare a kill method"
+    )
+    assert not hasattr(HardwareManager, "e_stop"), (
+        "HardwareManager must NOT declare an e_stop method"
+    )
