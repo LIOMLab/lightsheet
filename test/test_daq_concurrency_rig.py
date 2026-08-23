@@ -88,14 +88,18 @@ def _laser_like_write(errors: list[str]) -> None:
     Uses Dev1 ao0:1 at 0 V instead of Dev7 laser channels — same
     nidaqmx.Task() + add_ao_voltage_chan + write call pattern, no laser.
     Retries on -50103 resource-reserved errors to tolerate the Windows
-    channel-release delay under rapid back-to-back Task creation.
+    channel-release delay under rapid back-to-back Task creation. Uses a
+    unique task name per call so a retried task does not collide with the
+    name of a prior task that has not yet been cleaned up (-200089).
     """
     import nidaqmx
     import numpy as np
 
     for attempt in range(_DAQ_RETRY_COUNT):
         try:
-            with nidaqmx.Task(new_task_name="concurrency_laser_like") as task:
+            with nidaqmx.Task(
+                new_task_name=f"concurrency_laser_like_{time.time_ns()}"
+            ) as task:
                 task.ao_channels.add_ao_voltage_chan(_LASER_LIKE_TERMINALS)
                 task.write(np.stack((np.array([0.0]), np.array([0.0]))), auto_start=True)
             return
@@ -115,7 +119,9 @@ def _siggen_like_create(errors: list[str]) -> None:
     laser, no camera trigger. auto_start=True so the write succeeds without
     a separate timing config — the point is concurrent Task() creation.
     Retries on -50103 resource-reserved errors to tolerate the Windows
-    channel-release delay under rapid back-to-back Task creation.
+    channel-release delay under rapid back-to-back Task creation. Uses a
+    unique task name per call so a retried task does not collide with the
+    name of a prior task that has not yet been cleaned up (-200089).
     """
     import nidaqmx
     import numpy as np
@@ -123,7 +129,9 @@ def _siggen_like_create(errors: list[str]) -> None:
     task_ao = None
     for attempt in range(_DAQ_RETRY_COUNT):
         try:
-            task_ao = nidaqmx.Task(new_task_name="concurrency_siggen_ao")
+            task_ao = nidaqmx.Task(
+                new_task_name=f"concurrency_siggen_ao_{time.time_ns()}"
+            )
             task_ao.ao_channels.add_ao_voltage_chan(_SIGGEN_LIKE_TERMINALS)
             task_ao.write(np.stack((np.array([0.0]), np.array([0.0]))), auto_start=True)
             return
