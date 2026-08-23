@@ -2435,6 +2435,12 @@ class Controller_MainWindow(QMainWindow):
             self.ui.statusBar_progress.setValue(100)
             self.ui.statusBar_progress.show()
 
+            # Sample the auto-laser checkboxes on the GUI thread before
+            # spawning the worker — preview_mode_worker now drives the
+            # lasers via self._hw.start_lasers()/stop_lasers(), which read
+            # the cached bools, never the widgets (AGENTS.md §11).
+            self._cache_auto_laser_flags()
+
             # Starting preview mode thread
             self.preview_mode_thread = threading.Thread(target=self._acq.preview_mode_worker)
             self.preview_mode_thread.start()

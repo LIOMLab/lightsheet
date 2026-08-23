@@ -17,11 +17,11 @@ Behavior covered (per the plan's ``<behavior>`` block):
    is unchanged after the extraction — verified by the existing replay
    tests in ``test_golden_acquisition.py`` passing without regenerating
    the fixtures.
-3. (Task 1b) The D-05 preview-auto-laser fold: ``preview_mode_worker``
-   calls ``self._hw.start_lasers()`` after ``camera.arm()`` and
+3. The preview-auto-laser fold: ``preview_mode_worker`` calls
+   ``self._hw.start_lasers()`` after ``camera.arm()`` and
    ``self._hw.stop_lasers()`` before ``camera.disarm()``, mirroring
    ``live_mode_worker``'s shape.
-4. (Task 1b) ``updateUi_preview_mode_button`` calls
+4. ``updateUi_preview_mode_button`` calls
    ``self._cache_auto_laser_flags()`` before spawning the preview thread,
    mirroring ``updateUi_single_mode_button``.
 """
@@ -140,12 +140,13 @@ def test_acquisition_coordinator_stores_bundle_handles_and_collaborators() -> No
 
 
 # --------------------------------------------------------------------------- #
-# Task 1b — D-05 preview-auto-laser fold.
+# --------------------------------------------------------------------------- #
+# Preview-auto-laser fold.
 # --------------------------------------------------------------------------- #
 
 
 def test_preview_mode_worker_calls_start_lasers_after_arm_and_stop_before_disarm() -> None:
-    """D-05 fold: preview_mode_worker now calls self._hw.start_lasers()
+    """preview_mode_worker now calls self._hw.start_lasers()
     immediately after self.camera.arm() (before the while loop) and
     self._hw.stop_lasers() immediately before self.camera.disarm() —
     mirroring live_mode_worker's existing shape. Verified by running the
@@ -191,20 +192,20 @@ def test_preview_mode_worker_calls_start_lasers_after_arm_and_stop_before_disarm
 
     # start_lasers called after camera.arm.
     assert "camera.arm" in call_log, "camera.arm must be called"
-    assert "hw.start_lasers" in call_log, "hw.start_lasers must be called (D-05 fold)"
+    assert "hw.start_lasers" in call_log, "hw.start_lasers must be called (start_lasers)"
     assert call_log.index("camera.arm") < call_log.index("hw.start_lasers"), (
-        "D-05 fold: start_lasers must come AFTER camera.arm"
+        "start_lasers: start_lasers must come AFTER camera.arm"
     )
     # stop_lasers called before camera.disarm.
-    assert "hw.stop_lasers" in call_log, "hw.stop_lasers must be called (D-05 fold)"
+    assert "hw.stop_lasers" in call_log, "hw.stop_lasers must be called (start_lasers)"
     assert "camera.disarm" in call_log, "camera.disarm must be called"
     assert call_log.index("hw.stop_lasers") < call_log.index("camera.disarm"), (
-        "D-05 fold: stop_lasers must come BEFORE camera.disarm"
+        "start_lasers: stop_lasers must come BEFORE camera.disarm"
     )
 
 
 def test_updateUi_preview_mode_button_caches_auto_laser_flags_before_thread_spawn() -> None:
-    """D-05 second half: updateUi_preview_mode_button must call
+    """updateUi_preview_mode_button: updateUi_preview_mode_button must call
     self._cache_auto_laser_flags() before spawning the preview worker
     thread, mirroring updateUi_single_mode_button. Verified by running
     the real extracted body (it stays on the shell, reading self.ui.*)
@@ -252,11 +253,11 @@ def test_updateUi_preview_mode_button_caches_auto_laser_flags_before_thread_spaw
     updateUi_preview_mode_button(standin)
 
     assert "_cache_auto_laser_flags" in call_log, (
-        "D-05 second half: updateUi_preview_mode_button must call "
+        "updateUi_preview_mode_button: updateUi_preview_mode_button must call "
         "_cache_auto_laser_flags before spawning the preview thread"
     )
     assert "thread_spawn" in call_log, "the preview thread must be spawned"
     assert call_log.index("_cache_auto_laser_flags") < call_log.index("thread_spawn"), (
-        "D-05: _cache_auto_laser_flags must be called BEFORE the thread spawn"
+        "cache-flags: _cache_auto_laser_flags must be called BEFORE the thread spawn"
     )
 

@@ -145,8 +145,8 @@ def _build_standin() -> Mock:
     # Signal mocks — emit calls are captured via call_args_list.
     shell.sig_message = Mock()
     shell.sig_progress_update = Mock()
-    # UI widgets acquire_scan reads via self._shell.ui.* (Pitfall 7 — the
-    # ONE tolerated cross-tier read this phase).
+    # UI widgets acquire_scan reads via self._shell.ui.* (the ONE tolerated
+    # cross-tier read in AcquisitionCoordinator).
     shell.ui.lineEdit_saveDescription.text.return_value = "sample"
     shell.ui.checkBox_saveStitchBlend.isChecked.return_value = False
     # FrameSaverController enqueue_frame receives the reconstructed frame.
@@ -177,8 +177,8 @@ def capture_acquisition_sequence(scenario: str) -> list[dict]:
       ``siggen.error_message = "create_scan error"`` (mirroring the real
       ``SigGen.create_scanner`` bare-except branch), so ``acquire_scan``
       hits its ``if self.siggen.error:`` early-return and emits the
-      "Scan task creation failed" ``sig_message``. This closes Pitfall 2
-      for one error path: a dropped or re-sequenced emission on the
+      "Scan task creation failed" ``sig_message``. This closes one error
+      path: a dropped or re-sequenced emission on the
       create-scanner failure branch is now catchable, not just the happy
       path.
 
