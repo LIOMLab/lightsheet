@@ -300,6 +300,7 @@ def main() -> int:
     # collaborators for hardware_init. A two-phase init avoids the
     # circular dependency (collaborators need shell as parent/ref, shell
     # needs collaborators for hardware_init).
+    from lightsheet.gui.acquisition_coordinator import AcquisitionCoordinator
     from lightsheet.gui.frame_saver_controller import FrameSaverController
     from lightsheet.gui.hardware_manager import HardwareManager
 
@@ -308,6 +309,12 @@ def main() -> int:
     controller._fs = fs
     hw = HardwareManager(bundle, controller)
     controller._hw = hw
+    # AcquisitionCoordinator needs hw (for start_lasers/stop_lasers) and
+    # the shell (for sig_message, estop_event, _fs, ui.* widgets) — built
+    # last of the three collaborators, after hw and fs are wired onto the
+    # shell.
+    acq = AcquisitionCoordinator(bundle, hw, controller)
+    controller._acq = acq
     controller.sig_beep.connect(app.beep)  # connection for beep sounds
     controller.sig_stylesheet.connect(set_app_stylesheet)  # stylesheet selection
 
