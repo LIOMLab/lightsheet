@@ -86,13 +86,19 @@ def _make_mock_l2() -> MockLaser:
 _LASER_FACTORIES = [
     pytest.param(
         _make_daq_l1,
-        marks=pytest.mark.skipif(not _has_hardware, reason="rig only"),
+        marks=[
+            pytest.mark.skipif(not _has_hardware, reason="rig only"),
+            pytest.mark.xdist_group("rig_hardware"),
+        ],
         id="daq_real",
     ),
     pytest.param(_make_mock_l1, id="daq_mock"),
     pytest.param(
         _make_ibeam_smart_l2,
-        marks=pytest.mark.skipif(not _has_hardware, reason="rig only"),
+        marks=[
+            pytest.mark.skipif(not _has_hardware, reason="rig only"),
+            pytest.mark.xdist_group("rig_hardware"),
+        ],
         id="ibeam_real",
     ),
     pytest.param(_make_mock_l2, id="ibeam_mock"),
