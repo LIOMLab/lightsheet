@@ -538,39 +538,49 @@ class Controller_MainWindow(QMainWindow):
 
         # Connection for etl settings changes
         self.ui.doubleSpinBox_etlLeftAmplitude.valueChanged.connect(
-            self.updateUi_etl_left_amplitude
+            lambda: self._acq.updateUi_etl_left_amplitude()
         )
         self.ui.doubleSpinBox_etlRightAmplitude.valueChanged.connect(
-            self.updateUi_etl_right_amplitude
+            lambda: self._acq.updateUi_etl_right_amplitude()
         )
         self.ui.doubleSpinBox_etlLeftOffset.valueChanged.connect(
-            self.updateUi_etl_left_offset
+            lambda: self._acq.updateUi_etl_left_offset()
         )
         self.ui.doubleSpinBox_etlRightOffset.valueChanged.connect(
-            self.updateUi_etl_right_offset
+            lambda: self._acq.updateUi_etl_right_offset()
         )
-        self.ui.checkBox_etlSync.stateChanged.connect(self.updateUi_etl_sync)
-        self.ui.checkBox_etlActivate.stateChanged.connect(self.updateUi_etl_activate)
-        self.ui.doubleSpinBox_etlSteps.valueChanged.connect(self.updateUi_etl_steps)
+        self.ui.checkBox_etlSync.stateChanged.connect(
+            lambda: self._acq.updateUi_etl_sync()
+        )
+        self.ui.checkBox_etlActivate.stateChanged.connect(
+            lambda: self._acq.updateUi_etl_activate()
+        )
+        self.ui.doubleSpinBox_etlSteps.valueChanged.connect(
+            lambda: self._acq.updateUi_etl_steps()
+        )
 
         # Connection for galvo settings changes
         self.ui.doubleSpinBox_galvoLeftAmplitude.valueChanged.connect(
-            self.updateUi_galvo_left_amplitude
+            lambda: self._acq.updateUi_galvo_left_amplitude()
         )
         self.ui.doubleSpinBox_galvoRightAmplitude.valueChanged.connect(
-            self.updateUi_galvo_right_amplitude
+            lambda: self._acq.updateUi_galvo_right_amplitude()
         )
         self.ui.doubleSpinBox_galvoLeftOffset.valueChanged.connect(
-            self.updateUi_galvo_left_offset
+            lambda: self._acq.updateUi_galvo_left_offset()
         )
         self.ui.doubleSpinBox_galvoRightOffset.valueChanged.connect(
-            self.updateUi_galvo_right_offset
+            lambda: self._acq.updateUi_galvo_right_offset()
         )
-        self.ui.checkBox_galvoSync.stateChanged.connect(self.updateUi_galvo_sync)
+        self.ui.checkBox_galvoSync.stateChanged.connect(
+            lambda: self._acq.updateUi_galvo_sync()
+        )
         self.ui.checkBox_galvoActivate.stateChanged.connect(
-            self.updateUi_galvo_activate
+            lambda: self._acq.updateUi_galvo_activate()
         )
-        self.ui.checkBox_galvoInvert.stateChanged.connect(self.updateUi_galvo_invert)
+        self.ui.checkBox_galvoInvert.stateChanged.connect(
+            lambda: self._acq.updateUi_galvo_invert()
+        )
 
         # Connection for laser settings changes
         self.ui.doubleSpinBox_laserOneAmplitude.valueChanged.connect(
@@ -582,19 +592,19 @@ class Controller_MainWindow(QMainWindow):
 
         # Connection for camera settings changes
         self.ui.comboBox_cameraShutterMode.currentTextChanged.connect(
-            self.updateUi_camera_shutter_mode
+            lambda: self._acq.updateUi_camera_shutter_mode()
         )
         self.ui.doubleSpinBox_cameraExposureTime.valueChanged.connect(
-            self.updateUi_camera_exposure_time
+            lambda: self._acq.updateUi_camera_exposure_time()
         )
         self.ui.doubleSpinBox_cameraLineTime.valueChanged.connect(
-            self.updateUi_camera_line_time
+            lambda: self._acq.updateUi_camera_line_time()
         )
         self.ui.doubleSpinBox_cameraExposedLines.valueChanged.connect(
-            self.updateUi_camera_exposed_lines
+            lambda: self._acq.updateUi_camera_exposed_lines()
         )
         self.ui.doubleSpinBox_cameraDelayLines.valueChanged.connect(
-            self.updateUi_camera_delay_lines
+            lambda: self._acq.updateUi_camera_delay_lines()
         )
 
         # ---
@@ -1181,7 +1191,7 @@ class Controller_MainWindow(QMainWindow):
             self.ui.comboBox_cameraShutterMode.setCurrentIndex(1)
         else:
             self.ui.comboBox_cameraShutterMode.setCurrentIndex(0)
-        self.updateUi_camera_shutter_mode()
+        self._acq.updateUi_camera_shutter_mode()
 
         # Lasers — both spinboxes are 0-100 % staged setpoints (per the
         # .ui source). Seed from the persistent controller-side percentage,
@@ -1391,354 +1401,6 @@ class Controller_MainWindow(QMainWindow):
             self.motors.camera.get_position(self.units), self.units
         )
         self.ui.label_cameraCurrentPosition.setText(self.current_camera_position_text)
-
-    def updateUi_galvo_left_amplitude(self) -> None:
-        # Propagate Ui changes to hardware instance
-        self.siggen.galvo_left_amplitude = (
-            self.ui.doubleSpinBox_galvoLeftAmplitude.value()
-        )
-        # Adjust Min and Max to prevent amplitude + offset being <-10V or > 10V
-        self.ui.doubleSpinBox_galvoLeftOffset.setMinimum(
-            -10 + self.ui.doubleSpinBox_galvoLeftAmplitude.value()
-        )
-        self.ui.doubleSpinBox_galvoLeftOffset.setMaximum(
-            10 - self.ui.doubleSpinBox_galvoLeftAmplitude.value()
-        )
-        if self.ui.checkBox_galvoSync.isChecked():
-            # Set opposite galvo amplitude and offset
-            self.ui.doubleSpinBox_galvoRightAmplitude.setValue(
-                self.ui.doubleSpinBox_galvoLeftAmplitude.value()
-            )
-            self.ui.doubleSpinBox_galvoRightOffset.setValue(
-                self.ui.doubleSpinBox_galvoLeftOffset.value()
-            )
-            # Adjust Min and Max to prevent amplitude + offset being <-10V or > 10V
-            self.ui.doubleSpinBox_galvoRightOffset.setMinimum(
-                self.ui.doubleSpinBox_galvoLeftOffset.minimum()
-            )
-            self.ui.doubleSpinBox_galvoRightOffset.setMaximum(
-                self.ui.doubleSpinBox_galvoLeftOffset.maximum()
-            )
-            # Propagate Ui changes to hardware instance
-            self.siggen.galvo_right_amplitude = (
-                self.ui.doubleSpinBox_galvoRightAmplitude.value()
-            )
-            self.siggen.galvo_right_offset = (
-                self.ui.doubleSpinBox_galvoRightOffset.value()
-            )
-
-    def updateUi_galvo_right_amplitude(self) -> None:
-        # Propagate Ui changes to hardware instance
-        self.siggen.galvo_right_amplitude = (
-            self.ui.doubleSpinBox_galvoRightAmplitude.value()
-        )
-        # Adjust Min and Max to prevent amplitude + offset being <-10V or > 10V
-        self.ui.doubleSpinBox_galvoRightOffset.setMinimum(
-            -10 + self.ui.doubleSpinBox_galvoRightAmplitude.value()
-        )
-        self.ui.doubleSpinBox_galvoRightOffset.setMaximum(
-            10 - self.ui.doubleSpinBox_galvoRightAmplitude.value()
-        )
-        if self.ui.checkBox_galvoSync.isChecked():
-            # Set opposite galvo amplitude and offset
-            self.ui.doubleSpinBox_galvoLeftAmplitude.setValue(
-                self.ui.doubleSpinBox_galvoRightAmplitude.value()
-            )
-            self.ui.doubleSpinBox_galvoLeftOffset.setValue(
-                self.ui.doubleSpinBox_galvoRightOffset.value()
-            )
-            # Adjust Min and Max to prevent amplitude + offset being <-10V or > 10V
-            self.ui.doubleSpinBox_galvoLeftOffset.setMinimum(
-                self.ui.doubleSpinBox_galvoRightOffset.minimum()
-            )
-            self.ui.doubleSpinBox_galvoLeftOffset.setMaximum(
-                self.ui.doubleSpinBox_galvoRightOffset.maximum()
-            )
-            # Propagate Ui changes to hardware instance
-            self.siggen.galvo_left_amplitude = (
-                self.ui.doubleSpinBox_galvoLeftAmplitude.value()
-            )
-            self.siggen.galvo_left_offset = (
-                self.ui.doubleSpinBox_galvoLeftOffset.value()
-            )
-
-    def updateUi_galvo_left_offset(self) -> None:
-        # Propagate Ui changes to hardware instance
-        self.siggen.galvo_left_offset = self.ui.doubleSpinBox_galvoLeftOffset.value()
-        if self.ui.checkBox_galvoSync.isChecked():
-            # Set opposite galvo amplitude and offset
-            self.ui.doubleSpinBox_galvoRightAmplitude.setValue(
-                self.ui.doubleSpinBox_galvoLeftAmplitude.value()
-            )
-            self.ui.doubleSpinBox_galvoRightOffset.setValue(
-                self.ui.doubleSpinBox_galvoLeftOffset.value()
-            )
-            self.ui.doubleSpinBox_galvoRightOffset.setMinimum(
-                self.ui.doubleSpinBox_galvoLeftOffset.minimum()
-            )
-            self.ui.doubleSpinBox_galvoRightOffset.setMaximum(
-                self.ui.doubleSpinBox_galvoLeftOffset.maximum()
-            )
-            # Propagate Ui changes to hardware instance
-            self.siggen.galvo_right_amplitude = (
-                self.ui.doubleSpinBox_galvoRightAmplitude.value()
-            )
-            self.siggen.galvo_right_offset = (
-                self.ui.doubleSpinBox_galvoRightOffset.value()
-            )
-
-    def updateUi_galvo_right_offset(self) -> None:
-        # Propagate Ui changes to hardware instance
-        self.siggen.galvo_right_offset = self.ui.doubleSpinBox_galvoRightOffset.value()
-        if self.ui.checkBox_galvoSync.isChecked():
-            # Set opposite galvo amplitude and offset
-            self.ui.doubleSpinBox_galvoLeftAmplitude.setValue(
-                self.ui.doubleSpinBox_galvoRightAmplitude.value()
-            )
-            self.ui.doubleSpinBox_galvoLeftOffset.setValue(
-                self.ui.doubleSpinBox_galvoRightOffset.value()
-            )
-            self.ui.doubleSpinBox_galvoLeftOffset.setMinimum(
-                self.ui.doubleSpinBox_galvoRightOffset.minimum()
-            )
-            self.ui.doubleSpinBox_galvoLeftOffset.setMaximum(
-                self.ui.doubleSpinBox_galvoRightOffset.maximum()
-            )
-            # Propagate Ui changes to hardware instance
-            self.siggen.galvo_left_amplitude = (
-                self.ui.doubleSpinBox_galvoLeftAmplitude.value()
-            )
-            self.siggen.galvo_left_offset = (
-                self.ui.doubleSpinBox_galvoLeftOffset.value()
-            )
-
-    def updateUi_galvo_sync(self) -> None:
-        if self.ui.checkBox_galvoSync.isChecked():
-            # Set left galvo amplitude and offset to right galvo
-            self.ui.doubleSpinBox_galvoRightAmplitude.setValue(
-                self.ui.doubleSpinBox_galvoLeftAmplitude.value()
-            )
-            self.ui.doubleSpinBox_galvoRightOffset.setValue(
-                self.ui.doubleSpinBox_galvoLeftOffset.value()
-            )
-            self.ui.doubleSpinBox_galvoRightOffset.setMinimum(
-                self.ui.doubleSpinBox_galvoLeftOffset.minimum()
-            )
-            self.ui.doubleSpinBox_galvoRightOffset.setMaximum(
-                self.ui.doubleSpinBox_galvoLeftOffset.maximum()
-            )
-            # Propagate Ui changes to hardware instance
-            self.siggen.galvo_right_amplitude = (
-                self.ui.doubleSpinBox_galvoRightAmplitude.value()
-            )
-            self.siggen.galvo_right_offset = (
-                self.ui.doubleSpinBox_galvoRightOffset.value()
-            )
-
-    def updateUi_galvo_activate(self) -> None:
-        # Propagate Ui changes to hardware instance
-        self.siggen.galvo_activated = self.ui.checkBox_galvoActivate.isChecked()
-
-    def updateUi_galvo_invert(self) -> None:
-        # Propagate Ui changes to hardware instance
-        self.siggen.galvo_inverted = self.ui.checkBox_galvoInvert.isChecked()
-
-    def updateUi_etl_left_amplitude(self) -> None:
-        # Propagate Ui changes to hardware instance
-        self.siggen.etl_left_amplitude = self.ui.doubleSpinBox_etlLeftAmplitude.value()
-        # Adjust Min and Max to prevent amplitude + offset being <-5V or > 5V
-        self.ui.doubleSpinBox_etlLeftOffset.setMinimum(
-            -5 + self.ui.doubleSpinBox_etlLeftAmplitude.value()
-        )
-        self.ui.doubleSpinBox_etlLeftOffset.setMaximum(
-            5 - self.ui.doubleSpinBox_etlLeftAmplitude.value()
-        )
-        if self.ui.checkBox_etlSync.isChecked():
-            # Set opposite etl amplitude and offset
-            self.ui.doubleSpinBox_etlRightAmplitude.setValue(
-                self.ui.doubleSpinBox_etlLeftAmplitude.value()
-            )
-            self.ui.doubleSpinBox_etlRightOffset.setValue(
-                self.ui.doubleSpinBox_etlLeftOffset.value()
-            )
-            # Adjust Min and Max to prevent amplitude + offset being <-5V or > 5V
-            self.ui.doubleSpinBox_etlRightOffset.setMinimum(
-                self.ui.doubleSpinBox_etlLeftOffset.minimum()
-            )
-            self.ui.doubleSpinBox_etlRightOffset.setMaximum(
-                self.ui.doubleSpinBox_etlLeftOffset.maximum()
-            )
-            # Propagate Ui changes to hardware instance
-            self.siggen.etl_right_amplitude = (
-                self.ui.doubleSpinBox_etlRightAmplitude.value()
-            )
-            self.siggen.etl_right_offset = self.ui.doubleSpinBox_etlRightOffset.value()
-
-    def updateUi_etl_right_amplitude(self) -> None:
-        # Propagate Ui changes to hardware instance
-        self.siggen.etl_right_amplitude = (
-            self.ui.doubleSpinBox_etlRightAmplitude.value()
-        )
-        # Adjust Min and Max to prevent amplitude + offset being <-5V or > 5V
-        self.ui.doubleSpinBox_etlRightOffset.setMinimum(
-            -5 + self.ui.doubleSpinBox_etlRightAmplitude.value()
-        )
-        self.ui.doubleSpinBox_etlRightOffset.setMaximum(
-            5 - self.ui.doubleSpinBox_etlRightAmplitude.value()
-        )
-        if self.ui.checkBox_etlSync.isChecked():
-            # Set opposite etl amplitude and offset
-            self.ui.doubleSpinBox_etlLeftAmplitude.setValue(
-                self.ui.doubleSpinBox_etlRightAmplitude.value()
-            )
-            self.ui.doubleSpinBox_etlLeftOffset.setValue(
-                self.ui.doubleSpinBox_etlRightOffset.value()
-            )
-            # Adjust Min and Max to prevent amplitude + offset being <-5V or > 5V
-            self.ui.doubleSpinBox_etlLeftOffset.setMinimum(
-                self.ui.doubleSpinBox_etlRightOffset.minimum()
-            )
-            self.ui.doubleSpinBox_etlLeftOffset.setMaximum(
-                self.ui.doubleSpinBox_etlRightOffset.maximum()
-            )
-            # Propagate Ui changes to hardware instance
-            self.siggen.etl_left_amplitude = (
-                self.ui.doubleSpinBox_etlLeftAmplitude.value()
-            )
-            self.siggen.etl_left_offset = self.ui.doubleSpinBox_etlLeftOffset.value()
-
-    def updateUi_etl_left_offset(self) -> None:
-        # Propagate Ui changes to hardware instance
-        self.siggen.etl_left_offset = self.ui.doubleSpinBox_etlLeftOffset.value()
-        if self.ui.checkBox_etlSync.isChecked():
-            self.ui.doubleSpinBox_etlRightAmplitude.setValue(
-                self.ui.doubleSpinBox_etlLeftAmplitude.value()
-            )
-            self.ui.doubleSpinBox_etlRightOffset.setValue(
-                self.ui.doubleSpinBox_etlLeftOffset.value()
-            )
-            self.ui.doubleSpinBox_etlRightOffset.setMinimum(
-                self.ui.doubleSpinBox_etlLeftOffset.minimum()
-            )
-            self.ui.doubleSpinBox_etlRightOffset.setMaximum(
-                self.ui.doubleSpinBox_etlLeftOffset.maximum()
-            )
-            # Propagate Ui changes to hardware instance
-            self.siggen.etl_right_amplitude = (
-                self.ui.doubleSpinBox_etlRightAmplitude.value()
-            )
-            self.siggen.etl_right_offset = self.ui.doubleSpinBox_etlRightOffset.value()
-
-    def updateUi_etl_right_offset(self) -> None:
-        # Propagate Ui changes to hardware instance
-        self.siggen.etl_right_offset = self.ui.doubleSpinBox_etlRightOffset.value()
-        if self.ui.checkBox_etlSync.isChecked():
-            self.ui.doubleSpinBox_etlLeftAmplitude.setValue(
-                self.ui.doubleSpinBox_etlRightAmplitude.value()
-            )
-            self.ui.doubleSpinBox_etlLeftOffset.setValue(
-                self.ui.doubleSpinBox_etlRightOffset.value()
-            )
-            self.ui.doubleSpinBox_etlLeftOffset.setMinimum(
-                self.ui.doubleSpinBox_etlRightOffset.minimum()
-            )
-            self.ui.doubleSpinBox_etlLeftOffset.setMaximum(
-                self.ui.doubleSpinBox_etlRightOffset.maximum()
-            )
-            # Propagate Ui changes to hardware instance
-            self.siggen.etl_left_amplitude = (
-                self.ui.doubleSpinBox_etlLeftAmplitude.value()
-            )
-            self.siggen.etl_left_offset = self.ui.doubleSpinBox_etlLeftOffset.value()
-
-    def updateUi_etl_sync(self) -> None:
-        # Propagate Ui changes to hardware instance
-        if self.ui.checkBox_etlSync.isChecked():
-            self.ui.doubleSpinBox_etlRightAmplitude.setValue(
-                self.ui.doubleSpinBox_etlLeftAmplitude.value()
-            )
-            self.ui.doubleSpinBox_etlRightOffset.setValue(
-                self.ui.doubleSpinBox_etlLeftOffset.value()
-            )
-            self.ui.doubleSpinBox_etlRightOffset.setMinimum(
-                self.ui.doubleSpinBox_etlLeftOffset.minimum()
-            )
-            self.ui.doubleSpinBox_etlRightOffset.setMaximum(
-                self.ui.doubleSpinBox_etlLeftOffset.maximum()
-            )
-            # Propagate Ui changes to hardware instance
-            self.siggen.etl_right_amplitude = (
-                self.ui.doubleSpinBox_etlRightAmplitude.value()
-            )
-            self.siggen.etl_right_offset = self.ui.doubleSpinBox_etlRightOffset.value()
-
-    def updateUi_etl_steps(self) -> None:
-        # Propagate Ui changes to hardware instance
-        self.siggen.etl_steps = int(self.ui.doubleSpinBox_etlSteps.value())
-
-    def updateUi_etl_activate(self) -> None:
-        # Propagate Ui changes to hardware instance
-        self.siggen.etl_activated = self.ui.checkBox_etlActivate.isChecked()
-
-    #    def updateUi_acq_sample_rate(self):
-    #        # Propagate Ui changes to hardware instance
-    #        self.siggen.sample_rate = self.ui.doubleSpinBox_acqSampleRate.value()
-
-    def updateUi_camera_shutter_mode(self) -> None:
-        # Propagate Ui changes to hardware instance
-        self.camera.shutter_mode = self.ui.comboBox_cameraShutterMode.currentText()
-        # Update enabled settings
-        if self.camera.shutter_mode == "Rolling":
-            self.ui.label_doubleSpinBox_cameraExposureTime.setEnabled(True)
-            self.ui.doubleSpinBox_cameraExposureTime.setEnabled(True)
-            self.ui.label_doubleSpinBox_cameraLineTime.setEnabled(False)
-            self.ui.doubleSpinBox_cameraLineTime.setEnabled(False)
-            self.ui.label_doubleSpinBox_cameraExposedLines.setEnabled(False)
-            self.ui.doubleSpinBox_cameraExposedLines.setEnabled(False)
-            self.ui.label_doubleSpinBox_cameraDelayLines.setEnabled(False)
-            self.ui.doubleSpinBox_cameraDelayLines.setEnabled(False)
-        elif self.camera.shutter_mode == "Lightsheet":
-            self.ui.label_doubleSpinBox_cameraExposureTime.setEnabled(False)
-            self.ui.doubleSpinBox_cameraExposureTime.setEnabled(False)
-            self.ui.label_doubleSpinBox_cameraLineTime.setEnabled(True)
-            self.ui.doubleSpinBox_cameraLineTime.setEnabled(True)
-            self.ui.label_doubleSpinBox_cameraExposedLines.setEnabled(True)
-            self.ui.doubleSpinBox_cameraExposedLines.setEnabled(True)
-            self.ui.label_doubleSpinBox_cameraDelayLines.setEnabled(True)
-            self.ui.doubleSpinBox_cameraDelayLines.setEnabled(True)
-        else:
-            self.ui.label_doubleSpinBox_cameraExposureTime.setEnabled(True)
-            self.ui.doubleSpinBox_cameraExposureTime.setEnabled(True)
-            self.ui.label_doubleSpinBox_cameraLineTime.setEnabled(False)
-            self.ui.doubleSpinBox_cameraLineTime.setEnabled(False)
-            self.ui.label_doubleSpinBox_cameraExposedLines.setEnabled(False)
-            self.ui.doubleSpinBox_cameraExposedLines.setEnabled(False)
-            self.ui.label_doubleSpinBox_cameraDelayLines.setEnabled(False)
-            self.ui.doubleSpinBox_cameraDelayLines.setEnabled(False)
-
-    def updateUi_camera_exposure_time(self) -> None:
-        # Propagate Ui changes to hardware instance
-        self.camera.exposure_time = (
-            self.ui.doubleSpinBox_cameraExposureTime.value() * 1e-3
-        )  # ui(ms) to camera(s)
-
-    def updateUi_camera_line_time(self) -> None:
-        # Propagate Ui changes to Camera instance
-        self.camera.lightsheet_line_time = (
-            self.ui.doubleSpinBox_cameraLineTime.value() * 1e-6
-        )  # ui(us) to camera(s)
-
-    def updateUi_camera_exposed_lines(self) -> None:
-        # Propagate Ui changes to Camera instance
-        self.camera.lightsheet_exposed_lines = int(
-            self.ui.doubleSpinBox_cameraExposedLines.value()
-        )
-
-    def updateUi_camera_delay_lines(self) -> None:
-        # Propagate Ui changes to Camera instance
-        self.camera.lightsheet_delay_lines = int(
-            self.ui.doubleSpinBox_cameraDelayLines.value()
-        )
 
     def updateUi_laser1_amplitude(self) -> None:
         # Debounce-only slot: restart the 300ms single-shot timer so rapid
