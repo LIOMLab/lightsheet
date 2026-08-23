@@ -24,13 +24,26 @@ The E-stop kill path stays in the thin shell — the coordinator's worker
 bodies only *poll* ``self._shell.estop_event`` cooperatively; they never
 drive a laser off directly.
 
-The ONE tolerated cross-tier read in this collaborator lives here:
-``acquire_scan`` reads ``self._shell.ui.*`` widgets (save-option
-checkboxes, save-description line edit) directly. The golden harness's
-existing ``standin.ui.lineEdit_saveDescription.text.return_value`` seam
-depends on this access pattern surviving. Refactoring it into a
-shell-side pre-sampled arg is a larger change than this extraction's
-scope and is deferred.
+The tolerated cross-tier Qt widget reads in this collaborator live in
+two methods (reading widgets from a non-GUI thread is undefined behavior
+per Qt's threading model / AGENTS.md §11; these are pre-existing, moved
+verbatim from the original controller, and refactoring them into
+shell-side pre-sampled args is a larger change than this extraction's
+scope and is deferred):
+
+* ``acquire_scan`` reads ``self._shell.ui.lineEdit_saveDescription.text()``
+  (line ~275) and ``self._shell.ui.checkBox_saveStitchBlend.isChecked()``
+  (line ~372). The golden harness's
+  ``standin.ui.lineEdit_saveDescription.text.return_value`` seam depends
+  on this access pattern surviving.
+* ``stack_mode_worker`` reads five widgets directly from the worker
+  thread: ``self._shell.ui.lineEdit_saveDescription.text()`` (line ~389),
+  ``self._shell.ui.checkBox_saveAllCrop.isChecked()`` (lines ~395, ~522),
+  and ``self._shell.ui.checkBox_saveAllFull.isChecked()`` (lines ~403,
+  ~528).
+
+A future maintainer eliminating cross-tier reads must address all six
+sites, not just ``acquire_scan``.
 """
 
 from __future__ import annotations
@@ -54,7 +67,7 @@ logger = logging.getLogger(__name__)
 class AcquisitionCoordinator:
     """Acquisition worker + scan orchestration collaborator.
 
-    All five method bodies (``preview_mode_worker``, ``live_mode_worker``,
+    Four of the five method bodies (``live_mode_worker``,
     ``single_mode_worker``, ``stack_mode_worker``, ``acquire_scan``) are
     moved verbatim from ``Controller_MainWindow`` — only the
     attribute-access prefix changes (``self.`` ->
@@ -65,6 +78,17 @@ class AcquisitionCoordinator:
     existing ``try``/``except``/``finally`` shape (E-stop poll before each
     frame, ``sig_message`` on exception, ``sig_*_mode_finished`` exactly
     once in ``finally``) is preserved verbatim.
+
+    ``preview_mode_worker`` was MODIFIED during extraction (not a verbatim
+    move) to add ``self._hw.start_lasers()`` after ``camera.arm()`` and
+    ``self._hw.stop_lasers()`` before ``camera.disarm()`` — mirroring
+    ``live_mode_worker``'s shape so the operator can see the beam while
+    adjusting parameters in calibration mode. The previous shape left the
+    lasers dark during preview. The laser start/stop is gated by the
+    cached ``_auto_laser1``/``_auto_laser2`` flags sampled on the GUI
+    thread, so a Class IIIB laser is energized only when the operator
+    opted into auto-laser for that channel. See the inline comment in
+    ``preview_mode_worker`` for the rationale.
     """
 
     def __init__(
