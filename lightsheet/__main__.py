@@ -289,7 +289,21 @@ def main() -> int:
         load_sections_from_ini("config.ini", overlay_path)
     )
 
+    # Construct the FrameSaverController collaborator before the shell.
+    # It owns the FrameSaver + FrameViewer QObjects (parented to the
+    # shell once the shell exists) and routes save/enqueue calls. The
+    # shell delegates through self._fs. The shell is constructed first
+    # with fs=None, then the collaborator is wired and self._fs is
+    # assigned on the shell before hardware_init runs — FrameSaver/
+    # FrameViewer need the shell as their QObject parent, and the shell
+    # needs the bundle for hardware_init. A two-phase init avoids the
+    # circular dependency (collaborator needs shell as parent, shell
+    # needs collaborator for hardware_init).
+    from lightsheet.gui.frame_saver_controller import FrameSaverController
+
     controller = Controller_MainWindow(bundle, demo=demo)
+    fs = FrameSaverController(bundle, controller)
+    controller._fs = fs
     controller.sig_beep.connect(app.beep)  # connection for beep sounds
     controller.sig_stylesheet.connect(set_app_stylesheet)  # stylesheet selection
 

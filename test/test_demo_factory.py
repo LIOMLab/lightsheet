@@ -256,6 +256,7 @@ def _make_bundle_standin(demo: bool) -> Mock:
     standin = Mock()
     standin._demo_mode = demo
     standin._bundle = bundle
+    standin._fs = Mock()
     standin.ui = Mock()
     standin.ui.statusbar = Mock()
     standin.windowTitle = Mock(return_value="Lightsheet")

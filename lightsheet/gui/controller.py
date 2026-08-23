@@ -11,6 +11,7 @@ import logging
 import os
 import queue
 import threading
+import typing
 import webbrowser
 
 import h5py
@@ -44,6 +45,9 @@ from lightsheet.hal import Camera, ETLs, Motors, SigGen
 from lightsheet.hal.bundle import DeviceBundle
 
 logger = logging.getLogger(__name__)
+
+if typing.TYPE_CHECKING:
+    from lightsheet.gui.frame_saver_controller import FrameSaverController
 
 
 class Controller_MainWindow(QMainWindow):
@@ -89,7 +93,12 @@ class Controller_MainWindow(QMainWindow):
     # power.
     sig_laser_readback = pyqtSignal(int, str, str)
 
-    def __init__(self, bundle: DeviceBundle, demo: bool = False) -> None:
+    def __init__(
+        self,
+        bundle: DeviceBundle,
+        demo: bool = False,
+        fs: "FrameSaverController | None" = None,
+    ) -> None:
         # The pre-built DeviceBundle is the sole HAL-handle channel into
         # the shell — main()'s composition root builds it (via
         # _build_demo_bundle on the demo path, DeviceRegistry.resolve()
@@ -97,6 +106,11 @@ class Controller_MainWindow(QMainWindow):
         # protects the E-stop kill path: a re-bound laser handle after
         # construction would fail to de-energize a live Class IIIB laser.
         self._bundle = bundle
+        # FrameSaverController owns the FrameSaver + FrameViewer QObjects
+        # and routes save/enqueue calls. The shell delegates through
+        # self._fs. None-default keeps the legacy single-arg call sites
+        # (tests) working until the composition root passes it.
+        self._fs = fs
         # Demo mode flag — when True, the window-title suffix and
         # status-bar message carry the [DEMO] indicator. HAL construction
         # no longer branches on this flag (the bundle is pre-built by
@@ -758,24 +772,14 @@ class Controller_MainWindow(QMainWindow):
         # Update Ui with initial hardware state
         self.updateUi_initial_hardware_state()
 
-        # Instantiating the display port queue (image consumer)
-        self.frame_viewer = FrameViewer(
-            self, rows=self.camera.ysize, columns=self.camera.xsize
-        )
-
-        # Instantiating the frame saver (image consumer)
-        self.frame_saver = FrameSaver(self)
-
-        # Start timer to periodically (100ms) refresh the display port.
-        # The L1 status poll rides this same timer (additive connection —
-        # zero added serial cost, L1 status is a pure in-HAL active-flag
-        # read) so the DAQ laser status is genuinely live at 100ms. The L1
-        # readback refresh rides it too — DAQLaser has no hardware
-        # readback, so get_output_power() returns the staged mW (pure
-        # in-HAL attribute read, no serial I/O), and the 100ms cadence
-        # keeps the L1 mW field live as the operator edits the percentage.
+        # FrameSaverController owns the FrameSaver + FrameViewer QObjects
+        # (constructed in main()'s composition root and injected via
+        # __init__). hardware_init wires the display-port refresh timer
+        # to the FrameViewer's updateUi_refresh_view slot through the
+        # collaborator. The direct FrameViewer/FrameSaver construction
+        # moved to FrameSaverController.__init__.
         self.timer_imageview = QTimer()
-        self.timer_imageview.timeout.connect(self.frame_viewer.updateUi_refresh_view)
+        self.timer_imageview.timeout.connect(self._fs.frame_viewer.updateUi_refresh_view)
         self.timer_imageview.timeout.connect(lambda: self._poll_laser_status([0]))
         self.timer_imageview.timeout.connect(lambda: self._refresh_laser_readback(0))
         self.timer_imageview.start(100)
@@ -2783,7 +2787,7 @@ class Controller_MainWindow(QMainWindow):
 
                 # Sending first (and should be only) image to display port
                 frame = cam_images[0]
-                self.frame_viewer.enqueue_frame(frame)
+                self._fs.enqueue_frame(frame)
 
             # Stopping camera
             self.camera.disarm()
@@ -3277,7 +3281,7 @@ class Controller_MainWindow(QMainWindow):
             self.reconstructed_frame = self.reconstruct_frame(self.buffer)
 
         # Send reconstructed frame to display port
-        self.frame_viewer.enqueue_frame(self.reconstructed_frame)
+        self._fs.enqueue_frame(self.reconstructed_frame)
 
     def updateUi_select_directory(self) -> None:
         """Allows the selection of a directory for single scan or stack saving"""
@@ -3347,9 +3351,9 @@ class Controller_MainWindow(QMainWindow):
             self.save_description = str(self.ui.lineEdit_saveDescription.text())
 
             """Setting up frame saver"""
-            self.frame_saver.reinit(1)
-            self.frame_saver.add_sample_name(self.save_description)
-            self.frame_saver.add_motor_parameters(
+            self._fs.reinit(1)
+            self._fs.add_sample_name(self.save_description)
+            self._fs.add_motor_parameters(
                 self.image_hor_pos_text,
                 self.image_ver_pos_text,
                 self.image_cam_pos_text,
@@ -3357,31 +3361,31 @@ class Controller_MainWindow(QMainWindow):
 
             """Saving frame"""
             if self.ui.checkBox_saveAllCrop.isChecked():
-                self.frame_saver.set_files(
+                self._fs.set_files(
                     1, self.save_filename, "singleImage", 1, "ETLscan"
                 )
                 cropped_buffer = self.crop_buffer(self.buffer)
-                self.frame_saver.enqueue_buffer(cropped_buffer)
+                self._fs.enqueue_buffer(cropped_buffer)
                 self.updateUi_message_printer(
                     "Saving Images (one for each ETL scan, cropped)"
                 )
             elif self.ui.checkBox_saveAllFull.isChecked():
-                self.frame_saver.set_files(
+                self._fs.set_files(
                     1, self.save_filename, "singleImage", 1, "FullETLscan"
                 )
-                self.frame_saver.enqueue_buffer(self.buffer)
+                self._fs.enqueue_buffer(self.buffer)
                 self.updateUi_message_printer(
                     "Saving Images (one for each ETL scan, full)"
                 )
             else:
-                self.frame_saver.set_files(
+                self._fs.set_files(
                     1, self.save_filename, "singleImage", 1, "reconstructed_frame"
                 )
-                self.frame_saver.enqueue_buffer(self.reconstructed_frame)
+                self._fs.enqueue_buffer(self.reconstructed_frame)
                 self.updateUi_message_printer("Saving Reconstructed Image")
 
-            self.frame_saver.start_saving()
-            self.frame_saver.stop_saving()
+            self._fs.start_saving()
+            self._fs.stop_saving()
         else:
             self.sig_beep.emit()
             QMessageBox.warning(
@@ -3532,14 +3536,14 @@ class Controller_MainWindow(QMainWindow):
                 self.save_description = str(self.ui.lineEdit_saveDescription.text())
 
                 # Setting frame saver
-                self.frame_saver.reinit(3)
-                self.frame_saver.add_sample_name(self.save_description)
+                self._fs.reinit(3)
+                self._fs.add_sample_name(self.save_description)
                 if self.ui.checkBox_saveAllCrop.isChecked():
-                    self.frame_saver.set_files(
+                    self._fs.set_files(
                         self.number_of_planes, self.save_filename, "stack", 1, "ETLscan"
                     )
                 elif self.ui.checkBox_saveAllFull.isChecked():
-                    self.frame_saver.set_files(
+                    self._fs.set_files(
                         self.number_of_planes,
                         self.save_filename,
                         "stack",
@@ -3547,7 +3551,7 @@ class Controller_MainWindow(QMainWindow):
                         "FullETLscan",
                     )
                 else:
-                    self.frame_saver.set_files(
+                    self._fs.set_files(
                         1,
                         self.save_filename,
                         "stack",
@@ -3555,7 +3559,7 @@ class Controller_MainWindow(QMainWindow):
                         "reconstructed_frame",
                     )
                 # Starting frame saver
-                self.frame_saver.start_saving()
+                self._fs.start_saving()
 
             # Setting the camera for scan acquisition
             self.camera.arm_scan()
@@ -3616,7 +3620,7 @@ class Controller_MainWindow(QMainWindow):
                     # self.move_camera_to_focus()
 
                     if self.saving_allowed:
-                        self.frame_saver.add_motor_parameters(
+                        self._fs.add_motor_parameters(
                             self.current_horizontal_position_text,
                             self.current_vertical_position_text,
                             self.current_camera_position_text,
@@ -3651,17 +3655,17 @@ class Controller_MainWindow(QMainWindow):
                     if self.saving_allowed:
                         if self.ui.checkBox_saveAllCrop.isChecked():
                             cropped_buffer = self.crop_buffer(self.buffer)
-                            self.frame_saver.enqueue_buffer(cropped_buffer)
+                            self._fs.enqueue_buffer(cropped_buffer)
                             self.sig_message.emit(
                                 "Saving All Images (one for each ETL step, cropped)"
                             )
                         elif self.ui.checkBox_saveAllFull.isChecked():
-                            self.frame_saver.enqueue_buffer(self.buffer)
+                            self._fs.enqueue_buffer(self.buffer)
                             self.sig_message.emit(
                                 "Saving All Images (one for each ETL step, full)"
                             )
                         else:
-                            self.frame_saver.enqueue_buffer(self.reconstructed_frame)
+                            self._fs.enqueue_buffer(self.reconstructed_frame)
                             self.sig_message.emit("Saving Reconstructed Image")
 
                     # Update progress bar
@@ -3674,7 +3678,7 @@ class Controller_MainWindow(QMainWindow):
                 )  # In case the number of planes is not a multiple of 100
 
             if self.saving_allowed:
-                self.frame_saver.stop_saving()
+                self._fs.stop_saving()
 
             # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)  # noqa: E501
             self.siggen.update_etls(left_etl=2.5, right_etl=2.5)

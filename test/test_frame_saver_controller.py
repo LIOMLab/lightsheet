@@ -34,12 +34,36 @@ from unittest.mock import Mock
 
 import numpy as np
 import pytest
+from PyQt5.QtCore import QObject
 
 pytest.importorskip("PyQt5")  # FrameSaver/FrameViewer are QObjects
 
 from lightsheet.gui.controller import FrameSaver, FrameViewer
 from lightsheet.gui.frame_saver_controller import FrameSaverController
 from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
+
+
+class _ShellStandin(QObject):
+    """Minimal QObject stand-in for the shell.
+
+    FrameSaver/FrameViewer are QObjects parented to the shell, so the
+    shell stand-in must itself be a QObject (PyQt5 rejects a Mock as a
+    parent). The ``updateUi_message_printer`` slot is the
+    sig_status_message receiver — track calls on it via a list.
+    ``ui.imageView`` is the widget FrameViewer's __init__ seeds the
+    default frame into (a Mock is fine — the call is a no-op for the
+    test). ``save_format`` is read by FrameSaver.__init__.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.message_printer_calls: list[str] = []
+        self.sig_message = Mock()
+        self.ui = Mock()
+        self.save_format = "hdf5"
+
+    def updateUi_message_printer(self, message: str) -> None:
+        self.message_printer_calls.append(message)
 
 
 def _make_bundle() -> DeviceBundle:
@@ -56,15 +80,12 @@ def _make_bundle() -> DeviceBundle:
     return DeviceBundle(camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers)
 
 
-def _make_shell() -> Mock:
-    """Build a Mock stand-in shell exposing the attributes
+def _make_shell() -> _ShellStandin:
+    """Build a QObject shell stand-in exposing the attributes
     FrameSaverController.__init__ touches: ``updateUi_message_printer``
     (the sig_status_message slot) and a ``sig_message`` Mock so any
     incidental emit is a no-op."""
-    shell = Mock()
-    shell.updateUi_message_printer = Mock()
-    shell.sig_message = Mock()
-    return shell
+    return _ShellStandin()
 
 
 def test_init_creates_frame_saver_parented_to_shell() -> None:
@@ -76,9 +97,11 @@ def test_init_creates_frame_saver_parented_to_shell() -> None:
     assert isinstance(fs.frame_saver, FrameSaver), (
         "FrameSaverController must own a FrameSaver instance"
     )
-    # FrameSaver.__init__ calls QObject.__init__(self, parent) — the
-    # parent is the shell. PyQt5 stores the parent on .parent().
-    assert fs.frame_saver.parent() is shell, (
+    # FrameSaver.__init__ sets self.parent = parent (the shell) and calls
+    # QObject.__init__(self, parent) — both reference the shell. The
+    # .parent attribute is the shell (FrameSaver stores it for the save
+    # worker to read self.parent.lasers).
+    assert fs.frame_saver.parent is shell, (
         "FrameSaver must be parented to the shell (QObject parent)"
     )
 
@@ -92,7 +115,7 @@ def test_init_creates_frame_viewer_sized_from_bundle_camera() -> None:
     assert isinstance(fs.frame_viewer, FrameViewer), (
         "FrameSaverController must own a FrameViewer instance"
     )
-    assert fs.frame_viewer.parent() is shell, (
+    assert fs.frame_viewer.parent is shell, (
         "FrameViewer must be parented to the shell (QObject parent)"
     )
     assert fs.frame_viewer.rows == int(bundle.camera.ysize), (
@@ -127,26 +150,16 @@ def test_frame_saver_sig_status_message_connected_to_shell_slot() -> None:
     must cross to the GUI thread via the signal/slot queue, AGENTS.md
     §11).
 
-    Asserted by inspecting the Qt connection list on the signal: the
-    shell.updateUi_message_printer callable appears as a receiver.
+    Asserted behaviorally: emitting the signal must call the shell slot
+    (PyQt5 does not expose a public receiver enumeration on pyqtSignal).
     """
-    from PyQt5.QtCore import QMetaObject
-
     bundle = _make_bundle()
     shell = _make_shell()
     fs = FrameSaverController(bundle, shell)
-    # Gather the connected receivers via Qt's meta-object introspection.
-    # pyqtSignal does not expose a public receiver list, so we use
-    # QMetaObject.connections — the receiver is the shell's bound method.
-    meta = fs.frame_saver.metaObject()
-    # Find the sig_status_message signal index by name.
-    sig_idx = meta.indexOfSignal("sig_status_message(QString)")
-    assert sig_idx >= 0, "sig_status_message signal must exist on FrameSaver"
-    # The connection exists if the slot is in the connection list. PyQt5
-    # does not expose a public receiver enumeration, so we assert
-    # behaviorally: emitting the signal must call the shell slot.
     fs.frame_saver.sig_status_message.emit("test message")
-    shell.updateUi_message_printer.assert_called_once_with("test message")
+    assert shell.message_printer_calls == ["test message"], (
+        "sig_status_message.emit must route to shell.updateUi_message_printer"
+    )
 
 
 def test_pass_through_methods_route_to_frame_saver() -> None:
