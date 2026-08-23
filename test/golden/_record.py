@@ -144,14 +144,40 @@ def capture_acquisition_sequence(scenario: str) -> list[dict]:
     """Run the real acquire_scan body against a Mock stand-in and return
     the ordered ``sig_message`` / ``sig_progress_update`` emit sequence.
 
-    ``scenario`` selects the fixture name (only "default" is defined
-    today). The sequence is a list of ``{"type": "sig_message" |
+    ``scenario`` selects the fixture:
+
+    * ``"default"`` — the silent happy path (no DAQ error, no camera
+      timeout). Emits zero ``sig_message`` / ``sig_progress_update`` calls;
+      the fixture is an empty list. This characterizes the contract: a
+      successful acquisition is silent on the message channel.
+    * ``"siggen_create_scanner_fail"`` — the siggen ``create_scanner``
+      failure early-return path. The stand-in's ``create_scanner`` is
+      patched to set ``siggen.error = 1`` +
+      ``siggen.error_message = "create_scan error"`` (mirroring the real
+      ``SigGen.create_scanner`` bare-except branch), so ``acquire_scan``
+      hits its ``if self.siggen.error:`` early-return and emits the
+      "Scan task creation failed" ``sig_message``. This closes Pitfall 2
+      for one error path: a dropped or re-sequenced emission on the
+      create-scanner failure branch is now catchable, not just the happy
+      path.
+
+    The sequence is a list of ``{"type": "sig_message" |
     "sig_progress", "value": <first positional arg>}`` dicts in emission
     order.
     """
-    if scenario != "default":
+    if scenario not in ("default", "siggen_create_scanner_fail"):
         raise ValueError(f"unknown scenario: {scenario!r}")
     standin = _build_standin()
+    if scenario == "siggen_create_scanner_fail":
+        # Mirror the real SigGen.create_scanner bare-except branch: it sets
+        # error=1 + a generic 'create_scan error' message and never raises.
+        # acquire_scan resets self.siggen.error = 0 before the call, then
+        # checks it after — so the failure must be set inside create_scanner.
+        def _fail_create_scanner() -> None:
+            standin.siggen.error = 1
+            standin.siggen.error_message = "create_scan error"
+
+        standin.siggen.create_scanner = _fail_create_scanner
     acquire_scan = _load_method("acquire_scan(self) -> None")
     acquire_scan(standin)
 
@@ -163,15 +189,22 @@ def capture_acquisition_sequence(scenario: str) -> list[dict]:
     return sequence
 
 
-def record_acquisition(out_path: str) -> None:
-    """Capture the default scenario and write it to ``out_path`` as JSON."""
-    seq = capture_acquisition_sequence("default")
+def record_acquisition(out_path: str, scenario: str = "default") -> None:
+    """Capture a scenario and write it to ``out_path`` as JSON."""
+    seq = capture_acquisition_sequence(scenario)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(seq, f, indent=2)
         f.write("\n")
 
 
 if __name__ == "__main__":
-    out = os.path.join(os.path.dirname(__file__), "default.json")
-    record_acquisition(out)
-    print(f"Wrote {out}")
+    base = os.path.dirname(__file__)
+    scenarios = {
+        "default": os.path.join(base, "default.json"),
+        "siggen_create_scanner_fail": os.path.join(
+            base, "siggen_create_scanner_fail.json"
+        ),
+    }
+    for name, path in scenarios.items():
+        record_acquisition(path, name)
+        print(f"Wrote {path}")
