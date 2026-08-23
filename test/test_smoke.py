@@ -43,3 +43,12 @@ def test_pco_stub_raises_on_camera() -> None:
 
     with pytest.raises(RuntimeError):
         pco.Camera()
+
+
+def test_device_bundle_barrel_reexport_smoke() -> None:
+    """``from lightsheet.hal import DeviceBundle`` resolves to the same class
+    object as the direct module import — the barrel re-export is wired."""
+    from lightsheet.hal import DeviceBundle as barrel_reexport
+    from lightsheet.hal.bundle import DeviceBundle as direct
+
+    assert barrel_reexport is direct
