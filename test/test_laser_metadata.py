@@ -51,7 +51,10 @@ def _load_method(method_sig: str):
     a callable `func(self, outfile)` that executes the real source."""
     src = _read_controller_source()
     body = _slice_method(src, method_sig)
-    namespace = {}
+    # Seed the exec namespace with modules the method body references
+    # (the type hint `h5py.File` is evaluated at function definition time
+    # inside the exec — h5py must be present in the namespace).
+    namespace = {"h5py": h5py}
     exec(compile(body, _CONTROLLER_SRC, "exec"), namespace)
     func_name = method_sig.split("(")[0].strip()
     return namespace[func_name]
@@ -104,7 +107,7 @@ def test_write_laser_metadata_writes_all_five_attrs_per_laser(
         assert f.attrs["Laser1 Wavelength"] == 561
         assert f.attrs["Laser1 Power"] == 150.0
         assert f.attrs["Laser1 Max Power"] == 300.0
-        assert f.attrs["Laser1 Active"] is True
+        assert f.attrs["Laser1 Active"] == True
         assert f.attrs["Laser1 Label"] == "Laser 1 (561 nm)"
 
         # Laser 2 (inactive, 0 mW, 640 nm, 150 mW max) — included even
@@ -112,7 +115,7 @@ def test_write_laser_metadata_writes_all_five_attrs_per_laser(
         assert f.attrs["Laser2 Wavelength"] == 640
         assert f.attrs["Laser2 Power"] == 0.0
         assert f.attrs["Laser2 Max Power"] == 150.0
-        assert f.attrs["Laser2 Active"] is False
+        assert f.attrs["Laser2 Active"] == False
         assert f.attrs["Laser2 Label"] == "Laser 2 (640 nm)"
 
 
@@ -151,8 +154,8 @@ def test_write_laser_metadata_includes_inactive_laser(tmp_path) -> None:
         # Both lasers present in the metadata even though neither fired.
         assert "Laser1 Wavelength" in f.attrs
         assert "Laser2 Wavelength" in f.attrs
-        assert f.attrs["Laser1 Active"] is False
-        assert f.attrs["Laser2 Active"] is False
+        assert f.attrs["Laser1 Active"] == False
+        assert f.attrs["Laser2 Active"] == False
         assert f.attrs["Laser1 Power"] == 0.0
         assert f.attrs["Laser2 Power"] == 0.0
 
@@ -188,4 +191,4 @@ def test_write_laser_metadata_reads_live_instance_not_config(
 
     with h5py.File(outfile_path, "r") as f:
         assert f.attrs["Laser1 Power"] == 42.0
-        assert f.attrs["Laser1 Active"] is True
+        assert f.attrs["Laser1 Active"] == True

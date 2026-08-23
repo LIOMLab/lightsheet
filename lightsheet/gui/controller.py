@@ -3934,6 +3934,25 @@ class FrameSaver(QObject):
         self.frame_saver_thread = threading.Thread(target=self.frame_saver_worker)
         self.frame_saver_thread.start()
 
+    def _write_laser_metadata(self, outfile: h5py.File) -> None:
+        """Write per-laser metadata as h5py.File ROOT attrs once per file.
+
+        For each configured laser (ALL lasers, including inactive ones
+        with power=0 / active=False — reproducibility context), writes:
+        Laser{i+1} Wavelength (nm), Laser{i+1} Power (mW, canonical),
+        Laser{i+1} Max Power (mW), Laser{i+1} Active (bool),
+        Laser{i+1} Label (str). Read exclusively from the live
+        self.parent.lasers instances — never re-parsed from config.ini
+        at save time (fixes the config-drift metadata bug). Uniform mW
+        units mean no per-laser unit attr is needed.
+        """
+        for i, laser in enumerate(self.parent.lasers):
+            outfile.attrs[f"Laser{i+1} Wavelength"] = laser.wavelength
+            outfile.attrs[f"Laser{i+1} Power"] = laser.power
+            outfile.attrs[f"Laser{i+1} Max Power"] = laser.max_power
+            outfile.attrs[f"Laser{i+1} Active"] = bool(laser.active)
+            outfile.attrs[f"Laser{i+1} Label"] = laser.label
+
     def frame_saver_worker(self) -> None:
         """Thread for saving 3D arrays (or 2D arrays).
         The number of datasets per file is the number of 2D arrays"""
@@ -3941,6 +3960,12 @@ class FrameSaver(QObject):
             print("File created:" + str(self.filenames_list[idx]))  # debugging
             # Create file
             outfile = h5py.File(self.filenames_list[idx], "a")
+            # Write per-laser metadata as file-level root attrs once per
+            # file, read from the live list[ILaser] the controller holds
+            # (never re-parsed from config.ini — fixes the config-drift
+            # metadata bug). All configured lasers are included, even
+            # inactive ones (power=0, active=False), for reproducibility.
+            self._write_laser_metadata(outfile)
 
             counter = 1
             for dataset in range(int(self.number_of_datasets)):
