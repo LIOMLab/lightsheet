@@ -40,7 +40,7 @@ from lightsheet.config import cfg_read
 from lightsheet.gaussian import func, gaussian
 from lightsheet.gui.ui_controller import Ui_Controller
 from lightsheet.gui.ui_properties import Ui_Properties
-from lightsheet.hal import Camera, ETLs, IBeam, Lasers, Motors, SigGen
+from lightsheet.hal import Camera, ETLs, Motors, SigGen
 
 logger = logging.getLogger(__name__)
 
@@ -592,18 +592,21 @@ class Controller_MainWindow(QMainWindow):
         self.ui.statusbar.showMessage("Initializing hardware, please wait...")
         self.ui.statusbar.repaint()
 
-        # Instantiating hardware components. Under demo mode all 6 device
-        # families (Camera, SigGen, Motors, ETLs, Lasers, IBeam) construct
-        # Mock* instances so no hardware init runs on a dev box. The
-        # camera-before-siggen dependency ordering is preserved under both
-        # branches (the mock camera still carries the xsize/ysize/line_time
-        # the SigGen waveform timing derives from).
+        # Instantiating hardware components. Under demo mode all device
+        # families construct Mock* instances so no hardware init runs on a
+        # dev box. The camera-before-siggen dependency ordering is preserved
+        # under both branches (the mock camera still carries the
+        # xsize/ysize/line_time the SigGen waveform timing derives from).
+        #
+        # Lasers: self.lasers is a list[ILaser] — index 0 is Laser 1
+        # (DAQ AO /Dev7/ao0, 561 nm), index 1 is Laser 2 (Toptica iBeam,
+        # 640 nm, COM4). The old 2-channel Lasers container + separate
+        # IBeam attribute are retired; self.ibeam no longer exists.
         if self._demo_mode:
             from lightsheet.hal import (
                 MockCamera,
                 MockETLs,
-                MockIBeam,
-                MockLasers,
+                MockLaser,
                 MockMotors,
                 MockSigGen,
             )
@@ -615,36 +618,78 @@ class Controller_MainWindow(QMainWindow):
             # xsize/ysize/line_time the SigGen waveform timing derives from).
             self.siggen = MockSigGen(self.camera)
             self.motors = MockMotors()
-            self.lasers = MockLasers()
+            self.lasers = [
+                MockLaser(
+                    wavelength=561,
+                    max_power_mw=300.0,
+                    mw_per_volt=60.0,
+                    label="Laser 1 (561 nm)",
+                ),
+                MockLaser(
+                    wavelength=640,
+                    max_power_mw=150.0,
+                    label="Laser 2 (640 nm)",
+                ),
+            ]
             self.etls = MockETLs()
-            self.ibeam = MockIBeam()
         else:
+            from lightsheet.hal import DAQLaser, IBeamSmartLaser
+
             self.camera = Camera(verbose=True)
             self.siggen = SigGen(self.camera)
             self.motors = Motors()
-            self.lasers = Lasers()
+            # Laser 1 calibration lives in config.ini [Lasers] — the single
+            # source of truth for the 561 nm diode's mW-per-Volt and max
+            # output. DAQLaser takes mW-native constructor args, so derive
+            # them here: max_power_mw = Max Power (V) * mW per Volt,
+            # mw_per_volt = mW per Volt, wavelength = Wavelength.
+            _l1_cfg = cfg_read(
+                "config.ini",
+                "Lasers",
+                {
+                    "Laser1 Wavelength": 561,
+                    "Laser1 Power": 0.0,
+                    "Laser1 Max Power": 5.0,
+                    "Laser1 mW per Volt": 60.0,
+                },
+            )
+            self.lasers = [
+                DAQLaser(
+                    terminal="/Dev7/ao0",
+                    wavelength=int(_l1_cfg["Laser1 Wavelength"]),
+                    mw_per_volt=float(_l1_cfg["Laser1 mW per Volt"]),
+                    max_power_mw=float(_l1_cfg["Laser1 Max Power"])
+                    * float(_l1_cfg["Laser1 mW per Volt"]),
+                    label="Laser 1 (561 nm)",
+                ),
+                IBeamSmartLaser(label="Laser 2 (640 nm)"),
+            ]
             self.etls = ETLs()
-            self.ibeam = IBeam()
 
         # Making sure ETLs are in analog mode
         self.etls.open()
         self.etls.set_analog_mode()
 
-        # Open the Toptica iBeam serial laser (COM4). Failure is non-fatal —
-        # the DAQ laser path still works if the iBeam is offline — but surface
-        # the error so the operator knows the red laser is unavailable.
-        # open() calls enable_channel() internally; enable_channel() catches
+        # Open the Toptica iBeam serial laser (COM4). Laser 2 is now
+        # self.lasers[1] (an IBeamSmartLaser adapter wrapping the inner
+        # IBeam serial engine). The adapter constructs the inner IBeam in
+        # __init__ but does NOT open the serial port — open() is a real-
+        # hardware lifecycle verb the controller drives here, mirroring the
+        # pre-rewrite pattern. Failure is non-fatal — the DAQ laser path
+        # still works if the iBeam is offline — but surface the error so the
+        # operator knows the red laser is unavailable. open() calls
+        # enable_channel() internally; enable_channel() catches
         # SerialException and sets self.error without re-raising, so a plain
         # try/except around open() cannot detect a channel-enable failure —
         # the error surface must be inspected after open() returns.
         try:
-            self.ibeam.open()
-            if self.ibeam.error:
+            self.lasers[1]._ibeam.open()
+            if self.lasers[1]._ibeam.error:
                 self.sig_message.emit(
                     f"iBeam opened but channel enable failed: "
-                    f"{self.ibeam.error_message}"
+                    f"{self.lasers[1]._ibeam.error_message}"
                 )
-                self.ibeam.error = 0
+                self.lasers[1]._ibeam.error = 0
         except Exception as e:
             self.sig_message.emit(f"iBeam open failed: {e}")
 
@@ -720,7 +765,10 @@ class Controller_MainWindow(QMainWindow):
                         )
             self.camera.close()
             self.etls.close()
-            self.ibeam.close()
+            # Laser 2 (iBeam) serial close — a real-hardware lifecycle verb
+            # the adapter does not re-expose at the ILaser layer since only
+            # this shutdown path calls it.
+            self.lasers[1]._ibeam.close()
             self.timer_imageview.stop()
             QApplication.restoreOverrideCursor()
             event.accept()
@@ -1022,28 +1070,30 @@ class Controller_MainWindow(QMainWindow):
         self.ui.doubleSpinBox_laserOneAmplitude.setValue(self.laser1_power_pct)
         self.ui.doubleSpinBox_laserTwoAmplitude.setValue(self.laser2_power_pct)
 
-        # Wavelength labels — read from the live Lasers/IBeam instances so the
+        # Wavelength labels — read from the live list[ILaser] instances so the
         # operator sees the real configured wavelength (no hardcoded numbers).
         self.ui.label_72.setText(
             f'<html><head/><body><p><span style=" font-weight:600; font-size:18px;">'
-            f"{self.lasers.laser1_wavelength} nm</span></p></body></html>"
+            f"{self.lasers[0].wavelength} nm</span></p></body></html>"
         )
         self.ui.label_73.setText(
             f'<html><head/><body><p><span style=" font-weight:600; font-size:18px;">'
-            f"{self.ibeam.wavelength} nm</span></p></body></html>"
+            f"{self.lasers[1].wavelength} nm</span></p></body></html>"
         )
 
         # Toggle button text + tooltips so the operator can find each laser by
         # wavelength rather than the generic "Laser1"/"Laser2" placeholder.
         self.ui.pushButton_laserOneToggle.setText(
-            f"Toggle {self.lasers.laser1_wavelength} nm"
+            f"Toggle {self.lasers[0].wavelength} nm"
         )
-        self.ui.pushButton_laserTwoToggle.setText(f"Toggle {self.ibeam.wavelength} nm")
+        self.ui.pushButton_laserTwoToggle.setText(
+            f"Toggle {self.lasers[1].wavelength} nm"
+        )
         self.ui.pushButton_laserOneToggle.setToolTip(
-            f"Toggle {self.lasers.laser1_wavelength} nm laser (DAQ AO Dev7/ao0)"
+            f"Toggle {self.lasers[0].wavelength} nm laser (DAQ AO Dev7/ao0)"
         )
         self.ui.pushButton_laserTwoToggle.setToolTip(
-            f"Toggle Toptica iBeam ({self.ibeam.wavelength} nm, COM4)"
+            f"Toggle Toptica iBeam ({self.lasers[1].wavelength} nm, COM4)"
         )
 
         # Motors

@@ -311,7 +311,7 @@ def test_preview_mode_worker_breaks_on_estop_before_frame_acquisition() -> None:
 
 def test_wavelength_labels_set_from_live_instances() -> None:
     """updateUi_initial_hardware_state must set the wavelength labels from
-    the live self.lasers.laser1_wavelength and self.ibeam.wavelength
+    the live self.lasers[0].wavelength and self.lasers[1].wavelength
     instances — not hardcoded numbers — so the operator sees the real
     configured wavelength (LSR-05)."""
     updateUi_initial_hardware_state = _load_method(
@@ -339,18 +339,19 @@ def test_wavelength_labels_set_from_live_instances() -> None:
     camera.lightsheet_delay_lines = 0
     camera.shutter_mode = "Rolling"
 
-    lasers = Mock()
-    lasers.laser1_wavelength = 555  # green DAQ laser
-
-    ibeam = Mock()
-    ibeam.wavelength = 640  # red iBeam
+    # self.lasers is a list[ILaser] — index 0 = Laser 1 (561 nm DAQ),
+    # index 1 = Laser 2 (640 nm iBeam). The wavelength labels read
+    # self.lasers[i].wavelength from the live instances.
+    laser1 = Mock()
+    laser1.wavelength = 561  # green DAQ laser
+    laser2 = Mock()
+    laser2.wavelength = 640  # red iBeam
 
     standin = Mock()
     standin.ui = Mock()
     standin.siggen = siggen
     standin.camera = camera
-    standin.lasers = lasers
-    standin.ibeam = ibeam
+    standin.lasers = [laser1, laser2]
     standin.laser1_power_pct = 0
     standin.laser2_power_pct = 0
     # updateUi_initial_hardware_state calls these two helpers at the end;
@@ -362,15 +363,15 @@ def test_wavelength_labels_set_from_live_instances() -> None:
 
     label_72_text = standin.ui.label_72.setText.call_args[0][0]
     label_73_text = standin.ui.label_73.setText.call_args[0][0]
-    assert "555" in label_72_text, (
-        "label_72 must show the live lasers.laser1_wavelength (555), not a "
+    assert "561" in label_72_text, (
+        "label_72 must show the live lasers[0].wavelength (561), not a "
         "hardcoded number."
     )
     assert "640" in label_73_text, (
-        "label_73 must show the live ibeam.wavelength (640), not a hardcoded number."
+        "label_73 must show the live lasers[1].wavelength (640), not a hardcoded number."
     )
     # Toggle buttons are relabeled with the live wavelengths too.
     toggle1_text = standin.ui.pushButton_laserOneToggle.setText.call_args[0][0]
     toggle2_text = standin.ui.pushButton_laserTwoToggle.setText.call_args[0][0]
-    assert "555" in toggle1_text
+    assert "561" in toggle1_text
     assert "640" in toggle2_text
