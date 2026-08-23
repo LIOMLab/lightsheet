@@ -53,6 +53,52 @@ class HardwareManager:
         # to shell.lasers (the shell's list copy of the bundle's tuple).
         # The per-laser RLock already lives on each ILaser instance.
         self.lasers = list(bundle.lasers)
+        # NOTE: __init__ deliberately performs NO laser HAL lifecycle
+        # calls (no .open()/.on()/.set_power()). It runs synchronously in
+        # main()'s composition root BEFORE controller.show() — calling
+        # the iBeam serial open here would block the GUI window on the
+        # serial round-trip. The iBeam serial open is driven post-show
+        # from hardware_init via open_laser2() (see below), preserving
+        # the pre-extraction 100ms-timer-triggered timing exactly.
+
+    # ------------------------------------------------------------------ #
+    # iBeam serial-open lifecycle (called post-show from hardware_init).
+    # ------------------------------------------------------------------ #
+
+    def open_laser2(self) -> None:
+        """Open the Toptica iBeam serial laser (COM4 / self.lasers[1]).
+
+        Moved verbatim from ``Controller_MainWindow.hardware_init``'s inline
+        iBeam serial-open try/except block. The IBeamSmartLaser
+        adapter constructs the inner IBeam serial engine in ``__init__`` but
+        does NOT open the serial port — ``open()`` is a real-hardware
+        lifecycle verb driven here, mirroring the pre-rewrite pattern.
+
+        Failure is non-fatal — the DAQ laser path still works if the iBeam
+        is offline — but the error is surfaced via ``sig_message`` so the
+        operator knows the red laser is unavailable. ``open()`` calls
+        ``enable_channel()`` internally; ``enable_channel()`` catches
+        ``SerialException`` and sets ``self.error`` without re-raising, so a
+        plain ``try/except`` around ``open()`` cannot detect a channel-enable
+        failure — the error surface must be inspected after ``open()``
+        returns.
+
+        Timing invariant: this method is invoked from ``hardware_init``
+        (the 100ms ``timer_hardware_init`` callback), which cannot fire
+        until the Qt event loop is pumping via ``app.exec_()`` (i.e. after
+        ``controller.show()``). It is NOT called from ``__init__`` — that
+        would block the composition root on the serial round-trip.
+        """
+        try:
+            self.lasers[1].open()
+            if self.lasers[1].error:
+                self._shell.sig_message.emit(
+                    f"iBeam opened but channel enable failed: "
+                    f"{self.lasers[1].error_message}"
+                )
+                self.lasers[1].error = 0
+        except Exception as e:
+            self._shell.sig_message.emit(f"iBeam open failed: {e}")
 
     # ------------------------------------------------------------------ #
     # Laser power write paths (worker-thread HAL writes).

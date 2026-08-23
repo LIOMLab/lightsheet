@@ -254,3 +254,92 @@ def test_shell_estop_pressed_calls_laser_off_directly_not_via_hw() -> None:
 
     laser1.off.assert_called_once()
     laser2.off.assert_called_once()
+
+
+# --------------------------------------------------------------------------- #
+# Test 4 — open_laser2 drives the iBeam serial open + surfaces channel-
+# enable failure via sig_message; __init__ does NOT call .open() (regression
+# gate proving the composition root stays non-blocking).
+# --------------------------------------------------------------------------- #
+
+
+def test_open_laser2_calls_open_on_laser2_and_surfaces_error() -> None:
+    """HardwareManager.open_laser2() calls .open() on self.lasers[1] and,
+    when .error is set afterward (channel-enable failure caught inside
+    enable_channel()), emits sig_message on the shell with the error
+    message and clears the error flag — mirroring the pre-extraction
+    hardware_init inline block verbatim."""
+    bundle = _make_bundle()
+    shell = _make_shell(bundle)
+    hw = HardwareManager(bundle, shell)
+
+    laser2 = Mock()
+    laser2.error = 1
+    laser2.error_message = "enable_channel rejected: %SYS-E"
+    laser2._lock = threading.RLock()
+    hw.lasers = [Mock(), laser2]
+
+    hw.open_laser2()
+
+    laser2.open.assert_called_once()
+    shell.sig_message.emit.assert_called_once()
+    args, _ = shell.sig_message.emit.call_args
+    assert "iBeam opened but channel enable failed" in args[0]
+    assert "enable_channel rejected: %SYS-E" in args[0]
+    assert laser2.error == 0
+
+
+def test_open_laser2_surfaces_open_exception_via_sig_message() -> None:
+    """If self.lasers[1].open() raises, open_laser2() catches it and emits
+    sig_message with the exception text — the operator is told the red
+    laser is unavailable, but the failure is non-fatal (no re-raise)."""
+    bundle = _make_bundle()
+    shell = _make_shell(bundle)
+    hw = HardwareManager(bundle, shell)
+
+    laser2 = Mock()
+    laser2.open.side_effect = OSError("COM4 not available")
+    laser2._lock = threading.RLock()
+    hw.lasers = [Mock(), laser2]
+
+    # Must not raise — failure is non-fatal.
+    hw.open_laser2()
+
+    laser2.open.assert_called_once()
+    shell.sig_message.emit.assert_called_once()
+    args, _ = shell.sig_message.emit.call_args
+    assert "iBeam open failed" in args[0]
+    assert "COM4 not available" in args[0]
+
+
+def test_hardware_manager_init_does_not_call_open_on_laser2() -> None:
+    """Regression gate: constructing HardwareManager(bundle, shell) must
+    NOT call .open() on bundle.lasers[1]. __init__ runs synchronously in
+    main()'s composition root BEFORE controller.show() — calling the iBeam
+    serial open there would block the GUI window on the serial round-trip
+    (a startup-latency regression). The open is driven post-show from
+    hardware_init via open_laser2()."""
+    bundle = _make_bundle()
+    # Replace the bundle's laser 2 with a Mock whose .open() is observable.
+    laser1 = Mock()
+    laser1._lock = threading.RLock()
+    laser2 = Mock()
+    laser2._lock = threading.RLock()
+    bundle = DeviceBundle(
+        camera=bundle.camera,
+        siggen=bundle.siggen,
+        motors=bundle.motors,
+        etls=bundle.etls,
+        lasers=(laser1, laser2),
+    )
+    shell = _make_shell(bundle)
+
+    hw = HardwareManager(bundle, shell)
+
+    # __init__ must not have triggered any HAL lifecycle call on laser 2.
+    laser2.open.assert_not_called()
+    laser2.on.assert_not_called()
+    laser2.set_power.assert_not_called()
+    # Sanity: the manager did take a lasers reference (so the test isn't
+    # trivially passing because the attribute was never assigned).
+    assert hw.lasers[1] is laser2

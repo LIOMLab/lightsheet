@@ -758,35 +758,24 @@ class Controller_MainWindow(QMainWindow):
         self.etls.open()
         self.etls.set_analog_mode()
 
-        # Open the Toptica iBeam serial laser (COM4). Laser 2 is now
-        # self.lasers[1] (an IBeamSmartLaser adapter wrapping the inner
-        # IBeam serial engine). The adapter constructs the inner IBeam in
-        # __init__ but does NOT open the serial port — open() is a real-
-        # hardware lifecycle verb the controller drives here, mirroring the
-        # pre-rewrite pattern. Failure is non-fatal — the DAQ laser path
-        # still works if the iBeam is offline — but surface the error so the
-        # operator knows the red laser is unavailable. open() calls
-        # enable_channel() internally; enable_channel() catches
-        # SerialException and sets self.error without re-raising, so a plain
-        # try/except around open() cannot detect a channel-enable failure —
-        # the error surface must be inspected after open() returns.
+        # Open the Toptica iBeam serial laser (COM4 / self.lasers[1]).
+        # The iBeam serial-open lifecycle logic (open() + channel-enable-
+        # failure surfacing) lives in HardwareManager.open_laser2() — the
+        # collaborator that already owns all other laser lifecycle (write /
+        # toggle / poll / start / stop). The call is made HERE, from
+        # hardware_init (the 100ms timer_hardware_init callback, which
+        # cannot fire until the Qt event loop is pumping via app.exec_(),
+        # i.e. after .show()), NOT from HardwareManager.__init__ — that
+        # runs synchronously in main()'s composition root before .show()
+        # and would block the GUI window on the serial round-trip. The
+        # pre-extraction post-show timing is preserved exactly.
         #
         # The ILaser.open() contract is uniform across backends:
         # IBeamSmartLaser.open() delegates to the inner serial engine and
         # mirrors its error surface onto the adapter; the mock laser
         # backend's open() is a no-op (no hardware to open), so the same
-        # call site works in demo
-        # mode without a demo-mode gate.
-        try:
-            self.lasers[1].open()
-            if self.lasers[1].error:
-                self.sig_message.emit(
-                    f"iBeam opened but channel enable failed: "
-                    f"{self.lasers[1].error_message}"
-                )
-                self.lasers[1].error = 0
-        except Exception as e:
-            self.sig_message.emit(f"iBeam open failed: {e}")
+        # call site works in demo mode without a demo-mode gate.
+        self._hw.open_laser2()
 
         # Update Ui with initial hardware state
         self.updateUi_initial_hardware_state()
