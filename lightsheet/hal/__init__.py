@@ -45,6 +45,7 @@ from lightsheet.hal.interfaces import (
 from lightsheet.hal.mocks.mock_camera import MockCamera
 from lightsheet.hal.mocks.mock_etls import MockETLs
 from lightsheet.hal.mocks.mock_ibeam import MockIBeam
+from lightsheet.hal.mocks.mock_laser import MockLaser
 from lightsheet.hal.mocks.mock_lasers import MockLasers
 from lightsheet.hal.mocks.mock_motors import MockMotors
 from lightsheet.hal.mocks.mock_siggen import MockSigGen
@@ -81,6 +82,7 @@ __all__ = [
     "MockCamera",
     "MockETLs",
     "MockIBeam",
+    "MockLaser",
     "MockLasers",
     "MockMotors",
     "MockSigGen",
