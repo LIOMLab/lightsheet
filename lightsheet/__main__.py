@@ -71,6 +71,7 @@ def _build_demo_bundle():
             max_power_mw=300.0,
             mw_per_volt=60.0,
             label="Laser 1 (555 nm)",
+            calibration_curve=None,
         ),
         MockLaser(
             wavelength=640,

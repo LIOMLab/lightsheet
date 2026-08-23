@@ -868,6 +868,11 @@ def _make_readback_laser(
     laser.max_power = max_power
     laser.error = 0
     laser.error_message = ""
+    # calibrated defaults to False — a bare Mock would auto-create a truthy
+    # Mock attr, which would wrongly hit the calibrated branch in
+    # _refresh_laser_readback for L1. Set explicitly so the uncalibrated
+    # (est.) path is the default stand-in behavior.
+    laser.calibrated = False
     laser._lock = threading.RLock()
     laser.get_output_power = Mock()
     return laser
@@ -973,16 +978,21 @@ def test_refresh_laser2_readback_releases_lock_in_finally() -> None:
 
 
 def test_refresh_laser1_readback_shows_staged_mw() -> None:
-    """_refresh_laser_readback(0) emits (0, '12.5 mW', '') on
+    """_refresh_laser_readback(0) emits (0, '12.5 mW (est.)', <tooltip>) on
     sig_laser_readback with the staged mW from get_output_power().
     DAQLaser has no hardware readback — get_output_power() returns
-    self.power (the staged mW derived from pct/100 * max_power_mw). The
-    100ms display timer drives this refresh so the L1 mW field stays live
-    as the operator edits the percentage."""
+    self.power (the staged mW derived from pct/100 * max_power_mw). The L1
+    label carries an '(est.)' suffix + tooltip flagging the
+    linear-through-origin estimate as unverified (the diode's lab-measured
+    max is 236.6 mW, not the 300 mW the linear model predicts) until a
+    rig-measured calibration curve is loaded. The 100ms display timer
+    drives this refresh so the L1 mW field stays live as the operator
+    edits the percentage."""
     refresh = _load_method("_refresh_laser_readback(self, idx: int) -> None", src_path=_HW_SRC)
 
     laser1 = _make_readback_laser(power=12.5, max_power=50.0)
     laser1.label = "Laser 1 (555 nm)"
+    laser1.calibrated = False
     laser1.get_output_power.return_value = 12.5
 
     standin = Mock()
@@ -994,8 +1004,13 @@ def test_refresh_laser1_readback_shows_staged_mw() -> None:
 
     laser1.get_output_power.assert_called_once()
     # Exactly one emit for L1 (idx=0); the L2 label is not touched by an
-    # L1 refresh.
-    standin.sig_laser_readback.emit.assert_called_once_with(0, "12.5 mW", "")
+    # L1 refresh. The L1 (est.) suffix + unverified-estimate tooltip is
+    # asserted on the text + tooltip (the tooltip mentions 236.6 mW).
+    standin.sig_laser_readback.emit.assert_called_once()
+    idx, text, tooltip = standin.sig_laser_readback.emit.call_args.args
+    assert idx == 0
+    assert text == "12.5 mW (est.)"
+    assert "236.6 mW" in tooltip
 
 
 # --------------------------------------------------------------------------- #

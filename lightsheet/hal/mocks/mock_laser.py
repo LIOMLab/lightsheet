@@ -62,6 +62,10 @@ class MockLaser(ILaser):
     max_power: float = 0.0
     active: bool = False
     label: str = ""
+    # Mirrors DAQLaser.calibrated — False on the mock (demo path has no
+    # measured curve). Declared as a class default so the attribute exists
+    # pre-__init__ (the ABC declares it as an annotation).
+    calibrated: bool = False
 
     def __init__(
         self,
@@ -69,6 +73,7 @@ class MockLaser(ILaser):
         max_power_mw: float,
         mw_per_volt: float | None = None,
         label: str = "",
+        calibration_curve: object | None = None,
     ) -> None:
         # HAL error surface (AGENTS.md §10) — cleared on construct.
         self.error = 0
@@ -82,6 +87,12 @@ class MockLaser(ILaser):
         # (the mock tracks mW directly, no V conversion).
         self.mw_per_volt = mw_per_volt
         self.label = label
+        # Kept for symmetry with DAQLaser; unused by the mock's own logic.
+        # The mock tracks mW directly (no V conversion), so a calibration
+        # curve would have no effect — accepted but ignored, and
+        # `calibrated` stays False so the demo readback label shows the
+        # "(est.)" suffix consistent with an uncalibrated rig.
+        self.calibrated = False
 
         # Laser state — tracked in software (no hardware I/O).
         self.power = 0.0

@@ -38,10 +38,26 @@ as energized that is actually dark.
 ``ILaser`` instance, not the controller, so the daemon-thread write paths
 acquire ``self.lasers[i]._lock`` (reentrant so the controller's
 re-acquire-under-same-lock pattern does not deadlock).
+
+**Optional V->mW calibration curve (display-only):** an optional list of
+``(V, mW)`` breakpoints measured on the rig with a power meter. When loaded,
+``get_output_power()`` returns the ``numpy.interp``-evaluated mW at the
+commanded voltage (``self.power / self.mw_per_volt``) instead of the staged
+``self.power`` — so the readback label reflects the *actual* optical output
+the diode produces at that drive voltage, not the linear-through-origin
+estimate. This is a **display-only** mapping: the control path
+(``set_power`` mW -> V via ``mw_per_volt``) and the two-layer clamp are
+untouched. When no curve is loaded (``calibration_curve=None``), behavior is
+unchanged — ``get_output_power()`` returns ``self.power`` and ``calibrated``
+is ``False``. The diode's lab-measured max (236.6 mW) is ~27% below the
+300 mW the linear model predicts at 5 V, and DPSS output vs pump current has
+a threshold knee, so the linear estimate is unverified until a curve is
+loaded.
 """
 
 import logging
 import threading
+from collections.abc import Sequence
 
 import nidaqmx
 import numpy as np
@@ -67,6 +83,7 @@ class DAQLaser(ILaser):
         mw_per_volt: float,
         max_power_mw: float,
         label: str,
+        calibration_curve: Sequence[tuple[float, float]] | None = None,
     ) -> None:
         # HAL error surface (AGENTS.md §10) — cleared on construct.
         self.error = 0
@@ -94,6 +111,58 @@ class DAQLaser(ILaser):
         self.mw_per_volt = mw_per_volt
         self.max_power = max_power_mw  # mW (canonical)
         self.label = label
+
+        # Optional V->mW calibration curve (display-only — see class
+        # docstring). Validate on construct: a malformed curve (non-empty
+        # but not strictly-increasing V, or negative mW) is surfaced on the
+        # HAL error surface and falls back to None (linear mode) rather than
+        # raising — hardware-absence tolerance (AGENTS.md §10). An empty
+        # curve is treated as "no curve" (None), not an error.
+        self._curve_v: np.ndarray | None = None
+        self._curve_mw: np.ndarray | None = None
+        self.calibrated = False
+        if calibration_curve:
+            try:
+                pairs = [(float(v), float(mw)) for v, mw in calibration_curve]
+            except (TypeError, ValueError) as exc:
+                self.error = 1
+                self.error_message = (
+                    f"calibration_curve has non-numeric entries: {exc}"
+                )
+                logger.error(
+                    "DAQLaser(%s) calibration_curve non-numeric: %r",
+                    label,
+                    calibration_curve,
+                )
+            else:
+                vs = [v for v, _ in pairs]
+                mws = [mw for _, mw in pairs]
+                if len(vs) < 2 or vs != sorted(vs) or vs[0] == vs[-1]:
+                    self.error = 1
+                    self.error_message = (
+                        "calibration_curve must have >= 2 points with "
+                        "strictly-increasing V"
+                    )
+                    logger.error(
+                        "DAQLaser(%s) calibration_curve not strictly "
+                        "increasing: %r",
+                        label,
+                        vs,
+                    )
+                elif any(mw < 0 for mw in mws):
+                    self.error = 1
+                    self.error_message = (
+                        "calibration_curve has negative mW entries"
+                    )
+                    logger.error(
+                        "DAQLaser(%s) calibration_curve negative mW: %r",
+                        label,
+                        mws,
+                    )
+                else:
+                    self._curve_v = np.array(vs)
+                    self._curve_mw = np.array(mws)
+                    self.calibrated = True
 
         # Laser state — mW canonical (D-01).
         self.power = 0.0
@@ -200,15 +269,25 @@ class DAQLaser(ILaser):
         return None
 
     def get_output_power(self) -> float | None:
-        """Return the staged output power in milliwatts (mW).
+        """Return the output power in milliwatts (mW).
 
-        NI-DAQ analog output has no hardware power readback channel, so
-        this returns the staged ``self.power`` (mW) — the controller's L2
-        readback field degrades gracefully to the commanded value on the
-        DAQ laser. Never returns ``None`` (the staged value is always
-        available); the ``None` return is part of the ``ILaser`` contract
-        for backends with a real readback that can fail.
+        NI-DAQ analog output has no hardware power readback channel. When a
+        V->mW calibration curve is loaded (``calibrated=True``), this
+        returns the ``numpy.interp``-evaluated mW at the commanded voltage
+        (``self.power / self.mw_per_volt``) — the actual optical output the
+        diode produces at that drive voltage, per the rig-measured curve.
+        When no curve is loaded, returns the staged ``self.power`` (mW) —
+        the linear-through-origin estimate (``mW = V * mw_per_volt``). The
+        controller's readback label branches on ``self.calibrated`` to flag
+        the estimate as unverified vs calibrated.
+
+        Never returns ``None`` (the staged value is always available); the
+        ``None`` return is part of the ``ILaser`` contract for backends
+        with a real readback that can fail.
         """
+        if self.calibrated and self._curve_v is not None:
+            commanded_v = self.power / self.mw_per_volt if self.mw_per_volt else 0.0
+            return float(np.interp(commanded_v, self._curve_v, self._curve_mw))
         return self.power
 
     def set_power(self, mw: float) -> None:

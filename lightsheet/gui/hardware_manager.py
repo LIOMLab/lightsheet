@@ -474,9 +474,19 @@ class HardwareManager:
         explaining the fallback so the operator can distinguish a live
         readback from a stale commanded value.
 
-        Works for both lasers: idx=0 (L1/DAQLaser — get_output_power()
-        returns the staged mW, never None in practice) and idx=1 (L2/iBeam
-        — get_output_power() queries the serial readback, may return None).
+        L1 (DAQLaser, idx=0) has no hardware readback — get_output_power()
+        returns either the staged mW (linear-through-origin estimate, no
+        calibration curve loaded) or a curve-interpolated mW (calibrated).
+        The label suffix distinguishes the two so the operator knows
+        whether the number is an unverified linear estimate or a
+        rig-measured calibration: '(est.)' when uncalibrated, '(cal.)'
+        when a V->mW curve is loaded. The diode's lab-measured max is
+        236.6 mW, ~27% below the 300 mW the linear model predicts at 5 V,
+        so the unverified estimate is flagged explicitly.
+
+        Works for both lasers: idx=0 (L1/DAQLaser — staged or
+        curve-interpolated mW, never None) and idx=1 (L2/iBeam —
+        get_output_power() queries the serial readback, may return None).
         """
         laser = self.lasers[idx]
         if not laser._lock.acquire(blocking=False):
@@ -484,7 +494,34 @@ class HardwareManager:
         try:
             value = laser.get_output_power()
             if value is not None:
-                self._shell.sig_laser_readback.emit(idx, f"{value:.1f} mW", "")
+                if idx == 0:
+                    # L1 (DAQLaser) — no hardware readback. Branch on
+                    # calibrated to flag unverified linear estimate vs
+                    # rig-measured curve interpolation.
+                    if getattr(laser, "calibrated", False):
+                        self._shell.sig_laser_readback.emit(
+                            idx,
+                            f"{value:.1f} mW (cal.)",
+                            "Calibrated estimate from a measured V→mW "
+                            "curve. (DAQLaser has no live hardware "
+                            "readback; this is the curve-interpolated "
+                            "value at the commanded voltage.)",
+                        )
+                    else:
+                        self._shell.sig_laser_readback.emit(
+                            idx,
+                            f"{value:.1f} mW (est.)",
+                            "Linear-through-origin estimate "
+                            "(mW = V * mW_per_volt). Unverified — the "
+                            "diode's lab-measured max is 236.6 mW, not "
+                            "the 300 mW this model predicts. Run the rig "
+                            "calibration sweep to load a measured V->mW "
+                            "curve.",
+                        )
+                else:
+                    self._shell.sig_laser_readback.emit(
+                        idx, f"{value:.1f} mW", ""
+                    )
             else:
                 self._shell.sig_laser_readback.emit(
                     idx,

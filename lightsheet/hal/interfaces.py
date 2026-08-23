@@ -666,6 +666,11 @@ class ILaser(ABC):
     max_power: float  # mW (canonical)
     active: bool  # live state for status indicator
     label: str  # e.g. "Laser 1 (555 nm)" for metadata
+    # Whether get_output_power() returns a measured-curve-interpolated value
+    # (True) or a linear-through-origin estimate (False). The readback label
+    # formatter branches on this to flag unverified estimates vs calibrated
+    # values. Backends without a calibration curve set this False.
+    calibrated: bool
 
     # Per-instance RLock for daemon-thread write serialization. The
     # controller's _write_laser*_power / _toggle_laser* paths acquire
