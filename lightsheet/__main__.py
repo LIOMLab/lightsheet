@@ -303,6 +303,7 @@ def main() -> int:
     from lightsheet.gui.acquisition_coordinator import AcquisitionCoordinator
     from lightsheet.gui.frame_saver_controller import FrameSaverController
     from lightsheet.gui.hardware_manager import HardwareManager
+    from lightsheet.gui.motor_controller import MotorController
 
     controller = Controller_MainWindow(bundle, demo=demo)
     fs = FrameSaverController(bundle, controller)
@@ -315,6 +316,12 @@ def main() -> int:
     # shell.
     acq = AcquisitionCoordinator(bundle, hw, controller)
     controller._acq = acq
+    # MotorController owns the motor-move + focus/interpolation-display
+    # slots. Built after the shell so it can hold a shell reference; wired
+    # before hardware_init's dependent timers/connections run so the
+    # .clicked.connect(self._mc.<method>) call sites in __init__ resolve.
+    mc = MotorController(bundle, controller)
+    controller._mc = mc
     controller.sig_beep.connect(app.beep)  # connection for beep sounds
     controller.sig_stylesheet.connect(set_app_stylesheet)  # stylesheet selection
 

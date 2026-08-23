@@ -31,11 +31,9 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem,
     QToolBar,
 )
-from scipy import stats
 
 # FIXME - Free functions to integrate into own class (or at least cleanup/rename)
 from lightsheet.config import cfg_read
-from lightsheet.gaussian import func, gaussian
 from lightsheet.gui.properties_dialog import Properties_Dialog
 from lightsheet.gui.ui_controller import Ui_Controller
 from lightsheet.hal import Camera, ETLs, Motors, SigGen
@@ -47,6 +45,7 @@ if typing.TYPE_CHECKING:
     from lightsheet.gui.acquisition_coordinator import AcquisitionCoordinator
     from lightsheet.gui.frame_saver_controller import FrameSaverController
     from lightsheet.gui.hardware_manager import HardwareManager
+    from lightsheet.gui.motor_controller import MotorController
 
 
 class Controller_MainWindow(QMainWindow):
@@ -97,6 +96,7 @@ class Controller_MainWindow(QMainWindow):
         fs: "FrameSaverController | None" = None,
         hw: "HardwareManager | None" = None,
         acq: "AcquisitionCoordinator | None" = None,
+        mc: "MotorController | None" = None,
     ) -> None:
         # The pre-built DeviceBundle is the sole HAL-handle channel into
         # the shell — main()'s composition root builds it (via
@@ -125,6 +125,13 @@ class Controller_MainWindow(QMainWindow):
         # None-default keeps the legacy call sites (tests) working until
         # the composition root passes it.
         self._acq = acq
+        # MotorController owns all sample/vertical/camera motor-move
+        # GUI-thread slots plus the focus-calibration-display methods. The
+        # shell's pushButton_sample*/pushButton_camera*/pushButton_cal*
+        # .clicked.connect(...) call sites target self._mc.<method> instead
+        # of self.<method>. None-default keeps the legacy call sites
+        # (tests) working until the composition root passes it.
+        self._mc = mc
         # Demo mode flag — when True, the window-title suffix and
         # status-bar message carry the [DEMO] indicator. HAL construction
         # no longer branches on this flag (the bundle is pre-built by
@@ -479,42 +486,49 @@ class Controller_MainWindow(QMainWindow):
         # Connection for unit change
         self.ui.comboBox_units.currentTextChanged.connect(self.updateUi_units)
 
-        # Connections for the sample motion buttons
-        self.ui.pushButton_sampleStepUp.clicked.connect(self.updateUi_move_sample_up)
+        # Connections for the sample motion buttons. MotorController is
+        # wired onto self._mc by the composition root AFTER construction
+        # (two-phase init — mc needs a shell reference), so the clicks bind
+        # through lambdas that defer the self._mc attribute lookup to
+        # click-time (by then self._mc is wired). Mirrors the lazy-binding
+        # precedent for self._hw / self._fs in hardware_init.
+        self.ui.pushButton_sampleStepUp.clicked.connect(
+            lambda: self._mc.updateUi_move_sample_up()
+        )
         self.ui.pushButton_sampleStepDown.clicked.connect(
-            self.updateUi_move_sample_down
+            lambda: self._mc.updateUi_move_sample_down()
         )
         self.ui.pushButton_sampleStepForward.clicked.connect(
-            self.updateUi_move_sample_forward
+            lambda: self._mc.updateUi_move_sample_forward()
         )
         self.ui.pushButton_sampleStepBackward.clicked.connect(
-            self.updateUi_move_sample_backward
+            lambda: self._mc.updateUi_move_sample_backward()
         )
         self.ui.pushButton_sampleGotoOrigin.clicked.connect(
-            self.updateUi_move_sample_to_origin
+            lambda: self._mc.updateUi_move_sample_to_origin()
         )
         self.ui.pushButton_sampleSetOrigin.clicked.connect(
-            self.updateUi_set_sample_origin
+            lambda: self._mc.updateUi_set_sample_origin()
         )
         self.ui.pushButton_sampleGotoHPosition.clicked.connect(
-            self.updateUi_move_to_horizontal_position
+            lambda: self._mc.updateUi_move_to_horizontal_position()
         )
         self.ui.pushButton_sampleGotoVPosition.clicked.connect(
-            self.updateUi_move_to_vertical_position
+            lambda: self._mc.updateUi_move_to_vertical_position()
         )
 
         # Connections for the camera motion buttons
         self.ui.pushButton_cameraGotoPosition.clicked.connect(
-            self.updateUi_move_camera_to_position
+            lambda: self._mc.updateUi_move_camera_to_position()
         )
         self.ui.pushButton_cameraSetFocus.clicked.connect(
-            self.updateUi_set_camera_focus
+            lambda: self._mc.updateUi_set_camera_focus()
         )
         self.ui.pushButton_cameraStepForward.clicked.connect(
-            self.updateUi_move_camera_forward
+            lambda: self._mc.updateUi_move_camera_forward()
         )
         self.ui.pushButton_cameraStepBackward.clicked.connect(
-            self.updateUi_move_camera_backward
+            lambda: self._mc.updateUi_move_camera_backward()
         )
         # self.ui.pushButton_cameraGotoFocus.clicked.connect(self.updateUi_move_camera_to_focus)  # noqa: E501
 
@@ -587,22 +601,22 @@ class Controller_MainWindow(QMainWindow):
         # Connections for the 'Calibration' tab controls
         # ---
         self.ui.pushButton_calCameraComputeFocus.clicked.connect(
-            self.calculate_camera_focus
+            lambda: self._mc.calculate_camera_focus()
         )
         self.ui.pushButton_calCameraShowInterpolation.clicked.connect(
-            self.show_camera_interpolation
+            lambda: self._mc.show_camera_interpolation()
         )
         self.ui.pushButton_calEtlShowInterpolation.clicked.connect(
-            self.show_etl_interpolation
+            lambda: self._mc.show_etl_interpolation()
         )
         self.ui.pushButton_calHorizontalStartRangeSelection.clicked.connect(
-            self.updateUi_reset_boundaries
+            lambda: self._mc.updateUi_reset_boundaries()
         )
         self.ui.pushButton_calHorizontalSetForwardLimit.clicked.connect(
-            self.updateUi_set_horizontal_forward_boundary
+            lambda: self._mc.updateUi_set_horizontal_forward_boundary()
         )
         self.ui.pushButton_calHorizontalSetBackwardLimit.clicked.connect(
-            self.updateUi_set_horizontal_backward_boundary
+            lambda: self._mc.updateUi_set_horizontal_backward_boundary()
         )
 
         # ---
@@ -1377,498 +1391,6 @@ class Controller_MainWindow(QMainWindow):
             self.motors.camera.get_position(self.units), self.units
         )
         self.ui.label_cameraCurrentPosition.setText(self.current_camera_position_text)
-
-    def updateUi_move_to_horizontal_position(self) -> None:
-        """Moves the sample to a specified horizontal position"""
-        if (
-            self.ui.doubleSpinBox_sampleSetHPosition.value()
-            >= self.motors.horizontal.get_limit_low(self.units)
-        ) and (
-            self.ui.doubleSpinBox_sampleSetHPosition.value()
-            <= self.motors.horizontal.get_limit_high(self.units)
-        ):
-            try:
-                self.motors.horizontal.move_absolute_position(
-                    self.ui.doubleSpinBox_sampleSetHPosition.value(), self.units
-                )
-            except ValueError:
-                self.sig_message.emit(
-                    "Move rejected — horizontal would exceed travel limits. Move the stage closer to the travel range and retry."  # noqa: E501
-                )
-                self.sig_beep.emit()
-            else:
-                self.updateUi_message_printer("Sample moving to horizontal position")
-            self.updateUi_position_horizontal()
-        else:
-            self.updateUi_message_printer("Out of boundaries")
-            self.sig_beep.emit()
-
-    def updateUi_move_to_vertical_position(self) -> None:
-        """Moves the sample to a specified vertical position"""
-        if (
-            self.ui.doubleSpinBox_sampleSetVPosition.value()
-            >= self.motors.vertical.get_limit_low(self.units)
-        ) and (
-            self.ui.doubleSpinBox_sampleSetVPosition.value()
-            <= self.motors.vertical.get_limit_high(self.units)
-        ):
-            try:
-                self.motors.vertical.move_absolute_position(
-                    self.ui.doubleSpinBox_sampleSetVPosition.value(), self.units
-                )
-            except ValueError:
-                self.sig_message.emit(
-                    "Move rejected — vertical would exceed travel limits. Move the stage closer to the travel range and retry."  # noqa: E501
-                )
-                self.sig_beep.emit()
-            else:
-                self.updateUi_message_printer("Sample moving to vertical position")
-            self.updateUi_position_vertical()
-        else:
-            self.updateUi_message_printer("Out of boundaries")
-            self.sig_beep.emit()
-
-    def updateUi_move_sample_to_origin(self) -> None:
-        """Moves vertical and horizontal sample motors to origin position"""
-        if (
-            self.motors.horizontal.get_origin(self.units)
-            <= self.motors.horizontal.get_limit_high(self.units)
-        ) and (
-            self.motors.horizontal.get_origin(self.units)
-            >= self.motors.horizontal.get_limit_low(self.units)
-        ):
-            # Moving sample to horizontal origin
-            try:
-                self.motors.horizontal.move_absolute_position(
-                    self.motors.horizontal.get_origin(self.units), self.units
-                )
-            except ValueError:
-                self.sig_message.emit(
-                    "Move rejected — horizontal would exceed travel limits. Move the stage closer to the travel range and retry."  # noqa: E501
-                )
-                self.sig_beep.emit()
-            else:
-                self.updateUi_message_printer("Moving to horizontal origin")
-            self.updateUi_position_horizontal()
-        else:
-            self.sig_beep.emit()
-            self.updateUi_message_printer("Horizontal origin out of boundaries")
-
-        if (
-            self.motors.vertical.get_origin(self.units)
-            <= self.motors.vertical.get_limit_high(self.units)
-        ) and (
-            self.motors.vertical.get_origin(self.units)
-            >= self.motors.vertical.get_limit_low(self.units)
-        ):
-            # Moving sample to vertical origin
-            try:
-                self.motors.vertical.move_absolute_position(
-                    self.motors.vertical.get_origin(self.units), self.units
-                )
-            except ValueError:
-                self.sig_message.emit(
-                    "Move rejected — vertical would exceed travel limits. Move the stage closer to the travel range and retry."  # noqa: E501
-                )
-                self.sig_beep.emit()
-            else:
-                self.updateUi_message_printer("Moving to vertical origin")
-            self.updateUi_position_vertical()
-        else:
-            self.sig_beep.emit()
-            self.updateUi_message_printer("Vertical origin out of boundaries")
-
-    def updateUi_move_camera_to_position(self) -> None:
-        """Moves the sample to a specified vertical position"""
-        if (
-            self.ui.doubleSpinBox_cameraSetPosition.value()
-            >= self.motors.camera.get_limit_low(self.units)
-        ) and (
-            self.ui.doubleSpinBox_cameraSetPosition.value()
-            <= self.motors.camera.get_limit_high(self.units)
-        ):
-            try:
-                self.motors.camera.move_absolute_position(
-                    self.ui.doubleSpinBox_cameraSetPosition.value(), self.units
-                )
-            except ValueError:
-                self.sig_message.emit(
-                    "Move rejected — camera would exceed travel limits. Move the stage closer to the travel range and retry."  # noqa: E501
-                )
-                self.sig_beep.emit()
-            else:
-                self.updateUi_message_printer("Camera moving to position")
-            self.updateUi_position_camera()
-        else:
-            self.updateUi_message_printer("Out of boundaries")
-            self.sig_beep.emit()
-
-    def updateUi_move_camera_to_focus(self) -> None:
-        """Moves camera to focus position"""
-        if self.focus_selected:
-            if self.motors.camera.get_origin(
-                self.units
-            ) > self.motors.camera.get_limit_high(self.units):
-                # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_high(self.units), self.units)  # noqa: E501
-                # rather only report out of boundaries
-                self.updateUi_message_printer("Focus out of boundaries")
-                self.sig_beep.emit()
-                self.updateUi_position_camera()
-            elif self.motors.camera.get_origin(
-                self.units
-            ) < self.motors.camera.get_limit_low(self.units):
-                # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_low(self.units), self.units)  # noqa: E501
-                # rather only report out of boundaries
-                self.updateUi_message_printer("Focus out of boundaries")
-                self.sig_beep.emit()
-                self.updateUi_position_camera()
-            else:
-                try:
-                    self.motors.camera.move_absolute_position(
-                        self.motors.camera.get_origin(self.units), self.units
-                    )
-                except ValueError:
-                    self.sig_message.emit(
-                        "Move rejected — camera would exceed travel limits. Move the stage closer to the travel range and retry."  # noqa: E501
-                    )
-                    self.sig_beep.emit()
-                else:
-                    self.updateUi_message_printer("Moving to focus")
-                self.updateUi_position_camera()
-        else:
-            try:
-                self.motors.camera.move_absolute_position(
-                    self.motors.camera.get_origin(self.units), self.units
-                )
-            except ValueError:
-                self.sig_message.emit(
-                    "Move rejected — camera would exceed travel limits. Move the stage closer to the travel range and retry."  # noqa: E501
-                )
-                self.sig_beep.emit()
-            else:
-                self.updateUi_message_printer(
-                    "Focus not yet set. Moving camera to default focus"
-                )
-            self.updateUi_position_camera()
-
-    def updateUi_move_sample_backward(self) -> None:
-        """Sample motor backward horizontal motion"""
-        if (
-            self.motors.horizontal.get_position(self.units)
-            - self.ui.doubleSpinBox_sampleHStepSize.value()
-            >= self.motors.horizontal.get_limit_low(self.units)
-        ):
-            try:
-                self.motors.horizontal.move_relative_position(
-                    -self.ui.doubleSpinBox_sampleHStepSize.value(), self.units
-                )
-            except ValueError:
-                self.sig_message.emit(
-                    "Move rejected — horizontal would exceed travel limits. Move the stage closer to the travel range and retry."  # noqa: E501
-                )
-                self.sig_beep.emit()
-            else:
-                self.updateUi_message_printer("Sample moving backward")
-            self.updateUi_position_horizontal()
-        else:
-            # self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_low(self.units), self.units)  # noqa: E501
-            # rather only report out of boundaries
-            self.updateUi_message_printer("Out of boundaries")
-            self.sig_beep.emit()
-            self.updateUi_position_horizontal()
-
-    def updateUi_move_sample_forward(self) -> None:
-        """Sample motor forward horizontal motion"""
-        if (
-            self.motors.horizontal.get_position(self.units)
-            + self.ui.doubleSpinBox_sampleHStepSize.value()
-            <= self.motors.horizontal.get_limit_high(self.units)
-        ):
-            try:
-                self.motors.horizontal.move_relative_position(
-                    self.ui.doubleSpinBox_sampleHStepSize.value(), self.units
-                )
-            except ValueError:
-                self.sig_message.emit(
-                    "Move rejected — horizontal would exceed travel limits. Move the stage closer to the travel range and retry."  # noqa: E501
-                )
-                self.sig_beep.emit()
-            else:
-                self.updateUi_message_printer("Sample moving forward")
-            self.updateUi_position_horizontal()
-        else:
-            # self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_high(self.units), self.units)  # noqa: E501
-            # rather only report out of boundaries
-            self.updateUi_message_printer("Out of boundaries")
-            self.sig_beep.emit()
-            self.updateUi_position_horizontal()
-
-    def updateUi_move_sample_up(self) -> None:
-        """Sample motor upward vertical motion"""
-        if (
-            self.motors.vertical.get_position(self.units)
-            - self.ui.doubleSpinBox_sampleVStepSize.value()
-            >= self.motors.vertical.get_limit_low(self.units)
-        ):
-            try:
-                self.motors.vertical.move_relative_position(
-                    -self.ui.doubleSpinBox_sampleVStepSize.value(), self.units
-                )
-            except ValueError:
-                self.sig_message.emit(
-                    "Move rejected — vertical would exceed travel limits. Move the stage closer to the travel range and retry."  # noqa: E501
-                )
-                self.sig_beep.emit()
-            else:
-                self.updateUi_message_printer("Sample stepping up")
-            self.updateUi_position_vertical()
-        else:
-            # self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_low(self.units), self.units)  # noqa: E501
-            # rather only report out of boundaries
-            self.updateUi_message_printer("Out of boundaries")
-            self.sig_beep.emit()
-            self.updateUi_position_vertical()
-
-    def updateUi_move_sample_down(self) -> None:
-        """Sample motor downward vertical motion"""
-        if (
-            self.motors.vertical.get_position(self.units)
-            + self.ui.doubleSpinBox_sampleVStepSize.value()
-            <= self.motors.vertical.get_limit_high(self.units)
-        ):
-            try:
-                self.motors.vertical.move_relative_position(
-                    self.ui.doubleSpinBox_sampleVStepSize.value(), self.units
-                )
-            except ValueError:
-                self.sig_message.emit(
-                    "Move rejected — vertical would exceed travel limits. Move the stage closer to the travel range and retry."  # noqa: E501
-                )
-                self.sig_beep.emit()
-            else:
-                self.updateUi_message_printer("Sample stepping down")
-            self.updateUi_position_vertical()
-        else:
-            # self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_high(self.units), self.units)  # noqa: E501
-            # rather only report out of boundaries
-            self.updateUi_message_printer("Out of boundaries")
-            self.sig_beep.emit()
-            self.updateUi_position_vertical()
-
-    def updateUi_move_camera_backward(self) -> None:
-        """Camera motor backward horizontal motion"""
-        if (
-            self.motors.camera.get_position(self.units)
-            - self.ui.doubleSpinBox_cameraStepSize.value()
-            >= self.motors.camera.get_limit_low(self.units)
-        ):
-            try:
-                self.motors.camera.move_relative_position(
-                    -self.ui.doubleSpinBox_cameraStepSize.value(), self.units
-                )
-            except ValueError:
-                self.sig_message.emit(
-                    "Move rejected — camera would exceed travel limits. Move the stage closer to the travel range and retry."  # noqa: E501
-                )
-                self.sig_beep.emit()
-            else:
-                self.updateUi_message_printer("Camera stepping backward")
-            self.updateUi_position_camera()
-        else:
-            # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_low(self.units), self.units)  # noqa: E501
-            # In case of a communication glitch with motor, this was bringing the stage back to min position  # noqa: E501
-            # rather only report out of boundaries
-            self.updateUi_message_printer("Out of boundaries")
-            self.sig_beep.emit()
-            self.updateUi_position_camera()
-
-    def updateUi_move_camera_forward(self) -> None:
-        """Camera motor forward horizontal motion"""
-        if (
-            self.motors.camera.get_position(self.units)
-            + self.ui.doubleSpinBox_cameraStepSize.value()
-            <= self.motors.camera.get_limit_high(self.units)
-        ):
-            try:
-                self.motors.camera.move_relative_position(
-                    self.ui.doubleSpinBox_cameraStepSize.value(), self.units
-                )
-            except ValueError:
-                self.sig_message.emit(
-                    "Move rejected — camera would exceed travel limits. Move the stage closer to the travel range and retry."  # noqa: E501
-                )
-                self.sig_beep.emit()
-            else:
-                self.updateUi_message_printer("Camera stepping forward")
-            self.updateUi_position_camera()
-        else:
-            # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_high(self.units), self.units)  # noqa: E501
-            # In case of a communication glitch with motor, this was bringing the stage back to max position  # noqa: E501
-            # rather only report out of boundaries
-            self.updateUi_message_printer("Out of boundaries")
-            self.sig_beep.emit()
-            self.updateUi_position_camera()
-
-    def updateUi_reset_boundaries(self) -> None:
-        """Reset variables for setting sample's horizontal motion range"""
-        self.ui.pushButton_calHorizontalStartRangeSelection.setEnabled(False)
-        self.ui.pushButton_calHorizontalSetForwardLimit.setEnabled(True)
-        self.ui.pushButton_calHorizontalSetBackwardLimit.setEnabled(True)
-        self.ui.label_calibrateRange.setText("Move Horizontal Position")
-        # Default boundaries
-        self.motors.horizontal.set_limit_low(0, self.units)
-        self.motors.horizontal.set_limit_high(0, self.units)
-        self.updateUi_units()
-
-    def updateUi_set_horizontal_backward_boundary(self) -> None:
-        """Set lower limit of sample's horizontal motion"""
-        self.motors.horizontal.set_limit_low(
-            self.motors.horizontal.get_position(self.units), self.units
-        )
-        self.updateUi_units()
-        self.horizontal_backward_boundary_selected = True
-        self.ui.pushButton_calHorizontalSetBackwardLimit.setEnabled(False)
-        if self.horizontal_forward_boundary_selected:
-            self.ui.pushButton_calHorizontalStartRangeSelection.setEnabled(True)
-            self.ui.label_calibrateRange.setText("Press Calibrate Range To Start")
-
-    def updateUi_set_horizontal_forward_boundary(self) -> None:
-        """Set upper limit of sample's horizontal motion"""
-        self.motors.horizontal.set_limit_high(
-            self.motors.horizontal.get_position(self.units), self.units
-        )
-        self.updateUi_units()
-        self.horizontal_forward_boundary_selected = True
-        self.ui.pushButton_calHorizontalSetForwardLimit.setEnabled(False)
-        if self.horizontal_backward_boundary_selected:
-            self.ui.pushButton_calHorizontalStartRangeSelection.setEnabled(True)
-            self.ui.label_calibrateRange.setText("Press Calibrate Range To Start")
-
-    def updateUi_set_sample_origin(self) -> None:
-        """Modifies the sample origin position"""
-        self.motors.horizontal.set_origin(
-            self.motors.horizontal.get_position(self.units), self.units
-        )
-        self.motors.vertical.set_origin(
-            self.motors.vertical.get_position(self.units), self.units
-        )
-        origin_text = f"Sample origin set at ({self.motors.horizontal.get_origin(self.units)}, {self.motors.vertical.get_origin(self.units)}) {self.units}"  # noqa: E501
-        self.updateUi_message_printer(origin_text)
-
-    def updateUi_set_camera_focus(self) -> None:
-        """Modifies manually the camera focus position"""
-        self.focus_selected = True
-        self.motors.camera.set_origin(
-            self.motors.camera.get_position(self.units), self.units
-        )
-        focus_text = f"Camera focus manually set at {self.motors.camera.get_origin(self.units)} {self.units}"  # noqa: E501
-        self.updateUi_message_printer(focus_text)
-
-    def calculate_camera_focus(self) -> None:
-        """Interpolates the camera focus position"""
-        # Current sample position
-        current_position = self.motors.horizontal.get_position(self.units)
-        # Compute corresponding optimal focus position
-        focus_regression = self.slope_camera * current_position + self.intercept_camera
-        self.motors.camera.set_origin(focus_regression, self.units)
-        print("focus_regression:" + str(focus_regression))  # debugging
-        self.focus_selected = True
-        self.updateUi_message_printer("Focus automatically set")
-
-    def show_camera_interpolation(self) -> None:
-        """Shows the camera focus interpolation"""
-        x = self.camera_focus_relation[:, 0]
-        y = self.camera_focus_relation[:, 1]
-
-        # Calculating linear regression
-        xnew = np.linspace(
-            self.camera_focus_relation[0, 0], self.camera_focus_relation[-1, 0], 1000
-        )  ##1000 points
-        self.slope_camera, self.intercept_camera, r_value, p_value, std_err = (
-            stats.linregress(x, y)
-        )
-        print("r_value:" + str(r_value))  # debugging
-        print("p_value:" + str(p_value))  # debugging
-        print("std_err:" + str(std_err))  # debugging
-        yreg = self.slope_camera * xnew + self.intercept_camera
-
-        # Setting colormap
-        xstart = self.motors.horizontal.get_limit_low(self.units)
-        xend = self.motors.horizontal.get_limit_high(self.units)
-        ystart = self.focus_forward_boundary
-        yend = self.focus_backward_boundary
-        transp = copy.deepcopy(self.donnees)
-        for q in range(int(self.number_of_calibration_planes)):
-            transp[q, :] = np.flip(transp[q, :])
-        transp = np.transpose(transp)
-
-        # Showing interpolation graph
-        plt.figure(1)
-        plt.title("Camera Focus Regression")
-        plt.xlabel(f"Sample Horizontal Position ({self.units})")
-        plt.ylabel(f"Camera Position ({self.units})")
-        plt.imshow(transp, cmap="gray", extent=[xstart, xend, ystart, yend])  # Colormap
-        plt.plot(x, y, "o")  # Raw data
-        plt.plot(xnew, yreg)  # Linear regression
-        plt.show(
-            block=False
-        )  # Prevents the plot from blocking the execution of the code...
-
-        # debugging
-        n = int(self.number_of_camera_positions)
-        x = np.arange(n)
-        for g in range(int(self.number_of_calibration_planes)):
-            plt.figure(g + 2)
-            plt.plot(self.donnees[g, :])
-            plt.plot(x, gaussian(x, *self.popt[g]), "ro:", label="fit")
-            plt.show(block=False)
-
-    def show_etl_interpolation(self) -> None:
-        """Shows the etl focus interpolation"""
-        xl = self.etl_l_relation[:, 0]
-        yl = self.etl_l_relation[:, 1]
-        # Left linear regression
-        xlnew = np.linspace(
-            self.etl_l_relation[0, 0], self.etl_l_relation[-1, 0], 1000
-        )  # 1000 points
-        lslope, lintercept, r_value, p_value, std_err = stats.linregress(xl, yl)
-        print("r_value:" + str(r_value))  # debugging
-        print("p_value:" + str(p_value))  # debugging
-        print("std_err:" + str(std_err))  # debugging
-        ylnew = lslope * xlnew + lintercept
-
-        xr = self.etl_r_relation[:, 0]
-        yr = self.etl_r_relation[:, 1]
-        # Right linear regression
-        xrnew = np.linspace(
-            self.etl_r_relation[0, 0], self.etl_r_relation[-1, 0], 1000
-        )  # 1000 points
-        rslope, rintercept, r_value, p_value, std_err = stats.linregress(xr, yr)
-        print("r_value:" + str(r_value))  # debugging
-        print("p_value:" + str(p_value))  # debugging
-        print("std_err:" + str(std_err))  # debugging
-        yrnew = rslope * xrnew + rintercept
-
-        # Showing interpolation graph
-        plt.figure(1)
-        plt.title("ETL Focus Regression")
-        plt.xlabel("ETL Voltage (V)")
-        plt.ylabel("Focal Point Horizontal Position (column)")
-        plt.plot(xl, yl, "o", label="Left ETL")  # Raw left data
-        plt.plot(xlnew, ylnew)  # Left regression
-        plt.plot(xr, yr, "o", label="Right ETL")  # Raw right data
-        plt.plot(xrnew, yrnew)  # Right regression
-        plt.legend()
-        plt.show(
-            block=False
-        )  # Prevents the plot from blocking the execution of the code...
-
-        # debugging
-        for g in range(int(self.number_of_etls_points)):
-            plt.figure(g + 2)
-            plt.plot(self.xdata[g], self.ydata[g], ".")
-            plt.plot(self.xdata[g], func(self.xdata[g], *self.popt[g]), "r-")
-            plt.show(block=False)
 
     def updateUi_galvo_left_amplitude(self) -> None:
         # Propagate Ui changes to hardware instance
