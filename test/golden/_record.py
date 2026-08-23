@@ -71,7 +71,7 @@ _logger = logging.getLogger("lightsheet.gui.controller")
 
 
 def _read_controller_source() -> str:
-    with open(_CONTROLLER_SRC) as f:
+    with open(_CONTROLLER_SRC, encoding="utf-8") as f:
         return f.read()
 
 
@@ -96,7 +96,7 @@ def _load_method(method_sig: str, src_path: str = _CONTROLLER_SRC) -> Callable[.
     (``datetime``, ``logger``, ``np``) so the function resolves them at
     call time via its ``__globals__``.
     """
-    with open(src_path) as f:
+    with open(src_path, encoding="utf-8") as f:
         src = f.read()
     body = _slice_method(src, method_sig)
     namespace: dict[str, Any] = {

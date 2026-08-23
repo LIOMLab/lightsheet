@@ -27,11 +27,17 @@ This is a BEHAVIOR test (AGENTS.md §5) — it executes the real DAQLaser
 code under the conftest nidaqmx stub and asserts on its runtime state.
 """
 
+import os
 import threading
 
 import pytest
 
 from lightsheet.hal.real.daqlaser import DAQLaser
+
+# Module-level hardware gate — the on()-write-failure test depends on the
+# Mac nidaqmx stub making Task() raise; on the rig the real DAQ write
+# succeeds (and would energize the laser, a safety concern per AGENTS.md §2).
+_has_hardware: bool = os.environ.get("LIGHTSHEET_HW", "0") == "1"
 
 
 def _make_l1() -> DAQLaser:
@@ -94,7 +100,13 @@ def test_on_write_failure_reverts_state() -> None:
     """on() while power == 150.0 attempts a DAQ write of 150.0/60.0 == 2.5 V.
     The conftest nidaqmx stub makes nidaqmx.Task() raise nidaqmx.errors.Error,
     so on() must set error == 1, a non-empty error_message, and active ==
-    False (write-failure revert, mirroring the legacy Lasers._update_setpoints)."""
+    False (write-failure revert, mirroring the legacy Lasers._update_setpoints).
+
+    Skipped on the rig: the real DAQmx write succeeds (no stub to raise),
+    and on() would energize the laser — a power-setting command that
+    requires explicit operator action per AGENTS.md §2."""
+    if _has_hardware:
+        pytest.skip("Mac-only stub-failure path — on the rig the real DAQ write succeeds")
     laser = _make_l1()
     laser.set_power(150.0)
     assert laser.power == 150.0

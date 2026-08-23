@@ -59,10 +59,13 @@ pytestmark = pytest.mark.skipif(
 _CONTROLLER_SRC = os.path.join(
     os.path.dirname(__file__), "..", "lightsheet", "gui", "controller.py"
 )
+_HW_SRC = os.path.join(
+    os.path.dirname(__file__), "..", "lightsheet", "gui", "hardware_manager.py"
+)
 
 
-def _read_controller_source() -> str:
-    with open(_CONTROLLER_SRC, encoding="utf-8", errors="replace") as f:
+def _read_source(path: str) -> str:
+    with open(path, encoding="utf-8", errors="replace") as f:
         return f.read()
 
 
@@ -76,11 +79,11 @@ def _slice_method(src: str, method_sig: str) -> str:
     return body
 
 
-def _load_method(method_sig: str) -> Callable[..., Any]:
-    src = _read_controller_source()
+def _load_method(method_sig: str, src_path: str = _HW_SRC) -> Callable[..., Any]:
+    src = _read_source(src_path)
     body = _slice_method(src, method_sig)
     namespace = {}
-    exec(compile(body, _CONTROLLER_SRC, "exec"), namespace)
+    exec(compile(body, src_path, "exec"), namespace)
     func_name = method_sig.split("(")[0].strip()
     return namespace[func_name]
 
@@ -123,6 +126,8 @@ def standin() -> Mock:
     s.sig_message = Mock()
     s.sig_message.emit = lambda msg: messages.append(msg)
     s._messages = messages
+    # HardwareManager methods access GUI-thread state via self._shell.*
+    s._shell = s
     return s
 
 
