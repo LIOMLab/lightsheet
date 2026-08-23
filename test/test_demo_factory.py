@@ -68,6 +68,7 @@ def _load_method(method_sig: str) -> Callable[..., Any]:
     classes (which the factory branch constructs but whose real imports
     are not needed to assert on the Camera branch).
     """
+    from lightsheet.config import cfg_read
     from lightsheet.hal import Camera
 
     src = _read_controller_source()
@@ -75,9 +76,12 @@ def _load_method(method_sig: str) -> Callable[..., Any]:
     # Build the namespace with the module-level names hardware_init uses.
     # Qt classes and the non-Camera HAL classes are Mocked — the factory
     # branch under test only needs Camera (real) to be constructible so
-    # the demo/real branch assignment can be asserted. MockCamera is
-    # imported locally inside the demo branch (`from lightsheet.hal import
-    # MockCamera`), so it resolves at runtime without being in the namespace.
+    # the demo/real branch assignment can be asserted. MockCamera /
+    # MockLaser / DAQLaser / IBeamSmartLaser are imported locally inside
+    # the branches (`from lightsheet.hal import ...`), so they resolve at
+    # runtime without being in the namespace. cfg_read is a module-level
+    # import in controller.py and is referenced by the real branch to load
+    # Laser 1 calibration from config.ini.
     namespace: dict[str, Any] = {
         "QApplication": Mock(),
         "Qt": Mock(),
@@ -86,10 +90,9 @@ def _load_method(method_sig: str) -> Callable[..., Any]:
         "FrameSaver": Mock(),
         "SigGen": Mock(),
         "Motors": Mock(),
-        "Lasers": Mock(),
         "ETLs": Mock(),
-        "IBeam": Mock(),
         "Camera": Camera,
+        "cfg_read": cfg_read,
     }
     exec(compile(body, _CONTROLLER_SRC, "exec"), namespace)
     func_name = method_sig.split("(")[0].strip()
