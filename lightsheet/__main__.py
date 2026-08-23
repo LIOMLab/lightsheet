@@ -111,14 +111,21 @@ def _show_missing_device_dialog(message: str) -> None:
     layout = QVBoxLayout(dlg)
 
     lines = message.split("\n")
-    for i, line in enumerate(lines):
+    first_rendered = True
+    for line in lines:
         if not line.strip():
             continue
         label = QLabel(line)
         label.setWordWrap(True)
         # The first non-empty line is the header — render it bold red.
-        if i == 0 or line.startswith("✕"):
+        # Track the first rendered line separately rather than relying on
+        # the enumerate index, because message.split("\n")[0] may be an
+        # empty line that is skipped above (leaving the first non-empty
+        # line at index > 0, which would miss the bold-red styling if we
+        # checked `i == 0`).
+        if first_rendered or line.startswith("✕"):
             label.setStyleSheet("color: #FF3B30; font-weight: bold;")
+            first_rendered = False
         layout.addWidget(label)
 
     btn_layout = QHBoxLayout()
