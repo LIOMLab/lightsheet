@@ -154,7 +154,7 @@ def test_toggle_laser1_real_daq_no_access_violation(standin: Mock) -> None:
     test asserts no access violation escapes and the laser's error surface
     is clean afterward.
     """
-    toggle = _load_method("_toggle_laser1(self)")
+    toggle = _load_method("_toggle_laser1(self) -> None")
     toggle(standin)
     # No access violation means the call returned without crashing the
     # process. The laser HAL should not be in an error state after a 0 mW
@@ -172,7 +172,7 @@ def test_toggle_laser1_on_daemon_thread_real_daq(standin: Mock) -> None:
     violation is thread-context-related (nidaqmx Task destructor racing
     with thread exit, or a thread-local handle issue), this reproduces it.
     """
-    toggle = _load_method("_toggle_laser1(self)")
+    toggle = _load_method("_toggle_laser1(self) -> None")
     errors = []
     done = threading.Event()
 
@@ -201,7 +201,7 @@ def test_write_laser1_power_real_daq_repeated(standin: Mock) -> None:
     catch intermittent corruption from repeated Task create/write/close
     cycles on the real Dev7 AO channels.
     """
-    write = _load_method("_write_laser1_power(self, pct)")
+    write = _load_method("_write_laser1_power(self, pct: float) -> None")
     # Mark laser active so the write path actually runs.
     standin.lasers[0].active = True
     errors = []
@@ -227,7 +227,7 @@ def test_start_lasers_real_daq_then_siggen_create(standin: Mock) -> None:
     """
     from lightsheet.hal import Camera, SigGen
 
-    start_lasers = _load_method("start_lasers(self)")
+    start_lasers = _load_method("start_lasers(self) -> None")
     # Enable auto-laser 1 so start_lasers actually writes to Dev7.
     standin._auto_laser1 = True
     standin.laser1_power_pct = 0.0  # 0 mW — safe
