@@ -29,7 +29,7 @@ _FRAME_SAVER_SRC = os.path.join(
 
 
 def _read_controller_source() -> str:
-    with open(_FRAME_SAVER_SRC) as f:
+    with open(_FRAME_SAVER_SRC, encoding="utf-8") as f:
         return f.read()
 
 

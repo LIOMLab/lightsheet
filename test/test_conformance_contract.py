@@ -111,12 +111,11 @@ def test_has_hardware_module_level_bool_exists() -> None:
 def test_has_hardware_fixture_returns_env_value(has_hardware: bool) -> None:
     """The ``has_hardware`` session fixture returns a bool matching the
     LIGHTSHEET_HW env var (False on Mac default, True on rig when
-    LIGHTSHEET_HW=1). This test runs under the default (unset) env, so the
-    fixture must return False here; the rig sets LIGHTSHEET_HW=1 and the
-    fixture returns True there."""
+    LIGHTSHEET_HW=1). The fixture's value must match the env var on both
+    platforms."""
     assert isinstance(has_hardware, bool)
-    # Mac dev box default: LIGHTSHEET_HW unset → False.
-    assert has_hardware is False, (
-        "has_hardware fixture must return False when LIGHTSHEET_HW is unset "
-        "(Mac default); the rig sets LIGHTSHEET_HW=1"
+    expected = os.environ.get("LIGHTSHEET_HW", "0") == "1"
+    assert has_hardware is expected, (
+        f"has_hardware fixture must return {expected} when LIGHTSHEET_HW="
+        f"{os.environ.get('LIGHTSHEET_HW', 'unset')}"
     )

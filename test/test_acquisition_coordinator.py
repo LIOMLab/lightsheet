@@ -51,7 +51,7 @@ _ACQ_SRC = os.path.join(
 
 
 def _read_source(path: str) -> str:
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return f.read()
 
 

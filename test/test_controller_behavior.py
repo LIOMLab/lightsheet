@@ -52,7 +52,7 @@ _ACQ_SRC = os.path.join(
 
 
 def _read_controller_source() -> str:
-    with open(_CONTROLLER_SRC) as f:
+    with open(_CONTROLLER_SRC, encoding="utf-8") as f:
         return f.read()
 
 
@@ -79,7 +79,7 @@ def _load_method(
     logger, ...). `logger` is the module-level logger the source declares;
     seeding it here lets the migrated logger.* calls resolve when the body
     is exec'd in isolation."""
-    with open(src_path) as f:
+    with open(src_path, encoding="utf-8") as f:
         src = f.read()
     body = _slice_method(src, method_sig)
     namespace = {

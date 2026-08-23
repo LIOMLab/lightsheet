@@ -34,7 +34,7 @@ _HW_SRC = os.path.join(
 
 
 def _read_controller_source() -> str:
-    with open(_CONTROLLER_SRC) as f:
+    with open(_CONTROLLER_SRC, encoding="utf-8") as f:
         return f.read()
 
 
@@ -98,7 +98,7 @@ def _load_method(method_sig: str, src_path: str = _CONTROLLER_SRC) -> Callable[.
     `func(self, pct)` that executes the real source. Defaults to
     controller.py; pass `_HW_SRC` for the methods moved to
     HardwareManager (Phase 5 god-object split)."""
-    with open(src_path) as f:
+    with open(src_path, encoding="utf-8") as f:
         src = f.read()
     body = _slice_method(src, method_sig)
     # The body starts with `def <sig>:` — strip the docstring/def line and
