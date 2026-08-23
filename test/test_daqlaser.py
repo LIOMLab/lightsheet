@@ -119,6 +119,49 @@ def test_off_is_synchronous() -> None:
     assert laser.power == 0.0
 
 
+def test_open_is_noop_returning_none() -> None:
+    """open() is a no-op lifecycle verb (AGENTS.md §10): DAQLaser opens its
+    nidaqmx.Task per-write inside _write_volts, so there is no persistent
+    connection to open here. Returns None and leaves the error surface
+    clean so the controller can call self.lasers[i].open() uniformly
+    across backends."""
+    laser = _make_l1()
+    result = laser.open()
+    assert result is None
+    # No-op -> error surface unchanged from construction.
+    assert laser.error == 0
+    assert laser.error_message == ""
+
+
+def test_close_is_noop_returning_none() -> None:
+    """close() is a no-op lifecycle verb (AGENTS.md §10): mirrors open() —
+    DAQLaser holds no persistent DAQ connection. Returns None."""
+    laser = _make_l1()
+    result = laser.close()
+    assert result is None
+    assert laser.error == 0
+    assert laser.error_message == ""
+
+
+def test_get_output_power_returns_staged_power() -> None:
+    """get_output_power() returns the staged self.power (mW) — DAQ analog
+    output has no hardware readback channel, so the controller's L2
+    readback field degrades gracefully to the commanded value. Never
+    returns None (the staged value is always available)."""
+    laser = _make_l1()
+    # Freshly constructed -> staged power is 0.0.
+    assert laser.get_output_power() == 0.0
+    # After set_power, the staged value is reflected.
+    laser.set_power(150.0)
+    assert laser.get_output_power() == 150.0
+    # Clamp is reflected in the readback too.
+    laser.set_power(999.0)
+    assert laser.get_output_power() == 300.0
+    # off() resets staged power to 0.0 -> readback follows.
+    laser.off()
+    assert laser.get_output_power() == 0.0
+
+
 def test_native_unit_volts_clamp_in_write_volts() -> None:
     """The native-unit clamp inside _write_volts bounds volts to
     [0, max_power / mw_per_volt] independently of the mW-layer clamp in

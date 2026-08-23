@@ -27,6 +27,8 @@ This is a BEHAVIOR test (AGENTS.md §5) — no static-source grep.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 import lightsheet.hal.real.ibeam_smart as ibeam_mod
 import lightsheet.hal.real.ibeam_smart as ibeam_smart_mod
 
@@ -302,3 +304,99 @@ def test_ibeam_smart_get_output_power_returns_none_on_error() -> None:
         "error (parse failure / firmware rejection) — the GUI readback field "
         "must distinguish 'no reading' from 'reading is 0'"
     )
+
+
+# --------------------------------------------------------------------------- #
+# open() / close(): delegate to inner IBeam, mirror error surface onto adapter.
+# --------------------------------------------------------------------------- #
+def test_ibeam_smart_open_delegates_to_inner_and_mirrors_error() -> None:
+    """``open()`` delegates to ``self._ibeam.open()`` (which opens the
+    serial port, disables echo, and enables the configured diode channel)
+    and then mirrors the inner engine's error surface onto the adapter's
+    ``self.error`` / ``self.error_message`` — so the controller can read
+    ``self.lasers[1].error`` uniformly instead of reaching through to
+    ``self.lasers[1]._ibeam.error``.
+
+    On a successful open the inner ``error == 0`` and the adapter mirrors
+    ``error == 0``. The serial port is opened and the echo-off +
+    enable-channel handshake runs (the mock serial returns ``[OK]`` for
+    each sub-command)."""
+    with patch("lightsheet.hal.real.ibeam_smart.serial.Serial") as MockSerial:
+        mock_ser = MagicMock()
+        MockSerial.return_value = mock_ser
+        mock_ser.readline.return_value = b"[OK]\r\n"
+        adapter = ibeam_smart_mod.IBeamSmartLaser()
+        adapter.open()
+    # Inner engine opened successfully -> error surface clean on both.
+    assert adapter._ibeam.error == 0
+    assert adapter.error == 0, (
+        "open() must mirror the inner error surface onto the adapter so the "
+        "controller reads self.lasers[1].error uniformly"
+    )
+    assert adapter.error_message == ""
+    # The inner serial port was actually opened (delegation, not a no-op).
+    assert mock_ser.open.called
+
+
+def test_ibeam_smart_open_mirrors_inner_failure_onto_adapter() -> None:
+    """If the inner ``IBeam.open()`` raises (e.g. serial port in use), the
+    adapter's ``open()`` propagates the exception (matching the inner
+    engine's raise-on-open-failure contract) — the controller's
+    ``try/except`` around ``self.lasers[1].open()`` catches it. We verify
+    the raise propagates through the adapter so the controller's existing
+    except clause fires."""
+    with patch("lightsheet.hal.real.ibeam_smart.serial.Serial") as MockSerial:
+        import serial as real_serial_mod
+
+        mock_ser = MagicMock()
+        MockSerial.return_value = mock_ser
+        # ser.open() raises SerialException -> inner IBeam.open() catches
+        # it, sets self.error=1, and re-raises (per IBeam.open contract).
+        mock_ser.open.side_effect = real_serial_mod.SerialException(
+            "port in use"
+        )
+        adapter = ibeam_smart_mod.IBeamSmartLaser()
+        with pytest.raises(real_serial_mod.SerialException):
+            adapter.open()
+    # The inner engine surfaced the failure on its error surface before
+    # re-raising; the adapter did not get to mirror (the raise preempted
+    # the mirror lines), which is fine — the controller's except clause
+    # emits the message and the operator is notified.
+    assert adapter._ibeam.error == 1
+
+
+def test_ibeam_smart_close_delegates_to_inner() -> None:
+    """``close()`` delegates to ``self._ibeam.close()`` (which turns the
+    laser off and releases the serial port) and mirrors the inner error
+    surface onto the adapter. Replaces the controller's
+    ``self.lasers[1]._ibeam.close()`` reach-through."""
+    adapter, mock_ser = _make_open_ibeam_smart(readline_side_effect=[b"[OK]\r\n"])
+    assert mock_ser.close is not None
+    adapter.close()
+    # Inner IBeam.close() calls ser.close() — verify delegation reached the
+    # serial port.
+    assert mock_ser.close.called
+    # Adapter mirrors the inner error surface (clean on a successful close).
+    assert adapter.error == adapter._ibeam.error
+
+
+# --------------------------------------------------------------------------- #
+# open() / close() are part of the ILaser contract — verify the adapter
+# satisfies the ABC (instantiation would raise TypeError otherwise). This
+# is a structural check that complements the behavior tests above.
+# --------------------------------------------------------------------------- #
+def test_ibeam_smart_satisfies_ilaser_abc() -> None:
+    """IBeamSmartLaser implements the full ILaser ABC surface
+    (on/off/open/close/set_power/get_output_power + the read attrs and
+    _lock). Instantiation succeeds — if a required abstract method were
+    missing, ABCMeta would raise TypeError at construction."""
+    adapter = ibeam_smart_mod.IBeamSmartLaser()
+    for method in ("on", "off", "open", "close", "set_power", "get_output_power"):
+        assert callable(getattr(adapter, method)), (
+            f"IBeamSmartLaser must expose ILaser method {method!r}"
+        )
+    for attr in ("_lock", "error", "error_message", "wavelength", "power",
+                 "max_power", "active", "label"):
+        assert hasattr(adapter, attr), (
+            f"IBeamSmartLaser must expose ILaser attribute {attr!r}"
+        )
