@@ -153,47 +153,33 @@ def _make_standin(demo: bool) -> Mock:
     return standin
 
 
-def test_hardware_init_constructs_mock_camera_under_demo() -> None:
-    """When self._demo_mode is True, hardware_init's Camera branch must
-    construct a MockCamera (not the real Camera) so no hardware init runs
-    on a dev box."""
+def test_hardware_init_assigns_mock_camera_from_bundle_under_demo() -> None:
+    """When self._demo_mode is True (bundle built from Mock* by
+    _build_demo_bundle), hardware_init assigns the bundle's MockCamera
+    onto self.camera — no hardware init runs on a dev box."""
     from lightsheet.hal import MockCamera
 
     hardware_init = _load_method("hardware_init(self) -> None")
-    standin = _make_standin(demo=True)
+    standin = _make_bundle_standin(demo=True)
     hardware_init(standin)
     assert isinstance(standin.camera, MockCamera), (
-        "demo branch must construct MockCamera, not the real Camera"
+        "demo bundle's camera must be a MockCamera"
     )
-
-
-def test_hardware_init_constructs_real_camera_when_not_demo() -> None:
-    """When self._demo_mode is False, hardware_init's Camera branch must
-    construct the real Camera (the normal rig path)."""
-    from lightsheet.hal import Camera
-
-    hardware_init = _load_method("hardware_init(self) -> None")
-    standin = _make_standin(demo=False)
-    hardware_init(standin)
-    assert isinstance(standin.camera, Camera), (
-        "non-demo branch must construct the real Camera"
+    assert standin.camera is standin._bundle.camera, (
+        "hardware_init must assign from the bundle, not construct"
     )
 
 
 def test_hardware_init_preserves_siggen_camera_dependency() -> None:
-    """SigGen is constructed with the camera reference (waveform timing
-    derives from camera settings). The factory branch must preserve this
-    dependency ordering under both demo and real paths (Pitfall 2)."""
-    from lightsheet.hal import MockCamera
-
+    """The bundle's SigGen was constructed with the bundle's camera
+    reference (waveform timing derives from camera settings). After
+    hardware_init assigns from the bundle, the dependency is preserved
+    by identity (Pitfall 2)."""
     hardware_init = _load_method("hardware_init(self) -> None")
-    standin = _make_standin(demo=True)
+    standin = _make_bundle_standin(demo=True)
     hardware_init(standin)
-    # SigGen was constructed with standin.camera as its arg. The mock
-    # camera still carries the xsize/ysize/line_time the SigGen waveform
-    # timing derives from, so the dependency is meaningful under demo too.
-    assert isinstance(standin.camera, MockCamera)
-    assert standin.siggen is not None
+    assert standin.siggen is standin._bundle.siggen
+    assert standin.camera is standin._bundle.camera
 
 
 def test_hardware_init_demo_indicator_emitted_via_statusbar_not_sigmessage() -> None:
@@ -202,7 +188,7 @@ def test_hardware_init_demo_indicator_emitted_via_statusbar_not_sigmessage() -> 
     sig_message.emit, so it does not pollute the future golden-master
     sig_message sequence (UI-SPEC)."""
     hardware_init = _load_method("hardware_init(self) -> None")
-    standin = _make_standin(demo=True)
+    standin = _make_bundle_standin(demo=True)
     hardware_init(standin)
     # The window-title suffix was set.
     standin.setWindowTitle.assert_called_once()

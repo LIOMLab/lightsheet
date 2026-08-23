@@ -41,6 +41,7 @@ from lightsheet.gaussian import func, gaussian
 from lightsheet.gui.ui_controller import Ui_Controller
 from lightsheet.gui.ui_properties import Ui_Properties
 from lightsheet.hal import Camera, ETLs, Motors, SigGen
+from lightsheet.hal.bundle import DeviceBundle
 
 logger = logging.getLogger(__name__)
 
@@ -88,11 +89,18 @@ class Controller_MainWindow(QMainWindow):
     # power.
     sig_laser_readback = pyqtSignal(int, str, str)
 
-    def __init__(self, demo: bool = False) -> None:
-        # Demo mode flag — when True, hardware_init constructs Mock* HAL
-        # instances (no hardware init) so the app runs on a dev box without
-        # the microscope. Set from the --demo CLI flag / LIGHTSHEET_DEMO=1
-        # env var parsed in lightsheet.__main__.main().
+    def __init__(self, bundle: DeviceBundle, demo: bool = False) -> None:
+        # The pre-built DeviceBundle is the sole HAL-handle channel into
+        # the shell — main()'s composition root builds it (via
+        # _build_demo_bundle on the demo path, DeviceRegistry.resolve()
+        # on the rig path) and hands it in. The frozen bundle invariant
+        # protects the E-stop kill path: a re-bound laser handle after
+        # construction would fail to de-energize a live Class IIIB laser.
+        self._bundle = bundle
+        # Demo mode flag — when True, the window-title suffix and
+        # status-bar message carry the [DEMO] indicator. HAL construction
+        # no longer branches on this flag (the bundle is pre-built by
+        # main()); it is preserved for presentation logic only.
         self._demo_mode = demo
         # NOTES
         #
@@ -367,9 +375,10 @@ class Controller_MainWindow(QMainWindow):
         self._auto_laser2 = False
 
         # Per-laser write locks live on each ILaser instance
-        # (self.lasers[i]._lock), set in DAQLaser.__init__ /
-        # IBeamSmartLaser.__init__ / MockLaser.__init__. The daemon-thread
-        # write paths (_write_laser*_power, _toggle_laser*) acquire
+        # (self.lasers[i]._lock), set in each backend's __init__
+        # (DAQLaser / IBeamSmartLaser / the mock laser backend). The
+        # daemon-thread write paths (_write_laser*_power,
+        # _toggle_laser*) acquire
         # self.lasers[i]._lock. Reentrant (RLock) so _toggle_laser* can
         # call _write_laser*_power under the same lock without deadlocking.
         # The E-stop path intentionally does NOT acquire any laser lock —
@@ -692,79 +701,25 @@ class Controller_MainWindow(QMainWindow):
         self.ui.statusbar.showMessage("Initializing hardware, please wait...")
         self.ui.statusbar.repaint()
 
-        # Instantiating hardware components. Under demo mode all device
-        # families construct Mock* instances so no hardware init runs on a
-        # dev box. The camera-before-siggen dependency ordering is preserved
-        # under both branches (the mock camera still carries the
-        # xsize/ysize/line_time the SigGen waveform timing derives from).
+        # Instantiating hardware components. The DeviceBundle is
+        # pre-built by main()'s composition root (_build_demo_bundle on
+        # the demo path, DeviceRegistry.resolve() on the rig path) and
+        # injected via __init__. hardware_init assigns the bundle's HAL
+        # handles onto self — it no longer branches on _demo_mode to
+        # construct HAL classes. The camera-before-siggen dependency
+        # ordering was preserved at bundle construction time in main().
         #
         # Lasers: self.lasers is a list[ILaser] — index 0 is Laser 1
         # (DAQ AO /Dev7/ao0, 555 nm), index 1 is Laser 2 (Toptica iBeam,
-        # 640 nm, COM4). The old 2-channel Lasers container + separate
-        # IBeam attribute are retired; self.ibeam no longer exists.
-        if self._demo_mode:
-            from lightsheet.hal import (
-                MockCamera,
-                MockETLs,
-                MockLaser,
-                MockMotors,
-                MockSigGen,
-            )
-
-            self.camera = MockCamera(verbose=True)
-            # Signal Generator needs to know about Camera settings to generate
-            # proper scan waveforms — dependency ordering must be preserved
-            # under both branches (the mock camera still carries the
-            # xsize/ysize/line_time the SigGen waveform timing derives from).
-            self.siggen = MockSigGen(self.camera)
-            self.motors = MockMotors()
-            self.lasers = [
-                MockLaser(
-                    wavelength=555,
-                    max_power_mw=300.0,
-                    mw_per_volt=60.0,
-                    label="Laser 1 (555 nm)",
-                ),
-                MockLaser(
-                    wavelength=640,
-                    max_power_mw=150.0,
-                    label="Laser 2 (640 nm)",
-                ),
-            ]
-            self.etls = MockETLs()
-        else:
-            from lightsheet.hal import DAQLaser, IBeamSmartLaser
-
-            self.camera = Camera(verbose=True)
-            self.siggen = SigGen(self.camera)
-            self.motors = Motors()
-            # Laser 1 calibration lives in config.ini [Lasers] — the single
-            # source of truth for the 555 nm diode's mW-per-Volt and max
-            # output. DAQLaser takes mW-native constructor args, so derive
-            # them here: max_power_mw = Max Power (V) * mW per Volt,
-            # mw_per_volt = mW per Volt, wavelength = Wavelength.
-            _l1_cfg = cfg_read(
-                "config.ini",
-                "Lasers",
-                {
-                    "Laser1 Wavelength": 555,
-                    "Laser1 Power": 0.0,
-                    "Laser1 Max Power": 5.0,
-                    "Laser1 mW per Volt": 60.0,
-                },
-            )
-            self.lasers = [
-                DAQLaser(
-                    terminal="/Dev7/ao0",
-                    wavelength=int(_l1_cfg["Laser1 Wavelength"]),
-                    mw_per_volt=float(_l1_cfg["Laser1 mW per Volt"]),
-                    max_power_mw=float(_l1_cfg["Laser1 Max Power"])
-                    * float(_l1_cfg["Laser1 mW per Volt"]),
-                    label="Laser 1 (555 nm)",
-                ),
-                IBeamSmartLaser(label="Laser 2 (640 nm)"),
-            ]
-            self.etls = ETLs()
+        # 640 nm, COM4). The bundle's lasers field is an immutable tuple;
+        # self.lasers is a mutable list copy so the E-stop kill path
+        # (which iterates self.lasers) has a stable reference, while the
+        # frozen bundle's tuple cannot be re-bound after construction.
+        self.camera = self._bundle.camera
+        self.siggen = self._bundle.siggen
+        self.motors = self._bundle.motors
+        self.etls = self._bundle.etls
+        self.lasers = list(self._bundle.lasers)
 
         # Making sure ETLs are in analog mode
         self.etls.open()
@@ -785,8 +740,9 @@ class Controller_MainWindow(QMainWindow):
         #
         # The ILaser.open() contract is uniform across backends:
         # IBeamSmartLaser.open() delegates to the inner serial engine and
-        # mirrors its error surface onto the adapter; MockLaser.open() is a
-        # no-op (no hardware to open), so the same call site works in demo
+        # mirrors its error surface onto the adapter; the mock laser
+        # backend's open() is a no-op (no hardware to open), so the same
+        # call site works in demo
         # mode without a demo-mode gate.
         try:
             self.lasers[1].open()
@@ -836,7 +792,8 @@ class Controller_MainWindow(QMainWindow):
         self.timer_laser2_status.timeout.connect(self._poll_laser2_status_gated)
         # The L2 gated poll calls get_output_power() — now part of the
         # ILaser contract on every backend (IBeamSmartLaser queries the
-        # serial engine; DAQLaser / MockLaser return the staged mW power).
+        # serial engine; DAQLaser and the mock laser backend return the
+        # staged mW power).
         # The timer starts in both real and demo mode so the L2 status
         # indicator + readback field stay live under demo too.
         self.timer_laser2_status.start(
@@ -901,7 +858,8 @@ class Controller_MainWindow(QMainWindow):
             self.etls.close()
             # Laser 2 (iBeam) lifecycle close — ILaser.close() delegates to
             # the inner serial engine on IBeamSmartLaser and is a no-op on
-            # MockLaser, so the same call site works in real and demo mode.
+            # the mock laser backend, so the same call site works in both
+            # real and demo mode.
             self.lasers[1].close()
             self.timer_imageview.stop()
             self.timer_laser2_status.stop()
@@ -1363,7 +1321,8 @@ class Controller_MainWindow(QMainWindow):
 
         Works uniformly across backends: ``get_output_power()`` is on the
         ILaser contract (IBeamSmartLaser queries the serial engine;
-        DAQLaser / MockLaser return the staged mW power), so no demo-mode
+        DAQLaser and the mock laser backend return the staged mW power),
+        so no demo-mode
         gate is needed."""
         self._refresh_laser_readback(1)
         self._poll_laser_status([1])
