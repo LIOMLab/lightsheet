@@ -41,12 +41,11 @@ import time
 import serial
 
 from lightsheet.config import cfg_read
-from lightsheet.hal.interfaces import IIBeam
 
 logger = logging.getLogger(__name__)
 
 
-class IBeam(IIBeam):
+class IBeam:
     """HAL class for the Toptica iBeam Smart serial laser."""
 
     # Default configurable settings (overlaid with config.ini `[iBeam]`).
