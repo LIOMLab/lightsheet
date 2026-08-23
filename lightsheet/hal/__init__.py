@@ -25,6 +25,7 @@ Explicit ``__all__`` avoids leaking private symbols from ``interfaces.py``
 and the ``real/`` / ``mocks/`` subpackages.
 """
 
+from lightsheet.hal.bundle import DeviceBundle
 from lightsheet.hal.interfaces import (
     ICamera,
     ICameraCore,
@@ -54,6 +55,7 @@ from lightsheet.hal.real.siggen import SigGen
 __all__ = [
     "Camera",
     "DAQLaser",
+    "DeviceBundle",
     "ETLs",
     "IBeam",
     "IBeamSmartLaser",
