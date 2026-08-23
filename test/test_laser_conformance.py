@@ -112,6 +112,7 @@ def test_laser_conformance(device_factory: object) -> None:
     LASER_CONTRACT.assert_error_surface(dev)
     LASER_CONTRACT.assert_read_attrs(dev)
     LASER_CONTRACT.assert_setter_methods(dev)
+    LASER_CONTRACT.assert_getter_methods(dev)
 
 
 @pytest.mark.parametrize("device_factory", _LASER_FACTORIES)
