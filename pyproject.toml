@@ -19,6 +19,9 @@ dependencies = [
     "tifffile>=2022.2.9",
     "matplotlib>=3.5.1",
     "QDarkStyle>=3.0.3",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.15.0",
+    "pyyaml>=6.0.3",
 ]
 
 [project.scripts]
