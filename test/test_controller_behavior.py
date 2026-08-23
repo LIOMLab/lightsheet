@@ -97,7 +97,7 @@ def test_start_lasers_surfaces_laser1_daq_error() -> None:
     start_lasers = _load_method("start_lasers(self) -> None")
 
     laser1 = Mock()
-    laser1.label = "Laser 1 (561 nm)"
+    laser1.label = "Laser 1 (555 nm)"
     laser1.max_power = 300.0
     laser1.error = 1  # .on() "failed" the DAQ write
     laser1.error_message = "daq write failed"
@@ -249,7 +249,7 @@ def test_start_lasers_reads_cached_flags_not_widgets() -> None:
     start_lasers = _load_method("start_lasers(self) -> None")
 
     laser1 = Mock()
-    laser1.label = "Laser 1 (561 nm)"
+    laser1.label = "Laser 1 (555 nm)"
     laser1.max_power = 300.0
     laser1.error = 0
 
@@ -340,11 +340,11 @@ def test_wavelength_labels_set_from_live_instances() -> None:
     camera.lightsheet_delay_lines = 0
     camera.shutter_mode = "Rolling"
 
-    # self.lasers is a list[ILaser] — index 0 = Laser 1 (561 nm DAQ),
+    # self.lasers is a list[ILaser] — index 0 = Laser 1 (555 nm DAQ),
     # index 1 = Laser 2 (640 nm iBeam). The wavelength labels read
     # self.lasers[i].wavelength from the live instances.
     laser1 = Mock()
-    laser1.wavelength = 561  # green DAQ laser
+    laser1.wavelength = 555  # green DAQ laser
     laser2 = Mock()
     laser2.wavelength = 640  # red iBeam
 
@@ -364,8 +364,8 @@ def test_wavelength_labels_set_from_live_instances() -> None:
 
     label_72_text = standin.ui.label_72.setText.call_args[0][0]
     label_73_text = standin.ui.label_73.setText.call_args[0][0]
-    assert "561" in label_72_text, (
-        "label_72 must show the live lasers[0].wavelength (561), not a "
+    assert "555" in label_72_text, (
+        "label_72 must show the live lasers[0].wavelength (555), not a "
         "hardcoded number."
     )
     assert "640" in label_73_text, (
@@ -374,5 +374,5 @@ def test_wavelength_labels_set_from_live_instances() -> None:
     # Toggle buttons are relabeled with the live wavelengths too.
     toggle1_text = standin.ui.pushButton_laserOneToggle.setText.call_args[0][0]
     toggle2_text = standin.ui.pushButton_laserTwoToggle.setText.call_args[0][0]
-    assert "561" in toggle1_text
+    assert "555" in toggle1_text
     assert "640" in toggle2_text

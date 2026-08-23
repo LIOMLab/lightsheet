@@ -659,7 +659,7 @@ class Controller_MainWindow(QMainWindow):
         # xsize/ysize/line_time the SigGen waveform timing derives from).
         #
         # Lasers: self.lasers is a list[ILaser] — index 0 is Laser 1
-        # (DAQ AO /Dev7/ao0, 561 nm), index 1 is Laser 2 (Toptica iBeam,
+        # (DAQ AO /Dev7/ao0, 555 nm), index 1 is Laser 2 (Toptica iBeam,
         # 640 nm, COM4). The old 2-channel Lasers container + separate
         # IBeam attribute are retired; self.ibeam no longer exists.
         if self._demo_mode:
@@ -680,10 +680,10 @@ class Controller_MainWindow(QMainWindow):
             self.motors = MockMotors()
             self.lasers = [
                 MockLaser(
-                    wavelength=561,
+                    wavelength=555,
                     max_power_mw=300.0,
                     mw_per_volt=60.0,
-                    label="Laser 1 (561 nm)",
+                    label="Laser 1 (555 nm)",
                 ),
                 MockLaser(
                     wavelength=640,
@@ -699,7 +699,7 @@ class Controller_MainWindow(QMainWindow):
             self.siggen = SigGen(self.camera)
             self.motors = Motors()
             # Laser 1 calibration lives in config.ini [Lasers] — the single
-            # source of truth for the 561 nm diode's mW-per-Volt and max
+            # source of truth for the 555 nm diode's mW-per-Volt and max
             # output. DAQLaser takes mW-native constructor args, so derive
             # them here: max_power_mw = Max Power (V) * mW per Volt,
             # mw_per_volt = mW per Volt, wavelength = Wavelength.
@@ -707,7 +707,7 @@ class Controller_MainWindow(QMainWindow):
                 "config.ini",
                 "Lasers",
                 {
-                    "Laser1 Wavelength": 561,
+                    "Laser1 Wavelength": 555,
                     "Laser1 Power": 0.0,
                     "Laser1 Max Power": 5.0,
                     "Laser1 mW per Volt": 60.0,
@@ -720,7 +720,7 @@ class Controller_MainWindow(QMainWindow):
                     mw_per_volt=float(_l1_cfg["Laser1 mW per Volt"]),
                     max_power_mw=float(_l1_cfg["Laser1 Max Power"])
                     * float(_l1_cfg["Laser1 mW per Volt"]),
-                    label="Laser 1 (561 nm)",
+                    label="Laser 1 (555 nm)",
                 ),
                 IBeamSmartLaser(label="Laser 2 (640 nm)"),
             ]
