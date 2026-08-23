@@ -146,28 +146,45 @@ class FrameSaver(QObject):
         datasets_name: str,
     ) -> None:
         """Set the number and name of files to save and makes sure the filenames
-        are unique in the path to avoid overwrite on other files"""
+        are unique in the path to avoid overwrite on other files.
+
+        Plane numbers in filenames are sequential and 1-based (plane_00001,
+        plane_00002, ...) so they correspond to the actual plane index in
+        the stack — downstream analysis tools that expect sequential
+        numbering are not confused by gaps. If a sequential filename
+        already exists (e.g. from a previous run in the same directory),
+        a ``_vNN`` collision-avoidance suffix is appended so the plane
+        number stays meaningful while the filename stays unique.
+        """
         self.number_of_files = int(number_of_files)
         self.files_name = str(files_name)
         self.scan_type = str(scan_type)
         self.number_of_datasets = int(number_of_datasets)
         self.datasets_name = str(datasets_name)
 
-        counter = 0
-        for _ in range(self.number_of_files):
-            while True:
-                counter += 1
-                new_filename = (
-                    self.files_name
-                    + "_"
-                    + scan_type
-                    + "_plane_"
-                    + f"{counter:05d}"
-                    + ".hdf5"
-                )
-                if not os.path.isfile(new_filename):  # Check for existing files
-                    self.filenames_list.append(new_filename)
-                    break
+        for plane in range(self.number_of_files):
+            base = (
+                self.files_name
+                + "_"
+                + scan_type
+                + "_plane_"
+                + f"{plane + 1:05d}"
+            )
+            new_filename = base + ".hdf5"
+            # Collision avoidance: if the sequential filename already
+            # exists, append a _vNN suffix (starting at v2) until a free
+            # name is found. The plane number in the base stays sequential
+            # so downstream tools can still parse it; only the suffix
+            # carries the collision count.
+            if os.path.isfile(new_filename):
+                version = 2
+                while True:
+                    candidate = f"{base}_v{version:02d}.hdf5"
+                    if not os.path.isfile(candidate):
+                        new_filename = candidate
+                        break
+                    version += 1
+            self.filenames_list.append(new_filename)
 
     # Saving methods
 
