@@ -1063,14 +1063,29 @@ class Controller_MainWindow(QMainWindow):
         #    and alongside stack_mode_started in stack_mode_worker.
         self.estop_event.set()
         # 2. Drive BOTH lasers off synchronously on the GUI thread. The
-        #    kill path is lock-free — it does NOT acquire self.lasers[i]._lock
-        #    — so a stuck daemon write thread holding a laser's lock can
-        #    never delay the kill path (AGENTS.md §2). Each backend's off()
-        #    catches its own SDK errors internally and sets laser.error
-        #    rather than re-raising, so a try/except here can never fire
-        #    for a hardware failure. Check the error surface after each
-        #    off() and warn the operator explicitly that the laser may
-        #    still be emitting — never silently show a clean state.
+        #    kill path is synchronous (no thread/queue offload) so a Class
+        #    IIIB laser is driven off the instant the handler fires.
+        #
+        #    Per-backend lock behavior (AGENTS.md §2):
+        #    - DAQLaser.off() is lock-free — the per-write nidaqmx.Task is
+        #      independent of any concurrent write, so a daemon set_power
+        #      holding the RLock on another thread can never delay the
+        #      kill path.
+        #    - IBeamSmartLaser.off() delegates to the inner IBeam serial
+        #      round-trip, which acquires the (reentrant, per-CR-01) lock.
+        #      A daemon write holding the lock on the SAME thread is fine
+        #      (RLock reentry), but a daemon on ANOTHER thread holding it
+        #      blocks the E-stop for up to the serial timeout (3 s) + the
+        #      50 ms inter-command gap. This is acceptable for the iBeam:
+        #      the serial timeout is bounded, and the iBeam has its own
+        #      hardware interlock. The key safety property is that off()
+        #      is synchronous and drives the laser off immediately when it
+        #      can acquire the lock.
+        #    Each backend's off() catches its own SDK errors internally and
+        #    sets laser.error rather than re-raising, so a try/except here
+        #    can never fire for a hardware failure. Check the error surface
+        #    after each off() and warn the operator explicitly that the
+        #    laser may still be emitting — never silently show a clean state.
         for laser in self.lasers:
             laser.off()
             if laser.error:
