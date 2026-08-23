@@ -503,7 +503,7 @@ class MotorController:
             self._shell.slope_camera * current_position + self._shell.intercept_camera
         )
         self.motors.camera.set_origin(focus_regression, self._shell.units)
-        print("focus_regression:" + str(focus_regression))  # debugging
+        logger.debug("focus_regression: %s", focus_regression)
         self._shell.focus_selected = True
         self._shell.updateUi_message_printer("Focus automatically set")
 
@@ -521,9 +521,9 @@ class MotorController:
         self._shell.slope_camera, self._shell.intercept_camera, r_value, p_value, std_err = (
             stats.linregress(x, y)
         )
-        print("r_value:" + str(r_value))  # debugging
-        print("p_value:" + str(p_value))  # debugging
-        print("std_err:" + str(std_err))  # debugging
+        logger.debug("r_value: %s", r_value)
+        logger.debug("p_value: %s", p_value)
+        logger.debug("std_err: %s", std_err)
         yreg = self._shell.slope_camera * xnew + self._shell.intercept_camera
 
         # Setting colormap
@@ -566,9 +566,9 @@ class MotorController:
             self._shell.etl_l_relation[0, 0], self._shell.etl_l_relation[-1, 0], 1000
         )  # 1000 points
         lslope, lintercept, r_value, p_value, std_err = stats.linregress(xl, yl)
-        print("r_value:" + str(r_value))  # debugging
-        print("p_value:" + str(p_value))  # debugging
-        print("std_err:" + str(std_err))  # debugging
+        logger.debug("r_value: %s", r_value)
+        logger.debug("p_value: %s", p_value)
+        logger.debug("std_err: %s", std_err)
         ylnew = lslope * xlnew + lintercept
 
         xr = self._shell.etl_r_relation[:, 0]
@@ -578,9 +578,9 @@ class MotorController:
             self._shell.etl_r_relation[0, 0], self._shell.etl_r_relation[-1, 0], 1000
         )  # 1000 points
         rslope, rintercept, r_value, p_value, std_err = stats.linregress(xr, yr)
-        print("r_value:" + str(r_value))  # debugging
-        print("p_value:" + str(p_value))  # debugging
-        print("std_err:" + str(std_err))  # debugging
+        logger.debug("r_value: %s", r_value)
+        logger.debug("p_value: %s", p_value)
+        logger.debug("std_err: %s", std_err)
         yrnew = rslope * xrnew + rintercept
 
         # Showing interpolation graph
