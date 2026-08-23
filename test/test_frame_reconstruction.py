@@ -73,7 +73,7 @@ def test_crop_buffer_single_tile_returns_buffer_unchanged() -> None:
     """With a single tile (tile_count == 1) crop_buffer returns the
     buffer verbatim — no overlap cropping is applied."""
     fs = _make_fs()
-    buffer = np.arange(2 * 4 * 5, dtype=np.uint16).reshape(2, 4, 5)
+    buffer = np.arange(1 * 4 * 5, dtype=np.uint16).reshape(1, 4, 5)
     out = fs.crop_buffer(buffer)
     np.testing.assert_array_equal(out, buffer)
 
