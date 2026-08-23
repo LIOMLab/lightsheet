@@ -53,6 +53,7 @@ from lightsheet.hal.real.camera import Camera
 from lightsheet.hal.real.daqlaser import DAQLaser
 from lightsheet.hal.real.etls import ETLs
 from lightsheet.hal.real.ibeam import IBeam
+from lightsheet.hal.real.ibeam_smart import IBeamSmartLaser
 from lightsheet.hal.real.lasers import Lasers
 from lightsheet.hal.real.motors import Motors
 from lightsheet.hal.real.siggen import SigGen
@@ -78,6 +79,7 @@ __all__ = [
     "IOptotune",
     "ISigGen",
     "ISigGenCore",
+    "IBeamSmartLaser",
     "Lasers",
     "MockCamera",
     "MockETLs",
