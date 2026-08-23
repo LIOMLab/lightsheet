@@ -245,3 +245,117 @@ def test_frame_saver_worker_surfaces_h5py_error_and_stops(tmp_path) -> None:
 
     # Restore permissions so tmp_path cleanup can remove the directory.
     ro_dir.chmod(0o755)
+
+
+def test_set_files_sequential_plane_numbers(tmp_path) -> None:
+    """IN-05: in a FRESH directory, set_files(number_of_files=3,
+    files_name="stack", scan_type="z", ...) produces filenames_list =
+    ["stack_z_plane_00001.hdf5", "stack_z_plane_00002.hdf5",
+    "stack_z_plane_00003.hdf5"] — per-file 1-based sequential plane
+    index, 5-digit zero-padded.
+
+    set_files uses os.path.isfile against the CWD-relative filename, so
+    the test chdir's into tmp_path (a fresh directory) for the duration
+    of the call. filenames_list is reset to [] before the call so the
+    assertion is independent of any prior state.
+    """
+    bundle = _make_bundle()
+    shell = _make_shell()
+    fs = FrameSaverController(bundle, shell)
+    saver = fs.frame_saver
+    saver.filenames_list = []
+
+    import os
+
+    cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        saver.set_files(3, "stack", "z", 1, "dataset_")
+    finally:
+        os.chdir(cwd)
+
+    assert saver.filenames_list == [
+        "stack_z_plane_00001.hdf5",
+        "stack_z_plane_00002.hdf5",
+        "stack_z_plane_00003.hdf5",
+    ], (
+        "set_files in a fresh directory must produce per-file 1-based "
+        "sequential 5-digit zero-padded plane numbers; got: "
+        + repr(saver.filenames_list)
+    )
+
+
+def test_set_files_collision_suffix(tmp_path) -> None:
+    """IN-05: in a directory where "stack_z_plane_00001.hdf5" ALREADY
+    EXISTS, set_files produces "stack_z_plane_00001_v02.hdf5" for that
+    plane (the _vNN collision suffix, starting at v2), while
+    non-colliding planes stay sequential.
+
+    Pre-creates the colliding file in tmp_path, chdir's there for the
+    set_files call (set_files uses os.path.isfile on the bare filename),
+    then asserts on filenames_list.
+    """
+    bundle = _make_bundle()
+    shell = _make_shell()
+    fs = FrameSaverController(bundle, shell)
+    saver = fs.frame_saver
+    saver.filenames_list = []
+
+    # Pre-create the colliding file in the fresh directory.
+    (tmp_path / "stack_z_plane_00001.hdf5").write_bytes(b"")
+
+    import os
+
+    cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        saver.set_files(3, "stack", "z", 1, "dataset_")
+    finally:
+        os.chdir(cwd)
+
+    assert saver.filenames_list == [
+        "stack_z_plane_00001_v02.hdf5",
+        "stack_z_plane_00002.hdf5",
+        "stack_z_plane_00003.hdf5",
+    ], (
+        "set_files must append _v02 to a colliding plane while leaving "
+        "non-colliding planes sequential; got: "
+        + repr(saver.filenames_list)
+    )
+
+
+def test_set_files_collision_suffix_increments(tmp_path) -> None:
+    """IN-05: when both plane_00001.hdf5 and plane_00001_v02.hdf5 exist,
+    the suffix increments to _v03 for that plane.
+
+    Pre-creates both colliding files in tmp_path, chdir's there for the
+    set_files call, then asserts the third plane gets _v03.
+    """
+    bundle = _make_bundle()
+    shell = _make_shell()
+    fs = FrameSaverController(bundle, shell)
+    saver = fs.frame_saver
+    saver.filenames_list = []
+
+    # Pre-create both the base and the _v02 collision files.
+    (tmp_path / "stack_z_plane_00001.hdf5").write_bytes(b"")
+    (tmp_path / "stack_z_plane_00001_v02.hdf5").write_bytes(b"")
+
+    import os
+
+    cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        saver.set_files(3, "stack", "z", 1, "dataset_")
+    finally:
+        os.chdir(cwd)
+
+    assert saver.filenames_list == [
+        "stack_z_plane_00001_v03.hdf5",
+        "stack_z_plane_00002.hdf5",
+        "stack_z_plane_00003.hdf5",
+    ], (
+        "set_files must increment the collision suffix past existing "
+        "_v02 to _v03 when both base and _v02 exist; got: "
+        + repr(saver.filenames_list)
+    )
