@@ -70,8 +70,6 @@ class Controller_MainWindow(QMainWindow):
     sig_live_mode_finished = pyqtSignal()
     sig_stack_mode_finished = pyqtSignal()
     sig_preview_mode_finished = pyqtSignal()
-    sig_calibrate_camera_finished = pyqtSignal()  # TODO
-    sig_calibrate_etl_finished = pyqtSignal()  # TODO
 
     sig_refresh_position_horizontal = pyqtSignal()  # TODO
     sig_refresh_position_vertical = pyqtSignal()  # TODO
@@ -383,8 +381,6 @@ class Controller_MainWindow(QMainWindow):
         self.preview_mode_started = False
         self.live_mode_started = False
         self.stack_mode_started = False
-        self.camera_calibration_started = False
-        self.etls_calibration_started = False
 
         # Operator-facing staged laser power setpoints in percent (0-100).
         # These are the single persistent source of truth for the spinbox
@@ -440,20 +436,9 @@ class Controller_MainWindow(QMainWindow):
         self.ui.pushButton_acqStartStackMode.setEnabled(True)
         self.ui.pushButton_acqGetSingleImage.setEnabled(True)
         self.ui.pushButton_saveCurrentImage.setEnabled(False)
-        self.ui.pushButton_calCameraStartCalibration.setEnabled(False)
         self.ui.pushButton_calCameraComputeFocus.setEnabled(False)
         self.ui.pushButton_calCameraShowInterpolation.setEnabled(False)
-        self.ui.pushButton_calEtlStartCalibration.setEnabled(False)
         self.ui.pushButton_calEtlShowInterpolation.setEnabled(False)
-
-        # The Camera Calibration and ETL Calibration workflows are dead code
-        # (their worker bodies were never rebuilt after an earlier refactor).
-        # Hide the start buttons programmatically rather than editing the
-        # generated .ui file. The slot methods and signal connections are
-        # kept so the buttons can be re-enabled later; the worker bodies are
-        # stripped to no-ops below. Restorable from git history.
-        self.ui.pushButton_calCameraStartCalibration.setVisible(False)
-        self.ui.pushButton_calEtlStartCalibration.setVisible(False)
 
         # Initial state of First and Last plane selection (for Stack Mode)
         self.ui.checkBox_acqFirstPlaneSet.setEnabled(False)
@@ -604,17 +589,11 @@ class Controller_MainWindow(QMainWindow):
         # ---
         # Connections for the 'Calibration' tab controls
         # ---
-        self.ui.pushButton_calCameraStartCalibration.clicked.connect(
-            self.camera_calibration_button
-        )
         self.ui.pushButton_calCameraComputeFocus.clicked.connect(
             self.calculate_camera_focus
         )
         self.ui.pushButton_calCameraShowInterpolation.clicked.connect(
             self.show_camera_interpolation
-        )
-        self.ui.pushButton_calEtlStartCalibration.clicked.connect(
-            self.etls_calibration_button
         )
         self.ui.pushButton_calEtlShowInterpolation.clicked.connect(
             self.show_etl_interpolation
@@ -1037,10 +1016,6 @@ class Controller_MainWindow(QMainWindow):
             self.live_mode_started = False
         if self.stack_mode_started:
             self.stack_mode_started = False
-        if self.camera_calibration_started:
-            self.camera_calibration_started = False
-        if self.etls_calibration_started:
-            self.etls_calibration_started = False
         if self.lasers[0].active or self.lasers[1].active:
             self._hw.stop_lasers()
 
@@ -2952,86 +2927,6 @@ class Controller_MainWindow(QMainWindow):
         self.ui.statusBar_label.setText("")
         self.ui.statusBar_progress.hide()
 
-    # Calibration Methods
-
-    def camera_calibration_button(self) -> None:
-        """Start or stop camera calibration, depending on the button status"""
-        if self.camera_calibration_started:
-            self.camera_calibration_started = False
-            self.calibrate_camera_thread.join()
-        else:
-            self.close_modes()
-            self.camera_calibration_started = True
-            self.ui.pushButton_calCameraStartCalibration.setText(
-                "Stop Camera Calibration"
-            )
-            self.updateUi_motor_buttons()
-            self.start_calibrate_camera()
-
-    def start_calibrate_camera(self) -> None:
-        """Initiates camera calibration"""
-
-        # Modes disabling while stack acquisition
-        self.updateUi_modes_buttons([self.ui.pushButton_calCameraStartCalibration])
-
-        self.updateUi_message_printer("Camera calibration started")
-        self.ui.statusBar_label.setText("Current Mode: Camera Calibration ")
-        self.ui.statusBar_progress.show()
-
-        # Starting camera calibration thread
-        self.calibrate_camera_thread = threading.Thread(
-            target=self.calibrate_camera_worker
-        )
-        self.calibrate_camera_thread.start()
-
-    def calibrate_camera_worker(self) -> None:
-        """Camera calibration worker.
-
-        The calibration workflow that this worker used to drive was never
-        rebuilt after an earlier refactor and had become dead code (it
-        printed a placeholder message and returned before any of the
-        unreachable calibration logic). The body is now a no-op. The start
-        button is hidden in __init__; the slot method and its signal
-        connection are retained so a scoped rebuild can restore the
-        workflow from git history.
-        """
-        return None
-
-    def etls_calibration_button(self) -> None:
-        """Start or stop etls calibration, depending on the button status"""
-        if self.etls_calibration_started:
-            self.etls_calibration_started = False
-            self.calibrate_etls_thread.join()
-        else:
-            self.close_modes()
-            self.etls_calibration_started = True
-            self.ui.pushButton_calEtlStartCalibration.setText("Stop ETL Calibration")
-            self.updateUi_motor_buttons()
-            self.start_calibrate_etls()
-
-    def start_calibrate_etls(self) -> None:
-        """Initiates etls-galvos calibration"""
-
-        # Modes disabling while stack acquisition
-        self.updateUi_modes_buttons([self.ui.pushButton_calEtlStartCalibration])
-        self.updateUi_message_printer("ETL calibration started")
-
-        # Starting camera calibration thread
-        self.calibrate_etls_thread = threading.Thread(target=self.calibrate_etls_worker)
-        self.calibrate_etls_thread.start()
-
-    def calibrate_etls_worker(self) -> None:
-        """ETL/galvo calibration worker.
-
-        The calibration workflow that this worker used to drive was never
-        rebuilt after an earlier refactor and had become dead code (it
-        printed a placeholder message and returned before any of the
-        unreachable calibration logic). The body is now a no-op. The start
-        button is hidden in __init__; the slot method and its signal
-        connection are retained so a scoped rebuild can restore the
-        workflow from git history.
-        """
-        return None
 
 
 class Properties_Dialog(QDialog):
