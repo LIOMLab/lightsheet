@@ -162,6 +162,72 @@ def test_get_output_power_returns_staged_power() -> None:
     assert laser.get_output_power() == 0.0
 
 
+def test_construction_rejects_zero_mw_per_volt() -> None:
+    """A config.ini typo (``Laser1 mW per Volt = 0``) must surface on the
+    HAL error surface in __init__ rather than crash later with a
+    ZeroDivisionError inside _write_volts (AGENTS.md §10 — surface
+    misconfiguration rather than crash). The laser is constructed but
+    flagged ``error == 1`` with a non-empty message naming the bad value.
+    """
+    laser = DAQLaser(
+        terminal="/Dev7/ao0",
+        wavelength=555,
+        mw_per_volt=0.0,
+        max_power_mw=300.0,
+        label="Laser 1 (555 nm)",
+    )
+    assert laser.error == 1, (
+        "mw_per_volt=0 must set the HAL error surface in __init__ rather "
+        "than crash on the first _write_volts division"
+    )
+    assert "mw_per_volt" in laser.error_message
+    assert "0" in laser.error_message
+
+
+def test_construction_rejects_negative_mw_per_volt() -> None:
+    """A negative mw_per_volt is equally invalid (would invert the mW->V
+    mapping and produce a negative clamp ceiling). Surface on the HAL
+    error surface in __init__."""
+    laser = DAQLaser(
+        terminal="/Dev7/ao0",
+        wavelength=555,
+        mw_per_volt=-60.0,
+        max_power_mw=300.0,
+        label="Laser 1 (555 nm)",
+    )
+    assert laser.error == 1
+    assert "mw_per_volt" in laser.error_message
+
+
+def test_write_volts_aborts_on_zero_mw_per_volt() -> None:
+    """Defense-in-depth: even if a DAQLaser with mw_per_volt<=0 is
+    constructed (e.g. by a subclass or a future refactor that bypasses
+    the __init__ guard), _write_volts must NOT raise ZeroDivisionError
+    on the clamp division. It sets the error surface, reverts active,
+    and returns early — the daemon write thread stays alive."""
+    laser = DAQLaser(
+        terminal="/Dev7/ao0",
+        wavelength=555,
+        mw_per_volt=0.0,
+        max_power_mw=300.0,
+        label="Laser 1 (555 nm)",
+    )
+    assert laser.error == 1  # set by __init__
+    # Clear the surface so we can prove _write_volts re-sets it.
+    laser.error = 0
+    laser.error_message = ""
+    laser.active = True
+    laser._write_volts(2.5)
+    assert laser.error == 1, (
+        "_write_volts must surface the invalid mw_per_volt on the HAL "
+        "error surface rather than raise ZeroDivisionError"
+    )
+    assert laser.active is False, (
+        "_write_volts must revert active=False when it aborts on an "
+        "invalid mw_per_volt (mirrors the write-failure revert)"
+    )
+
+
 def test_native_unit_volts_clamp_in_write_volts() -> None:
     """The native-unit clamp inside _write_volts bounds volts to
     [0, max_power / mw_per_volt] independently of the mW-layer clamp in
