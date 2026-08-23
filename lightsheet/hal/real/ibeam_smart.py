@@ -110,6 +110,16 @@ class IBeam:
     _cfg_settings["Wavelength"] = "640"  # In nm (iBeam Smart 640)
     _cfg_settings["Power"] = "0"  # In uW
     _cfg_settings["Max Power"] = "150000"  # In uW (150 mW diode limit, rig-confirmed)
+    # Per-readline timeout for the response-read loop. The iBeam Smart
+    # firmware sends data lines and error replies in <30ms but takes ~3s
+    # to send the CMD> prompt that terminates the response. Waiting for
+    # the prompt wastes ~3s per command. Instead, _send_cmd uses this
+    # short timeout per readline: data/error lines arrive within it, and
+    # a timeout (b"") signals the response is complete. The CMD> prompt
+    # is flushed by reset_input_buffer on the next command. Rig-probed:
+    # 0.2s catches all data + %SYS-E replies with margin; configurable
+    # here so a slower firmware version can be tuned without code change.
+    _cfg_settings["Read Timeout"] = "0.2"  # seconds per readline
 
     def __init__(self, port: str | None = None) -> None:
         # HAL error status (mirrors lightsheet/lasers.py and lightsheet/etls.py).
@@ -126,6 +136,10 @@ class IBeam:
         self.wavelength = int(self.cfg_settings["Wavelength"])
         self._power = int(self.cfg_settings["Power"])
         self.max_power = int(self.cfg_settings["Max Power"])
+        # Per-readline timeout for the response-read loop (see _cfg_settings
+        # "Read Timeout" for rationale). Parsed from config so it is tunable
+        # without code change.
+        self._read_timeout = float(self.cfg_settings["Read Timeout"])
 
         # Serial connection + laser state.
         self.ser = None
@@ -347,12 +361,24 @@ class IBeam:
     # Serial I/O
     # ------------------------------------------------------------------ #
     def _send_cmd(self, cmd: str) -> list[str]:
-        """Send an ASCII command and read lines until the [OK] or CMD> terminator.
+        """Send an ASCII command and read the response lines.
 
         Acquires the per-instance lock, flushes the input buffer (reply-lag
         mitigation), writes the command with a CRLF terminator, reads lines
-        until `[OK]` or a `CMD>` prompt is seen, then sleeps for the
-        inter-command gap. Returns the collected response lines (stripped).
+        until a per-readline timeout fires (no more data) or the ``[OK]`` /
+        ``CMD>`` terminator is seen, then sleeps for the inter-command gap.
+        Returns the collected response lines (stripped).
+
+        The iBeam Smart firmware sends data lines and ``%SYS-E`` error
+        replies in <30ms but takes ~3s to send the ``CMD>`` prompt that
+        terminates the response. Waiting for the prompt wastes ~3s per
+        command. Instead, this method uses a short per-readline timeout
+        (``self._read_timeout``, default 0.2s, configurable via
+        ``[iBeam] Read Timeout`` in config.ini): data/error lines arrive
+        within it, and a timeout (``b""``) signals the response is
+        complete. The late ``CMD>`` prompt is flushed by
+        ``reset_input_buffer`` on the next command. Rig-probed: data
+        arrives in 30ms, errors in 20ms — 0.2s catches both with margin.
         """
         with self._lock:
             if self.ser is None:
@@ -368,21 +394,32 @@ class IBeam:
             self.ser.reset_input_buffer()
             self.ser.write(f"{cmd}\r\n".encode("ascii"))
 
-            response_lines = []
-            while True:
-                raw = self.ser.readline()
-                if raw == b"":
-                    # readline returns b'' on timeout (no bytes received
-                    # within the serial timeout window). Break so a stuck
-                    # device does not loop forever. A genuine blank response
-                    # line is b'\r\n' (decodes to '' after strip) and is NOT
-                    # a timeout — it is appended below and the loop continues
-                    # until the [OK]/CMD> terminator arrives.
-                    break
-                line = raw.decode("ascii", errors="replace").strip()
-                response_lines.append(line)
-                if line == "[OK]" or line.startswith("CMD>"):
-                    break
+            # Use the short per-readline timeout so we don't wait ~3s for
+            # the CMD> prompt. Save and restore the original timeout so the
+            # serial port's configured timeout (used elsewhere if ever) is
+            # not permanently changed.
+            original_timeout = self.ser.timeout
+            self.ser.timeout = self._read_timeout
+            try:
+                response_lines = []
+                while True:
+                    raw = self.ser.readline()
+                    if raw == b"":
+                        # readline returns b'' on timeout (no bytes received
+                        # within the read-timeout window). The response is
+                        # complete — the CMD> prompt will arrive ~3s later
+                        # and is flushed by reset_input_buffer on the next
+                        # command. A genuine blank response line is b'\r\n'
+                        # (decodes to '' after strip) and is NOT a timeout —
+                        # it is appended below and the loop continues until
+                        # the next readline times out.
+                        break
+                    line = raw.decode("ascii", errors="replace").strip()
+                    response_lines.append(line)
+                    if line == "[OK]" or line.startswith("CMD>"):
+                        break
+            finally:
+                self.ser.timeout = original_timeout
 
             # Surface a device-level rejection on the HAL error surface
             # instead of letting it look like success. The firmware prefixes
