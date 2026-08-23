@@ -66,7 +66,7 @@ class FrameViewer(QObject):
         # Set initial view
         self.parent.ui.imageView.setImage(frame_init)
 
-    def enqueue_frame(self, frame: np.uint16) -> None:
+    def enqueue_frame(self, frame: np.ndarray) -> None:
         with contextlib.suppress(queue.Full):
             self.queue.put(frame, block=False)
 
@@ -204,7 +204,7 @@ class FrameSaver(QObject):
         """Thread for saving 3D arrays (or 2D arrays).
         The number of datasets per file is the number of 2D arrays"""
         for idx in range(len(self.filenames_list)):
-            print("File created:" + str(self.filenames_list[idx]))  # debugging
+            logger.info("File created: %s", self.filenames_list[idx])
             # Create file
             outfile = h5py.File(self.filenames_list[idx], "a")
             # Write per-laser metadata as file-level root attrs once per
@@ -230,14 +230,12 @@ class FrameSaver(QObject):
                             self.dataset = outfile.create_dataset(
                                 path_root, data=buffer[frame, :, :]
                             )
-                            print(
-                                "Dataset "
-                                + str(dataset)
-                                + "/"
-                                + str(int(self.number_of_datasets))
-                                + " created:"
-                                + str(path_root)
-                            )  # debugging
+                            logger.info(
+                                "Dataset %s/%s created: %s",
+                                dataset,
+                                int(self.number_of_datasets),
+                                path_root,
+                            )
 
                             # Add attributes
                             self.dataset.attrs["Sample Name"] = self.sample_name
@@ -260,9 +258,25 @@ class FrameSaver(QObject):
 
                             counter += 1
                         break
-                    except Exception:
+                    except queue.Empty:
+                        # Timeout waiting for a buffer — stop_saving() may
+                        # have flipped the flag; if so, exit the inner loop.
+                        # Otherwise keep waiting for the next buffer.
                         if not self.saving_started:
                             break
+                    except Exception as e:
+                        # A non-timeout exception (e.g. h5py write error:
+                        # disk full, HDF5 corruption) must not be swallowed
+                        # and silently retried — surface it to the operator
+                        # and stop saving so we do not keep writing to a
+                        # corrupted file. The pre-extraction code caught
+                        # all exceptions here and treated them as timeouts,
+                        # which let a write error pass silently and the
+                        # worker proceeded to the next dataset on a
+                        # potentially corrupt file.
+                        self.sig_status_message.emit(f"Save error: {e}")
+                        self.saving_started = False
+                        break
                 if not self.saving_started:
                     break
             outfile.close()
