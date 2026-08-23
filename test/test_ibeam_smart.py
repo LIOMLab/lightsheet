@@ -143,6 +143,24 @@ def test_ibeam_smart_set_power_clamps_mw_at_adapter_layer() -> None:
     )
 
 
+def test_ibeam_smart_set_power_rounds_mw_to_uw_not_truncates() -> None:
+    """``set_power(mw)`` converts mW to µW via ``round(mw * 1000)`` rather
+    than ``int(mw * 1000)``. A value like 149.9999 mW must convert to
+    150000 µW (round-to-nearest), not 149999 µW (truncate toward zero).
+    The sub-µW precision difference is below the diode's practical
+    resolution and not a safety issue, but round() is the more correct
+    conversion for a value (vs an index computation)."""
+    adapter, mock_ser = _make_open_ibeam_smart(readline_side_effect=[b"[OK]\r\n"])
+    # 149.9999 mW * 1000 = 149999.9 -> round() = 150000, int() = 149999.
+    adapter.set_power(149.9999)
+    text = _last_write_text(mock_ser)
+    assert "150000" in text, (
+        f"set_power(149.9999 mW) must round to 150000 uW, not truncate to "
+        f"149999 uW; got {text!r}"
+    )
+    assert "149999" not in text
+
+
 def test_ibeam_smart_set_power_inner_uw_clamp_still_applies() -> None:
     """Two-layer clamp: even if the adapter's mW clamp is bypassed by a
     subclass or a future refactor, the inner ``IBeam.set_power``'s own µW

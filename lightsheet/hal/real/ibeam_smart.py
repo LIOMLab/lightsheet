@@ -507,7 +507,13 @@ class IBeamSmartLaser(ILaser):
         commanded power was applied.
         """
         mw = max(0.0, min(mw, self.max_power))
-        self._ibeam.set_power(int(mw * 1000))  # mW -> uW; inner clamp still applies
+        # mW -> uW. round() rather than int() so a value like 149.9999 mW
+        # converts to 150000 uW (not 149999) — round-to-nearest is the
+        # correct conversion for a value, vs int() which truncates toward
+        # zero. The sub-uW precision difference is below the diode's
+        # practical resolution and not a safety issue, but round() is more
+        # correct. The inner IBeam.set_power clamp still applies.
+        self._ibeam.set_power(round(mw * 1000))
         if not self._ibeam.error:
             self.power = mw
 
