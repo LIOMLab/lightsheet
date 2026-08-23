@@ -3,9 +3,11 @@
 ``FrameSaverController`` is a plain-Python collaborator that owns the
 ``FrameSaver`` + ``FrameViewer`` QObject instances and routes the
 shell's save/enqueue calls through to them. The QObjects themselves
-(``FrameSaver`` / ``FrameViewer``) stay defined in
-``lightsheet/gui/controller.py`` per PATTERNS.md — this collaborator just
-owns/routes to them. The shell delegates through ``self._fs``.
+(``FrameSaver`` / ``FrameViewer``) are defined in
+``lightsheet/gui/frame_saver_controller.py`` alongside this collaborator
+(moved verbatim from ``lightsheet/gui/controller.py`` — a
+behavior-preserving mechanical relocation). The shell delegates through
+``self._fs``.
 
 ``Controller_MainWindow`` cannot be instantiated on this Mac (no PyQt5
 display), so the tests construct ``FrameSaverController`` directly with a
@@ -38,8 +40,7 @@ from PyQt5.QtCore import QObject
 
 pytest.importorskip("PyQt5")  # FrameSaver/FrameViewer are QObjects
 
-from lightsheet.gui.controller import FrameSaver, FrameViewer
-from lightsheet.gui.frame_saver_controller import FrameSaverController
+from lightsheet.gui.frame_saver_controller import FrameSaver, FrameViewer, FrameSaverController
 from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
 
 
