@@ -35,14 +35,14 @@ from lightsheet.hal.real.daqlaser import DAQLaser
 
 
 def _make_l1() -> DAQLaser:
-    """Construct a DAQLaser mirroring Laser 1's config (561 nm, 300 mW max,
+    """Construct a DAQLaser mirroring Laser 1's config (555 nm, 300 mW max,
     60 mW per Volt, /Dev7/ao0)."""
     return DAQLaser(
         terminal="/Dev7/ao0",
-        wavelength=561,
+        wavelength=555,
         mw_per_volt=60.0,
         max_power_mw=300.0,
-        label="Laser 1 (561 nm)",
+        label="Laser 1 (555 nm)",
     )
 
 
@@ -54,8 +54,8 @@ def test_construction_defaults() -> None:
     assert laser.active is False
     assert laser.error == 0
     assert laser.error_message == ""
-    assert laser.label == "Laser 1 (561 nm)"
-    assert laser.wavelength == 561
+    assert laser.label == "Laser 1 (555 nm)"
+    assert laser.wavelength == 555
     assert laser.max_power == 300.0
     assert laser.mw_per_volt == 60.0
     assert laser.terminal == "/Dev7/ao0"

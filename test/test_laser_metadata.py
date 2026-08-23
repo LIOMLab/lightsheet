@@ -81,10 +81,10 @@ def test_write_laser_metadata_writes_all_five_attrs_per_laser(
 
     lasers = [
         MockLaser(
-            wavelength=561,
+            wavelength=555,
             max_power_mw=300.0,
             mw_per_volt=60.0,
-            label="Laser 1 (561 nm)",
+            label="Laser 1 (555 nm)",
         ),
         MockLaser(
             wavelength=640,
@@ -103,12 +103,12 @@ def test_write_laser_metadata_writes_all_five_attrs_per_laser(
         write_meta(standin, outfile)
 
     with h5py.File(outfile_path, "r") as f:
-        # Laser 1 (active, 150 mW staged, 561 nm, 300 mW max)
-        assert f.attrs["Laser1 Wavelength"] == 561
+        # Laser 1 (active, 150 mW staged, 555 nm, 300 mW max)
+        assert f.attrs["Laser1 Wavelength"] == 555
         assert f.attrs["Laser1 Power"] == 150.0
         assert f.attrs["Laser1 Max Power"] == 300.0
         assert f.attrs["Laser1 Active"] == True
-        assert f.attrs["Laser1 Label"] == "Laser 1 (561 nm)"
+        assert f.attrs["Laser1 Label"] == "Laser 1 (555 nm)"
 
         # Laser 2 (inactive, 0 mW, 640 nm, 150 mW max) — included even
         # though it did not fire (reproducibility context).
@@ -130,9 +130,9 @@ def test_write_laser_metadata_includes_inactive_laser(tmp_path) -> None:
 
     lasers = [
         MockLaser(
-            wavelength=561,
+            wavelength=555,
             max_power_mw=300.0,
-            label="Laser 1 (561 nm)",
+            label="Laser 1 (555 nm)",
         ),
         MockLaser(
             wavelength=640,
@@ -173,9 +173,9 @@ def test_write_laser_metadata_reads_live_instance_not_config(
 
     lasers = [
         MockLaser(
-            wavelength=561,
+            wavelength=555,
             max_power_mw=300.0,
-            label="Laser 1 (561 nm)",
+            label="Laser 1 (555 nm)",
         ),
     ]
     # Mutate the live instance after construction — the saved metadata

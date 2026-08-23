@@ -664,7 +664,7 @@ class ILaser(ABC):
     power: float  # mW (canonical)
     max_power: float  # mW (canonical)
     active: bool  # live state for status indicator
-    label: str  # e.g. "Laser 1 (561 nm)" for metadata
+    label: str  # e.g. "Laser 1 (555 nm)" for metadata
 
     # Lifecycle verbs (AGENTS.md §10) — abstract methods returning None.
     @abstractmethod

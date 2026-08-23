@@ -90,7 +90,7 @@ def standin() -> Mock:
     """A stand-in Controller_MainWindow self with REAL HAL instances.
 
     Constructed exactly as hardware_init constructs them: self.lasers is a
-    list[ILaser] = [DAQLaser(/Dev7/ao0, 561nm), IBeamSmartLaser(640nm)].
+    list[ILaser] = [DAQLaser(/Dev7/ao0, 555nm), IBeamSmartLaser(640nm)].
     The per-laser write locks live on the ILaser instances
     (self.lasers[i]._lock). estop_event and staged-percent fields are set
     as the laser methods read them. sig_message is captured so we can
@@ -104,10 +104,10 @@ def standin() -> Mock:
     s = Mock()
     laser1 = DAQLaser(
         terminal="/Dev7/ao0",
-        wavelength=561,
+        wavelength=555,
         mw_per_volt=60.0,
         max_power_mw=300.0,
-        label="Laser 1 (561 nm)",
+        label="Laser 1 (555 nm)",
     )
     laser2 = IBeamSmartLaser(label="Laser 2 (640 nm)")
     s.lasers = [laser1, laser2]
@@ -250,7 +250,7 @@ def test_start_lasers_real_daq_then_siggen_create(standin: Mock) -> None:
 def test_real_daqlaser_on_nonzero_voltage_no_crash() -> None:
     """The real DAQLaser.on() at a nonzero voltage — the exact GUI path.
 
-    The operator's 561nm toggle called _toggle_laser1 -> self.lasers[0].on(),
+    The operator's 555nm toggle called _toggle_laser1 -> self.lasers[0].on(),
     which writes a nonzero voltage to Dev7/ao0 via the DAQLaser backend.
     This test calls the real DAQLaser method (not a re-implemented
     nidaqmx.Task) at a small nonzero voltage to reproduce the access
@@ -270,10 +270,10 @@ def test_real_daqlaser_on_nonzero_voltage_no_crash() -> None:
     mw = voltage / 5.0 * 300.0
     laser = DAQLaser(
         channel="/Dev7/ao0",
-        wavelength=561,
+        wavelength=555,
         mw_per_volt=60.0,
         max_power_mw=300.0,
-        label="Laser 1 (561 nm)",
+        label="Laser 1 (555 nm)",
     )
     laser.set_power(mw)
     laser.on()
@@ -300,10 +300,10 @@ def test_real_daqlaser_on_daemon_thread_nonzero() -> None:
     mw = voltage / 5.0 * 300.0
     laser = DAQLaser(
         channel="/Dev7/ao0",
-        wavelength=561,
+        wavelength=555,
         mw_per_volt=60.0,
         max_power_mw=300.0,
-        label="Laser 1 (561 nm)",
+        label="Laser 1 (555 nm)",
     )
     laser.set_power(mw)
     errors = []

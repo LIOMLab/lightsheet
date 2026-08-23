@@ -134,7 +134,7 @@ def test_write_laser1_power_skips_when_estop_set() -> None:
     estop_event = threading.Event()
     estop_event.set()
 
-    laser1 = _make_write_laser("Laser 1 (561 nm)", active=True, max_power=300.0)
+    laser1 = _make_write_laser("Laser 1 (555 nm)", active=True, max_power=300.0)
 
     standin = Mock()
     standin.estop_event = estop_event
@@ -177,7 +177,7 @@ def test_write_laser1_power_writes_when_estop_clear_and_active() -> None:
 
     estop_event = threading.Event()  # clear
 
-    laser1 = _make_write_laser("Laser 1 (561 nm)", active=True, max_power=300.0)
+    laser1 = _make_write_laser("Laser 1 (555 nm)", active=True, max_power=300.0)
 
     standin = Mock()
     standin.estop_event = estop_event
@@ -197,7 +197,7 @@ def test_write_laser1_power_skips_when_laser_inactive() -> None:
 
     estop_event = threading.Event()  # clear
 
-    laser1 = _make_write_laser("Laser 1 (561 nm)", active=False, max_power=300.0)
+    laser1 = _make_write_laser("Laser 1 (555 nm)", active=False, max_power=300.0)
 
     standin = Mock()
     standin.estop_event = estop_event
@@ -242,7 +242,7 @@ def test_write_laser1_power_surfaces_error_and_resets() -> None:
         laser1.error = 1
         laser1.error_message = "daq write failed"
 
-    laser1 = _make_write_laser("Laser 1 (561 nm)", active=True, max_power=300.0)
+    laser1 = _make_write_laser("Laser 1 (555 nm)", active=True, max_power=300.0)
     laser1.set_power.side_effect = _fail_set_power
 
     standin = Mock()
@@ -254,7 +254,7 @@ def test_write_laser1_power_surfaces_error_and_resets() -> None:
 
     assert standin.sig_message.emit.called
     msg = standin.sig_message.emit.call_args[0][0]
-    assert "Laser 1 (561 nm)" in msg
+    assert "Laser 1 (555 nm)" in msg
     assert "daq write failed" in msg
     assert laser1.error == 0
 
@@ -271,7 +271,7 @@ def test_toggle_laser1_off_when_active() -> None:
     toggle = _load_method("_toggle_laser1(self) -> None")
 
     estop_event = threading.Event()  # clear
-    laser1 = _make_write_laser("Laser 1 (561 nm)", active=True, max_power=300.0)
+    laser1 = _make_write_laser("Laser 1 (555 nm)", active=True, max_power=300.0)
 
     standin = Mock()
     standin.estop_event = estop_event
@@ -291,7 +291,7 @@ def test_toggle_laser1_on_when_inactive() -> None:
     toggle = _load_method("_toggle_laser1(self) -> None")
 
     estop_event = threading.Event()  # clear
-    laser1 = _make_write_laser("Laser 1 (561 nm)", active=False, max_power=300.0)
+    laser1 = _make_write_laser("Laser 1 (555 nm)", active=False, max_power=300.0)
     # .on() must flip .active to True so the toggle body's post-on branch
     # applies the staged percentage (a real ILaser's .on() does this).
     laser1.on.side_effect = lambda: setattr(laser1, "active", True)
@@ -343,7 +343,7 @@ def test_toggle_laser1_skips_when_estop_set() -> None:
 
     estop_event = threading.Event()
     estop_event.set()
-    laser1 = _make_write_laser("Laser 1 (561 nm)", active=False, max_power=300.0)
+    laser1 = _make_write_laser("Laser 1 (555 nm)", active=False, max_power=300.0)
 
     standin = Mock()
     standin.estop_event = estop_event
@@ -362,7 +362,7 @@ def test_start_lasers_drives_both_auto_lasers() -> None:
     laser-2-specific self.ibeam branch."""
     start_lasers = _load_method("start_lasers(self) -> None")
 
-    laser1 = _make_write_laser("Laser 1 (561 nm)", active=False, max_power=300.0)
+    laser1 = _make_write_laser("Laser 1 (555 nm)", active=False, max_power=300.0)
     laser2 = _make_write_laser("Laser 2 (640 nm)", active=False, max_power=150.0)
 
     standin = Mock()
@@ -387,7 +387,7 @@ def test_start_lasers_skips_non_auto_lasers() -> None:
     True; the other laser is untouched."""
     start_lasers = _load_method("start_lasers(self) -> None")
 
-    laser1 = _make_write_laser("Laser 1 (561 nm)", active=False, max_power=300.0)
+    laser1 = _make_write_laser("Laser 1 (555 nm)", active=False, max_power=300.0)
     laser2 = _make_write_laser("Laser 2 (640 nm)", active=False, max_power=150.0)
 
     standin = Mock()
@@ -410,7 +410,7 @@ def test_stop_lasers_drives_both_auto_lasers_off() -> None:
     self.ibeam branch."""
     stop_lasers = _load_method("stop_lasers(self) -> None")
 
-    laser1 = _make_write_laser("Laser 1 (561 nm)", active=True, max_power=300.0)
+    laser1 = _make_write_laser("Laser 1 (555 nm)", active=True, max_power=300.0)
     laser2 = _make_write_laser("Laser 2 (640 nm)", active=True, max_power=150.0)
 
     standin = Mock()
@@ -464,7 +464,7 @@ def test_estop_drives_both_lasers_off_in_loop() -> None:
     estop = _load_method("updateUi_estop_pressed(self) -> None")
 
     estop_event = threading.Event()
-    laser1 = _make_laser_mock("Laser 1 (561 nm)")
+    laser1 = _make_laser_mock("Laser 1 (555 nm)")
     laser2 = _make_laser_mock("Laser 2 (640 nm)")
 
     standin = Mock()
@@ -491,7 +491,7 @@ def test_estop_emits_per_laser_warning_on_error() -> None:
     estop = _load_method("updateUi_estop_pressed(self) -> None")
 
     estop_event = threading.Event()
-    laser1 = _make_laser_mock("Laser 1 (561 nm)")
+    laser1 = _make_laser_mock("Laser 1 (555 nm)")
     laser2 = _make_laser_mock(
         "Laser 2 (640 nm)", error=1, error_message="serial write failed"
     )
@@ -544,7 +544,7 @@ def test_estop_acquires_no_laser_lock() -> None:
             return None
 
     estop_event = threading.Event()
-    laser1 = _make_laser_mock("Laser 1 (561 nm)")
+    laser1 = _make_laser_mock("Laser 1 (555 nm)")
     laser2 = _make_laser_mock("Laser 2 (640 nm)")
     laser1._lock = _NoLockAcquire()
     laser2._lock = _NoLockAcquire()
@@ -567,7 +567,7 @@ def test_close_modes_reads_lasers_index_active() -> None:
     are inactive, stop_lasers must NOT be called."""
     close_modes = _load_method("close_modes(self) -> None")
 
-    laser1 = _make_laser_mock("Laser 1 (561 nm)")
+    laser1 = _make_laser_mock("Laser 1 (555 nm)")
     laser2 = _make_laser_mock("Laser 2 (640 nm)")
     laser1.active = False
     laser2.active = False
@@ -589,7 +589,7 @@ def test_close_modes_calls_stop_lasers_when_a_laser_active() -> None:
     reading self.lasers[0].active or self.lasers[1].active."""
     close_modes = _load_method("close_modes(self) -> None")
 
-    laser1 = _make_laser_mock("Laser 1 (561 nm)")
+    laser1 = _make_laser_mock("Laser 1 (555 nm)")
     laser2 = _make_laser_mock("Laser 2 (640 nm)")
     laser1.active = False
     laser2.active = True  # laser 2 is on -> must stop
@@ -641,7 +641,7 @@ def test_poll_laser_status_active_emits_active() -> None:
     sig_laser_status(0, 'active')."""
     poll = _load_method("_poll_laser_status(self, indices: list[int]) -> None")
 
-    laser1 = _make_status_laser("Laser 1 (561 nm)", active=True, error=0)
+    laser1 = _make_status_laser("Laser 1 (555 nm)", active=True, error=0)
 
     standin = Mock()
     standin.lasers = [laser1, Mock()]
@@ -657,7 +657,7 @@ def test_poll_laser_status_inactive_emits_inactive() -> None:
     sig_laser_status(0, 'inactive')."""
     poll = _load_method("_poll_laser_status(self, indices: list[int]) -> None")
 
-    laser1 = _make_status_laser("Laser 1 (561 nm)", active=False, error=0)
+    laser1 = _make_status_laser("Laser 1 (555 nm)", active=False, error=0)
 
     standin = Mock()
     standin.lasers = [laser1, Mock()]
@@ -693,7 +693,7 @@ def test_poll_laser_status_both_indices_emits_twice() -> None:
     touch both lasers."""
     poll = _load_method("_poll_laser_status(self, indices: list[int]) -> None")
 
-    laser1 = _make_status_laser("Laser 1 (561 nm)", active=True, error=0)
+    laser1 = _make_status_laser("Laser 1 (555 nm)", active=True, error=0)
     laser2 = _make_status_laser("Laser 2 (640 nm)", active=False, error=0)
 
     standin = Mock()

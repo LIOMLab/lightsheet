@@ -34,26 +34,26 @@ _has_hardware: bool = os.environ.get("LIGHTSHEET_HW", "0") == "1"
 
 
 def _make_daq_l1() -> DAQLaser:
-    """DAQLaser configured with Laser 1's values (561 nm, 300 mW max,
+    """DAQLaser configured with Laser 1's values (555 nm, 300 mW max,
     60 mW per Volt, /Dev7/ao0)."""
     return DAQLaser(
         terminal="/Dev7/ao0",
-        wavelength=561,
+        wavelength=555,
         mw_per_volt=60.0,
         max_power_mw=300.0,
-        label="Laser 1 (561 nm)",
+        label="Laser 1 (555 nm)",
     )
 
 
 def _make_mock_l1() -> MockLaser:
-    """MockLaser configured with Laser 1's values (561 nm, 300 mW max,
+    """MockLaser configured with Laser 1's values (555 nm, 300 mW max,
     60 mW per Volt — kept for symmetry with DAQLaser, unused by the mock's
     own logic)."""
     return MockLaser(
-        wavelength=561,
+        wavelength=555,
         max_power_mw=300.0,
         mw_per_volt=60.0,
-        label="Laser 1 (561 nm)",
+        label="Laser 1 (555 nm)",
     )
 
 

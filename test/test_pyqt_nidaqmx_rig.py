@@ -202,10 +202,10 @@ def test_laser_task_with_full_hal_under_qapp() -> None:
         ibeam.open()
     laser1 = DAQLaser(
         channel="/Dev7/ao0",
-        wavelength=561,
+        wavelength=555,
         mw_per_volt=60.0,
         max_power_mw=300.0,
-        label="Laser 1 (561 nm)",
+        label="Laser 1 (555 nm)",
     )
     etls = ETLs()
     etls.open()
