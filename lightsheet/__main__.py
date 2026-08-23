@@ -27,11 +27,110 @@ def _resolve_demo(cli_demo: bool, env: str | None) -> bool:
     - ``LIGHTSHEET_DEMO=1`` -> demo active (env opt-in).
     - ``LIGHTSHEET_DEMO=0`` or unset -> demo inactive unless ``--demo``.
 
-    Under demo mode the controller's ``hardware_init`` factory constructs
-    ``Mock*`` HAL instances (no hardware init) and this bootstrap skips the
-    ``nicaiu.dll`` preload (no DAQmx task is ever created in demo mode).
+    Under demo mode ``main()``'s composition root builds a ``DeviceBundle``
+    from ``Mock*`` HAL instances (no hardware init) and this bootstrap skips
+    the ``nicaiu.dll`` preload (no DAQmx task is ever created in demo mode).
     """
     return bool(cli_demo or env == "1")
+
+
+def _build_demo_bundle():
+    """Construct a ``DeviceBundle`` from ``Mock*`` HAL instances for the
+    ``--demo`` / ``LIGHTSHEET_DEMO=1`` path.
+
+    Replicates the exact ``MockCamera`` / ``MockSigGen`` / ``MockMotors`` /
+    ``MockLaser`` x2 / ``MockETLs`` construction that previously lived
+    inline in ``Controller_MainWindow.hardware_init``'s demo branch. The
+    camera-before-siggen dependency ordering is preserved (the mock camera
+    still carries the xsize/ysize/line_time the SigGen waveform timing
+    derives from).
+
+    Imports are deferred to inside this function so the module stays
+    import-light — the HAL barrel is not loaded until ``main()`` calls this
+    on the demo path.
+    """
+    from lightsheet.hal import (
+        DeviceBundle,
+        MockCamera,
+        MockETLs,
+        MockLaser,
+        MockMotors,
+        MockSigGen,
+    )
+
+    camera = MockCamera(verbose=True)
+    # SigGen needs to know about Camera settings to generate proper scan
+    # waveforms — dependency ordering preserved (the mock camera still
+    # carries the xsize/ysize/line_time the SigGen waveform timing derives
+    # from).
+    siggen = MockSigGen(camera)
+    motors = MockMotors()
+    lasers = (
+        MockLaser(
+            wavelength=555,
+            max_power_mw=300.0,
+            mw_per_volt=60.0,
+            label="Laser 1 (555 nm)",
+        ),
+        MockLaser(
+            wavelength=640,
+            max_power_mw=150.0,
+            label="Laser 2 (640 nm)",
+        ),
+    )
+    etls = MockETLs()
+    return DeviceBundle(
+        camera=camera,
+        siggen=siggen,
+        motors=motors,
+        etls=etls,
+        lasers=lasers,
+    )
+
+
+def _show_missing_device_dialog(message: str) -> None:
+    """Show the missing-device strict-abort QDialog (D-02 / RFR-02).
+
+    The ``UnresolvedDeviceError`` message already contains the full dialog
+    body (header + intro + per-device entries, formatted per the UI-SPEC
+    copy template). This function splits it into lines and renders each as
+    a QLabel in a modal QDialog with a single Exit button. The
+    QApplication must already exist so the dialog can render.
+    """
+    from PyQt5.QtWidgets import (
+        QDialog,
+        QHBoxLayout,
+        QLabel,
+        QPushButton,
+        QVBoxLayout,
+    )
+
+    dlg = QDialog()
+    dlg.setWindowTitle("Missing device — startup aborted")
+    dlg.setMinimumWidth(480)
+    layout = QVBoxLayout(dlg)
+
+    lines = message.split("\n")
+    for i, line in enumerate(lines):
+        if not line.strip():
+            continue
+        label = QLabel(line)
+        label.setWordWrap(True)
+        # The first non-empty line is the header — render it bold red.
+        if i == 0 or line.startswith("✕"):
+            label.setStyleSheet("color: #FF3B30; font-weight: bold;")
+        layout.addWidget(label)
+
+    btn_layout = QHBoxLayout()
+    btn_layout.addStretch()
+    exit_btn = QPushButton("Exit")
+    exit_btn.setDefault(True)
+    exit_btn.clicked.connect(dlg.accept)
+    btn_layout.addWidget(exit_btn)
+    layout.addLayout(btn_layout)
+
+    dlg.setModal(True)
+    dlg.exec_()
 
 
 def main() -> int:
@@ -145,7 +244,52 @@ def main() -> int:
                 qdarkstyle.load_stylesheet(qt_api="pyqt5", palette=DarkPalette)
             )
 
-    controller = Controller_MainWindow(demo=demo)
+    # --- Composition root: build the DeviceBundle, validate config, then
+    # construct the shell. main() is the SOLE composition root —
+    # Controller_MainWindow receives a pre-built bundle and no longer
+    # constructs HAL classes itself. The E-stop kill path stays in the
+    # thin shell with a direct list[ILaser] ref (self.lasers =
+    # list(bundle.lasers)), lock-free on the GUI thread.
+    if demo:
+        bundle = _build_demo_bundle()
+    else:
+        # DeviceRegistry is imported ONLY on the rig path (not-demo) —
+        # never on the --demo path (Pitfall 6: an empty Mac USB-serial
+        # port list would abort every device). The QApplication already
+        # exists above so the missing-device QDialog can render.
+        from lightsheet.hal.registry import (
+            DeviceRegistry,
+            UnresolvedDeviceError,
+        )
+
+        try:
+            bundle = DeviceRegistry(
+                "hardware_inventory.yaml", "config.ini"
+            ).resolve()
+        except UnresolvedDeviceError as e:
+            _show_missing_device_dialog(str(e))
+            sys.exit(1)
+
+    # Config-schema validation runs AFTER the bundle exists but BEFORE
+    # any collaborator/shell is constructed (UI-SPEC order-of-operations).
+    # A REJECT-classified error aborts via sys.exit(1) inside
+    # validate_or_abort before any Qt window shows. This runs on both
+    # demo and rig paths — config validation is not a hardware carve-out.
+    from lightsheet.config_schema import (
+        ConfigValidator,
+        load_sections_from_ini,
+    )
+
+    overlay_path = (
+        "config.rig-specific.ini"
+        if os.path.exists("config.rig-specific.ini")
+        else None
+    )
+    ConfigValidator().validate_or_abort(
+        load_sections_from_ini("config.ini", overlay_path)
+    )
+
+    controller = Controller_MainWindow(bundle, demo=demo)
     controller.sig_beep.connect(app.beep)  # connection for beep sounds
     controller.sig_stylesheet.connect(set_app_stylesheet)  # stylesheet selection
 
