@@ -801,3 +801,94 @@ class IIBeam(IIBeamCore):
 
     @abstractmethod
     def is_enabled(self) -> bool: ...
+
+
+# =========================================================================== #
+# Unified single-channel Laser ABC (mW-canonical)
+# =========================================================================== #
+#
+# The unified ``ILaser`` ABC adopts the member names picked on ``IIBeamCore``
+# (``on`` / ``off`` / ``set_power`` + ``wavelength`` / ``power`` /
+# ``max_power`` / ``active`` / ``error`` / ``error_message`` attrs) unchanged
+# — this is a re-wrap of those names onto a single-channel ABC, not a rename.
+#
+# Power is **mW-canonical at the interface** (D-01): ``set_power(mw)`` takes
+# milliwatts and ``power`` / ``max_power`` attrs are in mW. Each backend
+# converts to its native unit internally (DAQLaser: mW -> V via
+# ``mw_per_volt``; IBeamSmartLaser: mW -> uW via *1000; MockLaser: tracks mW
+# in software). The Class IIIB safety clamp (AGENTS.md §2) lives in the
+# **native unit inside each backend** — the interface unit is a
+# truthfulness/metadata decision, not a safety one. ``set_power`` clamps mW
+# to ``[0, max_power]`` as a first safety layer; each backend's native-unit
+# write path clamps again as a second, independent safety layer.
+#
+# Controller-read attrs are declared as **class-level annotations** (not
+# ``@property`` + ``@abstractmethod``) — Python's ABC check runs at
+# instantiation, before ``__init__`` sets instance attrs, and an abstract
+# property descriptor is not satisfied by a plain instance attr (same
+# pattern as ``ICameraCore`` / ``IIBeamCore``).
+#
+# ``off()`` is synchronous — the E-stop kill path (AGENTS.md §2). Concrete
+# backends MUST set ``active=False`` (and ``power=0.0`` where appropriate)
+# and return ``None`` immediately, with no thread/queue offload, so the
+# GUI-thread E-stop handler can drive the laser off without waiting on a
+# background task.
+
+
+class ILaser(ABC):
+    """Unified single-channel laser ABC (mW-canonical).
+
+    The controller holds a ``list[ILaser]`` (one instance per configured
+    laser). Each backend converts mW to its native unit internally and
+    clamps the native-unit value inside its write path as a second,
+    independent safety layer (AGENTS.md §2 — two-layer clamp).
+
+    Controller-read attrs (``wavelength`` / ``power`` / ``max_power`` /
+    ``active`` / ``label`` + the cross-cutting ``error`` / ``error_message``
+    HAL error surface, AGENTS.md §10) are class-level annotations — the
+    concrete backends set them as plain instance attributes in ``__init__``.
+
+    ``off()`` is synchronous — the E-stop kill path (AGENTS.md §2). It MUST
+    return ``None`` immediately, with no thread/queue offload, after
+    setting ``active=False`` (and ``power=0.0`` where appropriate).
+    """
+
+    # HAL error surface (AGENTS.md §10) — every HAL ABC declares these.
+    # Concrete classes set them as instance attributes in ``__init__``.
+    error: int
+    error_message: str
+
+    # Controller-read attributes — class-level annotations. The real and
+    # mock classes set them as plain instance attributes in __init__.
+    wavelength: int  # nm
+    power: float  # mW (canonical)
+    max_power: float  # mW (canonical)
+    active: bool  # live state for status indicator
+    label: str  # e.g. "Laser 1 (561 nm)" for metadata
+
+    # Lifecycle verbs (AGENTS.md §10) — abstract methods returning None.
+    @abstractmethod
+    def on(self) -> None:
+        """Energize the laser (write the staged power to the device)."""
+        ...
+
+    @abstractmethod
+    def off(self) -> None:
+        """Synchronous E-stop kill path (AGENTS.md §2).
+
+        MUST set ``active=False`` (and ``power=0.0`` where appropriate) and
+        return ``None`` immediately, with no thread/queue offload. The
+        GUI-thread E-stop handler calls this directly; offloading it would
+        break the synchronous-off safety contract for a Class IIIB laser.
+        """
+        ...
+
+    @abstractmethod
+    def set_power(self, mw: float) -> None:
+        """Set the staged laser power in milliwatts (mW canonical).
+
+        Clamps ``mw`` to ``[0.0, max_power]`` (mW) as the first safety
+        layer. Each backend's native-unit write path clamps again as a
+        second, independent safety layer (AGENTS.md §2 — two-layer clamp).
+        """
+        ...
