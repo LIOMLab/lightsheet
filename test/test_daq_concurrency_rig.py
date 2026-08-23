@@ -26,9 +26,28 @@ Safety: writes 0 V to /Dev1/ao0:3 (galvo + ETL) only. Never touches
 import contextlib
 import importlib.util
 import threading
+import time
 from collections.abc import Callable
 
 import pytest
+
+# DAQ channel-release delay: Windows nidaqmx has a brief delay between
+# Task.close() and the channel becoming available for a new task. Under
+# rapid back-to-back (or concurrent) Task creation, a prior task's channel
+# may not have been released when the next task starts, causing a spurious
+# -50103 "resource is reserved" failure that is NOT the concurrency-
+# corruption signal this test is looking for. Retry with this delay to
+# tolerate the release lag; the access-violation corruption this test
+# hunts for is not a -50103 error and is not masked by the retry.
+_DAQ_RETRY_DELAY_S = 0.5
+_DAQ_RETRY_COUNT = 3
+
+
+def _is_resource_reserved_error(e: BaseException) -> bool:
+    """True if the error is a -50103 'resource is reserved' DAQ error
+    (channel-release lag), not the access-violation corruption this test
+    hunts for."""
+    return "-50103" in repr(e)
 
 
 def _real_nidaqmx_available() -> bool:
@@ -68,16 +87,24 @@ def _laser_like_write(errors: list[str]) -> None:
 
     Uses Dev1 ao0:1 at 0 V instead of Dev7 laser channels — same
     nidaqmx.Task() + add_ao_voltage_chan + write call pattern, no laser.
+    Retries on -50103 resource-reserved errors to tolerate the Windows
+    channel-release delay under rapid back-to-back Task creation.
     """
     import nidaqmx
     import numpy as np
 
-    try:
-        with nidaqmx.Task(new_task_name="concurrency_laser_like") as task:
-            task.ao_channels.add_ao_voltage_chan(_LASER_LIKE_TERMINALS)
-            task.write(np.stack((np.array([0.0]), np.array([0.0]))), auto_start=True)
-    except BaseException as e:
-        errors.append(repr(e))
+    for attempt in range(_DAQ_RETRY_COUNT):
+        try:
+            with nidaqmx.Task(new_task_name="concurrency_laser_like") as task:
+                task.ao_channels.add_ao_voltage_chan(_LASER_LIKE_TERMINALS)
+                task.write(np.stack((np.array([0.0]), np.array([0.0]))), auto_start=True)
+            return
+        except BaseException as e:
+            if _is_resource_reserved_error(e) and attempt < _DAQ_RETRY_COUNT - 1:
+                time.sleep(_DAQ_RETRY_DELAY_S)
+                continue
+            errors.append(repr(e))
+            return
 
 
 def _siggen_like_create(errors: list[str]) -> None:
@@ -87,21 +114,29 @@ def _siggen_like_create(errors: list[str]) -> None:
     Same nidaqmx.Task() creation pattern as the real create_scanner, no
     laser, no camera trigger. auto_start=True so the write succeeds without
     a separate timing config — the point is concurrent Task() creation.
+    Retries on -50103 resource-reserved errors to tolerate the Windows
+    channel-release delay under rapid back-to-back Task creation.
     """
     import nidaqmx
     import numpy as np
 
     task_ao = None
-    try:
-        task_ao = nidaqmx.Task(new_task_name="concurrency_siggen_ao")
-        task_ao.ao_channels.add_ao_voltage_chan(_SIGGEN_LIKE_TERMINALS)
-        task_ao.write(np.stack((np.array([0.0]), np.array([0.0]))), auto_start=True)
-    except BaseException as e:
-        errors.append(repr(e))
-    finally:
-        if task_ao is not None:
-            with contextlib.suppress(Exception):
-                task_ao.close()
+    for attempt in range(_DAQ_RETRY_COUNT):
+        try:
+            task_ao = nidaqmx.Task(new_task_name="concurrency_siggen_ao")
+            task_ao.ao_channels.add_ao_voltage_chan(_SIGGEN_LIKE_TERMINALS)
+            task_ao.write(np.stack((np.array([0.0]), np.array([0.0]))), auto_start=True)
+            return
+        except BaseException as e:
+            if task_ao is not None:
+                with contextlib.suppress(Exception):
+                    task_ao.close()
+                task_ao = None
+            if _is_resource_reserved_error(e) and attempt < _DAQ_RETRY_COUNT - 1:
+                time.sleep(_DAQ_RETRY_DELAY_S)
+                continue
+            errors.append(repr(e))
+            return
 
 
 def test_concurrent_daq_task_creation_does_not_corrupt_session() -> None:
