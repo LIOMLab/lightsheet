@@ -47,11 +47,18 @@ class ConformanceContract:
         setter_methods: setter verbs the instance must expose
             (``hasattr`` check). Not called — setters may have side effects
             (DAQ writes, serial commands) outside conformance scope.
+        getter_methods: read getter verbs the instance must expose
+            (``hasattr`` check). Not called — getters may issue
+            round-trips (serial reads, DAQ queries) outside conformance
+            scope. Defaults to an empty tuple for families with no
+            getters, so existing contracts continue to construct without
+            the new field.
     """
 
     lifecycle_methods: tuple[str, ...]
     read_attrs: tuple[str, ...]
     setter_methods: tuple[str, ...]
+    getter_methods: tuple[str, ...] = ()
 
     def assert_lifecycle(self, dev: object) -> None:
         """Assert every lifecycle method exists on ``dev`` and exercise the
@@ -108,6 +115,18 @@ class ConformanceContract:
         for method in self.setter_methods:
             assert hasattr(dev, method), (
                 f"{type(dev).__name__} missing setter method {method!r}"
+            )
+
+    def assert_getter_methods(self, dev: object) -> None:
+        """Assert every getter method exists on ``dev`` (``hasattr`` check).
+        Getters are NOT called — they may issue round-trips (serial reads,
+        DAQ queries) outside conformance scope. A missing getter is a
+        structural break that would surface as an ``AttributeError`` when
+        the controller invokes it. No-op when ``getter_methods`` is empty
+        (the default), so families with no getters are unaffected."""
+        for method in self.getter_methods:
+            assert hasattr(dev, method), (
+                f"{type(dev).__name__} missing getter method {method!r}"
             )
 
 
@@ -210,9 +229,10 @@ ETLS_CONTRACT = ConformanceContract(
 # lifecycle verbs (AGENTS.md §10) the controller calls in ``hardware_init``
 # and ``closeEvent`` — they are exercised by ``assert_lifecycle`` (no-ops
 # on DAQLaser / MockLaser, real open/close on IBeamSmartLaser which is
-# skipped on Mac). ``get_output_power`` is a read getter; it is an
-# existence check here (it issues a serial round-trip on the real iBeam),
-# the per-device test files exercise the mW/None behavior.
+# skipped on Mac). ``get_output_power`` is a read getter (not a setter);
+# it is an existence check here (it issues a serial round-trip on the real
+# iBeam), in the ``getter_methods`` tuple so the categorization matches
+# the semantics. The per-device test files exercise the mW/None behavior.
 LASER_CONTRACT = ConformanceContract(
     lifecycle_methods=("on", "off", "open", "close"),
     read_attrs=(
@@ -225,5 +245,6 @@ LASER_CONTRACT = ConformanceContract(
         "error_message",
         "_lock",
     ),
-    setter_methods=("set_power", "get_output_power"),
+    setter_methods=("set_power",),
+    getter_methods=("get_output_power",),
 )

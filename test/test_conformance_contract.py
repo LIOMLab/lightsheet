@@ -18,30 +18,52 @@ import pytest
 
 def test_conformance_contract_is_dataclass_with_required_fields() -> None:
     """ConformanceContract must be a dataclass with lifecycle_methods,
-    read_attrs, and setter_methods fields (D-15)."""
+    read_attrs, setter_methods, and getter_methods fields (D-15). The
+    getter_methods field defaults to an empty tuple so existing contracts
+    construct without it."""
     from dataclasses import is_dataclass
 
     from lightsheet.hal.conformance import ConformanceContract
 
     assert is_dataclass(ConformanceContract)
-    # The three fields the parametrize fixture consumes.
+    # The four fields the parametrize fixture consumes.
     fields = {f.name for f in __import__("dataclasses").fields(ConformanceContract)}
     assert "lifecycle_methods" in fields
     assert "read_attrs" in fields
     assert "setter_methods" in fields
+    assert "getter_methods" in fields
 
 
 def test_conformance_contract_has_assert_methods() -> None:
     """ConformanceContract must expose assert_lifecycle / assert_error_surface
-    / assert_read_attrs / assert_setter_methods methods — the single
-    assertion body the parametrized conformance tests call behind both
-    [real, mock] (D-15)."""
+    / assert_read_attrs / assert_setter_methods / assert_getter_methods
+    methods — the single assertion body the parametrized conformance tests
+    call behind both [real, mock] (D-15)."""
     from lightsheet.hal.conformance import ConformanceContract
 
     assert callable(getattr(ConformanceContract, "assert_lifecycle", None))
     assert callable(getattr(ConformanceContract, "assert_error_surface", None))
     assert callable(getattr(ConformanceContract, "assert_read_attrs", None))
     assert callable(getattr(ConformanceContract, "assert_setter_methods", None))
+    assert callable(getattr(ConformanceContract, "assert_getter_methods", None))
+
+
+def test_conformance_contract_getter_methods_defaults_to_empty_tuple() -> None:
+    """The getter_methods field defaults to an empty tuple so existing
+    per-device contracts (CAMERA / SIGGEN / MOTORS / ETLS) continue to
+    construct without passing it. LASER_CONTRACT is the only contract
+    that populates it (with get_output_power)."""
+    from lightsheet.hal.conformance import ConformanceContract
+
+    contract = ConformanceContract(
+        lifecycle_methods=(),
+        read_attrs=(),
+        setter_methods=(),
+    )
+    assert contract.getter_methods == (), (
+        "getter_methods must default to an empty tuple so existing "
+        "contracts construct without the new field"
+    )
 
 
 @pytest.mark.parametrize(
