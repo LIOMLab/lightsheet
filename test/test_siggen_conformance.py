@@ -61,7 +61,10 @@ def _real_siggen_factory() -> SigGen:
     [
         pytest.param(
             _real_siggen_factory,
-            marks=pytest.mark.skipif(not _has_hardware, reason="rig only"),
+            marks=[
+                pytest.mark.skipif(not _has_hardware, reason="rig only"),
+                pytest.mark.xdist_group("rig_hardware"),
+            ],
             id="real",
         ),
         pytest.param(lambda: MockSigGen(MockCamera()), id="mock"),

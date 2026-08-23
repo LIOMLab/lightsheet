@@ -50,10 +50,13 @@ def _real_nidaqmx_available() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(
-    not _real_nidaqmx_available(),
-    reason="rig-only: requires the real NI-DAQmx driver runtime",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        not _real_nidaqmx_available(),
+        reason="rig-only: requires the real NI-DAQmx driver runtime",
+    ),
+    pytest.mark.xdist_group("rig_hardware"),
+]
 
 
 _CONTROLLER_SRC = os.path.join(

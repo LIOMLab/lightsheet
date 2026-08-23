@@ -33,7 +33,10 @@ _has_hardware: bool = os.environ.get("LIGHTSHEET_HW", "0") == "1"
     [
         pytest.param(
             lambda: Motors(),
-            marks=pytest.mark.skipif(not _has_hardware, reason="rig only"),
+            marks=[
+                pytest.mark.skipif(not _has_hardware, reason="rig only"),
+                pytest.mark.xdist_group("rig_hardware"),
+            ],
             id="real",
         ),
         pytest.param(lambda: MockMotors(), id="mock"),
