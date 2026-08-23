@@ -1,10 +1,10 @@
-"""HardwareManager extraction tests (Phase 5 god-object split).
+"""HardwareManager extraction tests (god-object split).
 
 ``HardwareManager`` is a plain-Python collaborator that owns the laser
 write/toggle daemon threads, the per-laser RLock-guarded write paths,
 both status-poll methods, and ``start_lasers``/``stop_lasers`` — but does
-NOT own an ``estop()``/kill-path method of any kind (D-04 anti-pattern,
-Pitfall 3). The E-stop kill path (``updateUi_estop_pressed``) stays in
+NOT own an ``estop()``/kill-path method of any kind (safety anti-pattern,
+the pitfall). The E-stop kill path (``updateUi_estop_pressed``) stays in
 the thin shell with a direct ``list[ILaser]`` ref, lock-free, on the GUI
 thread.
 
@@ -18,7 +18,7 @@ Behavior covered (per the plan's ``<behavior>`` block):
    returns immediately without calling ``.on()``/``.off()`` on
    ``bundle.lasers[0]`` — the E-stop cooperative-skip survives the
    extraction.
-3. (Pitfall 3 regression) ``HardwareManager`` has NO ``estop`` method
+3. (regression) ``HardwareManager`` has NO ``estop`` method
    (``hasattr(HardwareManager, "estop")`` is False); the shell's
    ``updateUi_estop_pressed`` still calls ``laser.off()`` directly on
    ``self.lasers`` (a plain list, not routed through ``self._hw``) with
@@ -120,14 +120,22 @@ def test_start_lasers_drives_auto_laser1_via_bundle() -> None:
     # Substitute Mock lasers so the calls are observable. The bundle's
     # lasers are MockLaser instances; swap them for plain Mocks with the
     # attributes start_lasers reads (.max_power, .error, .error_message,
-    # .label, .set_power, .on).
+    # .label, .set_power, .on, .get_output_power, .power, .active).
     laser1 = Mock()
     laser1.max_power = 300.0
     laser1.error = 0
     laser1.error_message = ""
     laser1.label = "Laser 1 (555 nm)"
     laser1._lock = threading.RLock()
-    hw.lasers = [laser1, Mock()]
+    laser1.active = False
+    laser1.power = 0.0
+    laser1.get_output_power = Mock(return_value=0.0)
+    laser2 = Mock()
+    laser2._lock = threading.RLock()
+    laser2.error = 0
+    laser2.power = 0.0
+    laser2.get_output_power = Mock(return_value=0.0)
+    hw.lasers = [laser1, laser2]
 
     hw.start_lasers()
 
@@ -144,7 +152,7 @@ def test_start_lasers_drives_auto_laser1_via_bundle() -> None:
 def test_toggle_laser1_skips_when_estop_set() -> None:
     """hw._toggle_laser1() with shell.estop_event.is_set() -> True returns
     immediately without calling .on()/.off() on bundle.lasers[0] — the
-    E-stop cooperative-skip survives the extraction (T-05-17 mitigation)."""
+    E-stop cooperative-skip survives the extraction (the E-stop cooperative-skip mitigation)."""
     bundle = _make_bundle()
     shell = _make_shell(bundle)
     shell.estop_event.set()
@@ -167,18 +175,18 @@ def test_toggle_laser1_skips_when_estop_set() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Test 3 — Pitfall 3 regression: no HardwareManager.estop; shell kill path
+# Test 3 — regression: no HardwareManager.estop; shell kill path
 # stays direct + lock-free.
 # --------------------------------------------------------------------------- #
 
 
 def test_hardware_manager_has_no_estop_method() -> None:
     """HardwareManager must NOT declare an estop/kill/e_stop method — the
-    E-stop kill path stays in the shell (D-04 anti-pattern check, Pitfall 3).
+    E-stop kill path stays in the shell (safety anti-pattern check).
     A future maintainer who sees HardwareManager.estop() will be tempted to
     queue/thread it — the single most safety-critical regression risk."""
     assert not hasattr(HardwareManager, "estop"), (
-        "HardwareManager must NOT declare an estop method (D-04 anti-pattern)"
+        "HardwareManager must NOT declare an estop method (safety anti-pattern)"
     )
     assert not hasattr(HardwareManager, "kill"), (
         "HardwareManager must NOT declare a kill method"
@@ -200,14 +208,18 @@ def test_shell_estop_pressed_calls_laser_off_directly_not_via_hw() -> None:
     )
     src = _read_controller_source()
     body = _slice_method(src, "updateUi_estop_pressed(self) -> None")
-    # The body must NOT offload the kill path through a thread/timer/queue.
-    forbidden = ["threading.Thread", "QTimer.singleShot", "queue.Queue", "self._hw."]
+    # The kill path must NOT offload through a thread/timer/queue, and must
+    # NOT route the laser-off kill loop through HardwareManager (safety
+    # anti-pattern). The refresh-after-action polls (self._hw._poll_laser_status
+    # / self._hw._refresh_laser_readback) ARE allowed — they are not the
+    # kill path, just status-label refreshes.
+    forbidden = ["threading.Thread", "QTimer.singleShot", "queue.Queue", "self._hw.stop_lasers", "self._hw._toggle_laser", "self._hw._write_laser"]
     found = [p for p in forbidden if p in body]
     assert not found, (
-        f"updateUi_estop_pressed must not offload the kill path — "
-        f"found forbidden patterns: {found}"
+        f"updateUi_estop_pressed must not offload the kill path through "
+        f"HardwareManager write/toggle/stop — found forbidden patterns: {found}"
     )
-    # The body must call laser.off() directly on self.lasers.
+    # The body must call laser.off() directly on self.lasers (the kill loop).
     assert "for laser in self.lasers" in body, (
         "updateUi_estop_pressed must iterate self.lasers directly (not self._hw)"
     )

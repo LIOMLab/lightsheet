@@ -289,21 +289,25 @@ def main() -> int:
         load_sections_from_ini("config.ini", overlay_path)
     )
 
-    # Construct the FrameSaverController collaborator before the shell.
-    # It owns the FrameSaver + FrameViewer QObjects (parented to the
-    # shell once the shell exists) and routes save/enqueue calls. The
-    # shell delegates through self._fs. The shell is constructed first
-    # with fs=None, then the collaborator is wired and self._fs is
-    # assigned on the shell before hardware_init runs — FrameSaver/
-    # FrameViewer need the shell as their QObject parent, and the shell
-    # needs the bundle for hardware_init. A two-phase init avoids the
-    # circular dependency (collaborator needs shell as parent, shell
-    # needs collaborator for hardware_init).
+    # Construct the FrameSaverController + HardwareManager collaborators
+    # before the shell's hardware_init runs. They own the FrameSaver/
+    # FrameViewer QObjects (parented to the shell) and the laser
+    # write/toggle/poll logic respectively. The shell delegates through
+    # self._fs / self._hw. The shell is constructed first with fs/hw=None,
+    # then the collaborators are wired and assigned on the shell before
+    # the 100ms hardware_init timer fires — FrameSaver/FrameViewer need
+    # the shell as their QObject parent, and the shell needs the
+    # collaborators for hardware_init. A two-phase init avoids the
+    # circular dependency (collaborators need shell as parent/ref, shell
+    # needs collaborators for hardware_init).
     from lightsheet.gui.frame_saver_controller import FrameSaverController
+    from lightsheet.gui.hardware_manager import HardwareManager
 
     controller = Controller_MainWindow(bundle, demo=demo)
     fs = FrameSaverController(bundle, controller)
     controller._fs = fs
+    hw = HardwareManager(bundle, controller)
+    controller._hw = hw
     controller.sig_beep.connect(app.beep)  # connection for beep sounds
     controller.sig_stylesheet.connect(set_app_stylesheet)  # stylesheet selection
 

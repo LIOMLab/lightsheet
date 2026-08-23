@@ -43,6 +43,9 @@ from unittest.mock import Mock
 _CONTROLLER_SRC = os.path.join(
     os.path.dirname(__file__), "..", "lightsheet", "gui", "controller.py"
 )
+_HW_SRC = os.path.join(
+    os.path.dirname(__file__), "..", "lightsheet", "gui", "hardware_manager.py"
+)
 
 
 def _read_controller_source() -> str:
@@ -63,15 +66,18 @@ def _slice_method(src: str, method_sig: str) -> str:
 
 
 def _load_method(
-    method_sig: str, extra_globals: dict[str, Any] | None = None
+    method_sig: str, extra_globals: dict[str, Any] | None = None,
+    src_path: str = _CONTROLLER_SRC,
 ) -> Callable[..., Any]:
-    """Extract a method body from lightsheet/gui/controller.py and return a callable
-    that executes the real source. `extra_globals` seeds the exec namespace
-    with module-level names the body references (datetime, logging, logger,
-    ...). `logger` is the module-level logger lightsheet/gui/controller.py declares;
+    """Extract a method body from the given source file and return a callable
+    that executes the real source. Defaults to controller.py; pass `_HW_SRC`
+    for methods moved to HardwareManager. `extra_globals` seeds the exec
+    namespace with module-level names the body references (datetime, logging,
+    logger, ...). `logger` is the module-level logger the source declares;
     seeding it here lets the migrated logger.* calls resolve when the body
     is exec'd in isolation."""
-    src = _read_controller_source()
+    with open(src_path) as f:
+        src = f.read()
     body = _slice_method(src, method_sig)
     namespace = {
         "datetime": datetime,
@@ -80,7 +86,7 @@ def _load_method(
     }
     if extra_globals:
         namespace.update(extra_globals)
-    exec(compile(body, _CONTROLLER_SRC, "exec"), namespace)
+    exec(compile(body, src_path, "exec"), namespace)
     func_name = method_sig.split("(")[0].strip()
     return namespace[func_name]
 
@@ -94,13 +100,15 @@ def test_start_lasers_surfaces_laser1_daq_error() -> None:
     """When self.lasers[0].on() leaves .error set, start_lasers must emit
     an operator message naming the cause and reset the flag — a failed
     laser-1 DAQ start is no longer a silent no-op (G-01-1)."""
-    start_lasers = _load_method("start_lasers(self) -> None")
+    start_lasers = _load_method("start_lasers(self) -> None", src_path=_HW_SRC)
 
     laser1 = Mock()
     laser1.label = "Laser 1 (555 nm)"
     laser1.max_power = 300.0
     laser1.error = 1  # .on() "failed" the DAQ write
     laser1.error_message = "daq write failed"
+    laser1.power = 0.0
+    laser1.get_output_power = Mock(return_value=0.0)
 
     standin = Mock()
     standin._auto_laser1 = True
@@ -108,6 +116,10 @@ def test_start_lasers_surfaces_laser1_daq_error() -> None:
     standin.laser1_power_pct = 50
     standin.lasers = [laser1, Mock()]
     standin.sig_message = Mock()
+    standin.sig_laser_status = Mock()
+    standin.sig_laser_readback = Mock()
+    # HardwareManager reads shell-owned state via self._shell.*
+    standin._shell = standin
 
     start_lasers(standin)
 
@@ -246,12 +258,14 @@ def test_start_lasers_reads_cached_flags_not_widgets() -> None:
     widget (AGENTS.md §11 cross-thread rule, G-01-5). With the auto-laser1
     flag True and a UI that raises on checkbox access, start_lasers must
     energize laser 1 without touching the widget."""
-    start_lasers = _load_method("start_lasers(self) -> None")
+    start_lasers = _load_method("start_lasers(self) -> None", src_path=_HW_SRC)
 
     laser1 = Mock()
     laser1.label = "Laser 1 (555 nm)"
     laser1.max_power = 300.0
     laser1.error = 0
+    laser1.power = 0.0
+    laser1.get_output_power = Mock(return_value=0.0)
 
     standin = Mock()
     standin.ui = _WidgetRaisingUI()
@@ -260,6 +274,9 @@ def test_start_lasers_reads_cached_flags_not_widgets() -> None:
     standin.laser1_power_pct = 50
     standin.lasers = [laser1, Mock()]
     standin.sig_message = Mock()
+    standin.sig_laser_status = Mock()
+    standin.sig_laser_readback = Mock()
+    standin._shell = standin  # HardwareManager reads shell-owned state via self._shell.*
 
     # Must not raise — if it read the widget, _WidgetRaisingUI raises.
     start_lasers(standin)
