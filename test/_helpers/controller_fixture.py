@@ -1,18 +1,14 @@
 """Shared real-construction fixture for ``Controller_MainWindow`` and its
-collaborators — the sanctioned replacement for the ``_load_method`` exec
-pattern (AGENTS.md §5).
+collaborators (AGENTS.md §5).
 
 ``Controller_MainWindow`` IS constructable on Mac: ``uv run lightsheet
 --demo`` does exactly that via ``_build_demo_bundle()`` in
-``lightsheet/__main__.py``. The earlier belief that the class could not be
-instantiated without a live Qt display / real hardware was wrong —
-``QT_QPA_PLATFORM=offscreen`` + the conftest SDK stubs + the
-``pyqtgraph.ImageView`` QWidget stub make real construction work on the
-Mac dev box. Real construction produces genuine branch (arc) coverage
-that the exec pattern structurally cannot (the exec'd code object's
-arcs do not map back to the source file), and it exercises the real
-``__init__`` signal/attribute wiring the exec pattern skipped entirely.
-
+``lightsheet/__main__.py``. ``QT_QPA_PLATFORM=offscreen`` + the conftest
+SDK stubs + the ``pyqtgraph.ImageView`` QWidget stub make real
+construction work on the Mac dev box. Real construction produces genuine
+branch (arc) coverage and exercises the real signal/slot wiring, Qt
+widget state, and collaborator interactions — the foundation the test
+suite builds on.
 This module mirrors the composition root in ``lightsheet/__main__.main()``:
 build a mock ``DeviceBundle``, construct ``Controller_MainWindow`` with
 ``demo=True``, then wire the four collaborators
