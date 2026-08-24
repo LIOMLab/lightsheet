@@ -51,6 +51,38 @@ def has_hardware() -> bool:
     return os.environ.get("LIGHTSHEET_HW", "0") == "1"
 
 
+def pytest_collection_modifyitems(config: Any, items: list[Any]) -> None:
+    """Auto-skip ``@pytest.mark.rig`` tests when ``LIGHTSHEET_HW`` is unset.
+
+    This is the TST-07 collection-time selection mechanism the coverage
+    gate's rig-side invocation depends on. It complements (does NOT
+    replace) the module-level ``_has_hardware`` bool + ``has_hardware``
+    fixture above, which gate the TST-04 ``[real, mock]`` parametrize ids
+    via ``pytest.param(marks=pytest.mark.skipif(not _has_hardware, ...))``.
+
+    Why a collection hook instead of a bare
+    ``@pytest.mark.skipif(os.environ["LIGHTSHEET_HW"] == "1", ...)``:
+    a bare ``skipif`` reading ``os.environ["LIGHTSHEET_HW"]`` raises
+    ``KeyError`` at import time when the var is unset (the ``[]`` indexer
+    does not default). The hook reads ``os.environ.get(...)`` (default
+    ``"0"``) at collection time, after every test module is imported, so
+    there is no import-time hazard.
+
+    xdist-compatible: pytest calls this hook once per worker before that
+    worker's share of items is executed; env vars are inherited by every
+    worker process, so the rig/mock decision is consistent across workers.
+    On the rig (``LIGHTSHEET_HW=1``) the hook returns immediately and every
+    ``@pytest.mark.rig`` test runs.
+    """
+    if os.environ.get("LIGHTSHEET_HW", "0") == "1":
+        # Rig mode — run everything (rig tests + mock tests).
+        return
+    skip_rig = pytest.mark.skip(reason="rig-only: set LIGHTSHEET_HW=1 to run")
+    for item in items:
+        if "rig" in item.keywords:
+            item.add_marker(skip_rig)
+
+
 def _make_nidaqmx_stub() -> types.ModuleType:
     """Build a nidaqmx stub that imports fine but raises on Task() creation.
 
