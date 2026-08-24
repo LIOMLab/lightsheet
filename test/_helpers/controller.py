@@ -36,6 +36,15 @@ _HW_SRC = os.path.join(
 _ACQ_SRC = os.path.join(
     os.path.dirname(__file__), "..", "..", "lightsheet", "gui", "acquisition_coordinator.py"
 )
+_FS_SRC = os.path.join(
+    os.path.dirname(__file__), "..", "..", "lightsheet", "gui", "frame_saver_controller.py"
+)
+_MC_SRC = os.path.join(
+    os.path.dirname(__file__), "..", "..", "lightsheet", "gui", "motor_controller.py"
+)
+_MAIN_SRC = os.path.join(
+    os.path.dirname(__file__), "..", "..", "lightsheet", "__main__.py"
+)
 
 
 def _slice_method(src: str, method_sig: str) -> str:

@@ -299,3 +299,66 @@ def _pco_real_check(mod: types.ModuleType) -> None:
 _ensure_stub("nidaqmx", _make_nidaqmx_stub, real_check=_nidaqmx_real_check)
 _ensure_stub("pco", _make_pco_stub, real_check=_pco_real_check)
 _ensure_stub("serial", _make_serial_stub)
+
+
+def _install_imageview_stub() -> None:
+    """Replace ``pyqtgraph.ImageView`` with a lightweight QWidget subclass
+    before any test imports ``lightsheet.gui.ui_controller``.
+
+    ``pyqtgraph.ImageView`` constructs a ``ViewBox`` whose C++ destructor
+    segfaults during garbage collection at process exit. The segfault kills
+    the process before pytest-cov writes its coverage data, silently losing
+    all branch coverage. Replacing ``ImageView`` with a plain ``QWidget``
+    (same Qt widget API the UI setup reads — ``sizePolicy``, etc. — but no
+    pyqtgraph C++ objects) eliminates the segfault at the source.
+
+    Requires a QApplication to exist before the stub is used (QWidget
+    construction needs one). Tests that construct the controller create
+    their own QApplication at module load time.
+    """
+    import importlib
+    import PyQt5.QtWidgets as _QW
+
+    real_pg = importlib.import_module("pyqtgraph")
+    if not getattr(real_pg.ImageView, "_lightsheet_imageview_stub", False):
+        class _StubImageView(_QW.QWidget):  # noqa: N801
+            _lightsheet_imageview_stub = True
+
+        real_pg.ImageView = _StubImageView
+        # ui_controller imported the name into its own namespace at module
+        # load time; patch that too so the controller picks up the stub.
+        try:
+            ui_ctrl = importlib.import_module("lightsheet.gui.ui_controller")
+            ui_ctrl.ImageView = _StubImageView
+        except ModuleNotFoundError:
+            pass
+
+
+# Install the ImageView stub eagerly so any later import of
+# lightsheet.gui.ui_controller picks up the QWidget replacement.
+try:
+    _install_imageview_stub()
+except Exception:  # noqa: BLE001
+    # If pyqtgraph isn't installed or PyQt5 isn't available, skip the stub —
+    # tests that need them will skip themselves via pytest.importorskip.
+    pass
+
+
+# Disable garbage collection for the entire test session. Qt widget
+# destructors segfault during garbage collection on macOS, killing xdist
+# worker processes before they can send coverage data back to the master.
+# The segfault happens during a GC pass triggered by pytest's fixture
+# introspection (getfuncargnames → signature → unwrap → GC) or at worker
+# exit. Disabling GC prevents the segfault without affecting test behavior
+# (test objects are never explicitly collected during the test run).
+import gc as _gc
+_gc.disable()
+
+
+# GC is disabled globally (above) to prevent Qt widget destructor
+# segfaults during the test run. We do NOT re-enable it or call os._exit()
+# in pytest_sessionfinish — xdist workers must exit normally to send
+# coverage data back to the master. The gc.disable() prevents the segfault
+# during the test run; at exit, Python's normal shutdown may re-enable GC
+# and segfault, but by that point pytest-cov has already written coverage
+# data and the xdist channel has already sent it to the master.
