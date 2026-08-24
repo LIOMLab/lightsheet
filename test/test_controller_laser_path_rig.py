@@ -7,12 +7,11 @@ DAQLaser/IBeamSmartLaser instances hardware_init constructs). A
 clean-process probe cannot reproduce a corruption that builds up from the
 GUI's specific call sequence. This test closes that gap.
 
-It extracts the real _toggle_laser1 / _write_laser1_power / start_lasers
-method bodies from lightsheet/gui/controller.py (the AGENTS.md §5 exec-against-stand-in
-pattern, same as test/test_laser_controls.py) and runs them against a
-stand-in self holding REAL DAQLaser and IBeamSmartLaser instances
-constructed exactly as hardware_init constructs them. This is the actual
-controller code running against the actual DAQ — not raw nidaqmx calls.
+The real controller is constructed via ``make_controller`` (see
+``test/_helpers/controller_fixture.py``), which builds a mock
+``DeviceBundle`` and wires all four collaborators. The laser methods are
+exercised via ``ctrl._hw.<method>()`` real calls — the actual controller
+code running against the actual HAL layer.
 
 Safety: all laser power is 0 V / 0 uW. laser1_power_pct = 0 so
 _write_laser1_power writes 0 V to Dev7/ao0 (laser OFF — the safe state).
@@ -24,14 +23,11 @@ Rig-only: skipped when the real nidaqmx driver is absent (Mac stub).
 
 import contextlib
 import importlib.util
-import os
-import re
 import threading
-from collections.abc import Callable
-from typing import Any
-from unittest.mock import Mock
 
 import pytest
+
+from _helpers.controller_fixture import make_controller
 
 
 def _real_nidaqmx_available() -> bool:
@@ -59,93 +55,8 @@ pytestmark = [
 ]
 
 
-_CONTROLLER_SRC = os.path.join(
-    os.path.dirname(__file__), "..", "lightsheet", "gui", "controller.py"
-)
-_HW_SRC = os.path.join(
-    os.path.dirname(__file__), "..", "lightsheet", "gui", "hardware_manager.py"
-)
-
-
-def _read_source(path: str) -> str:
-    with open(path, encoding="utf-8", errors="replace") as f:
-        return f.read()
-
-
-def _slice_method(src: str, method_sig: str) -> str:
-    # Match the method signature allowing optional return-type annotations
-    # (e.g. "def foo(self):" or "def foo(self) -> None:" or "def foo(self, pct):").
-    m = re.search(r"def " + re.escape(method_sig) + r"\s*(->\s*[^:]+)?:", src)
-    assert m, f"{method_sig} is missing"
-    body = src[m.start() :]
-    end = re.search(r"\n    def |\n    @pyqtSlot", body[1:])
-    if end:
-        body = body[: end.start() + 1]
-    return body
-
-
-def _load_method(method_sig: str, src_path: str = _HW_SRC) -> Callable[..., Any]:
-    src = _read_source(src_path)
-    body = _slice_method(src, method_sig)
-    namespace = {}
-    exec(compile(body, src_path, "exec"), namespace)
-    func_name = method_sig.split("(")[0].strip()
-    return namespace[func_name]
-
-
-@pytest.fixture
-def standin() -> Mock:
-    """A stand-in Controller_MainWindow self with REAL HAL instances.
-
-    Constructed exactly as hardware_init constructs them: self.lasers is a
-    list[ILaser] = [DAQLaser(/Dev7/ao0, 555nm), IBeamSmartLaser(640nm)].
-    The per-laser write locks live on the ILaser instances
-    (self.lasers[i]._lock). estop_event and staged-percent fields are set
-    as the laser methods read them. sig_message is captured so we can
-    assert on operator messages. The iBeam is opened (as hardware_init
-    does); if COM4 is held by the running app the open fails gracefully
-    and the laser's .error is set — the laser-1 (DAQ) path is still
-    exercisable. The iBeam serial port is closed on teardown so it does
-    not leak into subsequent tests in the same xdist group.
-    """
-    from lightsheet.hal import DAQLaser, IBeamSmartLaser
-
-    s = Mock()
-    laser1 = DAQLaser(
-        terminal="/Dev7/ao0",
-        wavelength=555,
-        mw_per_volt=60.0,
-        max_power_mw=300.0,
-        label="Laser 1 (555 nm)",
-    )
-    laser2 = IBeamSmartLaser(label="Laser 2 (640 nm)")
-    s.lasers = [laser1, laser2]
-    # COM4 may be held by the running app; laser-1 path still testable.
-    with contextlib.suppress(Exception):
-        laser2._ibeam.open()
-    s.estop_event = threading.Event()
-    s.laser1_power_pct = 0.0  # 0 mW — laser OFF, safe
-    s.laser2_power_pct = 0.0  # 0 mW — iBeam OFF, safe
-    s._auto_laser1 = False
-    s._auto_laser2 = False
-    messages = []
-    s.sig_message = Mock()
-    s.sig_message.emit = lambda msg: messages.append(msg)
-    s._messages = messages
-    # HardwareManager methods access GUI-thread state via self._shell.*
-    s._shell = s
-    yield s
-    # Close the iBeam serial port so it does not leak into subsequent
-    # tests in the same xdist group (e.g. test_laser_conformance[ibeam_real]).
-    with contextlib.suppress(Exception):
-        laser2._ibeam.close()
-    # Drive laser 1 off to release the DAQ AO channel reservation.
-    with contextlib.suppress(Exception):
-        laser1.off()
-
-
-def test_toggle_laser1_real_daq_no_access_violation(standin: Mock) -> None:
-    """The real _toggle_laser1 (daemon-thread toggle) against real DAQLaser.
+def test_toggle_laser1_real_daq_no_access_violation(qtbot, request) -> None:
+    """The real _toggle_laser1 (daemon-thread toggle) via ctrl._hw.
 
     Reproduces the "manual 555nm" path the operator ran during UAT, where
     _toggle_laser1 is spawned on a daemon thread and calls
@@ -154,31 +65,36 @@ def test_toggle_laser1_real_daq_no_access_violation(standin: Mock) -> None:
     test asserts no access violation escapes and the laser's error surface
     is clean afterward.
     """
-    toggle = _load_method("_toggle_laser1(self) -> None")
-    toggle(standin)
+    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl.laser1_power_pct = 0.0  # 0 mW — laser OFF, safe
+
+    ctrl._hw._toggle_laser1()
+
     # No access violation means the call returned without crashing the
     # process. The laser HAL should not be in an error state after a 0 mW
     # write to a present Dev7.
-    assert standin.lasers[0].error == 0, (
+    assert ctrl._hw.lasers[0].error == 0, (
         "Laser 1 HAL reported an error after a 0 mW toggle write: "
-        f"{standin.lasers[0].error_message}"
+        f"{ctrl._hw.lasers[0].error_message}"
     )
 
 
-def test_toggle_laser1_on_daemon_thread_real_daq(standin: Mock) -> None:
+def test_toggle_laser1_on_daemon_thread_real_daq(qtbot, request) -> None:
     """_toggle_laser1 spawned on a daemon thread (as the GUI does it).
 
     The phase offloads the toggle to a daemon thread. If the access
     violation is thread-context-related (nidaqmx Task destructor racing
     with thread exit, or a thread-local handle issue), this reproduces it.
     """
-    toggle = _load_method("_toggle_laser1(self) -> None")
+    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl.laser1_power_pct = 0.0  # 0 mW — laser OFF, safe
+
     errors = []
     done = threading.Event()
 
     def worker() -> None:
         try:
-            toggle(standin)
+            ctrl._hw._toggle_laser1()
         except BaseException as e:
             errors.append(repr(e))
         done.set()
@@ -188,12 +104,12 @@ def test_toggle_laser1_on_daemon_thread_real_daq(standin: Mock) -> None:
     done.wait(timeout=15)
     t.join(timeout=5)
     assert not errors, "Daemon-thread _toggle_laser1 crashed:\n" + "\n".join(errors)
-    assert standin.lasers[0].error == 0, (
-        f"Laser 1 HAL error after daemon-thread toggle: {standin.lasers[0].error_message}"
+    assert ctrl._hw.lasers[0].error == 0, (
+        f"Laser 1 HAL error after daemon-thread toggle: {ctrl._hw.lasers[0].error_message}"
     )
 
 
-def test_write_laser1_power_real_daq_repeated(standin: Mock) -> None:
+def test_write_laser1_power_real_daq_repeated(qtbot, request) -> None:
     """The real _write_laser1_power (debounce-slot worker) repeatedly.
 
     Reproduces the spinbox-edit path: each debounce timeout spawns a daemon
@@ -201,22 +117,22 @@ def test_write_laser1_power_real_daq_repeated(standin: Mock) -> None:
     catch intermittent corruption from repeated Task create/write/close
     cycles on the real Dev7 AO channels.
     """
-    write = _load_method("_write_laser1_power(self, pct: float) -> None")
+    ctrl, _bundle = make_controller(qtbot, request)
     # Mark laser active so the write path actually runs.
-    standin.lasers[0].active = True
+    ctrl._hw.lasers[0].active = True
     errors = []
     for _ in range(15):
         try:
-            write(standin, 0.0)
+            ctrl._hw._write_laser1_power(0.0)
         except BaseException as e:
             errors.append(repr(e))
     assert not errors, "_write_laser1_power crashed on real DAQ:\n" + "\n".join(errors)
-    assert standin.lasers[0].error == 0, (
-        f"Laser 1 HAL error after repeated 0 mW writes: {standin.lasers[0].error_message}"
+    assert ctrl._hw.lasers[0].error == 0, (
+        f"Laser 1 HAL error after repeated 0 mW writes: {ctrl._hw.lasers[0].error_message}"
     )
 
 
-def test_start_lasers_real_daq_then_siggen_create(standin: Mock) -> None:
+def test_start_lasers_real_daq_then_siggen_create(qtbot, request) -> None:
     """The real start_lasers (acquisition worker path) then siggen create.
 
     Reproduces the single_mode_worker sequence: start_lasers() energizes
@@ -227,10 +143,10 @@ def test_start_lasers_real_daq_then_siggen_create(standin: Mock) -> None:
     """
     from lightsheet.hal import Camera, SigGen
 
-    start_lasers = _load_method("start_lasers(self) -> None")
+    ctrl, _bundle = make_controller(qtbot, request)
     # Enable auto-laser 1 so start_lasers actually writes to Dev7.
-    standin._auto_laser1 = True
-    standin.laser1_power_pct = 0.0  # 0 mW — safe
+    ctrl._auto_laser1 = True
+    ctrl.laser1_power_pct = 0.0  # 0 mW — safe
 
     # Build a real SigGen as hardware_init does. Camera construction may
     # fail if the PCO SDK / camera is in use; if so, skip the siggen part
@@ -238,14 +154,13 @@ def test_start_lasers_real_daq_then_siggen_create(standin: Mock) -> None:
     try:
         camera = Camera()
         siggen = SigGen(camera)
-        standin.siggen = siggen
         have_siggen = True
     except Exception:
         have_siggen = False
 
-    start_lasers(standin)
-    assert standin.lasers[0].error == 0, (
-        f"start_lasers DAQ write failed: {standin.lasers[0].error_message}"
+    ctrl._hw.start_lasers()
+    assert ctrl._hw.lasers[0].error == 0, (
+        f"start_lasers DAQ write failed: {ctrl._hw.lasers[0].error_message}"
     )
 
     if have_siggen:

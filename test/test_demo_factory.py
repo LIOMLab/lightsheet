@@ -5,75 +5,31 @@ Covers two concerns:
 
 1. ``_resolve_demo(cli_demo, env)`` — the pure flag-resolution helper in
    ``lightsheet.__main__`` that merges the ``--demo`` CLI flag and the
-   ``LIGHTSHEET_DEMO`` env var with CLI-overrides-env precedence (D-10).
+   ``LIGHTSHEET_DEMO`` env var with CLI-overrides-env precedence.
 
-2. The ``hardware_init`` Camera factory branch — extracted from
-   ``lightsheet/gui/controller.py`` and exec'd against a ``Mock`` stand-in
-   ``self`` (the established no-Qt pattern, see ``test_laser_controls.py``).
-   Asserts the demo branch constructs ``MockCamera`` and the real branch
-   constructs ``Camera``, and that ``SigGen`` receives the camera reference
-   (dependency ordering preserved, Pitfall 2).
+2. The ``hardware_init`` HAL-assignment branch — tested via real
+   construction: ``make_controller`` builds the real
+   ``Controller_MainWindow`` with a mock ``DeviceBundle`` (Laser 1 = 555 nm
+   / 300 mW, Laser 2 = 640 nm / 150 mW, mock camera/siggen/motors/etls),
+   wires all four collaborators, and calls ``hardware_init``. Asserts the
+   demo branch assigns ``MockCamera`` from the bundle, that ``SigGen``
+   receives the camera reference (dependency ordering preserved), and that
+   the demo indicator is emitted via the status bar (not ``sig_message``).
 
-``Controller_MainWindow`` cannot be instantiated on this Mac (needs a PyQt5
-display), so the real ``hardware_init`` source is extracted and exec'd
-against a minimal stand-in. The exec namespace is seeded with the real
-``lightsheet.gui.controller`` module globals (``QApplication``, ``Qt``,
-``FrameViewer``, ``FrameSaver``, ``QTimer``, the HAL classes) so the method
-body's module-level name lookups resolve. This runs the real factory code —
-the same code that runs on the rig — without instantiating the Qt window.
+The real controller is constructed via ``make_controller`` (see
+``test/_helpers/controller_fixture.py``) — ``QT_QPA_PLATFORM=offscreen``
+plus the conftest SDK stubs make real construction work on the Mac dev box,
+producing genuine branch coverage that the exec pattern structurally cannot.
 """
 
-from collections.abc import Callable
-from typing import Any
 from unittest.mock import Mock
 
-from _helpers.controller import _CONTROLLER_SRC, _load_method as _base_load_method, _slice_method
+from _helpers.controller_fixture import make_controller
 from lightsheet.__main__ import _resolve_demo
 
 
-def _read_controller_source() -> str:
-    with open(_CONTROLLER_SRC, encoding="utf-8") as f:
-        return f.read()
-
-
-def _load_method(method_sig: str) -> Callable[..., Any]:
-    """Demo-factory-specialized ``_load_method`` — delegates to the canonical
-    helper in ``_helpers.controller`` with the ``hardware_init`` namespace
-    seeding (Qt class mocks + real ``Camera`` + ``cfg_read``).
-
-    The exec namespace is built manually rather than seeded from the
-    controller module globals, because importing ``lightsheet.gui.controller``
-    transitively imports ``lightsheet.siggen``, whose top-level
-    ``from nidaqmx.constants import ...`` fails on this Mac (the conftest
-    nidaqmx stub has no ``constants`` submodule). Instead we provide the
-    module-level names the ``hardware_init`` body references: the real
-    ``Camera`` (constructs fine on Mac — the pco failure is caught on the
-    HAL error surface), and Mocks for the Qt classes and the other 5 HAL
-    classes (which the factory branch constructs but whose real imports
-    are not needed to assert on the Camera branch).
-    """
-    from lightsheet.config import cfg_read
-    from lightsheet.hal import Camera
-
-    extra_globals: dict[str, Any] = {
-        "QApplication": Mock(),
-        "Qt": Mock(),
-        "QTimer": Mock(),
-        "FrameViewer": Mock(),
-        "FrameSaver": Mock(),
-        "SigGen": Mock(),
-        "Motors": Mock(),
-        "ETLs": Mock(),
-        "Camera": Camera,
-        "cfg_read": cfg_read,
-    }
-    return _base_load_method(
-        method_sig, extra_globals=extra_globals, src_path=_CONTROLLER_SRC
-    )
-
-
 # --------------------------------------------------------------------------- #
-# _resolve_demo: CLI-overrides-env precedence (D-10).
+# _resolve_demo: CLI-overrides-env precedence.
 # --------------------------------------------------------------------------- #
 
 
@@ -99,86 +55,85 @@ def test_resolve_demo_cli_true_overrides_env_zero() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# hardware_init Camera factory branch — exec the real method body against a
-# Mock stand-in self. Asserts the demo branch constructs MockCamera, the
-# real branch constructs Camera, and SigGen receives the camera reference.
+# hardware_init HAL-assignment branch — tested via real construction.
+# make_controller builds the real Controller_MainWindow with a mock
+# DeviceBundle, wires all four collaborators, and calls hardware_init.
+# Asserts the bundle's HAL handles are assigned onto the controller and
+# the demo indicator is emitted via the status bar (not sig_message).
 # --------------------------------------------------------------------------- #
 
 
-def _make_standin(demo: bool) -> Mock:
-    """Build a Mock stand-in self with the attributes hardware_init reads.
-
-    The factory branch under test touches ``self._demo_mode``,
-    ``self.camera``, ``self.siggen``, ``self.motors``, ``self.lasers``,
-    ``self.etls``, ``self.ibeam``, ``self.ui.statusbar``,
-    ``self.setWindowTitle`` / ``self.windowTitle``,
-    ``self.updateUi_initial_hardware_state``, ``self.frame_viewer``,
-    ``self.frame_saver``, ``self.timer_imageview``. The stand-in lets the
-    real method body assign HAL instances onto self.camera etc. so the
-    test can assert on their concrete types; downstream Qt calls land on
-    Mock attrs (no-ops).
-    """
-    standin = Mock()
-    standin._demo_mode = demo
-    standin.ui = Mock()
-    standin.ui.statusbar = Mock()
-    standin.windowTitle = Mock(return_value="Lightsheet")
-    return standin
-
-
-def test_hardware_init_assigns_mock_camera_from_bundle_under_demo() -> None:
-    """When self._demo_mode is True (bundle built from Mock* by
-    _build_demo_bundle), hardware_init assigns the bundle's MockCamera
-    onto self.camera — no hardware init runs on a dev box."""
+def test_hardware_init_assigns_mock_camera_from_bundle_under_demo(
+    qtbot, request
+) -> None:
+    """When demo=True (bundle built from Mock* by _build_demo_bundle),
+    hardware_init assigns the bundle's MockCamera onto self.camera — no
+    hardware init runs on a dev box. Verified via real construction."""
     from lightsheet.hal import MockCamera
 
-    hardware_init = _load_method("hardware_init(self) -> None")
-    standin = _make_bundle_standin(demo=True)
-    hardware_init(standin)
-    assert isinstance(standin.camera, MockCamera), (
+    ctrl, bundle = make_controller(qtbot, request)
+    assert isinstance(ctrl.camera, MockCamera), (
         "demo bundle's camera must be a MockCamera"
     )
-    assert standin.camera is standin._bundle.camera, (
+    assert ctrl.camera is bundle.camera, (
         "hardware_init must assign from the bundle, not construct"
     )
 
 
-def test_hardware_init_preserves_siggen_camera_dependency() -> None:
+def test_hardware_init_preserves_siggen_camera_dependency(
+    qtbot, request
+) -> None:
     """The bundle's SigGen was constructed with the bundle's camera
     reference (waveform timing derives from camera settings). After
     hardware_init assigns from the bundle, the dependency is preserved
-    by identity (Pitfall 2)."""
-    hardware_init = _load_method("hardware_init(self) -> None")
-    standin = _make_bundle_standin(demo=True)
-    hardware_init(standin)
-    assert standin.siggen is standin._bundle.siggen
-    assert standin.camera is standin._bundle.camera
+    by identity. Verified via real construction."""
+    ctrl, bundle = make_controller(qtbot, request)
+    assert ctrl.siggen is bundle.siggen
+    assert ctrl.camera is bundle.camera
 
 
-def test_hardware_init_demo_indicator_emitted_via_statusbar_not_sigmessage() -> None:
+def test_hardware_init_demo_indicator_emitted_via_statusbar_not_sigmessage(
+    qtbot, request
+) -> None:
     """Under demo mode the indicator (window-title suffix + status-bar
     message) must go through QStatusBar.showMessage directly, NOT via
     sig_message.emit, so it does not pollute the future golden-master
-    sig_message sequence (UI-SPEC)."""
-    hardware_init = _load_method("hardware_init(self) -> None")
-    standin = _make_bundle_standin(demo=True)
-    hardware_init(standin)
+    sig_message sequence. Verified via real construction: re-run
+    hardware_init with spies on both emission channels."""
+    ctrl, _bundle = make_controller(qtbot, request)
+
+    # hardware_init already ran during make_controller. To observe the
+    # demo indicator routing, stop the existing timers, reset the window
+    # title, set up spies on both channels, and re-run hardware_init.
+    ctrl.timer_imageview.stop()
+    ctrl.timer_laser2_status.stop()
+    ctrl.setWindowTitle("Lightsheet")
+
+    # Spy on statusbar.showMessage (replace with a Mock that records calls).
+    statusbar_show = Mock()
+    ctrl.ui.statusbar.showMessage = statusbar_show
+
+    # Spy on sig_message.emit (connect a recorder slot).
+    sig_messages: list[str] = []
+    ctrl.sig_message.connect(lambda msg: sig_messages.append(msg))
+
+    ctrl.hardware_init()
+
     # The window-title suffix was set.
-    standin.setWindowTitle.assert_called_once()
-    title_arg = standin.setWindowTitle.call_args.args[0]
-    assert "[DEMO]" in title_arg, "window-title must carry the [DEMO] suffix"
+    assert "[DEMO]" in ctrl.windowTitle(), (
+        "window-title must carry the [DEMO] suffix"
+    )
     # The demo status-bar message was emitted via showMessage (not
     # sig_message.emit).
-    statusbar_calls = [str(c) for c in standin.ui.statusbar.showMessage.call_args_list]
+    statusbar_calls = [str(c) for c in statusbar_show.call_args_list]
     assert any("Demo mode" in c for c in statusbar_calls), (
         "demo indicator must be emitted via statusbar.showMessage"
     )
-    # sig_message.emit must not carry the demo indicator (UI-SPEC: keep
-    # the golden-master sig_message sequence clean).
-    for call in standin.sig_message.emit.call_args_list:
-        assert "Demo mode" not in str(call), (
-            "demo indicator must not be emitted via sig_message.emit"
-        )
+    # sig_message.emit must not carry the demo indicator (keep the
+    # golden-master sig_message sequence clean).
+    assert not any("Demo mode" in msg for msg in sig_messages), (
+        "demo indicator must not be emitted via sig_message.emit"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -188,97 +143,45 @@ def test_hardware_init_demo_indicator_emitted_via_statusbar_not_sigmessage() -> 
 # --------------------------------------------------------------------------- #
 
 
-def _make_bundle_standin(demo: bool) -> Mock:
-    """Build a Mock stand-in self pre-populated with a DeviceBundle built
-    from Mock* HAL stand-ins, matching the new bundle-consuming
-    hardware_init contract."""
-    from lightsheet.hal import (
-        DeviceBundle,
-        MockCamera,
-        MockETLs,
-        MockLaser,
-        MockMotors,
-        MockSigGen,
-    )
-
-    camera = MockCamera(verbose=True)
-    siggen = MockSigGen(camera)
-    motors = MockMotors()
-    lasers = (
-        MockLaser(
-            wavelength=555,
-            max_power_mw=300.0,
-            mw_per_volt=60.0,
-            label="Laser 1 (555 nm)",
-        ),
-        MockLaser(
-            wavelength=640,
-            max_power_mw=150.0,
-            label="Laser 2 (640 nm)",
-        ),
-    )
-    etls = MockETLs()
-    bundle = DeviceBundle(
-        camera=camera,
-        siggen=siggen,
-        motors=motors,
-        etls=etls,
-        lasers=lasers,
-    )
-
-    standin = Mock()
-    standin._demo_mode = demo
-    standin._bundle = bundle
-    standin._fs = Mock()
-    standin._hw = Mock()
-    standin.ui = Mock()
-    standin.ui.statusbar = Mock()
-    standin.windowTitle = Mock(return_value="Lightsheet")
-    return standin
-
-
-def test_hardware_init_assigns_from_bundle() -> None:
+def test_hardware_init_assigns_from_bundle(qtbot, request) -> None:
     """hardware_init must assign HAL handles from the injected bundle,
-    not construct them itself. After execution, standin.camera IS
-    standin._bundle.camera (identity, not a new instance)."""
-    hardware_init = _load_method("hardware_init(self) -> None")
-    standin = _make_bundle_standin(demo=True)
-    hardware_init(standin)
-    assert standin.camera is standin._bundle.camera, (
+    not construct them itself. After execution, ctrl.camera IS
+    bundle.camera (identity, not a new instance). Verified via real
+    construction."""
+    ctrl, bundle = make_controller(qtbot, request)
+    assert ctrl.camera is bundle.camera, (
         "hardware_init must assign self.camera from the bundle, not construct"
     )
-    assert standin.siggen is standin._bundle.siggen
-    assert standin.motors is standin._bundle.motors
-    assert standin.etls is standin._bundle.etls
-    assert standin.lasers == list(standin._bundle.lasers), (
+    assert ctrl.siggen is bundle.siggen
+    assert ctrl.motors is bundle.motors
+    assert ctrl.etls is bundle.etls
+    assert ctrl.lasers == list(bundle.lasers), (
         "hardware_init must assign self.lasers as a list copy of the bundle tuple"
     )
 
 
-def test_hardware_init_does_not_construct_hal_classes() -> None:
+def test_hardware_init_does_not_construct_hal_classes(qtbot, request) -> None:
     """hardware_init must NOT import or construct MockCamera/Camera/SigGen/
     Motors/DAQLaser/IBeamSmartLaser/ETLs/Mock* — those constructions moved
-    to main()'s _build_demo_bundle / DeviceRegistry. Asserts on the
-    extracted method source text (the SAME body exec'd by the other tests,
-    per AGENTS.md §5 — not a separate static-source grep)."""
-    src = _read_controller_source()
-    body = _slice_method(src, "hardware_init(self) -> None")
-    forbidden = [
-        "MockCamera(",
-        "MockSigGen(",
-        "MockMotors(",
-        "MockLaser(",
-        "MockETLs(",
-        "Camera(",
-        "SigGen(",
-        "Motors(",
-        "DAQLaser(",
-        "IBeamSmartLaser(",
-        "ETLs(",
-        "from lightsheet.hal import",
-    ]
-    found = [p for p in forbidden if p in body]
-    assert not found, (
-        f"hardware_init must not construct or import HAL classes — "
-        f"found forbidden patterns: {found}"
+    to main()'s _build_demo_bundle / DeviceRegistry. Verified via real
+    construction: after hardware_init, every HAL handle on the controller
+    IS the bundle's handle (identity) and each is a Mock* type — proving
+    hardware_init assigned from the bundle rather than constructing a new
+    instance."""
+    from lightsheet.hal import MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
+
+    ctrl, bundle = make_controller(qtbot, request)
+    # Identity: hardware_init assigned from the bundle, not constructed.
+    assert ctrl.camera is bundle.camera
+    assert ctrl.siggen is bundle.siggen
+    assert ctrl.motors is bundle.motors
+    assert ctrl.etls is bundle.etls
+    assert ctrl.lasers == list(bundle.lasers)
+    # Type: every handle is a Mock* instance (no real HAL construction).
+    assert isinstance(ctrl.camera, MockCamera)
+    assert isinstance(ctrl.siggen, MockSigGen)
+    assert isinstance(ctrl.motors, MockMotors)
+    assert isinstance(ctrl.etls, MockETLs)
+    assert all(isinstance(l, MockLaser) for l in ctrl.lasers), (
+        "every laser handle must be a MockLaser (no real HAL construction)"
     )

@@ -8,95 +8,37 @@ the pitfall). The E-stop kill path (``updateUi_estop_pressed``) stays in
 the thin shell with a direct ``list[ILaser]`` ref, lock-free, on the GUI
 thread.
 
-Behavior covered (per the plan's ``<behavior>`` block):
+The real controller is constructed via ``make_controller`` (see
+``test/_helpers/controller_fixture.py``). HardwareManager methods are
+exercised via ``ctrl._hw.<method>()`` real calls against the real
+collaborator wired into the real controller.
 
-1. ``HardwareManager(bundle, shell).start_lasers()`` with
-   ``shell._auto_laser1 = True`` calls ``.set_power(...)`` then ``.on()``
-   on ``bundle.lasers[0]`` (a Mock ILaser), mirroring the pre-extraction
-   ``start_lasers`` behavior exactly.
-2. ``hw._toggle_laser1()`` with ``shell.estop_event.is_set() -> True``
+Behavior covered:
+
+1. ``ctrl._hw.start_lasers()`` with ``ctrl._auto_laser1 = True`` calls
+   ``.set_power(...)`` then ``.on()`` on ``ctrl._hw.lasers[0]`` (a
+   MockLaser), mirroring the pre-extraction ``start_lasers`` behavior.
+2. ``ctrl._hw._toggle_laser1()`` with ``ctrl.estop_event.is_set() -> True``
    returns immediately without calling ``.on()``/``.off()`` on
-   ``bundle.lasers[0]`` — the E-stop cooperative-skip survives the
+   ``ctrl._hw.lasers[0]`` — the E-stop cooperative-skip survives the
    extraction.
 3. (regression) ``HardwareManager`` has NO ``estop`` method
    (``hasattr(HardwareManager, "estop")`` is False); the shell's
-   ``updateUi_estop_pressed`` still calls ``laser.off()`` directly on
-   ``self.lasers`` (a plain list, not routed through ``self._hw``) with
-   no ``threading.Thread``/``QTimer.singleShot``/queue in its body.
+   ``updateUi_estop_pressed`` drives every laser off synchronously on the
+   GUI thread, lock-free, NOT routed through HardwareManager, NOT
+   offloaded to a thread/timer/queue — verified via behavior assertions
+   on the real method.
 """
 
 from __future__ import annotations
 
-import os
-import re
 import threading
-from collections.abc import Callable
-from typing import Any
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
+import lightsheet.gui.controller as controller_module
+from _helpers.controller_fixture import make_controller, make_bundle
 from lightsheet.gui.hardware_manager import HardwareManager
-from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
-
-_CONTROLLER_SRC = os.path.join(
-    os.path.dirname(__file__), "..", "lightsheet", "gui", "controller.py"
-)
-
-
-def _read_controller_source() -> str:
-    with open(_CONTROLLER_SRC, encoding="utf-8") as f:
-        return f.read()
-
-
-def _slice_method(src: str, method_sig: str) -> str:
-    """Return the body of a method, from its `def <sig>:` line up to the
-    next top-level def/@pyqtSlot decorator."""
-    m = re.search(r"def " + re.escape(method_sig) + r":", src)
-    assert m, f"{method_sig} is missing"
-    body = src[m.start() :]
-    end = re.search(r"\n    def |\n    @pyqtSlot", body[1:])
-    if end:
-        body = body[: end.start() + 1]
-    return body
-
-
-def _load_method(method_sig: str) -> Callable[..., Any]:
-    """Extract a method body from lightsheet/gui/controller.py and return a
-    callable that executes the real source (the established no-Qt exec
-    pattern, see test_laser_controls.py / test_demo_factory.py)."""
-    src = _read_controller_source()
-    body = _slice_method(src, method_sig)
-    namespace: dict[str, Any] = {}
-    exec(compile(body, _CONTROLLER_SRC, "exec"), namespace)
-    func_name = method_sig.split("(")[0].strip()
-    return namespace[func_name]
-
-
-def _make_bundle() -> DeviceBundle:
-    """Build a demo DeviceBundle with two MockLaser instances."""
-    camera = MockCamera(verbose=True)
-    siggen = MockSigGen(camera)
-    motors = MockMotors()
-    lasers = (
-        MockLaser(wavelength=555, max_power_mw=300.0, label="Laser 1 (555 nm)"),
-        MockLaser(wavelength=640, max_power_mw=150.0, label="Laser 2 (640 nm)"),
-    )
-    etls = MockETLs()
-    return DeviceBundle(camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers)
-
-
-def _make_shell(bundle: DeviceBundle) -> Mock:
-    """Build a Mock stand-in shell exposing the attributes HardwareManager
-    reads off the shell reference: ``sig_message``, ``_auto_laser1``,
-    ``_auto_laser2``, ``laser1_power_pct``, ``laser2_power_pct``,
-    ``estop_event``."""
-    shell = Mock()
-    shell.sig_message = Mock()
-    shell._auto_laser1 = False
-    shell._auto_laser2 = False
-    shell.laser1_power_pct = 0.0
-    shell.laser2_power_pct = 0.0
-    shell.estop_event = threading.Event()
-    return shell
+from lightsheet.hal import DeviceBundle
 
 
 # --------------------------------------------------------------------------- #
@@ -104,44 +46,30 @@ def _make_shell(bundle: DeviceBundle) -> Mock:
 # --------------------------------------------------------------------------- #
 
 
-def test_start_lasers_drives_auto_laser1_via_bundle() -> None:
-    """HardwareManager(bundle, shell).start_lasers() with
-    shell._auto_laser1 = True calls .set_power(mw) then .on() on
-    bundle.lasers[0] — mirroring the pre-extraction start_lasers behavior
-    exactly (set_power before on so the DAQ backend writes the staged
-    power when it energizes the AO channel)."""
-    bundle = _make_bundle()
-    shell = _make_shell(bundle)
-    shell._auto_laser1 = True
-    shell._auto_laser2 = False
-    shell.laser1_power_pct = 50.0
-    hw = HardwareManager(bundle, shell)
+def test_start_lasers_drives_auto_laser1_via_bundle(qtbot, request) -> None:
+    """ctrl._hw.start_lasers() with ctrl._auto_laser1 = True calls
+    .set_power(mw) then .on() on ctrl._hw.lasers[0] — mirroring the
+    pre-extraction start_lasers behavior exactly (set_power before on so
+    the DAQ backend writes the staged power when it energizes the AO
+    channel). Verified via real construction with spies on the real
+    MockLaser methods."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = False
+    ctrl.laser1_power_pct = 50.0
 
-    # Substitute Mock lasers so the calls are observable. The bundle's
-    # lasers are MockLaser instances; swap them for plain Mocks with the
-    # attributes start_lasers reads (.max_power, .error, .error_message,
-    # .label, .set_power, .on, .get_output_power, .power, .active).
-    laser1 = Mock()
-    laser1.max_power = 300.0
-    laser1.error = 0
-    laser1.error_message = ""
-    laser1.label = "Laser 1 (555 nm)"
-    laser1._lock = threading.RLock()
-    laser1.active = False
-    laser1.power = 0.0
-    laser1.get_output_power = Mock(return_value=0.0)
-    laser2 = Mock()
-    laser2._lock = threading.RLock()
-    laser2.error = 0
-    laser2.power = 0.0
-    laser2.get_output_power = Mock(return_value=0.0)
-    hw.lasers = [laser1, laser2]
+    laser0 = ctrl._hw.lasers[0]
 
-    hw.start_lasers()
+    # Spy on the real MockLaser methods (wraps preserves behavior).
+    with (
+        patch.object(laser0, "set_power", wraps=laser0.set_power) as spy_set_power,
+        patch.object(laser0, "on", wraps=laser0.on) as spy_on,
+    ):
+        ctrl._hw.start_lasers()
 
     # 50 % of 300 mW = 150 mW, staged before .on().
-    laser1.set_power.assert_called_once_with(150.0)
-    laser1.on.assert_called_once()
+    spy_set_power.assert_called_once_with(150.0)
+    spy_on.assert_called_once()
 
 
 # --------------------------------------------------------------------------- #
@@ -149,29 +77,26 @@ def test_start_lasers_drives_auto_laser1_via_bundle() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_toggle_laser1_skips_when_estop_set() -> None:
-    """hw._toggle_laser1() with shell.estop_event.is_set() -> True returns
-    immediately without calling .on()/.off() on bundle.lasers[0] — the
-    E-stop cooperative-skip survives the extraction (the E-stop cooperative-skip mitigation)."""
-    bundle = _make_bundle()
-    shell = _make_shell(bundle)
-    shell.estop_event.set()
-    shell.laser1_power_pct = 50.0
-    hw = HardwareManager(bundle, shell)
+def test_toggle_laser1_skips_when_estop_set(qtbot, request) -> None:
+    """ctrl._hw._toggle_laser1() with ctrl.estop_event.is_set() -> True
+    returns immediately without calling .on()/.off() on
+    ctrl._hw.lasers[0] — the E-stop cooperative-skip survives the
+    extraction. Verified via real construction with spies on the real
+    MockLaser methods."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl.estop_event.set()
+    ctrl.laser1_power_pct = 50.0
 
-    laser1 = Mock()
-    laser1.max_power = 300.0
-    laser1.error = 0
-    laser1.error_message = ""
-    laser1.label = "Laser 1 (555 nm)"
-    laser1._lock = threading.RLock()
-    laser1.active = False
-    hw.lasers = [laser1, Mock()]
+    laser0 = ctrl._hw.lasers[0]
 
-    hw._toggle_laser1()
+    with (
+        patch.object(laser0, "on", wraps=laser0.on) as spy_on,
+        patch.object(laser0, "off", wraps=laser0.off) as spy_off,
+    ):
+        ctrl._hw._toggle_laser1()
 
-    laser1.on.assert_not_called()
-    laser1.off.assert_not_called()
+    spy_on.assert_not_called()
+    spy_off.assert_not_called()
 
 
 # --------------------------------------------------------------------------- #
@@ -196,64 +121,45 @@ def test_hardware_manager_has_no_estop_method() -> None:
     )
 
 
-def test_shell_estop_pressed_calls_laser_off_directly_not_via_hw() -> None:
-    """The shell's updateUi_estop_pressed must still call laser.off()
-    directly on self.lasers (a plain list, not routed through self._hw)
-    with no threading.Thread / QTimer.singleShot / queue in its body —
-    the kill path is lock-free and synchronous on the GUI thread
-    (AGENTS.md §2). Asserted via the _load_method exec pattern on the
-    real shell method body (AGENTS.md §5 — not a static-source grep)."""
-    updateUi_estop_pressed = _load_method(
-        "updateUi_estop_pressed(self) -> None"
-    )
-    src = _read_controller_source()
-    body = _slice_method(src, "updateUi_estop_pressed(self) -> None")
-    # The kill path must NOT offload through a thread/timer/queue, and must
-    # NOT route the laser-off kill loop through HardwareManager (safety
-    # anti-pattern). The refresh-after-action polls (self._hw._poll_laser_status
-    # / self._hw._refresh_laser_readback) ARE allowed — they are not the
-    # kill path, just status-label refreshes.
-    forbidden = ["threading.Thread", "QTimer.singleShot", "queue.Queue", "self._hw.stop_lasers", "self._hw._toggle_laser", "self._hw._write_laser"]
-    found = [p for p in forbidden if p in body]
-    assert not found, (
-        f"updateUi_estop_pressed must not offload the kill path through "
-        f"HardwareManager write/toggle/stop — found forbidden patterns: {found}"
-    )
-    # The body must call laser.off() directly on self.lasers (the kill loop).
-    assert "for laser in self.lasers" in body, (
-        "updateUi_estop_pressed must iterate self.lasers directly (not self._hw)"
-    )
-    assert "laser.off()" in body, (
-        "updateUi_estop_pressed must call laser.off() directly"
-    )
+def test_shell_estop_pressed_calls_laser_off_directly_not_via_hw(
+    qtbot, request
+) -> None:
+    """The shell's updateUi_estop_pressed must drive every laser off
+    synchronously on the GUI thread, lock-free, NOT routed through
+    HardwareManager, NOT offloaded to a thread/timer/queue. Verified via
+    real construction: patch threading.Thread and QTimer in the controller
+    module, call the real ctrl.updateUi_estop_pressed(), assert the
+    patches were NOT called (the kill path is not offloaded) and each
+    laser's off() WAS called (the kill path drives every laser off).
 
-    # Behavioral: run the real body against a Mock stand-in and confirm
-    # both lasers' .off() is called synchronously.
-    laser1 = Mock()
-    laser1.error = 0
-    laser1.error_message = ""
-    laser1.label = "Laser 1 (555 nm)"
-    laser2 = Mock()
-    laser2.error = 0
-    laser2.error_message = ""
-    laser2.label = "Laser 2 (640 nm)"
+    The refresh-after-action polls (self._hw._poll_laser_status /
+    self._hw._refresh_laser_readback / self._hw._refresh_laser2_readback_async)
+    ARE allowed — they are not the kill path, just status-label refreshes.
+    They route through HardwareManager which has its own threading import,
+    so the controller-module threading patch does not affect them."""
+    ctrl, _bundle = make_controller(qtbot, request)
 
-    standin = Mock()
-    standin.lasers = [laser1, laser2]
-    standin.estop_event = threading.Event()
-    standin.sig_message = Mock()
-    # The refresh-after-action calls route through the shell's own poll
-    # methods (Mocked here — the kill path itself is what matters).
-    standin._poll_laser_status = Mock()
-    standin._refresh_laser_readback = Mock()
-    # Qt widget mutations land on Mock attrs (no-ops).
-    standin.label_estopStatus = Mock()
-    standin.pushButton_estop = Mock()
+    laser0 = ctrl.lasers[0]
+    laser1 = ctrl.lasers[1]
 
-    updateUi_estop_pressed(standin)
+    # Patch threading.Thread and QTimer ONLY in the controller module's
+    # namespace. The kill path (laser.off() loop) must not offload through
+    # either. HardwareManager has its own imports, so its async readback
+    # thread (not part of the kill path) is unaffected.
+    with (
+        patch.object(controller_module, "threading") as mock_threading,
+        patch.object(controller_module, "QTimer") as mock_qtimer,
+        patch.object(laser0, "off", wraps=laser0.off) as spy_off0,
+        patch.object(laser1, "off", wraps=laser1.off) as spy_off1,
+    ):
+        ctrl.updateUi_estop_pressed()
 
-    laser1.off.assert_called_once()
-    laser2.off.assert_called_once()
+    # The kill path must NOT offload through a thread or timer.
+    mock_threading.Thread.assert_not_called()
+    mock_qtimer.singleShot.assert_not_called()
+    # Each laser's off() WAS called synchronously on the GUI thread.
+    spy_off0.assert_called_once()
+    spy_off1.assert_called_once()
 
 
 # --------------------------------------------------------------------------- #
@@ -263,78 +169,92 @@ def test_shell_estop_pressed_calls_laser_off_directly_not_via_hw() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_open_laser2_calls_open_on_laser2_and_surfaces_error() -> None:
-    """HardwareManager.open_laser2() calls .open() on self.lasers[1] and,
+def test_open_laser2_calls_open_on_laser2_and_surfaces_error(
+    qtbot, request
+) -> None:
+    """ctrl._hw.open_laser2() calls .open() on ctrl._hw.lasers[1] and,
     when .error is set afterward (channel-enable failure caught inside
     enable_channel()), emits sig_message on the shell with the error
     message and clears the error flag — mirroring the pre-extraction
-    hardware_init inline block verbatim."""
-    bundle = _make_bundle()
-    shell = _make_shell(bundle)
-    hw = HardwareManager(bundle, shell)
+    hardware_init inline block verbatim. Verified via real construction."""
+    ctrl, _bundle = make_controller(qtbot, request)
 
-    laser2 = Mock()
-    laser2.error = 1
-    laser2.error_message = "enable_channel rejected: %SYS-E"
-    laser2._lock = threading.RLock()
-    hw.lasers = [Mock(), laser2]
+    laser1 = ctrl._hw.lasers[1]
+    # Simulate a channel-enable failure: open() succeeds (MockLaser no-op)
+    # but the error surface is set afterward.
+    laser1.error = 1
+    laser1.error_message = "enable_channel rejected: %SYS-E"
 
-    hw.open_laser2()
+    # Record sig_message emissions.
+    messages: list[str] = []
+    ctrl.sig_message.connect(lambda msg: messages.append(msg))
 
-    laser2.open.assert_called_once()
-    shell.sig_message.emit.assert_called_once()
-    args, _ = shell.sig_message.emit.call_args
-    assert "iBeam opened but channel enable failed" in args[0]
-    assert "enable_channel rejected: %SYS-E" in args[0]
-    assert laser2.error == 0
+    with patch.object(laser1, "open", wraps=laser1.open) as spy_open:
+        ctrl._hw.open_laser2()
 
-
-def test_open_laser2_surfaces_open_exception_via_sig_message() -> None:
-    """If self.lasers[1].open() raises, open_laser2() catches it and emits
-    sig_message with the exception text — the operator is told the red
-    laser is unavailable, but the failure is non-fatal (no re-raise)."""
-    bundle = _make_bundle()
-    shell = _make_shell(bundle)
-    hw = HardwareManager(bundle, shell)
-
-    laser2 = Mock()
-    laser2.open.side_effect = OSError("COM4 not available")
-    laser2._lock = threading.RLock()
-    hw.lasers = [Mock(), laser2]
-
-    # Must not raise — failure is non-fatal.
-    hw.open_laser2()
-
-    laser2.open.assert_called_once()
-    shell.sig_message.emit.assert_called_once()
-    args, _ = shell.sig_message.emit.call_args
-    assert "iBeam open failed" in args[0]
-    assert "COM4 not available" in args[0]
+    spy_open.assert_called_once()
+    assert any("iBeam opened but channel enable failed" in m for m in messages), (
+        "sig_message must surface the channel-enable failure"
+    )
+    assert any("enable_channel rejected: %SYS-E" in m for m in messages), (
+        "sig_message must include the error message text"
+    )
+    assert laser1.error == 0, "open_laser2 must clear the error flag after surfacing"
 
 
-def test_hardware_manager_init_does_not_call_open_on_laser2() -> None:
+def test_open_laser2_surfaces_open_exception_via_sig_message(
+    qtbot, request
+) -> None:
+    """If ctrl._hw.lasers[1].open() raises, open_laser2() catches it and
+    emits sig_message with the exception text — the operator is told the
+    red laser is unavailable, but the failure is non-fatal (no re-raise).
+    Verified via real construction."""
+    ctrl, _bundle = make_controller(qtbot, request)
+
+    laser1 = ctrl._hw.lasers[1]
+
+    messages: list[str] = []
+    ctrl.sig_message.connect(lambda msg: messages.append(msg))
+
+    with patch.object(laser1, "open", side_effect=OSError("COM4 not available")):
+        # Must not raise — failure is non-fatal.
+        ctrl._hw.open_laser2()
+
+    assert any("iBeam open failed" in m for m in messages), (
+        "sig_message must surface the open exception"
+    )
+    assert any("COM4 not available" in m for m in messages), (
+        "sig_message must include the exception text"
+    )
+
+
+def test_hardware_manager_init_does_not_call_open_on_laser2(
+    qtbot, request
+) -> None:
     """Regression gate: constructing HardwareManager(bundle, shell) must
     NOT call .open() on bundle.lasers[1]. __init__ runs synchronously in
     main()'s composition root BEFORE controller.show() — calling the iBeam
     serial open there would block the GUI window on the serial round-trip
     (a startup-latency regression). The open is driven post-show from
-    hardware_init via open_laser2()."""
-    bundle = _make_bundle()
-    # Replace the bundle's laser 2 with a Mock whose .open() is observable.
+    hardware_init via open_laser2(). Verified via real construction: a
+    fresh HardwareManager is built with observable Mock lasers after
+    make_controller provides the real shell."""
+    ctrl, bundle = make_controller(qtbot, request)
+
+    # Build a fresh bundle with Mock lasers whose .open() is observable.
     laser1 = Mock()
     laser1._lock = threading.RLock()
     laser2 = Mock()
     laser2._lock = threading.RLock()
-    bundle = DeviceBundle(
+    test_bundle = DeviceBundle(
         camera=bundle.camera,
         siggen=bundle.siggen,
         motors=bundle.motors,
         etls=bundle.etls,
         lasers=(laser1, laser2),
     )
-    shell = _make_shell(bundle)
 
-    hw = HardwareManager(bundle, shell)
+    hw = HardwareManager(test_bundle, ctrl)
 
     # __init__ must not have triggered any HAL lifecycle call on laser 2.
     laser2.open.assert_not_called()
