@@ -92,6 +92,76 @@ def test_move_relative_rejects_resulting_position_over_limit() -> None:
         motor.move_relative_position(5, "mm")
 
 
+def test_move_relative_raises_when_position_query_errors() -> None:
+    """If the position-query serial call (cmd 60) leaves self.error truthy,
+    move_relative_position must raise ValueError BEFORE any move command
+    is sent — an unreadable position must not silently pass validation
+    (the self.error arc at line 418-421). The patched _motorIO sets
+    self.error on the position query and asserts no second (move) call
+    follows."""
+    motor = _make_motor()
+
+    def fake_motorIO(cmd_no: int, cmd_param: int) -> int:
+        if cmd_no == 60:
+            # Position query fails — set the error surface, return 0.
+            motor.error = 1
+            return 0
+        raise AssertionError(
+            f"move_relative_position sent cmd {cmd_no} to the stage before "
+            "the self.error check rejected the unreadable position"
+        )
+
+    motor._motorIO = fake_motorIO
+    with pytest.raises(ValueError, match="Cannot read current position"):
+        motor.move_relative_position(5, "mm")
+
+
+def test_move_relative_rejects_resulting_position_below_low_limit() -> None:
+    """A relative move whose RESULTING position would fall below the low
+    travel limit must raise ValueError. The check validates the resulting
+    position (current + delta), not the raw delta — a negative delta near
+    the bottom of travel is still rejected."""
+    motor = _make_motor()
+    near_low = motor.limit_low_microsteps + 1000  # ~0.0476 mm in microsteps
+
+    def fake_motorIO(cmd_no: int, cmd_param: int) -> int:
+        if cmd_no == 60:
+            motor.error = 0
+            return near_low
+        raise AssertionError(
+            f"move_relative_position sent cmd {cmd_no} to the stage before "
+            "the limit check rejected the below-low-limit resulting position"
+        )
+
+    motor._motorIO = fake_motorIO
+    # A -5 mm delta from near the bottom would push the resulting position
+    # well below limit_low_microsteps.
+    with pytest.raises(ValueError):
+        motor.move_relative_position(-5, "mm")
+
+
+def test_move_relative_accepts_within_limits() -> None:
+    """A relative move whose resulting position is within the travel range
+    must not raise ValueError and must send the move command (cmd 21)."""
+    motor = _make_motor()
+    mid_position = motor.limit_high_microsteps // 2
+    calls: list[int] = []
+
+    def fake_motorIO(cmd_no: int, cmd_param: int) -> int:
+        calls.append(cmd_no)
+        if cmd_no == 60:
+            motor.error = 0
+            return mid_position
+        # cmd 21 = move relative — the happy path sends this.
+        return 0
+
+    motor._motorIO = fake_motorIO
+    # A small +1 mm delta from mid-position stays within limits.
+    motor.move_relative_position(1, "mm")
+    # Both the position query (60) and the move command (21) were sent.
+    assert calls == [60, 21]
+
+
 def test_move_maximum_position_removed() -> None:
     """move_maximum_position is confirmed dead code (no GUI caller) and
     must be deleted from the ZaberMotor class."""

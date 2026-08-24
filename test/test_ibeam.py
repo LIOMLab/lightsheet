@@ -405,3 +405,78 @@ def test_ibeam_get_output_power_returns_value_on_matching_line() -> None:
         f"get_output_power must return 75000 uW from the CH1 line; "
         f"got {result!r}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Test 17: set_power clamps to 0 uW on negative input (floor clamp arc).
+# --------------------------------------------------------------------------- #
+def test_ibeam_set_power_clamps_floor_zero() -> None:
+    """set_power(-100) clamps to 0 µW — the floor side of the
+    max(0, min(power_uw, max_power)) clamp. The commanded write must
+    contain 'channel 1 power 0 micro', not '-100'."""
+    ib, mock_ser = _make_open_ibeam(readline_side_effect=[b"[OK]\r\n"])
+    ib.set_power(-100)
+    text = _last_write_text(mock_ser)
+    assert "channel 1 power 0 micro" in text
+    assert "-100" not in text
+    assert ib._power == 0
+
+
+# --------------------------------------------------------------------------- #
+# Test 18: off() sets _is_on=False and _power=0 even when the serial
+# round-trip raises SerialException (the safer-default arc, lines 240-250).
+# A Class IIIB laser's off-intent must not be reversed by a serial failure.
+# --------------------------------------------------------------------------- #
+def test_ibeam_off_sets_safe_defaults_on_serial_exception() -> None:
+    """When _send_cmd('laser off') raises serial.SerialException, off()
+    must still set _is_on=False (the safer default for a Class IIIB laser
+    — the GUI treats the laser as off and the operator is warned to
+    manually verify) and set error=1 with the exception message."""
+    ib, mock_ser = _make_open_ibeam()
+    # Configure the serial to raise SerialException on the next write
+    # (the 'laser off' round-trip).
+    import serial as serial_mod
+
+    mock_ser.write.side_effect = serial_mod.SerialException("port closed")
+    ib._is_on = True
+    ib._power = 50000
+    ib.off()
+    # Safer-default arc: _is_on stays False even though the round-trip
+    # failed (operator intent was off).
+    assert ib._is_on is False, (
+        "off() must set _is_on=False even on a SerialException — the "
+        "safer default for a Class IIIB laser is to treat it as off"
+    )
+    assert ib.error == 1, (
+        "off() must set error=1 when the serial round-trip raises so "
+        "the operator is warned to manually verify the laser state"
+    )
+    assert "port closed" in ib.error_message
+
+
+# --------------------------------------------------------------------------- #
+# Test 19: set_power sets error surface on serial exception (lines 290-293).
+# The except-SerialException arc in set_power must surface the failure
+# rather than let the HAL believe the commanded power was applied.
+# --------------------------------------------------------------------------- #
+def test_ibeam_set_power_sets_error_on_serial_exception() -> None:
+    """When _send_cmd raises serial.SerialException during set_power,
+    the except block must set error=1 with the exception message and
+    must NOT update _power (the rejection guard on the error surface)."""
+    ib, mock_ser = _make_open_ibeam()
+    import serial as serial_mod
+
+    mock_ser.write.side_effect = serial_mod.SerialException("port closed")
+    ib._power = 12345  # pre-seed a known prior power
+    ib.set_power(5000)
+    assert ib.error == 1, (
+        "set_power must set error=1 when the serial round-trip raises "
+        "SerialException — the failure must surface on the HAL error surface"
+    )
+    assert "port closed" in ib.error_message
+    # _power must NOT advance to the rejected 5000 uW.
+    assert ib._power == 12345, (
+        "set_power must not update self._power when the serial round-trip "
+        "raised — the HAL would otherwise believe the commanded power was "
+        "applied when the diode state is unknown"
+    )
