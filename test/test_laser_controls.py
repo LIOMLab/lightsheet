@@ -918,8 +918,8 @@ def test_refresh_laser1_readback_shows_staged_mw() -> None:
     DAQLaser has no hardware readback — get_output_power() returns
     self.power (the staged mW derived from pct/100 * max_power_mw). The L1
     label carries an '(est.)' suffix + tooltip flagging the
-    linear-through-origin estimate as unverified (the diode's lab-measured
-    max is 236.6 mW, not the 300 mW the linear model predicts) until a
+    linear-through-origin estimate as unverified (the linear model predicts
+    300 mW at 5V, but the rig-measured output is ~107.5 mW at 5V) until a
     rig-measured calibration curve is loaded. The 100ms display timer
     drives this refresh so the L1 mW field stays live as the operator
     edits the percentage."""

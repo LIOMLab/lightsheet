@@ -39,19 +39,34 @@ as energized that is actually dark.
 acquire ``self.lasers[i]._lock`` (reentrant so the controller's
 re-acquire-under-same-lock pattern does not deadlock).
 
-**Optional V->mW calibration curve (display-only):** an optional list of
+**Optional V->mW calibration curve (control + display):** an optional list of
 ``(V, mW)`` breakpoints measured on the rig with a power meter. When loaded,
-``get_output_power()`` returns the ``numpy.interp``-evaluated mW at the
-commanded voltage (``self.power / self.mw_per_volt``) instead of the staged
-``self.power`` — so the readback label reflects the *actual* optical output
-the diode produces at that drive voltage, not the linear-through-origin
-estimate. This is a **display-only** mapping: the control path
-(``set_power`` mW -> V via ``mw_per_volt``) and the two-layer clamp are
-untouched. When no curve is loaded (``calibration_curve=None``), behavior is
-unchanged — ``get_output_power()`` returns ``self.power`` and ``calibrated``
-is ``False``. The linear model predicts 300 mW at 5 V, but the rig-measured
-output is ~107.5 mW at 5 V (DPSS threshold knee + free-space measurement
-geometry), so the linear estimate is unverified until a curve is loaded.
+the calibration curve is used in **both** the control path and the display:
+
+- **Control path**: ``set_power(mw)`` uses the *inverse* curve
+  (``np.interp(mw, curve_mw, curve_v)``) to find the voltage that produces
+  the desired optical power, instead of the linear ``mw / mw_per_volt``.
+  This means the operator's percentage slider maps linearly to actual
+  optical power: 0% = off (0 mW), 100% = max measured power (e.g. 107.5 mW),
+  50% = half the max power. Without the curve, the slider maps linearly to
+  voltage (0% = 0V, 100% = 5V), which is non-linear in optical power due to
+  the DPSS threshold knee.
+
+- **max_power override**: when calibrated, ``max_power`` is set to the
+  curve's max mW (e.g. 107.5) instead of ``Max Power * mW per Volt`` (300).
+  This makes the percentage slider map to the actual optical power range.
+  The ``_max_volts`` attribute is set to the curve's max V (5.0) for the
+  native-unit V clamp.
+
+- **Display**: ``get_output_power()`` returns ``self.power`` (the commanded
+  mW), since the inverse curve ensures the voltage produces that power.
+
+When no curve is loaded (``calibration_curve=None``), behavior is unchanged
+— the linear ``mw / mw_per_volt`` conversion is used, ``max_power`` stays
+at the config value, and ``calibrated`` is ``False``. The linear model
+predicts 300 mW at 5 V, but the rig-measured output is ~107.5 mW at 5 V
+(DPSS threshold knee + free-space measurement geometry), so the linear
+estimate is unverified until a curve is loaded.
 """
 
 import logging
@@ -162,19 +177,59 @@ class DAQLaser(ILaser):
                     self._curve_v = np.array(vs)
                     self._curve_mw = np.array(mws)
                     self.calibrated = True
+                    # Override max_power to the curve's max mW so the
+                    # percentage slider maps to the actual optical power
+                    # range (0 to curve_max_mW), not the linear estimate
+                    # (0 to Max Power * mW per Volt). Also set _max_volts
+                    # to the curve's max V for the native-unit V clamp.
+                    self.max_power = float(self._curve_mw[-1])
+                    self._max_volts = float(self._curve_v[-1])
 
         # Laser state — mW canonical (D-01).
         self.power = 0.0
         self.active = False
+
+        # Native-unit V clamp ceiling. When calibrated, set above to the
+        # curve's max V. When uncalibrated, derive from the linear model.
+        # Used by _write_volts as the independent V safety clamp
+        # (AGENTS.md §2 two-layer clamp — the V layer must not depend on
+        # the mW layer's clamp).
+        if not self.calibrated:
+            self._max_volts = (
+                self.max_power / self.mw_per_volt
+                if self.mw_per_volt > 0
+                else 0.0
+            )
 
         # Per-instance reentrant lock (D-02: lock on the ILaser instance,
         # not the controller). RLock so the controller's daemon write paths
         # can re-acquire under the same lock without deadlocking.
         self._lock = threading.RLock()
 
+    def _mw_to_volts(self, mw: float) -> float:
+        """Convert desired optical power (mW) to DAQ voltage (V).
+
+        When calibrated, uses the inverse calibration curve
+        (``np.interp(mw, curve_mw, curve_v)``) to find the voltage that
+        produces the desired optical power. When uncalibrated, uses the
+        linear model (``mw / mw_per_volt``).
+
+        Special case: ``mw <= 0`` always returns 0.0 V — the inverse curve
+        has a flat zero-power region (below the DPSS threshold knee) where
+        ``np.interp`` would return the rightmost V with mW=0 (e.g. 1.5V),
+        but 0 mW means "off" and should drive 0V.
+        """
+        if mw <= 0:
+            return 0.0
+        if self.calibrated and self._curve_v is not None and self._curve_mw is not None:
+            return float(np.interp(mw, self._curve_mw, self._curve_v))
+        if self.mw_per_volt <= 0:
+            return 0.0
+        return mw / self.mw_per_volt
+
     def _write_volts(self, volts: float) -> None:
         """Write ``volts`` to the DAQ AO channel, clamped to
-        ``[0.0, max_power / mw_per_volt]`` (native-unit V clamp — the
+        ``[0.0, _max_volts]`` (native-unit V clamp — the
         second, independent safety layer per AGENTS.md §2).
 
         On a DAQ write failure (``nidaqmx.errors.Error`` / ``RuntimeError``
@@ -184,24 +239,9 @@ class DAQLaser(ILaser):
         shown as energized that is actually dark.
         """
         # Native-unit clamp (V) — independent of the mW clamp in set_power.
-        # Defense-in-depth: a zero/invalid mw_per_volt would raise
-        # ZeroDivisionError inside the clamp below, which is NOT caught by
-        # the typed-except (nidaqmx.errors.Error / RuntimeError / OSError).
-        # Guard explicitly so a config typo surfaced on the HAL error
-        # surface in __init__ does not crash the daemon write thread.
-        if self.mw_per_volt <= 0:
-            self.error = 1
-            self.error_message = (
-                f"mw_per_volt is zero/invalid ({self.mw_per_volt!r}); "
-                f"cannot convert mW -> V"
-            )
-            self.active = False
-            logger.error(
-                "DAQLaser._write_volts aborting: mw_per_volt=%r",
-                self.mw_per_volt,
-            )
-            return
-        volts = max(0.0, min(volts, self.max_power / self.mw_per_volt))
+        # _max_volts is set in __init__: curve max V when calibrated,
+        # max_power / mw_per_volt when uncalibrated.
+        volts = max(0.0, min(volts, self._max_volts))
         try:
             with nidaqmx.Task(new_task_name="laser_ao") as task:
                 task.ao_channels.add_ao_voltage_chan(self.terminal)
@@ -222,7 +262,7 @@ class DAQLaser(ILaser):
         write failure reverts ``active=False`` inside ``_write_volts``."""
         with self._lock:
             self.active = True
-            self._write_volts(self.power / self.mw_per_volt)
+            self._write_volts(self._mw_to_volts(self.power))
 
     def off(self) -> None:
         """Synchronous E-stop kill path (AGENTS.md §2).
@@ -270,23 +310,19 @@ class DAQLaser(ILaser):
     def get_output_power(self) -> float | None:
         """Return the output power in milliwatts (mW).
 
-        NI-DAQ analog output has no hardware power readback channel. When a
-        V->mW calibration curve is loaded (``calibrated=True``), this
-        returns the ``numpy.interp``-evaluated mW at the commanded voltage
-        (``self.power / self.mw_per_volt``) — the actual optical output the
-        diode produces at that drive voltage, per the rig-measured curve.
-        When no curve is loaded, returns the staged ``self.power`` (mW) —
-        the linear-through-origin estimate (``mW = V * mw_per_volt``). The
-        controller's readback label branches on ``self.calibrated`` to flag
-        the estimate as unverified vs calibrated.
+        NI-DAQ analog output has no hardware power readback channel. Returns
+        the staged ``self.power`` (mW) — the commanded power. When
+        calibrated, the inverse calibration curve in ``set_power`` ensures
+        the voltage written to the DAQ actually produces this optical power,
+        so the staged value is the real output. When uncalibrated, the
+        staged value is a linear-through-origin estimate
+        (``mW = V * mw_per_volt``) — the controller's readback label branches
+        on ``self.calibrated`` to flag it as unverified vs calibrated.
 
         Never returns ``None`` (the staged value is always available); the
         ``None`` return is part of the ``ILaser`` contract for backends
         with a real readback that can fail.
         """
-        if self.calibrated and self._curve_v is not None:
-            commanded_v = self.power / self.mw_per_volt if self.mw_per_volt else 0.0
-            return float(np.interp(commanded_v, self._curve_v, self._curve_mw))
         return self.power
 
     def set_power(self, mw: float) -> None:
@@ -297,9 +333,15 @@ class DAQLaser(ILaser):
         converted V value to the DAQ AO channel (``_write_volts`` applies
         the second, native-unit V clamp). If inactive, only stages the mW
         value — no DAQ write attempted.
+
+        When calibrated, ``max_power`` is the curve's max mW (e.g. 107.5),
+        and the mW→V conversion uses the inverse calibration curve so the
+        commanded mW maps to the voltage that actually produces that optical
+        power. When uncalibrated, ``max_power`` is the config value (e.g.
+        300) and the conversion is linear (``mw / mw_per_volt``).
         """
         mw = max(0.0, min(mw, self.max_power))
         with self._lock:
             self.power = mw
             if self.active:
-                self._write_volts(mw / self.mw_per_volt)
+                self._write_volts(self._mw_to_volts(mw))
