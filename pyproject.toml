@@ -138,6 +138,15 @@ file_branch_coverage_min = 100
 [tool.coverage-threshold.modules."lightsheet/hal/real/camera.py"]
 file_branch_coverage_min = 0
 
+# Generated Qt rcc code (pyqt5uic). The `qt_version < [5,8,0]` branch is a
+# compat guard for a Qt version we do not run; covering it requires
+# importlib.reload on the rcc module, which re-runs qInitResources and
+# corrupts Qt's resource registry, segfaulting the next QMainWindow
+# construction. Not worth destabilising the suite for one generated
+# compat branch — pin to the coverable baseline.
+[tool.coverage-threshold.modules."lightsheet/gui/ui_controller_rc.py"]
+file_branch_coverage_min = 50
+
 [tool.ty.rules]
 missing-type-argument = "error"
 unsound-return-statement = "error"

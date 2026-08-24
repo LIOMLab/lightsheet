@@ -712,3 +712,75 @@ def test_updateUi_select_directory_empty(qtbot, request) -> None:
     ):
         ctrl.updateUi_select_directory()
     assert ctrl.ui.lineEdit_saveFilename.isEnabled() is False
+
+
+# --------------------------------------------------------------------------- #
+# Branch-coverage closure: defensive / alternate-path branches not hit by
+# the tests above.
+# --------------------------------------------------------------------------- #
+
+
+def test_updateUi_units_neither_mm_nor_um_skips_both_branches(qtbot, request) -> None:
+    """updateUi_units: when the combo text is neither 'mm' nor 'µm', both
+    the if and elif bodies are skipped (the units_decimals / fixformat /
+    increment attrs keep their prior values). Covers the 1317->1323
+    branch (elif False -> fall through to the widget-update block)."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    # Add a third unit the method does not recognise, so neither the mm
+    # nor the µm branch fires.
+    ctrl.ui.comboBox_units.addItem("cm")
+    ctrl.ui.comboBox_units.setCurrentText("cm")
+    prior_decimals = ctrl.units_decimals
+    with patch.object(ctrl, "updateUi_position_indicators"):
+        ctrl.updateUi_units()
+    assert ctrl.units == "cm"
+    # The if/elif bodies did not run, so the decimals attr is unchanged.
+    assert ctrl.units_decimals == prior_decimals
+
+
+def test_updateUi_single_mode_button_already_started_is_noop(qtbot, request) -> None:
+    """updateUi_single_mode_button: when single_mode_started is already
+    True, the method is a no-op (does not call close_modes, does not
+    spawn a worker thread). Covers the 1674->exit branch."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl.single_mode_started = True
+    with patch.object(ctrl, "close_modes") as mock_close, \
+         patch("lightsheet.gui.controller.threading.Thread") as MockThread:
+        ctrl.updateUi_single_mode_button()
+    mock_close.assert_not_called()
+    MockThread.assert_not_called()
+    assert ctrl.single_mode_started is True
+
+
+def test_updateUi_initial_hardware_state_lightsheet_shutter_mode(qtbot, request) -> None:
+    """updateUi_initial_hardware_state: when the camera shutter_mode is
+    'Lightsheet', the shutter-mode combo is set to index 1 (Lightsheet).
+    Covers the 1205->1206 branch (the existing wavelength-labels test
+    covers the Rolling else branch)."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    # Set the camera's shutter_mode to Lightsheet so the
+    # `if self.camera.shutter_mode == "Lightsheet"` branch fires and
+    # sets the combo to index 1. Block signals on the combo so the
+    # insertItems / setCurrentIndex calls do not fire currentTextChanged,
+    # which would invoke _acq.updateUi_camera_shutter_mode and overwrite
+    # camera.shutter_mode from the combo text before the branch check.
+    ctrl.camera.shutter_mode = "Lightsheet"
+    ctrl.ui.comboBox_cameraShutterMode.blockSignals(True)
+    try:
+        ctrl.updateUi_initial_hardware_state()
+    finally:
+        ctrl.ui.comboBox_cameraShutterMode.blockSignals(False)
+    assert ctrl.ui.comboBox_cameraShutterMode.currentIndex() == 1
+
+
+def test_hardware_init_non_demo_shows_ready_status(qtbot, request) -> None:
+    """hardware_init: when _demo_mode is False, the statusbar shows
+    'Ready' (not the demo-mode message). Covers the 836 else branch.
+    Re-calling hardware_init on the already-initialised mock bundle is
+    safe — the mock HAL re-inits idempotently and the fixture teardown
+    stops the timers and sip.deletes the controller."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl._demo_mode = False
+    ctrl.hardware_init()
+    assert "Ready" in ctrl.ui.statusbar.currentMessage()
+

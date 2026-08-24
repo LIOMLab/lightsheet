@@ -248,3 +248,19 @@ LASER_CONTRACT = ConformanceContract(
     setter_methods=("set_power",),
     getter_methods=("get_output_power",),
 )
+
+# IPowerMeter surface — the power meter is a read-only calibration instrument
+# (not part of the DeviceBundle). ``open`` / ``close`` are the HAL lifecycle
+# verbs exercised by ``assert_lifecycle`` (no-op on the mock, real open/close
+# on the rig — the real path is skipped on Mac via skipif). ``zero`` is a
+# lifecycle verb with side effects (dark offset measurement), so it is an
+# existence check here, NOT called by ``assert_lifecycle`` (which only
+# exercises ``open`` / ``close``). ``read_power`` / ``read_power_mw`` /
+# ``read_averaged`` are read getters that issue DLL/round-trip calls on the
+# real path, so they are existence checks only (``getter_methods``).
+POWER_METER_CONTRACT = ConformanceContract(
+    lifecycle_methods=("open", "close", "zero"),
+    read_attrs=("error", "error_message"),
+    setter_methods=(),
+    getter_methods=("read_power", "read_power_mw", "read_averaged"),
+)

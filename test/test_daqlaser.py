@@ -381,3 +381,33 @@ def test_native_unit_volts_clamp_in_write_volts() -> None:
         assert captured["terminal"] == "/Dev7/ao0"
     finally:
         nidaqmx.Task = original_task  # type: ignore[attr-defined]
+
+
+def test_mw_to_volts_zero_mw_per_volt_guard_returns_zero() -> None:
+    """Defense-in-depth: _mw_to_volts must return 0.0 (not raise
+    ZeroDivisionError) when mw_per_volt<=0 and the laser is uncalibrated.
+
+    __init__ rejects mw_per_volt<=0 and sets error=1, but the guard in
+    _mw_to_volts is the second layer: a subclass or future refactor that
+    bypasses the __init__ guard, or a calibration-clear path, must not
+    let the linear-model division by mw_per_volt raise. The guard returns
+    0.0 V (no emission) — the safe default for an invalid conversion
+    factor. Mirrors the _write_volts zero-mw_per_volt guard above."""
+    laser = DAQLaser(
+        terminal="/Dev7/ao0",
+        wavelength=555,
+        mw_per_volt=0.0,
+        max_power_mw=300.0,
+        label="Laser 1 (555 nm)",
+    )
+    # __init__ set error=1; clear it so we prove the guard itself does not
+    # raise (the guard is a pure return, not an error-surface setter).
+    laser.error = 0
+    laser.error_message = ""
+    # Uncalibrated (no curve) so the linear-model branch is reached.
+    assert laser.calibrated is False
+    # mw > 0 so the mw<=0 early return is skipped; mw_per_volt<=0 guard fires.
+    assert laser._mw_to_volts(50.0) == 0.0
+    # The guard must not raise on negative mw_per_volt either.
+    laser.mw_per_volt = -60.0
+    assert laser._mw_to_volts(50.0) == 0.0

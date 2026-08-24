@@ -58,12 +58,6 @@ cd "${REPO_ROOT}"
 # (conftest.py disables GC to prevent Qt widget destructor segfaults on macOS).
 # Instead, step 1b manually re-combines with branch=True to preserve arcs.
 #
-# We run the controller branch tests in a SEPARATE invocation because the
-# module-scoped controller fixture needs all tests in one process to get full
-# branch coverage. When xdist splits them across workers, each worker only
-# covers a subset of branches, lowering the combined coverage. The separate
-# invocation uses --cov-append to add to the same data file.
-#
 # Single-process (-p no:xdist + addopts override): xdist workers segfault at
 # Python shutdown — the 53 self-capturing signal lambdas in
 # Controller_MainWindow.__init__ create reference cycles whose C++ destructors
@@ -75,7 +69,6 @@ cd "${REPO_ROOT}"
 # Qt6/PySide6 rewrite (see ROADMAP.md Phase 6 known issue). Re-enable xdist
 # after that rewrite replaces the signal lambdas.
 uv run pytest test/ -q --cov=lightsheet --cov-branch -p no:xdist -o "addopts=" || _pytest_exit=$?
-uv run pytest test/test_controller_branches.py -q --cov=lightsheet --cov-branch -p no:xdist -o "addopts=" --cov-append || true
 # Tolerate the shutdown segfault (exit 139): the .coverage file is written
 # BEFORE Python atexit runs, so the data is complete even when the process
 # segfaults at shutdown. Any other non-zero exit (test failure, real error)
