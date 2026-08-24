@@ -370,16 +370,20 @@ _gc.disable()
 # and segfault, but by that point pytest-cov has already written coverage
 # data and the xdist channel has already sent it to the master.
 #
-# Root cause of the segfault (a real reference-cycle bug, deferred to the
-# Phase 6 threading / Phase 7 Qt6 rework — see ROADMAP.md Phase 6 known
-# issue): 53 `lambda: self._mc.<slot>()` signal connections in
-# Controller_MainWindow.__init__ each create a cycle
+# Root cause of the segfault (a real reference-cycle bug, fixed in Phase 6
+# — see ROADMAP.md Phase 6 known issue): 53 `lambda: self._mc.<slot>()`
+# signal connections in Controller_MainWindow.__init__ each create a cycle
 # controller → child widget → signal → lambda → closure cell → controller.
 # The Python wrapper never reaches refcount zero, so the C++ QMainWindow
 # destructor is deferred to cyclic GC. In the production app (one
 # controller, runs until exit) this is a latent leak; in the test suite
 # (constructs ~50 controllers per process) the deferred destructor fires
-# mid-construction of the next controller and segfaults.
+# mid-construction of the next controller and segfaults. Phase 6 (Threading
+# Migration) breaks the cycle at the connection layer (functools.partial +
+# weakref or bound pyqtSlot methods replace the self-capturing lambdas);
+# once it lands, this hook, the make_controller sip.delete teardown, and
+# the single-process coverage gate can all be reverted to xdist. Phase 7
+# (Qt6 port) only confirms the cycle stays broken under PySide6.
 #
 # The make_controller fixture (test/_helpers/controller_fixture.py) calls
 # sip.delete(controller) in its teardown so each fixture-made controller's

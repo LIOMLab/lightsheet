@@ -65,9 +65,11 @@ cd "${REPO_ROOT}"
 # their .coverage.<worker> files ("coverage: failed workers", lost data).
 # Single-process writes one complete .coverage file before the shutdown
 # segfault, so the data is complete. The shutdown segfault is harmless (data
-# already written); it is a PyQt5-on-macOS issue deferred to the Phase 7
-# Qt6/PySide6 rewrite (see ROADMAP.md Phase 6 known issue). Re-enable xdist
-# after that rewrite replaces the signal lambdas.
+# already written). Re-enable xdist after Phase 6 (Threading Migration) breaks
+# the signal-lambda cycle — see ROADMAP.md Phase 6 known issue. The cycle is
+# broken at the connection layer in Phase 6 (functools.partial + weakref or
+# bound pyqtSlot methods replace the self-capturing lambdas); Phase 7 (Qt6
+# port) only confirms it, so xdist can come back as soon as Phase 6 lands.
 uv run pytest test/ -q --cov=lightsheet --cov-branch -p no:xdist -o "addopts=" || _pytest_exit=$?
 # Tolerate the shutdown segfault (exit 139): the .coverage file is written
 # BEFORE Python atexit runs, so the data is complete even when the process
