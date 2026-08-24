@@ -1,40 +1,42 @@
-"""Thorlabs PM100D power meter driver via the TLPMX DLL (ctypes wrapper).
+"""Thorlabs PM100D power meter HAL — TLPMX DLL backend behind the
+``IPowerMeter`` ABC.
 
-The PM100D uses a custom Thorlabs USB driver (``ThorlabsUSBDevice`` class,
-not standard USBTMC), so NI-VISA / pyvisa-py cannot enumerate it. The
-Thorlabs OPM software installs ``TLPMX_64.dll`` (the IVI Power Meter X
-driver) in ``C:\\Program Files\\IVI Foundation\\VISA\\Win64\\Bin\\``, which
-provides the C API:
+The PM100D is a USB-connected benchtop optical power meter console. It uses
+a custom Thorlabs USB driver (``ThorlabsUSBDevice`` class, not standard
+USBTMC), so NI-VISA / pyvisa cannot enumerate it. The Thorlabs OPM software
+installs ``TLPMX_64.dll`` (the IVI Power Meter X driver) which provides the
+C API:
 
-    TLPMX_findRsrc  -> count available power meters
-    TLPMX_getRsrcName -> get resource string by index
-    TLPMX_init       -> open a session
-    TLPMX_measPower  -> read current power (watts)
+    TLPMX_findRsrc     -> count available power meters
+    TLPMX_getRsrcName  -> get resource string by index
+    TLPMX_init         -> open a session
+    TLPMX_measPower    -> read current power (watts)
     TLPMX_setWavelength / TLPMX_getWavelength -> set/get wavelength (nm)
-    TLPMX_close      -> close session
+    TLPMX_setDarkOffset / TLPMX_getDarkOffset -> set/get dark offset
+    TLPMX_setAttenuation / TLPMX_getAttenuation -> set/get attenuation factor
+    TLPMX_setPowerRange / TLPMX_getPowerRange -> set/get power range
+    TLPMX_close        -> close session
+    TLPMX_reset        -> reset device
+    TLPMX_errorMessage -> translate status code to message
 
-This module wraps the ctypes calls in a clean Python context manager. It is
+This module wraps the ctypes calls in the ``IPowerMeter`` ABC. It is
 rig-only (the DLL is Windows-only and the PM100D must be physically
-connected). On the Mac the import fails gracefully (no DLL) so the sweep
-script's Mac guard fires.
+connected). On the Mac the import succeeds (ctypes is stdlib) but
+``open()`` fails with a clear error — the Mac guard in the sweep script
+catches this before the operator is prompted.
 
-Usage:
-    with PM100D(wavelength_nm=561) as meter:
-        power_w = meter.read_power()
-        power_mw = power_w * 1000.0
-
-The S245C is a thermal surface absorber (flat spectral response 190nm-20um),
-so the wavelength setting has minimal effect on accuracy, but we set it
-anyway for correctness.
+The S245C thermal sensor has a flat spectral response (190nm-20um), so the
+wavelength setting has minimal effect on accuracy, but it is set for
+correctness and for future use with photodiode sensors.
 """
-
-from __future__ import annotations
 
 import ctypes
 import logging
 import os
 import sys
 import time
+
+from lightsheet.hal.interfaces import IPowerMeter
 
 logger = logging.getLogger(__name__)
 
@@ -56,15 +58,29 @@ class PM100DNotConnected(PM100DError):
     """No PM100D resource found by TLPMX_findRsrc."""
 
 
-class PM100D:
-    """Thorlabs PM100D power meter driver via the TLPMX DLL.
+class PM100D(IPowerMeter):
+    """Thorlabs PM100D power meter via the TLPMX DLL.
 
-    Context manager: ``with PM100D(wavelength_nm=561) as meter: ...``
-    On exit, the session is closed even if an exception is raised.
+    Implements ``IPowerMeter`` — ``open`` / ``close`` / ``read_power`` /
+    ``zero``. The DLL is loaded lazily in ``open()`` so the class can be
+    imported on the Mac (ctypes is stdlib) without error; ``open()`` fails
+    clearly on non-Windows or when the DLL / device is missing.
 
     The S245C thermal sensor has a flat spectral response, so the wavelength
     setting has minimal effect on accuracy, but it is set for correctness
     and for future use with photodiode sensors.
+
+    Usage:
+        meter = PM100D(wavelength_nm=561)
+        meter.open()
+        try:
+            power_w = meter.read_power()
+        finally:
+            meter.close()
+
+    Or as a context manager:
+        with PM100D(wavelength_nm=561) as meter:
+            power_w = meter.read_power()
     """
 
     def __init__(
@@ -73,6 +89,10 @@ class PM100D:
         dll_path: str = _DEFAULT_DLL_PATH,
         reset: bool = False,
     ) -> None:
+        # HAL error surface — cleared on construct.
+        self.error = 0
+        self.error_message = ""
+
         self._wavelength_nm = float(wavelength_nm)
         self._dll_path = dll_path
         self._reset = reset
@@ -81,6 +101,11 @@ class PM100D:
 
     def _load_dll(self) -> ctypes.CDLL:
         """Load the TLPMX DLL. Raises PM100DError if the DLL is missing."""
+        if sys.platform != "win32":
+            raise PM100DError(
+                "PM100D is only supported on Windows (the TLPMX DLL is "
+                f"Windows-only). Current platform: {sys.platform}"
+            )
         if not os.path.exists(self._dll_path):
             raise PM100DError(
                 f"TLPMX DLL not found at {self._dll_path}. Install the "
@@ -114,8 +139,11 @@ class PM100D:
             raise PM100DError(f"TLPMX_getRsrcName failed: status={status}")
         return buf.value.decode("ascii")
 
-    def _open(self) -> None:
-        """Load the DLL, find the resource, open a session, set wavelength."""
+    def open(self) -> None:
+        """Load the DLL, find the resource, open a session, set wavelength.
+
+        Raises ``PM100DError`` (or ``PM100DNotConnected``) on any failure.
+        """
         self._dll = self._load_dll()
         rsrc = self._find_resource()
         logger.info("PM100D resource: %s", rsrc)
@@ -128,9 +156,9 @@ class PM100D:
             ctypes.byref(session),
         )
         if status != 0:
-            raise PM100DError(
-                f"TLPMX_init failed for {rsrc}: status={status}"
-            )
+            self.error = 1
+            self.error_message = f"TLPMX_init failed for {rsrc}: status={status}"
+            raise PM100DError(self.error_message)
         self._session = session.value
         logger.info("PM100D session opened: %d", self._session)
 
@@ -138,7 +166,11 @@ class PM100D:
         # correct for photodiode sensors and for provenance).
         self._set_wavelength(self._wavelength_nm)
 
-    def _close(self) -> None:
+        # Clear any prior error state from a previous open/close cycle.
+        self.error = 0
+        self.error_message = ""
+
+    def close(self) -> None:
         """Close the session."""
         if self._dll is not None and self._session != 0:
             try:
@@ -152,7 +184,6 @@ class PM100D:
         """Set the measurement wavelength (nm)."""
         assert self._dll is not None
         try:
-            # TLPMX_setWavelength(ViSession vi, ViReal64 wavelength)
             self._dll.TLPMX_setWavelength(
                 ctypes.c_uint32(self._session),
                 ctypes.c_double(float(wavelength_nm)),
@@ -162,10 +193,9 @@ class PM100D:
             logger.warning("PM100D setWavelength error: %s", exc)
 
     def read_power(self) -> float:
-        """Read the current optical power in watts.
+        """Read the current optical power in watts (SI).
 
-        Returns the power as a float (watts). Raises PM100DError on a
-        non-zero status from TLPMX_measPower.
+        Raises ``PM100DError`` on a non-zero status from TLPMX_measPower.
         """
         assert self._dll is not None
         if self._session == 0:
@@ -175,7 +205,9 @@ class PM100D:
             ctypes.c_uint32(self._session), ctypes.byref(power)
         )
         if status != 0:
-            raise PM100DError(f"TLPMX_measPower failed: status={status}")
+            self.error = 1
+            self.error_message = f"TLPMX_measPower failed: status={status}"
+            raise PM100DError(self.error_message)
         return float(power.value)
 
     def read_power_mw(self) -> float:
@@ -210,12 +242,48 @@ class PM100D:
         )
         return mean
 
-    def __enter__(self) -> PM100D:
-        self._open()
+    def zero(self) -> None:
+        """Perform a zero/dark offset adjustment.
+
+        The sensor must be blocked (no light on the detector) when this is
+        called. The TLPMX driver measures the dark current and subtracts it
+        from subsequent readings.
+
+        This calls ``TLPMX_setDarkOffset`` which triggers the dark
+        measurement internally. The operator must ensure the sensor is
+        blocked before calling this.
+        """
+        assert self._dll is not None
+        if self._session == 0:
+            raise PM100DError("PM100D session not open")
+        # TLPMX_setDarkOffset(ViSession vi, ViBoolean enabled)
+        # Setting enabled=True triggers the dark offset measurement.
+        # The sensor must be blocked when this is called.
+        try:
+            status = self._dll.TLPMX_setDarkOffset(
+                ctypes.c_uint32(self._session),
+                ctypes.c_int32(1),  # enable dark offset
+            )
+            if status != 0:
+                self.error = 1
+                self.error_message = (
+                    f"TLPMX_setDarkOffset failed: status={status}"
+                )
+                raise PM100DError(self.error_message)
+            logger.info("PM100D dark offset performed")
+        except PM100DError:
+            raise
+        except Exception as exc:
+            self.error = 1
+            self.error_message = f"PM100D zero error: {exc}"
+            raise PM100DError(self.error_message) from exc
+
+    def __enter__(self) -> "PM100D":
+        self.open()
         return self
 
     def __exit__(self, *args: object) -> None:
-        self._close()
+        self.close()
 
 
 def is_pm100d_available() -> bool:

@@ -37,6 +37,7 @@ from lightsheet.hal.interfaces import (
     IMotors,
     IMotorsCore,
     IOptotune,
+    IPowerMeter,
     ISigGen,
     ISigGenCore,
 )
@@ -44,12 +45,14 @@ from lightsheet.hal.mocks.mock_camera import MockCamera
 from lightsheet.hal.mocks.mock_etls import MockETLs
 from lightsheet.hal.mocks.mock_laser import MockLaser
 from lightsheet.hal.mocks.mock_motors import MockMotors
+from lightsheet.hal.mocks.mock_power_meter import MockPowerMeter
 from lightsheet.hal.mocks.mock_siggen import MockSigGen
 from lightsheet.hal.real.camera import Camera
 from lightsheet.hal.real.daqlaser import DAQLaser
 from lightsheet.hal.real.etls import ETLs
 from lightsheet.hal.real.ibeam_smart import IBeam, IBeamSmartLaser
 from lightsheet.hal.real.motors import Motors
+from lightsheet.hal.real.pm100d import PM100D, PM100DError, PM100DNotConnected
 from lightsheet.hal.real.siggen import SigGen
 
 # DeviceRegistry / UnresolvedDeviceError are NOT imported at barrel load
@@ -66,6 +69,7 @@ from lightsheet.hal.real.siggen import SigGen
 # from the lightsheet.hal namespace.
 
 __all__ = [
+    "PM100D",
     "Camera",
     "DAQLaser",
     "DeviceBundle",
@@ -83,14 +87,18 @@ __all__ = [
     "IMotors",
     "IMotorsCore",
     "IOptotune",
+    "IPowerMeter",
     "ISigGen",
     "ISigGenCore",
     "MockCamera",
     "MockETLs",
     "MockLaser",
     "MockMotors",
+    "MockPowerMeter",
     "MockSigGen",
     "Motors",
+    "PM100DError",
+    "PM100DNotConnected",
     "SigGen",
     "UnresolvedDeviceError",
 ]

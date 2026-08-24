@@ -744,3 +744,83 @@ class ILaser(ABC):
         can distinguish "no reading" from "reading is 0".
         """
         ...
+
+
+# =========================================================================== #
+# Power Meter family
+# =========================================================================== #
+#
+# The ``IPowerMeter`` ABC is the read-only optical power measurement surface.
+# Unlike the laser/camera/motor ABCs, the power meter is not part of the
+# ``DeviceBundle`` — it is a calibration/diagnostic instrument, not a
+# real-time control device. It is used by the calibration sweep script
+# (``test/laser1_calibration_sweep.py``) and could be used by a future
+# real-time power-monitoring widget.
+#
+# The ABC is intentionally minimal: open / close / read_power / zero. The
+# concrete backends (``PM100D`` via TLPMX DLL, ``MockPowerMeter`` for demo)
+# handle wavelength setting, averaging, and sensor-specific configuration
+# internally. The ``read_power`` method returns watts (the SI unit) — callers
+# convert to mW at the call site if needed.
+#
+# The HAL error surface (``error`` / ``error_message``) is declared as
+# class-level annotations, same as every other HAL ABC.
+
+
+class IPowerMeter(ABC):
+    """Read-only optical power meter ABC.
+
+    The power meter is a calibration/diagnostic instrument — it measures
+    optical power (watts) but does not control any hardware. It is NOT
+    part of the ``DeviceBundle`` (it is not a real-time control device);
+    it is constructed directly by the calibration sweep script or a
+    future monitoring widget.
+
+    Controller-read attrs (``error`` / ``error_message`` HAL error surface)
+    are class-level annotations — concrete backends set them as plain
+    instance attributes in ``__init__``.
+
+    ``read_power`` returns watts (SI). Callers convert to mW at the call
+    site if needed (``power_mw = meter.read_power() * 1000.0``).
+    """
+
+    # HAL error surface — every HAL ABC declares these. Concrete classes
+    # set them as instance attributes in ``__init__``.
+    error: int
+    error_message: str
+
+    @abstractmethod
+    def open(self) -> None:
+        """Open the device connection (USB / DLL load / resource find).
+        For backends with no persistent connection (MockPowerMeter), this
+        is a no-op returning ``None``.
+        """
+        ...
+
+    @abstractmethod
+    def close(self) -> None:
+        """Release the device connection. For backends with no persistent
+        connection (MockPowerMeter), this is a no-op returning ``None``.
+        """
+        ...
+
+    @abstractmethod
+    def read_power(self) -> float:
+        """Read the current optical power in watts (SI).
+
+        Returns a float (watts). Raises an exception on a read failure
+        (device disconnected, DLL error) so the caller can distinguish
+        a failed reading from a zero reading.
+        """
+        ...
+
+    @abstractmethod
+    def zero(self) -> None:
+        """Perform a zero/dark offset adjustment (background subtraction).
+
+        The sensor must be blocked (no light on the detector) when this
+        is called. The backend measures the dark current and subtracts it
+        from subsequent readings. For backends without hardware zeroing
+        (MockPowerMeter), this is a no-op.
+        """
+        ...
