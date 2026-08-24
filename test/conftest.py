@@ -324,6 +324,13 @@ def _install_imageview_stub() -> None:
         class _StubImageView(_QW.QWidget):  # noqa: N801
             _lightsheet_imageview_stub = True
 
+            def setImage(self, *args, **kwargs):  # noqa: N802
+                """No-op stand-in for pyqtgraph.ImageView.setImage — the
+                real method drives the C++ ViewBox that segfaults on GC.
+                Tests do not assert on the rendered image; they assert on
+                the controller's signal/attribute side-effects."""
+
+
         real_pg.ImageView = _StubImageView
         # ui_controller imported the name into its own namespace at module
         # load time; patch that too so the controller picks up the stub.
