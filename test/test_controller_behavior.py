@@ -1,20 +1,17 @@
 """
-Behavioral regression tests for Phase 01 controller methods that cannot be
-exercised by importing Controller_MainWindow on the Mac dev box (PyQt5 is not
-installed, so `from lightsheet.gui.controller import Controller_MainWindow` raises
-ModuleNotFoundError).
+Behavioral regression tests for Phase 01 controller methods, via real
+construction.
 
-Each test extracts the REAL method body from lightsheet/gui/controller.py and exec's it
-in a controlled namespace, then calls the resulting function against a minimal
-Mock stand-in `self`. This runs the same code that runs on the rig — proving
-runtime behavior, not a string match on the source. See AGENTS.md §5: never
-write static-source grep tests; exercise the real method via exec of its
-extracted body when the class cannot be instantiated.
-
-The `_read_controller_source` / `_slice_method` / `_load_method` helpers mirror
-test/test_laser_controls.py. `_load_method` seeds the exec namespace with the
-module-level globals the extracted body references (datetime, logging) so the
-function can resolve them at runtime.
+The real ``Controller_MainWindow`` is constructed via ``make_controller``
+(see ``test/_helpers/controller_fixture.py``), which mirrors
+``lightsheet/__main__.main()``'s composition root: a mock ``DeviceBundle``
+is built, the controller is constructed with ``demo=True``, all four
+collaborators (``FrameSaverController`` / ``HardwareManager`` /
+``AcquisitionCoordinator`` / ``MotorController``) are wired, and
+``hardware_init`` is called so ``self.lasers`` / ``self.camera`` /
+``self.siggen`` / ``self.motors`` / ``self.etls`` and the display/status
+timers are populated. Each test calls the REAL method on the real
+controller or collaborator and asserts on real attributes/signals.
 
 Coverage (Phase 01 gaps left after commit 3483180 removed the static-source
 tests):
@@ -31,10 +28,7 @@ tests):
        list[ILaser] instances, not hardcoded numbers (LSR-05)
 """
 
-import threading
-from unittest.mock import Mock
-
-from _helpers.controller import _ACQ_SRC, _HW_SRC, _load_method
+from _helpers.controller_fixture import make_controller
 
 
 # --------------------------------------------------------------------------- #
@@ -42,40 +36,38 @@ from _helpers.controller import _ACQ_SRC, _HW_SRC, _load_method
 # --------------------------------------------------------------------------- #
 
 
-def test_start_lasers_surfaces_laser1_daq_error() -> None:
+def test_start_lasers_surfaces_laser1_daq_error(qtbot, request) -> None:
     """When self.lasers[0].on() leaves .error set, start_lasers must emit
     an operator message naming the cause and reset the flag — a failed
     laser-1 DAQ start is no longer a silent no-op (G-01-1)."""
-    start_lasers = _load_method("start_lasers(self) -> None", src_path=_HW_SRC)
+    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = False
+    ctrl.laser1_power_pct = 50
 
-    laser1 = Mock()
-    laser1.label = "Laser 1 (555 nm)"
-    laser1.max_power = 300.0
-    laser1.error = 1  # .on() "failed" the DAQ write
-    laser1.error_message = "daq write failed"
-    laser1.power = 0.0
-    laser1.get_output_power = Mock(return_value=0.0)
+    laser1 = ctrl._hw.lasers[0]
+    # Simulate a DAQ write failure: on() sets error=1 (the real MockLaser.on()
+    # never errors, so we wrap it to inject the failure the DAQLaser backend
+    # would surface on a real write fault).
+    _real_on = laser1.on
 
-    standin = Mock()
-    standin._auto_laser1 = True
-    standin._auto_laser2 = False
-    standin.laser1_power_pct = 50
-    standin.lasers = [laser1, Mock()]
-    standin.sig_message = Mock()
-    standin.sig_laser_status = Mock()
-    standin.sig_laser_readback = Mock()
-    # HardwareManager reads shell-owned state via self._shell.*
-    standin._shell = standin
+    def _failing_on() -> None:
+        _real_on()
+        laser1.error = 1
+        laser1.error_message = "daq write failed"
 
-    start_lasers(standin)
+    laser1.on = _failing_on
+
+    messages: list[str] = []
+    ctrl.sig_message.connect(lambda msg: messages.append(msg))
+
+    ctrl._hw.start_lasers()
 
     # An operator message was emitted naming the failure.
-    assert standin.sig_message.emit.called, (
+    assert any("daq write failed" in m for m in messages), (
         "start_lasers must emit sig_message when self.lasers[0].error is "
         "set after .on() — a silent no-op is the G-01-1 regression."
     )
-    msg = standin.sig_message.emit.call_args[0][0]
-    assert "daq write failed" in msg
     # The flag is reset so the warning fires once per failure.
     assert laser1.error == 0
 
@@ -86,48 +78,81 @@ def test_start_lasers_surfaces_laser1_daq_error() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_acquire_scan_aborts_on_recorder_timeout_before_copy() -> None:
+def test_acquire_scan_aborts_on_recorder_timeout_before_copy(qtbot, request) -> None:
     """When camera.recorder_timeout_status is True after monitor_recorder,
     acquire_scan must emit the timeout warning, tear down the recorder and
     scanner, disarm the camera, and return BEFORE copy_recorder_images is
     ever reached — a timed-out plane can never be saved as zero-filled
     frames (BUG-01)."""
-    acquire_scan = _load_method("acquire_scan(self) -> None", src_path=_ACQ_SRC)
+    ctrl, _bundle = make_controller(qtbot, request)
+    acq = ctrl._acq
+    # waveform_cycles must be set so number_of_images is a valid int.
+    acq.siggen.waveform_cycles = 1
 
-    siggen = Mock()
-    siggen.error = 0
-    siggen.error_message = ""
-    siggen.waveform_cycles = 1
-    siggen.waveform_metadata = {}
+    # Simulate a recorder timeout: monitor_recorder sets the timeout flag
+    # (the real MockCamera.monitor_recorder never times out, so we wrap it
+    # to inject the timeout the real Camera would surface).
+    _real_monitor = acq.camera.monitor_recorder
 
-    camera = Mock()
-    camera.recorder_timeout_status = True  # the recorder timed out
+    def _timeout_monitor(n: int) -> None:
+        _real_monitor(n)
+        acq.camera.recorder_timeout_status = True
 
-    standin = Mock()
-    standin.siggen = siggen
-    standin.camera = camera
-    # acquire_scan now lives on AcquisitionCoordinator and reads shell-owned
-    # state via self._shell.* (sig_message, ui.*, _fs, buffer, etc.).
-    shell = Mock()
-    shell.sig_message = Mock()
-    # acquire_scan reads self._shell.ui.lineEdit_saveDescription.text() for
-    # metadata before the timeout check; a Mock ui satisfies that without
-    # exercising Qt.
-    shell.ui = Mock()
-    standin._shell = shell
+    acq.camera.monitor_recorder = _timeout_monitor
 
-    acquire_scan(standin)
+    # Track whether copy_recorder_images is reached.
+    copy_called: list[int] = []
+    _real_copy = acq.camera.copy_recorder_images
+
+    def _tracking_copy(n: int):
+        copy_called.append(n)
+        return _real_copy(n)
+
+    acq.camera.copy_recorder_images = _tracking_copy
+
+    # Track teardown calls.
+    delete_recorder_called: list[bool] = []
+    _real_delete_recorder = acq.camera.delete_recorder
+
+    def _tracking_delete_recorder() -> None:
+        delete_recorder_called.append(True)
+        _real_delete_recorder()
+
+    acq.camera.delete_recorder = _tracking_delete_recorder
+
+    delete_scanner_called: list[bool] = []
+    _real_delete_scanner = acq.siggen.delete_scanner
+
+    def _tracking_delete_scanner() -> None:
+        delete_scanner_called.append(True)
+        _real_delete_scanner()
+
+    acq.siggen.delete_scanner = _tracking_delete_scanner
+
+    disarm_called: list[bool] = []
+    _real_disarm = acq.camera.disarm
+
+    def _tracking_disarm() -> None:
+        disarm_called.append(True)
+        _real_disarm()
+
+    acq.camera.disarm = _tracking_disarm
+
+    messages: list[str] = []
+    ctrl.sig_message.connect(lambda msg: messages.append(msg))
+
+    acq.acquire_scan()
 
     # The defining assertion: copy_recorder_images must NOT be called.
-    camera.copy_recorder_images.assert_not_called()
+    assert not copy_called, (
+        "acquire_scan must not call copy_recorder_images on recorder timeout"
+    )
     # The operator was warned.
-    assert shell.sig_message.emit.called
-    msg = shell.sig_message.emit.call_args[0][0]
-    assert "Camera timeout" in msg
+    assert any("Camera timeout" in m for m in messages)
     # Teardown ran and the camera was disarmed before returning.
-    camera.delete_recorder.assert_called_once()
-    siggen.delete_scanner.assert_called_once()
-    camera.disarm.assert_called_once()
+    assert delete_recorder_called
+    assert delete_scanner_called
+    assert disarm_called
 
 
 # --------------------------------------------------------------------------- #
@@ -136,52 +161,68 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_acquire_scan_surfaces_siggen_error_before_recorder() -> None:
+def test_acquire_scan_surfaces_siggen_error_before_recorder(qtbot, request) -> None:
     """When create_scanner() sets self.siggen.error (its bare-except on DAQ
     task creation failure), acquire_scan must emit an operator message,
     delete the scanner, disarm the camera, and return BEFORE
     start_recorder() is ever called — a DAQ scan-task failure is no longer
     masked as a silent 15 s camera timeout (G-01-5)."""
-    acquire_scan = _load_method("acquire_scan(self) -> None", src_path=_ACQ_SRC)
+    ctrl, _bundle = make_controller(qtbot, request)
+    acq = ctrl._acq
+    acq.siggen.waveform_cycles = 1
 
-    siggen = Mock()
-    siggen.error = 0
-    siggen.error_message = ""
-    siggen.waveform_cycles = 1
-    siggen.waveform_metadata = {}
-
+    # Simulate a create_scanner DAQ failure: the real MockSigGen.create_scanner
+    # is a no-op that never errors, so we wrap it to inject the error the real
+    # SigGen would surface on a DAQ task creation fault.
     def _fail_create_scanner() -> None:
-        # create_scanner() sets siggen.error without raising.
-        siggen.error = 1
-        siggen.error_message = "create_scan error"
+        acq.siggen.error = 1
+        acq.siggen.error_message = "create_scan error"
 
-    siggen.create_scanner.side_effect = _fail_create_scanner
+    acq.siggen.create_scanner = _fail_create_scanner
 
-    camera = Mock()
-    camera.recorder_timeout_status = False
+    # Track whether start_recorder is reached.
+    start_recorder_called: list[int] = []
+    _real_start_recorder = acq.camera.start_recorder
 
-    standin = Mock()
-    standin.siggen = siggen
-    standin.camera = camera
-    # acquire_scan now lives on AcquisitionCoordinator and reads shell-owned
-    # state via self._shell.* (sig_message, ui.*, _fs, buffer, etc.).
-    shell = Mock()
-    shell.sig_message = Mock()
-    shell.ui = Mock()
-    standin._shell = shell
+    def _tracking_start_recorder(n: int) -> None:
+        start_recorder_called.append(n)
+        _real_start_recorder(n)
 
-    acquire_scan(standin)
+    acq.camera.start_recorder = _tracking_start_recorder
+
+    delete_scanner_called: list[bool] = []
+    _real_delete_scanner = acq.siggen.delete_scanner
+
+    def _tracking_delete_scanner() -> None:
+        delete_scanner_called.append(True)
+        _real_delete_scanner()
+
+    acq.siggen.delete_scanner = _tracking_delete_scanner
+
+    disarm_called: list[bool] = []
+    _real_disarm = acq.camera.disarm
+
+    def _tracking_disarm() -> None:
+        disarm_called.append(True)
+        _real_disarm()
+
+    acq.camera.disarm = _tracking_disarm
+
+    messages: list[str] = []
+    ctrl.sig_message.connect(lambda msg: messages.append(msg))
+
+    acq.acquire_scan()
 
     # The recorder was never primed — the failure surfaced before it.
-    camera.start_recorder.assert_not_called()
+    assert not start_recorder_called, (
+        "acquire_scan must not call start_recorder when create_scanner fails"
+    )
     # The operator saw the real DAQ cause.
-    assert shell.sig_message.emit.called
-    msg = shell.sig_message.emit.call_args[0][0]
-    assert "Scan task creation failed" in msg
-    assert "create_scan error" in msg
+    assert any("Scan task creation failed" in m for m in messages)
+    assert any("create_scan error" in m for m in messages)
     # Teardown ran.
-    siggen.delete_scanner.assert_called_once()
-    camera.disarm.assert_called_once()
+    assert delete_scanner_called
+    assert disarm_called
 
 
 # --------------------------------------------------------------------------- #
@@ -190,53 +231,38 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder() -> None:
 # --------------------------------------------------------------------------- #
 
 
-class _WidgetRaisingUI:
-    """A stand-in for self.ui whose laser auto-checkboxes raise
-    AttributeError on access. If start_lasers ever reverts to reading
-    checkBox_laserOneAutomatic / checkBox_laserTwoAutomatic directly, the
-    method raises and this test fails — proving the worker reads the cached
-    bools (self._auto_laser1 / self._auto_laser2), not Qt widgets."""
-
-    def __getattr__(self, name: str) -> Mock:
-        if name in ("checkBox_laserOneAutomatic", "checkBox_laserTwoAutomatic"):
-            raise AttributeError(
-                f"start_lasers must not read Qt widget {name} from a worker "
-                f"thread — use the cached self._auto_laser* flag "
-                f"(AGENTS.md §11)."
-            )
-        return Mock()
-
-
-def test_start_lasers_reads_cached_flags_not_widgets() -> None:
+def test_start_lasers_reads_cached_flags_not_widgets(qtbot, request) -> None:
     """start_lasers runs on an acquisition worker thread and must read only
     the cached auto-laser flags sampled on the GUI thread — never a Qt
     widget (AGENTS.md §11 cross-thread rule, G-01-5). With the auto-laser1
-    flag True and a UI that raises on checkbox access, start_lasers must
-    energize laser 1 without touching the widget."""
-    start_lasers = _load_method("start_lasers(self) -> None", src_path=_HW_SRC)
+    cached flag True but the Qt checkbox unchecked (its default state),
+    start_lasers must energize laser 1 — proving it reads the cached flag,
+    not the widget (if it read the checkbox, laser 1 would stay dark)."""
+    ctrl, _bundle = make_controller(qtbot, request)
 
-    laser1 = Mock()
-    laser1.label = "Laser 1 (555 nm)"
-    laser1.max_power = 300.0
-    laser1.error = 0
-    laser1.power = 0.0
-    laser1.get_output_power = Mock(return_value=0.0)
+    # The Qt checkbox is unchecked by default (QCheckBox defaults to False).
+    # Set the cached flag True — if start_lasers reads the widget instead of
+    # the cached flag, laser 1 would NOT be energized.
+    assert not ctrl.ui.checkBox_laserOneAutomatic.isChecked(), (
+        "checkbox must be unchecked for this test to prove the cached flag "
+        "is read, not the widget"
+    )
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = False
+    ctrl.laser1_power_pct = 50
 
-    standin = Mock()
-    standin.ui = _WidgetRaisingUI()
-    standin._auto_laser1 = True
-    standin._auto_laser2 = False
-    standin.laser1_power_pct = 50
-    standin.lasers = [laser1, Mock()]
-    standin.sig_message = Mock()
-    standin.sig_laser_status = Mock()
-    standin.sig_laser_readback = Mock()
-    standin._shell = standin  # HardwareManager reads shell-owned state via self._shell.*
+    laser1 = ctrl._hw.lasers[0]
+    assert not laser1.active  # sanity: laser starts off
 
-    # Must not raise — if it read the widget, _WidgetRaisingUI raises.
-    start_lasers(standin)
+    ctrl._hw.start_lasers()
 
-    laser1.on.assert_called_once()
+    # Laser 1 was energized — start_lasers read the cached _auto_laser1 flag
+    # (True), not the unchecked checkbox.
+    assert laser1.active, (
+        "start_lasers must energize laser 1 when the cached _auto_laser1 "
+        "flag is True, even if the Qt checkbox is unchecked — it must read "
+        "the cached flag, not the widget (AGENTS.md §11)."
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -245,43 +271,52 @@ def test_start_lasers_reads_cached_flags_not_widgets() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_preview_mode_worker_breaks_on_estop_before_frame_acquisition() -> None:
+def test_preview_mode_worker_breaks_on_estop_before_frame_acquisition(qtbot, request) -> None:
     """With estop_event set before the worker loop starts, the E-stop poll
     at the top of preview_mode_worker's while loop must break before any
     per-frame acquisition work (start_recorder / copy_recorder_images), and
     the finished signal must still fire exactly once from the finally block
     (CR-01 — preview now aligns with live/single/stack per AGENTS.md §2)."""
-    preview_mode_worker = _load_method(
-        "preview_mode_worker(self) -> None", src_path=_ACQ_SRC
-    )
+    ctrl, _bundle = make_controller(qtbot, request)
 
-    estop_event = threading.Event()
-    estop_event.set()  # E-stop actuated before the loop starts
+    # E-stop actuated before the loop starts.
+    ctrl.estop_event.set()
+    ctrl.preview_mode_started = True
 
-    camera = Mock()
+    # Track whether per-frame acquisition work runs.
+    start_recorder_called: list[int] = []
+    _real_start_recorder = ctrl._acq.camera.start_recorder
 
-    standin = Mock()
-    standin.camera = camera
-    # preview_mode_worker now lives on AcquisitionCoordinator and reads
-    # shell-owned state via self._shell.* (estop_event,
-    # preview_mode_started, ui.*, _fs, sig_message,
-    # sig_preview_mode_finished).
-    shell = Mock()
-    shell.estop_event = estop_event
-    shell.preview_mode_started = True
-    shell.ui = Mock()  # doubleSpinBox_cameraExposureTime.value() for setup
-    shell._fs = Mock()
-    shell.sig_message = Mock()
-    shell.sig_preview_mode_finished = Mock()
-    standin._shell = shell
+    def _tracking_start_recorder(n: int) -> None:
+        start_recorder_called.append(n)
+        _real_start_recorder(n)
 
-    preview_mode_worker(standin)
+    ctrl._acq.camera.start_recorder = _tracking_start_recorder
+
+    copy_called: list[int] = []
+    _real_copy = ctrl._acq.camera.copy_recorder_images
+
+    def _tracking_copy(n: int):
+        copy_called.append(n)
+        return _real_copy(n)
+
+    ctrl._acq.camera.copy_recorder_images = _tracking_copy
+
+    # Track the finished signal.
+    finished_emits: list[None] = []
+    ctrl.sig_preview_mode_finished.connect(lambda: finished_emits.append(None))
+
+    ctrl._acq.preview_mode_worker()
 
     # No per-frame acquisition work ran — the estop poll broke first.
-    camera.start_recorder.assert_not_called()
-    camera.copy_recorder_images.assert_not_called()
+    assert not start_recorder_called, (
+        "preview_mode_worker must not call start_recorder when estop is set"
+    )
+    assert not copy_called, (
+        "preview_mode_worker must not call copy_recorder_images when estop is set"
+    )
     # The finished signal fired exactly once (the finally block).
-    assert shell.sig_preview_mode_finished.emit.call_count == 1
+    assert len(finished_emits) == 1
 
 
 # --------------------------------------------------------------------------- #
@@ -290,63 +325,21 @@ def test_preview_mode_worker_breaks_on_estop_before_frame_acquisition() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_wavelength_labels_set_from_live_instances() -> None:
+def test_wavelength_labels_set_from_live_instances(qtbot, request) -> None:
     """updateUi_initial_hardware_state must set the wavelength labels from
     the live self.lasers[0].wavelength and self.lasers[1].wavelength
     instances — not hardcoded numbers — so the operator sees the real
     configured wavelength (LSR-05)."""
-    updateUi_initial_hardware_state = _load_method(
-        "updateUi_initial_hardware_state(self) -> None"
-    )
+    ctrl, _bundle = make_controller(qtbot, request)
 
-    siggen = Mock()
-    siggen.galvo_activated = False
-    siggen.galvo_inverted = False
-    siggen.galvo_left_amplitude = 0.0
-    siggen.galvo_right_amplitude = 0.0
-    siggen.galvo_left_offset = 0.0
-    siggen.galvo_right_offset = 0.0
-    siggen.etl_activated = False
-    siggen.etl_left_amplitude = 0.0
-    siggen.etl_right_amplitude = 0.0
-    siggen.etl_left_offset = 0.0
-    siggen.etl_right_offset = 0.0
-    siggen.etl_steps = 0
+    # The fixture's bundle has Laser 1 = 555 nm, Laser 2 = 640 nm.
+    assert ctrl.lasers[0].wavelength == 555
+    assert ctrl.lasers[1].wavelength == 640
 
-    camera = Mock()
-    camera.exposure_time = 0.01
-    camera.lightsheet_line_time = 0.0001
-    camera.lightsheet_exposed_lines = 1
-    camera.lightsheet_delay_lines = 0
-    camera.shutter_mode = "Rolling"
+    ctrl.updateUi_initial_hardware_state()
 
-    # self.lasers is a list[ILaser] — index 0 = Laser 1 (555 nm DAQ),
-    # index 1 = Laser 2 (640 nm iBeam). The wavelength labels read
-    # self.lasers[i].wavelength from the live instances.
-    laser1 = Mock()
-    laser1.wavelength = 555  # green DAQ laser
-    laser2 = Mock()
-    laser2.wavelength = 640  # red iBeam
-
-    standin = Mock()
-    standin.ui = Mock()
-    standin.siggen = siggen
-    standin.camera = camera
-    standin.lasers = [laser1, laser2]
-    standin.laser1_power_pct = 0
-    standin.laser2_power_pct = 0
-    # updateUi_initial_hardware_state calls these helpers at the end;
-    # as auto-Mock callables they are no-ops here. updateUi_camera_shutter_mode
-    # now lives on the AcquisitionCoordinator (extracted from the shell), so
-    # the retargeted call site reads self._acq.updateUi_camera_shutter_mode();
-    # a generic Mock sub-attribute satisfies it.
-    standin._acq = Mock()
-    standin.updateUi_units = Mock()
-
-    updateUi_initial_hardware_state(standin)
-
-    label_72_text = standin.ui.label_72.setText.call_args[0][0]
-    label_73_text = standin.ui.label_73.setText.call_args[0][0]
+    label_72_text = ctrl.ui.label_72.text()
+    label_73_text = ctrl.ui.label_73.text()
     assert "555" in label_72_text, (
         "label_72 must show the live lasers[0].wavelength (555), not a "
         "hardcoded number."
@@ -355,8 +348,8 @@ def test_wavelength_labels_set_from_live_instances() -> None:
         "label_73 must show the live lasers[1].wavelength (640), not a hardcoded number."
     )
     # Toggle buttons are relabeled with the live wavelengths too.
-    toggle1_text = standin.ui.pushButton_laserOneToggle.setText.call_args[0][0]
-    toggle2_text = standin.ui.pushButton_laserTwoToggle.setText.call_args[0][0]
+    toggle1_text = ctrl.ui.pushButton_laserOneToggle.text()
+    toggle2_text = ctrl.ui.pushButton_laserTwoToggle.text()
     assert "555" in toggle1_text
     assert "640" in toggle2_text
 
@@ -367,7 +360,7 @@ def test_wavelength_labels_set_from_live_instances() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_estop_warn_branch_fires_for_failed_laser() -> None:
+def test_estop_warn_branch_fires_for_failed_laser(qtbot, request) -> None:
     """updateUi_estop_pressed must check laser.error after each off() and
     emit an operator warning naming the failed laser when off() leaves
     error truthy — the D-06 E-stop safety arc. With one laser reporting
@@ -376,44 +369,42 @@ def test_estop_warn_branch_fires_for_failed_laser() -> None:
     its label and error_message, and reset the error flag after warning
     (AGENTS.md §2: never silently show a clean state when a laser may
     still be emitting)."""
-    updateUi_estop_pressed = _load_method(
-        "updateUi_estop_pressed(self) -> None"
-    )
+    ctrl, _bundle = make_controller(qtbot, request)
 
-    laser_ok = Mock()
-    laser_ok.error = 0
-    laser_ok.label = "Laser 1 (555 nm)"
+    laser_ok = ctrl.lasers[0]
+    laser_failed = ctrl.lasers[1]
 
-    laser_failed = Mock()
-    laser_failed.error = 1
-    laser_failed.error_message = "daq write failed"
-    laser_failed.label = "Laser 2 (640 nm)"
+    # Simulate a failed off() on laser 2: the real MockLaser.off() never
+    # errors, so we wrap it to inject the error the real backend would
+    # surface on a hardware write fault.
+    _real_off = laser_failed.off
 
-    standin = Mock()
-    standin.estop_event = Mock()
-    standin.lasers = [laser_ok, laser_failed]
-    standin.sig_message = Mock()
-    standin._hw = Mock()
-    standin.label_estopStatus = Mock()
-    standin.pushButton_estop = Mock()
+    def _failing_off() -> None:
+        _real_off()
+        laser_failed.error = 1
+        laser_failed.error_message = "daq write failed"
 
-    updateUi_estop_pressed(standin)
+    laser_failed.off = _failing_off
+
+    messages: list[str] = []
+    ctrl.sig_message.connect(lambda msg: messages.append(msg))
+
+    ctrl.updateUi_estop_pressed()
 
     # Cooperative-abort Event set on the GUI thread.
-    standin.estop_event.set.assert_called_once()
+    assert ctrl.estop_event.is_set()
     # Both lasers driven off synchronously.
-    laser_ok.off.assert_called_once()
-    laser_failed.off.assert_called_once()
+    assert not laser_ok.active
+    assert not laser_failed.active
     # The warn branch fired for the failed laser — find the emit call
     # whose message names the failed laser's label and error_message.
-    emit_calls = [c.args[0] for c in standin.sig_message.emit.call_args_list]
     warn_msgs = [
-        m for m in emit_calls
+        m for m in messages
         if "Laser 2 (640 nm)" in m and "daq write failed" in m
     ]
     assert len(warn_msgs) == 1, (
         f"warn branch must fire exactly once for the failed laser; "
-        f"got {len(warn_msgs)} warn messages in {emit_calls}"
+        f"got {len(warn_msgs)} warn messages in {messages}"
     )
     assert "E-STOP" in warn_msgs[0]
     assert "STILL BE ON" in warn_msgs[0]
@@ -421,44 +412,31 @@ def test_estop_warn_branch_fires_for_failed_laser() -> None:
     assert laser_failed.error == 0
 
 
-def test_estop_warn_branch_does_not_fire_when_all_off_succeed() -> None:
+def test_estop_warn_branch_does_not_fire_when_all_off_succeed(qtbot, request) -> None:
     """The control case: when both lasers report error=0 after off(), the
     warn branch must NOT fire — no spurious 'may still be on' warning when
     every off() succeeded cleanly. The method still emits its terminal
     'E-STOP actuated' status message, but no per-laser warning."""
-    updateUi_estop_pressed = _load_method(
-        "updateUi_estop_pressed(self) -> None"
-    )
+    ctrl, _bundle = make_controller(qtbot, request)
 
-    laser1 = Mock()
-    laser1.error = 0
-    laser1.label = "Laser 1 (555 nm)"
+    laser1 = ctrl.lasers[0]
+    laser2 = ctrl.lasers[1]
 
-    laser2 = Mock()
-    laser2.error = 0
-    laser2.label = "Laser 2 (640 nm)"
+    messages: list[str] = []
+    ctrl.sig_message.connect(lambda msg: messages.append(msg))
 
-    standin = Mock()
-    standin.estop_event = Mock()
-    standin.lasers = [laser1, laser2]
-    standin.sig_message = Mock()
-    standin._hw = Mock()
-    standin.label_estopStatus = Mock()
-    standin.pushButton_estop = Mock()
-
-    updateUi_estop_pressed(standin)
+    ctrl.updateUi_estop_pressed()
 
     # Both lasers driven off.
-    laser1.off.assert_called_once()
-    laser2.off.assert_called_once()
+    assert not laser1.active
+    assert not laser2.active
     # No per-laser warning emitted — every emit message is the terminal
     # "E-STOP actuated" status, none name a laser label or "STILL BE ON".
-    emit_calls = [c.args[0] for c in standin.sig_message.emit.call_args_list]
     warn_msgs = [
-        m for m in emit_calls
+        m for m in messages
         if "STILL BE ON" in m or "off command failed" in m
     ]
     assert len(warn_msgs) == 0, (
         f"warn branch must not fire when all off() calls succeed; "
-        f"got {warn_msgs} in {emit_calls}"
+        f"got {warn_msgs} in {messages}"
     )

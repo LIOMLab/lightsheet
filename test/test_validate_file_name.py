@@ -1,11 +1,9 @@
 """TST-03 safe_char filename-validation corpus.
 
-Execs the REAL ``Controller_MainWindow.validate_file_name`` body (via the
-``_load_method`` exec-against-Mock pattern from
-``test/test_laser_controls.py``) against a Mock stand-in ``self`` whose
-``ui.lineEdit_saveFilename`` returns the corpus input. This runs the real
-sanitization code — the same code that runs on the rig — without needing
-a Qt event loop or display (AGENTS.md §5: no static-source grep).
+Exercises the REAL ``Controller_MainWindow.validate_file_name`` method via
+real construction (``make_controller`` builds the full controller with all
+four collaborators wired and ``hardware_init`` already called). The
+sanitization code that runs here is the same code that runs on the rig.
 
 The corpus locks the ``safe_char`` behavior (alnum + ``-`` kept; everything
 else → ``_``; trailing ``_`` stripped; ``os.path.normpath`` joins
@@ -18,64 +16,9 @@ Inline ``@pytest.mark.parametrize`` (D-13 — no JSON/YAML data file): the
 corpus is small, semantically stable, and readable at the assertion site.
 """
 
-import os
-import re
-from collections.abc import Callable
-from typing import Any
-from unittest.mock import Mock
-
 import pytest
 
-_CONTROLLER_SRC = os.path.join(
-    os.path.dirname(__file__), "..", "lightsheet", "gui", "controller.py"
-)
-
-
-def _read_controller_source() -> str:
-    with open(_CONTROLLER_SRC, encoding="utf-8") as f:
-        return f.read()
-
-
-def _slice_method(src: str, method_sig: str) -> str:
-    m = re.search(r"def " + re.escape(method_sig) + r":", src)
-    assert m, f"{method_sig} is missing"
-    body = src[m.start() :]
-    end = re.search(r"\n    def |\n    @pyqtSlot", body[1:])
-    if end:
-        body = body[: end.start() + 1]
-    return body
-
-
-def _load_method(method_sig: str) -> Callable[..., Any]:
-    """Extract a method body from controller.py and return a callable.
-
-    The exec namespace is seeded with ``os`` (the body calls
-    ``os.path.normpath``) so the function resolves it at call time.
-    """
-    src = _read_controller_source()
-    body = _slice_method(src, method_sig)
-    namespace: dict[str, Any] = {"os": os}
-    exec(compile(body, _CONTROLLER_SRC, "exec"), namespace)
-    func_name = method_sig.split("(")[0].strip()
-    return namespace[func_name]
-
-
-_validate = _load_method("validate_file_name(self) -> None")
-
-
-def _standin(text: str, save_dir: str = "C:\\data") -> Mock:
-    """Build a Mock stand-in self for validate_file_name.
-
-    The method reads ``self.ui.lineEdit_saveFilename.text()``, sanitizes
-    it into ``self.save_filename``, and sets ``self.saving_allowed`` based
-    on whether both ``save_directory`` and ``save_filename`` are non-empty.
-    """
-    s = Mock()
-    s.ui.lineEdit_saveFilename.text.return_value = text
-    s.save_directory = save_dir
-    s.save_filename = ""
-    s.saving_allowed = False
-    return s
+from _helpers.controller_fixture import make_controller
 
 
 @pytest.mark.parametrize(
@@ -108,32 +51,42 @@ def _standin(text: str, save_dir: str = "C:\\data") -> Mock:
         "all-unsafe-rejected",
     ],
 )
-def test_safe_char_sanitizes(raw: str, expected_substring: str, allows: bool) -> None:
+def test_safe_char_sanitizes(
+    qtbot, request, raw: str, expected_substring: str, allows: bool
+) -> None:
     """validate_file_name sanitizes the filename via safe_char + rstrip('_')
     and joins it to save_directory; saving_allowed is True only when both
     are non-empty."""
-    s = _standin(raw)
-    _validate(s)
+    ctrl, _ = make_controller(qtbot, request)
+    ctrl.ui.lineEdit_saveFilename.setText(raw)
+    ctrl.save_directory = "C:\\data"
+    ctrl.save_filename = ""
+    ctrl.saving_allowed = False
+    ctrl.validate_file_name()
     if allows:
-        assert s.saving_allowed is True
-        assert expected_substring in s.save_filename, (
-            f"expected {expected_substring!r} in save_filename={s.save_filename!r}"
+        assert ctrl.saving_allowed is True
+        assert expected_substring in ctrl.save_filename, (
+            f"expected {expected_substring!r} in save_filename={ctrl.save_filename!r}"
         )
     else:
-        assert s.saving_allowed is False
+        assert ctrl.saving_allowed is False
 
 
-def test_safe_char_join_uses_save_directory() -> None:
+def test_safe_char_join_uses_save_directory(qtbot, request) -> None:
     """The sanitized filename is joined to save_directory via
     os.path.normpath(save_directory + '\\\\' + save_filename). On a
     non-Windows host normpath collapses the backslash separator, so we
     assert the sanitized name is present and the directory appears in the
     joined path."""
-    s = _standin("plane 01", save_dir="/tmp/data")
-    _validate(s)
-    assert s.saving_allowed is True
+    ctrl, _ = make_controller(qtbot, request)
+    ctrl.ui.lineEdit_saveFilename.setText("plane 01")
+    ctrl.save_directory = "/tmp/data"
+    ctrl.save_filename = ""
+    ctrl.saving_allowed = False
+    ctrl.validate_file_name()
+    assert ctrl.saving_allowed is True
     # normpath on POSIX collapses the Windows separator: /tmp/data\plane_01
     # → /tmp/data/plane_01. On Windows it stays /tmp/data\plane_01. Either
     # way the sanitized name and the directory are both present.
-    assert "plane_01" in s.save_filename
-    assert "tmp" in s.save_filename or "data" in s.save_filename
+    assert "plane_01" in ctrl.save_filename
+    assert "tmp" in ctrl.save_filename or "data" in ctrl.save_filename
