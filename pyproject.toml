@@ -70,11 +70,64 @@ ignore = ["ANN401"]
 # defaults
 
 [tool.pytest.ini_options]
-addopts = "-n auto"
+addopts = "-n auto --strict-markers"
 testpaths = ["test"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+pythonpath = ["test"]
+markers = [
+    "rig: requires real hardware (set LIGHTSHEET_HW=1)",
+    "mock: mock-only path (default on Mac)",
+    "slow: slow test, auto-deselected from fast iteration by convention",
+]
+
+# Coverage gate machinery (D-01/D-05). The gate is an explicit, separate
+# invocation (scripts/coverage.sh), NOT always-on in addopts above — the fast
+# `uv run pytest test/ -q` iteration path stays snappy and free of --cov
+# overhead. Branch coverage (D-05) subsumes line; coverage.py folds branch
+# into the single reported % so --cov-fail-under gates both in one number.
+[tool.coverage.run]
+branch = true
+source = ["lightsheet"]
+# D-02 correction (RESEARCH.md "D-02 Premise Verification"): only camera.py is
+# wholesale-omitted — its entire __init__ -> open() -> pco.Camera() chain is
+# Mac-unreachable with no testable logic outside the probe. The other three
+# hal/real/* safety modules (daqlaser.py, motors.py, ibeam_smart.py) stay
+# MEASURED at 100% branch (see [tool.coverage-threshold.modules.*] below) —
+# omitting them would remove the D-06 safety targets from the gate.
+omit = ["lightsheet/hal/real/camera.py"]
+
+[tool.coverage.report]
+# exclude_also EXTENDS the default `pragma: no cover` exclusion set (coverage
+# 7.2.0+). Do NOT use exclude_lines — it REPLACES the default set, dropping
+# the pragma:no-cover exclusion.
+exclude_also = [
+    "if __name__ == ['\"]__main__['\"]:",
+    "if sys\\.platform == ['\"]win32['\"]:",
+    "QApplication\\(",
+]
+
+# Per-module branch-coverage gate (D-01/D-06). coverage-threshold reads
+# coverage.json (produced by `coverage json` after pytest-cov combines the
+# -n auto xdist worker data) and enforces per-file thresholds via
+# longest-prefix-wins matching on the module-path keys below.
+[tool.coverage-threshold]
+file_branch_coverage_min = 80
+
+# Safety tier (100% branch) MUST stay in sync with AGENTS.md §2's
+# safety-critical module list.
+[tool.coverage-threshold.modules."lightsheet/hal/real/daqlaser.py"]
+file_branch_coverage_min = 100
+
+[tool.coverage-threshold.modules."lightsheet/hal/real/motors.py"]
+file_branch_coverage_min = 100
+
+[tool.coverage-threshold.modules."lightsheet/hal/real/ibeam_smart.py"]
+file_branch_coverage_min = 100
+
+[tool.coverage-threshold.modules."lightsheet/hal/real/camera.py"]
+file_branch_coverage_min = 0
 
 [tool.ty.rules]
 missing-type-argument = "error"
@@ -85,9 +138,11 @@ error-on-warning = true
 
 [dependency-groups]
 dev = [
+    "coverage-threshold>=0.6.2",
     "h5py-stubs>=0.1.2",
     "pyqt5-stubs>=5.15.6.0",
     "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
     "pytest-xdist>=3.8.0",
     "ruff>=0.16.4",
     "scipy-stubs>=1.15.3.0",
