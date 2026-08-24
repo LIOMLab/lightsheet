@@ -119,7 +119,7 @@ class Optotune(IOptotune):
         """
         Open the serial port and connect
         """
-        self.ser = serial.Serial()
+        self.ser = serial.Serial()  # pragma: no cover — serial.Serial open unreachable on Mac; ETLs.__init__ + set_analog_mode stay measured
         self.ser.baudrate = 115200
         self.ser.port = self.port
         self.ser.timeout = 1.0

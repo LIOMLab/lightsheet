@@ -160,7 +160,7 @@ class IBeam:
     def open(self) -> None:
         """Open the serial port and disable command echo."""
         try:
-            self.ser = serial.Serial()
+            self.ser = serial.Serial()  # pragma: no cover — serial.Serial open unreachable on Mac; set_power/off/_send_cmd stay measured (mock-serial via test_ibeam.py)
             self.ser.baudrate = self.baud_rate
             self.ser.port = self.port
             self.ser.timeout = 3.0
