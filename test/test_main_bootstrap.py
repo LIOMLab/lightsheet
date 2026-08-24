@@ -213,13 +213,13 @@ def test_main_demo_mode_returns_app_exec_exit_code(
 
     # 2. exception_hook: main() set sys.excepthook to the nested
     #    exception_hook. Call it with mocked args to cover lines 233-235.
-    #    Mock sys.exit so it doesn't actually exit.
-    original_exit = sys.exit
+    #    Mock sys.exit so it doesn't actually exit, and mock sys._excepthook
+    #    (the original hook main() saved) so the exception is not forwarded
+    #    into Qt's event loop (which would surface as a "CALL ERROR" and
+    #    fail the test).
     monkeypatch.setattr(sys, "exit", lambda code: None)
-    try:
-        sys.excepthook(ValueError, ValueError("test"), None)
-    finally:
-        monkeypatch.setattr(sys, "exit", original_exit)
+    monkeypatch.setattr(sys, "_excepthook", lambda *a, **kw: None)
+    sys.excepthook(ValueError, ValueError("test"), None)
 
 
 def test_main_rig_path_unresolved_device_shows_dialog_and_exits(

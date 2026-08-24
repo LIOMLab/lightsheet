@@ -153,6 +153,21 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
             if timer is not None:
                 timer.stop()
         qm_patch.stop()
+        # Explicitly destroy the controller's C++ Qt object NOW so its
+        # widget-tree destructors run deterministically at teardown,
+        # rather than being deferred by Python's refcount/GC and racing
+        # with the NEXT test's QMainWindow.__init__. Without this, the
+        # ~5th controller construction in a process segfaults inside
+        # __init__ because a prior controller's deferred C++ destructor
+        # fires mid-construction. The production app constructs exactly
+        # one controller and never reconstructs it, so this is a
+        # test-only lifecycle concern — but the fixture must tear down
+        # deterministically so the suite is stable.
+        import sip
+        try:
+            sip.delete(controller)
+        except (TypeError, RuntimeError):
+            pass
 
     request.addfinalizer(_teardown)
     return controller, bundle

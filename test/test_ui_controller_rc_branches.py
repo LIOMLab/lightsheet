@@ -1,18 +1,19 @@
 """Branch-coverage closure for ``lightsheet.gui.ui_controller_rc``.
 
 This is a PyQt5 resource compiler generated file. The uncovered branches are:
-- The ``qt_version < [5, 8, 0]`` True branch (rcc_version=1 path)
 - The ``qInitResources()`` module-level call (may not be tracked at import)
 
-The tests mock ``QtCore.qVersion()`` and reload the module to exercise the
-version-check branch, and call ``qInitResources`` / ``qCleanupResources``
-directly.
+The ``qt_version < [5, 8, 0]`` True branch (rcc_version=1 path) is a
+module-level branch in GENERATED code. It cannot be covered safely:
+``importlib.reload`` on a Qt rcc module re-runs ``qInitResources()``, which
+re-registers C++ resource data that is not cleaned up by the reload,
+corrupting Qt's internal resource registry. The next ``QMainWindow.__init__``
+(via ``setupUi`` loading ``:/...`` resources) then segfaults. That branch is
+therefore NOT chased here — generated rcc code is not worth destabilising the
+suite for one version-gate branch.
 """
 
 from __future__ import annotations
-
-import importlib
-from unittest.mock import patch
 
 import pytest
 
@@ -27,22 +28,17 @@ def test_qinit_resources_and_qcleanup_resources_callable() -> None:
     ui_controller_rc.qCleanupResources()
 
 
-def test_qt_version_below_5_8_uses_v1_struct() -> None:
-    """When QtCore.qVersion() returns < 5.8.0, the module sets rcc_version=1
-    and uses qt_resource_struct_v1 (the True branch of the version check).
+def test_rcc_version_matches_runtime_qt() -> None:
+    """The module selected the rcc struct matching the running Qt version
+    (covers the version-check expression without reloading the module).
 
-    This test mocks qVersion and reloads the module to exercise the branch."""
+    On Qt >= 5.8 (every supported rig + dev box) ``rcc_version`` is 2 and
+    ``qt_resource_struct`` is ``qt_resource_struct_v2``. Asserting the
+    current selection exercises the version-comparison expression at
+    module load without the unsafe ``importlib.reload`` that corrupts Qt's
+    resource registry."""
     pytest.importorskip("PyQt5")
-    from PyQt5 import QtCore
+    from lightsheet.gui import ui_controller_rc
 
-    with patch.object(QtCore, "qVersion", return_value="5.7.0"):
-        # Reload the module so the version check runs with the mocked value.
-        import lightsheet.gui.ui_controller_rc as mod
-        importlib.reload(mod)
-        try:
-            assert mod.rcc_version == 1
-            assert mod.qt_resource_struct is mod.qt_resource_struct_v1
-        finally:
-            # Restore the real module state.
-            with patch.object(QtCore, "qVersion", return_value=QtCore.qVersion()):
-                importlib.reload(mod)
+    assert ui_controller_rc.rcc_version == 2
+    assert ui_controller_rc.qt_resource_struct is ui_controller_rc.qt_resource_struct_v2
