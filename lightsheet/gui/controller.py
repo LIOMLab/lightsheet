@@ -263,16 +263,18 @@ class Controller_MainWindow(QMainWindow):
         # L2 readback label structure so the two laser columns are visually
         # symmetric. The '(est.)' suffix flags the linear-through-origin
         # estimate as unverified until a rig-measured calibration curve is
-        # loaded (the diode's lab-measured max is 236.6 mW, not the 300 mW
-        # the linear model predicts); _refresh_laser_readback switches to
+        # loaded (the linear model predicts 300 mW at 5V, but the rig-
+        # measured output is ~107.5 mW at 5V due to DPSS threshold knee
+        # and measurement geometry); _refresh_laser_readback switches to
         # '(cal.)' once a curve is present.
         self.label_laserOneReadback = QLabel("0.0 mW (est.)")
         self.label_laserOneReadback.setMinimumWidth(80)
         self.label_laserOneReadback.setToolTip(
             "Linear-through-origin estimate (mW = V * mW_per_volt). "
-            "Unverified — the diode's lab-measured max is 236.6 mW, not "
-            "the 300 mW this model predicts. Run the rig calibration "
-            "sweep to load a measured V->mW curve."
+            "Unverified — the linear model predicts 300 mW at 5V, but "
+            "the rig-measured output is ~107.5 mW at 5V (DPSS threshold "
+            "knee + free-space measurement geometry). Run the rig "
+            "calibration sweep to load a measured V->mW curve."
         )
         self.ui.verticalLayout_43.insertWidget(5, self.label_laserOneReadback)
 

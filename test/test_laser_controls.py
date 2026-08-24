@@ -940,12 +940,12 @@ def test_refresh_laser1_readback_shows_staged_mw() -> None:
     laser1.get_output_power.assert_called_once()
     # Exactly one emit for L1 (idx=0); the L2 label is not touched by an
     # L1 refresh. The L1 (est.) suffix + unverified-estimate tooltip is
-    # asserted on the text + tooltip (the tooltip mentions 236.6 mW).
+    # asserted on the text + tooltip (the tooltip mentions 107.5 mW).
     standin.sig_laser_readback.emit.assert_called_once()
     idx, text, tooltip = standin.sig_laser_readback.emit.call_args.args
     assert idx == 0
     assert text == "12.5 mW (est.)"
-    assert "236.6 mW" in tooltip
+    assert "107.5 mW" in tooltip
 
 
 # --------------------------------------------------------------------------- #

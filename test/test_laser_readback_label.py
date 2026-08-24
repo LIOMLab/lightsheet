@@ -8,7 +8,7 @@ linear-through-origin estimate ("(est.)") from a rig-measured calibration
 
 Behavior covered:
 - L1 uncalibrated (no curve) -> emits "{value:.1f} mW (est.)" with a
-  tooltip mentioning the 236.6 mW lab-measured max.
+  tooltip mentioning the 107.5 mW rig-measured max.
 - L1 calibrated (curve loaded) -> emits "{value:.1f} mW (cal.)" with a
   tooltip mentioning the measured curve.
 - L2 (iBeam) path unchanged -> emits "{value:.1f} mW" with empty tooltip
@@ -65,7 +65,7 @@ def _make_laser_mock(*, calibrated: bool, power: float, output: float | None) ->
 
 def test_l1_uncalibrated_emits_est_suffix() -> None:
     """L1 (idx=0) with calibrated=False -> emits '{value:.1f} mW (est.)'
-    with a tooltip mentioning the 236.6 mW lab-measured max."""
+    with a tooltip mentioning the 107.5 mW rig-measured max."""
     bundle = _make_bundle()
     shell = _make_shell()
     hw = HardwareManager(bundle, shell)
@@ -78,7 +78,7 @@ def test_l1_uncalibrated_emits_est_suffix() -> None:
     idx, text, tooltip = shell.sig_laser_readback.emit.call_args.args
     assert idx == 0
     assert text == "150.0 mW (est.)"
-    assert "236.6 mW" in tooltip
+    assert "107.5 mW" in tooltip
     assert "Unverified" in tooltip or "unverified" in tooltip
 
 
@@ -99,7 +99,7 @@ def test_l1_calibrated_emits_cal_suffix() -> None:
     assert text == "236.6 mW (cal.)"
     assert "Calibrated" in tooltip or "calibrated" in tooltip.lower()
     # Must NOT carry the unverified-estimate warning.
-    assert "236.6 mW, not" not in tooltip
+    assert "107.5 mW, not" not in tooltip
 
 
 def test_l2_path_unchanged_no_suffix() -> None:

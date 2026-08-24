@@ -480,9 +480,10 @@ class HardwareManager:
         The label suffix distinguishes the two so the operator knows
         whether the number is an unverified linear estimate or a
         rig-measured calibration: '(est.)' when uncalibrated, '(cal.)'
-        when a V->mW curve is loaded. The diode's lab-measured max is
-        236.6 mW, ~27% below the 300 mW the linear model predicts at 5 V,
-        so the unverified estimate is flagged explicitly.
+        when a V->mW curve is loaded. The linear model predicts 300 mW
+        at 5V, but the rig-measured output is ~107.5 mW at 5V (DPSS
+        threshold knee + free-space measurement geometry), so the
+        unverified estimate is flagged explicitly.
 
         Works for both lasers: idx=0 (L1/DAQLaser — staged or
         curve-interpolated mW, never None) and idx=1 (L2/iBeam —
@@ -513,10 +514,10 @@ class HardwareManager:
                             f"{value:.1f} mW (est.)",
                             "Linear-through-origin estimate "
                             "(mW = V * mW_per_volt). Unverified — the "
-                            "diode's lab-measured max is 236.6 mW, not "
-                            "the 300 mW this model predicts. Run the rig "
-                            "calibration sweep to load a measured V->mW "
-                            "curve.",
+                            "linear model predicts 300 mW at 5V, but "
+                            "the rig-measured output is ~107.5 mW at 5V. "
+                            "Run the rig calibration sweep to load a "
+                            "measured V->mW curve.",
                         )
                 else:
                     self._shell.sig_laser_readback.emit(

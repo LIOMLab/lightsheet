@@ -49,10 +49,9 @@ estimate. This is a **display-only** mapping: the control path
 (``set_power`` mW -> V via ``mw_per_volt``) and the two-layer clamp are
 untouched. When no curve is loaded (``calibration_curve=None``), behavior is
 unchanged — ``get_output_power()`` returns ``self.power`` and ``calibrated``
-is ``False``. The diode's lab-measured max (236.6 mW) is ~27% below the
-300 mW the linear model predicts at 5 V, and DPSS output vs pump current has
-a threshold knee, so the linear estimate is unverified until a curve is
-loaded.
+is ``False``. The linear model predicts 300 mW at 5 V, but the rig-measured
+output is ~107.5 mW at 5 V (DPSS threshold knee + free-space measurement
+geometry), so the linear estimate is unverified until a curve is loaded.
 """
 
 import logging
