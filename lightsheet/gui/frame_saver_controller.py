@@ -312,11 +312,31 @@ class FrameSaver(QObject):
             self.sig_status_message.emit("File " + self.filenames_list[idx] + " saved")
             if not self.saving_started:
                 break
+        logger.info("frame_saver_worker exited (saving_started=%s)", self.saving_started)
 
     def stop_saving(self) -> None:
-        """Changes the flag status to end the saving thread"""
+        """Signal the save worker to stop and join it with a bounded timeout.
+
+        The flag flip tells the worker to exit its inner loop after the
+        current buffer; the join ensures the HDF5 file is fully closed and
+        h5py's native state is quiesced BEFORE the caller proceeds to disarm
+        the camera / emit the finished signal / reinit for the next run.
+        Without the join, the saver thread outlives the acquisition cleanup
+        and a subsequent reinit (which replaces self.queue) or closeEvent
+        can race with an in-flight h5py write/close — h5py's native library
+        is not thread-safe across concurrent file handles, and the race can
+        corrupt HDF5 state and crash the process with a native segfault.
+        """
         self.saving_started = False
-        # self.frame_saver_thread.join()
+        worker = getattr(self, "frame_saver_thread", None)
+        if worker is not None and worker.is_alive():
+            worker.join(timeout=10.0)
+            if worker.is_alive():
+                logger.warning(
+                    "frame_saver_thread still alive after 10s join timeout "
+                    "in stop_saving — proceeding anyway (HDF5 state may be "
+                    "indeterminate)."
+                )
 
 
 class FrameSaverController:
