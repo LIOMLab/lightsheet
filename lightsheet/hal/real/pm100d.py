@@ -184,11 +184,15 @@ class PM100D(IPowerMeter):
         """Set the measurement wavelength (nm)."""
         assert self._dll is not None
         try:
-            self._dll.TLPMX_setWavelength(
+            status = self._dll.TLPMX_setWavelength(
                 ctypes.c_uint32(self._session),
                 ctypes.c_double(float(wavelength_nm)),
+                ctypes.c_uint16(1),  # channel 1
             )
-            logger.info("PM100D wavelength set to %.1f nm", wavelength_nm)
+            if status != 0:
+                logger.warning("PM100D setWavelength status=%d", status)
+            else:
+                logger.info("PM100D wavelength set to %.1f nm", wavelength_nm)
         except Exception as exc:
             logger.warning("PM100D setWavelength error: %s", exc)
 
@@ -202,7 +206,9 @@ class PM100D(IPowerMeter):
             raise PM100DError("PM100D session not open")
         power = ctypes.c_double(0.0)
         status = self._dll.TLPMX_measPower(
-            ctypes.c_uint32(self._session), ctypes.byref(power)
+            ctypes.c_uint32(self._session),
+            ctypes.byref(power),
+            ctypes.c_uint16(1),  # channel 1
         )
         if status != 0:
             self.error = 1
@@ -249,25 +255,25 @@ class PM100D(IPowerMeter):
         called. The TLPMX driver measures the dark current and subtracts it
         from subsequent readings.
 
-        This calls ``TLPMX_setDarkOffset`` which triggers the dark
+        This calls ``TLPMX_startDarkAdjust`` which triggers the dark
         measurement internally. The operator must ensure the sensor is
         blocked before calling this.
         """
         assert self._dll is not None
         if self._session == 0:
             raise PM100DError("PM100D session not open")
-        # TLPMX_setDarkOffset(ViSession vi, ViBoolean enabled)
-        # Setting enabled=True triggers the dark offset measurement.
-        # The sensor must be blocked when this is called.
+        # TLPMX_startDarkAdjust(ViSession vi, ViUInt16 channel)
+        # This performs the dark offset measurement. The sensor must be
+        # blocked when this is called.
         try:
-            status = self._dll.TLPMX_setDarkOffset(
+            status = self._dll.TLPMX_startDarkAdjust(
                 ctypes.c_uint32(self._session),
-                ctypes.c_int32(1),  # enable dark offset
+                ctypes.c_uint16(1),  # channel 1
             )
             if status != 0:
                 self.error = 1
                 self.error_message = (
-                    f"TLPMX_setDarkOffset failed: status={status}"
+                    f"TLPMX_startDarkAdjust failed: status={status}"
                 )
                 raise PM100DError(self.error_message)
             logger.info("PM100D dark offset performed")
