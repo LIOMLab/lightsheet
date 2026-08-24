@@ -1,0 +1,80 @@
+system:
+  name: Lightsheet microscope
+
+devices:
+  camera:
+    vendor: PCO
+    family: pco.edge family
+    model: pco.edge 4.2 bi
+    serial_number: 18500424
+    interface: USB 3.1 Gen 1
+    sensor_resolution_px:
+      x: 2048
+      y: 2048
+    firmware:
+      - device_index: 0
+        name: ASENA
+        major: 1
+        minor: 14
+        variant: 30
+      - device_index: 1
+        name: EMREN
+        major: 1
+        minor: 0
+        variant: 30
+
+  serial_devices:
+    - port: COM5
+      description: Optotune Lens Driver powered by atmel
+      vid_pid: 03EB:2018
+      serial_number: 75738303238351109060
+      role: ETL left
+    - port: COM6
+      description: Optotune Lens Driver powered by atmel
+      vid_pid: 03EB:2018
+      serial_number: 75738303238351916161
+      role: ETL right
+    - port: COM7
+      description: Prolific USB-to-Serial Comm Port
+      vid_pid: 067B:2303
+      serial_number: null
+      role: Zaber motor stages
+    - port: COM4
+      description: Toptica iBeam Smart 640nm laser (FTDI USB Serial Port)
+      vid_pid: 0403:6001
+      serial_number: FTESFCRWA
+      role: Toptica iBeam Smart 640nm laser
+    - port: COM1
+      description: Port de communication
+      hwid: ACPI\PNP0501\0
+      role: motherboard serial port
+
+  ni_daq:
+    - name: Dev1
+      product_type: PCIe-6363
+      channels:
+        ao: ao0:3
+        do: port0/line1
+      mapped_outputs:
+        galvo_left: /Dev1/ao0
+        galvo_right: /Dev1/ao1
+        etl_left: /Dev1/ao2
+        etl_right: /Dev1/ao3
+        camera_trigger: /Dev1/port0/line1
+    - name: Dev7
+      product_type: USB-6351
+      channels:
+        ao: ao0:1
+      mapped_outputs:
+        laser_1: /Dev7/ao0
+        laser_2: /Dev7/ao1
+
+  motion_stages:
+    controller_port: COM7
+    axes:
+      vertical:
+        device_number: 1
+      horizontal:
+        device_number: 2
+      camera:
+        device_number: 3

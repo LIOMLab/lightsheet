@@ -1,0 +1,564 @@
+"""
+Created on May 16, 2019
+
+@author: Pierre Girard-Collins
+"""
+
+import logging
+
+# National Instruments Imports
+import nidaqmx
+import numpy as np
+from nidaqmx.constants import AcquisitionType, Edge, LineGrouping
+
+from lightsheet.channel_map import ChannelMap
+from lightsheet.config import cfg_read, cfg_str2bool, cfg_write
+from lightsheet.hal.interfaces import ISigGen
+from lightsheet.hal.real.camera import Camera  # real→real dep (D-01)
+from lightsheet.waveforms import sawtooth, squarewave, staircase
+
+logger = logging.getLogger(__name__)
+
+
+class SigGen(ISigGen):
+    """
+    Class for generating and sending timing signals to galvos, etls and camera
+    """
+
+    # Configurable settings defaults
+    # Used as base dictionnary for .ini file allowable keys
+    _cfg_defaults: dict[str, str] = {}  # noqa: RUF012 - class-level config template, populated at definition, never mutated at runtime
+    _cfg_defaults["AO Terminals"] = (
+        "/Dev1/ao0:3"  # DAQ board AO terminals for Galvo + ETL scan ramps
+    )
+    _cfg_defaults["DO Terminals"] = (
+        "/Dev1/port0/line1"  # DAQ board DO terminals for Camera Exposure Control
+    )
+    _cfg_defaults["Sample Rate"] = "40000"  # In samples/second
+    _cfg_defaults["Galvo Pre Time"] = "0.001"  # [s]
+    _cfg_defaults["Galvo Scan Time"] = "0.100"  # [s]
+    _cfg_defaults["Galvo Reset Time"] = "0.025"  # [s]
+    _cfg_defaults["Galvo Post Time"] = "0.001"  # [s]
+    _cfg_defaults["Galvo Activated"] = "True"  # Boolean
+    _cfg_defaults["Galvo Inverted"] = "False"  # Boolean
+    _cfg_defaults["Galvo Left Amplitude"] = "1.0"  # In volts
+    _cfg_defaults["Galvo Left Offset"] = "0.5"  # In volts
+    _cfg_defaults["Galvo Right Amplitude"] = "1.0"  # In volts
+    _cfg_defaults["Galvo Right Offset"] = "0.5"  # In volts
+    _cfg_defaults["ETL Activated"] = "False"  # Boolean
+    _cfg_defaults["ETL Steps"] = "5"  # Number of focus regions over FOV
+    _cfg_defaults["ETL Left Amplitude"] = "1.0"  # In volts
+    _cfg_defaults["ETL Left Offset"] = "0.5"  # In volts
+    _cfg_defaults["ETL Right Amplitude"] = "1.0"  # In volts
+    _cfg_defaults["ETL Right Offset"] = "0.5"  # In volts
+    _cfg_defaults["Galvo Left Right Swap"] = (
+        "False"  # Boolean — rig-verification flip, mechanism only
+    )
+
+    def __init__(self, camera: Camera) -> None:
+        # Error status
+        self.error = 0
+        self.error_message = ""
+
+        # Set diag mode ON
+        self.diag = False
+
+        # We need to know about camera settings to generate the proper waveforms
+        self.camera = camera
+
+        self.task_galvo_etl = None
+        self.task_camera = None
+
+        self.waveform_metadata = None
+        self.waveform_cycles = None
+        self.waveform_camera = None
+        self.waveform_galvo_left = None
+        self.waveform_galvo_right = None
+        self.waveform_etl_left = None
+        self.waveform_etl_right = None
+
+        # read configurable settings from config.ini file
+        self._cfg_filename = "config.ini"
+        self._cfg_section = "SigGen"
+        self.cfg_load_ini()
+
+    def cfg_load_ini(self) -> None:
+        self._cfg = cfg_read(self._cfg_filename, self._cfg_section, self._cfg_defaults)
+
+        # set instance variables from configuration dictionary values
+        self.ao_terminals = str(self._cfg["AO Terminals"])
+        self.do_terminals = str(self._cfg["DO Terminals"])
+        self.sample_rate = int(self._cfg["Sample Rate"])
+        self.galvo_pre_time = float(self._cfg["Galvo Pre Time"])
+        self.galvo_scan_time = float(self._cfg["Galvo Scan Time"])
+        self.galvo_reset_time = float(self._cfg["Galvo Reset Time"])
+        self.galvo_post_time = float(self._cfg["Galvo Post Time"])
+        self.galvo_activated = cfg_str2bool(self._cfg["Galvo Activated"])
+        self.galvo_inverted = cfg_str2bool(self._cfg["Galvo Inverted"])
+        self.galvo_left_amplitude = float(self._cfg["Galvo Left Amplitude"])
+        self.galvo_left_offset = float(self._cfg["Galvo Left Offset"])
+        self.galvo_right_amplitude = float(self._cfg["Galvo Right Amplitude"])
+        self.galvo_right_offset = float(self._cfg["Galvo Right Offset"])
+        self.etl_activated = cfg_str2bool(self._cfg["ETL Activated"])
+        self.etl_steps = int(self._cfg["ETL Steps"])
+        self.etl_left_amplitude = float(self._cfg["ETL Left Amplitude"])
+        self.etl_left_offset = float(self._cfg["ETL Left Offset"])
+        self.etl_right_amplitude = float(self._cfg["ETL Right Amplitude"])
+        self.etl_right_offset = float(self._cfg["ETL Right Offset"])
+        self.galvo_left_right_swap = cfg_str2bool(self._cfg["Galvo Left Right Swap"])
+        # Channel-reversal + per-channel clamp policy (RFR-04 mechanism).
+        # galvo_left_right_swap defaults to False — the actual flip against
+        # real hardware is rig-verification work (HW2-02) and is NOT
+        # attempted from the dev Mac (AGENTS.md §13). The clamp methods are
+        # applied unconditionally at all four np.stack sites, independent of
+        # the swap flag (threat T-05-12 mitigation).
+        self.channel_map = ChannelMap(
+            galvo_left_right_swap=self.galvo_left_right_swap
+        )
+
+        ao_device = self.ao_terminals.rsplit("/", 1)[0]
+        ao_channels = self.ao_terminals.rsplit("/", 1)[1][2:].rsplit(":")
+        self.do_start_trigger = ao_device + "/ao/StartTrigger"
+        self.galvo_terminals = (
+            ao_device + "/ao" + ao_channels[0] + ":" + str(int(ao_channels[0]) + 1)
+        )
+        self.etl_terminals = (
+            ao_device + "/ao" + str(int(ao_channels[1]) - 1) + ":" + ao_channels[1]
+        )
+
+    def cfg_save_ini(self) -> None:
+        # pack current instance variables into configuration dictionary
+        self._cfg = {}
+        self._cfg["AO Terminals"] = str(self.ao_terminals)
+        self._cfg["DO Terminals"] = str(self.do_terminals)
+        self._cfg["Sample Rate"] = str(self.sample_rate)
+        self._cfg["Galvo Pre Time"] = str(self.galvo_pre_time)
+        self._cfg["Galvo Scan Time"] = str(self.galvo_scan_time)
+        self._cfg["Galvo Reset Time"] = str(self.galvo_reset_time)
+        self._cfg["Galvo Post Time"] = str(self.galvo_post_time)
+        self._cfg["Galvo Activated"] = str(self.galvo_activated)
+        self._cfg["Galvo Inverted"] = str(self.galvo_inverted)
+        self._cfg["Galvo Left Amplitude"] = str(self.galvo_left_amplitude)
+        self._cfg["Galvo Left Offset"] = str(self.galvo_left_offset)
+        self._cfg["Galvo Right Amplitude"] = str(self.galvo_right_amplitude)
+        self._cfg["Galvo Right Offset"] = str(self.galvo_right_offset)
+        self._cfg["ETL Activated"] = str(self.etl_activated)
+        self._cfg["ETL Steps"] = str(self.etl_steps)
+        self._cfg["ETL Left Amplitude"] = str(self.etl_left_amplitude)
+        self._cfg["ETL Left Offset"] = str(self.etl_left_offset)
+        self._cfg["ETL Right Amplitude"] = str(self.etl_right_amplitude)
+        self._cfg["ETL Right Offset"] = str(self.etl_right_offset)
+        self._cfg["Galvo Left Right Swap"] = str(self.galvo_left_right_swap)
+
+        self._cfg = cfg_write(self._cfg_filename, self._cfg_section, self._cfg)
+
+    def update_all(
+        self, left_galvo: float, right_galvo: float, left_etl: float, right_etl: float
+    ) -> None:
+        # Channel-reversal mechanism (RFR-04): order_galvos is called with
+        # (right, left) positionally so galvo_left_right_swap=False returns
+        # (right, left) unchanged — preserving today's literal stack order
+        # exactly — and only =True returns (left, right), the swap the FIXME
+        # comments describe. The actual flip is rig-verification work
+        # (HW2-02); the default ships behavior-preserving (AGENTS.md §13).
+        # Per-channel clamps are applied unconditionally, independent of the
+        # swap flag (threat T-05-12 mitigation).
+        galvo_first, galvo_second = self.channel_map.order_galvos(
+            right_galvo, left_galvo
+        )
+        galvo_etl_setpoints = np.stack(
+            (
+                np.array([self.channel_map.clamp_galvo(galvo_first)]),
+                np.array([self.channel_map.clamp_galvo(galvo_second)]),
+                np.array([self.channel_map.clamp_etl(left_etl)]),
+                np.array([self.channel_map.clamp_etl(right_etl)]),
+            )
+        )
+        # Running task
+        try:
+            with nidaqmx.Task(new_task_name="galvo_etl_setpoint") as task_update_all:
+                task_update_all.ao_channels.add_ao_voltage_chan(self.ao_terminals)
+                task_update_all.write(galvo_etl_setpoints, auto_start=True)
+        except Exception:
+            self.error = 1
+            self.error_message = "update_all error"
+            logger.exception("SigGen - update_all error")
+
+    def update_galvos(self, left_galvo: float, right_galvo: float) -> None:
+        # Channel-reversal mechanism (RFR-04) — see update_all for the
+        # (right, left) positional call rationale. Clamp is unconditional.
+        galvo_first, galvo_second = self.channel_map.order_galvos(
+            right_galvo, left_galvo
+        )
+        galvo_setpoints = np.stack(
+            (
+                np.array([self.channel_map.clamp_galvo(galvo_first)]),
+                np.array([self.channel_map.clamp_galvo(galvo_second)]),
+            )
+        )
+        # Running task
+        try:
+            with nidaqmx.Task(new_task_name="galvo_single") as task_update_galvos:
+                task_update_galvos.ao_channels.add_ao_voltage_chan(self.galvo_terminals)
+                task_update_galvos.write(galvo_setpoints, auto_start=True)
+        except Exception:
+            self.error = 1
+            self.error_message = "update_galvos error"
+            logger.exception("SigGen - update_galvos error")
+
+    def update_etls(self, left_etl: float, right_etl: float) -> None:
+        # ETL channels are not subject to the galvo left/right swap; the
+        # per-channel clamp is applied unconditionally (threat T-05-12).
+        etl_setpoints = np.stack(
+            (
+                np.array([self.channel_map.clamp_etl(left_etl)]),
+                np.array([self.channel_map.clamp_etl(right_etl)]),
+            )
+        )
+        # Running task
+        try:
+            with nidaqmx.Task(new_task_name="etl_single") as task_update_etls:
+                task_update_etls.ao_channels.add_ao_voltage_chan(self.etl_terminals)
+                task_update_etls.write(etl_setpoints, auto_start=True)
+        except Exception:
+            self.error = 1
+            self.error_message = "update_etls error"
+            logger.exception("SigGen - update_etls error")
+
+    def create_scanner(self) -> None:
+        """Creates Galvo + ETL scan task (AO) + Camera Exposure Control task (DO)"""
+
+        # Channel-reversal mechanism (RFR-04) — order_galvos called with
+        # (waveform_right, waveform_left) positionally so swap=False returns
+        # (right, left) unchanged, preserving today's literal stack order.
+        # Array clamps use np.clip against the channel_map limits; the galvo
+        # ±10V clamp and the ETL non-negative ceiling are applied
+        # unconditionally, independent of the swap flag (threat T-05-12).
+        galvo_first, galvo_second = self.channel_map.order_galvos(
+            self.waveform_galvo_right, self.waveform_galvo_left
+        )
+        galvo_first = np.clip(
+            galvo_first,
+            -self.channel_map.galvo_voltage_limit,
+            self.channel_map.galvo_voltage_limit,
+        )
+        galvo_second = np.clip(
+            galvo_second,
+            -self.channel_map.galvo_voltage_limit,
+            self.channel_map.galvo_voltage_limit,
+        )
+        etl_left_clipped = np.clip(
+            self.waveform_etl_left, 0.0, self.channel_map.etl_voltage_limit
+        )
+        etl_right_clipped = np.clip(
+            self.waveform_etl_right, 0.0, self.channel_map.etl_voltage_limit
+        )
+        galvo_etl_waveforms = np.stack(
+            (
+                galvo_first,
+                galvo_second,
+                etl_left_clipped,
+                etl_right_clipped,
+            )
+        )
+
+        try:
+            # Creating and setting up the galvo + ETL scan task (AO)
+            self.task_galvo_etl = nidaqmx.Task(new_task_name="galvo_etl_scan")
+            self.task_galvo_etl.ao_channels.add_ao_voltage_chan(self.ao_terminals)
+            self.task_galvo_etl.timing.cfg_samp_clk_timing(
+                rate=self.sample_rate,
+                sample_mode=AcquisitionType.FINITE,
+                samps_per_chan=self.total_samples,
+            )
+
+            # Creating and setting up the camera exposure control task (DO)
+            self.task_camera = nidaqmx.Task(new_task_name="camera_scan")
+            self.task_camera.do_channels.add_do_chan(
+                self.do_terminals, line_grouping=LineGrouping.CHAN_PER_LINE
+            )
+            self.task_camera.timing.cfg_samp_clk_timing(
+                rate=self.sample_rate,
+                sample_mode=AcquisitionType.FINITE,
+                samps_per_chan=self.total_samples,
+            )
+
+            # Setup DO task triggered by AO start_trigger (AO is master task)
+            self.task_camera.triggers.start_trigger.cfg_dig_edge_start_trig(
+                self.do_start_trigger, trigger_edge=Edge.RISING
+            )
+
+            # Write waveforms to AO and DO tasks (to be started later)
+            self.task_camera.write(self.waveform_camera, auto_start=False)
+            self.task_galvo_etl.write(galvo_etl_waveforms, auto_start=False)
+        except Exception:
+            self.task_galvo_etl = None
+            self.task_camera = None
+            self.error = 1
+            self.error_message = "create_scan error"
+            logger.exception("SigGen - create_scan error")
+
+    def start_scanner(self) -> None:
+        """Start both AO and DO tasks"""
+        if self.task_galvo_etl is not None and self.task_camera is not None:
+            # Master task needs to be started last
+            self.task_camera.start()
+            self.task_galvo_etl.start()
+
+    def monitor_scanner(self) -> None:
+        """Wait for AO and DO tasks to complete"""
+        if self.task_galvo_etl is not None and self.task_camera is not None:
+            self.task_camera.wait_until_done()
+            self.task_galvo_etl.wait_until_done()
+
+    def stop_scanner(self) -> None:
+        """Stop AO and DO tasks"""
+        if self.task_galvo_etl is not None and self.task_camera is not None:
+            self.task_camera.stop()
+            self.task_galvo_etl.stop()
+
+    def delete_scanner(self) -> None:
+        """Delete AO and DO tasks"""
+        if self.task_galvo_etl is not None and self.task_camera is not None:
+            self.task_camera.close()
+            self.task_camera = None
+            self.task_galvo_etl.close()
+            self.task_galvo_etl = None
+
+    def compute_scan_waveforms(self) -> None:
+        """Compute Galvo + ETL scan ramps and Camera Exposure waveforms."""
+
+        if self.camera.shutter_mode == "Lightsheet":
+            # Assuming vertical scan amplitude exactly matching camera FOV,
+            # galvo line speed must match camera line speed
+            # TODO Add correction for potential galvo overscan
+            # (will require voltage to optical displacement conversion)
+            self.galvo_scan_time = self.camera.line_time * self.camera.ysize
+            # In Lightsheet mode, exposure time is overriden by line time
+            # and exposed lines settings
+            camera_active_time = (
+                self.camera.line_time * self.camera.lightsheet_exposed_lines
+            )
+            camera_delay_time = 3 * self.camera.line_time
+            camera_delay_samples = int(np.ceil(camera_delay_time * self.sample_rate))
+
+        elif self.camera.shutter_mode == "Rolling":
+            if self.diag:
+                print("Testing rolling shutter signals generator")
+                # In Rolling mode, adjust galvo_scan_time to camera exposure
+                self.galvo_scan_time = self.camera.exposure_time
+                camera_data_readout_time = (
+                    0.5 * self.camera.ysize * self.camera.line_time
+                )
+                camera_active_time = self.galvo_scan_time + camera_data_readout_time
+                camera_delay_time = camera_data_readout_time
+                camera_delay_samples = int(
+                    np.ceil(camera_delay_time * self.sample_rate)
+                )
+                assert (
+                    self.galvo_pre_time + self.galvo_reset_time + self.galvo_post_time
+                    >= camera_data_readout_time
+                ), (
+                    "Time between galvo scan [reset_time + post_time"
+                    " + next pre-time] is not long enough for camera"
+                    " to complete data readout"
+                )
+            else:
+                # In Rolling mode, adjust galvo_scan_time to camera exposure
+                self.galvo_scan_time = self.camera.exposure_time + (
+                    self.camera.line_time * 0.5 * self.camera.ysize
+                )
+                # FIXME clean things up with galvo_scan_time
+                camera_active_time = self.galvo_scan_time - (
+                    self.camera.line_time * 0.5 * self.camera.ysize
+                )
+                camera_delay_time = 3 * self.camera.line_time + (
+                    self.camera.line_time * 0.5 * self.camera.ysize
+                )
+                camera_delay_samples = int(
+                    np.ceil(camera_delay_time * self.sample_rate)
+                )
+                camera_data_readout_time = (
+                    0.5 * self.camera.ysize + 1
+                ) * self.camera.line_time
+                assert (
+                    self.galvo_pre_time + self.galvo_reset_time + self.galvo_post_time
+                    >= camera_data_readout_time
+                ), (
+                    "Time between galvo scan [reset_time + post_time"
+                    " + next pre-time] is not long enough for camera"
+                    " to complete data readout"
+                )
+
+        elif self.camera.shutter_mode == "Global":
+            self.galvo_scan_time = self.camera.exposure_time
+            camera_active_time = self.galvo_scan_time
+            camera_delay_time = (0.5 * self.camera.ysize + 1) * self.camera.line_time
+            camera_delay_samples = int(np.ceil(camera_delay_time * self.sample_rate))
+            camera_data_readout_time = (
+                0.5 * self.camera.ysize + 1
+            ) * self.camera.line_time
+            assert (
+                self.galvo_pre_time + self.galvo_reset_time + self.galvo_post_time
+                >= camera_data_readout_time
+            ), (
+                "Time between galvo scan [reset_time + post_time"
+                " + next pre-time] is not long enough for camera"
+                " to complete data readout"
+            )
+
+        else:
+            raise Exception("camera shutter mode not supported")
+
+        # Save current settings to waveform metadata
+        self.waveform_metadata = {}
+        self.waveform_metadata["Camera Shutter Mode"] = str(self.camera.shutter_mode)
+        self.waveform_metadata["Camera Exposure Time"] = str(self.camera.exposure_time)
+        self.waveform_metadata["Galvo Activated"] = str(self.galvo_activated)
+        self.waveform_metadata["Galvo Inverted"] = str(self.galvo_inverted)
+        self.waveform_metadata["Galvo Left Amplitude"] = str(self.galvo_left_amplitude)
+        self.waveform_metadata["Galvo Left Offset"] = str(self.galvo_left_offset)
+        self.waveform_metadata["Galvo Right Amplitude"] = str(
+            self.galvo_right_amplitude
+        )
+        self.waveform_metadata["Galvo Right Offset"] = str(self.galvo_right_offset)
+        self.waveform_metadata["ETL Activated"] = str(self.etl_activated)
+        self.waveform_metadata["ETL Steps"] = str(self.etl_steps)
+        self.waveform_metadata["ETL Left Amplitude"] = str(self.etl_left_amplitude)
+        self.waveform_metadata["ETL Left Offset"] = str(self.etl_left_offset)
+        self.waveform_metadata["ETL Right Amplitude"] = str(self.etl_right_amplitude)
+        self.waveform_metadata["ETL Right Offset"] = str(self.etl_right_offset)
+
+        # Number of period cycles over the complete waveform
+        # (equal to current etl_steps value, but only updated with
+        # waveform generation)
+        self.waveform_cycles = self.etl_steps
+
+        # galvo waveform generator inputs
+        galvo_activated = self.galvo_activated
+        galvo_pre_samples = int(np.ceil(self.galvo_pre_time * self.sample_rate))
+        galvo_scan_samples = int(np.ceil(self.galvo_scan_time * self.sample_rate))
+        galvo_reset_samples = int(np.ceil(self.galvo_reset_time * self.sample_rate))
+        galvo_post_samples = int(np.ceil(self.galvo_post_time * self.sample_rate))
+        galvo_period_samples = (
+            galvo_pre_samples
+            + galvo_scan_samples
+            + galvo_reset_samples
+            + galvo_post_samples
+        )
+        galvo_shift = camera_delay_samples
+        galvo_repeat = self.waveform_cycles
+        galvo_inverted = self.galvo_inverted
+
+        # etl waveform generator inputs
+        etl_activated = self.etl_activated
+        etl_step_samples = galvo_period_samples
+        etl_steps = self.waveform_cycles
+        etl_shift = (
+            camera_delay_samples
+            - int(np.ceil(galvo_reset_samples / 2))
+            - galvo_post_samples
+        )
+
+        # camera waveform generator inputs
+        camera_pre_samples = galvo_pre_samples
+        camera_active_samples = int(np.ceil(camera_active_time * self.sample_rate))
+        camera_post_samples = (
+            galvo_period_samples - camera_pre_samples - camera_active_samples
+        )
+        camera_shift = 0
+        camera_repeat = self.waveform_cycles
+        camera_inverted = False
+
+        # Number of samples for acquistion sequence
+        # (period * number of etl focus positions)
+        self.total_samples = galvo_period_samples * self.waveform_cycles
+
+        # Time required for an acquisition sequence
+        self.total_time = self.total_samples / self.sample_rate
+
+        # Compute camera waveform
+        self.waveform_camera = squarewave(
+            pre_samples=camera_pre_samples,
+            active_samples=camera_active_samples,
+            post_samples=camera_post_samples,
+            shift=camera_shift,
+            repeat=camera_repeat,
+            inverted=camera_inverted,
+        )
+        # Compute galvos waveforms
+        self.waveform_galvo_left = sawtooth(
+            activated=galvo_activated,
+            pre_samples=galvo_pre_samples,
+            trace_samples=galvo_scan_samples,
+            retrace_samples=galvo_reset_samples,
+            post_samples=galvo_post_samples,
+            shift=galvo_shift,
+            repeat=galvo_repeat,
+            amplitude=self.galvo_left_amplitude,
+            offset=self.galvo_left_offset,
+            inverted=galvo_inverted,
+            filtered=True,
+        )
+
+        self.waveform_galvo_right = sawtooth(
+            activated=galvo_activated,
+            pre_samples=galvo_pre_samples,
+            trace_samples=galvo_scan_samples,
+            retrace_samples=galvo_reset_samples,
+            post_samples=galvo_post_samples,
+            shift=galvo_shift,
+            repeat=galvo_repeat,
+            amplitude=self.galvo_right_amplitude,
+            offset=self.galvo_right_offset,
+            inverted=galvo_inverted,
+            filtered=True,
+        )
+        # Compute etls waveforms
+        self.waveform_etl_left = staircase(
+            activated=etl_activated,
+            step_samples=etl_step_samples,
+            nbr_steps=etl_steps,
+            shift=etl_shift,
+            amplitude=self.etl_left_amplitude,
+            offset=self.etl_left_offset,
+            direction="down",
+            filtered=True,
+        )
+
+        self.waveform_etl_right = staircase(
+            activated=etl_activated,
+            step_samples=etl_step_samples,
+            nbr_steps=etl_steps,
+            shift=etl_shift,
+            amplitude=self.etl_right_amplitude,
+            offset=self.etl_right_offset,
+            direction="up",
+            filtered=True,
+        )
+
+
+if __name__ == "__main__":
+    from matplotlib import pyplot as plt
+
+    test_camera = Camera()
+    if test_camera.camera is None:
+        test_camera.xsize = 2048
+        test_camera.ysize = 2048
+        test_camera.line_time = 12.174 * 1e-6
+    test_camera.exposure_time = 0.500
+    test_camera.shutter_mode = "Lightsheet"
+    test_scanner = SigGen(test_camera)
+    # test_scanner.etl_steps = 2
+    # test_scanner.sample_rate = 1000
+    # test_scanner.test = False
+    test_scanner.compute_scan_waveforms()
+    print(test_scanner.waveform_metadata)
+
+    time_axis = np.arange(0, test_scanner.waveform_camera.size)
+    plt.plot(time_axis, test_scanner.waveform_camera)
+    plt.plot(time_axis, test_scanner.waveform_galvo_left)
+    plt.plot(time_axis, test_scanner.waveform_galvo_right)
+    plt.plot(time_axis, test_scanner.waveform_etl_left)
+    plt.plot(time_axis, test_scanner.waveform_etl_right)
+    plt.show()
