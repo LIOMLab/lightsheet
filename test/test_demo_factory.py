@@ -23,17 +23,12 @@ body's module-level name lookups resolve. This runs the real factory code —
 the same code that runs on the rig — without instantiating the Qt window.
 """
 
-import os
-import re
 from collections.abc import Callable
 from typing import Any
 from unittest.mock import Mock
 
+from _helpers.controller import _CONTROLLER_SRC, _load_method as _base_load_method, _slice_method
 from lightsheet.__main__ import _resolve_demo
-
-_CONTROLLER_SRC = os.path.join(
-    os.path.dirname(__file__), "..", "lightsheet", "gui", "controller.py"
-)
 
 
 def _read_controller_source() -> str:
@@ -41,21 +36,10 @@ def _read_controller_source() -> str:
         return f.read()
 
 
-def _slice_method(src: str, method_sig: str) -> str:
-    """Return the body of a method, from its `def <sig>:` line up to the
-    next top-level def/@pyqtSlot decorator."""
-    m = re.search(r"def " + re.escape(method_sig) + r":", src)
-    assert m, f"{method_sig} is missing"
-    body = src[m.start() :]
-    end = re.search(r"\n    def |\n    @pyqtSlot", body[1:])
-    if end:
-        body = body[: end.start() + 1]
-    return body
-
-
 def _load_method(method_sig: str) -> Callable[..., Any]:
-    """Extract a method body from lightsheet/gui/controller.py and return a
-    callable `func(self)` that executes the real source.
+    """Demo-factory-specialized ``_load_method`` — delegates to the canonical
+    helper in ``_helpers.controller`` with the ``hardware_init`` namespace
+    seeding (Qt class mocks + real ``Camera`` + ``cfg_read``).
 
     The exec namespace is built manually rather than seeded from the
     controller module globals, because importing ``lightsheet.gui.controller``
@@ -71,18 +55,7 @@ def _load_method(method_sig: str) -> Callable[..., Any]:
     from lightsheet.config import cfg_read
     from lightsheet.hal import Camera
 
-    src = _read_controller_source()
-    body = _slice_method(src, method_sig)
-    # Build the namespace with the module-level names hardware_init uses.
-    # Qt classes and the non-Camera HAL classes are Mocked — the factory
-    # branch under test only needs Camera (real) to be constructible so
-    # the demo/real branch assignment can be asserted. MockCamera /
-    # MockLaser / DAQLaser / IBeamSmartLaser are imported locally inside
-    # the branches (`from lightsheet.hal import ...`), so they resolve at
-    # runtime without being in the namespace. cfg_read is a module-level
-    # import in controller.py and is referenced by the real branch to load
-    # Laser 1 calibration from config.ini.
-    namespace: dict[str, Any] = {
+    extra_globals: dict[str, Any] = {
         "QApplication": Mock(),
         "Qt": Mock(),
         "QTimer": Mock(),
@@ -94,9 +67,9 @@ def _load_method(method_sig: str) -> Callable[..., Any]:
         "Camera": Camera,
         "cfg_read": cfg_read,
     }
-    exec(compile(body, _CONTROLLER_SRC, "exec"), namespace)
-    func_name = method_sig.split("(")[0].strip()
-    return namespace[func_name]
+    return _base_load_method(
+        method_sig, extra_globals=extra_globals, src_path=_CONTROLLER_SRC
+    )
 
 
 # --------------------------------------------------------------------------- #

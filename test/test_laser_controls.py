@@ -18,36 +18,11 @@ code. See AGENTS.md §5.
 """
 
 import contextlib
-import os
-import re
 import threading
-from collections.abc import Callable
-from typing import Any
 from unittest.mock import Mock
 
-_CONTROLLER_SRC = os.path.join(
-    os.path.dirname(__file__), "..", "lightsheet", "gui", "controller.py"
-)
-_HW_SRC = os.path.join(
-    os.path.dirname(__file__), "..", "lightsheet", "gui", "hardware_manager.py"
-)
-
-
-def _read_controller_source() -> str:
-    with open(_CONTROLLER_SRC, encoding="utf-8") as f:
-        return f.read()
-
-
-def _slice_method(src: str, method_sig: str) -> str:
-    """Return the body of a method, from its `def <sig>:` line up to the
-    next top-level def/@pyqtSlot decorator."""
-    m = re.search(r"def " + re.escape(method_sig) + r":", src)
-    assert m, f"{method_sig} is missing"
-    body = src[m.start() :]
-    end = re.search(r"\n    def |\n    @pyqtSlot", body[1:])
-    if end:
-        body = body[: end.start() + 1]
-    return body
+from _helpers.controller import _HW_SRC, _load_method
+from _helpers.factories import _make_write_laser
 
 
 # --------------------------------------------------------------------------- #
@@ -91,46 +66,6 @@ def test_pct_scaling_zero() -> None:
 # with a minimal stand-in self. This exercises the real method body — the
 # same code that runs on the rig — without needing the Qt runtime.
 # --------------------------------------------------------------------------- #
-
-
-def _load_method(method_sig: str, src_path: str = _CONTROLLER_SRC) -> Callable[..., Any]:
-    """Extract a method body from the given source file and return a callable
-    `func(self, pct)` that executes the real source. Defaults to
-    controller.py; pass `_HW_SRC` for the methods moved to
-    HardwareManager (Phase 5 god-object split)."""
-    with open(src_path, encoding="utf-8") as f:
-        src = f.read()
-    body = _slice_method(src, method_sig)
-    # The body starts with `def <sig>:` — strip the docstring/def line and
-    # re-wrap as a standalone function. _slice_method returns from the
-    # `def` line, so the whole thing is already a valid function def.
-    namespace = {}
-    exec(compile(body, src_path, "exec"), namespace)
-    func_name = method_sig.split("(")[0].strip()
-    return namespace[func_name]
-
-
-def _make_write_laser(
-    label: str,
-    active: bool = True,
-    max_power: float = 5.0,
-    error: int = 0,
-    error_message: str = "",
-) -> Mock:
-    """Build a Mock ILaser stand-in for the _write_laser*_power paths.
-
-    The write paths read .active, .max_power, .error, .error_message,
-    .label, and call .set_power(mw). The per-instance RLock lives on
-    ._lock (the daemon-thread write path acquires it).
-    """
-    laser = Mock()
-    laser.label = label
-    laser.active = active
-    laser.max_power = max_power
-    laser.error = error
-    laser.error_message = error_message
-    laser._lock = threading.RLock()
-    return laser
 
 
 def test_write_laser1_power_skips_when_estop_set() -> None:

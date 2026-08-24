@@ -31,67 +31,10 @@ tests):
        list[ILaser] instances, not hardcoded numbers (LSR-05)
 """
 
-import datetime
-import logging
-import os
-import re
 import threading
-from collections.abc import Callable
-from typing import Any
 from unittest.mock import Mock
 
-_CONTROLLER_SRC = os.path.join(
-    os.path.dirname(__file__), "..", "lightsheet", "gui", "controller.py"
-)
-_HW_SRC = os.path.join(
-    os.path.dirname(__file__), "..", "lightsheet", "gui", "hardware_manager.py"
-)
-_ACQ_SRC = os.path.join(
-    os.path.dirname(__file__), "..", "lightsheet", "gui", "acquisition_coordinator.py"
-)
-
-
-def _read_controller_source() -> str:
-    with open(_CONTROLLER_SRC, encoding="utf-8") as f:
-        return f.read()
-
-
-def _slice_method(src: str, method_sig: str) -> str:
-    """Return the body of a method, from its `def <sig>:` line up to the
-    next top-level def/@pyqtSlot decorator."""
-    m = re.search(r"def " + re.escape(method_sig) + r":", src)
-    assert m, f"{method_sig} is missing"
-    body = src[m.start() :]
-    end = re.search(r"\n    def |\n    @pyqtSlot", body[1:])
-    if end:
-        body = body[: end.start() + 1]
-    return body
-
-
-def _load_method(
-    method_sig: str, extra_globals: dict[str, Any] | None = None,
-    src_path: str = _CONTROLLER_SRC,
-) -> Callable[..., Any]:
-    """Extract a method body from the given source file and return a callable
-    that executes the real source. Defaults to controller.py; pass `_HW_SRC`
-    for methods moved to HardwareManager. `extra_globals` seeds the exec
-    namespace with module-level names the body references (datetime, logging,
-    logger, ...). `logger` is the module-level logger the source declares;
-    seeding it here lets the migrated logger.* calls resolve when the body
-    is exec'd in isolation."""
-    with open(src_path, encoding="utf-8") as f:
-        src = f.read()
-    body = _slice_method(src, method_sig)
-    namespace = {
-        "datetime": datetime,
-        "logging": logging,
-        "logger": logging.getLogger("test_controller_behavior"),
-    }
-    if extra_globals:
-        namespace.update(extra_globals)
-    exec(compile(body, src_path, "exec"), namespace)
-    func_name = method_sig.split("(")[0].strip()
-    return namespace[func_name]
+from _helpers.controller import _ACQ_SRC, _HW_SRC, _load_method
 
 
 # --------------------------------------------------------------------------- #
