@@ -273,20 +273,38 @@ def test_updateUi_units_um(qtbot, request) -> None:
 
 def test_updateUi_position_horizontal(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
+    # Clear the label first — hardware_init already populated it, so a bare
+    # `!= ""` assertion would pass even if the method were a no-op. Asserting
+    # the method re-writes the expected formatted value proves it ran.
+    ctrl.ui.label_sampleCurrentHPosition.setText("")
+    expected = ctrl.units_fixformat.format(
+        ctrl.motors.horizontal.get_position(ctrl.units), ctrl.units
+    )
     ctrl.updateUi_position_horizontal()
-    assert ctrl.ui.label_sampleCurrentHPosition.text() != ""
+    assert ctrl.ui.label_sampleCurrentHPosition.text() == expected
+    assert ctrl.current_horizontal_position_text == expected
 
 
 def test_updateUi_position_vertical(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
+    ctrl.ui.label_sampleCurrentVPosition.setText("")
+    expected = ctrl.units_fixformat.format(
+        ctrl.motors.vertical.get_position(ctrl.units), ctrl.units
+    )
     ctrl.updateUi_position_vertical()
-    assert ctrl.ui.label_sampleCurrentVPosition.text() != ""
+    assert ctrl.ui.label_sampleCurrentVPosition.text() == expected
+    assert ctrl.current_vertical_position_text == expected
 
 
 def test_updateUi_position_camera(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
+    ctrl.ui.label_cameraCurrentPosition.setText("")
+    expected = ctrl.units_fixformat.format(
+        ctrl.motors.camera.get_position(ctrl.units), ctrl.units
+    )
     ctrl.updateUi_position_camera()
-    assert ctrl.ui.label_cameraCurrentPosition.text() != ""
+    assert ctrl.ui.label_cameraCurrentPosition.text() == expected
+    assert ctrl.current_camera_position_text == expected
 
 
 # -- Laser amplitude / toggle -----------------------------------------------

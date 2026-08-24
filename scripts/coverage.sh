@@ -70,7 +70,7 @@ cd "${REPO_ROOT}"
 # broken at the connection layer in Phase 6 (functools.partial + weakref or
 # bound pyqtSlot methods replace the self-capturing lambdas); Phase 7 (Qt6
 # port) only confirms it, so xdist can come back as soon as Phase 6 lands.
-uv run pytest test/ -q --cov=lightsheet --cov-branch -p no:xdist -o "addopts=" || _pytest_exit=$?
+uv run pytest test/ -q --cov=lightsheet --cov-branch -p no:xdist -o "addopts=--strict-markers" || _pytest_exit=$?
 # Tolerate the shutdown segfault (exit 139): the .coverage file is written
 # BEFORE Python atexit runs, so the data is complete even when the process
 # segfaults at shutdown. Any other non-zero exit (test failure, real error)

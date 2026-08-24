@@ -80,6 +80,7 @@ markers = [
     "rig: requires real hardware (set LIGHTSHEET_HW=1)",
     "mock: mock-only path (default on Mac)",
     "slow: slow test, auto-deselected from fast iteration by convention",
+    "xdist_group: pytest-xdist group for running tests on the same worker (rig hardware)",
 ]
 
 # Coverage gate machinery (D-01/D-05). The gate is an explicit, separate
