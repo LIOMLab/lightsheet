@@ -117,6 +117,34 @@ def test_on_write_failure_reverts_state() -> None:
     assert laser.active is False
 
 
+def test_set_power_active_writes_via_write_volts() -> None:
+    """set_power on an ACTIVE laser writes via _write_volts (the if
+    self.active branch). The conftest nidaqmx stub makes nidaqmx.Task()
+    raise nidaqmx.errors.Error, so the typed-except path fires: error==1,
+    active==False after the write-failure revert. This is the DISTINCT
+    active=True arc from the inactive arc (test_set_power_inactive_no_write)
+    — both must be exercised for 100% branch coverage of set_power.
+
+    Skipped on the rig: the real DAQmx write succeeds (no stub to raise),
+    and set_power on an active laser energizes it — a power-setting
+    command that requires explicit operator action per AGENTS.md §2."""
+    if _has_hardware:
+        pytest.skip("Mac-only stub-failure path — on the rig the real DAQ write succeeds")
+    laser = _make_l1()
+    # Energize the laser (on() attempts a 0 V write which fails on the
+    # stub, reverting active=False). Set active=True directly to simulate
+    # the post-energization state where a daemon set_power adjusts power.
+    laser.active = True
+    laser.set_power(150.0)
+    # set_power staged the clamped mW value.
+    assert laser.power == 150.0
+    # The active=True branch called _write_volts -> stub raised -> error
+    # surface populated, active reverted to False (write-failure revert).
+    assert laser.error == 1
+    assert isinstance(laser.error_message, str) and laser.error_message != ""
+    assert laser.active is False
+
+
 def test_off_is_synchronous() -> None:
     """off() is synchronous: returns None and leaves active == False and
     power == 0.0 immediately (no thread/queue offload — E-stop kill path)."""
