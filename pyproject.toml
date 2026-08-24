@@ -112,7 +112,16 @@ exclude_also = [
 # coverage.json (produced by `coverage json` after pytest-cov combines the
 # -n auto xdist worker data) and enforces per-file thresholds via
 # longest-prefix-wins matching on the module-path keys below.
+#
+# Branch coverage is the gate metric (D-05: branch subsumes line for the
+# safety paths this gate protects). The global line/combined floors are
+# enforced by step 1's `--cov-fail-under=70` (combined line+branch), NOT
+# here — coverage-threshold defaults `line_coverage_min` to 100, which
+# would be unsatisfiable alongside the camera.py omit and the Qt-unreachable
+# controller shell. Pin it to 0 so the per-module branch gate is the only
+# gate this step enforces (mirroring D-05's "branch is the metric" decision).
 [tool.coverage-threshold]
+line_coverage_min = 0
 file_branch_coverage_min = 80
 
 # Safety tier (100% branch) MUST stay in sync with AGENTS.md §2's

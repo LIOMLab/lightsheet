@@ -53,8 +53,28 @@ cd "${REPO_ROOT}"
 
 # --- Step 1: collect coverage with the 70% global floor -----------------------
 # --cov-fail-under=70 is the fast-fail backstop; the per-module enforcement is
-# step 3. -n auto keeps xdist parallelism; pytest-cov auto-combines workers.
-uv run pytest test/ -q --cov=lightsheet --cov-branch --cov-fail-under=70 -n auto
+# step 3. -n auto keeps xdist parallelism. We do NOT use --cov-fail-under here
+# because pytest-cov's auto-combine loses branch (arc) data when GC is disabled
+# (conftest.py disables GC to prevent Qt widget destructor segfaults on macOS).
+# Instead, step 1b manually re-combines with branch=True to preserve arcs.
+#
+# We run the controller branch tests in a SEPARATE invocation because the
+# module-scoped controller fixture needs all tests in one process to get full
+# branch coverage. When xdist splits them across workers, each worker only
+# covers a subset of branches, lowering the combined coverage. The separate
+# invocation uses --cov-append to add to the same data file.
+uv run pytest test/ -q --cov=lightsheet --cov-branch -n auto
+uv run pytest test/test_controller_branches.py -q --cov=lightsheet --cov-branch -n auto --cov-append
+
+# --- Step 1b: manually re-combine with branch=True ---------------------------
+# pytest-cov's auto-combine produces a .coverage file with 0 arcs (branch data
+# is stripped). Re-combine from the worker .coverage.* files with branch=True
+# to restore the arc data that coverage-threshold needs for branch enforcement.
+uv run python -c "import coverage; c = coverage.Coverage(branch=True); c.combine(); c.save()"
+
+# --- Step 1c: enforce the 70% global floor ------------------------------------
+# Now that branch data is restored, check the global floor.
+uv run coverage report --fail-under=70 -q
 
 # --- Step 2: emit coverage.json from the combined .coverage data --------------
 uv run coverage json
