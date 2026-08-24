@@ -28,6 +28,18 @@
 #   bash scripts/coverage.sh             # Mac gate (mocks via test/conftest.py)
 #   LIGHTSHEET_HW=1 bash scripts/coverage.sh   # rig gate (real SDKs; rig-only)
 #
+# Rig-side invocation: `LIGHTSHEET_HW=1 bash scripts/coverage.sh` is run via
+# `ssh lightsheet-rig` (see AGENTS.md §4) on the microscope PC. It runs the
+# same 3-step script with the real hardware path unskipped, collecting
+# coverage for the modules pragma'd or omitted on Mac per the D-02 carve-out
+# (documented in AGENTS.md §5): `lightsheet/hal/real/camera.py` wholly (in
+# pyproject.toml `[tool.coverage.run].omit`), plus the inline `# pragma: no
+# cover` / `# pragma: no branch` hardware-probe call sites in
+# `lightsheet/hal/real/{motors,siggen,etls,ibeam_smart}.py`. Running this on
+# the rig is an OPERATOR action (AGENTS.md §2 — do not change laser or motor
+# state on the rig unless explicitly asked), not something this script or an
+# agent invokes automatically.
+#
 # A non-zero exit at step 3 (below-threshold modules) is the EXPECTED state
 # right after branch coverage is first enabled — the 5-15pt drop is the
 # signal that the gate is real. Closing those gaps is test-writing work
