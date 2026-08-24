@@ -1,4 +1,4 @@
-"""Manual Laser 1 V->mW calibration sweep utility (operator-run, rig only).
+"""Automated Laser 1 V->mW calibration sweep (PM100D auto-read, rig only).
 
 This is NOT a pytest test — it is a manual calibration utility in the same
 convention as the legacy ``test/daqmx.py`` / ``test/h5test.py`` scripts
@@ -8,66 +8,57 @@ convention as the legacy ``test/daqmx.py`` / ``test/h5test.py`` scripts
 Purpose
 -------
 Sweep the Laser 1 DAQ analog output (``/Dev7/ao0``) from 0 V to 5 V in
-configurable steps. At each voltage the operator reads a power meter and
-enters the measured mW. The (V, mW) pairs are written to a CSV that the
-follow-up quick task parses into a ``Laser1 Calibration Curve`` config value,
-which makes the L1 readback label switch from the unverified
-linear-through-origin estimate ("(est.)") to a rig-measured calibration
-("(cal.)").
+fine-grained steps. At each voltage the power is read AUTOMATICALLY from a
+Thorlabs PM100D power meter (with S245C thermal sensor) via the TLPMX DLL.
+The (V, mW, direction) rows are written to a CSV that the follow-up task
+parses into a ``Laser1 Calibration Curve`` config value.
 
-Protocol (v2 — improved after the first sweep showed DPSS thermal-transient
-noise and a 2.5x max-power gap vs the lab test)
----------------------------------------------------------------
-1. **Warm-up phase**: energize the laser at a moderate voltage (default 3 V)
-   for a configurable duration (default 180 s) before sweeping. The
-   LRS-0561 DPSS crystal warms up from pump-diode heat dissipation during
-   *emission* — "PSU on at 0 V for days" leaves the crystal cold. A cold
-   crystal causes thermal-lensing drift during the sweep (non-monotonic
-   points, rolloff at high V). 2-3 min at 3 V is enough; the spec sheet's
-   10-15 min is conservative.
-2. **Settling time**: after writing each voltage, wait a configurable delay
-   (default 2 s) before prompting for the reading, so the power meter
-   averaging and the DPSS thermal response settle.
-3. **Multi-sample averaging**: take N readings per voltage (default 3),
-   discard the first (let the meter settle further), average the rest.
-   Reduces single-reading noise (the first sweep had a 3.0 V dip + 3.25 V
-   jump that looked like un-settled readings).
-4. **Hysteresis check (ascending + descending)**: sweep 0 -> max, then
-   max -> 0, recording the direction. DPSS thermal behavior often shows
-   hysteresis (ascending != descending at the same V) — the CSV's
-   ``direction`` column lets the follow-up fit detect and handle it.
+This is the v3 protocol — fully automated (no manual meter entry). The v2
+protocol required the operator to type each reading; this version reads the
+PM100D directly, enabling:
+- Fine-grained steps (default 0.1V = 51 points, vs v2's 0.25V = 21 points)
+- More samples per point (default 5, vs v2's 3) with automatic averaging
+- Faster sweep (~3 min total vs ~8 min manual)
+- No transcription errors
 
-Power-meter setup (Newport 1918-C + 818-SL) — check BEFORE running
-------------------------------------------------------------------
-- Set the 1918-C wavelength to 561 nm (Lambda key -> custom wavelength).
-  A wrong wavelength applies the wrong responsivity correction.
-- Center the beam on the 818-SL crosshair; the clear aperture is only
-  10.3 mm. A beam that overfills or drifts off-center at high power
-  under-reads systematically (the first sweep's 95 mW peak vs 236.6 mW
-  lab test is consistent with ~63% of the beam hitting the sensor).
-- Verify the Beam Attenuator setting matches the physical OD3 attenuator
-  (likely ON — you're reading mW, not uW).
+Protocol (v3 — automated PM100D)
+--------------------------------
+1. **Warm-up phase**: energize the laser at 3V for 180s before sweeping
+   (DPSS crystal thermal stabilization). Configurable.
+2. **Settling time**: after writing each voltage, wait 2s before reading
+   (S245C thermal sensor has ~0.6s response time; 2s is conservative).
+3. **Multi-sample averaging**: 5 samples per point, first discarded, rest
+   averaged. The S245C thermal sensor has some noise at low power; averaging
+   reduces it.
+4. **Hysteresis check**: ascending 0->max then descending max->0, with a
+   direction column in the CSV.
+
+Power meter: Thorlabs PM100D + S245C thermal surface absorber
+--------------------------------------------------------------
+- S245C: thermal pile, flat spectral response 190nm-20um, no saturation
+  (unlike the 818-SL photodiode which saturated at ~75mW). The S245C gives
+  the TRUE absolute power.
+- Aperture: large enough to catch the full beam at <1cm distance.
+- Wavelength set to 561nm (minimal effect on thermal sensor, but correct).
+- The PM100D is accessed via the TLPMX DLL (ctypes wrapper in pm100d.py).
 
 Safety (AGENTS.md Sec.2 — Class IIIB laser)
 -------------------------------------------
-- Starts at 0 V and ends at 0 V (laser off).
+- Starts at 0V and ends at 0V (laser off).
 - Every DAQ write is clamped to [0, 5] V.
 - The operator confirms before the warm-up and before the sweep begins;
-  after that the sweep is semi-automated (settling delays + repeated
-  prompts) but the operator is present with the power meter and PPE.
-- Ctrl-C at any prompt aborts safely (laser driven to 0 V in finally).
+  after that the sweep is automated but the operator is present with PPE.
+- Ctrl-C at any time aborts safely (laser driven to 0V in finally).
 
 Usage (on the rig, with LIGHTSHEET_HW=1)
 ----------------------------------------
     uv run python test/laser1_calibration_sweep.py
-    uv run python test/laser1_calibration_sweep.py --step 0.5 --max-volts 5.0
-    uv run python test/laser1_calibration_sweep.py --warmup-volts 3.0 --warmup-secs 180
-    uv run python test/laser1_calibration_sweep.py --samples 5 --settle-secs 3
-    uv run python test/laser1_calibration_sweep.py --no-descending   # ascending only
+    uv run python test/laser1_calibration_sweep.py --step 0.1 --samples 5
+    uv run python test/laser1_calibration_sweep.py --warmup-secs 300
+    uv run python test/laser1_calibration_sweep.py --no-descending
     uv run python test/laser1_calibration_sweep.py --output test/laser1_calibration.csv
 
-On the Mac (no hardware), exits 1 with a message to run on the rig — the
-conftest nidaqmx stub makes ``Task()`` raise, which this script detects.
+On the Mac (no hardware), exits 1 with a message to run on the rig.
 """
 
 from __future__ import annotations
@@ -80,106 +71,31 @@ from datetime import datetime
 
 import numpy as np
 
-# nidaqmx is imported here (not inside main) so the Mac guard fires on
-# import-attempt / first Task() construction with a clear message rather
-# than a cryptic traceback. On the rig this is the real SDK; on the Mac the
-# conftest stub makes Task() raise (intentionally — see AGENTS.md Sec.5).
+# nidaqmx: Mac guard (conftest stub makes Task() raise on Mac).
 try:
     import nidaqmx
 except Exception as exc:  # pragma: no cover — environment-dependent
     print(
         "ERROR: nidaqmx is not available. This script must be run on the rig "
-        "with LIGHTSHEET_HW=1 (real NI-DAQmx SDK installed). On the Mac the "
-        "conftest stub makes Task() raise — there is no real DAQ hardware to "
-        f"drive. Cause: {exc}",
+        f"with LIGHTSHEET_HW=1. Cause: {exc}",
         file=sys.stderr,
     )
     sys.exit(1)
+
+# PM100D power meter driver (ctypes TLPMX wrapper). Rig-only — the DLL
+# is Windows-only and the PM100D must be physically connected.
+from pm100d import PM100D, PM100DError, PM100DNotConnected, is_pm100d_available
 
 MAX_VOLTS_HARD_LIMIT = 5.0
 DEFAULT_TERMINAL = "/Dev7/ao0"
 
 
 def _write_voltage(terminal: str, volts: float) -> None:
-    """Write ``volts`` (clamped to [0, 5]) to the DAQ AO channel.
-
-    Opens a fresh nidaqmx.Task per write (same pattern as
-    DAQLaser._write_volts) so there is no persistent task to clean up.
-    """
+    """Write ``volts`` (clamped to [0, 5]) to the DAQ AO channel."""
     volts = max(0.0, min(float(volts), MAX_VOLTS_HARD_LIMIT))
     with nidaqmx.Task(new_task_name="laser1_calibration") as task:
         task.ao_channels.add_ao_voltage_chan(terminal)
         task.write(np.array([volts]), auto_start=True)
-
-
-def _prompt_reading(volts: float, sample: int, n_samples: int) -> float | None:
-    """Prompt the operator for one power-meter mW reading at ``volts``.
-
-    Returns the float mW, or None to skip this sample, or raises
-    KeyboardInterrupt to quit early. Empty input = skip this sample.
-    """
-    label = f"sample {sample}/{n_samples}" if n_samples > 1 else "reading"
-    while True:
-        raw = input(
-            f"  V={volts:.3f}  {label}: enter power-meter mW "
-            f"(Enter=skip, s=skip, q=quit): "
-        ).strip()
-        if raw.lower() in ("q", "quit"):
-            raise KeyboardInterrupt
-        if raw == "" or raw.lower() in ("s", "skip"):
-            return None
-        try:
-            value = float(raw)
-        except ValueError:
-            print("    not a number — try again (or q to quit)")
-            continue
-        if value < 0:
-            print("    negative mW — try again")
-            continue
-        return value
-
-
-def _collect_point(
-    terminal: str,
-    volts: float,
-    n_samples: int,
-    settle_secs: float,
-) -> float | None:
-    """Energize at ``volts``, settle, collect ``n_samples`` readings, return
-    the average (discarding the first sample as a further-settling throwaway
-    when n_samples > 1). Returns None if all samples are skipped.
-
-    The laser stays energized across the samples (no zeroing between them) so
-    the DPSS thermal state is consistent within a point. The caller zeros the
-    laser after the point is recorded.
-    """
-    _write_voltage(terminal, volts)
-    if settle_secs > 0:
-        print(f"     settling {settle_secs:.1f} s ...")
-        time.sleep(settle_secs)
-    readings: list[float] = []
-    for i in range(1, n_samples + 1):
-        reading = _prompt_reading(volts, i, n_samples)
-        if reading is None:
-            print(f"     (sample {i} skipped)")
-            continue
-        readings.append(reading)
-        if i < n_samples:
-            print(f"     recorded sample {i}: {reading:.3f} mW")
-    if not readings:
-        return None
-    # Discard the first reading as a further-settling throwaway when we have
-    # more than one — the first reading after the settle delay still catches
-    # the tail of the thermal/meter transient.
-    if len(readings) > 1:
-        discarded = readings.pop(0)
-        print(f"     (discarded first sample {discarded:.3f} mW as throwaway)")
-    avg = float(np.mean(readings))
-    print(
-        f"     -> averaged {len(readings)} sample(s): {avg:.3f} mW "
-        f"(raw: {', '.join(f'{r:.3f}' for r in readings)})"
-    )
-    return avg
 
 
 def _run_pass(
@@ -188,51 +104,50 @@ def _run_pass(
     direction: str,
     n_samples: int,
     settle_secs: float,
+    meter: PM100D,
     pairs: list[tuple[float, float, str]],
 ) -> None:
-    """Run one sweep pass (ascending or descending) over ``voltages``,
-    appending (V, mW, direction) tuples to ``pairs``."""
+    """Run one sweep pass (ascending or descending), auto-reading the PM100D."""
     print(f"\n  === {direction.upper()} pass: {len(voltages)} points ===\n")
-    for volts in voltages:
-        print(f"  -> {volts:.3f} V ({direction})")
+    for i, volts in enumerate(voltages):
+        pct = (i + 1) / len(voltages) * 100
+        print(
+            f"  [{pct:5.1f}%] {direction} V={volts:.3f} ... ",
+            end="",
+            flush=True,
+        )
+        _write_voltage(terminal, volts)
+        if settle_secs > 0:
+            time.sleep(settle_secs)
         try:
-            reading = _collect_point(terminal, volts, n_samples, settle_secs)
-        except KeyboardInterrupt:
-            raise
-        if reading is None:
-            print("     (point skipped entirely)")
+            power_w = meter.read_averaged(n_samples, delay_s=0.5)
+        except PM100DError as exc:
+            print(f"METER ERROR: {exc}")
             _write_voltage(terminal, 0.0)
             continue
-        pairs.append((round(float(volts), 6), round(reading, 6), direction))
-        print(f"     recorded: {volts:.3f} V -> {reading:.3f} mW ({direction})")
+        power_mw = power_w * 1000.0
+        pairs.append(
+            (round(float(volts), 6), round(power_mw, 6), direction)
+        )
+        print(f"{power_mw:7.2f} mW")
         # Zero between points so the laser is not left energized while the
-        # operator prepares the next reading. Re-energize at the next point.
+        # thermal sensor settles to the next voltage.
         _write_voltage(terminal, 0.0)
 
 
-def _warmup(
-    terminal: str,
-    warmup_volts: float,
-    warmup_secs: float,
-) -> None:
-    """Energize the laser at ``warmup_volts`` for ``warmup_secs`` to
-    thermally stabilize the DPSS crystal before sweeping. The operator
-    confirms before the warm-up begins (Class IIIB safety)."""
+def _warmup(terminal: str, warmup_volts: float, warmup_secs: float) -> None:
+    """Energize the laser at ``warmup_volts`` for ``warmup_secs``."""
     if warmup_secs <= 0 or warmup_volts <= 0:
-        print("  Warm-up skipped (warmup-volts or warmup-secs is 0).")
+        print("  Warm-up skipped.")
         return
     print(
-        f"\n  WARM-UP: energizing at {warmup_volts:.2f} V for "
-        f"{warmup_secs:.0f} s to thermally stabilize the DPSS crystal.\n"
-        f"  (The LRS-0561 crystal warms up from pump-diode heat during "
-        f"emission;\n   'PSU on at 0 V' leaves it cold. 2-3 min at 3 V is "
-        f"enough.)\n"
+        f"\n  WARM-UP: {warmup_volts:.2f} V for {warmup_secs:.0f} s "
+        f"(DPSS crystal thermal stabilization).\n"
     )
     input("  Press Enter to start the warm-up (Ctrl-C to abort)... ")
     _write_voltage(terminal, warmup_volts)
-    print(f"  Laser at {warmup_volts:.2f} V. Warm-up timer: {warmup_secs:.0f} s.")
+    print(f"  Laser at {warmup_volts:.2f} V. Warm-up: {warmup_secs:.0f} s.")
     try:
-        # Countdown so the operator sees progress and can abort with Ctrl-C.
         remaining = warmup_secs
         while remaining > 0:
             chunk = min(10.0, remaining)
@@ -241,7 +156,7 @@ def _warmup(
             if remaining > 0:
                 print(f"    {remaining:.0f} s remaining ...")
     except KeyboardInterrupt:
-        print("\n  Warm-up aborted by operator. Proceeding to sweep.")
+        print("\n  Warm-up aborted. Proceeding to sweep.")
     finally:
         _write_voltage(terminal, 0.0)
         print("  Warm-up complete. Laser at 0 V.")
@@ -257,19 +172,15 @@ def run_sweep(
     n_samples: int,
     settle_secs: float,
     descending: bool,
+    wavelength_nm: float,
 ) -> int:
-    """Run the interactive sweep. Returns 0 on success, 1 on abort."""
+    """Run the automated sweep. Returns 0 on success, 1 on abort."""
     max_volts = max(0.0, min(float(max_volts), MAX_VOLTS_HARD_LIMIT))
-    step = max(0.05, float(step))
+    step = max(0.01, float(step))
     ascending = list(np.arange(0.0, max_volts + 1e-9, step))
-    # Always include the exact max-volts endpoint even if float rounding
-    # from arange drops it.
     if ascending and not abs(ascending[-1] - max_volts) < 1e-6:
         ascending.append(max_volts)
     ascending = [round(float(v), 6) for v in ascending]
-    # Descending pass: max -> 0, excluding the endpoints already covered by
-    # the ascending pass (avoid double-measuring 0 and max). Reversed inner
-    # points only.
     descending_v = (
         [round(float(v), 6) for v in reversed(ascending[1:-1])]
         if descending and len(ascending) > 2
@@ -277,47 +188,65 @@ def run_sweep(
     )
 
     print("=" * 70)
-    print("LASER 1 V->mW CALIBRATION SWEEP (v2) — CLASS IIIB LASER")
+    print("LASER 1 V->mW CALIBRATION SWEEP (v3 auto) — CLASS IIIB LASER")
     print("=" * 70)
     print("  Diode:  LRS-0561-PFO-00200-03 (561 nm DPSS)")
     print("  PSU:    Laserglow PSU-H-LED (0-5 V analog modulation)")
-    print("  Meter:  Newport 1918-C + 818-SL (set lambda=561nm, center beam)")
+    print(f"  Meter:  Thorlabs PM100D + S245C thermal (lambda={wavelength_nm}nm)")
     print(f"  DAQ AO: {terminal}")
-    print(f"  Steps:  {len(ascending)} ascending points, 0.000 V to "
+    print(f"  Steps:  {len(ascending)} ascending, 0.000 V to "
           f"{max_volts:.3f} V (step {step:.3f} V)")
     if descending_v:
-        print(f"          + {len(descending_v)} descending points "
-              f"(hysteresis check)")
+        print(f"          + {len(descending_v)} descending (hysteresis check)")
     print(f"  Warmup: {warmup_volts:.2f} V for {warmup_secs:.0f} s")
     print(f"  Sample: {n_samples} per point, {settle_secs:.1f} s settle, "
           f"first thrown away")
     print(f"  Output: {output}")
     print()
-    print("  WARNING: Class IIIB laser. Wear appropriate PPE. Confirm the")
-    print("  beam path is clear and the power meter is positioned BEFORE")
-    print("  pressing Enter. Ctrl-C at any prompt aborts safely (laser -> 0 V).")
+    print("  WARNING: Class IIIB laser. Wear PPE. The sweep is automated")
+    print("  but the laser energizes at each step. Ctrl-C aborts safely")
+    print("  (laser -> 0 V).")
     print()
     input("  Press Enter when ready to begin (Ctrl-C to abort)... ")
 
-    # Start at 0 V (laser off) so the sweep begins from a known-safe state.
     _write_voltage(terminal, 0.0)
-
-    # Warm-up phase (thermally stabilize the DPSS crystal).
     _warmup(terminal, warmup_volts, warmup_secs)
+
+    # Open the PM100D session.
+    print(f"\n  Opening PM100D session (wavelength={wavelength_nm}nm) ...")
+    try:
+        meter = PM100D(wavelength_nm=wavelength_nm, reset=False)
+        meter._open()
+    except PM100DNotConnected as exc:
+        print(f"\n  ERROR: {exc}")
+        return 1
+    except PM100DError as exc:
+        print(f"\n  ERROR: {exc}")
+        return 1
+    print("  PM100D connected.")
+
+    # Sanity check: read ambient/zero power before sweeping.
+    ambient = meter.read_power_mw()
+    print(f"  Ambient reading (laser at 0V): {ambient:.3f} mW")
 
     pairs: list[tuple[float, float, str]] = []
     try:
-        _run_pass(terminal, ascending, "ascending", n_samples, settle_secs, pairs)
+        _run_pass(
+            terminal, ascending, "ascending",
+            n_samples, settle_secs, meter, pairs,
+        )
         if descending_v:
             _run_pass(
-                terminal, descending_v, "descending", n_samples, settle_secs, pairs
+                terminal, descending_v, "descending",
+                n_samples, settle_secs, meter, pairs,
             )
     except KeyboardInterrupt:
-        print("\n  Sweep aborted by operator. Writing partial results.")
+        print("\n\n  Sweep aborted by operator. Writing partial results.")
     finally:
-        # Always end at 0 V (laser off) — even on abort.
         _write_voltage(terminal, 0.0)
         print("  Laser driven to 0 V (off).")
+        meter._close()
+        print("  PM100D session closed.")
 
     if not pairs:
         print("  No readings recorded — nothing to write.")
@@ -325,30 +254,23 @@ def run_sweep(
 
     _write_csv(output, pairs)
     print(f"\n  Wrote {len(pairs)} (V, mW, direction) rows to {output}")
-    print("  Next: run /gsd-quick to fit this CSV into a "
-          "'Laser1 Calibration Curve' config value.")
+    print("  Next: fit the curve and update config.ini "
+          "'Laser1 Calibration Curve'.")
     return 0
 
 
 def _write_csv(
     output: str, pairs: list[tuple[float, float, str]]
 ) -> None:
-    """Write the (V, mW, direction) rows to ``output`` as CSV with a comment
-    header. The comment header records the date and hardware so the
-    follow-up parsing task has provenance. The data rows are
-    ``voltage_v,power_mw,direction`` — direction is 'ascending' or
-    'descending' so the fit can detect/handle hysteresis.
-
-    ASCII-only header (the v1 script's em-dash got mangled on the Windows
-    codepage, producing a non-UTF8 byte in the CSV).
-    """
+    """Write the (V, mW, direction) rows to ``output`` as CSV."""
     with open(output, "w", newline="") as f:
         f.write(
-            f"# Laser 1 V->mW calibration sweep - {datetime.now().isoformat()}\n"
+            f"# Laser 1 V->mW calibration sweep (v3 auto) - "
+            f"{datetime.now().isoformat()}\n"
             f"# Diode: LRS-0561-PFO-00200-03 (561 nm DPSS)\n"
             f"# PSU: Laserglow PSU-H-LED (0-5 V analog modulation)\n"
-            f"# Meter: Newport 1918-C + 818-SL (lambda=561nm)\n"
-            f"# Generated by test/laser1_calibration_sweep.py (v2)\n"
+            f"# Meter: Thorlabs PM100D + S245C thermal sensor\n"
+            f"# Generated by test/laser1_calibration_sweep.py (v3)\n"
         )
         writer = csv.writer(f)
         writer.writerow(["voltage_v", "power_mw", "direction"])
@@ -358,76 +280,70 @@ def _write_csv(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Manual Laser 1 V->mW calibration sweep (rig only, v2). "
-        "Sweeps the DAQ AO voltage with a warm-up phase, settling delays, "
-        "multi-sample averaging, and an optional descending hysteresis "
-        "check. Records operator-entered power-meter readings to a CSV.",
+        description="Automated Laser 1 V->mW calibration sweep (v3, PM100D "
+        "auto-read). Sweeps the DAQ AO voltage and reads power from a "
+        "Thorlabs PM100D + S245C thermal sensor via the TLPMX DLL.",
     )
     parser.add_argument(
-        "--terminal",
-        default=DEFAULT_TERMINAL,
+        "--terminal", default=DEFAULT_TERMINAL,
         help=f"DAQ AO terminal (default: {DEFAULT_TERMINAL})",
     )
     parser.add_argument(
-        "--step",
-        type=float,
-        default=0.25,
-        help="Voltage step in V (default: 0.25, min: 0.05)",
+        "--step", type=float, default=0.1,
+        help="Voltage step in V (default: 0.1, min: 0.01)",
     )
     parser.add_argument(
-        "--max-volts",
-        type=float,
-        default=5.0,
+        "--max-volts", type=float, default=5.0,
         help="Maximum voltage in V, clamped to 5.0 (default: 5.0)",
     )
     parser.add_argument(
-        "--output",
-        default="test/laser1_calibration.csv",
+        "--output", default="test/laser1_calibration.csv",
         help="Output CSV path (default: test/laser1_calibration.csv)",
     )
     parser.add_argument(
-        "--warmup-volts",
-        type=float,
-        default=3.0,
-        help="Warm-up voltage in V (default: 3.0, 0 = skip warm-up)",
+        "--warmup-volts", type=float, default=3.0,
+        help="Warm-up voltage in V (default: 3.0, 0 = skip)",
     )
     parser.add_argument(
-        "--warmup-secs",
-        type=float,
-        default=180.0,
-        help="Warm-up duration in s (default: 180, 0 = skip warm-up)",
+        "--warmup-secs", type=float, default=180.0,
+        help="Warm-up duration in s (default: 180, 0 = skip)",
     )
     parser.add_argument(
-        "--samples",
-        type=int,
-        default=3,
-        help="Samples per point (default: 3, first thrown away as throwaway)",
+        "--samples", type=int, default=5,
+        help="Samples per point (default: 5, first thrown away)",
     )
     parser.add_argument(
-        "--settle-secs",
-        type=float,
-        default=2.0,
-        help="Settling delay after each voltage write, before prompting "
-        "(default: 2.0)",
+        "--settle-secs", type=float, default=2.0,
+        help="Settling delay after each voltage write (default: 2.0)",
     )
     parser.add_argument(
-        "--no-descending",
-        action="store_true",
-        help="Skip the descending hysteresis-check pass (ascending only)",
+        "--no-descending", action="store_true",
+        help="Skip the descending hysteresis-check pass",
+    )
+    parser.add_argument(
+        "--wavelength", type=float, default=561.0,
+        help="Wavelength in nm for the PM100D (default: 561.0)",
     )
     args = parser.parse_args()
 
-    # Mac guard: the conftest stub makes Task() raise. Probe it here with a
-    # clear message rather than letting the first _write_voltage crash
-    # mid-sweep. On the rig this constructs and tears down cleanly.
+    # Mac guard: probe the DAQ.
     try:
         with nidaqmx.Task(new_task_name="laser1_calibration_probe") as _probe:
             _probe.ao_channels.add_ao_voltage_chan(args.terminal)
     except Exception as exc:
         print(
             "ERROR: could not open a nidaqmx Task on the DAQ AO channel. "
-            "This script must be run on the rig with LIGHTSHEET_HW=1 (real "
-            f"NI-DAQmx SDK + DAQ hardware). Cause: {exc}",
+            f"Run on the rig with LIGHTSHEET_HW=1. Cause: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+
+    # PM100D guard: check the meter is available before starting.
+    if not is_pm100d_available():
+        print(
+            "ERROR: Thorlabs PM100D not found. Install the Thorlabs OPM "
+            "software (which installs TLPMX_64.dll) and connect the PM100D "
+            "via USB. The Thorlabs OPM GUI should be able to connect to it.",
             file=sys.stderr,
         )
         return 1
@@ -442,6 +358,7 @@ def main() -> int:
         n_samples=max(1, args.samples),
         settle_secs=max(0.0, args.settle_secs),
         descending=not args.no_descending,
+        wavelength_nm=args.wavelength,
     )
 
 
