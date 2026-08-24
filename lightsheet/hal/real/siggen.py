@@ -264,7 +264,7 @@ class SigGen(ISigGen):
 
         try:
             # Creating and setting up the galvo + ETL scan task (AO)
-            self.task_galvo_etl = nidaqmx.Task(new_task_name="galvo_etl_scan")
+            self.task_galvo_etl = nidaqmx.Task(new_task_name="galvo_etl_scan")  # pragma: no cover — nidaqmx.Task open unreachable on Mac (conftest stub raises); compute_scan_waveforms + ChannelMap sites stay measured
             self.task_galvo_etl.ao_channels.add_ao_voltage_chan(self.ao_terminals)
             self.task_galvo_etl.timing.cfg_samp_clk_timing(
                 rate=self.sample_rate,
@@ -273,7 +273,7 @@ class SigGen(ISigGen):
             )
 
             # Creating and setting up the camera exposure control task (DO)
-            self.task_camera = nidaqmx.Task(new_task_name="camera_scan")
+            self.task_camera = nidaqmx.Task(new_task_name="camera_scan")  # pragma: no cover — nidaqmx.Task open unreachable on Mac (conftest stub raises); compute_scan_waveforms + ChannelMap sites stay measured
             self.task_camera.do_channels.add_do_chan(
                 self.do_terminals, line_grouping=LineGrouping.CHAN_PER_LINE
             )
