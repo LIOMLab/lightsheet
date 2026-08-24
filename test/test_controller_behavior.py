@@ -359,3 +359,106 @@ def test_wavelength_labels_set_from_live_instances() -> None:
     toggle2_text = standin.ui.pushButton_laserTwoToggle.setText.call_args[0][0]
     assert "555" in toggle1_text
     assert "640" in toggle2_text
+
+
+# --------------------------------------------------------------------------- #
+# G7 — updateUi_estop_pressed warn branch: fires when a laser's off() leaves
+#      error truthy, does NOT fire when all off() calls succeed (AGENTS.md §2).
+# --------------------------------------------------------------------------- #
+
+
+def test_estop_warn_branch_fires_for_failed_laser() -> None:
+    """updateUi_estop_pressed must check laser.error after each off() and
+    emit an operator warning naming the failed laser when off() leaves
+    error truthy — the D-06 E-stop safety arc. With one laser reporting
+    a clean off() (error=0) and one reporting a failed off() (error=1),
+    the warn branch must fire EXACTLY ONCE for the failed laser, naming
+    its label and error_message, and reset the error flag after warning
+    (AGENTS.md §2: never silently show a clean state when a laser may
+    still be emitting)."""
+    updateUi_estop_pressed = _load_method(
+        "updateUi_estop_pressed(self) -> None"
+    )
+
+    laser_ok = Mock()
+    laser_ok.error = 0
+    laser_ok.label = "Laser 1 (555 nm)"
+
+    laser_failed = Mock()
+    laser_failed.error = 1
+    laser_failed.error_message = "daq write failed"
+    laser_failed.label = "Laser 2 (640 nm)"
+
+    standin = Mock()
+    standin.estop_event = Mock()
+    standin.lasers = [laser_ok, laser_failed]
+    standin.sig_message = Mock()
+    standin._hw = Mock()
+    standin.label_estopStatus = Mock()
+    standin.pushButton_estop = Mock()
+
+    updateUi_estop_pressed(standin)
+
+    # Cooperative-abort Event set on the GUI thread.
+    standin.estop_event.set.assert_called_once()
+    # Both lasers driven off synchronously.
+    laser_ok.off.assert_called_once()
+    laser_failed.off.assert_called_once()
+    # The warn branch fired for the failed laser — find the emit call
+    # whose message names the failed laser's label and error_message.
+    emit_calls = [c.args[0] for c in standin.sig_message.emit.call_args_list]
+    warn_msgs = [
+        m for m in emit_calls
+        if "Laser 2 (640 nm)" in m and "daq write failed" in m
+    ]
+    assert len(warn_msgs) == 1, (
+        f"warn branch must fire exactly once for the failed laser; "
+        f"got {len(warn_msgs)} warn messages in {emit_calls}"
+    )
+    assert "E-STOP" in warn_msgs[0]
+    assert "STILL BE ON" in warn_msgs[0]
+    # The error flag is reset after the warn so it fires once per failure.
+    assert laser_failed.error == 0
+
+
+def test_estop_warn_branch_does_not_fire_when_all_off_succeed() -> None:
+    """The control case: when both lasers report error=0 after off(), the
+    warn branch must NOT fire — no spurious 'may still be on' warning when
+    every off() succeeded cleanly. The method still emits its terminal
+    'E-STOP actuated' status message, but no per-laser warning."""
+    updateUi_estop_pressed = _load_method(
+        "updateUi_estop_pressed(self) -> None"
+    )
+
+    laser1 = Mock()
+    laser1.error = 0
+    laser1.label = "Laser 1 (555 nm)"
+
+    laser2 = Mock()
+    laser2.error = 0
+    laser2.label = "Laser 2 (640 nm)"
+
+    standin = Mock()
+    standin.estop_event = Mock()
+    standin.lasers = [laser1, laser2]
+    standin.sig_message = Mock()
+    standin._hw = Mock()
+    standin.label_estopStatus = Mock()
+    standin.pushButton_estop = Mock()
+
+    updateUi_estop_pressed(standin)
+
+    # Both lasers driven off.
+    laser1.off.assert_called_once()
+    laser2.off.assert_called_once()
+    # No per-laser warning emitted — every emit message is the terminal
+    # "E-STOP actuated" status, none name a laser label or "STILL BE ON".
+    emit_calls = [c.args[0] for c in standin.sig_message.emit.call_args_list]
+    warn_msgs = [
+        m for m in emit_calls
+        if "STILL BE ON" in m or "off command failed" in m
+    ]
+    assert len(warn_msgs) == 0, (
+        f"warn branch must not fire when all off() calls succeed; "
+        f"got {warn_msgs} in {emit_calls}"
+    )
