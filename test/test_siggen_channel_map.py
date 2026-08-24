@@ -65,7 +65,7 @@ class _RecordingTask:
         self.ao_channels = _AoChannels()
         self.timing = _Timing()
 
-    def __enter__(self) -> "_RecordingTask":
+    def __enter__(self) -> _RecordingTask:
         return self
 
     def __exit__(self, *exc: object) -> None:
@@ -347,9 +347,7 @@ def test_compute_scan_waveforms_rolling_diag_off() -> None:
     sg = _make_siggen_small_camera("Rolling")
     sg.diag = False
     sg.compute_scan_waveforms()
-    expected = sg.camera.exposure_time + (
-        sg.camera.line_time * 0.5 * sg.camera.ysize
-    )
+    expected = sg.camera.exposure_time + (sg.camera.line_time * 0.5 * sg.camera.ysize)
     assert sg.galvo_scan_time == pytest.approx(expected)
     assert sg.waveform_metadata["Camera Shutter Mode"] == "Rolling"
 
@@ -393,9 +391,7 @@ def test_update_all_writes_clamped_swapped_stack() -> None:
 
     with patch.object(siggen_module, "nidaqmx") as fake_nidaqmx:
         fake_nidaqmx.Task = _CaptureTask
-        sg.update_all(
-            left_galvo=15.0, right_galvo=-15.0, left_etl=7.0, right_etl=-1.0
-        )
+        sg.update_all(left_galvo=15.0, right_galvo=-15.0, left_etl=7.0, right_etl=-1.0)
     assert len(captured) == 1
     written = captured[0].written.flatten()
     # galvo channels clamped to ±10, etl channels clamped to [0, 5].
@@ -435,7 +431,7 @@ def test_update_galvos_sets_error_surface_on_task_failure() -> None:
         def __init__(self, *a: object, **k: object) -> None:
             raise RuntimeError("DAQ unavailable")
 
-        def __enter__(self) -> "_FailingTask":
+        def __enter__(self) -> _FailingTask:
             return self
 
         def __exit__(self, *exc: object) -> None:
@@ -480,7 +476,7 @@ def test_create_scanner_wiring_clamps_and_orders_waveforms() -> None:
             self.triggers = _Triggers()
             captured.append(self)
 
-        def __enter__(self) -> "_CaptureTask":
+        def __enter__(self) -> _CaptureTask:
             return self
 
         def __exit__(self, *exc: object) -> None:
@@ -522,7 +518,7 @@ def test_create_scanner_error_path_nulls_tasks() -> None:
         def __init__(self, *a: object, **k: object) -> None:
             raise RuntimeError("DAQ unavailable")
 
-        def __enter__(self) -> "_FailingTask":
+        def __enter__(self) -> _FailingTask:
             return self
 
         def __exit__(self, *exc: object) -> None:

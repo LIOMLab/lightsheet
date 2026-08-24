@@ -13,6 +13,7 @@ This is a BEHAVIOR test (AGENTS.md §5).
 """
 
 import os
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -50,3 +51,114 @@ def test_etls_conformance(device_factory: object) -> None:
     ETLS_CONTRACT.assert_error_surface(dev)
     ETLS_CONTRACT.assert_read_attrs(dev)
     ETLS_CONTRACT.assert_setter_methods(dev)
+
+
+# --------------------------------------------------------------------------- #
+# ETLs container branch coverage: set_analog_mode / set_current_mode /
+# get_mode / get_temperature / close each guard on `etl_left is not None`
+# and `etl_right is not None`. Both the None (no-op) and non-None
+# (delegating) branches must be exercised.
+# --------------------------------------------------------------------------- #
+def _make_etls() -> ETLs:
+    """Construct a real ETLs() — __init__ reads config.ini and sets ports,
+    leaving etl_left/etl_right as None (no hardware on Mac)."""
+    return ETLs()
+
+
+def test_etls_setters_noop_when_both_etls_none() -> None:
+    """When both etl_left and etl_right are None (post-construct state),
+    set_analog_mode / set_current_mode / get_mode / get_temperature / close
+    are all no-ops — the False arcs of the guard conditionals."""
+    etls = _make_etls()
+    assert etls.etl_left is None
+    assert etls.etl_right is None
+    # None of these should raise.
+    etls.set_analog_mode()
+    etls.set_current_mode()
+    etls.get_mode()
+    etls.get_temperature()
+    etls.close()
+
+
+def test_etls_set_analog_mode_delegates_to_both_etls() -> None:
+    """When both etl_left and etl_right are present, set_analog_mode
+    delegates to both — the True arcs of both guards."""
+    etls = _make_etls()
+    left = MagicMock()
+    right = MagicMock()
+    etls.etl_left = left
+    etls.etl_right = right
+    etls.set_analog_mode()
+    left.mode.assert_called_once_with("analog")
+    right.mode.assert_called_once_with("analog")
+
+
+def test_etls_set_current_mode_delegates_to_both_etls() -> None:
+    """When both etls are present, set_current_mode delegates to both."""
+    etls = _make_etls()
+    left = MagicMock()
+    right = MagicMock()
+    etls.etl_left = left
+    etls.etl_right = right
+    etls.set_current_mode()
+    left.mode.assert_called_once_with("current")
+    right.mode.assert_called_once_with("current")
+
+
+def test_etls_close_delegates_to_both_etls() -> None:
+    """When both etls are present, close calls handshake + close on both."""
+    etls = _make_etls()
+    left = MagicMock()
+    right = MagicMock()
+    etls.etl_left = left
+    etls.etl_right = right
+    etls.close()
+    left.handshake.assert_called_once()
+    left.close.assert_called_once()
+    right.handshake.assert_called_once()
+    right.close.assert_called_once()
+
+
+def test_etls_get_mode_delegates_to_both_etls() -> None:
+    """When both etls are present, get_mode queries both (the True arc)."""
+    etls = _make_etls()
+    left = MagicMock()
+    left.mode.return_value = "analog"
+    right = MagicMock()
+    right.mode.return_value = "current"
+    etls.etl_left = left
+    etls.etl_right = right
+    # get_mode prints — just verify it doesn't raise and both are queried.
+    etls.get_mode()
+    left.mode.assert_called_once_with()
+    right.mode.assert_called_once_with()
+
+
+def test_etls_get_temperature_delegates_to_both_etls() -> None:
+    """When both etls are present, get_temperature queries both."""
+    etls = _make_etls()
+    left = MagicMock()
+    left.temp_reading.return_value = 20.0
+    right = MagicMock()
+    right.temp_reading.return_value = 21.0
+    etls.etl_left = left
+    etls.etl_right = right
+    etls.get_temperature()
+    left.temp_reading.assert_called_once()
+    right.temp_reading.assert_called_once()
+
+
+def test_etls_setters_delegate_with_only_one_etl() -> None:
+    """When only etl_left is present (etl_right is None), the setters
+    delegate to the left and skip the right — the mixed-branch arc."""
+    etls = _make_etls()
+    left = MagicMock()
+    etls.etl_left = left
+    etls.etl_right = None
+    etls.set_analog_mode()
+    left.mode.assert_called_once_with("analog")
+    etls.set_current_mode()
+    left.mode.assert_called_with("current")
+    etls.close()
+    left.handshake.assert_called_once()
+    left.close.assert_called_once()
