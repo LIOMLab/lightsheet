@@ -37,7 +37,7 @@ def test_close_event_quits_preview_thread(qtbot, request) -> None:
 
     # Trigger closeEvent with a real QCloseEvent. The QMessageBox.question
     # patch (started by make_controller) returns Yes so shutdown proceeds.
-    from PyQt5.QtGui import QCloseEvent
+    from PySide6.QtGui import QCloseEvent
 
     event = QCloseEvent()
     ctrl.closeEvent(event)
@@ -53,7 +53,7 @@ def test_close_event_no_join_on_preview_thread(qtbot, request) -> None:
     """closeEvent must NOT call join() on the preview thread — the QThread
     vehicle uses quit() + wait() instead. Verified by asserting the
     _preview_thread attribute is a QThread (which has no join method)."""
-    from PyQt5.QtCore import QThread
+    from PySide6.QtCore import QThread
 
     ctrl, _bundle = make_controller(qtbot, request)
 
@@ -81,8 +81,8 @@ def test_close_event_preview_timeout_logs_warning(qtbot, request) -> None:
     warning was logged."""
     import logging
 
-    from PyQt5.QtCore import QThread
-    from PyQt5.QtGui import QCloseEvent
+    from PySide6.QtCore import QThread
+    from PySide6.QtGui import QCloseEvent
 
     ctrl, _bundle = make_controller(qtbot, request)
 

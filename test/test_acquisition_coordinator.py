@@ -150,7 +150,7 @@ def test_updateUi_preview_mode_button_caches_auto_laser_flags_before_thread_spaw
     make_controller) with _cache_auto_laser_flags patched to record the
     call and QThread.start patched so no real thread is started,
     asserting the cache call happens before the thread spawn."""
-    from PyQt5.QtCore import QThread
+    from PySide6.QtCore import QThread
 
     ctrl, _ = make_controller(qtbot, request)
 

@@ -174,10 +174,10 @@ def test_validate_or_abort_errors_calls_sys_exit(
 ) -> None:
     """When errors exist, validate_or_abort shows the dialog and calls
     sys.exit(1) (lines 640-642)."""
-    pytest.importorskip("PyQt5")
+    pytest.importorskip("PySide6")
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     app = QApplication.instance() or QApplication(sys.argv)
 
@@ -188,7 +188,7 @@ def test_validate_or_abort_errors_calls_sys_exit(
     monkeypatch.setattr(sys, "exit", lambda code: exit_called.append(code))
 
     # Mock dialog exec_ to return Rejected (0) — errors dialog always aborts.
-    with patch("PyQt5.QtWidgets.QDialog.exec_", return_value=0):
+    with patch("PySide6.QtWidgets.QDialog.exec", return_value=0):
         validator = ConfigValidator()
         validator.validate_or_abort(sections)
 
@@ -230,10 +230,10 @@ def test_validate_or_abort_warnings_only_proceed_does_not_exit(
     """When only warnings exist and the operator clicks 'Proceed with
     warnings' (Accepted), validate_or_abort does NOT call sys.exit
     (line 641: `if result.errors or not accepted` — accepted=True, no exit)."""
-    pytest.importorskip("PyQt5")
+    pytest.importorskip("PySide6")
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     app = QApplication.instance() or QApplication(sys.argv)
 
@@ -243,7 +243,7 @@ def test_validate_or_abort_warnings_only_proceed_does_not_exit(
     monkeypatch.setattr(sys, "exit", lambda code: exit_called.append(code))
 
     # Mock dialog exec_ to return Accepted (1) — operator clicks "Proceed".
-    with patch("PyQt5.QtWidgets.QDialog.exec_", return_value=1):
+    with patch("PySide6.QtWidgets.QDialog.exec", return_value=1):
         validator = ConfigValidator()
         validator.validate_or_abort(sections)
 
@@ -255,10 +255,10 @@ def test_validate_or_abort_warnings_only_exit_calls_sys_exit(
 ) -> None:
     """When only warnings exist and the operator clicks 'Exit' (Rejected),
     validate_or_abort calls sys.exit(1) (line 641: `not accepted` -> exit)."""
-    pytest.importorskip("PyQt5")
+    pytest.importorskip("PySide6")
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     app = QApplication.instance() or QApplication(sys.argv)
 
@@ -268,7 +268,7 @@ def test_validate_or_abort_warnings_only_exit_calls_sys_exit(
     monkeypatch.setattr(sys, "exit", lambda code: exit_called.append(code))
 
     # Mock dialog exec_ to return Rejected (0) — operator clicks "Exit".
-    with patch("PyQt5.QtWidgets.QDialog.exec_", return_value=0):
+    with patch("PySide6.QtWidgets.QDialog.exec", return_value=0):
         validator = ConfigValidator()
         validator.validate_or_abort(sections)
 

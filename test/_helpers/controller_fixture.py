@@ -188,17 +188,17 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
 
 def patch_qmessage_question():
     """Return a context manager (unittest.mock.patch) that patches
-    ``PyQt5.QtWidgets.QMessageBox.question`` to return ``QMessageBox.Yes``
-    without showing a modal dialog. ``make_controller`` starts it for the
-    whole test so the teardown ``closeEvent`` does not block the test
-    runner on an exit confirmation popup. Tests that exercise
-    ``closeEvent`` directly can also use this as a ``with``-block to
-    control the dialog's return value."""
+    ``PySide6.QtWidgets.QMessageBox.question`` to return
+    ``QMessageBox.StandardButton.Yes`` without showing a modal dialog.
+    ``make_controller`` starts it for the whole test so the teardown
+    ``closeEvent`` does not block the test runner on an exit confirmation
+    popup. Tests that exercise ``closeEvent`` directly can also use this
+    as a ``with``-block to control the dialog's return value."""
     from unittest.mock import patch
 
-    from PyQt5.QtWidgets import QMessageBox
+    from PySide6.QtWidgets import QMessageBox
 
     return patch(
-        "PyQt5.QtWidgets.QMessageBox.question",
-        return_value=QMessageBox.Yes,
+        "PySide6.QtWidgets.QMessageBox.question",
+        return_value=QMessageBox.StandardButton.Yes,
     )

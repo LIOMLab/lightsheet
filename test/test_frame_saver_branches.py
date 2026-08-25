@@ -22,9 +22,9 @@ from unittest.mock import Mock
 import h5py
 import numpy as np
 import pytest
-from PyQt5.QtCore import QObject
+from PySide6.QtCore import QObject
 
-pytest.importorskip("PyQt5")
+pytest.importorskip("PySide6")
 
 from lightsheet.gui.frame_saver_controller import FrameSaver, FrameViewer, FrameSaverController
 from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
