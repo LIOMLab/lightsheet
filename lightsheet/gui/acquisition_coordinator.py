@@ -13,7 +13,7 @@ in ``workers.py`` for all four modes.
 
 This is a plain-Python object (NOT a ``QObject``) per the plain-Python
 collaborator pattern: collaborators emit through a shell reference, never
-declare their own ``pyqtSignal``, and never call ``.connect()``. The
+declare their own ``Signal``, and never call ``.connect()``. The
 shell-owned state (``sig_message``, ``sig_progress_update``,
 ``sig_*_mode_finished``, ``estop_event``, the ``<mode>_mode_started``
 flags, ``_fs``, ``ui.*`` widgets, ``buffer`` / ``reconstructed_frame`` /

@@ -16,7 +16,7 @@ import h5py
 import numpy as np
 from matplotlib import pyplot as plt
 from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
-from PySide6.QtGui import QCloseEvent, QKeySequence
+from PySide6.QtGui import QCloseEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -27,7 +27,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
-    QShortcut,
     QTableWidgetItem,
     QToolBar,
 )

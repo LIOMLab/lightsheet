@@ -18,7 +18,7 @@ MotorController is a motion collaborator, NOT a safety kill-path owner.
 
 This is a plain-Python object (NOT a ``QObject``) per the plain-Python
 collaborator pattern: collaborators emit through a shell reference, never
-declare their own ``pyqtSignal``, and never call ``.connect()``. The
+declare their own ``Signal``, and never call ``.connect()``. The
 shell-owned state (``ui`` widgets, ``sig_message``/``sig_beep``, ``units``,
 ``updateUi_position_*`` / ``updateUi_message_printer`` / ``updateUi_units``
 thin GUI-state setters, ``focus_selected`` /

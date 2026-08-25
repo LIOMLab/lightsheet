@@ -12,7 +12,7 @@ queue/thread it — the single most safety-critical regression risk.
 
 This is a plain-Python object (NOT a ``QObject``) per the plain-Python collaborator pattern
 1: collaborators emit through a shell reference, never declare their own
-``pyqtSignal``, and never call ``.connect()``. The shell-owned state
+``Signal``, and never call ``.connect()``. The shell-owned state
 (``sig_message``, ``estop_event``, ``_auto_laser1``/``_auto_laser2``,
 ``laser1_power_pct``/``laser2_power_pct``) is read off the shell reference
 — these cached-flag/percentage values are sampled on the GUI thread by
