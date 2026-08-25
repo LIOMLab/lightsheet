@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import numpy as np
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QImage, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
     QGraphicsScene,
@@ -50,7 +50,10 @@ class ImageView(QGraphicsView):
         # this padding fix.
         self.setStyleSheet("QGraphicsView { padding: 0px; }")
         # No antialiasing — pixel-accurate display of grayscale frames.
-        self.setRenderHints(0)
+        # QPainter.RenderHint(0) is the "no hints" value (Antialiasing
+        # and friends all default to off, but set it explicitly so the
+        # widget's render state is deterministic).
+        self.setRenderHints(QPainter.RenderHint(0))
 
     def setImage(
         self,
