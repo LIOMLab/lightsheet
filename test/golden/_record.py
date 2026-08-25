@@ -183,8 +183,7 @@ def _build_preview_standin() -> Mock:
     from ``AcquisitionCoordinator.preview_mode_worker`` as the first step
     of the threading-vehicle migration) and reads its own ``self.camera``
     attribute plus shell-owned state via ``self._shell.*``
-    (``preview_mode_started``, ``estop_event``,
-    ``ui.doubleSpinBox_cameraExposureTime``, ``_fs``,
+    (``preview_mode_started``, ``estop_event``, ``_fs``,
     ``sig_message``) and laser control via ``self._hw`` (the
     ``start_lasers``/``stop_lasers`` calls). The stand-in IS the worker
     (``self``); ``self._hw`` is a real ``HardwareManager`` backed by a
@@ -240,6 +239,9 @@ def _build_preview_standin() -> Mock:
     standin.camera = camera
     standin._hw = hw
     standin._shell = shell
+    # PreviewWorker.__init__ pre-samples the exposure time on the GUI
+    # thread; the golden harness execs only run(), so set it here.
+    standin._camera_exposure_time = 100
     return standin
 
 
