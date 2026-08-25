@@ -330,6 +330,12 @@ def main() -> int:
     # .clicked.connect(self._mc.<method>) call sites in __init__ resolve.
     mc = MotorController(bundle, controller)
     controller._mc = mc
+    # Wire the collaborator-dependent signal connections (MotorController
+    # / AcquisitionCoordinator delegates) as bare bound-method connections
+    # — called after all four collaborators are assigned so the bound
+    # methods resolve. Breaks the signal-lambda reference cycle at the
+    # connection layer (PyQt5 weakref-to-__self__ decomposition).
+    controller.wire_collaborators()
     controller.sig_beep.connect(app.beep)  # connection for beep sounds
     controller.sig_stylesheet.connect(set_app_stylesheet)  # stylesheet selection
 

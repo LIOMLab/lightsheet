@@ -133,6 +133,13 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
     mc = MotorController(bundle, controller)
     controller._mc = mc
 
+    # Wire the collaborator-dependent signal connections (MotorController
+    # / AcquisitionCoordinator delegates). These were previously lambda
+    # connections in __init__ that created a reference cycle; they now
+    # live in wire_collaborators() as bare bound-method connections,
+    # called here after all four collaborators are assigned.
+    controller.wire_collaborators()
+
     # Run hardware_init synchronously (production defers it to a 100ms
     # QTimer so the event loop is pumping first; in tests we call it
     # directly so self.lasers / timers are populated before the test
