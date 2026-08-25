@@ -58,19 +58,24 @@ cd "${REPO_ROOT}"
 # (conftest.py disables GC to prevent Qt widget destructor segfaults on macOS).
 # Instead, step 1b manually re-combines with branch=True to preserve arcs.
 #
-# Single-process (-p no:xdist + addopts override): xdist workers segfault at
-# Python shutdown — the 53 self-capturing signal lambdas in
-# Controller_MainWindow.__init__ create reference cycles whose C++ destructors
-# fire when atexit re-enables GC, killing workers before pytest-cov writes
-# their .coverage.<worker> files ("coverage: failed workers", lost data).
-# Single-process writes one complete .coverage file before the shutdown
-# segfault, so the data is complete. The shutdown segfault is harmless (data
-# already written). Re-enable xdist after Phase 6 (Threading Migration) breaks
-# the signal-lambda cycle — see ROADMAP.md Phase 6 known issue. The cycle is
-# broken at the connection layer in Phase 6 (functools.partial + weakref or
-# bound pyqtSlot methods replace the self-capturing lambdas); Phase 7 (Qt6
-# port) only confirms it, so xdist can come back as soon as Phase 6 lands.
-uv run pytest test/ -q --cov=lightsheet --cov-branch -p no:xdist -o "addopts=--strict-markers" || _pytest_exit=$?
+# xdist parallelism is re-enabled (the single-process no-xdist flag is
+# removed). xdist workers previously segfaulted at Python shutdown because the
+# 53 self-capturing signal lambdas in Controller_MainWindow.__init__ created
+# reference cycles whose C++ destructors fired when atexit re-enables GC,
+# killing workers before pytest-cov wrote their .coverage.<worker> files
+# ("coverage: failed workers", lost data). The signal-lambda cycle is now
+# broken at the connection layer: wire_collaborators() uses bare bound-method
+# connections (PyQt5 decomposes these into weakref(__self__) +
+# strong(__func__), so the signal system holds zero strong refs to the
+# controller), so the Python wrapper reaches refcount zero naturally and the
+# deferred C++ destructor no longer fires at shutdown. Phase 7 (Qt6 port) will
+# confirm the cycle stays broken under PySide6.
+#
+# The -o addopts override explicitly includes -n auto because the override
+# REPLACES pyproject.toml's default addopts entirely (the default is
+# "-n auto --strict-markers"); without the explicit -n auto the override
+# would silently drop xdist parallelism.
+uv run pytest test/ -q --cov=lightsheet --cov-branch -o "addopts=--strict-markers -n auto" || _pytest_exit=$?
 # Tolerate the shutdown segfault (exit 139): the .coverage file is written
 # BEFORE Python atexit runs, so the data is complete even when the process
 # segfaults at shutdown. Any other non-zero exit (test failure, real error)
