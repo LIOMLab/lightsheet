@@ -20,7 +20,7 @@ from unittest.mock import Mock
 
 import pytest
 
-pytest.importorskip("PyQt5")
+pytest.importorskip("PySide6")
 
 from lightsheet.gui.hardware_manager import HardwareManager
 from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen

@@ -7,7 +7,7 @@ fix — the old ``stack_mode_worker`` called
 ``self._shell.updateUi_position_horizontal()`` directly from the worker
 thread (undefined behavior per Qt's threading model). The relocated
 ``StackWorker.run`` emits ``self._shell.sig_refresh_position_horizontal``
-(a queued ``pyqtSignal`` already declared on the shell and connected to
+(a queued ``Signal`` already declared on the shell and connected to
 the GUI-thread ``updateUi_position_horizontal`` slot) instead.
 
 The test constructs a ``StackWorker`` against a mock-shell stand-in
@@ -27,7 +27,7 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
-pytest.importorskip("PyQt5")
+pytest.importorskip("PySide6")
 
 from lightsheet.gui.workers import StackWorker
 from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen

@@ -59,7 +59,7 @@ def test_converted_connection_fires_collaborator_slot(qtbot, request) -> None:
     and the MotorController slot's side effect (a status message via
     updateUi_message_printer) is observed in the message log.
     """
-    from PyQt5.QtCore import Qt
+    from PySide6.QtCore import Qt
 
     ctrl, _ = make_controller(qtbot, request)
 

@@ -51,10 +51,10 @@ def _make_mock_parent() -> Mock:
 def _make_dialog(parent: Mock):
     """Construct Properties_Dialog via __new__ bypass — no QDialog.__init__,
     no setupUi. The ui attribute is a Mock so label.setText calls are captured."""
-    pytest.importorskip("PyQt5")
+    pytest.importorskip("PySide6")
     import os
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
     app = QApplication.instance() or QApplication([])
 
     from lightsheet.gui.properties_dialog import Properties_Dialog

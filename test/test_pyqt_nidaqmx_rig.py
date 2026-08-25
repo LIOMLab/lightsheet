@@ -1,6 +1,6 @@
-"""Rig-only test: does PyQt5 + nidaqmx interaction cause the access violation?
+"""Rig-only test: does PySide6 + nidaqmx interaction cause the access violation?
 
-Every plain-Python repro passes. The GUI runs inside QApplication.exec_()
+Every plain-Python repro passes. The GUI runs inside QApplication.exec()
 with a 100ms QTimer and the laser toggle spawned from a Qt slot on a daemon
 thread. This test mirrors that: constructs the full HAL inside a QApplication,
 starts the event loop, and triggers a laser Task creation from a QTimer
@@ -43,9 +43,9 @@ pytestmark = [
 ]
 
 
-def _have_pyqt5() -> bool:
+def _have_pyside6() -> bool:
     try:
-        import PyQt5  # noqa: F401
+        import PySide6  # noqa: F401
 
         return True
     except Exception:
@@ -76,21 +76,21 @@ def _do_laser_write(voltage: float, errors: list[tuple[str, str]], tag: str) -> 
 
 
 def test_laser_task_from_qtimer_slot() -> None:
-    """Laser Task created from a QTimer slot inside QApplication.exec_.
+    """Laser Task created from a QTimer slot inside QApplication.exec.
 
     Mirrors the GUI: the laser write fires from a Qt slot (the debounce
     timeout / toggle button) while the event loop is running. Gated on
     RIG_LASER_VOLTAGE.
     """
-    if not _have_pyqt5():
-        pytest.skip("PyQt5 not available")
+    if not _have_pyside6():
+        pytest.skip("PySide6 not available")
     voltage = os.environ.get("RIG_LASER_VOLTAGE")
     if not voltage:
         pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
     voltage = float(voltage)
 
-    from PyQt5.QtCore import QTimer
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QApplication
 
     app = QApplication.instance() or QApplication(sys.argv)
 
@@ -106,7 +106,7 @@ def test_laser_task_from_qtimer_slot() -> None:
     timer.setSingleShot(True)
     timer.timeout.connect(fire)
     timer.start(500)
-    app.exec_()
+    app.exec()
 
     assert not errors, "Laser Task from QTimer slot crashed:\n" + "\n".join(
         f"{t}: {e}" for t, e in errors
@@ -122,15 +122,15 @@ def test_laser_task_from_daemon_thread_under_qapp() -> None:
     does the laser write while the event loop runs. Gated on
     RIG_LASER_VOLTAGE.
     """
-    if not _have_pyqt5():
-        pytest.skip("PyQt5 not available")
+    if not _have_pyside6():
+        pytest.skip("PySide6 not available")
     voltage = os.environ.get("RIG_LASER_VOLTAGE")
     if not voltage:
         pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
     voltage = float(voltage)
 
-    from PyQt5.QtCore import QTimer
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QApplication
 
     app = QApplication.instance() or QApplication(sys.argv)
 
@@ -158,7 +158,7 @@ def test_laser_task_from_daemon_thread_under_qapp() -> None:
     timer.setSingleShot(True)
     timer.timeout.connect(spawn)
     timer.start(500)
-    app.exec_()
+    app.exec()
 
     assert not errors, (
         "Laser Task from daemon thread under QApp crashed:\n"
@@ -173,15 +173,15 @@ def test_laser_task_with_full_hal_under_qapp() -> None:
     DAQLaser/ETLs/IBeam as hardware_init does, start the event loop, then
     fire the laser write from a QTimer slot. Gated on RIG_LASER_VOLTAGE.
     """
-    if not _have_pyqt5():
-        pytest.skip("PyQt5 not available")
+    if not _have_pyside6():
+        pytest.skip("PySide6 not available")
     voltage = os.environ.get("RIG_LASER_VOLTAGE")
     if not voltage:
         pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
     voltage = float(voltage)
 
-    from PyQt5.QtCore import QTimer
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QApplication
 
     app = QApplication.instance() or QApplication(sys.argv)
 
@@ -233,7 +233,7 @@ def test_laser_task_with_full_hal_under_qapp() -> None:
     timer.setSingleShot(True)
     timer.timeout.connect(fire)
     timer.start(800)  # give hardware init a moment to settle
-    app.exec_()
+    app.exec()
 
     assert not errors, "Full-HAL laser write under QApp crashed:\n" + "\n".join(
         f"{t}: {e}" for t, e in errors

@@ -4,7 +4,7 @@ slots moved out of the ``Controller_MainWindow`` god object.
 ``MotorController`` is a plain-Python collaborator (NOT a ``QObject``) per the
 established god-object-split pattern: it holds a typed shell reference and
 emits through ``self._shell.sig_message`` / ``self._shell.sig_beep``, never
-declaring its own ``pyqtSignal`` or calling ``.connect()``. The shell-owned
+declaring its own ``Signal`` or calling ``.connect()``. The shell-owned
 state (``ui`` widgets, ``sig_message``/``sig_beep``, ``units``,
 ``updateUi_position_*`` / ``updateUi_message_printer``) is read off the shell
 reference; the manager holds its own ``self.motors = bundle.motors`` reference.
@@ -22,7 +22,7 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
-pytest.importorskip("PyQt5")  # MotorController is constructed with a QObject shell
+pytest.importorskip("PySide6")  # MotorController is constructed with a QObject shell
 
 from lightsheet.gui.motor_controller import MotorController
 from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen

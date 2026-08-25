@@ -1,16 +1,14 @@
 """Branch-coverage closure for ``lightsheet.gui.ui_controller_rc``.
 
-This is a PyQt5 resource compiler generated file. The uncovered branches are:
+This is a PySide6 resource compiler generated file. The uncovered branches are:
 - The ``qInitResources()`` module-level call (may not be tracked at import)
 
-The ``qt_version < [5, 8, 0]`` True branch (rcc_version=1 path) is a
-module-level branch in GENERATED code. It cannot be covered safely:
-``importlib.reload`` on a Qt rcc module re-runs ``qInitResources()``, which
-re-registers C++ resource data that is not cleaned up by the reload,
-corrupting Qt's internal resource registry. The next ``QMainWindow.__init__``
-(via ``setupUi`` loading ``:/...`` resources) then segfaults. That branch is
-therefore NOT chased here — generated rcc code is not worth destabilising the
-suite for one version-gate branch.
+The ``pyside6-rcc`` generated file (Qt6) does not emit the
+``qt_version < [5, 8, 0]`` version-gate branch that the old ``pyqt5-rcc``
+output had — it directly registers resources with format version ``0x03``
+(Qt6 rcc v3). The previous version-gate branch test is therefore obsolete
+and has been replaced with a format-version assertion on the
+``qRegisterResourceData`` call.
 """
 
 from __future__ import annotations
@@ -28,17 +26,24 @@ def test_qinit_resources_and_qcleanup_resources_callable() -> None:
     ui_controller_rc.qCleanupResources()
 
 
-def test_rcc_version_matches_runtime_qt() -> None:
-    """The module selected the rcc struct matching the running Qt version
-    (covers the version-check expression without reloading the module).
+def test_rcc_uses_qt6_format_version() -> None:
+    """The generated rcc module registers resources with the Qt6 format
+    version (0x03), confirming the pyside6-rcc output matches the runtime
+    Qt version. The old pyqt5-rcc output had a version-gate branch
+    (``qt_version < [5, 8, 0]`` selecting rcc_version 1 vs 2); pyside6-rcc
+    does not emit that branch, so this test asserts the format version
+    embedded in the qRegisterResourceData call instead."""
+    pytest.importorskip("PySide6")
+    import inspect
 
-    On Qt >= 5.8 (every supported rig + dev box) ``rcc_version`` is 2 and
-    ``qt_resource_struct`` is ``qt_resource_struct_v2``. Asserting the
-    current selection exercises the version-comparison expression at
-    module load without the unsafe ``importlib.reload`` that corrupts Qt's
-    resource registry."""
-    pytest.importorskip("PyQt5")
     from lightsheet.gui import ui_controller_rc
 
-    assert ui_controller_rc.rcc_version == 2
-    assert ui_controller_rc.qt_resource_struct is ui_controller_rc.qt_resource_struct_v2
+    # The qInitResources source should register with format version 0x03
+    # (Qt6 rcc v3). This exercises the generated registration code without
+    # the unsafe importlib.reload that corrupts Qt's resource registry.
+    source = inspect.getsource(ui_controller_rc.qInitResources)
+    assert "0x03" in source, (
+        f"qInitResources should register with Qt6 format version 0x03, "
+        f"got: {source!r}"
+    )
+    assert hasattr(ui_controller_rc, "qt_resource_struct")

@@ -3,7 +3,7 @@
 Exercises ``_build_demo_bundle`` (constructs the demo DeviceBundle from
 Mock* HAL), ``_show_missing_device_dialog`` (renders the missing-device
 QDialog under the offscreen Qt platform), and ``main()`` under ``--demo``
-with the controller + app.exec_ mocked out so the bootstrap runs without
+with the controller + app.exec mocked out so the bootstrap runs without
 a display.
 
 Behavior tests (AGENTS.md §5) — every assertion is on a runtime
@@ -60,18 +60,18 @@ def test_show_missing_device_dialog_renders_under_offscreen(
 ) -> None:
     """_show_missing_device_dialog renders the QDialog with the message
     lines under the offscreen Qt platform plugin (no display needed).
-    The dialog is modal (exec_) so the test must mock exec_ to avoid
+    The dialog is modal (exec) so the test must mock exec to avoid
     blocking. The message includes a non-✕, non-first line to exercise
     the else branch of the bold-red styling (line 127->130)."""
-    pytest.importorskip("PyQt5")
+    pytest.importorskip("PySide6")
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     app = QApplication.instance() or QApplication(sys.argv)
 
-    # Mock exec_ so the dialog returns immediately without blocking.
-    with patch("PyQt5.QtWidgets.QDialog.exec_", return_value=0):
+    # Mock exec so the dialog returns immediately without blocking.
+    with patch("PySide6.QtWidgets.QDialog.exec", return_value=0):
         # Include a non-✕, non-first line ("Details: ...") to exercise
         # the else branch (no bold-red styling on that label).
         _show_missing_device_dialog(
@@ -79,22 +79,22 @@ def test_show_missing_device_dialog_renders_under_offscreen(
         )
 
 
-# -- main() under --demo with mocked controller + app.exec_ -----------------
+# -- main() under --demo with mocked controller + app.exec -----------------
 
 
 def test_main_demo_mode_returns_app_exec_exit_code(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """main() under --demo constructs the demo bundle, validates config,
-    constructs the controller + collaborators, and returns app.exec_()'s
-    exit code. The controller + app.exec_ are mocked so the bootstrap
+    constructs the controller + collaborators, and returns app.exec()'s
+    exit code. The controller + app.exec are mocked so the bootstrap
     runs without a display or event loop.
 
     This exercises the full main() body: argparse, _resolve_demo, logging
     setup, Qt imports, nidaqmx __del__ guard, exception hook, QApplication
     construction, stylesheet, composition root (bundle + config validation
-    + controller + collaborators), and the exec_ return."""
-    pytest.importorskip("PyQt5")
+    + controller + collaborators), and the exec return."""
+    pytest.importorskip("PySide6")
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     monkeypatch.setenv("LIGHTSHEET_DEMO", "1")
 
@@ -104,7 +104,7 @@ def test_main_demo_mode_returns_app_exec_exit_code(
     # the function body, so patch sys.modules before calling main().
     # The mock controller must be a QObject subclass so FrameSaverController
     # can parent FrameSaver/FrameViewer to it.
-    from PyQt5.QtCore import QObject
+    from PySide6.QtCore import QObject
 
     class _MockController(QObject):
         # Class-level slot to record the last instance so the test can
@@ -156,20 +156,42 @@ def test_main_demo_mode_returns_app_exec_exit_code(
     mock_controller_mod.Controller_MainWindow = _MockController
     monkeypatch.setitem(sys.modules, "lightsheet.gui.controller", mock_controller_mod)
 
-    # Mock app.exec_ to return 0 immediately (don't start the event loop).
+    # Mock app.exec to return 0 immediately (don't start the event loop).
     # Also mock show() so it doesn't try to render.
     # mock_controller_instance.show = MagicMock()  # already a no-op on _MockController
 
-    # Patch QApplication.exec_ at the instance level via a patch on the
+    # Patch QApplication.exec at the instance level via a patch on the
     # class method. We need to intercept the app created inside main().
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
-    original_exec = QApplication.exec_
+    original_exec = QApplication.exec
 
     def fake_exec(self, *args, **kwargs):
         return 0
 
-    monkeypatch.setattr(QApplication, "exec_", fake_exec)
+    monkeypatch.setattr(QApplication, "exec", fake_exec)
+
+    # PySide6 raises RuntimeError when QApplication(sys.argv) is called while
+    # an instance already exists (PyQt5 silently returned the existing one).
+    # main() does `from PySide6.QtWidgets import QApplication` inside its
+    # body, then `QApplication(sys.argv)` — patch the module attribute to a
+    # thin wrapper that reuses the singleton so the bootstrap test runs in a
+    # process where an earlier test already constructed a QApplication.
+    # The wrapper delegates attribute access to the real class so
+    # isinstance/instance() checks downstream still work.
+    _real_QApplication = QApplication
+
+    class _IdempotentQApplication(_real_QApplication):
+        """QApplication subclass whose constructor returns the existing
+        singleton if one exists (mirroring PyQt5's idempotent behavior)."""
+
+        def __new__(cls, *args, **kwargs):
+            existing = _real_QApplication.instance()
+            if existing is not None:
+                return existing
+            return _real_QApplication(*args, **kwargs)
+
+    monkeypatch.setattr("PySide6.QtWidgets.QApplication", _IdempotentQApplication)
 
     # Patch configure_logging to avoid file I/O side effects.
     import lightsheet.logging_setup
@@ -190,7 +212,7 @@ def test_main_demo_mode_returns_app_exec_exit_code(
     # Import main AFTER patching sys.modules.
     from lightsheet.__main__ import main
 
-    # Run main() — should return 0 (app.exec_ mocked to return 0).
+    # Run main() — should return 0 (app.exec mocked to return 0).
     result = main()
     assert result == 0
 
@@ -227,12 +249,12 @@ def test_main_rig_path_unresolved_device_shows_dialog_and_exits(
 ) -> None:
     """main() on the rig path (not --demo) with an UnresolvedDeviceError
     shows the missing-device dialog and calls sys.exit(1)."""
-    pytest.importorskip("PyQt5")
+    pytest.importorskip("PySide6")
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     # Ensure LIGHTSHEET_DEMO is not set so the rig path is taken.
     monkeypatch.delenv("LIGHTSHEET_DEMO", raising=False)
 
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     app = QApplication.instance() or QApplication(sys.argv)
 
@@ -269,10 +291,28 @@ def test_main_rig_path_unresolved_device_shows_dialog_and_exits(
 
     monkeypatch.setattr(sys, "exit", fake_exit)
 
-    # Mock configure_logging + QApplication.exec_.
+    # Mock configure_logging + QApplication.exec.
     import lightsheet.logging_setup
 
     monkeypatch.setattr(lightsheet.logging_setup, "configure", lambda: None)
+
+    # PySide6 raises RuntimeError when QApplication(sys.argv) is called while
+    # an instance already exists (PyQt5 silently returned the existing one).
+    # main() does `from PySide6.QtWidgets import QApplication` inside its
+    # body, then `QApplication(sys.argv)` — patch the module attribute to a
+    # thin wrapper that reuses the singleton (this test already constructed
+    # one above). See test_main_demo_mode_returns_app_exec_exit_code for the
+    # full rationale.
+    _real_QApplication = QApplication
+
+    class _IdempotentQApplication(_real_QApplication):
+        def __new__(cls, *args, **kwargs):
+            existing = _real_QApplication.instance()
+            if existing is not None:
+                return existing
+            return _real_QApplication(*args, **kwargs)
+
+    monkeypatch.setattr("PySide6.QtWidgets.QApplication", _IdempotentQApplication)
 
     from lightsheet.__main__ import main
 

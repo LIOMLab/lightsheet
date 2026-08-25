@@ -1,14 +1,14 @@
 import sys
 from time import sleep
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtCore import QObject, QThread, pyqtSignal
-from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
 
 # Step 1: Create a worker class
 class Worker(QObject):
-    finished = pyqtSignal()
-    progress = pyqtSignal(int)
+    finished = Signal()
+    progress = Signal(int)
 
     def __init__(self):
         pass
@@ -25,7 +25,7 @@ class Worker(QObject):
 
 
 class Window(QMainWindow):
-    ping_worker = pyqtSignal(int)
+    ping_worker = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
