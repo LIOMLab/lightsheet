@@ -100,11 +100,12 @@ def test_preview_worker_finished_emits_exactly_once_exception(qtbot) -> None:
 
 
 def test_preview_worker_never_accesses_ui_widgets(qtbot) -> None:
-    """PreviewWorker.run must NOT access any self._shell.ui.* widget beyond
-    the exposure-time spinbox read at arm time (which happens on the
-    worker thread but is a read of a cached value, not a mutation). The
-    worker never mutates widgets — all cross-thread UI effects flow
-    through queued signals (AGENTS.md §11).
+    """PreviewWorker.run must NOT access any self._shell.ui.* widget. The
+    exposure-time spinbox read happens in PreviewWorker.__init__ on the
+    GUI thread (before moveToThread), so run() never reaches into the
+    shell's ui.* from the worker thread. The worker never mutates
+    widgets — all cross-thread UI effects flow through queued signals
+    (AGENTS.md §11).
 
     Verified by giving the shell a Mock ui and asserting no ui.* attribute
     other than doubleSpinBox_cameraExposureTime was accessed after run()."""
@@ -116,12 +117,13 @@ def test_preview_worker_never_accesses_ui_widgets(qtbot) -> None:
     worker.run()
 
     # The only permitted ui.* access is doubleSpinBox_cameraExposureTime
-    # (the exposure-time read at arm time). No other widget should be
-    # touched.
+    # (the exposure-time read in PreviewWorker.__init__ on the GUI
+    # thread, before moveToThread). No other widget should be touched.
     ui_mock = shell.ui
     accessed_children = [name for name, child in ui_mock._mock_children.items()]
-    # doubleSpinBox_cameraExposureTime is accessed via .value() — that's
-    # the one permitted read. No other widget attributes should appear.
+    # doubleSpinBox_cameraExposureTime is accessed via .value() in
+    # __init__ — that's the one permitted read. No other widget
+    # attributes should appear.
     for child_name in accessed_children:
         assert child_name == "doubleSpinBox_cameraExposureTime", (
             f"PreviewWorker must not access ui.{child_name} — "
