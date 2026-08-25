@@ -2,7 +2,7 @@
 and a real method call works + produces branch coverage."""
 import pytest
 
-pytest.importorskip("PyQt5")
+pytest.importorskip("PySide6")
 
 from _helpers.controller_fixture import make_controller
 

@@ -20,7 +20,7 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
-pytest.importorskip("PyQt5")
+pytest.importorskip("PySide6")
 
 from lightsheet.gui.acquisition_coordinator import AcquisitionCoordinator
 from lightsheet.gui.workers import LiveWorker, PreviewWorker, SingleWorker, StackWorker

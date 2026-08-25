@@ -23,7 +23,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-pytest.importorskip("PyQt5")
+pytest.importorskip("PySide6")
 
 from _helpers.controller_fixture import make_controller
 

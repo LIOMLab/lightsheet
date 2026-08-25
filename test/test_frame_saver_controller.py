@@ -9,12 +9,12 @@ shell's save/enqueue calls through to them. The QObjects themselves
 behavior-preserving mechanical relocation). The shell delegates through
 ``self._fs``.
 
-``Controller_MainWindow`` cannot be instantiated on this Mac (no PyQt5
+``Controller_MainWindow`` cannot be instantiated on this Mac (no PySide6
 display), so the tests construct ``FrameSaverController`` directly with a
 Mock stand-in shell and assert on the wrapped instances + the routed
 calls. The ``FrameSaver`` / ``FrameViewer`` classes ARE constructible on
 Mac (they only need a QObject parent + numpy for the default frame) —
-PyQt5 is installed in the dev venv, and ``conftest.py`` stubs the hardware
+PySide6 is installed in the dev venv, and ``conftest.py`` stubs the hardware
 SDKs — so the real classes are used here, not Mocks.
 
 Behavior covered (per the plan's ``<behavior>`` block):
@@ -36,9 +36,9 @@ from unittest.mock import Mock
 
 import numpy as np
 import pytest
-from PyQt5.QtCore import QObject
+from PySide6.QtCore import QObject
 
-pytest.importorskip("PyQt5")  # FrameSaver/FrameViewer are QObjects
+pytest.importorskip("PySide6")  # FrameSaver/FrameViewer are QObjects
 
 from lightsheet.gui.frame_saver_controller import FrameSaver, FrameViewer, FrameSaverController
 from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
@@ -48,7 +48,7 @@ class _ShellStandin(QObject):
     """Minimal QObject stand-in for the shell.
 
     FrameSaver/FrameViewer are QObjects parented to the shell, so the
-    shell stand-in must itself be a QObject (PyQt5 rejects a Mock as a
+    shell stand-in must itself be a QObject (PySide6 rejects a Mock as a
     parent). The ``updateUi_message_printer`` slot is the
     sig_status_message receiver — track calls on it via a list.
     ``ui.imageView`` is the widget FrameViewer's __init__ seeds the
@@ -152,7 +152,7 @@ def test_frame_saver_sig_status_message_connected_to_shell_slot() -> None:
     §11).
 
     Asserted behaviorally: emitting the signal must call the shell slot
-    (PyQt5 does not expose a public receiver enumeration on pyqtSignal).
+    (PySide6 does not expose a public receiver enumeration on pyqtSignal).
     """
     bundle = _make_bundle()
     shell = _make_shell()

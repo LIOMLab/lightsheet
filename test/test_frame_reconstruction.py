@@ -21,9 +21,9 @@ from unittest.mock import Mock
 
 import numpy as np
 import pytest
-from PyQt5.QtCore import QObject
+from PySide6.QtCore import QObject
 
-pytest.importorskip("PyQt5")  # FrameSaverController wraps QObjects
+pytest.importorskip("PySide6")  # FrameSaverController wraps QObjects
 
 from lightsheet.gui.frame_saver_controller import FrameSaverController
 from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen

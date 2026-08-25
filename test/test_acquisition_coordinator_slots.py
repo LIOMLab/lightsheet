@@ -18,7 +18,7 @@ from unittest.mock import Mock
 
 import pytest
 
-pytest.importorskip("PyQt5")
+pytest.importorskip("PySide6")
 
 from lightsheet.gui.acquisition_coordinator import AcquisitionCoordinator
 from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
