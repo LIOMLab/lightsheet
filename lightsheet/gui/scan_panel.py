@@ -31,7 +31,7 @@ class ScanPanelWidget(QWidget):
     ``wire_collaborators``). This panel owns only the widget tree.
     """
 
-    def __init__(self, shell: "Controller_MainWindow") -> None:
+    def __init__(self, shell: Controller_MainWindow) -> None:
         super().__init__()
         self._shell = shell
         self.ui = Ui_ScanPanel()
