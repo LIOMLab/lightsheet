@@ -24,7 +24,7 @@ so the safety net's integrity is auditable):
 * ``MockMotors`` / ``MockETLs`` / ``MockLaser`` track state in plain
   instance attributes with no I/O.
 
-The harness execs the REAL ``Controller_MainWindow.acquire_scan`` body
+The harness execs the REAL ``_AcquireScanMixin.acquire_scan`` body
 (via the ``_load_method`` exec-against-Mock pattern from
 ``test/test_laser_controls.py``) against a Mock stand-in ``self`` whose
 HAL attributes are the six ``Mock*`` classes. This runs the real method
@@ -34,7 +34,7 @@ ordered ``sig_message.emit`` / ``sig_progress_update.emit`` call sequence
 is captured as a JSON list of ``{"type": ..., "value": ...}`` dicts.
 
 ``acquire_scan`` references module-level names (``datetime``, ``logger``,
-``np``) from ``lightsheet/gui/controller.py``; the exec namespace is
+``np``) from ``lightsheet/gui/workers.py``; the exec namespace is
 seeded with them so the body resolves them at call time.
 """
 
