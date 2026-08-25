@@ -84,64 +84,71 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy(qtbot, request) -> 
     scanner, disarm the camera, and return BEFORE copy_recorder_images is
     ever reached — a timed-out plane can never be saved as zero-filled
     frames (BUG-01)."""
+    from lightsheet.gui.workers import SingleWorker
+
     ctrl, _bundle = make_controller(qtbot, request)
-    acq = ctrl._acq
+    # Construct a SingleWorker to exercise the relocated acquire_scan
+    # (now on _AcquireScanMixin in workers.py). The save-option args are
+    # pre-sampled on the GUI thread in production; here we pass defaults.
+    worker = SingleWorker(
+        ctrl._bundle, ctrl._hw, ctrl, save_description="", save_stitch_blend=False
+    )
     # waveform_cycles must be set so number_of_images is a valid int.
-    acq.siggen.waveform_cycles = 1
+    worker.siggen.waveform_cycles = 1
 
     # Simulate a recorder timeout: monitor_recorder sets the timeout flag
     # (the real MockCamera.monitor_recorder never times out, so we wrap it
     # to inject the timeout the real Camera would surface).
-    _real_monitor = acq.camera.monitor_recorder
+    _real_monitor = worker.camera.monitor_recorder
 
     def _timeout_monitor(n: int) -> None:
         _real_monitor(n)
-        acq.camera.recorder_timeout_status = True
+        worker.camera.recorder_timeout_status = True
 
-    acq.camera.monitor_recorder = _timeout_monitor
+    worker.camera.monitor_recorder = _timeout_monitor
 
     # Track whether copy_recorder_images is reached.
     copy_called: list[int] = []
-    _real_copy = acq.camera.copy_recorder_images
+    _real_copy = worker.camera.copy_recorder_images
 
     def _tracking_copy(n: int):
         copy_called.append(n)
         return _real_copy(n)
 
-    acq.camera.copy_recorder_images = _tracking_copy
+    worker.camera.copy_recorder_images = _tracking_copy
 
     # Track teardown calls.
     delete_recorder_called: list[bool] = []
-    _real_delete_recorder = acq.camera.delete_recorder
+    _real_delete_recorder = worker.camera.delete_recorder
 
     def _tracking_delete_recorder() -> None:
         delete_recorder_called.append(True)
         _real_delete_recorder()
 
-    acq.camera.delete_recorder = _tracking_delete_recorder
+    worker.camera.delete_recorder = _tracking_delete_recorder
 
     delete_scanner_called: list[bool] = []
-    _real_delete_scanner = acq.siggen.delete_scanner
+    _real_delete_scanner = worker.siggen.delete_scanner
 
     def _tracking_delete_scanner() -> None:
         delete_scanner_called.append(True)
         _real_delete_scanner()
 
-    acq.siggen.delete_scanner = _tracking_delete_scanner
+    worker.siggen.delete_scanner = _tracking_delete_scanner
 
     disarm_called: list[bool] = []
-    _real_disarm = acq.camera.disarm
+    _real_disarm = worker.camera.disarm
 
     def _tracking_disarm() -> None:
         disarm_called.append(True)
         _real_disarm()
 
-    acq.camera.disarm = _tracking_disarm
+    worker.camera.disarm = _tracking_disarm
 
     messages: list[str] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
 
-    acq.acquire_scan()
+    worker.acquire_scan()
 
     # The defining assertion: copy_recorder_images must NOT be called.
     assert not copy_called, (
@@ -167,51 +174,56 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder(qtbot, request) -> N
     delete the scanner, disarm the camera, and return BEFORE
     start_recorder() is ever called — a DAQ scan-task failure is no longer
     masked as a silent 15 s camera timeout (G-01-5)."""
+    from lightsheet.gui.workers import SingleWorker
+
     ctrl, _bundle = make_controller(qtbot, request)
-    acq = ctrl._acq
-    acq.siggen.waveform_cycles = 1
+    # Construct a SingleWorker to exercise the relocated acquire_scan.
+    worker = SingleWorker(
+        ctrl._bundle, ctrl._hw, ctrl, save_description="", save_stitch_blend=False
+    )
+    worker.siggen.waveform_cycles = 1
 
     # Simulate a create_scanner DAQ failure: the real MockSigGen.create_scanner
     # is a no-op that never errors, so we wrap it to inject the error the real
     # SigGen would surface on a DAQ task creation fault.
     def _fail_create_scanner() -> None:
-        acq.siggen.error = 1
-        acq.siggen.error_message = "create_scan error"
+        worker.siggen.error = 1
+        worker.siggen.error_message = "create_scan error"
 
-    acq.siggen.create_scanner = _fail_create_scanner
+    worker.siggen.create_scanner = _fail_create_scanner
 
     # Track whether start_recorder is reached.
     start_recorder_called: list[int] = []
-    _real_start_recorder = acq.camera.start_recorder
+    _real_start_recorder = worker.camera.start_recorder
 
     def _tracking_start_recorder(n: int) -> None:
         start_recorder_called.append(n)
         _real_start_recorder(n)
 
-    acq.camera.start_recorder = _tracking_start_recorder
+    worker.camera.start_recorder = _tracking_start_recorder
 
     delete_scanner_called: list[bool] = []
-    _real_delete_scanner = acq.siggen.delete_scanner
+    _real_delete_scanner = worker.siggen.delete_scanner
 
     def _tracking_delete_scanner() -> None:
         delete_scanner_called.append(True)
         _real_delete_scanner()
 
-    acq.siggen.delete_scanner = _tracking_delete_scanner
+    worker.siggen.delete_scanner = _tracking_delete_scanner
 
     disarm_called: list[bool] = []
-    _real_disarm = acq.camera.disarm
+    _real_disarm = worker.camera.disarm
 
     def _tracking_disarm() -> None:
         disarm_called.append(True)
         _real_disarm()
 
-    acq.camera.disarm = _tracking_disarm
+    worker.camera.disarm = _tracking_disarm
 
     messages: list[str] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
 
-    acq.acquire_scan()
+    worker.acquire_scan()
 
     # The recorder was never primed — the failure surfaced before it.
     assert not start_recorder_called, (

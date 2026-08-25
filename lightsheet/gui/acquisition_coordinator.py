@@ -1,14 +1,17 @@
 """AcquisitionCoordinator — god-object split collaborator.
 
-Owns the remaining three acquisition worker bodies (``live_mode_worker``,
-``single_mode_worker``, ``stack_mode_worker``) plus ``acquire_scan``.
-``preview_mode_worker`` has relocated to ``PreviewWorker`` in
-``lightsheet/gui/workers.py`` as the first step of the threading-vehicle
-migration to ``QThread`` + worker ``QObject`` (``moveToThread``); the
-other three worker bodies relocate in later plans. The shell
-(``Controller_MainWindow``) delegates through ``self._acq`` and spawns
-its worker threads targeting ``self._acq.<mode>_mode_worker`` for the
-modes still hosted here.
+Owns the remaining acquisition worker body (``stack_mode_worker``) plus
+the ~15 GUI-thread galvo/ETL/camera-setting slots.
+``preview_mode_worker``, ``live_mode_worker``, ``single_mode_worker``,
+and ``acquire_scan`` have relocated to ``PreviewWorker`` /
+``LiveWorker`` / ``SingleWorker`` / ``_AcquireScanMixin`` in
+``lightsheet/gui/workers.py`` as steps of the threading-vehicle
+migration to ``QThread`` + worker ``QObject`` (``moveToThread``);
+``stack_mode_worker`` relocates in a later plan. The shell
+(``Controller_MainWindow``) delegates through ``self._acq`` for the
+GUI-thread galvo/ETL slots still hosted here and spawns its worker
+threads targeting the worker QObjects in ``workers.py`` for the
+migrated modes.
 
 This is a plain-Python object (NOT a ``QObject``) per the plain-Python
 collaborator pattern: collaborators emit through a shell reference, never
@@ -29,25 +32,25 @@ bodies only *poll* ``self._shell.estop_event`` cooperatively; they never
 drive a laser off directly.
 
 The tolerated cross-tier Qt widget reads in this collaborator live in
-two methods (reading widgets from a non-GUI thread is undefined behavior
-per Qt's threading model / AGENTS.md §11; these are pre-existing, moved
-verbatim from the original controller, and refactoring them into
-shell-side pre-sampled args is a larger change than this extraction's
-scope and is deferred):
+``stack_mode_worker`` (reading widgets from a non-GUI thread is undefined
+behavior per Qt's threading model / AGENTS.md §11; these are
+pre-existing, moved verbatim from the original controller, and
+refactoring them into shell-side pre-sampled args is a larger change
+than this extraction's scope and is deferred):
 
-* ``acquire_scan`` reads ``self._shell.ui.lineEdit_saveDescription.text()``
-  (line ~275) and ``self._shell.ui.checkBox_saveStitchBlend.isChecked()``
-  (line ~372). The golden harness's
-  ``standin.ui.lineEdit_saveDescription.text.return_value`` seam depends
-  on this access pattern surviving.
 * ``stack_mode_worker`` reads five widgets directly from the worker
   thread: ``self._shell.ui.lineEdit_saveDescription.text()`` (line ~389),
   ``self._shell.ui.checkBox_saveAllCrop.isChecked()`` (lines ~395, ~522),
   and ``self._shell.ui.checkBox_saveAllFull.isChecked()`` (lines ~403,
   ~528).
 
-A future maintainer eliminating cross-tier reads must address all six
-sites, not just ``acquire_scan``.
+The ``acquire_scan`` cross-tier reads (``lineEdit_saveDescription``,
+``checkBox_saveStitchBlend``) have been eliminated — the relocated
+``_AcquireScanMixin.acquire_scan`` in ``workers.py`` reads
+``self._save_description`` / ``self._save_stitch_blend`` (constructor
+args pre-sampled on the GUI thread). A future maintainer eliminating the
+remaining cross-tier reads must address the five ``stack_mode_worker``
+sites.
 """
 
 from __future__ import annotations
@@ -60,6 +63,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from lightsheet.hal.bundle import DeviceBundle
+from lightsheet.gui.workers import _AcquireScanMixin
 
 if TYPE_CHECKING:
     from lightsheet.gui.controller import Controller_MainWindow
@@ -68,24 +72,25 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class AcquisitionCoordinator:
+class AcquisitionCoordinator(_AcquireScanMixin):
     """Acquisition worker + scan orchestration collaborator.
 
-    Three of the four remaining method bodies (``live_mode_worker``,
-    ``single_mode_worker``, ``stack_mode_worker``, plus ``acquire_scan``)
-    are moved verbatim from ``Controller_MainWindow`` — only the
-    attribute-access prefix changes (``self.`` ->
-    ``self._shell.`` for shell-owned state; ``self.camera`` /
-    ``self.siggen`` / ``self.motors`` stay as the coordinator's own
-    attributes; ``self.start_lasers()`` / ``self.stop_lasers()`` ->
-    ``self._hw.start_lasers()`` / ``self._hw.stop_lasers()``). Every
-    existing ``try``/``except``/``finally`` shape (E-stop poll before each
-    frame, ``sig_message`` on exception, ``sig_*_mode_finished`` exactly
-    once in ``finally``) is preserved verbatim.
+    The remaining worker body (``stack_mode_worker``) is moved verbatim
+    from ``Controller_MainWindow`` — only the attribute-access prefix
+    changes (``self.`` -> ``self._shell.`` for shell-owned state;
+    ``self.camera`` / ``self.siggen`` / ``self.motors`` stay as the
+    coordinator's own attributes; ``self.start_lasers()`` /
+    ``self.stop_lasers()`` -> ``self._hw.start_lasers()`` /
+    ``self._hw.stop_lasers()``). Every existing ``try``/``except``/
+    ``finally`` shape (E-stop poll before each frame, ``sig_message`` on
+    exception, ``sig_*_mode_finished`` exactly once in ``finally``) is
+    preserved verbatim.
 
-    ``preview_mode_worker`` has relocated to ``PreviewWorker`` in
-    ``lightsheet/gui/workers.py`` as the first step of the threading
-    migration; the other three worker bodies relocate in later plans.
+    ``preview_mode_worker``, ``live_mode_worker``, ``single_mode_worker``,
+    and ``acquire_scan`` have relocated to ``PreviewWorker`` /
+    ``LiveWorker`` / ``SingleWorker`` / ``_AcquireScanMixin`` in
+    ``lightsheet/gui/workers.py`` as steps of the threading migration;
+    ``stack_mode_worker`` relocates in a later plan.
     """
 
     def __init__(
@@ -100,233 +105,6 @@ class AcquisitionCoordinator:
         self.camera = bundle.camera
         self.siggen = bundle.siggen
         self.motors = bundle.motors
-
-    def live_mode_worker(self) -> None:
-        """This thread allows the execution of scan_mode while modifying
-        parameters in the UI"""
-        try:
-            # Moving the camera to focus
-            ##self.move_camera_to_focus()
-
-            #        # Setting the camera for scan acquisition
-            #        self.camera.arm_scan()
-
-            # Starting lasers
-            self._hw.start_lasers()
-
-            while self._shell.live_mode_started:
-                # E-stop poll point — checked at the top of each iteration before
-                # any frame acquisition work. The lasers are already dark (driven
-                # off synchronously on the GUI thread in updateUi_estop_pressed);
-                # this break just stops acquiring new frames.
-                if self._shell.estop_event.is_set():
-                    break
-
-                # Setting the camera for scan acquisition
-                self.camera.arm_scan()
-
-                # Refresh scan waveforms every loop (live mode)
-                self.siggen.compute_scan_waveforms()
-                # Get single image
-                self.acquire_scan()
-
-            # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)  # noqa: E501
-            self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-
-            # Stopping lasers
-            self._hw.stop_lasers()
-
-            # Stopping camera
-            self.camera.disarm()
-        except Exception as e:
-            self._shell.sig_message.emit(
-                f"Live acquisition failed — the run was aborted. Cause: {e}"
-            )
-            logger.exception("Live mode worker failed")
-        finally:
-            # The finished signal must fire exactly once whether the method
-            # completes normally, breaks out of the loop on E-stop, or an
-            # exception propagates from start_lasers()/acquire_scan()/
-            # stop_lasers()/camera.disarm()/anything else in the body.
-            # Without this, a worker that dies mid-cleanup leaves the UI
-            # stuck on "Stop Live Mode" with no slot to re-enable it.
-            self._shell.sig_live_mode_finished.emit()
-
-    def single_mode_worker(self) -> None:
-        """Generates and display a single scan which can be saved afterwards"""
-        try:
-            # Moving the camera to focus
-            ##self.move_camera_to_focus()
-
-            # Getting positions for the image
-            self._shell.image_hor_pos_text = self._shell.current_horizontal_position_text
-            self._shell.image_ver_pos_text = self._shell.current_vertical_position_text
-            self._shell.image_cam_pos_text = self._shell.current_camera_position_text
-
-            # Setting the camera for scan acquisition
-            self.camera.arm_scan()
-
-            # Start lasers
-            self._hw.start_lasers()
-
-            # E-stop poll point — checked before acquire_scan so a mid-acquisition
-            # E-stop (pressed between mode start and the single frame grab) aborts
-            # without acquiring the frame. The lasers are already dark from the
-            # synchronous GUI-thread zeroing in updateUi_estop_pressed.
-            if self._shell.estop_event.is_set():
-                # Put ETLs in standby and stop lasers/camera before exiting so the
-                # post-mode cleanup matches the normal single_mode_worker exit.
-                self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-                self._hw.stop_lasers()
-                self.camera.disarm()
-                return
-
-            # Refresh scan waveforms with current settings
-            self.siggen.compute_scan_waveforms()
-
-            # Acquire a single scan
-            self.acquire_scan()
-
-            # Put ETLs in standby mode
-            # 2.5V corresponds no current through coil (mid 0-5V adjustable range)
-            self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-
-            # Stop lasers
-            self._hw.stop_lasers()
-
-            # Stop camera
-            self.camera.disarm()
-        except Exception as e:
-            self._shell.sig_message.emit(
-                f"Single image acquisition failed — the run was aborted. Cause: {e}"
-            )
-            logger.exception("Single image mode worker failed")
-        finally:
-            # The finished signal must fire exactly once whether the method
-            # returns early (E-stop), completes normally, or an exception
-            # propagates from stop_lasers()/camera.disarm()/anything else.
-            # Without this, a worker that dies mid-cleanup leaves the UI
-            # stuck on "Acquiring..." with no slot to re-enable it.
-            self._shell.sig_single_mode_finished.emit()
-
-    def acquire_scan(self) -> None:
-        """
-        Generate scan tasks using previously computed waveforms and
-        acquire a single reconstructed frame
-        """
-
-        # TODO - thread lock siggen and camera while we acquire
-
-        # Store metadata about buffer to be acquired
-        self._shell.buffer_metadata_general = {}
-        self._shell.buffer_metadata_general["Date"] = str(datetime.date.today())
-        self._shell.buffer_metadata_general["Sample Name"] = str(
-            self._shell.ui.lineEdit_saveDescription.text()
-        )
-
-        self._shell.buffer_metadata_waveforms = {}
-        self._shell.buffer_metadata_waveforms = self.siggen.waveform_metadata
-
-        # TODO - motors and lasers and camera (?) metadata
-        self._shell.buffer_metadata_motors = {}
-        self._shell.buffer_metadata_lasers = {}
-        self._shell.buffer_metadata_camera = {}
-
-        # self.buffer_metadata['Horizontal Position']  = self.motors.horizontal.get_position('mm')  # noqa: E501
-        # self.buffer_metadata['Vertical Position']  = self.motors.vertical.get_position('mm')  # noqa: E501
-        # self.buffer_metadata['Camera Position']  = self.motors.camera.get_position('mm')  # noqa: E501
-
-        # Number of images to be acquired from the camera
-        number_of_images = self.siggen.waveform_cycles
-
-        # Creating acquisition tasks
-        # Clear any error left over from a previous acquisition so the check
-        # below reflects this create_scanner() call only.
-        self.siggen.error = 0
-        self.siggen.create_scanner()
-        # create_scanner() wraps its DAQ task creation in a bare except that
-        # sets self.siggen.error = 1 + a generic 'create_scan error' message
-        # but never raises. Without this check a failed create_scanner()
-        # leaves task_galvo_etl / task_camera as None, start_scanner() /
-        # monitor_scanner() become no-ops, and the camera waits out its full
-        # recorder timeout with nothing to report — a silent 15 s timeout
-        # that is impossible to diagnose. Surface it here, before the
-        # recorder is primed, so the operator sees the real DAQ fault
-        # instead of a camera timeout. The recorder is never primed on this
-        # path, so there is no recorder to delete; the scanner task objects
-        # are None so delete_scanner() is a safe no-op, and disarm() returns
-        # the camera to a consistent state. Do NOT clear self.siggen.error
-        # here — the stack worker inspects it to decide whether to abort the
-        # remaining planes, and the reset above clears it at the start of
-        # the next acquisition.
-        if self.siggen.error:
-            self._shell.sig_message.emit(
-                f"Scan task creation failed — the acquisition was aborted before the camera was triggered. Check the NI DAQ connection (Dev1). Cause: {self.siggen.error_message}"  # noqa: E501
-            )
-            logger.warning("SigGen create_scanner failed during acquire_scan")
-            self.siggen.delete_scanner()
-            self.camera.disarm()
-            return
-
-        # Prime the camera recorder before we start the acquisition taks
-        self.camera.start_recorder(number_of_images)
-        self.siggen.start_scanner()
-
-        # Monitor completion of acquisition tasks and camera recorder
-        self.camera.monitor_recorder(number_of_images)
-        self.siggen.monitor_scanner()
-
-        # Stop tasks and recorder
-        self.camera.stop_recorder()
-        self.siggen.stop_scanner()
-
-        # Abort on recorder timeout — never copy zero-filled frames to disk.
-        # The recorder timeout flag is set by monitor_recorder when the camera
-        # did not return the expected frames in time. Returning here before
-        # copy_recorder_images ensures a timed-out plane is not mistaken for
-        # a real (dark) frame on disk.
-        if self.camera.recorder_timeout_status:
-            self._shell.sig_message.emit(
-                "Camera timeout — plane was not recorded (camera did not return frames in time). "  # noqa: E501
-                "The acquisition was aborted. Reduce the number of images per plane or check the camera USB connection, then restart the run."  # noqa: E501
-            )
-            logger.warning("Camera recorder timeout during acquire_scan")
-            self.camera.delete_recorder()
-            # Delete the DAQ scanner task. The scanner was already stopped
-            # above (before the timeout check) — NI-DAQmx Task.stop() is
-            # idempotent, so a second stop_scanner() here was redundant and
-            # is omitted. delete_scanner() tears down the task so the DAQ
-            # hardware is left in a consistent state.
-            self.siggen.delete_scanner()
-            # Disarm the camera before returning. Camera.disarm() is
-            # idempotent (it only issues the SDK stop-recording call when
-            # the camera reports recording state == 'on'), so calling it
-            # here and again from a caller that reaches its own disarm()
-            # is safe. This ensures a camera left mid-timeout is always
-            # disarmed before any worker that might die afterward gets a
-            # chance to skip its own cleanup.
-            self.camera.disarm()
-            return
-
-        # Recover images from the recorder
-        # Note: Images must be recovered before deleting the recorder
-        recorded_images = self.camera.copy_recorder_images(number_of_images)
-        self._shell.buffer = np.asarray(recorded_images)
-
-        # Delete tasks and recorder
-        self.camera.delete_recorder()
-        self.siggen.delete_scanner()
-
-        # Frame reconstruction options
-        if self._shell.ui.checkBox_saveStitchBlend.isChecked():
-            self._shell.reconstructed_frame = self._shell._fs.reconstruct_frame_linear_blend(
-                self._shell.buffer
-            )
-        else:
-            self._shell.reconstructed_frame = self._shell._fs.reconstruct_frame(self._shell.buffer)
-
-        # Send reconstructed frame to display port
-        self._shell._fs.enqueue_frame(self._shell.reconstructed_frame)
 
     def stack_mode_worker(self) -> None:
         """Thread for volume acquisition and saving"""
@@ -383,6 +161,20 @@ class AcquisitionCoordinator:
             progress_value = 0
             progress_increment = 100 / self._shell.number_of_planes
             self._shell.sig_progress_update.emit(0)  # To reset progress bar
+
+            # Pre-sample the save-option widgets acquire_scan reads, so the
+            # inherited _AcquireScanMixin.acquire_scan (relocated to
+            # workers.py) finds self._save_description /
+            # self._save_stitch_blend. These two cross-tier reads are the
+            # stack_mode_worker B-03 sites deferred to the later plan that
+            # relocates stack_mode_worker into StackWorker; they stay as
+            # ui.* reads here (not yet pre-sampled on the GUI thread).
+            self._save_description = str(
+                self._shell.ui.lineEdit_saveDescription.text()
+            )
+            self._save_stitch_blend = (
+                self._shell.ui.checkBox_saveStitchBlend.isChecked()
+            )
 
             # Compute scan waveforms only once before we start the stack acquisition
             # Changes to settings won't be effective until we stop/restart mode

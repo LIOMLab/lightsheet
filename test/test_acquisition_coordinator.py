@@ -1,11 +1,14 @@
 """AcquisitionCoordinator extraction tests (god-object split).
 
 ``AcquisitionCoordinator`` is a plain-Python collaborator that owns the
-three remaining acquisition worker bodies (``live_mode_worker``,
-``single_mode_worker``, ``stack_mode_worker``) plus ``acquire_scan``.
-``preview_mode_worker`` has relocated to ``PreviewWorker`` in
-``lightsheet/gui/workers.py``. The shell delegates through ``self._acq``.
-The coordinator reads shell-owned state (``sig_message``, ``estop_event``,
+remaining acquisition worker body (``stack_mode_worker``).
+``preview_mode_worker``, ``live_mode_worker``, ``single_mode_worker``,
+and ``acquire_scan`` have relocated to ``PreviewWorker`` /
+``LiveWorker`` / ``SingleWorker`` / ``_AcquireScanMixin`` in
+``lightsheet/gui/workers.py``. The shell delegates through ``self._acq``
+for the GUI-thread galvo/ETL slots still hosted here and spawns worker
+QObjects from ``workers.py`` for the migrated modes. The coordinator
+reads shell-owned state (``sig_message``, ``estop_event``,
 ``<mode>_mode_started`` flags, ``_fs``, ``ui.*`` widgets) via an injected
 ``self._shell`` reference and reads its own ``self.camera`` /
 ``self.siggen`` / ``self.motors`` / ``self._hw`` attributes.
@@ -18,8 +21,9 @@ the real object — the same code that runs on the rig.
 
 Behavior covered (per the plan's ``<behavior>`` block):
 
-1. ``AcquisitionCoordinator(bundle, hw, shell)`` exposes the four
-   remaining methods as callable attributes.
+1. ``AcquisitionCoordinator(bundle, hw, shell)`` exposes
+   ``stack_mode_worker`` as a callable attribute (the other three worker
+   bodies + acquire_scan have relocated to workers.py).
 2. The golden-master replay (``default.json`` + ``siggen_create_scanner_fail.json``)
    is unchanged after the extraction — verified by the existing replay
    tests in ``test_golden_acquisition.py`` passing without regenerating
@@ -40,27 +44,22 @@ from unittest.mock import patch
 from _helpers.controller_fixture import make_controller
 
 
-def test_acquisition_coordinator_exposes_four_worker_methods(
+def test_acquisition_coordinator_exposes_stack_worker_method(
     qtbot, request
 ) -> None:
     """AcquisitionCoordinator(bundle, hw, shell) constructed via
-    make_controller exposes single_mode_worker, live_mode_worker,
-    stack_mode_worker, acquire_scan as callable methods. preview_mode_worker
-    has relocated to PreviewWorker in lightsheet/gui/workers.py."""
+    make_controller exposes stack_mode_worker as a callable method.
+    preview_mode_worker, live_mode_worker, single_mode_worker, and
+    acquire_scan have relocated to PreviewWorker / LiveWorker /
+    SingleWorker / _AcquireScanMixin in lightsheet/gui/workers.py."""
     ctrl, _ = make_controller(qtbot, request)
     acq = ctrl._acq
 
-    for name in (
-        "single_mode_worker",
-        "live_mode_worker",
-        "stack_mode_worker",
-        "acquire_scan",
-    ):
-        method = getattr(acq, name, None)
-        assert callable(method), (
-            f"AcquisitionCoordinator must expose {name} as a callable method "
-            f"(got {method!r})"
-        )
+    method = getattr(acq, "stack_mode_worker", None)
+    assert callable(method), (
+        f"AcquisitionCoordinator must expose stack_mode_worker as a callable method "
+        f"(got {method!r})"
+    )
 
 
 def test_acquisition_coordinator_stores_bundle_handles_and_collaborators(
