@@ -497,147 +497,26 @@ class Controller_MainWindow(QMainWindow):
         # Connection for unit change
         self.ui.comboBox_units.currentTextChanged.connect(self.updateUi_units)
 
-        # Connections for the sample motion buttons. MotorController is
-        # wired onto self._mc by the composition root AFTER construction
-        # (two-phase init — mc needs a shell reference), so the clicks bind
-        # through lambdas that defer the self._mc attribute lookup to
-        # click-time (by then self._mc is wired). Mirrors the lazy-binding
-        # precedent for self._hw / self._fs in hardware_init.
-        self.ui.pushButton_sampleStepUp.clicked.connect(
-            lambda: self._mc.updateUi_move_sample_up()
-        )
-        self.ui.pushButton_sampleStepDown.clicked.connect(
-            lambda: self._mc.updateUi_move_sample_down()
-        )
-        self.ui.pushButton_sampleStepForward.clicked.connect(
-            lambda: self._mc.updateUi_move_sample_forward()
-        )
-        self.ui.pushButton_sampleStepBackward.clicked.connect(
-            lambda: self._mc.updateUi_move_sample_backward()
-        )
-        self.ui.pushButton_sampleGotoOrigin.clicked.connect(
-            lambda: self._mc.updateUi_move_sample_to_origin()
-        )
-        self.ui.pushButton_sampleSetOrigin.clicked.connect(
-            lambda: self._mc.updateUi_set_sample_origin()
-        )
-        self.ui.pushButton_sampleGotoHPosition.clicked.connect(
-            lambda: self._mc.updateUi_move_to_horizontal_position()
-        )
-        self.ui.pushButton_sampleGotoVPosition.clicked.connect(
-            lambda: self._mc.updateUi_move_to_vertical_position()
-        )
+        # Connections for the sample/camera motion, scan-settings, and
+        # calibration tab controls that delegate to the MotorController
+        # (self._mc) and AcquisitionCoordinator (self._acq) collaborators
+        # are wired in wire_collaborators() — called by the composition
+        # root AFTER self._mc / self._acq are assigned (two-phase init:
+        # those attrs are None here, so the bound methods cannot be
+        # resolved at __init__ time). wire_collaborators() connects bare
+        # bound methods (no lambda wrappers) so PyQt5 holds a weakref to
+        # the collaborator instance and a strong ref to the unbound
+        # function — breaking the controller → widget → signal → lambda →
+        # closure cell → controller reference cycle at the connection
+        # layer.
 
-        # Connections for the camera motion buttons
-        self.ui.pushButton_cameraGotoPosition.clicked.connect(
-            lambda: self._mc.updateUi_move_camera_to_position()
-        )
-        self.ui.pushButton_cameraSetFocus.clicked.connect(
-            lambda: self._mc.updateUi_set_camera_focus()
-        )
-        self.ui.pushButton_cameraStepForward.clicked.connect(
-            lambda: self._mc.updateUi_move_camera_forward()
-        )
-        self.ui.pushButton_cameraStepBackward.clicked.connect(
-            lambda: self._mc.updateUi_move_camera_backward()
-        )
-        # self.ui.pushButton_cameraGotoFocus.clicked.connect(self.updateUi_move_camera_to_focus)  # noqa: E501
-
-        # ---
-        # Connections for the 'Scan Settings' tab controls
-        # ---
-
-        # Connection for etl settings changes
-        self.ui.doubleSpinBox_etlLeftAmplitude.valueChanged.connect(
-            lambda: self._acq.updateUi_etl_left_amplitude()
-        )
-        self.ui.doubleSpinBox_etlRightAmplitude.valueChanged.connect(
-            lambda: self._acq.updateUi_etl_right_amplitude()
-        )
-        self.ui.doubleSpinBox_etlLeftOffset.valueChanged.connect(
-            lambda: self._acq.updateUi_etl_left_offset()
-        )
-        self.ui.doubleSpinBox_etlRightOffset.valueChanged.connect(
-            lambda: self._acq.updateUi_etl_right_offset()
-        )
-        self.ui.checkBox_etlSync.stateChanged.connect(
-            lambda: self._acq.updateUi_etl_sync()
-        )
-        self.ui.checkBox_etlActivate.stateChanged.connect(
-            lambda: self._acq.updateUi_etl_activate()
-        )
-        self.ui.doubleSpinBox_etlSteps.valueChanged.connect(
-            lambda: self._acq.updateUi_etl_steps()
-        )
-
-        # Connection for galvo settings changes
-        self.ui.doubleSpinBox_galvoLeftAmplitude.valueChanged.connect(
-            lambda: self._acq.updateUi_galvo_left_amplitude()
-        )
-        self.ui.doubleSpinBox_galvoRightAmplitude.valueChanged.connect(
-            lambda: self._acq.updateUi_galvo_right_amplitude()
-        )
-        self.ui.doubleSpinBox_galvoLeftOffset.valueChanged.connect(
-            lambda: self._acq.updateUi_galvo_left_offset()
-        )
-        self.ui.doubleSpinBox_galvoRightOffset.valueChanged.connect(
-            lambda: self._acq.updateUi_galvo_right_offset()
-        )
-        self.ui.checkBox_galvoSync.stateChanged.connect(
-            lambda: self._acq.updateUi_galvo_sync()
-        )
-        self.ui.checkBox_galvoActivate.stateChanged.connect(
-            lambda: self._acq.updateUi_galvo_activate()
-        )
-        self.ui.checkBox_galvoInvert.stateChanged.connect(
-            lambda: self._acq.updateUi_galvo_invert()
-        )
-
-        # Connection for laser settings changes
+        # Connection for laser settings changes — these target self
+        # methods (not collaborators), so they stay in __init__.
         self.ui.doubleSpinBox_laserOneAmplitude.valueChanged.connect(
             self.updateUi_laser1_amplitude
         )
         self.ui.doubleSpinBox_laserTwoAmplitude.valueChanged.connect(
             self.updateUi_laser2_amplitude
-        )
-
-        # Connection for camera settings changes
-        self.ui.comboBox_cameraShutterMode.currentTextChanged.connect(
-            lambda: self._acq.updateUi_camera_shutter_mode()
-        )
-        self.ui.doubleSpinBox_cameraExposureTime.valueChanged.connect(
-            lambda: self._acq.updateUi_camera_exposure_time()
-        )
-        self.ui.doubleSpinBox_cameraLineTime.valueChanged.connect(
-            lambda: self._acq.updateUi_camera_line_time()
-        )
-        self.ui.doubleSpinBox_cameraExposedLines.valueChanged.connect(
-            lambda: self._acq.updateUi_camera_exposed_lines()
-        )
-        self.ui.doubleSpinBox_cameraDelayLines.valueChanged.connect(
-            lambda: self._acq.updateUi_camera_delay_lines()
-        )
-
-        # ---
-        # Connections for the 'Calibration' tab controls
-        # ---
-        self.ui.pushButton_calCameraComputeFocus.clicked.connect(
-            lambda: self._mc.calculate_camera_focus()
-        )
-        self.ui.pushButton_calCameraShowInterpolation.clicked.connect(
-            lambda: self._mc.show_camera_interpolation()
-        )
-        self.ui.pushButton_calEtlShowInterpolation.clicked.connect(
-            lambda: self._mc.show_etl_interpolation()
-        )
-        self.ui.pushButton_calHorizontalStartRangeSelection.clicked.connect(
-            lambda: self._mc.updateUi_reset_boundaries()
-        )
-        self.ui.pushButton_calHorizontalSetForwardLimit.clicked.connect(
-            lambda: self._mc.updateUi_set_horizontal_forward_boundary()
-        )
-        self.ui.pushButton_calHorizontalSetBackwardLimit.clicked.connect(
-            lambda: self._mc.updateUi_set_horizontal_backward_boundary()
         )
 
         # ---
@@ -1054,6 +933,80 @@ class Controller_MainWindow(QMainWindow):
             self.stack_mode_started = False
         if self.lasers[0].active or self.lasers[1].active:
             self._hw.stop_lasers()
+
+    def wire_collaborators(self) -> None:
+        """Wire the collaborator-dependent signal connections.
+
+        MUST be called by the composition root (main() and the
+        make_controller test fixture) AFTER self._mc / self._acq /
+        self._hw / self._fs are assigned — never from __init__, where
+        those attrs are still None (two-phase init). Connecting bare
+        bound methods (e.g. ``self._mc.updateUi_move_sample_up``)
+        instead of lambda wrappers that call the same method breaks
+        the ``controller → child widget → signal → lambda → closure
+        cell → controller`` reference cycle at the connection layer:
+        PyQt5 decomposes a bound method into ``weakref(__self__) +
+        strong(__func__)``, so the signal system holds zero strong refs
+        to the controller or its collaborators and the Python wrapper
+        reaches refcount zero naturally on teardown.
+        """
+        # ---
+        # Connections for the 'Motion' tab controls (MotorController)
+        # ---
+        self.ui.pushButton_sampleStepUp.clicked.connect(self._mc.updateUi_move_sample_up)
+        self.ui.pushButton_sampleStepDown.clicked.connect(self._mc.updateUi_move_sample_down)
+        self.ui.pushButton_sampleStepForward.clicked.connect(self._mc.updateUi_move_sample_forward)
+        self.ui.pushButton_sampleStepBackward.clicked.connect(self._mc.updateUi_move_sample_backward)
+        self.ui.pushButton_sampleGotoOrigin.clicked.connect(self._mc.updateUi_move_sample_to_origin)
+        self.ui.pushButton_sampleSetOrigin.clicked.connect(self._mc.updateUi_set_sample_origin)
+        self.ui.pushButton_sampleGotoHPosition.clicked.connect(self._mc.updateUi_move_to_horizontal_position)
+        self.ui.pushButton_sampleGotoVPosition.clicked.connect(self._mc.updateUi_move_to_vertical_position)
+
+        # Connections for the camera motion buttons
+        self.ui.pushButton_cameraGotoPosition.clicked.connect(self._mc.updateUi_move_camera_to_position)
+        self.ui.pushButton_cameraSetFocus.clicked.connect(self._mc.updateUi_set_camera_focus)
+        self.ui.pushButton_cameraStepForward.clicked.connect(self._mc.updateUi_move_camera_forward)
+        self.ui.pushButton_cameraStepBackward.clicked.connect(self._mc.updateUi_move_camera_backward)
+
+        # ---
+        # Connections for the 'Scan Settings' tab controls
+        # (AcquisitionCoordinator)
+        # ---
+
+        # Connection for etl settings changes
+        self.ui.doubleSpinBox_etlLeftAmplitude.valueChanged.connect(self._acq.updateUi_etl_left_amplitude)
+        self.ui.doubleSpinBox_etlRightAmplitude.valueChanged.connect(self._acq.updateUi_etl_right_amplitude)
+        self.ui.doubleSpinBox_etlLeftOffset.valueChanged.connect(self._acq.updateUi_etl_left_offset)
+        self.ui.doubleSpinBox_etlRightOffset.valueChanged.connect(self._acq.updateUi_etl_right_offset)
+        self.ui.checkBox_etlSync.stateChanged.connect(self._acq.updateUi_etl_sync)
+        self.ui.checkBox_etlActivate.stateChanged.connect(self._acq.updateUi_etl_activate)
+        self.ui.doubleSpinBox_etlSteps.valueChanged.connect(self._acq.updateUi_etl_steps)
+
+        # Connection for galvo settings changes
+        self.ui.doubleSpinBox_galvoLeftAmplitude.valueChanged.connect(self._acq.updateUi_galvo_left_amplitude)
+        self.ui.doubleSpinBox_galvoRightAmplitude.valueChanged.connect(self._acq.updateUi_galvo_right_amplitude)
+        self.ui.doubleSpinBox_galvoLeftOffset.valueChanged.connect(self._acq.updateUi_galvo_left_offset)
+        self.ui.doubleSpinBox_galvoRightOffset.valueChanged.connect(self._acq.updateUi_galvo_right_offset)
+        self.ui.checkBox_galvoSync.stateChanged.connect(self._acq.updateUi_galvo_sync)
+        self.ui.checkBox_galvoActivate.stateChanged.connect(self._acq.updateUi_galvo_activate)
+        self.ui.checkBox_galvoInvert.stateChanged.connect(self._acq.updateUi_galvo_invert)
+
+        # Connection for camera settings changes
+        self.ui.comboBox_cameraShutterMode.currentTextChanged.connect(self._acq.updateUi_camera_shutter_mode)
+        self.ui.doubleSpinBox_cameraExposureTime.valueChanged.connect(self._acq.updateUi_camera_exposure_time)
+        self.ui.doubleSpinBox_cameraLineTime.valueChanged.connect(self._acq.updateUi_camera_line_time)
+        self.ui.doubleSpinBox_cameraExposedLines.valueChanged.connect(self._acq.updateUi_camera_exposed_lines)
+        self.ui.doubleSpinBox_cameraDelayLines.valueChanged.connect(self._acq.updateUi_camera_delay_lines)
+
+        # ---
+        # Connections for the 'Calibration' tab controls (MotorController)
+        # ---
+        self.ui.pushButton_calCameraComputeFocus.clicked.connect(self._mc.calculate_camera_focus)
+        self.ui.pushButton_calCameraShowInterpolation.clicked.connect(self._mc.show_camera_interpolation)
+        self.ui.pushButton_calEtlShowInterpolation.clicked.connect(self._mc.show_etl_interpolation)
+        self.ui.pushButton_calHorizontalStartRangeSelection.clicked.connect(self._mc.updateUi_reset_boundaries)
+        self.ui.pushButton_calHorizontalSetForwardLimit.clicked.connect(self._mc.updateUi_set_horizontal_forward_boundary)
+        self.ui.pushButton_calHorizontalSetBackwardLimit.clicked.connect(self._mc.updateUi_set_horizontal_backward_boundary)
 
     @pyqtSlot()
     def updateUi_estop_pressed(self) -> None:
