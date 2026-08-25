@@ -301,56 +301,6 @@ _ensure_stub("pco", _make_pco_stub, real_check=_pco_real_check)
 _ensure_stub("serial", _make_serial_stub)
 
 
-def _install_imageview_stub() -> None:
-    """Replace ``pyqtgraph.ImageView`` with a lightweight QWidget subclass
-    before any test imports ``lightsheet.gui.ui_controller``.
-
-    ``pyqtgraph.ImageView`` constructs a ``ViewBox`` whose C++ destructor
-    segfaults during garbage collection at process exit. The segfault kills
-    the process before pytest-cov writes its coverage data, silently losing
-    all branch coverage. Replacing ``ImageView`` with a plain ``QWidget``
-    (same Qt widget API the UI setup reads — ``sizePolicy``, etc. — but no
-    pyqtgraph C++ objects) eliminates the segfault at the source.
-
-    Requires a QApplication to exist before the stub is used (QWidget
-    construction needs one). Tests that construct the controller create
-    their own QApplication at module load time.
-    """
-    import importlib
-    import PyQt5.QtWidgets as _QW
-
-    real_pg = importlib.import_module("pyqtgraph")
-    if not getattr(real_pg.ImageView, "_lightsheet_imageview_stub", False):
-        class _StubImageView(_QW.QWidget):  # noqa: N801
-            _lightsheet_imageview_stub = True
-
-            def setImage(self, *args, **kwargs):  # noqa: N802
-                """No-op stand-in for pyqtgraph.ImageView.setImage — the
-                real method drives the C++ ViewBox that segfaults on GC.
-                Tests do not assert on the rendered image; they assert on
-                the controller's signal/attribute side-effects."""
-
-
-        real_pg.ImageView = _StubImageView
-        # ui_controller imported the name into its own namespace at module
-        # load time; patch that too so the controller picks up the stub.
-        try:
-            ui_ctrl = importlib.import_module("lightsheet.gui.ui_controller")
-            ui_ctrl.ImageView = _StubImageView
-        except ModuleNotFoundError:
-            pass
-
-
-# Install the ImageView stub eagerly so any later import of
-# lightsheet.gui.ui_controller picks up the QWidget replacement.
-try:
-    _install_imageview_stub()
-except Exception:  # noqa: BLE001
-    # If pyqtgraph isn't installed or PyQt5 isn't available, skip the stub —
-    # tests that need them will skip themselves via pytest.importorskip.
-    pass
-
-
 # Disable garbage collection for the entire test session. Qt widget
 # destructors segfault during garbage collection on macOS, killing xdist
 # worker processes before they can send coverage data back to the master.
@@ -382,12 +332,22 @@ _gc.disable()
 #
 # The cycle is now broken at the connection layer: wire_collaborators()
 # (added in the Phase 6 threading migration) uses bare bound-method
-# connections, which PyQt5 decomposes into weakref(__self__) +
-# strong(__func__), so the signal system holds zero strong refs to the
-# controller and the Python wrapper reaches refcount zero naturally on
-# teardown. Phase 7 (Qt6 port) will confirm the cycle stays broken under
-# PySide6 (which holds a strong ref to __func__ released on disconnect —
-# safer than PyQt5's weakref-to-__self__).
+# connections, which PySide6 decomposes into a strong ref to __func__
+# released on disconnect — the signal system holds zero strong refs to
+# the controller after disconnect, so the Python wrapper reaches
+# refcount zero naturally on teardown.
+#
+# The historical ImageView stub that previously lived here has been
+# deleted: the plotting library that contributed the ImageView widget
+# has been dropped entirely and replaced by the native
+# ``lightsheet/gui/image_view.py`` ImageView (QGraphicsView-based, no
+# ViewBox C++ destructor). The mid-suite ViewBox segfault the stub
+# worked around is eliminated at the source. A separate shutdown-time
+# QApplication teardown segfault (sipQApplication::~sipQApplication →
+# ~QGuiApplication EXC_BAD_ACCESS at 0x0, no ViewBox in the stack) is
+# recorded as a known issue and is a verification point under
+# PySide6/Qt6 — it fires AFTER coverage data is written, so it does
+# not affect the gate.
 #
 # A per-test pytest_runtest_teardown hook previously sip.deleted every
 # top-level QWidget after each test to force deterministic C++
@@ -397,5 +357,4 @@ _gc.disable()
 # _stop_worker_threads, which mirrors closeEvent's quit()+wait()
 # shutdown). The single-process -p no:xdist flag in scripts/coverage.sh
 # is the last of the three workarounds and is re-enabled once xdist
-# workers no longer segfault at shutdown. This historical explanation is
-# kept as context for Phase 7.
+# workers no longer segfault at shutdown.

@@ -8,7 +8,7 @@ relocation). The shell delegates through ``self._fs``.
 
 This is a plain-Python object (NOT a ``QObject``) per the plain-Python collaborator pattern
 1: collaborators emit through a shell reference, never declare their own
-``pyqtSignal``, and never call ``.connect()``. The one exception is the
+``Signal``, and never call ``.connect()``. The one exception is the
 ``FrameSaver.sig_status_message`` → ``shell.updateUi_message_printer``
 connection, which is preserved verbatim from the pre-extraction
 ``hardware_init`` — ``FrameSaver`` runs its save worker on a thread and
@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING
 
 import h5py
 import numpy as np
-from PyQt5.QtCore import QObject, pyqtSignal
+from PySide6.QtCore import QObject, Signal
 
 from lightsheet.hal.bundle import DeviceBundle
 
@@ -87,7 +87,7 @@ class FrameSaver(QObject):
     """Class for storing buffers (images) in its queue and saving them
     afterwards in a specified directory in a HDF5 format"""
 
-    sig_status_message = pyqtSignal(str)
+    sig_status_message = Signal(str)
 
     def __init__(self, parent: Controller_MainWindow, block_size: int = 1) -> None:
         QObject.__init__(self, parent)

@@ -3509,7 +3509,7 @@
   <customwidget>
    <class>ImageView</class>
    <extends>QGraphicsView</extends>
-   <header>pyqtgraph</header>
+   <header>lightsheet.gui.image_view</header>
   </customwidget>
  </customwidgets>
  <resources>
