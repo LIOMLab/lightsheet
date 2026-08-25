@@ -466,15 +466,22 @@ def test_refresh_laser2_readback_async_skips_when_thread_alive() -> None:
     assert hw._readback_thread is fake_thread
 
 
-def test_refresh_laser2_readback_async_starts_thread_when_none() -> None:
+def test_refresh_laser2_readback_async_starts_thread_when_none(qtbot) -> None:
     """When no prior thread exists, a new QThread is started."""
     laser2 = _make_laser("L2", output_power=10.0)
     hw, shell = _make_hw(laser2=laser2)
     hw._refresh_laser2_readback_async()
-    # Wait for the QThread to complete so the test doesn't leak.
-    if hw._readback_thread is not None:
-        hw._readback_thread.quit()
-        hw._readback_thread.wait(2000)
+    # Wait for the QThread to stop, pumping the event loop while waiting
+    # (unlike QThread.wait which blocks it). The readback worker self-quits
+    # via sig_finished→thread.quit (DirectConnection), so the thread exits
+    # on its own once the worker completes. The mock readback is instant,
+    # so the worker may have already finished by the time we get here —
+    # waitUntil handles both cases (returns immediately if already
+    # stopped, pumps events otherwise). The blocking wait(2000) form
+    # previously here could race ahead of the thread's exec()
+    # (quit-before-exec is a no-op) and strand the thread under xdist.
+    assert hw._readback_thread is not None
+    qtbot.waitUntil(lambda: not hw._readback_thread.isRunning(), timeout=2000)
     # A readback emit happened (the thread ran _refresh_laser_readback(1)).
     shell.sig_laser_readback.emit.assert_called()
 

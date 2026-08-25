@@ -32,7 +32,9 @@ collaborators without the shell can call ``make_bundle()`` directly.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
+
+from PySide6.QtWidgets import QApplication
 
 from lightsheet.hal import (
     DeviceBundle,
@@ -42,6 +44,37 @@ from lightsheet.hal import (
     MockMotors,
     MockSigGen,
 )
+
+
+def _quit_thread_draining(thread: Optional[Any], timeout_ms: int = 2000) -> None:
+    """Quit a worker ``QThread`` and pump the event loop until it stops.
+
+    Unlike ``QThread.wait()`` (which blocks the calling thread without
+    processing events), this polls ``isRunning()`` while flushing the
+    ``QApplication`` event queue at each tick. That lets a queued
+    ``quit()`` reach the thread's event loop and the thread reap
+    deterministically — the blocking ``wait()`` form stalls the main
+    event loop and, under xdist with many controllers per worker,
+    stacks into an apparent hang when ``quit()`` races ahead of the
+    thread's ``exec()`` (quit-before-exec is a no-op, the thread then
+    runs unattended and the blocking wait never observes it stop).
+
+    A thread that already self-quit (``isRunning()`` is False on entry)
+    is a no-op. The poll is capped at ``timeout_ms`` so a genuinely
+    stuck worker cannot hang teardown — matching the prior ``wait(2000)``
+    bound.
+    """
+    if thread is None or not thread.isRunning():
+        return
+    thread.quit()
+    app = QApplication.instance()
+    deadline = timeout_ms
+    step_ms = 20
+    while thread.isRunning() and deadline > 0:
+        if app is not None:
+            app.processEvents()
+        thread.wait(step_ms)
+        deadline -= step_ms
 
 
 def make_bundle() -> DeviceBundle:
@@ -156,22 +189,26 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
         # Stop the frame_saver QThread (quit()+wait with the h5py quiesce
         # timeout) — no-op if no save was started.
         controller._fs.frame_saver.stop_saving()
-        # Stop the laser2 readback QThread if one is in flight (fire-and-
-        # forget single-shot; quit()+wait so it doesn't outlive the test).
-        readback_thread = getattr(controller._hw, "_readback_thread", None)
-        if readback_thread is not None and readback_thread.isRunning():
-            readback_thread.quit()
-            readback_thread.wait(2000)
+        # Stop the laser2 readback QThread if one is in flight. The
+        # readback worker self-quits via sig_finished→thread.quit
+        # (DirectConnection, fires on the worker thread), so the thread
+        # always exits on its own once the worker's start_readback slot
+        # runs. The teardown only needs to nudge a still-running thread
+        # and pump the event loop while it drains — a blocking
+        # QThread.wait() here would stall the main event loop and, under
+        # xdist with ~50 controllers per worker, stack into an apparent
+        # hang when quit() races ahead of the thread's exec() (quit
+        # before exec is a no-op, the thread then runs unattended). The
+        # non-blocking poll below pumps events so a queued quit reaches
+        # the thread's event loop and the thread reaps deterministically.
+        _quit_thread_draining(getattr(controller._hw, "_readback_thread", None))
         for attr in (
             "_preview_thread",
             "_live_thread",
             "_single_thread",
             "_stack_thread",
         ):
-            t = getattr(controller, attr, None)
-            if t is not None and t.isRunning():
-                t.quit()
-                t.wait(2000)
+            _quit_thread_draining(getattr(controller, attr, None))
 
     def _teardown() -> None:
         # Stop the hardware_init timers so no pending callback fires
