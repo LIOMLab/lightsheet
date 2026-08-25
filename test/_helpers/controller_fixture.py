@@ -4,7 +4,7 @@ collaborators (AGENTS.md §5).
 ``Controller_MainWindow`` IS constructable on Mac: ``uv run lightsheet
 --demo`` does exactly that via ``_build_demo_bundle()`` in
 ``lightsheet/__main__.py``. ``QT_QPA_PLATFORM=offscreen`` + the conftest
-SDK stubs + the ``pyqtgraph.ImageView`` QWidget stub make real
+SDK stubs + the offscreen Qt platform make real
 construction work on the Mac dev box. Real construction produces genuine
 branch (arc) coverage and exercises the real signal/slot wiring, Qt
 widget state, and collaborator interactions — the foundation the test

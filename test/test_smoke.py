@@ -72,11 +72,11 @@ def test_dead_calibration_symbols_absent() -> None:
     This is an import-level ``hasattr`` assertion (AGENTS.md §5 — no
     static-source grep): it proves the symbols are gone from the live class
     object, not just absent from a text scan. ``Controller_MainWindow``
-    cannot be instantiated on the Mac (needs PyQt5 display), so the check
+    cannot be instantiated on the Mac (needs PySide6 display), so the check
     runs against the class itself — ``hasattr(cls, name)`` is true for any
-    name declared as a class attribute (pyqtSignal, method, instance-attr
+    name declared as a class attribute (Signal, method, instance-attr
     initialized in ``__init__`` is NOT visible here, but the deleted
-    symbols were either pyqtSignal class attrs or method defs, both of
+    symbols were either Signal class attrs or method defs, both of
     which ``hasattr`` on the class catches).
     """
     from lightsheet.gui.controller import Controller_MainWindow

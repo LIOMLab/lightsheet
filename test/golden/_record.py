@@ -80,11 +80,11 @@ def _read_controller_source() -> str:
 
 def _slice_method(src: str, method_sig: str) -> str:
     """Return the body of a method, from its ``def <sig>:`` line up to the
-    next top-level ``def``/``@pyqtSlot`` decorator or ``class`` boundary."""
+    next top-level ``def``/``@Slot`` decorator or ``class`` boundary."""
     m = re.search(r"def " + re.escape(method_sig) + r":", src)
     assert m, f"{method_sig} is missing"
     body = src[m.start() :]
-    end = re.search(r"\n    def |\n    @pyqtSlot|\nclass ", body[1:])
+    end = re.search(r"\n    def |\n    @Slot|\nclass ", body[1:])
     if end:
         body = body[: end.start() + 1]
     return body
@@ -194,7 +194,7 @@ def _build_preview_standin() -> Mock:
     the relocation introduced no stray emission on the message channel).
 
     The relocated body changed only the ``finally`` block: it now emits
-    ``self.finished.emit()`` (the worker's own ``pyqtSignal``) instead of
+    ``self.finished.emit()`` (the worker's own ``Signal``) instead of
     ``self._shell.sig_preview_mode_finished.emit()``. The golden harness
     captures ``sig_message`` / ``sig_progress_update`` emissions (not
     ``finished``), so the fixture is byte-identical to the pre-migration

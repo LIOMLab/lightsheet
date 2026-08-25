@@ -152,7 +152,7 @@ def test_frame_saver_sig_status_message_connected_to_shell_slot() -> None:
     §11).
 
     Asserted behaviorally: emitting the signal must call the shell slot
-    (PySide6 does not expose a public receiver enumeration on pyqtSignal).
+    (PySide6 does not expose a public receiver enumeration on Signal).
     """
     bundle = _make_bundle()
     shell = _make_shell()
