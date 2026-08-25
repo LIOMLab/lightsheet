@@ -40,8 +40,6 @@ required-environments = ["sys_platform == 'win32'", "sys_platform == 'darwin'"]
 
 [tool.ruff]
 extend-exclude = [
-    "lightsheet/gui/ui_controller.py",
-    "lightsheet/gui/ui_controller_rc.py",
     "lightsheet/gui/ui_properties.py",
     # 7B generated per-panel .ui/.qrc files (pyside6-uic/pyside6-rcc output).
     # Pre-registered so 7B regen does not trip ruff.
@@ -160,15 +158,6 @@ file_branch_coverage_min = 0
 # QGraphicsView-based image display widget. 50% branch floor until the
 # SC2 render smoke test (07-02) lands and exercises the setImage path.
 [tool.coverage-threshold.modules."lightsheet/gui/image_view.py"]
-file_branch_coverage_min = 50
-
-# Generated Qt rcc code (pyqt5uic). The `qt_version < [5,8,0]` branch is a
-# compat guard for a Qt version we do not run; covering it requires
-# importlib.reload on the rcc module, which re-runs qInitResources and
-# corrupts Qt's resource registry, segfaulting the next QMainWindow
-# construction. Not worth destabilising the suite for one generated
-# compat branch — pin to the coverable baseline.
-[tool.coverage-threshold.modules."lightsheet/gui/ui_controller_rc.py"]
 file_branch_coverage_min = 50
 
 [tool.ty.rules]

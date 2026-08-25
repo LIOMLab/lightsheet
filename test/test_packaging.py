@@ -78,16 +78,14 @@ def test_gui_controller_imports() -> None:
 def test_gui_controller_imports_from_foreign_cwd(tmp_path: Path) -> None:
     """A subprocess rooted in an empty temp directory (no repo files
     present) imports ``lightsheet.gui.controller`` — which transitively
-    imports ``lightsheet.gui.ui_controller``, whose tail runs
-    ``from . import ui_controller_rc`` (the package-relative resource
-    import emitted by ``pyuic5 --from-imports``).
+    imports the per-panel Ui_* modules and ui_shell (the package-relative
+    imports emitted by ``pyside6-uic --from-imports``).
 
     With the package-relative import this succeeds from a foreign CWD.
     If the inherited ``sys.path.append("./gui")`` + bare
-    ``import ui_controller_rc`` hack were re-introduced, this subprocess
-    would fail with ``ModuleNotFoundError: No module named 'ui_controller_rc'``
-    (because ``./lightsheet/gui`` does not exist in the empty CWD). This is
-    the adversarial can-fail test for the path-hack elimination (D-05)."""
+    ``import ui_*`` hack were re-introduced, this subprocess
+    would fail with ``ModuleNotFoundError`` (because ``./lightsheet/gui``
+    does not exist in the empty CWD)."""
     result = subprocess.run(
         [sys.executable, "-c", "import lightsheet.gui.controller"],
         cwd=tmp_path,
