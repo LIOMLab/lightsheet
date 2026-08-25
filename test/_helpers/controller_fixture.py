@@ -146,6 +146,24 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
     # exercises any method that reads them).
     controller.hardware_init()
 
+    def _stop_worker_threads() -> None:
+        # Mirror closeEvent's quit()+wait() shutdown so no worker QThread
+        # outlives a test. Mock HAL calls are non-blocking, so the
+        # cooperative poll exits within one iteration after close_modes()
+        # clears the mode-started flags. A shorter bound than production's
+        # 5000 is acceptable here (2000 ms) for the same reason.
+        controller.close_modes()
+        for attr in (
+            "_preview_thread",
+            "_live_thread",
+            "_single_thread",
+            "_stack_thread",
+        ):
+            t = getattr(controller, attr, None)
+            if t is not None and t.isRunning():
+                t.quit()
+                t.wait(2000)
+
     def _teardown() -> None:
         # Stop the hardware_init timers so no pending callback fires
         # after the test returns (the 100ms imageview timer + the L2
@@ -155,22 +173,14 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
             timer = getattr(controller, timer_attr, None)
             if timer is not None:
                 timer.stop()
+        # Quit+wait every worker QThread before the patch stops so no
+        # worker outlives the test. The signal-lambda reference cycle is
+        # broken at the connection layer (wire_collaborators uses bare
+        # bound-method connections, so the Python wrapper reaches
+        # refcount zero naturally on teardown), so sip.delete is no
+        # longer required to force deterministic C++ destruction.
+        _stop_worker_threads()
         qm_patch.stop()
-        # Explicitly destroy the controller's C++ Qt object NOW so its
-        # widget-tree destructors run deterministically at teardown,
-        # rather than being deferred by Python's refcount/GC and racing
-        # with the NEXT test's QMainWindow.__init__. Without this, the
-        # ~5th controller construction in a process segfaults inside
-        # __init__ because a prior controller's deferred C++ destructor
-        # fires mid-construction. The production app constructs exactly
-        # one controller and never reconstructs it, so this is a
-        # test-only lifecycle concern — but the fixture must tear down
-        # deterministically so the suite is stable.
-        import sip
-        try:
-            sip.delete(controller)
-        except (TypeError, RuntimeError):
-            pass
 
     request.addfinalizer(_teardown)
     return controller, bundle
