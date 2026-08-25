@@ -732,6 +732,13 @@ class Controller_MainWindow(QMainWindow):
             self.ui.statusbar.showMessage("Shutting down hardware...")
             self.ui.statusbar.repaint()
             self.close_modes()
+            # Stop the frame_saver QThread BEFORE the acquisition threads so
+            # h5py.File.close() completes (wait(10000), matching the former
+            # join(10.0) h5py quiesce timeout) before the camera/etls close.
+            # stop_saving flips saving_started (the worker's cooperative
+            # cancellation flag) then quit()+wait(10000) on the saver thread.
+            # No-op if no save was started (_saver_thread absent).
+            self._fs.frame_saver.stop_saving()
             # Shut down all four acquisition worker QThreads via a single
             # uniform quit() + wait(5000) loop (the QThread vehicle
             # replacement for join(timeout=5.0)). quit() requests the
@@ -742,8 +749,8 @@ class Controller_MainWindow(QMainWindow):
             # terminate() is never used (dangerous per Qt docs — can leave
             # mutexes held, HDF5 half-written). These thread attributes only
             # exist once their mode has been started at least once, hence
-            # getattr. frame_saver_thread / laser daemon threads / laser2
-            # readback stay threading.Thread and are NOT in this loop.
+            # getattr. The 4 laser daemon threads stay threading.Thread and
+            # are NOT in this loop (lock-free E-stop, AGENTS.md §2).
             for attr in ("_preview_thread", "_live_thread", "_single_thread", "_stack_thread"):
                 worker_thread = getattr(self, attr, None)
                 if worker_thread is not None and worker_thread.isRunning():

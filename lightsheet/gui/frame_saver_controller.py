@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING
 
 import h5py
 import numpy as np
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from lightsheet.hal.bundle import DeviceBundle
 
@@ -37,6 +37,34 @@ if TYPE_CHECKING:
     from lightsheet.gui.controller import Controller_MainWindow
 
 logger = logging.getLogger(__name__)
+
+
+class FrameSaverWorker(QObject):
+    """Worker ``QObject`` for the HDF5 save loop, affined to a dedicated
+    ``QThread`` via ``moveToThread``.
+
+    The save loop body itself stays on ``FrameSaver.frame_saver_worker``
+    (unchanged) — this worker's ``start_saving`` slot invokes that method
+    on the worker thread and emits ``sig_finished`` when it returns. The
+    ``sig_finished`` → ``thread.quit`` connection ensures the thread's
+    event loop exits after the save loop completes, so ``thread.wait()``
+    unblocks only after ``h5py.File.close()`` has returned on the worker
+    thread (the load-bearing h5py close-ordering contract).
+    """
+
+    sig_finished = Signal()
+
+    def __init__(self, saver: "FrameSaver") -> None:
+        super().__init__()
+        self._saver = saver
+
+    @Slot()
+    def start_saving(self) -> None:
+        """Run the save loop on the worker thread, then signal completion."""
+        try:
+            self._saver.frame_saver_worker()
+        finally:
+            self.sig_finished.emit()
 
 
 class FrameViewer(QObject):
@@ -193,10 +221,24 @@ class FrameSaver(QObject):
         self.queue.put(item=buffer, block=True)
 
     def start_saving(self) -> None:
-        """Initiates saving thread"""
+        """Initiates the save worker on a dedicated QThread.
+
+        The worker ``QObject`` is moved to the thread via ``moveToThread``;
+        the thread's ``started`` signal invokes the worker's ``start_saving``
+        slot, which runs the save loop on the worker thread. When the save
+        loop exits, the worker emits ``sig_finished`` which quits the
+        thread's event loop — so ``stop_saving``'s ``wait(10000)`` unblocks
+        only after ``h5py.File.close()`` has returned on the worker thread
+        (the h5py close-ordering contract).
+        """
         self.saving_started = True
-        self.frame_saver_thread = threading.Thread(target=self.frame_saver_worker)
-        self.frame_saver_thread.start()
+        self._saver_thread = QThread()
+        self._saver_worker = FrameSaverWorker(self)
+        self._saver_worker.moveToThread(self._saver_thread)
+        self._saver_thread.started.connect(self._saver_worker.start_saving)
+        self._saver_worker.sig_finished.connect(self._saver_thread.quit)
+        self._saver_thread.finished.connect(self._saver_worker.deleteLater)
+        self._saver_thread.start()
 
     def _write_laser_metadata(self, outfile: h5py.File) -> None:
         """Write per-laser metadata as h5py.File ROOT attrs once per file.
@@ -318,22 +360,28 @@ class FrameSaver(QObject):
         """Signal the save worker to stop and join it with a bounded timeout.
 
         The flag flip tells the worker to exit its inner loop after the
-        current buffer; the join ensures the HDF5 file is fully closed and
-        h5py's native state is quiesced BEFORE the caller proceeds to disarm
-        the camera / emit the finished signal / reinit for the next run.
-        Without the join, the saver thread outlives the acquisition cleanup
+        current buffer; ``quit()`` + ``wait(10000)`` ensures the HDF5 file
+        is fully closed and h5py's native state is quiesced BEFORE the
+        caller proceeds to disarm the camera / emit the finished signal /
+        reinit for the next run. The ordering chain: ``saving_started``
+        flips to False → the worker's inner loop exits →
+        ``h5py.File.close()`` returns on the worker thread →
+        ``frame_saver_worker()`` returns → ``sig_finished`` emits →
+        ``thread.quit()`` → the event loop exits → ``wait(10000)`` unblocks.
+
+        Without the wait, the saver thread outlives the acquisition cleanup
         and a subsequent reinit (which replaces self.queue) or closeEvent
         can race with an in-flight h5py write/close — h5py's native library
         is not thread-safe across concurrent file handles, and the race can
         corrupt HDF5 state and crash the process with a native segfault.
         """
         self.saving_started = False
-        worker = getattr(self, "frame_saver_thread", None)
-        if worker is not None and worker.is_alive():
-            worker.join(timeout=10.0)
-            if worker.is_alive():
+        worker_thread = getattr(self, "_saver_thread", None)
+        if worker_thread is not None and worker_thread.isRunning():
+            worker_thread.quit()
+            if not worker_thread.wait(10000):
                 logger.warning(
-                    "frame_saver_thread still alive after 10s join timeout "
+                    "frame_saver_thread still alive after 10s wait timeout "
                     "in stop_saving — proceeding anyway (HDF5 state may be "
                     "indeterminate)."
                 )

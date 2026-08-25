@@ -153,6 +153,9 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
         # clears the mode-started flags. A shorter bound than production's
         # 5000 is acceptable here (2000 ms) for the same reason.
         controller.close_modes()
+        # Stop the frame_saver QThread (quit()+wait with the h5py quiesce
+        # timeout) — no-op if no save was started.
+        controller._fs.frame_saver.stop_saving()
         for attr in (
             "_preview_thread",
             "_live_thread",

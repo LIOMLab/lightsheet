@@ -165,9 +165,9 @@ def test_frame_saver_start_saving_starts_thread() -> None:
     saver.filenames_list = []  # empty so worker exits immediately
     saver.start_saving()
     assert saver.saving_started is True
-    assert hasattr(saver, "frame_saver_thread")
-    # Wait for the thread to finish (empty filenames_list -> immediate exit).
-    saver.frame_saver_thread.join(timeout=2.0)
+    assert hasattr(saver, "_saver_thread")
+    # Wait for the QThread to finish (empty filenames_list -> immediate exit).
+    saver._saver_thread.wait(2000)
     saver.stop_saving()
 
 
