@@ -1892,6 +1892,7 @@ class Controller_MainWindow(QMainWindow):
                 # Check that filename is valid and saving is allowed
                 self.validate_file_name()
 
+                nosave_answer = False
                 if not self.saving_allowed:
                     self.sig_beep.emit()
                     nosave_answer = QMessageBox.question(
