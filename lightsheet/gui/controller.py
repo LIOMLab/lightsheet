@@ -36,7 +36,7 @@ from PyQt5.QtWidgets import (
 from lightsheet.config import cfg_read
 from lightsheet.gui.properties_dialog import Properties_Dialog
 from lightsheet.gui.ui_controller import Ui_Controller
-from lightsheet.gui.workers import PreviewWorker
+from lightsheet.gui.workers import LiveWorker, PreviewWorker, SingleWorker
 from lightsheet.hal import Camera, ETLs, Motors, SigGen
 from lightsheet.hal.bundle import DeviceBundle
 
@@ -870,20 +870,36 @@ class Controller_MainWindow(QMainWindow):
                         "timeout during closeEvent — proceeding with "
                         "shutdown anyway."
                     )
-            # Join the remaining three acquisition worker threads
-            # (threading.Thread) with a bounded timeout instead of an
-            # unconditional fixed sleep. These still spawn via
-            # threading.Thread until later plans migrate them to QThread.
-            # A worker stuck inside a blocking hardware call
-            # (camera.monitor_recorder up to its timeout, an iBeam serial
-            # round-trip, a motor move) would otherwise hang shutdown
-            # indefinitely; the bounded wait gives it a chance to exit
-            # cleanly while guaranteeing shutdown proceeds regardless.
-            # These thread attributes only exist once their mode has been
+            # Shut down the live and single worker QThreads via quit() +
+            # wait(5000) (the QThread vehicle replacement for
+            # join(timeout=5.0)), mirroring the preview-thread shape. quit()
+            # requests the thread's event loop to exit; wait(5000) blocks
+            # the GUI thread up to 5s for the worker to return. The
+            # cooperative poll model means the worker exits on its own at
+            # the next loop iteration after close_modes() cleared the
+            # mode-started flag. terminate() is never used.
+            for attr in ("_live_thread", "_single_thread"):
+                worker_thread = getattr(self, attr, None)
+                if worker_thread is not None and worker_thread.isRunning():
+                    worker_thread.quit()
+                    if not worker_thread.wait(5000):
+                        logger.warning(
+                            "%s still running after 5s wait "
+                            "timeout during closeEvent — proceeding with "
+                            "shutdown anyway.",
+                            attr,
+                        )
+            # Join the remaining acquisition worker thread (threading.Thread)
+            # with a bounded timeout instead of an unconditional fixed sleep.
+            # This still spawns via threading.Thread until the later plan
+            # migrates it to QThread. A worker stuck inside a blocking
+            # hardware call (camera.monitor_recorder up to its timeout, an
+            # iBeam serial round-trip, a motor move) would otherwise hang
+            # shutdown indefinitely; the bounded wait gives it a chance to
+            # exit cleanly while guaranteeing shutdown proceeds regardless.
+            # This thread attribute only exists once its mode has been
             # started at least once, hence getattr.
             for attr in (
-                "single_mode_thread",
-                "live_mode_thread",
                 "stack_mode_thread",
             ):
                 worker_thread = getattr(self, attr, None)
@@ -1687,9 +1703,23 @@ class Controller_MainWindow(QMainWindow):
             # start_lasers()/stop_lasers(), never the widgets (AGENTS.md §11).
             self._cache_auto_laser_flags()
 
-            # Starting live mode thread
-            self.live_mode_thread = threading.Thread(target=self._acq.live_mode_worker)
-            self.live_mode_thread.start()
+            # Spawn the live worker on a QThread (moveToThread pattern).
+            # The worker QObject owns the relocated live_mode_worker body;
+            # thread.started -> worker.run kicks off the acquisition loop,
+            # worker.finished -> updateUi_post_live_mode re-enables the UI
+            # on the GUI thread, and worker.finished -> thread.quit stops
+            # the thread's event loop. closeEvent shuts this thread down via
+            # quit() + wait(5000) instead of join(timeout=5.0). Live mode
+            # never reads save-option widgets, so no B-03 pre-sampling is
+            # needed (mirroring PreviewWorker's shape).
+            self._live_worker = LiveWorker(self._bundle, self._hw, self)
+            self._live_thread = QThread()
+            self._live_worker.moveToThread(self._live_thread)
+            self._live_thread.started.connect(self._live_worker.run)
+            self._live_worker.finished.connect(self.updateUi_post_live_mode)
+            self._live_worker.finished.connect(self._live_thread.quit)
+            self._live_thread.finished.connect(self._live_worker.deleteLater)
+            self._live_thread.start()
 
     @pyqtSlot()
     def updateUi_post_live_mode(self) -> None:
@@ -1716,9 +1746,29 @@ class Controller_MainWindow(QMainWindow):
             # start_lasers()/stop_lasers(), never the widgets (AGENTS.md §11).
             self._cache_auto_laser_flags()
 
-            # Starting single image thread
-            self.single_mode_thread = threading.Thread(target=self._acq.single_mode_worker)
-            self.single_mode_thread.start()
+            # B-03: pre-sample the save-option widgets on the GUI thread
+            # BEFORE constructing the worker, mirroring _cache_auto_laser_flags().
+            # SingleWorker.acquire_scan reads self._save_description /
+            # self._save_stitch_blend (constructor args) instead of reaching
+            # into self._shell.ui.* from the worker thread (AGENTS.md §11).
+            save_desc = str(self.ui.lineEdit_saveDescription.text())
+            save_blend = self.ui.checkBox_saveStitchBlend.isChecked()
+
+            # Spawn the single-image worker on a QThread (moveToThread pattern).
+            # The worker QObject owns the relocated single_mode_worker body;
+            # thread.started -> worker.run kicks off the single acquisition,
+            # worker.finished -> updateUi_post_single_mode re-enables the UI
+            # on the GUI thread, and worker.finished -> thread.quit stops the
+            # thread's event loop. closeEvent shuts this thread down via
+            # quit() + wait(5000) instead of join(timeout=5.0).
+            self._single_worker = SingleWorker(self._bundle, self._hw, self, save_desc, save_blend)  # noqa: E501
+            self._single_thread = QThread()
+            self._single_worker.moveToThread(self._single_thread)
+            self._single_thread.started.connect(self._single_worker.run)
+            self._single_worker.finished.connect(self.updateUi_post_single_mode)
+            self._single_worker.finished.connect(self._single_thread.quit)
+            self._single_thread.finished.connect(self._single_worker.deleteLater)
+            self._single_thread.start()
 
     @pyqtSlot()
     def updateUi_post_single_mode(self) -> None:
