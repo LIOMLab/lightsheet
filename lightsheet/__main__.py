@@ -98,7 +98,7 @@ def _show_missing_device_dialog(message: str) -> None:
     a QLabel in a modal QDialog with a single Exit button. The
     QApplication must already exist so the dialog can render.
     """
-    from PyQt5.QtWidgets import (
+    from PySide6.QtWidgets import (
         QDialog,
         QHBoxLayout,
         QLabel,
@@ -138,7 +138,7 @@ def _show_missing_device_dialog(message: str) -> None:
     layout.addLayout(btn_layout)
 
     dlg.setModal(True)
-    dlg.exec_()
+    dlg.exec()
 
 
 def main() -> int:
@@ -155,8 +155,8 @@ def main() -> int:
     args, _ = parser.parse_known_args()
     demo = _resolve_demo(args.demo, os.environ.get("LIGHTSHEET_DEMO"))
 
-    # Preload the NI-DAQmx C library before any PyQt5 import. PyQt5 (and
-    # qdarkstyle) load Qt DLLs that corrupt the NI-DAQmx driver's internal
+    # Preload the NI-DAQmx C library before any PySide6/Qt6 import. PySide6
+    # (and qdarkstyle) load Qt DLLs that corrupt the NI-DAQmx driver's internal
     # state when loaded first — every subsequent nidaqmx.Task() call crashes
     # with "OSError: exception: access violation reading 0x0000000000000000"
     # inside DAQmxCreateTask. Preloading nicaiu.dll maps the driver into the
@@ -185,12 +185,12 @@ def main() -> int:
 
     configure_logging()
 
-    # PyQt5 / controller / qdarkstyle imports are deferred to inside main()
+    # PySide6 / controller / qdarkstyle imports are deferred to inside main()
     # so the nicaiu preload above runs first. ruff's E402 (module-level
     # import-not-at-top) is suppressed for this file via per-file-ignores.
     import qdarkstyle
-    from PyQt5.QtCore import pyqtSlot
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtCore import Slot
+    from PySide6.QtWidgets import QApplication
     from qdarkstyle.dark.palette import DarkPalette
     from qdarkstyle.light.palette import LightPalette
 
@@ -238,18 +238,18 @@ def main() -> int:
 
     # Initializing the app, controller (class which connects GUI to features)
     app = QApplication(sys.argv)
-    app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api="pyqt5", palette=LightPalette))
+    app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api="pyside6", palette=LightPalette))
 
-    @pyqtSlot(str)
+    @Slot(str)
     def set_app_stylesheet(stylesheet_code: str) -> None:
         """Function that allows stylesheet selection for the app."""
         if stylesheet_code == "light":
             app.setStyleSheet(
-                qdarkstyle.load_stylesheet(qt_api="pyqt5", palette=LightPalette)
+                qdarkstyle.load_stylesheet(qt_api="pyside6", palette=LightPalette)
             )
         elif stylesheet_code == "dark":
             app.setStyleSheet(
-                qdarkstyle.load_stylesheet(qt_api="pyqt5", palette=DarkPalette)
+                qdarkstyle.load_stylesheet(qt_api="pyside6", palette=DarkPalette)
             )
 
     # --- Composition root: build the DeviceBundle, validate config, then
@@ -334,14 +334,14 @@ def main() -> int:
     # / AcquisitionCoordinator delegates) as bare bound-method connections
     # — called after all four collaborators are assigned so the bound
     # methods resolve. Breaks the signal-lambda reference cycle at the
-    # connection layer (PyQt5 weakref-to-__self__ decomposition).
+    # connection layer (PySide6 weakref-to-__self__ decomposition).
     controller.wire_collaborators()
     controller.sig_beep.connect(app.beep)  # connection for beep sounds
     controller.sig_stylesheet.connect(set_app_stylesheet)  # stylesheet selection
 
     # Show controller UI and execute main event loop
     controller.show()
-    return app.exec_()
+    return app.exec()
 
 
 if __name__ == "__main__":

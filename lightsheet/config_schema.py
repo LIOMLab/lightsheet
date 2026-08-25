@@ -610,7 +610,7 @@ def load_sections_from_ini(
 # validate_or_abort() runs collect_config_errors on the sections dict, shows
 # a modal QDialog listing all errors (red, startup-blocking) and warnings
 # (amber, advisory), then aborts via sys.exit(1) if any errors exist. If
-# only warnings are present, the operator may proceed. PyQt5 is imported
+# only warnings are present, the operator may proceed. PySide6 is imported
 # inside _show_dialog so the module stays importable without Qt for the
 # pure-logic collect_config_errors tests.
 # ---------------------------------------------------------------------------
@@ -652,12 +652,13 @@ class ConfigValidator:
         "Proceed with warnings" (only if 0 errors and ≥1 warning).
 
         Returns ``True`` if the operator clicked "Proceed with warnings"
-        (``QDialog.Accepted``) and ``False`` otherwise (``QDialog.Rejected``
-        — the "Exit" button, window close, or ESC). The caller uses this
-        to decide whether to abort on the warnings-only path: an errors
-        dialog always aborts regardless of the return value.
+        (``QDialog.DialogCode.Accepted``) and ``False`` otherwise
+        (``QDialog.DialogCode.Rejected`` — the "Exit" button, window close,
+        or ESC). The caller uses this to decide whether to abort on the
+        warnings-only path: an errors dialog always aborts regardless of
+        the return value.
         """
-        from PyQt5.QtWidgets import (
+        from PySide6.QtWidgets import (
             QDialog,
             QHBoxLayout,
             QLabel,
@@ -708,4 +709,4 @@ class ConfigValidator:
 
         layout.addLayout(btn_layout)
         dlg.setModal(True)
-        return dlg.exec_() == QDialog.Accepted
+        return dlg.exec() == QDialog.DialogCode.Accepted

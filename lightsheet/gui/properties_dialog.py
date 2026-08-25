@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import QDialog
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QDialog
 
 from lightsheet.gui.ui_properties import Ui_Properties
 
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 class Properties_Dialog(QDialog):
     """Class for Properties Dialog"""
 
-    sig_status_message = pyqtSignal(str)
+    sig_status_message = Signal(str)
 
     def __init__(self, parent: Controller_MainWindow) -> None:
         QDialog.__init__(self, parent)

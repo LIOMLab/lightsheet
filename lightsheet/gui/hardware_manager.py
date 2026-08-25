@@ -90,7 +90,7 @@ class HardwareManager:
 
         Timing invariant: this method is invoked from ``hardware_init``
         (the 100ms ``timer_hardware_init`` callback), which cannot fire
-        until the Qt event loop is pumping via ``app.exec_()`` (i.e. after
+        until the Qt event loop is pumping via ``app.exec()`` (i.e. after
         ``controller.show()``). It is NOT called from ``__init__`` — that
         would block the composition root on the serial round-trip.
         """

@@ -23,7 +23,7 @@ E-stop kill path stays lock-free on the GUI thread; the workers only
 
 Workers never touch the shell's ``ui.*`` widgets directly (AGENTS.md
 §11) — all cross-thread UI effects flow through the shell's queued
-``pyqtSignal`` connections (``sig_message``, ``sig_progress_update``,
+``Signal`` connections (``sig_message``, ``sig_progress_update``,
 ``sig_refresh_position_horizontal``, ``sig_*_mode_finished``) plus this
 worker's own ``finished`` signal. The save-option widgets
 (``lineEdit_saveDescription``, ``checkBox_saveStitchBlend``,
@@ -42,7 +42,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
-from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
+from PySide6.QtCore import QObject, Signal, Slot
 
 from lightsheet.hal.bundle import DeviceBundle
 
@@ -66,7 +66,7 @@ class PreviewWorker(QObject):
     completes normally, breaks on E-stop, or an exception propagates.
     """
 
-    finished = pyqtSignal()
+    finished = Signal()
 
     def __init__(
         self,
@@ -91,7 +91,7 @@ class PreviewWorker(QObject):
             shell.ui.doubleSpinBox_cameraExposureTime.value()
         )
 
-    @pyqtSlot()
+    @Slot()
     def run(self) -> None:
         """This thread allows the visualization and manual control of the
         parameters of the beams in the UI. There is no scan here,
@@ -318,7 +318,7 @@ class LiveWorker(QObject, _AcquireScanMixin):
     no B-03 args (mirroring ``PreviewWorker``'s shape).
     """
 
-    finished = pyqtSignal()
+    finished = Signal()
 
     def __init__(
         self,
@@ -338,7 +338,7 @@ class LiveWorker(QObject, _AcquireScanMixin):
         self._save_description = ""
         self._save_stitch_blend = False
 
-    @pyqtSlot()
+    @Slot()
     def run(self) -> None:
         """This thread allows the execution of scan_mode while modifying
         parameters in the UI"""
@@ -411,7 +411,7 @@ class SingleWorker(QObject, _AcquireScanMixin):
     the shell's ``ui.*`` from the worker thread (AGENTS.md §11).
     """
 
-    finished = pyqtSignal()
+    finished = Signal()
 
     def __init__(
         self,
@@ -436,7 +436,7 @@ class SingleWorker(QObject, _AcquireScanMixin):
         self._save_description = save_description
         self._save_stitch_blend = save_stitch_blend
 
-    @pyqtSlot()
+    @Slot()
     def run(self) -> None:
         """Generates and display a single scan which can be saved afterwards"""
         try:
@@ -523,7 +523,7 @@ class StackWorker(QObject, _AcquireScanMixin):
     AGENTS.md §11 direct-widget-mutation violation.
     """
 
-    finished = pyqtSignal()
+    finished = Signal()
 
     def __init__(
         self,
@@ -552,7 +552,7 @@ class StackWorker(QObject, _AcquireScanMixin):
         self._save_all_crop = save_all_crop
         self._save_all_full = save_all_full
 
-    @pyqtSlot()
+    @Slot()
     def run(self) -> None:
         """Thread for volume acquisition and saving"""
         try:
