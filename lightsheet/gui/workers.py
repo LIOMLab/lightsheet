@@ -6,9 +6,9 @@ threading-vehicle migration from ``threading.Thread`` to ``QThread`` +
 ``AcquisitionCoordinator`` (which stays plain-Python and keeps its
 GUI-thread galvo/ETL slots).
 
-``PreviewWorker``, ``LiveWorker``, and ``SingleWorker`` are present in
-this file; ``StackWorker`` lands in a later plan as its body relocates.
-The shell (``Controller_MainWindow``) constructs a worker ``QObject`` +
+``PreviewWorker``, ``LiveWorker``, ``SingleWorker``, and
+``StackWorker`` are all present in this file. The shell
+(``Controller_MainWindow``) constructs a worker ``QObject`` +
 a ``QThread``, calls ``worker.moveToThread(thread)``, connects
 ``thread.started -> worker.run`` and
 ``worker.finished -> shell.updateUi_post_<mode>`` /
@@ -21,16 +21,18 @@ poll ``self._shell.estop_event.is_set()`` at the same loop sites. The
 E-stop kill path stays lock-free on the GUI thread; the workers only
 *poll* the event. ``QThread.requestInterruption()`` is NOT adopted.
 
-Workers never touch ``self._shell.ui.*`` widgets directly (AGENTS.md
+Workers never touch the shell's ``ui.*`` widgets directly (AGENTS.md
 §11) — all cross-thread UI effects flow through the shell's queued
 ``pyqtSignal`` connections (``sig_message``, ``sig_progress_update``,
-``sig_*_mode_finished``) plus this worker's own ``finished`` signal.
-The save-option widgets (``lineEdit_saveDescription``,
-``checkBox_saveStitchBlend``) are pre-sampled on the GUI thread in the
-mode-button slot and passed as ``SingleWorker`` constructor args, so
-``_AcquireScanMixin.acquire_scan`` reads ``self._save_description`` /
-``self._save_stitch_blend`` instead of reaching into ``self._shell.ui.*``
-from the worker thread.
+``sig_refresh_position_horizontal``, ``sig_*_mode_finished``) plus this
+worker's own ``finished`` signal. The save-option widgets
+(``lineEdit_saveDescription``, ``checkBox_saveStitchBlend``,
+``checkBox_saveAllCrop``, ``checkBox_saveAllFull``) are pre-sampled on
+the GUI thread in the mode-button slot and passed as worker constructor
+args, so ``_AcquireScanMixin.acquire_scan`` and ``StackWorker.run`` read
+``self._save_description`` / ``self._save_stitch_blend`` /
+``self._save_all_crop`` / ``self._save_all_full`` instead of reaching
+into the shell's ``ui.*`` from the worker thread.
 """
 
 from __future__ import annotations
@@ -76,6 +78,13 @@ class PreviewWorker(QObject):
         self.camera = bundle.camera
         self._hw = hw
         self._shell = shell
+        # B-03: pre-sample the camera exposure time on the GUI thread (the
+        # constructor runs on the GUI thread before moveToThread) so run()
+        # never reaches into the shell's ui.* from the worker thread
+        # (AGENTS.md §11).
+        self._camera_exposure_time = int(
+            shell.ui.doubleSpinBox_cameraExposureTime.value()
+        )
 
     @pyqtSlot()
     def run(self) -> None:
@@ -87,7 +96,7 @@ class PreviewWorker(QObject):
             # Setting the camera for self triggered acquisition
             self.camera.set_trigger_mode("auto_trigger")
             self.camera.set_exposure_time(
-                int(self._shell.ui.doubleSpinBox_cameraExposureTime.value())
+                self._camera_exposure_time
             )
             self.camera.arm()
 
@@ -389,7 +398,7 @@ class SingleWorker(QObject, _AcquireScanMixin):
     (``save_description``, ``save_stitch_blend``) so
     ``_AcquireScanMixin.acquire_scan`` reads ``self._save_description``
     / ``self._save_stitch_blend`` instead of reaching into
-    ``self._shell.ui.*`` from the worker thread (AGENTS.md §11).
+    the shell's ``ui.*`` from the worker thread (AGENTS.md §11).
     """
 
     finished = pyqtSignal()
@@ -468,4 +477,251 @@ class SingleWorker(QObject, _AcquireScanMixin):
             # propagates from stop_lasers()/camera.disarm()/anything else.
             # Without this, a worker that dies mid-cleanup leaves the UI
             # stuck on "Acquiring..." with no slot to re-enable it.
+            self.finished.emit()
+
+
+class StackWorker(QObject, _AcquireScanMixin):
+    """Worker ``QObject`` for stack mode (volume acquisition + saving).
+
+    Relocated verbatim from ``AcquisitionCoordinator.stack_mode_worker``.
+    The body arms the camera for scan acquisition, starts the auto-selected
+    lasers (guarded by a pre-stop check), computes scan waveforms once,
+    then loops over ``self._shell.number_of_planes`` planes — moving the
+    horizontal motor, acquiring a scan, and saving the frame. The
+    ``finished`` signal fires exactly once in ``finally`` so the
+    GUI-thread slot (``updateUi_post_stack_mode``) re-enables the UI
+    whether the run completes normally, breaks on E-stop/Stop, or an
+    exception propagates.
+
+    The save-option widgets (``lineEdit_saveDescription``,
+    ``checkBox_saveStitchBlend``, ``checkBox_saveAllCrop``,
+    ``checkBox_saveAllFull``) are pre-sampled on the GUI thread in
+    ``updateUi_stack_mode_button`` and passed as constructor args
+    (``save_description``, ``save_stitch_blend``, ``save_all_crop``,
+    ``save_all_full``) so the worker thread never reaches into
+    the shell's ``ui.*`` (AGENTS.md §11).
+
+    The per-plane position update reaches the GUI thread via the queued
+    ``sig_refresh_position_horizontal`` signal (already declared on the
+    shell and connected to the GUI-thread position-refresh slot) instead
+    of a legacy direct cross-thread widget mutation — closing the last
+    AGENTS.md §11 direct-widget-mutation violation.
+    """
+
+    finished = pyqtSignal()
+
+    def __init__(
+        self,
+        bundle: DeviceBundle,
+        hw: "HardwareManager",
+        shell: "Controller_MainWindow",
+        save_description: str,
+        save_stitch_blend: bool,
+        save_all_crop: bool,
+        save_all_full: bool,
+    ) -> None:
+        super().__init__()
+        self.camera = bundle.camera
+        self.siggen = bundle.siggen
+        self.motors = bundle.motors
+        self._hw = hw
+        self._shell = shell
+        # B-03: pre-sampled on the GUI thread before spawning the worker.
+        self._save_description = save_description
+        self._save_stitch_blend = save_stitch_blend
+        self._save_all_crop = save_all_crop
+        self._save_all_full = save_all_full
+
+    @pyqtSlot()
+    def run(self) -> None:
+        """Thread for volume acquisition and saving"""
+        try:
+            # Making sure saving is allowed and filename isn't empty
+            if self._shell.saving_allowed:
+                # Getting sample name
+                self._shell.save_description = str(
+                    self._save_description
+                )
+
+                # Setting frame saver
+                self._shell._fs.reinit(3)
+                self._shell._fs.add_sample_name(self._shell.save_description)
+                if self._save_all_crop:
+                    self._shell._fs.set_files(
+                        self._shell.number_of_planes,
+                        self._shell.save_filename,
+                        "stack",
+                        1,
+                        "ETLscan",
+                    )
+                elif self._save_all_full:
+                    self._shell._fs.set_files(
+                        self._shell.number_of_planes,
+                        self._shell.save_filename,
+                        "stack",
+                        1,
+                        "FullETLscan",
+                    )
+                else:
+                    self._shell._fs.set_files(
+                        1,
+                        self._shell.save_filename,
+                        "stack",
+                        self._shell.number_of_planes,
+                        "reconstructed_frame",
+                    )
+                # Starting frame saver
+                self._shell._fs.start_saving()
+
+            # Setting the camera for scan acquisition
+            self.camera.arm_scan()
+
+            # Pre-stop guard: a Stop or E-stop pressed in the instant between
+            # thread start and this line skips energizing the lasers entirely.
+            # The per-plane loop's first-iteration poll then breaks immediately
+            # and the end-of-method cleanup (stop_lasers/disarm/emit) runs
+            # unchanged, so no lasers are left on and the UI re-enables.
+            if self._shell.stack_mode_started and not self._shell.estop_event.is_set():
+                self._hw.start_lasers()
+
+            # Set progress bar
+            progress_value = 0
+            progress_increment = 100 / self._shell.number_of_planes
+            self._shell.sig_progress_update.emit(0)  # To reset progress bar
+
+            # Compute scan waveforms only once before we start the stack acquisition
+            # Changes to settings won't be effective until we stop/restart mode
+            self.siggen.compute_scan_waveforms()
+
+            for plane in range(int(self._shell.number_of_planes)):
+                if not self._shell.stack_mode_started:
+                    self._shell.sig_message.emit("Stack Acquisition Interrupted")
+                    break
+                elif self._shell.estop_event.is_set():
+                    # E-stop poll point — checked alongside the stack_mode_started
+                    # flag at each plane boundary. The lasers are already dark
+                    # (driven off synchronously on the GUI thread); this break
+                    # stops acquiring new planes.
+                    self._shell.sig_message.emit("Stack Acquisition Interrupted")
+                    break
+                else:
+                    # Pre-move guard: a Stop or E-stop requested while the worker
+                    # was between blocking calls (after the loop-top poll but
+                    # before this motor move) must not start a new blocking call.
+                    if (
+                        not self._shell.stack_mode_started
+                        or self._shell.estop_event.is_set()
+                    ):
+                        break
+
+                    # Moving sample position
+                    position = self._shell.stack_starting_plane + (
+                        plane * self._shell.stack_step
+                    )
+                    try:
+                        self.motors.horizontal.move_absolute_position(
+                            position, "\u03bcm"
+                        )  # Position in micro-meters
+                    except ValueError:
+                        self._shell.sig_message.emit(
+                            "Move rejected — horizontal would exceed travel limits. Stack acquisition aborted."  # noqa: E501
+                        )
+                        self._shell.sig_beep.emit()
+                        break
+                    # Per-plane position update reaches the GUI thread via the
+                    # queued sig_refresh_position_horizontal signal (already
+                    # declared on the shell and connected to
+                    # updateUi_position_horizontal) instead of a direct
+                    # cross-thread widget mutation (AGENTS.md §11).
+                    self._shell.sig_refresh_position_horizontal.emit()
+
+                    # Moving the camera to focus
+                    # FIXME - Add focus adjustement to stack mode
+                    # self.calculate_camera_focus()
+                    # self.move_camera_to_focus()
+
+                    if self._shell.saving_allowed:
+                        self._shell._fs.add_motor_parameters(
+                            self._shell.current_horizontal_position_text,
+                            self._shell.current_vertical_position_text,
+                            self._shell.current_camera_position_text,
+                        )
+
+                    # Pre-acquire guard: a Stop or E-stop requested while the worker
+                    # was between the motor move and this acquisition must not start
+                    # the (potentially long, up to recorder-timeout) camera grab.
+                    if (
+                        not self._shell.stack_mode_started
+                        or self._shell.estop_event.is_set()
+                    ):
+                        break
+
+                    # Getting image
+                    self.acquire_scan()
+
+                    # Abort the stack if the camera timed out on this plane —
+                    # acquire_scan already emitted the timeout warning and cleaned
+                    # up the recorder/scanner; do not enqueue a (nonexistent)
+                    # frame for this plane or attempt the next one.
+                    if self.camera.recorder_timeout_status:
+                        break
+
+                    # A DAQ scan-task failure would recur on every remaining
+                    # plane — abort the stack instead of emitting the same
+                    # message N times. acquire_scan already emitted the
+                    # operator message and cleaned up the scanner/camera for
+                    # this plane; the post-loop stop_lasers/disarm cleanup
+                    # runs unchanged.
+                    if self.siggen.error:
+                        break
+
+                    # Saving frame
+                    if self._shell.saving_allowed:
+                        if self._save_all_crop:
+                            cropped_buffer = self._shell._fs.crop_buffer(self._shell.buffer)
+                            self._shell._fs.enqueue_buffer(cropped_buffer)
+                            self._shell.sig_message.emit(
+                                "Saving All Images (one for each ETL step, cropped)"
+                            )
+                        elif self._save_all_full:
+                            self._shell._fs.enqueue_buffer(self._shell.buffer)
+                            self._shell.sig_message.emit(
+                                "Saving All Images (one for each ETL step, full)"
+                            )
+                        else:
+                            self._shell._fs.enqueue_buffer(self._shell.reconstructed_frame)
+                            self._shell.sig_message.emit("Saving Reconstructed Image")
+
+                    # Update progress bar
+                    progress_value += progress_increment
+                    self._shell.sig_progress_update.emit(int(progress_value))
+
+            if self._shell.stack_mode_started:
+                self._shell.sig_progress_update.emit(
+                    100
+                )  # In case the number of planes is not a multiple of 100
+
+            if self._shell.saving_allowed:
+                self._shell._fs.stop_saving()
+
+            # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)  # noqa: E501
+            self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+
+            # Stopping laser
+            self._hw.stop_lasers()
+
+            # Stopping camera
+            self.camera.disarm()
+        except Exception as e:
+            self._shell.sig_message.emit(
+                f"Stack acquisition failed — the run was aborted. Cause: {e}"
+            )
+            logger.exception("Stack mode worker failed")
+        finally:
+            # The finished signal must fire exactly once whether the method
+            # completes normally, breaks out of the per-plane loop, or an
+            # exception propagates from stop_lasers()/camera.disarm()/
+            # anything else in the body. Without this, a worker that dies
+            # mid-cleanup leaves the UI stuck on "Stop Stack Mode" with no
+            # slot to re-enable it.
             self.finished.emit()

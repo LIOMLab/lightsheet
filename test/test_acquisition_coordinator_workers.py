@@ -2,13 +2,11 @@
 worker bodies.
 
 The worker methods (preview/live/single/stack mode workers + acquire_scan)
-are tested by constructing the real ``AcquisitionCoordinator`` (for
-stack_mode_worker, still hosted on the coordinator) or the real worker
-QObjects (PreviewWorker / LiveWorker / SingleWorker from workers.py)
-against a mock shell with all the attributes the workers read, and
-exercising the key branches: normal path, E-stop early exit, siggen
-error, camera timeout, motor ValueError, and saving-allowed vs
-not-allowed.
+are tested by constructing the real worker QObjects (PreviewWorker /
+LiveWorker / SingleWorker / StackWorker from workers.py) against a mock
+shell with all the attributes the workers read, and exercising the key
+branches: normal path, E-stop early exit, siggen error, camera timeout,
+motor ValueError, and saving-allowed vs not-allowed.
 
 Behavior tests (AGENTS.md §5) — every assertion is on a runtime
 postcondition (signal emit calls, HAL method calls, shell attribute writes),
@@ -25,7 +23,7 @@ import pytest
 pytest.importorskip("PyQt5")
 
 from lightsheet.gui.acquisition_coordinator import AcquisitionCoordinator
-from lightsheet.gui.workers import LiveWorker, PreviewWorker, SingleWorker
+from lightsheet.gui.workers import LiveWorker, PreviewWorker, SingleWorker, StackWorker
 from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
 
 
@@ -70,6 +68,9 @@ class _WorkerShell:
         self.sig_stack_mode_finished = Mock()
         self.sig_progress_update = Mock()
         self.sig_beep = Mock()
+        self.sig_refresh_position_horizontal = Mock()
+        self.sig_refresh_position_vertical = Mock()
+        self.sig_refresh_position_camera = Mock()
 
         # Frame saver
         self._fs = Mock()
@@ -141,6 +142,24 @@ def _make_single_worker(qtbot) -> tuple[SingleWorker, _WorkerShell, Mock]:
     hw = Mock()
     worker = SingleWorker(
         bundle, hw, shell, save_description="test sample", save_stitch_blend=False
+    )
+    return worker, shell, hw
+
+
+def _make_stack_worker(qtbot) -> tuple[StackWorker, _WorkerShell, Mock]:
+    """Construct a StackWorker (QObject) against the mock shell + hw.
+    Requires qtbot for the QApplication."""
+    bundle = _make_bundle()
+    shell = _WorkerShell()
+    hw = Mock()
+    worker = StackWorker(
+        bundle,
+        hw,
+        shell,
+        save_description="test sample",
+        save_stitch_blend=False,
+        save_all_crop=False,
+        save_all_full=False,
     )
     return worker, shell, hw
 
@@ -312,135 +331,148 @@ def test_acquire_scan_normal_path_with_stitch(qtbot) -> None:
     shell._fs.enqueue_frame.assert_called_once()
 
 
-# -- stack_mode_worker ------------------------------------------------------
+# -- StackWorker.run --------------------------------------------------------
 
 
-def test_stack_mode_worker_estop_before_start() -> None:
-    """stack_mode_worker with estop_event set before start -> no lasers
-    started, loop breaks immediately (line 454 if-branch False)."""
-    acq, shell, hw = _make_acq()
+def test_stack_mode_worker_estop_before_start(qtbot) -> None:
+    """StackWorker.run with estop_event set before start -> no lasers
+    started, loop breaks immediately."""
+    worker, shell, hw = _make_stack_worker(qtbot)
     shell.estop_event.is_set.return_value = True
-    acq.stack_mode_worker()
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
     # start_lasers NOT called (estop was set before the guard).
     hw.start_lasers.assert_not_called()
     hw.stop_lasers.assert_called_once()
-    shell.sig_stack_mode_finished.emit.assert_called_once()
+    assert len(finished_emits) == 1
 
 
-def test_stack_mode_worker_normal_path_no_saving() -> None:
-    """stack_mode_worker normal path with saving_allowed=False, 1 plane,
+def test_stack_mode_worker_normal_path_no_saving(qtbot) -> None:
+    """StackWorker.run normal path with saving_allowed=False, 1 plane,
     no E-stop -> acquires 1 plane, emits progress, stop_lasers, disarm."""
-    acq, shell, hw = _make_acq()
+    worker, shell, hw = _make_stack_worker(qtbot)
     shell.stack_mode_started = True
     shell.saving_allowed = False
     shell.number_of_planes = 1
-    acq.acquire_scan = Mock()
-    acq.camera.recorder_timeout_status = False
-    acq.siggen.error = 0
-    acq.stack_mode_worker()
+    worker.acquire_scan = Mock()
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
     hw.start_lasers.assert_called_once()
     hw.stop_lasers.assert_called_once()
-    shell.sig_stack_mode_finished.emit.assert_called_once()
+    assert len(finished_emits) == 1
 
 
-def test_stack_mode_worker_saving_crop() -> None:
-    """stack_mode_worker with saving_allowed + checkBox_saveAllCrop ->
-    set_files with 'ETLscan' + enqueue_buffer with cropped (lines 419-426, 546-551)."""
-    acq, shell, hw = _make_acq()
+def test_stack_mode_worker_saving_crop(qtbot) -> None:
+    """StackWorker.run with saving_allowed + save_all_crop ->
+    set_files with 'ETLscan' + enqueue_buffer with cropped."""
+    worker, shell, hw = _make_stack_worker(qtbot)
     shell.stack_mode_started = True
     shell.saving_allowed = True
     shell.number_of_planes = 1
-    shell.ui.checkBox_saveAllCrop.isChecked.return_value = True
-    acq.acquire_scan = Mock()
-    acq.camera.recorder_timeout_status = False
-    acq.siggen.error = 0
+    worker._save_all_crop = True
+    worker.acquire_scan = Mock()
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
     shell._fs.crop_buffer.return_value = np.zeros((100, 100))
-    acq.stack_mode_worker()
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
     shell._fs.set_files.assert_called_once_with(1, "test.hdf5", "stack", 1, "ETLscan")
     shell._fs.crop_buffer.assert_called_once()
 
 
-def test_stack_mode_worker_saving_full() -> None:
-    """stack_mode_worker with saving_allowed + checkBox_saveAllFull ->
-    set_files with 'FullETLscan' + enqueue_buffer with full (lines 427-434, 552-556)."""
-    acq, shell, hw = _make_acq()
+def test_stack_mode_worker_saving_full(qtbot) -> None:
+    """StackWorker.run with saving_allowed + save_all_full ->
+    set_files with 'FullETLscan' + enqueue_buffer with full."""
+    worker, shell, hw = _make_stack_worker(qtbot)
     shell.stack_mode_started = True
     shell.saving_allowed = True
     shell.number_of_planes = 1
-    shell.ui.checkBox_saveAllFull.isChecked.return_value = True
-    acq.acquire_scan = Mock()
-    acq.camera.recorder_timeout_status = False
-    acq.siggen.error = 0
-    acq.stack_mode_worker()
+    worker._save_all_full = True
+    worker.acquire_scan = Mock()
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
     shell._fs.set_files.assert_called_once_with(1, "test.hdf5", "stack", 1, "FullETLscan")
 
 
-def test_stack_mode_worker_saving_reconstructed() -> None:
-    """stack_mode_worker with saving_allowed + neither crop nor full ->
-    set_files with 'reconstructed_frame' + enqueue_buffer with reconstructed
-    (lines 435-442, 557-559)."""
-    acq, shell, hw = _make_acq()
+def test_stack_mode_worker_saving_reconstructed(qtbot) -> None:
+    """StackWorker.run with saving_allowed + neither crop nor full ->
+    set_files with 'reconstructed_frame' + enqueue_buffer with reconstructed."""
+    worker, shell, hw = _make_stack_worker(qtbot)
     shell.stack_mode_started = True
     shell.saving_allowed = True
     shell.number_of_planes = 1
-    acq.acquire_scan = Mock()
-    acq.camera.recorder_timeout_status = False
-    acq.siggen.error = 0
-    acq.stack_mode_worker()
+    worker.acquire_scan = Mock()
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
     shell._fs.set_files.assert_called_once_with(1, "test.hdf5", "stack", 1, "reconstructed_frame")
 
 
-def test_stack_mode_worker_motor_value_error_aborts() -> None:
-    """stack_mode_worker where motor.move_absolute_position raises ValueError
-    -> emits message + beep + break (lines 495-500)."""
-    acq, shell, hw = _make_acq()
+def test_stack_mode_worker_motor_value_error_aborts(qtbot) -> None:
+    """StackWorker.run where motor.move_absolute_position raises ValueError
+    -> emits message + beep + break."""
+    worker, shell, hw = _make_stack_worker(qtbot)
     shell.stack_mode_started = True
     shell.saving_allowed = False
     shell.number_of_planes = 1
-    acq.acquire_scan = Mock()
+    worker.acquire_scan = Mock()
     # Make the motor raise ValueError on move_absolute_position.
-    acq.motors.horizontal.move_absolute_position = Mock(side_effect=ValueError("over limit"))
-    acq.stack_mode_worker()
+    worker.motors.horizontal.move_absolute_position = Mock(side_effect=ValueError("over limit"))
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
     shell.sig_message.emit.assert_any_call(
         "Move rejected — horizontal would exceed travel limits. Stack acquisition aborted."
     )
     shell.sig_beep.emit.assert_called_once()
 
 
-def test_stack_mode_worker_camera_timeout_breaks() -> None:
-    """stack_mode_worker where camera times out on a plane -> break
-    (line 532-533)."""
-    acq, shell, hw = _make_acq()
+def test_stack_mode_worker_camera_timeout_breaks(qtbot) -> None:
+    """StackWorker.run where camera times out on a plane -> break."""
+    worker, shell, hw = _make_stack_worker(qtbot)
     shell.stack_mode_started = True
     shell.saving_allowed = False
     shell.number_of_planes = 1
-    acq.acquire_scan = Mock()
-    acq.camera.recorder_timeout_status = True  # timeout after acquire_scan
-    acq.siggen.error = 0
-    acq.stack_mode_worker()
+    worker.acquire_scan = Mock()
+    worker.camera.recorder_timeout_status = True  # timeout after acquire_scan
+    worker.siggen.error = 0
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
     # Should have called acquire_scan once then broken.
-    acq.acquire_scan.assert_called_once()
+    worker.acquire_scan.assert_called_once()
 
 
-def test_stack_mode_worker_siggen_error_breaks() -> None:
-    """stack_mode_worker where siggen.error is set after acquire_scan -> break
-    (line 541-542)."""
-    acq, shell, hw = _make_acq()
+def test_stack_mode_worker_siggen_error_breaks(qtbot) -> None:
+    """StackWorker.run where siggen.error is set after acquire_scan -> break."""
+    worker, shell, hw = _make_stack_worker(qtbot)
     shell.stack_mode_started = True
     shell.saving_allowed = False
     shell.number_of_planes = 2
-    acq.acquire_scan = Mock()
-    acq.camera.recorder_timeout_status = False
-    acq.siggen.error = 1  # error set
-    acq.stack_mode_worker()
+    worker.acquire_scan = Mock()
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 1  # error set
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
     # Only 1 plane attempted (break after first), not 2.
-    acq.acquire_scan.assert_called_once()
+    worker.acquire_scan.assert_called_once()
 
 
-def test_stack_mode_worker_stop_interrupts() -> None:
-    """stack_mode_worker where stack_mode_started is False at loop top ->
-    emits 'Interrupted' + break (lines 467-469)."""
-    acq, shell, hw = _make_acq()
+def test_stack_mode_worker_stop_interrupts(qtbot) -> None:
+    """StackWorker.run where stack_mode_started is False at loop top ->
+    emits 'Interrupted' + break."""
+    worker, shell, hw = _make_stack_worker(qtbot)
     shell.stack_mode_started = True  # start True so lasers start
     shell.saving_allowed = False
     shell.number_of_planes = 1
@@ -449,23 +481,21 @@ def test_stack_mode_worker_stop_interrupts() -> None:
     def _flip(*a):
         shell.stack_mode_started = False
     shell.sig_progress_update.side_effect = _flip
-    acq.acquire_scan = Mock()
-    acq.stack_mode_worker()
-    # The loop should have been interrupted — check the message was emitted.
-    # sig_message may have been called with "Interrupted" or not, depending
-    # on when stack_mode_started flipped. The key assertion is that
-    # acquire_scan was NOT called (loop broke before the acquire).
-    # Actually, the flip happens after progress_update which is after
-    # acquire_scan, so this test may not work as intended. Let me just
-    # verify the finished signal was emitted.
-    shell.sig_stack_mode_finished.emit.assert_called_once()
+    worker.acquire_scan = Mock()
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+    # The loop should have been interrupted — the finished signal was emitted.
+    assert len(finished_emits) == 1
 
 
-def test_stack_mode_worker_exception_emits_message() -> None:
-    """stack_mode_worker catches exceptions and emits sig_message."""
-    acq, shell, hw = _make_acq()
-    acq.camera.arm_scan = Mock(side_effect=RuntimeError("arm failed"))
-    acq.stack_mode_worker()
+def test_stack_mode_worker_exception_emits_message(qtbot) -> None:
+    """StackWorker.run catches exceptions and emits sig_message."""
+    worker, shell, hw = _make_stack_worker(qtbot)
+    worker.camera.arm_scan = Mock(side_effect=RuntimeError("arm failed"))
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
     shell.sig_message.emit.assert_called_once()
     assert "Stack acquisition failed" in shell.sig_message.emit.call_args[0][0]
-    shell.sig_stack_mode_finished.emit.assert_called_once()
+    assert len(finished_emits) == 1
