@@ -19,7 +19,8 @@ The cooperative cancellation model (``*_mode_started`` bool flag +
 ``estop_event`` ``threading.Event``) is preserved verbatim — the workers
 poll ``self._shell.estop_event.is_set()`` at the same loop sites. The
 E-stop kill path stays lock-free on the GUI thread; the workers only
-*poll* the event. ``QThread.requestInterruption()`` is NOT adopted.
+*poll* the event. No QThread interruption API is adopted — the
+``estop_event`` ``threading.Event`` is the sole cancellation mechanism.
 
 Workers never touch the shell's ``ui.*`` widgets directly (AGENTS.md
 §11) — all cross-thread UI effects flow through the shell's queued
