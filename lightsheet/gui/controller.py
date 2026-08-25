@@ -15,9 +15,9 @@ import webbrowser
 import h5py
 import numpy as np
 from matplotlib import pyplot as plt
-from PyQt5.QtCore import QObject, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
-from PyQt5.QtGui import QCloseEvent, QKeySequence
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtGui import QCloseEvent, QKeySequence
+from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QButtonGroup,
@@ -58,19 +58,19 @@ class Controller_MainWindow(QMainWindow):
     _cfg_settings["Image File Format"] = "HDF5"
 
     # Signals
-    sig_beep = pyqtSignal()
-    sig_stylesheet = pyqtSignal(str)
-    sig_message = pyqtSignal(str)
-    sig_progress_update = pyqtSignal(int)
+    sig_beep = Signal()
+    sig_stylesheet = Signal(str)
+    sig_message = Signal(str)
+    sig_progress_update = Signal(int)
 
-    sig_single_mode_finished = pyqtSignal()
-    sig_live_mode_finished = pyqtSignal()
-    sig_stack_mode_finished = pyqtSignal()
-    sig_preview_mode_finished = pyqtSignal()
+    sig_single_mode_finished = Signal()
+    sig_live_mode_finished = Signal()
+    sig_stack_mode_finished = Signal()
+    sig_preview_mode_finished = Signal()
 
-    sig_refresh_position_horizontal = pyqtSignal()  # TODO
-    sig_refresh_position_vertical = pyqtSignal()  # TODO
-    sig_refresh_position_camera = pyqtSignal()  # TODO
+    sig_refresh_position_horizontal = Signal()  # TODO
+    sig_refresh_position_vertical = Signal()  # TODO
+    sig_refresh_position_camera = Signal()  # TODO
 
     # Per-laser status indicator (LSR-06). QTimer-driven polls (the L1
     # 100ms display timer and the L2 gated ~1s iBeam timer) and the
@@ -78,7 +78,7 @@ class Controller_MainWindow(QMainWindow):
     # the GUI-thread slot updateUi_laser_status mutates the QLabel. No
     # QTimer callback or worker thread ever writes a QLabel directly
     # (AGENTS.md §11 — cross-thread UI updates go through signals).
-    sig_laser_status = pyqtSignal(int, str)
+    sig_laser_status = Signal(int, str)
 
     # Per-laser power readback (LSR-06). _refresh_laser_readback emits
     # (idx, text, tooltip) on this signal from any thread (QTimer callback
@@ -88,7 +88,7 @@ class Controller_MainWindow(QMainWindow):
     # "" for a live readback (clears any prior stale-value warning) or the
     # stale-value explanation when the readback fell back to the commanded
     # power.
-    sig_laser_readback = pyqtSignal(int, str, str)
+    sig_laser_readback = Signal(int, str, str)
 
     def __init__(
         self,
@@ -191,7 +191,7 @@ class Controller_MainWindow(QMainWindow):
         # status indicator, the E-stop button, and the Arm/Reset button.
         self.toolBar_estop = QToolBar("Safety", self)
         self.toolBar_estop.setMovable(False)
-        self.addToolBar(Qt.TopToolBarArea, self.toolBar_estop)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolBar_estop)
 
         # E-stop status indicator (green = ARMED, red = ACTUATED, gray = DISARMED)
         self.label_estopStatus = QLabel("● ARMED")
@@ -229,7 +229,7 @@ class Controller_MainWindow(QMainWindow):
 
         # F12 hotkey — fires regardless of which widget has focus.
         self.shortcut_estop = QShortcut(QKeySequence("F12"), self)
-        self.shortcut_estop.setContext(Qt.ApplicationShortcut)
+        self.shortcut_estop.setContext(Qt.ShortcutContext.ApplicationShortcut)
         self.shortcut_estop.activated.connect(self.updateUi_estop_pressed)
 
         # Per-laser status indicators (LSR-06). Added programmatically per
@@ -620,7 +620,7 @@ class Controller_MainWindow(QMainWindow):
         Launches timer to periodically refresh image display port (imageView)
         """
         # Change to busy cursor and display status message
-        QApplication.setOverrideCursor(Qt.WaitCursor)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         self.ui.statusbar.showMessage("Initializing hardware, please wait...")
         self.ui.statusbar.repaint()
 
@@ -654,7 +654,7 @@ class Controller_MainWindow(QMainWindow):
         # collaborator that already owns all other laser lifecycle (write /
         # toggle / poll / start / stop). The call is made HERE, from
         # hardware_init (the 100ms timer_hardware_init callback, which
-        # cannot fire until the Qt event loop is pumping via app.exec_(),
+        # cannot fire until the Qt event loop is pumping via app.exec(),
         # i.e. after .show()), NOT from HardwareManager.__init__ — that
         # runs synchronously in main()'s composition root before .show()
         # and would block the GUI window on the serial round-trip. The
@@ -726,10 +726,10 @@ class Controller_MainWindow(QMainWindow):
             self,
             "Confirm Exit...",
             "Are you sure you want to exit ?",
-            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
-        if result == QMessageBox.Yes:
-            QApplication.setOverrideCursor(Qt.WaitCursor)
+        if result == QMessageBox.StandardButton.Yes:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             self.ui.statusbar.showMessage("Shutting down hardware...")
             self.ui.statusbar.repaint()
             self.close_modes()
@@ -770,7 +770,7 @@ class Controller_MainWindow(QMainWindow):
         else:
             event.ignore()
 
-    @pyqtSlot(str)
+    @Slot(str)
     def updateUi_message_printer(self, message: str) -> None:
         """Print text in console, in controller text box and in status bar"""
         logger.info(message)
@@ -783,7 +783,7 @@ class Controller_MainWindow(QMainWindow):
     def open_properties_dialog(self) -> None:
         """Open the dialog window for showing properties"""
         self.properties_dialog = Properties_Dialog(self)
-        self.properties_dialog.setAttribute(Qt.WA_DeleteOnClose)
+        self.properties_dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.properties_dialog.open()
         self.properties_dialog.get_properties()
 
@@ -1008,7 +1008,7 @@ class Controller_MainWindow(QMainWindow):
         self.ui.pushButton_calHorizontalSetForwardLimit.clicked.connect(self._mc.updateUi_set_horizontal_forward_boundary)
         self.ui.pushButton_calHorizontalSetBackwardLimit.clicked.connect(self._mc.updateUi_set_horizontal_backward_boundary)
 
-    @pyqtSlot()
+    @Slot()
     def updateUi_estop_pressed(self) -> None:
         """E-stop button / F12 hotkey handler.
 
@@ -1079,7 +1079,7 @@ class Controller_MainWindow(QMainWindow):
             "was aborted. Press Arm/Reset, then Arm, to re-enable lasers."
         )
 
-    @pyqtSlot()
+    @Slot()
     def updateUi_arm_reset_pressed(self) -> None:
         """Arm/Reset button handler — the two-press re-arm sequence.
 
@@ -1207,7 +1207,7 @@ class Controller_MainWindow(QMainWindow):
     # for the refresh-after-action — but the laser.off() kill loop itself
     # stays in the shell, direct on self.lasers, lock-free.
 
-    @pyqtSlot(int, str, str)
+    @Slot(int, str, str)
     def updateUi_laser_readback(self, idx: int, text: str, tooltip: str) -> None:
         """GUI-thread slot — maps a (idx, text, tooltip) emit from
         sig_laser_readback to the per-laser readback QLabel. text is the
@@ -1220,7 +1220,7 @@ class Controller_MainWindow(QMainWindow):
         labels[idx].setText(text)
         labels[idx].setToolTip(tooltip)
 
-    @pyqtSlot()
+    @Slot()
     def updateUi_laser2_refresh_clicked(self) -> None:
         """Manual Refresh Power button handler — re-queries the L2 laser
         status + power readback on demand. The readback refresh and the
@@ -1236,7 +1236,7 @@ class Controller_MainWindow(QMainWindow):
         self._hw._refresh_laser2_readback_async()
         self._hw._poll_laser_status([1])
 
-    @pyqtSlot(int, str)
+    @Slot(int, str)
     def updateUi_laser_status(self, idx: int, status: str) -> None:
         """GUI-thread slot — maps a (idx, status) emit from
         sig_laser_status to the per-laser QLabel text + semantic color.
@@ -1581,7 +1581,7 @@ class Controller_MainWindow(QMainWindow):
             self._preview_thread.finished.connect(self._preview_worker.deleteLater)
             self._preview_thread.start()
 
-    @pyqtSlot()
+    @Slot()
     def updateUi_post_preview_mode(self) -> None:
         # updating ui after preview mode thread has completed
         self.updateUi_modes_buttons(self.default_buttons)
@@ -1640,7 +1640,7 @@ class Controller_MainWindow(QMainWindow):
             self._live_thread.finished.connect(self._live_worker.deleteLater)
             self._live_thread.start()
 
-    @pyqtSlot()
+    @Slot()
     def updateUi_post_live_mode(self) -> None:
         # updating ui after live mode thread has completed
         self.updateUi_modes_buttons(self.default_buttons)
@@ -1689,7 +1689,7 @@ class Controller_MainWindow(QMainWindow):
             self._single_thread.finished.connect(self._single_worker.deleteLater)
             self._single_thread.start()
 
-    @pyqtSlot()
+    @Slot()
     def updateUi_post_single_mode(self) -> None:
         # Re-enabling modes after single frame acquisition
         self.single_mode_started = False
@@ -1700,9 +1700,9 @@ class Controller_MainWindow(QMainWindow):
 
     def updateUi_select_directory(self) -> None:
         """Allows the selection of a directory for single scan or stack saving"""
-        options = QFileDialog.Options()
-        options |= QFileDialog.DontResolveSymlinks
-        options |= QFileDialog.ShowDirsOnly
+        options = QFileDialog.Option()
+        options |= QFileDialog.Option.DontResolveSymlinks
+        options |= QFileDialog.Option.ShowDirsOnly
         tmp_directory = QFileDialog.getExistingDirectory(
             self, "Choose Directory", self.save_directory, options
         )
@@ -1807,8 +1807,8 @@ class Controller_MainWindow(QMainWindow):
                 self,
                 "Save Warning",
                 "Select a directory and enter a valid filename before saving",
-                QMessageBox.Ok,
-                QMessageBox.Ok,
+                QMessageBox.StandardButton.Ok,
+                QMessageBox.StandardButton.Ok,
             )
             self.sig_message.emit(
                 "Select a directory and enter a valid filename before saving"
@@ -1878,8 +1878,8 @@ class Controller_MainWindow(QMainWindow):
                     self,
                     "Stack Acquisition Warning",
                     "Set starting and ending points and select a non-zero plane step value",  # noqa: E501
-                    QMessageBox.Ok,
-                    QMessageBox.Ok,
+                    QMessageBox.StandardButton.Ok,
+                    QMessageBox.StandardButton.Ok,
                 )
             else:
                 # Setting stack step size sign (taking into account the direction of acquisition)  # noqa: E501
@@ -1900,8 +1900,8 @@ class Controller_MainWindow(QMainWindow):
                         self,
                         "Stack Acquisition Question",
                         "Make stack acquisition without saving ?",
-                        QMessageBox.Yes | QMessageBox.No,
-                        QMessageBox.Yes,
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.Yes,
                     )
 
                 if self.saving_allowed or nosave_answer:
@@ -1958,7 +1958,7 @@ class Controller_MainWindow(QMainWindow):
                     self._stack_thread.finished.connect(self._stack_worker.deleteLater)
                     self._stack_thread.start()
 
-    @pyqtSlot()
+    @Slot()
     def updateUi_post_stack_mode(self) -> None:
         """Enabling modes after stack mode"""
         self.ui.pushButton_acqStartStackMode.setText("Start Stack Mode")
