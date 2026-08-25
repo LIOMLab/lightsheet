@@ -491,7 +491,7 @@ def test_updateUi_laser_status_active_sets_on_label(qtbot, request) -> None:
     to '● ON' and a green bold stylesheet."""
     ctrl, _ = make_controller(qtbot, request)
 
-    ctrl.updateUi_laser_status(0, "active")
+    ctrl.laser_panel.updateUi_laser_status(0, "active")
 
     assert ctrl.label_laserOneStatus.text() == "● ON"
     style = ctrl.label_laserOneStatus.styleSheet()
@@ -504,7 +504,7 @@ def test_updateUi_laser_status_inactive_sets_off_label(qtbot, request) -> None:
     to '● OFF' and a gray bold stylesheet."""
     ctrl, _ = make_controller(qtbot, request)
 
-    ctrl.updateUi_laser_status(0, "inactive")
+    ctrl.laser_panel.updateUi_laser_status(0, "inactive")
 
     assert ctrl.label_laserOneStatus.text() == "● OFF"
     style = ctrl.label_laserOneStatus.styleSheet()
@@ -517,7 +517,7 @@ def test_updateUi_laser_status_error_sets_err_label_for_laser2(qtbot, request) -
     to '● ERR' and a red bold stylesheet."""
     ctrl, _ = make_controller(qtbot, request)
 
-    ctrl.updateUi_laser_status(1, "error")
+    ctrl.laser_panel.updateUi_laser_status(1, "error")
 
     assert ctrl.label_laserTwoStatus.text() == "● ERR"
     style = ctrl.label_laserTwoStatus.styleSheet()
@@ -709,7 +709,7 @@ def test_updateUi_laser_readback_live_clears_tooltip(qtbot, request) -> None:
     readback must not keep a stale degraded-readback tooltip."""
     ctrl, _ = make_controller(qtbot, request)
 
-    ctrl.updateUi_laser_readback(1, "75.0 mW", "")
+    ctrl.laser_panel.updateUi_laser_readback(1, "75.0 mW", "")
 
     assert ctrl.label_laserTwoReadback.text() == "75.0 mW"
     assert ctrl.label_laserTwoReadback.toolTip() == ""
@@ -728,7 +728,7 @@ def test_updateUi_laser_readback_degraded_sets_tooltip(qtbot, request) -> None:
         "Power readback unavailable (parse failure). "
         "Showing last commanded value may be stale."
     )
-    ctrl.updateUi_laser_readback(1, "42.0 mW (cmd)", tooltip)
+    ctrl.laser_panel.updateUi_laser_readback(1, "42.0 mW (cmd)", tooltip)
 
     assert ctrl.label_laserTwoReadback.text() == "42.0 mW (cmd)"
     assert ctrl.label_laserTwoReadback.toolTip() == tooltip
@@ -739,7 +739,7 @@ def test_updateUi_laser_readback_l1_routes_to_l1_label(qtbot, request) -> None:
     not label_laserTwoReadback — the idx selects the correct label."""
     ctrl, _ = make_controller(qtbot, request)
 
-    ctrl.updateUi_laser_readback(0, "12.5 mW", "")
+    ctrl.laser_panel.updateUi_laser_readback(0, "12.5 mW", "")
 
     assert ctrl.label_laserOneReadback.text() == "12.5 mW"
     # L2 label was not touched.

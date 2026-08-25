@@ -100,7 +100,7 @@ class MotorController:
                 self._shell.sig_beep.emit()
             else:
                 self._shell.updateUi_message_printer("Sample moving to horizontal position")
-            self._shell.updateUi_position_horizontal()
+            self._shell.motor_panel.updateUi_position_horizontal()
         else:
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
@@ -126,7 +126,7 @@ class MotorController:
                 self._shell.sig_beep.emit()
             else:
                 self._shell.updateUi_message_printer("Sample moving to vertical position")
-            self._shell.updateUi_position_vertical()
+            self._shell.motor_panel.updateUi_position_vertical()
         else:
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
@@ -153,7 +153,7 @@ class MotorController:
                 self._shell.sig_beep.emit()
             else:
                 self._shell.updateUi_message_printer("Moving to horizontal origin")
-            self._shell.updateUi_position_horizontal()
+            self._shell.motor_panel.updateUi_position_horizontal()
         else:
             self._shell.sig_beep.emit()
             self._shell.updateUi_message_printer("Horizontal origin out of boundaries")
@@ -178,7 +178,7 @@ class MotorController:
                 self._shell.sig_beep.emit()
             else:
                 self._shell.updateUi_message_printer("Moving to vertical origin")
-            self._shell.updateUi_position_vertical()
+            self._shell.motor_panel.updateUi_position_vertical()
         else:
             self._shell.sig_beep.emit()
             self._shell.updateUi_message_printer("Vertical origin out of boundaries")
@@ -204,7 +204,7 @@ class MotorController:
                 self._shell.sig_beep.emit()
             else:
                 self._shell.updateUi_message_printer("Camera moving to position")
-            self._shell.updateUi_position_camera()
+            self._shell.motor_panel.updateUi_position_camera()
         else:
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
@@ -219,7 +219,7 @@ class MotorController:
                 # rather only report out of boundaries
                 self._shell.updateUi_message_printer("Focus out of boundaries")
                 self._shell.sig_beep.emit()
-                self._shell.updateUi_position_camera()
+                self._shell.motor_panel.updateUi_position_camera()
             elif self.motors.camera.get_origin(
                 self._shell.units
             ) < self.motors.camera.get_limit_low(self._shell.units):
@@ -227,7 +227,7 @@ class MotorController:
                 # rather only report out of boundaries
                 self._shell.updateUi_message_printer("Focus out of boundaries")
                 self._shell.sig_beep.emit()
-                self._shell.updateUi_position_camera()
+                self._shell.motor_panel.updateUi_position_camera()
             else:
                 try:
                     self.motors.camera.move_absolute_position(
@@ -241,7 +241,7 @@ class MotorController:
                     self._shell.sig_beep.emit()
                 else:
                     self._shell.updateUi_message_printer("Moving to focus")
-                self._shell.updateUi_position_camera()
+                self._shell.motor_panel.updateUi_position_camera()
         else:
             try:
                 self.motors.camera.move_absolute_position(
@@ -257,7 +257,7 @@ class MotorController:
                 self._shell.updateUi_message_printer(
                     "Focus not yet set. Moving camera to default focus"
                 )
-            self._shell.updateUi_position_camera()
+            self._shell.motor_panel.updateUi_position_camera()
 
     # ------------------------------------------------------------------ #
     # Sample / camera relative-move slots (step buttons).
@@ -282,13 +282,13 @@ class MotorController:
                 self._shell.sig_beep.emit()
             else:
                 self._shell.updateUi_message_printer("Sample moving backward")
-            self._shell.updateUi_position_horizontal()
+            self._shell.motor_panel.updateUi_position_horizontal()
         else:
             # self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_low(self._shell.units), self._shell.units)  # noqa: E501
             # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
-            self._shell.updateUi_position_horizontal()
+            self._shell.motor_panel.updateUi_position_horizontal()
 
     def updateUi_move_sample_forward(self) -> None:
         """Sample motor forward horizontal motion"""
@@ -309,13 +309,13 @@ class MotorController:
                 self._shell.sig_beep.emit()
             else:
                 self._shell.updateUi_message_printer("Sample moving forward")
-            self._shell.updateUi_position_horizontal()
+            self._shell.motor_panel.updateUi_position_horizontal()
         else:
             # self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_high(self._shell.units), self._shell.units)  # noqa: E501
             # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
-            self._shell.updateUi_position_horizontal()
+            self._shell.motor_panel.updateUi_position_horizontal()
 
     def updateUi_move_sample_up(self) -> None:
         """Sample motor upward vertical motion"""
@@ -336,13 +336,13 @@ class MotorController:
                 self._shell.sig_beep.emit()
             else:
                 self._shell.updateUi_message_printer("Sample stepping up")
-            self._shell.updateUi_position_vertical()
+            self._shell.motor_panel.updateUi_position_vertical()
         else:
             # self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_low(self._shell.units), self._shell.units)  # noqa: E501
             # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
-            self._shell.updateUi_position_vertical()
+            self._shell.motor_panel.updateUi_position_vertical()
 
     def updateUi_move_sample_down(self) -> None:
         """Sample motor downward vertical motion"""
@@ -363,13 +363,13 @@ class MotorController:
                 self._shell.sig_beep.emit()
             else:
                 self._shell.updateUi_message_printer("Sample stepping down")
-            self._shell.updateUi_position_vertical()
+            self._shell.motor_panel.updateUi_position_vertical()
         else:
             # self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_high(self._shell.units), self._shell.units)  # noqa: E501
             # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
-            self._shell.updateUi_position_vertical()
+            self._shell.motor_panel.updateUi_position_vertical()
 
     def updateUi_move_camera_backward(self) -> None:
         """Camera motor backward horizontal motion"""
@@ -390,14 +390,14 @@ class MotorController:
                 self._shell.sig_beep.emit()
             else:
                 self._shell.updateUi_message_printer("Camera stepping backward")
-            self._shell.updateUi_position_camera()
+            self._shell.motor_panel.updateUi_position_camera()
         else:
             # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_low(self._shell.units), self._shell.units)  # noqa: E501
             # In case of a communication glitch with motor, this was bringing the stage back to min position  # noqa: E501
             # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
-            self._shell.updateUi_position_camera()
+            self._shell.motor_panel.updateUi_position_camera()
 
     def updateUi_move_camera_forward(self) -> None:
         """Camera motor forward horizontal motion"""
@@ -418,14 +418,14 @@ class MotorController:
                 self._shell.sig_beep.emit()
             else:
                 self._shell.updateUi_message_printer("Camera stepping forward")
-            self._shell.updateUi_position_camera()
+            self._shell.motor_panel.updateUi_position_camera()
         else:
             # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_high(self._shell.units), self._shell.units)  # noqa: E501
             # In case of a communication glitch with motor, this was bringing the stage back to max position  # noqa: E501
             # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
-            self._shell.updateUi_position_camera()
+            self._shell.motor_panel.updateUi_position_camera()
 
     # ------------------------------------------------------------------ #
     # Boundary / origin / focus set slots (calibration-tab buttons).
@@ -440,14 +440,14 @@ class MotorController:
         # Default boundaries
         self.motors.horizontal.set_limit_low(0, self._shell.units)
         self.motors.horizontal.set_limit_high(0, self._shell.units)
-        self._shell.updateUi_units()
+        self._shell.motor_panel.updateUi_units()
 
     def updateUi_set_horizontal_backward_boundary(self) -> None:
         """Set lower limit of sample's horizontal motion"""
         self.motors.horizontal.set_limit_low(
             self.motors.horizontal.get_position(self._shell.units), self._shell.units
         )
-        self._shell.updateUi_units()
+        self._shell.motor_panel.updateUi_units()
         self._shell.horizontal_backward_boundary_selected = True
         self._shell.ui.pushButton_calHorizontalSetBackwardLimit.setEnabled(False)
         if self._shell.horizontal_forward_boundary_selected:
@@ -459,7 +459,7 @@ class MotorController:
         self.motors.horizontal.set_limit_high(
             self.motors.horizontal.get_position(self._shell.units), self._shell.units
         )
-        self._shell.updateUi_units()
+        self._shell.motor_panel.updateUi_units()
         self._shell.horizontal_forward_boundary_selected = True
         self._shell.ui.pushButton_calHorizontalSetForwardLimit.setEnabled(False)
         if self._shell.horizontal_backward_boundary_selected:

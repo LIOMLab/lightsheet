@@ -29,7 +29,7 @@ def test_close_event_quits_preview_thread(qtbot, request) -> None:
     # preview_mode_started=True, but the mock camera's recorder calls are
     # non-blocking so the loop iterates quickly.
     ctrl.preview_mode_started = False  # else: branch (start path)
-    ctrl.updateUi_preview_mode_button()
+    ctrl.acquisition_panel.updateUi_preview_mode_button()
 
     # The preview thread should now exist and be running.
     assert hasattr(ctrl, "_preview_thread"), "preview thread must be spawned"
@@ -58,7 +58,7 @@ def test_close_event_no_join_on_preview_thread(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
 
     ctrl.preview_mode_started = False
-    ctrl.updateUi_preview_mode_button()
+    ctrl.acquisition_panel.updateUi_preview_mode_button()
 
     assert isinstance(ctrl._preview_thread, QThread), (
         "_preview_thread must be a QThread, not a threading.Thread"
@@ -87,7 +87,7 @@ def test_close_event_preview_timeout_logs_warning(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
 
     ctrl.preview_mode_started = False
-    ctrl.updateUi_preview_mode_button()
+    ctrl.acquisition_panel.updateUi_preview_mode_button()
 
     # Patch wait to return False (timeout) so the warning path fires.
     # Also patch quit so it doesn't actually stop the thread (the mock

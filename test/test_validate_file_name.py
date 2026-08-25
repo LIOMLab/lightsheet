@@ -62,7 +62,7 @@ def test_safe_char_sanitizes(
     ctrl.save_directory = "C:\\data"
     ctrl.save_filename = ""
     ctrl.saving_allowed = False
-    ctrl.validate_file_name()
+    ctrl.save_panel.validate_file_name()
     if allows:
         assert ctrl.saving_allowed is True
         assert expected_substring in ctrl.save_filename, (
@@ -83,7 +83,7 @@ def test_safe_char_join_uses_save_directory(qtbot, request) -> None:
     ctrl.save_directory = "/tmp/data"
     ctrl.save_filename = ""
     ctrl.saving_allowed = False
-    ctrl.validate_file_name()
+    ctrl.save_panel.validate_file_name()
     assert ctrl.saving_allowed is True
     # normpath on POSIX collapses the Windows separator: /tmp/data\plane_01
     # → /tmp/data/plane_01. On Windows it stays /tmp/data\plane_01. Either

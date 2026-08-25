@@ -59,6 +59,10 @@ class _ShellStandin:
         # Shell-owned GUI-state setters — record calls for assertion.
         self.message_printer_calls: list[str] = []
         self.position_calls: list[str] = []
+        # MotorController delegates position/units updates to
+        # shell.motor_panel (the per-panel widget module). The stand-in
+        # already defines these methods, so motor_panel points to self.
+        self.motor_panel = self
 
     def updateUi_message_printer(self, message: str) -> None:
         self.message_printer_calls.append(message)

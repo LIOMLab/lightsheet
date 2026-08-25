@@ -171,7 +171,7 @@ def test_updateUi_preview_mode_button_caches_auto_laser_flags_before_thread_spaw
         # spawn timing without launching a worker thread.
         patch.object(QThread, "start", side_effect=lambda: call_log.append("thread_spawn")),
     ):
-        ctrl.updateUi_preview_mode_button()
+        ctrl.acquisition_panel.updateUi_preview_mode_button()
 
     assert "_cache_auto_laser_flags" in call_log, (
         "updateUi_preview_mode_button: updateUi_preview_mode_button must call "
