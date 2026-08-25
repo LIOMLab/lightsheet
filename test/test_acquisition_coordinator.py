@@ -35,7 +35,6 @@ Behavior covered (per the plan's ``<behavior>`` block):
 
 from __future__ import annotations
 
-import threading
 from unittest.mock import patch
 
 from _helpers.controller_fixture import make_controller
@@ -146,11 +145,13 @@ def test_updateUi_preview_mode_button_caches_auto_laser_flags_before_thread_spaw
 ) -> None:
     """updateUi_preview_mode_button: updateUi_preview_mode_button must call
     self._cache_auto_laser_flags() before spawning the preview worker
-    thread, mirroring updateUi_single_mode_button. Verified by calling the
+    QThread, mirroring updateUi_single_mode_button. Verified by calling the
     real updateUi_preview_mode_button on the real controller (via
     make_controller) with _cache_auto_laser_flags patched to record the
-    call and threading.Thread patched so no real thread is started,
+    call and QThread.start patched so no real thread is started,
     asserting the cache call happens before the thread spawn."""
+    from PyQt5.QtCore import QThread
+
     ctrl, _ = make_controller(qtbot, request)
 
     call_log: list[str] = []
@@ -164,25 +165,13 @@ def test_updateUi_preview_mode_button_caches_auto_laser_flags_before_thread_spaw
             side_effect=lambda: call_log.append("_cache_auto_laser_flags"),
         ),
         patch.object(ctrl, "close_modes", side_effect=lambda: call_log.append("close_modes")),
+        # Patch QThread.start so no real thread is started. The real QThread
+        # is constructed, the worker is moveToThread'd, and the signal
+        # connections are wired — only start() is intercepted to record the
+        # spawn timing without launching a worker thread.
+        patch.object(QThread, "start", side_effect=lambda: call_log.append("thread_spawn")),
     ):
-        # Capture the thread spawn via patching threading.Thread so no real
-        # thread is started. Record the target to confirm it points at the
-        # coordinator's preview_mode_worker.
-        spawned_targets: list = []
-
-        class _FakeThread:
-            def __init__(self, target=None, args=(), kwargs=None) -> None:
-                spawned_targets.append(target)
-                call_log.append("thread_spawn")
-
-            def start(self) -> None:
-                pass
-
-            def is_alive(self) -> bool:
-                return False
-
-        with patch.object(threading, "Thread", _FakeThread):
-            ctrl.updateUi_preview_mode_button()
+        ctrl.updateUi_preview_mode_button()
 
     assert "_cache_auto_laser_flags" in call_log, (
         "updateUi_preview_mode_button: updateUi_preview_mode_button must call "

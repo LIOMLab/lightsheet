@@ -266,18 +266,20 @@ def test_start_lasers_reads_cached_flags_not_widgets(qtbot, request) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# G5 — preview_mode_worker polls estop_event and breaks before frame
+# G5 — PreviewWorker.run polls estop_event and breaks before frame
 #      acquisition; the finished signal fires exactly once (LSR-04 / CR-01)
 # --------------------------------------------------------------------------- #
 
 
-def test_preview_mode_worker_breaks_on_estop_before_frame_acquisition(qtbot, request) -> None:
+def test_preview_worker_breaks_on_estop_before_frame_acquisition(qtbot, request) -> None:
     """With estop_event set before the worker loop starts, the E-stop poll
-    at the top of preview_mode_worker's while loop must break before any
+    at the top of PreviewWorker.run's while loop must break before any
     per-frame acquisition work (start_recorder / copy_recorder_images), and
     the finished signal must still fire exactly once from the finally block
     (CR-01 — preview now aligns with live/single/stack per AGENTS.md §2)."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    from lightsheet.gui.workers import PreviewWorker
+
+    ctrl, bundle = make_controller(qtbot, request)
 
     # E-stop actuated before the loop starts.
     ctrl.estop_event.set()
@@ -302,18 +304,19 @@ def test_preview_mode_worker_breaks_on_estop_before_frame_acquisition(qtbot, req
 
     ctrl._acq.camera.copy_recorder_images = _tracking_copy
 
-    # Track the finished signal.
+    # Construct the PreviewWorker and track its finished signal.
+    worker = PreviewWorker(bundle, ctrl._hw, ctrl)
     finished_emits: list[None] = []
-    ctrl.sig_preview_mode_finished.connect(lambda: finished_emits.append(None))
+    worker.finished.connect(lambda: finished_emits.append(None))
 
-    ctrl._acq.preview_mode_worker()
+    worker.run()
 
     # No per-frame acquisition work ran — the estop poll broke first.
     assert not start_recorder_called, (
-        "preview_mode_worker must not call start_recorder when estop is set"
+        "PreviewWorker must not call start_recorder when estop is set"
     )
     assert not copy_called, (
-        "preview_mode_worker must not call copy_recorder_images when estop is set"
+        "PreviewWorker must not call copy_recorder_images when estop is set"
     )
     # The finished signal fired exactly once (the finally block).
     assert len(finished_emits) == 1

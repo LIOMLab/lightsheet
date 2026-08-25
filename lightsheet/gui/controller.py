@@ -15,7 +15,7 @@ import webbrowser
 import h5py
 import numpy as np
 from matplotlib import pyplot as plt
-from PyQt5.QtCore import QObject, Qt, QTimer, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import QObject, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QCloseEvent, QKeySequence
 from PyQt5.QtWidgets import (
     QAbstractItemView,
@@ -36,6 +36,7 @@ from PyQt5.QtWidgets import (
 from lightsheet.config import cfg_read
 from lightsheet.gui.properties_dialog import Properties_Dialog
 from lightsheet.gui.ui_controller import Ui_Controller
+from lightsheet.gui.workers import PreviewWorker
 from lightsheet.hal import Camera, ETLs, Motors, SigGen
 from lightsheet.hal.bundle import DeviceBundle
 
@@ -853,17 +854,35 @@ class Controller_MainWindow(QMainWindow):
             self.ui.statusbar.showMessage("Shutting down hardware...")
             self.ui.statusbar.repaint()
             self.close_modes()
-            # Join each acquisition worker thread with a bounded timeout
-            # instead of an unconditional fixed sleep. A worker stuck
-            # inside a blocking hardware call (camera.monitor_recorder up to
-            # its timeout, an iBeam serial round-trip, a motor move) would
-            # otherwise hang shutdown indefinitely; the bounded wait gives
-            # it a chance to exit cleanly while guaranteeing shutdown
-            # proceeds regardless. These thread attributes only exist once
-            # their mode has been started at least once, hence getattr.
+            # Shut down the preview worker QThread via quit() + wait(5000)
+            # (the QThread vehicle replacement for join(timeout=5.0)).
+            # quit() requests the thread's event loop to exit; wait(5000)
+            # blocks the GUI thread up to 5s for the worker to return. The
+            # cooperative poll model means the worker exits on its own at
+            # the next loop iteration after close_modes() cleared
+            # preview_mode_started. terminate() is never used (dangerous
+            # per Qt docs — can leave mutexes held, HDF5 half-written).
+            if getattr(self, "_preview_thread", None) is not None and self._preview_thread.isRunning():
+                self._preview_thread.quit()
+                if not self._preview_thread.wait(5000):
+                    logger.warning(
+                        "_preview_thread still running after 5s wait "
+                        "timeout during closeEvent — proceeding with "
+                        "shutdown anyway."
+                    )
+            # Join the remaining three acquisition worker threads
+            # (threading.Thread) with a bounded timeout instead of an
+            # unconditional fixed sleep. These still spawn via
+            # threading.Thread until later plans migrate them to QThread.
+            # A worker stuck inside a blocking hardware call
+            # (camera.monitor_recorder up to its timeout, an iBeam serial
+            # round-trip, a motor move) would otherwise hang shutdown
+            # indefinitely; the bounded wait gives it a chance to exit
+            # cleanly while guaranteeing shutdown proceeds regardless.
+            # These thread attributes only exist once their mode has been
+            # started at least once, hence getattr.
             for attr in (
                 "single_mode_thread",
-                "preview_mode_thread",
                 "live_mode_thread",
                 "stack_mode_thread",
             ):
@@ -1606,14 +1625,26 @@ class Controller_MainWindow(QMainWindow):
             self.ui.statusBar_progress.show()
 
             # Sample the auto-laser checkboxes on the GUI thread before
-            # spawning the worker — preview_mode_worker now drives the
-            # lasers via self._hw.start_lasers()/stop_lasers(), which read
-            # the cached bools, never the widgets (AGENTS.md §11).
+            # spawning the worker — PreviewWorker.run drives the lasers via
+            # self._hw.start_lasers()/stop_lasers(), which read the cached
+            # bools, never the widgets (AGENTS.md §11).
             self._cache_auto_laser_flags()
 
-            # Starting preview mode thread
-            self.preview_mode_thread = threading.Thread(target=self._acq.preview_mode_worker)
-            self.preview_mode_thread.start()
+            # Spawn the preview worker on a QThread (moveToThread pattern).
+            # The worker QObject owns the relocated preview_mode_worker body;
+            # thread.started -> worker.run kicks off the acquisition loop,
+            # worker.finished -> updateUi_post_preview_mode re-enables the UI
+            # on the GUI thread, and worker.finished -> thread.quit stops the
+            # thread's event loop. closeEvent shuts this thread down via
+            # quit() + wait(5000) instead of join(timeout=5.0).
+            self._preview_worker = PreviewWorker(self._bundle, self._hw, self)
+            self._preview_thread = QThread()
+            self._preview_worker.moveToThread(self._preview_thread)
+            self._preview_thread.started.connect(self._preview_worker.run)
+            self._preview_worker.finished.connect(self.updateUi_post_preview_mode)
+            self._preview_worker.finished.connect(self._preview_thread.quit)
+            self._preview_thread.finished.connect(self._preview_worker.deleteLater)
+            self._preview_thread.start()
 
     @pyqtSlot()
     def updateUi_post_preview_mode(self) -> None:
