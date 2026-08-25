@@ -1,0 +1,217 @@
+# -*- coding: utf-8 -*-
+
+################################################################################
+## Form generated from reading UI file 'ui_shell.ui'
+##
+## Created by: Qt User Interface Compiler version 6.11.2
+##
+## WARNING! All changes made in this file will be lost when recompiling UI file!
+################################################################################
+
+from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
+    QMetaObject, QObject, QPoint, QRect,
+    QSize, QTime, QUrl, Qt)
+from PySide6.QtGui import (QAction, QBrush, QColor, QConicalGradient,
+    QCursor, QFont, QFontDatabase, QGradient,
+    QIcon, QImage, QKeySequence, QLinearGradient,
+    QPainter, QPalette, QPixmap, QRadialGradient,
+    QShortcut, QTransform)
+from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QMainWindow,
+    QMenu, QMenuBar, QPlainTextEdit, QPushButton,
+    QSizePolicy, QSplitter, QStatusBar, QTabWidget,
+    QToolBar, QVBoxLayout, QWidget)
+
+from lightsheet.gui.image_view import ImageView
+
+class Ui_Shell(object):
+    def setupUi(self, Shell):
+        if not Shell.objectName():
+            Shell.setObjectName(u"Shell")
+        Shell.resize(1479, 899)
+        self.action_openDocumentation = QAction(Shell)
+        self.action_openDocumentation.setObjectName(u"action_openDocumentation")
+        self.action_ShowHideMessageLog = QAction(Shell)
+        self.action_ShowHideMessageLog.setObjectName(u"action_ShowHideMessageLog")
+        self.action_ShowHideMessageLog.setCheckable(True)
+        self.action_ShowHideMessageLog.setChecked(True)
+        self.action_showSystemProperties = QAction(Shell)
+        self.action_showSystemProperties.setObjectName(u"action_showSystemProperties")
+        self.action_lightTheme = QAction(Shell)
+        self.action_lightTheme.setObjectName(u"action_lightTheme")
+        self.action_darkTheme = QAction(Shell)
+        self.action_darkTheme.setObjectName(u"action_darkTheme")
+        self.action_ShowHideImagesPane = QAction(Shell)
+        self.action_ShowHideImagesPane.setObjectName(u"action_ShowHideImagesPane")
+        self.action_ShowHideImagesPane.setCheckable(True)
+        self.action_ShowHideImagesPane.setChecked(True)
+        self.action_ShowHideControlsPane = QAction(Shell)
+        self.action_ShowHideControlsPane.setObjectName(u"action_ShowHideControlsPane")
+        self.action_ShowHideControlsPane.setCheckable(True)
+        self.action_ShowHideControlsPane.setChecked(True)
+        self.action_OpenFile = QAction(Shell)
+        self.action_OpenFile.setObjectName(u"action_OpenFile")
+        self.action_Exit = QAction(Shell)
+        self.action_Exit.setObjectName(u"action_Exit")
+        self.centralwidget = QWidget(Shell)
+        self.centralwidget.setObjectName(u"centralwidget")
+        self.horizontalLayout_3 = QHBoxLayout(self.centralwidget)
+        self.horizontalLayout_3.setObjectName(u"horizontalLayout_3")
+        self.splitter = QSplitter(self.centralwidget)
+        self.splitter.setObjectName(u"splitter")
+        self.splitter.setOrientation(Qt.Horizontal)
+        self.splitter.setHandleWidth(5)
+        self.splitter.setChildrenCollapsible(False)
+        self.imagesPane = QWidget(self.splitter)
+        self.imagesPane.setObjectName(u"imagesPane")
+        sizePolicy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.imagesPane.sizePolicy().hasHeightForWidth())
+        self.imagesPane.setSizePolicy(sizePolicy)
+        self.imagesPane.setMinimumSize(QSize(706, 700))
+        self.verticalLayout = QVBoxLayout(self.imagesPane)
+        self.verticalLayout.setObjectName(u"verticalLayout")
+        self.verticalLayout.setContentsMargins(0, 0, 6, 0)
+        self.imageView = ImageView(self.imagesPane)
+        self.imageView.setObjectName(u"imageView")
+        sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        sizePolicy1.setHorizontalStretch(0)
+        sizePolicy1.setVerticalStretch(0)
+        sizePolicy1.setHeightForWidth(self.imageView.sizePolicy().hasHeightForWidth())
+        self.imageView.setSizePolicy(sizePolicy1)
+        self.imageView.setMinimumSize(QSize(700, 700))
+        self.imageView.setBaseSize(QSize(700, 0))
+
+        self.verticalLayout.addWidget(self.imageView)
+
+        self.splitter.addWidget(self.imagesPane)
+        self.controlsPane = QWidget(self.splitter)
+        self.controlsPane.setObjectName(u"controlsPane")
+        self.verticalLayout_3 = QVBoxLayout(self.controlsPane)
+        self.verticalLayout_3.setObjectName(u"verticalLayout_3")
+        self.verticalLayout_3.setContentsMargins(-1, 0, -1, 0)
+        self.tabControls = QTabWidget(self.controlsPane)
+        self.tabControls.setObjectName(u"tabControls")
+        self.tabPanelsPlaceholder = QWidget()
+        self.tabPanelsPlaceholder.setObjectName(u"tabPanelsPlaceholder")
+        self.verticalLayout_panels = QVBoxLayout(self.tabPanelsPlaceholder)
+        self.verticalLayout_panels.setObjectName(u"verticalLayout_panels")
+        self.tabControls.addTab(self.tabPanelsPlaceholder, "")
+
+        self.verticalLayout_3.addWidget(self.tabControls)
+
+        self.horizontalLayout_10 = QHBoxLayout()
+        self.horizontalLayout_10.setObjectName(u"horizontalLayout_10")
+        self.plainTextEdit_messageLog = QPlainTextEdit(self.controlsPane)
+        self.plainTextEdit_messageLog.setObjectName(u"plainTextEdit_messageLog")
+        sizePolicy.setHeightForWidth(self.plainTextEdit_messageLog.sizePolicy().hasHeightForWidth())
+        self.plainTextEdit_messageLog.setSizePolicy(sizePolicy)
+        self.plainTextEdit_messageLog.setMinimumSize(QSize(0, 80))
+        self.plainTextEdit_messageLog.setMaximumSize(QSize(16777215, 80))
+        self.plainTextEdit_messageLog.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.plainTextEdit_messageLog.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.plainTextEdit_messageLog.setReadOnly(True)
+        self.plainTextEdit_messageLog.setTextInteractionFlags(Qt.NoTextInteraction)
+
+        self.horizontalLayout_10.addWidget(self.plainTextEdit_messageLog)
+
+
+        self.verticalLayout_3.addLayout(self.horizontalLayout_10)
+
+        self.splitter.addWidget(self.controlsPane)
+
+        self.horizontalLayout_3.addWidget(self.splitter)
+
+        Shell.setCentralWidget(self.centralwidget)
+        self.toolBar_estop = QToolBar(Shell)
+        self.toolBar_estop.setObjectName(u"toolBar_estop")
+        self.toolBar_estop.setMovable(False)
+        self.label_estopStatus = QLabel(self.toolBar_estop)
+        self.label_estopStatus.setObjectName(u"label_estopStatus")
+        self.label_estopStatus.setMinimumSize(QSize(140, 0))
+        self.label_estopStatus.setStyleSheet(u"color: #34C759; font-weight: bold;")
+        self.toolBar_estop.addWidget(self.label_estopStatus)
+        self.pushButton_estop = QPushButton(self.toolBar_estop)
+        self.pushButton_estop.setObjectName(u"pushButton_estop")
+        self.pushButton_estop.setMinimumSize(QSize(96, 48))
+        self.pushButton_estop.setStyleSheet(u"QPushButton { background-color: #FF3B30; color: white; font-size: 18px; font-weight: bold; border: 2px solid black; }")
+        self.pushButton_estop.setCheckable(True)
+        self.shortcut_estop = QShortcut(self.pushButton_estop)
+        self.shortcut_estop.setObjectName(u"shortcut_estop")
+        self.shortcut_estop.setContext(Qt.ApplicationShortcut)
+        self.toolBar_estop.addWidget(self.pushButton_estop)
+        self.pushButton_armReset = QPushButton(self.toolBar_estop)
+        self.pushButton_armReset.setObjectName(u"pushButton_armReset")
+        self.pushButton_armReset.setMinimumSize(QSize(88, 32))
+        self.toolBar_estop.addWidget(self.pushButton_armReset)
+        Shell.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolBar_estop)
+        self.menubar = QMenuBar(Shell)
+        self.menubar.setObjectName(u"menubar")
+        self.menubar.setGeometry(QRect(0, 0, 1479, 21))
+        self.menuDisplay = QMenu(self.menubar)
+        self.menuDisplay.setObjectName(u"menuDisplay")
+        self.menu_Select_Theme = QMenu(self.menuDisplay)
+        self.menu_Select_Theme.setObjectName(u"menu_Select_Theme")
+        self.menuHelp = QMenu(self.menubar)
+        self.menuHelp.setObjectName(u"menuHelp")
+        self.menuFile = QMenu(self.menubar)
+        self.menuFile.setObjectName(u"menuFile")
+        Shell.setMenuBar(self.menubar)
+        self.statusbar = QStatusBar(Shell)
+        self.statusbar.setObjectName(u"statusbar")
+        Shell.setStatusBar(self.statusbar)
+
+        self.menubar.addAction(self.menuFile.menuAction())
+        self.menubar.addAction(self.menuDisplay.menuAction())
+        self.menubar.addAction(self.menuHelp.menuAction())
+        self.menuDisplay.addAction(self.menu_Select_Theme.menuAction())
+        self.menuDisplay.addAction(self.action_ShowHideImagesPane)
+        self.menuDisplay.addAction(self.action_ShowHideControlsPane)
+        self.menuDisplay.addAction(self.action_ShowHideMessageLog)
+        self.menu_Select_Theme.addAction(self.action_lightTheme)
+        self.menu_Select_Theme.addAction(self.action_darkTheme)
+        self.menuHelp.addAction(self.action_openDocumentation)
+        self.menuHelp.addAction(self.action_showSystemProperties)
+        self.menuFile.addAction(self.action_OpenFile)
+        self.menuFile.addSeparator()
+        self.menuFile.addAction(self.action_Exit)
+
+        self.retranslateUi(Shell)
+
+        self.tabControls.setCurrentIndex(0)
+
+
+        QMetaObject.connectSlotsByName(Shell)
+    # setupUi
+
+    def retranslateUi(self, Shell):
+        Shell.setWindowTitle(QCoreApplication.translate("Shell", u"MesoSPIM Controller", None))
+        self.action_openDocumentation.setText(QCoreApplication.translate("Shell", u"Open Documentation", None))
+#if QT_CONFIG(statustip)
+        self.action_openDocumentation.setStatusTip(QCoreApplication.translate("Shell", u"Open PDF Documentation", None))
+#endif // QT_CONFIG(statustip)
+#if QT_CONFIG(shortcut)
+        self.action_openDocumentation.setShortcut(QCoreApplication.translate("Shell", u"Ctrl+H", None))
+#endif // QT_CONFIG(shortcut)
+        self.action_ShowHideMessageLog.setText(QCoreApplication.translate("Shell", u"Show Message Log", None))
+        self.action_showSystemProperties.setText(QCoreApplication.translate("Shell", u"Show System Properties", None))
+        self.action_lightTheme.setText(QCoreApplication.translate("Shell", u"Light Theme", None))
+        self.action_darkTheme.setText(QCoreApplication.translate("Shell", u"Dark Theme", None))
+        self.action_ShowHideImagesPane.setText(QCoreApplication.translate("Shell", u"Show Images Pane", None))
+        self.action_ShowHideControlsPane.setText(QCoreApplication.translate("Shell", u"Show Controls Pane", None))
+        self.action_OpenFile.setText(QCoreApplication.translate("Shell", u"Open File...", None))
+        self.action_Exit.setText(QCoreApplication.translate("Shell", u"Exit", None))
+        self.tabControls.setTabText(self.tabControls.indexOf(self.tabPanelsPlaceholder), QCoreApplication.translate("Shell", u"Controls", None))
+        self.toolBar_estop.setWindowTitle(QCoreApplication.translate("Shell", u"Safety", None))
+        self.label_estopStatus.setText(QCoreApplication.translate("Shell", u"\u25cf ARMED", None))
+#if QT_CONFIG(tooltip)
+        self.pushButton_estop.setToolTip(QCoreApplication.translate("Shell", u"Emergency stop (F12) \u2014 drives all lasers to 0 V and aborts the current acquisition", None))
+#endif // QT_CONFIG(tooltip)
+        self.pushButton_estop.setText(QCoreApplication.translate("Shell", u"E-STOP", None))
+        self.pushButton_armReset.setText(QCoreApplication.translate("Shell", u"Arm/Reset", None))
+        self.menuDisplay.setTitle(QCoreApplication.translate("Shell", u"View", None))
+        self.menu_Select_Theme.setTitle(QCoreApplication.translate("Shell", u"Select Color Theme", None))
+        self.menuHelp.setTitle(QCoreApplication.translate("Shell", u"Help", None))
+        self.menuFile.setTitle(QCoreApplication.translate("Shell", u"File", None))
+    # retranslateUi
+

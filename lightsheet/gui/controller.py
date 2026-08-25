@@ -28,13 +28,13 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QTableWidgetItem,
-    QToolBar,
 )
 
 # FIXME - Free functions to integrate into own class (or at least cleanup/rename)
 from lightsheet.config import cfg_read
 from lightsheet.gui.properties_dialog import Properties_Dialog
 from lightsheet.gui.ui_controller import Ui_Controller
+from lightsheet.gui.ui_shell import Ui_Shell
 from lightsheet.gui.workers import LiveWorker, PreviewWorker, SingleWorker, StackWorker
 from lightsheet.hal import Camera, ETLs, Motors, SigGen
 from lightsheet.hal.bundle import DeviceBundle
@@ -167,8 +167,36 @@ class Controller_MainWindow(QMainWindow):
         #
 
         QMainWindow.__init__(self)
+
+        # Load the E-stop toolbar from the shell .ui FIRST. The shell .ui
+        # (ui_shell.ui) declares the safety toolbar (toolBar_estop with
+        # pushButton_estop, label_estopStatus, pushButton_armReset) and the
+        # F12 QShortcut (shortcut_estop) as true UI elements — not hidden
+        # in programmatic code. Ui_Shell.setupUi adds the toolbar to this
+        # QMainWindow and creates a placeholder central widget. The
+        # subsequent Ui_Controller.setupUi call replaces that placeholder
+        # with the real monolithic UI (QMainWindow.setCentralWidget deletes
+        # the old central widget; toolbars survive the replacement). This
+        # transitional two-load sequence will be replaced by a single
+        # Ui_Shell load in 07-08/07-09 when the shell composition completes.
+        self.ui_shell = Ui_Shell()
+        self.ui_shell.setupUi(self)
+
+        # Load the main UI from the monolithic .ui. This replaces the
+        # shell's placeholder central widget with the real controls.
         self.ui = Ui_Controller()
         self.ui.setupUi(self)
+
+        # Expose the E-stop widgets as direct attributes on the controller
+        # for backward compatibility with existing slot code and tests
+        # (ctrl.pushButton_armReset.text(), etc.). The widgets themselves
+        # are constructed by the .ui-generated Ui_Shell code — only the
+        # references are copied here.
+        self.toolBar_estop = self.ui_shell.toolBar_estop
+        self.label_estopStatus = self.ui_shell.label_estopStatus
+        self.pushButton_estop = self.ui_shell.pushButton_estop
+        self.pushButton_armReset = self.ui_shell.pushButton_armReset
+        self.shortcut_estop = self.ui_shell.shortcut_estop
 
         # E-stop cooperative-abort event. Starts clear (not set) so the
         # system boots ARMED — worker loops run normally until the operator
@@ -185,50 +213,22 @@ class Controller_MainWindow(QMainWindow):
         # press re-arms).
         self._estop_disarmed = False
 
-        # Safety toolbar — created programmatically (not in the generated
-        # .ui file) so it survives pyuic5 regeneration. Holds the E-stop
-        # status indicator, the E-stop button, and the Arm/Reset button.
-        self.toolBar_estop = QToolBar("Safety", self)
-        self.toolBar_estop.setMovable(False)
-        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolBar_estop)
-
-        # E-stop status indicator (green = ARMED, red = ACTUATED, gray = DISARMED)
-        self.label_estopStatus = QLabel("● ARMED")
-        self.label_estopStatus.setMinimumWidth(140)
-        self.label_estopStatus.setStyleSheet("color: #34C759; font-weight: bold;")
-        self.toolBar_estop.addWidget(self.label_estopStatus)
-
-        self.toolBar_estop.addSeparator()
-
-        # E-stop button — 18px Bold white "E-STOP" on red fill, 96x48 min
-        # (prominent two-finger panic target). Checkable so the latch state
-        # is queryable, though the visual state is driven by QSS in the
-        # press handler rather than Qt's checked styling.
-        self.pushButton_estop = QPushButton("E-STOP")
-        self.pushButton_estop.setCheckable(True)
-        self.pushButton_estop.setMinimumSize(96, 48)
-        self.pushButton_estop.setStyleSheet(
-            "QPushButton { background-color: #FF3B30; color: white; "
-            "font-size: 18px; font-weight: bold; border: 2px solid black; }"
-        )
-        self.pushButton_estop.setToolTip(
-            "Emergency stop (F12) — drives all lasers to 0 V and aborts the current acquisition"  # noqa: E501
-        )
+        # Wire the E-stop signal/slot connections. The widget CONSTRUCTION
+        # comes from the .ui-generated code (Ui_Shell); the connections stay
+        # explicit in controller.py for visibility and testability. The
+        # kill-path logic in updateUi_estop_pressed stays synchronous and
+        # lock-free (AGENTS.md §2 — safety-critical).
         self.pushButton_estop.clicked.connect(self.updateUi_estop_pressed)
-        self.toolBar_estop.addWidget(self.pushButton_estop)
-
-        # Arm/Reset button — 88x32 min (smaller than E-stop so the panic
-        # stroke hits E-stop first). Two-press sequence: first press after
-        # an E-stop DISARMS (gray), second press re-ARMS (green). Never
-        # re-energizes a laser itself.
-        self.pushButton_armReset = QPushButton("Arm/Reset")
-        self.pushButton_armReset.setMinimumSize(88, 32)
         self.pushButton_armReset.clicked.connect(self.updateUi_arm_reset_pressed)
-        self.toolBar_estop.addWidget(self.pushButton_armReset)
 
-        # F12 hotkey — fires regardless of which widget has focus.
-        self.shortcut_estop = QShortcut(QKeySequence("F12"), self)
-        self.shortcut_estop.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        # F12 hotkey — fires regardless of which widget has focus. The
+        # QShortcut is declared in ui_shell.ui (with ApplicationShortcut
+        # context); the F12 key sequence is set here because pyside6-uic
+        # maps the .ui "shortcut" property to setShortcut() which QShortcut
+        # does not have (it uses setKey()). The QShortcut object itself
+        # (parented to pushButton_estop per the .ui) is created by
+        # Ui_Shell.setupUi; only the key is wired here.
+        self.shortcut_estop.setKey(QKeySequence("F12"))
         self.shortcut_estop.activated.connect(self.updateUi_estop_pressed)
 
         # Per-laser status indicators (LSR-06). Added programmatically per
