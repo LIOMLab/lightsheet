@@ -1694,7 +1694,8 @@ class Controller_MainWindow(QMainWindow):
         # Re-enabling modes after single frame acquisition
         self.single_mode_started = False
         self.ui.pushButton_acqGetSingleImage.setText("Get Single Image")
-        self.default_buttons.append(self.ui.pushButton_saveCurrentImage)
+        if self.ui.pushButton_saveCurrentImage not in self.default_buttons:
+            self.default_buttons.append(self.ui.pushButton_saveCurrentImage)
         self.updateUi_modes_buttons(self.default_buttons)
 
     def updateUi_select_directory(self) -> None:
