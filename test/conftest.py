@@ -370,63 +370,32 @@ _gc.disable()
 # and segfault, but by that point pytest-cov has already written coverage
 # data and the xdist channel has already sent it to the master.
 #
-# Root cause of the segfault (a real reference-cycle bug, fixed in Phase 6
-# — see ROADMAP.md Phase 6 known issue): 53 `lambda: self._mc.<slot>()`
-# signal connections in Controller_MainWindow.__init__ each create a cycle
+# Root cause of the historical segfault (a real reference-cycle bug, now
+# fixed — see ROADMAP.md Phase 6 known issue): 53 `lambda: self._mc.<slot>()`
+# signal connections in Controller_MainWindow.__init__ each created a cycle
 # controller → child widget → signal → lambda → closure cell → controller.
-# The Python wrapper never reaches refcount zero, so the C++ QMainWindow
-# destructor is deferred to cyclic GC. In the production app (one
-# controller, runs until exit) this is a latent leak; in the test suite
-# (constructs ~50 controllers per process) the deferred destructor fires
-# mid-construction of the next controller and segfaults. Phase 6 (Threading
-# Migration) breaks the cycle at the connection layer (functools.partial +
-# weakref or bound pyqtSlot methods replace the self-capturing lambdas);
-# once it lands, this hook, the make_controller sip.delete teardown, and
-# the single-process coverage gate can all be reverted to xdist. Phase 7
-# (Qt6 port) only confirms the cycle stays broken under PySide6.
+# The Python wrapper never reached refcount zero, so the C++ QMainWindow
+# destructor was deferred to cyclic GC. In the production app (one
+# controller, runs until exit) this was a latent leak; in the test suite
+# (constructs ~50 controllers per process) the deferred destructor fired
+# mid-construction of the next controller and segfaulted.
 #
-# The make_controller fixture (test/_helpers/controller_fixture.py) calls
-# sip.delete(controller) in its teardown so each fixture-made controller's
-# C++ tree is destroyed deterministically. The pytest_runtest_teardown
-# hook below extends that to EVERY test: after each test it sip.deletes
-# any remaining top-level widgets (e.g. the _MockController + collaborators
-# that test_main_bootstrap constructs via main() without going through the
-# fixture or qtbot.addWidget). pytest-qt's own _close_widgets uses
-# deleteLater (deferred to the event loop), which races with the next
-# test's widget construction; sip.delete forces immediate C++ destruction.
-
-
-@pytest.hookimpl(trylast=True)
-def pytest_runtest_teardown(item, nextitem):
-    """Deterministically destroy every top-level QWidget after each test so
-    C++ destructors run NOW (under our control) instead of being deferred
-    by deleteLater / cyclic GC and racing with the next test's widget
-    construction. Runs trylast so pytest-qt's _close_widgets (which uses
-    deleteLater) has already run; we clean up whatever it left behind.
-
-    This prevents the mid-run segfault where a prior controller's deferred
-    C++ destructor fires inside the next test's QMainWindow.__init__. The
-    remaining shutdown-time segfault (Python atexit re-enabling GC and
-    collecting the orphaned Python wrapper cycles from the 53
-    self-capturing signal lambdas — see ROADMAP.md Phase 6 known issue)
-    only kills workers AFTER they have written coverage data and sent
-    test results, so it does not affect the gate's pass/fail or coverage
-    totals (xdist reports "failed workers" but the data is already
-    written; the master combines the per-worker .coverage files).
-    """
-    try:
-        from PyQt5.QtWidgets import QApplication
-        import sip
-        app = QApplication.instance()
-        if app is None:
-            return
-        for w in list(app.topLevelWidgets()):
-            try:
-                sip.delete(w)
-            except (TypeError, RuntimeError):
-                # Already deleted or not sip-managed — skip.
-                pass
-        app.processEvents()
-    except Exception:
-        # PyQt5/sip not available (tests skipped) — nothing to clean up.
-        pass
+# The cycle is now broken at the connection layer: wire_collaborators()
+# (added in the Phase 6 threading migration) uses bare bound-method
+# connections, which PyQt5 decomposes into weakref(__self__) +
+# strong(__func__), so the signal system holds zero strong refs to the
+# controller and the Python wrapper reaches refcount zero naturally on
+# teardown. Phase 7 (Qt6 port) will confirm the cycle stays broken under
+# PySide6 (which holds a strong ref to __func__ released on disconnect —
+# safer than PyQt5's weakref-to-__self__).
+#
+# A per-test pytest_runtest_teardown hook previously sip.deleted every
+# top-level QWidget after each test to force deterministic C++
+# destruction (preventing the mid-run segfault). That hook is now removed
+# — the cycle break makes it unnecessary. The make_controller fixture's
+# sip.delete teardown was likewise removed (replaced by
+# _stop_worker_threads, which mirrors closeEvent's quit()+wait()
+# shutdown). The single-process -p no:xdist flag in scripts/coverage.sh
+# is the last of the three workarounds and is re-enabled once xdist
+# workers no longer segfault at shutdown. This historical explanation is
+# kept as context for Phase 7.
