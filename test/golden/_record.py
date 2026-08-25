@@ -65,6 +65,9 @@ _CONTROLLER_SRC = os.path.join(
 _ACQ_SRC = os.path.join(
     os.path.dirname(__file__), "..", "..", "lightsheet", "gui", "acquisition_coordinator.py"
 )
+_WORKERS_SRC = os.path.join(
+    os.path.dirname(__file__), "..", "..", "lightsheet", "gui", "workers.py"
+)
 
 # Module-level logger the exec'd body references (controller.py:45).
 _logger = logging.getLogger("lightsheet.gui.controller")
@@ -164,21 +167,30 @@ def _build_standin() -> Mock:
 
 
 def _build_preview_standin() -> Mock:
-    """Build the Mock stand-in ``self`` for ``preview_mode_worker``.
+    """Build the Mock stand-in ``self`` for ``PreviewWorker.run``.
 
-    ``preview_mode_worker`` lives on ``AcquisitionCoordinator`` and reads
-    its own ``self.camera`` attribute plus shell-owned state via
-    ``self._shell.*`` (``preview_mode_started``, ``estop_event``,
+    ``PreviewWorker`` lives in ``lightsheet/gui/workers.py`` (relocated
+    from ``AcquisitionCoordinator.preview_mode_worker`` as the first step
+    of the threading-vehicle migration) and reads its own ``self.camera``
+    attribute plus shell-owned state via ``self._shell.*``
+    (``preview_mode_started``, ``estop_event``,
     ``ui.doubleSpinBox_cameraExposureTime``, ``_fs``,
-    ``sig_message``, ``sig_preview_mode_finished``) and laser control via
-    ``self._hw`` (the D-05 fold's ``start_lasers``/``stop_lasers`` calls).
-    The stand-in IS the coordinator (``self``); ``self._hw`` is a real
-    ``HardwareManager`` backed by a ``DeviceBundle`` of Mock devices so
-    the D-05 fold's laser start/stop calls exercise the real
-    ``HardwareManager.start_lasers``/``stop_lasers`` path (which emits
-    ``sig_message`` only on a HAL error — MockLaser does not error, so
-    the happy-path fixture is an empty list, proving the fold introduced
-    no stray emission on the message channel).
+    ``sig_message``) and laser control via ``self._hw`` (the
+    ``start_lasers``/``stop_lasers`` calls). The stand-in IS the worker
+    (``self``); ``self._hw`` is a real ``HardwareManager`` backed by a
+    ``DeviceBundle`` of Mock devices so the laser start/stop calls
+    exercise the real ``HardwareManager.start_lasers``/``stop_lasers``
+    path (which emits ``sig_message`` only on a HAL error — MockLaser
+    does not error, so the happy-path fixture is an empty list, proving
+    the relocation introduced no stray emission on the message channel).
+
+    The relocated body changed only the ``finally`` block: it now emits
+    ``self.finished.emit()`` (the worker's own ``pyqtSignal``) instead of
+    ``self._shell.sig_preview_mode_finished.emit()``. The golden harness
+    captures ``sig_message`` / ``sig_progress_update`` emissions (not
+    ``finished``), so the fixture is byte-identical to the pre-migration
+    version — the threading-vehicle change did not alter the
+    ``sig_message``/``sig_progress_update`` sequence.
 
     ``preview_mode_started`` is ``False`` so the while loop is skipped —
     the scenario exercises the arm → start_lasers → stop_lasers → disarm
@@ -265,7 +277,7 @@ def capture_acquisition_sequence(scenario: str) -> list[dict]:
 
     if scenario == "preview_auto_laser":
         standin = _build_preview_standin()
-        worker = _load_method("preview_mode_worker(self) -> None", src_path=_ACQ_SRC)
+        worker = _load_method("run(self) -> None", src_path=_WORKERS_SRC)
         worker(standin)
         sequence: list[dict] = []
         for call in standin._shell.sig_message.emit.call_args_list:
