@@ -22,6 +22,7 @@ import pytest
 pytest.importorskip("PyQt5")
 
 from lightsheet.gui.acquisition_coordinator import AcquisitionCoordinator
+from lightsheet.gui.workers import PreviewWorker
 from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
 
 
@@ -109,40 +110,56 @@ def _make_acq() -> tuple[AcquisitionCoordinator, _WorkerShell, Mock]:
     return acq, shell, hw
 
 
-# -- preview_mode_worker ----------------------------------------------------
+def _make_preview_worker(qtbot) -> tuple[PreviewWorker, _WorkerShell, Mock]:
+    """Construct a PreviewWorker (QObject) against the mock shell + hw.
+    Requires qtbot for the QApplication."""
+    bundle = _make_bundle()
+    shell = _WorkerShell()
+    hw = Mock()
+    worker = PreviewWorker(bundle, hw, shell)
+    return worker, shell, hw
 
 
-def test_preview_mode_worker_normal_exit() -> None:
-    """preview_mode_worker with preview_mode_started=False exits the loop
+# -- PreviewWorker.run ------------------------------------------------------
+
+
+def test_preview_worker_normal_exit(qtbot) -> None:
+    """PreviewWorker.run with preview_mode_started=False exits the loop
     immediately, calls stop_lasers + disarm, emits finished signal."""
-    acq, shell, hw = _make_acq()
+    worker, shell, hw = _make_preview_worker(qtbot)
     shell.preview_mode_started = False  # loop doesn't execute
-    acq.preview_mode_worker()
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
     # stop_lasers was called
     hw.stop_lasers.assert_called_once()
-    # finished signal emitted
-    shell.sig_preview_mode_finished.emit.assert_called_once()
+    # finished signal emitted exactly once
+    assert len(finished_emits) == 1
 
 
-def test_preview_mode_worker_estop_break() -> None:
-    """preview_mode_worker with estop_event set breaks out of the loop."""
-    acq, shell, hw = _make_acq()
+def test_preview_worker_estop_break(qtbot) -> None:
+    """PreviewWorker.run with estop_event set breaks out of the loop."""
+    worker, shell, hw = _make_preview_worker(qtbot)
     shell.preview_mode_started = True
     shell.estop_event.is_set.return_value = True  # E-stop on first iteration
-    acq.preview_mode_worker()
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
     hw.stop_lasers.assert_called_once()
-    shell.sig_preview_mode_finished.emit.assert_called_once()
+    assert len(finished_emits) == 1
 
 
-def test_preview_mode_worker_exception_emits_message() -> None:
-    """preview_mode_worker catches exceptions and emits sig_message."""
-    acq, shell, hw = _make_acq()
+def test_preview_worker_exception_emits_message(qtbot) -> None:
+    """PreviewWorker.run catches exceptions and emits sig_message."""
+    worker, shell, hw = _make_preview_worker(qtbot)
     # Make camera.arm() raise to trigger the except block.
-    acq.camera.arm = Mock(side_effect=RuntimeError("camera error"))
-    acq.preview_mode_worker()
+    worker.camera.arm = Mock(side_effect=RuntimeError("camera error"))
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
     shell.sig_message.emit.assert_called_once()
     assert "Preview acquisition failed" in shell.sig_message.emit.call_args[0][0]
-    shell.sig_preview_mode_finished.emit.assert_called_once()
+    assert len(finished_emits) == 1
 
 
 # -- live_mode_worker -------------------------------------------------------

@@ -1,10 +1,11 @@
 """AcquisitionCoordinator extraction tests (god-object split).
 
 ``AcquisitionCoordinator`` is a plain-Python collaborator that owns the
-four acquisition worker bodies (``preview_mode_worker``,
-``live_mode_worker``, ``single_mode_worker``, ``stack_mode_worker``) plus
-``acquire_scan``. The shell delegates through ``self._acq``. The
-coordinator reads shell-owned state (``sig_message``, ``estop_event``,
+three remaining acquisition worker bodies (``live_mode_worker``,
+``single_mode_worker``, ``stack_mode_worker``) plus ``acquire_scan``.
+``preview_mode_worker`` has relocated to ``PreviewWorker`` in
+``lightsheet/gui/workers.py``. The shell delegates through ``self._acq``.
+The coordinator reads shell-owned state (``sig_message``, ``estop_event``,
 ``<mode>_mode_started`` flags, ``_fs``, ``ui.*`` widgets) via an injected
 ``self._shell`` reference and reads its own ``self.camera`` /
 ``self.siggen`` / ``self.motors`` / ``self._hw`` attributes.
@@ -17,18 +18,18 @@ the real object — the same code that runs on the rig.
 
 Behavior covered (per the plan's ``<behavior>`` block):
 
-1. ``AcquisitionCoordinator(bundle, hw, shell)`` exposes the five methods
-   as callable attributes.
+1. ``AcquisitionCoordinator(bundle, hw, shell)`` exposes the four
+   remaining methods as callable attributes.
 2. The golden-master replay (``default.json`` + ``siggen_create_scanner_fail.json``)
    is unchanged after the extraction — verified by the existing replay
    tests in ``test_golden_acquisition.py`` passing without regenerating
    the fixtures.
-3. The preview-auto-laser fold: ``preview_mode_worker`` calls
+3. The preview-auto-laser fold: ``PreviewWorker.run`` calls
    ``self._hw.start_lasers()`` after ``camera.arm()`` and
    ``self._hw.stop_lasers()`` before ``camera.disarm()``, mirroring
    ``live_mode_worker``'s shape.
 4. ``updateUi_preview_mode_button`` calls
-   ``self._cache_auto_laser_flags()`` before spawning the preview thread,
+   ``self._cache_auto_laser_flags()`` before spawning the preview worker,
    mirroring ``updateUi_single_mode_button``.
 """
 
@@ -40,13 +41,13 @@ from unittest.mock import patch
 from _helpers.controller_fixture import make_controller
 
 
-def test_acquisition_coordinator_exposes_five_worker_methods(
+def test_acquisition_coordinator_exposes_four_worker_methods(
     qtbot, request
 ) -> None:
     """AcquisitionCoordinator(bundle, hw, shell) constructed via
     make_controller exposes single_mode_worker, live_mode_worker,
-    stack_mode_worker, preview_mode_worker, acquire_scan as callable
-    methods."""
+    stack_mode_worker, acquire_scan as callable methods. preview_mode_worker
+    has relocated to PreviewWorker in lightsheet/gui/workers.py."""
     ctrl, _ = make_controller(qtbot, request)
     acq = ctrl._acq
 
@@ -54,7 +55,6 @@ def test_acquisition_coordinator_exposes_five_worker_methods(
         "single_mode_worker",
         "live_mode_worker",
         "stack_mode_worker",
-        "preview_mode_worker",
         "acquire_scan",
     ):
         method = getattr(acq, name, None)
@@ -86,19 +86,20 @@ def test_acquisition_coordinator_stores_bundle_handles_and_collaborators(
 # --------------------------------------------------------------------------- #
 
 
-def test_preview_mode_worker_calls_start_lasers_after_arm_and_stop_before_disarm(
+def test_preview_worker_calls_start_lasers_after_arm_and_stop_before_disarm(
     qtbot, request
 ) -> None:
-    """preview_mode_worker now calls self._hw.start_lasers()
+    """PreviewWorker.run now calls self._hw.start_lasers()
     immediately after self.camera.arm() (before the while loop) and
     self._hw.stop_lasers() immediately before self.camera.disarm() —
     mirroring live_mode_worker's existing shape. Verified by calling the
-    real preview_mode_worker on the real AcquisitionCoordinator (via
-    make_controller) with the camera arm/disarm and hw start/stop_lasers
-    methods patched to record the call order, and estop_event set so the
-    while loop breaks immediately after start_lasers."""
-    ctrl, _ = make_controller(qtbot, request)
-    acq = ctrl._acq
+    real PreviewWorker.run (via make_controller) with the camera arm/disarm
+    and hw start/stop_lasers methods patched to record the call order, and
+    estop_event set so the while loop breaks immediately after
+    start_lasers."""
+    from lightsheet.gui.workers import PreviewWorker
+
+    ctrl, bundle = make_controller(qtbot, request)
 
     call_log: list[str] = []
     # Set estop so the while loop breaks immediately after start_lasers —
@@ -107,22 +108,24 @@ def test_preview_mode_worker_calls_start_lasers_after_arm_and_stop_before_disarm
     ctrl.estop_event.set()
     ctrl.preview_mode_started = True
 
+    worker = PreviewWorker(bundle, ctrl._hw, ctrl)
+
     # Patch the four collaborator methods to record the call order. The
-    # real preview_mode_worker is called on the real coordinator — only
-    # the collaborator methods are intercepted to observe the ordering.
+    # real PreviewWorker.run is called — only the collaborator methods are
+    # intercepted to observe the ordering.
     with (
-        patch.object(acq.camera, "arm", side_effect=lambda: call_log.append("camera.arm")),
+        patch.object(worker.camera, "arm", side_effect=lambda: call_log.append("camera.arm")),
         patch.object(
-            acq.camera, "disarm", side_effect=lambda: call_log.append("camera.disarm")
+            worker.camera, "disarm", side_effect=lambda: call_log.append("camera.disarm")
         ),
         patch.object(
-            acq._hw, "start_lasers", side_effect=lambda: call_log.append("hw.start_lasers")
+            ctrl._hw, "start_lasers", side_effect=lambda: call_log.append("hw.start_lasers")
         ),
         patch.object(
-            acq._hw, "stop_lasers", side_effect=lambda: call_log.append("hw.stop_lasers")
+            ctrl._hw, "stop_lasers", side_effect=lambda: call_log.append("hw.stop_lasers")
         ),
     ):
-        acq.preview_mode_worker()
+        worker.run()
 
     # start_lasers called after camera.arm.
     assert "camera.arm" in call_log, "camera.arm must be called"

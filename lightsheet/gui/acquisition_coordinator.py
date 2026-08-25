@@ -1,10 +1,14 @@
 """AcquisitionCoordinator — god-object split collaborator.
 
-Owns the four acquisition worker bodies (``preview_mode_worker``,
-``live_mode_worker``, ``single_mode_worker``, ``stack_mode_worker``) plus
-``acquire_scan``. The shell (``Controller_MainWindow``) delegates through
-``self._acq`` and spawns its worker threads targeting
-``self._acq.<mode>_mode_worker``.
+Owns the remaining three acquisition worker bodies (``live_mode_worker``,
+``single_mode_worker``, ``stack_mode_worker``) plus ``acquire_scan``.
+``preview_mode_worker`` has relocated to ``PreviewWorker`` in
+``lightsheet/gui/workers.py`` as the first step of the threading-vehicle
+migration to ``QThread`` + worker ``QObject`` (``moveToThread``); the
+other three worker bodies relocate in later plans. The shell
+(``Controller_MainWindow``) delegates through ``self._acq`` and spawns
+its worker threads targeting ``self._acq.<mode>_mode_worker`` for the
+modes still hosted here.
 
 This is a plain-Python object (NOT a ``QObject``) per the plain-Python
 collaborator pattern: collaborators emit through a shell reference, never
@@ -67,9 +71,9 @@ logger = logging.getLogger(__name__)
 class AcquisitionCoordinator:
     """Acquisition worker + scan orchestration collaborator.
 
-    Four of the five method bodies (``live_mode_worker``,
-    ``single_mode_worker``, ``stack_mode_worker``, ``acquire_scan``) are
-    moved verbatim from ``Controller_MainWindow`` — only the
+    Three of the four remaining method bodies (``live_mode_worker``,
+    ``single_mode_worker``, ``stack_mode_worker``, plus ``acquire_scan``)
+    are moved verbatim from ``Controller_MainWindow`` — only the
     attribute-access prefix changes (``self.`` ->
     ``self._shell.`` for shell-owned state; ``self.camera`` /
     ``self.siggen`` / ``self.motors`` stay as the coordinator's own
@@ -79,16 +83,9 @@ class AcquisitionCoordinator:
     frame, ``sig_message`` on exception, ``sig_*_mode_finished`` exactly
     once in ``finally``) is preserved verbatim.
 
-    ``preview_mode_worker`` was MODIFIED during extraction (not a verbatim
-    move) to add ``self._hw.start_lasers()`` after ``camera.arm()`` and
-    ``self._hw.stop_lasers()`` before ``camera.disarm()`` — mirroring
-    ``live_mode_worker``'s shape so the operator can see the beam while
-    adjusting parameters in calibration mode. The previous shape left the
-    lasers dark during preview. The laser start/stop is gated by the
-    cached ``_auto_laser1``/``_auto_laser2`` flags sampled on the GUI
-    thread, so a Class IIIB laser is energized only when the operator
-    opted into auto-laser for that channel. See the inline comment in
-    ``preview_mode_worker`` for the rationale.
+    ``preview_mode_worker`` has relocated to ``PreviewWorker`` in
+    ``lightsheet/gui/workers.py`` as the first step of the threading
+    migration; the other three worker bodies relocate in later plans.
     """
 
     def __init__(
@@ -103,78 +100,6 @@ class AcquisitionCoordinator:
         self.camera = bundle.camera
         self.siggen = bundle.siggen
         self.motors = bundle.motors
-
-    def preview_mode_worker(self) -> None:
-        """This thread allows the visualization and manual control of the
-        parameters of the beams in the UI. There is no scan here,
-        beams only changes when parameters are changed. This the preferred
-        mode for beam calibration"""
-        try:
-            # Setting the camera for self triggered acquisition
-            self.camera.set_trigger_mode("auto_trigger")
-            self.camera.set_exposure_time(
-                int(self._shell.ui.doubleSpinBox_cameraExposureTime.value())
-            )
-            self.camera.arm()
-
-            # Start the auto-selected lasers after camera.arm() and before
-            # the preview loop, mirroring live_mode_worker's shape. Preview
-            # mode now drives the lasers so the operator can see the beam
-            # while adjusting parameters — the previous shape left the
-            # lasers dark during preview, defeating the mode's purpose for
-            # beam calibration. start_lasers/stop_lasers read the cached
-            # auto-laser flags sampled on the GUI thread by
-            # _cache_auto_laser_flags() in updateUi_preview_mode_button.
-            self._hw.start_lasers()
-
-            while self._shell.preview_mode_started:
-                # E-stop poll point — checked at the top of each iteration
-                # before any frame acquisition work. The lasers are already
-                # dark (driven off synchronously on the GUI thread in
-                # updateUi_estop_pressed); this break just stops acquiring
-                # new frames. Preview mode does not drive lasers or scan
-                # generation, but the camera stays armed and grabbing until
-                # the operator manually stops — polling estop_event aligns
-                # preview_mode_worker with live/single/stack per the
-                # AGENTS.md §2 rule that E-stop is polled in all acquisition
-                # worker loops.
-                if self._shell.estop_event.is_set():
-                    break
-
-                # # Updating Galvo and ETL voltages
-                # self.siggen.update_all()
-
-                # Recording a single image
-                self.camera.start_recorder(1)
-                self.camera.monitor_recorder(1)
-                self.camera.stop_recorder()
-                cam_images = self.camera.copy_recorder_images(1)
-                self.camera.delete_recorder()
-
-                # Sending first (and should be only) image to display port
-                frame = cam_images[0]
-                self._shell._fs.enqueue_frame(frame)
-
-            # Stop the lasers before camera.disarm(), mirroring
-            # live_mode_worker's cleanup shape. The lasers were started after
-            # camera.arm() above; stopping them here ensures no laser is left
-            # energized when the camera is disarmed and the mode exits.
-            self._hw.stop_lasers()
-
-            # Stopping camera
-            self.camera.disarm()
-        except Exception as e:
-            self._shell.sig_message.emit(
-                f"Preview acquisition failed — the run was aborted. Cause: {e}"
-            )
-            logger.exception("Preview mode worker failed")
-        finally:
-            # The finished signal must fire exactly once whether the method
-            # completes normally or an exception propagates from
-            # start_lasers()/acquire_scan()/camera.disarm()/anything else in
-            # the body. Without this, a worker that dies mid-cleanup leaves
-            # the UI stuck on "Stop Preview Mode" with no slot to re-enable it.
-            self._shell.sig_preview_mode_finished.emit()
 
     def live_mode_worker(self) -> None:
         """This thread allows the execution of scan_mode while modifying
