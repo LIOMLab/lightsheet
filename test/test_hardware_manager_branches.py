@@ -454,26 +454,27 @@ def test_poll_laser2_status_gated_proceeds_when_lock_free() -> None:
 
 
 def test_refresh_laser2_readback_async_skips_when_thread_alive() -> None:
-    """When a prior readback thread is still alive, the async refresh is a no-op."""
+    """When a prior readback thread is still running, the async refresh is a no-op."""
     laser2 = _make_laser("L2")
     hw, shell = _make_hw(laser2=laser2)
-    # Plant a fake alive thread.
+    # Plant a fake running QThread.
     fake_thread = Mock()
-    fake_thread.is_alive.return_value = True
-    hw._laser2_readback_thread = fake_thread
+    fake_thread.isRunning.return_value = True
+    hw._readback_thread = fake_thread
     hw._refresh_laser2_readback_async()
     # No new thread started — the fake thread is still the cached one.
-    assert hw._laser2_readback_thread is fake_thread
+    assert hw._readback_thread is fake_thread
 
 
 def test_refresh_laser2_readback_async_starts_thread_when_none() -> None:
-    """When no prior thread exists, a new daemon thread is started."""
+    """When no prior thread exists, a new QThread is started."""
     laser2 = _make_laser("L2", output_power=10.0)
     hw, shell = _make_hw(laser2=laser2)
     hw._refresh_laser2_readback_async()
-    # Wait for the thread to complete so the test doesn't leak.
-    if hw._laser2_readback_thread is not None:
-        hw._laser2_readback_thread.join(timeout=2.0)
+    # Wait for the QThread to complete so the test doesn't leak.
+    if hw._readback_thread is not None:
+        hw._readback_thread.quit()
+        hw._readback_thread.wait(2000)
     # A readback emit happened (the thread ran _refresh_laser_readback(1)).
     shell.sig_laser_readback.emit.assert_called()
 

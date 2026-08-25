@@ -24,8 +24,9 @@ reference (identical objects to ``shell.lasers``).
 from __future__ import annotations
 
 import logging
-import threading
 from typing import TYPE_CHECKING
+
+from PySide6.QtCore import Qt, QObject, QThread, Signal, Slot
 
 from lightsheet.hal.bundle import DeviceBundle
 
@@ -33,6 +34,36 @@ if TYPE_CHECKING:
     from lightsheet.gui.controller import Controller_MainWindow
 
 logger = logging.getLogger(__name__)
+
+
+class LaserReadbackWorker(QObject):
+    """Worker ``QObject`` for the iBeam L2 serial readback, affined to a
+    dedicated ``QThread`` via ``moveToThread``.
+
+    Fire-and-forget single-shot: ``start_readback`` runs the serial query
+    on the worker thread (calling ``HardwareManager._refresh_laser_readback``
+    which emits the result via the shell's ``sig_laser_readback`` signal —
+    a thread-safe Qt signal that crosses to the GUI thread for the QLabel
+    mutation). When the readback completes, ``sig_finished`` emits which
+    quits the thread's event loop via a direct connection (so the thread
+    exits without waiting for the main thread's event loop to process a
+    queued quit).
+    """
+
+    sig_finished = Signal()
+
+    def __init__(self, hw: "HardwareManager") -> None:
+        super().__init__()
+        self._hw = hw
+
+    @Slot()
+    def start_readback(self) -> None:
+        """Entry point connected to QThread.started — runs the L2 readback
+        (idx=1, the iBeam) on the worker thread, then signals completion."""
+        try:
+            self._hw._refresh_laser_readback(1)
+        finally:
+            self.sig_finished.emit()
 
 
 class HardwareManager:
@@ -53,11 +84,12 @@ class HardwareManager:
         # to shell.lasers (the shell's list copy of the bundle's tuple).
         # The per-laser RLock already lives on each ILaser instance.
         self.lasers = list(bundle.lasers)
-        # Tracks the in-flight async iBeam readback thread so the 1s status
+        # Tracks the in-flight async iBeam readback QThread so the 1s status
         # timer cannot stack readback threads when the serial round-trip
         # (~3s firmware latency) exceeds the timer interval. See
         # _refresh_laser2_readback_async.
-        self._laser2_readback_thread: threading.Thread | None = None
+        self._readback_thread: QThread | None = None
+        self._readback_worker: LaserReadbackWorker | None = None
         # NOTE: __init__ deliberately performs NO laser HAL lifecycle
         # calls (no .open()/.on()/.set_power()). It runs synchronously in
         # main()'s composition root BEFORE controller.show() — calling
@@ -420,38 +452,47 @@ class HardwareManager:
         self._refresh_laser2_readback_async()
 
     def _refresh_laser2_readback_async(self) -> None:
-        """Offload the iBeam (L2) serial readback to a daemon thread.
+        """Offload the iBeam (L2) serial readback to a QThread + worker
+        QObject.
 
         The iBeam serial round-trip (show level power) takes ~3s due to
         firmware response latency. Running it on the GUI thread — as the
         1s status QTimer and the refresh-after-action call sites
         previously did — freezes the UI for the duration of every
-        round-trip. This spawns a daemon thread to call
-        _refresh_laser_readback(1), which performs the serial query and
-        emits the result via sig_laser_readback (a thread-safe Qt signal
-        — the QLabel mutation happens on the GUI thread in the slot, per
-        AGENTS.md §11).
+        round-trip. This spawns a QThread with a LaserReadbackWorker that
+        calls _refresh_laser_readback(1) on the worker thread, which
+        performs the serial query and emits the result via
+        sig_laser_readback (a thread-safe Qt signal — the QLabel mutation
+        happens on the GUI thread in the slot, per AGENTS.md §11).
 
-        A guard on self._laser2_readback_thread prevents stacking when
-        the 1s timer fires faster than the ~3s round-trip completes: if
-        a prior readback is still in flight, this call is a no-op and
-        the next timer tick retries. The L1/DAQLaser readback
+        A guard on self._readback_thread prevents stacking when the 1s
+        timer fires faster than the ~3s round-trip completes: if a prior
+        readback thread is still running, this call is a no-op and the
+        next timer tick retries. The L1/DAQLaser readback
         (_refresh_laser_readback(0)) stays synchronous — it returns the
         staged mW power with no serial I/O, so there is nothing to
         offload.
+
+        The readback thread is fire-and-forget (single-shot): the worker's
+        do_readback slot runs the query, emits sig_finished which quits
+        the thread's event loop, and the thread exits.
         """
         if (
-            self._laser2_readback_thread is not None
-            and self._laser2_readback_thread.is_alive()
+            self._readback_thread is not None
+            and self._readback_thread.isRunning()
         ):
             return
-        self._laser2_readback_thread = threading.Thread(
-            target=self._refresh_laser_readback,
-            args=(1,),
-            daemon=True,
-            name="ibeam-readback",
+        self._readback_thread = QThread()
+        self._readback_worker = LaserReadbackWorker(self)
+        self._readback_worker.moveToThread(self._readback_thread)
+        self._readback_thread.started.connect(
+            self._readback_worker.start_readback, Qt.DirectConnection
         )
-        self._laser2_readback_thread.start()
+        self._readback_worker.sig_finished.connect(
+            self._readback_thread.quit, Qt.DirectConnection
+        )
+        self._readback_thread.finished.connect(self._readback_worker.deleteLater)
+        self._readback_thread.start()
 
     def _refresh_laser_readback(self, idx: int) -> None:
         """Query self.lasers[idx].get_output_power() and emit the readback

@@ -156,6 +156,12 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
         # Stop the frame_saver QThread (quit()+wait with the h5py quiesce
         # timeout) — no-op if no save was started.
         controller._fs.frame_saver.stop_saving()
+        # Stop the laser2 readback QThread if one is in flight (fire-and-
+        # forget single-shot; quit()+wait so it doesn't outlive the test).
+        readback_thread = getattr(controller._hw, "_readback_thread", None)
+        if readback_thread is not None and readback_thread.isRunning():
+            readback_thread.quit()
+            readback_thread.wait(2000)
         for attr in (
             "_preview_thread",
             "_live_thread",
