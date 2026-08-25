@@ -5,17 +5,16 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lightsheet"
 version = "0.1.0"
-description = "Light-sheet fluorescence microscope controller (PyQt5 desktop app)"
-requires-python = ">=3.10,<3.13"
+description = "Light-sheet fluorescence microscope controller (PySide6 desktop app)"
+requires-python = ">=3.12,<3.13"
 dependencies = [
-    "numpy>=1.22.3",
-    "PyQt5>=5.15.6",
+    "numpy>=2.0",
+    "PySide6>=6.8",
     "nidaqmx>=0.6.0",
     "pco>=0.1.3",
     "pyserial>=3.5",
-    "h5py>=3.6.0",
-    "scipy>=1.8.0",
-    "pyqtgraph>=0.12.4",
+    "h5py>=3.11",
+    "scipy>=1.13",
     "tifffile>=2022.2.9",
     "matplotlib>=3.5.1",
     "QDarkStyle>=3.0.3",
@@ -44,6 +43,20 @@ extend-exclude = [
     "lightsheet/gui/ui_controller.py",
     "lightsheet/gui/ui_controller_rc.py",
     "lightsheet/gui/ui_properties.py",
+    # 7B generated per-panel .ui/.qrc files (pyside6-uic/pyside6-rcc output).
+    # Pre-registered so 7B regen does not trip ruff.
+    "lightsheet/gui/ui_laser_panel.py",
+    "lightsheet/gui/ui_motor_panel.py",
+    "lightsheet/gui/ui_acquisition_panel.py",
+    "lightsheet/gui/ui_save_panel.py",
+    "lightsheet/gui/ui_stack_panel.py",
+    "lightsheet/gui/ui_shell.py",
+    "lightsheet/gui/ui_laser_panel_rc.py",
+    "lightsheet/gui/ui_motor_panel_rc.py",
+    "lightsheet/gui/ui_acquisition_panel_rc.py",
+    "lightsheet/gui/ui_save_panel_rc.py",
+    "lightsheet/gui/ui_stack_panel_rc.py",
+    "lightsheet/gui/ui_shell_rc.py",
     "test/axial_resolution.py",
     "test/convert_tiff_to_hdf5.py",
     "test/daqmx.py",
@@ -139,6 +152,12 @@ file_branch_coverage_min = 100
 [tool.coverage-threshold.modules."lightsheet/hal/real/camera.py"]
 file_branch_coverage_min = 0
 
+# Native Qt6 ImageView replacement (D-05, MIG-08). New module in 7A —
+# QGraphicsView-based image display widget. 50% branch floor until the
+# SC2 render smoke test (07-02) lands and exercises the setImage path.
+[tool.coverage-threshold.modules."lightsheet/gui/image_view.py"]
+file_branch_coverage_min = 50
+
 # Generated Qt rcc code (pyqt5uic). The `qt_version < [5,8,0]` branch is a
 # compat guard for a Qt version we do not run; covering it requires
 # importlib.reload on the rcc module, which re-runs qInitResources and
@@ -159,7 +178,6 @@ error-on-warning = true
 dev = [
     "coverage-threshold>=0.6.2",
     "h5py-stubs>=0.1.2",
-    "pyqt5-stubs>=5.15.6.0",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     "pytest-qt>=4.5.0",
