@@ -80,11 +80,11 @@ def _read_controller_source() -> str:
 
 def _slice_method(src: str, method_sig: str) -> str:
     """Return the body of a method, from its ``def <sig>:`` line up to the
-    next top-level ``def``/``@pyqtSlot`` decorator."""
+    next top-level ``def``/``@pyqtSlot`` decorator or ``class`` boundary."""
     m = re.search(r"def " + re.escape(method_sig) + r":", src)
     assert m, f"{method_sig} is missing"
     body = src[m.start() :]
-    end = re.search(r"\n    def |\n    @pyqtSlot", body[1:])
+    end = re.search(r"\n    def |\n    @pyqtSlot|\nclass ", body[1:])
     if end:
         body = body[: end.start() + 1]
     return body
@@ -115,28 +115,35 @@ def _load_method(method_sig: str, src_path: str = _CONTROLLER_SRC) -> Callable[.
 def _build_standin() -> Mock:
     """Build the Mock stand-in ``self`` for acquire_scan.
 
-    acquire_scan now lives on ``AcquisitionCoordinator`` (god-object split).
-    The coordinator reads its own ``self.camera`` / ``self.siggen`` /
-    ``self.motors`` attributes and shell-owned state via ``self._shell.*``
-    (``sig_message``, ``sig_progress_update``, ``ui.*`` widgets, ``_fs``,
-    ``buffer`` / ``reconstructed_frame`` / ``buffer_metadata_*``,
-    ``reconstruct_frame`` / ``reconstruct_frame_linear_blend``). The
-    stand-in mirrors that shape: it IS the coordinator (``self``), with
-    ``self._shell`` a Mock exposing the shell-owned attributes acquire_scan
-    reads. The siggen's waveforms are pre-computed so ``waveform_cycles`` /
-    ``waveform_metadata`` are populated (the real coordinator calls
-    ``compute_scan_waveforms`` before ``acquire_scan``).
+    acquire_scan now lives on ``_AcquireScanMixin`` in
+    ``lightsheet/gui/workers.py`` (relocated from AcquisitionCoordinator).
+    The mixin reads its own ``self.camera`` / ``self.siggen`` /
+    ``self.motors`` attributes, shell-owned state via ``self._shell.*``
+    (``sig_message``, ``sig_progress_update``, ``_fs``,
+    ``buffer`` / ``reconstructed_frame`` / ``buffer_metadata_*``), and
+    the pre-sampled save options via ``self._save_description`` /
+    ``self._save_stitch_blend`` (constructor args on the worker QObject,
+    set directly on the stand-in here). The stand-in IS the worker
+    (``self``); ``self._shell`` is a Mock exposing the shell-owned
+    attributes acquire_scan reads. The siggen's waveforms are
+    pre-computed so ``waveform_cycles`` / ``waveform_metadata`` are
+    populated (the real worker calls ``compute_scan_waveforms`` before
+    ``acquire_scan``).
+
+    Regenerated fixtures matched the pre-migration fixtures byte-for-byte
+    (same values, only the access path changed from shell UI widgets to
+    instance attrs).
     """
     camera = MockCamera()
     siggen = MockSigGen(camera)
     siggen.compute_scan_waveforms()
 
     standin = Mock()
-    # Coordinator's own HAL handles.
+    # Worker's own HAL handles.
     standin.camera = camera
     standin.siggen = siggen
     standin.motors = MockMotors()
-    # The coordinator holds list[ILaser] (Wave 3 rewrite). acquire_scan does
+    # The worker holds list[ILaser] (Wave 3 rewrite). acquire_scan does
     # not reference self.lasers, but the stand-in mirrors hardware_init's
     # shape so a future body change that does read laser state is caught.
     standin.lasers = [
@@ -145,15 +152,18 @@ def _build_standin() -> Mock:
     ]
     standin.etls = MockETLs()
 
+    # B-03: save options are now ctor args on the worker QObject, pre-sampled
+    # on the GUI thread. The stand-in mirrors the worker's instance attrs
+    # directly — acquire_scan reads self._save_description /
+    # self._save_stitch_blend, NOT self._shell.ui.* widgets.
+    standin._save_description = "sample"
+    standin._save_stitch_blend = False
+
     # Shell reference — acquire_scan reads shell-owned state via self._shell.*
     shell = Mock()
     # Signal mocks — emit calls are captured via call_args_list.
     shell.sig_message = Mock()
     shell.sig_progress_update = Mock()
-    # UI widgets acquire_scan reads via self._shell.ui.* (the ONE tolerated
-    # cross-tier read in AcquisitionCoordinator).
-    shell.ui.lineEdit_saveDescription.text.return_value = "sample"
-    shell.ui.checkBox_saveStitchBlend.isChecked.return_value = False
     # FrameSaverController enqueue_frame receives the reconstructed frame.
     shell._fs = Mock()
     # Frame-reconstruction helpers stay on the shell — acquire_scan calls
@@ -297,7 +307,7 @@ def capture_acquisition_sequence(scenario: str) -> list[dict]:
             standin.siggen.error_message = "create_scan error"
 
         standin.siggen.create_scanner = _fail_create_scanner
-    acquire_scan = _load_method("acquire_scan(self) -> None", src_path=_ACQ_SRC)
+    acquire_scan = _load_method("acquire_scan(self) -> None", src_path=_WORKERS_SRC)
     acquire_scan(standin)
 
     sequence = []
