@@ -232,6 +232,41 @@ def test_live_mode_worker_estop_break(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
+def test_live_mode_worker_acquire_scan_does_not_skip_cleanup(qtbot) -> None:
+    """LiveWorker.run must call stop_lasers even when acquire_scan() runs.
+
+    Regression guard: acquire_scan() reads self._save_description and
+    self._save_stitch_blend. If LiveWorker.__init__ does not set them,
+    acquire_scan() raises AttributeError inside the try block and the
+    stop_lasers() / camera.disarm() cleanup is skipped — leaving Class IIIB
+    lasers energized. The loop must execute one acquire_scan() iteration and
+    still reach stop_lasers().
+    """
+    worker, shell, hw = _make_live_worker(qtbot)
+    shell.live_mode_started = True
+    shell.estop_event.is_set.return_value = False
+    # Flip live_mode_started to False after the first acquire_scan() so the
+    # loop runs exactly one iteration then exits normally.
+    original_acquire = worker.acquire_scan
+
+    def _acquire_then_stop() -> None:
+        original_acquire()
+        shell.live_mode_started = False
+
+    worker.acquire_scan = _acquire_then_stop  # type: ignore[method-assign]
+    # Spy on camera.disarm (MockCamera is a real instance, not a Mock).
+    disarm_spy = Mock(wraps=worker.camera.disarm)
+    worker.camera.disarm = disarm_spy  # type: ignore[method-assign]
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+    # The safety-critical assertion: cleanup ran despite acquire_scan() executing.
+    hw.stop_lasers.assert_called_once()
+    disarm_spy.assert_called_once()
+    assert len(finished_emits) == 1
+
+
+
 # -- SingleWorker.run -------------------------------------------------------
 
 

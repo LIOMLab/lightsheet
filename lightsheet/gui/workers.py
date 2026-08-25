@@ -78,6 +78,11 @@ class PreviewWorker(QObject):
         self.camera = bundle.camera
         self._hw = hw
         self._shell = shell
+        # Live mode never saves, but acquire_scan() reads these to populate
+        # buffer metadata. Empty/False defaults keep the metadata field
+        # well-typed without implying a save will occur.
+        self._save_description = ""
+        self._save_stitch_blend = False
         # B-03: pre-sample the camera exposure time on the GUI thread (the
         # constructor runs on the GUI thread before moveToThread) so run()
         # never reaches into the shell's ui.* from the worker thread
@@ -327,6 +332,11 @@ class LiveWorker(QObject, _AcquireScanMixin):
         self.motors = bundle.motors
         self._hw = hw
         self._shell = shell
+        # Live mode never saves, but acquire_scan() reads these to populate
+        # buffer metadata. Empty/False defaults keep the metadata field
+        # well-typed without implying a save will occur.
+        self._save_description = ""
+        self._save_stitch_blend = False
 
     @pyqtSlot()
     def run(self) -> None:
@@ -417,6 +427,11 @@ class SingleWorker(QObject, _AcquireScanMixin):
         self.motors = bundle.motors
         self._hw = hw
         self._shell = shell
+        # Live mode never saves, but acquire_scan() reads these to populate
+        # buffer metadata. Empty/False defaults keep the metadata field
+        # well-typed without implying a save will occur.
+        self._save_description = ""
+        self._save_stitch_blend = False
         # B-03: pre-sampled on the GUI thread before spawning the worker.
         self._save_description = save_description
         self._save_stitch_blend = save_stitch_blend
@@ -526,6 +541,11 @@ class StackWorker(QObject, _AcquireScanMixin):
         self.motors = bundle.motors
         self._hw = hw
         self._shell = shell
+        # Live mode never saves, but acquire_scan() reads these to populate
+        # buffer metadata. Empty/False defaults keep the metadata field
+        # well-typed without implying a save will occur.
+        self._save_description = ""
+        self._save_stitch_blend = False
         # B-03: pre-sampled on the GUI thread before spawning the worker.
         self._save_description = save_description
         self._save_stitch_blend = save_stitch_blend
