@@ -66,7 +66,7 @@ class MotorController:
     travel-limit enforcement).
     """
 
-    def __init__(self, bundle: DeviceBundle, shell: "Controller_MainWindow") -> None:
+    def __init__(self, bundle: DeviceBundle, shell: Controller_MainWindow) -> None:
         self._bundle = bundle
         self._shell = shell
         # Direct IMotors reference — identical objects to shell.motors (the
@@ -99,7 +99,7 @@ class MotorController:
                 )
                 self._shell.sig_beep.emit()
             else:
-                self._shell.updateUi_message_printer("Sample moving to horizontal position")
+                self._shell.updateUi_message_printer("Sample moving to horizontal position")  # noqa: E501
             self._shell.motor_panel.updateUi_position_horizontal()
         else:
             self._shell.updateUi_message_printer("Out of boundaries")
@@ -125,7 +125,7 @@ class MotorController:
                 )
                 self._shell.sig_beep.emit()
             else:
-                self._shell.updateUi_message_printer("Sample moving to vertical position")
+                self._shell.updateUi_message_printer("Sample moving to vertical position")  # noqa: E501
             self._shell.motor_panel.updateUi_position_vertical()
         else:
             self._shell.updateUi_message_printer("Out of boundaries")
@@ -452,7 +452,7 @@ class MotorController:
         self._shell.ui.pushButton_calHorizontalSetBackwardLimit.setEnabled(False)
         if self._shell.horizontal_forward_boundary_selected:
             self._shell.ui.pushButton_calHorizontalStartRangeSelection.setEnabled(True)
-            self._shell.ui.label_calibrateRange.setText("Press Calibrate Range To Start")
+            self._shell.ui.label_calibrateRange.setText("Press Calibrate Range To Start")  # noqa: E501
 
     def updateUi_set_horizontal_forward_boundary(self) -> None:
         """Set upper limit of sample's horizontal motion"""
@@ -464,7 +464,7 @@ class MotorController:
         self._shell.ui.pushButton_calHorizontalSetForwardLimit.setEnabled(False)
         if self._shell.horizontal_backward_boundary_selected:
             self._shell.ui.pushButton_calHorizontalStartRangeSelection.setEnabled(True)
-            self._shell.ui.label_calibrateRange.setText("Press Calibrate Range To Start")
+            self._shell.ui.label_calibrateRange.setText("Press Calibrate Range To Start")  # noqa: E501
 
     def updateUi_set_sample_origin(self) -> None:
         """Modifies the sample origin position"""
@@ -518,7 +518,7 @@ class MotorController:
             self._shell.camera_focus_relation[-1, 0],
             1000,
         )  ##1000 points
-        self._shell.slope_camera, self._shell.intercept_camera, r_value, p_value, std_err = (
+        self._shell.slope_camera, self._shell.intercept_camera, r_value, p_value, std_err = (  # noqa: E501
             stats.linregress(x, y)
         )
         logger.debug("r_value: %s", r_value)
@@ -601,5 +601,5 @@ class MotorController:
         for g in range(int(self._shell.number_of_etls_points)):
             plt.figure(g + 2)
             plt.plot(self._shell.xdata[g], self._shell.ydata[g], ".")
-            plt.plot(self._shell.xdata[g], func(self._shell.xdata[g], *self._shell.popt[g]), "r-")
+            plt.plot(self._shell.xdata[g], func(self._shell.xdata[g], *self._shell.popt[g]), "r-")  # noqa: E501
             plt.show(block=False)

@@ -40,7 +40,7 @@ class LaserPanelWidget(QWidget):
     panel slots that update them reference ``self._shell.label_laser*``.
     """
 
-    def __init__(self, shell: "Controller_MainWindow") -> None:
+    def __init__(self, shell: Controller_MainWindow) -> None:
         super().__init__()
         self._shell = shell
         self.ui = Ui_LaserPanel()
@@ -55,7 +55,7 @@ class LaserPanelWidget(QWidget):
         '' for a live readback (which clears any prior stale-value
         tooltip). The label list is indexed by laser index.
         """
-        labels = [self._shell.label_laserOneReadback, self._shell.label_laserTwoReadback]
+        labels = [self._shell.label_laserOneReadback, self._shell.label_laserTwoReadback]  # noqa: E501
         labels[idx].setText(text)
         labels[idx].setToolTip(tooltip)
 
@@ -113,14 +113,14 @@ class LaserPanelWidget(QWidget):
         # 300ms until the debounce fires. The debounce timer still governs
         # when the actual DAQ write happens; this only updates the staged
         # value the toggle reads.
-        self._shell.laser1_power_pct = self._shell.ui.doubleSpinBox_laserOneAmplitude.value()
+        self._shell.laser1_power_pct = self._shell.ui.doubleSpinBox_laserOneAmplitude.value()  # noqa: E501
         self._shell._laser1_amplitude_timer.start(300)
 
     def updateUi_laser2_amplitude(self) -> None:
         # Debounce-only slot for laser 2 (iBeam). See updateUi_laser1_amplitude.
         # Capture the staged percentage now for the same reason as laser 1:
         # _toggle_laser2's just-on path reads laser2_power_pct.
-        self._shell.laser2_power_pct = self._shell.ui.doubleSpinBox_laserTwoAmplitude.value()
+        self._shell.laser2_power_pct = self._shell.ui.doubleSpinBox_laserTwoAmplitude.value()  # noqa: E501
         self._shell._laser2_amplitude_timer.start(300)
 
     def _apply_laser1_amplitude(self) -> None:

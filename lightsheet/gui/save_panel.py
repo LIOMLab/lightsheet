@@ -30,7 +30,7 @@ class SavePanelWidget(QWidget):
     """Save/file-manager controls panel — owns file selection and
     single-image save slots."""
 
-    def __init__(self, shell: "Controller_MainWindow") -> None:
+    def __init__(self, shell: Controller_MainWindow) -> None:
         super().__init__()
         self._shell = shell
         self.ui = Ui_SavePanel()
@@ -58,7 +58,7 @@ class SavePanelWidget(QWidget):
                         item, dataset_names[item]
                     )
             self._shell.ui.listWidget_fileDatasets.setCurrentRow(0)
-            self._shell.updateUi_message_printer("File " + self._shell.open_directory + " opened")
+            self._shell.updateUi_message_printer("File " + self._shell.open_directory + " opened")  # noqa: E501
             self._shell.ui.pushButton_selectDataset.setEnabled(True)
         else:
             self._shell.ui.label_currentFileDirectory.setText("None Specified")
@@ -73,8 +73,8 @@ class SavePanelWidget(QWidget):
             import h5py
             from matplotlib import pyplot as plt
 
-            for item in range(len(self._shell.ui.listWidget_fileDatasets.selectedItems())):
-                self._shell.dataset_name = self._shell.ui.listWidget_fileDatasets.selectedItems()[
+            for item in range(len(self._shell.ui.listWidget_fileDatasets.selectedItems())):  # noqa: E501
+                self._shell.dataset_name = self._shell.ui.listWidget_fileDatasets.selectedItems()[  # noqa: E501
                     item
                 ].text()
                 with h5py.File(self._shell.open_directory, "r") as f:
@@ -113,7 +113,7 @@ class SavePanelWidget(QWidget):
 
                     # Display image
                     data = dataset[()]
-                    plt.figure(self._shell.open_directory + " (" + self._shell.dataset_name + ")")
+                    plt.figure(self._shell.open_directory + " (" + self._shell.dataset_name + ")")  # noqa: E501
                     plt.imshow(data, cmap="gray")
                     plt.show(
                         block=False
@@ -158,7 +158,7 @@ class SavePanelWidget(QWidget):
     def validate_file_name(self) -> None:
         """Validate filename set by the user"""
 
-        # To validate individual char. Only alphanumeric, - and _ characters are permitted
+        # To validate individual char. Only alphanumeric, - and _ characters are permitted  # noqa: E501
         def safe_char(c: str) -> str:
             if c.isalnum() or c == "-":
                 return c
@@ -187,7 +187,7 @@ class SavePanelWidget(QWidget):
 
         if self._shell.saving_allowed:
             # Getting sample name
-            self._shell.save_description = str(self._shell.ui.lineEdit_saveDescription.text())
+            self._shell.save_description = str(self._shell.ui.lineEdit_saveDescription.text())  # noqa: E501
 
             """Setting up frame saver"""
             self._shell._fs.reinit(1)
@@ -218,7 +218,7 @@ class SavePanelWidget(QWidget):
                 )
             else:
                 self._shell._fs.set_files(
-                    1, self._shell.save_filename, "singleImage", 1, "reconstructed_frame"
+                    1, self._shell.save_filename, "singleImage", 1, "reconstructed_frame"  # noqa: E501
                 )
                 self._shell._fs.enqueue_buffer(self._shell.reconstructed_frame)
                 self._shell.updateUi_message_printer("Saving Reconstructed Image")

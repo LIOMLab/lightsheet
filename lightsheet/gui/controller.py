@@ -30,7 +30,7 @@ import threading
 import typing
 import webbrowser
 
-from PySide6.QtCore import Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -179,7 +179,8 @@ class Controller_MainWindow(QMainWindow):
         # monolith's tabMotion but was not included in the motor panel .ui
         # during the 07-07 split. Create it programmatically and insert it
         # at the top of the motor panel's layout (before groupBox_SampleMovement).
-        from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel as _QLabel
+        from PySide6.QtWidgets import QComboBox, QHBoxLayout
+        from PySide6.QtWidgets import QLabel as _QLabel
 
         self.units_label = _QLabel("Units:")
         self.motor_panel.ui.comboBox_units = QComboBox(self.motor_panel)
@@ -318,9 +319,9 @@ class Controller_MainWindow(QMainWindow):
             self.ui.lineEdit_saveDescription.setEnabled(True)
         else:
             self.ui.lineEdit_saveDirectory.setText("")
-            self.ui.lineEdit_saveFilename.setText("Filename - Select Save Directory First")
+            self.ui.lineEdit_saveFilename.setText("Filename - Select Save Directory First")  # noqa: E501
             self.ui.lineEdit_saveFilename.setEnabled(False)
-            self.ui.lineEdit_saveDescription.setText("Description - Select Save Directory First")
+            self.ui.lineEdit_saveDescription.setText("Description - Select Save Directory First")  # noqa: E501
             self.ui.lineEdit_saveDescription.setEnabled(False)
 
         # Flags
@@ -523,7 +524,7 @@ class Controller_MainWindow(QMainWindow):
         self.timer_imageview = QTimer()
         self.timer_imageview.timeout.connect(self._fs.frame_viewer.updateUi_refresh_view)
         self.timer_imageview.timeout.connect(lambda: self._hw._poll_laser_status([0]))
-        self.timer_imageview.timeout.connect(lambda: self._hw._refresh_laser_readback(0))
+        self.timer_imageview.timeout.connect(lambda: self._hw._refresh_laser_readback(0))  # noqa: E501
         self.timer_imageview.start(100)
 
         # L2 (iBeam) status poll — a separate gated QTimer
@@ -545,7 +546,7 @@ class Controller_MainWindow(QMainWindow):
             self.ui.statusbar.showMessage("Ready", 2000)
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        """Making sure that everything is closed when the user exits the software."""  # noqa: E501
+        """Making sure that everything is closed when the user exits the software."""
         result = QMessageBox.question(
             self,
             "Confirm Exit...",
@@ -566,7 +567,7 @@ class Controller_MainWindow(QMainWindow):
             # after close_modes() cleared its mode-started flag. The 4 laser
             # daemon threads stay threading.Thread and are NOT in this loop
             # (lock-free E-stop, AGENTS.md §2).
-            for attr in ("_preview_thread", "_live_thread", "_single_thread", "_stack_thread"):
+            for attr in ("_preview_thread", "_live_thread", "_single_thread", "_stack_thread"):  # noqa: E501
                 worker_thread = getattr(self, attr, None)
                 if worker_thread is not None and worker_thread.isRunning():
                     worker_thread.quit()

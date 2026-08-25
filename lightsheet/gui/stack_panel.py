@@ -24,7 +24,7 @@ class StackPanelWidget(QWidget):
     """Stack acquisition setup panel — owns stack starting/ending point
     and number-of-planes calculation slots."""
 
-    def __init__(self, shell: "Controller_MainWindow") -> None:
+    def __init__(self, shell: Controller_MainWindow) -> None:
         super().__init__()
         self._shell = shell
         self.ui = Ui_StackPanel()
@@ -55,11 +55,11 @@ class StackPanelWidget(QWidget):
             ):
                 self._shell.number_of_planes = np.ceil(
                     abs(
-                        (self._shell.stack_ending_plane - self._shell.stack_starting_plane)
+                        (self._shell.stack_ending_plane - self._shell.stack_starting_plane)  # noqa: E501
                         / self._shell.ui.doubleSpinBox_acqPlaneStepSize.value()
                     )
                 )
-                self._shell.number_of_planes += 1  # Takes into account the initial plane
+                self._shell.number_of_planes += 1  # Takes into account the initial plane  # noqa: E501
                 self._shell.ui.label_acqNumberOfPlanes.setText(str(self._shell.number_of_planes))
         else:
             self._shell.sig_message.emit("Set a non-zero value to plane step")

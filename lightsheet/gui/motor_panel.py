@@ -22,7 +22,7 @@ class MotorPanelWidget(QWidget):
     """Motor/position controls panel — owns motor button enable/disable and
     position indicator refresh slots."""
 
-    def __init__(self, shell: "Controller_MainWindow") -> None:
+    def __init__(self, shell: Controller_MainWindow) -> None:
         super().__init__()
         self._shell = shell
         self.ui = Ui_MotorPanel()
@@ -64,7 +64,7 @@ class MotorPanelWidget(QWidget):
 
         # Updates to horizontal position
         self._shell.ui.doubleSpinBox_sampleSetHPosition.setDecimals(self._shell.units_decimals)
-        self._shell.ui.doubleSpinBox_sampleSetHPosition.setSuffix(f" {self._shell.units}")
+        self._shell.ui.doubleSpinBox_sampleSetHPosition.setSuffix(f" {self._shell.units}")  # noqa: E501
         self._shell.ui.doubleSpinBox_sampleSetHPosition.setMinimum(
             self._shell.motors.horizontal.get_limit_low(self._shell.units)
         )
@@ -74,7 +74,7 @@ class MotorPanelWidget(QWidget):
 
         # Updates to vertical position
         self._shell.ui.doubleSpinBox_sampleSetVPosition.setDecimals(self._shell.units_decimals)
-        self._shell.ui.doubleSpinBox_sampleSetVPosition.setSuffix(f" {self._shell.units}")
+        self._shell.ui.doubleSpinBox_sampleSetVPosition.setSuffix(f" {self._shell.units}")  # noqa: E501
         self._shell.ui.doubleSpinBox_sampleSetVPosition.setMinimum(
             self._shell.motors.vertical.get_limit_low(self._shell.units)
         )
@@ -84,7 +84,7 @@ class MotorPanelWidget(QWidget):
 
         # Updates to camera position
         self._shell.ui.doubleSpinBox_cameraSetPosition.setDecimals(self._shell.units_decimals)
-        self._shell.ui.doubleSpinBox_cameraSetPosition.setSuffix(f" {self._shell.units}")
+        self._shell.ui.doubleSpinBox_cameraSetPosition.setSuffix(f" {self._shell.units}")  # noqa: E501
         self._shell.ui.doubleSpinBox_cameraSetPosition.setMinimum(
             self._shell.motors.camera.get_limit_low(self._shell.units)
         )
@@ -136,8 +136,8 @@ class MotorPanelWidget(QWidget):
 
     def updateUi_position_horizontal(self) -> None:
         """Updates the current horizontal sample position displayed"""
-        self._shell.current_horizontal_position_text = self._shell.units_fixformat.format(
-            self._shell.motors.horizontal.get_position(self._shell.units), self._shell.units
+        self._shell.current_horizontal_position_text = self._shell.units_fixformat.format(  # noqa: E501
+            self._shell.motors.horizontal.get_position(self._shell.units), self._shell.units  # noqa: E501
         )
         self._shell.ui.label_sampleCurrentHPosition.setText(
             self._shell.current_horizontal_position_text
@@ -146,7 +146,7 @@ class MotorPanelWidget(QWidget):
     def updateUi_position_vertical(self) -> None:
         """Updates the current vertical sample position displayed"""
         self._shell.current_vertical_position_text = self._shell.units_fixformat.format(
-            self._shell.motors.vertical.get_position(self._shell.units), self._shell.units
+            self._shell.motors.vertical.get_position(self._shell.units), self._shell.units  # noqa: E501
         )
         self._shell.ui.label_sampleCurrentVPosition.setText(
             self._shell.current_vertical_position_text

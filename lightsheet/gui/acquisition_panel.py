@@ -29,14 +29,14 @@ class AcquisitionPanelWidget(QWidget):
     """Acquisition modes panel — owns the four mode-button handlers
     (preview/live/single/stack) and the mode-button enable/disable helpers."""
 
-    def __init__(self, shell: "Controller_MainWindow") -> None:
+    def __init__(self, shell: Controller_MainWindow) -> None:
         super().__init__()
         self._shell = shell
         self.ui = Ui_AcquisitionPanel()
         self.ui.setupUi(self)
 
     def updateUi_modes_buttons(self, buttons_to_enable: list[QPushButton]) -> None:
-        """Update mode buttons status : disable buttons, except for those specified to be enabled"""
+        """Update mode buttons status : disable buttons, except for those specified to be enabled"""  # noqa: E501
         aquisition_buttons = [
             self._shell.ui.pushButton_acqStartPreviewMode,
             self._shell.ui.pushButton_acqStartLiveMode,
@@ -85,7 +85,7 @@ class AcquisitionPanelWidget(QWidget):
             self._shell._cache_auto_laser_flags()
 
             # Spawn the preview worker on a QThread (moveToThread pattern).
-            self._shell._preview_worker = PreviewWorker(self._shell._bundle, self._shell._hw, self._shell)
+            self._shell._preview_worker = PreviewWorker(self._shell._bundle, self._shell._hw, self._shell)  # noqa: E501
             self._shell._preview_thread = QThread()
             self._shell._preview_worker.moveToThread(self._shell._preview_thread)
             self._shell._preview_thread.started.connect(self._shell._preview_worker.run)
@@ -124,7 +124,7 @@ class AcquisitionPanelWidget(QWidget):
             self._shell._cache_auto_laser_flags()
 
             # Spawn the live worker on a QThread (moveToThread pattern).
-            self._shell._live_worker = LiveWorker(self._shell._bundle, self._shell._hw, self._shell)
+            self._shell._live_worker = LiveWorker(self._shell._bundle, self._shell._hw, self._shell)  # noqa: E501
             self._shell._live_thread = QThread()
             self._shell._live_worker.moveToThread(self._shell._live_thread)
             self._shell._live_thread.started.connect(self._shell._live_worker.run)
@@ -177,7 +177,7 @@ class AcquisitionPanelWidget(QWidget):
         # Re-enabling modes after single frame acquisition
         self._shell.single_mode_started = False
         self._shell.ui.pushButton_acqGetSingleImage.setText("Get Single Image")
-        if self._shell.ui.pushButton_saveCurrentImage not in self._shell.default_buttons:
+        if self._shell.ui.pushButton_saveCurrentImage not in self._shell.default_buttons:  # noqa: E501
             self._shell.default_buttons.append(self._shell.ui.pushButton_saveCurrentImage)
         self.updateUi_modes_buttons(self._shell.default_buttons)
 
@@ -194,24 +194,24 @@ class AcquisitionPanelWidget(QWidget):
                 or (self._shell.ui.doubleSpinBox_acqPlaneStepSize.value() == 0)
             ):
                 self._shell.sig_message.emit(
-                    "Set starting and ending points and select a non-zero plane step value"
+                    "Set starting and ending points and select a non-zero plane step value"  # noqa: E501
                 )
                 self._shell.sig_beep.emit()
                 QMessageBox.warning(
                     self._shell,
                     "Stack Acquisition Warning",
-                    "Set starting and ending points and select a non-zero plane step value",
+                    "Set starting and ending points and select a non-zero plane step value",  # noqa: E501
                     QMessageBox.StandardButton.Ok,
                     QMessageBox.StandardButton.Ok,
                 )
             else:
-                # Setting stack step size sign (taking into account the direction of acquisition)
+                # Setting stack step size sign (taking into account the direction of acquisition)  # noqa: E501
                 if self._shell.stack_starting_plane > self._shell.stack_ending_plane:
                     self._shell.stack_step = (
                         -1 * self._shell.ui.doubleSpinBox_acqPlaneStepSize.value()
                     )
                 else:
-                    self._shell.stack_step = self._shell.ui.doubleSpinBox_acqPlaneStepSize.value()
+                    self._shell.stack_step = self._shell.ui.doubleSpinBox_acqPlaneStepSize.value()  # noqa: E501
 
                 # Check that filename is valid and saving is allowed
                 self._shell.save_panel.validate_file_name()
@@ -228,9 +228,9 @@ class AcquisitionPanelWidget(QWidget):
                     )
 
                 if self._shell.saving_allowed or nosave_answer:
-                    self._shell.ui.pushButton_acqStartStackMode.setText("Stop Stack Mode")
-                    self._shell.ui.statusBar_label.setText("Current Acquisition Mode: Stack ")
-                    self._shell.ui.statusBar_progress.setValue(0)  # To reset progress bar
+                    self._shell.ui.pushButton_acqStartStackMode.setText("Stop Stack Mode")  # noqa: E501
+                    self._shell.ui.statusBar_label.setText("Current Acquisition Mode: Stack ")  # noqa: E501
+                    self._shell.ui.statusBar_progress.setValue(0)  # To reset progress bar  # noqa: E501
                     self._shell.ui.statusBar_progress.show()
                     self._shell.stack_mode_started = True
 
