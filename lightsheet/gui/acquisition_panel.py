@@ -16,7 +16,7 @@ from __future__ import annotations
 import typing
 
 from PySide6.QtCore import QThread, Slot
-from PySide6.QtWidgets import QMessageBox, QPushButton, QWidget
+from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton, QWidget
 
 from lightsheet.gui.ui_acquisition_panel import Ui_AcquisitionPanel
 from lightsheet.gui.workers import LiveWorker, PreviewWorker, SingleWorker, StackWorker
@@ -272,25 +272,56 @@ class AcquisitionPanelWidget(QWidget):
                     # before spawning the worker (AGENTS.md §11).
                     self._shell._cache_auto_laser_flags()
 
-                    # B-03: pre-sample the save-option widgets on the GUI
-                    # thread BEFORE constructing the worker (AGENTS.md §11).
-                    save_desc = str(self._shell.save_panel.ui.lineEdit_saveDescription.text())
-                    save_blend = self._shell.save_panel.ui.checkBox_saveStitchBlend.isChecked()
-                    save_all_crop = self._shell.save_panel.ui.checkBox_saveAllCrop.isChecked()
-                    save_all_full = self._shell.save_panel.ui.checkBox_saveAllFull.isChecked()
+                    # Spawn the stack worker (shared with the queue loop).
+                    self._spawn_stack_worker()
 
-                    # Spawn the stack worker on a QThread (moveToThread pattern).
-                    self._shell._stack_worker = StackWorker(
-                        self._shell._bundle, self._shell._hw, self._shell,
-                        save_desc, save_blend, save_all_crop, save_all_full,
-                    )
-                    self._shell._stack_thread = QThread()
-                    self._shell._stack_worker.moveToThread(self._shell._stack_thread)
-                    self._shell._stack_thread.started.connect(self._shell._stack_worker.run)
-                    self._shell._stack_worker.finished.connect(self.updateUi_post_stack_mode)
-                    self._shell._stack_worker.finished.connect(self._shell._stack_thread.quit)
-                    self._shell._stack_thread.finished.connect(self._shell._stack_worker.deleteLater)
-                    self._shell._stack_thread.start()
+    def _spawn_stack_worker(self):
+        """Spawn the stack worker on its QThread (moveToThread pattern),
+        wire its finished signal to the post-stack UI cleanup, and start
+        it. Shared by the single-stack Start button and the Acquisition
+        Table queue loop so both re-use the same worker (with its
+        per-plane ValueError catch as the physical-safety backstop).
+
+        Pre-samples the auto-laser flags + save-option widgets on the GUI
+        thread before constructing the worker (AGENTS.md §11) so the
+        worker thread never reaches into the shell's ui.*.
+        """
+        # If a previous stack thread is still running (e.g. the queue loop
+        # re-entering for the next row), drain it before overwriting the
+        # reference so no QThread is leaked. The worker's finished signal
+        # already queued thread.quit(); this pumps the event loop so the
+        # queued quit lands and the thread reaps deterministically.
+        prev_thread = getattr(self._shell, "_stack_thread", None)
+        if prev_thread is not None and prev_thread.isRunning():
+            prev_thread.quit()
+            app = QApplication.instance()
+            deadline = 2000
+            while prev_thread.isRunning() and deadline > 0:
+                if app is not None:
+                    app.processEvents()
+                prev_thread.wait(20)
+                deadline -= 20
+
+        # B-03: pre-sample the save-option widgets on the GUI thread
+        # BEFORE constructing the worker (AGENTS.md §11).
+        save_desc = str(self._shell.save_panel.ui.lineEdit_saveDescription.text())
+        save_blend = self._shell.save_panel.ui.checkBox_saveStitchBlend.isChecked()
+        save_all_crop = self._shell.save_panel.ui.checkBox_saveAllCrop.isChecked()
+        save_all_full = self._shell.save_panel.ui.checkBox_saveAllFull.isChecked()
+
+        # Spawn the stack worker on a QThread (moveToThread pattern).
+        self._shell._stack_worker = StackWorker(
+            self._shell._bundle, self._shell._hw, self._shell,
+            save_desc, save_blend, save_all_crop, save_all_full,
+        )
+        self._shell._stack_thread = QThread()
+        self._shell._stack_worker.moveToThread(self._shell._stack_thread)
+        self._shell._stack_thread.started.connect(self._shell._stack_worker.run)
+        self._shell._stack_worker.finished.connect(self.updateUi_post_stack_mode)
+        self._shell._stack_worker.finished.connect(self._shell._stack_thread.quit)
+        self._shell._stack_thread.finished.connect(self._shell._stack_worker.deleteLater)
+        self._shell._stack_thread.start()
+        return self._shell._stack_worker
 
     @Slot()
     def updateUi_post_stack_mode(self) -> None:

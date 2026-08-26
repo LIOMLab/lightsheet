@@ -930,7 +930,8 @@ class Controller_MainWindow(QMainWindow):
             self.ui.action_ShowHideMessageLog.setChecked(True)
 
     def _update_mode_badge(
-        self, mode: str, state: str = "", plane: int = 0, total: int = 0
+        self, mode: str, state: str = "", plane: int = 0, total: int = 0,
+        queue_row: int = 0, queue_total: int = 0,
     ) -> None:
         """Update the mode/state badge in the E-stop toolbar.
 
@@ -945,6 +946,7 @@ class Controller_MainWindow(QMainWindow):
         - live → "LIVE"
         - single → "SINGLE"
         - stack running → "STACK RUNNING — plane {plane}/{total}"
+        - stack running in a queue → appended " (row {queue_row}/{queue_total})"
         """
         if mode == "IDLE":
             text = "IDLE"
@@ -960,6 +962,8 @@ class Controller_MainWindow(QMainWindow):
             text = f"STACK {state} \u2014 plane {n}/{n_total}" if state else (
                 f"STACK RUNNING \u2014 plane {n}/{n_total}"
             )
+            if queue_row and queue_total:
+                text += f" (row {queue_row}/{queue_total})"
         else:
             text = mode
         self.ui.label_modeBadge.setText(text)
@@ -970,10 +974,22 @@ class Controller_MainWindow(QMainWindow):
         run so the operator sees 'STACK RUNNING — plane {n}/{N}' without
         looking at the status bar (audit #12). Outside a stack run, the
         progress value is not shown in the badge (the badge reflects the
-        mode, set by the mode-start/complete sites)."""
+        mode, set by the mode-start/complete sites). During a queue run,
+        the badge appends the row index so the operator sees which row is
+        acquiring."""
         if getattr(self, "stack_mode_started", False):
             total = int(getattr(self, "number_of_planes", 0))
-            self._update_mode_badge("STACK", "RUNNING", plane=value, total=total)
+            mgr = getattr(self, "stack_panel", None)
+            qm = getattr(mgr, "table_manager", None) if mgr else None
+            q_row = int(getattr(qm, "_queue_row_index", 0)) + 1 if qm else 0
+            q_total = int(getattr(qm, "_queue_rows_total", 0)) if qm else 0
+            if qm is not None and getattr(qm, "_queue_active", False):
+                self._update_mode_badge(
+                    "STACK", "RUNNING", plane=value, total=total,
+                    queue_row=q_row, queue_total=q_total,
+                )
+            else:
+                self._update_mode_badge("STACK", "RUNNING", plane=value, total=total)
 
     def _cache_auto_laser_flags(self) -> None:
         """Sample the auto-laser checkboxes. GUI thread only.

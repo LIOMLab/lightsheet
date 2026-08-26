@@ -443,7 +443,143 @@ class AcquisitionTableManager(QWidget):
 
     def _start_queue(self) -> None:
         """Start Queue: execute rows sequentially via the existing stack
-        worker. Implemented in Task 2."""
-        raise NotImplementedError(
-            "_start_queue is implemented in the queue-execution task."
-        )
+        worker, re-using the single-stack worker invocation per row.
+
+        The queue loop runs on the GUI thread so the E-stop kill path
+        (also GUI thread) can abort it synchronously. Each row's stack
+        runs on the existing stack worker thread; the GUI thread waits
+        for it via a QEventLoop with quit() connected to the worker's
+        finished signal — NOT threading.Event.wait() (which would block
+        the event loop and freeze the GUI). The QEventLoop keeps the
+        event loop pumping so timers/signals/paint events fire and the
+        E-stop kill path stays responsive.
+
+        Between rows, the queue checks estop_event — if set, it stops
+        (no auto-resume; the operator must re-arm + manually restart).
+        The worker's per-plane move_absolute_position ValueError catch
+        is the physical-safety backstop if a row's start slips past the
+        table validation.
+        """
+        from PySide6.QtCore import QEventLoop
+
+        rows = [self.row_at(i) for i in range(self.table.rowCount())]
+
+        # --- Validate before starting ---
+        if not rows:
+            self._shell.sig_message.emit(
+                self.error_state_text("no stacks in the queue")
+            )
+            self._shell.sig_beep.emit()
+            return
+        for i, r in enumerate(rows):
+            if r.n_planes == 0:
+                self._shell.sig_message.emit(
+                    self.error_state_text(
+                        f"row {i + 1} ({r.name}) is incomplete \u2014 "
+                        "set a valid start/end/step"
+                    )
+                )
+                self._shell.sig_beep.emit()
+                return
+        # Save-path check: if saving is allowed, a save directory must be
+        # set. (If saving is not allowed, the queue runs without saving —
+        # the worker checks self._shell.saving_allowed per row.)
+        if getattr(self._shell, "saving_allowed", False):
+            if not getattr(self._shell, "save_directory", ""):
+                self._shell.sig_message.emit(
+                    self.error_state_text("no save path is set")
+                )
+                self._shell.sig_beep.emit()
+                return
+
+        # --- Execute the queue ---
+        self._queue_active = True
+        self._queue_rows_total = len(rows)
+        # Disable the table buttons while the queue runs.
+        self._set_queue_running(True)
+        try:
+            for i, row in enumerate(rows):
+                # Between rows, check E-stop — abort the queue if set.
+                if self._shell.estop_event.is_set():
+                    self._shell.sig_message.emit(
+                        "Queue aborted by E-stop. Re-arm and manually "
+                        "restart the queue to resume."
+                    )
+                    break
+                self._queue_row_index = i
+
+                # Configure the shell's stack params from the row (μm).
+                # Set them directly (not via updateUi_set_number_of_planes,
+                # which reads the single-stack spinboxes and would
+                # overwrite the row's values). The worker reads
+                # stack_starting_plane / stack_step / number_of_planes.
+                self._shell.stack_starting_plane = row.start
+                self._shell.stack_ending_plane = row.end
+                # stack_step carries the direction sign (negative when
+                # end < start), matching updateUi_stack_mode_button.
+                self._shell.stack_step = (
+                    row.step if row.end >= row.start else -row.step
+                )
+                self._shell.number_of_planes = row.n_planes
+                self._shell.stack_first_plane_set = True
+                self._shell.stack_last_plane_set = True
+                # Mirror the row's step into the single-stack spinbox for
+                # UI consistency (blocked so it does not recompute).
+                sb_step = self._shell.stack_panel.ui.doubleSpinBox_acqPlaneStepSize
+                sb_step.blockSignals(True)
+                sb_step.setValue(row.step)
+                sb_step.blockSignals(False)
+
+                # Update the mode badge with the row index.
+                self._shell._update_mode_badge(
+                    "STACK", "RUNNING", plane=1,
+                    total=int(self._shell.number_of_planes),
+                    queue_row=i + 1, queue_total=len(rows),
+                )
+
+                # Move the stage to the row's start position. The
+                # worker's per-plane move_absolute_position ValueError
+                # catch is the physical-safety backstop if this slips
+                # past the table validation.
+                try:
+                    self._shell.motors.horizontal.move_absolute_position(
+                        row.start, "\u03bcm"
+                    )
+                except ValueError:
+                    self._shell.sig_message.emit(
+                        self.error_state_text(
+                            f"row {i + 1} start {row.start:.2f} \u03bcm "
+                            "exceeds stage travel limits"
+                        )
+                    )
+                    self._shell.sig_beep.emit()
+                    break
+
+                # Start the stack worker (re-use the existing single-stack
+                # invocation — no new worker spawned here; the shared
+                # helper in the acquisition panel owns the worker thread).
+                worker = self._shell.acquisition_panel._spawn_stack_worker()
+
+                # Non-blocking wait: a QEventLoop with quit() connected to
+                # the worker's finished signal. This keeps the GUI event
+                # loop pumping (timers, signals, paint events fire) while
+                # waiting for the worker thread to signal completion. Do
+                # NOT use threading.Event.wait() on the GUI thread — that
+                # would block the event loop + freeze the GUI, contradicting
+                # the responsive-GUI goal + the E-stop responsiveness
+                # invariant.
+                loop = QEventLoop()
+                worker.finished.connect(loop.quit)
+                loop.exec()
+        finally:
+            self._queue_active = False
+            self._set_queue_running(False)
+            self._update_start_queue_state()
+
+    def _set_queue_running(self, running: bool) -> None:
+        """Toggle the table buttons + Start Queue while the queue runs."""
+        self.pushButton_addStack.setEnabled(not running)
+        self.pushButton_removeStack.setEnabled(not running)
+        self.pushButton_moveUp.setEnabled(not running)
+        self.pushButton_moveDown.setEnabled(not running)
+        self.pushButton_startQueue.setEnabled(not running)
