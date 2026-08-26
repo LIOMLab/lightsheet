@@ -600,6 +600,26 @@ class AcquisitionTableManager(QWidget):
                 # worker's per-plane move_absolute_position ValueError
                 # catch is the physical-safety backstop if this slips
                 # past the table validation.
+                #
+                # Pre-move E-stop re-check: the loop-top estop check runs
+                # once per row, but several GUI-thread statements (param
+                # setup, spinbox mirror, mode badge) run between it and
+                # this move. Re-check here so an E-stop pressed in that
+                # window aborts the queue before the blocking serial
+                # move starts. This narrows (does not eliminate) the
+                # window in which the GUI thread is blocked by the motor
+                # move and cannot process the E-stop button click until
+                # the move returns. Fully closing that window requires
+                # offloading the move to a worker thread, which is
+                # deferred to the threading rework (high-risk on this
+                # codebase; a partial threading change could deadlock or
+                # desync the lock-free E-stop kill path).
+                if self._shell.estop_event.is_set():
+                    self._shell.sig_message.emit(
+                        "Queue aborted by E-stop. Re-arm and manually "
+                        "restart the queue to resume."
+                    )
+                    break
                 try:
                     self._shell.motors.horizontal.move_absolute_position(
                         row.start, "\u03bcm"
