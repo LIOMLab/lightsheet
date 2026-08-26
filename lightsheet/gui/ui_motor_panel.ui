@@ -6,21 +6,15 @@
    <item>
     <widget class="QGroupBox" name="groupBox_SampleMovement">
      <property name="sizePolicy">
-      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+      <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
        <horstretch>0</horstretch>
        <verstretch>0</verstretch>
       </sizepolicy>
      </property>
      <property name="minimumSize">
       <size>
-       <width>350</width>
-       <height>380</height>
-      </size>
-     </property>
-     <property name="maximumSize">
-      <size>
-       <width>350</width>
-       <height>380</height>
+       <width>300</width>
+       <height>0</height>
       </size>
      </property>
      <property name="title">
@@ -152,13 +146,7 @@
               <height>60</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>60</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="toolTip">
+<property name="toolTip">
              <string>Move the sample forward</string>
             </property>
             <property name="text">
@@ -183,13 +171,7 @@
               <height>60</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>60</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="toolTip">
+<property name="toolTip">
              <string>Move the sample to origin</string>
             </property>
             <property name="text">
@@ -224,13 +206,7 @@
               <height>60</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>60</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="toolTip">
+<property name="toolTip">
              <string>Move the sample up</string>
             </property>
             <property name="text">
@@ -255,13 +231,7 @@
               <height>60</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>60</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="toolTip">
+<property name="toolTip">
              <string>Move the sample backward</string>
             </property>
             <property name="text">
@@ -299,13 +269,7 @@
               <height>60</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>60</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="toolTip">
+<property name="toolTip">
              <string>Move the sample down</string>
             </property>
             <property name="text">
@@ -441,13 +405,7 @@
               <height>20</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>100</width>
-              <height>20</height>
-             </size>
-            </property>
-            <property name="decimals">
+<property name="decimals">
              <number>3</number>
             </property>
            </widget>
@@ -466,13 +424,7 @@
               <height>23</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>90</width>
-              <height>23</height>
-             </size>
-            </property>
-            <property name="toolTip">
+<property name="toolTip">
              <string>Move the sample to the specified horizontal position</string>
             </property>
             <property name="text">
@@ -517,13 +469,7 @@
               <height>20</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>100</width>
-              <height>20</height>
-             </size>
-            </property>
-            <property name="decimals">
+<property name="decimals">
              <number>3</number>
             </property>
            </widget>
@@ -542,13 +488,7 @@
               <height>23</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>90</width>
-              <height>23</height>
-             </size>
-            </property>
-            <property name="toolTip">
+<property name="toolTip">
              <string>Move the sample to the specified vertical position</string>
             </property>
             <property name="text">
@@ -566,21 +506,15 @@
    <item>
     <widget class="QGroupBox" name="groupBox_CameraMovement">
      <property name="sizePolicy">
-      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+      <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
        <horstretch>0</horstretch>
        <verstretch>0</verstretch>
       </sizepolicy>
      </property>
      <property name="minimumSize">
       <size>
-       <width>350</width>
-       <height>380</height>
-      </size>
-     </property>
-     <property name="maximumSize">
-      <size>
-       <width>350</width>
-       <height>380</height>
+       <width>300</width>
+       <height>0</height>
       </size>
      </property>
      <property name="title">
@@ -707,13 +641,7 @@
               <height>60</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>60</width>
-              <height>60</height>
-             </size>
-            </property>
-            <property name="text">
+<property name="text">
              <string>Forward</string>
             </property>
            </widget>
@@ -745,13 +673,7 @@
               <height>60</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>60</width>
-              <height>60</height>
-             </size>
-            </property>
-            <property name="text">
+<property name="text">
              <string/>
             </property>
            </widget>
@@ -770,13 +692,7 @@
               <height>60</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>60</width>
-              <height>60</height>
-             </size>
-            </property>
-            <property name="text">
+<property name="text">
              <string>Focus</string>
             </property>
            </widget>
@@ -795,13 +711,7 @@
               <height>60</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>60</width>
-              <height>60</height>
-             </size>
-            </property>
-            <property name="text">
+<property name="text">
              <string>Backward</string>
             </property>
            </widget>
@@ -820,13 +730,7 @@
               <height>60</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>60</width>
-              <height>60</height>
-             </size>
-            </property>
-            <property name="text">
+<property name="text">
              <string/>
             </property>
            </widget>
@@ -905,13 +809,7 @@
               <height>20</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>100</width>
-              <height>20</height>
-             </size>
-            </property>
-            <property name="text">
+<property name="text">
              <string>Camera Position:</string>
             </property>
            </widget>
@@ -930,13 +828,7 @@
               <height>20</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>100</width>
-              <height>20</height>
-             </size>
-            </property>
-            <property name="decimals">
+<property name="decimals">
              <number>3</number>
             </property>
            </widget>
@@ -955,13 +847,7 @@
               <height>23</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>90</width>
-              <height>23</height>
-             </size>
-            </property>
-            <property name="toolTip">
+<property name="toolTip">
              <string>Move the camera to the specified position</string>
             </property>
             <property name="text">

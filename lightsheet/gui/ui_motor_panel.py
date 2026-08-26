@@ -27,13 +27,12 @@ class Ui_MotorPanel(object):
         self.verticalLayout_panel.setObjectName(u"verticalLayout_panel")
         self.groupBox_SampleMovement = QGroupBox(motorPanel)
         self.groupBox_SampleMovement.setObjectName(u"groupBox_SampleMovement")
-        sizePolicy = QSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        sizePolicy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.groupBox_SampleMovement.sizePolicy().hasHeightForWidth())
         self.groupBox_SampleMovement.setSizePolicy(sizePolicy)
-        self.groupBox_SampleMovement.setMinimumSize(QSize(350, 380))
-        self.groupBox_SampleMovement.setMaximumSize(QSize(350, 380))
+        self.groupBox_SampleMovement.setMinimumSize(QSize(300, 0))
         self.gridLayout_7 = QGridLayout(self.groupBox_SampleMovement)
         self.gridLayout_7.setObjectName(u"gridLayout_7")
         self.verticalLayout_32 = QVBoxLayout()
@@ -80,8 +79,11 @@ class Ui_MotorPanel(object):
         self.pushButton_sampleSetOrigin = QPushButton(self.groupBox_SampleMovement)
         self.pushButton_sampleSetOrigin.setObjectName(u"pushButton_sampleSetOrigin")
         self.pushButton_sampleSetOrigin.setEnabled(True)
-        sizePolicy.setHeightForWidth(self.pushButton_sampleSetOrigin.sizePolicy().hasHeightForWidth())
-        self.pushButton_sampleSetOrigin.setSizePolicy(sizePolicy)
+        sizePolicy2 = QSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        sizePolicy2.setHorizontalStretch(0)
+        sizePolicy2.setVerticalStretch(0)
+        sizePolicy2.setHeightForWidth(self.pushButton_sampleSetOrigin.sizePolicy().hasHeightForWidth())
+        self.pushButton_sampleSetOrigin.setSizePolicy(sizePolicy2)
         self.pushButton_sampleSetOrigin.setMinimumSize(QSize(75, 0))
 
         self.horizontalLayout_6.addWidget(self.pushButton_sampleSetOrigin)
@@ -100,19 +102,17 @@ class Ui_MotorPanel(object):
         self.gridLayout_3.setObjectName(u"gridLayout_3")
         self.pushButton_sampleStepForward = QPushButton(self.groupBox_SampleMovement)
         self.pushButton_sampleStepForward.setObjectName(u"pushButton_sampleStepForward")
-        sizePolicy.setHeightForWidth(self.pushButton_sampleStepForward.sizePolicy().hasHeightForWidth())
-        self.pushButton_sampleStepForward.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.pushButton_sampleStepForward.sizePolicy().hasHeightForWidth())
+        self.pushButton_sampleStepForward.setSizePolicy(sizePolicy2)
         self.pushButton_sampleStepForward.setMinimumSize(QSize(60, 60))
-        self.pushButton_sampleStepForward.setMaximumSize(QSize(60, 16777215))
 
         self.gridLayout_3.addWidget(self.pushButton_sampleStepForward, 1, 3, 1, 1)
 
         self.pushButton_sampleGotoOrigin = QPushButton(self.groupBox_SampleMovement)
         self.pushButton_sampleGotoOrigin.setObjectName(u"pushButton_sampleGotoOrigin")
-        sizePolicy.setHeightForWidth(self.pushButton_sampleGotoOrigin.sizePolicy().hasHeightForWidth())
-        self.pushButton_sampleGotoOrigin.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.pushButton_sampleGotoOrigin.sizePolicy().hasHeightForWidth())
+        self.pushButton_sampleGotoOrigin.setSizePolicy(sizePolicy2)
         self.pushButton_sampleGotoOrigin.setMinimumSize(QSize(60, 60))
-        self.pushButton_sampleGotoOrigin.setMaximumSize(QSize(60, 16777215))
 
         self.gridLayout_3.addWidget(self.pushButton_sampleGotoOrigin, 1, 2, 1, 1)
 
@@ -122,19 +122,17 @@ class Ui_MotorPanel(object):
 
         self.pushButton_sampleStepUp = QPushButton(self.groupBox_SampleMovement)
         self.pushButton_sampleStepUp.setObjectName(u"pushButton_sampleStepUp")
-        sizePolicy.setHeightForWidth(self.pushButton_sampleStepUp.sizePolicy().hasHeightForWidth())
-        self.pushButton_sampleStepUp.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.pushButton_sampleStepUp.sizePolicy().hasHeightForWidth())
+        self.pushButton_sampleStepUp.setSizePolicy(sizePolicy2)
         self.pushButton_sampleStepUp.setMinimumSize(QSize(60, 60))
-        self.pushButton_sampleStepUp.setMaximumSize(QSize(60, 16777215))
 
         self.gridLayout_3.addWidget(self.pushButton_sampleStepUp, 0, 2, 1, 1)
 
         self.pushButton_sampleStepBackward = QPushButton(self.groupBox_SampleMovement)
         self.pushButton_sampleStepBackward.setObjectName(u"pushButton_sampleStepBackward")
-        sizePolicy.setHeightForWidth(self.pushButton_sampleStepBackward.sizePolicy().hasHeightForWidth())
-        self.pushButton_sampleStepBackward.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.pushButton_sampleStepBackward.sizePolicy().hasHeightForWidth())
+        self.pushButton_sampleStepBackward.setSizePolicy(sizePolicy2)
         self.pushButton_sampleStepBackward.setMinimumSize(QSize(60, 60))
-        self.pushButton_sampleStepBackward.setMaximumSize(QSize(60, 16777215))
 
         self.gridLayout_3.addWidget(self.pushButton_sampleStepBackward, 1, 1, 1, 1)
 
@@ -144,10 +142,9 @@ class Ui_MotorPanel(object):
 
         self.pushButton_sampleStepDown = QPushButton(self.groupBox_SampleMovement)
         self.pushButton_sampleStepDown.setObjectName(u"pushButton_sampleStepDown")
-        sizePolicy.setHeightForWidth(self.pushButton_sampleStepDown.sizePolicy().hasHeightForWidth())
-        self.pushButton_sampleStepDown.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.pushButton_sampleStepDown.sizePolicy().hasHeightForWidth())
+        self.pushButton_sampleStepDown.setSizePolicy(sizePolicy2)
         self.pushButton_sampleStepDown.setMinimumSize(QSize(60, 60))
-        self.pushButton_sampleStepDown.setMaximumSize(QSize(60, 16777215))
 
         self.gridLayout_3.addWidget(self.pushButton_sampleStepDown, 2, 2, 1, 1)
 
@@ -165,8 +162,8 @@ class Ui_MotorPanel(object):
 
         self.doubleSpinBox_sampleHStepSize = QDoubleSpinBox(self.groupBox_SampleMovement)
         self.doubleSpinBox_sampleHStepSize.setObjectName(u"doubleSpinBox_sampleHStepSize")
-        sizePolicy.setHeightForWidth(self.doubleSpinBox_sampleHStepSize.sizePolicy().hasHeightForWidth())
-        self.doubleSpinBox_sampleHStepSize.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.doubleSpinBox_sampleHStepSize.sizePolicy().hasHeightForWidth())
+        self.doubleSpinBox_sampleHStepSize.setSizePolicy(sizePolicy2)
         self.doubleSpinBox_sampleHStepSize.setMinimumSize(QSize(75, 0))
         self.doubleSpinBox_sampleHStepSize.setDecimals(3)
 
@@ -185,8 +182,8 @@ class Ui_MotorPanel(object):
 
         self.doubleSpinBox_sampleVStepSize = QDoubleSpinBox(self.groupBox_SampleMovement)
         self.doubleSpinBox_sampleVStepSize.setObjectName(u"doubleSpinBox_sampleVStepSize")
-        sizePolicy.setHeightForWidth(self.doubleSpinBox_sampleVStepSize.sizePolicy().hasHeightForWidth())
-        self.doubleSpinBox_sampleVStepSize.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.doubleSpinBox_sampleVStepSize.sizePolicy().hasHeightForWidth())
+        self.doubleSpinBox_sampleVStepSize.setSizePolicy(sizePolicy2)
         self.doubleSpinBox_sampleVStepSize.setMinimumSize(QSize(75, 0))
         self.doubleSpinBox_sampleVStepSize.setDecimals(3)
 
@@ -206,31 +203,29 @@ class Ui_MotorPanel(object):
         self.horizontalLayout_53.setObjectName(u"horizontalLayout_53")
         self.label_23 = QLabel(self.groupBox_SampleMovement)
         self.label_23.setObjectName(u"label_23")
-        sizePolicy.setHeightForWidth(self.label_23.sizePolicy().hasHeightForWidth())
-        self.label_23.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.label_23.sizePolicy().hasHeightForWidth())
+        self.label_23.setSizePolicy(sizePolicy2)
         self.label_23.setMinimumSize(QSize(100, 20))
 
         self.horizontalLayout_53.addWidget(self.label_23)
 
         self.doubleSpinBox_sampleSetHPosition = QDoubleSpinBox(self.groupBox_SampleMovement)
         self.doubleSpinBox_sampleSetHPosition.setObjectName(u"doubleSpinBox_sampleSetHPosition")
-        sizePolicy2 = QSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
-        sizePolicy2.setHorizontalStretch(0)
-        sizePolicy2.setVerticalStretch(0)
-        sizePolicy2.setHeightForWidth(self.doubleSpinBox_sampleSetHPosition.sizePolicy().hasHeightForWidth())
-        self.doubleSpinBox_sampleSetHPosition.setSizePolicy(sizePolicy2)
+        sizePolicy3 = QSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
+        sizePolicy3.setHorizontalStretch(0)
+        sizePolicy3.setVerticalStretch(0)
+        sizePolicy3.setHeightForWidth(self.doubleSpinBox_sampleSetHPosition.sizePolicy().hasHeightForWidth())
+        self.doubleSpinBox_sampleSetHPosition.setSizePolicy(sizePolicy3)
         self.doubleSpinBox_sampleSetHPosition.setMinimumSize(QSize(100, 20))
-        self.doubleSpinBox_sampleSetHPosition.setMaximumSize(QSize(100, 20))
         self.doubleSpinBox_sampleSetHPosition.setDecimals(3)
 
         self.horizontalLayout_53.addWidget(self.doubleSpinBox_sampleSetHPosition)
 
         self.pushButton_sampleGotoHPosition = QPushButton(self.groupBox_SampleMovement)
         self.pushButton_sampleGotoHPosition.setObjectName(u"pushButton_sampleGotoHPosition")
-        sizePolicy.setHeightForWidth(self.pushButton_sampleGotoHPosition.sizePolicy().hasHeightForWidth())
-        self.pushButton_sampleGotoHPosition.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.pushButton_sampleGotoHPosition.sizePolicy().hasHeightForWidth())
+        self.pushButton_sampleGotoHPosition.setSizePolicy(sizePolicy2)
         self.pushButton_sampleGotoHPosition.setMinimumSize(QSize(90, 23))
-        self.pushButton_sampleGotoHPosition.setMaximumSize(QSize(90, 23))
 
         self.horizontalLayout_53.addWidget(self.pushButton_sampleGotoHPosition)
 
@@ -241,28 +236,26 @@ class Ui_MotorPanel(object):
         self.horizontalLayout_54.setObjectName(u"horizontalLayout_54")
         self.label_24 = QLabel(self.groupBox_SampleMovement)
         self.label_24.setObjectName(u"label_24")
-        sizePolicy.setHeightForWidth(self.label_24.sizePolicy().hasHeightForWidth())
-        self.label_24.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.label_24.sizePolicy().hasHeightForWidth())
+        self.label_24.setSizePolicy(sizePolicy2)
         self.label_24.setMinimumSize(QSize(100, 20))
 
         self.horizontalLayout_54.addWidget(self.label_24)
 
         self.doubleSpinBox_sampleSetVPosition = QDoubleSpinBox(self.groupBox_SampleMovement)
         self.doubleSpinBox_sampleSetVPosition.setObjectName(u"doubleSpinBox_sampleSetVPosition")
-        sizePolicy2.setHeightForWidth(self.doubleSpinBox_sampleSetVPosition.sizePolicy().hasHeightForWidth())
-        self.doubleSpinBox_sampleSetVPosition.setSizePolicy(sizePolicy2)
+        sizePolicy3.setHeightForWidth(self.doubleSpinBox_sampleSetVPosition.sizePolicy().hasHeightForWidth())
+        self.doubleSpinBox_sampleSetVPosition.setSizePolicy(sizePolicy3)
         self.doubleSpinBox_sampleSetVPosition.setMinimumSize(QSize(100, 20))
-        self.doubleSpinBox_sampleSetVPosition.setMaximumSize(QSize(100, 20))
         self.doubleSpinBox_sampleSetVPosition.setDecimals(3)
 
         self.horizontalLayout_54.addWidget(self.doubleSpinBox_sampleSetVPosition)
 
         self.pushButton_sampleGotoVPosition = QPushButton(self.groupBox_SampleMovement)
         self.pushButton_sampleGotoVPosition.setObjectName(u"pushButton_sampleGotoVPosition")
-        sizePolicy.setHeightForWidth(self.pushButton_sampleGotoVPosition.sizePolicy().hasHeightForWidth())
-        self.pushButton_sampleGotoVPosition.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.pushButton_sampleGotoVPosition.sizePolicy().hasHeightForWidth())
+        self.pushButton_sampleGotoVPosition.setSizePolicy(sizePolicy2)
         self.pushButton_sampleGotoVPosition.setMinimumSize(QSize(90, 23))
-        self.pushButton_sampleGotoVPosition.setMaximumSize(QSize(90, 23))
 
         self.horizontalLayout_54.addWidget(self.pushButton_sampleGotoVPosition)
 
@@ -279,8 +272,7 @@ class Ui_MotorPanel(object):
         self.groupBox_CameraMovement.setObjectName(u"groupBox_CameraMovement")
         sizePolicy.setHeightForWidth(self.groupBox_CameraMovement.sizePolicy().hasHeightForWidth())
         self.groupBox_CameraMovement.setSizePolicy(sizePolicy)
-        self.groupBox_CameraMovement.setMinimumSize(QSize(350, 380))
-        self.groupBox_CameraMovement.setMaximumSize(QSize(350, 380))
+        self.groupBox_CameraMovement.setMinimumSize(QSize(300, 0))
         self.gridLayout_6 = QGridLayout(self.groupBox_CameraMovement)
         self.gridLayout_6.setObjectName(u"gridLayout_6")
         self.verticalLayout_34 = QVBoxLayout()
@@ -310,11 +302,11 @@ class Ui_MotorPanel(object):
 
         self.label_2 = QLabel(self.groupBox_CameraMovement)
         self.label_2.setObjectName(u"label_2")
-        sizePolicy3 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-        sizePolicy3.setHorizontalStretch(50)
-        sizePolicy3.setVerticalStretch(0)
-        sizePolicy3.setHeightForWidth(self.label_2.sizePolicy().hasHeightForWidth())
-        self.label_2.setSizePolicy(sizePolicy3)
+        sizePolicy4 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        sizePolicy4.setHorizontalStretch(50)
+        sizePolicy4.setVerticalStretch(0)
+        sizePolicy4.setHeightForWidth(self.label_2.sizePolicy().hasHeightForWidth())
+        self.label_2.setSizePolicy(sizePolicy4)
 
         self.gridLayout_10.addWidget(self.label_2, 1, 1, 1, 1)
 
@@ -323,8 +315,8 @@ class Ui_MotorPanel(object):
 
         self.pushButton_cameraSetFocus = QPushButton(self.groupBox_CameraMovement)
         self.pushButton_cameraSetFocus.setObjectName(u"pushButton_cameraSetFocus")
-        sizePolicy.setHeightForWidth(self.pushButton_cameraSetFocus.sizePolicy().hasHeightForWidth())
-        self.pushButton_cameraSetFocus.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.pushButton_cameraSetFocus.sizePolicy().hasHeightForWidth())
+        self.pushButton_cameraSetFocus.setSizePolicy(sizePolicy2)
         self.pushButton_cameraSetFocus.setMinimumSize(QSize(75, 0))
 
         self.horizontalLayout_58.addWidget(self.pushButton_cameraSetFocus)
@@ -347,10 +339,9 @@ class Ui_MotorPanel(object):
 
         self.pushButton_cameraStepForward = QPushButton(self.groupBox_CameraMovement)
         self.pushButton_cameraStepForward.setObjectName(u"pushButton_cameraStepForward")
-        sizePolicy.setHeightForWidth(self.pushButton_cameraStepForward.sizePolicy().hasHeightForWidth())
-        self.pushButton_cameraStepForward.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.pushButton_cameraStepForward.sizePolicy().hasHeightForWidth())
+        self.pushButton_cameraStepForward.setSizePolicy(sizePolicy2)
         self.pushButton_cameraStepForward.setMinimumSize(QSize(60, 60))
-        self.pushButton_cameraStepForward.setMaximumSize(QSize(60, 60))
 
         self.gridLayout_8.addWidget(self.pushButton_cameraStepForward, 1, 3, 1, 1)
 
@@ -360,37 +351,33 @@ class Ui_MotorPanel(object):
 
         self.label_3 = QLabel(self.groupBox_CameraMovement)
         self.label_3.setObjectName(u"label_3")
-        sizePolicy.setHeightForWidth(self.label_3.sizePolicy().hasHeightForWidth())
-        self.label_3.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.label_3.sizePolicy().hasHeightForWidth())
+        self.label_3.setSizePolicy(sizePolicy2)
         self.label_3.setMinimumSize(QSize(60, 60))
-        self.label_3.setMaximumSize(QSize(60, 60))
 
         self.gridLayout_8.addWidget(self.label_3, 0, 2, 1, 1)
 
         self.pushButton_cameraGotoFocus = QPushButton(self.groupBox_CameraMovement)
         self.pushButton_cameraGotoFocus.setObjectName(u"pushButton_cameraGotoFocus")
-        sizePolicy.setHeightForWidth(self.pushButton_cameraGotoFocus.sizePolicy().hasHeightForWidth())
-        self.pushButton_cameraGotoFocus.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.pushButton_cameraGotoFocus.sizePolicy().hasHeightForWidth())
+        self.pushButton_cameraGotoFocus.setSizePolicy(sizePolicy2)
         self.pushButton_cameraGotoFocus.setMinimumSize(QSize(60, 60))
-        self.pushButton_cameraGotoFocus.setMaximumSize(QSize(60, 60))
 
         self.gridLayout_8.addWidget(self.pushButton_cameraGotoFocus, 1, 2, 1, 1)
 
         self.pushButton_cameraStepBackward = QPushButton(self.groupBox_CameraMovement)
         self.pushButton_cameraStepBackward.setObjectName(u"pushButton_cameraStepBackward")
-        sizePolicy.setHeightForWidth(self.pushButton_cameraStepBackward.sizePolicy().hasHeightForWidth())
-        self.pushButton_cameraStepBackward.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.pushButton_cameraStepBackward.sizePolicy().hasHeightForWidth())
+        self.pushButton_cameraStepBackward.setSizePolicy(sizePolicy2)
         self.pushButton_cameraStepBackward.setMinimumSize(QSize(60, 60))
-        self.pushButton_cameraStepBackward.setMaximumSize(QSize(60, 60))
 
         self.gridLayout_8.addWidget(self.pushButton_cameraStepBackward, 1, 1, 1, 1)
 
         self.label_4 = QLabel(self.groupBox_CameraMovement)
         self.label_4.setObjectName(u"label_4")
-        sizePolicy.setHeightForWidth(self.label_4.sizePolicy().hasHeightForWidth())
-        self.label_4.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.label_4.sizePolicy().hasHeightForWidth())
+        self.label_4.setSizePolicy(sizePolicy2)
         self.label_4.setMinimumSize(QSize(60, 60))
-        self.label_4.setMaximumSize(QSize(60, 60))
 
         self.gridLayout_8.addWidget(self.label_4, 2, 2, 1, 1)
 
@@ -412,8 +399,8 @@ class Ui_MotorPanel(object):
 
         self.doubleSpinBox_cameraStepSize = QDoubleSpinBox(self.groupBox_CameraMovement)
         self.doubleSpinBox_cameraStepSize.setObjectName(u"doubleSpinBox_cameraStepSize")
-        sizePolicy.setHeightForWidth(self.doubleSpinBox_cameraStepSize.sizePolicy().hasHeightForWidth())
-        self.doubleSpinBox_cameraStepSize.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.doubleSpinBox_cameraStepSize.sizePolicy().hasHeightForWidth())
+        self.doubleSpinBox_cameraStepSize.setSizePolicy(sizePolicy2)
         self.doubleSpinBox_cameraStepSize.setMinimumSize(QSize(75, 0))
         self.doubleSpinBox_cameraStepSize.setDecimals(3)
 
@@ -433,29 +420,26 @@ class Ui_MotorPanel(object):
         self.horizontalLayout_59.setObjectName(u"horizontalLayout_59")
         self.label_32 = QLabel(self.groupBox_CameraMovement)
         self.label_32.setObjectName(u"label_32")
-        sizePolicy.setHeightForWidth(self.label_32.sizePolicy().hasHeightForWidth())
-        self.label_32.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.label_32.sizePolicy().hasHeightForWidth())
+        self.label_32.setSizePolicy(sizePolicy2)
         self.label_32.setMinimumSize(QSize(100, 20))
-        self.label_32.setMaximumSize(QSize(100, 20))
 
         self.horizontalLayout_59.addWidget(self.label_32)
 
         self.doubleSpinBox_cameraSetPosition = QDoubleSpinBox(self.groupBox_CameraMovement)
         self.doubleSpinBox_cameraSetPosition.setObjectName(u"doubleSpinBox_cameraSetPosition")
-        sizePolicy2.setHeightForWidth(self.doubleSpinBox_cameraSetPosition.sizePolicy().hasHeightForWidth())
-        self.doubleSpinBox_cameraSetPosition.setSizePolicy(sizePolicy2)
+        sizePolicy3.setHeightForWidth(self.doubleSpinBox_cameraSetPosition.sizePolicy().hasHeightForWidth())
+        self.doubleSpinBox_cameraSetPosition.setSizePolicy(sizePolicy3)
         self.doubleSpinBox_cameraSetPosition.setMinimumSize(QSize(100, 20))
-        self.doubleSpinBox_cameraSetPosition.setMaximumSize(QSize(100, 20))
         self.doubleSpinBox_cameraSetPosition.setDecimals(3)
 
         self.horizontalLayout_59.addWidget(self.doubleSpinBox_cameraSetPosition)
 
         self.pushButton_cameraGotoPosition = QPushButton(self.groupBox_CameraMovement)
         self.pushButton_cameraGotoPosition.setObjectName(u"pushButton_cameraGotoPosition")
-        sizePolicy.setHeightForWidth(self.pushButton_cameraGotoPosition.sizePolicy().hasHeightForWidth())
-        self.pushButton_cameraGotoPosition.setSizePolicy(sizePolicy)
+        sizePolicy2.setHeightForWidth(self.pushButton_cameraGotoPosition.sizePolicy().hasHeightForWidth())
+        self.pushButton_cameraGotoPosition.setSizePolicy(sizePolicy2)
         self.pushButton_cameraGotoPosition.setMinimumSize(QSize(90, 23))
-        self.pushButton_cameraGotoPosition.setMaximumSize(QSize(90, 23))
 
         self.horizontalLayout_59.addWidget(self.pushButton_cameraGotoPosition)
 
