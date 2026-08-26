@@ -261,13 +261,40 @@ class AcquisitionTableManager(QWidget):
         # cellChanged fires from setText; the recompute runs there.
 
     def row_at(self, row: int) -> _Row:
-        """Snapshot of one row's parsed values (micrometres)."""
+        """Snapshot of one row's parsed values (micrometres).
+
+        Non-numeric cell text (the operator typed "abc" or "1.0.0") is
+        treated as 0.0 so the row computes to 0 planes and the queue's
+        pre-start validation rejects it with a clear message, rather than
+        raising an uncaught ValueError that crashes queue start.
+        """
         name = self.table.item(row, _COL_NAME).text()
-        start = float(self.table.item(row, _COL_START).text() or 0.0)
-        end = float(self.table.item(row, _COL_END).text() or 0.0)
-        step = float(self.table.item(row, _COL_STEP).text() or 0.0)
+        start = self._safe_float(row, _COL_START)
+        end = self._safe_float(row, _COL_END)
+        step = self._safe_float(row, _COL_STEP)
         n_planes, est_time_s, est_size_mb = self._compute(start, end, step)
         return _Row(name, start, end, step, n_planes, est_time_s, est_size_mb)
+
+    def _safe_float(self, row: int, col: int) -> float:
+        """Parse a numeric cell's text to float, returning 0.0 on
+        non-numeric text. The cell is NOT flagged here (flagging happens
+        in _recompute_row_impl on edit); this helper only prevents a
+        ValueError crash at queue-start time."""
+        try:
+            return float(self.table.item(row, col).text() or 0.0)
+        except (ValueError, TypeError):
+            return 0.0
+
+    def _parse_or_flag(self, row: int, col: int, text: str) -> float:
+        """Parse a numeric cell's text to float during recompute, flagging
+        the cell red if the text is non-numeric so the operator sees the
+        bad cell. Returns 0.0 for unparseable text so the downstream
+        plane-count computation does not crash."""
+        try:
+            return float(text or 0.0)
+        except (ValueError, TypeError):
+            self._flag(row, col)
+            return 0.0
 
     def is_row_flagged(self, row: int) -> bool:
         """True if the row has any flagged (red-background) cell."""
@@ -350,9 +377,16 @@ class AcquisitionTableManager(QWidget):
             self._recomputing = False
 
     def _recompute_row_impl(self, row: int) -> None:
-        start = float(self.table.item(row, _COL_START).text() or 0.0)
-        end = float(self.table.item(row, _COL_END).text() or 0.0)
-        step = float(self.table.item(row, _COL_STEP).text() or 0.0)
+        # Parse each editable numeric cell, flagging non-numeric text
+        # (e.g. "abc", "1.0.0") instead of crashing on every keystroke.
+        # _safe_float returns 0.0 for unparseable text; the flag below
+        # surfaces the bad cell to the operator so they can fix it.
+        start_text = self.table.item(row, _COL_START).text()
+        end_text = self.table.item(row, _COL_END).text()
+        step_text = self.table.item(row, _COL_STEP).text()
+        start = self._parse_or_flag(row, _COL_START, start_text)
+        end = self._parse_or_flag(row, _COL_END, end_text)
+        step = self._parse_or_flag(row, _COL_STEP, step_text)
         n_planes, est_time_s, est_size_mb = self._compute(start, end, step)
 
         self.table.blockSignals(True)
