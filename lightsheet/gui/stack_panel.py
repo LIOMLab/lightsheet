@@ -53,12 +53,12 @@ class StackPanelWidget(QWidget):
                 self._shell.ui.checkBox_acqFirstPlaneSet.isChecked()
                 and self._shell.ui.checkBox_acqLastPlaneSet.isChecked()
             ):
-                self._shell.number_of_planes = np.ceil(
+                self._shell.number_of_planes = int(np.ceil(
                     abs(
                         (self._shell.stack_ending_plane - self._shell.stack_starting_plane)  # noqa: E501
                         / self._shell.ui.doubleSpinBox_acqPlaneStepSize.value()
                     )
-                )
+                ))
                 self._shell.number_of_planes += 1  # Takes into account the initial plane  # noqa: E501
                 self._shell.ui.label_acqNumberOfPlanes.setText(str(self._shell.number_of_planes))
         else:

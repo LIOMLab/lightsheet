@@ -88,10 +88,17 @@ class ImageView(QGraphicsView):
         # ARGB on screen, so 16-bit grayscale would not survive the
         # QPixmap round-trip reliably). The SC2 smoke test asserts
         # non-zero pixel data, not 16-bit fidelity.
+        #
+        # The bytes buffer MUST stay alive until QPixmap.fromImage
+        # completes the copy — QImage does not copy the data, it just
+        # wraps the pointer. Binding tobytes() to an instance attribute
+        # keeps the buffer alive across the fromImage call and until the
+        # next setImage replaces it.
         height, width = frame_scaled.shape
         bytes_per_line = width
+        self._image_buffer = frame_scaled.tobytes()
         qimage = QImage(
-            frame_scaled.tobytes(),
+            self._image_buffer,
             width,
             height,
             bytes_per_line,
