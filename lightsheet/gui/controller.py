@@ -27,6 +27,7 @@ import copy
 import logging
 import os
 import threading
+from functools import partial
 import typing
 import webbrowser
 
@@ -708,8 +709,13 @@ class Controller_MainWindow(QMainWindow):
         # FrameSaverController display-port refresh timer
         self.timer_imageview = QTimer()
         self.timer_imageview.timeout.connect(self._fs.frame_viewer.updateUi_refresh_view)
-        self.timer_imageview.timeout.connect(lambda: self._hw._poll_laser_status([0]))
-        self.timer_imageview.timeout.connect(lambda: self._hw._refresh_laser_readback(0))  # noqa: E501
+        # Use functools.partial (bound callables) instead of lambdas so
+        # the connection does not capture self._hw in a closure cell and
+        # create a reference cycle (controller -> timer -> lambda ->
+        # self._hw -> self._shell -> controller). This matches the
+        # bound-method pattern documented in wire_collaborators.
+        self.timer_imageview.timeout.connect(partial(self._hw._poll_laser_status, [0]))
+        self.timer_imageview.timeout.connect(partial(self._hw._refresh_laser_readback, 0))
         self.timer_imageview.start(100)
 
         # L2 (iBeam) status poll — a separate gated QTimer
