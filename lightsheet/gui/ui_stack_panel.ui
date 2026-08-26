@@ -134,6 +134,9 @@
           </item>
           <item>
            <widget class="QDoubleSpinBox" name="doubleSpinBox_acqPlaneStepSize">
+        <property name="toolTip">
+         <string>Step between adjacent z-planes in the stack. Unit: the active unit (μm/mm). Valid range: &gt;0 (a zero step is rejected). Effect: smaller steps = finer z-resolution but more frames and a longer acquisition.</string>
+        </property>
             <property name="sizePolicy">
              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -182,6 +185,9 @@
           </item>
           <item>
            <widget class="QDoubleSpinBox" name="doubleSpinBox_acqFirstPlane">
+        <property name="toolTip">
+         <string>Stack start position. Unit: the active unit (μm/mm). Set via the Set button (reads the current motor position) or type directly. Valid range: the stage travel limits (reject-and-beep if out of range).</string>
+        </property>
             <property name="sizePolicy">
              <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -233,6 +239,9 @@
           </item>
           <item>
            <widget class="QDoubleSpinBox" name="doubleSpinBox_acqLastPlane">
+        <property name="toolTip">
+         <string>Stack end position. Unit: the active unit (μm/mm). Set via the Set button (reads the current motor position) or type directly. Valid range: the stage travel limits (reject-and-beep if out of range).</string>
+        </property>
             <property name="sizePolicy">
              <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
               <horstretch>0</horstretch>

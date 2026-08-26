@@ -296,6 +296,9 @@
           </item>
           <item>
            <widget class="QDoubleSpinBox" name="doubleSpinBox_sampleHStepSize">
+        <property name="toolTip">
+         <string>Horizontal sample stage jog step. Unit: the active unit (μm/mm/steps, set on the E-stop toolbar). Valid range: &gt;0. Effect: the step arrows move the stage by this amount.</string>
+        </property>
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -344,6 +347,9 @@
           </item>
           <item>
            <widget class="QDoubleSpinBox" name="doubleSpinBox_sampleVStepSize">
+        <property name="toolTip">
+         <string>Vertical sample stage jog step. Unit: the active unit (μm/mm/steps). Valid range: &gt;0. Effect: the step arrows move the stage by this amount.</string>
+        </property>
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -393,6 +399,9 @@
           </item>
           <item>
            <widget class="QDoubleSpinBox" name="doubleSpinBox_sampleSetHPosition">
+        <property name="toolTip">
+         <string>Horizontal sample target position for the Go-To button. Unit: the active unit (μm/mm/steps). Valid range: the stage travel limits (reject-and-beep if out of range). Effect: Go-To moves the stage to this position.</string>
+        </property>
             <property name="sizePolicy">
              <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -457,6 +466,9 @@
           </item>
           <item>
            <widget class="QDoubleSpinBox" name="doubleSpinBox_sampleSetVPosition">
+        <property name="toolTip">
+         <string>Vertical sample target position for the Go-To button. Unit: the active unit (μm/mm/steps). Valid range: the stage travel limits (reject-and-beep if out of range). Effect: Go-To moves the stage to this position.</string>
+        </property>
             <property name="sizePolicy">
              <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -767,6 +779,9 @@
           </item>
           <item>
            <widget class="QDoubleSpinBox" name="doubleSpinBox_cameraStepSize">
+        <property name="toolTip">
+         <string>Camera (focus) stage jog step. Unit: the active unit (μm/mm/steps). Valid range: &gt;0. Effect: the step arrows move the focus stage by this amount.</string>
+        </property>
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -816,6 +831,9 @@
           </item>
           <item>
            <widget class="QDoubleSpinBox" name="doubleSpinBox_cameraSetPosition">
+        <property name="toolTip">
+         <string>Camera (focus) target position for the Go-To button. Unit: the active unit (μm/mm/steps). Valid range: the stage travel limits (reject-and-beep if out of range). Effect: Go-To moves the focus stage to this position.</string>
+        </property>
             <property name="sizePolicy">
              <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
               <horstretch>0</horstretch>

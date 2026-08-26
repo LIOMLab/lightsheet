@@ -101,6 +101,7 @@ SHELL_OWNED_OBJECTNAMES = frozenset({
     "action_darkTheme",
     "action_showSystemProperties",
     "action_openDocumentation",
+    "actionGuidePdf",
     "action_OpenFile",
     # Menus.
     "menuFile",
@@ -461,7 +462,7 @@ class Controller_MainWindow(QMainWindow):
         self.ui.action_lightTheme.triggered.connect(self.updateUi_light_theme)
         self.ui.action_darkTheme.triggered.connect(self.updateUi_dark_theme)
         self.ui.action_showSystemProperties.triggered.connect(self.open_properties_dialog)
-        self.ui.action_openDocumentation.triggered.connect(self.open_help)
+        self.ui.actionGuidePdf.triggered.connect(self.open_help)
 
         # Connection for unit change — re-renders BOTH the Motion position
         # labels (motor_panel.updateUi_units) AND the Stack plane spinboxes
@@ -804,9 +805,17 @@ class Controller_MainWindow(QMainWindow):
         self.properties_dialog.get_properties()
 
     def open_help(self) -> None:
-        """Open help documentation (PDF)"""
-        guide_pdf = os.path.dirname(os.path.abspath(__file__)) + r"\..\Guide.pdf"
-        webbrowser.open_new(guide_pdf)
+        """Open the operator manual (Guide.pdf, French reference).
+
+        The path is built cross-platform so the Help menu works on the
+        Mac dev box as well as the Windows rig.
+        """
+        guide_pdf = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            os.pardir,
+            "Guide.pdf",
+        )
+        webbrowser.open_new(os.path.abspath(guide_pdf))
 
     def updateUi_light_theme(self) -> None:
         self.sig_stylesheet.emit("light")

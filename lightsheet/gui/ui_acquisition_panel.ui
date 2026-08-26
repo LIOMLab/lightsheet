@@ -133,6 +133,9 @@
       </item>
       <item row="2" column="1">
        <widget class="QDoubleSpinBox" name="doubleSpinBox_cameraExposureTime">
+        <property name="toolTip">
+         <string>Camera exposure time per line. Unit: ms. Valid range: per the PCO camera limits. Effect: longer exposure = brighter image but slower acquisition.</string>
+        </property>
         <property name="prefix">
          <string/>
         </property>
@@ -165,6 +168,9 @@
       </item>
       <item row="3" column="1">
        <widget class="QDoubleSpinBox" name="doubleSpinBox_cameraLineTime">
+        <property name="toolTip">
+         <string>Camera line time (exposure + readout). Unit: ms. Valid range: per the PCO camera limits. Effect: sets the line period; must be &gt;= exposure time.</string>
+        </property>
         <property name="suffix">
          <string> μs</string>
         </property>
@@ -188,6 +194,9 @@
       </item>
       <item row="4" column="1">
        <widget class="QDoubleSpinBox" name="doubleSpinBox_cameraExposedLines">
+        <property name="toolTip">
+         <string>Number of exposed lines per frame. Unit: lines. Valid range: &gt;0. Effect: sets the frame height in lines.</string>
+        </property>
         <property name="decimals">
          <number>0</number>
         </property>
@@ -208,6 +217,9 @@
       </item>
       <item row="5" column="1">
        <widget class="QDoubleSpinBox" name="doubleSpinBox_cameraDelayLines">
+        <property name="toolTip">
+         <string>Number of delay (non-exposed) lines before the exposed region. Unit: lines. Valid range: &gt;=0. Effect: shifts the trigger timing relative to the galvo/ETL sweep.</string>
+        </property>
         <property name="decimals">
          <number>0</number>
         </property>

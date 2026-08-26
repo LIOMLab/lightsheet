@@ -138,6 +138,9 @@
         </item>
         <item>
          <widget class="QCheckBox" name="checkBox_saveStitch">
+        <property name="toolTip">
+         <string>Stitch saved frames into a single tiled image. Effect: enable to produce a stitched overview; disable to save individual frames only.</string>
+        </property>
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
             <horstretch>0</horstretch>
@@ -154,6 +157,9 @@
         </item>
         <item>
          <widget class="QCheckBox" name="checkBox_saveStitchBlend">
+        <property name="toolTip">
+         <string>Blend overlapping regions when stitching. Effect: enable for seamless stitching; disable for hard-edge tiling.</string>
+        </property>
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
             <horstretch>0</horstretch>
@@ -167,6 +173,9 @@
         </item>
         <item>
          <widget class="QCheckBox" name="checkBox_saveAllCrop">
+        <property name="toolTip">
+         <string>Save all cropped frames. Effect: enable to save the cropped region of every frame to the dataset.</string>
+        </property>
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
             <horstretch>0</horstretch>
@@ -180,6 +189,9 @@
         </item>
         <item>
          <widget class="QCheckBox" name="checkBox_saveAllFull">
+        <property name="toolTip">
+         <string>Save all full frames. Effect: enable to save the full-frame data of every frame to the dataset.</string>
+        </property>
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
             <horstretch>0</horstretch>

@@ -262,6 +262,9 @@
     </widget>
    </widget>
    <widget class="QPushButton" name="pushButton_armReset">
+        <property name="toolTip">
+         <string>Two-press Arm/Reset sequence. First press after an E-stop: Clear E-stop (disarm the kill flag). Second press: Arm Lasers (re-enable laser toggles). Safety: a single press never re-arms a Class IIIB laser — both presses are required.</string>
+        </property>
     <property name="minimumSize">
      <size>
       <width>88</width>
@@ -329,7 +332,7 @@
     <property name="title">
      <string>Help</string>
     </property>
-    <addaction name="action_openDocumentation"/>
+    <addaction name="actionGuidePdf"/>
     <addaction name="action_showSystemProperties"/>
    </widget>
    <widget class="QMenu" name="menuFile">
@@ -345,12 +348,15 @@
    <addaction name="menuHelp"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
-  <action name="action_openDocumentation">
+  <action name="actionGuidePdf">
    <property name="text">
-    <string>Open Documentation</string>
+    <string>Guide.pdf (French reference)</string>
+   </property>
+   <property name="toolTip">
+    <string>Opens the operator manual (French, Guide.pdf)</string>
    </property>
    <property name="statusTip">
-    <string>Open PDF Documentation</string>
+    <string>Open the operator manual (Guide.pdf)</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+H</string>
