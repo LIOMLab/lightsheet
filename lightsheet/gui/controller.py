@@ -774,12 +774,18 @@ class Controller_MainWindow(QMainWindow):
                 )
                 laser.error = 0
         # Refresh-after-action: both status labels reflect the post-E-stop
-        # state immediately (the periodic timers would otherwise lag).
-        # Routed through HardwareManager — the kill loop itself (laser.off()
-        # above) stays in the shell, direct on self.lasers, lock-free.
-        self._hw._poll_laser_status([0, 1])
-        self._hw._refresh_laser_readback(0)
-        self._hw._refresh_laser2_readback_async()
+        # state. Deferred via QTimer.singleShot(0, ...) so the GUI thread
+        # releases within ~1 ms of the press — the synchronous kill loop
+        # above (estop_event.set() + laser.off()) is the only blocking
+        # work, and it is lock-free. The L2 (iBeam) readback is a ~3s
+        # serial round-trip on the rig; calling it synchronously froze
+        # the GUI for the duration of every E-stop press (G-07-4). The
+        # kill loop itself (laser.off() above) stays in the shell, direct
+        # on self.lasers, lock-free — only the post-kill *refresh* is
+        # deferred (AGENTS.md §2 — the kill path is never offloaded).
+        QTimer.singleShot(0, lambda: self._hw._poll_laser_status([0, 1]))
+        QTimer.singleShot(0, lambda: self._hw._refresh_laser_readback(0))
+        QTimer.singleShot(0, self._hw._refresh_laser2_readback_async)
 
         # 4. Latch the UI into ACTUATED: red indicator, yellow 4px border
         #    on the E-stop button.

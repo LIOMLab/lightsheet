@@ -126,37 +126,38 @@ def test_shell_estop_pressed_calls_laser_off_directly_not_via_hw(
 ) -> None:
     """The shell's updateUi_estop_pressed must drive every laser off
     synchronously on the GUI thread, lock-free, NOT routed through
-    HardwareManager, NOT offloaded to a thread/timer/queue. Verified via
-    real construction: patch threading.Thread and QTimer in the controller
-    module, call the real ctrl.updateUi_estop_pressed(), assert the
-    patches were NOT called (the kill path is not offloaded) and each
-    laser's off() WAS called (the kill path drives every laser off).
+    HardwareManager, NOT offloaded to a thread/queue. The kill loop
+    (estop_event.set() + for laser in self.lasers: laser.off()) runs
+    inline; only the post-kill *refresh* (_poll_laser_status /
+    _refresh_laser_readback / _refresh_laser2_readback_async) is deferred
+    via QTimer.singleShot(0, ...) so the GUI thread releases within ~1 ms
+    of the press (G-07-4 freeze fix).
 
-    The refresh-after-action polls (self._hw._poll_laser_status /
-    self._hw._refresh_laser_readback / self._hw._refresh_laser2_readback_async)
-    ARE allowed — they are not the kill path, just status-label refreshes.
-    They route through HardwareManager which has its own threading import,
-    so the controller-module threading patch does not affect them."""
+    Verified via real construction: patch threading.Thread in the
+    controller module (the kill path must not offload through it) and
+    spy on each laser's off() (the kill path drives every laser off
+    synchronously). QTimer is NOT patched out — the deferred refresh is
+    expected to schedule QTimer.singleShot calls, and the kill path
+    itself does not touch QTimer."""
     ctrl, _bundle = make_controller(qtbot, request)
 
     laser0 = ctrl.lasers[0]
     laser1 = ctrl.lasers[1]
 
-    # Patch threading.Thread and QTimer ONLY in the controller module's
-    # namespace. The kill path (laser.off() loop) must not offload through
-    # either. HardwareManager has its own imports, so its async readback
-    # thread (not part of the kill path) is unaffected.
+    # Patch threading.Thread ONLY in the controller module's namespace.
+    # The kill path (laser.off() loop) must not offload through a thread.
+    # QTimer is intentionally NOT patched: the post-kill refresh is
+    # deferred via QTimer.singleShot(0, ...) (the G-07-4 fix), and the
+    # kill path itself does not touch QTimer.
     with (
         patch.object(controller_module, "threading") as mock_threading,
-        patch.object(controller_module, "QTimer") as mock_qtimer,
         patch.object(laser0, "off", wraps=laser0.off) as spy_off0,
         patch.object(laser1, "off", wraps=laser1.off) as spy_off1,
     ):
         ctrl.updateUi_estop_pressed()
 
-    # The kill path must NOT offload through a thread or timer.
+    # The kill path must NOT offload through a thread.
     mock_threading.Thread.assert_not_called()
-    mock_qtimer.singleShot.assert_not_called()
     # Each laser's off() WAS called synchronously on the GUI thread.
     spy_off0.assert_called_once()
     spy_off1.assert_called_once()
