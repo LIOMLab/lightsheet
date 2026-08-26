@@ -74,9 +74,9 @@ def _build_demo_bundle():
             calibration_curve=None,
         ),
         MockLaser(
-            wavelength=640,
+            wavelength=647,
             max_power_mw=150.0,
-            label="Laser 2 (640 nm)",
+            label="Laser 2 (647 nm)",
         ),
     )
     etls = MockETLs()

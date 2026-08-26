@@ -265,7 +265,7 @@ class DeviceRegistry:
                 label="Laser 1 (555 nm)",
                 calibration_curve=_calibration_curve,
             ),
-            IBeamSmartLaser(label="Laser 2 (640 nm)"),
+            IBeamSmartLaser(label="Laser 2 (647 nm)"),
         )
 
         return DeviceBundle(

@@ -107,7 +107,7 @@ class IBeam:
     _cfg_settings["Port"] = "COM4"
     _cfg_settings["Baud Rate"] = "115200"
     _cfg_settings["Channel"] = "1"
-    _cfg_settings["Wavelength"] = "640"  # In nm (iBeam Smart 640)
+    _cfg_settings["Wavelength"] = "647"  # Capture/detection wavelength in nm (physical iBeam Smart 640 diode emits at 640 nm; 647 nm is the recorded capture wavelength)
     _cfg_settings["Power"] = "0"  # In uW
     _cfg_settings["Max Power"] = "150000"  # In uW (150 mW diode limit, rig-confirmed)
     # Per-readline timeout for the response-read loop. The iBeam Smart
@@ -447,18 +447,20 @@ class IBeamSmartLaser(ILaser):
     identity).
     """
 
-    def __init__(self, label: str = "Laser 2 (640 nm)") -> None:
+    def __init__(self, label: str = "Laser 2 (647 nm)") -> None:
         # The inner rig-confirmed serial engine. __init__ does NOT open the
         # serial port — the controller's hardware_init is responsible for
         # calling open() (mirrors the existing IBeam construction pattern).
         self._ibeam = IBeam()
 
         # mW-canonical ILaser surface (D-01). The inner IBeam reports
-        # wavelength in nm (640, serial self-report) and max_power in µW
-        # (150000 = 150 mW, rig-confirmed + `show data` Pmax field); the
-        # adapter converts max_power to mW for the interface.
+        # wavelength in nm (647, the recorded capture wavelength — the
+        # physical iBeam Smart 640 diode emits at 640 nm; 647 nm is the
+        # detection/capture wavelength recorded and displayed) and max_power
+        # in µW (150000 = 150 mW, rig-confirmed + `show data` Pmax field);
+        # the adapter converts max_power to mW for the interface.
         self.label = label
-        self.wavelength = self._ibeam.wavelength  # 640 (nm)
+        self.wavelength = self._ibeam.wavelength  # 647 (nm)
         self.max_power = self._ibeam.max_power / 1000.0  # uW -> mW
         self.power = 0.0  # mW
         self.active = False

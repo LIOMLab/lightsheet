@@ -43,8 +43,10 @@ from lightsheet.config import cfg_read
 logger = logging.getLogger(__name__)
 
 # --- Safety-critical constants (AGENTS.md Sec.2 / hardware_inventory.yaml) ---
-# iBeam Smart 640 hard limit: 150 mW = 150000 uW (rig-confirmed 640 nm, not
-# the older 636 nm reference).
+# iBeam Smart 640 hard limit: 150 mW = 150000 uW (rig-confirmed). The schema
+# validates Max Power, not wavelength — 640 nm is the physical diode emission
+# peak; 647 nm is the recorded capture/detection wavelength. The 150 mW /
+# 150000 uW hard limit applies regardless of which wavelength label is shown.
 _IBEAM_MAX_MW: int = 150000  # uW
 
 # Zaber T-LS mechanical travel limits per AGENTS.md Sec.2 / config.ini tracked
