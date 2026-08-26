@@ -77,8 +77,8 @@ def _last_write_text(mock_ser: MagicMock) -> str:
 # --------------------------------------------------------------------------- #
 def test_ibeam_smart_construction_mw_canonical_and_lock_identity() -> None:
     """``IBeamSmartLaser()`` constructs the inner ``IBeam`` and exposes the
-    mW-canonical ``ILaser`` surface: ``wavelength`` (640 nm, from the inner
-    iBeam self-report), ``max_power`` (150.0 mW = 150000 µW / 1000), ``power``
+    mW-canonical ``ILaser`` surface: ``wavelength`` (647 nm, the recorded
+    capture wavelength from the inner iBeam self-report), ``max_power`` (150.0 mW = 150000 µW / 1000), ``power``
     (0.0 mW), ``active`` (False), ``error`` (0). The adapter's ``_lock`` IS
     the inner ``IBeam._lock`` (lock identity — not a new lock) so the
     daemon-thread write paths that acquire ``self.lasers[i]._lock`` and the
@@ -86,13 +86,13 @@ def test_ibeam_smart_construction_mw_canonical_and_lock_identity() -> None:
     """
     adapter = ibeam_smart_mod.IBeamSmartLaser()
     # mW-canonical surface (D-01).
-    assert adapter.wavelength == 640
+    assert adapter.wavelength == 647
     assert adapter.max_power == 150.0  # 150000 uW / 1000
     assert adapter.power == 0.0
     assert adapter.active is False
     assert adapter.error == 0
     assert adapter.error_message == ""
-    assert adapter.label == "Laser 2 (640 nm)"
+    assert adapter.label == "Laser 2 (647 nm)"
     # Lock identity: the adapter's lock IS the inner IBeam's lock (D-02).
     # Not a new lock — the daemon-thread write path acquires the same lock
     # the inner _send_cmd acquires.

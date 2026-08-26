@@ -10,7 +10,7 @@ Covers two concerns:
 2. The ``hardware_init`` HAL-assignment branch — tested via real
    construction: ``make_controller`` builds the real
    ``Controller_MainWindow`` with a mock ``DeviceBundle`` (Laser 1 = 555 nm
-   / 300 mW, Laser 2 = 640 nm / 150 mW, mock camera/siggen/motors/etls),
+   / 300 mW, Laser 2 = 647 nm / 150 mW, mock camera/siggen/motors/etls),
    wires all four collaborators, and calls ``hardware_init``. Asserts the
    demo branch assigns ``MockCamera`` from the bundle, that ``SigGen``
    receives the camera reference (dependency ordering preserved), and that

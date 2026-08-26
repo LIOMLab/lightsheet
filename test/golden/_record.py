@@ -148,7 +148,7 @@ def _build_standin() -> Mock:
     # shape so a future body change that does read laser state is caught.
     standin.lasers = [
         MockLaser(wavelength=555, max_power_mw=300.0, label="Laser 1 (555 nm)"),
-        MockLaser(wavelength=640, max_power_mw=150.0, label="Laser 2 (640 nm)"),
+        MockLaser(wavelength=647, max_power_mw=150.0, label="Laser 2 (647 nm)"),
     ]
     standin.etls = MockETLs()
 
@@ -213,7 +213,7 @@ def _build_preview_standin() -> Mock:
     etls = MockETLs()
     lasers = (
         MockLaser(wavelength=555, max_power_mw=300.0, label="Laser 1 (555 nm)"),
-        MockLaser(wavelength=640, max_power_mw=150.0, label="Laser 2 (640 nm)"),
+        MockLaser(wavelength=647, max_power_mw=150.0, label="Laser 2 (647 nm)"),
     )
     bundle = DeviceBundle(
         camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers

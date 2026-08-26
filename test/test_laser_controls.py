@@ -324,7 +324,7 @@ def test_estop_emits_per_laser_warning_on_error(qtbot, request) -> None:
 
     # laser2 had an error — a warning was emitted naming its label + cause.
     msg = blocker.args[0]
-    assert "Laser 2 (640 nm)" in msg
+    assert "Laser 2 (647 nm)" in msg
     assert "serial write failed" in msg
     # The error was reset after the warning.
     assert ctrl.lasers[1].error == 0

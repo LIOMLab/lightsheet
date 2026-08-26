@@ -40,10 +40,10 @@ def test_build_demo_bundle_returns_device_bundle_with_mock_hal() -> None:
 
 
 def test_build_demo_bundle_laser_wavelengths() -> None:
-    """The two lasers are 555 nm and 640 nm (the demo bundle's configured wavelengths)."""
+    """The two lasers are 555 nm and 647 nm (the demo bundle's configured wavelengths)."""
     bundle = _build_demo_bundle()
     assert bundle.lasers[0].wavelength == 555
-    assert bundle.lasers[1].wavelength == 640
+    assert bundle.lasers[1].wavelength == 647
 
 
 def test_build_demo_bundle_siggen_has_camera_reference() -> None:

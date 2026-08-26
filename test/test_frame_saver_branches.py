@@ -39,7 +39,7 @@ class _ShellStandin(QObject):
         self.save_format = "hdf5"
         self.lasers = [
             MockLaser(wavelength=555, max_power_mw=300.0, label="L1"),
-            MockLaser(wavelength=640, max_power_mw=150.0, label="L2"),
+            MockLaser(wavelength=647, max_power_mw=150.0, label="L2"),
         ]
 
     def updateUi_message_printer(self, message: str) -> None:
@@ -52,7 +52,7 @@ def _make_bundle() -> DeviceBundle:
     motors = MockMotors()
     lasers = (
         MockLaser(wavelength=555, max_power_mw=300.0, label="L1"),
-        MockLaser(wavelength=640, max_power_mw=150.0, label="L2"),
+        MockLaser(wavelength=647, max_power_mw=150.0, label="L2"),
     )
     etls = MockETLs()
     return DeviceBundle(camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers)
@@ -182,7 +182,7 @@ def test_frame_saver_write_laser_metadata_writes_per_laser_attrs(tmp_path) -> No
         assert "Laser1 Wavelength" in outfile.attrs
         assert "Laser2 Wavelength" in outfile.attrs
         assert outfile.attrs["Laser1 Wavelength"] == 555
-        assert outfile.attrs["Laser2 Wavelength"] == 640
+        assert outfile.attrs["Laser2 Wavelength"] == 647
 
 
 # -- FrameSaver.frame_saver_worker happy path --------------------------------

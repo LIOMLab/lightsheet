@@ -58,25 +58,25 @@ def _make_mock_l1() -> MockLaser:
 
 
 def _make_ibeam_smart_l2() -> IBeamSmartLaser:
-    """IBeamSmartLaser configured with Laser 2's values (640 nm, 150 mW
+    """IBeamSmartLaser configured with Laser 2's values (647 nm, 150 mW
     max, COM4 serial). The inner ``IBeam`` is constructed but NOT opened
     (``IBeam.__init__`` does not call ``open()``), so this is safe to run
     on Mac without a physical device — no serial port is touched. The real
     conformance path (rig only) is responsible for calling ``open()`` on
     the inner engine before exercising the serial round-trips."""
-    return IBeamSmartLaser(label="Laser 2 (640 nm)")
+    return IBeamSmartLaser(label="Laser 2 (647 nm)")
 
 
 def _make_mock_l2() -> MockLaser:
-    """MockLaser configured with Laser 2's values (640 nm, 150 mW max) —
+    """MockLaser configured with Laser 2's values (647 nm, 150 mW max) —
     the same MockLaser class used for the L1 mock leg, configured for the
     iBeam's wavelength and max power so the L2 conformance id exercises
     the same ILaser surface behind a mock."""
     return MockLaser(
-        wavelength=640,
+        wavelength=647,
         max_power_mw=150.0,
         mw_per_volt=None,
-        label="Laser 2 (640 nm)",
+        label="Laser 2 (647 nm)",
     )
 
 

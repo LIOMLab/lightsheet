@@ -79,7 +79,7 @@ def _quit_thread_draining(thread: Optional[Any], timeout_ms: int = 2000) -> None
 
 def make_bundle() -> DeviceBundle:
     """Build a mock ``DeviceBundle`` mirroring ``_build_demo_bundle()`` in
-    ``lightsheet/__main__.py`` (Laser 1 = 555 nm / 300 mW, Laser 2 = 640 nm
+    ``lightsheet/__main__.py`` (Laser 1 = 555 nm / 300 mW, Laser 2 = 647 nm
     / 150 mW, mock camera/siggen/motors/etls). The camera-before-siggen
     dependency ordering is preserved."""
     camera = MockCamera(verbose=False)
@@ -94,9 +94,9 @@ def make_bundle() -> DeviceBundle:
             calibration_curve=None,
         ),
         MockLaser(
-            wavelength=640,
+            wavelength=647,
             max_power_mw=150.0,
-            label="Laser 2 (640 nm)",
+            label="Laser 2 (647 nm)",
         ),
     )
     etls = MockETLs()

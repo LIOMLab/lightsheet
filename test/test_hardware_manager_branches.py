@@ -32,7 +32,7 @@ def _make_bundle() -> DeviceBundle:
     motors = MockMotors()
     lasers = (
         MockLaser(wavelength=555, max_power_mw=300.0, label="L1"),
-        MockLaser(wavelength=640, max_power_mw=150.0, label="L2"),
+        MockLaser(wavelength=647, max_power_mw=150.0, label="L2"),
     )
     etls = MockETLs()
     return DeviceBundle(camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers)

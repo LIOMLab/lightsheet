@@ -50,7 +50,7 @@ def _ibeam_valid() -> dict:
         "Port": "COM4",
         "Baud Rate": 115200,
         "Channel": 1,
-        "Wavelength": 640,
+        "Wavelength": 647,
         "Power": 0,
         "Max Power": 150000,
         "Status Poll Interval": 1.0,

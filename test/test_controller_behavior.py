@@ -347,9 +347,9 @@ def test_wavelength_labels_set_from_live_instances(qtbot, request) -> None:
     configured wavelength (LSR-05)."""
     ctrl, _bundle = make_controller(qtbot, request)
 
-    # The fixture's bundle has Laser 1 = 555 nm, Laser 2 = 640 nm.
+    # The fixture's bundle has Laser 1 = 555 nm, Laser 2 = 647 nm.
     assert ctrl.lasers[0].wavelength == 555
-    assert ctrl.lasers[1].wavelength == 640
+    assert ctrl.lasers[1].wavelength == 647
 
     ctrl.updateUi_initial_hardware_state()
 
@@ -359,14 +359,14 @@ def test_wavelength_labels_set_from_live_instances(qtbot, request) -> None:
         "label_72 must show the live lasers[0].wavelength (555), not a "
         "hardcoded number."
     )
-    assert "640" in label_73_text, (
-        "label_73 must show the live lasers[1].wavelength (640), not a hardcoded number."
+    assert "647" in label_73_text, (
+        "label_73 must show the live lasers[1].wavelength (647), not a hardcoded number."
     )
     # Toggle buttons are relabeled with the live wavelengths too.
     toggle1_text = ctrl.laser_panel.ui.pushButton_laserOneToggle.text()
     toggle2_text = ctrl.laser_panel.ui.pushButton_laserTwoToggle.text()
     assert "555" in toggle1_text
-    assert "640" in toggle2_text
+    assert "647" in toggle2_text
 
 
 # --------------------------------------------------------------------------- #
@@ -415,7 +415,7 @@ def test_estop_warn_branch_fires_for_failed_laser(qtbot, request) -> None:
     # whose message names the failed laser's label and error_message.
     warn_msgs = [
         m for m in messages
-        if "Laser 2 (640 nm)" in m and "daq write failed" in m
+        if "Laser 2 (647 nm)" in m and "daq write failed" in m
     ]
     assert len(warn_msgs) == 1, (
         f"warn branch must fire exactly once for the failed laser; "

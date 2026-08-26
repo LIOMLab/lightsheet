@@ -45,13 +45,13 @@ def test_write_laser_metadata_writes_all_five_attrs_per_laser(
         assert f.attrs["Laser1 Active"] == True
         assert f.attrs["Laser1 Label"] == "Laser 1 (555 nm)"
 
-        # Laser 2 (inactive, 0 mW, 640 nm, 150 mW max) — included even
+        # Laser 2 (inactive, 0 mW, 647 nm, 150 mW max) — included even
         # though it did not fire (reproducibility context).
-        assert f.attrs["Laser2 Wavelength"] == 640
+        assert f.attrs["Laser2 Wavelength"] == 647
         assert f.attrs["Laser2 Power"] == 0.0
         assert f.attrs["Laser2 Max Power"] == 150.0
         assert f.attrs["Laser2 Active"] == False
-        assert f.attrs["Laser2 Label"] == "Laser 2 (640 nm)"
+        assert f.attrs["Laser2 Label"] == "Laser 2 (647 nm)"
 
 
 def test_write_laser_metadata_includes_inactive_laser(
