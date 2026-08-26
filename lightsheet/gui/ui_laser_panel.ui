@@ -305,6 +305,9 @@
           <property name="text">
            <string>Toggle Laser1</string>
           </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
          </widget>
         </item>
         <item>
@@ -320,6 +323,9 @@
           </property>
           <property name="text">
            <string>Toggle Laser2</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
           </property>
          </widget>
         </item>

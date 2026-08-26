@@ -23,7 +23,7 @@ import threading
 import typing
 
 from PySide6.QtCore import Slot
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QMessageBox, QWidget
 
 from lightsheet.gui.ui_laser_panel import Ui_LaserPanel
 
@@ -77,26 +77,41 @@ class LaserPanelWidget(QWidget):
     @Slot(int, str)
     def updateUi_laser_status(self, idx: int, status: str) -> None:
         """GUI-thread slot — maps a (idx, status) emit from
-        sig_laser_status to the per-laser QLabel text + semantic color.
-        status is 'active' / 'inactive' / 'error' (set by
+        sig_laser_status to the per-laser QLabel text + semantic color,
+        and corrects the toggle button checked state to match the HAL
+        state. status is 'active' / 'inactive' / 'error' (set by
         _poll_laser_status). The label list is indexed by laser index.
+
+        The button checked-state correction closes the optimistic-echo
+        hazard window: the toggle slot sets the label + button
+        optimistically on press, and the next poll re-aligns both with
+        the real HAL state (e.g. if the toggle failed or the E-stop
+        killed the laser between the press and the poll, the label and
+        button revert to OFF here).
         """
         labels = [self.ui.label_laserOneStatus, self.ui.label_laserTwoStatus]
+        buttons = [
+            self.ui.pushButton_laserOneToggle,
+            self.ui.pushButton_laserTwoToggle,
+        ]
         if status == "active":
             labels[idx].setText("● ON")
             labels[idx].setStyleSheet(
                 "color: #34C759; font-weight: bold;"
             )
+            buttons[idx].setChecked(True)
         elif status == "inactive":
             labels[idx].setText("● OFF")
             labels[idx].setStyleSheet(
                 "color: #8E8E93; font-weight: bold;"
             )
+            buttons[idx].setChecked(False)
         else:  # "error"
             labels[idx].setText("● ERR")
             labels[idx].setStyleSheet(
                 "color: #FF3B30; font-weight: bold;"
             )
+            buttons[idx].setChecked(False)
 
     def updateUi_laser1_amplitude(self) -> None:
         # Debounce-only slot: restart the 300ms single-shot timer so rapid
@@ -146,15 +161,116 @@ class LaserPanelWidget(QWidget):
         ).start()
 
     def laser1_toggle_button(self) -> None:
-        # Slot only spawns a worker thread — the DAQ toggle (and the
-        # immediate scaled-power application when turning on) happens off
-        # the GUI thread so the event loop is never blocked on a DAQ
-        # round-trip. The toggle body moved to HardwareManager._toggle_laser1.
+        """Laser 1 toggle button handler.
+
+        The button is checkable: Qt toggles ``isChecked()`` BEFORE emitting
+        ``clicked``, so on entry ``isChecked()`` is the NEW (desired) state.
+        The handler:
+        1. Optimistically echoes the desired state to the status label
+           (ON green / OFF gray) on the GUI thread, BEFORE the toggle
+           thread starts — so the label is never stale after a press.
+        2. If turning ON and the first-energize flag is not yet set, shows
+           a confirmation dialog (Class IIIB laser safety). Cancel reverts
+           the button + label and does NOT spawn the toggle thread.
+           "Don't warn again this session" sets the per-session flag.
+        3. Spawns the toggle thread (threading.Thread, daemon) targeting
+           HardwareManager._toggle_laser1 — the threading model is
+           unchanged (no QThread migration; the lock-free E-stop kill path
+           requires no queued-slot dispatch window).
+
+        The next poll (sig_laser_status → updateUi_laser_status) corrects
+        both the label and the button checked state if the HAL state
+        differs (e.g. the toggle failed or the E-stop killed the laser
+        between the press and the poll).
+        """
+        btn = self.ui.pushButton_laserOneToggle
+        label = self.ui.label_laserOneStatus
+        turning_on = btn.isChecked()
+        self._optimistic_echo(label, turning_on)
+        if turning_on and not self._shell._laser1_first_energize_done:
+            choice = self._show_first_energize_dialog(0)
+            if choice == "cancel":
+                # Revert the optimistic echo + button checked state; do
+                # NOT spawn the toggle thread. The per-session flag stays
+                # unset so the next energize still warns.
+                btn.setChecked(False)
+                self._optimistic_echo(label, turning_on=False)
+                return
+            # Both "energize" and "dont_warn_again" proceed; only the
+            # latter sets the per-session flag (energize sets it too so a
+            # second energize in the same session does not re-prompt).
+            self._shell._laser1_first_energize_done = True
         threading.Thread(target=self._shell._hw._toggle_laser1, daemon=True).start()
 
     def laser2_toggle_button(self) -> None:
-        # Slot only spawns a worker thread — the iBeam serial on/off (and
-        # the immediate scaled-power application when turning on) happens
-        # off the GUI thread so the event loop is never blocked on a
-        # serial round-trip. The toggle body moved to HardwareManager._toggle_laser2.
+        """Laser 2 toggle button handler — symmetric with laser 1. See
+        laser1_toggle_button for the optimistic-echo + first-energize gate
+        + threading model rationale."""
+        btn = self.ui.pushButton_laserTwoToggle
+        label = self.ui.label_laserTwoStatus
+        turning_on = btn.isChecked()
+        self._optimistic_echo(label, turning_on)
+        if turning_on and not self._shell._laser2_first_energize_done:
+            choice = self._show_first_energize_dialog(1)
+            if choice == "cancel":
+                btn.setChecked(False)
+                self._optimistic_echo(label, turning_on=False)
+                return
+            self._shell._laser2_first_energize_done = True
         threading.Thread(target=self._shell._hw._toggle_laser2, daemon=True).start()
+
+    # ------------------------------------------------------------------ #
+    # First-energize + optimistic-echo helpers
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _optimistic_echo(label, turning_on: bool) -> None:
+        """Set the status label to the desired state synchronously on the
+        GUI thread (ON green / OFF gray). Called BEFORE the toggle thread
+        starts so the label is never stale after a press. The next poll
+        corrects it if the HAL state differs."""
+        if turning_on:
+            label.setText("● ON")
+            label.setStyleSheet("color: #34C759; font-weight: bold;")
+        else:
+            label.setText("● OFF")
+            label.setStyleSheet("color: #8E8E93; font-weight: bold;")
+
+    def _show_first_energize_dialog(self, idx: int) -> str:
+        """Show the Class IIIB first-energize confirmation dialog and return
+        the operator's choice as a string: ``"energize"`` / ``"cancel"`` /
+        ``"dont_warn_again"``.
+
+        The dialog copy matches the UI-SPEC: heading ``Energize {label}?``,
+        body with wavelength + max_power + eye-protection warning, buttons
+        Energize / Cancel / Don't warn again this session. The wavelength
+        and max_power are read off the live laser instance so the warning
+        reflects the actual laser being energized.
+        """
+        laser = self._shell.lasers[idx]
+        heading = f"Energize {laser.label}?"
+        body = (
+            f"You are about to energize a Class IIIB laser "
+            f"({laser.wavelength} nm, up to {laser.max_power:.0f} mW). "
+            f"Confirm eye protection is on and the beam path is clear. "
+            f"(Disable this warning for the rest of the session.)"
+        )
+        # QMessageBox.question is the standard modal helper; the third
+        # button is the "Don't warn again this session" affordance. The
+        # return value maps to one of the three choices below.
+        from PySide6.QtWidgets import QMessageBox
+
+        result = QMessageBox.question(
+            self,
+            heading,
+            body,
+            QMessageBox.StandardButton.Yes
+            | QMessageBox.StandardButton.Cancel
+            | QMessageBox.StandardButton.Discard,
+            QMessageBox.StandardButton.Yes,
+        )
+        if result == QMessageBox.StandardButton.Yes:
+            return "energize"
+        if result == QMessageBox.StandardButton.Discard:
+            return "dont_warn_again"
+        return "cancel"

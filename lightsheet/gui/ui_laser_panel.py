@@ -195,6 +195,7 @@ class Ui_LaserPanel(object):
         self.pushButton_laserOneToggle.setObjectName(u"pushButton_laserOneToggle")
         sizePolicy2.setHeightForWidth(self.pushButton_laserOneToggle.sizePolicy().hasHeightForWidth())
         self.pushButton_laserOneToggle.setSizePolicy(sizePolicy2)
+        self.pushButton_laserOneToggle.setCheckable(True)
 
         self.verticalLayout_17.addWidget(self.pushButton_laserOneToggle)
 
@@ -202,6 +203,7 @@ class Ui_LaserPanel(object):
         self.pushButton_laserTwoToggle.setObjectName(u"pushButton_laserTwoToggle")
         sizePolicy2.setHeightForWidth(self.pushButton_laserTwoToggle.sizePolicy().hasHeightForWidth())
         self.pushButton_laserTwoToggle.setSizePolicy(sizePolicy2)
+        self.pushButton_laserTwoToggle.setCheckable(True)
 
         self.verticalLayout_17.addWidget(self.pushButton_laserTwoToggle)
 

@@ -383,6 +383,15 @@ class Controller_MainWindow(QMainWindow):
         self.laser1_power_pct = 0.0
         self.laser2_power_pct = 0.0
 
+        # First-energize confirmation per-session flags (audit #15). Each
+        # laser gets its own flag; the dialog gates the FIRST energize of
+        # that laser in a session unless the operator clicked "Don't warn
+        # again this session" (which sets the flag and skips subsequent
+        # dialogs). Cancel does NOT set the flag — the next energize still
+        # warns. The flag is per-session (in-memory), not persisted.
+        self._laser1_first_energize_done = False
+        self._laser2_first_energize_done = False
+
         # Auto-laser checkbox states sampled on the GUI thread before an
         # acquisition worker starts (AGENTS.md §11).
         self._auto_laser1 = False
