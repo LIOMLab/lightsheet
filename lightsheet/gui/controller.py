@@ -367,6 +367,29 @@ class Controller_MainWindow(QMainWindow):
         # Add first entry to message log
         self.ui.plainTextEdit_messageLog.appendPlainText("-- message log --")
 
+        # LevelsBar → ImageView wiring. The LevelsBar (image-adjacent,
+        # below the ImageView) drives the display levels window via
+        # sig_levelsChanged; the slot updates the ImageView's clamp
+        # window and re-renders. The clamp is display-only — saved
+        # frames are the raw uint16.
+        self.ui.levelsBar.sig_levelsChanged.connect(self._on_levels_changed)
+
+    def _on_levels_changed(self, levels_min: int, levels_max: int) -> None:
+        """Apply a LevelsBar handle drag to the ImageView display window."""
+        self.ui.imageView.set_levels(levels_min, levels_max)
+
+    def _update_levels_readout(self, frame) -> None:
+        """Update the live min/max QLabel readout with the actual pixel
+        range of the supplied frame (not the display window)."""
+        if frame is None:
+            return
+        try:
+            lo = int(frame.min())
+            hi = int(frame.max())
+        except (ValueError, TypeError):
+            return
+        self.ui.label_levelsReadout.setText(f"{lo}\u2013{hi}")
+
         # Set configurable settings to default values
         self.cfg_settings = copy.deepcopy(self._cfg_defaults)
         self.cfg_settings = cfg_read("config.ini", "Controller", self.cfg_settings)

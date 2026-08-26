@@ -93,6 +93,12 @@ class FrameViewer(QObject):
         frame_init = np.transpose(frame_init)
         # Set initial view
         self.parent.ui.imageView.setImage(frame_init)
+        # Live min/max readout (actual pixel range, not the display window).
+        # Guarded so a minimal shell stand-in without the helper does not
+        # break FrameViewer construction.
+        _readout = getattr(self.parent, "_update_levels_readout", None)
+        if _readout is not None:
+            _readout(frame_init)
 
     def enqueue_frame(self, frame: np.ndarray) -> None:
         with contextlib.suppress(queue.Full):
@@ -109,6 +115,10 @@ class FrameViewer(QObject):
             self.parent.ui.imageView.setImage(
                 frame, autoRange=False, autoLevels=False, autoHistogramRange=False
             )
+            # Live min/max readout (actual pixel range, not the display window).
+            _readout = getattr(self.parent, "_update_levels_readout", None)
+            if _readout is not None:
+                _readout(frame)
 
 
 class FrameSaver(QObject):

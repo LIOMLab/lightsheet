@@ -69,6 +69,24 @@ class ImageView(QGraphicsView):
         # square until setImage populates the scene). 320x240 matches
         # the pane floor.
         self._scene.setSceneRect(0, 0, 320, 240)
+        # The most recent frame (raw uint16), kept so set_levels can
+        # re-render with a new display window without the caller having
+        # to re-supply the frame. The clamp is applied to a COPY for
+        # display — this attribute holds the raw frame.
+        self._last_frame: np.ndarray | None = None
+
+    def set_levels(self, levels_min: int, levels_max: int) -> None:
+        """Update the display levels window and re-render the current
+        frame (if any) clamped to the new window.
+
+        The clamp is on the DISPLAY buffer only — the raw frame stored
+        for save paths is never clamped. Callers (the LevelsBar drag
+        slot) invoke this on a handle drag.
+        """
+        self._levels_min = int(levels_min)
+        self._levels_max = int(levels_max)
+        if self._last_frame is not None:
+            self.setImage(self._last_frame)
 
     def resizeEvent(self, event) -> None:
         """Re-call fitInView on every resize so the pixmap fills the
@@ -102,6 +120,9 @@ class ImageView(QGraphicsView):
         """
         # Fixed levels window: scale uint16 [0, 2000] to uint8 [0, 255].
         # np.clip + linear scaling; values outside the window saturate.
+        # The raw frame is retained for set_levels re-render and for the
+        # save path (which receives the unclamped frame separately).
+        self._last_frame = frame
         frame_clamped = np.clip(frame, self._levels_min, self._levels_max)
         frame_scaled = (
             (frame_clamped - self._levels_min)

@@ -169,3 +169,76 @@ def test_resize_event_no_recursion(qtbot) -> None:
 
     # If we got here without hanging, recursion did not occur.
     assert view.width() == 500
+
+
+def test_levels_driven_clamp(qtbot) -> None:
+    """set_levels updates the display window; a frame with values 0-4000
+    displayed with levels 1000-3000 clamps to that window (pixels below
+    1000 render black, pixels above 3000 render white)."""
+    from lightsheet.gui.image_view import ImageView
+
+    view = ImageView()
+    qtbot.addWidget(view)
+
+    # Frame with a known spread: 0, 1000, 2000, 3000, 4000 across 5 px.
+    frame = np.zeros((1, 5), dtype=np.uint16)
+    frame[0, 0] = 0
+    frame[0, 1] = 1000
+    frame[0, 2] = 2000
+    frame[0, 3] = 3000
+    frame[0, 4] = 4000
+
+    view.setImage(frame)
+    # Narrow the window to 1000-3000.
+    view.set_levels(1000, 3000)
+
+    # The displayed buffer must reflect the new window: pixel 0 (value 0,
+    # below 1000) clamps to 0 (black); pixel 4 (value 4000, above 3000)
+    # clamps to 255 (white); pixel 2 (value 2000, midpoint of 1000-3000)
+    # renders ~127.
+    qimage = view._pixmap_item.pixmap().toImage()
+    # Column-major transposition aside, this 1-row frame maps directly.
+    v0 = qimage.pixelColor(0, 0).value()
+    v4 = qimage.pixelColor(4, 0).value()
+    v2 = qimage.pixelColor(2, 0).value()
+    assert v0 == 0, f"pixel below window should be black, got {v0}"
+    assert v4 == 255, f"pixel above window should be white, got {v4}"
+    assert 100 <= v2 <= 155, f"midpoint pixel should be ~127, got {v2}"
+
+
+def test_levels_readout_updates(qtbot, request) -> None:
+    """After setImage, the live min/max QLabel readout shows the frame's
+    actual pixel range (not the display window)."""
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _ = make_controller(qtbot, request)
+    import numpy as np
+
+    frame = np.zeros((10, 10), dtype=np.uint16)
+    frame[0, 0] = 1234
+    frame[5, 5] = 5678
+    ctrl._update_levels_readout(frame)
+    text = ctrl.ui.label_levelsReadout.text()
+    # The readout shows the actual pixel range (frame.min()/max()), not
+    # the display window.
+    assert "0" in text, f"readout missing frame min: {text!r}"
+    assert "5678" in text, f"readout missing frame max: {text!r}"
+
+
+def test_levels_bar_wired_to_image_view(qtbot, request) -> None:
+    """Dragging the LevelsBar handles updates the ImageView display
+    window via the shell's sig_levelsChanged → set_levels wiring."""
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _ = make_controller(qtbot, request)
+    import numpy as np
+
+    frame = np.zeros((10, 10), dtype=np.uint16)
+    frame[0, 0] = 4000
+    ctrl.ui.imageView.setImage(frame)
+    # Drive the LevelsBar by setting its property (the setter emits
+    # sig_levelsChanged, which the shell wires to set_levels).
+    ctrl.ui.levelsBar.levels_max = 1000
+    assert ctrl.ui.imageView._levels_max == 1000, (
+        "LevelsBar sig_levelsChanged did not propagate to ImageView"
+    )

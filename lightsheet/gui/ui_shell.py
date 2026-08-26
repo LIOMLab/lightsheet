@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QMainWindow,
     QToolBar, QVBoxLayout, QWidget)
 
 from lightsheet.gui.image_view import ImageView
+from lightsheet.gui.levels_bar import LevelsBar
 
 class Ui_Shell(object):
     def setupUi(self, Shell):
@@ -81,14 +82,43 @@ class Ui_Shell(object):
 
         self.verticalLayout.addWidget(self.imageView)
 
+        self.horizontalLayout_levels = QHBoxLayout()
+        self.horizontalLayout_levels.setSpacing(6)
+        self.horizontalLayout_levels.setObjectName(u"horizontalLayout_levels")
+        self.levelsBar = LevelsBar(self.imagesPane)
+        self.levelsBar.setObjectName(u"levelsBar")
+        sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        sizePolicy1.setHorizontalStretch(1)
+        sizePolicy1.setVerticalStretch(0)
+        sizePolicy1.setHeightForWidth(self.levelsBar.sizePolicy().hasHeightForWidth())
+        self.levelsBar.setSizePolicy(sizePolicy1)
+        self.levelsBar.setMinimumSize(QSize(240, 32))
+
+        self.horizontalLayout_levels.addWidget(self.levelsBar)
+
+        self.label_levelsReadout = QLabel(self.imagesPane)
+        self.label_levelsReadout.setObjectName(u"label_levelsReadout")
+        sizePolicy2 = QSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        sizePolicy2.setHorizontalStretch(0)
+        sizePolicy2.setVerticalStretch(0)
+        sizePolicy2.setHeightForWidth(self.label_levelsReadout.sizePolicy().hasHeightForWidth())
+        self.label_levelsReadout.setSizePolicy(sizePolicy2)
+        self.label_levelsReadout.setMinimumSize(QSize(120, 0))
+        self.label_levelsReadout.setAlignment(Qt.AlignRight|Qt.AlignVCenter)
+
+        self.horizontalLayout_levels.addWidget(self.label_levelsReadout)
+
+
+        self.verticalLayout.addLayout(self.horizontalLayout_levels)
+
         self.splitter.addWidget(self.imagesPane)
         self.controlsPane = QWidget(self.splitter)
         self.controlsPane.setObjectName(u"controlsPane")
-        sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
-        sizePolicy1.setHorizontalStretch(0)
-        sizePolicy1.setVerticalStretch(1)
-        sizePolicy1.setHeightForWidth(self.controlsPane.sizePolicy().hasHeightForWidth())
-        self.controlsPane.setSizePolicy(sizePolicy1)
+        sizePolicy3 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        sizePolicy3.setHorizontalStretch(0)
+        sizePolicy3.setVerticalStretch(1)
+        sizePolicy3.setHeightForWidth(self.controlsPane.sizePolicy().hasHeightForWidth())
+        self.controlsPane.setSizePolicy(sizePolicy3)
         self.controlsPane.setMinimumSize(QSize(360, 0))
         self.verticalLayout_3 = QVBoxLayout(self.controlsPane)
         self.verticalLayout_3.setObjectName(u"verticalLayout_3")
@@ -107,11 +137,11 @@ class Ui_Shell(object):
         self.horizontalLayout_10.setObjectName(u"horizontalLayout_10")
         self.plainTextEdit_messageLog = QPlainTextEdit(self.controlsPane)
         self.plainTextEdit_messageLog.setObjectName(u"plainTextEdit_messageLog")
-        sizePolicy2 = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        sizePolicy2.setHorizontalStretch(0)
-        sizePolicy2.setVerticalStretch(0)
-        sizePolicy2.setHeightForWidth(self.plainTextEdit_messageLog.sizePolicy().hasHeightForWidth())
-        self.plainTextEdit_messageLog.setSizePolicy(sizePolicy2)
+        sizePolicy4 = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        sizePolicy4.setHorizontalStretch(0)
+        sizePolicy4.setVerticalStretch(0)
+        sizePolicy4.setHeightForWidth(self.plainTextEdit_messageLog.sizePolicy().hasHeightForWidth())
+        self.plainTextEdit_messageLog.setSizePolicy(sizePolicy4)
         self.plainTextEdit_messageLog.setMinimumSize(QSize(0, 80))
         self.plainTextEdit_messageLog.setMaximumSize(QSize(16777215, 80))
         self.plainTextEdit_messageLog.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
@@ -207,6 +237,7 @@ class Ui_Shell(object):
         self.action_ShowHideControlsPane.setText(QCoreApplication.translate("Shell", u"Show Controls Pane", None))
         self.action_OpenFile.setText(QCoreApplication.translate("Shell", u"Open File...", None))
         self.action_Exit.setText(QCoreApplication.translate("Shell", u"Exit", None))
+        self.label_levelsReadout.setText(QCoreApplication.translate("Shell", u"0\u20132000", None))
         self.tabControls.setTabText(self.tabControls.indexOf(self.tabPanelsPlaceholder), QCoreApplication.translate("Shell", u"Controls", None))
         self.toolBar_estop.setWindowTitle(QCoreApplication.translate("Shell", u"Safety", None))
         self.label_estopStatus.setText(QCoreApplication.translate("Shell", u"\u25cf ARMED", None))
