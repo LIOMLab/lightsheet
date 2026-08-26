@@ -1,15 +1,12 @@
 """ScanPanelWidget — per-panel widget/controller for scan settings (ETL/Galvo).
 
-A widget container for the ETL Settings, Galvanometers, and Reset Settings
-controls. The signal/slot connections for these widgets are wired in the
-shell's ``wire_collaborators()`` to the AcquisitionCoordinator
+A widget container for the ETL Settings and Galvanometers controls. The
+signal/slot connections for these widgets are wired in the shell's
+``wire_collaborators()`` to the AcquisitionCoordinator
 (``self._acq.updateUi_etl_*`` / ``self._acq.updateUi_galvo_*``) — this panel
 owns no slots of its own, mirroring the plain-Python collaborator pattern
 where the collaborator owns the slot logic and the panel owns the widget
 tree.
-
-The ``pushButton_resetSettings`` button is currently unconnected (no handler
-in the original monolith). It exists in the .ui for future use.
 """
 
 from __future__ import annotations

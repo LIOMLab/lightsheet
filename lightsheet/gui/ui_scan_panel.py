@@ -17,7 +17,7 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QCheckBox, QDoubleSpinBox, QFormLayout,
     QFrame, QGroupBox, QHBoxLayout, QLabel,
-    QPushButton, QSizePolicy, QVBoxLayout, QWidget)
+    QSizePolicy, QVBoxLayout, QWidget)
 
 class Ui_ScanPanel(object):
     def setupUi(self, scanPanel):
@@ -380,11 +380,6 @@ class Ui_ScanPanel(object):
 
         self.verticalLayout_panel.addWidget(self.groupBox_11)
 
-        self.pushButton_resetSettings = QPushButton(scanPanel)
-        self.pushButton_resetSettings.setObjectName(u"pushButton_resetSettings")
-
-        self.verticalLayout_panel.addWidget(self.pushButton_resetSettings)
-
 
         self.retranslateUi(scanPanel)
 
@@ -420,10 +415,6 @@ class Ui_ScanPanel(object):
         self.checkBox_galvoSync.setText(QCoreApplication.translate("ScanPanel", u"Sync Left/Right", None))
         self.checkBox_galvoActivate.setText(QCoreApplication.translate("ScanPanel", u"Activate Galvanometers", None))
         self.checkBox_galvoInvert.setText(QCoreApplication.translate("ScanPanel", u"Invert scan", None))
-#if QT_CONFIG(tooltip)
-        self.pushButton_resetSettings.setToolTip(QCoreApplication.translate("ScanPanel", u"Return all parameters to their default value", None))
-#endif // QT_CONFIG(tooltip)
-        self.pushButton_resetSettings.setText(QCoreApplication.translate("ScanPanel", u"Reset Settings", None))
         pass
     # retranslateUi
 

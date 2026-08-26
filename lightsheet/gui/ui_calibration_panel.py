@@ -80,13 +80,6 @@ class Ui_CalibrationPanel(object):
 
         self.verticalLayout_5.addItem(self.verticalSpacer_3)
 
-        self.pushButton_calCameraStartCalibration = QPushButton(self.groupBox_2)
-        self.pushButton_calCameraStartCalibration.setObjectName(u"pushButton_calCameraStartCalibration")
-        sizePolicy1.setHeightForWidth(self.pushButton_calCameraStartCalibration.sizePolicy().hasHeightForWidth())
-        self.pushButton_calCameraStartCalibration.setSizePolicy(sizePolicy1)
-
-        self.verticalLayout_5.addWidget(self.pushButton_calCameraStartCalibration)
-
         self.pushButton_calCameraShowInterpolation = QPushButton(self.groupBox_2)
         self.pushButton_calCameraShowInterpolation.setObjectName(u"pushButton_calCameraShowInterpolation")
         sizePolicy1.setHeightForWidth(self.pushButton_calCameraShowInterpolation.sizePolicy().hasHeightForWidth())
@@ -134,13 +127,6 @@ class Ui_CalibrationPanel(object):
         self.verticalSpacer_5 = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.verticalLayout_6.addItem(self.verticalSpacer_5)
-
-        self.pushButton_calEtlStartCalibration = QPushButton(self.groupBox_3)
-        self.pushButton_calEtlStartCalibration.setObjectName(u"pushButton_calEtlStartCalibration")
-        sizePolicy1.setHeightForWidth(self.pushButton_calEtlStartCalibration.sizePolicy().hasHeightForWidth())
-        self.pushButton_calEtlStartCalibration.setSizePolicy(sizePolicy1)
-
-        self.verticalLayout_6.addWidget(self.pushButton_calEtlStartCalibration)
 
         self.pushButton_calEtlShowInterpolation = QPushButton(self.groupBox_3)
         self.pushButton_calEtlShowInterpolation.setObjectName(u"pushButton_calEtlShowInterpolation")
@@ -194,13 +180,15 @@ class Ui_CalibrationPanel(object):
     def retranslateUi(self, calibrationPanel):
         self.groupBox_2.setTitle(QCoreApplication.translate("CalibrationPanel", u"Camera Focus Calibration", None))
         self.label_28.setText(QCoreApplication.translate("CalibrationPanel", u"Number of planes for calibration:", None))
+#if QT_CONFIG(tooltip)
+        self.doubleSpinBox_calNumberOfPlanes.setToolTip(QCoreApplication.translate("CalibrationPanel", u"Number of z-planes per camera position used by the camera-focus calibration. Unit: planes. Valid range: 3\u20131000. Effect: more planes give a finer focus curve but a longer calibration sweep.", None))
+#endif // QT_CONFIG(tooltip)
         self.doubleSpinBox_calNumberOfPlanes.setSuffix(QCoreApplication.translate("CalibrationPanel", u" planes", None))
         self.label_43.setText(QCoreApplication.translate("CalibrationPanel", u"Number of camera positions:", None))
-        self.doubleSpinBox_calNumberOfCameraPositions.setSuffix(QCoreApplication.translate("CalibrationPanel", u" planes", None))
 #if QT_CONFIG(tooltip)
-        self.pushButton_calCameraStartCalibration.setToolTip(QCoreApplication.translate("CalibrationPanel", u"Start camera calibration", None))
+        self.doubleSpinBox_calNumberOfCameraPositions.setToolTip(QCoreApplication.translate("CalibrationPanel", u"Number of camera (focus) positions sampled across the horizontal range. Unit: positions. Valid range: 1\u20131000. Effect: more positions improve the focus-vs-position regression fit.", None))
 #endif // QT_CONFIG(tooltip)
-        self.pushButton_calCameraStartCalibration.setText(QCoreApplication.translate("CalibrationPanel", u"Start Camera Calibration", None))
+        self.doubleSpinBox_calNumberOfCameraPositions.setSuffix(QCoreApplication.translate("CalibrationPanel", u" planes", None))
 #if QT_CONFIG(tooltip)
         self.pushButton_calCameraShowInterpolation.setToolTip(QCoreApplication.translate("CalibrationPanel", u"Show the results of the last camera calibration", None))
 #endif // QT_CONFIG(tooltip)
@@ -211,11 +199,10 @@ class Ui_CalibrationPanel(object):
         self.pushButton_calCameraComputeFocus.setText(QCoreApplication.translate("CalibrationPanel", u"Compute Camera Focus", None))
         self.groupBox_3.setTitle(QCoreApplication.translate("CalibrationPanel", u"ETL Focus Calibration", None))
         self.label_47.setText(QCoreApplication.translate("CalibrationPanel", u"Number of ETL voltages:", None))
-        self.doubleSpinBox_calNumberOfEtlVoltages.setSuffix(QCoreApplication.translate("CalibrationPanel", u" points", None))
 #if QT_CONFIG(tooltip)
-        self.pushButton_calEtlStartCalibration.setToolTip(QCoreApplication.translate("CalibrationPanel", u"Start ETLs calibration", None))
+        self.doubleSpinBox_calNumberOfEtlVoltages.setToolTip(QCoreApplication.translate("CalibrationPanel", u"Number of ETL drive voltages sampled by the ETL-focus calibration. Unit: points. Valid range: 1\u20131000. Effect: more points give a finer ETL-focus curve but a longer calibration sweep.", None))
 #endif // QT_CONFIG(tooltip)
-        self.pushButton_calEtlStartCalibration.setText(QCoreApplication.translate("CalibrationPanel", u"Start ETL Calibration", None))
+        self.doubleSpinBox_calNumberOfEtlVoltages.setSuffix(QCoreApplication.translate("CalibrationPanel", u" points", None))
 #if QT_CONFIG(tooltip)
         self.pushButton_calEtlShowInterpolation.setToolTip(QCoreApplication.translate("CalibrationPanel", u"Show the results of the last ETLs calibration", None))
 #endif // QT_CONFIG(tooltip)

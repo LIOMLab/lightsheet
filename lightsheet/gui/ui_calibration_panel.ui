@@ -32,6 +32,9 @@
             <verstretch>0</verstretch>
            </sizepolicy>
           </property>
+          <property name="toolTip">
+           <string>Number of z-planes per camera position used by the camera-focus calibration. Unit: planes. Valid range: 3–1000. Effect: more planes give a finer focus curve but a longer calibration sweep.</string>
+          </property>
           <property name="suffix">
            <string> planes</string>
           </property>
@@ -70,6 +73,9 @@
             <verstretch>0</verstretch>
            </sizepolicy>
           </property>
+          <property name="toolTip">
+           <string>Number of camera (focus) positions sampled across the horizontal range. Unit: positions. Valid range: 1–1000. Effect: more positions improve the focus-vs-position regression fit.</string>
+          </property>
           <property name="suffix">
            <string> planes</string>
           </property>
@@ -101,22 +107,6 @@
          </size>
         </property>
        </spacer>
-      </item>
-      <item>
-       <widget class="QPushButton" name="pushButton_calCameraStartCalibration">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="toolTip">
-         <string>Start camera calibration</string>
-        </property>
-        <property name="text">
-         <string>Start Camera Calibration</string>
-        </property>
-       </widget>
       </item>
       <item>
        <widget class="QPushButton" name="pushButton_calCameraShowInterpolation">
@@ -182,6 +172,9 @@
             <verstretch>0</verstretch>
            </sizepolicy>
           </property>
+          <property name="toolTip">
+           <string>Number of ETL drive voltages sampled by the ETL-focus calibration. Unit: points. Valid range: 1–1000. Effect: more points give a finer ETL-focus curve but a longer calibration sweep.</string>
+          </property>
           <property name="suffix">
            <string> points</string>
           </property>
@@ -213,22 +206,6 @@
          </size>
         </property>
        </spacer>
-      </item>
-      <item>
-       <widget class="QPushButton" name="pushButton_calEtlStartCalibration">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="toolTip">
-         <string>Start ETLs calibration</string>
-        </property>
-        <property name="text">
-         <string>Start ETL Calibration</string>
-        </property>
-       </widget>
       </item>
       <item>
        <widget class="QPushButton" name="pushButton_calEtlShowInterpolation">

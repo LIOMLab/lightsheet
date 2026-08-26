@@ -597,16 +597,6 @@
      </layout>
     </widget>
    </item>
-   <item>
-    <widget class="QPushButton" name="pushButton_resetSettings">
-     <property name="toolTip">
-      <string>Return all parameters to their default value</string>
-     </property>
-     <property name="text">
-      <string>Reset Settings</string>
-     </property>
-    </widget>
-   </item>
   </layout>
  </widget>
  <resources/>
