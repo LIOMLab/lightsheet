@@ -87,6 +87,12 @@ ignore = ["ANN401"]
 [tool.pytest.ini_options]
 addopts = "-n auto --strict-markers"
 testpaths = ["test"]
+# Force the offscreen Qt platform plugin so no GUI windows pop up during
+# the test suite (headless CI + local runs). Individual tests may still
+# override via monkeypatch.setenv when they need a different platform.
+env = [
+    "QT_QPA_PLATFORM=offscreen",
+]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -207,6 +213,7 @@ dev = [
     "h5py-stubs>=0.1.2",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
+    "pytest-env>=1.1.3",
     "pytest-qt>=4.5.0",
     "pytest-xdist>=3.8.0",
     "ruff>=0.16.4",
