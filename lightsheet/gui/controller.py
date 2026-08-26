@@ -152,6 +152,18 @@ class Controller_MainWindow(QMainWindow):
         self.pushButton_estop.clicked.connect(self.updateUi_estop_pressed)
         self.pushButton_armReset.clicked.connect(self.updateUi_arm_reset_pressed)
 
+        # Two-press re-arm sequence documentation (audit #6). The button
+        # label changes per state (Clear E-stop / Arm Lasers / Arm/Reset);
+        # the tooltip stays constant and explains the whole sequence so
+        # the operator can discover the two-press requirement without
+        # trial-and-error on a Class IIIB laser.
+        self.pushButton_armReset.setToolTip(
+            "Two-press sequence to re-arm after an E-stop. "
+            "First press: Clear E-stop (disarm the kill latch). "
+            "Second press: Arm Lasers (system ready; lasers still off "
+            "until you toggle one or start a run)."
+        )
+
         # F12 hotkey — fires regardless of which widget has focus. The
         # QShortcut is declared in ui_shell.ui (with ApplicationShortcut
         # context); the F12 key sequence is set here because pyside6-uic
@@ -788,13 +800,16 @@ class Controller_MainWindow(QMainWindow):
         QTimer.singleShot(0, self._hw._refresh_laser2_readback_async)
 
         # 4. Latch the UI into ACTUATED: red indicator, yellow 4px border
-        #    on the E-stop button.
+        #    on the E-stop button. The Arm/Reset button label reflects the
+        #    NEXT action available — "Clear E-stop" (the first press of the
+        #    two-press re-arm sequence, audit #6).
         self.label_estopStatus.setText("● E-STOP ACTUATED")
         self.label_estopStatus.setStyleSheet("color: #FF3B30; font-weight: bold;")
         self.pushButton_estop.setStyleSheet(
             "QPushButton { background-color: #FF3B30; color: white; "
             "font-size: 18px; font-weight: bold; border: 4px solid #FFC107; }"
         )
+        self.pushButton_armReset.setText("Clear E-stop")
 
         # 5. Warn the operator. Re-energizing requires Arm/Reset then Arm.
         self.sig_message.emit(
@@ -813,20 +828,31 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_arm_reset_pressed(self) -> None:
         """Arm/Reset button handler — the two-press re-arm sequence.
 
-        First press (while ACTUATED): clears the E-stop Event and transitions
-        to DISARMED (gray indicator, button label -> "Arm"). Lasers are NOT
-        re-energized — they stay off until the operator explicitly toggles one
-        or starts an acquisition.
+        State machine (audit #6 — made explicit on screen):
 
-        Second press (while DISARMED, button labeled "Arm"): transitions back
-        to ARMED (green indicator, button label -> "Arm/Reset"). The system
-        is now ready; energizing still requires a separate deliberate action.
+            ARMED --(E-stop)--> ACTUATED --(1st press)--> DISARMED --(2nd press)--> ARMED
 
-        Never re-energizes a laser itself (D-01).
+        First press (while ACTUATED, button labeled "Clear E-stop"):
+        clears the E-stop Event and transitions to DISARMED (gray
+        indicator, button label -> "Arm Lasers"). Lasers are NOT
+        re-energized — they stay off until the operator explicitly
+        toggles one or starts an acquisition.
+
+        Second press (while DISARMED, button labeled "Arm Lasers"):
+        transitions back to ARMED (green indicator, button label ->
+        "Arm/Reset"). The system is now ready; energizing still requires
+        a separate deliberate action.
+
+        A single press from ACTUATED must NOT re-arm — it transitions to
+        DISARMED first (no single-press re-arm of a Class IIIB laser,
+        AGENTS.md §2).
+
+        Never re-energizes a laser itself.
         """
         if self._estop_disarmed:
-            # Second press: re-arm. System returns to ARMED; lasers stay off
-            # until the operator explicitly toggles one or starts a run.
+            # Second press: re-arm. System returns to ARMED; lasers stay
+            # off until the operator explicitly toggles one or starts a
+            # run.
             self._estop_disarmed = False
             self.label_estopStatus.setText("● ARMED")
             self.label_estopStatus.setStyleSheet("color: #34C759; font-weight: bold;")
@@ -835,9 +861,15 @@ class Controller_MainWindow(QMainWindow):
                 "font-size: 18px; font-weight: bold; border: 2px solid black; }"
             )
             self.pushButton_armReset.setText("Arm/Reset")
+            self.sig_message.emit(
+                "System armed. Lasers stay off until you toggle one or "
+                "start a run."
+            )
         else:
-            # First press after an E-stop: clear the cooperative-abort Event
-            # and transition to DISARMED. Lasers remain off.
+            # First press after an E-stop: clear the cooperative-abort
+            # Event and transition to DISARMED. Lasers remain off. A
+            # single press from ACTUATED does NOT re-arm — the second
+            # press (above) is required (AGENTS.md §2).
             self.estop_event.clear()
             self._estop_disarmed = True
             self.label_estopStatus.setText("● DISARMED")
@@ -846,7 +878,10 @@ class Controller_MainWindow(QMainWindow):
                 "QPushButton { background-color: #8E8E93; color: white; "
                 "font-size: 18px; font-weight: bold; border: 2px solid black; }"
             )
-            self.pushButton_armReset.setText("Arm")
+            self.pushButton_armReset.setText("Arm Lasers")
+            self.sig_message.emit(
+                "E-stop cleared. Press Arm Lasers to re-arm."
+            )
 
     def updateUi_initial_hardware_state(self) -> None:
         # SigGen

@@ -200,7 +200,10 @@ def test_updateUi_arm_reset_pressed_first_press(qtbot, request) -> None:
     ctrl.updateUi_arm_reset_pressed()
     assert ctrl._estop_disarmed is True
     assert ctrl.estop_event.is_set() is False
-    assert ctrl.pushButton_armReset.text() == "Arm"
+    # First press transitions to DISARMED; the button label reflects the
+    # NEXT action available — "Arm Lasers" (the second press of the
+    # two-press re-arm sequence, audit #6).
+    assert ctrl.pushButton_armReset.text() == "Arm Lasers"
 
 
 def test_updateUi_arm_reset_pressed_second_press(qtbot, request) -> None:
