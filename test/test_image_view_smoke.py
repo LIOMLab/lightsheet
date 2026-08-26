@@ -59,3 +59,113 @@ def test_image_view_render_nonzero(qtbot) -> None:
         if has_nonzero:
             break
     assert has_nonzero, "ImageView rendered a blank image (all pixels zero)"
+
+
+def test_scrollbar_policy_always_off(qtbot) -> None:
+    """ImageView scrollbar policy is AlwaysOff on both axes — prevents
+    resize→fitInView→scrollbar-toggle→resize recursion."""
+    from PySide6.QtCore import Qt
+
+    from lightsheet.gui.image_view import ImageView
+
+    view = ImageView()
+    qtbot.addWidget(view)
+
+    assert (
+        view.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    ), "horizontalScrollBarPolicy must be ScrollBarAlwaysOff"
+    assert (
+        view.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    ), "verticalScrollBarPolicy must be ScrollBarAlwaysOff"
+
+
+def test_scene_rect_at_construction(qtbot) -> None:
+    """ImageView has a non-empty sceneRect at construction so fitInView
+    has geometry before the first frame (no tiny black square)."""
+    from lightsheet.gui.image_view import ImageView
+
+    view = ImageView()
+    qtbot.addWidget(view)
+
+    rect = view.sceneRect()
+    assert rect.width() > 0, "sceneRect width must be > 0 at construction"
+    assert rect.height() > 0, "sceneRect height must be > 0 at construction"
+
+
+def test_min_size_floor(qtbot) -> None:
+    """ImageView minimum size is 320x240 (dropped from 700x700) so it can
+    actually shrink on small screens."""
+    from lightsheet.gui.image_view import ImageView
+
+    view = ImageView()
+    qtbot.addWidget(view)
+
+    assert view.minimumSize().width() <= 320, (
+        f"ImageView min width {view.minimumSize().width()} must be <= 320"
+    )
+    assert view.minimumSize().height() <= 240, (
+        f"ImageView min height {view.minimumSize().height()} must be <= 240"
+    )
+
+
+def test_resize_refits_pixmap(qtbot) -> None:
+    """resizeEvent re-calls fitInView so the pixmap fills the viewport
+    on every resize (no tiny black square)."""
+    import numpy as np
+
+    from lightsheet.gui.image_view import ImageView
+
+    view = ImageView()
+    view.resize(200, 200)
+    qtbot.addWidget(view)
+    view.show()
+    qtbot.waitExposed(view)
+
+    # 100x100 frame with a seed pixel at the levels max.
+    frame = np.zeros((100, 100), dtype=np.uint16)
+    frame[50, 50] = 2000
+    view.setImage(frame)
+    qtbot.wait(20)
+    scale_before = view.transform().m11()
+
+    # Resize to a larger viewport and let the layout settle. The
+    # resizeEvent override must re-call fitInView so the pixmap scales
+    # up to fill the new viewport (KeepAspectRatio). Without the
+    # override the transform stays at the small-viewport scale.
+    view.resize(640, 480)
+    qtbot.wait(50)
+    scale_after = view.transform().m11()
+
+    assert scale_after > scale_before, (
+        f"resizeEvent did not refit: transform scale went {scale_before:.3f} "
+        f"-> {scale_after:.3f} (expected increase after growing viewport — "
+        f"fitInView not re-called on resize)"
+    )
+
+
+def test_resize_event_no_recursion(qtbot) -> None:
+    """resizeEvent must not cause infinite recursion (scrollbar AlwaysOff
+    prevents the show/hide→resize cycle). The test simply asserts the
+    widget survives a resize without hanging or crashing."""
+    import numpy as np
+
+    from lightsheet.gui.image_view import ImageView
+
+    view = ImageView()
+    view.resize(400, 300)
+    qtbot.addWidget(view)
+    view.show()
+    qtbot.waitExposed(view)
+
+    frame = np.zeros((100, 100), dtype=np.uint16)
+    frame[50, 50] = 2000
+    view.setImage(frame)
+
+    # Several resizes — if resizeEvent recursed this would hang/CPU-spin
+    # and the test would time out.
+    for w, h in [(640, 480), (320, 240), (800, 600), (500, 500)]:
+        view.resize(w, h)
+        qtbot.wait(20)
+
+    # If we got here without hanging, recursion did not occur.
+    assert view.width() == 500

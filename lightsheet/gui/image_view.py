@@ -54,6 +54,32 @@ class ImageView(QGraphicsView):
         # and friends all default to off, but set it explicitly so the
         # widget's render state is deterministic).
         self.setRenderHints(QPainter.RenderHint(0))
+        # Scrollbar policy AlwaysOff on both axes: prevents the
+        # resize→fitInView→scrollbar-show/hide→resize recursion pitfall.
+        # With scrollbars always off the viewport size only changes on
+        # real resizes, so fitInView in resizeEvent is non-reentrant.
+        self.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        # Non-empty sceneRect at construction so fitInView has geometry
+        # before the first frame (otherwise the view shows a tiny black
+        # square until setImage populates the scene). 320x240 matches
+        # the pane floor.
+        self._scene.setSceneRect(0, 0, 320, 240)
+
+    def resizeEvent(self, event) -> None:
+        """Re-call fitInView on every resize so the pixmap fills the
+        viewport (KeepAspectRatio). With scrollbar policy AlwaysOff the
+        viewport size only changes on real resizes, so this is
+        non-reentrant — no re-entrancy guard needed."""
+        super().resizeEvent(event)
+        if self._pixmap_item is not None:
+            self.fitInView(
+                self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio
+            )
 
     def setImage(
         self,
