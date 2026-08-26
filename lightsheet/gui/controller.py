@@ -347,7 +347,7 @@ class Controller_MainWindow(QMainWindow):
             self.save_format = "hdf5"
 
         self.save_directory = os.path.normpath(
-            os.path.expanduser("~") + "\\Documents\\LightSheetData"
+            os.path.join(os.path.expanduser("~"), "Documents", "LightSheetData")
         )
         self.save_filename = ""
         self.save_description = ""

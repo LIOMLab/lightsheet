@@ -174,7 +174,7 @@ class SavePanelWidget(QWidget):
 
         if (self._shell.save_directory != "") and (self._shell.save_filename != ""):
             self._shell.save_filename = os.path.normpath(
-                self._shell.save_directory + "\\" + self._shell.save_filename
+                os.path.join(self._shell.save_directory, self._shell.save_filename)
             )
             self._shell.saving_allowed = True
         else:
