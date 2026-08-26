@@ -124,11 +124,20 @@ class ImageView(QGraphicsView):
         # save path (which receives the unclamped frame separately).
         self._last_frame = frame
         frame_clamped = np.clip(frame, self._levels_min, self._levels_max)
-        frame_scaled = (
-            (frame_clamped - self._levels_min)
-            / (self._levels_max - self._levels_min)
-            * 255
-        ).astype(np.uint8)
+        # Guard against a degenerate levels window where both LevelsBar
+        # handles coincide (levels_max == levels_min). The LevelsBar
+        # setters permit equality, so this state is reachable by normal
+        # handle dragging; without the guard the division yields nan/inf
+        # and the uint8 cast produces garbage. Fall back to a binary
+        # threshold at levels_min so the display stays sane (pixels above
+        # the threshold render white, at-or-below render black).
+        span = self._levels_max - self._levels_min
+        if span <= 0:
+            frame_scaled = (frame > self._levels_min).astype(np.uint8) * 255
+        else:
+            frame_scaled = (
+                (frame_clamped - self._levels_min) / span * 255
+            ).astype(np.uint8)
 
         # Build a QImage over the uint8 buffer. Format_Grayscale8 is
         # cross-platform safe (QPixmap is typically backed by 32-bit
