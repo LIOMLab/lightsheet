@@ -68,6 +68,12 @@ class AcquisitionPanelWidget(QWidget):
         if self._shell.preview_mode_started:
             self._shell.preview_mode_started = False
             self._shell.ui.pushButton_acqStartPreviewMode.setText("Start Preview Mode")
+            # Disable the button until the worker's finished signal fires
+            # (updateUi_post_preview_mode re-enables all default buttons).
+            # Without this, the user can click "Start" before the worker
+            # exits, spawning a second worker while the first is still
+            # running — both would access the camera concurrently.
+            self._shell.ui.pushButton_acqStartPreviewMode.setEnabled(False)
         else:
             self._shell.close_modes()
             self._shell.preview_mode_started = True
@@ -108,6 +114,11 @@ class AcquisitionPanelWidget(QWidget):
         if self._shell.live_mode_started:
             self._shell.live_mode_started = False
             self._shell.ui.pushButton_acqStartLiveMode.setText("Start Live Mode")
+            # Disable until the worker finishes (updateUi_post_live_mode
+            # re-enables all default buttons). Prevents a restart race
+            # that would spawn a second worker accessing the camera
+            # concurrently with the still-running first worker.
+            self._shell.ui.pushButton_acqStartLiveMode.setEnabled(False)
         else:
             self._shell.close_modes()
             self._shell.live_mode_started = True
@@ -185,6 +196,11 @@ class AcquisitionPanelWidget(QWidget):
         """Start or stop stack mode, depending on the button status"""
         if self._shell.stack_mode_started:
             self._shell.stack_mode_started = False
+            # Disable until the worker finishes (updateUi_post_stack_mode
+            # re-enables all default buttons). Prevents a restart race
+            # that would spawn a second worker accessing the camera
+            # concurrently with the still-running first worker.
+            self._shell.ui.pushButton_acqStartStackMode.setEnabled(False)
         else:
             self._shell.close_modes()
             # Making sure the limits of the volume are set

@@ -397,8 +397,13 @@ class HardwareManager:
         # Refresh-after-action: both status labels reflect the post-stop
         # state immediately (the periodic timers would otherwise lag).
         self._poll_laser_status([0, 1])
+        # L1 readback is instant (staged mW, no serial). L2 (iBeam) readback
+        # is a ~3s serial query — skip it here because stop_lasers() is
+        # called from close_modes() on the GUI thread during E-stop and
+        # closeEvent, where a 3s GUI freeze is a safety-adjacent UX
+        # concern. The periodic timer_laser2_status will refresh the L2
+        # readback on its next tick.
         self._refresh_laser_readback(0)
-        self._refresh_laser_readback(1)
 
     # ------------------------------------------------------------------ #
     # Status poll + readback refresh (emit through shell signals).

@@ -67,10 +67,9 @@ class Controller_MainWindow(QMainWindow):
     """Thin shell for the MesoSPIM Controller — composes 7 per-panel widget
     modules and retains the safety-critical E-stop kill path."""
 
-    # Dictionnary of configurable settings and their default values
-    _cfg_settings: dict[str, str] = {}  # noqa: RUF012
-    _cfg_settings["Units"] = "mm"
-    _cfg_settings["Image File Format"] = "HDF5"
+    # Default configurable settings. Used as the base for the per-instance
+    # cfg_settings dict (deep-copied in __init__ before merging config.ini).
+    _cfg_defaults: dict[str, str] = {"Units": "mm", "Image File Format": "HDF5"}
 
     # Signals
     sig_beep = Signal()
@@ -276,22 +275,17 @@ class Controller_MainWindow(QMainWindow):
         self.ui.plainTextEdit_messageLog.appendPlainText("-- message log --")
 
         # Set configurable settings to default values
-        self.cfg_settings = copy.deepcopy(self._cfg_settings)
+        self.cfg_settings = copy.deepcopy(self._cfg_defaults)
         self.cfg_settings = cfg_read("config.ini", "Controller", self.cfg_settings)
 
-        if str(self.cfg_settings["Units"]) == "mm":
-            self.units = "mm"
-        if (
-            str(self.cfg_settings["Units"]) == "\u03bcm"
-            or str(self.cfg_settings["Units"]) == "um"
-        ):
+        units_cfg = str(self.cfg_settings["Units"])
+        if units_cfg == "\u03bcm" or units_cfg == "um":
             self.units = "\u03bcm"
         else:
             self.units = "mm"
 
-        if str.lower(self.cfg_settings["Image File Format"]) == "hdf5":
-            self.save_format = "hdf5"
-        if str.lower(self.cfg_settings["Image File Format"]) == "tiff":
+        fmt_cfg = str(self.cfg_settings["Image File Format"]).lower()
+        if fmt_cfg == "tiff":
             self.save_format = "tiff"
         else:
             self.save_format = "hdf5"
@@ -557,6 +551,16 @@ class Controller_MainWindow(QMainWindow):
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             self.ui.statusbar.showMessage("Shutting down hardware...")
             self.ui.statusbar.repaint()
+            # Guard: hardware_init may not have run yet (100ms single-shot
+            # timer). If the window is closed before it fires, self.lasers /
+            # self.camera / self.etls / self.timer_imageview /
+            # self.timer_laser2_status are not yet set — skip the hardware
+            # shutdown path entirely (nothing to shut down).
+            if not hasattr(self, "lasers"):
+                self.timer_hardware_init.stop()
+                QApplication.restoreOverrideCursor()
+                event.accept()
+                return
             self.close_modes()
             # Stop the frame_saver QThread BEFORE the acquisition threads so
             # h5py.File.close() completes before the camera/etls close.
@@ -791,6 +795,13 @@ class Controller_MainWindow(QMainWindow):
             "E-STOP actuated — all lasers driven to 0 V and the acquisition "
             "was aborted. Press Arm/Reset, then Arm, to re-enable lasers."
         )
+
+        # 6. The E-stop button is checkable (setCheckable(True) in the .ui).
+        # Clear the checked state so the button does not stay visually
+        # pressed after the momentary action — the actuated state is shown
+        # by the red indicator label + yellow border stylesheet above, not
+        # by the button's checked state.
+        self.pushButton_estop.setChecked(False)
 
     @Slot()
     def updateUi_arm_reset_pressed(self) -> None:

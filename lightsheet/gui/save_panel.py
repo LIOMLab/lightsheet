@@ -129,9 +129,10 @@ class SavePanelWidget(QWidget):
 
     def updateUi_select_directory(self) -> None:
         """Allows the selection of a directory for single scan or stack saving"""
-        options = QFileDialog.Option()
-        options |= QFileDialog.Option.DontResolveSymlinks
-        options |= QFileDialog.Option.ShowDirsOnly
+        options = (
+            QFileDialog.Option.DontResolveSymlinks
+            | QFileDialog.Option.ShowDirsOnly
+        )
         tmp_directory = QFileDialog.getExistingDirectory(
             self._shell, "Choose Directory", self._shell.save_directory, options
         )
@@ -217,6 +218,12 @@ class SavePanelWidget(QWidget):
                     "Saving Images (one for each ETL scan, full)"
                 )
             else:
+                # checkBox_saveStitch (the default "Stitched - No blend"
+                # option) falls through to this branch — it is the
+                # reconstructed_frame save mode. The checkbox is in the
+                # exclusive save_option_button_group but is not explicitly
+                # checked here because it is the implicit default (the
+                # else branch covers it).
                 self._shell._fs.set_files(
                     1, self._shell.save_filename, "singleImage", 1, "reconstructed_frame"  # noqa: E501
                 )
