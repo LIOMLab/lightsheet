@@ -225,7 +225,7 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
         # after the test returns (the 100ms imageview timer + the L2
         # status poll). Guard with getattr — a test that tore these down
         # itself should not fail teardown.
-        for timer_attr in ("timer_imageview", "timer_laser2_status"):
+        for timer_attr in ("timer_hardware_init", "timer_imageview", "timer_laser2_status"):
             timer = getattr(controller, timer_attr, None)
             if timer is not None:
                 timer.stop()
