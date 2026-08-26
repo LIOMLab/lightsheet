@@ -194,7 +194,7 @@ def main() -> int:
     from qdarkstyle.dark.palette import DarkPalette
     from qdarkstyle.light.palette import LightPalette
 
-    from lightsheet.gui.controller import Controller_MainWindow
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
     # Workaround for a nidaqmx 0.6.x Task.__del__ bug: after the context manager
     # closes a Task (close() -> clear()), the internal _saved_name attribute is
@@ -308,10 +308,10 @@ def main() -> int:
     # collaborators for hardware_init. A two-phase init avoids the
     # circular dependency (collaborators need shell as parent/ref, shell
     # needs collaborators for hardware_init).
-    from lightsheet.gui.acquisition_coordinator import AcquisitionCoordinator
-    from lightsheet.gui.frame_saver_controller import FrameSaverController
-    from lightsheet.gui.hardware_manager import HardwareManager
-    from lightsheet.gui.motor_controller import MotorController
+    from lightsheet.gui.coordinators.acquisition_coordinator import AcquisitionCoordinator
+    from lightsheet.gui.coordinators.frame_saver_controller import FrameSaverController
+    from lightsheet.gui.coordinators.hardware_manager import HardwareManager
+    from lightsheet.gui.coordinators.motor_controller import MotorController
 
     controller = Controller_MainWindow(bundle, demo=demo)
     fs = FrameSaverController(bundle, controller)

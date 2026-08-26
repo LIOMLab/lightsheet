@@ -1,4 +1,4 @@
-"""Branch-coverage closure for ``lightsheet.gui.acquisition_coordinator``
+"""Branch-coverage closure for ``lightsheet.gui.coordinators.acquisition_coordinator``
 worker bodies.
 
 The worker methods (preview/live/single/stack mode workers + acquire_scan)
@@ -22,7 +22,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from lightsheet.gui.acquisition_coordinator import AcquisitionCoordinator
+from lightsheet.gui.coordinators.acquisition_coordinator import AcquisitionCoordinator
 from lightsheet.gui.workers import LiveWorker, PreviewWorker, SingleWorker, StackWorker
 from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
 

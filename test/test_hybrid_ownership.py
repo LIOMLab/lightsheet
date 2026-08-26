@@ -94,7 +94,7 @@ def test_panel_internal_widgets_not_on_shell_ui_sample(qtbot, request) -> None:
 def test_shell_owned_objectnames_whitelist_exists() -> None:
     """The controller module defines a SHELL_OWNED_OBJECTNAMES whitelist
     driving the trimmed merge loop."""
-    from lightsheet.gui import controller
+    from lightsheet.gui.shell import controller
 
     assert hasattr(controller, "SHELL_OWNED_OBJECTNAMES")
     whitelist = controller.SHELL_OWNED_OBJECTNAMES
@@ -122,7 +122,7 @@ def test_merge_loop_only_sets_shell_owned_widgets(qtbot, request) -> None:
     panel-internal widget leaks. Reconstruct the merge by iterating each
     panel's ``vars(panel.ui)`` and asserting every attr that would land on
     ``self.ui`` is in SHELL_OWNED_OBJECTNAMES."""
-    from lightsheet.gui import controller
+    from lightsheet.gui.shell import controller
 
     ctrl, _ = _make(qtbot, request)
     whitelist = controller.SHELL_OWNED_OBJECTNAMES
@@ -158,7 +158,7 @@ def test_estop_kill_path_unchanged() -> None:
     merge-loop trim (AGENTS.md §2)."""
     import inspect
 
-    from lightsheet.gui.controller import Controller_MainWindow
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
     src = inspect.getsource(Controller_MainWindow.updateUi_estop_pressed)
     assert "self.lasers" in src

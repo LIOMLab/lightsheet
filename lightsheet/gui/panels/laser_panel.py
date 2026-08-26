@@ -25,10 +25,10 @@ import typing
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QMessageBox, QWidget
 
-from lightsheet.gui.ui_laser_panel import Ui_LaserPanel
+from lightsheet.gui.panels.ui_laser_panel import Ui_LaserPanel
 
 if typing.TYPE_CHECKING:
-    from lightsheet.gui.controller import Controller_MainWindow
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
 class LaserPanelWidget(QWidget):

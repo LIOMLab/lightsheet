@@ -100,7 +100,7 @@ def test_controller_persists_stack_params_on_close(qtbot, request, tmp_path) -> 
 
     # Patch cfg_write to capture the written dict.
     written: list[tuple] = []
-    with patch("lightsheet.gui.controller.cfg_write",
+    with patch("lightsheet.gui.shell.controller.cfg_write",
                lambda *a, **k: written.append((a, k))):
         ctrl._save_stack_params()
     assert len(written) == 1

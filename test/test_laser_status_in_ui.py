@@ -21,8 +21,8 @@ from pathlib import Path
 
 from _helpers.controller_fixture import make_controller
 
-_CONTROLLER_PATH = Path(__file__).resolve().parents[1] / "lightsheet" / "gui" / "controller.py"
-_UI_PATH = Path(__file__).resolve().parents[1] / "lightsheet" / "gui" / "ui_laser_panel.ui"
+_CONTROLLER_PATH = Path(__file__).resolve().parents[1] / "lightsheet" / "gui" / "shell" / "controller.py"
+_UI_PATH = Path(__file__).resolve().parents[1] / "lightsheet" / "gui" / "panels" / "ui_laser_panel.ui"
 
 
 def _controller_source() -> str:
@@ -143,7 +143,7 @@ def test_laser_panel_slots_reference_panel_local_ui() -> None:
     """laser_panel.py:updateUi_laser_status / updateUi_laser_readback must
     reference ``self.ui.label_laser*`` (panel-local), not
     ``self._shell.label_laser*`` (the old cross-panel reach)."""
-    src = (Path(__file__).resolve().parents[1] / "lightsheet" / "gui" / "laser_panel.py").read_text(
+    src = (Path(__file__).resolve().parents[1] / "lightsheet" / "gui" / "panels" / "laser_panel.py").read_text(
         encoding="utf-8"
     )
     # The status slot must use the panel-local ui attribute.

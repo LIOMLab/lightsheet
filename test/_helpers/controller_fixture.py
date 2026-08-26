@@ -141,11 +141,11 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
     hardware_init timers are also stopped at teardown so no pending
     timer callbacks fire after the test returns.
     """
-    from lightsheet.gui.acquisition_coordinator import AcquisitionCoordinator
-    from lightsheet.gui.controller import Controller_MainWindow
-    from lightsheet.gui.frame_saver_controller import FrameSaverController
-    from lightsheet.gui.hardware_manager import HardwareManager
-    from lightsheet.gui.motor_controller import MotorController
+    from lightsheet.gui.coordinators.acquisition_coordinator import AcquisitionCoordinator
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+    from lightsheet.gui.coordinators.frame_saver_controller import FrameSaverController
+    from lightsheet.gui.coordinators.hardware_manager import HardwareManager
+    from lightsheet.gui.coordinators.motor_controller import MotorController
 
     bundle = make_bundle()
     # Start the QMessageBox.question patch WITHOUT a `with` block so it

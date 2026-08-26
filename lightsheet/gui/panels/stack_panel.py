@@ -21,11 +21,11 @@ import typing
 import numpy as np
 from PySide6.QtWidgets import QWidget
 
-from lightsheet.gui.acquisition_table_manager import AcquisitionTableManager
-from lightsheet.gui.ui_stack_panel import Ui_StackPanel
+from lightsheet.gui.panels.acquisition_table_manager import AcquisitionTableManager
+from lightsheet.gui.panels.ui_stack_panel import Ui_StackPanel
 
 if typing.TYPE_CHECKING:
-    from lightsheet.gui.controller import Controller_MainWindow
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
 class StackPanelWidget(QWidget):

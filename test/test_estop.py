@@ -92,7 +92,7 @@ def test_worker_poll_logic_breaks_on_set() -> None:
 def test_hardware_manager_has_no_estop_method() -> None:
     """HardwareManager must NOT declare an estop/kill/e_stop method — the
     E-stop kill path stays in the shell (safety anti-pattern)."""
-    from lightsheet.gui.hardware_manager import HardwareManager
+    from lightsheet.gui.coordinators.hardware_manager import HardwareManager
 
     assert not hasattr(HardwareManager, "estop"), (
         "HardwareManager must NOT declare an estop method (safety anti-pattern) "
@@ -120,7 +120,7 @@ def test_hardware_manager_has_no_estop_method() -> None:
 def test_motor_controller_has_no_estop_method() -> None:
     """MotorController must NOT declare an estop/kill/e_stop method — motion
     collaborators are not safety kill-path owners (safety anti-pattern)."""
-    from lightsheet.gui.motor_controller import MotorController
+    from lightsheet.gui.coordinators.motor_controller import MotorController
 
     assert not hasattr(MotorController, "estop"), (
         "MotorController must NOT declare an estop method (safety anti-pattern) "

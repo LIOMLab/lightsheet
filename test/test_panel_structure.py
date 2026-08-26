@@ -40,7 +40,7 @@ from PySide6.QtCore import QObject  # noqa: E402
 
 def test_laser_panel_instantiates(qtbot) -> None:
     """LaserPanelWidget exposes the per-laser toggle + amplitude controls."""
-    from lightsheet.gui.laser_panel import LaserPanelWidget
+    from lightsheet.gui.panels.laser_panel import LaserPanelWidget
 
     panel = LaserPanelWidget(Mock())
     qtbot.addWidget(panel)
@@ -59,7 +59,7 @@ def test_laser_panel_instantiates(qtbot) -> None:
 
 def test_motor_panel_instantiates(qtbot) -> None:
     """MotorPanelWidget exposes the sample + camera movement group boxes."""
-    from lightsheet.gui.motor_panel import MotorPanelWidget
+    from lightsheet.gui.panels.motor_panel import MotorPanelWidget
 
     panel = MotorPanelWidget(Mock())
     qtbot.addWidget(panel)
@@ -73,7 +73,7 @@ def test_motor_panel_instantiates(qtbot) -> None:
 
 def test_acquisition_panel_instantiates(qtbot) -> None:
     """AcquisitionPanelWidget exposes the four mode buttons."""
-    from lightsheet.gui.acquisition_panel import AcquisitionPanelWidget
+    from lightsheet.gui.panels.acquisition_panel import AcquisitionPanelWidget
 
     panel = AcquisitionPanelWidget(Mock())
     qtbot.addWidget(panel)
@@ -88,7 +88,7 @@ def test_acquisition_panel_instantiates(qtbot) -> None:
 
 def test_save_panel_instantiates(qtbot) -> None:
     """SavePanelWidget exposes the file-manager group box + directory picker."""
-    from lightsheet.gui.save_panel import SavePanelWidget
+    from lightsheet.gui.panels.save_panel import SavePanelWidget
 
     panel = SavePanelWidget(Mock())
     qtbot.addWidget(panel)
@@ -103,7 +103,7 @@ def test_save_panel_instantiates(qtbot) -> None:
 
 def test_stack_panel_instantiates(qtbot) -> None:
     """StackPanelWidget exposes the stack setup controls."""
-    from lightsheet.gui.stack_panel import StackPanelWidget
+    from lightsheet.gui.panels.stack_panel import StackPanelWidget
 
     panel = StackPanelWidget(Mock())
     qtbot.addWidget(panel)
@@ -121,7 +121,7 @@ def test_stack_panel_instantiates(qtbot) -> None:
 
 def test_scan_panel_instantiates(qtbot) -> None:
     """ScanPanelWidget exposes the ETL/Galvo settings container."""
-    from lightsheet.gui.scan_panel import ScanPanelWidget
+    from lightsheet.gui.panels.scan_panel import ScanPanelWidget
 
     panel = ScanPanelWidget(Mock())
     qtbot.addWidget(panel)
@@ -134,7 +134,7 @@ def test_scan_panel_instantiates(qtbot) -> None:
 
 def test_calibration_panel_instantiates(qtbot) -> None:
     """CalibrationPanelWidget exposes the calibration controls container."""
-    from lightsheet.gui.calibration_panel import CalibrationPanelWidget
+    from lightsheet.gui.panels.calibration_panel import CalibrationPanelWidget
 
     panel = CalibrationPanelWidget(Mock())
     qtbot.addWidget(panel)

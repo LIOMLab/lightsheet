@@ -16,7 +16,7 @@ pytest.importorskip("PySide6")
 
 def test_image_view_render_nonzero(qtbot) -> None:
     """SC2: native ImageView renders non-zero pixel data after setImage."""
-    from lightsheet.gui.image_view import ImageView
+    from lightsheet.gui.panels.image_view import ImageView
 
     view = ImageView()
     qtbot.addWidget(view)
@@ -66,7 +66,7 @@ def test_scrollbar_policy_always_off(qtbot) -> None:
     resize→fitInView→scrollbar-toggle→resize recursion."""
     from PySide6.QtCore import Qt
 
-    from lightsheet.gui.image_view import ImageView
+    from lightsheet.gui.panels.image_view import ImageView
 
     view = ImageView()
     qtbot.addWidget(view)
@@ -82,7 +82,7 @@ def test_scrollbar_policy_always_off(qtbot) -> None:
 def test_scene_rect_at_construction(qtbot) -> None:
     """ImageView has a non-empty sceneRect at construction so fitInView
     has geometry before the first frame (no tiny black square)."""
-    from lightsheet.gui.image_view import ImageView
+    from lightsheet.gui.panels.image_view import ImageView
 
     view = ImageView()
     qtbot.addWidget(view)
@@ -95,7 +95,7 @@ def test_scene_rect_at_construction(qtbot) -> None:
 def test_min_size_floor(qtbot) -> None:
     """ImageView minimum size is 320x240 (dropped from 700x700) so it can
     actually shrink on small screens."""
-    from lightsheet.gui.image_view import ImageView
+    from lightsheet.gui.panels.image_view import ImageView
 
     view = ImageView()
     qtbot.addWidget(view)
@@ -113,7 +113,7 @@ def test_resize_refits_pixmap(qtbot) -> None:
     on every resize (no tiny black square)."""
     import numpy as np
 
-    from lightsheet.gui.image_view import ImageView
+    from lightsheet.gui.panels.image_view import ImageView
 
     view = ImageView()
     view.resize(200, 200)
@@ -149,7 +149,7 @@ def test_resize_event_no_recursion(qtbot) -> None:
     widget survives a resize without hanging or crashing."""
     import numpy as np
 
-    from lightsheet.gui.image_view import ImageView
+    from lightsheet.gui.panels.image_view import ImageView
 
     view = ImageView()
     view.resize(400, 300)
@@ -175,7 +175,7 @@ def test_levels_driven_clamp(qtbot) -> None:
     """set_levels updates the display window; a frame with values 0-4000
     displayed with levels 1000-3000 clamps to that window (pixels below
     1000 render black, pixels above 3000 render white)."""
-    from lightsheet.gui.image_view import ImageView
+    from lightsheet.gui.panels.image_view import ImageView
 
     view = ImageView()
     qtbot.addWidget(view)

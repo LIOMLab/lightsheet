@@ -32,7 +32,7 @@ from unittest.mock import patch
 
 from _helpers.controller_fixture import make_controller
 
-_LASER_PANEL_PATH = Path(__file__).resolve().parents[1] / "lightsheet" / "gui" / "laser_panel.py"
+_LASER_PANEL_PATH = Path(__file__).resolve().parents[1] / "lightsheet" / "gui" / "panels" / "laser_panel.py"
 
 
 # --------------------------------------------------------------------------- #
@@ -66,7 +66,7 @@ def test_optimistic_echo_on_when_turning_on(qtbot, request) -> None:
     assert label.text() == "\u25cf OFF"
 
     spawned = {"did": False}
-    real_thread = __import__("lightsheet.gui.laser_panel", fromlist=["threading"]).threading
+    real_thread = __import__("lightsheet.gui.panels.laser_panel", fromlist=["threading"]).threading
 
     def _fake_thread(*args, **kwargs):
         spawned["did"] = True
@@ -97,7 +97,7 @@ def test_optimistic_echo_off_when_turning_off(qtbot, request) -> None:
     label.setText("\u25cf ON")
     label.setStyleSheet("color: #34C759; font-weight: bold;")
 
-    real_thread = __import__("lightsheet.gui.laser_panel", fromlist=["threading"]).threading
+    real_thread = __import__("lightsheet.gui.panels.laser_panel", fromlist=["threading"]).threading
 
     def _fake_thread(*args, **kwargs):
         class _T:
@@ -143,7 +143,7 @@ def _patch_question(return_value):
     """Patch QMessageBox.question (the modal helper used by the dialog gate)
     to return the supplied value without showing a popup."""
     return patch(
-        "lightsheet.gui.laser_panel.QMessageBox.question",
+        "lightsheet.gui.panels.laser_panel.QMessageBox.question",
         return_value=return_value,
     )
 
@@ -164,7 +164,7 @@ def test_first_energize_dialog_appears_first_time(qtbot, request) -> None:
         captured["text"] = (title, text)
         return QMessageBox.StandardButton.Yes  # Energize
 
-    real_thread = __import__("lightsheet.gui.laser_panel", fromlist=["threading"]).threading
+    real_thread = __import__("lightsheet.gui.panels.laser_panel", fromlist=["threading"]).threading
 
     def _fake_thread(*a, **k):
         class _T:
@@ -172,7 +172,7 @@ def test_first_energize_dialog_appears_first_time(qtbot, request) -> None:
                 pass
         return _T()
 
-    with patch("lightsheet.gui.laser_panel.QMessageBox.question", _capture), \
+    with patch("lightsheet.gui.panels.laser_panel.QMessageBox.question", _capture), \
          patch.object(real_thread, "Thread", _fake_thread):
         btn.click()
 
@@ -196,7 +196,7 @@ def test_first_energize_cancel_reverts_button_and_does_not_energize(qtbot, reque
     ctrl._laser1_first_energize_done = False
 
     spawned = {"did": False}
-    real_thread = __import__("lightsheet.gui.laser_panel", fromlist=["threading"]).threading
+    real_thread = __import__("lightsheet.gui.panels.laser_panel", fromlist=["threading"]).threading
 
     def _fake_thread(*a, **k):
         spawned["did"] = True
@@ -207,7 +207,7 @@ def test_first_energize_cancel_reverts_button_and_does_not_energize(qtbot, reque
 
     from PySide6.QtWidgets import QMessageBox
 
-    with patch("lightsheet.gui.laser_panel.QMessageBox.question",
+    with patch("lightsheet.gui.panels.laser_panel.QMessageBox.question",
                return_value=QMessageBox.StandardButton.Cancel), \
          patch.object(real_thread, "Thread", _fake_thread):
         btn.click()
@@ -227,7 +227,7 @@ def test_first_energize_dont_warn_again_sets_flag(qtbot, request) -> None:
     ctrl._laser1_first_energize_done = False
 
     call_count = {"n": 0}
-    real_thread = __import__("lightsheet.gui.laser_panel", fromlist=["threading"]).threading
+    real_thread = __import__("lightsheet.gui.panels.laser_panel", fromlist=["threading"]).threading
 
     def _fake_thread(*a, **k):
         class _T:
@@ -244,7 +244,7 @@ def test_first_energize_dont_warn_again_sets_flag(qtbot, request) -> None:
         call_count["n"] += 1
         return QMessageBox.StandardButton.Discard
 
-    with patch("lightsheet.gui.laser_panel.QMessageBox.question", _question), \
+    with patch("lightsheet.gui.panels.laser_panel.QMessageBox.question", _question), \
          patch.object(real_thread, "Thread", _fake_thread):
         btn.click()  # first energize — dialog shown, "don't warn again"
         # Reset the button to unchecked so the second click is again a
@@ -266,7 +266,7 @@ def test_first_energize_energize_proceeds(qtbot, request) -> None:
     ctrl._laser1_first_energize_done = False
 
     spawned = {"did": False}
-    real_thread = __import__("lightsheet.gui.laser_panel", fromlist=["threading"]).threading
+    real_thread = __import__("lightsheet.gui.panels.laser_panel", fromlist=["threading"]).threading
 
     def _fake_thread(*a, **k):
         spawned["did"] = True
@@ -277,7 +277,7 @@ def test_first_energize_energize_proceeds(qtbot, request) -> None:
 
     from PySide6.QtWidgets import QMessageBox
 
-    with patch("lightsheet.gui.laser_panel.QMessageBox.question",
+    with patch("lightsheet.gui.panels.laser_panel.QMessageBox.question",
                return_value=QMessageBox.StandardButton.Yes), \
          patch.object(real_thread, "Thread", _fake_thread):
         btn.click()

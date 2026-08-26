@@ -1,4 +1,4 @@
-"""Branch-coverage closure for ``lightsheet.gui.controller`` GUI-thread
+"""Branch-coverage closure for ``lightsheet.gui.shell.controller`` GUI-thread
 slots, via real construction.
 
 The real ``Controller_MainWindow`` is constructed via ``make_controller``
@@ -126,14 +126,14 @@ def test_updateUi_show_hide_message_log_hidden(qtbot, request) -> None:
 
 def test_open_help_calls_webbrowser(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    with patch("lightsheet.gui.controller.webbrowser.open_new") as mock_open:
+    with patch("lightsheet.gui.shell.controller.webbrowser.open_new") as mock_open:
         ctrl.open_help()
     mock_open.assert_called_once()
 
 
 def test_open_properties_dialog(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    with patch("lightsheet.gui.controller.Properties_Dialog") as MockDialog:
+    with patch("lightsheet.gui.shell.controller.Properties_Dialog") as MockDialog:
         ctrl.open_properties_dialog()
     mock_dlg = MockDialog.return_value
     mock_dlg.setAttribute.assert_called_once()
@@ -360,7 +360,7 @@ def test_updateUi_laser2_amplitude(qtbot, request) -> None:
 def test_apply_laser1_amplitude(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.laser_panel.ui.doubleSpinBox_laserOneAmplitude.setValue(50.0)
-    with patch("lightsheet.gui.laser_panel.threading.Thread") as MockThread:
+    with patch("lightsheet.gui.panels.laser_panel.threading.Thread") as MockThread:
         MockThread.return_value.start = Mock()
         ctrl.laser_panel._apply_laser1_amplitude()
         MockThread.return_value.start.assert_called_once()
@@ -369,7 +369,7 @@ def test_apply_laser1_amplitude(qtbot, request) -> None:
 def test_apply_laser2_amplitude(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.laser_panel.ui.doubleSpinBox_laserTwoAmplitude.setValue(75.0)
-    with patch("lightsheet.gui.laser_panel.threading.Thread") as MockThread:
+    with patch("lightsheet.gui.panels.laser_panel.threading.Thread") as MockThread:
         MockThread.return_value.start = Mock()
         ctrl.laser_panel._apply_laser2_amplitude()
         MockThread.return_value.start.assert_called_once()
@@ -377,7 +377,7 @@ def test_apply_laser2_amplitude(qtbot, request) -> None:
 
 def test_laser1_toggle_button(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    with patch("lightsheet.gui.laser_panel.threading.Thread") as MockThread:
+    with patch("lightsheet.gui.panels.laser_panel.threading.Thread") as MockThread:
         MockThread.return_value.start = Mock()
         ctrl.laser_panel.laser1_toggle_button()
         MockThread.return_value.start.assert_called_once()
@@ -385,7 +385,7 @@ def test_laser1_toggle_button(qtbot, request) -> None:
 
 def test_laser2_toggle_button(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    with patch("lightsheet.gui.laser_panel.threading.Thread") as MockThread:
+    with patch("lightsheet.gui.panels.laser_panel.threading.Thread") as MockThread:
         MockThread.return_value.start = Mock()
         ctrl.laser_panel.laser2_toggle_button()
         MockThread.return_value.start.assert_called_once()
@@ -489,7 +489,7 @@ def test_updateUi_stack_mode_button_start_valid(qtbot, request) -> None:
     ctrl.stack_first_plane_set = True
     ctrl.stack_last_plane_set = True
     ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
-    with patch("lightsheet.gui.acquisition_panel.QMessageBox") as MockMsg:
+    with patch("lightsheet.gui.panels.acquisition_panel.QMessageBox") as MockMsg:
         ctrl.acquisition_panel.updateUi_stack_mode_button()
     assert ctrl.stack_mode_started is True
 
@@ -502,7 +502,7 @@ def test_updateUi_stack_mode_button_start_invalid(qtbot, request) -> None:
     beeps: list[None] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
     ctrl.sig_beep.connect(lambda: beeps.append(None))
-    with patch("lightsheet.gui.acquisition_panel.QMessageBox") as MockMsg:
+    with patch("lightsheet.gui.panels.acquisition_panel.QMessageBox") as MockMsg:
         MockMsg.Ok = 1
         MockMsg.warning.return_value = MockMsg.Ok
         ctrl.acquisition_panel.updateUi_stack_mode_button()
@@ -522,7 +522,7 @@ def test_updateUi_stack_mode_button_start_reverse_direction(qtbot, request) -> N
     ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(100.0)
     ctrl.stack_panel.ui.doubleSpinBox_acqLastPlane.setValue(0.0)
     ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
-    with patch("lightsheet.gui.acquisition_panel.QMessageBox") as MockMsg:
+    with patch("lightsheet.gui.panels.acquisition_panel.QMessageBox") as MockMsg:
         ctrl.acquisition_panel.updateUi_stack_mode_button()
     assert ctrl.stack_step == -10.0
 
@@ -536,7 +536,7 @@ def test_updateUi_stack_mode_button_start_nosave_yes(qtbot, request) -> None:
     ctrl.stack_first_plane_set = True
     ctrl.stack_last_plane_set = True
     ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
-    with patch("lightsheet.gui.acquisition_panel.QMessageBox") as MockMsg:
+    with patch("lightsheet.gui.panels.acquisition_panel.QMessageBox") as MockMsg:
         MockMsg.Yes = 1
         MockMsg.No = 0
         MockMsg.question.return_value = MockMsg.Yes
@@ -662,7 +662,7 @@ def test_updateUi_save_single_image_not_allowed(qtbot, request) -> None:
     beeps: list[None] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
     ctrl.sig_beep.connect(lambda: beeps.append(None))
-    with patch("lightsheet.gui.save_panel.QMessageBox") as MockMsg:
+    with patch("lightsheet.gui.panels.save_panel.QMessageBox") as MockMsg:
         MockMsg.Ok = 1
         MockMsg.warning.return_value = MockMsg.Ok
         ctrl.save_panel.updateUi_save_single_image()
@@ -735,7 +735,7 @@ def test_updateUi_select_directory_valid(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.save_directory = "/tmp"
     with patch(
-        "lightsheet.gui.save_panel.QFileDialog.getExistingDirectory",
+        "lightsheet.gui.panels.save_panel.QFileDialog.getExistingDirectory",
         return_value="/new/dir",
     ):
         ctrl.save_panel.updateUi_select_directory()
@@ -746,7 +746,7 @@ def test_updateUi_select_directory_empty(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.save_directory = ""
     with patch(
-        "lightsheet.gui.save_panel.QFileDialog.getExistingDirectory",
+        "lightsheet.gui.panels.save_panel.QFileDialog.getExistingDirectory",
         return_value="",
     ):
         ctrl.save_panel.updateUi_select_directory()

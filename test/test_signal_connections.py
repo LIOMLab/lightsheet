@@ -29,7 +29,7 @@ def test_init_has_no_lambda_collaborator_connections() -> None:
     ``lambda: self._`` pattern in its ``.connect(`` calls — the
     collaborator-delegating lambdas have been moved to
     ``wire_collaborators()`` as bare bound-method connections."""
-    import lightsheet.gui.controller as controller_mod
+    import lightsheet.gui.shell.controller as controller_mod
 
     init_source = inspect.getsource(controller_mod.Controller_MainWindow.__init__)
     # The lambda-collaborator pattern must not appear in __init__.
@@ -39,7 +39,7 @@ def test_init_has_no_lambda_collaborator_connections() -> None:
 
 def test_wire_collaborators_exists() -> None:
     """``Controller_MainWindow`` has a ``wire_collaborators`` method."""
-    import lightsheet.gui.controller as controller_mod
+    import lightsheet.gui.shell.controller as controller_mod
 
     assert hasattr(controller_mod.Controller_MainWindow, "wire_collaborators")
     assert callable(

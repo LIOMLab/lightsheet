@@ -26,12 +26,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, QObject, QThread, Signal, Slot
+from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
 
 from lightsheet.hal.bundle import DeviceBundle
 
 if TYPE_CHECKING:
-    from lightsheet.gui.controller import Controller_MainWindow
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 logger = logging.getLogger(__name__)
 

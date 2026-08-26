@@ -20,10 +20,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from lightsheet.gui.ui_save_panel import Ui_SavePanel
+from lightsheet.gui.panels.ui_save_panel import Ui_SavePanel
 
 if typing.TYPE_CHECKING:
-    from lightsheet.gui.controller import Controller_MainWindow
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
 class SavePanelWidget(QWidget):

@@ -80,7 +80,7 @@ def test_estop_slot_lives_only_in_shell() -> None:
     regression: the lock-free GUI-thread kill path must have a single owner
     (the shell), per AGENTS.md §2.
     """
-    from lightsheet.gui.controller import Controller_MainWindow
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
     # Positive control — the shell MUST own the kill-path slot.
     assert hasattr(Controller_MainWindow, "updateUi_estop_pressed"), (
@@ -90,11 +90,11 @@ def test_estop_slot_lives_only_in_shell() -> None:
 
     # Negative control — no per-panel module may define the kill-path slot.
     for name in _PANEL_MODULE_NAMES:
-        mod = importlib.import_module(f"lightsheet.gui.{name}")
+        mod = importlib.import_module(f"lightsheet.gui.panels.{name}")
         assert not hasattr(mod, "updateUi_estop_pressed"), (
-            f"lightsheet.gui.{name} defines updateUi_estop_pressed — the "
+            f"lightsheet.gui.panels.{name} defines updateUi_estop_pressed — the "
             "E-stop kill-path slot must live ONLY in the shell "
-            "(lightsheet/gui/controller.py), lock-free on the GUI thread "
+            "(lightsheet/gui/shell/controller.py), lock-free on the GUI thread "
             "(AGENTS.md §2). A panel owning the kill path is a safety "
             "regression."
         )
@@ -124,12 +124,12 @@ def test_monolithic_ui_controller_deleted_and_panels_exist() -> None:
 
     # The 7 per-panel modules + the shell must import cleanly.
     for name in _PANEL_MODULE_NAMES:
-        importlib.import_module(f"lightsheet.gui.{name}")
-    importlib.import_module("lightsheet.gui.ui_shell")
+        importlib.import_module(f"lightsheet.gui.panels.{name}")
+    importlib.import_module("lightsheet.gui.shell.ui_shell")
 
     # The native ImageView (MIG-08) must exist on disk.
-    assert (_GUI_DIR / "image_view.py").exists(), (
-        "lightsheet/gui/image_view.py must exist — the native Qt6 "
+    assert (_GUI_DIR / "panels" / "image_view.py").exists(), (
+        "lightsheet/gui/panels/image_view.py must exist — the native Qt6 "
         "ImageView replaced the dropped pyqtgraph ImageView (MIG-08)."
     )
 
@@ -203,7 +203,7 @@ def test_laser_panel_daemons_are_threading_thread() -> None:
     ``estop_event`` before energizing, and a stuck toggle thread must never
     delay the kill path (AGENTS.md §2). The 4 daemons are: laser1 amplitude
     write, laser2 amplitude write, laser1 toggle, laser2 toggle."""
-    source = (_GUI_DIR / "laser_panel.py").read_text(encoding="utf-8")
+    source = (_GUI_DIR / "panels" / "laser_panel.py").read_text(encoding="utf-8")
     count = source.count("threading.Thread(")
     assert count >= 4, (
         f"laser_panel.py must create the 4 laser daemon threads via "

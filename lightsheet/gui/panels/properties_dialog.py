@@ -15,10 +15,10 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QDialog
 
-from lightsheet.gui.ui_properties import Ui_Properties
+from lightsheet.gui.panels.ui_properties import Ui_Properties
 
 if TYPE_CHECKING:
-    from lightsheet.gui.controller import Controller_MainWindow
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
 class Properties_Dialog(QDialog):

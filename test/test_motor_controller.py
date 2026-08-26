@@ -24,7 +24,7 @@ import pytest
 
 pytest.importorskip("PySide6")  # MotorController is constructed with a QObject shell
 
-from lightsheet.gui.motor_controller import MotorController
+from lightsheet.gui.coordinators.motor_controller import MotorController
 from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
 
 

@@ -107,7 +107,7 @@ def test_main_demo_mode_returns_app_exec_exit_code(
 
     # Mock the controller module so Controller_MainWindow is a Mock that
     # does not construct a real Qt window. main() does
-    # `from lightsheet.gui.controller import Controller_MainWindow` inside
+    # `from lightsheet.gui.shell.controller import Controller_MainWindow` inside
     # the function body, so patch sys.modules before calling main().
     # The mock controller must be a QObject subclass so FrameSaverController
     # can parent FrameSaver/FrameViewer to it.
@@ -159,9 +159,9 @@ def test_main_demo_mode_returns_app_exec_exit_code(
         def closeEvent(self, event):
             pass
 
-    mock_controller_mod = types.ModuleType("lightsheet.gui.controller")
+    mock_controller_mod = types.ModuleType("lightsheet.gui.shell.controller")
     mock_controller_mod.Controller_MainWindow = _MockController
-    monkeypatch.setitem(sys.modules, "lightsheet.gui.controller", mock_controller_mod)
+    monkeypatch.setitem(sys.modules, "lightsheet.gui.shell.controller", mock_controller_mod)
 
     # Replace QApplication with a pure-Python fake so main()'s
     # ``QApplication(sys.argv)`` call doesn't construct a real C++

@@ -16,13 +16,13 @@ from __future__ import annotations
 import typing
 
 from PySide6.QtCore import QThread, Slot
-from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton, QWidget
+from PySide6.QtWidgets import QMessageBox, QPushButton, QWidget
 
-from lightsheet.gui.ui_acquisition_panel import Ui_AcquisitionPanel
+from lightsheet.gui.panels.ui_acquisition_panel import Ui_AcquisitionPanel
 from lightsheet.gui.workers import LiveWorker, PreviewWorker, SingleWorker, StackWorker
 
 if typing.TYPE_CHECKING:
-    from lightsheet.gui.controller import Controller_MainWindow
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
 class AcquisitionPanelWidget(QWidget):
@@ -286,21 +286,24 @@ class AcquisitionPanelWidget(QWidget):
         thread before constructing the worker (AGENTS.md §11) so the
         worker thread never reaches into the shell's ui.*.
         """
-        # If a previous stack thread is still running (e.g. the queue loop
-        # re-entering for the next row), drain it before overwriting the
-        # reference so no QThread is leaked. The worker's finished signal
-        # already queued thread.quit(); this pumps the event loop so the
-        # queued quit lands and the thread reaps deterministically.
+        # Reuse the same QThread across queue rows instead of constructing
+        # a new one per row. Constructing + destroying a QThread C++ object
+        # while the previous worker's deleteLater is still pending races
+        # the C++ destructors and segfaults under xdist. A QThread can be
+        # start()ed again after quit()+wait() returns, so we keep the
+        # thread object alive for the controller's lifetime and only
+        # replace the per-row worker (a plain Python object whose
+        # finished signal drives thread.quit each row).
         prev_thread = getattr(self._shell, "_stack_thread", None)
         if prev_thread is not None and prev_thread.isRunning():
             prev_thread.quit()
-            app = QApplication.instance()
-            deadline = 2000
-            while prev_thread.isRunning() and deadline > 0:
-                if app is not None:
-                    app.processEvents()
-                prev_thread.wait(20)
-                deadline -= 20
+            prev_thread.wait(5000)
+        # If the thread was never created (first stack ever) or was
+        # destroyed (teardown), construct a fresh one; otherwise reuse it.
+        if prev_thread is None:
+            self._shell._stack_thread = QThread()
+        else:
+            self._shell._stack_thread = prev_thread
 
         # B-03: pre-sample the save-option widgets on the GUI thread
         # BEFORE constructing the worker (AGENTS.md §11).
@@ -309,16 +312,41 @@ class AcquisitionPanelWidget(QWidget):
         save_all_crop = self._shell.save_panel.ui.checkBox_saveAllCrop.isChecked()
         save_all_full = self._shell.save_panel.ui.checkBox_saveAllFull.isChecked()
 
-        # Spawn the stack worker on a QThread (moveToThread pattern).
+        # Disconnect the previous worker's signals so its finished→quit
+        # can't fire the reused thread a second time and its started→run
+        # can't double-fire when the reused thread starts for the new row.
+        prev_worker = getattr(self._shell, "_stack_worker", None)
+        if prev_worker is not None:
+            try:
+                prev_worker.finished.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+
+        # Spawn the stack worker on the (reused) QThread (moveToThread
+        # pattern). A new worker per row is fine — it's a Python object
+        # whose C++ side is just QObject, torn down by deleteLater on
+        # thread.finished without racing another QThread destructor.
         self._shell._stack_worker = StackWorker(
             self._shell._bundle, self._shell._hw, self._shell,
             save_desc, save_blend, save_all_crop, save_all_full,
         )
-        self._shell._stack_thread = QThread()
         self._shell._stack_worker.moveToThread(self._shell._stack_thread)
+        # When reusing the thread (2nd+ queue row), disconnect the prior
+        # started→run so the reused thread's started only invokes this
+        # row's run. Skip on the first spawn — no prior connection exists
+        # and disconnect() would warn.
+        if prev_thread is not None:
+            try:
+                self._shell._stack_thread.started.disconnect()
+            except (TypeError, RuntimeError):
+                pass
         self._shell._stack_thread.started.connect(self._shell._stack_worker.run)
         self._shell._stack_worker.finished.connect(self.updateUi_post_stack_mode)
         self._shell._stack_worker.finished.connect(self._shell._stack_thread.quit)
+        # thread.finished→worker.deleteLater: this fires each row (the
+        # thread quits per row), reaping that row's worker. The
+        # connection is per-worker (queued before the row starts), so it
+        # only affects the current row's worker.
         self._shell._stack_thread.finished.connect(self._shell._stack_worker.deleteLater)
         self._shell._stack_thread.start()
         return self._shell._stack_worker

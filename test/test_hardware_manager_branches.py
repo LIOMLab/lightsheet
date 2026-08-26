@@ -22,7 +22,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from lightsheet.gui.hardware_manager import HardwareManager
+from lightsheet.gui.coordinators.hardware_manager import HardwareManager
 from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
 
 

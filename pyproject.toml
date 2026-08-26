@@ -40,25 +40,25 @@ required-environments = ["sys_platform == 'win32'", "sys_platform == 'darwin'"]
 
 [tool.ruff]
 extend-exclude = [
-    "lightsheet/gui/ui_properties.py",
+    "lightsheet/gui/panels/ui_properties.py",
     # 7B generated per-panel .ui/.qrc files (pyside6-uic/pyside6-rcc output).
     # Pre-registered so 7B regen does not trip ruff.
-    "lightsheet/gui/ui_laser_panel.py",
-    "lightsheet/gui/ui_motor_panel.py",
-    "lightsheet/gui/ui_acquisition_panel.py",
-    "lightsheet/gui/ui_save_panel.py",
-    "lightsheet/gui/ui_stack_panel.py",
-    "lightsheet/gui/ui_scan_panel.py",
-    "lightsheet/gui/ui_calibration_panel.py",
-    "lightsheet/gui/ui_shell.py",
-    "lightsheet/gui/ui_laser_panel_rc.py",
-    "lightsheet/gui/ui_motor_panel_rc.py",
-    "lightsheet/gui/ui_acquisition_panel_rc.py",
-    "lightsheet/gui/ui_save_panel_rc.py",
-    "lightsheet/gui/ui_stack_panel_rc.py",
-    "lightsheet/gui/ui_scan_panel_rc.py",
-    "lightsheet/gui/ui_calibration_panel_rc.py",
-    "lightsheet/gui/ui_shell_rc.py",
+    "lightsheet/gui/panels/ui_laser_panel.py",
+    "lightsheet/gui/panels/ui_motor_panel.py",
+    "lightsheet/gui/panels/ui_acquisition_panel.py",
+    "lightsheet/gui/panels/ui_save_panel.py",
+    "lightsheet/gui/panels/ui_stack_panel.py",
+    "lightsheet/gui/panels/ui_scan_panel.py",
+    "lightsheet/gui/panels/ui_calibration_panel.py",
+    "lightsheet/gui/shell/ui_shell.py",
+    "lightsheet/gui/panels/ui_laser_panel_rc.py",
+    "lightsheet/gui/panels/ui_motor_panel_rc.py",
+    "lightsheet/gui/panels/ui_acquisition_panel_rc.py",
+    "lightsheet/gui/panels/ui_save_panel_rc.py",
+    "lightsheet/gui/panels/ui_stack_panel_rc.py",
+    "lightsheet/gui/panels/ui_scan_panel_rc.py",
+    "lightsheet/gui/panels/ui_calibration_panel_rc.py",
+    "lightsheet/gui/shell/ui_shell_rc.py",
     "test/axial_resolution.py",
     "test/convert_tiff_to_hdf5.py",
     "test/daqmx.py",
@@ -127,23 +127,23 @@ source = ["lightsheet"]
 # are measured.
 omit = [
     "lightsheet/hal/real/camera.py",
-    "lightsheet/gui/ui_properties.py",
-    "lightsheet/gui/ui_shell.py",
-    "lightsheet/gui/ui_laser_panel.py",
-    "lightsheet/gui/ui_motor_panel.py",
-    "lightsheet/gui/ui_acquisition_panel.py",
-    "lightsheet/gui/ui_save_panel.py",
-    "lightsheet/gui/ui_stack_panel.py",
-    "lightsheet/gui/ui_scan_panel.py",
-    "lightsheet/gui/ui_calibration_panel.py",
-    "lightsheet/gui/ui_shell_rc.py",
-    "lightsheet/gui/ui_laser_panel_rc.py",
-    "lightsheet/gui/ui_motor_panel_rc.py",
-    "lightsheet/gui/ui_acquisition_panel_rc.py",
-    "lightsheet/gui/ui_save_panel_rc.py",
-    "lightsheet/gui/ui_stack_panel_rc.py",
-    "lightsheet/gui/ui_scan_panel_rc.py",
-    "lightsheet/gui/ui_calibration_panel_rc.py",
+    "lightsheet/gui/panels/ui_properties.py",
+    "lightsheet/gui/shell/ui_shell.py",
+    "lightsheet/gui/panels/ui_laser_panel.py",
+    "lightsheet/gui/panels/ui_motor_panel.py",
+    "lightsheet/gui/panels/ui_acquisition_panel.py",
+    "lightsheet/gui/panels/ui_save_panel.py",
+    "lightsheet/gui/panels/ui_stack_panel.py",
+    "lightsheet/gui/panels/ui_scan_panel.py",
+    "lightsheet/gui/panels/ui_calibration_panel.py",
+    "lightsheet/gui/shell/ui_shell_rc.py",
+    "lightsheet/gui/panels/ui_laser_panel_rc.py",
+    "lightsheet/gui/panels/ui_motor_panel_rc.py",
+    "lightsheet/gui/panels/ui_acquisition_panel_rc.py",
+    "lightsheet/gui/panels/ui_save_panel_rc.py",
+    "lightsheet/gui/panels/ui_stack_panel_rc.py",
+    "lightsheet/gui/panels/ui_scan_panel_rc.py",
+    "lightsheet/gui/panels/ui_calibration_panel_rc.py",
 ]
 
 [tool.coverage.report]
@@ -189,7 +189,7 @@ file_branch_coverage_min = 0
 # Native Qt6 ImageView replacement (D-05, MIG-08). New module in 7A —
 # QGraphicsView-based image display widget. 50% branch floor until the
 # SC2 render smoke test (07-02) lands and exercises the setImage path.
-[tool.coverage-threshold.modules."lightsheet/gui/image_view.py"]
+[tool.coverage-threshold.modules."lightsheet/gui/panels/image_view.py"]
 file_branch_coverage_min = 50
 
 # 7B per-panel widget/controller modules. New in 07-09 — the slot bodies
@@ -197,7 +197,7 @@ file_branch_coverage_min = 50
 # existing behavior tests (make_controller + real method calls). The
 # save_panel has the lowest coverage because its file-dialog slots are
 # heavily mock-dependent; floor set to current measured level.
-[tool.coverage-threshold.modules."lightsheet/gui/save_panel.py"]
+[tool.coverage-threshold.modules."lightsheet/gui/panels/save_panel.py"]
 file_branch_coverage_min = 50
 
 [tool.ty.rules]

@@ -15,7 +15,7 @@ pytest.importorskip("PySide6")
 
 
 def _make_bar(qtbot):
-    from lightsheet.gui.levels_bar import LevelsBar
+    from lightsheet.gui.panels.levels_bar import LevelsBar
 
     bar = LevelsBar()
     bar.resize(400, 40)
@@ -182,7 +182,7 @@ def test_no_pyqtgraph_import_in_levels_bar_module() -> None:
     """The levels bar must be stock-Qt6 only — no pyqtgraph dependency."""
     import inspect
 
-    from lightsheet.gui import levels_bar
+    from lightsheet.gui.panels import levels_bar
 
     src = inspect.getsource(levels_bar)
     assert "pyqtgraph" not in src.lower(), (

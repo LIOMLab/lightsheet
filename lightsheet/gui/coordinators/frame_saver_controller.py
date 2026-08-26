@@ -34,7 +34,7 @@ from PySide6.QtCore import QObject, QThread, Signal, Slot
 from lightsheet.hal.bundle import DeviceBundle
 
 if TYPE_CHECKING:
-    from lightsheet.gui.controller import Controller_MainWindow
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 logger = logging.getLogger(__name__)
 

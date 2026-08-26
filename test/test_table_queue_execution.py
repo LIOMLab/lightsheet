@@ -280,7 +280,7 @@ def test_worker_stays_threading_no_qthread_in_table(qtbot, request) -> None:
     """Test 10: no new worker bypasses the per-plane ValueError catch; the
     queue re-uses the existing StackWorker (which has the catch)."""
     import inspect
-    from lightsheet.gui.acquisition_table_manager import AcquisitionTableManager
+    from lightsheet.gui.panels.acquisition_table_manager import AcquisitionTableManager
     from lightsheet.gui.workers import StackWorker
 
     src = inspect.getsource(AcquisitionTableManager)

@@ -15,10 +15,10 @@ import typing
 
 from PySide6.QtWidgets import QWidget
 
-from lightsheet.gui.ui_scan_panel import Ui_ScanPanel
+from lightsheet.gui.panels.ui_scan_panel import Ui_ScanPanel
 
 if typing.TYPE_CHECKING:
-    from lightsheet.gui.controller import Controller_MainWindow
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
 class ScanPanelWidget(QWidget):

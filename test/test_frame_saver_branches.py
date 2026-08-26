@@ -26,7 +26,7 @@ from PySide6.QtCore import QObject
 
 pytest.importorskip("PySide6")
 
-from lightsheet.gui.frame_saver_controller import FrameSaver, FrameViewer, FrameSaverController
+from lightsheet.gui.coordinators.frame_saver_controller import FrameSaver, FrameViewer, FrameSaverController
 from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
 
 

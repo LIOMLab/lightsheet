@@ -21,8 +21,8 @@ from PySide6.QtWidgets import (QApplication, QComboBox, QHBoxLayout, QLabel,
     QPushButton, QSizePolicy, QSplitter, QStatusBar,
     QTabWidget, QToolBar, QVBoxLayout, QWidget)
 
-from lightsheet.gui.image_view import ImageView
-from lightsheet.gui.levels_bar import LevelsBar
+from lightsheet.gui.panels.image_view import ImageView
+from lightsheet.gui.panels.levels_bar import LevelsBar
 
 class Ui_Shell(object):
     def setupUi(self, Shell):

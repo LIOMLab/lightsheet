@@ -66,18 +66,18 @@ def test_console_script_entry_point_registered() -> None:
 
 
 def test_gui_controller_imports() -> None:
-    """``lightsheet.gui.controller.Controller_MainWindow`` imports where
+    """``lightsheet.gui.shell.controller.Controller_MainWindow`` imports where
     PyQt5 is available; skipped otherwise (PyQt5 is not stubbed by
     conftest)."""
     try:
-        from lightsheet.gui.controller import Controller_MainWindow  # noqa: F401
+        from lightsheet.gui.shell.controller import Controller_MainWindow  # noqa: F401
     except ImportError as exc:
         pytest.skip(f"PyQt5 not installed: {exc}")
 
 
 def test_gui_controller_imports_from_foreign_cwd(tmp_path: Path) -> None:
     """A subprocess rooted in an empty temp directory (no repo files
-    present) imports ``lightsheet.gui.controller`` — which transitively
+    present) imports ``lightsheet.gui.shell.controller`` — which transitively
     imports the per-panel Ui_* modules and ui_shell (the package-relative
     imports emitted by ``pyside6-uic --from-imports``).
 
@@ -87,7 +87,7 @@ def test_gui_controller_imports_from_foreign_cwd(tmp_path: Path) -> None:
     would fail with ``ModuleNotFoundError`` (because ``./lightsheet/gui``
     does not exist in the empty CWD)."""
     result = subprocess.run(
-        [sys.executable, "-c", "import lightsheet.gui.controller"],
+        [sys.executable, "-c", "import lightsheet.gui.shell.controller"],
         cwd=tmp_path,
         capture_output=True,
         text=True,

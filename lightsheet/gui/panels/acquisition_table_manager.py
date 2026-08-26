@@ -47,7 +47,7 @@ from PySide6.QtWidgets import (
 )
 
 if typing.TYPE_CHECKING:
-    from lightsheet.gui.controller import Controller_MainWindow
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
 # Column indices in the QTableWidget.

@@ -425,12 +425,12 @@
   <customwidget>
    <class>ImageView</class>
    <extends>QGraphicsView</extends>
-   <header>lightsheet.gui.image_view</header>
+   <header>lightsheet.gui.panels.image_view</header>
   </customwidget>
   <customwidget>
    <class>LevelsBar</class>
    <extends>QWidget</extends>
-   <header>lightsheet.gui.levels_bar</header>
+   <header>lightsheet.gui.panels.levels_bar</header>
   </customwidget>
  </customwidgets>
  <resources/>

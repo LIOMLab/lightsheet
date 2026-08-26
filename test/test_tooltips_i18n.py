@@ -61,13 +61,13 @@ IBEAM_READBACK_TOOLTIP_FRAGMENT = "iBeam power readback"
 def _panel_classes() -> dict[str, str]:
     """Map panel attribute name → panel widget class qualified import path."""
     return {
-        "laser_panel": "lightsheet.gui.laser_panel.LaserPanelWidget",
-        "motor_panel": "lightsheet.gui.motor_panel.MotorPanelWidget",
-        "acquisition_panel": "lightsheet.gui.acquisition_panel.AcquisitionPanelWidget",
-        "stack_panel": "lightsheet.gui.stack_panel.StackPanelWidget",
-        "scan_panel": "lightsheet.gui.scan_panel.ScanPanelWidget",
-        "save_panel": "lightsheet.gui.save_panel.SavePanelWidget",
-        "calibration_panel": "lightsheet.gui.calibration_panel.CalibrationPanelWidget",
+        "laser_panel": "lightsheet.gui.panels.laser_panel.LaserPanelWidget",
+        "motor_panel": "lightsheet.gui.panels.motor_panel.MotorPanelWidget",
+        "acquisition_panel": "lightsheet.gui.panels.acquisition_panel.AcquisitionPanelWidget",
+        "stack_panel": "lightsheet.gui.panels.stack_panel.StackPanelWidget",
+        "scan_panel": "lightsheet.gui.panels.scan_panel.ScanPanelWidget",
+        "save_panel": "lightsheet.gui.panels.save_panel.SavePanelWidget",
+        "calibration_panel": "lightsheet.gui.panels.calibration_panel.CalibrationPanelWidget",
     }
 
 
@@ -239,7 +239,7 @@ def test_open_help_uses_cross_platform_path() -> None:
     """
     import inspect
 
-    from lightsheet.gui.controller import Controller_MainWindow
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
     src = inspect.getsource(Controller_MainWindow.open_help)
     # The Windows-only literal backslash path must be gone.

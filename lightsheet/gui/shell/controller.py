@@ -27,9 +27,9 @@ import copy
 import logging
 import os
 import threading
-from functools import partial
 import typing
 import webbrowser
+from functools import partial
 
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QCloseEvent, QKeySequence
@@ -44,15 +44,15 @@ from PySide6.QtWidgets import (
 )
 
 from lightsheet.config import cfg_read, cfg_write
-from lightsheet.gui.acquisition_panel import AcquisitionPanelWidget
-from lightsheet.gui.calibration_panel import CalibrationPanelWidget
-from lightsheet.gui.laser_panel import LaserPanelWidget
-from lightsheet.gui.motor_panel import MotorPanelWidget
-from lightsheet.gui.properties_dialog import Properties_Dialog
-from lightsheet.gui.save_panel import SavePanelWidget
-from lightsheet.gui.scan_panel import ScanPanelWidget
-from lightsheet.gui.stack_panel import StackPanelWidget
-from lightsheet.gui.ui_shell import Ui_Shell
+from lightsheet.gui.panels.acquisition_panel import AcquisitionPanelWidget
+from lightsheet.gui.panels.calibration_panel import CalibrationPanelWidget
+from lightsheet.gui.panels.laser_panel import LaserPanelWidget
+from lightsheet.gui.panels.motor_panel import MotorPanelWidget
+from lightsheet.gui.panels.properties_dialog import Properties_Dialog
+from lightsheet.gui.panels.save_panel import SavePanelWidget
+from lightsheet.gui.panels.scan_panel import ScanPanelWidget
+from lightsheet.gui.panels.stack_panel import StackPanelWidget
+from lightsheet.gui.shell.ui_shell import Ui_Shell
 from lightsheet.hal.bundle import DeviceBundle
 
 logger = logging.getLogger(__name__)
@@ -113,10 +113,12 @@ SHELL_OWNED_OBJECTNAMES = frozenset({
 })
 
 if typing.TYPE_CHECKING:
-    from lightsheet.gui.acquisition_coordinator import AcquisitionCoordinator
-    from lightsheet.gui.frame_saver_controller import FrameSaverController
-    from lightsheet.gui.hardware_manager import HardwareManager
-    from lightsheet.gui.motor_controller import MotorController
+    from lightsheet.gui.coordinators.acquisition_coordinator import (
+        AcquisitionCoordinator,
+    )
+    from lightsheet.gui.coordinators.frame_saver_controller import FrameSaverController
+    from lightsheet.gui.coordinators.hardware_manager import HardwareManager
+    from lightsheet.gui.coordinators.motor_controller import MotorController
 
 
 class Controller_MainWindow(QMainWindow):

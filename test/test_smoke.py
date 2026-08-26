@@ -79,7 +79,7 @@ def test_dead_calibration_symbols_absent() -> None:
     symbols were either Signal class attrs or method defs, both of
     which ``hasattr`` on the class catches).
     """
-    from lightsheet.gui.controller import Controller_MainWindow
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
     for name in (
         "calibrate_camera_worker",

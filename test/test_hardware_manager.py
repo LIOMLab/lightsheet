@@ -35,9 +35,9 @@ from __future__ import annotations
 import threading
 from unittest.mock import Mock, patch
 
-import lightsheet.gui.controller as controller_module
+import lightsheet.gui.shell.controller as controller_module
 from _helpers.controller_fixture import make_controller, make_bundle
-from lightsheet.gui.hardware_manager import HardwareManager
+from lightsheet.gui.coordinators.hardware_manager import HardwareManager
 from lightsheet.hal import DeviceBundle
 
 

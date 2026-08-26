@@ -57,7 +57,7 @@ from lightsheet.hal import (
     MockMotors,
     MockSigGen,
 )
-from lightsheet.gui.hardware_manager import HardwareManager
+from lightsheet.gui.coordinators.hardware_manager import HardwareManager
 
 _CONTROLLER_SRC = os.path.join(
     os.path.dirname(__file__), "..", "..", "lightsheet", "gui", "controller.py"
@@ -70,7 +70,7 @@ _WORKERS_SRC = os.path.join(
 )
 
 # Module-level logger the exec'd body references (controller.py:45).
-_logger = logging.getLogger("lightsheet.gui.controller")
+_logger = logging.getLogger("lightsheet.gui.shell.controller")
 
 
 def _read_controller_source() -> str:

@@ -48,8 +48,8 @@ from PySide6.QtCore import QObject, Signal, Slot
 from lightsheet.hal.bundle import DeviceBundle
 
 if TYPE_CHECKING:
-    from lightsheet.gui.controller import Controller_MainWindow
-    from lightsheet.gui.hardware_manager import HardwareManager
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+    from lightsheet.gui.coordinators.hardware_manager import HardwareManager
 
 logger = logging.getLogger(__name__)
 

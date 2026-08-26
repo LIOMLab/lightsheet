@@ -1,4 +1,4 @@
-"""Branch-coverage closure for ``lightsheet.gui.properties_dialog``.
+"""Branch-coverage closure for ``lightsheet.gui.panels.properties_dialog``.
 
 The Properties_Dialog is a QDialog subclass that reads camera + motor
 properties and displays them via Ui_Properties. The tests use the
@@ -57,7 +57,7 @@ def _make_dialog(parent: Mock):
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance() or QApplication([])
 
-    from lightsheet.gui.properties_dialog import Properties_Dialog
+    from lightsheet.gui.panels.properties_dialog import Properties_Dialog
 
     # Bypass __init__ entirely — populate the attributes the methods read.
     dlg = Properties_Dialog.__new__(Properties_Dialog)

@@ -12,10 +12,10 @@ import typing
 
 from PySide6.QtWidgets import QWidget
 
-from lightsheet.gui.ui_motor_panel import Ui_MotorPanel
+from lightsheet.gui.panels.ui_motor_panel import Ui_MotorPanel
 
 if typing.TYPE_CHECKING:
-    from lightsheet.gui.controller import Controller_MainWindow
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
 class MotorPanelWidget(QWidget):

@@ -41,7 +41,7 @@ pytest.importorskip("PySide6")
 
 def test_calCameraStartCalibration_button_is_deleted(qtbot) -> None:
     """The dead 'Start Camera Calibration' button is pruned from the .ui."""
-    from lightsheet.gui.calibration_panel import CalibrationPanelWidget
+    from lightsheet.gui.panels.calibration_panel import CalibrationPanelWidget
 
     panel = CalibrationPanelWidget(Mock())
     qtbot.addWidget(panel)
@@ -53,7 +53,7 @@ def test_calCameraStartCalibration_button_is_deleted(qtbot) -> None:
 
 def test_calEtlStartCalibration_button_is_deleted(qtbot) -> None:
     """The dead 'Start ETL Calibration' button is pruned from the .ui."""
-    from lightsheet.gui.calibration_panel import CalibrationPanelWidget
+    from lightsheet.gui.panels.calibration_panel import CalibrationPanelWidget
 
     panel = CalibrationPanelWidget(Mock())
     qtbot.addWidget(panel)
@@ -65,7 +65,7 @@ def test_calEtlStartCalibration_button_is_deleted(qtbot) -> None:
 
 def test_resetSettings_button_is_deleted(qtbot) -> None:
     """The dead 'Reset Settings' button is pruned from the scan panel .ui."""
-    from lightsheet.gui.scan_panel import ScanPanelWidget
+    from lightsheet.gui.panels.scan_panel import ScanPanelWidget
 
     panel = ScanPanelWidget(Mock())
     qtbot.addWidget(panel)
@@ -83,7 +83,7 @@ def test_resetSettings_button_is_deleted(qtbot) -> None:
 
 def test_live_calibration_buttons_have_tooltips(qtbot) -> None:
     """The live calibration buttons remain and carry a non-empty tooltip."""
-    from lightsheet.gui.calibration_panel import CalibrationPanelWidget
+    from lightsheet.gui.panels.calibration_panel import CalibrationPanelWidget
 
     panel = CalibrationPanelWidget(Mock())
     qtbot.addWidget(panel)
@@ -108,7 +108,7 @@ def test_live_calibration_buttons_have_tooltips(qtbot) -> None:
 
 def test_live_calibration_spinboxes_have_tooltips(qtbot) -> None:
     """The live calibration numeric inputs carry a non-empty tooltip."""
-    from lightsheet.gui.calibration_panel import CalibrationPanelWidget
+    from lightsheet.gui.panels.calibration_panel import CalibrationPanelWidget
 
     panel = CalibrationPanelWidget(Mock())
     qtbot.addWidget(panel)

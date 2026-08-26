@@ -98,7 +98,7 @@ def test_close_event_preview_timeout_logs_warning(qtbot, request) -> None:
         patch.object(QThread, "quit", lambda self: None),
     ):
         with patch.object(
-            logging.getLogger("lightsheet.gui.controller"),
+            logging.getLogger("lightsheet.gui.shell.controller"),
             "warning",
         ) as mock_warning:
             event = QCloseEvent()
