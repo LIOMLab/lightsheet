@@ -50,35 +50,49 @@ def test_updateUi_dark_theme_emits_stylesheet(qtbot, request) -> None:
 def test_updateUi_show_hide_images_pane_visible(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.show()
-    assert ctrl.ui.imagesPane.isVisible()
+    qtbot.waitExposed(ctrl)
+    # The images pane starts visible (splitter size > 0).
+    assert ctrl.ui.splitter.sizes()[0] > 0
     ctrl.updateUi_show_hide_images_pane()
-    assert not ctrl.ui.imagesPane.isVisible()
+    # Toggling hides the pane via splitter.setSizes([0, total]) — the
+    # splitter size is the authoritative signal (audit #7).
+    assert ctrl.ui.splitter.sizes()[0] == 0
+    assert ctrl.ui.action_ShowHideImagesPane.isChecked() is False
 
 
 def test_updateUi_show_hide_images_pane_hidden(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.show()
-    ctrl.ui.imagesPane.hide()
-    assert not ctrl.ui.imagesPane.isVisible()
+    qtbot.waitExposed(ctrl)
+    # Hide the pane via the slot, then toggle back on.
     ctrl.updateUi_show_hide_images_pane()
-    assert ctrl.ui.imagesPane.isVisible()
+    assert ctrl.ui.splitter.sizes()[0] == 0
+    ctrl.updateUi_show_hide_images_pane()
+    assert ctrl.ui.splitter.sizes()[0] > 0
+    assert ctrl.ui.action_ShowHideImagesPane.isChecked() is True
 
 
 def test_updateUi_show_hide_controls_pane_visible(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.show()
-    assert ctrl.ui.controlsPane.isVisible()
+    qtbot.waitExposed(ctrl)
+    # The controls pane starts visible (splitter size > 0).
+    assert ctrl.ui.splitter.sizes()[1] > 0
     ctrl.updateUi_show_hide_controls_pane()
-    assert not ctrl.ui.controlsPane.isVisible()
+    # controlsPane is the SECOND widget (index 1).
+    assert ctrl.ui.splitter.sizes()[1] == 0
+    assert ctrl.ui.action_ShowHideControlsPane.isChecked() is False
 
 
 def test_updateUi_show_hide_controls_pane_hidden(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.show()
-    ctrl.ui.controlsPane.hide()
-    assert not ctrl.ui.controlsPane.isVisible()
+    qtbot.waitExposed(ctrl)
     ctrl.updateUi_show_hide_controls_pane()
-    assert ctrl.ui.controlsPane.isVisible()
+    assert ctrl.ui.splitter.sizes()[1] == 0
+    ctrl.updateUi_show_hide_controls_pane()
+    assert ctrl.ui.splitter.sizes()[1] > 0
+    assert ctrl.ui.action_ShowHideControlsPane.isChecked() is True
 
 
 def test_updateUi_show_hide_message_log_visible(qtbot, request) -> None:

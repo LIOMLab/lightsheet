@@ -634,16 +634,67 @@ class Controller_MainWindow(QMainWindow):
         self.sig_stylesheet.emit("dark")
 
     def updateUi_show_hide_images_pane(self) -> None:
-        if self.ui.imagesPane.isVisible():
-            self.ui.imagesPane.hide()
+        """Toggle the images pane via splitter.setSizes() (audit #7).
+
+        The View-menu action and the QSplitter drag are two mechanisms
+        that can hide/show a pane. Routing the menu through
+        splitter.setSizes() (instead of show()/hide() on the pane widget
+        directly) keeps the splitter sizes authoritative — the menu and
+        the splitter stay in sync, and childrenCollapsible=False blocks
+        handle-drag-to-zero so hiding is via the menu only.
+
+        The pane has a non-zero minimum width (320 px, the D-02d floor),
+        so setSizes([0, total]) alone cannot shrink it to 0 — Qt's
+        splitter respects the widget minimum. Temporarily setting
+        minimumWidth=0 + maximumWidth=0 lets the splitter reach 0 (the
+        standard Qt pattern for a collapsible section under
+        childrenCollapsible=False); restoring both to their defaults
+        (minimum 320, maximum 16777215) lets the splitter allocate
+        space again on re-show.
+        """
+        splitter = self.ui.splitter
+        images_pane = self.ui.imagesPane
+        # imagesPane is the FIRST widget in the splitter (index 0).
+        # A pane is "visible" in the splitter sense when its size > 0.
+        images_visible = splitter.sizes()[0] > 0
+        total = splitter.width() or sum(splitter.sizes()) or 1
+        if images_visible:
+            images_pane.setMinimumWidth(0)
+            images_pane.setMaximumWidth(0)
+            splitter.setSizes([0, total])
+            self.ui.action_ShowHideImagesPane.setChecked(False)
         else:
-            self.ui.imagesPane.show()
+            # Restore the D-02d floor minimum + the Qt default maximum,
+            # then a sensible default (50/50 split) on re-show.
+            images_pane.setMinimumWidth(320)
+            images_pane.setMaximumWidth(16777215)
+            half = total // 2
+            splitter.setSizes([half, total - half])
+            self.ui.action_ShowHideImagesPane.setChecked(True)
 
     def updateUi_show_hide_controls_pane(self) -> None:
-        if self.ui.controlsPane.isVisible():
-            self.ui.controlsPane.hide()
+        """Toggle the controls pane via splitter.setSizes() (audit #7).
+
+        Mirrors updateUi_show_hide_images_pane — controlsPane is the
+        SECOND widget in the splitter (index 1). The pane has a 360 px
+        minimum width (the controls floor), so minimumWidth=0 +
+        maximumWidth=0 is used to let the splitter reach 0 on hide.
+        """
+        splitter = self.ui.splitter
+        controls_pane = self.ui.controlsPane
+        controls_visible = splitter.sizes()[1] > 0
+        total = splitter.width() or sum(splitter.sizes()) or 1
+        if controls_visible:
+            controls_pane.setMinimumWidth(0)
+            controls_pane.setMaximumWidth(0)
+            splitter.setSizes([total, 0])
+            self.ui.action_ShowHideControlsPane.setChecked(False)
         else:
-            self.ui.controlsPane.show()
+            controls_pane.setMinimumWidth(360)
+            controls_pane.setMaximumWidth(16777215)
+            half = total // 2
+            splitter.setSizes([total - half, half])
+            self.ui.action_ShowHideControlsPane.setChecked(True)
 
     def updateUi_show_hide_message_log(self) -> None:
         if self.ui.plainTextEdit_messageLog.isVisible():
