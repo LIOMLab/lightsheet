@@ -189,8 +189,6 @@ class _AcquireScanMixin:
         acquire a single reconstructed frame
         """
 
-        # TODO - thread lock siggen and camera while we acquire
-
         # Store metadata about buffer to be acquired
         self._shell.buffer_metadata_general = {}
         self._shell.buffer_metadata_general["Date"] = str(datetime.date.today())
@@ -201,14 +199,9 @@ class _AcquireScanMixin:
         self._shell.buffer_metadata_waveforms = {}
         self._shell.buffer_metadata_waveforms = self.siggen.waveform_metadata
 
-        # TODO - motors and lasers and camera (?) metadata
         self._shell.buffer_metadata_motors = {}
         self._shell.buffer_metadata_lasers = {}
         self._shell.buffer_metadata_camera = {}
-
-        # self.buffer_metadata['Horizontal Position']  = self.motors.horizontal.get_position('mm')  # noqa: E501
-        # self.buffer_metadata['Vertical Position']  = self.motors.vertical.get_position('mm')  # noqa: E501
-        # self.buffer_metadata['Camera Position']  = self.motors.camera.get_position('mm')  # noqa: E501
 
         # Number of images to be acquired from the camera
         number_of_images = self.siggen.waveform_cycles
@@ -344,12 +337,6 @@ class LiveWorker(QObject, _AcquireScanMixin):
         """This thread allows the execution of scan_mode while modifying
         parameters in the UI"""
         try:
-            # Moving the camera to focus
-            ##self.move_camera_to_focus()
-
-            #        # Setting the camera for scan acquisition
-            #        self.camera.arm_scan()
-
             # Starting lasers
             self._hw.start_lasers()
 
@@ -428,12 +415,10 @@ class SingleWorker(QObject, _AcquireScanMixin):
         self.motors = bundle.motors
         self._hw = hw
         self._shell = shell
-        # Live mode never saves, but acquire_scan() reads these to populate
-        # buffer metadata. Empty/False defaults keep the metadata field
-        # well-typed without implying a save will occur.
-        self._save_description = ""
-        self._save_stitch_blend = False
-        # B-03: pre-sampled on the GUI thread before spawning the worker.
+        # Save-option widgets are pre-sampled on the GUI thread before
+        # spawning the worker so the worker thread never reaches into the
+        # shell's ui.* (cross-thread widget access). acquire_scan() reads
+        # these to populate buffer metadata.
         self._save_description = save_description
         self._save_stitch_blend = save_stitch_blend
 
@@ -441,9 +426,6 @@ class SingleWorker(QObject, _AcquireScanMixin):
     def run(self) -> None:
         """Generates and display a single scan which can be saved afterwards"""
         try:
-            # Moving the camera to focus
-            ##self.move_camera_to_focus()
-
             # Getting positions for the image
             self._shell.image_hor_pos_text = self._shell.current_horizontal_position_text
             self._shell.image_ver_pos_text = self._shell.current_vertical_position_text
@@ -522,6 +504,10 @@ class StackWorker(QObject, _AcquireScanMixin):
     shell and connected to the GUI-thread position-refresh slot) instead
     of a legacy direct cross-thread widget mutation — closing the last
     AGENTS.md §11 direct-widget-mutation violation.
+
+    Known limitation: stack mode does not adjust camera focus between
+    planes (the single-frame worker does). Adding per-plane focus
+    adjustment here is a future enhancement, not a regression.
     """
 
     finished = Signal()
@@ -542,12 +528,10 @@ class StackWorker(QObject, _AcquireScanMixin):
         self.motors = bundle.motors
         self._hw = hw
         self._shell = shell
-        # Live mode never saves, but acquire_scan() reads these to populate
-        # buffer metadata. Empty/False defaults keep the metadata field
-        # well-typed without implying a save will occur.
-        self._save_description = ""
-        self._save_stitch_blend = False
-        # B-03: pre-sampled on the GUI thread before spawning the worker.
+        # Save-option widgets are pre-sampled on the GUI thread before
+        # spawning the worker so the worker thread never reaches into the
+        # shell's ui.* (cross-thread widget access). acquire_scan() reads
+        # these to populate buffer metadata.
         self._save_description = save_description
         self._save_stitch_blend = save_stitch_blend
         self._save_all_crop = save_all_crop
@@ -668,11 +652,6 @@ class StackWorker(QObject, _AcquireScanMixin):
                     # updateUi_position_horizontal) instead of a direct
                     # cross-thread widget mutation (AGENTS.md §11).
                     self._shell.sig_refresh_position_horizontal.emit()
-
-                    # Moving the camera to focus
-                    # FIXME - Add focus adjustement to stack mode
-                    # self.calculate_camera_focus()
-                    # self.move_camera_to_focus()
 
                     if self._shell.saving_allowed:
                         self._shell._fs.add_motor_parameters(

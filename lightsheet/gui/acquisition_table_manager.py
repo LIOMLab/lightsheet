@@ -298,7 +298,7 @@ class AcquisitionTableManager(QWidget):
 
     def is_row_flagged(self, row: int) -> bool:
         """True if the row has any flagged (red-background) cell."""
-        for col in (range(self.table.columnCount())):
+        for col in range(self.table.columnCount()):
             item = self.table.item(row, col)
             if item is not None and item.background() == _FLAG_COLOR:
                 return True
