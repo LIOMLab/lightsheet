@@ -58,7 +58,7 @@ def test_safe_char_sanitizes(
     and joins it to save_directory; saving_allowed is True only when both
     are non-empty."""
     ctrl, _ = make_controller(qtbot, request)
-    ctrl.ui.lineEdit_saveFilename.setText(raw)
+    ctrl.save_panel.ui.lineEdit_saveFilename.setText(raw)
     ctrl.save_directory = "C:\\data"
     ctrl.save_filename = ""
     ctrl.saving_allowed = False
@@ -79,7 +79,7 @@ def test_safe_char_join_uses_save_directory(qtbot, request) -> None:
     assert the sanitized name is present and the directory appears in the
     joined path."""
     ctrl, _ = make_controller(qtbot, request)
-    ctrl.ui.lineEdit_saveFilename.setText("plane 01")
+    ctrl.save_panel.ui.lineEdit_saveFilename.setText("plane 01")
     ctrl.save_directory = "/tmp/data"
     ctrl.save_filename = ""
     ctrl.saving_allowed = False

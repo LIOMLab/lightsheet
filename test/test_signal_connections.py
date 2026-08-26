@@ -68,7 +68,7 @@ def test_converted_connection_fires_collaborator_slot(qtbot, request) -> None:
 
     # Click the sample step-up button — wired via wire_collaborators()
     # to self._mc.updateUi_move_sample_up (a bare bound method, no lambda).
-    qtbot.mouseClick(ctrl.ui.pushButton_sampleStepUp, Qt.LeftButton)
+    qtbot.mouseClick(ctrl.motor_panel.ui.pushButton_sampleStepUp, Qt.LeftButton)
 
     # updateUi_move_sample_up always calls updateUi_message_printer with
     # either "Sample stepping up" (move succeeded) or "Out of boundaries"
@@ -93,8 +93,8 @@ def test_converted_acq_connection_fires_collaborator_slot(qtbot, request) -> Non
 
     # Set a new value on the spinbox — wired via wire_collaborators() to
     # self._acq.updateUi_etl_left_amplitude (bare bound method).
-    new_val = ctrl.ui.doubleSpinBox_etlLeftAmplitude.value() + 0.1
-    ctrl.ui.doubleSpinBox_etlLeftAmplitude.setValue(new_val)
+    new_val = ctrl.scan_panel.ui.doubleSpinBox_etlLeftAmplitude.value() + 0.1
+    ctrl.scan_panel.ui.doubleSpinBox_etlLeftAmplitude.setValue(new_val)
 
     after = siggen.etl_left_amplitude
     assert after != before, (

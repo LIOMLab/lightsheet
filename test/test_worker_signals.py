@@ -39,7 +39,12 @@ class _PreviewShell:
 
     def __init__(self) -> None:
         self.ui = Mock()
-        self.ui.doubleSpinBox_cameraExposureTime.value.return_value = 100
+        # Hybrid ownership: PreviewWorker reads the camera exposure spinbox
+        # via shell.acquisition_panel.ui.<name> in __init__ (GUI thread,
+        # before moveToThread). The shell.ui namespace is not touched for
+        # panel-internal widgets.
+        self.acquisition_panel = Mock()
+        self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.value.return_value = 100
         self.preview_mode_started = False  # skip the frame-grab loop
         self.estop_event = threading.Event()
         self._fs = Mock()
@@ -116,16 +121,21 @@ def test_preview_worker_never_accesses_ui_widgets(qtbot) -> None:
 
     worker.run()
 
-    # The only permitted ui.* access is doubleSpinBox_cameraExposureTime
-    # (the exposure-time read in PreviewWorker.__init__ on the GUI
-    # thread, before moveToThread). No other widget should be touched.
-    ui_mock = shell.ui
-    accessed_children = [name for name, child in ui_mock._mock_children.items()]
-    # doubleSpinBox_cameraExposureTime is accessed via .value() in
-    # __init__ — that's the one permitted read. No other widget
-    # attributes should appear.
+    # The shell.ui namespace must NOT be accessed for any panel-internal
+    # widget (hybrid ownership — panel-internal widgets live on their
+    # panel's ui, not on shell.ui).
+    shell_ui_children = [name for name in shell.ui._mock_children]
+    assert shell_ui_children == [], (
+        f"PreviewWorker must not access shell.ui.* — got {shell_ui_children}"
+    )
+
+    # The only permitted panel-internal access is
+    # doubleSpinBox_cameraExposureTime via acquisition_panel.ui (the
+    # exposure-time read in PreviewWorker.__init__ on the GUI thread,
+    # before moveToThread). No other widget should be touched.
+    accessed_children = [name for name in shell.acquisition_panel.ui._mock_children]
     for child_name in accessed_children:
         assert child_name == "doubleSpinBox_cameraExposureTime", (
-            f"PreviewWorker must not access ui.{child_name} — "
+            f"PreviewWorker must not access acquisition_panel.ui.{child_name} — "
             f"only doubleSpinBox_cameraExposureTime is permitted (AGENTS.md §11)"
         )

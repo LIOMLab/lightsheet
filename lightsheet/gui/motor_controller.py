@@ -82,15 +82,15 @@ class MotorController:
     def updateUi_move_to_horizontal_position(self) -> None:
         """Moves the sample to a specified horizontal position"""
         if (
-            self._shell.ui.doubleSpinBox_sampleSetHPosition.value()
+            self._shell.motor_panel.ui.doubleSpinBox_sampleSetHPosition.value()
             >= self.motors.horizontal.get_limit_low(self._shell.units)
         ) and (
-            self._shell.ui.doubleSpinBox_sampleSetHPosition.value()
+            self._shell.motor_panel.ui.doubleSpinBox_sampleSetHPosition.value()
             <= self.motors.horizontal.get_limit_high(self._shell.units)
         ):
             try:
                 self.motors.horizontal.move_absolute_position(
-                    self._shell.ui.doubleSpinBox_sampleSetHPosition.value(),
+                    self._shell.motor_panel.ui.doubleSpinBox_sampleSetHPosition.value(),
                     self._shell.units,
                 )
             except ValueError:
@@ -108,15 +108,15 @@ class MotorController:
     def updateUi_move_to_vertical_position(self) -> None:
         """Moves the sample to a specified vertical position"""
         if (
-            self._shell.ui.doubleSpinBox_sampleSetVPosition.value()
+            self._shell.motor_panel.ui.doubleSpinBox_sampleSetVPosition.value()
             >= self.motors.vertical.get_limit_low(self._shell.units)
         ) and (
-            self._shell.ui.doubleSpinBox_sampleSetVPosition.value()
+            self._shell.motor_panel.ui.doubleSpinBox_sampleSetVPosition.value()
             <= self.motors.vertical.get_limit_high(self._shell.units)
         ):
             try:
                 self.motors.vertical.move_absolute_position(
-                    self._shell.ui.doubleSpinBox_sampleSetVPosition.value(),
+                    self._shell.motor_panel.ui.doubleSpinBox_sampleSetVPosition.value(),
                     self._shell.units,
                 )
             except ValueError:
@@ -186,15 +186,15 @@ class MotorController:
     def updateUi_move_camera_to_position(self) -> None:
         """Moves the sample to a specified vertical position"""
         if (
-            self._shell.ui.doubleSpinBox_cameraSetPosition.value()
+            self._shell.motor_panel.ui.doubleSpinBox_cameraSetPosition.value()
             >= self.motors.camera.get_limit_low(self._shell.units)
         ) and (
-            self._shell.ui.doubleSpinBox_cameraSetPosition.value()
+            self._shell.motor_panel.ui.doubleSpinBox_cameraSetPosition.value()
             <= self.motors.camera.get_limit_high(self._shell.units)
         ):
             try:
                 self.motors.camera.move_absolute_position(
-                    self._shell.ui.doubleSpinBox_cameraSetPosition.value(),
+                    self._shell.motor_panel.ui.doubleSpinBox_cameraSetPosition.value(),
                     self._shell.units,
                 )
             except ValueError:
@@ -267,12 +267,12 @@ class MotorController:
         """Sample motor backward horizontal motion"""
         if (
             self.motors.horizontal.get_position(self._shell.units)
-            - self._shell.ui.doubleSpinBox_sampleHStepSize.value()
+            - self._shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value()
             >= self.motors.horizontal.get_limit_low(self._shell.units)
         ):
             try:
                 self.motors.horizontal.move_relative_position(
-                    -self._shell.ui.doubleSpinBox_sampleHStepSize.value(),
+                    -self._shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value(),
                     self._shell.units,
                 )
             except ValueError:
@@ -294,12 +294,12 @@ class MotorController:
         """Sample motor forward horizontal motion"""
         if (
             self.motors.horizontal.get_position(self._shell.units)
-            + self._shell.ui.doubleSpinBox_sampleHStepSize.value()
+            + self._shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value()
             <= self.motors.horizontal.get_limit_high(self._shell.units)
         ):
             try:
                 self.motors.horizontal.move_relative_position(
-                    self._shell.ui.doubleSpinBox_sampleHStepSize.value(),
+                    self._shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value(),
                     self._shell.units,
                 )
             except ValueError:
@@ -321,12 +321,12 @@ class MotorController:
         """Sample motor upward vertical motion"""
         if (
             self.motors.vertical.get_position(self._shell.units)
-            - self._shell.ui.doubleSpinBox_sampleVStepSize.value()
+            - self._shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value()
             >= self.motors.vertical.get_limit_low(self._shell.units)
         ):
             try:
                 self.motors.vertical.move_relative_position(
-                    -self._shell.ui.doubleSpinBox_sampleVStepSize.value(),
+                    -self._shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value(),
                     self._shell.units,
                 )
             except ValueError:
@@ -348,12 +348,12 @@ class MotorController:
         """Sample motor downward vertical motion"""
         if (
             self.motors.vertical.get_position(self._shell.units)
-            + self._shell.ui.doubleSpinBox_sampleVStepSize.value()
+            + self._shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value()
             <= self.motors.vertical.get_limit_high(self._shell.units)
         ):
             try:
                 self.motors.vertical.move_relative_position(
-                    self._shell.ui.doubleSpinBox_sampleVStepSize.value(),
+                    self._shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value(),
                     self._shell.units,
                 )
             except ValueError:
@@ -375,12 +375,12 @@ class MotorController:
         """Camera motor backward horizontal motion"""
         if (
             self.motors.camera.get_position(self._shell.units)
-            - self._shell.ui.doubleSpinBox_cameraStepSize.value()
+            - self._shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value()
             >= self.motors.camera.get_limit_low(self._shell.units)
         ):
             try:
                 self.motors.camera.move_relative_position(
-                    -self._shell.ui.doubleSpinBox_cameraStepSize.value(),
+                    -self._shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value(),
                     self._shell.units,
                 )
             except ValueError:
@@ -403,12 +403,12 @@ class MotorController:
         """Camera motor forward horizontal motion"""
         if (
             self.motors.camera.get_position(self._shell.units)
-            + self._shell.ui.doubleSpinBox_cameraStepSize.value()
+            + self._shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value()
             <= self.motors.camera.get_limit_high(self._shell.units)
         ):
             try:
                 self.motors.camera.move_relative_position(
-                    self._shell.ui.doubleSpinBox_cameraStepSize.value(),
+                    self._shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value(),
                     self._shell.units,
                 )
             except ValueError:
@@ -433,10 +433,10 @@ class MotorController:
 
     def updateUi_reset_boundaries(self) -> None:
         """Reset variables for setting sample's horizontal motion range"""
-        self._shell.ui.pushButton_calHorizontalStartRangeSelection.setEnabled(False)
-        self._shell.ui.pushButton_calHorizontalSetForwardLimit.setEnabled(True)
-        self._shell.ui.pushButton_calHorizontalSetBackwardLimit.setEnabled(True)
-        self._shell.ui.label_calibrateRange.setText("Move Horizontal Position")
+        self._shell.calibration_panel.ui.pushButton_calHorizontalStartRangeSelection.setEnabled(False)
+        self._shell.calibration_panel.ui.pushButton_calHorizontalSetForwardLimit.setEnabled(True)
+        self._shell.calibration_panel.ui.pushButton_calHorizontalSetBackwardLimit.setEnabled(True)
+        self._shell.calibration_panel.ui.label_calibrateRange.setText("Move Horizontal Position")
         # Default boundaries
         self.motors.horizontal.set_limit_low(0, self._shell.units)
         self.motors.horizontal.set_limit_high(0, self._shell.units)
@@ -449,10 +449,10 @@ class MotorController:
         )
         self._shell.motor_panel.updateUi_units()
         self._shell.horizontal_backward_boundary_selected = True
-        self._shell.ui.pushButton_calHorizontalSetBackwardLimit.setEnabled(False)
+        self._shell.calibration_panel.ui.pushButton_calHorizontalSetBackwardLimit.setEnabled(False)
         if self._shell.horizontal_forward_boundary_selected:
-            self._shell.ui.pushButton_calHorizontalStartRangeSelection.setEnabled(True)
-            self._shell.ui.label_calibrateRange.setText("Press Calibrate Range To Start")  # noqa: E501
+            self._shell.calibration_panel.ui.pushButton_calHorizontalStartRangeSelection.setEnabled(True)
+            self._shell.calibration_panel.ui.label_calibrateRange.setText("Press Calibrate Range To Start")  # noqa: E501
 
     def updateUi_set_horizontal_forward_boundary(self) -> None:
         """Set upper limit of sample's horizontal motion"""
@@ -461,10 +461,10 @@ class MotorController:
         )
         self._shell.motor_panel.updateUi_units()
         self._shell.horizontal_forward_boundary_selected = True
-        self._shell.ui.pushButton_calHorizontalSetForwardLimit.setEnabled(False)
+        self._shell.calibration_panel.ui.pushButton_calHorizontalSetForwardLimit.setEnabled(False)
         if self._shell.horizontal_backward_boundary_selected:
-            self._shell.ui.pushButton_calHorizontalStartRangeSelection.setEnabled(True)
-            self._shell.ui.label_calibrateRange.setText("Press Calibrate Range To Start")  # noqa: E501
+            self._shell.calibration_panel.ui.pushButton_calHorizontalStartRangeSelection.setEnabled(True)
+            self._shell.calibration_panel.ui.label_calibrateRange.setText("Press Calibrate Range To Start")  # noqa: E501
 
     def updateUi_set_sample_origin(self) -> None:
         """Modifies the sample origin position"""

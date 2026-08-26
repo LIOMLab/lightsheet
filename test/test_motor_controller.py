@@ -63,6 +63,10 @@ class _ShellStandin:
         # shell.motor_panel (the per-panel widget module). The stand-in
         # already defines these methods, so motor_panel points to self.
         self.motor_panel = self
+        # Hybrid ownership: MotorController reaches calibration_panel
+        # widgets (boundary-limit buttons) via
+        # self._shell.calibration_panel.ui.<name>.
+        self.calibration_panel = Mock()
 
     def updateUi_message_printer(self, message: str) -> None:
         self.message_printer_calls.append(message)
@@ -151,7 +155,7 @@ def test_move_sample_backward_preflight_boundary_check_skips_hal_call() -> None:
     # i.e. position=0, step=1, limit_low=0  =>  0 - 1 = -1 < 0  =>  False
     mc.motors.horizontal.get_position = Mock(return_value=0.0)
     mc.motors.horizontal.get_limit_low = Mock(return_value=0.0)
-    shell.ui.doubleSpinBox_sampleHStepSize.value.return_value = 1.0
+    shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value.return_value = 1.0
     mc.motors.horizontal.move_relative_position = Mock()
 
     mc.updateUi_move_sample_backward()
@@ -177,7 +181,7 @@ def test_move_to_horizontal_position_in_range_emits_moving_message() -> None:
     branch of the try/except — the happy path)."""
     mc, shell = _make_mc()
     mc.motors.horizontal.move_absolute_position = Mock()
-    shell.ui.doubleSpinBox_sampleSetHPosition.value.return_value = 5.0
+    shell.motor_panel.ui.doubleSpinBox_sampleSetHPosition.value.return_value = 5.0
     mc.updateUi_move_to_horizontal_position()
     mc.motors.horizontal.move_absolute_position.assert_called_once()
     assert any("Sample moving to horizontal position" in m for m in shell.message_printer_calls)
@@ -191,7 +195,7 @@ def test_move_to_horizontal_position_out_of_boundaries_beeps() -> None:
     # Position below the low limit.
     mc.motors.horizontal.get_limit_low = Mock(return_value=10.0)
     mc.motors.horizontal.get_limit_high = Mock(return_value=20.0)
-    shell.ui.doubleSpinBox_sampleSetHPosition.value.return_value = 5.0
+    shell.motor_panel.ui.doubleSpinBox_sampleSetHPosition.value.return_value = 5.0
     mc.updateUi_move_to_horizontal_position()
     mc.motors.horizontal.move_absolute_position.assert_not_called()
     assert any("Out of boundaries" in m for m in shell.message_printer_calls)
@@ -201,7 +205,7 @@ def test_move_to_horizontal_position_out_of_boundaries_beeps() -> None:
 def test_move_to_vertical_position_in_range_emits_moving_message() -> None:
     mc, shell = _make_mc()
     mc.motors.vertical.move_absolute_position = Mock()
-    shell.ui.doubleSpinBox_sampleSetVPosition.value.return_value = 5.0
+    shell.motor_panel.ui.doubleSpinBox_sampleSetVPosition.value.return_value = 5.0
     mc.updateUi_move_to_vertical_position()
     mc.motors.vertical.move_absolute_position.assert_called_once()
     assert any("Sample moving to vertical position" in m for m in shell.message_printer_calls)
@@ -223,7 +227,7 @@ def test_move_to_vertical_position_out_of_boundaries_beeps() -> None:
     mc.motors.vertical.move_absolute_position = Mock()
     mc.motors.vertical.get_limit_low = Mock(return_value=10.0)
     mc.motors.vertical.get_limit_high = Mock(return_value=20.0)
-    shell.ui.doubleSpinBox_sampleSetVPosition.value.return_value = 5.0
+    shell.motor_panel.ui.doubleSpinBox_sampleSetVPosition.value.return_value = 5.0
     mc.updateUi_move_to_vertical_position()
     mc.motors.vertical.move_absolute_position.assert_not_called()
     assert shell.sig_beep.emit.called
@@ -232,7 +236,7 @@ def test_move_to_vertical_position_out_of_boundaries_beeps() -> None:
 def test_move_camera_to_position_in_range_emits_moving_message() -> None:
     mc, shell = _make_mc()
     mc.motors.camera.move_absolute_position = Mock()
-    shell.ui.doubleSpinBox_cameraSetPosition.value.return_value = 5.0
+    shell.motor_panel.ui.doubleSpinBox_cameraSetPosition.value.return_value = 5.0
     mc.updateUi_move_camera_to_position()
     mc.motors.camera.move_absolute_position.assert_called_once()
     assert any("Camera moving to position" in m for m in shell.message_printer_calls)
@@ -253,7 +257,7 @@ def test_move_camera_to_position_out_of_boundaries_beeps() -> None:
     mc.motors.camera.move_absolute_position = Mock()
     mc.motors.camera.get_limit_low = Mock(return_value=10.0)
     mc.motors.camera.get_limit_high = Mock(return_value=20.0)
-    shell.ui.doubleSpinBox_cameraSetPosition.value.return_value = 5.0
+    shell.motor_panel.ui.doubleSpinBox_cameraSetPosition.value.return_value = 5.0
     mc.updateUi_move_camera_to_position()
     mc.motors.camera.move_absolute_position.assert_not_called()
     assert shell.sig_beep.emit.called
@@ -414,7 +418,7 @@ def test_move_sample_forward_in_range_emits_moving_message() -> None:
     mc.motors.horizontal.move_relative_position = Mock()
     mc.motors.horizontal.get_position = Mock(return_value=5.0)
     mc.motors.horizontal.get_limit_high = Mock(return_value=100.0)
-    shell.ui.doubleSpinBox_sampleHStepSize.value.return_value = 1.0
+    shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value.return_value = 1.0
     mc.updateUi_move_sample_forward()
     mc.motors.horizontal.move_relative_position.assert_called_once()
     assert any("Sample moving forward" in m for m in shell.message_printer_calls)
@@ -425,7 +429,7 @@ def test_move_sample_forward_out_of_boundaries_beeps() -> None:
     mc.motors.horizontal.move_relative_position = Mock()
     mc.motors.horizontal.get_position = Mock(return_value=99.0)
     mc.motors.horizontal.get_limit_high = Mock(return_value=100.0)
-    shell.ui.doubleSpinBox_sampleHStepSize.value.return_value = 5.0
+    shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value.return_value = 5.0
     mc.updateUi_move_sample_forward()
     mc.motors.horizontal.move_relative_position.assert_not_called()
     assert any("Out of boundaries" in m for m in shell.message_printer_calls)
@@ -436,7 +440,7 @@ def test_move_sample_forward_valueerror_aborts() -> None:
     mc.motors.horizontal.move_relative_position = Mock(side_effect=ValueError("over-travel"))
     mc.motors.horizontal.get_position = Mock(return_value=5.0)
     mc.motors.horizontal.get_limit_high = Mock(return_value=100.0)
-    shell.ui.doubleSpinBox_sampleHStepSize.value.return_value = 1.0
+    shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value.return_value = 1.0
     mc.updateUi_move_sample_forward()
     assert shell.sig_message.emit.called
     assert shell.sig_beep.emit.called
@@ -447,7 +451,7 @@ def test_move_sample_up_in_range_emits_moving_message() -> None:
     mc.motors.vertical.move_relative_position = Mock()
     mc.motors.vertical.get_position = Mock(return_value=5.0)
     mc.motors.vertical.get_limit_low = Mock(return_value=0.0)
-    shell.ui.doubleSpinBox_sampleVStepSize.value.return_value = 1.0
+    shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value.return_value = 1.0
     mc.updateUi_move_sample_up()
     mc.motors.vertical.move_relative_position.assert_called_once()
     assert any("Sample stepping up" in m for m in shell.message_printer_calls)
@@ -458,7 +462,7 @@ def test_move_sample_up_out_of_boundaries_beeps() -> None:
     mc.motors.vertical.move_relative_position = Mock()
     mc.motors.vertical.get_position = Mock(return_value=1.0)
     mc.motors.vertical.get_limit_low = Mock(return_value=0.0)
-    shell.ui.doubleSpinBox_sampleVStepSize.value.return_value = 5.0
+    shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value.return_value = 5.0
     mc.updateUi_move_sample_up()
     mc.motors.vertical.move_relative_position.assert_not_called()
     assert any("Out of boundaries" in m for m in shell.message_printer_calls)
@@ -469,7 +473,7 @@ def test_move_sample_down_in_range_emits_moving_message() -> None:
     mc.motors.vertical.move_relative_position = Mock()
     mc.motors.vertical.get_position = Mock(return_value=5.0)
     mc.motors.vertical.get_limit_high = Mock(return_value=100.0)
-    shell.ui.doubleSpinBox_sampleVStepSize.value.return_value = 1.0
+    shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value.return_value = 1.0
     mc.updateUi_move_sample_down()
     mc.motors.vertical.move_relative_position.assert_called_once()
     assert any("Sample stepping down" in m for m in shell.message_printer_calls)
@@ -480,7 +484,7 @@ def test_move_sample_down_out_of_boundaries_beeps() -> None:
     mc.motors.vertical.move_relative_position = Mock()
     mc.motors.vertical.get_position = Mock(return_value=99.0)
     mc.motors.vertical.get_limit_high = Mock(return_value=100.0)
-    shell.ui.doubleSpinBox_sampleVStepSize.value.return_value = 5.0
+    shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value.return_value = 5.0
     mc.updateUi_move_sample_down()
     mc.motors.vertical.move_relative_position.assert_not_called()
     assert any("Out of boundaries" in m for m in shell.message_printer_calls)
@@ -491,7 +495,7 @@ def test_move_camera_backward_in_range_emits_moving_message() -> None:
     mc.motors.camera.move_relative_position = Mock()
     mc.motors.camera.get_position = Mock(return_value=5.0)
     mc.motors.camera.get_limit_low = Mock(return_value=0.0)
-    shell.ui.doubleSpinBox_cameraStepSize.value.return_value = 1.0
+    shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value.return_value = 1.0
     mc.updateUi_move_camera_backward()
     mc.motors.camera.move_relative_position.assert_called_once()
     assert any("Camera stepping backward" in m for m in shell.message_printer_calls)
@@ -502,7 +506,7 @@ def test_move_camera_backward_out_of_boundaries_beeps() -> None:
     mc.motors.camera.move_relative_position = Mock()
     mc.motors.camera.get_position = Mock(return_value=1.0)
     mc.motors.camera.get_limit_low = Mock(return_value=0.0)
-    shell.ui.doubleSpinBox_cameraStepSize.value.return_value = 5.0
+    shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value.return_value = 5.0
     mc.updateUi_move_camera_backward()
     mc.motors.camera.move_relative_position.assert_not_called()
     assert any("Out of boundaries" in m for m in shell.message_printer_calls)
@@ -513,7 +517,7 @@ def test_move_camera_forward_in_range_emits_moving_message() -> None:
     mc.motors.camera.move_relative_position = Mock()
     mc.motors.camera.get_position = Mock(return_value=5.0)
     mc.motors.camera.get_limit_high = Mock(return_value=100.0)
-    shell.ui.doubleSpinBox_cameraStepSize.value.return_value = 1.0
+    shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value.return_value = 1.0
     mc.updateUi_move_camera_forward()
     mc.motors.camera.move_relative_position.assert_called_once()
     assert any("Camera stepping forward" in m for m in shell.message_printer_calls)
@@ -524,7 +528,7 @@ def test_move_camera_forward_out_of_boundaries_beeps() -> None:
     mc.motors.camera.move_relative_position = Mock()
     mc.motors.camera.get_position = Mock(return_value=99.0)
     mc.motors.camera.get_limit_high = Mock(return_value=100.0)
-    shell.ui.doubleSpinBox_cameraStepSize.value.return_value = 5.0
+    shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value.return_value = 5.0
     mc.updateUi_move_camera_forward()
     mc.motors.camera.move_relative_position.assert_not_called()
     assert any("Out of boundaries" in m for m in shell.message_printer_calls)
@@ -540,7 +544,7 @@ def test_reset_boundaries_resets_limits_and_disables_buttons() -> None:
     mc.updateUi_reset_boundaries()
     mc.motors.horizontal.set_limit_low.assert_called_once()
     mc.motors.horizontal.set_limit_high.assert_called_once()
-    shell.ui.pushButton_calHorizontalStartRangeSelection.setEnabled.assert_called_with(False)
+    shell.calibration_panel.ui.pushButton_calHorizontalStartRangeSelection.setEnabled.assert_called_with(False)
     assert "units" in shell.position_calls
 
 
@@ -562,7 +566,7 @@ def test_set_horizontal_backward_boundary_with_forward_already_set_enables_start
     mc.motors.horizontal.get_position = Mock(return_value=3.0)
     shell.horizontal_forward_boundary_selected = True
     mc.updateUi_set_horizontal_backward_boundary()
-    shell.ui.pushButton_calHorizontalStartRangeSelection.setEnabled.assert_called_with(True)
+    shell.calibration_panel.ui.pushButton_calHorizontalStartRangeSelection.setEnabled.assert_called_with(True)
 
 
 def test_set_horizontal_forward_boundary_sets_limit_high() -> None:
@@ -581,7 +585,7 @@ def test_set_horizontal_forward_boundary_with_backward_already_set_enables_start
     mc.motors.horizontal.get_position = Mock(return_value=7.0)
     shell.horizontal_backward_boundary_selected = True
     mc.updateUi_set_horizontal_forward_boundary()
-    shell.ui.pushButton_calHorizontalStartRangeSelection.setEnabled.assert_called_with(True)
+    shell.calibration_panel.ui.pushButton_calHorizontalStartRangeSelection.setEnabled.assert_called_with(True)
 
 
 def test_set_sample_origin_sets_origin_and_emits_message() -> None:

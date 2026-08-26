@@ -56,6 +56,60 @@ from lightsheet.hal.bundle import DeviceBundle
 
 logger = logging.getLogger(__name__)
 
+# Shell-owned widget objectNames. The ``vars(panel.ui)`` merge loop below
+# only surfaces these onto ``self.ui``; panel-internal widgets stay on
+# their owning panel's ``ui`` and are reached via the panel-qualified path
+# (``self.ui.<name>`` inside a panel, ``self._shell.<panel>.ui.<name>``
+# across panels). The shell-owned set covers the safety-critical E-stop
+# toolbar (AGENTS.md §2 — the kill path's widget references must never
+# strand), the status bar, the message log, the units selector, and the
+# controls/images pane primitives. Most of these live on ``Ui_Shell`` via
+# ``setupUi`` (so they are already on ``self.ui`` and never appear in a
+# panel's ``vars(panel.ui)``); listing them here is harmless and documents
+# the shell-owned surface. The only panel.ui attr that is shell-owned is
+# ``comboBox_units`` (created programmatically on ``motor_panel.ui`` in
+# ``__init__`` and whitelisted so the shell keeps it on ``self.ui``).
+SHELL_OWNED_OBJECTNAMES = frozenset({
+    # E-stop toolbar (safety-critical — AGENTS.md §2).
+    "toolBar_estop",
+    "pushButton_estop",
+    "pushButton_armReset",
+    "label_estopStatus",
+    "shortcut_estop",
+    # Status bar.
+    "statusbar",
+    "statusBar_label",
+    "statusBar_progress",
+    # Message log.
+    "plainTextEdit_messageLog",
+    # Units selector (programmatic, shell-owned).
+    "comboBox_units",
+    "units_label",
+    # Controls / images pane primitives + tab shell.
+    "splitter",
+    "controlsPane",
+    "tabControls",
+    "imagesPane",
+    "imageView",
+    "centralwidget",
+    # View-menu / theme / help actions.
+    "action_Exit",
+    "action_ShowHideControlsPane",
+    "action_ShowHideImagesPane",
+    "action_ShowHideMessageLog",
+    "action_lightTheme",
+    "action_darkTheme",
+    "action_showSystemProperties",
+    "action_openDocumentation",
+    "action_OpenFile",
+    # Menus.
+    "menuFile",
+    "menuDisplay",
+    "menuHelp",
+    "menu_Select_Theme",
+    "menubar",
+})
+
 if typing.TYPE_CHECKING:
     from lightsheet.gui.acquisition_coordinator import AcquisitionCoordinator
     from lightsheet.gui.frame_saver_controller import FrameSaverController
@@ -211,7 +265,7 @@ class Controller_MainWindow(QMainWindow):
         # gracefully on small screens (UI-SPEC QScrollArea Wrapping
         # Rules). All 7 per-panel widget classes are preserved — the
         # merge is sub-layouts in tabs, NOT a widget-class deletion or a
-        # left-rail/QToolBox refactor.
+        # non-tab shell architecture.
         from PySide6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
 
         self.ui.tabControls.removeTab(0)
@@ -233,8 +287,15 @@ class Controller_MainWindow(QMainWindow):
         self.ui.tabControls.addTab(self.save_panel, "File Manager")
         self.ui.tabControls.addTab(self.calibration_panel, "Calibration")
 
-        # Merge each panel's widget attributes onto self.ui so the flat
-        # self.ui.<objectName> namespace works across all panels + shell.
+        # Merge each panel's SHELL-OWNED widget attributes onto self.ui.
+        # Panel-internal widgets stay on their owning panel's ``ui`` and
+        # are reached via the panel-qualified path (hybrid ownership,
+        # D-05): ``self.ui.<name>`` inside a panel for its own widgets,
+        # ``self._shell.<panel>.ui.<name>`` for cross-panel reads. Only
+        # the shell-owned widgets (notably ``comboBox_units``, created
+        # programmatically on ``motor_panel.ui``) are surfaced onto
+        # ``self.ui`` so the shell + the E-stop kill path keep a single
+        # owner for the safety-critical surface (AGENTS.md §2).
         for panel in (
             self.laser_panel,
             self.motor_panel,
@@ -245,7 +306,7 @@ class Controller_MainWindow(QMainWindow):
             self.calibration_panel,
         ):
             for attr_name in vars(panel.ui):
-                if not attr_name.startswith("_"):
+                if not attr_name.startswith("_") and attr_name in SHELL_OWNED_OBJECTNAMES:
                     setattr(self.ui, attr_name, getattr(panel.ui, attr_name))
 
         # Per-laser status indicators (LSR-06). Added programmatically per
@@ -256,7 +317,7 @@ class Controller_MainWindow(QMainWindow):
         self.label_laserOneStatus = QLabel("● OFF")
         self.label_laserOneStatus.setMinimumWidth(140)
         self.label_laserOneStatus.setStyleSheet("color: #8E8E93; font-weight: bold;")
-        self.ui.verticalLayout_43.insertWidget(4, self.label_laserOneStatus)
+        self.laser_panel.ui.verticalLayout_43.insertWidget(4, self.label_laserOneStatus)
 
         self.label_laserOneReadback = QLabel("0.0 mW (est.)")
         self.label_laserOneReadback.setMinimumWidth(80)
@@ -267,19 +328,19 @@ class Controller_MainWindow(QMainWindow):
             "knee + free-space measurement geometry). Run the rig "
             "calibration sweep to load a measured V->mW curve."
         )
-        self.ui.verticalLayout_43.insertWidget(5, self.label_laserOneReadback)
+        self.laser_panel.ui.verticalLayout_43.insertWidget(5, self.label_laserOneReadback)
 
         self.label_laserTwoStatus = QLabel("● OFF")
         self.label_laserTwoStatus.setMinimumWidth(140)
         self.label_laserTwoStatus.setStyleSheet("color: #8E8E93; font-weight: bold;")
-        self.ui.verticalLayout_44.insertWidget(4, self.label_laserTwoStatus)
+        self.laser_panel.ui.verticalLayout_44.insertWidget(4, self.label_laserTwoStatus)
 
         self.label_laserTwoReadback = QLabel("N/A")
         self.label_laserTwoReadback.setMinimumWidth(80)
         self.label_laserTwoReadback.setToolTip(
             "iBeam power readback — click Refresh Power to re-query"
         )
-        self.ui.verticalLayout_44.insertWidget(5, self.label_laserTwoReadback)
+        self.laser_panel.ui.verticalLayout_44.insertWidget(5, self.label_laserTwoReadback)
 
         self.pushButton_laserTwoRefresh = QPushButton("Refresh Power")
         self.pushButton_laserTwoRefresh.setToolTip(
@@ -289,7 +350,7 @@ class Controller_MainWindow(QMainWindow):
         self.pushButton_laserTwoRefresh.clicked.connect(
             self.laser_panel.updateUi_laser2_refresh_clicked
         )
-        self.ui.verticalLayout_44.insertWidget(6, self.pushButton_laserTwoRefresh)
+        self.laser_panel.ui.verticalLayout_44.insertWidget(6, self.pushButton_laserTwoRefresh)
 
         # Connect the status/readback signals to the laser panel slots.
         self.sig_laser_status.connect(self.laser_panel.updateUi_laser_status)
@@ -338,17 +399,17 @@ class Controller_MainWindow(QMainWindow):
             self.ui.comboBox_units.setCurrentIndex(0)
 
         if self.save_directory != "":
-            self.ui.lineEdit_saveDirectory.setText(self.save_directory)
-            self.ui.lineEdit_saveFilename.setText(self.save_filename)
-            self.ui.lineEdit_saveFilename.setEnabled(True)
-            self.ui.lineEdit_saveDescription.setText(self.save_description)
-            self.ui.lineEdit_saveDescription.setEnabled(True)
+            self.save_panel.ui.lineEdit_saveDirectory.setText(self.save_directory)
+            self.save_panel.ui.lineEdit_saveFilename.setText(self.save_filename)
+            self.save_panel.ui.lineEdit_saveFilename.setEnabled(True)
+            self.save_panel.ui.lineEdit_saveDescription.setText(self.save_description)
+            self.save_panel.ui.lineEdit_saveDescription.setEnabled(True)
         else:
-            self.ui.lineEdit_saveDirectory.setText("")
-            self.ui.lineEdit_saveFilename.setText("Filename - Select Save Directory First")  # noqa: E501
-            self.ui.lineEdit_saveFilename.setEnabled(False)
-            self.ui.lineEdit_saveDescription.setText("Description - Select Save Directory First")  # noqa: E501
-            self.ui.lineEdit_saveDescription.setEnabled(False)
+            self.save_panel.ui.lineEdit_saveDirectory.setText("")
+            self.save_panel.ui.lineEdit_saveFilename.setText("Filename - Select Save Directory First")  # noqa: E501
+            self.save_panel.ui.lineEdit_saveFilename.setEnabled(False)
+            self.save_panel.ui.lineEdit_saveDescription.setText("Description - Select Save Directory First")  # noqa: E501
+            self.save_panel.ui.lineEdit_saveDescription.setEnabled(False)
 
         # Flags
         self.single_mode_started = False
@@ -382,30 +443,30 @@ class Controller_MainWindow(QMainWindow):
         self.reconstructed_frame = None
 
         self.default_buttons = [
-            self.ui.pushButton_acqStartPreviewMode,
-            self.ui.pushButton_acqStartLiveMode,
-            self.ui.pushButton_acqStartStackMode,
-            self.ui.pushButton_acqGetSingleImage,
+            self.acquisition_panel.ui.pushButton_acqStartPreviewMode,
+            self.acquisition_panel.ui.pushButton_acqStartLiveMode,
+            self.stack_panel.ui.pushButton_acqStartStackMode,
+            self.acquisition_panel.ui.pushButton_acqGetSingleImage,
         ]
 
         # Initial state of modes buttons
-        self.ui.pushButton_acqStartPreviewMode.setEnabled(True)
-        self.ui.pushButton_acqStartLiveMode.setEnabled(True)
-        self.ui.pushButton_acqStartStackMode.setEnabled(True)
-        self.ui.pushButton_acqGetSingleImage.setEnabled(True)
-        self.ui.pushButton_saveCurrentImage.setEnabled(False)
-        self.ui.pushButton_calCameraComputeFocus.setEnabled(False)
-        self.ui.pushButton_calCameraShowInterpolation.setEnabled(False)
-        self.ui.pushButton_calEtlShowInterpolation.setEnabled(False)
+        self.acquisition_panel.ui.pushButton_acqStartPreviewMode.setEnabled(True)
+        self.acquisition_panel.ui.pushButton_acqStartLiveMode.setEnabled(True)
+        self.stack_panel.ui.pushButton_acqStartStackMode.setEnabled(True)
+        self.acquisition_panel.ui.pushButton_acqGetSingleImage.setEnabled(True)
+        self.save_panel.ui.pushButton_saveCurrentImage.setEnabled(False)
+        self.calibration_panel.ui.pushButton_calCameraComputeFocus.setEnabled(False)
+        self.calibration_panel.ui.pushButton_calCameraShowInterpolation.setEnabled(False)
+        self.calibration_panel.ui.pushButton_calEtlShowInterpolation.setEnabled(False)
 
         # Initial state of First and Last plane selection (for Stack Mode)
-        self.ui.checkBox_acqFirstPlaneSet.setEnabled(False)
-        self.ui.checkBox_acqLastPlaneSet.setEnabled(False)
-        self.ui.pushButton_acqSetFirstPlane.setEnabled(True)
-        self.ui.pushButton_acqSetLastPlane.setEnabled(True)
+        self.stack_panel.ui.checkBox_acqFirstPlaneSet.setEnabled(False)
+        self.stack_panel.ui.checkBox_acqLastPlaneSet.setEnabled(False)
+        self.stack_panel.ui.pushButton_acqSetFirstPlane.setEnabled(True)
+        self.stack_panel.ui.pushButton_acqSetLastPlane.setEnabled(True)
 
         # Initial state of some file selection buttons
-        self.ui.pushButton_selectDataset.setEnabled(False)
+        self.save_panel.ui.pushButton_selectDataset.setEnabled(False)
 
         # ---
         # Signal connections for progress bar and command log
@@ -429,60 +490,60 @@ class Controller_MainWindow(QMainWindow):
         self.ui.comboBox_units.currentTextChanged.connect(self.motor_panel.updateUi_units)
 
         # Connection for laser settings changes — target the laser panel slots.
-        self.ui.doubleSpinBox_laserOneAmplitude.valueChanged.connect(
+        self.laser_panel.ui.doubleSpinBox_laserOneAmplitude.valueChanged.connect(
             self.laser_panel.updateUi_laser1_amplitude
         )
-        self.ui.doubleSpinBox_laserTwoAmplitude.valueChanged.connect(
+        self.laser_panel.ui.doubleSpinBox_laserTwoAmplitude.valueChanged.connect(
             self.laser_panel.updateUi_laser2_amplitude
         )
 
         # Connections for the 'File Manager' tab controls — target save panel.
-        self.ui.pushButton_selectFile.clicked.connect(self.save_panel.updateUi_select_file)
-        self.ui.pushButton_selectDataset.clicked.connect(self.save_panel.updateUi_select_dataset)
-        self.ui.listWidget_fileDatasets.doubleClicked.connect(self.save_panel.updateUi_select_dataset)
+        self.save_panel.ui.pushButton_selectFile.clicked.connect(self.save_panel.updateUi_select_file)
+        self.save_panel.ui.pushButton_selectDataset.clicked.connect(self.save_panel.updateUi_select_dataset)
+        self.save_panel.ui.listWidget_fileDatasets.doubleClicked.connect(self.save_panel.updateUi_select_dataset)
 
         # Connections for the 'Manual Acquisition' controls — target acquisition panel.
-        self.ui.pushButton_acqGetSingleImage.clicked.connect(
+        self.acquisition_panel.ui.pushButton_acqGetSingleImage.clicked.connect(
             self.acquisition_panel.updateUi_single_mode_button
         )
-        self.ui.pushButton_acqStartLiveMode.clicked.connect(
+        self.acquisition_panel.ui.pushButton_acqStartLiveMode.clicked.connect(
             self.acquisition_panel.updateUi_live_mode_button
         )
-        self.ui.pushButton_acqStartPreviewMode.clicked.connect(
+        self.acquisition_panel.ui.pushButton_acqStartPreviewMode.clicked.connect(
             self.acquisition_panel.updateUi_preview_mode_button
         )
 
         # Connections for the 'Automatic Acquisition' controls — target stack panel.
-        self.ui.pushButton_acqStartStackMode.clicked.connect(
+        self.stack_panel.ui.pushButton_acqStartStackMode.clicked.connect(
             self.acquisition_panel.updateUi_stack_mode_button
         )
-        self.ui.doubleSpinBox_acqPlaneStepSize.valueChanged.connect(
+        self.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.valueChanged.connect(
             self.stack_panel.updateUi_set_number_of_planes
         )
-        self.ui.pushButton_acqSetFirstPlane.clicked.connect(
+        self.stack_panel.ui.pushButton_acqSetFirstPlane.clicked.connect(
             self.stack_panel.updateUi_set_stack_mode_starting_point
         )
-        self.ui.pushButton_acqSetLastPlane.clicked.connect(
+        self.stack_panel.ui.pushButton_acqSetLastPlane.clicked.connect(
             self.stack_panel.updateUi_set_stack_mode_ending_point
         )
 
         # Connections for the 'Lasers' controls — target laser panel.
-        self.ui.pushButton_laserOneToggle.clicked.connect(self.laser_panel.laser1_toggle_button)
-        self.ui.pushButton_laserTwoToggle.clicked.connect(self.laser_panel.laser2_toggle_button)
+        self.laser_panel.ui.pushButton_laserOneToggle.clicked.connect(self.laser_panel.laser1_toggle_button)
+        self.laser_panel.ui.pushButton_laserTwoToggle.clicked.connect(self.laser_panel.laser2_toggle_button)
 
         # Connections for the 'Save Settings' controls — target save panel.
-        self.ui.pushButton_saveSelectDirectory.clicked.connect(
+        self.save_panel.ui.pushButton_saveSelectDirectory.clicked.connect(
             self.save_panel.updateUi_select_directory
         )
-        self.ui.pushButton_saveCurrentImage.clicked.connect(
+        self.save_panel.ui.pushButton_saveCurrentImage.clicked.connect(
             self.save_panel.updateUi_save_single_image
         )
 
         self.save_option_button_group = QButtonGroup(self)
-        self.save_option_button_group.addButton(self.ui.checkBox_saveStitch)
-        self.save_option_button_group.addButton(self.ui.checkBox_saveStitchBlend)
-        self.save_option_button_group.addButton(self.ui.checkBox_saveAllCrop)
-        self.save_option_button_group.addButton(self.ui.checkBox_saveAllFull)
+        self.save_option_button_group.addButton(self.save_panel.ui.checkBox_saveStitch)
+        self.save_option_button_group.addButton(self.save_panel.ui.checkBox_saveStitchBlend)
+        self.save_option_button_group.addButton(self.save_panel.ui.checkBox_saveAllCrop)
+        self.save_option_button_group.addButton(self.save_panel.ui.checkBox_saveAllFull)
         self.save_option_button_group.setExclusive(True)
 
         # ---
@@ -521,8 +582,9 @@ class Controller_MainWindow(QMainWindow):
         """Build a merged tab page hosting two panel widgets in a vertical
         sub-layout inside a QScrollArea (widgetResizable=True).
 
-        The merge is a sub-layout in one tab (D-01), NOT a left-rail/
-        QToolBox refactor — the thin QTabWidget shell stays and each
+        The merge is a sub-layout in one tab (D-01), NOT a side-rail
+        or stacked-tool container refactor — the thin QTabWidget shell
+        stays and each
         panel widget keeps its own widget tree. The QScrollArea lets the
         two stacked panels overflow gracefully on small screens (UI-SPEC
         QScrollArea Wrapping Rules). The scroll area's horizontal
@@ -764,8 +826,8 @@ class Controller_MainWindow(QMainWindow):
         mode-*start* entry point that leads to a worker calling
         start_lasers()/stop_lasers().
         """
-        self._auto_laser1 = self.ui.checkBox_laserOneAutomatic.isChecked()
-        self._auto_laser2 = self.ui.checkBox_laserTwoAutomatic.isChecked()
+        self._auto_laser1 = self.laser_panel.ui.checkBox_laserOneAutomatic.isChecked()
+        self._auto_laser2 = self.laser_panel.ui.checkBox_laserTwoAutomatic.isChecked()
 
     def close_modes(self) -> None:
         """Close all thread modes if they are active.
@@ -801,58 +863,58 @@ class Controller_MainWindow(QMainWindow):
         # ---
         # Connections for the 'Motion' tab controls (MotorController)
         # ---
-        self.ui.pushButton_sampleStepUp.clicked.connect(self._mc.updateUi_move_sample_up)
-        self.ui.pushButton_sampleStepDown.clicked.connect(self._mc.updateUi_move_sample_down)
-        self.ui.pushButton_sampleStepForward.clicked.connect(self._mc.updateUi_move_sample_forward)
-        self.ui.pushButton_sampleStepBackward.clicked.connect(self._mc.updateUi_move_sample_backward)
-        self.ui.pushButton_sampleGotoOrigin.clicked.connect(self._mc.updateUi_move_sample_to_origin)
-        self.ui.pushButton_sampleSetOrigin.clicked.connect(self._mc.updateUi_set_sample_origin)
-        self.ui.pushButton_sampleGotoHPosition.clicked.connect(self._mc.updateUi_move_to_horizontal_position)
-        self.ui.pushButton_sampleGotoVPosition.clicked.connect(self._mc.updateUi_move_to_vertical_position)
+        self.motor_panel.ui.pushButton_sampleStepUp.clicked.connect(self._mc.updateUi_move_sample_up)
+        self.motor_panel.ui.pushButton_sampleStepDown.clicked.connect(self._mc.updateUi_move_sample_down)
+        self.motor_panel.ui.pushButton_sampleStepForward.clicked.connect(self._mc.updateUi_move_sample_forward)
+        self.motor_panel.ui.pushButton_sampleStepBackward.clicked.connect(self._mc.updateUi_move_sample_backward)
+        self.motor_panel.ui.pushButton_sampleGotoOrigin.clicked.connect(self._mc.updateUi_move_sample_to_origin)
+        self.motor_panel.ui.pushButton_sampleSetOrigin.clicked.connect(self._mc.updateUi_set_sample_origin)
+        self.motor_panel.ui.pushButton_sampleGotoHPosition.clicked.connect(self._mc.updateUi_move_to_horizontal_position)
+        self.motor_panel.ui.pushButton_sampleGotoVPosition.clicked.connect(self._mc.updateUi_move_to_vertical_position)
 
         # Connections for the camera motion buttons
-        self.ui.pushButton_cameraGotoPosition.clicked.connect(self._mc.updateUi_move_camera_to_position)
-        self.ui.pushButton_cameraSetFocus.clicked.connect(self._mc.updateUi_set_camera_focus)
-        self.ui.pushButton_cameraStepForward.clicked.connect(self._mc.updateUi_move_camera_forward)
-        self.ui.pushButton_cameraStepBackward.clicked.connect(self._mc.updateUi_move_camera_backward)
+        self.motor_panel.ui.pushButton_cameraGotoPosition.clicked.connect(self._mc.updateUi_move_camera_to_position)
+        self.motor_panel.ui.pushButton_cameraSetFocus.clicked.connect(self._mc.updateUi_set_camera_focus)
+        self.motor_panel.ui.pushButton_cameraStepForward.clicked.connect(self._mc.updateUi_move_camera_forward)
+        self.motor_panel.ui.pushButton_cameraStepBackward.clicked.connect(self._mc.updateUi_move_camera_backward)
 
         # ---
         # Connections for the 'Scan Settings' tab controls
         # (AcquisitionCoordinator)
         # ---
-        self.ui.doubleSpinBox_etlLeftAmplitude.valueChanged.connect(self._acq.updateUi_etl_left_amplitude)
-        self.ui.doubleSpinBox_etlRightAmplitude.valueChanged.connect(self._acq.updateUi_etl_right_amplitude)
-        self.ui.doubleSpinBox_etlLeftOffset.valueChanged.connect(self._acq.updateUi_etl_left_offset)
-        self.ui.doubleSpinBox_etlRightOffset.valueChanged.connect(self._acq.updateUi_etl_right_offset)
-        self.ui.checkBox_etlSync.stateChanged.connect(self._acq.updateUi_etl_sync)
-        self.ui.checkBox_etlActivate.stateChanged.connect(self._acq.updateUi_etl_activate)
-        self.ui.doubleSpinBox_etlSteps.valueChanged.connect(self._acq.updateUi_etl_steps)
+        self.scan_panel.ui.doubleSpinBox_etlLeftAmplitude.valueChanged.connect(self._acq.updateUi_etl_left_amplitude)
+        self.scan_panel.ui.doubleSpinBox_etlRightAmplitude.valueChanged.connect(self._acq.updateUi_etl_right_amplitude)
+        self.scan_panel.ui.doubleSpinBox_etlLeftOffset.valueChanged.connect(self._acq.updateUi_etl_left_offset)
+        self.scan_panel.ui.doubleSpinBox_etlRightOffset.valueChanged.connect(self._acq.updateUi_etl_right_offset)
+        self.scan_panel.ui.checkBox_etlSync.stateChanged.connect(self._acq.updateUi_etl_sync)
+        self.scan_panel.ui.checkBox_etlActivate.stateChanged.connect(self._acq.updateUi_etl_activate)
+        self.scan_panel.ui.doubleSpinBox_etlSteps.valueChanged.connect(self._acq.updateUi_etl_steps)
 
         # Connection for galvo settings changes
-        self.ui.doubleSpinBox_galvoLeftAmplitude.valueChanged.connect(self._acq.updateUi_galvo_left_amplitude)
-        self.ui.doubleSpinBox_galvoRightAmplitude.valueChanged.connect(self._acq.updateUi_galvo_right_amplitude)
-        self.ui.doubleSpinBox_galvoLeftOffset.valueChanged.connect(self._acq.updateUi_galvo_left_offset)
-        self.ui.doubleSpinBox_galvoRightOffset.valueChanged.connect(self._acq.updateUi_galvo_right_offset)
-        self.ui.checkBox_galvoSync.stateChanged.connect(self._acq.updateUi_galvo_sync)
-        self.ui.checkBox_galvoActivate.stateChanged.connect(self._acq.updateUi_galvo_activate)
-        self.ui.checkBox_galvoInvert.stateChanged.connect(self._acq.updateUi_galvo_invert)
+        self.scan_panel.ui.doubleSpinBox_galvoLeftAmplitude.valueChanged.connect(self._acq.updateUi_galvo_left_amplitude)
+        self.scan_panel.ui.doubleSpinBox_galvoRightAmplitude.valueChanged.connect(self._acq.updateUi_galvo_right_amplitude)
+        self.scan_panel.ui.doubleSpinBox_galvoLeftOffset.valueChanged.connect(self._acq.updateUi_galvo_left_offset)
+        self.scan_panel.ui.doubleSpinBox_galvoRightOffset.valueChanged.connect(self._acq.updateUi_galvo_right_offset)
+        self.scan_panel.ui.checkBox_galvoSync.stateChanged.connect(self._acq.updateUi_galvo_sync)
+        self.scan_panel.ui.checkBox_galvoActivate.stateChanged.connect(self._acq.updateUi_galvo_activate)
+        self.scan_panel.ui.checkBox_galvoInvert.stateChanged.connect(self._acq.updateUi_galvo_invert)
 
         # Connection for camera settings changes
-        self.ui.comboBox_cameraShutterMode.currentTextChanged.connect(self._acq.updateUi_camera_shutter_mode)
-        self.ui.doubleSpinBox_cameraExposureTime.valueChanged.connect(self._acq.updateUi_camera_exposure_time)
-        self.ui.doubleSpinBox_cameraLineTime.valueChanged.connect(self._acq.updateUi_camera_line_time)
-        self.ui.doubleSpinBox_cameraExposedLines.valueChanged.connect(self._acq.updateUi_camera_exposed_lines)
-        self.ui.doubleSpinBox_cameraDelayLines.valueChanged.connect(self._acq.updateUi_camera_delay_lines)
+        self.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.connect(self._acq.updateUi_camera_shutter_mode)
+        self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.valueChanged.connect(self._acq.updateUi_camera_exposure_time)
+        self.acquisition_panel.ui.doubleSpinBox_cameraLineTime.valueChanged.connect(self._acq.updateUi_camera_line_time)
+        self.acquisition_panel.ui.doubleSpinBox_cameraExposedLines.valueChanged.connect(self._acq.updateUi_camera_exposed_lines)
+        self.acquisition_panel.ui.doubleSpinBox_cameraDelayLines.valueChanged.connect(self._acq.updateUi_camera_delay_lines)
 
         # ---
         # Connections for the 'Calibration' tab controls (MotorController)
         # ---
-        self.ui.pushButton_calCameraComputeFocus.clicked.connect(self._mc.calculate_camera_focus)
-        self.ui.pushButton_calCameraShowInterpolation.clicked.connect(self._mc.show_camera_interpolation)
-        self.ui.pushButton_calEtlShowInterpolation.clicked.connect(self._mc.show_etl_interpolation)
-        self.ui.pushButton_calHorizontalStartRangeSelection.clicked.connect(self._mc.updateUi_reset_boundaries)
-        self.ui.pushButton_calHorizontalSetForwardLimit.clicked.connect(self._mc.updateUi_set_horizontal_forward_boundary)
-        self.ui.pushButton_calHorizontalSetBackwardLimit.clicked.connect(self._mc.updateUi_set_horizontal_backward_boundary)
+        self.calibration_panel.ui.pushButton_calCameraComputeFocus.clicked.connect(self._mc.calculate_camera_focus)
+        self.calibration_panel.ui.pushButton_calCameraShowInterpolation.clicked.connect(self._mc.show_camera_interpolation)
+        self.calibration_panel.ui.pushButton_calEtlShowInterpolation.clicked.connect(self._mc.show_etl_interpolation)
+        self.calibration_panel.ui.pushButton_calHorizontalStartRangeSelection.clicked.connect(self._mc.updateUi_reset_boundaries)
+        self.calibration_panel.ui.pushButton_calHorizontalSetForwardLimit.clicked.connect(self._mc.updateUi_set_horizontal_forward_boundary)
+        self.calibration_panel.ui.pushButton_calHorizontalSetBackwardLimit.clicked.connect(self._mc.updateUi_set_horizontal_backward_boundary)
 
     @Slot()
     def updateUi_estop_pressed(self) -> None:
@@ -989,70 +1051,70 @@ class Controller_MainWindow(QMainWindow):
 
     def updateUi_initial_hardware_state(self) -> None:
         # SigGen
-        self.ui.checkBox_galvoActivate.setChecked(self.siggen.galvo_activated)
-        self.ui.checkBox_galvoInvert.setChecked(self.siggen.galvo_inverted)
-        self.ui.doubleSpinBox_galvoLeftAmplitude.setValue(self.siggen.galvo_left_amplitude)
-        self.ui.doubleSpinBox_galvoRightAmplitude.setValue(self.siggen.galvo_right_amplitude)
-        self.ui.doubleSpinBox_galvoLeftOffset.setValue(self.siggen.galvo_left_offset)
-        self.ui.doubleSpinBox_galvoRightOffset.setValue(self.siggen.galvo_right_offset)
+        self.scan_panel.ui.checkBox_galvoActivate.setChecked(self.siggen.galvo_activated)
+        self.scan_panel.ui.checkBox_galvoInvert.setChecked(self.siggen.galvo_inverted)
+        self.scan_panel.ui.doubleSpinBox_galvoLeftAmplitude.setValue(self.siggen.galvo_left_amplitude)
+        self.scan_panel.ui.doubleSpinBox_galvoRightAmplitude.setValue(self.siggen.galvo_right_amplitude)
+        self.scan_panel.ui.doubleSpinBox_galvoLeftOffset.setValue(self.siggen.galvo_left_offset)
+        self.scan_panel.ui.doubleSpinBox_galvoRightOffset.setValue(self.siggen.galvo_right_offset)
 
-        self.ui.checkBox_etlActivate.setChecked(self.siggen.etl_activated)
-        self.ui.doubleSpinBox_etlLeftAmplitude.setValue(self.siggen.etl_left_amplitude)
-        self.ui.doubleSpinBox_etlRightAmplitude.setValue(self.siggen.etl_right_amplitude)
-        self.ui.doubleSpinBox_etlLeftOffset.setValue(self.siggen.etl_left_offset)
-        self.ui.doubleSpinBox_etlRightOffset.setValue(self.siggen.etl_right_offset)
-        self.ui.doubleSpinBox_etlSteps.setValue(self.siggen.etl_steps)
+        self.scan_panel.ui.checkBox_etlActivate.setChecked(self.siggen.etl_activated)
+        self.scan_panel.ui.doubleSpinBox_etlLeftAmplitude.setValue(self.siggen.etl_left_amplitude)
+        self.scan_panel.ui.doubleSpinBox_etlRightAmplitude.setValue(self.siggen.etl_right_amplitude)
+        self.scan_panel.ui.doubleSpinBox_etlLeftOffset.setValue(self.siggen.etl_left_offset)
+        self.scan_panel.ui.doubleSpinBox_etlRightOffset.setValue(self.siggen.etl_right_offset)
+        self.scan_panel.ui.doubleSpinBox_etlSteps.setValue(self.siggen.etl_steps)
 
         # Camera
-        self.ui.doubleSpinBox_cameraExposureTime.setValue(
+        self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.setValue(
             self.camera.exposure_time * 1e3
         )  # camera(s) to ui(ms)
-        self.ui.doubleSpinBox_cameraLineTime.setValue(
+        self.acquisition_panel.ui.doubleSpinBox_cameraLineTime.setValue(
             self.camera.lightsheet_line_time * 1e6
         )  # camera(s) to ui(us)
-        self.ui.doubleSpinBox_cameraExposedLines.setValue(
+        self.acquisition_panel.ui.doubleSpinBox_cameraExposedLines.setValue(
             self.camera.lightsheet_exposed_lines
         )
-        self.ui.doubleSpinBox_cameraDelayLines.setValue(
+        self.acquisition_panel.ui.doubleSpinBox_cameraDelayLines.setValue(
             self.camera.lightsheet_delay_lines
         )
         # Set camera shutter mode comboBox options (default: Rolling)
-        self.ui.comboBox_cameraShutterMode.insertItems(0, ["Rolling", "Lightsheet"])
+        self.acquisition_panel.ui.comboBox_cameraShutterMode.insertItems(0, ["Rolling", "Lightsheet"])
         if self.camera.shutter_mode == "Lightsheet":
-            self.ui.comboBox_cameraShutterMode.setCurrentIndex(1)
+            self.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentIndex(1)
         else:
-            self.ui.comboBox_cameraShutterMode.setCurrentIndex(0)
+            self.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentIndex(0)
         self._acq.updateUi_camera_shutter_mode()
 
         # Lasers — both spinboxes are 0-100 % staged setpoints. Seed from
         # the persistent controller-side percentage, not the live HAL state,
         # so the staged value survives laser on/off and E-stop disarm/re-arm
         # cycles within the session.
-        self.ui.doubleSpinBox_laserOneAmplitude.setValue(self.laser1_power_pct)
-        self.ui.doubleSpinBox_laserTwoAmplitude.setValue(self.laser2_power_pct)
+        self.laser_panel.ui.doubleSpinBox_laserOneAmplitude.setValue(self.laser1_power_pct)
+        self.laser_panel.ui.doubleSpinBox_laserTwoAmplitude.setValue(self.laser2_power_pct)
 
         # Wavelength labels — read from the live list[ILaser] instances.
-        self.ui.label_72.setText(
+        self.laser_panel.ui.label_72.setText(
             f'<html><head/><body><p><span style=" font-weight:600; font-size:18px;">'
             f"{self.lasers[0].wavelength} nm</span></p></body></html>"
         )
-        self.ui.label_73.setText(
+        self.laser_panel.ui.label_73.setText(
             f'<html><head/><body><p><span style=" font-weight:600; font-size:18px;">'
             f"{self.lasers[1].wavelength} nm</span></p></body></html>"
         )
 
         # Toggle button text + tooltips so the operator can find each laser
         # by wavelength rather than the generic "Laser1"/"Laser2" placeholder.
-        self.ui.pushButton_laserOneToggle.setText(
+        self.laser_panel.ui.pushButton_laserOneToggle.setText(
             f"Toggle {self.lasers[0].wavelength} nm"
         )
-        self.ui.pushButton_laserTwoToggle.setText(
+        self.laser_panel.ui.pushButton_laserTwoToggle.setText(
             f"Toggle {self.lasers[1].wavelength} nm"
         )
-        self.ui.pushButton_laserOneToggle.setToolTip(
+        self.laser_panel.ui.pushButton_laserOneToggle.setToolTip(
             f"Toggle {self.lasers[0].wavelength} nm laser (DAQ AO Dev7/ao0)"
         )
-        self.ui.pushButton_laserTwoToggle.setToolTip(
+        self.laser_panel.ui.pushButton_laserTwoToggle.setToolTip(
             f"Toggle Toptica iBeam ({self.lasers[1].wavelength} nm, COM4)"
         )
 

@@ -44,7 +44,11 @@ class _WorkerShell:
 
     def __init__(self) -> None:
         self.ui = Mock()
-        self.ui.doubleSpinBox_cameraExposureTime.value.return_value = 100
+        # Hybrid ownership: PreviewWorker reads the camera exposure spinbox
+        # via shell.acquisition_panel.ui.<name> (panel-internal widget, no
+        # longer on the flat shell.ui namespace).
+        self.acquisition_panel = Mock()
+        self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.value.return_value = 100
         self.ui.lineEdit_saveDescription.text.return_value = "test sample"
         self.ui.checkBox_saveStitchBlend.isChecked.return_value = False
         self.ui.checkBox_saveAllCrop.isChecked.return_value = False

@@ -159,14 +159,25 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
 
     # The shell's __init__ composes 7 per-panel widgets (laser_panel,
     # motor_panel, acquisition_panel, stack_panel, scan_panel,
-    # save_panel, calibration_panel) into tabControls. The structural-
-    # assert smoke test (test_panel_structure.py::test_shell_composes_panels)
-    # verifies these attributes are non-None and the panels are composed
-    # into the right containers. Panel verification is NOT done here
-    # because adding assertions to the fixture amplifies a pre-existing
+    # save_panel, calibration_panel) into 5 tabControls tabs. The
+    # structural-assert smoke test (test_panel_structure.py) verifies
+    # these attributes are non-None and the panels are composed into the
+    # right containers. Panel verification is NOT done here because
+    # adding assertions to the fixture amplifies a pre-existing
     # timer/signal leak under xdist (timers fire after controller
     # teardown, flooding stderr with "Signal source has been deleted"
     # errors that cause cross-test contamination in xdist workers).
+    #
+    # Hybrid widget ownership: panel-internal widgets live on their
+    # owning panel's ``ui`` (``controller.<panel>.ui.<name>``), NOT on
+    # the flat ``controller.ui`` namespace. The shell's
+    # ``vars(panel.ui)`` merge loop is trimmed to shell-owned widgets
+    # only (E-stop toolbar, status bar, message log, units selector,
+    # controlsPane), so tests reach panel-internal widgets via the
+    # panel-qualified path. Cross-panel reads use
+    # ``controller.<owner_panel>.ui.<name>``. Shell-owned widgets stay
+    # on ``controller.ui.<name>``. See test_hybrid_ownership.py for the
+    # regression gate.
     fs = FrameSaverController(bundle, controller)
     controller._fs = fs
     hw = HardwareManager(bundle, controller)

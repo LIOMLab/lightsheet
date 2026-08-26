@@ -45,8 +45,8 @@ class SavePanelWidget(QWidget):
         )[0]
 
         if self._shell.open_directory != "":  # If file directory specified
-            self._shell.ui.label_currentFileDirectory.setText(self._shell.open_directory)
-            self._shell.ui.listWidget_fileDatasets.clear()
+            self.ui.label_currentFileDirectory.setText(self._shell.open_directory)
+            self.ui.listWidget_fileDatasets.clear()
 
             # Open the file and display its datasets
             import h5py
@@ -54,27 +54,27 @@ class SavePanelWidget(QWidget):
             with h5py.File(self._shell.open_directory, "r") as f:
                 dataset_names = list(f.keys())
                 for item in range(len(dataset_names)):
-                    self._shell.ui.listWidget_fileDatasets.insertItem(
+                    self.ui.listWidget_fileDatasets.insertItem(
                         item, dataset_names[item]
                     )
-            self._shell.ui.listWidget_fileDatasets.setCurrentRow(0)
+            self.ui.listWidget_fileDatasets.setCurrentRow(0)
             self._shell.updateUi_message_printer("File " + self._shell.open_directory + " opened")  # noqa: E501
-            self._shell.ui.pushButton_selectDataset.setEnabled(True)
+            self.ui.pushButton_selectDataset.setEnabled(True)
         else:
-            self._shell.ui.label_currentFileDirectory.setText("None Specified")
+            self.ui.label_currentFileDirectory.setText("None Specified")
 
     def updateUi_select_dataset(self) -> None:
         """
         Opens one or many HDF5 datasets and displays its attributes and data as an image
         """
         if (self._shell.open_directory != "") and (
-            self._shell.ui.listWidget_fileDatasets.count() != 0
+            self.ui.listWidget_fileDatasets.count() != 0
         ):
             import h5py
             from matplotlib import pyplot as plt
 
-            for item in range(len(self._shell.ui.listWidget_fileDatasets.selectedItems())):  # noqa: E501
-                self._shell.dataset_name = self._shell.ui.listWidget_fileDatasets.selectedItems()[  # noqa: E501
+            for item in range(len(self.ui.listWidget_fileDatasets.selectedItems())):  # noqa: E501
+                self._shell.dataset_name = self.ui.listWidget_fileDatasets.selectedItems()[  # noqa: E501
                     item
                 ].text()
                 with h5py.File(self._shell.open_directory, "r") as f:
@@ -82,32 +82,32 @@ class SavePanelWidget(QWidget):
 
                     # Display attributes of the first selected dataset
                     if item == 0:
-                        self._shell.ui.label_currentDataset.setText(self._shell.dataset_name)
+                        self.ui.label_currentDataset.setText(self._shell.dataset_name)
                         attribute_names = list(dataset.attrs.keys())
                         attribute_values = list(dataset.attrs.values())
-                        self._shell.ui.tableWidget_fileAttributes.setColumnCount(2)
-                        self._shell.ui.tableWidget_fileAttributes.setRowCount(
+                        self.ui.tableWidget_fileAttributes.setColumnCount(2)
+                        self.ui.tableWidget_fileAttributes.setRowCount(
                             len(attribute_names)
                         )
-                        self._shell.ui.tableWidget_fileAttributes.setHorizontalHeaderItem(
+                        self.ui.tableWidget_fileAttributes.setHorizontalHeaderItem(
                             0, QTableWidgetItem("Attributes")
                         )
-                        self._shell.ui.tableWidget_fileAttributes.setHorizontalHeaderItem(
+                        self.ui.tableWidget_fileAttributes.setHorizontalHeaderItem(
                             1, QTableWidgetItem("Values")
                         )
                         for attribute in range(0, len(attribute_names)):
-                            self._shell.ui.tableWidget_fileAttributes.setItem(
+                            self.ui.tableWidget_fileAttributes.setItem(
                                 attribute,
                                 0,
                                 QTableWidgetItem(attribute_names[attribute]),
                             )
-                            self._shell.ui.tableWidget_fileAttributes.setItem(
+                            self.ui.tableWidget_fileAttributes.setItem(
                                 attribute,
                                 1,
                                 QTableWidgetItem(str(attribute_values[attribute])),
                             )
-                        self._shell.ui.tableWidget_fileAttributes.resizeColumnsToContents()
-                        self._shell.ui.tableWidget_fileAttributes.setEditTriggers(
+                        self.ui.tableWidget_fileAttributes.resizeColumnsToContents()
+                        self.ui.tableWidget_fileAttributes.setEditTriggers(
                             QAbstractItemView.NoEditTriggers
                         )  # No editing possible
 
@@ -140,21 +140,21 @@ class SavePanelWidget(QWidget):
             self._shell.save_directory = os.path.normpath(tmp_directory)
 
         if self._shell.save_directory != "":
-            self._shell.ui.lineEdit_saveDirectory.setText(self._shell.save_directory)
-            self._shell.ui.lineEdit_saveFilename.setText("")
-            self._shell.ui.lineEdit_saveFilename.setEnabled(True)
-            self._shell.ui.lineEdit_saveDescription.setText("")
-            self._shell.ui.lineEdit_saveDescription.setEnabled(True)
+            self.ui.lineEdit_saveDirectory.setText(self._shell.save_directory)
+            self.ui.lineEdit_saveFilename.setText("")
+            self.ui.lineEdit_saveFilename.setEnabled(True)
+            self.ui.lineEdit_saveDescription.setText("")
+            self.ui.lineEdit_saveDescription.setEnabled(True)
         else:
-            self._shell.ui.lineEdit_saveDirectory.setText("")
-            self._shell.ui.lineEdit_saveFilename.setText(
+            self.ui.lineEdit_saveDirectory.setText("")
+            self.ui.lineEdit_saveFilename.setText(
                 "Filename - Select Save Directory First"
             )
-            self._shell.ui.lineEdit_saveFilename.setEnabled(False)
-            self._shell.ui.lineEdit_saveDescription.setText(
+            self.ui.lineEdit_saveFilename.setEnabled(False)
+            self.ui.lineEdit_saveDescription.setText(
                 "Description - Select Save Directory First"
             )
-            self._shell.ui.lineEdit_saveDescription.setEnabled(False)
+            self.ui.lineEdit_saveDescription.setEnabled(False)
 
     def validate_file_name(self) -> None:
         """Validate filename set by the user"""
@@ -166,7 +166,7 @@ class SavePanelWidget(QWidget):
             else:
                 return "_"
 
-        tmp_string = self._shell.ui.lineEdit_saveFilename.text()
+        tmp_string = self.ui.lineEdit_saveFilename.text()
         tmp_string = "".join(safe_char(c) for c in tmp_string).rstrip("_")
 
         if tmp_string != "":
@@ -188,7 +188,7 @@ class SavePanelWidget(QWidget):
 
         if self._shell.saving_allowed:
             # Getting sample name
-            self._shell.save_description = str(self._shell.ui.lineEdit_saveDescription.text())  # noqa: E501
+            self._shell.save_description = str(self.ui.lineEdit_saveDescription.text())  # noqa: E501
 
             """Setting up frame saver"""
             self._shell._fs.reinit(1)
@@ -200,7 +200,7 @@ class SavePanelWidget(QWidget):
             )
 
             """Saving frame"""
-            if self._shell.ui.checkBox_saveAllCrop.isChecked():
+            if self.ui.checkBox_saveAllCrop.isChecked():
                 self._shell._fs.set_files(
                     1, self._shell.save_filename, "singleImage", 1, "ETLscan"
                 )
@@ -209,7 +209,7 @@ class SavePanelWidget(QWidget):
                 self._shell.updateUi_message_printer(
                     "Saving Images (one for each ETL scan, cropped)"
                 )
-            elif self._shell.ui.checkBox_saveAllFull.isChecked():
+            elif self.ui.checkBox_saveAllFull.isChecked():
                 self._shell._fs.set_files(
                     1, self._shell.save_filename, "singleImage", 1, "FullETLscan"
                 )

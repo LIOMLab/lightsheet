@@ -38,14 +38,14 @@ class AcquisitionPanelWidget(QWidget):
     def updateUi_modes_buttons(self, buttons_to_enable: list[QPushButton]) -> None:
         """Update mode buttons status : disable buttons, except for those specified to be enabled"""  # noqa: E501
         aquisition_buttons = [
-            self._shell.ui.pushButton_acqStartPreviewMode,
-            self._shell.ui.pushButton_acqStartLiveMode,
-            self._shell.ui.pushButton_acqStartStackMode,
-            self._shell.ui.pushButton_acqGetSingleImage,
-            self._shell.ui.pushButton_saveCurrentImage,
-            self._shell.ui.pushButton_calCameraComputeFocus,
-            self._shell.ui.pushButton_calCameraShowInterpolation,
-            self._shell.ui.pushButton_calEtlShowInterpolation,
+            self.ui.pushButton_acqStartPreviewMode,
+            self.ui.pushButton_acqStartLiveMode,
+            self._shell.stack_panel.ui.pushButton_acqStartStackMode,
+            self.ui.pushButton_acqGetSingleImage,
+            self._shell.save_panel.ui.pushButton_saveCurrentImage,
+            self._shell.calibration_panel.ui.pushButton_calCameraComputeFocus,
+            self._shell.calibration_panel.ui.pushButton_calCameraShowInterpolation,
+            self._shell.calibration_panel.ui.pushButton_calEtlShowInterpolation,
         ]
         for button in aquisition_buttons:
             if button in buttons_to_enable:
@@ -67,20 +67,20 @@ class AcquisitionPanelWidget(QWidget):
         """Start or stop preview mode, depending on the button status"""
         if self._shell.preview_mode_started:
             self._shell.preview_mode_started = False
-            self._shell.ui.pushButton_acqStartPreviewMode.setText("Start Preview Mode")
+            self.ui.pushButton_acqStartPreviewMode.setText("Start Preview Mode")
             # Disable the button until the worker's finished signal fires
             # (updateUi_post_preview_mode re-enables all default buttons).
             # Without this, the user can click "Start" before the worker
             # exits, spawning a second worker while the first is still
             # running — both would access the camera concurrently.
-            self._shell.ui.pushButton_acqStartPreviewMode.setEnabled(False)
+            self.ui.pushButton_acqStartPreviewMode.setEnabled(False)
         else:
             self._shell.close_modes()
             self._shell.preview_mode_started = True
-            self._shell.ui.pushButton_acqStartPreviewMode.setText("Stop Preview Mode")
+            self.ui.pushButton_acqStartPreviewMode.setText("Stop Preview Mode")
 
             # updating ui before starting preview mode thread
-            self.updateUi_modes_buttons([self._shell.ui.pushButton_acqStartPreviewMode])
+            self.updateUi_modes_buttons([self.ui.pushButton_acqStartPreviewMode])
             self._shell.updateUi_message_printer("->Preview mode started")
             self._shell.ui.statusBar_label.setText("Current Acquisition Mode: Preview ")
             self._shell.ui.statusBar_progress.setValue(100)
@@ -113,18 +113,18 @@ class AcquisitionPanelWidget(QWidget):
         """Start or stop live mode, depending on the button status"""
         if self._shell.live_mode_started:
             self._shell.live_mode_started = False
-            self._shell.ui.pushButton_acqStartLiveMode.setText("Start Live Mode")
+            self.ui.pushButton_acqStartLiveMode.setText("Start Live Mode")
             # Disable until the worker finishes (updateUi_post_live_mode
             # re-enables all default buttons). Prevents a restart race
             # that would spawn a second worker accessing the camera
             # concurrently with the still-running first worker.
-            self._shell.ui.pushButton_acqStartLiveMode.setEnabled(False)
+            self.ui.pushButton_acqStartLiveMode.setEnabled(False)
         else:
             self._shell.close_modes()
             self._shell.live_mode_started = True
-            self._shell.ui.pushButton_acqStartLiveMode.setText("Stop Live Mode")
+            self.ui.pushButton_acqStartLiveMode.setText("Stop Live Mode")
             # updating ui before starting live mode thread
-            self.updateUi_modes_buttons([self._shell.ui.pushButton_acqStartLiveMode])
+            self.updateUi_modes_buttons([self.ui.pushButton_acqStartLiveMode])
             self._shell.updateUi_message_printer("->Live mode started")
             self._shell.ui.statusBar_label.setText("Current Acquisition Mode: Live ")
             self._shell.ui.statusBar_progress.setValue(100)
@@ -160,8 +160,8 @@ class AcquisitionPanelWidget(QWidget):
 
             self._shell.single_mode_started = True
             # Disabling modes while single frame acquisition
-            self._shell.ui.pushButton_acqGetSingleImage.setText("Acquiring...")
-            self.updateUi_modes_buttons([self._shell.ui.pushButton_acqGetSingleImage])
+            self.ui.pushButton_acqGetSingleImage.setText("Acquiring...")
+            self.updateUi_modes_buttons([self.ui.pushButton_acqGetSingleImage])
             self._shell.updateUi_message_printer("->Getting single image")
 
             # Sample the auto-laser checkboxes on the GUI thread before
@@ -170,8 +170,8 @@ class AcquisitionPanelWidget(QWidget):
 
             # B-03: pre-sample the save-option widgets on the GUI thread
             # BEFORE constructing the worker (AGENTS.md §11).
-            save_desc = str(self._shell.ui.lineEdit_saveDescription.text())
-            save_blend = self._shell.ui.checkBox_saveStitchBlend.isChecked()
+            save_desc = str(self._shell.save_panel.ui.lineEdit_saveDescription.text())
+            save_blend = self._shell.save_panel.ui.checkBox_saveStitchBlend.isChecked()
 
             # Spawn the single-image worker on a QThread (moveToThread pattern).
             self._shell._single_worker = SingleWorker(self._shell._bundle, self._shell._hw, self._shell, save_desc, save_blend)  # noqa: E501
@@ -187,9 +187,9 @@ class AcquisitionPanelWidget(QWidget):
     def updateUi_post_single_mode(self) -> None:
         # Re-enabling modes after single frame acquisition
         self._shell.single_mode_started = False
-        self._shell.ui.pushButton_acqGetSingleImage.setText("Get Single Image")
-        if self._shell.ui.pushButton_saveCurrentImage not in self._shell.default_buttons:  # noqa: E501
-            self._shell.default_buttons.append(self._shell.ui.pushButton_saveCurrentImage)
+        self.ui.pushButton_acqGetSingleImage.setText("Get Single Image")
+        if self._shell.save_panel.ui.pushButton_saveCurrentImage not in self._shell.default_buttons:  # noqa: E501
+            self._shell.default_buttons.append(self._shell.save_panel.ui.pushButton_saveCurrentImage)
         self.updateUi_modes_buttons(self._shell.default_buttons)
 
     def updateUi_stack_mode_button(self) -> None:
@@ -200,14 +200,14 @@ class AcquisitionPanelWidget(QWidget):
             # re-enables all default buttons). Prevents a restart race
             # that would spawn a second worker accessing the camera
             # concurrently with the still-running first worker.
-            self._shell.ui.pushButton_acqStartStackMode.setEnabled(False)
+            self._shell.stack_panel.ui.pushButton_acqStartStackMode.setEnabled(False)
         else:
             self._shell.close_modes()
             # Making sure the limits of the volume are set
             if (
-                (not self._shell.ui.checkBox_acqFirstPlaneSet.isChecked())
-                or (not self._shell.ui.checkBox_acqLastPlaneSet.isChecked())
-                or (self._shell.ui.doubleSpinBox_acqPlaneStepSize.value() == 0)
+                (not self._shell.stack_panel.ui.checkBox_acqFirstPlaneSet.isChecked())
+                or (not self._shell.stack_panel.ui.checkBox_acqLastPlaneSet.isChecked())
+                or (self._shell.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.value() == 0)
             ):
                 self._shell.sig_message.emit(
                     "Set starting and ending points and select a non-zero plane step value"  # noqa: E501
@@ -224,10 +224,10 @@ class AcquisitionPanelWidget(QWidget):
                 # Setting stack step size sign (taking into account the direction of acquisition)  # noqa: E501
                 if self._shell.stack_starting_plane > self._shell.stack_ending_plane:
                     self._shell.stack_step = (
-                        -1 * self._shell.ui.doubleSpinBox_acqPlaneStepSize.value()
+                        -1 * self._shell.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.value()
                     )
                 else:
-                    self._shell.stack_step = self._shell.ui.doubleSpinBox_acqPlaneStepSize.value()  # noqa: E501
+                    self._shell.stack_step = self._shell.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.value()  # noqa: E501
 
                 # Check that filename is valid and saving is allowed
                 self._shell.save_panel.validate_file_name()
@@ -244,14 +244,14 @@ class AcquisitionPanelWidget(QWidget):
                     )
 
                 if self._shell.saving_allowed or nosave_answer:
-                    self._shell.ui.pushButton_acqStartStackMode.setText("Stop Stack Mode")  # noqa: E501
+                    self._shell.stack_panel.ui.pushButton_acqStartStackMode.setText("Stop Stack Mode")  # noqa: E501
                     self._shell.ui.statusBar_label.setText("Current Acquisition Mode: Stack ")  # noqa: E501
                     self._shell.ui.statusBar_progress.setValue(0)  # To reset progress bar  # noqa: E501
                     self._shell.ui.statusBar_progress.show()
                     self._shell.stack_mode_started = True
 
                     # Modes disabling while stack acquisition
-                    self.updateUi_modes_buttons([self._shell.ui.pushButton_acqStartStackMode])
+                    self.updateUi_modes_buttons([self._shell.stack_panel.ui.pushButton_acqStartStackMode])
                     self._shell.motor_panel.updateUi_motor_buttons()
                     self._shell.updateUi_message_printer(
                         "->Stack mode started -- Number of frames to save: "
@@ -264,10 +264,10 @@ class AcquisitionPanelWidget(QWidget):
 
                     # B-03: pre-sample the save-option widgets on the GUI
                     # thread BEFORE constructing the worker (AGENTS.md §11).
-                    save_desc = str(self._shell.ui.lineEdit_saveDescription.text())
-                    save_blend = self._shell.ui.checkBox_saveStitchBlend.isChecked()
-                    save_all_crop = self._shell.ui.checkBox_saveAllCrop.isChecked()
-                    save_all_full = self._shell.ui.checkBox_saveAllFull.isChecked()
+                    save_desc = str(self._shell.save_panel.ui.lineEdit_saveDescription.text())
+                    save_blend = self._shell.save_panel.ui.checkBox_saveStitchBlend.isChecked()
+                    save_all_crop = self._shell.save_panel.ui.checkBox_saveAllCrop.isChecked()
+                    save_all_full = self._shell.save_panel.ui.checkBox_saveAllFull.isChecked()
 
                     # Spawn the stack worker on a QThread (moveToThread pattern).
                     self._shell._stack_worker = StackWorker(
@@ -285,7 +285,7 @@ class AcquisitionPanelWidget(QWidget):
     @Slot()
     def updateUi_post_stack_mode(self) -> None:
         """Enabling modes after stack mode"""
-        self._shell.ui.pushButton_acqStartStackMode.setText("Start Stack Mode")
+        self._shell.stack_panel.ui.pushButton_acqStartStackMode.setText("Start Stack Mode")
         self.updateUi_modes_buttons(self._shell.default_buttons)
         self._shell.motor_panel.updateUi_motor_buttons(disable_button=False)
 

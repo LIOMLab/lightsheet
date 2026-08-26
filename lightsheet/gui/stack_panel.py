@@ -35,7 +35,7 @@ class StackPanelWidget(QWidget):
         self._shell.stack_starting_plane = self._shell.motors.horizontal.get_position(
             "\u03bcm"
         )  # Units in micro-meters, because plane step is in micro-meters
-        self._shell.ui.checkBox_acqFirstPlaneSet.setChecked(True)
+        self.ui.checkBox_acqFirstPlaneSet.setChecked(True)
         self.updateUi_set_number_of_planes()
 
     def updateUi_set_stack_mode_ending_point(self) -> None:
@@ -43,23 +43,23 @@ class StackPanelWidget(QWidget):
         self._shell.stack_ending_plane = self._shell.motors.horizontal.get_position(
             "\u03bcm"
         )  # Units in micro-meters, because plane step is in micro-meters
-        self._shell.ui.checkBox_acqLastPlaneSet.setChecked(True)
+        self.ui.checkBox_acqLastPlaneSet.setChecked(True)
         self.updateUi_set_number_of_planes()
 
     def updateUi_set_number_of_planes(self) -> None:
         """Calculates the number of planes that will be saved in the stack acquisition"""  # noqa: E501
-        if self._shell.ui.doubleSpinBox_acqPlaneStepSize.value() != 0:
+        if self.ui.doubleSpinBox_acqPlaneStepSize.value() != 0:
             if (
-                self._shell.ui.checkBox_acqFirstPlaneSet.isChecked()
-                and self._shell.ui.checkBox_acqLastPlaneSet.isChecked()
+                self.ui.checkBox_acqFirstPlaneSet.isChecked()
+                and self.ui.checkBox_acqLastPlaneSet.isChecked()
             ):
                 self._shell.number_of_planes = int(np.ceil(
                     abs(
                         (self._shell.stack_ending_plane - self._shell.stack_starting_plane)  # noqa: E501
-                        / self._shell.ui.doubleSpinBox_acqPlaneStepSize.value()
+                        / self.ui.doubleSpinBox_acqPlaneStepSize.value()
                     )
                 ))
                 self._shell.number_of_planes += 1  # Takes into account the initial plane  # noqa: E501
-                self._shell.ui.label_acqNumberOfPlanes.setText(str(self._shell.number_of_planes))
+                self.ui.label_acqNumberOfPlanes.setText(str(self._shell.number_of_planes))
         else:
             self._shell.sig_message.emit("Set a non-zero value to plane step")

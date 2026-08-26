@@ -136,27 +136,27 @@ def test_updateUi_motor_buttons_disable(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.motor_panel.updateUi_motor_buttons(disable_button=True)
     # All buttons should have setEnabled(False) called
-    assert ctrl.ui.pushButton_sampleStepUp.isEnabled() is False
+    assert ctrl.motor_panel.ui.pushButton_sampleStepUp.isEnabled() is False
 
 
 def test_updateUi_motor_buttons_enable(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.motor_panel.updateUi_motor_buttons(disable_button=False)
-    assert ctrl.ui.pushButton_sampleStepUp.isEnabled() is True
+    assert ctrl.motor_panel.ui.pushButton_sampleStepUp.isEnabled() is True
 
 
 def test_updateUi_modes_buttons(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     # Use the same button object that's in ctrl.ui so the `in` check works.
-    btn_enable = ctrl.ui.pushButton_acqStartPreviewMode
+    btn_enable = ctrl.acquisition_panel.ui.pushButton_acqStartPreviewMode
     ctrl.acquisition_panel.updateUi_modes_buttons([btn_enable])
     assert btn_enable.isEnabled() is True
-    assert ctrl.ui.pushButton_acqStartLiveMode.isEnabled() is False
+    assert ctrl.acquisition_panel.ui.pushButton_acqStartLiveMode.isEnabled() is False
 
 
 def test_updateUi_enable_buttons(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    btn = ctrl.ui.pushButton_acqStartPreviewMode
+    btn = ctrl.acquisition_panel.ui.pushButton_acqStartPreviewMode
     btn.setEnabled(False)
     ctrl.acquisition_panel.updateUi_enable_buttons([btn])
     assert btn.isEnabled() is True
@@ -164,7 +164,7 @@ def test_updateUi_enable_buttons(qtbot, request) -> None:
 
 def test_updateUi_disable_buttons(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    btn = ctrl.ui.pushButton_acqStartPreviewMode
+    btn = ctrl.acquisition_panel.ui.pushButton_acqStartPreviewMode
     btn.setEnabled(True)
     ctrl.acquisition_panel.updateUi_disable_buttons([btn])
     assert btn.isEnabled() is False
@@ -172,8 +172,8 @@ def test_updateUi_disable_buttons(qtbot, request) -> None:
 
 def test_cache_auto_laser_flags(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    ctrl.ui.checkBox_laserOneAutomatic.setChecked(True)
-    ctrl.ui.checkBox_laserTwoAutomatic.setChecked(False)
+    ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
+    ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(False)
     ctrl._cache_auto_laser_flags()
     assert ctrl._auto_laser1 is True
     assert ctrl._auto_laser2 is False
@@ -293,34 +293,34 @@ def test_updateUi_position_horizontal(qtbot, request) -> None:
     # Clear the label first — hardware_init already populated it, so a bare
     # `!= ""` assertion would pass even if the method were a no-op. Asserting
     # the method re-writes the expected formatted value proves it ran.
-    ctrl.ui.label_sampleCurrentHPosition.setText("")
+    ctrl.motor_panel.ui.label_sampleCurrentHPosition.setText("")
     expected = ctrl.units_fixformat.format(
         ctrl.motors.horizontal.get_position(ctrl.units), ctrl.units
     )
     ctrl.motor_panel.updateUi_position_horizontal()
-    assert ctrl.ui.label_sampleCurrentHPosition.text() == expected
+    assert ctrl.motor_panel.ui.label_sampleCurrentHPosition.text() == expected
     assert ctrl.current_horizontal_position_text == expected
 
 
 def test_updateUi_position_vertical(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    ctrl.ui.label_sampleCurrentVPosition.setText("")
+    ctrl.motor_panel.ui.label_sampleCurrentVPosition.setText("")
     expected = ctrl.units_fixformat.format(
         ctrl.motors.vertical.get_position(ctrl.units), ctrl.units
     )
     ctrl.motor_panel.updateUi_position_vertical()
-    assert ctrl.ui.label_sampleCurrentVPosition.text() == expected
+    assert ctrl.motor_panel.ui.label_sampleCurrentVPosition.text() == expected
     assert ctrl.current_vertical_position_text == expected
 
 
 def test_updateUi_position_camera(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    ctrl.ui.label_cameraCurrentPosition.setText("")
+    ctrl.motor_panel.ui.label_cameraCurrentPosition.setText("")
     expected = ctrl.units_fixformat.format(
         ctrl.motors.camera.get_position(ctrl.units), ctrl.units
     )
     ctrl.motor_panel.updateUi_position_camera()
-    assert ctrl.ui.label_cameraCurrentPosition.text() == expected
+    assert ctrl.motor_panel.ui.label_cameraCurrentPosition.text() == expected
     assert ctrl.current_camera_position_text == expected
 
 
@@ -329,7 +329,7 @@ def test_updateUi_position_camera(qtbot, request) -> None:
 
 def test_updateUi_laser1_amplitude(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    ctrl.ui.doubleSpinBox_laserOneAmplitude.setValue(50.0)
+    ctrl.laser_panel.ui.doubleSpinBox_laserOneAmplitude.setValue(50.0)
     with patch.object(ctrl._laser1_amplitude_timer, "start") as mock_start:
         ctrl.laser_panel.updateUi_laser1_amplitude()
     assert ctrl.laser1_power_pct == 50.0
@@ -338,7 +338,7 @@ def test_updateUi_laser1_amplitude(qtbot, request) -> None:
 
 def test_updateUi_laser2_amplitude(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    ctrl.ui.doubleSpinBox_laserTwoAmplitude.setValue(75.0)
+    ctrl.laser_panel.ui.doubleSpinBox_laserTwoAmplitude.setValue(75.0)
     with patch.object(ctrl._laser2_amplitude_timer, "start") as mock_start:
         ctrl.laser_panel.updateUi_laser2_amplitude()
     assert ctrl.laser2_power_pct == 75.0
@@ -347,7 +347,7 @@ def test_updateUi_laser2_amplitude(qtbot, request) -> None:
 
 def test_apply_laser1_amplitude(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    ctrl.ui.doubleSpinBox_laserOneAmplitude.setValue(50.0)
+    ctrl.laser_panel.ui.doubleSpinBox_laserOneAmplitude.setValue(50.0)
     with patch("lightsheet.gui.laser_panel.threading.Thread") as MockThread:
         MockThread.return_value.start = Mock()
         ctrl.laser_panel._apply_laser1_amplitude()
@@ -356,7 +356,7 @@ def test_apply_laser1_amplitude(qtbot, request) -> None:
 
 def test_apply_laser2_amplitude(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    ctrl.ui.doubleSpinBox_laserTwoAmplitude.setValue(75.0)
+    ctrl.laser_panel.ui.doubleSpinBox_laserTwoAmplitude.setValue(75.0)
     with patch("lightsheet.gui.laser_panel.threading.Thread") as MockThread:
         MockThread.return_value.start = Mock()
         ctrl.laser_panel._apply_laser2_amplitude()
@@ -398,7 +398,7 @@ def test_updateUi_preview_mode_button_stop(qtbot, request) -> None:
     ctrl.preview_mode_started = True
     ctrl.acquisition_panel.updateUi_preview_mode_button()
     assert ctrl.preview_mode_started is False
-    assert ctrl.ui.pushButton_acqStartPreviewMode.text() == "Start Preview Mode"
+    assert ctrl.acquisition_panel.ui.pushButton_acqStartPreviewMode.text() == "Start Preview Mode"
 
 
 def test_updateUi_post_preview_mode(qtbot, request) -> None:
@@ -424,7 +424,7 @@ def test_updateUi_live_mode_button_stop(qtbot, request) -> None:
     ctrl.live_mode_started = True
     ctrl.acquisition_panel.updateUi_live_mode_button()
     assert ctrl.live_mode_started is False
-    assert ctrl.ui.pushButton_acqStartLiveMode.text() == "Start Live Mode"
+    assert ctrl.acquisition_panel.ui.pushButton_acqStartLiveMode.text() == "Start Live Mode"
 
 
 def test_updateUi_post_live_mode(qtbot, request) -> None:
@@ -448,14 +448,14 @@ def test_updateUi_post_single_mode(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.acquisition_panel.updateUi_post_single_mode()
     assert ctrl.single_mode_started is False
-    assert ctrl.ui.pushButton_acqGetSingleImage.text() == "Get Single Image"
+    assert ctrl.acquisition_panel.ui.pushButton_acqGetSingleImage.text() == "Get Single Image"
 
 
 def test_updateUi_post_stack_mode(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.acquisition_panel.updateUi_post_stack_mode()
     assert ctrl.stack_mode_started is False
-    assert ctrl.ui.pushButton_acqStartStackMode.text() == "Start Stack Mode"
+    assert ctrl.stack_panel.ui.pushButton_acqStartStackMode.text() == "Start Stack Mode"
 
 
 # -- Stack mode button (both branches) --------------------------------------
@@ -474,9 +474,9 @@ def test_updateUi_stack_mode_button_start_valid(qtbot, request) -> None:
     ctrl.saving_allowed = True
     ctrl.stack_starting_plane = 0.0
     ctrl.stack_ending_plane = 100.0
-    ctrl.ui.checkBox_acqFirstPlaneSet.setChecked(True)
-    ctrl.ui.checkBox_acqLastPlaneSet.setChecked(True)
-    ctrl.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
+    ctrl.stack_panel.ui.checkBox_acqFirstPlaneSet.setChecked(True)
+    ctrl.stack_panel.ui.checkBox_acqLastPlaneSet.setChecked(True)
+    ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
     with patch("lightsheet.gui.acquisition_panel.QMessageBox") as MockMsg:
         ctrl.acquisition_panel.updateUi_stack_mode_button()
     assert ctrl.stack_mode_started is True
@@ -485,7 +485,7 @@ def test_updateUi_stack_mode_button_start_valid(qtbot, request) -> None:
 def test_updateUi_stack_mode_button_start_invalid(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.stack_mode_started = False
-    ctrl.ui.checkBox_acqFirstPlaneSet.setChecked(False)
+    ctrl.stack_panel.ui.checkBox_acqFirstPlaneSet.setChecked(False)
     messages: list[str] = []
     beeps: list[None] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
@@ -505,9 +505,9 @@ def test_updateUi_stack_mode_button_start_reverse_direction(qtbot, request) -> N
     ctrl.saving_allowed = True
     ctrl.stack_starting_plane = 100.0
     ctrl.stack_ending_plane = 0.0
-    ctrl.ui.checkBox_acqFirstPlaneSet.setChecked(True)
-    ctrl.ui.checkBox_acqLastPlaneSet.setChecked(True)
-    ctrl.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
+    ctrl.stack_panel.ui.checkBox_acqFirstPlaneSet.setChecked(True)
+    ctrl.stack_panel.ui.checkBox_acqLastPlaneSet.setChecked(True)
+    ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
     with patch("lightsheet.gui.acquisition_panel.QMessageBox") as MockMsg:
         ctrl.acquisition_panel.updateUi_stack_mode_button()
     assert ctrl.stack_step == -10.0
@@ -519,9 +519,9 @@ def test_updateUi_stack_mode_button_start_nosave_yes(qtbot, request) -> None:
     ctrl.saving_allowed = False
     ctrl.stack_starting_plane = 0.0
     ctrl.stack_ending_plane = 100.0
-    ctrl.ui.checkBox_acqFirstPlaneSet.setChecked(True)
-    ctrl.ui.checkBox_acqLastPlaneSet.setChecked(True)
-    ctrl.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
+    ctrl.stack_panel.ui.checkBox_acqFirstPlaneSet.setChecked(True)
+    ctrl.stack_panel.ui.checkBox_acqLastPlaneSet.setChecked(True)
+    ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
     with patch("lightsheet.gui.acquisition_panel.QMessageBox") as MockMsg:
         MockMsg.Yes = 1
         MockMsg.No = 0
@@ -535,7 +535,7 @@ def test_updateUi_stack_mode_button_start_nosave_yes(qtbot, request) -> None:
 
 def test_validate_file_name_valid(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    ctrl.ui.lineEdit_saveFilename.setText("test_file")
+    ctrl.save_panel.ui.lineEdit_saveFilename.setText("test_file")
     ctrl.save_directory = "/tmp"
     ctrl.save_panel.validate_file_name()
     assert ctrl.saving_allowed is True
@@ -543,7 +543,7 @@ def test_validate_file_name_valid(qtbot, request) -> None:
 
 def test_validate_file_name_empty(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    ctrl.ui.lineEdit_saveFilename.setText("")
+    ctrl.save_panel.ui.lineEdit_saveFilename.setText("")
     ctrl.save_directory = ""
     ctrl.save_panel.validate_file_name()
     assert ctrl.saving_allowed is False
@@ -551,7 +551,7 @@ def test_validate_file_name_empty(qtbot, request) -> None:
 
 def test_validate_file_name_special_chars(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    ctrl.ui.lineEdit_saveFilename.setText("test@file#name")
+    ctrl.save_panel.ui.lineEdit_saveFilename.setText("test@file#name")
     ctrl.save_directory = "/tmp"
     ctrl.save_panel.validate_file_name()
     assert ctrl.saving_allowed is True
@@ -571,8 +571,8 @@ def test_updateUi_save_single_image_saving_allowed_crop(qtbot, request) -> None:
     ctrl.image_ver_pos_text = "0.0"
     ctrl.image_cam_pos_text = "0.0"
     ctrl.buffer = Mock()
-    ctrl.ui.checkBox_saveAllCrop.setChecked(True)
-    ctrl.ui.checkBox_saveAllFull.setChecked(False)
+    ctrl.save_panel.ui.checkBox_saveAllCrop.setChecked(True)
+    ctrl.save_panel.ui.checkBox_saveAllFull.setChecked(False)
     ctrl._fs.reinit = Mock()
     ctrl._fs.set_files = Mock()
     ctrl._fs.crop_buffer = Mock(return_value=Mock())
@@ -599,8 +599,8 @@ def test_updateUi_save_single_image_saving_allowed_full(qtbot, request) -> None:
     ctrl.image_ver_pos_text = "0.0"
     ctrl.image_cam_pos_text = "0.0"
     ctrl.buffer = Mock()
-    ctrl.ui.checkBox_saveAllCrop.setChecked(False)
-    ctrl.ui.checkBox_saveAllFull.setChecked(True)
+    ctrl.save_panel.ui.checkBox_saveAllCrop.setChecked(False)
+    ctrl.save_panel.ui.checkBox_saveAllFull.setChecked(True)
     ctrl._fs.reinit = Mock()
     ctrl._fs.set_files = Mock()
     ctrl._fs.enqueue_buffer = Mock()
@@ -623,8 +623,8 @@ def test_updateUi_save_single_image_saving_allowed_reconstructed(qtbot, request)
     ctrl.image_ver_pos_text = "0.0"
     ctrl.image_cam_pos_text = "0.0"
     ctrl.reconstructed_frame = Mock()
-    ctrl.ui.checkBox_saveAllCrop.setChecked(False)
-    ctrl.ui.checkBox_saveAllFull.setChecked(False)
+    ctrl.save_panel.ui.checkBox_saveAllCrop.setChecked(False)
+    ctrl.save_panel.ui.checkBox_saveAllFull.setChecked(False)
     ctrl._fs.reinit = Mock()
     ctrl._fs.set_files = Mock()
     ctrl._fs.enqueue_buffer = Mock()
@@ -643,7 +643,7 @@ def test_updateUi_save_single_image_not_allowed(qtbot, request) -> None:
     ctrl.saving_allowed = False
     ctrl.save_directory = ""
     ctrl.save_filename = ""
-    ctrl.ui.lineEdit_saveFilename.setText("")
+    ctrl.save_panel.ui.lineEdit_saveFilename.setText("")
     messages: list[str] = []
     beeps: list[None] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
@@ -664,7 +664,7 @@ def test_updateUi_set_stack_mode_starting_point(qtbot, request) -> None:
     with patch.object(ctrl.stack_panel, "updateUi_set_number_of_planes") as mock_set_planes:
         ctrl.stack_panel.updateUi_set_stack_mode_starting_point()
     assert ctrl.stack_starting_plane == ctrl.motors.horizontal.get_position("\u03bcm")
-    assert ctrl.ui.checkBox_acqFirstPlaneSet.isChecked() is True
+    assert ctrl.stack_panel.ui.checkBox_acqFirstPlaneSet.isChecked() is True
     mock_set_planes.assert_called_once()
 
 
@@ -673,7 +673,7 @@ def test_updateUi_set_stack_mode_ending_point(qtbot, request) -> None:
     with patch.object(ctrl.stack_panel, "updateUi_set_number_of_planes") as mock_set_planes:
         ctrl.stack_panel.updateUi_set_stack_mode_ending_point()
     assert ctrl.stack_ending_plane == ctrl.motors.horizontal.get_position("\u03bcm")
-    assert ctrl.ui.checkBox_acqLastPlaneSet.isChecked() is True
+    assert ctrl.stack_panel.ui.checkBox_acqLastPlaneSet.isChecked() is True
     mock_set_planes.assert_called_once()
 
 
@@ -681,19 +681,19 @@ def test_updateUi_set_number_of_planes_valid(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.stack_starting_plane = 0.0
     ctrl.stack_ending_plane = 100.0
-    ctrl.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
-    ctrl.ui.checkBox_acqFirstPlaneSet.setChecked(True)
-    ctrl.ui.checkBox_acqLastPlaneSet.setChecked(True)
+    ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
+    ctrl.stack_panel.ui.checkBox_acqFirstPlaneSet.setChecked(True)
+    ctrl.stack_panel.ui.checkBox_acqLastPlaneSet.setChecked(True)
     ctrl.stack_panel.updateUi_set_number_of_planes()
     assert ctrl.number_of_planes > 0
-    assert ctrl.ui.label_acqNumberOfPlanes.text() != ""
+    assert ctrl.stack_panel.ui.label_acqNumberOfPlanes.text() != ""
 
 
 def test_updateUi_set_number_of_planes_zero_step(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     # The spinbox has a default minimum of 0.25; lower it so 0 is accepted.
-    ctrl.ui.doubleSpinBox_acqPlaneStepSize.setMinimum(0)
-    ctrl.ui.doubleSpinBox_acqPlaneStepSize.setValue(0)
+    ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setMinimum(0)
+    ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(0)
     messages: list[str] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
     ctrl.stack_panel.updateUi_set_number_of_planes()
@@ -702,9 +702,9 @@ def test_updateUi_set_number_of_planes_zero_step(qtbot, request) -> None:
 
 def test_updateUi_set_number_of_planes_planes_not_set(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    ctrl.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
-    ctrl.ui.checkBox_acqFirstPlaneSet.setChecked(False)
-    ctrl.ui.checkBox_acqLastPlaneSet.setChecked(True)
+    ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
+    ctrl.stack_panel.ui.checkBox_acqFirstPlaneSet.setChecked(False)
+    ctrl.stack_panel.ui.checkBox_acqLastPlaneSet.setChecked(True)
     messages: list[str] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
     ctrl.stack_panel.updateUi_set_number_of_planes()
@@ -734,7 +734,7 @@ def test_updateUi_select_directory_empty(qtbot, request) -> None:
         return_value="",
     ):
         ctrl.save_panel.updateUi_select_directory()
-    assert ctrl.ui.lineEdit_saveFilename.isEnabled() is False
+    assert ctrl.save_panel.ui.lineEdit_saveFilename.isEnabled() is False
 
 
 # --------------------------------------------------------------------------- #
@@ -786,12 +786,12 @@ def test_updateUi_initial_hardware_state_lightsheet_shutter_mode(qtbot, request)
     # which would invoke _acq.updateUi_camera_shutter_mode and overwrite
     # camera.shutter_mode from the combo text before the branch check.
     ctrl.camera.shutter_mode = "Lightsheet"
-    ctrl.ui.comboBox_cameraShutterMode.blockSignals(True)
+    ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.blockSignals(True)
     try:
         ctrl.updateUi_initial_hardware_state()
     finally:
-        ctrl.ui.comboBox_cameraShutterMode.blockSignals(False)
-    assert ctrl.ui.comboBox_cameraShutterMode.currentIndex() == 1
+        ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.blockSignals(False)
+    assert ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.currentIndex() == 1
 
 
 def test_hardware_init_non_demo_shows_ready_status(qtbot, request) -> None:

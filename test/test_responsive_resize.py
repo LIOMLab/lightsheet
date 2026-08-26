@@ -137,7 +137,7 @@ def test_sample_movement_group_box_not_pinned(qtbot, request) -> None:
     qtbot.waitExposed(controller)
     _show_motion_tab(controller, qtbot)
 
-    gb = controller.ui.groupBox_SampleMovement
+    gb = controller.motor_panel.ui.groupBox_SampleMovement
     max_size = gb.maximumSize()
     # Qt's default max is (16777215, 16777215). The fixed 350x380 cap
     # would set both to 350/380. Assert at least one dimension is not
@@ -155,7 +155,7 @@ def test_camera_movement_group_box_not_pinned(qtbot, request) -> None:
     qtbot.waitExposed(controller)
     _show_motion_tab(controller, qtbot)
 
-    gb = controller.ui.groupBox_CameraMovement
+    gb = controller.motor_panel.ui.groupBox_CameraMovement
     max_size = gb.maximumSize()
     assert not (max_size.width() == 350 and max_size.height() == 380), (
         f"groupBox_CameraMovement still pinned to 350x380 max "
@@ -171,7 +171,7 @@ def test_sample_movement_group_box_min_width_content_driven(qtbot, request) -> N
     qtbot.waitExposed(controller)
     _show_motion_tab(controller, qtbot)
 
-    gb = controller.ui.groupBox_SampleMovement
+    gb = controller.motor_panel.ui.groupBox_SampleMovement
     min_size = gb.minimumSize()
     # The old pin was 350x380. The remediation drops the height pin to
     # 0 (layout decides) and keeps a content-driven width ~300. Assert
@@ -191,7 +191,7 @@ def test_jog_arrow_button_no_width_cap(qtbot, request) -> None:
     qtbot.waitExposed(controller)
     _show_motion_tab(controller, qtbot)
 
-    btn = controller.ui.pushButton_sampleStepForward
+    btn = controller.motor_panel.ui.pushButton_sampleStepForward
     # Keep the 60x60 minimum (touch target).
     assert btn.minimumSize().width() == 60, (
         f"jog button min width {btn.minimumSize().width()} != 60 "
@@ -218,7 +218,7 @@ def test_motion_tab_group_boxes_visible_at_laptop_floor(qtbot, request) -> None:
     _resize_and_settle(controller, 1366, 768, qtbot)
     _show_motion_tab(controller, qtbot)
 
-    sample_gb = controller.ui.groupBox_SampleMovement
-    camera_gb = controller.ui.groupBox_CameraMovement
+    sample_gb = controller.motor_panel.ui.groupBox_SampleMovement
+    camera_gb = controller.motor_panel.ui.groupBox_CameraMovement
     assert sample_gb.isVisible(), "groupBox_SampleMovement not visible at 1366x768"
     assert camera_gb.isVisible(), "groupBox_CameraMovement not visible at 1366x768"

@@ -255,7 +255,7 @@ def test_start_lasers_reads_cached_flags_not_widgets(qtbot, request) -> None:
     # The Qt checkbox is unchecked by default (QCheckBox defaults to False).
     # Set the cached flag True — if start_lasers reads the widget instead of
     # the cached flag, laser 1 would NOT be energized.
-    assert not ctrl.ui.checkBox_laserOneAutomatic.isChecked(), (
+    assert not ctrl.laser_panel.ui.checkBox_laserOneAutomatic.isChecked(), (
         "checkbox must be unchecked for this test to prove the cached flag "
         "is read, not the widget"
     )
@@ -353,8 +353,8 @@ def test_wavelength_labels_set_from_live_instances(qtbot, request) -> None:
 
     ctrl.updateUi_initial_hardware_state()
 
-    label_72_text = ctrl.ui.label_72.text()
-    label_73_text = ctrl.ui.label_73.text()
+    label_72_text = ctrl.laser_panel.ui.label_72.text()
+    label_73_text = ctrl.laser_panel.ui.label_73.text()
     assert "555" in label_72_text, (
         "label_72 must show the live lasers[0].wavelength (555), not a "
         "hardcoded number."
@@ -363,8 +363,8 @@ def test_wavelength_labels_set_from_live_instances(qtbot, request) -> None:
         "label_73 must show the live lasers[1].wavelength (640), not a hardcoded number."
     )
     # Toggle buttons are relabeled with the live wavelengths too.
-    toggle1_text = ctrl.ui.pushButton_laserOneToggle.text()
-    toggle2_text = ctrl.ui.pushButton_laserTwoToggle.text()
+    toggle1_text = ctrl.laser_panel.ui.pushButton_laserOneToggle.text()
+    toggle2_text = ctrl.laser_panel.ui.pushButton_laserTwoToggle.text()
     assert "555" in toggle1_text
     assert "640" in toggle2_text
 

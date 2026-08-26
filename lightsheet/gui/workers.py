@@ -89,7 +89,7 @@ class PreviewWorker(QObject):
         # never reaches into the shell's ui.* from the worker thread
         # (AGENTS.md §11).
         self._camera_exposure_time = int(
-            shell.ui.doubleSpinBox_cameraExposureTime.value()
+            shell.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.value()
         )
 
     @Slot()
