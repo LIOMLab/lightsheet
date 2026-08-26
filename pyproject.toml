@@ -112,7 +112,33 @@ source = ["lightsheet"]
 # hal/real/* safety modules (daqlaser.py, motors.py, ibeam_smart.py) stay
 # MEASURED at 100% branch (see [tool.coverage-threshold.modules.*] below) —
 # omitting them would remove the D-06 safety targets from the gate.
-omit = ["lightsheet/hal/real/camera.py"]
+#
+# The generated ui_*.py / ui_*_rc.py files (pyside6-uic / pyside6-rcc output)
+# are omitted from coverage: they are auto-generated code with branches that
+# depend on Qt Designer properties (sizePolicy, orientation, etc.) that are
+# not exercised by the test suite. The hand-written panel modules
+# (laser_panel.py, motor_panel.py, etc.) that USE these generated classes
+# are measured.
+omit = [
+    "lightsheet/hal/real/camera.py",
+    "lightsheet/gui/ui_properties.py",
+    "lightsheet/gui/ui_shell.py",
+    "lightsheet/gui/ui_laser_panel.py",
+    "lightsheet/gui/ui_motor_panel.py",
+    "lightsheet/gui/ui_acquisition_panel.py",
+    "lightsheet/gui/ui_save_panel.py",
+    "lightsheet/gui/ui_stack_panel.py",
+    "lightsheet/gui/ui_scan_panel.py",
+    "lightsheet/gui/ui_calibration_panel.py",
+    "lightsheet/gui/ui_shell_rc.py",
+    "lightsheet/gui/ui_laser_panel_rc.py",
+    "lightsheet/gui/ui_motor_panel_rc.py",
+    "lightsheet/gui/ui_acquisition_panel_rc.py",
+    "lightsheet/gui/ui_save_panel_rc.py",
+    "lightsheet/gui/ui_stack_panel_rc.py",
+    "lightsheet/gui/ui_scan_panel_rc.py",
+    "lightsheet/gui/ui_calibration_panel_rc.py",
+]
 
 [tool.coverage.report]
 # exclude_also EXTENDS the default `pragma: no cover` exclusion set (coverage
@@ -158,6 +184,14 @@ file_branch_coverage_min = 0
 # QGraphicsView-based image display widget. 50% branch floor until the
 # SC2 render smoke test (07-02) lands and exercises the setImage path.
 [tool.coverage-threshold.modules."lightsheet/gui/image_view.py"]
+file_branch_coverage_min = 50
+
+# 7B per-panel widget/controller modules. New in 07-09 — the slot bodies
+# are moved verbatim from the monolithic controller.py and tested via the
+# existing behavior tests (make_controller + real method calls). The
+# save_panel has the lowest coverage because its file-dialog slots are
+# heavily mock-dependent; floor set to current measured level.
+[tool.coverage-threshold.modules."lightsheet/gui/save_panel.py"]
 file_branch_coverage_min = 50
 
 [tool.ty.rules]
