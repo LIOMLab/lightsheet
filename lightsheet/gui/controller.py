@@ -482,9 +482,14 @@ class Controller_MainWindow(QMainWindow):
         self.calibration_panel.ui.pushButton_calCameraShowInterpolation.setEnabled(False)
         self.calibration_panel.ui.pushButton_calEtlShowInterpolation.setEnabled(False)
 
-        # Initial state of First and Last plane selection (for Stack Mode)
-        self.stack_panel.ui.checkBox_acqFirstPlaneSet.setEnabled(False)
-        self.stack_panel.ui.checkBox_acqLastPlaneSet.setEnabled(False)
+        # Initial state of First and Last plane selection (for Stack Mode).
+        # The boundary-set boolean is now a shell flag (the checkboxes were
+        # replaced with editable spinboxes). The spinboxes are always
+        # enabled so the operator can type a value directly; the
+        # editingFinished handler validates against the motor travel
+        # limits and rejects with a beep on out-of-range.
+        self.stack_first_plane_set = False
+        self.stack_last_plane_set = False
         self.stack_panel.ui.pushButton_acqSetFirstPlane.setEnabled(True)
         self.stack_panel.ui.pushButton_acqSetLastPlane.setEnabled(True)
 
@@ -548,6 +553,16 @@ class Controller_MainWindow(QMainWindow):
         )
         self.stack_panel.ui.pushButton_acqSetLastPlane.clicked.connect(
             self.stack_panel.updateUi_set_stack_mode_ending_point
+        )
+        # Manual entry on the first/last plane spinbox validates against
+        # the motor travel limits and rejects with a beep on out-of-range
+        # (the worker's per-plane ValueError catch is the physical-safety
+        # backstop if the soft block slips).
+        self.stack_panel.ui.doubleSpinBox_acqFirstPlane.editingFinished.connect(
+            self.stack_panel._on_first_plane_edited
+        )
+        self.stack_panel.ui.doubleSpinBox_acqLastPlane.editingFinished.connect(
+            self.stack_panel._on_last_plane_edited
         )
 
         # Connections for the 'Lasers' controls — target laser panel.
@@ -663,6 +678,9 @@ class Controller_MainWindow(QMainWindow):
 
         # Update Ui with initial hardware state
         self.updateUi_initial_hardware_state()
+        # Now that motors are assigned, seed the stack plane spinbox ranges
+        # from the motor travel limits (the soft widget-layer block).
+        self.stack_panel._seed_spinbox_ranges()
 
         # FrameSaverController display-port refresh timer
         self.timer_imageview = QTimer()

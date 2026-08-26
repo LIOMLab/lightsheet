@@ -474,8 +474,8 @@ def test_updateUi_stack_mode_button_start_valid(qtbot, request) -> None:
     ctrl.saving_allowed = True
     ctrl.stack_starting_plane = 0.0
     ctrl.stack_ending_plane = 100.0
-    ctrl.stack_panel.ui.checkBox_acqFirstPlaneSet.setChecked(True)
-    ctrl.stack_panel.ui.checkBox_acqLastPlaneSet.setChecked(True)
+    ctrl.stack_first_plane_set = True
+    ctrl.stack_last_plane_set = True
     ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
     with patch("lightsheet.gui.acquisition_panel.QMessageBox") as MockMsg:
         ctrl.acquisition_panel.updateUi_stack_mode_button()
@@ -485,7 +485,7 @@ def test_updateUi_stack_mode_button_start_valid(qtbot, request) -> None:
 def test_updateUi_stack_mode_button_start_invalid(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.stack_mode_started = False
-    ctrl.stack_panel.ui.checkBox_acqFirstPlaneSet.setChecked(False)
+    ctrl.stack_first_plane_set = False
     messages: list[str] = []
     beeps: list[None] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
@@ -505,8 +505,10 @@ def test_updateUi_stack_mode_button_start_reverse_direction(qtbot, request) -> N
     ctrl.saving_allowed = True
     ctrl.stack_starting_plane = 100.0
     ctrl.stack_ending_plane = 0.0
-    ctrl.stack_panel.ui.checkBox_acqFirstPlaneSet.setChecked(True)
-    ctrl.stack_panel.ui.checkBox_acqLastPlaneSet.setChecked(True)
+    ctrl.stack_first_plane_set = True
+    ctrl.stack_last_plane_set = True
+    ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(100.0)
+    ctrl.stack_panel.ui.doubleSpinBox_acqLastPlane.setValue(0.0)
     ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
     with patch("lightsheet.gui.acquisition_panel.QMessageBox") as MockMsg:
         ctrl.acquisition_panel.updateUi_stack_mode_button()
@@ -519,8 +521,8 @@ def test_updateUi_stack_mode_button_start_nosave_yes(qtbot, request) -> None:
     ctrl.saving_allowed = False
     ctrl.stack_starting_plane = 0.0
     ctrl.stack_ending_plane = 100.0
-    ctrl.stack_panel.ui.checkBox_acqFirstPlaneSet.setChecked(True)
-    ctrl.stack_panel.ui.checkBox_acqLastPlaneSet.setChecked(True)
+    ctrl.stack_first_plane_set = True
+    ctrl.stack_last_plane_set = True
     ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
     with patch("lightsheet.gui.acquisition_panel.QMessageBox") as MockMsg:
         MockMsg.Yes = 1
@@ -664,7 +666,8 @@ def test_updateUi_set_stack_mode_starting_point(qtbot, request) -> None:
     with patch.object(ctrl.stack_panel, "updateUi_set_number_of_planes") as mock_set_planes:
         ctrl.stack_panel.updateUi_set_stack_mode_starting_point()
     assert ctrl.stack_starting_plane == ctrl.motors.horizontal.get_position("\u03bcm")
-    assert ctrl.stack_panel.ui.checkBox_acqFirstPlaneSet.isChecked() is True
+    assert ctrl.stack_first_plane_set is True
+    assert ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.value() == ctrl.stack_starting_plane
     mock_set_planes.assert_called_once()
 
 
@@ -673,7 +676,8 @@ def test_updateUi_set_stack_mode_ending_point(qtbot, request) -> None:
     with patch.object(ctrl.stack_panel, "updateUi_set_number_of_planes") as mock_set_planes:
         ctrl.stack_panel.updateUi_set_stack_mode_ending_point()
     assert ctrl.stack_ending_plane == ctrl.motors.horizontal.get_position("\u03bcm")
-    assert ctrl.stack_panel.ui.checkBox_acqLastPlaneSet.isChecked() is True
+    assert ctrl.stack_last_plane_set is True
+    assert ctrl.stack_panel.ui.doubleSpinBox_acqLastPlane.value() == ctrl.stack_ending_plane
     mock_set_planes.assert_called_once()
 
 
@@ -682,8 +686,8 @@ def test_updateUi_set_number_of_planes_valid(qtbot, request) -> None:
     ctrl.stack_starting_plane = 0.0
     ctrl.stack_ending_plane = 100.0
     ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
-    ctrl.stack_panel.ui.checkBox_acqFirstPlaneSet.setChecked(True)
-    ctrl.stack_panel.ui.checkBox_acqLastPlaneSet.setChecked(True)
+    ctrl.stack_first_plane_set = True
+    ctrl.stack_last_plane_set = True
     ctrl.stack_panel.updateUi_set_number_of_planes()
     assert ctrl.number_of_planes > 0
     assert ctrl.stack_panel.ui.label_acqNumberOfPlanes.text() != ""
@@ -703,8 +707,8 @@ def test_updateUi_set_number_of_planes_zero_step(qtbot, request) -> None:
 def test_updateUi_set_number_of_planes_planes_not_set(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
-    ctrl.stack_panel.ui.checkBox_acqFirstPlaneSet.setChecked(False)
-    ctrl.stack_panel.ui.checkBox_acqLastPlaneSet.setChecked(True)
+    ctrl.stack_first_plane_set = False
+    ctrl.stack_last_plane_set = True
     messages: list[str] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
     ctrl.stack_panel.updateUi_set_number_of_planes()

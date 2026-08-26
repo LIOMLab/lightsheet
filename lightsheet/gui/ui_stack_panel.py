@@ -15,9 +15,9 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QCheckBox, QDoubleSpinBox, QFrame,
-    QGroupBox, QHBoxLayout, QLabel, QPushButton,
-    QSizePolicy, QSpacerItem, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QFrame, QGroupBox,
+    QHBoxLayout, QLabel, QPushButton, QSizePolicy,
+    QSpacerItem, QVBoxLayout, QWidget)
 
 class Ui_StackPanel(object):
     def setupUi(self, stackPanel):
@@ -123,15 +123,16 @@ class Ui_StackPanel(object):
 
         self.horizontalLayout_90.addWidget(self.pushButton_acqSetFirstPlane)
 
-        self.checkBox_acqFirstPlaneSet = QCheckBox(self.groupBox_18)
-        self.checkBox_acqFirstPlaneSet.setObjectName(u"checkBox_acqFirstPlaneSet")
-        sizePolicy4 = QSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        sizePolicy4.setHorizontalStretch(0)
-        sizePolicy4.setVerticalStretch(0)
-        sizePolicy4.setHeightForWidth(self.checkBox_acqFirstPlaneSet.sizePolicy().hasHeightForWidth())
-        self.checkBox_acqFirstPlaneSet.setSizePolicy(sizePolicy4)
+        self.doubleSpinBox_acqFirstPlane = QDoubleSpinBox(self.groupBox_18)
+        self.doubleSpinBox_acqFirstPlane.setObjectName(u"doubleSpinBox_acqFirstPlane")
+        sizePolicy1.setHeightForWidth(self.doubleSpinBox_acqFirstPlane.sizePolicy().hasHeightForWidth())
+        self.doubleSpinBox_acqFirstPlane.setSizePolicy(sizePolicy1)
+        self.doubleSpinBox_acqFirstPlane.setMinimumSize(QSize(120, 0))
+        self.doubleSpinBox_acqFirstPlane.setDecimals(2)
+        self.doubleSpinBox_acqFirstPlane.setMinimum(-100000.000000000000000)
+        self.doubleSpinBox_acqFirstPlane.setMaximum(100000.000000000000000)
 
-        self.horizontalLayout_90.addWidget(self.checkBox_acqFirstPlaneSet)
+        self.horizontalLayout_90.addWidget(self.doubleSpinBox_acqFirstPlane)
 
 
         self.verticalLayout_14.addLayout(self.horizontalLayout_90)
@@ -146,12 +147,16 @@ class Ui_StackPanel(object):
 
         self.horizontalLayout_91.addWidget(self.pushButton_acqSetLastPlane)
 
-        self.checkBox_acqLastPlaneSet = QCheckBox(self.groupBox_18)
-        self.checkBox_acqLastPlaneSet.setObjectName(u"checkBox_acqLastPlaneSet")
-        sizePolicy4.setHeightForWidth(self.checkBox_acqLastPlaneSet.sizePolicy().hasHeightForWidth())
-        self.checkBox_acqLastPlaneSet.setSizePolicy(sizePolicy4)
+        self.doubleSpinBox_acqLastPlane = QDoubleSpinBox(self.groupBox_18)
+        self.doubleSpinBox_acqLastPlane.setObjectName(u"doubleSpinBox_acqLastPlane")
+        sizePolicy1.setHeightForWidth(self.doubleSpinBox_acqLastPlane.sizePolicy().hasHeightForWidth())
+        self.doubleSpinBox_acqLastPlane.setSizePolicy(sizePolicy1)
+        self.doubleSpinBox_acqLastPlane.setMinimumSize(QSize(120, 0))
+        self.doubleSpinBox_acqLastPlane.setDecimals(2)
+        self.doubleSpinBox_acqLastPlane.setMinimum(-100000.000000000000000)
+        self.doubleSpinBox_acqLastPlane.setMaximum(100000.000000000000000)
 
-        self.horizontalLayout_91.addWidget(self.checkBox_acqLastPlaneSet)
+        self.horizontalLayout_91.addWidget(self.doubleSpinBox_acqLastPlane)
 
 
         self.verticalLayout_14.addLayout(self.horizontalLayout_91)
@@ -195,12 +200,12 @@ class Ui_StackPanel(object):
         self.pushButton_acqSetFirstPlane.setToolTip(QCoreApplication.translate("StackPanel", u"Set the current horizontal position as starting point for stack acquisition", None))
 #endif // QT_CONFIG(tooltip)
         self.pushButton_acqSetFirstPlane.setText(QCoreApplication.translate("StackPanel", u"Set Starting Plane", None))
-        self.checkBox_acqFirstPlaneSet.setText("")
+        self.doubleSpinBox_acqFirstPlane.setSuffix(QCoreApplication.translate("StackPanel", u" \u03bcm", None))
 #if QT_CONFIG(tooltip)
         self.pushButton_acqSetLastPlane.setToolTip(QCoreApplication.translate("StackPanel", u"Set the current horizontal position as ending point for stack acquisition", None))
 #endif // QT_CONFIG(tooltip)
         self.pushButton_acqSetLastPlane.setText(QCoreApplication.translate("StackPanel", u"Set Ending Plane", None))
-        self.checkBox_acqLastPlaneSet.setText("")
+        self.doubleSpinBox_acqLastPlane.setSuffix(QCoreApplication.translate("StackPanel", u" \u03bcm", None))
         pass
     # retranslateUi
 

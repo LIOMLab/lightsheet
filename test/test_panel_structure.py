@@ -112,8 +112,11 @@ def test_stack_panel_instantiates(qtbot) -> None:
     assert panel.findChild(QObject, "pushButton_acqSetFirstPlane") is not None
     assert panel.findChild(QObject, "pushButton_acqSetLastPlane") is not None
     assert panel.findChild(QObject, "doubleSpinBox_acqPlaneStepSize") is not None
-    assert panel.findChild(QObject, "checkBox_acqFirstPlaneSet") is not None
-    assert panel.findChild(QObject, "checkBox_acqLastPlaneSet") is not None
+    assert panel.findChild(QObject, "doubleSpinBox_acqFirstPlane") is not None
+    assert panel.findChild(QObject, "doubleSpinBox_acqLastPlane") is not None
+    # The boundary-set checkboxes are gone (migrated to editable spinboxes).
+    assert panel.findChild(QObject, "checkBox_acqFirstPlaneSet") is None
+    assert panel.findChild(QObject, "checkBox_acqLastPlaneSet") is None
 
 
 def test_scan_panel_instantiates(qtbot) -> None:

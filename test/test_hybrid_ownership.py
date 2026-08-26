@@ -62,13 +62,13 @@ def test_panel_internal_widget_not_on_shell_ui(qtbot, request) -> None:
     the merge-loop trim — it lives on its owning panel's ``ui`` only."""
     ctrl, _ = _make(qtbot, request)
 
-    # checkBox_acqFirstPlaneSet is a stack_panel-internal widget.
-    assert not hasattr(ctrl.ui, "checkBox_acqFirstPlaneSet"), (
+    # doubleSpinBox_acqFirstPlane is a stack_panel-internal widget.
+    assert not hasattr(ctrl.ui, "doubleSpinBox_acqFirstPlane"), (
         "panel-internal widget leaked onto controller.ui — the merge loop "
         "must be trimmed to shell-owned widgets only."
     )
     # It IS accessible via the panel-qualified path.
-    assert hasattr(ctrl.stack_panel.ui, "checkBox_acqFirstPlaneSet")
+    assert hasattr(ctrl.stack_panel.ui, "doubleSpinBox_acqFirstPlane")
 
 
 def test_panel_internal_widgets_not_on_shell_ui_sample(qtbot, request) -> None:
@@ -80,7 +80,7 @@ def test_panel_internal_widgets_not_on_shell_ui_sample(qtbot, request) -> None:
         "laser_panel": "pushButton_laserOneToggle",
         "motor_panel": "pushButton_sampleStepForward",
         "acquisition_panel": "pushButton_acqGetSingleImage",
-        "stack_panel": "checkBox_acqFirstPlaneSet",
+        "stack_panel": "doubleSpinBox_acqFirstPlane",
         "scan_panel": "checkBox_etlSync",
         "save_panel": "lineEdit_saveDirectory",
         "calibration_panel": "pushButton_calCameraComputeFocus",

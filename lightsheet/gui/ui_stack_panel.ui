@@ -181,15 +181,30 @@
            </widget>
           </item>
           <item>
-           <widget class="QCheckBox" name="checkBox_acqFirstPlaneSet">
+           <widget class="QDoubleSpinBox" name="doubleSpinBox_acqFirstPlane">
             <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+             <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
               <horstretch>0</horstretch>
               <verstretch>0</verstretch>
              </sizepolicy>
             </property>
-            <property name="text">
-             <string/>
+            <property name="minimumSize">
+             <size>
+              <width>120</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="suffix">
+             <string> μm</string>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>-100000.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>100000.000000000000000</double>
             </property>
            </widget>
           </item>
@@ -217,15 +232,30 @@
            </widget>
           </item>
           <item>
-           <widget class="QCheckBox" name="checkBox_acqLastPlaneSet">
+           <widget class="QDoubleSpinBox" name="doubleSpinBox_acqLastPlane">
             <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+             <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
               <horstretch>0</horstretch>
               <verstretch>0</verstretch>
              </sizepolicy>
             </property>
-            <property name="text">
-             <string/>
+            <property name="minimumSize">
+             <size>
+              <width>120</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="suffix">
+             <string> μm</string>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>-100000.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>100000.000000000000000</double>
             </property>
            </widget>
           </item>

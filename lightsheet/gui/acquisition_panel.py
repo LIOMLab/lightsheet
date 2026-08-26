@@ -205,8 +205,8 @@ class AcquisitionPanelWidget(QWidget):
             self._shell.close_modes()
             # Making sure the limits of the volume are set
             if (
-                (not self._shell.stack_panel.ui.checkBox_acqFirstPlaneSet.isChecked())
-                or (not self._shell.stack_panel.ui.checkBox_acqLastPlaneSet.isChecked())
+                (not self._shell.stack_first_plane_set)
+                or (not self._shell.stack_last_plane_set)
                 or (self._shell.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.value() == 0)
             ):
                 self._shell.sig_message.emit(
