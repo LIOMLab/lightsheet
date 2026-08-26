@@ -438,7 +438,7 @@ def test_poll_laser_status_active_emits_active(qtbot, request) -> None:
 
     ctrl._hw._poll_laser_status([0])
 
-    assert ctrl.label_laserOneStatus.text() == "● ON"
+    assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "● ON"
 
 
 def test_poll_laser_status_inactive_emits_inactive(qtbot, request) -> None:
@@ -451,7 +451,7 @@ def test_poll_laser_status_inactive_emits_inactive(qtbot, request) -> None:
 
     ctrl._hw._poll_laser_status([0])
 
-    assert ctrl.label_laserOneStatus.text() == "● OFF"
+    assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "● OFF"
 
 
 def test_poll_laser_status_error_wins_over_active(qtbot, request) -> None:
@@ -465,7 +465,7 @@ def test_poll_laser_status_error_wins_over_active(qtbot, request) -> None:
 
     ctrl._hw._poll_laser_status([1])
 
-    assert ctrl.label_laserTwoStatus.text() == "● ERR"
+    assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "● ERR"
 
 
 def test_poll_laser_status_both_indices_emits_twice(qtbot, request) -> None:
@@ -482,8 +482,8 @@ def test_poll_laser_status_both_indices_emits_twice(qtbot, request) -> None:
 
     # Both labels were updated via the connected slots — one emission per
     # index.
-    assert ctrl.label_laserOneStatus.text() == "● ON"
-    assert ctrl.label_laserTwoStatus.text() == "● OFF"
+    assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "● ON"
+    assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "● OFF"
 
 
 def test_updateUi_laser_status_active_sets_on_label(qtbot, request) -> None:
@@ -493,8 +493,8 @@ def test_updateUi_laser_status_active_sets_on_label(qtbot, request) -> None:
 
     ctrl.laser_panel.updateUi_laser_status(0, "active")
 
-    assert ctrl.label_laserOneStatus.text() == "● ON"
-    style = ctrl.label_laserOneStatus.styleSheet()
+    assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "● ON"
+    style = ctrl.laser_panel.ui.label_laserOneStatus.styleSheet()
     assert "#34C759" in style
     assert "bold" in style
 
@@ -506,8 +506,8 @@ def test_updateUi_laser_status_inactive_sets_off_label(qtbot, request) -> None:
 
     ctrl.laser_panel.updateUi_laser_status(0, "inactive")
 
-    assert ctrl.label_laserOneStatus.text() == "● OFF"
-    style = ctrl.label_laserOneStatus.styleSheet()
+    assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "● OFF"
+    style = ctrl.laser_panel.ui.label_laserOneStatus.styleSheet()
     assert "#8E8E93" in style
     assert "bold" in style
 
@@ -519,8 +519,8 @@ def test_updateUi_laser_status_error_sets_err_label_for_laser2(qtbot, request) -
 
     ctrl.laser_panel.updateUi_laser_status(1, "error")
 
-    assert ctrl.label_laserTwoStatus.text() == "● ERR"
-    style = ctrl.label_laserTwoStatus.styleSheet()
+    assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "● ERR"
+    style = ctrl.laser_panel.ui.label_laserTwoStatus.styleSheet()
     assert "#FF3B30" in style
     assert "bold" in style
 
@@ -602,8 +602,8 @@ def test_refresh_laser2_readback_populated(qtbot, request) -> None:
     ctrl._hw._refresh_laser_readback(1)
 
     # The connected updateUi_laser_readback slot applied the emit.
-    assert ctrl.label_laserTwoReadback.text() == "75.0 mW"
-    assert ctrl.label_laserTwoReadback.toolTip() == ""
+    assert ctrl.laser_panel.ui.label_laserTwoReadback.text() == "75.0 mW"
+    assert ctrl.laser_panel.ui.label_laserTwoReadback.toolTip() == ""
 
 
 def test_refresh_laser2_readback_degraded_shows_commanded_fallback(
@@ -619,8 +619,8 @@ def test_refresh_laser2_readback_degraded_shows_commanded_fallback(
     with patch.object(ctrl._hw.lasers[1], "get_output_power", return_value=None):
         ctrl._hw._refresh_laser_readback(1)
 
-    assert ctrl.label_laserTwoReadback.text() == "42.0 mW (cmd)"
-    tooltip = ctrl.label_laserTwoReadback.toolTip()
+    assert ctrl.laser_panel.ui.label_laserTwoReadback.text() == "42.0 mW (cmd)"
+    tooltip = ctrl.laser_panel.ui.label_laserTwoReadback.toolTip()
     assert "readback unavailable" in tooltip or "parse failure" in tooltip
 
 
@@ -691,8 +691,8 @@ def test_refresh_laser1_readback_shows_staged_mw(qtbot, request) -> None:
     # Exactly one emit for L1 (idx=0); the L2 label is not touched by an
     # L1 refresh. The L1 (est.) suffix + unverified-estimate tooltip is
     # asserted on the text + tooltip (the tooltip mentions 107.5 mW).
-    assert ctrl.label_laserOneReadback.text() == "12.5 mW (est.)"
-    assert "107.5 mW" in ctrl.label_laserOneReadback.toolTip()
+    assert ctrl.laser_panel.ui.label_laserOneReadback.text() == "12.5 mW (est.)"
+    assert "107.5 mW" in ctrl.laser_panel.ui.label_laserOneReadback.toolTip()
 
 
 # --------------------------------------------------------------------------- #
@@ -711,10 +711,10 @@ def test_updateUi_laser_readback_live_clears_tooltip(qtbot, request) -> None:
 
     ctrl.laser_panel.updateUi_laser_readback(1, "75.0 mW", "")
 
-    assert ctrl.label_laserTwoReadback.text() == "75.0 mW"
-    assert ctrl.label_laserTwoReadback.toolTip() == ""
+    assert ctrl.laser_panel.ui.label_laserTwoReadback.text() == "75.0 mW"
+    assert ctrl.laser_panel.ui.label_laserTwoReadback.toolTip() == ""
     # L1 label was not touched.
-    assert ctrl.label_laserOneReadback.text() == "0.0 mW (est.)"
+    assert ctrl.laser_panel.ui.label_laserOneReadback.text() == "0.0 mW (est.)"
 
 
 def test_updateUi_laser_readback_degraded_sets_tooltip(qtbot, request) -> None:
@@ -730,8 +730,8 @@ def test_updateUi_laser_readback_degraded_sets_tooltip(qtbot, request) -> None:
     )
     ctrl.laser_panel.updateUi_laser_readback(1, "42.0 mW (cmd)", tooltip)
 
-    assert ctrl.label_laserTwoReadback.text() == "42.0 mW (cmd)"
-    assert ctrl.label_laserTwoReadback.toolTip() == tooltip
+    assert ctrl.laser_panel.ui.label_laserTwoReadback.text() == "42.0 mW (cmd)"
+    assert ctrl.laser_panel.ui.label_laserTwoReadback.toolTip() == tooltip
 
 
 def test_updateUi_laser_readback_l1_routes_to_l1_label(qtbot, request) -> None:
@@ -741,6 +741,6 @@ def test_updateUi_laser_readback_l1_routes_to_l1_label(qtbot, request) -> None:
 
     ctrl.laser_panel.updateUi_laser_readback(0, "12.5 mW", "")
 
-    assert ctrl.label_laserOneReadback.text() == "12.5 mW"
+    assert ctrl.laser_panel.ui.label_laserOneReadback.text() == "12.5 mW"
     # L2 label was not touched.
-    assert ctrl.label_laserTwoReadback.text() == "N/A"
+    assert ctrl.laser_panel.ui.label_laserTwoReadback.text() == "N/A"

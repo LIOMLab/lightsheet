@@ -297,48 +297,15 @@ class Controller_MainWindow(QMainWindow):
                 if not attr_name.startswith("_") and attr_name in SHELL_OWNED_OBJECTNAMES:
                     setattr(self.ui, attr_name, getattr(panel.ui, attr_name))
 
-        # Per-laser status indicators (LSR-06). Added programmatically per
-        # AGENTS.md §8 (generated UI files are never hand-edited) — parented
-        # into the laser panel's groupBox_15 column layouts
-        # (verticalLayout_43 = L1 column, verticalLayout_44 = L2 column).
-        # Inserted BEFORE the expanding spacer so they align.
-        self.label_laserOneStatus = QLabel("● OFF")
-        self.label_laserOneStatus.setMinimumWidth(140)
-        self.label_laserOneStatus.setStyleSheet("color: #8E8E93; font-weight: bold;")
-        self.laser_panel.ui.verticalLayout_43.insertWidget(4, self.label_laserOneStatus)
-
-        self.label_laserOneReadback = QLabel("0.0 mW (est.)")
-        self.label_laserOneReadback.setMinimumWidth(80)
-        self.label_laserOneReadback.setToolTip(
-            "Linear-through-origin estimate (mW = V * mW_per_volt). "
-            "Unverified — the linear model predicts 300 mW at 5V, but "
-            "the rig-measured output is ~107.5 mW at 5V (DPSS threshold "
-            "knee + free-space measurement geometry). Run the rig "
-            "calibration sweep to load a measured V->mW curve."
-        )
-        self.laser_panel.ui.verticalLayout_43.insertWidget(5, self.label_laserOneReadback)
-
-        self.label_laserTwoStatus = QLabel("● OFF")
-        self.label_laserTwoStatus.setMinimumWidth(140)
-        self.label_laserTwoStatus.setStyleSheet("color: #8E8E93; font-weight: bold;")
-        self.laser_panel.ui.verticalLayout_44.insertWidget(4, self.label_laserTwoStatus)
-
-        self.label_laserTwoReadback = QLabel("N/A")
-        self.label_laserTwoReadback.setMinimumWidth(80)
-        self.label_laserTwoReadback.setToolTip(
-            "iBeam power readback — click Refresh Power to re-query"
-        )
-        self.laser_panel.ui.verticalLayout_44.insertWidget(5, self.label_laserTwoReadback)
-
-        self.pushButton_laserTwoRefresh = QPushButton("Refresh Power")
-        self.pushButton_laserTwoRefresh.setToolTip(
-            "Re-query iBeam status and power readback now "
-            "(skipped while a power write is in progress)"
-        )
-        self.pushButton_laserTwoRefresh.clicked.connect(
+        # Per-laser status/readback labels + the L2 Refresh Power button are
+        # defined in ui_laser_panel.ui (verticalLayout_43 / verticalLayout_44
+        # column layouts) so they share the panel's layout/style. The panel
+        # slots reach them via self.ui.label_laser* (panel-local, hybrid
+        # ownership). The signal connections below stay explicit in the shell
+        # for visibility and testability.
+        self.laser_panel.ui.pushButton_laserTwoRefresh.clicked.connect(
             self.laser_panel.updateUi_laser2_refresh_clicked
         )
-        self.laser_panel.ui.verticalLayout_44.insertWidget(6, self.pushButton_laserTwoRefresh)
 
         # Connect the status/readback signals to the laser panel slots.
         self.sig_laser_status.connect(self.laser_panel.updateUi_laser_status)

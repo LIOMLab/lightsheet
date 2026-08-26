@@ -34,10 +34,10 @@ if typing.TYPE_CHECKING:
 class LaserPanelWidget(QWidget):
     """Laser controls panel — owns laser amplitude/toggle/status/readback slots.
 
-    The per-laser status/readback QLabels (``label_laserOneStatus`` etc.) are
-    constructed programmatically in the shell's ``__init__`` and inserted into
-    this panel's ``verticalLayout_43`` / ``verticalLayout_44`` columns. The
-    panel slots that update them reference ``self._shell.label_laser*``.
+    The per-laser status/readback QLabels (``label_laserOneStatus`` etc.) and
+    the L2 Refresh Power button are defined in ``ui_laser_panel.ui`` so they
+    share the panel's layout/style. The panel slots that update them reference
+    ``self.ui.label_laser*`` (panel-local, hybrid ownership).
     """
 
     def __init__(self, shell: Controller_MainWindow) -> None:
@@ -55,7 +55,7 @@ class LaserPanelWidget(QWidget):
         '' for a live readback (which clears any prior stale-value
         tooltip). The label list is indexed by laser index.
         """
-        labels = [self._shell.label_laserOneReadback, self._shell.label_laserTwoReadback]  # noqa: E501
+        labels = [self.ui.label_laserOneReadback, self.ui.label_laserTwoReadback]
         labels[idx].setText(text)
         labels[idx].setToolTip(tooltip)
 
@@ -81,7 +81,7 @@ class LaserPanelWidget(QWidget):
         status is 'active' / 'inactive' / 'error' (set by
         _poll_laser_status). The label list is indexed by laser index.
         """
-        labels = [self._shell.label_laserOneStatus, self._shell.label_laserTwoStatus]
+        labels = [self.ui.label_laserOneStatus, self.ui.label_laserTwoStatus]
         if status == "active":
             labels[idx].setText("● ON")
             labels[idx].setStyleSheet(

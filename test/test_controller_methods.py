@@ -246,9 +246,9 @@ def test_updateUi_arm_reset_pressed_second_press(qtbot, request) -> None:
 def test_updateUi_laser_readback(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.laser_panel.updateUi_laser_readback(0, "100 mW", "")
-    assert ctrl.label_laserOneReadback.text() == "100 mW"
+    assert ctrl.laser_panel.ui.label_laserOneReadback.text() == "100 mW"
     ctrl.laser_panel.updateUi_laser_readback(1, "50 mW", "stale")
-    assert ctrl.label_laserTwoReadback.text() == "50 mW"
+    assert ctrl.laser_panel.ui.label_laserTwoReadback.text() == "50 mW"
 
 
 def test_updateUi_laser2_refresh_clicked(qtbot, request) -> None:
@@ -263,19 +263,19 @@ def test_updateUi_laser2_refresh_clicked(qtbot, request) -> None:
 def test_updateUi_laser_status_active(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.laser_panel.updateUi_laser_status(0, "active")
-    assert ctrl.label_laserOneStatus.text() == "● ON"
+    assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "● ON"
 
 
 def test_updateUi_laser_status_inactive(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.laser_panel.updateUi_laser_status(1, "inactive")
-    assert ctrl.label_laserTwoStatus.text() == "● OFF"
+    assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "● OFF"
 
 
 def test_updateUi_laser_status_error(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.laser_panel.updateUi_laser_status(0, "error")
-    assert ctrl.label_laserOneStatus.text() == "● ERR"
+    assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "● ERR"
 
 
 # -- Units / position -------------------------------------------------------

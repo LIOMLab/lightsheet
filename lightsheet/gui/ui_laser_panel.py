@@ -84,6 +84,19 @@ class Ui_LaserPanel(object):
 
         self.verticalLayout_43.addWidget(self.checkBox_laserOneAutomatic)
 
+        self.label_laserOneStatus = QLabel(self.groupBox_15)
+        self.label_laserOneStatus.setObjectName(u"label_laserOneStatus")
+        self.label_laserOneStatus.setMinimumSize(QSize(140, 0))
+        self.label_laserOneStatus.setStyleSheet(u"color: #8E8E93; font-weight: bold;")
+
+        self.verticalLayout_43.addWidget(self.label_laserOneStatus)
+
+        self.label_laserOneReadback = QLabel(self.groupBox_15)
+        self.label_laserOneReadback.setObjectName(u"label_laserOneReadback")
+        self.label_laserOneReadback.setMinimumSize(QSize(80, 0))
+
+        self.verticalLayout_43.addWidget(self.label_laserOneReadback)
+
         self.verticalSpacer_8 = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.verticalLayout_43.addItem(self.verticalSpacer_8)
@@ -141,6 +154,24 @@ class Ui_LaserPanel(object):
 
         self.verticalLayout_44.addWidget(self.checkBox_laserTwoAutomatic)
 
+        self.label_laserTwoStatus = QLabel(self.groupBox_15)
+        self.label_laserTwoStatus.setObjectName(u"label_laserTwoStatus")
+        self.label_laserTwoStatus.setMinimumSize(QSize(140, 0))
+        self.label_laserTwoStatus.setStyleSheet(u"color: #8E8E93; font-weight: bold;")
+
+        self.verticalLayout_44.addWidget(self.label_laserTwoStatus)
+
+        self.label_laserTwoReadback = QLabel(self.groupBox_15)
+        self.label_laserTwoReadback.setObjectName(u"label_laserTwoReadback")
+        self.label_laserTwoReadback.setMinimumSize(QSize(80, 0))
+
+        self.verticalLayout_44.addWidget(self.label_laserTwoReadback)
+
+        self.pushButton_laserTwoRefresh = QPushButton(self.groupBox_15)
+        self.pushButton_laserTwoRefresh.setObjectName(u"pushButton_laserTwoRefresh")
+
+        self.verticalLayout_44.addWidget(self.pushButton_laserTwoRefresh)
+
         self.verticalSpacer_15 = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.verticalLayout_44.addItem(self.verticalSpacer_15)
@@ -196,10 +227,30 @@ class Ui_LaserPanel(object):
         self.label_50.setText(QCoreApplication.translate("LaserPanel", u"Power:", None))
         self.doubleSpinBox_laserOneAmplitude.setSuffix(QCoreApplication.translate("LaserPanel", u" %", None))
         self.checkBox_laserOneAutomatic.setText(QCoreApplication.translate("LaserPanel", u"Auto On/Off", None))
+#if QT_CONFIG(tooltip)
+        self.label_laserOneStatus.setToolTip(QCoreApplication.translate("LaserPanel", u"Laser 1 emission state (ON / OFF / ERR)", None))
+#endif // QT_CONFIG(tooltip)
+        self.label_laserOneStatus.setText(QCoreApplication.translate("LaserPanel", u"\u25cf OFF", None))
+#if QT_CONFIG(tooltip)
+        self.label_laserOneReadback.setToolTip(QCoreApplication.translate("LaserPanel", u"Linear-through-origin estimate (mW = V * mW_per_volt). Unverified \u2014 the linear model predicts 300 mW at 5V, but the rig-measured output is ~107.5 mW at 5V (DPSS threshold knee + free-space measurement geometry). Run the rig calibration sweep to load a measured V->mW curve.", None))
+#endif // QT_CONFIG(tooltip)
+        self.label_laserOneReadback.setText(QCoreApplication.translate("LaserPanel", u"0.0 mW (est.)", None))
         self.label_73.setText(QCoreApplication.translate("LaserPanel", u"<html><head/><body><p><span style=\" font-weight:600;\">Laser2</span></p></body></html>", None))
         self.label_74.setText(QCoreApplication.translate("LaserPanel", u"Power:", None))
         self.doubleSpinBox_laserTwoAmplitude.setSuffix(QCoreApplication.translate("LaserPanel", u" %", None))
         self.checkBox_laserTwoAutomatic.setText(QCoreApplication.translate("LaserPanel", u"Auto On/Off", None))
+#if QT_CONFIG(tooltip)
+        self.label_laserTwoStatus.setToolTip(QCoreApplication.translate("LaserPanel", u"Laser 2 emission state (ON / OFF / ERR)", None))
+#endif // QT_CONFIG(tooltip)
+        self.label_laserTwoStatus.setText(QCoreApplication.translate("LaserPanel", u"\u25cf OFF", None))
+#if QT_CONFIG(tooltip)
+        self.label_laserTwoReadback.setToolTip(QCoreApplication.translate("LaserPanel", u"iBeam power readback \u2014 click Refresh Power to re-query", None))
+#endif // QT_CONFIG(tooltip)
+        self.label_laserTwoReadback.setText(QCoreApplication.translate("LaserPanel", u"N/A", None))
+#if QT_CONFIG(tooltip)
+        self.pushButton_laserTwoRefresh.setToolTip(QCoreApplication.translate("LaserPanel", u"Re-query iBeam status and power readback now (skipped while a power write is in progress)", None))
+#endif // QT_CONFIG(tooltip)
+        self.pushButton_laserTwoRefresh.setText(QCoreApplication.translate("LaserPanel", u"Refresh Power", None))
         self.groupBox_4.setTitle(QCoreApplication.translate("LaserPanel", u"Lasers", None))
 #if QT_CONFIG(tooltip)
         self.pushButton_laserOneToggle.setToolTip(QCoreApplication.translate("LaserPanel", u"Activate left laser", None))
