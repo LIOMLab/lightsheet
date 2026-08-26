@@ -786,8 +786,16 @@ class Controller_MainWindow(QMainWindow):
             self.etls.close()
             # Laser 2 (iBeam) lifecycle close
             self.lasers[1].close()
-            self.timer_imageview.stop()
-            self.timer_laser2_status.stop()
+            # Stop the display/status timers. Guard each with getattr
+            # because a partial hardware_init failure (e.g. self.etls.open()
+            # raising after self.lasers is set but before the timers are
+            # created) would leave one or both timer attributes unset, and
+            # an unguarded .stop() would raise AttributeError and prevent
+            # a clean shutdown.
+            for timer_attr in ("timer_imageview", "timer_laser2_status"):
+                timer = getattr(self, timer_attr, None)
+                if timer is not None:
+                    timer.stop()
             QApplication.restoreOverrideCursor()
             event.accept()
         else:
