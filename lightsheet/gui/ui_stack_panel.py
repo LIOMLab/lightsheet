@@ -161,6 +161,15 @@ class Ui_StackPanel(object):
 
         self.verticalLayout_14.addLayout(self.horizontalLayout_91)
 
+        self.label_stackPlanSummary = QLabel(self.groupBox_18)
+        self.label_stackPlanSummary.setObjectName(u"label_stackPlanSummary")
+        sizePolicy3.setHeightForWidth(self.label_stackPlanSummary.sizePolicy().hasHeightForWidth())
+        self.label_stackPlanSummary.setSizePolicy(sizePolicy3)
+        self.label_stackPlanSummary.setMinimumSize(QSize(0, 60))
+        self.label_stackPlanSummary.setWordWrap(True)
+
+        self.verticalLayout_14.addWidget(self.label_stackPlanSummary)
+
         self.verticalSpacer_9 = QSpacerItem(20, 1, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.verticalLayout_14.addItem(self.verticalSpacer_9)
@@ -206,6 +215,7 @@ class Ui_StackPanel(object):
 #endif // QT_CONFIG(tooltip)
         self.pushButton_acqSetLastPlane.setText(QCoreApplication.translate("StackPanel", u"Set Ending Plane", None))
         self.doubleSpinBox_acqLastPlane.setSuffix(QCoreApplication.translate("StackPanel", u" \u03bcm", None))
+        self.label_stackPlanSummary.setText(QCoreApplication.translate("StackPanel", u"No stack configured. Drive the stage to the start position and press Set, or type start/end positions and a step.", None))
         pass
     # retranslateUi
 

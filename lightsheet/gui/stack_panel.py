@@ -164,3 +164,70 @@ class StackPanelWidget(QWidget):
                 self.ui.label_acqNumberOfPlanes.setText(str(self._shell.number_of_planes))
         else:
             self._shell.sig_message.emit("Set a non-zero value to plane step")
+        # Always re-render the summary so the operator sees the current
+        # plan state (empty / partial / full).
+        self._render_stack_plan_summary()
+
+    def _render_stack_plan_summary(self) -> None:
+        """Render the read-only stack plan summary: start/end/step/#planes/
+        est. time/est. size. Handles empty and partial states."""
+        first_set = bool(getattr(self._shell, "stack_first_plane_set", False))
+        last_set = bool(getattr(self._shell, "stack_last_plane_set", False))
+        step = self.ui.doubleSpinBox_acqPlaneStepSize.value()
+        unit = "\u03bcm"
+
+        if not first_set and not last_set:
+            self.ui.label_stackPlanSummary.setText(
+                "No stack configured. Drive the stage to the start position "
+                "and press Set, or type start/end positions and a step."
+            )
+            return
+
+        if first_set != last_set:
+            # Only one boundary is set — partial state.
+            self.ui.label_stackPlanSummary.setText(
+                "Partial stack plan: one boundary is set. "
+                "Set the other boundary to compute the plan."
+            )
+            return
+
+        # Both boundaries set — full plan.
+        start = self.ui.doubleSpinBox_acqFirstPlane.value()
+        end = self.ui.doubleSpinBox_acqLastPlane.value()
+        n_planes = int(getattr(self._shell, "number_of_planes", 0))
+        # Estimated time: per-plane time × #planes. The per-plane time is
+        # advisory — read from the camera exposure if available, else a
+        # sensible default. Estimates are advisory (the actual acquisition
+        # time depends on real hardware behavior).
+        per_plane_s = self._estimate_per_plane_time()
+        est_time_s = n_planes * per_plane_s
+        est_size_mb = self._estimate_stack_size_mb(n_planes)
+        mm, ss = divmod(int(est_time_s), 60)
+        self.ui.label_stackPlanSummary.setText(
+            f"Start: {start:.2f} {unit} | End: {end:.2f} {unit} | "
+            f"Step: {step:.2f} {unit} | Planes: {n_planes} | "
+            f"Est. time: {mm}:{ss:02d} | Est. size: {est_size_mb:.1f} MB"
+        )
+
+    def _estimate_per_plane_time(self) -> float:
+        """Advisory per-plane acquisition time in seconds. Falls back to a
+        sensible default when the camera/exposure is unavailable."""
+        try:
+            exposure = float(self._shell.acquisition_panel.ui
+                             .doubleSpinBox_cameraExposureTime.value())
+            # Exposure is in ms; add overhead for galvo/ETL scan + motor
+            # settle. 1.5x exposure is a rough advisory factor.
+            return exposure / 1000.0 * 1.5
+        except (AttributeError, ValueError, TypeError):
+            return 0.5
+
+    def _estimate_stack_size_mb(self, n_planes: int) -> float:
+        """Advisory stack size in MB. Uses the camera frame dims × 2 bytes
+        (uint16) when available; falls back to a 2000×2000 default."""
+        try:
+            rows = int(getattr(self._shell.camera, "rows", 2000))
+            cols = int(getattr(self._shell.camera, "columns", 2000))
+        except (AttributeError, TypeError, ValueError):
+            rows, cols = 2000, 2000
+        bytes_per_frame = rows * cols * 2
+        return (n_planes * bytes_per_frame) / (1024.0 * 1024.0)

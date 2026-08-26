@@ -808,4 +808,7 @@ def test_hardware_init_non_demo_shows_ready_status(qtbot, request) -> None:
     ctrl._demo_mode = False
     ctrl.hardware_init()
     assert "Ready" in ctrl.ui.statusbar.currentMessage()
+    # Restore demo mode so teardown's closeEvent does not persist stack
+    # params to the real config.ini.
+    ctrl._demo_mode = True
 

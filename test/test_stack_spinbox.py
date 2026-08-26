@@ -36,6 +36,10 @@ def test_spinboxes_exist_and_checkboxes_gone(qtbot, request) -> None:
 
 def test_shell_flags_initialized(qtbot, request) -> None:
     ctrl, _ = make_controller(qtbot, request)
+    # The flags start False unless config.ini has persisted stack params
+    # from a prior run. In the test environment config.ini should not
+    # carry stack params (demo mode skips persistence), so the flags
+    # should be False.
     assert ctrl.stack_first_plane_set is False
     assert ctrl.stack_last_plane_set is False
 
@@ -100,6 +104,9 @@ def test_number_of_planes_guards_on_shell_flags(qtbot, request) -> None:
     ctrl.stack_starting_plane = 0.0
     ctrl.stack_ending_plane = 100.0
     ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
+    # Reset number_of_planes so we can detect whether the guard blocks
+    # the computation (hardware_init may have set it via _load_stack_params).
+    ctrl.number_of_planes = 0
     # Neither flag set → no planes computed.
     ctrl.stack_first_plane_set = False
     ctrl.stack_last_plane_set = False
@@ -108,6 +115,7 @@ def test_number_of_planes_guards_on_shell_flags(qtbot, request) -> None:
     # Only one flag set → still no planes.
     ctrl.stack_first_plane_set = True
     ctrl.stack_last_plane_set = False
+    ctrl.number_of_planes = 0
     ctrl.stack_panel.updateUi_set_number_of_planes()
     assert ctrl.number_of_planes == 0
     # Both flags set → planes computed.

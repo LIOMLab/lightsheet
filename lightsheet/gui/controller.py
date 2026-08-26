@@ -42,7 +42,7 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 
-from lightsheet.config import cfg_read
+from lightsheet.config import cfg_read, cfg_write
 from lightsheet.gui.acquisition_panel import AcquisitionPanelWidget
 from lightsheet.gui.calibration_panel import CalibrationPanelWidget
 from lightsheet.gui.laser_panel import LaserPanelWidget
@@ -374,22 +374,6 @@ class Controller_MainWindow(QMainWindow):
         # frames are the raw uint16.
         self.ui.levelsBar.sig_levelsChanged.connect(self._on_levels_changed)
 
-    def _on_levels_changed(self, levels_min: int, levels_max: int) -> None:
-        """Apply a LevelsBar handle drag to the ImageView display window."""
-        self.ui.imageView.set_levels(levels_min, levels_max)
-
-    def _update_levels_readout(self, frame) -> None:
-        """Update the live min/max QLabel readout with the actual pixel
-        range of the supplied frame (not the display window)."""
-        if frame is None:
-            return
-        try:
-            lo = int(frame.min())
-            hi = int(frame.max())
-        except (ValueError, TypeError):
-            return
-        self.ui.label_levelsReadout.setText(f"{lo}\u2013{hi}")
-
         # Set configurable settings to default values
         self.cfg_settings = copy.deepcopy(self._cfg_defaults)
         self.cfg_settings = cfg_read("config.ini", "Controller", self.cfg_settings)
@@ -615,6 +599,70 @@ class Controller_MainWindow(QMainWindow):
         self._laser2_amplitude_timer.setSingleShot(True)
         self._laser2_amplitude_timer.timeout.connect(self.laser_panel._apply_laser2_amplitude)
 
+    def _on_levels_changed(self, levels_min: int, levels_max: int) -> None:
+        """Apply a LevelsBar handle drag to the ImageView display window."""
+        self.ui.imageView.set_levels(levels_min, levels_max)
+
+    def _update_levels_readout(self, frame) -> None:
+        """Update the live min/max QLabel readout with the actual pixel
+        range of the supplied frame (not the display window)."""
+        if frame is None:
+            return
+        try:
+            lo = int(frame.min())
+            hi = int(frame.max())
+        except (ValueError, TypeError):
+            return
+        self.ui.label_levelsReadout.setText(f"{lo}\u2013{hi}")
+
+    def _save_stack_params(self) -> None:
+        """Persist the last stack's start/end/step to config.ini so a
+        re-run does not required re-driving the stage. Called on close.
+        Skipped in demo mode so the test suite (which constructs many
+        controllers with demo=True and tears them down concurrently under
+        xdist) does not corrupt the real config.ini."""
+        if getattr(self, "_demo_mode", False):
+            return
+        start = self.stack_starting_plane
+        end = self.stack_ending_plane
+        step = self.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.value()
+        cfg_write("config.ini", "Controller", {
+            "StackLastStart": "" if start is None else f"{start:.4f}",
+            "StackLastEnd": "" if end is None else f"{end:.4f}",
+            "StackLastStep": f"{step:.4f}",
+        })
+
+    def _load_stack_params(self) -> None:
+        """Load the last stack's start/end/step from config.ini and
+        populate the spinboxes + set the shell flags if present."""
+        cfg = cfg_read("config.ini", "Controller", {
+            "StackLastStart": "",
+            "StackLastEnd": "",
+            "StackLastStep": "",
+        })
+        start_s = str(cfg.get("StackLastStart", "")).strip()
+        end_s = str(cfg.get("StackLastEnd", "")).strip()
+        step_s = str(cfg.get("StackLastStep", "")).strip()
+        if start_s:
+            try:
+                self.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(float(start_s))
+                self.stack_starting_plane = float(start_s)
+                self.stack_first_plane_set = True
+            except ValueError:
+                pass
+        if end_s:
+            try:
+                self.stack_panel.ui.doubleSpinBox_acqLastPlane.setValue(float(end_s))
+                self.stack_ending_plane = float(end_s)
+                self.stack_last_plane_set = True
+            except ValueError:
+                pass
+        if step_s:
+            try:
+                self.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(float(step_s))
+            except ValueError:
+                pass
+
     @staticmethod
     def _build_merged_tab(panels, _QScrollArea, _QVBoxLayout, _QWidget):
         """Build a merged tab page hosting two panel widgets in a vertical
@@ -681,6 +729,11 @@ class Controller_MainWindow(QMainWindow):
         # Now that motors are assigned, seed the stack plane spinbox ranges
         # from the motor travel limits (the soft widget-layer block).
         self.stack_panel._seed_spinbox_ranges()
+        # Restore the last stack's start/end/step from config.ini so a
+        # re-run does not require re-driving the stage.
+        self._load_stack_params()
+        # Render the summary for the restored state.
+        self.stack_panel._render_stack_plan_summary()
 
         # FrameSaverController display-port refresh timer
         self.timer_imageview = QTimer()
@@ -719,6 +772,9 @@ class Controller_MainWindow(QMainWindow):
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             self.ui.statusbar.showMessage("Shutting down hardware...")
             self.ui.statusbar.repaint()
+            # Persist the last stack's start/end/step so a re-run does not
+            # require re-driving the stage.
+            self._save_stack_params()
             # Guard: hardware_init may not have run yet (100ms single-shot
             # timer). If the window is closed before it fires, self.lasers /
             # self.camera / self.etls / self.timer_imageview /
