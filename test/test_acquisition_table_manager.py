@@ -1,0 +1,216 @@
+"""AcquisitionTableManager — QTableWidget queue of z-stacks by
+position/range/step (audit #11 in-full).
+
+The operator adds/edits/removes/reorders stack rows; each row specifies a
+z-stack by start position, end position, and step. Start Queue (Task 2)
+executes the rows sequentially, re-using the existing stack worker per row
+without the operator re-driving the stage to each boundary.
+
+This file covers the table CRUD + row validation + empty/error/partial
+states + E8 overflow/long-text/zero-one-many. The queue execution loop is
+covered by test_table_queue_execution.py.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+pytest.importorskip("PySide6")
+
+from _helpers.controller_fixture import make_controller
+
+from PySide6.QtWidgets import QTableWidget, QWidget
+from PySide6.QtGui import QColor
+
+
+def _mgr(qtbot, request):
+    ctrl, _ = make_controller(qtbot, request)
+    return ctrl, ctrl.stack_panel.table_manager
+
+
+def test_table_manager_exists(qtbot, request) -> None:
+    ctrl, mgr = _mgr(qtbot, request)
+    assert isinstance(mgr, QWidget)
+    assert isinstance(mgr.table, QTableWidget)
+
+
+def test_table_columns(qtbot, request) -> None:
+    """Test 1: columns Name, Start (μm), End (μm), Step (μm), #Planes,
+    Est. Time, Est. Size."""
+    _ctrl, mgr = _mgr(qtbot, request)
+    headers = [
+        mgr.table.horizontalHeaderItem(i).text()
+        for i in range(mgr.table.columnCount())
+    ]
+    assert headers == ["Name", "Start (\u03bcm)", "End (\u03bcm)",
+                       "Step (\u03bcm)", "#Planes", "Est. Time", "Est. Size"]
+
+
+def test_empty_state_copy(qtbot, request) -> None:
+    """Test 2: empty state renders the documented copy."""
+    _ctrl, mgr = _mgr(qtbot, request)
+    assert mgr.table.rowCount() == 0
+    text = mgr.empty_state_text()
+    assert "No stacks in the queue" in text
+    assert "re-driving the stage" in text
+
+
+def test_add_stack_default_row(qtbot, request) -> None:
+    """Test 3: Add Stack appends a row with default values + computed
+    #planes."""
+    _ctrl, mgr = _mgr(qtbot, request)
+    mgr.add_stack()
+    assert mgr.table.rowCount() == 1
+    row = mgr.row_at(0)
+    assert row.name.startswith("Stack")
+    assert row.start == 0.0
+    assert row.end == 0.0
+    assert row.step == 1.0
+    # start == end → 0 planes (incomplete row).
+    assert row.n_planes == 0
+
+
+def test_cell_edit_recomputes(qtbot, request) -> None:
+    """Test 4: editing a cell updates the value + recomputes #planes/est.
+    time/est. size."""
+    _ctrl, mgr = _mgr(qtbot, request)
+    mgr.add_stack()
+    # Edit start=100, end=200, step=10 → 11 planes.
+    mgr.set_cell(0, 1, "100")
+    mgr.set_cell(0, 2, "200")
+    mgr.set_cell(0, 3, "10")
+    row = mgr.row_at(0)
+    assert row.start == 100.0
+    assert row.end == 200.0
+    assert row.step == 10.0
+    assert row.n_planes == 11
+    assert row.est_time_s > 0
+    assert row.est_size_mb > 0
+
+
+def test_remove_stack_confirmation(qtbot, request) -> None:
+    """Test 5: Remove Stack shows a confirmation dialog with the row name;
+    Yes removes, Cancel does not."""
+    from unittest.mock import patch
+    from PySide6.QtWidgets import QMessageBox
+
+    _ctrl, mgr = _mgr(qtbot, request)
+    mgr.add_stack()
+    mgr.set_cell(0, 0, "MyStack")
+    mgr.table.selectRow(0)
+    assert mgr.table.rowCount() == 1
+
+    # Cancel → row stays.
+    with patch("PySide6.QtWidgets.QMessageBox.question",
+               return_value=QMessageBox.StandardButton.Cancel):
+        mgr.remove_stack()
+    assert mgr.table.rowCount() == 1
+
+    # Yes → row removed.
+    seen_prompt: list[str] = []
+    mgr.table.selectRow(0)
+
+    def _capture(_parent, _title, text, *a, **k):
+        seen_prompt.append(text)
+        return QMessageBox.StandardButton.Yes
+
+    with patch("PySide6.QtWidgets.QMessageBox.question", side_effect=_capture):
+        mgr.remove_stack()
+    assert mgr.table.rowCount() == 0
+    assert seen_prompt, "remove_stack did not show a confirmation dialog"
+    assert "MyStack" in seen_prompt[0]
+    assert "Remove" in seen_prompt[0]
+
+
+def test_move_up_down(qtbot, request) -> None:
+    """Test 6: Move Up / Move Down reorder the selected row."""
+    _ctrl, mgr = _mgr(qtbot, request)
+    mgr.add_stack(); mgr.set_cell(0, 0, "A")
+    mgr.add_stack(); mgr.set_cell(1, 0, "B")
+    mgr.add_stack(); mgr.set_cell(2, 0, "C")
+    # Select row 2 (C) and move it up → order A, C, B.
+    mgr.table.selectRow(2)
+    mgr.move_up()
+    assert [mgr.row_at(i).name for i in range(3)] == ["A", "C", "B"]
+    # Now C is at index 1; move it down → A, B, C.
+    mgr.table.selectRow(1)
+    mgr.move_down()
+    assert [mgr.row_at(i).name for i in range(3)] == ["A", "B", "C"]
+
+
+def test_incomplete_row_disables_start_queue(qtbot, request) -> None:
+    """Test 7: a row with start == end or step == 0 is flagged; Start Queue
+    disabled while any row is incomplete."""
+    _ctrl, mgr = _mgr(qtbot, request)
+    mgr.add_stack()  # default start=end=0, step=1 → incomplete (start==end)
+    assert not mgr.start_queue_enabled()
+    # Make it complete.
+    mgr.set_cell(0, 1, "100")
+    mgr.set_cell(0, 2, "200")
+    mgr.set_cell(0, 3, "10")
+    assert mgr.start_queue_enabled()
+    # step == 0 → incomplete again.
+    mgr.set_cell(0, 3, "0")
+    assert not mgr.start_queue_enabled()
+
+
+def test_incomplete_row_flagged_visually(qtbot, request) -> None:
+    """Test 7b: an incomplete row is flagged with a red background on the
+    offending cell."""
+    _ctrl, mgr = _mgr(qtbot, request)
+    mgr.add_stack()
+    # default start==end → incomplete; the row should be flagged.
+    assert mgr.is_row_flagged(0)
+    mgr.set_cell(0, 1, "100")
+    mgr.set_cell(0, 2, "200")
+    mgr.set_cell(0, 3, "10")
+    assert not mgr.is_row_flagged(0)
+
+
+def test_out_of_range_row_flagged(qtbot, request) -> None:
+    """Test 8: a start/end value outside the motor travel limits is flagged
+    + the row shows the out-of-range error."""
+    ctrl, mgr = _mgr(qtbot, request)
+    high = ctrl.motors.horizontal.get_limit_high("\u03bcm")
+    mgr.add_stack()
+    # End past the high limit.
+    mgr.set_cell(0, 1, "100")
+    mgr.set_cell(0, 2, str(high + 10000))
+    mgr.set_cell(0, 3, "10")
+    assert mgr.is_row_flagged(0)
+    assert not mgr.start_queue_enabled()
+
+
+def test_long_name_truncates_with_tooltip(qtbot, request) -> None:
+    """Test 9: long stack names truncate with ellipsis; the full name is in
+    the cell tooltip."""
+    _ctrl, mgr = _mgr(qtbot, request)
+    long_name = "A" * 200
+    mgr.add_stack()
+    mgr.set_cell(0, 0, long_name)
+    item = mgr.table.item(0, 0)
+    assert item.toolTip() == long_name
+
+
+def test_table_scrollable(qtbot, request) -> None:
+    """Test 10: the table scrolls horizontally/vertically when content
+    exceeds the viewport."""
+    _ctrl, mgr = _mgr(qtbot, request)
+    from PySide6.QtCore import Qt
+    assert mgr.table.horizontalScrollBarPolicy() != Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert mgr.table.verticalScrollBarPolicy() != Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+
+
+def test_zero_one_many(qtbot, request) -> None:
+    """Test 11: the table renders 0 (empty copy), 1, and N rows."""
+    _ctrl, mgr = _mgr(qtbot, request)
+    # 0 rows.
+    assert mgr.table.rowCount() == 0
+    assert "No stacks in the queue" in mgr.empty_state_text()
+    # 1 row.
+    mgr.add_stack()
+    assert mgr.table.rowCount() == 1
+    # N rows.
+    for _ in range(5):
+        mgr.add_stack()
+    assert mgr.table.rowCount() == 6

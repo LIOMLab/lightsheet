@@ -21,6 +21,7 @@ import typing
 import numpy as np
 from PySide6.QtWidgets import QWidget
 
+from lightsheet.gui.acquisition_table_manager import AcquisitionTableManager
 from lightsheet.gui.ui_stack_panel import Ui_StackPanel
 
 if typing.TYPE_CHECKING:
@@ -36,6 +37,13 @@ class StackPanelWidget(QWidget):
         self._shell = shell
         self.ui = Ui_StackPanel()
         self.ui.setupUi(self)
+        # Compose the AcquisitionTableManager (a QTableWidget queue of
+        # z-stacks by position/range/step) into the Acquisition Queue
+        # group box. The single-stack Set-button workflow above stays
+        # alongside the table for one-off stacks; the table is for
+        # multi-stack sequences without re-driving the stage.
+        self.table_manager = AcquisitionTableManager(shell)
+        self.ui.verticalLayout_acquisitionQueue.addWidget(self.table_manager)
         # Seed the spinbox range from the motor travel limits as a soft
         # widget-layer block. The spinbox range is widened so an
         # out-of-range entry is accepted by the widget and then rejected

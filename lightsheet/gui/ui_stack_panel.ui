@@ -310,6 +310,14 @@
      </layout>
     </widget>
    </item>
+   <item>
+    <widget class="QGroupBox" name="groupBox_acquisitionQueue">
+     <property name="title">
+      <string>Acquisition Queue</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_acquisitionQueue"/>
+    </widget>
+   </item>
   </layout>
  </widget>
  <resources/>

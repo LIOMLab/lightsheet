@@ -180,6 +180,13 @@ class Ui_StackPanel(object):
 
         self.verticalLayout_panel.addWidget(self.groupBox_18)
 
+        self.groupBox_acquisitionQueue = QGroupBox(stackPanel)
+        self.groupBox_acquisitionQueue.setObjectName(u"groupBox_acquisitionQueue")
+        self.verticalLayout_acquisitionQueue = QVBoxLayout(self.groupBox_acquisitionQueue)
+        self.verticalLayout_acquisitionQueue.setObjectName(u"verticalLayout_acquisitionQueue")
+
+        self.verticalLayout_panel.addWidget(self.groupBox_acquisitionQueue)
+
 
         self.retranslateUi(stackPanel)
 
@@ -225,6 +232,7 @@ class Ui_StackPanel(object):
 #endif // QT_CONFIG(tooltip)
         self.doubleSpinBox_acqLastPlane.setSuffix(QCoreApplication.translate("StackPanel", u" \u03bcm", None))
         self.label_stackPlanSummary.setText(QCoreApplication.translate("StackPanel", u"No stack configured. Drive the stage to the start position and press Set, or type start/end positions and a step.", None))
+        self.groupBox_acquisitionQueue.setTitle(QCoreApplication.translate("StackPanel", u"Acquisition Queue", None))
         pass
     # retranslateUi
 
