@@ -152,7 +152,10 @@ def test_shell_composes_panels(qtbot, request) -> None:
 
     ctrl, _ = make_controller(qtbot, request)
 
-    # All 7 panel widgets are composed onto the shell.
+    # All 7 panel widgets are composed onto the shell. The 7 per-panel
+    # widget classes are preserved (no deletion) — the tab consolidation
+    # merges them into 5 tabs via vertical sub-layouts, not by removing
+    # any panel class.
     assert ctrl.laser_panel is not None
     assert ctrl.motor_panel is not None
     assert ctrl.acquisition_panel is not None
@@ -161,8 +164,83 @@ def test_shell_composes_panels(qtbot, request) -> None:
     assert ctrl.scan_panel is not None
     assert ctrl.calibration_panel is not None
 
-    # The shell's tabControls holds 7 tabs (the placeholder was removed).
-    assert ctrl.ui.tabControls.count() == 7
+
+def test_tab_controls_has_five_tabs(qtbot, request) -> None:
+    """The shell's tabControls holds 5 tabs (was 7).
+
+    Acquisition+Stack and Scan+Lasers are merged via vertical sub-layouts
+    in one tab each (D-01). The placeholder tab is removed.
+    """
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _ = make_controller(qtbot, request)
+    assert ctrl.ui.tabControls.count() == 5
+
+
+def test_tab_order_and_labels(qtbot, request) -> None:
+    """Tab order is Motion, Acquisition+Stack, Scan+Lasers, File Manager,
+    Calibration (D-01 / UI-SPEC Tab Consolidation table)."""
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _ = make_controller(qtbot, request)
+    tc = ctrl.ui.tabControls
+
+    # Index 0 — Motion
+    assert "Motion" in tc.tabText(0)
+    # Index 1 — merged Acquisition + Stack
+    assert "Acquisition" in tc.tabText(1)
+    assert "Stack" in tc.tabText(1)
+    # Index 2 — merged Scan + Lasers
+    assert "Scan" in tc.tabText(2)
+    assert "Laser" in tc.tabText(2)
+    # Index 3 — File Manager
+    assert "File" in tc.tabText(3)
+    # Index 4 — Calibration
+    assert "Calibration" in tc.tabText(4)
+
+
+def test_merged_tabs_host_both_panels(qtbot, request) -> None:
+    """The merged Acquisition+Stack tab hosts BOTH panel widgets; the
+    merged Scan+Lasers tab hosts BOTH panel widgets (D-01 vertical
+    sub-layout, not a widget-class deletion)."""
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _ = make_controller(qtbot, request)
+    tc = ctrl.ui.tabControls
+
+    # The merged tab page at index 1 must contain both the acquisition
+    # panel and the stack panel somewhere in its widget subtree.
+    acq_stack_page = tc.widget(1)
+    assert acq_stack_page.findChild(QObject, "pushButton_acqGetSingleImage") is not None
+    assert acq_stack_page.findChild(QObject, "pushButton_acqStartStackMode") is not None
+
+    # The merged tab page at index 2 must contain both the scan panel and
+    # the laser panel.
+    scan_lasers_page = tc.widget(2)
+    assert scan_lasers_page.findChild(QObject, "pushButton_laserOneToggle") is not None
+    assert scan_lasers_page.findChild(QObject, "checkBox_etlSync") is not None
+
+
+def test_merged_tabs_wrapped_in_scroll_area(qtbot, request) -> None:
+    """The merged Acquisition+Stack and Scan+Lasers tabs are wrapped in a
+    QScrollArea with widgetResizable=True (UI-SPEC QScrollArea Wrapping
+    Rules) so the stacked panels overflow gracefully on small screens."""
+    from PySide6.QtWidgets import QScrollArea
+
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _ = make_controller(qtbot, request)
+    tc = ctrl.ui.tabControls
+
+    for idx in (1, 2):
+        page = tc.widget(idx)
+        scroll = page.findChild(QScrollArea)
+        assert scroll is not None, (
+            f"tab {idx} is not wrapped in a QScrollArea"
+        )
+        assert scroll.widgetResizable() is True, (
+            f"tab {idx} scroll area must have widgetResizable=True"
+        )
 
 
 def test_estop_button_in_shell(qtbot, request) -> None:

@@ -203,13 +203,33 @@ class Controller_MainWindow(QMainWindow):
         # Insert at position 0 (before groupBox_SampleMovement)
         self.motor_panel.ui.verticalLayout_panel.insertLayout(0, _units_layout)
 
-        # Remove the placeholder tab and add each panel as its own tab.
+        # Remove the placeholder tab and compose the 7 per-panel widgets
+        # into 5 tabs (D-01 tab consolidation). Motion, File Manager, and
+        # Calibration stay standalone; Acquisition+Stack and Scan+Lasers
+        # are merged via a vertical sub-layout inside a QScrollArea
+        # (widgetResizable=True) so the two stacked panels overflow
+        # gracefully on small screens (UI-SPEC QScrollArea Wrapping
+        # Rules). All 7 per-panel widget classes are preserved — the
+        # merge is sub-layouts in tabs, NOT a widget-class deletion or a
+        # left-rail/QToolBox refactor.
+        from PySide6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
+
         self.ui.tabControls.removeTab(0)
         self.ui.tabControls.addTab(self.motor_panel, "Motion")
-        self.ui.tabControls.addTab(self.laser_panel, "Lasers")
-        self.ui.tabControls.addTab(self.acquisition_panel, "Acquisition")
-        self.ui.tabControls.addTab(self.stack_panel, "Stack")
-        self.ui.tabControls.addTab(self.scan_panel, "Scan Settings")
+        self.ui.tabControls.addTab(
+            self._build_merged_tab(
+                (self.acquisition_panel, self.stack_panel),
+                QScrollArea, QVBoxLayout, QWidget,
+            ),
+            "Acquisition + Stack",
+        )
+        self.ui.tabControls.addTab(
+            self._build_merged_tab(
+                (self.scan_panel, self.laser_panel),
+                QScrollArea, QVBoxLayout, QWidget,
+            ),
+            "Scan + Lasers",
+        )
         self.ui.tabControls.addTab(self.save_panel, "File Manager")
         self.ui.tabControls.addTab(self.calibration_panel, "Calibration")
 
@@ -495,6 +515,39 @@ class Controller_MainWindow(QMainWindow):
         self._laser2_amplitude_timer = QTimer()
         self._laser2_amplitude_timer.setSingleShot(True)
         self._laser2_amplitude_timer.timeout.connect(self.laser_panel._apply_laser2_amplitude)
+
+    @staticmethod
+    def _build_merged_tab(panels, _QScrollArea, _QVBoxLayout, _QWidget):
+        """Build a merged tab page hosting two panel widgets in a vertical
+        sub-layout inside a QScrollArea (widgetResizable=True).
+
+        The merge is a sub-layout in one tab (D-01), NOT a left-rail/
+        QToolBox refactor — the thin QTabWidget shell stays and each
+        panel widget keeps its own widget tree. The QScrollArea lets the
+        two stacked panels overflow gracefully on small screens (UI-SPEC
+        QScrollArea Wrapping Rules). The scroll area's horizontal
+        scrollbar is always off (panels are vertical-scroll only).
+        """
+        from PySide6.QtCore import Qt as _Qt
+
+        container = _QWidget()
+        outer = _QVBoxLayout(container)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        scroll = _QScrollArea(container)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(_Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setFrameShape(_QScrollArea.Shape.NoFrame)
+        content = _QWidget()
+        content_layout = _QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(8)
+        for panel in panels:
+            content_layout.addWidget(panel)
+        content_layout.addStretch(1)
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
+        return container
 
     def hardware_init(self) -> None:
         """Completes initialisation of hardware and image consumers.
