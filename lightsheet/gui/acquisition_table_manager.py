@@ -497,6 +497,17 @@ class AcquisitionTableManager(QWidget):
         self._queue_rows_total = len(rows)
         # Disable the table buttons while the queue runs.
         self._set_queue_running(True)
+        # Snapshot the operator's single-stack state so it can be
+        # restored after the queue completes or aborts (the queue
+        # overwrites these per row). Captured BEFORE the loop touches them.
+        saved_single_stack = (
+            self._shell.stack_starting_plane,
+            self._shell.stack_ending_plane,
+            self._shell.stack_step,
+            self._shell.number_of_planes,
+            self._shell.stack_first_plane_set,
+            self._shell.stack_last_plane_set,
+        )
         try:
             for i, row in enumerate(rows):
                 # Between rows, check E-stop — abort the queue if set.
@@ -523,11 +534,25 @@ class AcquisitionTableManager(QWidget):
                 self._shell.number_of_planes = row.n_planes
                 self._shell.stack_first_plane_set = True
                 self._shell.stack_last_plane_set = True
+                # The stack worker's first-iteration guard
+                # (``if not self._shell.stack_mode_started: break``) and
+                # its laser-start gate both read this flag, so it MUST be
+                # True before the worker is spawned for each row. The
+                # single-stack Start button sets it at
+                # acquisition_panel.py; the queue bypasses that path, so
+                # set it here. Reset to False in the finally block below
+                # so a subsequent single-stack Start re-arms cleanly.
+                self._shell.stack_mode_started = True
                 # Mirror the row's step into the single-stack spinbox for
-                # UI consistency (blocked so it does not recompute).
+                # UI consistency (blocked so it does not recompute). The
+                # row stores μm; the spinbox displays in the current
+                # display unit (μm or mm), so convert μm → mm when the
+                # display unit is mm to avoid a 1000× display error.
                 sb_step = self._shell.stack_panel.ui.doubleSpinBox_acqPlaneStepSize
+                unit = self._shell.ui.comboBox_units.currentText()
+                display_step = row.step / 1000.0 if unit == "mm" else row.step
                 sb_step.blockSignals(True)
-                sb_step.setValue(row.step)
+                sb_step.setValue(display_step)
                 sb_step.blockSignals(False)
 
                 # Update the mode badge with the row index.
@@ -572,6 +597,23 @@ class AcquisitionTableManager(QWidget):
                 worker.finished.connect(loop.quit)
                 loop.exec()
         finally:
+            # Reset the stack-mode flag so a subsequent single-stack
+            # Start re-arms cleanly (the worker's first-iteration guard
+            # reads it). This also covers the E-stop abort path between
+            # rows: estop_event is set, the loop breaks, and we land here.
+            self._shell.stack_mode_started = False
+            # Restore the operator's single-stack state that the queue
+            # overwrote per row. This runs on both normal completion and
+            # abort (E-stop / over-travel ValueError), so the single-stack
+            # spinbox/Set-button workflow returns to its pre-queue values.
+            (
+                self._shell.stack_starting_plane,
+                self._shell.stack_ending_plane,
+                self._shell.stack_step,
+                self._shell.number_of_planes,
+                self._shell.stack_first_plane_set,
+                self._shell.stack_last_plane_set,
+            ) = saved_single_stack
             self._queue_active = False
             self._set_queue_running(False)
             self._update_start_queue_state()
