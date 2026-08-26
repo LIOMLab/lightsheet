@@ -272,6 +272,19 @@
      <string>Arm/Reset</string>
     </property>
    </widget>
+   <widget class="QLabel" name="label_units">
+    <property name="text">
+     <string>Units:</string>
+    </property>
+   </widget>
+   <widget class="QComboBox" name="comboBox_units">
+    <property name="minimumSize">
+     <size>
+      <width>75</width>
+      <height>0</height>
+     </size>
+    </property>
+   </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">

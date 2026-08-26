@@ -16,10 +16,10 @@ from PySide6.QtGui import (QAction, QBrush, QColor, QConicalGradient,
     QIcon, QImage, QKeySequence, QLinearGradient,
     QPainter, QPalette, QPixmap, QRadialGradient,
     QShortcut, QTransform)
-from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QMainWindow,
-    QMenu, QMenuBar, QPlainTextEdit, QPushButton,
-    QSizePolicy, QSplitter, QStatusBar, QTabWidget,
-    QToolBar, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QComboBox, QHBoxLayout, QLabel,
+    QMainWindow, QMenu, QMenuBar, QPlainTextEdit,
+    QPushButton, QSizePolicy, QSplitter, QStatusBar,
+    QTabWidget, QToolBar, QVBoxLayout, QWidget)
 
 from lightsheet.gui.image_view import ImageView
 from lightsheet.gui.levels_bar import LevelsBar
@@ -184,6 +184,13 @@ class Ui_Shell(object):
         self.pushButton_armReset.setObjectName(u"pushButton_armReset")
         self.pushButton_armReset.setMinimumSize(QSize(88, 32))
         self.toolBar_estop.addWidget(self.pushButton_armReset)
+        self.label_units = QLabel(self.toolBar_estop)
+        self.label_units.setObjectName(u"label_units")
+        self.toolBar_estop.addWidget(self.label_units)
+        self.comboBox_units = QComboBox(self.toolBar_estop)
+        self.comboBox_units.setObjectName(u"comboBox_units")
+        self.comboBox_units.setMinimumSize(QSize(75, 0))
+        self.toolBar_estop.addWidget(self.comboBox_units)
         Shell.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolBar_estop)
         self.menubar = QMenuBar(Shell)
         self.menubar.setObjectName(u"menubar")
@@ -250,6 +257,7 @@ class Ui_Shell(object):
 #endif // QT_CONFIG(tooltip)
         self.pushButton_estop.setText(QCoreApplication.translate("Shell", u"E-STOP", None))
         self.pushButton_armReset.setText(QCoreApplication.translate("Shell", u"Arm/Reset", None))
+        self.label_units.setText(QCoreApplication.translate("Shell", u"Units:", None))
         self.menuDisplay.setTitle(QCoreApplication.translate("Shell", u"View", None))
         self.menu_Select_Theme.setTitle(QCoreApplication.translate("Shell", u"Select Color Theme", None))
         self.menuHelp.setTitle(QCoreApplication.translate("Shell", u"Help", None))

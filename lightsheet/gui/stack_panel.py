@@ -69,6 +69,67 @@ class StackPanelWidget(QWidget):
         self.ui.doubleSpinBox_acqFirstPlane.setRange(low - margin, high + margin)
         self.ui.doubleSpinBox_acqLastPlane.setRange(low - margin, high + margin)
 
+    def _rerender_stack_units(self) -> None:
+        """Re-render the Stack plane spinboxes + suffix on a unit change.
+
+        The stack plane positions (doubleSpinBox_acqFirstPlane /
+        doubleSpinBox_acqLastPlane) and the plane step
+        (doubleSpinBox_acqPlaneStepSize) are stored internally in
+        micrometres (the worker + the motor HAL operate in μm regardless of
+        the display unit). When the display unit changes, the spinbox
+        suffix is updated and the displayed value is converted between μm
+        (internal) and the display unit (μm or mm):
+
+        - μm display: value shown as-is, suffix " μm".
+        - mm display: value ÷ 1000, suffix " mm".
+
+        The internal ``stack_starting_plane`` / ``stack_ending_plane``
+        shell flags stay in μm — only the displayed value + suffix change.
+        The ``number_of_planes`` computation reads the spinbox values via
+        ``updateUi_set_number_of_planes`` which uses the spinbox values
+        directly, so the conversion must be consistent: the step spinbox
+        is also converted so the ratio (end-start)/step stays the same.
+        """
+        unit = self._shell.ui.comboBox_units.currentText()
+        sb_first = self.ui.doubleSpinBox_acqFirstPlane
+        sb_last = self.ui.doubleSpinBox_acqLastPlane
+        sb_step = self.ui.doubleSpinBox_acqPlaneStepSize
+
+        # The spinbox values are in the CURRENT display unit (tracked by
+        # the suffix). Convert to the NEW display unit and update the
+        # suffix. Block signals during the conversion so the valueChanged
+        # signal does not re-trigger updateUi_set_number_of_planes
+        # mid-conversion.
+        if unit == "mm":
+            decimals = 5
+        else:  # μm (the default)
+            decimals = 2
+
+        for sb in (sb_first, sb_last, sb_step):
+            sb.blockSignals(True)
+            current_suffix = sb.suffix().strip()
+            current_value = sb.value()
+            if current_suffix == unit or not current_suffix:
+                # No conversion needed (same unit or initial render where
+                # the value is already in the target unit).
+                new_value = current_value
+            elif current_suffix == "\u03bcm" and unit == "mm":
+                # μm → mm: divide by 1000.
+                new_value = current_value / 1000.0
+            elif current_suffix == "mm" and unit == "\u03bcm":
+                # mm → μm: multiply by 1000.
+                new_value = current_value * 1000.0
+            else:
+                new_value = current_value
+            sb.setValue(new_value)
+            sb.setSuffix(f" {unit}")
+            sb.setDecimals(decimals)
+            sb.blockSignals(False)
+
+        # Re-render the summary so the unit label in the summary text
+        # matches the display unit.
+        self._render_stack_plan_summary()
+
     def updateUi_set_stack_mode_starting_point(self) -> None:
         """Defines the starting point where the first plane of the stack volume will be recorded"""  # noqa: E501
         pos = self._shell.motors.horizontal.get_position(
@@ -139,6 +200,14 @@ class StackPanelWidget(QWidget):
         self._shell.stack_last_plane_set = True
         self.updateUi_set_number_of_planes()
 
+    def _display_to_um(self, value: float) -> float:
+        """Convert a spinbox value from the current display unit to
+        micrometres (the internal unit the worker + motor HAL use)."""
+        unit = self._shell.ui.comboBox_units.currentText()
+        if unit == "mm":
+            return value * 1000.0
+        return value  # μm (no conversion needed)
+
     def updateUi_set_number_of_planes(self) -> None:
         """Calculates the number of planes that will be saved in the stack acquisition"""  # noqa: E501
         if self.ui.doubleSpinBox_acqPlaneStepSize.value() != 0:
@@ -147,17 +216,24 @@ class StackPanelWidget(QWidget):
                 and self._shell.stack_last_plane_set
             ):
                 # Read the boundary values from the spinboxes (the
-                # operator may have typed them directly).
-                self._shell.stack_starting_plane = (
+                # operator may have typed them directly) and convert to
+                # μm (the internal unit the worker + motor HAL use).
+                self._shell.stack_starting_plane = self._display_to_um(
                     self.ui.doubleSpinBox_acqFirstPlane.value()
                 )
-                self._shell.stack_ending_plane = (
+                self._shell.stack_ending_plane = self._display_to_um(
                     self.ui.doubleSpinBox_acqLastPlane.value()
+                )
+                # The step spinbox is also in the display unit — convert
+                # to μm for the ratio so the number-of-planes computation
+                # is unit-independent.
+                step_um = self._display_to_um(
+                    self.ui.doubleSpinBox_acqPlaneStepSize.value()
                 )
                 self._shell.number_of_planes = int(np.ceil(
                     abs(
                         (self._shell.stack_ending_plane - self._shell.stack_starting_plane)  # noqa: E501
-                        / self.ui.doubleSpinBox_acqPlaneStepSize.value()
+                        / step_um
                     )
                 ))
                 self._shell.number_of_planes += 1  # Takes into account the initial plane  # noqa: E501
@@ -174,7 +250,7 @@ class StackPanelWidget(QWidget):
         first_set = bool(getattr(self._shell, "stack_first_plane_set", False))
         last_set = bool(getattr(self._shell, "stack_last_plane_set", False))
         step = self.ui.doubleSpinBox_acqPlaneStepSize.value()
-        unit = "\u03bcm"
+        unit = self._shell.ui.comboBox_units.currentText()
 
         if not first_set and not last_set:
             self.ui.label_stackPlanSummary.setText(

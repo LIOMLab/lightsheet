@@ -66,9 +66,8 @@ logger = logging.getLogger(__name__)
 # controls/images pane primitives. Most of these live on ``Ui_Shell`` via
 # ``setupUi`` (so they are already on ``self.ui`` and never appear in a
 # panel's ``vars(panel.ui)``); listing them here is harmless and documents
-# the shell-owned surface. The only panel.ui attr that is shell-owned is
-# ``comboBox_units`` (created programmatically on ``motor_panel.ui`` in
-# ``__init__`` and whitelisted so the shell keeps it on ``self.ui``).
+# the shell-owned surface. ``comboBox_units`` and ``label_units`` are now
+# in the E-stop toolbar via ui_shell.ui (promoted from the Motion tab).
 SHELL_OWNED_OBJECTNAMES = frozenset({
     # E-stop toolbar (safety-critical — AGENTS.md §2).
     "toolBar_estop",
@@ -240,22 +239,10 @@ class Controller_MainWindow(QMainWindow):
         self.save_panel = SavePanelWidget(self)
         self.calibration_panel = CalibrationPanelWidget(self)
 
-        # The units selector (comboBox_units + "Units:" label) was in the
-        # monolith's tabMotion but was not included in the motor panel .ui
-        # during the 07-07 split. Create it programmatically and insert it
-        # at the top of the motor panel's layout (before groupBox_SampleMovement).
-        from PySide6.QtWidgets import QComboBox, QHBoxLayout
-        from PySide6.QtWidgets import QLabel as _QLabel
-
-        self.units_label = _QLabel("Units:")
-        self.motor_panel.ui.comboBox_units = QComboBox(self.motor_panel)
-        self.motor_panel.ui.comboBox_units.setObjectName("comboBox_units")
-        self.motor_panel.ui.comboBox_units.setMinimumSize(75, 0)
-        _units_layout = QHBoxLayout()
-        _units_layout.addWidget(self.units_label)
-        _units_layout.addWidget(self.motor_panel.ui.comboBox_units)
-        # Insert at position 0 (before groupBox_SampleMovement)
-        self.motor_panel.ui.verticalLayout_panel.insertLayout(0, _units_layout)
+        # The units selector (comboBox_units + "Units:" label) is now in
+        # the E-stop toolbar via ui_shell.ui (promoted from the Motion tab
+        # so it is visible on every tab). The .ui provides the widget; the
+        # items + current-text are set below from config.ini.
 
         # Remove the placeholder tab and compose the 7 per-panel widgets
         # into 5 tabs (D-01 tab consolidation). Motion, File Manager, and
@@ -292,8 +279,8 @@ class Controller_MainWindow(QMainWindow):
         # are reached via the panel-qualified path (hybrid ownership,
         # D-05): ``self.ui.<name>`` inside a panel for its own widgets,
         # ``self._shell.<panel>.ui.<name>`` for cross-panel reads. Only
-        # the shell-owned widgets (notably ``comboBox_units``, created
-        # programmatically on ``motor_panel.ui``) are surfaced onto
+        # the shell-owned widgets (notably ``comboBox_units`` in the
+        # E-stop toolbar via ui_shell.ui) are surfaced onto
         # ``self.ui`` so the shell + the E-stop kill path keep a single
         # owner for the safety-critical surface (AGENTS.md §2).
         for panel in (
@@ -498,8 +485,12 @@ class Controller_MainWindow(QMainWindow):
         self.ui.action_showSystemProperties.triggered.connect(self.open_properties_dialog)
         self.ui.action_openDocumentation.triggered.connect(self.open_help)
 
-        # Connection for unit change
+        # Connection for unit change — re-renders BOTH the Motion position
+        # labels (motor_panel.updateUi_units) AND the Stack plane spinboxes
+        # (stack_panel._rerender_stack_units) so every dependent field
+        # updates immediately on a unit switch.
         self.ui.comboBox_units.currentTextChanged.connect(self.motor_panel.updateUi_units)
+        self.ui.comboBox_units.currentTextChanged.connect(self.stack_panel._rerender_stack_units)
 
         # Connection for laser settings changes — target the laser panel slots.
         self.laser_panel.ui.doubleSpinBox_laserOneAmplitude.valueChanged.connect(
@@ -1254,3 +1245,6 @@ class Controller_MainWindow(QMainWindow):
 
         # Motors
         self.motor_panel.updateUi_units()
+        # Re-render the Stack plane spinboxes with the current unit suffix
+        # (the spinboxes start with no suffix in the .ui; this sets it).
+        self.stack_panel._rerender_stack_units()
