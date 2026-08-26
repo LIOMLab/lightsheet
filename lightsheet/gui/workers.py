@@ -607,14 +607,27 @@ class StackWorker(QObject, _AcquireScanMixin):
 
             # Set progress bar
             progress_value = 0
-            progress_increment = 100 / self._shell.number_of_planes
+            # Defensive guard: a zero plane count (e.g. a queue row that
+            # slipped past validation, or a future code path/race) would
+            # divide by zero below. Abort with a status message instead of
+            # raising ZeroDivisionError. The single-stack path ensures
+            # >=1 via updateUi_set_number_of_planes; this guard is the
+            # backstop for the queue path and any unexpected zero.
+            n_planes = int(self._shell.number_of_planes)
+            if n_planes <= 0:
+                self._shell.sig_message.emit(
+                    "Stack acquisition aborted: number of planes is 0"
+                )
+                self._shell.sig_beep.emit()
+                return
+            progress_increment = 100 / n_planes
             self._shell.sig_progress_update.emit(0)  # To reset progress bar
 
             # Compute scan waveforms only once before we start the stack acquisition
             # Changes to settings won't be effective until we stop/restart mode
             self.siggen.compute_scan_waveforms()
 
-            for plane in range(int(self._shell.number_of_planes)):
+            for plane in range(n_planes):
                 if not self._shell.stack_mode_started:
                     self._shell.sig_message.emit("Stack Acquisition Interrupted")
                     break
