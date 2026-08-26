@@ -272,6 +272,20 @@
      <string>Arm/Reset</string>
     </property>
    </widget>
+   <widget class="QLabel" name="label_modeBadge">
+    <property name="minimumSize">
+     <size>
+      <width>140</width>
+      <height>0</height>
+     </size>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">font-weight: bold;</string>
+    </property>
+    <property name="text">
+     <string>IDLE</string>
+    </property>
+   </widget>
    <widget class="QLabel" name="label_units">
     <property name="text">
      <string>Units:</string>

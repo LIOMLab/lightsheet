@@ -74,6 +74,7 @@ SHELL_OWNED_OBJECTNAMES = frozenset({
     "pushButton_estop",
     "pushButton_armReset",
     "label_estopStatus",
+    "label_modeBadge",
     "shortcut_estop",
     # Status bar.
     "statusbar",
@@ -471,6 +472,7 @@ class Controller_MainWindow(QMainWindow):
         # Signal connections for progress bar and command log
         # ---
         self.sig_progress_update.connect(self.ui.statusBar_progress.setValue)
+        self.sig_progress_update.connect(self._on_progress_update)
         self.sig_message.connect(self.updateUi_message_printer)
 
         # ---
@@ -941,6 +943,52 @@ class Controller_MainWindow(QMainWindow):
             default_log_height = 96
             splitter.setSizes([total - default_log_height, default_log_height])
             self.ui.action_ShowHideMessageLog.setChecked(True)
+
+    def _update_mode_badge(
+        self, mode: str, state: str = "", plane: int = 0, total: int = 0
+    ) -> None:
+        """Update the mode/state badge in the E-stop toolbar.
+
+        The badge mirrors the progress bar value into the badge text so
+        the operator never has to look at the status bar mid-run. The
+        badge uses QDarkStyle default text color + bold weight — no
+        accent color (audit #12).
+
+        Modes:
+        - idle → "IDLE"
+        - preview → "PREVIEW"
+        - live → "LIVE"
+        - single → "SINGLE"
+        - stack running → "STACK RUNNING — plane {plane}/{total}"
+        """
+        if mode == "IDLE":
+            text = "IDLE"
+        elif mode == "PREVIEW":
+            text = "PREVIEW"
+        elif mode == "LIVE":
+            text = "LIVE"
+        elif mode == "SINGLE":
+            text = "SINGLE"
+        elif mode == "STACK":
+            n = plane if plane > 0 else 1
+            n_total = total if total > 0 else int(getattr(self, "number_of_planes", 0))
+            text = f"STACK {state} \u2014 plane {n}/{n_total}" if state else (
+                f"STACK RUNNING \u2014 plane {n}/{n_total}"
+            )
+        else:
+            text = mode
+        self.ui.label_modeBadge.setText(text)
+
+    @Slot(int)
+    def _on_progress_update(self, value: int) -> None:
+        """Mirror sig_progress_update into the mode badge during a stack
+        run so the operator sees 'STACK RUNNING — plane {n}/{N}' without
+        looking at the status bar (audit #12). Outside a stack run, the
+        progress value is not shown in the badge (the badge reflects the
+        mode, set by the mode-start/complete sites)."""
+        if getattr(self, "stack_mode_started", False):
+            total = int(getattr(self, "number_of_planes", 0))
+            self._update_mode_badge("STACK", "RUNNING", plane=value, total=total)
 
     def _cache_auto_laser_flags(self) -> None:
         """Sample the auto-laser checkboxes. GUI thread only.

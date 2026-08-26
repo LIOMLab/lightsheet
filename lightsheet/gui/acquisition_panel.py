@@ -85,6 +85,7 @@ class AcquisitionPanelWidget(QWidget):
             self._shell.ui.statusBar_label.setText("Current Acquisition Mode: Preview ")
             self._shell.ui.statusBar_progress.setValue(100)
             self._shell.ui.statusBar_progress.show()
+            self._shell._update_mode_badge("PREVIEW")
 
             # Sample the auto-laser checkboxes on the GUI thread before
             # spawning the worker (AGENTS.md §11).
@@ -108,6 +109,7 @@ class AcquisitionPanelWidget(QWidget):
         self._shell.ui.statusBar_label.setText("")
         self._shell.ui.statusBar_progress.setValue(0)
         self._shell.ui.statusBar_progress.hide()
+        self._shell._update_mode_badge("IDLE")
 
     def updateUi_live_mode_button(self) -> None:
         """Start or stop live mode, depending on the button status"""
@@ -129,6 +131,7 @@ class AcquisitionPanelWidget(QWidget):
             self._shell.ui.statusBar_label.setText("Current Acquisition Mode: Live ")
             self._shell.ui.statusBar_progress.setValue(100)
             self._shell.ui.statusBar_progress.show()
+            self._shell._update_mode_badge("LIVE")
 
             # Sample the auto-laser checkboxes on the GUI thread before
             # spawning the worker (AGENTS.md §11).
@@ -152,6 +155,7 @@ class AcquisitionPanelWidget(QWidget):
         self._shell.ui.statusBar_label.setText("")
         self._shell.ui.statusBar_progress.setValue(0)
         self._shell.ui.statusBar_progress.hide()
+        self._shell._update_mode_badge("IDLE")
 
     def updateUi_single_mode_button(self) -> None:
         """Acquire a single image"""
@@ -163,6 +167,7 @@ class AcquisitionPanelWidget(QWidget):
             self.ui.pushButton_acqGetSingleImage.setText("Acquiring...")
             self.updateUi_modes_buttons([self.ui.pushButton_acqGetSingleImage])
             self._shell.updateUi_message_printer("->Getting single image")
+            self._shell._update_mode_badge("SINGLE")
 
             # Sample the auto-laser checkboxes on the GUI thread before
             # spawning the worker (AGENTS.md §11).
@@ -188,6 +193,7 @@ class AcquisitionPanelWidget(QWidget):
         # Re-enabling modes after single frame acquisition
         self._shell.single_mode_started = False
         self.ui.pushButton_acqGetSingleImage.setText("Get Single Image")
+        self._shell._update_mode_badge("IDLE")
         if self._shell.save_panel.ui.pushButton_saveCurrentImage not in self._shell.default_buttons:  # noqa: E501
             self._shell.default_buttons.append(self._shell.save_panel.ui.pushButton_saveCurrentImage)
         self.updateUi_modes_buttons(self._shell.default_buttons)
@@ -257,6 +263,10 @@ class AcquisitionPanelWidget(QWidget):
                         "->Stack mode started -- Number of frames to save: "
                         + str(int(self._shell.number_of_planes))
                     )
+                    self._shell._update_mode_badge(
+                        "STACK", "RUNNING", plane=1,
+                        total=int(self._shell.number_of_planes),
+                    )
 
                     # Sample the auto-laser checkboxes on the GUI thread
                     # before spawning the worker (AGENTS.md §11).
@@ -293,3 +303,4 @@ class AcquisitionPanelWidget(QWidget):
         self._shell.updateUi_message_printer("->Stack Mode Acquisition Done")
         self._shell.ui.statusBar_label.setText("")
         self._shell.ui.statusBar_progress.hide()
+        self._shell._update_mode_badge("IDLE")
