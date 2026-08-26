@@ -56,6 +56,7 @@ def test_build_demo_bundle_siggen_has_camera_reference() -> None:
 
 
 def test_show_missing_device_dialog_renders_under_offscreen(
+    qtbot: pytest.QtBot,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """_show_missing_device_dialog renders the QDialog with the message
@@ -66,10 +67,7 @@ def test_show_missing_device_dialog_renders_under_offscreen(
     pytest.importorskip("PySide6")
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
-    from PySide6.QtWidgets import QApplication
-
-    app = QApplication.instance() or QApplication(sys.argv)
-
+    # qtbot ensures a QApplication exists; no need to construct one.
     # Mock exec so the dialog returns immediately without blocking.
     with patch("PySide6.QtWidgets.QDialog.exec", return_value=0):
         # Include a non-✕, non-first line ("Details: ...") to exercise
@@ -83,6 +81,7 @@ def test_show_missing_device_dialog_renders_under_offscreen(
 
 
 def test_main_demo_mode_returns_app_exec_exit_code(
+    qtbot: pytest.QtBot,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """main() under --demo constructs the demo bundle, validates config,
@@ -93,7 +92,15 @@ def test_main_demo_mode_returns_app_exec_exit_code(
     This exercises the full main() body: argparse, _resolve_demo, logging
     setup, Qt imports, nidaqmx __del__ guard, exception hook, QApplication
     construction, stylesheet, composition root (bundle + config validation
-    + controller + collaborators), and the exec return."""
+    + controller + collaborators), and the exec return.
+
+    ``qtbot`` is used (but not for widget registration) so pytest-qt owns
+    the real QApplication lifecycle. ``main()``'s ``QApplication(sys.argv)``
+    call is intercepted by patching ``PySide6.QtWidgets.QApplication`` to a
+    pure-Python fake whose ``exec()`` returns 0 — patching ``exec`` on the
+    real shiboken-wrapped C++ class does not reliably override the vtable
+    dispatch, so when prior tests already created a QApplication via
+    qtbot, ``app.exec()`` would start the real event loop and hang."""
     pytest.importorskip("PySide6")
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     monkeypatch.setenv("LIGHTSHEET_DEMO", "1")
@@ -156,42 +163,39 @@ def test_main_demo_mode_returns_app_exec_exit_code(
     mock_controller_mod.Controller_MainWindow = _MockController
     monkeypatch.setitem(sys.modules, "lightsheet.gui.controller", mock_controller_mod)
 
-    # Mock app.exec to return 0 immediately (don't start the event loop).
-    # Also mock show() so it doesn't try to render.
-    # mock_controller_instance.show = MagicMock()  # already a no-op on _MockController
+    # Replace QApplication with a pure-Python fake so main()'s
+    # ``QApplication(sys.argv)`` call doesn't construct a real C++
+    # QApplication (which would raise RuntimeError if qtbot's instance
+    # already exists) and ``app.exec()`` returns 0 without starting the
+    # event loop. Patching exec on the real shiboken-wrapped QApplication
+    # class does not reliably override the C++ vtable dispatch — the
+    # pure-Python fake sidesteps that entirely.
+    #
+    # ``instance()`` delegates to the real QApplication so pytest-qt's
+    # teardown (_process_events calls QApplication.instance()) still works
+    # while the monkeypatch is active.
+    from PySide6.QtWidgets import QApplication as _RealQApp
 
-    # Patch QApplication.exec at the instance level via a patch on the
-    # class method. We need to intercept the app created inside main().
-    from PySide6.QtWidgets import QApplication
+    class _FakeQApp:
+        """Pure-Python QApplication stand-in. exec() returns 0."""
 
-    original_exec = QApplication.exec
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
 
-    def fake_exec(self, *args, **kwargs):
-        return 0
+        def setStyleSheet(self, *args: object, **kwargs: object) -> None:
+            pass
 
-    monkeypatch.setattr(QApplication, "exec", fake_exec)
+        def beep(self) -> None:
+            pass
 
-    # PySide6 raises RuntimeError when QApplication(sys.argv) is called while
-    # an instance already exists (PyQt5 silently returned the existing one).
-    # main() does `from PySide6.QtWidgets import QApplication` inside its
-    # body, then `QApplication(sys.argv)` — patch the module attribute to a
-    # thin wrapper that reuses the singleton so the bootstrap test runs in a
-    # process where an earlier test already constructed a QApplication.
-    # The wrapper delegates attribute access to the real class so
-    # isinstance/instance() checks downstream still work.
-    _real_QApplication = QApplication
+        def exec(self) -> int:
+            return 0
 
-    class _IdempotentQApplication(_real_QApplication):
-        """QApplication subclass whose constructor returns the existing
-        singleton if one exists (mirroring PyQt5's idempotent behavior)."""
+        @staticmethod
+        def instance() -> object:
+            return _RealQApp.instance()
 
-        def __new__(cls, *args, **kwargs):
-            existing = _real_QApplication.instance()
-            if existing is not None:
-                return existing
-            return _real_QApplication(*args, **kwargs)
-
-    monkeypatch.setattr("PySide6.QtWidgets.QApplication", _IdempotentQApplication)
+    monkeypatch.setattr("PySide6.QtWidgets.QApplication", _FakeQApp)
 
     # Patch configure_logging to avoid file I/O side effects.
     import lightsheet.logging_setup
@@ -245,6 +249,7 @@ def test_main_demo_mode_returns_app_exec_exit_code(
 
 
 def test_main_rig_path_unresolved_device_shows_dialog_and_exits(
+    qtbot: pytest.QtBot,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """main() on the rig path (not --demo) with an UnresolvedDeviceError
@@ -253,10 +258,6 @@ def test_main_rig_path_unresolved_device_shows_dialog_and_exits(
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     # Ensure LIGHTSHEET_DEMO is not set so the rig path is taken.
     monkeypatch.delenv("LIGHTSHEET_DEMO", raising=False)
-
-    from PySide6.QtWidgets import QApplication
-
-    app = QApplication.instance() or QApplication(sys.argv)
 
     # Mock the registry to raise UnresolvedDeviceError.
     mock_registry_mod = types.ModuleType("lightsheet.hal.registry")
@@ -291,28 +292,35 @@ def test_main_rig_path_unresolved_device_shows_dialog_and_exits(
 
     monkeypatch.setattr(sys, "exit", fake_exit)
 
-    # Mock configure_logging + QApplication.exec.
+    # Mock configure_logging + QApplication.
     import lightsheet.logging_setup
 
     monkeypatch.setattr(lightsheet.logging_setup, "configure", lambda: None)
 
-    # PySide6 raises RuntimeError when QApplication(sys.argv) is called while
-    # an instance already exists (PyQt5 silently returned the existing one).
-    # main() does `from PySide6.QtWidgets import QApplication` inside its
-    # body, then `QApplication(sys.argv)` — patch the module attribute to a
-    # thin wrapper that reuses the singleton (this test already constructed
-    # one above). See test_main_demo_mode_returns_app_exec_exit_code for the
-    # full rationale.
-    _real_QApplication = QApplication
+    # Same pure-Python fake QApplication as the demo-mode test — avoids
+    # the RuntimeError from constructing a second C++ QApplication when
+    # qtbot's instance already exists. ``instance()`` delegates to the
+    # real QApplication so pytest-qt's teardown still works.
+    from PySide6.QtWidgets import QApplication as _RealQApp
 
-    class _IdempotentQApplication(_real_QApplication):
-        def __new__(cls, *args, **kwargs):
-            existing = _real_QApplication.instance()
-            if existing is not None:
-                return existing
-            return _real_QApplication(*args, **kwargs)
+    class _FakeQApp:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
 
-    monkeypatch.setattr("PySide6.QtWidgets.QApplication", _IdempotentQApplication)
+        def setStyleSheet(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def beep(self) -> None:
+            pass
+
+        def exec(self) -> int:
+            return 0
+
+        @staticmethod
+        def instance() -> object:
+            return _RealQApp.instance()
+
+    monkeypatch.setattr("PySide6.QtWidgets.QApplication", _FakeQApp)
 
     from lightsheet.__main__ import main
 
