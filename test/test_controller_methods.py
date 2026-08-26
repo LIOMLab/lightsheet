@@ -98,18 +98,30 @@ def test_updateUi_show_hide_controls_pane_hidden(qtbot, request) -> None:
 def test_updateUi_show_hide_message_log_visible(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.show()
-    assert ctrl.ui.plainTextEdit_messageLog.isVisible()
+    qtbot.waitExposed(ctrl)
+    qtbot.wait(50)
+    splitter = ctrl.ui.message_splitter
+    # Log starts visible (splitter section > 0).
+    assert splitter.sizes()[1] > 0
     ctrl.updateUi_show_hide_message_log()
-    assert not ctrl.ui.plainTextEdit_messageLog.isVisible()
+    # After toggling, the log section is 0 (hidden via splitter sizes).
+    assert splitter.sizes()[1] == 0
+    assert ctrl.ui.action_ShowHideMessageLog.isChecked() is False
 
 
 def test_updateUi_show_hide_message_log_hidden(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.show()
-    ctrl.ui.plainTextEdit_messageLog.hide()
-    assert not ctrl.ui.plainTextEdit_messageLog.isVisible()
+    qtbot.waitExposed(ctrl)
+    qtbot.wait(50)
+    splitter = ctrl.ui.message_splitter
+    # Hide the log first via the toggle.
     ctrl.updateUi_show_hide_message_log()
-    assert ctrl.ui.plainTextEdit_messageLog.isVisible()
+    assert splitter.sizes()[1] == 0
+    # Toggle again to show.
+    ctrl.updateUi_show_hide_message_log()
+    assert splitter.sizes()[1] > 0
+    assert ctrl.ui.action_ShowHideMessageLog.isChecked() is True
 
 
 def test_open_help_calls_webbrowser(qtbot, request) -> None:

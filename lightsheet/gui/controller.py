@@ -909,10 +909,47 @@ class Controller_MainWindow(QMainWindow):
             self.ui.action_ShowHideControlsPane.setChecked(True)
 
     def updateUi_show_hide_message_log(self) -> None:
-        if self.ui.plainTextEdit_messageLog.isVisible():
-            self.ui.plainTextEdit_messageLog.hide()
+        """Toggle the message log via message_splitter.setSizes() (audit #4
+        + audit #7 sync pattern).
+
+        Mirrors updateUi_show_hide_images_pane / _controls_pane — the
+        message log is now a vertical QSplitter section inside
+        controlsPane (message_splitter), not a standalone widget. Routing
+        the View-menu toggle through splitter.setSizes() keeps the splitter
+        sizes authoritative so the menu and the splitter handle stay in
+        sync. childrenCollapsible=False blocks handle-drag-to-zero, so
+        hiding is via the menu only (the operator can still drag the log
+        taller/shorter, but not collapse it to 0).
+
+        The log has a non-zero minimum height (96 px, ~5 lines), so
+        setSizes([total, 0]) alone cannot shrink it to 0 — Qt's splitter
+        respects the widget minimum. Temporarily setting minimumHeight=0
+        + maximumHeight=0 lets the splitter reach 0 (the standard Qt
+        pattern for a collapsible section under
+        childrenCollapsible=False); restoring both to their defaults
+        (minimum 96, maximum 16777215) lets the splitter allocate space
+        again on re-show.
+
+        The log section is the SECOND widget in message_splitter (index
+        1). A log section size > 0 means "visible".
+        """
+        splitter = self.ui.message_splitter
+        log = self.ui.plainTextEdit_messageLog
+        log_visible = splitter.sizes()[1] > 0
+        total = sum(splitter.sizes()) or splitter.height() or 1
+        if log_visible:
+            log.setMinimumHeight(0)
+            log.setMaximumHeight(0)
+            splitter.setSizes([total, 0])
+            self.ui.action_ShowHideMessageLog.setChecked(False)
         else:
-            self.ui.plainTextEdit_messageLog.show()
+            # Restore the ~5-line default minimum + the Qt default maximum,
+            # then a sensible default (96 px log) on re-show.
+            log.setMinimumHeight(96)
+            log.setMaximumHeight(16777215)
+            default_log_height = 96
+            splitter.setSizes([total - default_log_height, default_log_height])
+            self.ui.action_ShowHideMessageLog.setChecked(True)
 
     def _cache_auto_laser_flags(self) -> None:
         """Sample the auto-laser checkboxes. GUI thread only.
