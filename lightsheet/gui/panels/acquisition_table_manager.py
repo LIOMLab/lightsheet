@@ -952,6 +952,9 @@ class AcquisitionTableManager(QWidget):
         if not has_rows:
             folder = str(getattr(self._shell, "save_directory", ""))
             self._past_empty_label.setText(_PAST_EMPTY_COPY.format(folder=folder))
+            # Auto-scan when switching to Past for the first time so
+            # the operator does not need to manually click Refresh.
+            self._on_refresh_past()
 
     def _on_refresh_past(self) -> None:
         """Trigger an async re-scan of the save directory for past

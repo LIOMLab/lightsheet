@@ -35,9 +35,13 @@ def test_past_acquisitions_browser_parses_hdf5_and_zarr(
     # Synthetic HDF5 acquisition with a 640 nm wavelength root attr (the
     # iBeam label that must normalize to 647 nm). The filename carries the
     # 640nm token too — both sources agree on 640, the display shows 647.
+    # Laser2 is the active laser (640nm iBeam) — Laser1 (555nm) is inactive.
     h5_path = data_dir / "S01_640nm_stack_plane_00001.hdf5"
     with h5py.File(h5_path, "w") as f:
-        f.attrs["Laser1 Wavelength"] = 640
+        f.attrs["Laser1 Wavelength"] = 555
+        f.attrs["Laser1 Active"] = False
+        f.attrs["Laser2 Wavelength"] = 640
+        f.attrs["Laser2 Active"] = True
         f.create_dataset(
             "reconstructed_frame001", data=np.zeros((4, 8, 8), dtype=np.uint16)
         )
@@ -80,6 +84,39 @@ def test_past_acquisitions_browser_parses_hdf5_and_zarr(
     # #planes: HDF5 = len(f.keys()) = 1; Zarr = L0 shape[1] = 4.
     assert hdf5_entry.n_planes == 1, hdf5_entry.n_planes
     assert zarr_entry.n_planes == 4, zarr_entry.n_planes
+
+
+def test_past_acquisitions_hdf5_picks_active_laser_wavelength(
+    qtbot, request, tmp_path
+) -> None:
+    """The HDF5 wavelength parser must return the ACTIVE laser's
+    wavelength, not just the first one found. When only Laser2 (647nm)
+    is active, the browser must show 647nm — not 555nm from Laser1."""
+    import h5py
+    import numpy as np
+
+    ctrl, _ = make_controller(qtbot, request)
+
+    data_dir = tmp_path / "LightSheetData"
+    data_dir.mkdir()
+
+    # Laser1 (555nm) inactive, Laser2 (647nm) active.
+    h5_path = data_dir / "test_active_laser.hdf5"
+    with h5py.File(h5_path, "w") as f:
+        f.attrs["Laser1 Wavelength"] = 555
+        f.attrs["Laser1 Active"] = False
+        f.attrs["Laser2 Wavelength"] = 647
+        f.attrs["Laser2 Active"] = True
+        f.create_dataset(
+            "reconstructed_frame001", data=np.zeros((4, 8, 8), dtype=np.uint16)
+        )
+
+    browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
+    entries = browser.list_acquisitions()
+    assert len(entries) == 1
+    assert entries[0].wavelength == 647, (
+        f"expected 647 (active laser), got {entries[0].wavelength}"
+    )
 
 
 def test_past_acquisitions_browser_degrades_on_missing_attrs(

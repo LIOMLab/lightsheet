@@ -217,7 +217,21 @@ class PastAcquisitionsBrowser(QObject):
         )
 
     def _hdf5_wavelength(self, f, fname: str) -> int | None:
-        # Root attrs first (post-Phase-4 files).
+        # Root attrs: prefer the ACTIVE laser's wavelength. The file
+        # stores both lasers' metadata, but only the active one was used
+        # for this acquisition. Checking Laser1 first would always
+        # return 555nm even when only the 647nm laser was active.
+        for i in (1, 2):
+            active = f.attrs.get(f"Laser{i} Active")
+            if active is not None and bool(active):
+                wl = f.attrs.get(f"Laser{i} Wavelength")
+                if wl is not None:
+                    try:
+                        return int(wl)
+                    except (TypeError, ValueError):
+                        pass
+        # Fall back: no active laser attr (pre-Phase-4 files) — try
+        # Laser1 then Laser2 wavelength attrs.
         for key in ("Laser1 Wavelength", "Laser2 Wavelength"):
             val = f.attrs.get(key)
             if val is not None:
