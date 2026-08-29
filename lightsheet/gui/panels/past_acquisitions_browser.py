@@ -398,15 +398,24 @@ class PastAcquisitionsBrowser(QObject):
         # crash on some Qt versions.
         self._thread.finished.connect(self._worker.deleteLater)
         self._thread.finished.connect(self._thread.deleteLater)
+        # Clear the Python references AFTER the thread has actually
+        # exited (thread.finished fires after the event loop stops, not
+        # when quit() is posted). Clearing them in _on_worker_finished
+        # (which fires when the WORKER finishes, before the thread has
+        # processed the quit event) lets Python GC collect the QThread
+        # wrapper while the C++ QThread is still running — causing
+        # "QThread: Destroyed while thread is still running" crash.
+        self._thread.finished.connect(self._clear_thread_refs)
         self._thread.start()
 
     def _on_worker_finished(self, entries: list) -> None:
         self.sig_scan_finished.emit(entries)
-        # Clear the stale references so the next start_scan_async is not
-        # blocked by a thread that has finished but whose isRunning()
-        # may still report True briefly before deleteLater fires. The
-        # thread + worker C++ objects are torn down by the
-        # finished->deleteLater connections wired in start_scan_async.
+
+    def _clear_thread_refs(self) -> None:
+        """Clear the thread/worker Python references after the thread has
+        actually exited (connected to thread.finished). The C++ objects
+        are torn down by the deleteLater connections wired in
+        start_scan_async."""
         self._thread = None
         self._worker = None
 

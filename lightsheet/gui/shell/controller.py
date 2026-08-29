@@ -841,6 +841,10 @@ class Controller_MainWindow(QMainWindow):
                 event.accept()
                 return
             self.close_modes()
+            # Stop the past-acquisitions browser scan thread if it is
+            # running — without this the QThread is destroyed while
+            # still running on app exit (crash).
+            self.stack_panel.table_manager._past_browser.stop_scan()
             # Stop the frame_saver QThread BEFORE the acquisition threads so
             # h5py.File.close() completes before the camera/etls close.
             self._fs.frame_saver.stop_saving()
