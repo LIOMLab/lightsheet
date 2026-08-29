@@ -98,3 +98,43 @@ def test_cfg_str2bool_true_cases(value: str) -> None:
 def test_cfg_str2bool_false_cases(value: str) -> None:
     """cfg_str2bool returns False for anything outside the true-word set."""
     assert cfg_str2bool(value) is False
+
+
+# --------------------------------------------------------------------------- #
+# Wave 0 RED scaffold for D-03 (Image File Format enum).
+#
+# Defines the expected behavior of the ``Image File Format`` config field
+# that lands in a later wave: an enum accepting ``hdf5`` / ``zarr`` /
+# ``both`` / ``tiff`` and rejecting unknown values with a validation error.
+# Marked ``xfail`` (strict=False) during Wave 0 so the suite stays GREEN:
+# the enum field does not exist yet, so the construction raises and xfail
+# records the expected failure.
+# --------------------------------------------------------------------------- #
+
+_WAVE0_D03 = "Wave 0 RED scaffold — Image File Format enum implemented in a later wave"
+
+
+@pytest.mark.xfail(reason=_WAVE0_D03, strict=False)
+def test_image_file_format_enum(tmp_path: Path) -> None:
+    """D-03: ``Image File Format`` is an enum accepting the four documented
+    values (hdf5 / zarr / both / tiff) and rejecting unknown values with a
+    validation error (the field is an enum, not a free string)."""
+    from pydantic import ValidationError
+
+    from lightsheet.config_schema import ControllerSettings
+
+    for fmt in ("hdf5", "zarr", "both", "tiff"):
+        ini = tmp_path / f"test_{fmt}.ini"
+        ini.write_text(
+            f"[Controller]\nImage File Format = {fmt}\n", encoding="utf-8"
+        )
+        settings = ControllerSettings.from_ini(str(ini))
+        assert settings.image_file_format == fmt
+
+    # Unknown value is rejected with a validation error.
+    bad_ini = tmp_path / "test_bad.ini"
+    bad_ini.write_text(
+        "[Controller]\nImage File Format = fits\n", encoding="utf-8"
+    )
+    with pytest.raises(ValidationError):
+        ControllerSettings.from_ini(str(bad_ini))
