@@ -16,7 +16,6 @@ VALIDATION.md automated commands resolve by node id.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
 
@@ -187,29 +186,120 @@ def test_acquisition_group(qtbot, request, tmp_path) -> None:
 # file (VALIDATION.md resolves them by node id).
 
 
-@pytest.mark.xfail(
-    reason="Task 2: FrameSaverWorker.start_saving format branch + close ordering",
-    strict=False,
-)
 def test_format_branch(qtbot, request, tmp_path) -> None:
     """SAV-01: the ``save_format`` branch selects the Zarr saver path.
     When ``save_format == 'zarr'`` the worker calls ``zarr_save_worker``
     (not ``frame_saver_worker``); ``'hdf5'`` -> ``frame_saver_worker``;
     ``'both'`` -> ``zarr_save_worker`` then ``frame_saver_worker``
-    (serialized)."""
+    (serialized). The try/finally + ``sig_finished.emit()`` shape is
+    preserved verbatim (single emit, not duplicated)."""
+    from unittest.mock import MagicMock
+
+    from lightsheet.gui.coordinators.frame_saver_controller import FrameSaverWorker
+
     ctrl, _ = make_controller(qtbot, request)
-    assert ZarrSaver is not None
-    ctrl.save_format = "zarr"
-    assert ctrl.save_format == "zarr"
+    _save_directory(ctrl, tmp_path)
+    saver = ctrl._fs.frame_saver
+
+    # Replace the loop bodies with spies so we can observe which branch
+    # ran without touching the disk or starting a real QThread.
+    saver.frame_saver_worker = MagicMock()
+    saver.zarr_save_worker = MagicMock()
+
+    def _run(fmt: str) -> list[str]:
+        ctrl.save_format = fmt
+        worker = FrameSaverWorker(saver)
+        finished: list[int] = []
+        worker.sig_finished.connect(lambda: finished.append(1))
+        # Call the slot directly (on the calling thread) — no QThread.
+        worker.start_saving()
+        return finished
+
+    # zarr -> zarr_save_worker only.
+    saver.zarr_save_worker.reset_mock()
+    saver.frame_saver_worker.reset_mock()
+    finished = _run("zarr")
+    assert saver.zarr_save_worker.call_count == 1
+    assert saver.frame_saver_worker.call_count == 0
+    assert len(finished) == 1  # sig_finished emitted exactly once
+
+    # hdf5 -> frame_saver_worker only.
+    saver.zarr_save_worker.reset_mock()
+    saver.frame_saver_worker.reset_mock()
+    finished = _run("hdf5")
+    assert saver.frame_saver_worker.call_count == 1
+    assert saver.zarr_save_worker.call_count == 0
+    assert len(finished) == 1
+
+    # both -> zarr_save_worker then frame_saver_worker (serialized).
+    saver.zarr_save_worker.reset_mock()
+    saver.frame_saver_worker.reset_mock()
+    # Track call order across both spies.
+    call_order: list[str] = []
+    saver.zarr_save_worker.side_effect = lambda: call_order.append("zarr")
+    saver.frame_saver_worker.side_effect = lambda: call_order.append("hdf5")
+    finished = _run("both")
+    assert call_order == ["zarr", "hdf5"]
+    assert len(finished) == 1  # single sig_finished, not duplicated
+
+    # unknown -> defaults to frame_saver_worker.
+    saver.zarr_save_worker.reset_mock()
+    saver.frame_saver_worker.reset_mock()
+    finished = _run("tiff")
+    assert saver.frame_saver_worker.call_count == 1
+    assert saver.zarr_save_worker.call_count == 0
+    assert len(finished) == 1
 
 
-@pytest.mark.xfail(
-    reason="Task 2: FrameSaverWorker.start_saving format branch + close ordering",
-    strict=False,
-)
 def test_close_ordering(qtbot, request, tmp_path) -> None:
     """SAV-01: ``sig_finished`` fires only AFTER finalize completes
     (close ordering). The try/finally + ``sig_finished.emit()`` shape
-    in ``FrameSaverWorker.start_saving`` is the load-bearing contract."""
+    in ``FrameSaverWorker.start_saving`` is the load-bearing contract —
+    a Zarr finalize that takes a measurable time completes BEFORE
+    ``sig_finished`` emits."""
+    from lightsheet.gui.coordinators.frame_saver_controller import FrameSaverWorker
+
     ctrl, _ = make_controller(qtbot, request)
-    assert ZarrSaver is not None
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1.0
+    ctrl.save_format = "zarr"
+    saver = ctrl._fs.frame_saver
+
+    # Drive a real Zarr save through the worker slot (called directly
+    # on the calling thread — no QThread). The finalize builds a real
+    # (tiny) pyramid so the close-ordering is exercised end-to-end.
+    n_planes = 2
+    saver.set_files(
+        number_of_files=n_planes,
+        files_name="stack",
+        scan_type="z",
+        number_of_datasets=1,
+        datasets_name="ch",
+    )
+    saver.horizontal_positions_list = [0.0, 1.0]
+    saver.vertical_positions_list = [0.0, 2.0]
+    saver.camera_positions_list = [0.0, 3.0]
+    frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
+    # Pre-load the queue so zarr_save_worker drains without waiting.
+    saver.queue.put(frame)
+    saver.queue.put(frame)
+    # The production FrameSaver.start_saving() sets saving_started=True
+    # then starts the QThread; here we call the worker slot directly
+    # (no QThread), so set the flag manually to mirror the production
+    # entry condition.
+    saver.saving_started = True
+
+    worker = FrameSaverWorker(saver)
+    finished: list[int] = []
+    worker.sig_finished.connect(lambda: finished.append(1))
+    # The ZarrSaver is constructed in FrameSaver.__init__; finalize runs
+    # inside the worker's try block, so sig_finished (in the finally)
+    # fires AFTER finalize returns.
+    worker.start_saving()
+    assert len(finished) == 1
+    # The store was finalized (acquisition group present).
+    import zarr
+
+    root = zarr.open(str(tmp_path / "stack.ome.zarr"), mode="r")
+    assert "acquisition" in root
+    assert root["0"].shape == (1, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)

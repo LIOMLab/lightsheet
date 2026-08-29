@@ -43,16 +43,27 @@ logger = logging.getLogger(__name__)
 
 
 class FrameSaverWorker(QObject):
-    """Worker ``QObject`` for the HDF5 save loop, affined to a dedicated
+    """Worker ``QObject`` for the save loop, affined to a dedicated
     ``QThread`` via ``moveToThread``.
 
-    The save loop body itself stays on ``FrameSaver.frame_saver_worker``
-    (unchanged) — this worker's ``start_saving`` slot invokes that method
-    on the worker thread and emits ``sig_finished`` when it returns. The
+    The save loop body itself stays on ``FrameSaver`` — this worker's
+    ``start_saving`` slot invokes the appropriate loop method on the
+    worker thread and emits ``sig_finished`` when it returns. The
     ``sig_finished`` → ``thread.quit`` connection ensures the thread's
     event loop exits after the save loop completes, so ``thread.wait()``
-    unblocks only after ``h5py.File.close()`` has returned on the worker
-    thread (the load-bearing h5py close-ordering contract).
+    unblocks only after the save loop (HDF5 close OR Zarr finalize) has
+    returned on the worker thread (the load-bearing close-ordering
+    contract — preserved verbatim for both formats).
+
+    The format branch selects the loop body based on
+    ``self._saver.parent.save_format``: ``hdf5`` -> the existing
+    ``frame_saver_worker`` (byte-identical); ``zarr`` -> the new
+    ``zarr_save_worker`` (ZarrSaver-driven); ``both`` -> ``zarr_save_worker``
+    then ``frame_saver_worker`` SERIALIZED (never concurrent — h5py and
+    zarr chunk flushes on the same thread interleaving risks
+    corruption). The ``try/finally`` + ``sig_finished.emit()`` shape is
+    preserved verbatim — the finally gate fires after the branched loop
+    returns, so a Zarr finalize completes before the join.
     """
 
     sig_finished = Signal()
@@ -63,9 +74,29 @@ class FrameSaverWorker(QObject):
 
     @Slot()
     def start_saving(self) -> None:
-        """Run the save loop on the worker thread, then signal completion."""
+        """Run the save loop on the worker thread, then signal completion.
+
+        The format branch is inside the ``try`` so a finalize/write
+        failure propagates to the worker's error handler; the
+        ``finally: sig_finished.emit()`` gate is UNCHANGED and fires
+        after the branched loop returns (the close-ordering contract).
+        """
         try:
-            self._saver.frame_saver_worker()
+            fmt = self._saver.parent.save_format
+            if fmt == "hdf5":
+                self._saver.frame_saver_worker()
+            elif fmt == "zarr":
+                self._saver.zarr_save_worker()
+            elif fmt == "both":
+                # SERIALIZED: zarr first, then hdf5. Never concurrent —
+                # h5py and zarr chunk flushes on the same thread
+                # interleaving risks corruption.
+                self._saver.zarr_save_worker()
+                self._saver.frame_saver_worker()
+            else:
+                # Default to HDF5 for "tiff" legacy + unknown — matches
+                # the controller's save_format parse else branch.
+                self._saver.frame_saver_worker()
         finally:
             self.sig_finished.emit()
 
@@ -147,9 +178,24 @@ class FrameSaver(QObject):
         self.vertical_positions_list = []
         self.camera_positions_list = []
 
+        # ZarrSaver is a plain-Python sibling collaborator (NOT a
+        # QObject) — no QObject parenting needed. Constructed once per
+        # FrameSaver; reinit resets it so a per-acquisition format
+        # change takes effect without controller reconstruction.
+        self._zarr_saver = ZarrSaver(parent)
+
     def reinit(self, block_size: int) -> None:
         if self.saving_started:
             self.saving_started = False
+
+        # Re-read save_format so a per-acquisition format change (set
+        # by the save-panel format radio) takes effect without
+        # controller reconstruction.
+        self.file_format = self.parent.save_format
+        # Reset the ZarrSaver so a per-acquisition format change takes
+        # effect (a fresh writer is constructed on the next
+        # zarr_save_worker call).
+        self._zarr_saver = ZarrSaver(self.parent)
 
         self.block_size = block_size
         self.queue = queue.Queue(
@@ -368,6 +414,106 @@ class FrameSaver(QObject):
             if not self.saving_started:
                 break
         logger.info("frame_saver_worker exited (saving_started=%s)", self.saving_started)
+
+    def zarr_save_worker(self) -> None:
+        """ZarrSaver-driven save loop body — streams reconstructed frames
+        into the L0 OME-Zarr array, then finalizes the pyramid + NGFF
+        metadata + /acquisition group on the worker thread BEFORE the
+        method returns (so ``sig_finished`` emits after finalize — the
+        close-ordering contract).
+
+        Mirrors ``frame_saver_worker``'s queue-consume shape: buffers
+        come off ``self.queue`` (2D or 3D), each frame is written via
+        ``self._zarr_saver.write_plane`` with the per-plane motor
+        positions from ``self.horizontal_positions_list`` etc. The
+        store_path is built from ``self.parent.save_directory`` +
+        ``self.files_name`` + ``.ome.zarr`` (PLAIN path,
+        ``os.path.normpath``); the filename is already sanitized by
+        ``save_panel.validate_file_name`` before ``set_files`` is
+        called.
+
+        A finalize failure propagates to the worker's try/except (NOT a
+        silent HDF5 fallback — the prohibition): the error surfaces via
+        ``sig_status_message``, ``saving_started`` flips to False, and
+        ``sig_finished`` still emits in the worker's ``finally`` (the
+        join completes; the partial zarr store is left on disk for the
+        operator to inspect/delete).
+        """
+        n_planes = self.number_of_files * int(self.number_of_datasets)
+        store_path = os.path.normpath(
+            os.path.join(self.parent.save_directory, self.files_name + ".ome.zarr")
+        )
+        try:
+            self._zarr_saver.start_stack(store_path, n_planes)
+        except Exception as e:
+            self.sig_status_message.emit(f"Save error: {e}")
+            self.saving_started = False
+            return
+
+        z_idx = 0
+        pos_index = 0
+        try:
+            while self.saving_started and z_idx < n_planes:
+                try:
+                    buffer: np.ndarray = self.queue.get(True, 1)
+                except queue.Empty:
+                    # stop_saving() may have flipped the flag; if so,
+                    # exit the loop. Otherwise keep waiting for the
+                    # next buffer.
+                    continue
+
+                if buffer.ndim == 2:
+                    buffer = np.expand_dims(buffer, axis=0)
+                for frame in range(buffer.shape[0]):
+                    if z_idx >= n_planes:
+                        break
+                    # Motor positions: one entry per plane, collected
+                    # by add_motor_parameters during the acquisition
+                    # loop. Guard against a short list (defensive).
+                    hor = (
+                        float(self.horizontal_positions_list[pos_index])
+                        if pos_index < len(self.horizontal_positions_list)
+                        else 0.0
+                    )
+                    ver = (
+                        float(self.vertical_positions_list[pos_index])
+                        if pos_index < len(self.vertical_positions_list)
+                        else 0.0
+                    )
+                    cam = (
+                        float(self.camera_positions_list[pos_index])
+                        if pos_index < len(self.camera_positions_list)
+                        else 0.0
+                    )
+                    self._zarr_saver.write_plane(
+                        z_idx, buffer[frame, :, :], hor, ver, cam
+                    )
+                    z_idx += 1
+                    pos_index += 1
+        except Exception as e:
+            self.sig_status_message.emit(f"Save error: {e}")
+            self.saving_started = False
+        else:
+            # Finalize builds the pyramid + NGFF metadata + /acquisition
+            # group on the worker thread BEFORE the method returns, so
+            # sig_finished emits after finalize (the close-ordering
+            # contract). A finalize failure propagates to the except
+            # above (NOT a silent HDF5 fallback).
+            if not self.saving_started:
+                logger.info(
+                    "zarr_save_worker exiting before finalize "
+                    "(saving_started=False) — partial store left on disk"
+                )
+            else:
+                try:
+                    self._zarr_saver.finalize()
+                    self.sig_status_message.emit(
+                        "Zarr store " + store_path + " saved"
+                    )
+                except Exception as e:
+                    self.sig_status_message.emit(f"Save error: {e}")
+                    self.saving_started = False
+        logger.info("zarr_save_worker exited (saving_started=%s)", self.saving_started)
 
     def stop_saving(self) -> None:
         """Signal the save worker to stop and join it with a bounded timeout.
