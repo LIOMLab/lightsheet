@@ -235,7 +235,8 @@ class AcquisitionTableManager(QWidget):
         row = self.table.currentRow()
         if row < 0 or row >= self.table.rowCount():
             return
-        name = self.table.item(row, _COL_NAME).text()
+        name_item = self.table.item(row, _COL_NAME)
+        name = name_item.text() if name_item is not None else ""
         answer = QMessageBox.question(
             self,
             "Remove Stack",
@@ -283,7 +284,8 @@ class AcquisitionTableManager(QWidget):
         pre-start validation rejects it with a clear message, rather than
         raising an uncaught ValueError that crashes queue start.
         """
-        name = self.table.item(row, _COL_NAME).text()
+        name_item = self.table.item(row, _COL_NAME)
+        name = name_item.text() if name_item is not None else ""
         start = self._safe_float(row, _COL_START)
         end = self._safe_float(row, _COL_END)
         step = self._safe_float(row, _COL_STEP)
@@ -294,9 +296,14 @@ class AcquisitionTableManager(QWidget):
         """Parse a numeric cell's text to float, returning 0.0 on
         non-numeric text. The cell is NOT flagged here (flagging happens
         in _recompute_row_impl on edit); this helper only prevents a
-        ValueError crash at queue-start time."""
+        ValueError crash at queue-start time. Also guards a missing item
+        (None) so a partially-populated row does not raise
+        AttributeError."""
+        item = self.table.item(row, col)
+        if item is None:
+            return 0.0
         try:
-            return float(self.table.item(row, col).text() or 0.0)
+            return float(item.text() or 0.0)
         except (ValueError, TypeError):
             return 0.0
 
@@ -489,9 +496,14 @@ class AcquisitionTableManager(QWidget):
         # (e.g. "abc", "1.0.0") instead of crashing on every keystroke.
         # _safe_float returns 0.0 for unparseable text; the flag below
         # surfaces the bad cell to the operator so they can fix it.
-        start_text = self.table.item(row, _COL_START).text()
-        end_text = self.table.item(row, _COL_END).text()
-        step_text = self.table.item(row, _COL_STEP).text()
+        # Guard missing items (None) so a partially-populated row does not
+        # raise AttributeError.
+        start_item = self.table.item(row, _COL_START)
+        end_item = self.table.item(row, _COL_END)
+        step_item = self.table.item(row, _COL_STEP)
+        start_text = start_item.text() if start_item is not None else ""
+        end_text = end_item.text() if end_item is not None else ""
+        step_text = step_item.text() if step_item is not None else ""
         start = self._parse_or_flag(row, _COL_START, start_text)
         end = self._parse_or_flag(row, _COL_END, end_text)
         step = self._parse_or_flag(row, _COL_STEP, step_text)

@@ -71,8 +71,13 @@ _PAST_ERROR_COPY = (
 )
 
 
-def _format_bytes(n: int) -> str:
-    """Format a byte count as a human-readable size string (KB/MB/GB/TB)."""
+def _format_bytes(n: int | None) -> str:
+    """Format a byte count as a human-readable size string (KB/MB/GB/TB).
+
+    ``n`` is typed ``int | None`` because the size helpers can return 0 on
+    OSError and a future caller could plausibly pass None for an unknown
+    size; the None guard returns an empty string in that case.
+    """
     if n is None:
         return ""
     value = float(n)
@@ -507,6 +512,15 @@ class PastAcquisitionsBrowser(QObject):
         self._thread = None
         self._worker = None
 
+    def is_scanning(self) -> bool:
+        """True if an async scan is currently running.
+
+        Public accessor so collaborators (e.g. the panel's refresh slot)
+        can query scan state without reaching into the browser's private
+        ``_thread`` attribute.
+        """
+        return self._thread is not None and self._thread.isRunning()
+
 
 class _ScanWorker(QObject):
     """Worker QObject that runs the scan on a worker thread."""
@@ -671,8 +685,7 @@ class PastAcquisitionsPanel(QWidget):
         If a scan is already in flight, the table/label are NOT reset —
         the running scan's results will populate the table on
         completion."""
-        if self._browser._thread is not None and \
-                self._browser._thread.isRunning():
+        if self._browser.is_scanning():
             return
         folder = str(getattr(self._shell, "save_directory", ""))
         self.ui.label_pastStatus.setText(
