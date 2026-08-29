@@ -58,12 +58,13 @@ class FrameSaverWorker(QObject):
     The format branch selects the loop body based on
     ``self._saver.parent.save_format``: ``hdf5`` -> the existing
     ``frame_saver_worker`` (byte-identical); ``zarr`` -> the new
-    ``zarr_save_worker`` (ZarrSaver-driven); ``both`` -> ``zarr_save_worker``
-    then ``frame_saver_worker`` SERIALIZED (never concurrent — h5py and
-    zarr chunk flushes on the same thread interleaving risks
-    corruption). The ``try/finally`` + ``sig_finished.emit()`` shape is
-    preserved verbatim — the finally gate fires after the branched loop
-    returns, so a Zarr finalize completes before the join.
+    ``zarr_save_worker`` (ZarrSaver-driven); ``both`` ->
+    ``both_save_worker`` (a single consume loop that writes each frame
+    to BOTH formats, then finalizes Zarr — the previous two-loop design
+    drained the shared queue twice and produced empty HDF5 files). The
+    ``try/finally`` + ``sig_finished.emit()`` shape is preserved verbatim
+    — the finally gate fires after the branched loop returns, so a Zarr
+    finalize completes before the join.
     """
 
     sig_finished = Signal()
@@ -88,11 +89,18 @@ class FrameSaverWorker(QObject):
             elif fmt == "zarr":
                 self._saver.zarr_save_worker()
             elif fmt == "both":
-                # SERIALIZED: zarr first, then hdf5. Never concurrent —
-                # h5py and zarr chunk flushes on the same thread
-                # interleaving risks corruption.
-                self._saver.zarr_save_worker()
-                self._saver.frame_saver_worker()
+                # Single consume loop writing each frame to BOTH zarr and
+                # hdf5, then finalizes zarr. The previous two-loop design
+                # (zarr_save_worker then frame_saver_worker) drained the
+                # shared single-consumer self.queue twice — the Zarr loop
+                # consumed every frame, leaving the HDF5 loop with an
+                # empty queue and producing empty (metadata-only) HDF5
+                # files. both_save_worker consumes each buffer once and
+                # writes it to both formats. Never concurrent — all
+                # writes are on this single worker thread, serialized
+                # per-frame. sig_finished still emits once in the finally
+                # gate after both formats are fully closed/finalized.
+                self._saver.both_save_worker()
             else:
                 # Default to HDF5 for "tiff" legacy + unknown — matches
                 # the controller's save_format parse else branch.
@@ -565,6 +573,161 @@ class FrameSaver(QObject):
                     self.sig_status_message.emit(f"Save error: {e}")
                     self.saving_started = False
         logger.info("zarr_save_worker exited (saving_started=%s)", self.saving_started)
+
+    def both_save_worker(self) -> None:
+        """Single queue-consume loop writing each frame to BOTH the
+        OME-Zarr store and the HDF5 files, then finalizes Zarr.
+
+        Replaces the broken two-loop pattern (``zarr_save_worker`` then
+        ``frame_saver_worker``) that drained the shared single-consumer
+        ``self.queue`` twice — the Zarr loop consumed every frame, leaving
+        the HDF5 loop with an empty queue so it produced metadata-only
+        HDF5 files (no image datasets). This method consumes each buffer
+        exactly once and writes every frame to both formats from the same
+        consume pass.
+
+        Close-ordering contract preserved: the single
+        ``sig_finished.emit()`` in ``FrameSaverWorker.start_saving``'s
+        finally gate fires AFTER this method returns (all HDF5 files
+        closed + Zarr finalized). HDF5 files are opened/closed
+        one-at-a-time inside the loop (matching ``frame_saver_worker``'s
+        per-file pattern so at most one h5py handle is open); the Zarr
+        store is finalized once after the loop. Never concurrent — all
+        writes are on the single worker thread, serialized per-frame.
+
+        Error handling mirrors the existing workers: a start_stack
+        failure returns early; a per-file open/metadata error breaks the
+        file loop; a per-dataset write error surfaces via
+        ``sig_status_message`` and flips ``saving_started`` to False so
+        the inner loop exits; a finalize failure surfaces the same way.
+        ``sig_finished`` still emits in the worker's finally gate.
+        """
+        n_planes = self.number_of_files * int(self.number_of_datasets)
+        store_path = os.path.normpath(
+            os.path.join(self.parent.save_directory, self.files_name + ".ome.zarr")
+        )
+        try:
+            self._zarr_saver.start_stack(store_path, n_planes)
+        except Exception as e:
+            self.sig_status_message.emit(f"Save error: {e}")
+            self.saving_started = False
+            return
+
+        z_idx = 0
+        zarr_pos_index = 0
+        try:
+            for idx in range(len(self.filenames_list)):
+                logger.info("File created: %s", self.filenames_list[idx])
+                try:
+                    outfile = h5py.File(self.filenames_list[idx], "a")
+                    self._write_laser_metadata(outfile)
+                    self._write_acquisition_metadata(outfile)
+                except Exception as e:
+                    self.sig_status_message.emit(f"Save error: {e}")
+                    self.saving_started = False
+                    break
+
+                counter = 1
+                for dataset in range(int(self.number_of_datasets)):
+                    while True:
+                        try:
+                            buffer: np.ndarray = self.queue.get(True, 1)
+                            if buffer.ndim == 2:
+                                buffer = np.expand_dims(buffer, axis=0)
+                            for frame in range(buffer.shape[0]):
+                                if z_idx >= n_planes:
+                                    break
+                                # --- HDF5 write (mirrors frame_saver_worker) ---
+                                path_root = self.datasets_name + f"{counter:03d}"
+                                self.dataset = outfile.create_dataset(
+                                    path_root, data=buffer[frame, :, :]
+                                )
+                                logger.info(
+                                    "Dataset %s/%s created: %s",
+                                    dataset,
+                                    int(self.number_of_datasets),
+                                    path_root,
+                                )
+                                self.dataset.attrs["Sample Name"] = self.sample_name
+                                self.dataset.attrs["Date"] = str(datetime.date.today())
+
+                                if buffer.shape[0] == 1:
+                                    h5_pos_index = (
+                                        dataset + idx * int(self.number_of_datasets)
+                                    )
+                                else:
+                                    h5_pos_index = idx
+                                self.dataset.attrs["Horizontal Position"] = (
+                                    self.horizontal_positions_list[h5_pos_index]
+                                )
+                                self.dataset.attrs["Vertical Position"] = (
+                                    self.vertical_positions_list[h5_pos_index]
+                                )
+                                self.dataset.attrs["Camera Position"] = (
+                                    self.camera_positions_list[h5_pos_index]
+                                )
+                                counter += 1
+
+                                # --- Zarr write (mirrors zarr_save_worker) ---
+                                hor = (
+                                    float(self.horizontal_positions_list[zarr_pos_index])
+                                    if zarr_pos_index < len(self.horizontal_positions_list)
+                                    else 0.0
+                                )
+                                ver = (
+                                    float(self.vertical_positions_list[zarr_pos_index])
+                                    if zarr_pos_index < len(self.vertical_positions_list)
+                                    else 0.0
+                                )
+                                cam = (
+                                    float(self.camera_positions_list[zarr_pos_index])
+                                    if zarr_pos_index < len(self.camera_positions_list)
+                                    else 0.0
+                                )
+                                self._zarr_saver.write_plane(
+                                    z_idx, buffer[frame, :, :], hor, ver, cam
+                                )
+                                z_idx += 1
+                                zarr_pos_index += 1
+                            break
+                        except queue.Empty:
+                            # stop_saving() may have flipped the flag; if
+                            # so, exit the inner loop. Otherwise keep
+                            # waiting for the next buffer.
+                            if not self.saving_started:
+                                break
+                        except Exception as e:
+                            self.sig_status_message.emit(f"Save error: {e}")
+                            self.saving_started = False
+                            break
+                    if not self.saving_started:
+                        break
+                outfile.close()
+                self.sig_status_message.emit(
+                    "File " + self.filenames_list[idx] + " saved"
+                )
+                if not self.saving_started:
+                    break
+
+            # Finalize the Zarr store after all HDF5 files are closed.
+            if not self.saving_started:
+                logger.info(
+                    "both_save_worker exiting before finalize "
+                    "(saving_started=False) — partial store left on disk"
+                )
+            else:
+                try:
+                    self._zarr_saver.finalize()
+                    self.sig_status_message.emit(
+                        "Zarr store " + store_path + " saved"
+                    )
+                except Exception as e:
+                    self.sig_status_message.emit(f"Save error: {e}")
+                    self.saving_started = False
+        except Exception as e:
+            self.sig_status_message.emit(f"Save error: {e}")
+            self.saving_started = False
+        logger.info("both_save_worker exited (saving_started=%s)", self.saving_started)
 
     def stop_saving(self) -> None:
         """Signal the save worker to stop and join it with a bounded timeout.

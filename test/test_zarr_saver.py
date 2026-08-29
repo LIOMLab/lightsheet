@@ -205,6 +205,7 @@ def test_format_branch(qtbot, request, tmp_path) -> None:
     # ran without touching the disk or starting a real QThread.
     saver.frame_saver_worker = MagicMock()
     saver.zarr_save_worker = MagicMock()
+    saver.both_save_worker = MagicMock()
 
     def _run(fmt: str) -> list[str]:
         ctrl.save_format = fmt
@@ -218,28 +219,33 @@ def test_format_branch(qtbot, request, tmp_path) -> None:
     # zarr -> zarr_save_worker only.
     saver.zarr_save_worker.reset_mock()
     saver.frame_saver_worker.reset_mock()
+    saver.both_save_worker.reset_mock()
     finished = _run("zarr")
     assert saver.zarr_save_worker.call_count == 1
     assert saver.frame_saver_worker.call_count == 0
+    assert saver.both_save_worker.call_count == 0
     assert len(finished) == 1  # sig_finished emitted exactly once
 
     # hdf5 -> frame_saver_worker only.
     saver.zarr_save_worker.reset_mock()
     saver.frame_saver_worker.reset_mock()
+    saver.both_save_worker.reset_mock()
     finished = _run("hdf5")
     assert saver.frame_saver_worker.call_count == 1
     assert saver.zarr_save_worker.call_count == 0
+    assert saver.both_save_worker.call_count == 0
     assert len(finished) == 1
 
-    # both -> zarr_save_worker then frame_saver_worker (serialized).
+    # both -> both_save_worker (single dual-write loop, not two separate
+    # calls). The previous two-call design drained the shared queue twice
+    # and produced empty HDF5 files; both_save_worker fixes this.
     saver.zarr_save_worker.reset_mock()
     saver.frame_saver_worker.reset_mock()
-    # Track call order across both spies.
-    call_order: list[str] = []
-    saver.zarr_save_worker.side_effect = lambda: call_order.append("zarr")
-    saver.frame_saver_worker.side_effect = lambda: call_order.append("hdf5")
+    saver.both_save_worker.reset_mock()
     finished = _run("both")
-    assert call_order == ["zarr", "hdf5"]
+    assert saver.both_save_worker.call_count == 1
+    assert saver.zarr_save_worker.call_count == 0
+    assert saver.frame_saver_worker.call_count == 0
     assert len(finished) == 1  # single sig_finished, not duplicated
 
     # unknown -> defaults to frame_saver_worker.
@@ -303,3 +309,88 @@ def test_close_ordering(qtbot, request, tmp_path) -> None:
     root = zarr.open(str(tmp_path / "stack.ome.zarr"), mode="r")
     assert "acquisition" in root
     assert root["0"].shape == (1, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)
+
+
+def test_both_mode_writes_both_formats(qtbot, request, tmp_path) -> None:
+    """CR-01 regression: ``both`` save mode must write image data to BOTH
+    the OME-Zarr store AND the HDF5 files from a single queue-consume
+    pass. The previous two-loop design (zarr_save_worker then
+    frame_saver_worker) drained the shared single-consumer queue twice —
+    the Zarr loop consumed every frame, leaving the HDF5 loop with an
+    empty queue so it produced metadata-only HDF5 files (no image
+    datasets). This test exercises the real shared queue end-to-end
+    (no MagicMock spies on the worker methods) and asserts both formats
+    carry the image data.
+    """
+    import h5py
+    import zarr
+
+    from lightsheet.gui.coordinators.frame_saver_controller import FrameSaverWorker
+
+    ctrl, _ = make_controller(qtbot, request)
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1.0
+    ctrl.save_format = "both"
+    saver = ctrl._fs.frame_saver
+    # Reinit with a larger block_size so the queue (maxsize = 2 * block_size)
+    # can hold all n_planes frames at once for the pre-load below.
+    saver.reinit(8)
+
+    n_planes = 3
+    # files_name must include the save directory prefix (production code
+    # joins save_directory + filename before calling set_files, so the
+    # filenames_list entries are full paths).
+    files_name = str(tmp_path / "stack")
+    saver.set_files(
+        number_of_files=n_planes,
+        files_name=files_name,
+        scan_type="z",
+        number_of_datasets=1,
+        datasets_name="ch",
+    )
+    saver.horizontal_positions_list = [0.0, 1.0, 2.0]
+    saver.vertical_positions_list = [0.0, 2.0, 4.0]
+    saver.camera_positions_list = [0.0, 3.0, 6.0]
+    # Distinct non-zero pixel values per plane so we can verify the data
+    # actually landed in both formats (not just metadata headers).
+    frames = []
+    for z in range(n_planes):
+        frame = np.full(
+            (ctrl.camera.ysize, ctrl.camera.xsize), (z + 1) * 100, dtype=np.uint16
+        )
+        frames.append(frame)
+        saver.queue.put(frame)
+    saver.saving_started = True
+
+    worker = FrameSaverWorker(saver)
+    finished: list[int] = []
+    worker.sig_finished.connect(lambda: finished.append(1))
+    worker.start_saving()
+
+    # sig_finished emitted exactly once (close-ordering contract).
+    assert len(finished) == 1
+
+    # --- Zarr store has the full image data + acquisition group ---
+    root = zarr.open(str(tmp_path / "stack.ome.zarr"), mode="r")
+    assert "acquisition" in root
+    assert root["0"].shape == (1, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)
+    arr = root["0"]
+    for z in range(n_planes):
+        # The single-channel axis is 0; plane z is axis 1.
+        assert np.all(arr[0, z, :, :] == (z + 1) * 100)
+
+    # --- HDF5 files have image datasets (NOT metadata-only) ---
+    # set_files creates one .hdf5 file per plane (full path = files_name
+    # + _z_plane_NNNNN.hdf5).
+    for z in range(n_planes):
+        h5_path = str(tmp_path / f"stack_z_plane_{z + 1:05d}.hdf5")
+        with h5py.File(h5_path, "r") as f:
+            keys = list(f.keys())
+            # The dataset name pattern is datasets_name + counter (1-based).
+            assert len(keys) == 1, f"HDF5 file {h5_path} has {len(keys)} datasets, expected 1"
+            ds = f[keys[0]]
+            assert ds.shape == (ctrl.camera.ysize, ctrl.camera.xsize)
+            assert np.all(ds[()] == (z + 1) * 100), (
+                f"HDF5 plane {z} data mismatch: got max {ds[()].max()}, "
+                f"expected {(z + 1) * 100}"
+            )
