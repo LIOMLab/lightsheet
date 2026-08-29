@@ -156,3 +156,41 @@ def test_image_file_format_enum(tmp_path: Path) -> None:
         ControllerSettings(**data)
     with pytest.raises(ValidationError):
         ControllerSettingsOverlay(**data)
+
+
+def test_image_file_format_missing_key_defaults_to_hdf5(tmp_path: Path) -> None:
+    """Regression: when ``Image File Format`` is absent from config.ini,
+    ``load_sections_from_ini`` builds the cfg_read defaults dict with "" for
+    every alias, so the key arrives at the model as "" (not as a missing
+    kwarg). The pydantic ``default="both"`` never fires for that path; the
+    before-validator must map the "" sentinel to the operator-facing default
+    "hdf5" (matching ``controller._cfg_defaults`` and the rig's historical
+    behavior) instead of letting the Literal reject it. This is the
+    startup-blocker root cause — a config.ini without the key must validate
+    clean, not abort startup with "Input should be one of ..."."""
+    from lightsheet.config import cfg_read
+    from lightsheet.config_schema import (
+        ControllerSettings,
+        ControllerSettingsOverlay,
+    )
+
+    # cfg_read defaults dict mirrors load_sections_from_ini: every alias
+    # seeded with "" so absent keys return "" (the sentinel under test).
+    defaults = {"Image File Format": "", "Units": "mm"}
+
+    # config.ini with NO Image File Format line — the rig's actual state.
+    ini = tmp_path / "no_format_key.ini"
+    ini.write_text("[Controller]\nUnits = mm\n", encoding="utf-8")
+    data = cfg_read(str(ini), "Controller", dict(defaults))
+    assert data["Image File Format"] == ""  # sentinel, not a real value
+
+    # Both tiers resolve the empty sentinel to "hdf5" — no ValidationError.
+    assert ControllerSettings(**data).image_file_format == "hdf5"
+    assert ControllerSettingsOverlay(**data).image_file_format == "hdf5"
+
+    # End-to-end: the real startup gate path must not surface an error.
+    from lightsheet.config_schema import collect_config_errors
+
+    sections = {"Controller": data}
+    result = collect_config_errors(sections)
+    assert not result.errors

@@ -149,6 +149,15 @@ class ControllerSettings(_NoEnvBaseSettings):
     # session. Literal rejects unknown values at startup (the collect-all
     # gate); the before-validator lowercases so the rig's Title-Case
     # "HDF5"/"Zarr"/"Both"/"TIFF" config.ini values are accepted.
+    #
+    # load_sections_from_ini builds the cfg_read defaults dict with "" for
+    # every alias, so a key absent from config.ini arrives here as "" (not
+    # as a missing kwarg). The pydantic default="both" therefore never fires
+    # for the load_sections path — the before-validator must map the ""
+    # sentinel to the operator-facing default itself. "hdf5" matches
+    # controller._cfg_defaults["Image File Format"] = "HDF5" and the rig's
+    # historical behavior; "both" would silently double disk usage on a
+    # config that never opted into dual-format saving.
     image_file_format: Literal["hdf5", "zarr", "both", "tiff"] = Field(
         alias="Image File Format", default="both"
     )
@@ -157,6 +166,8 @@ class ControllerSettings(_NoEnvBaseSettings):
     @classmethod
     def _lowercase_image_file_format(cls, v: Any) -> Any:
         if isinstance(v, str):
+            if v == "":
+                return "hdf5"
             return v.lower()
         return v
 
@@ -174,6 +185,8 @@ class ControllerSettingsOverlay(_NoEnvBaseSettings):
     @classmethod
     def _lowercase_image_file_format(cls, v: Any) -> Any:
         if isinstance(v, str):
+            if v == "":
+                return "hdf5"
             return v.lower()
         return v
 
