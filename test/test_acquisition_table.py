@@ -98,8 +98,10 @@ def test_format_radio_re_estimates_table(qtbot, request) -> None:
     table.recompute_all_rows()
     before = table.table.item(row, 6).text()
 
-    # Drive the real controller slot (the radio buttonClicked path).
-    ctrl.updateUi_save_format_changed(ctrl.save_panel.ui.radioButton_saveFormat_zarr)
+    # Click the OME-Zarr radio — fires the button group's buttonClicked
+    # signal, which runs updateUi_save_format_changed (sets save_format)
+    # then recompute_all_rows (re-estimates every row) in connection order.
+    ctrl.save_panel.ui.radioButton_saveFormat_zarr.click()
     after = table.table.item(row, 6).text()
 
     assert before != after

@@ -45,7 +45,7 @@ def test_save_format_radio_re_estimates_table(qtbot, request) -> None:
     ctrl.save_format = "hdf5"
     table.recompute_all_rows()
     before = table.table.item(row, 6).text()
-    ctrl.updateUi_save_format_changed(ctrl.save_panel.ui.radioButton_saveFormat_zarr)
+    ctrl.save_panel.ui.radioButton_saveFormat_zarr.click()
     after = table.table.item(row, 6).text()
     assert before != after
     assert "(OME-Zarr)" in after, after
