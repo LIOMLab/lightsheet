@@ -372,7 +372,16 @@ class PastAcquisitionsBrowser(QObject):
         running, it is allowed to finish (cancelling an h5py open
         mid-read is not clean); the result is discarded if the operator
         toggled back to Planned by the time it completes (the caller
-        decides whether to populate the table)."""
+        decides whether to populate the table).
+
+        The thread's ``finished`` signal is connected to
+        ``deleteLater`` for both the worker and the thread so the C++
+        QObjects are destroyed deterministically rather than by Python
+        GC (which can warn or crash on some Qt versions when a QThread
+        is destroyed without an explicit deleteLater). The
+        ``_on_worker_finished`` slot clears ``self._thread`` /
+        ``self._worker`` so the next ``start_scan_async`` is not blocked
+        by a stale reference."""
         if self._thread is not None and self._thread.isRunning():
             return
         data_dir = self._resolve_data_dir()
@@ -382,10 +391,24 @@ class PastAcquisitionsBrowser(QObject):
         self._thread.started.connect(self._worker.run)
         self._worker.finished.connect(self._on_worker_finished)
         self._worker.finished.connect(self._thread.quit)
+        # Deterministic C++ cleanup: deleteLater on both the worker and
+        # the thread when the thread's event loop exits. Without this,
+        # the QThread and worker QObject persist (held by self._thread /
+        # self._worker) until Python GC drops them, which can warn or
+        # crash on some Qt versions.
+        self._thread.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
         self._thread.start()
 
     def _on_worker_finished(self, entries: list) -> None:
         self.sig_scan_finished.emit(entries)
+        # Clear the stale references so the next start_scan_async is not
+        # blocked by a thread that has finished but whose isRunning()
+        # may still report True briefly before deleteLater fires. The
+        # thread + worker C++ objects are torn down by the
+        # finished->deleteLater connections wired in start_scan_async.
+        self._thread = None
+        self._worker = None
 
     def stop_scan(self) -> None:
         """Best-effort teardown for shutdown / teardown. The worker is

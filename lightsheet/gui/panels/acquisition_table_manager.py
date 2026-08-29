@@ -948,17 +948,43 @@ class AcquisitionTableManager(QWidget):
     def _on_refresh_past(self) -> None:
         """Trigger an async re-scan of the save directory for past
         acquisitions. Shows the 'Scanning ...' label while the worker
-        runs; the table is populated in one batch on completion."""
+        runs; the table is populated in one batch on completion.
+
+        The scanning label + past-table hide are only applied when the
+        Past view is active — the Refresh button is always visible (it
+        is not hidden by _show_planned_view), so the operator can click
+        Refresh while viewing Planned. Without this guard the scanning
+        label + past table would leak into the Planned view and obscure
+        the planned-queue table.
+
+        If a scan is already in flight, the table/label are NOT reset —
+        the running scan's results will populate the table on
+        completion. This prevents a double-click from clearing the table
+        to empty + showing 'Scanning...' indefinitely (the second click
+        would be silently dropped by start_scan_async's running guard)."""
+        # If a scan is already running, do not reset the table — the
+        # in-flight scan will populate it on completion.
+        if self._past_browser._thread is not None and \
+                self._past_browser._thread.isRunning():
+            return
         folder = str(getattr(self._shell, "save_directory", ""))
         self._past_empty_label.setText(_PAST_SCANNING_COPY.format(folder=folder))
-        self._past_empty_label.setVisible(True)
-        self.tableWidget_pastAcquisitions.setVisible(False)
+        # Only mutate past-table/label visibility if Past is the active
+        # view — otherwise the scanning label leaks over the Planned view.
+        if self.radioButton_viewPast.isChecked():
+            self._past_empty_label.setVisible(True)
+            self.tableWidget_pastAcquisitions.setVisible(False)
         self.tableWidget_pastAcquisitions.setRowCount(0)
         self._past_browser.start_scan_async()
 
     def _on_past_scan_finished(self, entries: list) -> None:
         """Populate the past-acquisitions table in one batch (called on
-        the GUI thread via the browser's sig_scan_finished signal)."""
+        the GUI thread via the browser's sig_scan_finished signal).
+
+        Past-table/label visibility is only updated when Past is the
+        active view — the row data is populated either way, so toggling
+        to Past after the scan shows the rows correctly via
+        _on_view_changed -> _show_past_view."""
         self.tableWidget_pastAcquisitions.setSortingEnabled(False)
         self.tableWidget_pastAcquisitions.setRowCount(0)
         for entry in entries:
@@ -969,11 +995,14 @@ class AcquisitionTableManager(QWidget):
             _PAST_COL_DATE, Qt.SortOrder.DescendingOrder
         )
         has_rows = self.tableWidget_pastAcquisitions.rowCount() > 0
-        self.tableWidget_pastAcquisitions.setVisible(has_rows)
-        self._past_empty_label.setVisible(not has_rows)
-        if not has_rows:
-            folder = str(getattr(self._shell, "save_directory", ""))
-            self._past_empty_label.setText(_PAST_EMPTY_COPY.format(folder=folder))
+        # Only mutate past-table/label visibility if Past is the active
+        # view — otherwise the past table leaks over the Planned view.
+        if self.radioButton_viewPast.isChecked():
+            self.tableWidget_pastAcquisitions.setVisible(has_rows)
+            self._past_empty_label.setVisible(not has_rows)
+            if not has_rows:
+                folder = str(getattr(self._shell, "save_directory", ""))
+                self._past_empty_label.setText(_PAST_EMPTY_COPY.format(folder=folder))
         # Re-emit so external observers (tests) can subscribe.
         self.past_acquisitions_scan_finished.emit(entries)
 
