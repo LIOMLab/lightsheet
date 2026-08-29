@@ -399,9 +399,20 @@ class AcquisitionPanelWidget(QWidget):
         self._shell._stack_worker.finished.connect(self.updateUi_post_stack_mode)
         self._shell._stack_worker.finished.connect(self._shell._stack_thread.quit)
         # thread.finished→worker.deleteLater: this fires each row (the
-        # thread quits per row), reaping that row's worker. The
-        # connection is per-worker (queued before the row starts), so it
-        # only affects the current row's worker.
+        # thread quits per row), reaping that row's worker. Disconnect any
+        # prior thread.finished→deleteLater connection from a previous
+        # queue row first — otherwise thread.finished accumulates one
+        # deleteLater connection per row, and when the thread finishes it
+        # calls deleteLater on already-deleted QObjects from prior rows
+        # (Qt warns "QObject::deleteLater called on a deleted object" or
+        # crashes under heavy queue use). The prev_worker.finished
+        # disconnect above only clears the worker's own signals, not the
+        # thread's finished signal.
+        if prev_thread is not None:
+            try:
+                self._shell._stack_thread.finished.disconnect()
+            except (TypeError, RuntimeError):
+                pass
         self._shell._stack_thread.finished.connect(self._shell._stack_worker.deleteLater)
         self._shell._stack_thread.start()
         return self._shell._stack_worker
