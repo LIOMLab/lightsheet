@@ -346,11 +346,15 @@ class Controller_MainWindow(QMainWindow):
         fmt_cfg = str(self.cfg_settings["Image File Format"]).lower()
         if fmt_cfg == "tiff":
             self.save_format = "tiff"
+        elif fmt_cfg == "zarr":
+            self.save_format = "zarr"
+        elif fmt_cfg == "both":
+            self.save_format = "both"
         else:
             self.save_format = "hdf5"
 
         self.save_directory = os.path.normpath(
-            os.path.join(os.path.expanduser("~"), "Documents", "LightSheetData")
+            os.path.join(os.path.expanduser("~"), "Desktop", "LightSheetData")
         )
         self.save_filename = ""
         self.save_description = ""
