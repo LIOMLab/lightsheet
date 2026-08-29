@@ -15,10 +15,10 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QFrame,
-    QGridLayout, QGroupBox, QHBoxLayout, QHeaderView,
-    QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QPushButton, QSizePolicy, QSpacerItem, QSplitter,
+from PySide6.QtWidgets import (QAbstractItemView, QApplication, QFrame, QGridLayout,
+    QGroupBox, QHBoxLayout, QHeaderView, QLabel,
+    QLineEdit, QListWidget, QListWidgetItem, QPushButton,
+    QRadioButton, QSizePolicy, QSpacerItem, QSplitter,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 class Ui_SavePanel(object):
@@ -112,42 +112,68 @@ class Ui_SavePanel(object):
 
         self.verticalLayout_11 = QVBoxLayout()
         self.verticalLayout_11.setObjectName(u"verticalLayout_11")
+        self.label_saveFormat = QLabel(self.groupBox_5)
+        self.label_saveFormat.setObjectName(u"label_saveFormat")
+
+        self.verticalLayout_11.addWidget(self.label_saveFormat)
+
+        self.radioButton_saveFormat_hdf5 = QRadioButton(self.groupBox_5)
+        self.radioButton_saveFormat_hdf5.setObjectName(u"radioButton_saveFormat_hdf5")
+        sizePolicy2 = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        sizePolicy2.setHorizontalStretch(0)
+        sizePolicy2.setVerticalStretch(0)
+        sizePolicy2.setHeightForWidth(self.radioButton_saveFormat_hdf5.sizePolicy().hasHeightForWidth())
+        self.radioButton_saveFormat_hdf5.setSizePolicy(sizePolicy2)
+
+        self.verticalLayout_11.addWidget(self.radioButton_saveFormat_hdf5)
+
+        self.radioButton_saveFormat_zarr = QRadioButton(self.groupBox_5)
+        self.radioButton_saveFormat_zarr.setObjectName(u"radioButton_saveFormat_zarr")
+        sizePolicy2.setHeightForWidth(self.radioButton_saveFormat_zarr.sizePolicy().hasHeightForWidth())
+        self.radioButton_saveFormat_zarr.setSizePolicy(sizePolicy2)
+
+        self.verticalLayout_11.addWidget(self.radioButton_saveFormat_zarr)
+
+        self.radioButton_saveFormat_both = QRadioButton(self.groupBox_5)
+        self.radioButton_saveFormat_both.setObjectName(u"radioButton_saveFormat_both")
+        sizePolicy2.setHeightForWidth(self.radioButton_saveFormat_both.sizePolicy().hasHeightForWidth())
+        self.radioButton_saveFormat_both.setSizePolicy(sizePolicy2)
+
+        self.verticalLayout_11.addWidget(self.radioButton_saveFormat_both)
+
         self.label_7 = QLabel(self.groupBox_5)
         self.label_7.setObjectName(u"label_7")
 
         self.verticalLayout_11.addWidget(self.label_7)
 
-        self.checkBox_saveStitch = QCheckBox(self.groupBox_5)
-        self.checkBox_saveStitch.setObjectName(u"checkBox_saveStitch")
-        sizePolicy2 = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        sizePolicy2.setHorizontalStretch(0)
-        sizePolicy2.setVerticalStretch(0)
-        sizePolicy2.setHeightForWidth(self.checkBox_saveStitch.sizePolicy().hasHeightForWidth())
-        self.checkBox_saveStitch.setSizePolicy(sizePolicy2)
-        self.checkBox_saveStitch.setChecked(True)
+        self.radioButton_saveStitch = QRadioButton(self.groupBox_5)
+        self.radioButton_saveStitch.setObjectName(u"radioButton_saveStitch")
+        sizePolicy2.setHeightForWidth(self.radioButton_saveStitch.sizePolicy().hasHeightForWidth())
+        self.radioButton_saveStitch.setSizePolicy(sizePolicy2)
+        self.radioButton_saveStitch.setChecked(True)
 
-        self.verticalLayout_11.addWidget(self.checkBox_saveStitch)
+        self.verticalLayout_11.addWidget(self.radioButton_saveStitch)
 
-        self.checkBox_saveStitchBlend = QCheckBox(self.groupBox_5)
-        self.checkBox_saveStitchBlend.setObjectName(u"checkBox_saveStitchBlend")
-        sizePolicy2.setHeightForWidth(self.checkBox_saveStitchBlend.sizePolicy().hasHeightForWidth())
-        self.checkBox_saveStitchBlend.setSizePolicy(sizePolicy2)
+        self.radioButton_saveStitchBlend = QRadioButton(self.groupBox_5)
+        self.radioButton_saveStitchBlend.setObjectName(u"radioButton_saveStitchBlend")
+        sizePolicy2.setHeightForWidth(self.radioButton_saveStitchBlend.sizePolicy().hasHeightForWidth())
+        self.radioButton_saveStitchBlend.setSizePolicy(sizePolicy2)
 
-        self.verticalLayout_11.addWidget(self.checkBox_saveStitchBlend)
+        self.verticalLayout_11.addWidget(self.radioButton_saveStitchBlend)
 
-        self.checkBox_saveAllCrop = QCheckBox(self.groupBox_5)
-        self.checkBox_saveAllCrop.setObjectName(u"checkBox_saveAllCrop")
-        sizePolicy2.setHeightForWidth(self.checkBox_saveAllCrop.sizePolicy().hasHeightForWidth())
-        self.checkBox_saveAllCrop.setSizePolicy(sizePolicy2)
+        self.radioButton_saveAllCrop = QRadioButton(self.groupBox_5)
+        self.radioButton_saveAllCrop.setObjectName(u"radioButton_saveAllCrop")
+        sizePolicy2.setHeightForWidth(self.radioButton_saveAllCrop.sizePolicy().hasHeightForWidth())
+        self.radioButton_saveAllCrop.setSizePolicy(sizePolicy2)
 
-        self.verticalLayout_11.addWidget(self.checkBox_saveAllCrop)
+        self.verticalLayout_11.addWidget(self.radioButton_saveAllCrop)
 
-        self.checkBox_saveAllFull = QCheckBox(self.groupBox_5)
-        self.checkBox_saveAllFull.setObjectName(u"checkBox_saveAllFull")
-        sizePolicy2.setHeightForWidth(self.checkBox_saveAllFull.sizePolicy().hasHeightForWidth())
-        self.checkBox_saveAllFull.setSizePolicy(sizePolicy2)
+        self.radioButton_saveAllFull = QRadioButton(self.groupBox_5)
+        self.radioButton_saveAllFull.setObjectName(u"radioButton_saveAllFull")
+        sizePolicy2.setHeightForWidth(self.radioButton_saveAllFull.sizePolicy().hasHeightForWidth())
+        self.radioButton_saveAllFull.setSizePolicy(sizePolicy2)
 
-        self.verticalLayout_11.addWidget(self.checkBox_saveAllFull)
+        self.verticalLayout_11.addWidget(self.radioButton_saveAllFull)
 
 
         self.horizontalLayout_8.addLayout(self.verticalLayout_11)
@@ -280,7 +306,7 @@ class Ui_SavePanel(object):
 #endif // QT_CONFIG(tooltip)
         self.pushButton_saveSelectDirectory.setText(QCoreApplication.translate("SavePanel", u"Select Save Directory", None))
 #if QT_CONFIG(tooltip)
-        self.pushButton_saveCurrentImage.setToolTip(QCoreApplication.translate("SavePanel", u"Save single image", None))
+        self.pushButton_saveCurrentImage.setToolTip(QCoreApplication.translate("SavePanel", u"Save the current displayed frame as a single image using the selected save option above. (Stack saves are started from the Stack panel and use the stack save path, not these options.)", None))
 #endif // QT_CONFIG(tooltip)
         self.pushButton_saveCurrentImage.setText(QCoreApplication.translate("SavePanel", u"Save Current Image", None))
         self.lineEdit_saveDescription.setText("")
@@ -289,23 +315,36 @@ class Ui_SavePanel(object):
         self.lineEdit_saveDirectory.setText("")
         self.label_8.setText(QCoreApplication.translate("SavePanel", u"Save Directory:", None))
         self.label_46.setText(QCoreApplication.translate("SavePanel", u"Description:", None))
+        self.label_saveFormat.setText(QCoreApplication.translate("SavePanel", u"Save format:", None))
+#if QT_CONFIG(tooltip)
+        self.radioButton_saveFormat_hdf5.setToolTip(QCoreApplication.translate("SavePanel", u"Write the existing per-plane HDF5 stack (byte-identical to today's save path).", None))
+#endif // QT_CONFIG(tooltip)
+        self.radioButton_saveFormat_hdf5.setText(QCoreApplication.translate("SavePanel", u"HDF5", None))
+#if QT_CONFIG(tooltip)
+        self.radioButton_saveFormat_zarr.setToolTip(QCoreApplication.translate("SavePanel", u"Write a streaming OME-Zarr whole-stack volume with multiscale pyramids (10/25/50/100 \u00b5m) and OME-NGFF channel metadata \u2014 BigStitcher/napari-readable.", None))
+#endif // QT_CONFIG(tooltip)
+        self.radioButton_saveFormat_zarr.setText(QCoreApplication.translate("SavePanel", u"OME-Zarr", None))
+#if QT_CONFIG(tooltip)
+        self.radioButton_saveFormat_both.setToolTip(QCoreApplication.translate("SavePanel", u"Write both HDF5 and OME-Zarr \u2014 doubles disk write rate. Use only when disk space and write throughput are not the bottleneck (e.g. short validation stacks). For whole-brain stacks, prefer HDF5 or OME-Zarr alone.", None))
+#endif // QT_CONFIG(tooltip)
+        self.radioButton_saveFormat_both.setText(QCoreApplication.translate("SavePanel", u"Both", None))
         self.label_7.setText(QCoreApplication.translate("SavePanel", u"Save option (select one):", None))
 #if QT_CONFIG(tooltip)
-        self.checkBox_saveStitch.setToolTip(QCoreApplication.translate("SavePanel", u"Stitch saved frames into a single tiled image. Effect: enable to produce a stitched overview; disable to save individual frames only.", None))
+        self.radioButton_saveStitch.setToolTip(QCoreApplication.translate("SavePanel", u"Stitch saved frames into a single tiled image. Effect: enable to produce a stitched overview; disable to save individual frames only.", None))
 #endif // QT_CONFIG(tooltip)
-        self.checkBox_saveStitch.setText(QCoreApplication.translate("SavePanel", u"Stitched - No blend", None))
+        self.radioButton_saveStitch.setText(QCoreApplication.translate("SavePanel", u"Stitched - No blend", None))
 #if QT_CONFIG(tooltip)
-        self.checkBox_saveStitchBlend.setToolTip(QCoreApplication.translate("SavePanel", u"Blend overlapping regions when stitching. Effect: enable for seamless stitching; disable for hard-edge tiling.", None))
+        self.radioButton_saveStitchBlend.setToolTip(QCoreApplication.translate("SavePanel", u"Blend overlapping regions when stitching. Effect: enable for seamless stitching; disable for hard-edge tiling.", None))
 #endif // QT_CONFIG(tooltip)
-        self.checkBox_saveStitchBlend.setText(QCoreApplication.translate("SavePanel", u"Stitched - Linear blend (20%)", None))
+        self.radioButton_saveStitchBlend.setText(QCoreApplication.translate("SavePanel", u"Stitched - Linear blend (20%)", None))
 #if QT_CONFIG(tooltip)
-        self.checkBox_saveAllCrop.setToolTip(QCoreApplication.translate("SavePanel", u"Save all cropped frames. Effect: enable to save the cropped region of every frame to the dataset.", None))
+        self.radioButton_saveAllCrop.setToolTip(QCoreApplication.translate("SavePanel", u"Save all cropped frames. Effect: enable to save the cropped region of every frame to the dataset.", None))
 #endif // QT_CONFIG(tooltip)
-        self.checkBox_saveAllCrop.setText(QCoreApplication.translate("SavePanel", u"All frames - Cropped (20%)", None))
+        self.radioButton_saveAllCrop.setText(QCoreApplication.translate("SavePanel", u"All frames - Cropped (20%)", None))
 #if QT_CONFIG(tooltip)
-        self.checkBox_saveAllFull.setToolTip(QCoreApplication.translate("SavePanel", u"Save all full frames. Effect: enable to save the full-frame data of every frame to the dataset.", None))
+        self.radioButton_saveAllFull.setToolTip(QCoreApplication.translate("SavePanel", u"Save all full frames. Effect: enable to save the full-frame data of every frame to the dataset.", None))
 #endif // QT_CONFIG(tooltip)
-        self.checkBox_saveAllFull.setText(QCoreApplication.translate("SavePanel", u"All frames - Full", None))
+        self.radioButton_saveAllFull.setText(QCoreApplication.translate("SavePanel", u"All frames - Full", None))
         self.groupBox_16.setTitle(QCoreApplication.translate("SavePanel", u"Open File", None))
 #if QT_CONFIG(tooltip)
         self.pushButton_selectFile.setToolTip(QCoreApplication.translate("SavePanel", u"Select a HDF5 file to open", None))
