@@ -49,7 +49,7 @@
              </widget>
             </item>
             <item row="0" column="1">
-             <widget class="QDoubleSpinBox" name="doubleSpinBox_etlLeftAmplitude">
+             <widget class="FieldSpecSpinBox" name="doubleSpinBox_etlLeftAmplitude">
         <property name="toolTip">
          <string>Left ETL sweep amplitude. Unit: V. Valid range: 0–5 (clamped by the channel map). Effect: larger amplitude = wider tunable-lens sweep; co-adapt with the laser power when switching wavelength or zoom.</string>
         </property>
@@ -73,6 +73,20 @@
               </property>
              </widget>
             </item>
+            <item>
+            <widget class="QSlider" name="slider_doubleSpinBox_etlLeftAmplitude">
+            <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="minimumSize">
+            <size>
+            <width>120</width>
+            <height>0</height>
+            </size>
+            </property>
+            </widget>
+            </item>
+
             <item row="1" column="0">
              <widget class="QLabel" name="label_79">
               <property name="sizePolicy">
@@ -87,7 +101,7 @@
              </widget>
             </item>
             <item row="1" column="1">
-             <widget class="QDoubleSpinBox" name="doubleSpinBox_etlLeftOffset">
+             <widget class="FieldSpecSpinBox" name="doubleSpinBox_etlLeftOffset">
         <property name="toolTip">
          <string>Left ETL DC offset. Unit: V. Valid range: 0–5. Effect: shifts the sweep center; co-adapt with amplitude for the current wavelength/zoom.</string>
         </property>
@@ -178,7 +192,7 @@
              </widget>
             </item>
             <item row="0" column="1">
-             <widget class="QDoubleSpinBox" name="doubleSpinBox_etlRightAmplitude">
+             <widget class="FieldSpecSpinBox" name="doubleSpinBox_etlRightAmplitude">
         <property name="toolTip">
          <string>Right ETL sweep amplitude. Unit: V. Valid range: 0–5 (clamped by the channel map). Effect: larger amplitude = wider tunable-lens sweep; co-adapt with the laser power.</string>
         </property>
@@ -202,6 +216,20 @@
               </property>
              </widget>
             </item>
+            <item>
+            <widget class="QSlider" name="slider_doubleSpinBox_etlRightAmplitude">
+            <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="minimumSize">
+            <size>
+            <width>120</width>
+            <height>0</height>
+            </size>
+            </property>
+            </widget>
+            </item>
+
             <item row="1" column="0">
              <widget class="QLabel" name="label_82">
               <property name="sizePolicy">
@@ -216,7 +244,7 @@
              </widget>
             </item>
             <item row="1" column="1">
-             <widget class="QDoubleSpinBox" name="doubleSpinBox_etlRightOffset">
+             <widget class="FieldSpecSpinBox" name="doubleSpinBox_etlRightOffset">
         <property name="toolTip">
          <string>Right ETL DC offset. Unit: V. Valid range: 0–5. Effect: shifts the sweep center; co-adapt with amplitude for the current wavelength/zoom.</string>
         </property>
@@ -312,7 +340,7 @@
          </widget>
         </item>
         <item>
-         <widget class="QDoubleSpinBox" name="doubleSpinBox_etlSteps">
+         <widget class="FieldSpecSpinBox" name="doubleSpinBox_etlSteps">
         <property name="toolTip">
          <string>Number of ETL voltage steps per sweep. Unit: steps. Valid range: &gt;0. Effect: more steps = smoother sweep but higher DAQ update rate.</string>
         </property>
@@ -381,7 +409,7 @@
              </widget>
             </item>
             <item row="0" column="1">
-             <widget class="QDoubleSpinBox" name="doubleSpinBox_galvoLeftAmplitude">
+             <widget class="FieldSpecSpinBox" name="doubleSpinBox_galvoLeftAmplitude">
         <property name="toolTip">
          <string>Left galvo scan amplitude. Unit: V. Valid range: ±10 (clamped by the channel map). Effect: larger amplitude = wider scan; co-adapt with the ETL amplitude for the current zoom.</string>
         </property>
@@ -402,6 +430,20 @@
               </property>
              </widget>
             </item>
+            <item>
+            <widget class="QSlider" name="slider_doubleSpinBox_galvoLeftAmplitude">
+            <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="minimumSize">
+            <size>
+            <width>120</width>
+            <height>0</height>
+            </size>
+            </property>
+            </widget>
+            </item>
+
             <item row="1" column="0">
              <widget class="QLabel" name="label_62">
               <property name="sizePolicy">
@@ -416,7 +458,7 @@
              </widget>
             </item>
             <item row="1" column="1">
-             <widget class="QDoubleSpinBox" name="doubleSpinBox_galvoLeftOffset">
+             <widget class="FieldSpecSpinBox" name="doubleSpinBox_galvoLeftOffset">
         <property name="toolTip">
          <string>Left galvo DC offset. Unit: V. Valid range: ±10. Effect: shifts the scan center.</string>
         </property>
@@ -501,7 +543,7 @@
              </widget>
             </item>
             <item row="0" column="1">
-             <widget class="QDoubleSpinBox" name="doubleSpinBox_galvoRightAmplitude">
+             <widget class="FieldSpecSpinBox" name="doubleSpinBox_galvoRightAmplitude">
         <property name="toolTip">
          <string>Right galvo scan amplitude. Unit: V. Valid range: ±10 (clamped by the channel map). Effect: larger amplitude = wider scan.</string>
         </property>
@@ -522,6 +564,20 @@
               </property>
              </widget>
             </item>
+            <item>
+            <widget class="QSlider" name="slider_doubleSpinBox_galvoRightAmplitude">
+            <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="minimumSize">
+            <size>
+            <width>120</width>
+            <height>0</height>
+            </size>
+            </property>
+            </widget>
+            </item>
+
             <item row="1" column="0">
              <widget class="QLabel" name="label_66">
               <property name="sizePolicy">
@@ -536,7 +592,7 @@
              </widget>
             </item>
             <item row="1" column="1">
-             <widget class="QDoubleSpinBox" name="doubleSpinBox_galvoRightOffset">
+             <widget class="FieldSpecSpinBox" name="doubleSpinBox_galvoRightOffset">
         <property name="toolTip">
          <string>Right galvo DC offset. Unit: V. Valid range: ±10. Effect: shifts the scan center.</string>
         </property>
@@ -641,6 +697,13 @@
    </item>
   </layout>
  </widget>
- <resources/>
+ <customwidgets>
+ <customwidget>
+  <class>FieldSpecSpinBox</class>
+  <extends>QDoubleSpinBox</extends>
+  <header>lightsheet.gui.widgets.field_spec_spinbox</header>
+ </customwidget>
+</customwidgets>
+<resources/>
  <connections/>
 </ui>

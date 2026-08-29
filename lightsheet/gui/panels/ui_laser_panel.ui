@@ -47,7 +47,7 @@
            </widget>
           </item>
           <item row="0" column="1">
-           <widget class="QDoubleSpinBox" name="doubleSpinBox_laserOneAmplitude">
+           <widget class="FieldSpecSpinBox" name="doubleSpinBox_laserOneAmplitude">
         <property name="toolTip">
          <string>Laser 1 power as a percentage of max power. Unit: %. Valid range: 0–100. Effect: applied via a debounced DAQ write; the E-stop drives it to 0 immediately.</string>
         </property>
@@ -184,7 +184,7 @@
            </widget>
           </item>
           <item row="0" column="1">
-           <widget class="QDoubleSpinBox" name="doubleSpinBox_laserTwoAmplitude">
+           <widget class="FieldSpecSpinBox" name="doubleSpinBox_laserTwoAmplitude">
         <property name="toolTip">
          <string>Laser 2 power as a percentage of max power. Unit: %. Valid range: 0–100. Effect: applied via the iBeam serial write; the E-stop drives it to 0 immediately.</string>
         </property>
@@ -370,6 +370,13 @@
    </item>
   </layout>
  </widget>
- <resources/>
+ <customwidgets>
+ <customwidget>
+  <class>FieldSpecSpinBox</class>
+  <extends>QDoubleSpinBox</extends>
+  <header>lightsheet.gui.widgets.field_spec_spinbox</header>
+ </customwidget>
+</customwidgets>
+<resources/>
  <connections/>
 </ui>

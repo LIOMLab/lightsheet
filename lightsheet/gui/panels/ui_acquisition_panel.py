@@ -15,9 +15,11 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QComboBox, QDoubleSpinBox, QFormLayout,
-    QFrame, QGroupBox, QLabel, QPushButton,
-    QSizePolicy, QSpacerItem, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QComboBox, QFormLayout, QFrame,
+    QGroupBox, QLabel, QPushButton, QSizePolicy,
+    QSlider, QSpacerItem, QVBoxLayout, QWidget)
+
+from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
 class Ui_AcquisitionPanel(object):
     def setupUi(self, acquisitionPanel):
@@ -97,7 +99,7 @@ class Ui_AcquisitionPanel(object):
 
         self.formLayout.setWidget(2, QFormLayout.ItemRole.LabelRole, self.label_doubleSpinBox_cameraExposureTime)
 
-        self.doubleSpinBox_cameraExposureTime = QDoubleSpinBox(self.groupBox_12)
+        self.doubleSpinBox_cameraExposureTime = FieldSpecSpinBox(self.groupBox_12)
         self.doubleSpinBox_cameraExposureTime.setObjectName(u"doubleSpinBox_cameraExposureTime")
         self.doubleSpinBox_cameraExposureTime.setDecimals(0)
         self.doubleSpinBox_cameraExposureTime.setMinimum(25.000000000000000)
@@ -107,12 +109,19 @@ class Ui_AcquisitionPanel(object):
 
         self.formLayout.setWidget(2, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_cameraExposureTime)
 
+        self.slider_doubleSpinBox_cameraExposureTime = QSlider(self.groupBox_12)
+        self.slider_doubleSpinBox_cameraExposureTime.setObjectName(u"slider_doubleSpinBox_cameraExposureTime")
+        self.slider_doubleSpinBox_cameraExposureTime.setOrientation(Qt.Horizontal)
+        self.slider_doubleSpinBox_cameraExposureTime.setMinimumSize(QSize(120, 0))
+
+        self.formLayout.setWidget(0, QFormLayout.ItemRole.LabelRole, self.slider_doubleSpinBox_cameraExposureTime)
+
         self.label_doubleSpinBox_cameraLineTime = QLabel(self.groupBox_12)
         self.label_doubleSpinBox_cameraLineTime.setObjectName(u"label_doubleSpinBox_cameraLineTime")
 
         self.formLayout.setWidget(3, QFormLayout.ItemRole.LabelRole, self.label_doubleSpinBox_cameraLineTime)
 
-        self.doubleSpinBox_cameraLineTime = QDoubleSpinBox(self.groupBox_12)
+        self.doubleSpinBox_cameraLineTime = FieldSpecSpinBox(self.groupBox_12)
         self.doubleSpinBox_cameraLineTime.setObjectName(u"doubleSpinBox_cameraLineTime")
         self.doubleSpinBox_cameraLineTime.setDecimals(3)
         self.doubleSpinBox_cameraLineTime.setMinimum(12.175000000000001)
@@ -125,7 +134,7 @@ class Ui_AcquisitionPanel(object):
 
         self.formLayout.setWidget(4, QFormLayout.ItemRole.LabelRole, self.label_doubleSpinBox_cameraExposedLines)
 
-        self.doubleSpinBox_cameraExposedLines = QDoubleSpinBox(self.groupBox_12)
+        self.doubleSpinBox_cameraExposedLines = FieldSpecSpinBox(self.groupBox_12)
         self.doubleSpinBox_cameraExposedLines.setObjectName(u"doubleSpinBox_cameraExposedLines")
         self.doubleSpinBox_cameraExposedLines.setDecimals(0)
         self.doubleSpinBox_cameraExposedLines.setMinimum(1.000000000000000)
@@ -138,7 +147,7 @@ class Ui_AcquisitionPanel(object):
 
         self.formLayout.setWidget(5, QFormLayout.ItemRole.LabelRole, self.label_doubleSpinBox_cameraDelayLines)
 
-        self.doubleSpinBox_cameraDelayLines = QDoubleSpinBox(self.groupBox_12)
+        self.doubleSpinBox_cameraDelayLines = FieldSpecSpinBox(self.groupBox_12)
         self.doubleSpinBox_cameraDelayLines.setObjectName(u"doubleSpinBox_cameraDelayLines")
         self.doubleSpinBox_cameraDelayLines.setDecimals(0)
         self.doubleSpinBox_cameraDelayLines.setMaximum(1024.000000000000000)

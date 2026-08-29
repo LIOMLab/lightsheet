@@ -133,7 +133,7 @@
            </widget>
           </item>
           <item>
-           <widget class="QDoubleSpinBox" name="doubleSpinBox_acqPlaneStepSize">
+           <widget class="FieldSpecSpinBox" name="doubleSpinBox_acqPlaneStepSize">
         <property name="toolTip">
          <string>Step between adjacent z-planes in the stack. Unit: the active unit (μm/mm). Valid range: &gt;0 (a zero step is rejected). Effect: smaller steps = finer z-resolution but more frames and a longer acquisition.</string>
         </property>
@@ -184,7 +184,7 @@
            </widget>
           </item>
           <item>
-           <widget class="QDoubleSpinBox" name="doubleSpinBox_acqFirstPlane">
+           <widget class="FieldSpecSpinBox" name="doubleSpinBox_acqFirstPlane">
         <property name="toolTip">
          <string>Stack start position. Unit: the active unit (μm/mm). Set via the Set button (reads the current motor position) or type directly. Valid range: the stage travel limits (reject-and-beep if out of range).</string>
         </property>
@@ -214,6 +214,20 @@
             </property>
            </widget>
           </item>
+          <item>
+          <widget class="QSlider" name="slider_doubleSpinBox_acqFirstPlane">
+          <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="minimumSize">
+          <size>
+          <width>120</width>
+          <height>0</height>
+          </size>
+          </property>
+          </widget>
+          </item>
+
          </layout>
         </item>
         <item>
@@ -238,7 +252,7 @@
            </widget>
           </item>
           <item>
-           <widget class="QDoubleSpinBox" name="doubleSpinBox_acqLastPlane">
+           <widget class="FieldSpecSpinBox" name="doubleSpinBox_acqLastPlane">
         <property name="toolTip">
          <string>Stack end position. Unit: the active unit (μm/mm). Set via the Set button (reads the current motor position) or type directly. Valid range: the stage travel limits (reject-and-beep if out of range).</string>
         </property>
@@ -268,6 +282,20 @@
             </property>
            </widget>
           </item>
+          <item>
+          <widget class="QSlider" name="slider_doubleSpinBox_acqLastPlane">
+          <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="minimumSize">
+          <size>
+          <width>120</width>
+          <height>0</height>
+          </size>
+          </property>
+          </widget>
+          </item>
+
          </layout>
         </item>
         <item>
@@ -320,6 +348,13 @@
    </item>
   </layout>
  </widget>
- <resources/>
+ <customwidgets>
+ <customwidget>
+  <class>FieldSpecSpinBox</class>
+  <extends>QDoubleSpinBox</extends>
+  <header>lightsheet.gui.widgets.field_spec_spinbox</header>
+ </customwidget>
+</customwidgets>
+<resources/>
  <connections/>
 </ui>

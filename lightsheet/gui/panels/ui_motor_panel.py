@@ -15,9 +15,11 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QFrame, QGridLayout,
-    QGroupBox, QHBoxLayout, QLabel, QPushButton,
-    QSizePolicy, QSpacerItem, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QGroupBox,
+    QHBoxLayout, QLabel, QPushButton, QSizePolicy,
+    QSlider, QSpacerItem, QVBoxLayout, QWidget)
+
+from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
 class Ui_MotorPanel(object):
     def setupUi(self, motorPanel):
@@ -160,7 +162,7 @@ class Ui_MotorPanel(object):
 
         self.horizontalLayout_55.addWidget(self.label_25)
 
-        self.doubleSpinBox_sampleHStepSize = QDoubleSpinBox(self.groupBox_SampleMovement)
+        self.doubleSpinBox_sampleHStepSize = FieldSpecSpinBox(self.groupBox_SampleMovement)
         self.doubleSpinBox_sampleHStepSize.setObjectName(u"doubleSpinBox_sampleHStepSize")
         sizePolicy2.setHeightForWidth(self.doubleSpinBox_sampleHStepSize.sizePolicy().hasHeightForWidth())
         self.doubleSpinBox_sampleHStepSize.setSizePolicy(sizePolicy2)
@@ -180,7 +182,7 @@ class Ui_MotorPanel(object):
 
         self.horizontalLayout_55.addWidget(self.label_26)
 
-        self.doubleSpinBox_sampleVStepSize = QDoubleSpinBox(self.groupBox_SampleMovement)
+        self.doubleSpinBox_sampleVStepSize = FieldSpecSpinBox(self.groupBox_SampleMovement)
         self.doubleSpinBox_sampleVStepSize.setObjectName(u"doubleSpinBox_sampleVStepSize")
         sizePolicy2.setHeightForWidth(self.doubleSpinBox_sampleVStepSize.sizePolicy().hasHeightForWidth())
         self.doubleSpinBox_sampleVStepSize.setSizePolicy(sizePolicy2)
@@ -209,7 +211,7 @@ class Ui_MotorPanel(object):
 
         self.horizontalLayout_53.addWidget(self.label_23)
 
-        self.doubleSpinBox_sampleSetHPosition = QDoubleSpinBox(self.groupBox_SampleMovement)
+        self.doubleSpinBox_sampleSetHPosition = FieldSpecSpinBox(self.groupBox_SampleMovement)
         self.doubleSpinBox_sampleSetHPosition.setObjectName(u"doubleSpinBox_sampleSetHPosition")
         sizePolicy3 = QSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
         sizePolicy3.setHorizontalStretch(0)
@@ -220,6 +222,13 @@ class Ui_MotorPanel(object):
         self.doubleSpinBox_sampleSetHPosition.setDecimals(3)
 
         self.horizontalLayout_53.addWidget(self.doubleSpinBox_sampleSetHPosition)
+
+        self.slider_doubleSpinBox_sampleSetHPosition = QSlider(self.groupBox_SampleMovement)
+        self.slider_doubleSpinBox_sampleSetHPosition.setObjectName(u"slider_doubleSpinBox_sampleSetHPosition")
+        self.slider_doubleSpinBox_sampleSetHPosition.setOrientation(Qt.Horizontal)
+        self.slider_doubleSpinBox_sampleSetHPosition.setMinimumSize(QSize(120, 0))
+
+        self.horizontalLayout_53.addWidget(self.slider_doubleSpinBox_sampleSetHPosition)
 
         self.pushButton_sampleGotoHPosition = QPushButton(self.groupBox_SampleMovement)
         self.pushButton_sampleGotoHPosition.setObjectName(u"pushButton_sampleGotoHPosition")
@@ -242,7 +251,7 @@ class Ui_MotorPanel(object):
 
         self.horizontalLayout_54.addWidget(self.label_24)
 
-        self.doubleSpinBox_sampleSetVPosition = QDoubleSpinBox(self.groupBox_SampleMovement)
+        self.doubleSpinBox_sampleSetVPosition = FieldSpecSpinBox(self.groupBox_SampleMovement)
         self.doubleSpinBox_sampleSetVPosition.setObjectName(u"doubleSpinBox_sampleSetVPosition")
         sizePolicy3.setHeightForWidth(self.doubleSpinBox_sampleSetVPosition.sizePolicy().hasHeightForWidth())
         self.doubleSpinBox_sampleSetVPosition.setSizePolicy(sizePolicy3)
@@ -250,6 +259,13 @@ class Ui_MotorPanel(object):
         self.doubleSpinBox_sampleSetVPosition.setDecimals(3)
 
         self.horizontalLayout_54.addWidget(self.doubleSpinBox_sampleSetVPosition)
+
+        self.slider_doubleSpinBox_sampleSetVPosition = QSlider(self.groupBox_SampleMovement)
+        self.slider_doubleSpinBox_sampleSetVPosition.setObjectName(u"slider_doubleSpinBox_sampleSetVPosition")
+        self.slider_doubleSpinBox_sampleSetVPosition.setOrientation(Qt.Horizontal)
+        self.slider_doubleSpinBox_sampleSetVPosition.setMinimumSize(QSize(120, 0))
+
+        self.horizontalLayout_54.addWidget(self.slider_doubleSpinBox_sampleSetVPosition)
 
         self.pushButton_sampleGotoVPosition = QPushButton(self.groupBox_SampleMovement)
         self.pushButton_sampleGotoVPosition.setObjectName(u"pushButton_sampleGotoVPosition")
@@ -397,7 +413,7 @@ class Ui_MotorPanel(object):
 
         self.horizontalLayout_62.addWidget(self.label_33)
 
-        self.doubleSpinBox_cameraStepSize = QDoubleSpinBox(self.groupBox_CameraMovement)
+        self.doubleSpinBox_cameraStepSize = FieldSpecSpinBox(self.groupBox_CameraMovement)
         self.doubleSpinBox_cameraStepSize.setObjectName(u"doubleSpinBox_cameraStepSize")
         sizePolicy2.setHeightForWidth(self.doubleSpinBox_cameraStepSize.sizePolicy().hasHeightForWidth())
         self.doubleSpinBox_cameraStepSize.setSizePolicy(sizePolicy2)
@@ -426,7 +442,7 @@ class Ui_MotorPanel(object):
 
         self.horizontalLayout_59.addWidget(self.label_32)
 
-        self.doubleSpinBox_cameraSetPosition = QDoubleSpinBox(self.groupBox_CameraMovement)
+        self.doubleSpinBox_cameraSetPosition = FieldSpecSpinBox(self.groupBox_CameraMovement)
         self.doubleSpinBox_cameraSetPosition.setObjectName(u"doubleSpinBox_cameraSetPosition")
         sizePolicy3.setHeightForWidth(self.doubleSpinBox_cameraSetPosition.sizePolicy().hasHeightForWidth())
         self.doubleSpinBox_cameraSetPosition.setSizePolicy(sizePolicy3)
@@ -434,6 +450,13 @@ class Ui_MotorPanel(object):
         self.doubleSpinBox_cameraSetPosition.setDecimals(3)
 
         self.horizontalLayout_59.addWidget(self.doubleSpinBox_cameraSetPosition)
+
+        self.slider_doubleSpinBox_cameraSetPosition = QSlider(self.groupBox_CameraMovement)
+        self.slider_doubleSpinBox_cameraSetPosition.setObjectName(u"slider_doubleSpinBox_cameraSetPosition")
+        self.slider_doubleSpinBox_cameraSetPosition.setOrientation(Qt.Horizontal)
+        self.slider_doubleSpinBox_cameraSetPosition.setMinimumSize(QSize(120, 0))
+
+        self.horizontalLayout_59.addWidget(self.slider_doubleSpinBox_cameraSetPosition)
 
         self.pushButton_cameraGotoPosition = QPushButton(self.groupBox_CameraMovement)
         self.pushButton_cameraGotoPosition.setObjectName(u"pushButton_cameraGotoPosition")

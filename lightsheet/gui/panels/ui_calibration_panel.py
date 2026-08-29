@@ -15,9 +15,11 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QFormLayout, QGroupBox,
-    QLabel, QPushButton, QSizePolicy, QSpacerItem,
-    QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QFormLayout, QGroupBox, QLabel,
+    QPushButton, QSizePolicy, QSpacerItem, QVBoxLayout,
+    QWidget)
+
+from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
 class Ui_CalibrationPanel(object):
     def setupUi(self, calibrationPanel):
@@ -41,7 +43,7 @@ class Ui_CalibrationPanel(object):
 
         self.formLayout_2.setWidget(0, QFormLayout.ItemRole.LabelRole, self.label_28)
 
-        self.doubleSpinBox_calNumberOfPlanes = QDoubleSpinBox(self.groupBox_2)
+        self.doubleSpinBox_calNumberOfPlanes = FieldSpecSpinBox(self.groupBox_2)
         self.doubleSpinBox_calNumberOfPlanes.setObjectName(u"doubleSpinBox_calNumberOfPlanes")
         sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         sizePolicy1.setHorizontalStretch(0)
@@ -62,7 +64,7 @@ class Ui_CalibrationPanel(object):
 
         self.formLayout_2.setWidget(1, QFormLayout.ItemRole.LabelRole, self.label_43)
 
-        self.doubleSpinBox_calNumberOfCameraPositions = QDoubleSpinBox(self.groupBox_2)
+        self.doubleSpinBox_calNumberOfCameraPositions = FieldSpecSpinBox(self.groupBox_2)
         self.doubleSpinBox_calNumberOfCameraPositions.setObjectName(u"doubleSpinBox_calNumberOfCameraPositions")
         sizePolicy1.setHeightForWidth(self.doubleSpinBox_calNumberOfCameraPositions.sizePolicy().hasHeightForWidth())
         self.doubleSpinBox_calNumberOfCameraPositions.setSizePolicy(sizePolicy1)
@@ -110,7 +112,7 @@ class Ui_CalibrationPanel(object):
 
         self.formLayout_3.setWidget(0, QFormLayout.ItemRole.LabelRole, self.label_47)
 
-        self.doubleSpinBox_calNumberOfEtlVoltages = QDoubleSpinBox(self.groupBox_3)
+        self.doubleSpinBox_calNumberOfEtlVoltages = FieldSpecSpinBox(self.groupBox_3)
         self.doubleSpinBox_calNumberOfEtlVoltages.setObjectName(u"doubleSpinBox_calNumberOfEtlVoltages")
         sizePolicy1.setHeightForWidth(self.doubleSpinBox_calNumberOfEtlVoltages.sizePolicy().hasHeightForWidth())
         self.doubleSpinBox_calNumberOfEtlVoltages.setSizePolicy(sizePolicy1)

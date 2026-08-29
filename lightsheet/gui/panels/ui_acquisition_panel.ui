@@ -132,7 +132,7 @@
        </widget>
       </item>
       <item row="2" column="1">
-       <widget class="QDoubleSpinBox" name="doubleSpinBox_cameraExposureTime">
+       <widget class="FieldSpecSpinBox" name="doubleSpinBox_cameraExposureTime">
         <property name="toolTip">
          <string>Camera exposure time per line. Unit: ms. Valid range: per the PCO camera limits. Effect: longer exposure = brighter image but slower acquisition.</string>
         </property>
@@ -159,6 +159,20 @@
         </property>
        </widget>
       </item>
+      <item>
+      <widget class="QSlider" name="slider_doubleSpinBox_cameraExposureTime">
+      <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+      </property>
+      <property name="minimumSize">
+      <size>
+      <width>120</width>
+      <height>0</height>
+      </size>
+      </property>
+      </widget>
+      </item>
+
       <item row="3" column="0">
        <widget class="QLabel" name="label_doubleSpinBox_cameraLineTime">
         <property name="text">
@@ -167,7 +181,7 @@
        </widget>
       </item>
       <item row="3" column="1">
-       <widget class="QDoubleSpinBox" name="doubleSpinBox_cameraLineTime">
+       <widget class="FieldSpecSpinBox" name="doubleSpinBox_cameraLineTime">
         <property name="toolTip">
          <string>Camera line time (exposure + readout). Unit: ms. Valid range: per the PCO camera limits. Effect: sets the line period; must be &gt;= exposure time.</string>
         </property>
@@ -193,7 +207,7 @@
        </widget>
       </item>
       <item row="4" column="1">
-       <widget class="QDoubleSpinBox" name="doubleSpinBox_cameraExposedLines">
+       <widget class="FieldSpecSpinBox" name="doubleSpinBox_cameraExposedLines">
         <property name="toolTip">
          <string>Number of exposed lines per frame. Unit: lines. Valid range: &gt;0. Effect: sets the frame height in lines.</string>
         </property>
@@ -216,7 +230,7 @@
        </widget>
       </item>
       <item row="5" column="1">
-       <widget class="QDoubleSpinBox" name="doubleSpinBox_cameraDelayLines">
+       <widget class="FieldSpecSpinBox" name="doubleSpinBox_cameraDelayLines">
         <property name="toolTip">
          <string>Number of delay (non-exposed) lines before the exposed region. Unit: lines. Valid range: &gt;=0. Effect: shifts the trigger timing relative to the galvo/ETL sweep.</string>
         </property>
@@ -233,6 +247,13 @@
    </item>
   </layout>
  </widget>
- <resources/>
+ <customwidgets>
+ <customwidget>
+  <class>FieldSpecSpinBox</class>
+  <extends>QDoubleSpinBox</extends>
+  <header>lightsheet.gui.widgets.field_spec_spinbox</header>
+ </customwidget>
+</customwidgets>
+<resources/>
  <connections/>
 </ui>

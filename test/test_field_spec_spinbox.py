@@ -16,10 +16,11 @@ pytest.importorskip("PySide6")
 
 # Canonical 22 objectName keys from the UI-SPEC FieldSpec Policy Table.
 EXPECTED_FIELD_SPEC_KEYS = [
-    "doubleSpinBox_sampleHPosition",
-    "doubleSpinBox_sampleVPosition",
-    "doubleSpinBox_cameraPosition",
-    "doubleSpinBox_sampleStepSize",
+    "doubleSpinBox_sampleSetHPosition",
+    "doubleSpinBox_sampleSetVPosition",
+    "doubleSpinBox_cameraSetPosition",
+    "doubleSpinBox_sampleHStepSize",
+    "doubleSpinBox_sampleVStepSize",
     "doubleSpinBox_cameraStepSize",
     "doubleSpinBox_acqFirstPlane",
     "doubleSpinBox_acqLastPlane",
@@ -275,7 +276,7 @@ def test_step_by_negative_with_modifier_decrements(qtbot, monkeypatch) -> None:
 def test_field_specs_has_all_canonical_keys() -> None:
     from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 
-    assert len(FIELD_SPECS) == 23
+    assert len(FIELD_SPECS) == 24
     for key in EXPECTED_FIELD_SPEC_KEYS:
         assert key in FIELD_SPECS, f"missing key: {key}"
 
@@ -284,7 +285,7 @@ def test_field_specs_units() -> None:
     from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 
     assert FIELD_SPECS["doubleSpinBox_acqPlaneStepSize"].unit == "µm"
-    assert FIELD_SPECS["doubleSpinBox_sampleHPosition"].unit == "mm"
+    assert FIELD_SPECS["doubleSpinBox_sampleSetHPosition"].unit == "mm"
     assert FIELD_SPECS["doubleSpinBox_galvoLeftAmplitude"].unit == "V"
     assert FIELD_SPECS["doubleSpinBox_cameraExposureTime"].unit == "ms"
     assert FIELD_SPECS["doubleSpinBox_etlSteps"].unit == ""
@@ -297,9 +298,9 @@ def test_field_specs_motor_max_matches_hal() -> None:
     ranges (mm). A regression in the table must be caught."""
     from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 
-    assert FIELD_SPECS["doubleSpinBox_sampleHPosition"].maximum == 41.0
-    assert FIELD_SPECS["doubleSpinBox_sampleVPosition"].maximum == 18.8
-    assert FIELD_SPECS["doubleSpinBox_cameraPosition"].maximum == 35.0
+    assert FIELD_SPECS["doubleSpinBox_sampleSetHPosition"].maximum == 41.0
+    assert FIELD_SPECS["doubleSpinBox_sampleSetVPosition"].maximum == 18.8
+    assert FIELD_SPECS["doubleSpinBox_cameraSetPosition"].maximum == 35.0
 
 
 def test_field_specs_galvo_offset_signed_range() -> None:
@@ -318,4 +319,4 @@ def test_field_spec_reexported_from_spinbox_module() -> None:
     from lightsheet.gui.widgets.field_spec_spinbox import FIELD_SPECS, FieldSpec
 
     assert FieldSpec is not None
-    assert len(FIELD_SPECS) == 23
+    assert len(FIELD_SPECS) == 24

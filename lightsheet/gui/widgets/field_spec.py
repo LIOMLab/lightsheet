@@ -40,10 +40,11 @@ class FieldSpec:
 # safety backstop, but the widget soft-block should still match the rig.
 FIELD_SPECS: dict[str, FieldSpec] = {
     # Motion panel — motor positions (mm) + step sizes (mm)
-    "doubleSpinBox_sampleHPosition": FieldSpec("mm", 3, 0.1, 1.0, 0.0, 41.0),
-    "doubleSpinBox_sampleVPosition": FieldSpec("mm", 3, 0.1, 1.0, 0.0, 18.8),
-    "doubleSpinBox_cameraPosition": FieldSpec("mm", 3, 0.1, 1.0, 0.0, 35.0),
-    "doubleSpinBox_sampleStepSize": FieldSpec("mm", 3, 0.01, 0.1, 0.0, 5.0),
+    "doubleSpinBox_sampleSetHPosition": FieldSpec("mm", 3, 0.1, 1.0, 0.0, 41.0),
+    "doubleSpinBox_sampleSetVPosition": FieldSpec("mm", 3, 0.1, 1.0, 0.0, 18.8),
+    "doubleSpinBox_cameraSetPosition": FieldSpec("mm", 3, 0.1, 1.0, 0.0, 35.0),
+    "doubleSpinBox_sampleHStepSize": FieldSpec("mm", 3, 0.01, 0.1, 0.0, 5.0),
+    "doubleSpinBox_sampleVStepSize": FieldSpec("mm", 3, 0.01, 0.1, 0.0, 5.0),
     "doubleSpinBox_cameraStepSize": FieldSpec("mm", 3, 0.01, 0.1, 0.0, 5.0),
     # Stack panel — first/last plane (mm, motor H travel) + plane step (µm)
     "doubleSpinBox_acqFirstPlane": FieldSpec("mm", 3, 0.1, 1.0, 0.0, 41.0),

@@ -295,7 +295,7 @@
            </widget>
           </item>
           <item>
-           <widget class="QDoubleSpinBox" name="doubleSpinBox_sampleHStepSize">
+           <widget class="FieldSpecSpinBox" name="doubleSpinBox_sampleHStepSize">
         <property name="toolTip">
          <string>Horizontal sample stage jog step. Unit: the active unit (μm/mm/steps, set on the E-stop toolbar). Valid range: &gt;0. Effect: the step arrows move the stage by this amount.</string>
         </property>
@@ -346,7 +346,7 @@
            </widget>
           </item>
           <item>
-           <widget class="QDoubleSpinBox" name="doubleSpinBox_sampleVStepSize">
+           <widget class="FieldSpecSpinBox" name="doubleSpinBox_sampleVStepSize">
         <property name="toolTip">
          <string>Vertical sample stage jog step. Unit: the active unit (μm/mm/steps). Valid range: &gt;0. Effect: the step arrows move the stage by this amount.</string>
         </property>
@@ -398,7 +398,7 @@
            </widget>
           </item>
           <item>
-           <widget class="QDoubleSpinBox" name="doubleSpinBox_sampleSetHPosition">
+           <widget class="FieldSpecSpinBox" name="doubleSpinBox_sampleSetHPosition">
         <property name="toolTip">
          <string>Horizontal sample target position for the Go-To button. Unit: the active unit (μm/mm/steps). Valid range: the stage travel limits (reject-and-beep if out of range). Effect: Go-To moves the stage to this position.</string>
         </property>
@@ -419,6 +419,20 @@
             </property>
            </widget>
           </item>
+          <item>
+          <widget class="QSlider" name="slider_doubleSpinBox_sampleSetHPosition">
+          <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="minimumSize">
+          <size>
+          <width>120</width>
+          <height>0</height>
+          </size>
+          </property>
+          </widget>
+          </item>
+
           <item>
            <widget class="QPushButton" name="pushButton_sampleGotoHPosition">
             <property name="sizePolicy">
@@ -465,7 +479,7 @@
            </widget>
           </item>
           <item>
-           <widget class="QDoubleSpinBox" name="doubleSpinBox_sampleSetVPosition">
+           <widget class="FieldSpecSpinBox" name="doubleSpinBox_sampleSetVPosition">
         <property name="toolTip">
          <string>Vertical sample target position for the Go-To button. Unit: the active unit (μm/mm/steps). Valid range: the stage travel limits (reject-and-beep if out of range). Effect: Go-To moves the stage to this position.</string>
         </property>
@@ -486,6 +500,20 @@
             </property>
            </widget>
           </item>
+          <item>
+          <widget class="QSlider" name="slider_doubleSpinBox_sampleSetVPosition">
+          <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="minimumSize">
+          <size>
+          <width>120</width>
+          <height>0</height>
+          </size>
+          </property>
+          </widget>
+          </item>
+
           <item>
            <widget class="QPushButton" name="pushButton_sampleGotoVPosition">
             <property name="sizePolicy">
@@ -778,7 +806,7 @@
            </widget>
           </item>
           <item>
-           <widget class="QDoubleSpinBox" name="doubleSpinBox_cameraStepSize">
+           <widget class="FieldSpecSpinBox" name="doubleSpinBox_cameraStepSize">
         <property name="toolTip">
          <string>Camera (focus) stage jog step. Unit: the active unit (μm/mm/steps). Valid range: &gt;0. Effect: the step arrows move the focus stage by this amount.</string>
         </property>
@@ -830,7 +858,7 @@
            </widget>
           </item>
           <item>
-           <widget class="QDoubleSpinBox" name="doubleSpinBox_cameraSetPosition">
+           <widget class="FieldSpecSpinBox" name="doubleSpinBox_cameraSetPosition">
         <property name="toolTip">
          <string>Camera (focus) target position for the Go-To button. Unit: the active unit (μm/mm/steps). Valid range: the stage travel limits (reject-and-beep if out of range). Effect: Go-To moves the focus stage to this position.</string>
         </property>
@@ -851,6 +879,20 @@
             </property>
            </widget>
           </item>
+          <item>
+          <widget class="QSlider" name="slider_doubleSpinBox_cameraSetPosition">
+          <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="minimumSize">
+          <size>
+          <width>120</width>
+          <height>0</height>
+          </size>
+          </property>
+          </widget>
+          </item>
+
           <item>
            <widget class="QPushButton" name="pushButton_cameraGotoPosition">
             <property name="sizePolicy">
@@ -899,6 +941,13 @@
    </item>
   </layout>
  </widget>
- <resources/>
+ <customwidgets>
+ <customwidget>
+  <class>FieldSpecSpinBox</class>
+  <extends>QDoubleSpinBox</extends>
+  <header>lightsheet.gui.widgets.field_spec_spinbox</header>
+ </customwidget>
+</customwidgets>
+<resources/>
  <connections/>
 </ui>

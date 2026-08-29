@@ -15,10 +15,11 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QCheckBox, QDoubleSpinBox, QFormLayout,
-    QFrame, QGroupBox, QHBoxLayout, QLabel,
-    QPushButton, QSizePolicy, QSpacerItem, QVBoxLayout,
-    QWidget)
+from PySide6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QFrame,
+    QGroupBox, QHBoxLayout, QLabel, QPushButton,
+    QSizePolicy, QSpacerItem, QVBoxLayout, QWidget)
+
+from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
 class Ui_LaserPanel(object):
     def setupUi(self, laserPanel):
@@ -61,7 +62,7 @@ class Ui_LaserPanel(object):
 
         self.formLayout_14.setWidget(0, QFormLayout.ItemRole.LabelRole, self.label_50)
 
-        self.doubleSpinBox_laserOneAmplitude = QDoubleSpinBox(self.groupBox_15)
+        self.doubleSpinBox_laserOneAmplitude = FieldSpecSpinBox(self.groupBox_15)
         self.doubleSpinBox_laserOneAmplitude.setObjectName(u"doubleSpinBox_laserOneAmplitude")
         sizePolicy2 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         sizePolicy2.setHorizontalStretch(0)
@@ -136,7 +137,7 @@ class Ui_LaserPanel(object):
 
         self.formLayout_15.setWidget(0, QFormLayout.ItemRole.LabelRole, self.label_74)
 
-        self.doubleSpinBox_laserTwoAmplitude = QDoubleSpinBox(self.groupBox_15)
+        self.doubleSpinBox_laserTwoAmplitude = FieldSpecSpinBox(self.groupBox_15)
         self.doubleSpinBox_laserTwoAmplitude.setObjectName(u"doubleSpinBox_laserTwoAmplitude")
         sizePolicy2.setHeightForWidth(self.doubleSpinBox_laserTwoAmplitude.sizePolicy().hasHeightForWidth())
         self.doubleSpinBox_laserTwoAmplitude.setSizePolicy(sizePolicy2)
