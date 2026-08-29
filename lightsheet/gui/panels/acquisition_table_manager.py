@@ -32,14 +32,16 @@ from __future__ import annotations
 import math
 import typing
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QMessageBox,
     QPushButton,
+    QRadioButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -81,6 +83,47 @@ _ERROR_COPY = (
 
 _FLAG_COLOR = QColor(255, 200, 200)
 
+# Past-acquisitions browser columns.
+_PAST_HEADERS = ["Sample", "Channel", "#Planes", "Size", "Date", "Format"]
+_PAST_COL_SAMPLE = 0
+_PAST_COL_CHANNEL = 1
+_PAST_COL_NPLANES = 2
+_PAST_COL_SIZE = 3
+_PAST_COL_DATE = 4
+_PAST_COL_FORMAT = 5
+
+_PAST_EMPTY_COPY = "No past acquisitions found in {folder}."
+_PAST_SCANNING_COPY = "Scanning {folder} for past acquisitions\u2026"
+_PAST_ERROR_COPY = (
+    "Cannot read past acquisitions: {folder} is missing or not readable."
+)
+
+
+def _normalize_wavelength(wl):
+    """Display-only wavelength normalization: 640 -> 647 (the iBeam label
+    says 640 but the channel is the 647 nm capture wavelength). Other
+    wavelengths pass through. ``None`` stays ``None``. The underlying
+    filename / HDF5 metadata are NOT modified (Pitfall 6)."""
+    if wl is None:
+        return None
+    if wl == 640:
+        return 647
+    return wl
+
+
+def _format_bytes(n: int) -> str:
+    """Format a byte count as a human-readable size string (KB/MB/GB/TB)."""
+    if n is None:
+        return ""
+    value = float(n)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if value < 1024.0 or unit == "TB":
+            if unit == "B":
+                return f"{int(value)} {unit}"
+            return f"{value:.1f} {unit}"
+        value /= 1024.0
+    return f"{value:.1f} TB"
+
 
 class _Row:
     """A snapshot of one table row's values (in micrometres)."""
@@ -106,6 +149,12 @@ class AcquisitionTableManager(QWidget):
     buttons. Row values are stored in micrometres (the internal unit the
     worker + motor HAL use), regardless of the display unit.
     """
+
+    # Emitted when the async past-acquisitions scan completes (the list
+    # of PastAcquisitionEntry). External observers (e.g. tests) may
+    # subscribe; the table is populated internally in
+    # _on_past_scan_finished.
+    past_acquisitions_scan_finished = Signal(list)
 
     def __init__(self, shell: "Controller_MainWindow") -> None:
         super().__init__()
@@ -166,6 +215,82 @@ class AcquisitionTableManager(QWidget):
         # state copy is the only visible content.
         self.table.setVisible(False)
 
+        # --- Past-acquisitions browser (D-05) ---
+        # A Planned/Past toggle + Refresh button + a read-only past table
+        # join the Acquisition Queue group. The past table is hidden at
+        # startup (Planned is the default view). The browser parses both
+        # HDF5 and OME-Zarr stores from the save directory and normalizes
+        # 640 -> 647 in the Channel column (display only).
+        view_row = QHBoxLayout()
+        view_label = QLabel("View:", self)
+        self.radioButton_viewPlanned = QRadioButton("Planned", self)
+        self.radioButton_viewPlanned.setObjectName("radioButton_viewPlanned")
+        self.radioButton_viewPlanned.setChecked(True)
+        self.radioButton_viewPlanned.setToolTip(
+            "Show the planned acquisition queue (add/remove/reorder rows)."
+        )
+        self.radioButton_viewPast = QRadioButton("Past", self)
+        self.radioButton_viewPast.setObjectName("radioButton_viewPast")
+        self.radioButton_viewPast.setToolTip(
+            "Show past acquisitions saved in the save directory (read-only)."
+        )
+        self.pushButton_refreshPast = QPushButton("Refresh", self)
+        self.pushButton_refreshPast.setObjectName("pushButton_refreshPast")
+        self.pushButton_refreshPast.setToolTip(
+            "Re-scan the save directory for past acquisitions."
+        )
+        view_row.addWidget(view_label)
+        view_row.addWidget(self.radioButton_viewPlanned)
+        view_row.addWidget(self.radioButton_viewPast)
+        view_row.addWidget(self.pushButton_refreshPast)
+        view_row.addStretch()
+
+        self._view_group = QButtonGroup(self)
+        self._view_group.setExclusive(True)
+        self._view_group.addButton(self.radioButton_viewPlanned)
+        self._view_group.addButton(self.radioButton_viewPast)
+
+        self.tableWidget_pastAcquisitions = QTableWidget(0, len(_PAST_HEADERS), self)
+        self.tableWidget_pastAcquisitions.setObjectName(
+            "tableWidget_pastAcquisitions"
+        )
+        self.tableWidget_pastAcquisitions.setHorizontalHeaderLabels(_PAST_HEADERS)
+        self.tableWidget_pastAcquisitions.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self.tableWidget_pastAcquisitions.setSelectionMode(
+            QTableWidget.SelectionMode.SingleSelection
+        )
+        # Read-only (D-05 — no delete/move/rename from the GUI).
+        self.tableWidget_pastAcquisitions.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.tableWidget_pastAcquisitions.setSortingEnabled(True)
+        past_header = self.tableWidget_pastAcquisitions.horizontalHeader()
+        past_header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        past_header.setStretchLastSection(True)
+        self.tableWidget_pastAcquisitions.setWordWrap(False)
+        self.tableWidget_pastAcquisitions.textElideMode = Qt.TextElideMode.ElideRight
+        self.tableWidget_pastAcquisitions.setVisible(False)
+
+        self._past_empty_label = QLabel("", self)
+        self._past_empty_label.setWordWrap(True)
+        self._past_empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._past_empty_label.setStyleSheet("color: gray; padding: 12px;")
+        self._past_empty_label.setVisible(False)
+
+        layout.addLayout(view_row)
+        layout.addWidget(self._past_empty_label)
+        layout.addWidget(self.tableWidget_pastAcquisitions)
+
+        # The past-acquisitions browser (parser + async scan worker).
+        from lightsheet.gui.panels.past_acquisitions_browser import (
+            PastAcquisitionsBrowser,
+        )
+        self._past_browser = PastAcquisitionsBrowser(self._shell)
+        self._past_browser.sig_scan_finished.connect(self._on_past_scan_finished)
+        self._past_browser.sig_message.connect(self._shell.sig_message.emit)
+
         # --- Wire buttons ---
         self.pushButton_addStack.clicked.connect(self.add_stack)
         self.pushButton_removeStack.clicked.connect(self.remove_stack)
@@ -173,6 +298,8 @@ class AcquisitionTableManager(QWidget):
         self.pushButton_moveDown.clicked.connect(self.move_down)
         self.pushButton_startQueue.clicked.connect(self._start_queue)
         self.table.cellChanged.connect(self._on_cell_changed)
+        self._view_group.buttonClicked.connect(self._on_view_changed)
+        self.pushButton_refreshPast.clicked.connect(self._on_refresh_past)
 
         # Queue execution state (set by _start_queue, read by the shell's
         # progress-mirror slot so the mode badge includes the row index).
@@ -775,3 +902,96 @@ class AcquisitionTableManager(QWidget):
         self.pushButton_moveUp.setEnabled(not running)
         self.pushButton_moveDown.setEnabled(not running)
         self.pushButton_startQueue.setEnabled(not running)
+
+    # ------------------------------------------------------------------ #
+    # Past-acquisitions browser (D-05)
+    # ------------------------------------------------------------------ #
+
+    def _on_view_changed(self, button) -> None:
+        """Swap the visible table + show/hide the planned-queue buttons
+        when the Planned/Past toggle changes."""
+        if button is self.radioButton_viewPast:
+            self._show_past_view()
+        else:
+            self._show_planned_view()
+
+    def _show_planned_view(self) -> None:
+        self.table.setVisible(self.table.rowCount() > 0)
+        self._empty_label.setVisible(self.table.rowCount() == 0)
+        self.tableWidget_pastAcquisitions.setVisible(False)
+        self._past_empty_label.setVisible(False)
+        for btn in (
+            self.pushButton_addStack, self.pushButton_removeStack,
+            self.pushButton_moveUp, self.pushButton_moveDown,
+            self.pushButton_startQueue,
+        ):
+            btn.setVisible(True)
+
+    def _show_past_view(self) -> None:
+        self.table.setVisible(False)
+        self._empty_label.setVisible(False)
+        # Hide the planned-queue buttons (Past is read-only — no
+        # add/remove/move/start from the past view).
+        for btn in (
+            self.pushButton_addStack, self.pushButton_removeStack,
+            self.pushButton_moveUp, self.pushButton_moveDown,
+            self.pushButton_startQueue,
+        ):
+            btn.setVisible(False)
+        has_rows = self.tableWidget_pastAcquisitions.rowCount() > 0
+        self.tableWidget_pastAcquisitions.setVisible(has_rows)
+        self._past_empty_label.setVisible(not has_rows)
+        if not has_rows:
+            folder = str(getattr(self._shell, "save_directory", ""))
+            self._past_empty_label.setText(_PAST_EMPTY_COPY.format(folder=folder))
+
+    def _on_refresh_past(self) -> None:
+        """Trigger an async re-scan of the save directory for past
+        acquisitions. Shows the 'Scanning ...' label while the worker
+        runs; the table is populated in one batch on completion."""
+        folder = str(getattr(self._shell, "save_directory", ""))
+        self._past_empty_label.setText(_PAST_SCANNING_COPY.format(folder=folder))
+        self._past_empty_label.setVisible(True)
+        self.tableWidget_pastAcquisitions.setVisible(False)
+        self.tableWidget_pastAcquisitions.setRowCount(0)
+        self._past_browser.start_scan_async()
+
+    def _on_past_scan_finished(self, entries: list) -> None:
+        """Populate the past-acquisitions table in one batch (called on
+        the GUI thread via the browser's sig_scan_finished signal)."""
+        self.tableWidget_pastAcquisitions.setSortingEnabled(False)
+        self.tableWidget_pastAcquisitions.setRowCount(0)
+        for entry in entries:
+            self._add_past_row(entry)
+        self.tableWidget_pastAcquisitions.setSortingEnabled(True)
+        # Default sort: Date descending.
+        self.tableWidget_pastAcquisitions.sortByColumn(
+            _PAST_COL_DATE, Qt.SortOrder.DescendingOrder
+        )
+        has_rows = self.tableWidget_pastAcquisitions.rowCount() > 0
+        self.tableWidget_pastAcquisitions.setVisible(has_rows)
+        self._past_empty_label.setVisible(not has_rows)
+        if not has_rows:
+            folder = str(getattr(self._shell, "save_directory", ""))
+            self._past_empty_label.setText(_PAST_EMPTY_COPY.format(folder=folder))
+        # Re-emit so external observers (tests) can subscribe.
+        self.past_acquisitions_scan_finished.emit(entries)
+
+    def _add_past_row(self, entry) -> None:
+        row = self.tableWidget_pastAcquisitions.rowCount()
+        self.tableWidget_pastAcquisitions.insertRow(row)
+        self._set_past_cell(row, _PAST_COL_SAMPLE, entry.sample)
+        wl = _normalize_wavelength(entry.wavelength)
+        self._set_past_cell(
+            row, _PAST_COL_CHANNEL, "" if wl is None else str(wl)
+        )
+        self._set_past_cell(row, _PAST_COL_NPLANES, str(entry.n_planes))
+        self._set_past_cell(row, _PAST_COL_SIZE, _format_bytes(entry.size_bytes))
+        self._set_past_cell(row, _PAST_COL_DATE, entry.date_str)
+        self._set_past_cell(row, _PAST_COL_FORMAT, entry.format_label)
+
+    def _set_past_cell(self, row: int, col: int, text: str) -> None:
+        item = QTableWidgetItem(text)
+        item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+        item.setToolTip(text)
+        self.tableWidget_pastAcquisitions.setItem(row, col, item)
