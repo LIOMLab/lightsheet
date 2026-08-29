@@ -318,6 +318,52 @@ class FrameSaver(QObject):
             outfile.attrs[f"Laser{i+1} Active"] = bool(laser.active)
             outfile.attrs[f"Laser{i+1} Label"] = laser.label
 
+    def _write_acquisition_metadata(self, outfile: h5py.File) -> None:
+        """Write motor + scan-param + camera metadata as HDF5 root attrs,
+        read from the live IMotor / SigGen / camera instances (completes
+        SAV-03 alongside the existing laser attrs).
+
+        This is the motor + scan-param half of the config-drift metadata
+        fix — the laser half already shipped. The attrs are read
+        exclusively from the live ``self.parent.motors`` /
+        ``self.parent.siggen`` / ``self.parent.camera`` instances, never
+        re-parsed from config.ini at save time (the frozen DeviceBundle
+        guarantees handle stability). The attr-name schema mirrors the
+        Zarr ``/acquisition`` group so both formats carry the same
+        provenance.
+
+        The motor positions are the CURRENT snapshot at save start (one
+        read per axis); the per-plane motor positions are already written
+        as dataset attrs in ``frame_saver_worker`` — this adds the
+        root-level snapshot, not per-plane.
+        """
+        motors = self.parent.motors
+        outfile.attrs["Horizontal Position"] = motors.horizontal.get_position("mm")
+        outfile.attrs["Vertical Position"] = motors.vertical.get_position("mm")
+        outfile.attrs["Camera Position"] = motors.camera.get_position("mm")
+
+        sg = self.parent.siggen
+        outfile.attrs["Galvo Left Amplitude"] = sg.galvo_left_amplitude
+        outfile.attrs["Galvo Right Amplitude"] = sg.galvo_right_amplitude
+        outfile.attrs["Galvo Left Offset"] = sg.galvo_left_offset
+        outfile.attrs["Galvo Right Offset"] = sg.galvo_right_offset
+        outfile.attrs["ETL Left Amplitude"] = sg.etl_left_amplitude
+        outfile.attrs["ETL Right Amplitude"] = sg.etl_right_amplitude
+        outfile.attrs["ETL Left Offset"] = sg.etl_left_offset
+        outfile.attrs["ETL Right Offset"] = sg.etl_right_offset
+        # sample_rate is a live instance attribute on the SigGen (the mock
+        # sets it at construct time; the real SigGen reads it from config
+        # at construct time).
+        outfile.attrs["Sample Rate"] = sg.sample_rate
+
+        cam = self.parent.camera
+        outfile.attrs["Exposure Time (s)"] = cam.exposure_time
+        outfile.attrs["Shutter Mode"] = cam.shutter_mode
+        outfile.attrs["Binning X"] = cam.binning_x
+        outfile.attrs["Binning Y"] = cam.binning_y
+        outfile.attrs["X Size"] = cam.xsize
+        outfile.attrs["Y Size"] = cam.ysize
+
     def frame_saver_worker(self) -> None:
         """Thread for saving 3D arrays (or 2D arrays).
         The number of datasets per file is the number of 2D arrays"""
@@ -332,6 +378,11 @@ class FrameSaver(QObject):
                 # metadata bug). All configured lasers are included, even
                 # inactive ones (power=0, active=False), for reproducibility.
                 self._write_laser_metadata(outfile)
+                # Write motor + scan-param + camera root attrs from the
+                # live IMotor / SigGen / camera instances (the motor +
+                # scan-param half of SAV-03). Same config-drift contract:
+                # live instances only, never re-parse config.ini.
+                self._write_acquisition_metadata(outfile)
             except Exception as e:
                 # A file-creation or metadata-write error (disk full,
                 # permission denied, HDF5 corruption at open) must surface

@@ -41,6 +41,12 @@ class _ShellStandin(QObject):
             MockLaser(wavelength=555, max_power_mw=300.0, label="L1"),
             MockLaser(wavelength=647, max_power_mw=150.0, label="L2"),
         ]
+        # Live mock HAL instances so _write_acquisition_metadata (which
+        # reads motors/siggen/camera from self.parent) works in the
+        # frame_saver_worker happy-path tests.
+        self.camera = MockCamera(verbose=False)
+        self.siggen = MockSigGen(self.camera)
+        self.motors = MockMotors()
 
     def updateUi_message_printer(self, message: str) -> None:
         self.message_printer_calls.append(message)
