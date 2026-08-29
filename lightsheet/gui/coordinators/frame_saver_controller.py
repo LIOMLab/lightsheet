@@ -393,6 +393,7 @@ class FrameSaver(QObject):
     def frame_saver_worker(self) -> None:
         """Thread for saving 3D arrays (or 2D arrays).
         The number of datasets per file is the number of 2D arrays"""
+        aborted = False
         for idx in range(len(self.filenames_list)):
             logger.info("File created: %s", self.filenames_list[idx])
             try:
@@ -466,11 +467,23 @@ class FrameSaver(QObject):
                             counter += 1
                         break
                     except queue.Empty:
-                        # Timeout waiting for a buffer — stop_saving() may
-                        # have flipped the flag; if so, exit the inner loop.
-                        # Otherwise keep waiting for the next buffer.
+                        # Timeout waiting for a buffer — stop_saving()
+                        # may have flipped the flag. If so, drain any
+                        # remaining frames with a non-blocking get before
+                        # exiting — in demo mode (and on fast rigs) the
+                        # acquisition queues all frames near-instantly,
+                        # then stop_saving() flips the flag while frames
+                        # are still in the queue. Only break if the queue
+                        # is truly empty (genuine abort or all frames
+                        # consumed).
                         if not self.saving_started:
-                            break
+                            try:
+                                buffer = self.queue.get_nowait()
+                            except queue.Empty:
+                                aborted = True
+                                break
+                        else:
+                            continue
                     except Exception as e:
                         # A non-timeout exception (e.g. h5py write error:
                         # disk full, HDF5 corruption) must not be swallowed
@@ -483,12 +496,13 @@ class FrameSaver(QObject):
                         # potentially corrupt file.
                         self.sig_status_message.emit(f"Save error: {e}")
                         self.saving_started = False
+                        aborted = True
                         break
-                if not self.saving_started:
+                if aborted:
                     break
             outfile.close()
             self.sig_status_message.emit("File " + self.filenames_list[idx] + " saved")
-            if not self.saving_started:
+            if aborted:
                 break
         logger.info("frame_saver_worker exited (saving_started=%s)", self.saving_started)
 
@@ -530,14 +544,24 @@ class FrameSaver(QObject):
         z_idx = 0
         pos_index = 0
         try:
-            while self.saving_started and z_idx < n_planes:
+            while z_idx < n_planes:
                 try:
                     buffer: np.ndarray = self.queue.get(True, 1)
                 except queue.Empty:
-                    # stop_saving() may have flipped the flag; if so,
-                    # exit the loop. Otherwise keep waiting for the
-                    # next buffer.
-                    continue
+                    # stop_saving() may have flipped the flag. If so,
+                    # drain any remaining frames with a non-blocking get
+                    # before exiting — in demo mode (and on fast rigs)
+                    # the acquisition queues all frames near-instantly,
+                    # then stop_saving() flips the flag while frames are
+                    # still in the queue. Only break if the queue is
+                    # truly empty (genuine abort or all frames consumed).
+                    if not self.saving_started:
+                        try:
+                            buffer = self.queue.get_nowait()
+                        except queue.Empty:
+                            break
+                    else:
+                        continue
 
                 if buffer.ndim == 2:
                     buffer = np.expand_dims(buffer, axis=0)
@@ -646,6 +670,7 @@ class FrameSaver(QObject):
 
         z_idx = 0
         zarr_pos_index = 0
+        aborted = False
         try:
             for idx in range(len(self.filenames_list)):
                 logger.info("File created: %s", self.filenames_list[idx])
@@ -722,22 +747,35 @@ class FrameSaver(QObject):
                                 zarr_pos_index += 1
                             break
                         except queue.Empty:
-                            # stop_saving() may have flipped the flag; if
-                            # so, exit the inner loop. Otherwise keep
-                            # waiting for the next buffer.
+                            # stop_saving() may have flipped the flag.
+                            # If so, drain any remaining frames with a
+                            # non-blocking get before exiting — in demo
+                            # mode (and on fast rigs) the acquisition
+                            # queues all frames near-instantly, then
+                            # stop_saving() flips the flag while frames
+                            # are still in the queue. Only break if the
+                            # queue is truly empty (genuine abort or all
+                            # frames consumed).
                             if not self.saving_started:
-                                break
+                                try:
+                                    buffer = self.queue.get_nowait()
+                                except queue.Empty:
+                                    aborted = True
+                                    break
+                            else:
+                                continue
                         except Exception as e:
                             self.sig_status_message.emit(f"Save error: {e}")
                             self.saving_started = False
+                            aborted = True
                             break
-                    if not self.saving_started:
+                    if aborted or z_idx >= n_planes:
                         break
                 outfile.close()
                 self.sig_status_message.emit(
                     "File " + self.filenames_list[idx] + " saved"
                 )
-                if not self.saving_started:
+                if aborted or z_idx >= n_planes:
                     break
 
             # Finalize the Zarr store after all HDF5 files are closed.

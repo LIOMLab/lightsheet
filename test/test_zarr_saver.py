@@ -364,6 +364,10 @@ def test_zarr_save_finalizes_after_stop_saving_on_normal_completion(
     _save_directory(ctrl, tmp_path)
     ctrl.stack_step = 1.0
     ctrl.save_format = "zarr"
+    # Shrink the camera frame so the Dask pyramid build in finalize is
+    # fast (2048x2048 x 5 planes takes minutes; 32x32 takes milliseconds).
+    ctrl.camera.xsize = 32
+    ctrl.camera.ysize = 32
     saver = ctrl._fs.frame_saver
 
     n_planes = 2
@@ -428,6 +432,109 @@ def test_zarr_save_finalizes_after_stop_saving_on_normal_completion(
     )
 
 
+def test_zarr_drains_queue_after_stop_saving(qtbot, request, tmp_path) -> None:
+    """Regression: all frames queued, then stop_saving() flips
+    saving_started=False BEFORE the worker drains the queue.
+
+    This is the demo-mode / fast-rig scenario: the acquisition queues all
+    frames near-instantly, then stop_saving() fires. The old worker loop
+    (`while self.saving_started and z_idx < n_planes`) exited on the flag
+    flip after consuming only 1 frame, leaving the rest in the queue and
+    producing a 1-plane store with no finalize. The fix drains remaining
+    frames via get_nowait() on queue.Empty when saving_started is False.
+    """
+    from lightsheet.gui.coordinators.frame_saver_controller import (
+        FrameSaverWorker,
+    )
+
+    import zarr
+
+    ctrl, _ = make_controller(qtbot, request)
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1.0
+    ctrl.save_format = "zarr"
+    # Shrink the camera frame so the Dask pyramid build in finalize is
+    # fast (2048x2048 x 5 planes takes minutes; 32x32 takes milliseconds).
+    ctrl.camera.xsize = 32
+    ctrl.camera.ysize = 32
+    saver = ctrl._fs.frame_saver
+    # Reinit with a larger block_size so the queue (maxsize = 2 * block_size)
+    # can hold all n_planes frames at once for the pre-load below.
+    saver.reinit(8)
+
+    n_planes = 5
+    saver.set_files(
+        number_of_files=n_planes,
+        files_name="drain_test",
+        scan_type="z",
+        number_of_datasets=1,
+        datasets_name="ch",
+    )
+    saver.horizontal_positions_list = [f"{i}.00 μm" for i in range(n_planes)]
+    saver.vertical_positions_list = [f"{i}.00 μm" for i in range(n_planes)]
+    saver.camera_positions_list = [f"{i}.00 μm" for i in range(n_planes)]
+    frame = np.zeros(
+        (ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16
+    )
+
+    # Pre-queue ALL frames BEFORE starting the worker — mimicking the
+    # demo-mode scenario where the acquisition completes instantly.
+    for _ in range(n_planes):
+        saver.queue.put(frame)
+
+    # Flip saving_started=False BEFORE the worker starts, simulating
+    # stop_saving() being called by the acquisition worker right after
+    # queueing the last frame. The worker must still drain all 5 frames
+    # and finalize the store.
+    saver.saving_started = True
+
+    # Use a wrapper that flips the flag after the first get, so the worker
+    # sees saving_started=False while frames are still in the queue.
+    class _FlipAfterFirstGet:
+        def __init__(self, real) -> None:
+            self._real = real
+            self._count = 0
+
+        def get(self, block=True, timeout=None):
+            buf = self._real.get(block=block, timeout=timeout)
+            self._count += 1
+            if self._count >= 1:
+                saver.saving_started = False
+            return buf
+
+        def get_nowait(self):
+            return self._real.get_nowait()
+
+        def __getattr__(self, name):
+            return getattr(self._real, name)
+
+    saver.queue = _FlipAfterFirstGet(saver.queue)
+
+    worker = FrameSaverWorker(saver)
+    finished: list[int] = []
+    worker.sig_finished.connect(lambda: finished.append(1))
+    worker.start_saving()
+    assert len(finished) == 1
+
+    # ALL 5 planes must be written + the store finalized despite
+    # saving_started being flipped after the first frame.
+    root = zarr.open(str(tmp_path / "drain_test.ome.zarr"), mode="r")
+    assert "acquisition" in root, (
+        "finalize was skipped — /acquisition group missing "
+        "(the worker exited before draining the queue)"
+    )
+    assert "ome" in root.attrs, (
+        "multiscales/omero metadata missing — napari-ome-zarr cannot read "
+        "the store without the ome root attrs"
+    )
+    # L0 should have all 5 planes.
+    arr = root["0"]
+    assert arr.shape[1] == n_planes, (
+        f"L0 has {arr.shape[1]} planes but expected {n_planes} — "
+        f"the worker did not drain the queue after stop_saving()"
+    )
+
+
 def test_both_mode_writes_both_formats(qtbot, request, tmp_path) -> None:
     """CR-01 regression: ``both`` save mode must write image data to BOTH
     the OME-Zarr store AND the HDF5 files from a single queue-consume
@@ -448,6 +555,10 @@ def test_both_mode_writes_both_formats(qtbot, request, tmp_path) -> None:
     _save_directory(ctrl, tmp_path)
     ctrl.stack_step = 1.0
     ctrl.save_format = "both"
+    # Shrink the camera frame so the Dask pyramid build in finalize is
+    # fast (2048x2048 takes minutes; 32x32 takes milliseconds).
+    ctrl.camera.xsize = 32
+    ctrl.camera.ysize = 32
     saver = ctrl._fs.frame_saver
     # Reinit with a larger block_size so the queue (maxsize = 2 * block_size)
     # can hold all n_planes frames at once for the pre-load below.
