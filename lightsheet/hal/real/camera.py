@@ -47,6 +47,13 @@ class Camera(ICamera):
         self.camera = None
         self.xsize = None
         self.ysize = None
+        # Binning readback (D-02) — defaults to 1x1 so the attrs exist even
+        # if open() fails (pco.Camera() raises). The ZarrSaver finalize path
+        # reads these for the XY voxel-size source; without the default an
+        # open() failure would AttributeError downstream. open()/arm()
+        # overwrite them with the live SDK binning readback.
+        self.binning_x = 1
+        self.binning_y = 1
         self.bytes_per_image = None
         self.line_time = None
 
@@ -107,6 +114,13 @@ class Camera(ICamera):
                 )  # 16 bit images (2 bytes per pixel)
                 self.camera.sdk.set_image_parameters(self.xsize, self.ysize)
 
+                # Binning readback (D-02) — the XY voxel-size source for the
+                # ZarrSaver's base_res assembly. The .get(..., 1) fallback
+                # handles a dict missing the expected keys.
+                binning = self.camera.sdk.get_binning()
+                self.binning_x = int(binning.get("binning x", 1))
+                self.binning_y = int(binning.get("binning y", 1))
+
                 cam_cmos_line_timing = {}
                 cam_cmos_line_timing = self.camera.sdk.get_cmos_line_timing()
                 self.line_time = cam_cmos_line_timing.get("line time")
@@ -148,6 +162,12 @@ class Camera(ICamera):
                 self.xsize * self.ysize * 2
             )  # 16 bit images (2 bytes per pixel)
             self.camera.sdk.set_image_parameters(self.xsize, self.ysize)
+
+            # Binning re-read after arm (D-02) — the operator may change
+            # binning between open and arm via the camera software.
+            binning = self.camera.sdk.get_binning()
+            self.binning_x = int(binning.get("binning x", 1))
+            self.binning_y = int(binning.get("binning y", 1))
 
             cam_cmos_line_timing = {}
             cam_cmos_line_timing = self.camera.sdk.get_cmos_line_timing()
