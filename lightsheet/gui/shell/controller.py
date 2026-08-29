@@ -784,9 +784,15 @@ class Controller_MainWindow(QMainWindow):
             self.ui.statusbar.showMessage(
                 "Demo mode — no hardware connected (mock HAL)", 5000
             )
-            # Load a sample image in grayscale so the operator can test
-            # the contrast slider and levels bar without hardware.
-            _demo_img_path = "/Users/frans/Downloads/lsfm_vasculature_frans_irgolitsch.png"
+            # Load a bundled sample image in grayscale so the operator
+            # can test the contrast slider and levels bar without
+            # hardware. The image lives in lightsheet/resources/ so it
+            # works on any machine with the repo checked out.
+            import os as _os
+            _demo_img_path = _os.path.join(
+                _os.path.dirname(_os.path.dirname(_os.path.dirname(__file__))),
+                "resources", "demo_image.png",
+            )
             try:
                 from PySide6.QtGui import QImage
                 import numpy as _np
