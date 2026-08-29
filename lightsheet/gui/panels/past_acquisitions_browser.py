@@ -249,6 +249,18 @@ class PastAcquisitionsBrowser(QObject):
         m = _HDF5_FILENAME_RE.match(fname)
         if m and m.group("sample"):
             return m.group("sample")
+        # No wavelength token in the filename (e.g. "test5_stack_plane_
+        # 00001.hdf5") — strip the _stack_plane_NNNNN suffix to get the
+        # sample name. Without this the full filename shows in the
+        # Sample column.
+        stem = fname
+        if stem.lower().endswith(".hdf5"):
+            stem = stem[: -len(".hdf5")]
+        m2 = re.match(
+            r"^(.+?)_stack_plane_\d+$", stem, re.IGNORECASE
+        )
+        if m2 and m2.group(1):
+            return m2.group(1)
         return sample_hint
 
     # -- Zarr ---------------------------------------------------------- #
