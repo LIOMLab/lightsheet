@@ -23,6 +23,7 @@ from PySide6.QtWidgets import QWidget
 
 from lightsheet.gui.panels.acquisition_table_manager import AcquisitionTableManager
 from lightsheet.gui.panels.ui_stack_panel import Ui_StackPanel
+from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -52,6 +53,25 @@ class StackPanelWidget(QWidget):
         # worker's per-plane ValueError catch is the physical-safety
         # backstop if the soft block slips.
         self._seed_spinbox_ranges()
+        # Apply the declarative FieldSpec policy table AFTER
+        # _seed_spinbox_ranges so the spec's soft min/max are the final
+        # widget-layer block. The editingFinished validation and the HAL
+        # motor travel-limit validator stay as the safety backstops.
+        for obj_name, spec in FIELD_SPECS.items():
+            w = getattr(self.ui, obj_name, None)
+            if w is not None and hasattr(w, "applySpec"):
+                w.applySpec(spec)
+        # Selective QSlider pairing for the wide-range coarse first/last
+        # plane fields. The slider widgets are present (added in the .ui)
+        # but bidirectional sync is NOT wired here: the stack panel uses a
+        # pre-existing µm-units convention for the spinbox value
+        # (_seed_spinbox_ranges widens the range to motor-limit µm values
+        # like 0–101609, while the FieldSpec declares mm with max 41). The
+        # slider's int range (0–41 from the spec) would clamp the spinbox
+        # value via the valueChanged→setValue feedback, breaking the
+        # widened-range entry path. Reconciling the stack panel's units
+        # (mm vs µm) and wiring the slider sync is deferred to a future
+        # plan; the slider widgets stay in the .ui as a visual placeholder.
 
     def _seed_spinbox_ranges(self) -> None:
         """Seed the first/last plane spinbox ranges from the motor travel

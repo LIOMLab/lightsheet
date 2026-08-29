@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from lightsheet.gui.panels.ui_save_panel import Ui_SavePanel
+from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -35,6 +36,15 @@ class SavePanelWidget(QWidget):
         self._shell = shell
         self.ui = Ui_SavePanel()
         self.ui.setupUi(self)
+        # Apply the declarative FieldSpec policy table to every promoted
+        # FieldSpecSpinBox by objectName. save_panel has no
+        # FieldSpecSpinBox widgets, so the loop is a no-op (getattr →
+        # None for every key); it is kept for mechanical consistency
+        # across all 7 panels.
+        for obj_name, spec in FIELD_SPECS.items():
+            w = getattr(self.ui, obj_name, None)
+            if w is not None and hasattr(w, "applySpec"):
+                w.applySpec(spec)
 
     def updateUi_select_file(self) -> None:
         """Allows the selection of a file (.hdf5), opens it and displays its datasets"""

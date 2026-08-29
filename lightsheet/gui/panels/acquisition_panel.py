@@ -19,6 +19,7 @@ from PySide6.QtCore import QThread, Slot
 from PySide6.QtWidgets import QMessageBox, QPushButton, QWidget
 
 from lightsheet.gui.panels.ui_acquisition_panel import Ui_AcquisitionPanel
+from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 from lightsheet.gui.workers import LiveWorker, PreviewWorker, SingleWorker, StackWorker
 
 if typing.TYPE_CHECKING:
@@ -34,6 +35,24 @@ class AcquisitionPanelWidget(QWidget):
         self._shell = shell
         self.ui = Ui_AcquisitionPanel()
         self.ui.setupUi(self)
+        # Apply the declarative FieldSpec policy table to every promoted
+        # FieldSpecSpinBox by objectName (suffix/decimals/step/soft min-max).
+        for obj_name, spec in FIELD_SPECS.items():
+            w = getattr(self.ui, obj_name, None)
+            if w is not None and hasattr(w, "applySpec"):
+                w.applySpec(spec)
+        # Selective QSlider pairing for the wide-range coarse camera
+        # exposure-time field. Bare bound-method connections (no lambdas).
+        field_name = "doubleSpinBox_cameraExposureTime"
+        spinbox = getattr(self.ui, field_name, None)
+        slider = getattr(self.ui, f"slider_{field_name}", None)
+        if spinbox is not None and slider is not None:
+            spec = FIELD_SPECS[field_name]
+            slider.setRange(int(spec.minimum), int(spec.maximum))
+            slider.setSingleStep(int(spec.page_step))
+            slider.setValue(int(spinbox.value()))
+            spinbox.valueChanged.connect(slider.setValue)
+            slider.valueChanged.connect(spinbox.setValue)
 
     def updateUi_modes_buttons(self, buttons_to_enable: list[QPushButton]) -> None:
         """Update mode buttons status : disable buttons, except for those specified to be enabled"""  # noqa: E501

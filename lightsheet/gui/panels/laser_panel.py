@@ -26,6 +26,7 @@ from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QMessageBox, QWidget
 
 from lightsheet.gui.panels.ui_laser_panel import Ui_LaserPanel
+from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -45,6 +46,15 @@ class LaserPanelWidget(QWidget):
         self._shell = shell
         self.ui = Ui_LaserPanel()
         self.ui.setupUi(self)
+        # Apply the declarative FieldSpec policy table to every promoted
+        # FieldSpecSpinBox by objectName (suffix/decimals/step/soft min-max).
+        # FieldSpec min/max are a SOFT widget-layer block; the two-layer
+        # runtime clamp (ILaser.set_power + DAQLaser._write_volts) and the
+        # config_schema startup gate are the safety-critical clamps.
+        for obj_name, spec in FIELD_SPECS.items():
+            w = getattr(self.ui, obj_name, None)
+            if w is not None and hasattr(w, "applySpec"):
+                w.applySpec(spec)
 
     @Slot(int, str, str)
     def updateUi_laser_readback(self, idx: int, text: str, tooltip: str) -> None:

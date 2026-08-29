@@ -14,6 +14,7 @@ import typing
 from PySide6.QtWidgets import QWidget
 
 from lightsheet.gui.panels.ui_motor_panel import Ui_MotorPanel
+from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -28,6 +29,33 @@ class MotorPanelWidget(QWidget):
         self._shell = shell
         self.ui = Ui_MotorPanel()
         self.ui.setupUi(self)
+        # Apply the declarative FieldSpec policy table to every promoted
+        # FieldSpecSpinBox by objectName (suffix/decimals/step/soft min-max).
+        # Panels with no matching widgets skip the loop (getattr → None).
+        for obj_name, spec in FIELD_SPECS.items():
+            w = getattr(self.ui, obj_name, None)
+            if w is not None and hasattr(w, "applySpec"):
+                w.applySpec(spec)
+        # Selective QSlider pairing for the wide-range coarse motor-travel
+        # fields. Bare bound-method connections (no lambdas) preserve the
+        # Phase 6 reference-cycle break. Qt's setValue does not re-emit
+        # valueChanged when the value is unchanged, so the bidirectional
+        # sync cannot recurse.
+        for field_name in (
+            "doubleSpinBox_sampleSetHPosition",
+            "doubleSpinBox_sampleSetVPosition",
+            "doubleSpinBox_cameraSetPosition",
+        ):
+            spinbox = getattr(self.ui, field_name, None)
+            slider = getattr(self.ui, f"slider_{field_name}", None)
+            if spinbox is None or slider is None:
+                continue
+            spec = FIELD_SPECS[field_name]
+            slider.setRange(int(spec.minimum), int(spec.maximum))
+            slider.setSingleStep(int(spec.page_step))
+            slider.setValue(int(spinbox.value()))
+            spinbox.valueChanged.connect(slider.setValue)
+            slider.valueChanged.connect(spinbox.setValue)
 
     def updateUi_motor_buttons(self, disable_button: bool = True) -> None:
         """Enable or disable all motor buttons"""

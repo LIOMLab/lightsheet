@@ -19,6 +19,7 @@ import typing
 from PySide6.QtWidgets import QWidget
 
 from lightsheet.gui.panels.ui_calibration_panel import Ui_CalibrationPanel
+from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -37,3 +38,14 @@ class CalibrationPanelWidget(QWidget):
         self._shell = shell
         self.ui = Ui_CalibrationPanel()
         self.ui.setupUi(self)
+        # Apply the declarative FieldSpec policy table to every promoted
+        # FieldSpecSpinBox by objectName. calibration_panel's three
+        # FieldSpecSpinBox widgets (calNumberOfPlanes /
+        # calNumberOfCameraPositions / calNumberOfEtlVoltages) are not in
+        # FIELD_SPECS (no fixed unit/range contract — they are count
+        # fields), so the loop is a no-op for them; it is kept for
+        # mechanical consistency across all 7 panels.
+        for obj_name, spec in FIELD_SPECS.items():
+            w = getattr(self.ui, obj_name, None)
+            if w is not None and hasattr(w, "applySpec"):
+                w.applySpec(spec)
