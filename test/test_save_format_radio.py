@@ -14,11 +14,7 @@ estimation land.
 
 from __future__ import annotations
 
-import pytest
-
 from _helpers.controller_fixture import make_controller
-
-_WAVE0_REESTIMATE = "Wave 0 RED scaffold — Est. Size re-estimate lands with the acquisition-table expansion"
 
 
 def test_save_format_radio_sets_save_format(qtbot, request) -> None:
@@ -33,15 +29,23 @@ def test_save_format_radio_sets_save_format(qtbot, request) -> None:
     assert ctrl.save_format == "zarr"
 
 
-@pytest.mark.xfail(reason=_WAVE0_REESTIMATE, strict=False)
 def test_save_format_radio_re_estimates_table(qtbot, request) -> None:
     """D-05: switching the save-format radio re-estimates the Est. Size
     cell in the acquisition table (Zarr vs HDF5 have different per-plane
     footprints). The table's Est. Size value changes after the slot fires."""
     ctrl, _ = make_controller(qtbot, request)
-    # Capture the Est. Size cell value before the format switch.
-    table = ctrl.acquisition_panel.acquisition_table
-    before = table.get_est_size()
+    table = ctrl.stack_panel.table_manager
+    ctrl.stack_step = 5.0
+    table.add_stack()
+    row = table.table.rowCount() - 1
+    table.set_cell(row, 1, "0")
+    table.set_cell(row, 2, "1000")
+    table.set_cell(row, 3, "5")
+
+    ctrl.save_format = "hdf5"
+    table.recompute_all_rows()
+    before = table.table.item(row, 6).text()
     ctrl.updateUi_save_format_changed(ctrl.save_panel.ui.radioButton_saveFormat_zarr)
-    after = table.get_est_size()
+    after = table.table.item(row, 6).text()
     assert before != after
+    assert "(OME-Zarr)" in after, after
