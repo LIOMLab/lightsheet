@@ -262,7 +262,16 @@ class Controller_MainWindow(QMainWindow):
         from PySide6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
 
         self.ui.tabControls.removeTab(0)
-        self.ui.tabControls.addTab(self.motor_panel, "Motion")
+        # Wrap the motor panel in a QScrollArea so it scrolls when the
+        # window is too narrow for the fixed-size buttons + labels (the
+        # other merged tabs already use this pattern via _build_merged_tab).
+        # Horizontal scrollbar is enabled so the motor panel's wide
+        # button grid can scroll sideways on small screens.
+        _motor_scroll = QScrollArea()
+        _motor_scroll.setWidgetResizable(True)
+        _motor_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        _motor_scroll.setWidget(self.motor_panel)
+        self.ui.tabControls.addTab(_motor_scroll, "Motion")
         self.ui.tabControls.addTab(
             self._build_merged_tab(
                 (self.acquisition_panel, self.stack_panel),
@@ -775,8 +784,30 @@ class Controller_MainWindow(QMainWindow):
             self.ui.statusbar.showMessage(
                 "Demo mode — no hardware connected (mock HAL)", 5000
             )
+            # Load a sample image in grayscale so the operator can test
+            # the contrast slider and levels bar without hardware.
+            _demo_img_path = "/Users/frans/Downloads/lsfm_vasculature_frans_irgolitsch.png"
+            try:
+                from PySide6.QtGui import QImage
+                import numpy as _np
+                _img = QImage(_demo_img_path)
+                if not _img.isNull():
+                    # Convert to grayscale numpy array for ImageView.
+                    _ptr = _img.convertToFormat(QImage.Format_Grayscale8)
+                    _arr = _np.frombuffer(
+                        _ptr.bits(), dtype=_np.uint8
+                    ).reshape(_ptr.height(), _ptr.width()).copy()
+                    self.ui.imageView.setImage(_arr)
+            except Exception:
+                pass  # Missing image file is non-fatal — just no preview
         else:
             self.ui.statusbar.showMessage("Ready", 2000)
+
+        # Set the default splitter ratio to 60/40 (60% image viewer,
+        # 40% controls pane). The splitter has no initial sizes in the
+        # .ui file, so without this Qt defaults to 50/50.
+        _total = self.ui.splitter.width() or 1280
+        self.ui.splitter.setSizes([int(_total * 0.6), int(_total * 0.4)])
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Making sure that everything is closed when the user exits the software."""
