@@ -101,40 +101,58 @@ def test_cfg_str2bool_false_cases(value: str) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Wave 0 RED scaffold for D-03 (Image File Format enum).
-#
-# Defines the expected behavior of the ``Image File Format`` config field
-# that lands in a later wave: an enum accepting ``hdf5`` / ``zarr`` /
-# ``both`` / ``tiff`` and rejecting unknown values with a validation error.
-# Marked ``xfail`` (strict=False) during Wave 0 so the suite stays GREEN:
-# the enum field does not exist yet, so the construction raises and xfail
-# records the expected failure.
+# D-03: Image File Format enum. ``Image File Format`` is an enum accepting
+# hdf5 / zarr / both / tiff (case-insensitive) and rejecting unknown values
+# with a validation error at startup (the PKG-04 collect-all gate).
 # --------------------------------------------------------------------------- #
 
-_WAVE0_D03 = "Wave 0 RED scaffold — Image File Format enum implemented in a later wave"
 
-
-@pytest.mark.xfail(reason=_WAVE0_D03, strict=False)
 def test_image_file_format_enum(tmp_path: Path) -> None:
-    """D-03: ``Image File Format`` is an enum accepting the four documented
-    values (hdf5 / zarr / both / tiff) and rejecting unknown values with a
-    validation error (the field is an enum, not a free string)."""
+    """D-03: ``Image File Format`` accepts the four documented values
+    (hdf5 / zarr / both / tiff, case-insensitive) and rejects unknown
+    values with a ValidationError. The rig's current "HDF5" stays valid."""
     from pydantic import ValidationError
 
-    from lightsheet.config_schema import ControllerSettings
+    from lightsheet.config import cfg_read
+    from lightsheet.config_schema import (
+        ControllerSettings,
+        ControllerSettingsOverlay,
+    )
 
+    # cfg_read uses the defaults dict keys (case-sensitive) to capture ini
+    # values; the alias keys match the Field aliases on the model.
+    defaults = {"Image File Format": "both", "Units": "mm"}
+
+    # Valid values — accepted by BOTH tiers (strict + overlay in sync).
     for fmt in ("hdf5", "zarr", "both", "tiff"):
         ini = tmp_path / f"test_{fmt}.ini"
         ini.write_text(
-            f"[Controller]\nImage File Format = {fmt}\n", encoding="utf-8"
+            f"[Controller]\nImage File Format = {fmt}\nUnits = mm\n",
+            encoding="utf-8",
         )
-        settings = ControllerSettings.from_ini(str(ini))
+        data = cfg_read(str(ini), "Controller", dict(defaults))
+        settings = ControllerSettings(**data)
         assert settings.image_file_format == fmt
+        overlay = ControllerSettingsOverlay(**data)
+        assert overlay.image_file_format == fmt
 
-    # Unknown value is rejected with a validation error.
+    # Case-insensitivity: the rig's Title-Case "HDF5" stays valid.
+    ini_hdf5 = tmp_path / "test_HDF5_upper.ini"
+    ini_hdf5.write_text(
+        "[Controller]\nImage File Format = HDF5\nUnits = mm\n",
+        encoding="utf-8",
+    )
+    data = cfg_read(str(ini_hdf5), "Controller", dict(defaults))
+    assert ControllerSettings(**data).image_file_format == "hdf5"
+
+    # Unknown value is rejected with a validation error (both tiers).
     bad_ini = tmp_path / "test_bad.ini"
     bad_ini.write_text(
-        "[Controller]\nImage File Format = fits\n", encoding="utf-8"
+        "[Controller]\nImage File Format = fits\nUnits = mm\n",
+        encoding="utf-8",
     )
+    data = cfg_read(str(bad_ini), "Controller", dict(defaults))
     with pytest.raises(ValidationError):
-        ControllerSettings.from_ini(str(bad_ini))
+        ControllerSettings(**data)
+    with pytest.raises(ValidationError):
+        ControllerSettingsOverlay(**data)

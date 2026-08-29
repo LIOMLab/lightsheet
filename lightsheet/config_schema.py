@@ -32,7 +32,7 @@ import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, ValidationError, field_validator
 from pydantic.fields import FieldInfo
@@ -144,6 +144,21 @@ class ControllerSettings(_NoEnvBaseSettings):
         extra="forbid", case_sensitive=True, populate_by_name=True
     )
     units: str = Field(alias="Units")
+    # Image File Format — the persisted default save format loaded at
+    # startup into self.save_format. The radio group overrides it per
+    # session. Literal rejects unknown values at startup (the collect-all
+    # gate); the before-validator lowercases so the rig's Title-Case
+    # "HDF5"/"Zarr"/"Both"/"TIFF" config.ini values are accepted.
+    image_file_format: Literal["hdf5", "zarr", "both", "tiff"] = Field(
+        alias="Image File Format", default="both"
+    )
+
+    @field_validator("image_file_format", mode="before")
+    @classmethod
+    def _lowercase_image_file_format(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.lower()
+        return v
 
 
 class ControllerSettingsOverlay(_NoEnvBaseSettings):
@@ -151,6 +166,16 @@ class ControllerSettingsOverlay(_NoEnvBaseSettings):
         extra="ignore", case_sensitive=True, populate_by_name=True
     )
     units: str = Field(alias="Units")
+    image_file_format: Literal["hdf5", "zarr", "both", "tiff"] = Field(
+        alias="Image File Format", default="both"
+    )
+
+    @field_validator("image_file_format", mode="before")
+    @classmethod
+    def _lowercase_image_file_format(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.lower()
+        return v
 
 
 class CameraSettings(_NoEnvBaseSettings):
