@@ -71,7 +71,13 @@ class AcquisitionPanelWidget(QWidget):
         ]
         # Re-enable when the default buttons are being restored (idle
         # state); disable when only the active mode button is enabled.
-        idle = any(
+        # Use all() so idle is True only when the full default button set
+        # is present — during an active acquisition only the active mode's
+        # stop button is in buttons_to_enable, so all() returns False and
+        # the radios are disabled. The previous any() heuristic always
+        # returned True (the active stop button is also a start button),
+        # so the radios were never disabled mid-acquisition.
+        idle = all(
             b in buttons_to_enable
             for b in [
                 self.ui.pushButton_acqStartPreviewMode,
