@@ -127,13 +127,13 @@ def test_apply_spec_empty_unit_no_leading_space(qtbot) -> None:
 
 def _make_wheel_event(angle_delta=120):
     """Synthesize a QWheelEvent with a positive (up) angle delta."""
-    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtCore import QPoint, QPointF, Qt
     from PySide6.QtGui import QWheelEvent
 
     pos = QPointF(80.0, 16.0)
     global_pos = QPointF(80.0, 16.0)
-    pixel_delta = QPointF(0.0, 0.0)
-    angle = QPointF(0.0, float(angle_delta))
+    pixel_delta = QPoint(0, 0)
+    angle = QPoint(0, int(angle_delta))
     return QWheelEvent(
         pos,
         global_pos,
@@ -147,13 +147,20 @@ def _make_wheel_event(angle_delta=120):
 
 
 def test_wheel_ignored_when_unfocused(qtbot) -> None:
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QLineEdit
 
     from lightsheet.gui.widgets.field_spec import FieldSpec
 
     sb = _make_spinbox(qtbot)
     sb.applySpec(FieldSpec(unit="mm", decimals=3, single_step=0.1, page_step=1.0, minimum=0.0, maximum=41.0))
     sb.setValue(5.0)
+    # clearFocus() alone does not remove focus when the spinbox is the only
+    # focusable widget in the window — Qt re-assigns focus to it. Give focus
+    # to a separate widget so the spinbox genuinely loses focus.
+    other = QLineEdit(sb.parentWidget() if sb.parentWidget() is not None else None)
+    other.show()
+    qtbot.addWidget(other)
+    other.setFocus()
     sb.clearFocus()
     QApplication.processEvents()
     assert not sb.hasFocus()
@@ -265,10 +272,10 @@ def test_step_by_negative_with_modifier_decrements(qtbot, monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_field_specs_has_22_keys() -> None:
+def test_field_specs_has_all_canonical_keys() -> None:
     from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 
-    assert len(FIELD_SPECS) == 22
+    assert len(FIELD_SPECS) == 23
     for key in EXPECTED_FIELD_SPEC_KEYS:
         assert key in FIELD_SPECS, f"missing key: {key}"
 
@@ -311,4 +318,4 @@ def test_field_spec_reexported_from_spinbox_module() -> None:
     from lightsheet.gui.widgets.field_spec_spinbox import FIELD_SPECS, FieldSpec
 
     assert FieldSpec is not None
-    assert len(FIELD_SPECS) == 22
+    assert len(FIELD_SPECS) == 23
