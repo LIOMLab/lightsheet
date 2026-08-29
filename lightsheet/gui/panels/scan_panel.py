@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import typing
 
+from PySide6.QtCore import QSignalBlocker
 from PySide6.QtWidgets import QWidget
 
 from lightsheet.gui.panels.ui_scan_panel import Ui_ScanPanel
@@ -42,6 +43,13 @@ class ScanPanelWidget(QWidget):
                 w.applySpec(spec)
         # Selective QSlider pairing for the wide-range coarse ETL/galvo
         # amplitude fields. Bare bound-method connections (no lambdas).
+        #
+        # The spinbox→slider direction scales the float to the slider's
+        # int range and blocks the slider's valueChanged signal during the
+        # setValue so the truncated int does not feed back into the spinbox
+        # and silently discard the fractional part (e.g. 1.50 → 1 → 1.00).
+        # The slider→spinbox direction stays a plain connection so a slider
+        # drag still drives the spinbox.
         for field_name in (
             "doubleSpinBox_etlLeftAmplitude",
             "doubleSpinBox_etlRightAmplitude",
@@ -56,5 +64,13 @@ class ScanPanelWidget(QWidget):
             slider.setRange(int(spec.minimum), int(spec.maximum))
             slider.setSingleStep(int(spec.page_step))
             slider.setValue(int(spinbox.value()))
-            spinbox.valueChanged.connect(slider.setValue)
+
+            def _on_spinbox_changed(val, _slider=slider) -> None:
+                # Block the slider's valueChanged so the int truncation
+                # does not round-trip back into the spinbox and discard
+                # the fractional part the operator typed.
+                with QSignalBlocker(_slider):
+                    _slider.setValue(int(val))
+
+            spinbox.valueChanged.connect(_on_spinbox_changed)
             slider.valueChanged.connect(spinbox.setValue)
