@@ -25,6 +25,7 @@ import logging
 import os
 import queue
 import threading
+import time
 from typing import TYPE_CHECKING
 
 import h5py
@@ -32,6 +33,8 @@ import numpy as np
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from lightsheet.hal.bundle import DeviceBundle
+
+from liom_toolkit.utils.zarr_writer import AnalysisOmeZarrWriter
 
 if TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -395,6 +398,224 @@ class FrameSaver(QObject):
                     "in stop_saving — proceeding anyway (HDF5 state may be "
                     "indeterminate)."
                 )
+
+
+def _wavelength_to_hex(wavelength: int) -> str:
+    """Map a laser wavelength (nm) to a 6-char hex color string (no ``#``).
+
+    The mapping covers the wavelengths configured on this rig:
+    488 nm -> cyan, 555 nm -> green, 640/647 nm -> red. Any other
+    wavelength falls back to white so an unrecognised channel is still
+    visible in viewers that honour the omero channel color. The operator
+    may override the recorded color at UAT.
+    """
+    if wavelength == 488:
+        return "00FFFF"  # cyan
+    if wavelength == 555:
+        return "00FF00"  # green
+    if wavelength in (640, 647):
+        return "FF0000"  # red
+    return "FFFFFF"  # white fallback
+
+
+class ZarrSaver:
+    """Plain-Python collaborator that streams reconstructed frames into an
+    OME-Zarr store and finalizes the analysis pyramid + NGFF metadata.
+
+    This is NOT a ``QObject``: it mirrors the plain-Python collaborator
+    pattern — status messages cross to the GUI thread via
+    ``self.parent.sig_message.emit(...)``. It owns a single
+    ``liom_toolkit.utils.zarr_writer.AnalysisOmeZarrWriter`` per stack
+    (constructed in ``start_stack``); ``finalize`` builds the multiscale
+    pyramid out-of-core via Dask and writes the OME-NGFF metadata, then
+    the ``/acquisition`` group is appended via the writer's public
+    ``root`` handle. ``finalize_with_resolutions`` is called exactly once
+    per writer (re-calling raises ``RuntimeError``); the ``_finalized``
+    flag guards against a double-finalize from the worker's error path.
+    """
+
+    def __init__(self, shell: "Controller_MainWindow") -> None:
+        self.parent = shell
+        self._writer: AnalysisOmeZarrWriter | None = None
+        self.saving_started = False
+        self._finalized = False
+        self._horizontal_positions: list[float] = []
+        self._vertical_positions: list[float] = []
+        self._camera_positions: list[float] = []
+
+    def start_stack(self, store_path: str, n_planes: int) -> None:
+        """Construct the OME-Zarr writer for a new stack.
+
+        ``store_path`` is a PLAIN filesystem path (NOT ``file://`` — the
+        writer raises ``ValueError`` on a ``file://`` prefix). The path
+        is asserted to live inside the operator-selected save directory
+        so a path-traversal attempt cannot write outside it. The L0
+        array is shaped ``(1, n_planes, ysize, xsize)`` — a 4D
+        single-channel store — and chunked one plane per chunk so each
+        streaming write touches exactly one chunk (peak RAM = one frame
+        + one chunk).
+        """
+        # Path-traversal guard: the resolved store_path must be inside
+        # the operator-selected save directory.
+        save_dir = os.path.normpath(self.parent.save_directory)
+        resolved = os.path.normpath(store_path)
+        try:
+            common = os.path.commonpath([save_dir, os.path.dirname(resolved)])
+        except ValueError:
+            common = ""
+        if common != save_dir:
+            msg = f"Zarr store_path {resolved!r} is outside save directory {save_dir!r}"
+            self.parent.sig_message.emit(msg)
+            raise ValueError(msg)
+
+        cam = self.parent.camera
+        shape = (1, int(n_planes), int(cam.ysize), int(cam.xsize))
+        chunk_shape = (1, 1, int(cam.ysize), int(cam.xsize))
+        self._writer = AnalysisOmeZarrWriter(
+            store_path=resolved,
+            shape=shape,
+            chunk_shape=chunk_shape,
+            dtype=np.uint16,
+            overwrite=True,
+            unit="micrometer",
+        )
+        self.saving_started = True
+        self._finalized = False
+        self._horizontal_positions = []
+        self._vertical_positions = []
+        self._camera_positions = []
+
+    def write_plane(
+        self,
+        z_idx: int,
+        frame: np.ndarray,
+        hor_pos: float,
+        ver_pos: float,
+        cam_pos: float,
+    ) -> None:
+        """Stream one reconstructed 2D frame into the L0 array.
+
+        The writer indexes a 4D array ``(c, z, y, x)``; the per-plane
+        frame is 2D ``(y, x)`` so a channel axis is prepended for the
+        assignment. The motor positions are recorded for the
+        ``/acquisition`` group written at finalize time.
+        """
+        if self._writer is None:
+            raise RuntimeError("ZarrSaver.write_plane called before start_stack")
+        self._writer[:, z_idx, :, :] = frame[np.newaxis, :, :]
+        self._horizontal_positions.append(float(hor_pos))
+        self._vertical_positions.append(float(ver_pos))
+        self._camera_positions.append(float(cam_pos))
+
+    def _build_omero_channels(self, lasers) -> list[dict]:
+        """Build the omero.channels list from the live ``list[ILaser]``.
+
+        Every configured laser is included (active or not) so the saved
+        metadata carries the full acquisition provenance. Each channel
+        dict carries ``label`` / ``color`` / ``active`` / ``wavelength``
+        — the color is a 6-char hex string with no ``#`` prefix.
+        """
+        channels: list[dict] = []
+        for laser in lasers:
+            channels.append(
+                {
+                    "label": laser.label,
+                    "color": _wavelength_to_hex(laser.wavelength),
+                    "active": bool(laser.active),
+                    "wavelength": int(laser.wavelength),
+                }
+            )
+        return channels
+
+    def _write_acquisition_group(self) -> None:
+        """Write the ``/acquisition`` group (per-plane motor positions +
+        scan params) via the writer's public ``root`` handle.
+
+        Called AFTER ``finalize_with_resolutions`` so the multiscale
+        pyramid + NGFF metadata are already on disk; the acquisition
+        group is appended as a sibling group under root. Per-plane
+        motor positions are 1D datasets under ``/acquisition/motor/``;
+        scan params (galvo/ETL amplitudes+offsets, exposure, sample
+        rate, shutter mode, binning) are group attrs read from the live
+        HAL instances.
+        """
+        if self._writer is None:
+            raise RuntimeError("ZarrSaver._write_acquisition_group called with no writer")
+        root = self._writer.root
+        grp = root.create_group("acquisition")
+        motor = grp.create_group("motor")
+        motor.create_array(
+            "horizontal", data=np.array(self._horizontal_positions, dtype=float)
+        )
+        motor.create_array(
+            "vertical", data=np.array(self._vertical_positions, dtype=float)
+        )
+        motor.create_array(
+            "camera", data=np.array(self._camera_positions, dtype=float)
+        )
+
+        siggen = self.parent.siggen
+        cam = self.parent.camera
+        grp.attrs["galvo_left_amplitude"] = siggen.galvo_left_amplitude
+        grp.attrs["galvo_right_amplitude"] = siggen.galvo_right_amplitude
+        grp.attrs["galvo_left_offset"] = siggen.galvo_left_offset
+        grp.attrs["galvo_right_offset"] = siggen.galvo_right_offset
+        grp.attrs["etl_left_amplitude"] = siggen.etl_left_amplitude
+        grp.attrs["etl_right_amplitude"] = siggen.etl_right_amplitude
+        grp.attrs["etl_left_offset"] = siggen.etl_left_offset
+        grp.attrs["etl_right_offset"] = siggen.etl_right_offset
+        grp.attrs["exposure_time_s"] = cam.exposure_time
+        grp.attrs["shutter_mode"] = cam.shutter_mode
+        # sample_rate is a live instance attribute on the SigGen (the
+        # mock sets it at construct time; the real SigGen reads it from
+        # config at construct time).
+        grp.attrs["sample_rate"] = siggen.sample_rate
+        grp.attrs["binning_x"] = cam.binning_x
+        grp.attrs["binning_y"] = cam.binning_y
+
+    def finalize(self) -> None:
+        """Build the analysis pyramid + NGFF metadata, then the
+        ``/acquisition`` group.
+
+        ``finalize_with_resolutions`` is called exactly once per writer
+        (re-calling raises ``RuntimeError``); the ``_finalized`` flag
+        guards against a double-finalize from the worker's error path.
+        The call is timed so the operator can see how long the pyramid
+        build took — if the ``frame_saver_thread still alive after 10s
+        wait timeout`` warning fires on the rig, the duration log shows
+        whether the pyramid build was the cause.
+        """
+        if self._writer is None:
+            raise RuntimeError("ZarrSaver.finalize called before start_stack")
+        if self._finalized:
+            raise RuntimeError("ZarrSaver.finalize called twice")
+
+        cam = self.parent.camera
+        # Pitfall 3 guard: binning_x may be None if the camera never
+        # opened — fall back to 1 (the rig's current 1x1 state).
+        binning_x = cam.binning_x if cam.binning_x is not None else 1
+        binning_y = cam.binning_y if cam.binning_y is not None else 1
+        if cam.binning_x is None:
+            logger.warning(
+                "ZarrSaver.finalize: camera.binning_x is None — falling back to 1"
+            )
+        base_res = (abs(self.parent.stack_step), 6.5 * binning_x, 6.5 * binning_y)
+        logger.info("ZarrSaver.finalize base_res=%s", base_res)
+        omero_channels = self._build_omero_channels(self.parent.lasers)
+
+        t0 = time.time()
+        self._writer.finalize_with_resolutions(
+            base_res=base_res,
+            target_resolutions_um=(10, 25, 50, 100),
+            make_isotropic=True,
+            omero_channels=omero_channels,
+        )
+        logger.info(
+            "Zarr finalize_with_resolutions took %.2fs", time.time() - t0
+        )
+        self._write_acquisition_group()
+        self._finalized = True
+        self.saving_started = False
 
 
 class FrameSaverController:

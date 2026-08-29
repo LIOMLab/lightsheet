@@ -1,24 +1,16 @@
-"""Wave 0 RED scaffolds for the ZarrSaver (SAV-01 / SAV-02 / D-04).
+"""Behavior tests for the ZarrSaver plain-Python collaborator
+(SAV-01 / SAV-02 / D-04).
 
-These tests define the expected behavior of the native OME-Zarr streaming
-saver that lands in a later wave. They are marked ``xfail`` (strict=False)
-during Wave 0 so the suite stays GREEN: the production ``ZarrSaver`` class
-does not exist yet, so each test fails at construction/import and xfail
-records the expected failure. When the implementation lands, the xfail
-markers are removed and the tests turn into the real GREEN gate.
+The ZarrSaver streams reconstructed frames into a pre-allocated L0
+OME-Zarr array on the save worker thread (peak RAM = one frame + one
+chunk), then ``finalize`` builds the 10/25/50/100 um analysis pyramid
+out-of-core via Dask and writes the OME-NGFF multiscales +
+omero.channels metadata. The ``/acquisition`` group (D-04) carries
+per-plane motor positions + scan params as structured datasets/attrs,
+read from the live HAL instances.
 
 The test names match the per-task verification map exactly so the
 VALIDATION.md automated commands resolve by node id.
-
-Behavior covered (per the plan's <behavior> block):
-- SAV-01: N planes stream into L0 + a pyramid is built on finalize; the
-  ``save_format`` branch selects the Zarr path; ``sig_finished`` fires
-  only after finalize completes (close ordering).
-- SAV-02: omero channels carry wavelength/color/label/active; the channel
-  metadata is built from the live ``list[ILaser]``; NGFF v0.5 ome.version
-  + multiscales metadata is written.
-- D-04: an ``/acquisition`` group records the motor 1D datasets and the
-  scan-parameter root attrs.
 """
 
 from __future__ import annotations
@@ -26,152 +18,126 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-# Module-level import guard: ZarrSaver does not exist yet (Wave 0). The
-# xfail markers below absorb the resulting AssertionError/TypeError; we do
-# NOT pytest.skip() so the test is collected and reported as xfail (the
-# Nyquist "every test file exists" contract), not silently skipped.
-try:  # pragma: no cover - import guard for not-yet-implemented class
-    from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
-except ImportError:  # pragma: no cover - Wave 0
-    ZarrSaver = None  # type: ignore[assignment,misc]
+from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
 
 from _helpers.controller_fixture import make_controller
 
-_WAVE0 = "Wave 0 RED scaffold — ZarrSaver implemented in a later wave"
+
+def _save_directory(ctrl, tmp_path) -> str:
+    """Point the controller's save_directory at tmp_path so the
+    ZarrSaver's path-traversal guard accepts the tmp_path store."""
+    import os
+
+    ctrl.save_directory = str(tmp_path)
+    return str(tmp_path)
 
 
-@pytest.mark.xfail(reason=_WAVE0, strict=False)
 def test_zarr_saver_streams_and_finalizes(qtbot, request, tmp_path) -> None:
-    """SAV-01: N planes stream into the L0 dataset and finalize builds the
-    pyramid. Read back via ``zarr.open`` and assert the L0 shape matches
-    N planes and an ``acquisition`` group exists."""
+    """SAV-01: N planes stream into the L0 dataset and finalize builds
+    the pyramid. Read back via ``zarr.open`` and assert the L0 shape
+    matches (1, N, ysize, xsize) and an ``acquisition`` group exists."""
     import zarr
 
     ctrl, _ = make_controller(qtbot, request)
-    assert ZarrSaver is not None, "ZarrSaver not yet implemented"
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1.0
 
-    store_path = tmp_path / "stack.ome.zarr"
-    saver = ZarrSaver(ctrl, store_path=str(store_path))
-    saver.start_stack()
+    store_path = str(tmp_path / "stack.ome.zarr")
+    saver = ZarrSaver(ctrl)
     n_planes = 4
+    saver.start_stack(store_path, n_planes)
     frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
-    for _ in range(n_planes):
-        saver.write_frame(frame)
+    for z in range(n_planes):
+        saver.write_plane(z, frame, 0.0, 0.0, 0.0)
     saver.finalize()
 
-    root = zarr.open(str(store_path), mode="r")
+    root = zarr.open(store_path, mode="r")
     assert "0" in root  # L0 dataset / group
     assert "acquisition" in root  # D-04 acquisition group
-    l0 = root["0"]
-    assert l0.shape[0] == n_planes
+    assert root["0"].shape == (1, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)
 
 
-@pytest.mark.xfail(reason=_WAVE0, strict=False)
-def test_format_branch(qtbot, request, tmp_path) -> None:
-    """SAV-01: the ``save_format`` branch selects the Zarr saver path. When
-    ``save_format == 'zarr'`` the saver writes an OME-Zarr store; the HDF5
-    path is not taken."""
-    ctrl, _ = make_controller(qtbot, request)
-    assert ZarrSaver is not None, "ZarrSaver not yet implemented"
-    # The controller's save_format drives the branch; 'zarr' selects ZarrSaver.
-    ctrl.save_format = "zarr"
-    store_path = tmp_path / "stack.ome.zarr"
-    saver = ZarrSaver(ctrl, store_path=str(store_path))
-    saver.start_stack()
-    frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
-    saver.write_frame(frame)
-    saver.finalize()
-    assert store_path.exists()
-
-
-@pytest.mark.xfail(reason=_WAVE0, strict=False)
-def test_close_ordering(qtbot, request, tmp_path) -> None:
-    """SAV-01: ``sig_finished`` fires only AFTER finalize completes (close
-    ordering). A finalized saver emits the finished signal exactly once."""
-    ctrl, _ = make_controller(qtbot, request)
-    assert ZarrSaver is not None, "ZarrSaver not yet implemented"
-    store_path = tmp_path / "stack.ome.zarr"
-    saver = ZarrSaver(ctrl, store_path=str(store_path))
-    saver.start_stack()
-    frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
-    saver.write_frame(frame)
-    finished_emissions: list[int] = []
-    saver.sig_finished.connect(lambda: finished_emissions.append(1))
-    saver.finalize()
-    assert len(finished_emissions) == 1
-
-
-@pytest.mark.xfail(reason=_WAVE0, strict=False)
 def test_omero_channels(qtbot, request, tmp_path) -> None:
-    """SAV-02: the omero channels carry wavelength / color / label / active
-    per configured laser."""
+    """SAV-02: the omero channels carry wavelength / color / label /
+    active per configured laser. The color is a 6-char hex string with
+    no ``#`` prefix."""
     import zarr
 
     ctrl, _ = make_controller(qtbot, request)
-    assert ZarrSaver is not None, "ZarrSaver not yet implemented"
-    store_path = tmp_path / "stack.ome.zarr"
-    saver = ZarrSaver(ctrl, store_path=str(store_path))
-    saver.start_stack()
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1.0
+
+    store_path = str(tmp_path / "stack.ome.zarr")
+    saver = ZarrSaver(ctrl)
+    saver.start_stack(store_path, 1)
     frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
-    saver.write_frame(frame)
+    saver.write_plane(0, frame, 0.0, 0.0, 0.0)
     saver.finalize()
 
-    root = zarr.open(str(store_path), mode="r")
-    omero = root.attrs["omero"]
-    channels = omero["channels"]
+    root = zarr.open(store_path, mode="r")
+    ome = root.attrs["ome"]
+    channels = ome["omero"]["channels"]
     assert len(channels) == len(ctrl.lasers)
     for ch, laser in zip(channels, ctrl.lasers):
         assert ch["wavelength"] == laser.wavelength
-        assert "color" in ch
+        assert isinstance(ch["color"], str)
+        assert len(ch["color"]) == 6
+        assert "#" not in ch["color"]
         assert ch["label"] == laser.label
-        assert ch["active"] == laser.active
+        assert ch["active"] == bool(laser.active)
 
 
-@pytest.mark.xfail(reason=_WAVE0, strict=False)
 def test_omero_from_live_lasers(qtbot, request, tmp_path) -> None:
     """SAV-02: the omero channel metadata is built from the live
-    ``list[ILaser]`` the controller holds, not from a config re-parse. A
-    laser whose wavelength/label was mutated at runtime is reflected in
-    the saved channels."""
+    ``list[ILaser]`` the controller holds, not from a config re-parse.
+    A laser whose ``active`` flag was mutated at runtime is reflected
+    in the saved channels."""
     import zarr
 
     ctrl, _ = make_controller(qtbot, request)
-    assert ZarrSaver is not None, "ZarrSaver not yet implemented"
-    # Mutate live laser state after construction — the saved metadata must
-    # reflect the live value, not a config default.
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1.0
+
+    # Mutate live laser state after constructing the ZarrSaver but
+    # before finalize — the saved metadata must reflect the live value.
+    original_active = ctrl.lasers[0].active
     original_label = ctrl.lasers[0].label
     try:
+        ctrl.lasers[0].active = not original_active
         ctrl.lasers[0].label = "Mutated (555 nm)"
-        store_path = tmp_path / "stack.ome.zarr"
-        saver = ZarrSaver(ctrl, store_path=str(store_path))
-        saver.start_stack()
+        store_path = str(tmp_path / "stack.ome.zarr")
+        saver = ZarrSaver(ctrl)
+        saver.start_stack(store_path, 1)
         frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
-        saver.write_frame(frame)
+        saver.write_plane(0, frame, 0.0, 0.0, 0.0)
         saver.finalize()
 
-        root = zarr.open(str(store_path), mode="r")
-        channels = root.attrs["omero"]["channels"]
+        root = zarr.open(store_path, mode="r")
+        channels = root.attrs["ome"]["omero"]["channels"]
         assert channels[0]["label"] == "Mutated (555 nm)"
+        assert channels[0]["active"] == (not original_active)
     finally:
+        ctrl.lasers[0].active = original_active
         ctrl.lasers[0].label = original_label
 
 
-@pytest.mark.xfail(reason=_WAVE0, strict=False)
 def test_ngff_metadata(qtbot, request, tmp_path) -> None:
     """SAV-02: NGFF v0.5 metadata is written — ``ome.version`` and the
     ``multiscales`` structure with at least one dataset pointing at L0."""
     import zarr
 
     ctrl, _ = make_controller(qtbot, request)
-    assert ZarrSaver is not None, "ZarrSaver not yet implemented"
-    store_path = tmp_path / "stack.ome.zarr"
-    saver = ZarrSaver(ctrl, store_path=str(store_path))
-    saver.start_stack()
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1.0
+
+    store_path = str(tmp_path / "stack.ome.zarr")
+    saver = ZarrSaver(ctrl)
+    saver.start_stack(store_path, 1)
     frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
-    saver.write_frame(frame)
+    saver.write_plane(0, frame, 0.0, 0.0, 0.0)
     saver.finalize()
 
-    root = zarr.open(str(store_path), mode="r")
+    root = zarr.open(store_path, mode="r")
     ome = root.attrs["ome"]
     assert ome["version"] == "0.5"
     multiscales = ome["multiscales"]
@@ -181,27 +147,69 @@ def test_ngff_metadata(qtbot, request, tmp_path) -> None:
     assert datasets[0]["path"] == "0"
 
 
-@pytest.mark.xfail(reason=_WAVE0, strict=False)
 def test_acquisition_group(qtbot, request, tmp_path) -> None:
     """D-04: the ``/acquisition`` group records the motor 1D datasets
-    (vertical/horizontal/camera positions) and the scan-parameter root
-    attrs (step size, scan parameters) matching the live controller."""
+    (horizontal/vertical/camera positions, length n_planes) and the
+    scan-parameter group attrs (galvo/ETL amplitudes+offsets, exposure,
+    sample_rate, shutter_mode) matching the live controller."""
     import zarr
 
     ctrl, _ = make_controller(qtbot, request)
-    assert ZarrSaver is not None, "ZarrSaver not yet implemented"
-    store_path = tmp_path / "stack.ome.zarr"
-    saver = ZarrSaver(ctrl, store_path=str(store_path))
-    saver.start_stack()
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1.0
+
+    store_path = str(tmp_path / "stack.ome.zarr")
+    saver = ZarrSaver(ctrl)
+    n_planes = 3
+    saver.start_stack(store_path, n_planes)
     frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
-    saver.write_frame(frame)
+    for z in range(n_planes):
+        saver.write_plane(z, frame, float(z), float(z) * 2.0, float(z) * 3.0)
     saver.finalize()
 
-    root = zarr.open(str(store_path), mode="r")
+    root = zarr.open(store_path, mode="r")
     acq = root["acquisition"]
-    # Motor 1D datasets for each axis.
-    assert "motor_position_vertical" in acq
-    assert "motor_position_horizontal" in acq
-    assert "motor_position_camera" in acq
-    # Scan-parameter root attrs.
-    assert "step_size" in root.attrs
+    motor = acq["motor"]
+    assert motor["horizontal"].shape == (n_planes,)
+    assert motor["vertical"].shape == (n_planes,)
+    assert motor["camera"].shape == (n_planes,)
+    # Scan-parameter group attrs read from the live HAL instances.
+    assert acq.attrs["galvo_left_amplitude"] == ctrl.siggen.galvo_left_amplitude
+    assert acq.attrs["etl_left_amplitude"] == ctrl.siggen.etl_left_amplitude
+    assert acq.attrs["exposure_time_s"] == ctrl.camera.exposure_time
+    assert acq.attrs["shutter_mode"] == ctrl.camera.shutter_mode
+    assert acq.attrs["sample_rate"] == ctrl.siggen.sample_rate
+
+
+# --- Task 2 tests (format branch + close ordering) ---------------------
+# These two are made GREEN in Task 2 alongside the FrameSaverWorker
+# format branch. They are kept here so all 7 ZarrSaver tests live in one
+# file (VALIDATION.md resolves them by node id).
+
+
+@pytest.mark.xfail(
+    reason="Task 2: FrameSaverWorker.start_saving format branch + close ordering",
+    strict=False,
+)
+def test_format_branch(qtbot, request, tmp_path) -> None:
+    """SAV-01: the ``save_format`` branch selects the Zarr saver path.
+    When ``save_format == 'zarr'`` the worker calls ``zarr_save_worker``
+    (not ``frame_saver_worker``); ``'hdf5'`` -> ``frame_saver_worker``;
+    ``'both'`` -> ``zarr_save_worker`` then ``frame_saver_worker``
+    (serialized)."""
+    ctrl, _ = make_controller(qtbot, request)
+    assert ZarrSaver is not None
+    ctrl.save_format = "zarr"
+    assert ctrl.save_format == "zarr"
+
+
+@pytest.mark.xfail(
+    reason="Task 2: FrameSaverWorker.start_saving format branch + close ordering",
+    strict=False,
+)
+def test_close_ordering(qtbot, request, tmp_path) -> None:
+    """SAV-01: ``sig_finished`` fires only AFTER finalize completes
+    (close ordering). The try/finally + ``sig_finished.emit()`` shape
+    in ``FrameSaverWorker.start_saving`` is the load-bearing contract."""
+    ctrl, _ = make_controller(qtbot, request)
+    assert ZarrSaver is not None
