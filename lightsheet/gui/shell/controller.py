@@ -202,6 +202,13 @@ class Controller_MainWindow(QMainWindow):
         self.pushButton_estop = self.ui.pushButton_estop
         self.pushButton_armReset = self.ui.pushButton_armReset
         self.shortcut_estop = self.ui.shortcut_estop
+        # Safety: the E-stop toolbar is fixed (non-movable, non-floatable)
+        # so the kill button stays in a predictable location at every
+        # window size. The .ui sets both, but enforce programmatically as
+        # a belt-and-suspenders guard against a .ui regen losing the
+        # property (a floatable toolbar could be dragged off-screen).
+        self.toolBar_estop.setMovable(False)
+        self.toolBar_estop.setFloatable(False)
 
         # E-stop cooperative-abort event. Starts clear (not set) so the
         # system boots ARMED. Polled at the top of every acquisition worker
