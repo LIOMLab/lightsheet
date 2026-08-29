@@ -337,12 +337,17 @@ class PastAcquisitionsBrowser(QObject):
         )
 
     def _zarr_n_planes(self, root) -> int:
-        # L0 is the multiscale level "0" array; shape is (c, z, y, x).
+        # L0 is the multiscale level "0" array. The writer produces a 4D
+        # (c, z, y, x) array; plane count is shape[1]. A 3D (z, y, x)
+        # array (no channel dimension) would return shape[0] instead —
+        # fail closed on anything other than the expected 4D shape so a
+        # future writer change does not silently report the image height
+        # as the plane count.
         arr = root.get("0")
         if arr is None:
             return 0
         shape = getattr(arr, "shape", None)
-        if not shape or len(shape) < 2:
+        if not shape or len(shape) != 4:
             return 0
         return int(shape[1])
 
