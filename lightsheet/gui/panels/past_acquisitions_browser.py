@@ -530,6 +530,28 @@ class _ScanWorker(QObject):
             self.finished.emit([])
 
 
+class _NumericTableWidgetItem(QTableWidgetItem):
+    """QTableWidgetItem that sorts by a numeric UserRole value when one
+    is set, falling back to the default text comparison otherwise.
+
+    The past-acquisitions table has numeric columns (#Planes, Size) whose
+    string text sorts lexically by default ("10" < "2"). Setting a
+    numeric sort value on Qt.ItemDataRole.UserRole and overriding __lt__
+    makes Qt sort these columns numerically when the operator clicks the
+    column header.
+    """
+
+    def __lt__(self, other) -> bool:  # noqa: D601 - Qt override
+        sv = self.data(Qt.ItemDataRole.UserRole)
+        ov = other.data(Qt.ItemDataRole.UserRole) if isinstance(other, QTableWidgetItem) else None
+        if sv is not None and ov is not None:
+            try:
+                return float(sv) < float(ov)
+            except (TypeError, ValueError):
+                pass
+        return super().__lt__(other)
+
+
 class PastAcquisitionsPanel(QWidget):
     """Dedicated left-rail panel hosting the past-acquisitions browser.
 
@@ -690,15 +712,32 @@ class PastAcquisitionsPanel(QWidget):
         self._set_past_cell(row, _PAST_COL_SAMPLE, entry.sample)
         wl = normalize_wavelength(entry.wavelength)
         self._set_past_cell(
-            row, _PAST_COL_CHANNEL, "" if wl is None else str(wl)
+            row, _PAST_COL_CHANNEL, "" if wl is None else str(wl),
+            sort_value=wl if wl is not None else None,
         )
-        self._set_past_cell(row, _PAST_COL_NPLANES, str(entry.n_planes))
-        self._set_past_cell(row, _PAST_COL_SIZE, _format_bytes(entry.size_bytes))
+        self._set_past_cell(
+            row, _PAST_COL_NPLANES, str(entry.n_planes),
+            sort_value=entry.n_planes,
+        )
+        self._set_past_cell(
+            row, _PAST_COL_SIZE, _format_bytes(entry.size_bytes),
+            sort_value=entry.size_bytes,
+        )
         self._set_past_cell(row, _PAST_COL_DATE, entry.date_str)
         self._set_past_cell(row, _PAST_COL_FORMAT, entry.format_label)
 
-    def _set_past_cell(self, row: int, col: int, text: str) -> None:
-        item = QTableWidgetItem(text)
+    def _set_past_cell(
+        self, row: int, col: int, text: str, sort_value=None
+    ) -> None:
+        # Use the numeric item subclass when a numeric sort value is
+        # provided so Qt sorts the column numerically (via __lt__ on the
+        # UserRole data) instead of lexically on the string text.
+        item = (
+            _NumericTableWidgetItem(text) if sort_value is not None
+            else QTableWidgetItem(text)
+        )
         item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
         item.setToolTip(text)
+        if sort_value is not None:
+            item.setData(Qt.ItemDataRole.UserRole, sort_value)
         self.ui.tableWidget_pastAcquisitions.setItem(row, col, item)
