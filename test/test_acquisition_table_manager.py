@@ -56,16 +56,22 @@ def test_empty_state_copy(qtbot, request) -> None:
 
 
 def test_add_stack_default_row(qtbot, request) -> None:
-    """Test 3: Add Stack appends a row with default values + computed
-    #planes."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    """Test 3: Add Stack appends a row pre-filled with the current stack
+    panel values (first plane, last plane, step size) + computed #planes."""
+    ctrl, mgr = _mgr(qtbot, request)
+    # Set the stack panel spinboxes to known values. The step spinbox
+    # is in mm (default unit); 0.025 mm = 25 μm is the minimum in mm mode.
+    sp = ctrl.stack_panel.ui
+    sp.doubleSpinBox_acqFirstPlane.setValue(0.0)
+    sp.doubleSpinBox_acqLastPlane.setValue(0.0)
+    sp.doubleSpinBox_acqPlaneStepSize.setValue(0.025)
     mgr.add_stack()
     assert mgr.table.rowCount() == 1
     row = mgr.row_at(0)
     assert row.name.startswith("Stack")
     assert row.start == 0.0
     assert row.end == 0.0
-    assert row.step == 1.0
+    assert row.step == 0.025
     # start == end → 0 planes (incomplete row).
     assert row.n_planes == 0
 

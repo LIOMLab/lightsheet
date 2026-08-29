@@ -327,16 +327,23 @@ class AcquisitionTableManager(QWidget):
         return _ERROR_COPY.format(reason=reason)
 
     def add_stack(self) -> None:
-        """Append a new row with default values (name "Stack N",
-        start 0, end 0, step 1). The row is incomplete (start == end) so
-        Start Queue stays disabled until the operator fills it in."""
+        """Append a new row pre-filled with the current stack panel
+        values (first plane, last plane, step size). The row name
+        defaults to "Stack N". If the stack panel has valid start/end
+        values, the row is immediately ready for Start Queue."""
+        sp = self._shell.stack_panel.ui
+        start = sp.doubleSpinBox_acqFirstPlane.value()
+        end = sp.doubleSpinBox_acqLastPlane.value()
+        step = sp.doubleSpinBox_acqPlaneStepSize.value()
+        if step == 0:
+            step = 1.0  # avoid division by zero in n_planes computation
         row = self.table.rowCount()
         self.table.blockSignals(True)
         self.table.insertRow(row)
         self._set_name_cell(row, f"Stack {row + 1}")
-        self._set_numeric_cell(row, _COL_START, 0.0)
-        self._set_numeric_cell(row, _COL_END, 0.0)
-        self._set_numeric_cell(row, _COL_STEP, 1.0)
+        self._set_numeric_cell(row, _COL_START, start)
+        self._set_numeric_cell(row, _COL_END, end)
+        self._set_numeric_cell(row, _COL_STEP, step)
         self._set_readonly_cell(row, _COL_NPLANES, "0")
         self._set_readonly_cell(row, _COL_ESTTIME, "0:00")
         self._set_readonly_cell(
