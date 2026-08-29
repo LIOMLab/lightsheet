@@ -42,6 +42,24 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _position_to_float(value: str | float) -> float:
+    """Coerce a motor-position entry to ``float``.
+
+    ``add_motor_parameters`` stores the shell's formatted display strings
+    (e.g. ``"99.82 μm"`` from ``units_fixformat``) so the HDF5 per-dataset
+    attr path can write them verbatim. The Zarr ``/acquisition/motor``
+    datasets need numeric values, so this helper strips the trailing unit
+    suffix. A bare numeric string or an already-numeric value is passed
+    through. Raises ``ValueError`` if the leading token is not numeric —
+    the caller's try/except surfaces it as a save error rather than
+    writing a malformed store.
+    """
+    if isinstance(value, (int, float)):
+        return float(value)
+    token = str(value).strip().split()[0]
+    return float(token)
+
+
 class FrameSaverWorker(QObject):
     """Worker ``QObject`` for the save loop, affined to a dedicated
     ``QThread`` via ``moveToThread``.
@@ -528,19 +546,22 @@ class FrameSaver(QObject):
                         break
                     # Motor positions: one entry per plane, collected
                     # by add_motor_parameters during the acquisition
-                    # loop. Guard against a short list (defensive).
+                    # loop. The entries are the shell's formatted display
+                    # strings (e.g. "99.82 μm"); _position_to_float strips
+                    # the unit suffix for the Zarr numeric datasets. Guard
+                    # against a short list (defensive).
                     hor = (
-                        float(self.horizontal_positions_list[pos_index])
+                        _position_to_float(self.horizontal_positions_list[pos_index])
                         if pos_index < len(self.horizontal_positions_list)
                         else 0.0
                     )
                     ver = (
-                        float(self.vertical_positions_list[pos_index])
+                        _position_to_float(self.vertical_positions_list[pos_index])
                         if pos_index < len(self.vertical_positions_list)
                         else 0.0
                     )
                     cam = (
-                        float(self.camera_positions_list[pos_index])
+                        _position_to_float(self.camera_positions_list[pos_index])
                         if pos_index < len(self.camera_positions_list)
                         else 0.0
                     )
@@ -558,10 +579,20 @@ class FrameSaver(QObject):
             # sig_finished emits after finalize (the close-ordering
             # contract). A finalize failure propagates to the except
             # above (NOT a silent HDF5 fallback).
-            if not self.saving_started:
+            #
+            # Gate on z_idx < n_planes, NOT on saving_started: stop_saving()
+            # flips saving_started=False on NORMAL completion too (it is the
+            # winding-down path for both abort and success). If all planes
+            # were written (z_idx >= n_planes) the stack completed and the
+            # store MUST be finalized so napari/ome-zarr readers find the
+            # multiscales + omero metadata. Only skip finalize when the loop
+            # exited early (z_idx < n_planes) — a genuine abort leaving a
+            # partial store on disk.
+            if z_idx < n_planes:
                 logger.info(
                     "zarr_save_worker exiting before finalize "
-                    "(saving_started=False) — partial store left on disk"
+                    "(z_idx=%d < n_planes=%d) — partial store left on disk",
+                    z_idx, n_planes,
                 )
             else:
                 try:
@@ -670,17 +701,17 @@ class FrameSaver(QObject):
 
                                 # --- Zarr write (mirrors zarr_save_worker) ---
                                 hor = (
-                                    float(self.horizontal_positions_list[zarr_pos_index])
+                                    _position_to_float(self.horizontal_positions_list[zarr_pos_index])
                                     if zarr_pos_index < len(self.horizontal_positions_list)
                                     else 0.0
                                 )
                                 ver = (
-                                    float(self.vertical_positions_list[zarr_pos_index])
+                                    _position_to_float(self.vertical_positions_list[zarr_pos_index])
                                     if zarr_pos_index < len(self.vertical_positions_list)
                                     else 0.0
                                 )
                                 cam = (
-                                    float(self.camera_positions_list[zarr_pos_index])
+                                    _position_to_float(self.camera_positions_list[zarr_pos_index])
                                     if zarr_pos_index < len(self.camera_positions_list)
                                     else 0.0
                                 )
@@ -710,10 +741,16 @@ class FrameSaver(QObject):
                     break
 
             # Finalize the Zarr store after all HDF5 files are closed.
-            if not self.saving_started:
+            # Gate on z_idx < n_planes, NOT on saving_started: stop_saving()
+            # flips saving_started=False on normal completion too. If all
+            # planes were written the store MUST be finalized so readers find
+            # the multiscales + omero metadata. See zarr_save_worker for the
+            # full rationale.
+            if z_idx < n_planes:
                 logger.info(
                     "both_save_worker exiting before finalize "
-                    "(saving_started=False) — partial store left on disk"
+                    "(z_idx=%d < n_planes=%d) — partial store left on disk",
+                    z_idx, n_planes,
                 )
             else:
                 try:

@@ -31,6 +31,32 @@ def _save_directory(ctrl, tmp_path) -> str:
     return str(tmp_path)
 
 
+def test_position_to_float_strips_unit_suffix() -> None:
+    """The Zarr /acquisition/motor datasets need numeric values, but
+    add_motor_parameters stores the shell's formatted display strings
+    (e.g. "99.82 μm"). _position_to_float must coerce all the shapes the
+    shell's units_fixformat produces, plus bare numerics, without raising.
+    """
+    from lightsheet.gui.coordinators.frame_saver_controller import (
+        _position_to_float,
+    )
+
+    # Formatted display strings (the real input from add_motor_parameters).
+    assert _position_to_float("99.82 μm") == 99.82
+    assert _position_to_float("0.00 mm") == 0.0
+    assert _position_to_float("-1.50 μm") == -1.5
+    # Bare numeric string and already-numeric values pass through.
+    assert _position_to_float("12.5") == 12.5
+    assert _position_to_float(7) == 7.0
+    assert _position_to_float(3.25) == 3.25
+    # A non-numeric leading token raises (surfaced as a save error by the
+    # worker's try/except — never writes a malformed store).
+    import pytest
+
+    with pytest.raises(ValueError):
+        _position_to_float("not a number")
+
+
 def test_zarr_saver_streams_and_finalizes(qtbot, request, tmp_path) -> None:
     """SAV-01: N planes stream into the L0 dataset and finalize builds
     the pyramid. Read back via ``zarr.open`` and assert the L0 shape
@@ -309,6 +335,97 @@ def test_close_ordering(qtbot, request, tmp_path) -> None:
     root = zarr.open(str(tmp_path / "stack.ome.zarr"), mode="r")
     assert "acquisition" in root
     assert root["0"].shape == (1, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)
+
+
+def test_zarr_save_finalizes_after_stop_saving_on_normal_completion(
+    qtbot, request, tmp_path
+) -> None:
+    """Regression: on normal stack completion ``stop_saving()`` flips
+    ``saving_started=False`` (it is the winding-down path for BOTH abort
+    and success). The zarr_save_worker must STILL finalize when all planes
+    were written (``z_idx >= n_planes``), because the multiscales + omero
+    metadata + /acquisition group are written at finalize — without them
+    napari-ome-zarr opens the store and returns no data.
+
+    The previous gate ``if not self.saving_started: skip finalize`` fired
+    on normal completion too, leaving a partial store (L0 data only, empty
+    root attrs, no pyramid, no /acquisition group). This test simulates the
+    real completion sequence: the queue is pre-loaded with all frames, and
+    a queue wrapper flips ``saving_started=False`` once the last frame is
+    consumed (mimicking the acquisition coordinator calling stop_saving()
+    after enqueuing the final plane)."""
+    import zarr
+
+    from lightsheet.gui.coordinators.frame_saver_controller import (
+        FrameSaverWorker,
+    )
+
+    ctrl, _ = make_controller(qtbot, request)
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1.0
+    ctrl.save_format = "zarr"
+    saver = ctrl._fs.frame_saver
+
+    n_planes = 2
+    saver.set_files(
+        number_of_files=n_planes,
+        files_name="stack",
+        scan_type="z",
+        number_of_datasets=1,
+        datasets_name="ch",
+    )
+    # Use the shell's formatted display strings (the real input shape —
+    # add_motor_parameters stores units_fixformat output like "99.82 μm").
+    # The Zarr worker must coerce these to floats for the numeric
+    # /acquisition/motor datasets; a bare float() would raise ValueError
+    # on the unit suffix and abort the save mid-stream.
+    saver.horizontal_positions_list = ["0.00 μm", "1.00 μm"]
+    saver.vertical_positions_list = ["0.00 μm", "2.00 μm"]
+    saver.camera_positions_list = ["0.00 μm", "3.00 μm"]
+    frame = np.zeros(
+        (ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16
+    )
+
+    # Queue wrapper that flips saving_started=False once the last frame is
+    # consumed — mimicking stop_saving() on normal completion.
+    class _StopAfterLastQueue:
+        def __init__(self, real, n_frames: int) -> None:
+            self._real = real
+            self._remaining = n_frames
+
+        def get(self, block=True, timeout=None):
+            buf = self._real.get(block=block, timeout=timeout)
+            self._remaining -= 1
+            if self._remaining <= 0:
+                saver.saving_started = False
+            return buf
+
+        def __getattr__(self, name):
+            return getattr(self._real, name)
+
+    saver.queue = _StopAfterLastQueue(saver.queue, n_planes)
+    for _ in range(n_planes):
+        saver.queue.put(frame)
+    saver.saving_started = True
+
+    worker = FrameSaverWorker(saver)
+    finished: list[int] = []
+    worker.sig_finished.connect(lambda: finished.append(1))
+    worker.start_saving()
+    assert len(finished) == 1
+
+    # The store MUST be finalized despite saving_started=False at the
+    # completion gate — root attrs carry the ome metadata and the
+    # /acquisition group is present.
+    root = zarr.open(str(tmp_path / "stack.ome.zarr"), mode="r")
+    assert "acquisition" in root, (
+        "finalize was skipped on normal completion — /acquisition group "
+        "missing (the napari-ome-zarr 'returned no data' regression)"
+    )
+    assert "ome" in root.attrs, (
+        "multiscales/omero metadata missing — napari-ome-zarr cannot read "
+        "the store without the ome root attrs"
+    )
 
 
 def test_both_mode_writes_both_formats(qtbot, request, tmp_path) -> None:
