@@ -1,11 +1,10 @@
-"""Wave 0 RED scaffolds for camera binning readback (D-02).
+"""Camera binning readback conformance (D-02).
 
-Defines the expected behavior of the binning readback that lands in a
-later wave (MockCamera gains ``binning_x`` / ``binning_y`` and the
-``CAMERA_CONTRACT.read_attrs`` is extended to include them). Marked
-``xfail`` (strict=False) during Wave 0 so the suite stays GREEN: the
-binning attributes do not exist yet, so the assertions fail with
-``AttributeError`` and xfail records the expected failure.
+The binning_x/binning_y HAL readback provides the XY voxel-size source for
+the ZarrSaver's base_res assembly. MockCamera exposes 1x1 defaults (the
+rig's current state); the real Camera reads sdk.get_binning() in open()
+and arm(). The CAMERA_CONTRACT.read_attrs includes binning_x/binning_y so
+the structural drift catch fires if a mock drops them.
 """
 
 from __future__ import annotations
@@ -19,10 +18,7 @@ from lightsheet.hal.conformance import CAMERA_CONTRACT
 
 _has_hardware: bool = os.environ.get("LIGHTSHEET_HW", "0") == "1"
 
-_WAVE0 = "Wave 0 RED scaffold — camera binning implemented in a later wave"
 
-
-@pytest.mark.xfail(reason=_WAVE0, strict=False)
 def test_mock_camera_binning_defaults_to_one() -> None:
     """D-02: MockCamera defaults binning_x == binning_y == 1 (no binning).
     The mock populates the same binning attributes the real Camera exposes
@@ -47,7 +43,6 @@ def test_mock_camera_binning_defaults_to_one() -> None:
         pytest.param(lambda: MockCamera(), id="mock"),
     ],
 )
-@pytest.mark.xfail(reason=_WAVE0, strict=False)
 def test_camera_binning_in_conformance_read_attrs(device_factory: object) -> None:
     """D-02: the CAMERA_CONTRACT.assert_read_attrs passes for both [real,
     mock] once ``binning_x`` / ``binning_y`` are added to the contract's

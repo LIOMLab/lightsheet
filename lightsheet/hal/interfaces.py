@@ -68,6 +68,14 @@ class ICameraCore(ABC):
     # and mock classes set them as plain instance attributes in __init__/open.
     xsize: int | None
     ysize: int | None
+    # Binning readback (D-02) — the XY voxel-size source for the ZarrSaver's
+    # base_res assembly. The real Camera reads sdk.get_binning() in open() and
+    # arm(); the mock defaults to 1 (the rig's current 1x1 state). Declared as
+    # a class-level annotation (not @property+@abstractmethod) for the same
+    # reason as xsize/ysize above — the real class sets it as a plain instance
+    # attribute, which does not satisfy an abstract property descriptor.
+    binning_x: int
+    binning_y: int
     exposure_time: float
     shutter_mode: str
     line_time: float | None

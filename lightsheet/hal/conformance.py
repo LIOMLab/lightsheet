@@ -154,6 +154,8 @@ CAMERA_CONTRACT = ConformanceContract(
     read_attrs=(
         "xsize",
         "ysize",
+        "binning_x",
+        "binning_y",
         "exposure_time",
         "shutter_mode",
         "line_time",

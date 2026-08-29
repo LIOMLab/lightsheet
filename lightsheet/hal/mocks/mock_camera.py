@@ -52,6 +52,13 @@ class MockCamera(ICamera):
     # synthetic values as instance attributes.
     xsize: int | None = None
     ysize: int | None = None
+    # Binning readback (D-02) — defaults to 1x1 (no binning), matching the
+    # rig's current state per the rig probe. The real Camera reads
+    # sdk.get_binning() in open()/arm(); the mock uses the class-level
+    # default so the controller's read path is unchanged between real and
+    # demo runs.
+    binning_x: int = 1
+    binning_y: int = 1
     exposure_time: float = 0.0
     shutter_mode: str = "Rolling"
     line_time: float | None = None
@@ -109,6 +116,10 @@ class MockCamera(ICamera):
             # content out of scope).
             self.xsize = 2048
             self.ysize = 2048
+            # Binning readback (D-02) — synthetic 1x1 default mirrors the
+            # real Camera.open() sdk.get_binning() readback.
+            self.binning_x = 1
+            self.binning_y = 1
             self.bytes_per_image = self.xsize * self.ysize * 2  # 16-bit
             self.line_time = self.default_line_time
             # Mark the mock as "opened" with a non-None sentinel so open()
