@@ -50,9 +50,9 @@ class _WorkerShell:
         self.acquisition_panel = Mock()
         self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.value.return_value = 100
         self.ui.lineEdit_saveDescription.text.return_value = "test sample"
-        self.ui.checkBox_saveStitchBlend.isChecked.return_value = False
-        self.ui.checkBox_saveAllCrop.isChecked.return_value = False
-        self.ui.checkBox_saveAllFull.isChecked.return_value = False
+        self.ui.radioButton_saveStitchBlend.isChecked.return_value = False
+        self.ui.radioButton_saveAllCrop.isChecked.return_value = False
+        self.ui.radioButton_saveAllFull.isChecked.return_value = False
 
         # Mode started flags — set to False so workers exit immediately.
         self.preview_mode_started = False

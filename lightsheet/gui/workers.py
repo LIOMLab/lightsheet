@@ -27,8 +27,8 @@ Workers never touch the shell's ``ui.*`` widgets directly (AGENTS.md
 ``Signal`` connections (``sig_message``, ``sig_progress_update``,
 ``sig_refresh_position_horizontal``, ``sig_*_mode_finished``) plus this
 worker's own ``finished`` signal. The save-option widgets
-(``lineEdit_saveDescription``, ``checkBox_saveStitchBlend``,
-``checkBox_saveAllCrop``, ``checkBox_saveAllFull``) are pre-sampled on
+(``lineEdit_saveDescription``, ``radioButton_saveStitchBlend``,
+``radioButton_saveAllCrop``, ``radioButton_saveAllFull``) are pre-sampled on
 the GUI thread in the mode-button slot and passed as worker constructor
 args, so ``_AcquireScanMixin.acquire_scan`` and ``StackWorker.run`` read
 ``self._save_description`` / ``self._save_stitch_blend`` /
@@ -391,7 +391,7 @@ class SingleWorker(QObject, _AcquireScanMixin):
     camera. The ``finished`` signal fires exactly once in ``finally``.
 
     The save-option widgets (``lineEdit_saveDescription``,
-    ``checkBox_saveStitchBlend``) are pre-sampled on the GUI thread in
+    ``radioButton_saveStitchBlend``) are pre-sampled on the GUI thread in
     ``updateUi_single_mode_button`` and passed as constructor args
     (``save_description``, ``save_stitch_blend``) so
     ``_AcquireScanMixin.acquire_scan`` reads ``self._save_description``
@@ -492,8 +492,8 @@ class StackWorker(QObject, _AcquireScanMixin):
     exception propagates.
 
     The save-option widgets (``lineEdit_saveDescription``,
-    ``checkBox_saveStitchBlend``, ``checkBox_saveAllCrop``,
-    ``checkBox_saveAllFull``) are pre-sampled on the GUI thread in
+    ``radioButton_saveStitchBlend``, ``radioButton_saveAllCrop``,
+    ``radioButton_saveAllFull``) are pre-sampled on the GUI thread in
     ``updateUi_stack_mode_button`` and passed as constructor args
     (``save_description``, ``save_stitch_blend``, ``save_all_crop``,
     ``save_all_full``) so the worker thread never reaches into

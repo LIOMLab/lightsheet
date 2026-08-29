@@ -147,11 +147,11 @@ class SavePanelWidget(QWidget):
             self.ui.lineEdit_saveDescription.setEnabled(True)
         else:
             self.ui.lineEdit_saveDirectory.setText("")
-            self.ui.lineEdit_saveFilename.setText(
+            self.ui.lineEdit_saveFilename.setPlaceholderText(
                 "Filename - Select Save Directory First"
             )
             self.ui.lineEdit_saveFilename.setEnabled(False)
-            self.ui.lineEdit_saveDescription.setText(
+            self.ui.lineEdit_saveDescription.setPlaceholderText(
                 "Description - Select Save Directory First"
             )
             self.ui.lineEdit_saveDescription.setEnabled(False)
@@ -200,7 +200,7 @@ class SavePanelWidget(QWidget):
             )
 
             """Saving frame"""
-            if self.ui.checkBox_saveAllCrop.isChecked():
+            if self.ui.radioButton_saveAllCrop.isChecked():
                 self._shell._fs.set_files(
                     1, self._shell.save_filename, "singleImage", 1, "ETLscan"
                 )
@@ -209,7 +209,7 @@ class SavePanelWidget(QWidget):
                 self._shell.updateUi_message_printer(
                     "Saving Images (one for each ETL scan, cropped)"
                 )
-            elif self.ui.checkBox_saveAllFull.isChecked():
+            elif self.ui.radioButton_saveAllFull.isChecked():
                 self._shell._fs.set_files(
                     1, self._shell.save_filename, "singleImage", 1, "FullETLscan"
                 )
@@ -218,9 +218,9 @@ class SavePanelWidget(QWidget):
                     "Saving Images (one for each ETL scan, full)"
                 )
             else:
-                # checkBox_saveStitch (the default "Stitched - No blend"
+                # radioButton_saveStitch (the default "Stitched - No blend"
                 # option) falls through to this branch — it is the
-                # reconstructed_frame save mode. The checkbox is in the
+                # reconstructed_frame save mode. The radio is in the
                 # exclusive save_option_button_group but is not explicitly
                 # checked here because it is the implicit default (the
                 # else branch covers it).

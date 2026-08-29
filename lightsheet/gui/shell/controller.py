@@ -34,6 +34,7 @@ from functools import partial
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QApplication,
     QButtonGroup,
     QLabel,
@@ -353,6 +354,11 @@ class Controller_MainWindow(QMainWindow):
         else:
             self.save_format = "hdf5"
 
+        # The format radio group is created later in __init__ (after the
+        # save panel widgets exist); reflect self.save_format onto the
+        # checked radio once the group is wired (see _reflect_save_format_radio).
+        self._pending_save_format_reflection = self.save_format
+
         self.save_directory = os.path.normpath(
             os.path.join(os.path.expanduser("~"), "Desktop", "LightSheetData")
         )
@@ -376,9 +382,9 @@ class Controller_MainWindow(QMainWindow):
             self.save_panel.ui.lineEdit_saveDescription.setEnabled(True)
         else:
             self.save_panel.ui.lineEdit_saveDirectory.setText("")
-            self.save_panel.ui.lineEdit_saveFilename.setText("Filename - Select Save Directory First")  # noqa: E501
+            self.save_panel.ui.lineEdit_saveFilename.setPlaceholderText("Filename - Select Save Directory First")  # noqa: E501
             self.save_panel.ui.lineEdit_saveFilename.setEnabled(False)
-            self.save_panel.ui.lineEdit_saveDescription.setText("Description - Select Save Directory First")  # noqa: E501
+            self.save_panel.ui.lineEdit_saveDescription.setPlaceholderText("Description - Select Save Directory First")  # noqa: E501
             self.save_panel.ui.lineEdit_saveDescription.setEnabled(False)
 
         # Flags
@@ -539,11 +545,33 @@ class Controller_MainWindow(QMainWindow):
         )
 
         self.save_option_button_group = QButtonGroup(self)
-        self.save_option_button_group.addButton(self.save_panel.ui.checkBox_saveStitch)
-        self.save_option_button_group.addButton(self.save_panel.ui.checkBox_saveStitchBlend)
-        self.save_option_button_group.addButton(self.save_panel.ui.checkBox_saveAllCrop)
-        self.save_option_button_group.addButton(self.save_panel.ui.checkBox_saveAllFull)
+        self.save_option_button_group.addButton(self.save_panel.ui.radioButton_saveStitch)
+        self.save_option_button_group.addButton(self.save_panel.ui.radioButton_saveStitchBlend)
+        self.save_option_button_group.addButton(self.save_panel.ui.radioButton_saveAllCrop)
+        self.save_option_button_group.addButton(self.save_panel.ui.radioButton_saveAllFull)
         self.save_option_button_group.setExclusive(True)
+
+        # Format radio group — exclusive, session-only (does NOT write
+        # config.ini). The slot maps the clicked radio to a lowercase
+        # constant and sets self.save_format for the current session.
+        self.save_format_button_group = QButtonGroup(self)
+        self.save_format_button_group.addButton(self.save_panel.ui.radioButton_saveFormat_hdf5)
+        self.save_format_button_group.addButton(self.save_panel.ui.radioButton_saveFormat_zarr)
+        self.save_format_button_group.addButton(self.save_panel.ui.radioButton_saveFormat_both)
+        self.save_format_button_group.setExclusive(True)
+        self.save_format_button_group.buttonClicked.connect(self.updateUi_save_format_changed)
+
+        # Reflect the config-driven save_format default onto the checked
+        # format radio. "tiff" (legacy) maps to the HDF5 radio as the
+        # closest equivalent — tiff is not in the radio group.
+        fmt = getattr(self, "_pending_save_format_reflection", "hdf5")
+        if fmt == "zarr":
+            self.save_panel.ui.radioButton_saveFormat_zarr.setChecked(True)
+        elif fmt == "both":
+            self.save_panel.ui.radioButton_saveFormat_both.setChecked(True)
+        else:
+            # hdf5 or tiff (legacy) → HDF5 radio
+            self.save_panel.ui.radioButton_saveFormat_hdf5.setChecked(True)
 
         # ---
         # Signal connections for post modes (threads) Ui updates
@@ -816,6 +844,22 @@ class Controller_MainWindow(QMainWindow):
         self.ui.plainTextEdit_messageLog.verticalScrollBar().setValue(
             self.ui.plainTextEdit_messageLog.verticalScrollBar().maximum()
         )
+
+    @Slot(QAbstractButton)
+    def updateUi_save_format_changed(self, button: QAbstractButton) -> None:
+        """Map the clicked format radio to a lowercase constant and set
+        ``self.save_format`` for the current session. This is session-only
+        — it does NOT write config.ini. The config-driven default is
+        reflected at startup; the operator override lives until the app
+        exits."""
+        ui = self.save_panel.ui
+        if button is ui.radioButton_saveFormat_hdf5:
+            self.save_format = "hdf5"
+        elif button is ui.radioButton_saveFormat_zarr:
+            self.save_format = "zarr"
+        elif button is ui.radioButton_saveFormat_both:
+            self.save_format = "both"
+        self.sig_message.emit(f"Save format set to {self.save_format} (session only)")
 
     def open_properties_dialog(self) -> None:
         """Open the dialog window for showing properties"""

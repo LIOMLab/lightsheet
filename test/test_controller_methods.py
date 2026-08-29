@@ -585,8 +585,8 @@ def test_updateUi_save_single_image_saving_allowed_crop(qtbot, request) -> None:
     ctrl.image_ver_pos_text = "0.0"
     ctrl.image_cam_pos_text = "0.0"
     ctrl.buffer = Mock()
-    ctrl.save_panel.ui.checkBox_saveAllCrop.setChecked(True)
-    ctrl.save_panel.ui.checkBox_saveAllFull.setChecked(False)
+    ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(True)
+    ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
     ctrl._fs.reinit = Mock()
     ctrl._fs.set_files = Mock()
     ctrl._fs.crop_buffer = Mock(return_value=Mock())
@@ -613,8 +613,8 @@ def test_updateUi_save_single_image_saving_allowed_full(qtbot, request) -> None:
     ctrl.image_ver_pos_text = "0.0"
     ctrl.image_cam_pos_text = "0.0"
     ctrl.buffer = Mock()
-    ctrl.save_panel.ui.checkBox_saveAllCrop.setChecked(False)
-    ctrl.save_panel.ui.checkBox_saveAllFull.setChecked(True)
+    ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
+    ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(True)
     ctrl._fs.reinit = Mock()
     ctrl._fs.set_files = Mock()
     ctrl._fs.enqueue_buffer = Mock()
@@ -637,8 +637,8 @@ def test_updateUi_save_single_image_saving_allowed_reconstructed(qtbot, request)
     ctrl.image_ver_pos_text = "0.0"
     ctrl.image_cam_pos_text = "0.0"
     ctrl.reconstructed_frame = Mock()
-    ctrl.save_panel.ui.checkBox_saveAllCrop.setChecked(False)
-    ctrl.save_panel.ui.checkBox_saveAllFull.setChecked(False)
+    ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
+    ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
     ctrl._fs.reinit = Mock()
     ctrl._fs.set_files = Mock()
     ctrl._fs.enqueue_buffer = Mock()

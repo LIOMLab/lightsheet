@@ -53,6 +53,36 @@ class AcquisitionPanelWidget(QWidget):
             else:
                 button.setEnabled(False)
 
+        # Disable the format + save-option radios during an active
+        # acquisition and re-enable on idle. The radios are not in the
+        # aquisition_buttons list (they are not QPushButtons); they are
+        # toggled here alongside the mode buttons so a format/option
+        # change mid-acquisition is impossible (the save worker reads
+        # save_format at acquisition start).
+        save_ui = self._shell.save_panel.ui
+        format_and_option_radios = [
+            save_ui.radioButton_saveFormat_hdf5,
+            save_ui.radioButton_saveFormat_zarr,
+            save_ui.radioButton_saveFormat_both,
+            save_ui.radioButton_saveStitch,
+            save_ui.radioButton_saveStitchBlend,
+            save_ui.radioButton_saveAllCrop,
+            save_ui.radioButton_saveAllFull,
+        ]
+        # Re-enable when the default buttons are being restored (idle
+        # state); disable when only the active mode button is enabled.
+        idle = any(
+            b in buttons_to_enable
+            for b in [
+                self.ui.pushButton_acqStartPreviewMode,
+                self.ui.pushButton_acqStartLiveMode,
+                self._shell.stack_panel.ui.pushButton_acqStartStackMode,
+                self.ui.pushButton_acqGetSingleImage,
+            ]
+        )
+        for radio in format_and_option_radios:
+            radio.setEnabled(idle)
+
     def updateUi_enable_buttons(self, buttons_to_enable: list[QPushButton]) -> None:
         """Enable buttons"""
         for button in buttons_to_enable:
@@ -176,7 +206,7 @@ class AcquisitionPanelWidget(QWidget):
             # B-03: pre-sample the save-option widgets on the GUI thread
             # BEFORE constructing the worker (AGENTS.md §11).
             save_desc = str(self._shell.save_panel.ui.lineEdit_saveDescription.text())
-            save_blend = self._shell.save_panel.ui.checkBox_saveStitchBlend.isChecked()
+            save_blend = self._shell.save_panel.ui.radioButton_saveStitchBlend.isChecked()
 
             # Spawn the single-image worker on a QThread (moveToThread pattern).
             self._shell._single_worker = SingleWorker(self._shell._bundle, self._shell._hw, self._shell, save_desc, save_blend)  # noqa: E501
@@ -308,9 +338,9 @@ class AcquisitionPanelWidget(QWidget):
         # B-03: pre-sample the save-option widgets on the GUI thread
         # BEFORE constructing the worker (AGENTS.md §11).
         save_desc = str(self._shell.save_panel.ui.lineEdit_saveDescription.text())
-        save_blend = self._shell.save_panel.ui.checkBox_saveStitchBlend.isChecked()
-        save_all_crop = self._shell.save_panel.ui.checkBox_saveAllCrop.isChecked()
-        save_all_full = self._shell.save_panel.ui.checkBox_saveAllFull.isChecked()
+        save_blend = self._shell.save_panel.ui.radioButton_saveStitchBlend.isChecked()
+        save_all_crop = self._shell.save_panel.ui.radioButton_saveAllCrop.isChecked()
+        save_all_full = self._shell.save_panel.ui.radioButton_saveAllFull.isChecked()
 
         # Disconnect the previous worker's signals so its finished→quit
         # can't fire the reused thread a second time and its started→run
