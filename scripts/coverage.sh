@@ -71,11 +71,14 @@ cd "${REPO_ROOT}"
 # deferred C++ destructor no longer fires at shutdown. Phase 7 (Qt6 port) will
 # confirm the cycle stays broken under PySide6.
 #
-# The -o addopts override explicitly includes -n auto because the override
-# REPLACES pyproject.toml's default addopts entirely (the default is
-# "-n auto --strict-markers"); without the explicit -n auto the override
-# would silently drop xdist parallelism.
-uv run pytest test/ -q --cov=lightsheet --cov-branch -o "addopts=--strict-markers -n auto" || _pytest_exit=$?
+# The -o addopts override deliberately RE-DECLARES addopts rather than
+# inheriting from pyproject.toml: -o replaces the default addopts entirely, so
+# the new --dist=load / --max-worker-restart=0 flags added there do NOT apply
+# during the coverage run (coverage.sh is single-purpose and its exit-code
+# handling is already tuned for the shutdown segfault). -n auto is included
+# explicitly so xdist parallelism is not silently dropped; --maxprocesses=6 is
+# added here explicitly for memory-bound consistency with the iteration path.
+uv run pytest test/ -q --cov=lightsheet --cov-branch -o "addopts=--strict-markers -n auto --maxprocesses=6" || _pytest_exit=$?
 # Tolerate the shutdown segfault (exit 139): the .coverage file is written
 # BEFORE Python atexit runs, so the data is complete even when the process
 # segfaults at shutdown. Any other non-zero exit (test failure, real error)

@@ -34,7 +34,9 @@ packages = [
     "lightsheet.hal",
     "lightsheet.hal.real",
     "lightsheet.hal.mocks",
+    "lightsheet.resources",
 ]
+package-data = { "lightsheet.resources" = ["*.png"] }
 
 [tool.uv]
 required-environments = ["sys_platform == 'win32'", "sys_platform == 'darwin'"]
@@ -86,7 +88,28 @@ ignore = ["ANN401"]
 # defaults
 
 [tool.pytest.ini_options]
-addopts = "-n auto --strict-markers"
+minversion = "9.1"
+# xdist flags:
+#   -n auto --maxprocesses=6  caps workers at 6 to bound PyQt5 worker memory on
+#                             high-core machines (rig, CI); -n auto alone would
+#                             spawn 10 workers on a 10-core Mac, each importing
+#                             Qt + stubs.
+#   --dist=load               explicit xdist distribution mode (the xdist
+#                             default); xdist_group("rig_hardware") still works
+#                             under any dist mode.
+#   --max-worker-restart=0    disables silent worker-restart-on-crash so a
+#                             segfaulted worker's tests surface as failures
+#                             instead of being hidden (lightsheet has a known
+#                             shutdown segfault, exit 139, tolerated in
+#                             scripts/coverage.sh).
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "-n", "auto",
+    "--maxprocesses=6",
+    "--dist=load",
+    "--max-worker-restart=0",
+]
 testpaths = ["test"]
 # Force the offscreen Qt platform plugin so no GUI windows pop up during
 # the test suite (headless CI + local runs). Individual tests may still
