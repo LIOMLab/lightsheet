@@ -1,0 +1,225 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "breezestylesheets"
+dynamic = ["version"]
+description = "Configurable Breeze and BreezeDark-like stylesheets for Qt Applications."
+readme = "README.md"
+requires-python = ">=3.7.4"
+dependencies = []
+authors = [
+  { name = "Colin Duquesnoy" },
+  { name = "Alex Huszagh", email = "ahuszagh@gmail.com" },
+]
+maintainers = [
+  { name = "Alex Huszagh", email = "ahuszagh@gmail.com" },
+]
+license = { "file" = "LICENSE.md" }
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Environment :: X11 Applications :: Qt",
+]
+keywords = ["qt", "gui", "stylesheets"]
+
+[project.urls]
+Homepage = "https://github.com/Alexhuszagh/BreezeStyleSheets"
+Documentation = "https://readthedocs.org"
+Repository = "https://github.com/Alexhuszagh/BreezeStyleSheets.git"
+"Bug Tracker" = "https://github.com/Alexhuszagh/BreezeStyleSheets/issues"
+Changelog = "https://github.com/Alexhuszagh/BreezeStyleSheets/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+yaml = [
+  "pyyaml>=6.0.1,<7.0.0",
+]
+toml = [
+  "tomli>=2.0.1,<3.0.0; python_version < '3.11'",
+]
+xml = [
+  "xml2dict>=0.2.2,<0.3.0",
+]
+detect = [
+  "winrt-Windows.UI>=3.2.1; platform_system == 'Windows' and python_version > '3.8'",
+  "winrt-Windows.UI.ViewManagement>=3.2.1; platform_system == 'Windows' and python_version > '3.8'",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=9.1.1; python_version >= '3.10'",
+  "pytest>=7.4.4; python_version < '3.10'",
+  "ruff>=0.16.0",
+  "ty>=0.0.72; python_version >= '3.8'",
+]
+test = [
+  "coverage>=7.2.4",
+  "pytest-cov>=4.1.0",
+  "pytest-html>=3.2.0",
+]
+type = [
+  "mypy>=2.3.0; python_version >= '3.10'",
+  "pyright>=1.1.411,<2.0.0",
+  "types-pyyaml>=6.0.12.20260724,<7.0.0.0; python_version >= '3.10'",
+]
+badge = [
+  "genbadge[coverage]>=1.1.3",
+]
+
+[tool.hatch.version]
+path = "breezestylesheets/__init__.py"
+
+[tool.hatch.build]
+only-include = ["breezestylesheets"]
+
+[tool.uv]
+add-bounds = "major"
+
+# tox-like replacements to execute tests for a large environment and configure CI
+[tool.poe.executor]
+type = "uv"
+extra = ["yaml", "toml", "xml"]
+
+[tool.poe.tasks._check]
+cmd = "ruff check breezestylesheets test"
+executor = { group = ["dev"], no-group = ["badge", "test", "type"] }
+
+[tool.poe.tasks._fmt-check]
+cmd = "ruff format breezestylesheets test --check"
+executor = { group = ["dev"], no-group = ["badge", "test", "type"] }
+
+[tool.poe.tasks.lint]
+help = "run the code linters"
+sequence = ["_check", "_fmt-check"]
+
+[tool.poe.tasks.fmt]
+help = "run the code formatters"
+cmd = "ruff format breezestylesheets test"
+
+[tool.poe.tasks._pyright]
+cmd = "--python 3.12 pyright"
+executor = { group = ["dev", "type"], no-group = ["badge", "test"] }
+
+[tool.poe.tasks._mypy]
+cmd = "--python 3.12 mypy"
+executor = { group = ["dev", "type"], no-group = ["badge", "test"] }
+
+[tool.poe.tasks._ty]
+cmd = "ty check"
+executor = { group = ["dev", "type"], no-group = ["badge", "test"] }
+
+[tool.poe.tasks.type]
+help = "run the static type checkers"
+sequence = ["_pyright", "_mypy", "_ty"]
+
+[tool.poe.tasks.test-py37]
+help = "run the test suite for Python 3.7"
+cmd = "--python 3.7 pytest"
+executor = { group = ["dev", "test"], no-group = ["badge", "type"] }
+
+[tool.poe.tasks.test-py38]
+help = "run the test suite for Python 3.8"
+cmd = "--python 3.8 pytest"
+executor = { group = ["dev", "test"], no-group = ["badge", "type"] }
+
+[tool.poe.tasks.test-py39]
+help = "run the test suite for Python 3.9"
+cmd = "--python 3.9 pytest"
+executor = { group = ["dev", "test"], no-group = ["badge", "type"] }
+
+[tool.poe.tasks.test-py310]
+help = "run the test suite for Python 3.10"
+cmd = "--python 3.10 pytest"
+executor = { group = ["dev", "test"], no-group = ["badge", "type"] }
+
+[tool.poe.tasks.test-py311]
+help = "run the test suite for Python 3.11"
+cmd = "--python 3.11 pytest"
+executor = { group = ["dev", "test"], no-group = ["badge", "type"] }
+
+[tool.poe.tasks.test-py312]
+help = "run the test suite for Python 3.12"
+cmd = "--python 3.12 pytest"
+executor = { group = ["dev", "test"], no-group = ["badge", "type"] }
+
+[tool.poe.tasks.test-py313]
+help = "run the test suite for Python 3.13"
+cmd = "--python 3.13 pytest"
+executor = { group = ["dev", "test"], no-group = ["badge", "type"] }
+
+[tool.poe.tasks.test-py314]
+help = "run the test suite for Python 3.14"
+cmd = "--python 3.14 pytest"
+executor = { group = ["dev", "test"], no-group = ["badge", "type"] }
+
+[tool.poe.tasks.test]
+help = "run the test suite for all versions"
+# NOTE: there's a bug with using pytest on Windows for Python 3.7 due to encoding issues
+sequence = ["test-py38", "test-py39", "test-py310", "test-py311", "test-py312", "test-py313", "test-py314"]
+
+[tool.poe.tasks.badge]
+help = "generate the coverage and test badge"
+cmd = "genbadge coverage --input-file coverage.xml --output-file coverage.svg"
+executor = { group = ["badge"], no-group = ["dev", "test", "type"] }
+
+[tool.poe.tasks.configure]
+help = "configure the stylesheets"
+cmd = "python configure.py"
+
+[tool.poe.tasks.ci]
+help = "run the CI suite"
+sequence = ["lint", "test", "type", "badge"]
+
+[tool.ruff]
+line-length = 110
+# NOTE: lowest possible version
+target-version = "py37"
+
+[tool.ruff.format]
+quote-style = "double"
+line-ending = "lf"
+preview = true
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E203", "D202", "D212", "D300", "UP037"]
+preview = true
+
+[tool.ruff.lint.per-file-ignores]
+"__*__.py" = ["F401"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+section-order = ["future", "typing", "standard-library", "third-party", "first-party", "local-folder"]
+no-lines-before = ["typing", "local-folder"]
+
+[tool.ruff.lint.isort.sections]
+typing = ["typing", "types", "typing_extensions", "mypy", "mypy_extensions", "collections.abc"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "--cov=breezestylesheets --junitxml=__reports__/junit.xml --html=__reports__/report.html --cov-report=xml"
+
+# NOTE: `example` is handled in its own project
+[tool.pyright]
+include = ["breezestylesheets", "test"]
+pythonVersion = "3.12"
+
+[tool.mypy]
+packages = ["breezestylesheets", "test"]
+warn_no_return = false
+
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.ty.src]
+include = ["breezestylesheets", "test"]
+
+[tool.ty.rules]
+# NOTE: does not report inconsistent argument name overrides
+unused-type-ignore-comment = "ignore"
+# NOTE: cannot correctly detect that our type bases are classes
+unsupported-base = "ignore"

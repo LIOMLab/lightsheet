@@ -608,7 +608,6 @@ dependencies = [
     { name = "pyserial" },
     { name = "pyside6" },
     { name = "pyyaml" },
-    { name = "qdarkstyle" },
     { name = "scipy" },
     { name = "tifffile" },
 ]
@@ -641,7 +640,6 @@ requires-dist = [
     { name = "pyserial", specifier = ">=3.5" },
     { name = "pyside6", specifier = ">=6.8" },
     { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "qdarkstyle", specifier = ">=3.0.3" },
     { name = "scipy", specifier = ">=1.13" },
     { name = "tifffile", specifier = ">=2022.2.9" },
 ]
@@ -1361,30 +1359,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/74/93/7baea19427dcfbe1e5a372d81473250b379f04b1bd3c4c5ff825e2327202/pyyaml-6.0.3-cp312-cp312-win32.whl", hash = "sha256:96b533f0e99f6579b3d4d4995707cf36df9100d67e0c8303a0c55b27b5f99bc5", size = 137658, upload-time = "2025-09-25T21:32:20.209Z" },
     { url = "https://files.pythonhosted.org/packages/86/bf/899e81e4cce32febab4fb42bb97dcdf66bc135272882d1987881a4b519e9/pyyaml-6.0.3-cp312-cp312-win_amd64.whl", hash = "sha256:5fcd34e47f6e0b794d17de1b4ff496c00986e1c83f7ab2fb8fcfe9616ff7477b", size = 154003, upload-time = "2025-09-25T21:32:21.167Z" },
     { url = "https://files.pythonhosted.org/packages/1a/08/67bd04656199bbb51dbed1439b7f27601dfb576fb864099c7ef0c3e55531/pyyaml-6.0.3-cp312-cp312-win_arm64.whl", hash = "sha256:64386e5e707d03a7e172c0701abfb7e10f0fb753ee1d773128192742712a98fd", size = 140344, upload-time = "2025-09-25T21:32:22.617Z" },
-]
-
-[[package]]
-name = "qdarkstyle"
-version = "3.2.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "qtpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ef/1e/5bf72a61a7636058e25eaa7503c050dae9445de75fad6f71ba08f2174e49/QDarkStyle-3.2.3.tar.gz", hash = "sha256:0c0b7f74a6e92121008992b369bab60468157db1c02cd30d64a5e9a3b402f1ae", size = 700957, upload-time = "2023-11-28T19:54:51.623Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/93/7d/c3c10498430dadcea4def5faddf71cd199e577d20a125e7ef1e9d7bdbbfa/QDarkStyle-3.2.3-py2.py3-none-any.whl", hash = "sha256:ea980ee426d594909cf1058306832af71ff6cbad6f69237b036d1550635aefbc", size = 871762, upload-time = "2023-11-28T19:54:48.123Z" },
-]
-
-[[package]]
-name = "qtpy"
-version = "2.4.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "packaging" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/70/01/392eba83c8e47b946b929d7c46e0f04b35e9671f8bb6fc36b6f7945b4de8/qtpy-2.4.3.tar.gz", hash = "sha256:db744f7832e6d3da90568ba6ccbca3ee2b3b4a890c3d6fbbc63142f6e4cdf5bb", size = 66982, upload-time = "2025-02-11T15:09:25.759Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/69/76/37c0ccd5ab968a6a438f9c623aeecc84c202ab2fabc6a8fd927580c15b5a/QtPy-2.4.3-py3-none-any.whl", hash = "sha256:72095afe13673e017946cc258b8d5da43314197b741ed2890e563cf384b51aa1", size = 95045, upload-time = "2025-02-11T15:09:24.162Z" },
 ]
 
 [[package]]

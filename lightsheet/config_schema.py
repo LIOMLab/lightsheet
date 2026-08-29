@@ -161,6 +161,19 @@ class ControllerSettings(_NoEnvBaseSettings):
     image_file_format: Literal["hdf5", "zarr", "both", "tiff"] = Field(
         alias="Image File Format", default="both"
     )
+    # Theme — the persisted UI theme override loaded at startup into
+    # set_app_stylesheet. "system" follows the OS light/dark via
+    # QGuiApplication.styleHints().colorScheme(); "light"/"dark" are explicit
+    # overrides. The before-validator lowercases so the rig's Title-Case
+    # "Dark"/"Light"/"System" config.ini values are accepted, and maps the
+    # "" sentinel (a key absent from config.ini arrives as "" via
+    # load_sections_from_ini) to the operator-facing default "system".
+    # Non-safety key — an unknown value is rejected by the Literal here in
+    # the strict tier (collected by ConfigValidator as an error) and the
+    # overlay tier handles a missing key via the "" -> "system" mapping.
+    theme: Literal["light", "dark", "system"] = Field(
+        alias="Theme", default="system"
+    )
 
     @field_validator("image_file_format", mode="before")
     @classmethod
@@ -168,6 +181,15 @@ class ControllerSettings(_NoEnvBaseSettings):
         if isinstance(v, str):
             if v == "":
                 return "hdf5"
+            return v.lower()
+        return v
+
+    @field_validator("theme", mode="before")
+    @classmethod
+    def _lowercase_theme(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            if v == "":
+                return "system"
             return v.lower()
         return v
 
@@ -180,6 +202,9 @@ class ControllerSettingsOverlay(_NoEnvBaseSettings):
     image_file_format: Literal["hdf5", "zarr", "both", "tiff"] = Field(
         alias="Image File Format", default="both"
     )
+    theme: Literal["light", "dark", "system"] = Field(
+        alias="Theme", default="system"
+    )
 
     @field_validator("image_file_format", mode="before")
     @classmethod
@@ -187,6 +212,15 @@ class ControllerSettingsOverlay(_NoEnvBaseSettings):
         if isinstance(v, str):
             if v == "":
                 return "hdf5"
+            return v.lower()
+        return v
+
+    @field_validator("theme", mode="before")
+    @classmethod
+    def _lowercase_theme(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            if v == "":
+                return "system"
             return v.lower()
         return v
 

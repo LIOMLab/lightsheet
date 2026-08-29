@@ -6,8 +6,12 @@ or as a debug fallback with ``python -m lightsheet``.
 
 The bootstrap body is relocated verbatim from the legacy ``main/main.py``;
 the only structural change is wrapping it in ``main()`` so the QApplication
-and controller live as function locals rather than module globals, and
-``set_app_stylesheet`` becomes a closure over the local ``app``.
+and controller live as function locals rather than module globals. The
+theme helpers (``_load_breeze_stylesheet``, ``_system_theme``,
+``_resolve_theme``, ``set_app_stylesheet``) are module-level so they are
+unit-testable without constructing the full ``Controller_MainWindow`` and
+so the controller's ``sig_stylesheet`` signal can connect to
+``set_app_stylesheet`` directly.
 """
 
 import argparse
@@ -15,8 +19,198 @@ import logging
 import os
 import sys
 import warnings
+from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Theme helpers — BreezeStyleSheets (vendored) + Qt6 system-default detection.
+#
+# BreezeStyleSheets is NOT on PyPI; the source is vendored under
+# lightsheet/gui/_vendor/breezestylesheets/ and compiled into
+# lightsheet/gui/breeze_pyside6.py via scripts/build-breeze.sh (pyside6-rcc).
+# Importing the compiled module registers the Qt resource tree
+# (:/light/stylesheet.qss, :/dark/stylesheet.qss) so the stylesheets load via
+# QFile at runtime. The compiled resource is committed (same pattern as the
+# ui_*_rc.py files) so the rig needs no configure.py run.
+#
+# These helpers are module-level (not the closure form) so they are unit-
+# testable without constructing the full Controller_MainWindow.
+# ---------------------------------------------------------------------------
+
+
+def _load_breeze_stylesheet(theme: str) -> str:
+    """Load the Breeze .qss for the given theme code ("light" or "dark")
+    from the compiled Qt resource.
+
+    The compiled resource (lightsheet/gui/breeze_pyside6.py) registers the
+    stylesheets under ``:/<theme>/stylesheet.qss``. Returns the stylesheet
+    text. Raises FileNotFoundError if the resource path is absent (a build
+    or import failure).
+    """
+    # Importing the compiled module registers the resource tree. Deferred so
+    # the module stays import-light on paths that never load a stylesheet.
+    from lightsheet.gui import breeze_pyside6  # noqa: F401  # side effect: qRegisterResourceData
+    from PySide6.QtCore import QFile, QIODevice
+
+    path = f":/{theme}/stylesheet.qss"
+    f = QFile(path)
+    if not f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
+        raise FileNotFoundError(
+            f"Breeze stylesheet resource not found: {path} "
+            f"(open error: {f.errorString()})"
+        )
+    return bytes(f.readAll()).decode("utf-8")
+
+
+def _color_scheme_to_theme(scheme: "object") -> str:
+    """Map a ``Qt.ColorScheme`` value to a Breeze theme code.
+
+    - ``Qt.ColorScheme.Light`` -> "light"
+    - ``Qt.ColorScheme.Dark`` -> "dark"
+    - ``Qt.ColorScheme.Unknown`` (or anything else) -> "dark" (the fallback
+      — a dark microscope-room GUI is the safer default for an operator
+      working in a dim environment).
+
+    Pure function over the scheme value so it is unit-testable without
+    relying on the platform honoring ``setColorScheme`` (the offscreen
+    platform on macOS always reports Unknown).
+    """
+    from PySide6.QtCore import Qt
+
+    if scheme == Qt.ColorScheme.Light:
+        return "light"
+    # Dark or Unknown -> dark (the fallback for Unknown).
+    return "dark"
+
+
+def _system_theme() -> str:
+    """Resolve the OS light/dark preference via Qt6
+    ``QGuiApplication.styleHints().colorScheme()`` (available since Qt 6.5).
+
+    Returns "dark" for Dark, "light" for Light, and "dark" for Unknown (the
+    fallback — a dark microscope-room GUI is the safer default for an
+    operator working in a dim environment).
+    """
+    from PySide6.QtGui import QGuiApplication
+
+    scheme = QGuiApplication.styleHints().colorScheme()
+    return _color_scheme_to_theme(scheme)
+
+
+def _resolve_theme(cfg_theme: str) -> str:
+    """Map the persisted ``[Controller] Theme`` config value to the theme
+    code that ``set_app_stylesheet`` consumes.
+
+    - "system" (or any unrecognized/empty value) -> resolved via
+      ``_system_theme()`` against the current OS color scheme.
+    - "light" / "dark" -> returned verbatim (explicit override).
+
+    Defensive against malformed persisted values ("" or "purple"): an
+    unrecognized value falls back to the system resolution rather than
+    crashing. The config_schema Literal rejects "purple" at load time; this
+    guard is a second line of defense for direct cfg_read callers.
+    """
+    if cfg_theme == "light" or cfg_theme == "dark":
+        return cfg_theme
+    # "system", "", None, or any unrecognized value -> system resolution.
+    return _system_theme()
+
+
+# Module-level holder for the persisted operator theme choice. The
+# colorSchemeChanged handler reads this to decide whether to follow a
+# mid-session OS theme switch (only when the choice is "system"). main()
+# initializes it from config.ini at startup; set_app_stylesheet updates it
+# on each call so the handler sees the latest operator choice.
+_persisted_theme_holder: dict[str, str] = {"theme": "system"}
+
+
+def _on_color_scheme_changed(app: "object") -> None:
+    """colorSchemeChanged slot — re-resolve the theme only if the
+    persisted operator choice is still "system". An explicit light/dark
+    choice must hold across an OS theme switch.
+
+    Module-level so set_app_stylesheet can connect it without nesting
+    closures (and so tests can call set_app_stylesheet directly).
+    """
+    if _persisted_theme_holder["theme"] != "system":
+        return
+    resolved = _system_theme()
+    app.setStyleSheet(_load_breeze_stylesheet(resolved))
+
+
+def set_app_stylesheet(
+    stylesheet_code: str,
+    app: "Optional[object]" = None,
+    persisted_theme: "Optional[str]" = None,
+) -> None:
+    """Apply the Breeze stylesheet for the chosen theme code.
+
+    - "light" / "dark": load that Breeze sheet directly and disconnect the
+      colorSchemeChanged follower (an explicit choice does not follow
+      mid-session OS theme switches).
+    - "system": resolve via QGuiApplication.styleHints().colorScheme() and
+      connect colorSchemeChanged so a mid-session OS theme switch
+      re-resolves only while the persisted choice stays "system".
+
+    ``app`` defaults to QApplication.instance() (the production path and
+    the test path both have a QApplication active). ``persisted_theme``
+    defaults to the module-level holder's current value; passing it
+    explicitly is how the controller's sig_stylesheet signal communicates
+    the new operator choice on a menu click, and how tests pin the
+    persisted choice without going through main().
+    """
+    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtWidgets import QApplication
+
+    if app is None:
+        app = QApplication.instance()
+    if persisted_theme is None:
+        # When called from the controller's sig_stylesheet signal (an
+        # operator menu click), persisted_theme is not passed — the
+        # stylesheet_code IS the new operator choice, so the holder must
+        # track it. This is what makes an explicit light/dark menu choice
+        # stop the colorSchemeChanged follower (the holder flips from
+        # "system" to "light"/"dark"). Tests pass persisted_theme
+        # explicitly to pin the choice independent of the signal.
+        persisted_theme = stylesheet_code
+    # Update the holder so the colorSchemeChanged handler sees the latest
+    # operator choice.
+    _persisted_theme_holder["theme"] = persisted_theme
+
+    if stylesheet_code == "system":
+        resolved = _system_theme()
+        app.setStyleSheet(_load_breeze_stylesheet(resolved))
+        # Follow mid-session OS theme changes — but only while the persisted
+        # choice is still "system". The guard in _on_color_scheme_changed
+        # prevents an explicit light/dark choice from being overridden.
+        hints = QGuiApplication.styleHints()
+        # Disconnect any prior follower so we never stack handlers across
+        # repeated set_app_stylesheet calls. PySide6 emits a RuntimeWarning
+        # (not an exception) when disconnecting a signal with no
+        # connections, so suppress warnings around the call rather than
+        # relying on a receivers() guard (SignalInstance has none).
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            try:
+                hints.colorSchemeChanged.disconnect()
+            except (RuntimeError, TypeError):
+                pass  # no handler connected yet
+        hints.colorSchemeChanged.connect(
+            lambda _scheme: _on_color_scheme_changed(app)
+        )
+    else:
+        # Explicit light/dark — load directly and stop following the OS.
+        theme = stylesheet_code if stylesheet_code in ("light", "dark") else "dark"
+        app.setStyleSheet(_load_breeze_stylesheet(theme))
+        hints = QGuiApplication.styleHints()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            try:
+                hints.colorSchemeChanged.disconnect()
+            except (RuntimeError, TypeError):
+                pass
 
 
 def _resolve_demo(cli_demo: bool, env: str | None) -> bool:
@@ -156,7 +350,7 @@ def main() -> int:
     demo = _resolve_demo(args.demo, os.environ.get("LIGHTSHEET_DEMO"))
 
     # Preload the NI-DAQmx C library before any PySide6/Qt6 import. PySide6
-    # (and qdarkstyle) load Qt DLLs that corrupt the NI-DAQmx driver's internal
+    # loads Qt DLLs that corrupt the NI-DAQmx driver's internal
     # state when loaded first — every subsequent nidaqmx.Task() call crashes
     # with "OSError: exception: access violation reading 0x0000000000000000"
     # inside DAQmxCreateTask. Preloading nicaiu.dll maps the driver into the
@@ -185,15 +379,12 @@ def main() -> int:
 
     configure_logging()
 
-    # PySide6 / controller / qdarkstyle imports are deferred to inside main()
-    # so the nicaiu preload above runs first. ruff's E402 (module-level
+    # PySide6 / controller imports are deferred to inside main() so the
+    # nicaiu preload above runs first. ruff's E402 (module-level
     # import-not-at-top) is suppressed for this file via per-file-ignores.
-    import qdarkstyle
-    from PySide6.QtCore import Slot
     from PySide6.QtWidgets import QApplication
-    from qdarkstyle.dark.palette import DarkPalette
-    from qdarkstyle.light.palette import LightPalette
 
+    from lightsheet.config import cfg_read
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
     # Workaround for a nidaqmx 0.6.x Task.__del__ bug: after the context manager
@@ -238,19 +429,23 @@ def main() -> int:
 
     # Initializing the app, controller (class which connects GUI to features)
     app = QApplication(sys.argv)
-    app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api="pyside6", palette=LightPalette))
 
-    @Slot(str)
-    def set_app_stylesheet(stylesheet_code: str) -> None:
-        """Function that allows stylesheet selection for the app."""
-        if stylesheet_code == "light":
-            app.setStyleSheet(
-                qdarkstyle.load_stylesheet(qt_api="pyside6", palette=LightPalette)
-            )
-        elif stylesheet_code == "dark":
-            app.setStyleSheet(
-                qdarkstyle.load_stylesheet(qt_api="pyside6", palette=DarkPalette)
-            )
+    # Read the persisted [Controller] Theme override (light/dark/system;
+    # default system) and apply the Breeze stylesheet at startup. The
+    # config_schema ControllerSettings.theme field validates the value at
+    # the startup gate above; here cfg_read returns the raw string with the
+    # "system" default for an absent key.
+    cfg_theme = cfg_read(
+        "config.ini", "Controller", {"Theme": "system"}
+    )["Theme"]
+    # Initialize the module-level persisted-theme holder so the
+    # colorSchemeChanged handler (connected inside set_app_stylesheet)
+    # can decide whether to follow a mid-session OS theme switch.
+    _persisted_theme_holder["theme"] = cfg_theme
+    # Apply the startup theme. set_app_stylesheet is module-level so the
+    # controller's sig_stylesheet signal can connect to it directly and
+    # the test suite can call it without constructing main().
+    set_app_stylesheet(cfg_theme, app=app, persisted_theme=cfg_theme)
 
     # --- Composition root: build the DeviceBundle, validate config, then
     # construct the shell. main() is the SOLE composition root —

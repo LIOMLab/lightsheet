@@ -117,44 +117,60 @@ def test_set_app_stylesheet_light_distinct_from_dark(qtbot) -> None:
 
 
 # ---------------------------------------------------------------------------
-# System-default resolution — _system_theme reads colorScheme.
+# System-default resolution — _color_scheme_to_theme maps Qt.ColorScheme to
+# a Breeze theme code. _system_theme reads colorScheme() and delegates.
 # ---------------------------------------------------------------------------
 
 
-def test_system_theme_dark(qtbot) -> None:
+def test_color_scheme_to_theme_dark(qtbot) -> None:
     m = _import_theme_module()
-    QGuiApplication.styleHints().setColorScheme(Qt.ColorScheme.Dark)
-    assert m._system_theme() == "dark"
+    assert m._color_scheme_to_theme(Qt.ColorScheme.Dark) == "dark"
 
 
-def test_system_theme_light(qtbot) -> None:
+def test_color_scheme_to_theme_light(qtbot) -> None:
     m = _import_theme_module()
-    QGuiApplication.styleHints().setColorScheme(Qt.ColorScheme.Light)
+    assert m._color_scheme_to_theme(Qt.ColorScheme.Light) == "light"
+
+
+def test_color_scheme_to_theme_unknown_falls_back_to_dark(qtbot) -> None:
+    m = _import_theme_module()
+    assert m._color_scheme_to_theme(Qt.ColorScheme.Unknown) == "dark"
+
+
+def test_system_theme_reads_color_scheme(qtbot, monkeypatch) -> None:
+    # _system_theme delegates to _color_scheme_to_theme after reading
+    # QGuiApplication.styleHints().colorScheme(). Patch the reader to verify
+    # the delegation without depending on the platform honoring
+    # setColorScheme (the offscreen platform on macOS always reports
+    # Unknown).
+    m = _import_theme_module()
+    monkeypatch.setattr(
+        "PySide6.QtGui.QGuiApplication.styleHints",
+        lambda: type(
+            "FakeHints",
+            (),
+            {"colorScheme": staticmethod(lambda: Qt.ColorScheme.Light)},
+        )(),
+    )
     assert m._system_theme() == "light"
 
 
-def test_system_theme_unknown_falls_back_to_dark(qtbot) -> None:
-    m = _import_theme_module()
-    QGuiApplication.styleHints().setColorScheme(Qt.ColorScheme.Unknown)
-    assert m._system_theme() == "dark"
-
-
-def test_set_app_stylesheet_system_follows_dark(qtbot) -> None:
+def test_set_app_stylesheet_system_follows_dark(qtbot, monkeypatch) -> None:
     m = _import_theme_module()
     app = QApplication.instance()
     _reset_app_stylesheet(app)
-    QGuiApplication.styleHints().setColorScheme(Qt.ColorScheme.Dark)
+    monkeypatch.setattr(m, "_system_theme", lambda: "dark")
     m.set_app_stylesheet("system", app=app, persisted_theme="system")
     assert app.styleSheet() != ""
     # The applied sheet must be the Breeze dark sheet.
     assert app.styleSheet() == m._load_breeze_stylesheet("dark")
 
 
-def test_set_app_stylesheet_system_follows_light(qtbot) -> None:
+def test_set_app_stylesheet_system_follows_light(qtbot, monkeypatch) -> None:
     m = _import_theme_module()
     app = QApplication.instance()
     _reset_app_stylesheet(app)
-    QGuiApplication.styleHints().setColorScheme(Qt.ColorScheme.Light)
+    monkeypatch.setattr(m, "_system_theme", lambda: "light")
     m.set_app_stylesheet("system", app=app, persisted_theme="system")
     assert app.styleSheet() == m._load_breeze_stylesheet("light")
 
@@ -165,75 +181,77 @@ def test_set_app_stylesheet_system_follows_light(qtbot) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_theme_system_uses_color_scheme(qtbot) -> None:
+def test_resolve_theme_system_uses_color_scheme(qtbot, monkeypatch) -> None:
     m = _import_theme_module()
-    QGuiApplication.styleHints().setColorScheme(Qt.ColorScheme.Dark)
+    monkeypatch.setattr(m, "_system_theme", lambda: "dark")
     assert m._resolve_theme("system") == "dark"
-    QGuiApplication.styleHints().setColorScheme(Qt.ColorScheme.Light)
+    monkeypatch.setattr(m, "_system_theme", lambda: "light")
     assert m._resolve_theme("system") == "light"
 
 
-def test_resolve_theme_explicit_dark(qtbot) -> None:
+def test_resolve_theme_explicit_dark(qtbot, monkeypatch) -> None:
     m = _import_theme_module()
     # An explicit "dark" persisted choice is honored regardless of OS scheme.
-    QGuiApplication.styleHints().setColorScheme(Qt.ColorScheme.Light)
+    monkeypatch.setattr(m, "_system_theme", lambda: "light")
     assert m._resolve_theme("dark") == "dark"
 
 
-def test_resolve_theme_explicit_light(qtbot) -> None:
+def test_resolve_theme_explicit_light(qtbot, monkeypatch) -> None:
     m = _import_theme_module()
-    QGuiApplication.styleHints().setColorScheme(Qt.ColorScheme.Dark)
+    monkeypatch.setattr(m, "_system_theme", lambda: "dark")
     assert m._resolve_theme("light") == "light"
 
 
-def test_resolve_theme_unknown_value_falls_back_to_system(qtbot) -> None:
+def test_resolve_theme_unknown_value_falls_back_to_system(qtbot, monkeypatch) -> None:
     # A malformed persisted value (e.g. "" or "purple") resolves to system
     # rather than crashing — the config_schema Literal rejects "purple" at
     # load time, but _resolve_theme must still be defensive.
     m = _import_theme_module()
-    QGuiApplication.styleHints().setColorScheme(Qt.ColorScheme.Dark)
+    monkeypatch.setattr(m, "_system_theme", lambda: "dark")
     assert m._resolve_theme("") == "dark"  # "" -> system -> dark
 
 
 # ---------------------------------------------------------------------------
 # colorSchemeChanged follow — only when persisted choice is "system".
+#
+# The offscreen platform on macOS does not honor setColorScheme, so these
+# tests drive the colorSchemeChanged signal's connected handler directly by
+# calling _on_color_scheme_changed (the slot set_app_stylesheet connects).
+# This verifies the follow-logic without depending on platform color-scheme
+# support.
 # ---------------------------------------------------------------------------
 
 
-def test_colorSchemeChanged_follows_when_system(qtbot) -> None:
+def test_colorSchemeChanged_follows_when_system(qtbot, monkeypatch) -> None:
     """When the persisted choice is "system", a mid-session OS theme switch
     triggers a reload of the matching Breeze sheet."""
     m = _import_theme_module()
     app = QApplication.instance()
     _reset_app_stylesheet(app)
-    QGuiApplication.styleHints().setColorScheme(Qt.ColorScheme.Dark)
+    monkeypatch.setattr(m, "_system_theme", lambda: "dark")
     m.set_app_stylesheet("system", app=app, persisted_theme="system")
     assert app.styleSheet() == m._load_breeze_stylesheet("dark")
-    # Simulate the OS switching to Light mid-session.
-    QGuiApplication.styleHints().setColorScheme(Qt.ColorScheme.Light)
-    # Emit the colorSchemeChanged signal — the connected handler must reload.
-    # Use qtbot.waitSignal to ensure the signal fires + handler runs.
-    qtbot.waitSignal(
-        QGuiApplication.styleHints().colorSchemeChanged, timeout=2000
-    )
-    # After the signal, the app stylesheet should now be the light sheet.
+    # Simulate the OS switching to Light mid-session — the connected handler
+    # re-resolves via _system_theme.
+    monkeypatch.setattr(m, "_system_theme", lambda: "light")
+    m._on_color_scheme_changed(app)
     assert app.styleSheet() == m._load_breeze_stylesheet("light")
 
 
-def test_colorSchemeChanged_ignored_when_explicit(qtbot) -> None:
+def test_colorSchemeChanged_ignored_when_explicit(qtbot, monkeypatch) -> None:
     """When the persisted choice is explicitly "dark" or "light", a
     mid-session OS theme switch must NOT reload the stylesheet."""
     m = _import_theme_module()
     app = QApplication.instance()
     _reset_app_stylesheet(app)
-    QGuiApplication.styleHints().setColorScheme(Qt.ColorScheme.Dark)
+    monkeypatch.setattr(m, "_system_theme", lambda: "dark")
     m.set_app_stylesheet("dark", app=app, persisted_theme="dark")
     dark_sheet = app.styleSheet()
-    # OS switches to Light — the explicit "dark" choice must hold.
-    QGuiApplication.styleHints().setColorScheme(Qt.ColorScheme.Light)
-    qtbot.waitSignal(
-        QGuiApplication.styleHints().colorSchemeChanged, timeout=2000
-    )
+    # OS switches to Light — the explicit "dark" choice must hold. The
+    # handler short-circuits because the persisted choice is "dark", not
+    # "system".
+    monkeypatch.setattr(m, "_system_theme", lambda: "light")
+    m._on_color_scheme_changed(app)
     assert app.styleSheet() == dark_sheet, (
         "explicit dark choice was overridden by an OS theme switch"
     )
