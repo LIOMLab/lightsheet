@@ -136,11 +136,17 @@ class LevelsBar(QWidget):
         Emits ``sig_rangeChanged`` with the new (range_min, range_max). If
         the window was clamped, ``sig_levelsChanged`` is also emitted so the
         ImageView's display window stays consistent with the new range.
+        No-ops (no signal, no repaint) when the range is unchanged — callers
+        invoke this on every incoming frame, and for a fixed dtype the range
+        is constant, so the guard prevents redundant emissions and keeps the
+        operator's RANGE handle adjustments stable across frames.
         """
         new_min = int(dmin)
         new_max = int(dmax)
         if new_max < new_min:
             new_min, new_max = new_max, new_min
+        if new_min == self._range_min and new_max == self._range_max:
+            return
         self._range_min = new_min
         self._range_max = new_max
         # Clamp the window into the new range.
