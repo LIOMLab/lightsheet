@@ -560,6 +560,14 @@ class Controller_MainWindow(QMainWindow):
         self.save_format_button_group.addButton(self.save_panel.ui.radioButton_saveFormat_both)
         self.save_format_button_group.setExclusive(True)
         self.save_format_button_group.buttonClicked.connect(self.updateUi_save_format_changed)
+        # Re-estimate every planned-queue row's Est. Size cell when the
+        # format radio changes (HDF5 = raw bytes; OME-Zarr = raw L0 +
+        # multiscale pyramid overhead; Both = sum). Connected AFTER
+        # updateUi_save_format_changed so save_format is updated before
+        # the recompute reads it (Qt calls slots in connection order).
+        self.save_format_button_group.buttonClicked.connect(
+            self.stack_panel.table_manager.recompute_all_rows
+        )
 
         # Reflect the config-driven save_format default onto the checked
         # format radio. "tiff" (legacy) maps to the HDF5 radio as the

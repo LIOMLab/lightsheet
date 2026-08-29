@@ -207,7 +207,10 @@ class AcquisitionTableManager(QWidget):
         self._set_numeric_cell(row, _COL_STEP, 1.0)
         self._set_readonly_cell(row, _COL_NPLANES, "0")
         self._set_readonly_cell(row, _COL_ESTTIME, "0:00")
-        self._set_readonly_cell(row, _COL_ESTSIZE, "0.0 MB")
+        self._set_readonly_cell(
+            row, _COL_ESTSIZE,
+            self._format_size_human_readable(0.0, self._format_label()),
+        )
         self.table.blockSignals(False)
         # Recompute + validate the new row (signals re-enabled).
         self._recompute_row(row)
@@ -355,14 +358,104 @@ class AcquisitionTableManager(QWidget):
             return 0.5
 
     def _estimate_stack_size_mb(self, n_planes: int) -> float:
-        """Advisory stack size in MB."""
+        """Advisory stack size in MB, format-aware.
+
+        - ``hdf5`` (and the tiff/legacy fallback): raw bytes —
+          ``rows * cols * 2 * n_planes`` (uint16), unchanged from the
+          pre-format-aware behavior.
+        - ``zarr``: raw L0 bytes plus the multiscale pyramid overhead.
+          The pyramid level count is stack_step-dependent: count the
+          targets in ``(10, 25, 50, 100)`` µm that are ``>= max(base_res)``
+          where ``base_res = (abs(stack_step), 6.5*binning_x,
+          6.5*binning_y)`` — the same target-validity filter the writer's
+          ``finalize_with_resolutions`` applies (so the estimate tracks
+          the real on-disk pyramid, NOT a hardcoded level count). Each
+          downsampled level is ~1/4 of the previous (2× Y/X downsample),
+          so the total pyramid overhead is
+          ``L0 * sum(0.25**i for i in range(level_count))``.
+        - ``both``: ``hdf5_estimate + zarr_estimate`` (sum).
+        """
         try:
             rows = int(getattr(self._shell.camera, "rows", 2000))
             cols = int(getattr(self._shell.camera, "columns", 2000))
         except (AttributeError, TypeError, ValueError):
             rows, cols = 2000, 2000
         bytes_per_frame = rows * cols * 2
-        return (n_planes * bytes_per_frame) / (1024.0 * 1024.0)
+        l0_bytes = n_planes * bytes_per_frame
+        l0_mb = l0_bytes / (1024.0 * 1024.0)
+
+        fmt = str(getattr(self._shell, "save_format", "hdf5")).lower()
+        if fmt == "zarr":
+            return l0_mb * self._zarr_pyramid_multiplier()
+        if fmt == "both":
+            return l0_mb + l0_mb * self._zarr_pyramid_multiplier()
+        # hdf5 / tiff / unknown -> raw bytes.
+        return l0_mb
+
+    def _zarr_pyramid_multiplier(self) -> float:
+        """Total-size multiplier for the OME-Zarr pyramid relative to L0.
+
+        The level count is derived from the live ``base_res`` (Z from
+        ``stack_step``, XY from the camera binning) using the writer's
+        target-validity filter: a target resolution is kept only if
+        ``target_um >= max(base_res)``. Each retained level is ~1/4 of
+        the previous (2× Y/X downsample), so the geometric sum
+        ``sum(0.25**i for i in range(level_count))`` is the overhead
+        factor on top of L0 (level 0 contributes 1.0).
+        """
+        try:
+            stack_step = float(getattr(self._shell, "stack_step", 0.0))
+        except (TypeError, ValueError):
+            stack_step = 0.0
+        cam = getattr(self._shell, "camera", None)
+        binning_x = int(getattr(cam, "binning_x", 1) or 1)
+        binning_y = int(getattr(cam, "binning_y", 1) or 1)
+        base_res = (abs(stack_step), 6.5 * binning_x, 6.5 * binning_y)
+        max_res = max(base_res) if base_res else 0.0
+        level_count = sum(1 for t in (10, 25, 50, 100) if t >= max_res)
+        # Level 0 (raw) is always present; each downsampled level adds
+        # 0.25**i of L0. The multiplier covers L0 + all pyramid levels.
+        return sum(0.25 ** i for i in range(level_count))
+
+    def _format_size_human_readable(self, mb: float, fmt: str) -> str:
+        """Format an MB value as a human-readable string with a format
+        suffix: ``>=1024 GB`` -> TB, ``>=1024 MB`` -> GB, else MB. One
+        decimal place. ``fmt`` is the uppercase label (``"HDF5"`` /
+        ``"OME-Zarr"`` / ``"Both"``)."""
+        if mb >= 1024.0 * 1024.0:
+            return f"{mb / 1024.0 / 1024.0:.1f} TB ({fmt})"
+        if mb >= 1024.0:
+            return f"{mb / 1024.0:.1f} GB ({fmt})"
+        return f"{mb:.1f} MB ({fmt})"
+
+    def _format_label(self) -> str:
+        """Map ``self._shell.save_format`` to the uppercase suffix label
+        used in the Est. Size cell."""
+        fmt = str(getattr(self._shell, "save_format", "hdf5")).lower()
+        if fmt == "zarr":
+            return "OME-Zarr"
+        if fmt == "both":
+            return "Both"
+        return "HDF5"
+
+    def recompute_all_rows(self) -> None:
+        """Re-estimate every planned-queue row's Est. Size cell.
+
+        Subscribed to the save-format radio group's ``buttonClicked``
+        signal (wired in the controller): when the operator switches
+        format, every row's size estimate is re-computed against the new
+        format so the format-dependence is visible at planning time. Uses
+        the existing ``_recomputing`` re-entrancy guard so the per-row
+        ``setItem`` calls do not re-trigger ``cellChanged``.
+        """
+        if self._recomputing:
+            return
+        self._recomputing = True
+        try:
+            for i in range(self.table.rowCount()):
+                self._recompute_row_impl(i)
+        finally:
+            self._recomputing = False
 
     def _recompute_row(self, row: int) -> None:
         """Recompute #planes/est.time/est.size for a row + validate
@@ -393,7 +486,10 @@ class AcquisitionTableManager(QWidget):
         self._set_readonly_cell(row, _COL_NPLANES, str(n_planes))
         mm, ss = divmod(int(est_time_s), 60)
         self._set_readonly_cell(row, _COL_ESTTIME, f"{mm}:{ss:02d}")
-        self._set_readonly_cell(row, _COL_ESTSIZE, f"{est_size_mb:.1f} MB")
+        self._set_readonly_cell(
+            row, _COL_ESTSIZE,
+            self._format_size_human_readable(est_size_mb, self._format_label()),
+        )
         # Update the name tooltip in case the name was edited.
         name_item = self.table.item(row, _COL_NAME)
         if name_item is not None:
