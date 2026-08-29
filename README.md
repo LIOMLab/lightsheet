@@ -95,3 +95,14 @@ model, rig SSH access, test commands, code style, HAL pattern, GUI
 conventions). Read it before making changes — the rules exist because
 hardware damage and operator injury are real risks on this project, not just
 code-quality concerns.
+
+## Demo image credit
+
+The bundled demo image (`lightsheet/resources/demo_image.png`) is a
+light-sheet fluorescence microscopy image of mouse brain vasculature,
+provided by **Frans Irgolitsch, LIOM (Laboratory of Intuitive
+Opto-Mechatronics and Instrumentation), Polytechnique Montréal**. It is
+used here with permission for testing the image viewer's contrast slider
+and levels bar in demo mode (no hardware connected).
+
+Source: [Mouse Brain Vasculature — CERMO-FC, UQAM](https://www.cermofc.uqam.ca/portfolio-item/mouse-brain-vasculature/)
