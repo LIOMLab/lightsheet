@@ -103,12 +103,17 @@ def _normalize_wavelength(wl):
     """Display-only wavelength normalization: 640 -> 647 (the iBeam label
     says 640 but the channel is the 647 nm capture wavelength). Other
     wavelengths pass through. ``None`` stays ``None``. The underlying
-    filename / HDF5 metadata are NOT modified (Pitfall 6)."""
-    if wl is None:
-        return None
-    if wl == 640:
-        return 647
-    return wl
+    filename / HDF5 metadata are NOT modified (Pitfall 6).
+
+    This delegates to ``past_acquisitions_browser.normalize_wavelength``
+    (the single canonical definition) so the normalization rule lives in
+    one place. The browser already normalizes entry.wavelength at parse
+    time; this wrapper is retained for the table manager's
+    ``_add_past_row`` call site (idempotent — 647 -> 647)."""
+    from lightsheet.gui.panels.past_acquisitions_browser import (
+        normalize_wavelength,
+    )
+    return normalize_wavelength(wl)
 
 
 def _format_bytes(n: int) -> str:
@@ -503,8 +508,11 @@ class AcquisitionTableManager(QWidget):
         - ``both``: ``hdf5_estimate + zarr_estimate`` (sum).
         """
         try:
-            rows = int(getattr(self._shell.camera, "rows", 2000))
-            cols = int(getattr(self._shell.camera, "columns", 2000))
+            # The camera HAL exposes ysize/xsize (not rows/columns);
+            # reading the wrong attrs always fell back to 2000x2000,
+            # making the estimate wrong for any non-2000x2000 camera.
+            rows = int(getattr(self._shell.camera, "ysize", 2000) or 2000)
+            cols = int(getattr(self._shell.camera, "xsize", 2000) or 2000)
         except (AttributeError, TypeError, ValueError):
             rows, cols = 2000, 2000
         bytes_per_frame = rows * cols * 2

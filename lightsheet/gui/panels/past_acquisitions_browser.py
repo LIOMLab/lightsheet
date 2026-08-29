@@ -198,7 +198,7 @@ class PastAcquisitionsBrowser(QObject):
                 # Wavelength: root attrs first, else filename token.
                 wl = self._hdf5_wavelength(f, fname)
                 sample = self._hdf5_sample(f, fname, sample_hint)
-        except (OSError, KeyError, Exception) as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             self.sig_message.emit(
                 f"Could not parse {fname}: {exc}. Skipped."
             )
@@ -250,7 +250,7 @@ class PastAcquisitionsBrowser(QObject):
             n_planes = self._zarr_n_planes(root)
             wl = self._zarr_wavelength(root, fname)
             sample = self._zarr_sample(fname, sample_hint)
-        except (OSError, KeyError, Exception) as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             self.sig_message.emit(
                 f"Could not parse {fname}: {exc}. Skipped."
             )

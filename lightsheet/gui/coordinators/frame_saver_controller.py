@@ -951,14 +951,13 @@ class ZarrSaver:
             raise RuntimeError("ZarrSaver.finalize called twice")
 
         cam = self.parent.camera
-        # Pitfall 3 guard: binning_x may be None if the camera never
-        # opened — fall back to 1 (the rig's current 1x1 state).
-        binning_x = cam.binning_x if cam.binning_x is not None else 1
-        binning_y = cam.binning_y if cam.binning_y is not None else 1
-        if cam.binning_x is None:
-            logger.warning(
-                "ZarrSaver.finalize: camera.binning_x is None — falling back to 1"
-            )
+        # The ICameraCore contract declares binning_x/binning_y as int
+        # (not int | None), and both MockCamera and the real Camera
+        # default to 1 (never None). The previous defensive None-guard
+        # was dead code given the int contract — removed so the type
+        # annotation is authoritative.
+        binning_x = int(cam.binning_x)
+        binning_y = int(cam.binning_y)
         base_res = (abs(self.parent.stack_step), 6.5 * binning_x, 6.5 * binning_y)
         logger.info("ZarrSaver.finalize base_res=%s", base_res)
         omero_channels = self._build_omero_channels(self.parent.lasers)
