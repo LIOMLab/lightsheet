@@ -343,9 +343,14 @@ class LevelsBar(QWidget):
                 self.update()
         elif h == "center":
             # Preserve window width, shift both setpoints, clamp to range.
-            half_width = (self._window_max - self._window_min) // 2
+            # Use the exact width (not // 2) so an odd-width window does
+            # not silently shrink by 1 unit per drag: half_width is the
+            # floor of width/2, and new_max is computed as new_min + width
+            # so the full width survives the integer division.
+            width = self._window_max - self._window_min
+            half_width = width // 2
             new_min = value - half_width
-            new_max = value + half_width
+            new_max = new_min + width
             if new_min < self._range_min:
                 shift = self._range_min - new_min
                 new_min += shift
