@@ -943,20 +943,33 @@ class ZarrSaver:
         self._camera_positions.append(float(cam_pos))
 
     def _build_omero_channels(self, lasers) -> list[dict]:
-        """Build the omero.channels list from the live ``list[ILaser]``.
+        """Build the omero.channels list from the lasers that were
+        actually used in this acquisition.
 
-        Every configured laser is included (active or not) so the saved
-        metadata carries the full acquisition provenance. Each channel
-        dict carries ``label`` / ``color`` / ``active`` / ``wavelength``
-        — the color is a 6-char hex string with no ``#`` prefix.
+        Only lasers whose auto-laser flag was set at acquisition start
+        (``self.parent._auto_laser1`` / ``_auto_laser2``) are included.
+        The flags are cached on the GUI thread by
+        ``_cache_auto_laser_flags()`` before the worker spawns, so they
+        reflect the operator's intent at start-of-run — not the live
+        ``laser.active`` state, which is False by finalize time because
+        ``stop_lasers()`` runs in the acquisition worker's cleanup
+        before the save worker drains the queue and finalizes.
+
+        Each channel dict carries ``label`` / ``color`` / ``active`` /
+        ``wavelength`` — the color is a 6-char hex string with no ``#``
+        prefix.
         """
         channels: list[dict] = []
-        for laser in lasers:
+        for idx, laser in enumerate(lasers):
+            # idx 0 -> _auto_laser1, idx 1 -> _auto_laser2
+            flag_attr = f"_auto_laser{idx + 1}"
+            if not getattr(self.parent, flag_attr, False):
+                continue
             channels.append(
                 {
                     "label": laser.label,
                     "color": _wavelength_to_hex(laser.wavelength),
-                    "active": bool(laser.active),
+                    "active": True,
                     "wavelength": int(laser.wavelength),
                 }
             )

@@ -84,13 +84,19 @@ def test_zarr_saver_streams_and_finalizes(qtbot, request, tmp_path) -> None:
 
 def test_omero_channels(qtbot, request, tmp_path) -> None:
     """SAV-02: the omero channels carry wavelength / color / label /
-    active per configured laser. The color is a 6-char hex string with
-    no ``#`` prefix."""
+    active per laser that was actually used in the acquisition. Only
+    lasers whose auto-laser flag was set at acquisition start are
+    included — not all configured lasers. The color is a 6-char hex
+    string with no ``#`` prefix."""
     import zarr
 
     ctrl, _ = make_controller(qtbot, request)
     _save_directory(ctrl, tmp_path)
     ctrl.stack_step = 1.0
+
+    # Only laser 2 (647 nm) was active for this acquisition.
+    ctrl._auto_laser1 = False
+    ctrl._auto_laser2 = True
 
     store_path = str(tmp_path / "stack.ome.zarr")
     saver = ZarrSaver(ctrl)
@@ -102,33 +108,41 @@ def test_omero_channels(qtbot, request, tmp_path) -> None:
     root = zarr.open(store_path, mode="r")
     ome = root.attrs["ome"]
     channels = ome["omero"]["channels"]
-    assert len(channels) == len(ctrl.lasers)
-    for ch, laser in zip(channels, ctrl.lasers):
-        assert ch["wavelength"] == laser.wavelength
-        assert isinstance(ch["color"], str)
-        assert len(ch["color"]) == 6
-        assert "#" not in ch["color"]
-        assert ch["label"] == laser.label
-        assert ch["active"] == bool(laser.active)
+    # Only the active laser (647 nm) should be in the channels list.
+    assert len(channels) == 1, (
+        f"expected 1 channel (only laser 2 was active), got {len(channels)}"
+    )
+    ch = channels[0]
+    assert ch["wavelength"] == 647
+    assert isinstance(ch["color"], str)
+    assert len(ch["color"]) == 6
+    assert "#" not in ch["color"]
+    assert ch["label"] == ctrl.lasers[1].label
+    assert ch["active"] is True
 
 
 def test_omero_from_live_lasers(qtbot, request, tmp_path) -> None:
     """SAV-02: the omero channel metadata is built from the live
     ``list[ILaser]`` the controller holds, not from a config re-parse.
-    A laser whose ``active`` flag was mutated at runtime is reflected
-    in the saved channels."""
+    A laser whose ``label`` was mutated at runtime is reflected in the
+    saved channels. The channel filter uses the cached auto-laser flags
+    (``_auto_laser1`` / ``_auto_laser2``) sampled at acquisition start,
+    not the live ``laser.active`` state (which is False by finalize
+    time because ``stop_lasers()`` runs before finalize)."""
     import zarr
 
     ctrl, _ = make_controller(qtbot, request)
     _save_directory(ctrl, tmp_path)
     ctrl.stack_step = 1.0
 
-    # Mutate live laser state after constructing the ZarrSaver but
+    # Laser 1 was active for this acquisition.
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = False
+
+    # Mutate live laser label after constructing the ZarrSaver but
     # before finalize — the saved metadata must reflect the live value.
-    original_active = ctrl.lasers[0].active
     original_label = ctrl.lasers[0].label
     try:
-        ctrl.lasers[0].active = not original_active
         ctrl.lasers[0].label = "Mutated (555 nm)"
         store_path = str(tmp_path / "stack.ome.zarr")
         saver = ZarrSaver(ctrl)
@@ -139,10 +153,12 @@ def test_omero_from_live_lasers(qtbot, request, tmp_path) -> None:
 
         root = zarr.open(store_path, mode="r")
         channels = root.attrs["ome"]["omero"]["channels"]
+        assert len(channels) == 1, (
+            f"expected 1 channel (only laser 1 was active), got {len(channels)}"
+        )
         assert channels[0]["label"] == "Mutated (555 nm)"
-        assert channels[0]["active"] == (not original_active)
+        assert channels[0]["active"] is True
     finally:
-        ctrl.lasers[0].active = original_active
         ctrl.lasers[0].label = original_label
 
 
