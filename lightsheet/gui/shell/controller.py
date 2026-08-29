@@ -31,6 +31,8 @@ import typing
 import webbrowser
 from functools import partial
 
+import numpy as np
+
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
@@ -366,11 +368,15 @@ class Controller_MainWindow(QMainWindow):
         self.ui.plainTextEdit_messageLog.appendPlainText("-- message log --")
 
         # LevelsBar → ImageView wiring. The LevelsBar (image-adjacent,
-        # below the ImageView) drives the display levels window via
-        # sig_levelsChanged; the slot updates the ImageView's clamp
-        # window and re-renders. The clamp is display-only — saved
-        # frames are the raw uint16.
+        # below the ImageView) drives two display properties:
+        #   sig_levelsChanged (window min/max) → ImageView display clamp
+        #   sig_rangeChanged  (range  min/max) → ImageView colormap scaling
+        # Both are display-only — saved frames are the raw uint16. The
+        # connections use bare bound-method references (no lambda) so the
+        # signal system holds no strong ref to the controller after
+        # disconnect (the reference-cycle break).
         self.ui.levelsBar.sig_levelsChanged.connect(self._on_levels_changed)
+        self.ui.levelsBar.sig_rangeChanged.connect(self._on_range_changed)
 
         # Set configurable settings to default values
         self.cfg_settings = copy.deepcopy(self._cfg_defaults)
@@ -645,12 +651,21 @@ class Controller_MainWindow(QMainWindow):
         self._laser2_amplitude_timer.timeout.connect(self.laser_panel._apply_laser2_amplitude)
 
     def _on_levels_changed(self, levels_min: int, levels_max: int) -> None:
-        """Apply a LevelsBar handle drag to the ImageView display window."""
+        """Apply a LevelsBar WINDOW handle drag to the ImageView display
+        clamp window and re-render."""
         self.ui.imageView.set_levels(levels_min, levels_max)
+
+    def _on_range_changed(self, range_min: int, range_max: int) -> None:
+        """Apply a LevelsBar RANGE handle drag (or set_data_range) to the
+        ImageView colormap scaling bounds. The range frames the grayscale
+        gradient; the window (sig_levelsChanged) clamps the display."""
+        self.ui.imageView.set_colormap_range(range_min, range_max)
 
     def _update_levels_readout(self, frame) -> None:
         """Update the live min/max QLabel readout with the actual pixel
-        range of the supplied frame (not the display window)."""
+        range of the supplied frame (not the display window), and push the
+        data-following range to the LevelsBar so its RANGE handles track
+        the frame's dtype bounds (0-65535 for uint16)."""
         if frame is None:
             return
         try:
@@ -658,7 +673,22 @@ class Controller_MainWindow(QMainWindow):
             hi = int(frame.max())
         except (ValueError, TypeError):
             return
-        self.ui.label_levelsReadout.setText(f"{lo}\u2013{hi}")
+        self.ui.label_levelsReadout.setText(f"min: {lo}   max: {hi}")
+        # Push the data-following range to the LevelsBar. For integer
+        # dtypes the range is the dtype bounds (0-65535 for uint16); for
+        # float dtypes the range is the observed pixel range. set_data_range
+        # no-ops when the range is unchanged, so per-frame calls with a
+        # constant dtype do not reset the operator's RANGE adjustments.
+        try:
+            if frame.dtype.kind in ("u", "i"):
+                info = np.iinfo(frame.dtype)
+                dmin = max(0, int(info.min))
+                dmax = int(info.max)
+            else:
+                dmin, dmax = lo, hi
+            self.ui.levelsBar.set_data_range(dmin, dmax)
+        except (ValueError, TypeError):
+            pass
 
     def _save_stack_params(self) -> None:
         """Persist the last stack's start/end/step to config.ini so a
@@ -793,6 +823,9 @@ class Controller_MainWindow(QMainWindow):
                         _ptr.bits(), dtype=_np.uint8
                     ).reshape(_ptr.height(), _ptr.width()).copy()
                     self.ui.imageView.setImage(_arr)
+                    # Push the demo frame's data range to the LevelsBar
+                    # and update the live min/max readout.
+                    self._update_levels_readout(_arr)
             except Exception:
                 pass  # Missing image file is non-fatal — just no preview
         else:

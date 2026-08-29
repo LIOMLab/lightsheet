@@ -40,11 +40,17 @@ class ImageView(QGraphicsView):
         self._scene = QGraphicsScene(self)
         self.setScene(self._scene)
         self._pixmap_item: QGraphicsPixmapItem | None = None
-        # Fixed levels window: 0-2000. The seed-one-pixel-to-2000 trick
-        # the historical callers used to fix an auto-detected histogram
-        # range is now redundant — the window is explicit here.
+        # Display levels window (the WINDOW set from the LevelsBar). The
+        # ImageView clamps the frame to this window for display. Saved
+        # frames are the raw uint16 — the clamp is display-only.
         self._levels_min = 0
         self._levels_max = 2000
+        # Colormap scaling range (the RANGE set from the LevelsBar). The
+        # grayscale ramp spans this range; the window clamps within it.
+        # Defaults to the uint16 range so the widget is sane before the
+        # first set_colormap_range call.
+        self._colormap_min = 0
+        self._colormap_max = 65535
         # QGraphicsView adds a default 4px margin that can cause blank
         # rendering in tight layouts; the SC2 exit criterion requires
         # this padding fix.
@@ -85,6 +91,19 @@ class ImageView(QGraphicsView):
         """
         self._levels_min = int(levels_min)
         self._levels_max = int(levels_max)
+        if self._last_frame is not None:
+            self.setImage(self._last_frame)
+
+    def set_colormap_range(self, range_min: int, range_max: int) -> None:
+        """Set the colormap scaling range (the LevelsBar RANGE set).
+
+        The grayscale ramp spans ``[range_min, range_max]``; the display
+        window (``set_levels``) clamps within it. Display-only — saved
+        frames are the raw uint16. Re-renders the current frame so the
+        operator sees the new scaling immediately.
+        """
+        self._colormap_min = int(range_min)
+        self._colormap_max = int(range_max)
         if self._last_frame is not None:
             self.setImage(self._last_frame)
 

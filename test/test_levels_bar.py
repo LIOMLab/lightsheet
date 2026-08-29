@@ -59,8 +59,10 @@ def test_levels_bar_has_sig_range_changed(qtbot) -> None:
     bar = _make_bar(qtbot)
     received: list[tuple[int, int]] = []
     bar.sig_rangeChanged.connect(lambda lo, hi: received.append((lo, hi)))
-    bar.set_data_range(0, 65535)
-    assert (0, 65535) in received
+    # Use a non-default range so the call is not a no-op (the default range
+    # is already 0-65535).
+    bar.set_data_range(0, 4000)
+    assert (0, 4000) in received
 
 
 def test_levels_bar_min_size_and_size_policy(qtbot) -> None:

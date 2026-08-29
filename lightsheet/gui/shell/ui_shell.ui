@@ -311,8 +311,8 @@
             </property>
             <property name="minimumSize">
              <size>
-              <width>240</width>
-              <height>32</height>
+              <width>320</width>
+              <height>64</height>
              </size>
             </property>
            </widget>
@@ -332,7 +332,7 @@
              </size>
             </property>
             <property name="text">
-             <string>0–2000</string>
+             <string>min: —   max: —</string>
             </property>
             <property name="alignment">
              <set>Qt::AlignRight|Qt::AlignVCenter</set>

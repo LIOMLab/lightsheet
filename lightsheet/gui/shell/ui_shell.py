@@ -183,7 +183,7 @@ class Ui_Shell(object):
         sizePolicy2.setVerticalStretch(0)
         sizePolicy2.setHeightForWidth(self.levelsBar.sizePolicy().hasHeightForWidth())
         self.levelsBar.setSizePolicy(sizePolicy2)
-        self.levelsBar.setMinimumSize(QSize(240, 32))
+        self.levelsBar.setMinimumSize(QSize(320, 64))
 
         self.horizontalLayout_levels.addWidget(self.levelsBar)
 
