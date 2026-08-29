@@ -373,6 +373,10 @@ def test_drag_range_min_handle(qtbot) -> None:
     sig_rangeChanged."""
     bar = _make_bar(qtbot)
     bar.set_data_range(0, 1000)
+    # Narrow the window so window_min is NOT at x=0 (otherwise the
+    # hit-test tiebreaker grabs window_min, not range_min).
+    bar.window_min = 200
+    bar.window_max = 400
     range_received: list[tuple[int, int]] = []
     bar.sig_rangeChanged.connect(lambda lo, hi: range_received.append((lo, hi)))
     # range_min@0. Press, drag to x=100 (value 250).
@@ -389,6 +393,9 @@ def test_range_handles_cannot_cross(qtbot) -> None:
     """Dragging range_min past range_max clamps range_min to range_max."""
     bar = _make_bar(qtbot)
     bar.set_data_range(0, 1000)
+    # Narrow the window so range_min is grabbable at x=0.
+    bar.window_min = 200
+    bar.window_max = 400
     # range_max@400 (value 1000). Drag range_min to x=400 (value 1000).
     _press_at(bar, 0)
     _move_to(bar, 400)
