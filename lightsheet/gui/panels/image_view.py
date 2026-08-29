@@ -98,12 +98,24 @@ class ImageView(QGraphicsView):
         """Set the colormap scaling range (the LevelsBar RANGE set).
 
         The grayscale ramp spans ``[range_min, range_max]``; the display
-        window (``set_levels``) clamps within it. Display-only — saved
-        frames are the raw uint16. Re-renders the current frame so the
-        operator sees the new scaling immediately.
+        window (``set_levels``) clamps within it. Dragging the RANGE
+        handles inward clamps the levels window into the new range, which
+        is the visible effect on the display (a window handle outside the
+        new range is pulled back inside). Display-only — saved frames are
+        the raw uint16. Re-renders the current frame so the operator sees
+        the new scaling immediately.
         """
         self._colormap_min = int(range_min)
         self._colormap_max = int(range_max)
+        # Clamp the levels window into the new range so the RANGE handles
+        # have a visible effect: a window setpoint outside the new range
+        # is pulled back inside, narrowing the display window and changing
+        # the contrast.
+        new_levels_min = max(self._colormap_min, min(self._levels_min, self._colormap_max))
+        new_levels_max = max(self._colormap_min, min(self._levels_max, self._colormap_max))
+        if (new_levels_min, new_levels_max) != (self._levels_min, self._levels_max):
+            self._levels_min = new_levels_min
+            self._levels_max = new_levels_max
         if self._last_frame is not None:
             self.setImage(self._last_frame)
 
@@ -133,11 +145,15 @@ class ImageView(QGraphicsView):
         no auto-range, auto-levels, or histogram. The frame is expected
         to be already-transposed (column-major) by the caller.
 
-        The frame is clamped to the fixed levels window [0, 2000] and
-        scaled to uint8 [0, 255] for display. Values above 2000 clamp to
-        255; values below 0 clamp to 0.
+        The frame is clamped to the display levels window
+        ``[levels_min, levels_max]`` (the LevelsBar WINDOW set) and scaled
+        to uint8 ``[0, 255]`` against that same window. Values outside the
+        window saturate (below -> black, above -> white). The colormap
+        range (RANGE set) frames the data range and constrains the window;
+        dragging the RANGE handles inward clamps the window into the new
+        range, which is the visible effect on the display.
         """
-        # Fixed levels window: scale uint16 [0, 2000] to uint8 [0, 255].
+        # Scale uint16 [levels_min, levels_max] to uint8 [0, 255].
         # np.clip + linear scaling; values outside the window saturate.
         # The raw frame is retained for set_levels re-render and for the
         # save path (which receives the unclamped frame separately).
