@@ -174,8 +174,8 @@ def test_stacked_panels_has_eight_pages(qtbot, request) -> None:
 
     Page order matches the left-rail button order: Motion(0), Acquire(1),
     Stack(2), Scan(3), Lasers(4), Files(5), Past(6), Calibrate(7). The
-    placeholder page shipped by the .ui is removed; the Past page is a
-    placeholder QWidget until the dedicated browser panel is built.
+    placeholder page shipped by the .ui is removed; the Past page hosts
+    the dedicated PastAcquisitionsPanel (browser + read-only table).
     """
     from _helpers.controller_fixture import make_controller
 
@@ -204,16 +204,17 @@ def test_stacked_page_order(qtbot, request) -> None:
     assert sp.widget(4).findChild(QObject, "pushButton_laserOneToggle") is not None
     # Index 5 — Files (save panel)
     assert sp.widget(5).findChild(QObject, "pushButton_saveSelectDirectory") is not None
-    # Index 6 — Past (placeholder QWidget; no panel-specific child yet)
-    assert sp.widget(6) is not None
+    # Index 6 — Past (dedicated PastAcquisitionsPanel)
+    assert sp.widget(6).findChild(QObject, "tableWidget_pastAcquisitions") is not None
     # Index 7 — Calibrate (calibration panel)
     assert sp.widget(7).findChild(QObject, "pushButton_calCameraComputeFocus") is not None
 
 
 def test_all_panels_wrapped_in_scroll_area(qtbot, request) -> None:
-    """Each panel page (except the Past placeholder) is a QScrollArea with
-    widgetResizable=True (UI-SPEC QScrollArea Wrapping Rules) so the panel
-    overflows gracefully on small screens."""
+    """Each panel page is a QScrollArea with widgetResizable=True
+    (UI-SPEC QScrollArea Wrapping Rules) so the panel overflows
+    gracefully on small screens. The uniform convention applies to all
+    8 pages including the dedicated Past Acquisitions panel."""
     from PySide6.QtWidgets import QScrollArea
 
     from _helpers.controller_fixture import make_controller
@@ -221,10 +222,8 @@ def test_all_panels_wrapped_in_scroll_area(qtbot, request) -> None:
     ctrl, _ = make_controller(qtbot, request)
     sp = ctrl.ui.stackedPanels
 
-    # Pages 0-4 and 5, 7 are QScrollArea instances wrapping their panel.
-    # Page 6 (Past) is a bare placeholder QWidget until the dedicated
-    # browser panel is built.
-    for idx in (0, 1, 2, 3, 4, 5, 7):
+    # All 8 pages are QScrollArea instances wrapping their panel.
+    for idx in range(8):
         page = sp.widget(idx)
         assert isinstance(page, QScrollArea), (
             f"page {idx} is not a QScrollArea (got {type(page).__name__})"

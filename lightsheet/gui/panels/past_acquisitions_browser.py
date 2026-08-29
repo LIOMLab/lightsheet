@@ -35,12 +35,54 @@ import re
 import typing
 from dataclasses import dataclass
 
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import QObject, QThread, Qt, Signal
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QHeaderView,
+    QTableWidget,
+    QTableWidgetItem,
+    QWidget,
+)
+
+from lightsheet.gui.panels.ui_past_acquisitions_panel import (
+    Ui_PastAcquisitionsPanel,
+)
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
 logger = logging.getLogger(__name__)
+
+# Past-acquisitions table columns (display-only). The Planned-queue columns
+# stay in acquisition_table_manager.py; these are the dedicated Past panel's
+# table columns.
+_PAST_HEADERS = ["Sample", "Channel", "#Planes", "Size", "Date", "Format"]
+_PAST_COL_SAMPLE = 0
+_PAST_COL_CHANNEL = 1
+_PAST_COL_NPLANES = 2
+_PAST_COL_SIZE = 3
+_PAST_COL_DATE = 4
+_PAST_COL_FORMAT = 5
+
+_PAST_EMPTY_COPY = "No past acquisitions found in {folder}."
+_PAST_SCANNING_COPY = "Scanning {folder} for past acquisitions\u2026"
+_PAST_ERROR_COPY = (
+    "Cannot read past acquisitions: {folder} is missing or not readable."
+)
+
+
+def _format_bytes(n: int) -> str:
+    """Format a byte count as a human-readable size string (KB/MB/GB/TB)."""
+    if n is None:
+        return ""
+    value = float(n)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if value < 1024.0 or unit == "TB":
+            if unit == "B":
+                return f"{int(value)} {unit}"
+            return f"{value:.1f} {unit}"
+        value /= 1024.0
+    return f"{value:.1f} TB"
 
 # Targets the writer's finalize_with_resolutions uses (mirrored for the
 # level-count estimate in the table manager; not used by the parser).
@@ -481,3 +523,177 @@ class _ScanWorker(QObject):
         except Exception as exc:  # noqa: BLE001
             logger.exception("past-acquisitions scan failed: %s", exc)
             self.finished.emit([])
+
+
+class PastAcquisitionsPanel(QWidget):
+    """Dedicated left-rail panel hosting the past-acquisitions browser.
+
+    Replaces the placeholder QWidget at ``stackedPanels`` index 6. Owns the
+    ``PastAcquisitionsBrowser`` (parser + async scan worker), the read-only
+    past-acquisitions ``QTableWidget``, the Planned/Past toggle, and the
+    Refresh button. The Planned queue + add/edit/remove/start-queue controls
+    stay in the Stack panel (``AcquisitionTableManager``); this panel is
+    read-only browse of past saves.
+
+    The Planned/Past toggle moves with the browser to this dedicated panel.
+    Since the Planned queue now lives in a separate left-rail page (Stack,
+    index 2), the "Planned" radio button switches the left-rail to the Stack
+    page instead of toggling a table in-place. The "Past" radio button is the
+    current page (checked by default).
+
+    The async-scan pattern (``QThread`` + ``moveToThread`` + ``finished →
+    deleteLater`` + ``_clear_thread_refs``) is preserved verbatim in the
+    ``PastAcquisitionsBrowser`` — it keeps the GUI thread (and the E-stop
+    kill path) responsive during a ~30-folder scan.
+    """
+
+    # Emitted when the async past-acquisitions scan completes (the list of
+    # PastAcquisitionEntry). External observers (e.g. tests) may subscribe;
+    # the table is populated internally in _on_scan_finished.
+    past_acquisitions_scan_finished = Signal(list)
+
+    def __init__(self, shell: "Controller_MainWindow") -> None:
+        super().__init__()
+        self._shell = shell
+        self.ui = Ui_PastAcquisitionsPanel()
+        self.ui.setupUi(self)
+
+        # Read-only past table: ResizeToContents + stretch last section +
+        # ellipsis on long names. Sorting enabled after the batch populate
+        # so the per-row setItem calls do not re-sort mid-populate.
+        self.ui.tableWidget_pastAcquisitions.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self.ui.tableWidget_pastAcquisitions.setSelectionMode(
+            QTableWidget.SelectionMode.SingleSelection
+        )
+        self.ui.tableWidget_pastAcquisitions.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        past_header = self.ui.tableWidget_pastAcquisitions.horizontalHeader()
+        past_header.setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
+        past_header.setStretchLastSection(True)
+        self.ui.tableWidget_pastAcquisitions.setWordWrap(False)
+        self.ui.tableWidget_pastAcquisitions.textElideMode = (
+            Qt.TextElideMode.ElideRight
+        )
+        self.ui.tableWidget_pastAcquisitions.setSortingEnabled(True)
+
+        # Status label styling (empty/scanning/error copy).
+        self.ui.label_pastStatus.setStyleSheet("color: gray; padding: 12px;")
+        self.ui.label_pastStatus.setVisible(False)
+
+        # Planned/Past toggle — exclusive group. "Planned" switches the
+        # left-rail to the Stack page (index 2); "Past" is this page.
+        self._view_group = QButtonGroup(self)
+        self._view_group.setExclusive(True)
+        self._view_group.addButton(self.ui.radioButton_viewPlanned)
+        self._view_group.addButton(self.ui.radioButton_viewPast)
+        self.ui.radioButton_viewPast.setChecked(True)
+
+        # The past-acquisitions browser (parser + async scan worker).
+        self._browser = PastAcquisitionsBrowser(self._shell)
+        self._browser.sig_scan_finished.connect(self._on_scan_finished)
+        self._browser.sig_message.connect(self._shell.sig_message.emit)
+
+        # Wire the Refresh button + the Planned toggle.
+        self.ui.pushButton_refreshPast.clicked.connect(self._on_refresh)
+        self._view_group.buttonClicked.connect(self._on_view_changed)
+
+    # ------------------------------------------------------------------ #
+    # Public API
+    # ------------------------------------------------------------------ #
+
+    @property
+    def browser(self) -> PastAcquisitionsBrowser:
+        """The owned PastAcquisitionsBrowser (parser + async scan worker)."""
+        return self._browser
+
+    def refresh(self) -> None:
+        """Trigger an async re-scan of the save directory."""
+        self._on_refresh()
+
+    def stop_scan(self) -> None:
+        """Best-effort teardown for shutdown (delegates to the browser)."""
+        self._browser.stop_scan()
+
+    # ------------------------------------------------------------------ #
+    # Internal slots
+    # ------------------------------------------------------------------ #
+
+    def _on_view_changed(self, button) -> None:
+        """Planned/Past toggle handler. "Planned" switches the left-rail to
+        the Stack page (index 2); "Past" re-checks itself (this page)."""
+        if button is self.ui.radioButton_viewPlanned:
+            # Switch the left-rail to the Stack page (Planned queue).
+            stacked = getattr(self._shell.ui, "stackedPanels", None)
+            if stacked is not None:
+                stacked.setCurrentIndex(2)
+            # Re-check "Past" so the toggle reflects this page when the
+            # operator returns to it.
+            self.ui.radioButton_viewPast.setChecked(True)
+        # "Past" is the current page — no action needed.
+
+    def _on_refresh(self) -> None:
+        """Trigger an async re-scan of the save directory for past
+        acquisitions. Shows the 'Scanning ...' label while the worker
+        runs; the table is populated in one batch on completion.
+
+        If a scan is already in flight, the table/label are NOT reset —
+        the running scan's results will populate the table on
+        completion."""
+        if self._browser._thread is not None and \
+                self._browser._thread.isRunning():
+            return
+        folder = str(getattr(self._shell, "save_directory", ""))
+        self.ui.label_pastStatus.setText(
+            _PAST_SCANNING_COPY.format(folder=folder)
+        )
+        self.ui.label_pastStatus.setVisible(True)
+        self.ui.tableWidget_pastAcquisitions.setVisible(False)
+        self.ui.tableWidget_pastAcquisitions.setRowCount(0)
+        self._browser.start_scan_async()
+
+    def _on_scan_finished(self, entries: list) -> None:
+        """Populate the past-acquisitions table in one batch (called on
+        the GUI thread via the browser's sig_scan_finished signal)."""
+        self.ui.tableWidget_pastAcquisitions.setSortingEnabled(False)
+        self.ui.tableWidget_pastAcquisitions.setRowCount(0)
+        for entry in entries:
+            self._add_past_row(entry)
+        self.ui.tableWidget_pastAcquisitions.setSortingEnabled(True)
+        # Default sort: Date descending.
+        self.ui.tableWidget_pastAcquisitions.sortByColumn(
+            _PAST_COL_DATE, Qt.SortOrder.DescendingOrder
+        )
+        has_rows = self.ui.tableWidget_pastAcquisitions.rowCount() > 0
+        self.ui.tableWidget_pastAcquisitions.setVisible(has_rows)
+        self.ui.label_pastStatus.setVisible(not has_rows)
+        if not has_rows:
+            folder = str(getattr(self._shell, "save_directory", ""))
+            self.ui.label_pastStatus.setText(
+                _PAST_EMPTY_COPY.format(folder=folder)
+            )
+        # Re-emit so external observers (tests) can subscribe.
+        self.past_acquisitions_scan_finished.emit(entries)
+
+    def _add_past_row(self, entry) -> None:
+        row = self.ui.tableWidget_pastAcquisitions.rowCount()
+        self.ui.tableWidget_pastAcquisitions.insertRow(row)
+        self._set_past_cell(row, _PAST_COL_SAMPLE, entry.sample)
+        wl = normalize_wavelength(entry.wavelength)
+        self._set_past_cell(
+            row, _PAST_COL_CHANNEL, "" if wl is None else str(wl)
+        )
+        self._set_past_cell(row, _PAST_COL_NPLANES, str(entry.n_planes))
+        self._set_past_cell(row, _PAST_COL_SIZE, _format_bytes(entry.size_bytes))
+        self._set_past_cell(row, _PAST_COL_DATE, entry.date_str)
+        self._set_past_cell(row, _PAST_COL_FORMAT, entry.format_label)
+
+    def _set_past_cell(self, row: int, col: int, text: str) -> None:
+        item = QTableWidgetItem(text)
+        item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+        item.setToolTip(text)
+        self.ui.tableWidget_pastAcquisitions.setItem(row, col, item)

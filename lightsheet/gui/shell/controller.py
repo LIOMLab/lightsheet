@@ -51,6 +51,9 @@ from lightsheet.gui.panels.acquisition_panel import AcquisitionPanelWidget
 from lightsheet.gui.panels.calibration_panel import CalibrationPanelWidget
 from lightsheet.gui.panels.laser_panel import LaserPanelWidget
 from lightsheet.gui.panels.motor_panel import MotorPanelWidget
+from lightsheet.gui.panels.past_acquisitions_browser import (
+    PastAcquisitionsPanel,
+)
 from lightsheet.gui.panels.properties_dialog import Properties_Dialog
 from lightsheet.gui.panels.save_panel import SavePanelWidget
 from lightsheet.gui.panels.scan_panel import ScanPanelWidget
@@ -248,6 +251,7 @@ class Controller_MainWindow(QMainWindow):
         self.scan_panel = ScanPanelWidget(self)
         self.save_panel = SavePanelWidget(self)
         self.calibration_panel = CalibrationPanelWidget(self)
+        self.past_panel = PastAcquisitionsPanel(self)
 
         # The per-field units are now fixed (motor travel in mm, plane
         # step in µm) — the global units toggle is gone. The per-field
@@ -286,13 +290,11 @@ class Controller_MainWindow(QMainWindow):
         self.ui.stackedPanels.addWidget(_wrap(self.scan_panel))             # 3 Scan
         self.ui.stackedPanels.addWidget(_wrap(self.laser_panel))            # 4 Lasers
         self.ui.stackedPanels.addWidget(_wrap(self.save_panel))             # 5 Files
-        # Past (index 6): the dedicated PastAcquisitionsPanel is built in
-        # a later plan; until then a placeholder QWidget keeps the page
-        # count at 8 so the left-rail button indices line up. A later
-        # plan swaps this placeholder for the real browser widget via
-        # stackedPanels.insertWidget(6, browser) without re-architecture.
-        self._past_placeholder = QWidget()
-        self.ui.stackedPanels.addWidget(self._past_placeholder)             # 6 Past
+        # Past (index 6): the dedicated PastAcquisitionsPanel hosts the
+        # past-acquisitions browser (parser + async scan worker), the
+        # read-only past table, the Planned/Past toggle, and the Refresh
+        # button. Wrapped in a QScrollArea per the uniform convention.
+        self.ui.stackedPanels.addWidget(_wrap(self.past_panel))             # 6 Past
         self.ui.stackedPanels.addWidget(_wrap(self.calibration_panel))      # 7 Calibrate
 
         # --- Left-rail navigation wiring ---
@@ -866,7 +868,7 @@ class Controller_MainWindow(QMainWindow):
             # Stop the past-acquisitions browser scan thread if it is
             # running — without this the QThread is destroyed while
             # still running on app exit (crash).
-            self.stack_panel.table_manager._past_browser.stop_scan()
+            self.past_panel.stop_scan()
             # Stop the frame_saver QThread BEFORE the acquisition threads so
             # h5py.File.close() completes before the camera/etls close.
             self._fs.frame_saver.stop_saving()
