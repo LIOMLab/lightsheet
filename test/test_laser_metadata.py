@@ -119,66 +119,75 @@ def test_write_laser_metadata_reads_live_instance_not_config(
 
 
 # --------------------------------------------------------------------------- #
-# Wave 0 RED scaffolds for SAV-03 (motor + scan-param root attrs).
+# SAV-03: motor + scan-param root attrs (the motor + scan-param half of
+# the config-drift metadata fix; the laser half shipped in Phase 4 D-04).
 #
-# These tests define the expected behavior of the extended
-# ``_write_laser_metadata`` that lands in a later wave: in addition to the
-# per-laser root attrs above, the saver writes the motor positions and the
-# scan parameters as HDF5 root attrs, read from the live controller
-# instances (no config re-parse). Marked ``xfail`` (strict=False) during
-# Wave 0 so the suite stays GREEN: the extended attrs are not written yet,
-# so the assertions fail with ``KeyError`` and xfail records the expected
-# failure.
+# ``_write_acquisition_metadata`` writes the motor positions + scan params
+# + camera params as HDF5 root attrs, read from the live controller
+# instances (no config re-parse). The attr names mirror the Zarr
+# /acquisition group from the sibling ZarrSaver plan so both formats
+# carry the same provenance.
 # --------------------------------------------------------------------------- #
 
-_WAVE0_SAV03 = (
-    "Wave 0 RED scaffold — motor + scan-param metadata implemented in a later wave"
-)
 
-
-@pytest.mark.xfail(reason=_WAVE0_SAV03, strict=False)
 def test_motor_and_scan_params_in_hdf5_metadata(
     qtbot, request, tmp_path
 ) -> None:
-    """SAV-03: ``_write_laser_metadata`` also writes the motor positions
-    (vertical/horizontal/camera) and the scan parameters (step size, scan
-    parameters) as HDF5 root attrs, matching the live ``ctrl.motors`` /
-    ``ctrl.siggen`` / ``ctrl.camera`` values."""
+    """SAV-03: ``_write_acquisition_metadata`` writes the motor positions
+    (horizontal/vertical/camera) + scan params (galvo/ETL amplitudes +
+    offsets, sample rate) + camera params (exposure, shutter mode,
+    binning, x/y size) as HDF5 root attrs, matching the live
+    ``ctrl.motors`` / ``ctrl.siggen`` / ``ctrl.camera`` values."""
     ctrl, _ = make_controller(qtbot, request)
 
     outfile_path = tmp_path / "test_motor_meta.hdf5"
     with h5py.File(outfile_path, "a") as outfile:
         ctrl._fs.frame_saver._write_laser_metadata(outfile)
+        ctrl._fs.frame_saver._write_acquisition_metadata(outfile)
 
     with h5py.File(outfile_path, "r") as f:
-        # Motor position root attrs — one per axis, matching live motors.
-        assert f.attrs["Motor Vertical Position"] == ctrl.motors.vertical.position
-        assert f.attrs["Motor Horizontal Position"] == ctrl.motors.horizontal.position
-        assert f.attrs["Motor Camera Position"] == ctrl.motors.camera.position
+        # Motor position root attrs — current snapshot from live motors.
+        assert f.attrs["Horizontal Position"] == ctrl.motors.horizontal.get_position("mm")
+        assert f.attrs["Vertical Position"] == ctrl.motors.vertical.get_position("mm")
+        assert f.attrs["Camera Position"] == ctrl.motors.camera.get_position("mm")
         # Scan-parameter root attrs from the live siggen.
-        assert f.attrs["Step Size"] == ctrl.siggen.step_size
-        # Camera binning attrs (D-02) from the live camera.
-        assert f.attrs["Camera Binning X"] == ctrl.camera.binning_x
-        assert f.attrs["Camera Binning Y"] == ctrl.camera.binning_y
+        assert f.attrs["Galvo Left Amplitude"] == ctrl.siggen.galvo_left_amplitude
+        assert f.attrs["Galvo Right Amplitude"] == ctrl.siggen.galvo_right_amplitude
+        assert f.attrs["Galvo Left Offset"] == ctrl.siggen.galvo_left_offset
+        assert f.attrs["Galvo Right Offset"] == ctrl.siggen.galvo_right_offset
+        assert f.attrs["ETL Left Amplitude"] == ctrl.siggen.etl_left_amplitude
+        assert f.attrs["ETL Right Amplitude"] == ctrl.siggen.etl_right_amplitude
+        assert f.attrs["ETL Left Offset"] == ctrl.siggen.etl_left_offset
+        assert f.attrs["ETL Right Offset"] == ctrl.siggen.etl_right_offset
+        assert f.attrs["Sample Rate"] == ctrl.siggen.sample_rate
+        # Camera params from the live camera.
+        assert f.attrs["Exposure Time (s)"] == ctrl.camera.exposure_time
+        assert f.attrs["Shutter Mode"] == ctrl.camera.shutter_mode
+        assert f.attrs["Binning X"] == ctrl.camera.binning_x
+        assert f.attrs["Binning Y"] == ctrl.camera.binning_y
+        assert f.attrs["X Size"] == ctrl.camera.xsize
+        assert f.attrs["Y Size"] == ctrl.camera.ysize
 
 
-@pytest.mark.xfail(reason=_WAVE0_SAV03, strict=False)
 def test_no_config_reparse(qtbot, request, tmp_path) -> None:
     """SAV-03: the motor-position root attr reflects the LIVE motor value,
-    not a config-parsed default. Mutating a motor position after
+    not a config-parsed default. Mutating a siggen amplitude after
     construction is reflected in the saved attr — the saver reads the live
-    instance, never re-parses config.ini at save time."""
+    instance, never re-parses config.ini at save time (the config-drift
+    bug this fixes)."""
     ctrl, _ = make_controller(qtbot, request)
 
-    # Mutate the vertical motor position after construction.
-    original = ctrl.motors.vertical.position
+    # Mutate a siggen amplitude after construction — the saved attr must
+    # reflect the live mutated value, not the config default.
+    original = ctrl.siggen.galvo_left_amplitude
     try:
-        ctrl.motors.vertical.position = original + 1234.5
+        ctrl.siggen.galvo_left_amplitude = original + 0.123
         outfile_path = tmp_path / "test_no_reparse.hdf5"
         with h5py.File(outfile_path, "a") as outfile:
             ctrl._fs.frame_saver._write_laser_metadata(outfile)
+            ctrl._fs.frame_saver._write_acquisition_metadata(outfile)
 
         with h5py.File(outfile_path, "r") as f:
-            assert f.attrs["Motor Vertical Position"] == original + 1234.5
+            assert f.attrs["Galvo Left Amplitude"] == original + 0.123
     finally:
-        ctrl.motors.vertical.position = original
+        ctrl.siggen.galvo_left_amplitude = original
