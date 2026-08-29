@@ -519,6 +519,10 @@ def test_updateUi_stack_mode_button_start_reverse_direction(qtbot, request) -> N
     ctrl.stack_ending_plane = 0.0
     ctrl.stack_first_plane_set = True
     ctrl.stack_last_plane_set = True
+    # Switch to μm so the step value (10.0) is in μm — the default unit
+    # is mm (from config.ini) and the step max in mm mode is 0.025 mm.
+    ctrl.ui.comboBox_units.setCurrentText("\u03bcm")
+    qtbot.wait(30)
     ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(100.0)
     ctrl.stack_panel.ui.doubleSpinBox_acqLastPlane.setValue(0.0)
     ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)

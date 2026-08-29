@@ -141,6 +141,56 @@ def test_switching_units_rerenders_stack_spinboxes(qtbot, request) -> None:
         )
 
 
+def test_switching_units_scales_step_spinbox_min_max(qtbot, request) -> None:
+    """Switching comboBox_units scales the plane-step spinbox min/max/step
+    by the same factor as the value, so fine steps (e.g. 6.5 μm = 0.0065 mm)
+    are enterable in mm mode. Without this, switching to mm leaves the min
+    at 0.25 (now 0.25 mm = 250 μm), blocking sub-250-μm steps."""
+    ctrl, _ = _make(qtbot, request)
+    sb_step = ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize
+
+    # Start in μm (the default).
+    ctrl.ui.comboBox_units.setCurrentText("\u03bcm")
+    qtbot.wait(30)
+    um_min = sb_step.minimum()
+    um_max = sb_step.maximum()
+    um_step = sb_step.singleStep()
+
+    # Switch to mm — min/max/step should all divide by 1000.
+    ctrl.ui.comboBox_units.setCurrentText("mm")
+    qtbot.wait(30)
+    mm_min = sb_step.minimum()
+    mm_max = sb_step.maximum()
+    mm_step = sb_step.singleStep()
+    assert abs(mm_min - um_min / 1000.0) < 1e-9, (
+        f"mm min is {mm_min} but should be {um_min / 1000.0}"
+    )
+    assert abs(mm_max - um_max / 1000.0) < 1e-9, (
+        f"mm max is {mm_max} but should be {um_max / 1000.0}"
+    )
+    assert abs(mm_step - um_step / 1000.0) < 1e-9, (
+        f"mm singleStep is {mm_step} but should be {um_step / 1000.0}"
+    )
+
+    # 6.5 μm = 0.0065 mm must be within the mm-mode range.
+    assert mm_min <= 0.0065 <= mm_max, (
+        f"0.0065 mm (6.5 μm) is outside the mm-mode step range "
+        f"[{mm_min}, {mm_max}]"
+    )
+
+    # Switch back to μm — min/max/step should revert.
+    ctrl.ui.comboBox_units.setCurrentText("\u03bcm")
+    qtbot.wait(30)
+    assert abs(sb_step.minimum() - um_min) < 1e-6, (
+        f"after switching back to μm, min is {sb_step.minimum()} "
+        f"but should be {um_min}"
+    )
+    assert abs(sb_step.maximum() - um_max) < 1e-6, (
+        f"after switching back to μm, max is {sb_step.maximum()} "
+        f"but should be {um_max}"
+    )
+
+
 def test_updateUi_units_hook_calls_both_panels(qtbot, request) -> None:
     """The updateUi_units hook calls both motor_panel.updateUi_units AND
     stack_panel._rerender_stack_units (the re-render extension)."""

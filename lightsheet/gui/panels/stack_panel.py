@@ -120,15 +120,27 @@ class StackPanelWidget(QWidget):
             if current_suffix == unit or not current_suffix:
                 # No conversion needed (same unit or initial render where
                 # the value is already in the target unit).
+                factor = 1.0
                 new_value = current_value
             elif current_suffix == "\u03bcm" and unit == "mm":
                 # μm → mm: divide by 1000.
-                new_value = current_value / 1000.0
+                factor = 1.0 / 1000.0
+                new_value = current_value * factor
             elif current_suffix == "mm" and unit == "\u03bcm":
                 # mm → μm: multiply by 1000.
-                new_value = current_value * 1000.0
+                factor = 1000.0
+                new_value = current_value * factor
             else:
+                factor = 1.0
                 new_value = current_value
+            # Scale min/max/singleStep by the same factor so the valid
+            # range and increment stay consistent across unit changes.
+            # Without this, switching to mm leaves the step spinbox min
+            # at 0.25 (now 0.25 mm = 250 μm) — blocking fine steps like
+            # 6.5 μm = 0.0065 mm.
+            sb.setMinimum(sb.minimum() * factor)
+            sb.setMaximum(sb.maximum() * factor)
+            sb.setSingleStep(sb.singleStep() * factor)
             sb.setValue(new_value)
             sb.setSuffix(f" {unit}")
             sb.setDecimals(decimals)

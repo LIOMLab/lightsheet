@@ -118,6 +118,10 @@ def test_summary_updates_on_edit(qtbot, request) -> None:
     ctrl, _ = make_controller(qtbot, request)
     ctrl.stack_first_plane_set = True
     ctrl.stack_last_plane_set = True
+    # Switch to μm so the step values (5.0, 2.0) are in μm — the default
+    # unit is mm (from config.ini) and the step max in mm mode is 0.025 mm.
+    ctrl.ui.comboBox_units.setCurrentText("\u03bcm")
+    qtbot.wait(30)
     ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(50.0)
     ctrl.stack_panel.ui.doubleSpinBox_acqLastPlane.setValue(150.0)
     ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(5.0)
