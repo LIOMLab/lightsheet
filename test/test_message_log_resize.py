@@ -6,7 +6,7 @@ The message log was capped at a fixed 80 px max height and used
 string. This test asserts the audit #4 remediation:
 
 - The 80 px max-height cap is removed (``maximumSize().height() != 80``).
-- A vertical ``QSplitter`` (``message_splitter``) hosts the tab controls
+- A vertical ``QSplitter`` (``message_splitter``) hosts the stacked panels
   (stretch=1) on top and the message log (stretch=0) on the bottom inside
   ``controlsPane`` — the operator can drag the handle to resize the log.
 - The log defaults to ~5 lines (minimum 96 px) and stays read-only.
@@ -50,7 +50,7 @@ def test_message_log_cap_removed(qtbot, request) -> None:
 
 
 def test_message_splitter_exists(qtbot, request) -> None:
-    """A vertical QSplitter (message_splitter) hosts tabControls + the
+    """A vertical QSplitter (message_splitter) hosts stackedPanels + the
     message log inside controlsPane."""
     ctrl, _ = _make(qtbot, request)
     assert hasattr(ctrl.ui, "message_splitter"), (
@@ -63,10 +63,10 @@ def test_message_splitter_exists(qtbot, request) -> None:
     assert splitter.orientation() == Qt.Orientation.Vertical, (
         "message_splitter must be vertical"
     )
-    # tabControls and the message log are both children of the splitter.
+    # stackedPanels and the message log are both children of the splitter.
     children = [splitter.widget(i) for i in range(splitter.count())]
-    assert ctrl.ui.tabControls in children, (
-        "tabControls must be a section of message_splitter"
+    assert ctrl.ui.stackedPanels in children, (
+        "stackedPanels must be a section of message_splitter"
     )
     assert ctrl.ui.plainTextEdit_messageLog in children, (
         "plainTextEdit_messageLog must be a section of message_splitter"
@@ -87,10 +87,10 @@ def test_message_splitter_drag_resizes_log(qtbot, request) -> None:
     be collapsible to 0 via handle drag (childrenCollapsible=False); hiding
     is via the View-menu only.
 
-    The exact log size after a handle drag is bounded by the tabControls
-    content minimum (the panels impose a large minimumSizeHint on the
-    QTabWidget) and the QPlainTextEdit's own minimumSizeHint, so this test
-    verifies the handle is interactive (handleWidth > 0,
+    The exact log size after a handle drag is bounded by the stacked
+    panels content minimum (the panels impose a large minimumSizeHint on
+    the QStackedWidget) and the QPlainTextEdit's own minimumSizeHint, so
+    this test verifies the handle is interactive (handleWidth > 0,
     childrenCollapsible=False) and that setSizes with a non-zero log
     allocation produces a non-zero log size. The View-menu toggle test
     below proves setSizes changes the log size (hide → 0, show → > 0)."""
@@ -108,9 +108,9 @@ def test_message_splitter_drag_resizes_log(qtbot, request) -> None:
         "message_splitter handleWidth must be > 0 so the operator can "
         "grab the handle to drag the log taller/shorter"
     )
-    # The splitter has exactly 2 sections (tabControls + log).
+    # The splitter has exactly 2 sections (stackedPanels + log).
     assert splitter.count() == 2, (
-        f"message_splitter should have 2 sections (tabControls + log); "
+        f"message_splitter should have 2 sections (stackedPanels + log); "
         f"got {splitter.count()}"
     )
     # setSizes with a non-zero log allocation produces a non-zero log size

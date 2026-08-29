@@ -542,7 +542,7 @@ def test_real_classes_inherit_their_abc() -> None:
 def test_mock_motor_has_controller_called_getters() -> None:
     """MockMotor must expose get_limit_low / get_limit_high / get_origin /
     get_units / get_inverted, mirroring ZaberMotor. The controller's
-    updateUi_units call graph reads these (46 call sites) — a mock that
+    motor-move + position-indicator call graph reads these — a mock that
     omits them crashes the demo GUI at runtime with AttributeError instead
     of failing at ABC instantiation with a clear TypeError. This is the
     regression test for the mock motor crash: a future mock that drops

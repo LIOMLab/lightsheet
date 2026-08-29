@@ -1,13 +1,13 @@
-"""Hybrid widget-ownership regression test (D-05).
+"""Hybrid widget-ownership regression test.
 
 Asserts the shell's ``vars(panel.ui)`` merge loop is trimmed to shell-owned
 widgets only, so panel-internal widgets no longer leak onto ``self.ui``.
 Each panel's slots reach their own widgets via ``self.ui.<name>``
 (panel-local) and cross-panel reads go through
 ``self._shell.<panel>.ui.<name>``. The shell-owned widgets (E-stop toolbar,
-status bar, message log, units selector, controlsPane) stay on ``self.ui``
-so the lock-free GUI-thread E-stop kill path (AGENTS.md §2) is never
-stranded by a panel-ownership change.
+status bar, message log, left-rail navigation primitives, controlsPane)
+stay on ``self.ui`` so the lock-free GUI-thread E-stop kill path
+(AGENTS.md §2) is never stranded by a panel-ownership change.
 
 Runs headless on Mac via ``QT_QPA_PLATFORM=offscreen`` (set by conftest).
 """
@@ -27,7 +27,8 @@ def _make(qtbot, request):
 
 def test_shell_owned_widgets_stay_on_ui(qtbot, request) -> None:
     """Shell-owned widgets stay accessible via ``controller.ui`` after the
-    merge-loop trim (E-stop invariant + status bar + message log + units)."""
+    merge-loop trim (E-stop invariant + status bar + message log +
+    left-rail navigation)."""
     ctrl, _ = _make(qtbot, request)
 
     # E-stop toolbar widgets — the safety-critical invariant.
@@ -44,15 +45,15 @@ def test_shell_owned_widgets_stay_on_ui(qtbot, request) -> None:
     # Message log.
     assert hasattr(ctrl.ui, "plainTextEdit_messageLog")
 
-    # Units selector (programmatic, shell-owned, lives on motor_panel.ui
-    # but is whitelisted into the merge loop so the shell keeps it on
-    # self.ui).
-    assert hasattr(ctrl.ui, "comboBox_units")
+    # Left-rail navigation primitives (shell-owned, replace the old
+    # units selector + tabbed shell).
+    assert hasattr(ctrl.ui, "stackedPanels")
+    assert hasattr(ctrl.ui, "leftRail")
+    assert hasattr(ctrl.ui, "toolButton_railMotion")
 
-    # Controls pane / splitter / tab controls / image view.
+    # Controls pane / splitter / image view.
     assert hasattr(ctrl.ui, "splitter")
     assert hasattr(ctrl.ui, "controlsPane")
-    assert hasattr(ctrl.ui, "tabControls")
     assert hasattr(ctrl.ui, "imagesPane")
     assert hasattr(ctrl.ui, "imageView")
 
@@ -106,15 +107,23 @@ def test_shell_owned_objectnames_whitelist_exists() -> None:
         "label_estopStatus",
         "toolBar_estop",
         "plainTextEdit_messageLog",
-        "comboBox_units",
+        "stackedPanels",
+        "leftRail",
+        "buttonGroup_leftRail",
+        "action_followSystemTheme",
         "statusbar",
         "splitter",
         "controlsPane",
-        "tabControls",
         "imagesPane",
         "imageView",
     ):
         assert name in whitelist, f"{name!r} must be in SHELL_OWNED_OBJECTNAMES"
+    # The removed entries must NOT be in the whitelist.
+    for removed in ("comboBox_units", "units_label", "tabControls"):
+        assert removed not in whitelist, (
+            f"{removed!r} must be removed from SHELL_OWNED_OBJECTNAMES "
+            "after the shell re-architecture"
+        )
 
 
 def test_merge_loop_only_sets_shell_owned_widgets(qtbot, request) -> None:

@@ -5,9 +5,12 @@ slots moved out of the ``Controller_MainWindow`` god object.
 established god-object-split pattern: it holds a typed shell reference and
 emits through ``self._shell.sig_message`` / ``self._shell.sig_beep``, never
 declaring its own ``Signal`` or calling ``.connect()``. The shell-owned
-state (``ui`` widgets, ``sig_message``/``sig_beep``, ``units``,
-``updateUi_position_*`` / ``updateUi_message_printer``) is read off the shell
-reference; the manager holds its own ``self.motors = bundle.motors`` reference.
+state (``ui`` widgets, ``sig_message``/``sig_beep``,
+``updateUi_position_*`` / ``updateUi_message_printer`` /
+``updateUi_position_indicators``) is read off the shell reference; the
+manager holds its own ``self.motors = bundle.motors`` reference. Motor
+travel is in millimetres (the fixed motor-display unit; the global units
+toggle is gone).
 
 These tests exercise the real ``MotorController`` methods against a Mock shell
 and a demo ``DeviceBundle`` (real ``MockMotors`` HAL with software-tracked
@@ -32,10 +35,11 @@ class _ShellStandin:
     """Minimal shell stand-in exposing the attributes MotorController reads.
 
     MotorController reads ``shell.ui`` (Qt widgets), ``shell.sig_message`` /
-    ``shell.sig_beep`` (signals), ``shell.units``, and the shell-owned
+    ``shell.sig_beep`` (signals), and the shell-owned
     ``updateUi_position_horizontal`` / ``updateUi_position_vertical`` /
-    ``updateUi_position_camera`` / ``updateUi_message_printer`` /
-    ``updateUi_units`` thin GUI-state setters (which stay on the shell).
+    ``updateUi_position_camera`` / ``updateUi_position_indicators`` /
+    ``updateUi_message_printer`` thin GUI-state setters (which stay on the
+    shell). Motor travel is in millimetres (fixed unit).
     """
 
     def __init__(self) -> None:
@@ -49,7 +53,6 @@ class _ShellStandin:
         self.ui.doubleSpinBox_cameraStepSize.value.return_value = 1.0
         self.sig_message = Mock()
         self.sig_beep = Mock()
-        self.units = "mm"
         # Shell-owned calibration state — read by the focus/boundary slots.
         self.focus_selected = False
         self.horizontal_backward_boundary_selected = False
@@ -80,8 +83,8 @@ class _ShellStandin:
     def updateUi_position_camera(self) -> None:
         self.position_calls.append("camera")
 
-    def updateUi_units(self) -> None:
-        self.position_calls.append("units")
+    def updateUi_position_indicators(self) -> None:
+        self.position_calls.append("indicators")
 
 
 def _make_bundle() -> DeviceBundle:
@@ -545,7 +548,7 @@ def test_reset_boundaries_resets_limits_and_disables_buttons() -> None:
     mc.motors.horizontal.set_limit_low.assert_called_once()
     mc.motors.horizontal.set_limit_high.assert_called_once()
     shell.calibration_panel.ui.pushButton_calHorizontalStartRangeSelection.setEnabled.assert_called_with(False)
-    assert "units" in shell.position_calls
+    assert "indicators" in shell.position_calls
 
 
 def test_set_horizontal_backward_boundary_sets_limit_low() -> None:

@@ -123,9 +123,10 @@ def test_splitter_panes_not_collapsible(qtbot, request) -> None:
 
 
 def _show_motion_tab(controller, qtbot) -> None:
-    """Switch the controls tab widget to the Motion tab (index 0) and
+    """Switch the stacked panes to the Motion page (index 0) and
     let the layout settle."""
-    controller.ui.tabControls.setCurrentIndex(0)
+    controller.ui.stackedPanels.setCurrentIndex(0)
+    controller.ui.toolButton_railMotion.setChecked(True)
     qtbot.wait(50)
 
 

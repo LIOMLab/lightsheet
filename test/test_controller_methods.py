@@ -278,26 +278,7 @@ def test_updateUi_laser_status_error(qtbot, request) -> None:
     assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "● ERR"
 
 
-# -- Units / position -------------------------------------------------------
-
-
-def test_updateUi_units_mm(qtbot, request) -> None:
-    ctrl, _bundle = make_controller(qtbot, request)
-    ctrl.ui.comboBox_units.setCurrentText("mm")
-    with patch.object(ctrl.motor_panel, "updateUi_position_indicators") as mock_pos:
-        ctrl.motor_panel.updateUi_units()
-    assert ctrl.units == "mm"
-    assert ctrl.units_decimals == 3
-    mock_pos.assert_called_once()
-
-
-def test_updateUi_units_um(qtbot, request) -> None:
-    ctrl, _bundle = make_controller(qtbot, request)
-    ctrl.ui.comboBox_units.setCurrentText("\u03bcm")
-    with patch.object(ctrl.motor_panel, "updateUi_position_indicators"):
-        ctrl.motor_panel.updateUi_units()
-    assert ctrl.units == "\u03bcm"
-    assert ctrl.units_decimals == 0
+# -- Position indicators (fixed mm display unit) ---------------------------
 
 
 def test_updateUi_position_horizontal(qtbot, request) -> None:
@@ -306,9 +287,7 @@ def test_updateUi_position_horizontal(qtbot, request) -> None:
     # `!= ""` assertion would pass even if the method were a no-op. Asserting
     # the method re-writes the expected formatted value proves it ran.
     ctrl.motor_panel.ui.label_sampleCurrentHPosition.setText("")
-    expected = ctrl.units_fixformat.format(
-        ctrl.motors.horizontal.get_position(ctrl.units), ctrl.units
-    )
+    expected = "{:.5f} mm".format(ctrl.motors.horizontal.get_position("mm"))
     ctrl.motor_panel.updateUi_position_horizontal()
     assert ctrl.motor_panel.ui.label_sampleCurrentHPosition.text() == expected
     assert ctrl.current_horizontal_position_text == expected
@@ -317,9 +296,7 @@ def test_updateUi_position_horizontal(qtbot, request) -> None:
 def test_updateUi_position_vertical(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.motor_panel.ui.label_sampleCurrentVPosition.setText("")
-    expected = ctrl.units_fixformat.format(
-        ctrl.motors.vertical.get_position(ctrl.units), ctrl.units
-    )
+    expected = "{:.5f} mm".format(ctrl.motors.vertical.get_position("mm"))
     ctrl.motor_panel.updateUi_position_vertical()
     assert ctrl.motor_panel.ui.label_sampleCurrentVPosition.text() == expected
     assert ctrl.current_vertical_position_text == expected
@@ -328,9 +305,7 @@ def test_updateUi_position_vertical(qtbot, request) -> None:
 def test_updateUi_position_camera(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.motor_panel.ui.label_cameraCurrentPosition.setText("")
-    expected = ctrl.units_fixformat.format(
-        ctrl.motors.camera.get_position(ctrl.units), ctrl.units
-    )
+    expected = "{:.5f} mm".format(ctrl.motors.camera.get_position("mm"))
     ctrl.motor_panel.updateUi_position_camera()
     assert ctrl.motor_panel.ui.label_cameraCurrentPosition.text() == expected
     assert ctrl.current_camera_position_text == expected
@@ -519,10 +494,9 @@ def test_updateUi_stack_mode_button_start_reverse_direction(qtbot, request) -> N
     ctrl.stack_ending_plane = 0.0
     ctrl.stack_first_plane_set = True
     ctrl.stack_last_plane_set = True
-    # Switch to μm so the step value (10.0) is in μm — the default unit
-    # is mm (from config.ini) and the step max in mm mode is 0.025 mm.
-    ctrl.ui.comboBox_units.setCurrentText("\u03bcm")
-    qtbot.wait(30)
+    # Stack plane positions + step are in µm (the fixed stack-display
+    # unit; the global units toggle is gone). Set the spinbox values
+    # directly without a units toggle.
     ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(100.0)
     ctrl.stack_panel.ui.doubleSpinBox_acqLastPlane.setValue(0.0)
     ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
@@ -761,24 +735,6 @@ def test_updateUi_select_directory_empty(qtbot, request) -> None:
 # Branch-coverage closure: defensive / alternate-path branches not hit by
 # the tests above.
 # --------------------------------------------------------------------------- #
-
-
-def test_updateUi_units_neither_mm_nor_um_skips_both_branches(qtbot, request) -> None:
-    """updateUi_units: when the combo text is neither 'mm' nor 'µm', both
-    the if and elif bodies are skipped (the units_decimals / fixformat /
-    increment attrs keep their prior values). Covers the 1317->1323
-    branch (elif False -> fall through to the widget-update block)."""
-    ctrl, _bundle = make_controller(qtbot, request)
-    # Add a third unit the method does not recognise, so neither the mm
-    # nor the µm branch fires.
-    ctrl.ui.comboBox_units.addItem("cm")
-    ctrl.ui.comboBox_units.setCurrentText("cm")
-    prior_decimals = ctrl.units_decimals
-    with patch.object(ctrl.motor_panel, "updateUi_position_indicators"):
-        ctrl.motor_panel.updateUi_units()
-    assert ctrl.units == "cm"
-    # The if/elif bodies did not run, so the decimals attr is unchanged.
-    assert ctrl.units_decimals == prior_decimals
 
 
 def test_updateUi_single_mode_button_already_started_is_noop(qtbot, request) -> None:
