@@ -817,12 +817,11 @@ class AcquisitionTableManager(QWidget):
                 self._shell.stack_mode_started = True
                 # Mirror the row's step into the single-stack spinbox for
                 # UI consistency (blocked so it does not recompute). The
-                # row stores μm; the spinbox displays in the current
-                # display unit (μm or mm), so convert μm → mm when the
-                # display unit is mm to avoid a 1000× display error.
+                # row stores µm; the spinbox displays in micrometres (the
+                # fixed stack-display unit; the global units toggle is
+                # gone), so the value is passed through unchanged.
                 sb_step = self._shell.stack_panel.ui.doubleSpinBox_acqPlaneStepSize
-                unit = self._shell.ui.comboBox_units.currentText()
-                display_step = row.step / 1000.0 if unit == "mm" else row.step
+                display_step = row.step
                 sb_step.blockSignals(True)
                 sb_step.setValue(display_step)
                 sb_step.blockSignals(False)

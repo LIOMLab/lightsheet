@@ -64,12 +64,11 @@ logger = logging.getLogger(__name__)
 # (``self.ui.<name>`` inside a panel, ``self._shell.<panel>.ui.<name>``
 # across panels). The shell-owned set covers the safety-critical E-stop
 # toolbar (AGENTS.md §2 — the kill path's widget references must never
-# strand), the status bar, the message log, the units selector, and the
-# controls/images pane primitives. Most of these live on ``Ui_Shell`` via
-# ``setupUi`` (so they are already on ``self.ui`` and never appear in a
-# panel's ``vars(panel.ui)``); listing them here is harmless and documents
-# the shell-owned surface. ``comboBox_units`` and ``label_units`` are now
-# in the E-stop toolbar via ui_shell.ui (promoted from the Motion tab).
+# strand), the status bar, the message log, the left-rail navigation
+# primitives, and the controls/images pane primitives. Most of these live
+# on ``Ui_Shell`` via ``setupUi`` (so they are already on ``self.ui`` and
+# never appear in a panel's ``vars(panel.ui)``); listing them here is
+# harmless and documents the shell-owned surface.
 SHELL_OWNED_OBJECTNAMES = frozenset({
     # E-stop toolbar (safety-critical — AGENTS.md §2).
     "toolBar_estop",
@@ -84,13 +83,14 @@ SHELL_OWNED_OBJECTNAMES = frozenset({
     "statusBar_progress",
     # Message log.
     "plainTextEdit_messageLog",
-    # Units selector (programmatic, shell-owned).
-    "comboBox_units",
-    "units_label",
-    # Controls / images pane primitives + tab shell.
+    # Left-rail navigation + stacked panes (shell-owned).
+    "stackedPanels",
+    "leftRail",
+    "buttonGroup_leftRail",
+    "action_followSystemTheme",
+    # Controls / images pane primitives.
     "splitter",
     "controlsPane",
-    "tabControls",
     "imagesPane",
     "imageView",
     "centralwidget",
@@ -182,9 +182,11 @@ class Controller_MainWindow(QMainWindow):
         QMainWindow.__init__(self)
 
         # Load the shell UI (E-stop toolbar, ImageView, message log,
-        # tabControls with a placeholder tab). The shell .ui provides the
-        # safety toolbar + placeholder containers; the 7 panel widgets are
-        # composed into tabControls programmatically below.
+        # leftRail of 8 checkable QToolButtons + stackedPanels
+        # QStackedWidget with a placeholder page). The shell .ui provides
+        # the safety toolbar + the left-rail/stacked-pane primitives; the
+        # 8 per-panel widgets are composed into stackedPanels
+        # programmatically below (each wrapped in a QScrollArea).
         self.ui = Ui_Shell()
         self.ui.setupUi(self)
 
@@ -231,7 +233,7 @@ class Controller_MainWindow(QMainWindow):
         self.shortcut_estop.setKey(QKeySequence("F12"))
         self.shortcut_estop.activated.connect(self.updateUi_estop_pressed)
 
-        # --- Compose the 7 per-panel widgets into tabControls ---
+        # --- Compose the 8 per-panel widgets into stackedPanels ---
         # Each panel widget creates its own widgets via its Ui_* class.
         # After creation, the panel's widget attributes are merged onto
         # self.ui so the shell (and tests) can reference any widget via
@@ -245,59 +247,86 @@ class Controller_MainWindow(QMainWindow):
         self.save_panel = SavePanelWidget(self)
         self.calibration_panel = CalibrationPanelWidget(self)
 
-        # The units selector (comboBox_units + "Units:" label) is now in
-        # the E-stop toolbar via ui_shell.ui (promoted from the Motion tab
-        # so it is visible on every tab). The .ui provides the widget; the
-        # items + current-text are set below from config.ini.
+        # The per-field units are now fixed (motor travel in mm, plane
+        # step in µm) — the global units toggle is gone. The per-field
+        # suffix/decimals are applied via FieldSpec in a later plan; the
+        # spinboxes temporarily have no suffix in this intermediate state.
 
-        # Remove the placeholder tab and compose the 7 per-panel widgets
-        # into 5 tabs (D-01 tab consolidation). Motion, File Manager, and
-        # Calibration stay standalone; Acquisition+Stack and Scan+Lasers
-        # are merged via a vertical sub-layout inside a QScrollArea
-        # (widgetResizable=True) so the two stacked panels overflow
-        # gracefully on small screens (UI-SPEC QScrollArea Wrapping
-        # Rules). All 7 per-panel widget classes are preserved — the
-        # merge is sub-layouts in tabs, NOT a widget-class deletion or a
-        # non-tab shell architecture.
-        from PySide6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
+        # Compose the 8 per-panel widgets into stackedPanels (the
+        # QStackedWidget that replaces the old tabbed shell). Each panel
+        # Each panel is wrapped in a QScrollArea(widgetResizable=True)
+        # so it scrolls gracefully on small screens (UI-SPEC QScrollArea
+        # Wrapping Rules). Horizontal scrollbar is always off (panels are
+        # vertical-scroll only). The page order matches the left-rail
+        # button order: Motion(0), Acquire(1), Stack(2), Scan(3),
+        # Lasers(4), Files(5), Past(6), Calibrate(7).
+        from PySide6.QtWidgets import QScrollArea, QWidget
 
-        self.ui.tabControls.removeTab(0)
-        # Wrap the motor panel in a QScrollArea so it scrolls when the
-        # window is too narrow for the fixed-size buttons + labels (the
-        # other merged tabs already use this pattern via _build_merged_tab).
-        # Horizontal scrollbar is enabled so the motor panel's wide
-        # button grid can scroll sideways on small screens.
-        _motor_scroll = QScrollArea()
-        _motor_scroll.setWidgetResizable(True)
-        _motor_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        _motor_scroll.setWidget(self.motor_panel)
-        self.ui.tabControls.addTab(_motor_scroll, "Motion")
-        self.ui.tabControls.addTab(
-            self._build_merged_tab(
-                (self.acquisition_panel, self.stack_panel),
-                QScrollArea, QVBoxLayout, QWidget,
-            ),
-            "Acquisition + Stack",
+        def _wrap(panel) -> QScrollArea:
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+            scroll.setHorizontalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            )
+            scroll.setVerticalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAsNeeded
+            )
+            scroll.setWidget(panel)
+            return scroll
+
+        # Remove the placeholder page the .ui ships, then add the 8
+        # panel-wrapping scroll areas in left-rail order.
+        self.ui.stackedPanels.removeWidget(self.ui.stackedPanelsPlaceholder)
+        self.ui.stackedPanels.addWidget(_wrap(self.motor_panel))            # 0 Motion
+        self.ui.stackedPanels.addWidget(_wrap(self.acquisition_panel))      # 1 Acquire
+        self.ui.stackedPanels.addWidget(_wrap(self.stack_panel))            # 2 Stack
+        self.ui.stackedPanels.addWidget(_wrap(self.scan_panel))             # 3 Scan
+        self.ui.stackedPanels.addWidget(_wrap(self.laser_panel))            # 4 Lasers
+        self.ui.stackedPanels.addWidget(_wrap(self.save_panel))             # 5 Files
+        # Past (index 6): the dedicated PastAcquisitionsPanel is built in
+        # a later plan; until then a placeholder QWidget keeps the page
+        # count at 8 so the left-rail button indices line up. A later
+        # plan swaps this placeholder for the real browser widget via
+        # stackedPanels.insertWidget(6, browser) without re-architecture.
+        self._past_placeholder = QWidget()
+        self.ui.stackedPanels.addWidget(self._past_placeholder)             # 6 Past
+        self.ui.stackedPanels.addWidget(_wrap(self.calibration_panel))      # 7 Calibrate
+
+        # --- Left-rail navigation wiring ---
+        # An exclusive QButtonGroup maps each of the 8 left-rail
+        # QToolButtons to a stackedPanels page index. idClicked(int)
+        # drives stackedPanels.setCurrentIndex(int) — the canonical Qt
+        # left-rail + QStackedWidget navigation pattern. Bare bound-method
+        # connection (no lambda) preserves the cycle-break fix.
+        self._rail_group = QButtonGroup(self)
+        self._rail_group.setExclusive(True)
+        _rail_buttons = (
+            self.ui.toolButton_railMotion,    # id 0
+            self.ui.toolButton_railAcquire,   # id 1
+            self.ui.toolButton_railStack,     # id 2
+            self.ui.toolButton_railScan,      # id 3
+            self.ui.toolButton_railLasers,    # id 4
+            self.ui.toolButton_railFiles,     # id 5
+            self.ui.toolButton_railPast,      # id 6
+            self.ui.toolButton_railCalibrate, # id 7
         )
-        self.ui.tabControls.addTab(
-            self._build_merged_tab(
-                (self.scan_panel, self.laser_panel),
-                QScrollArea, QVBoxLayout, QWidget,
-            ),
-            "Scan + Lasers",
-        )
-        self.ui.tabControls.addTab(self.save_panel, "File Manager")
-        self.ui.tabControls.addTab(self.calibration_panel, "Calibration")
+        for _id, _btn in enumerate(_rail_buttons):
+            self._rail_group.addButton(_btn, id=_id)
+        self._rail_group.idClicked.connect(self.ui.stackedPanels.setCurrentIndex)
+        # Motion is the default active page (matches the .ui's checked
+        # property on toolButton_railMotion).
+        self.ui.toolButton_railMotion.setChecked(True)
+        self.ui.stackedPanels.setCurrentIndex(0)
 
         # Merge each panel's SHELL-OWNED widget attributes onto self.ui.
         # Panel-internal widgets stay on their owning panel's ``ui`` and
         # are reached via the panel-qualified path (hybrid ownership,
         # D-05): ``self.ui.<name>`` inside a panel for its own widgets,
         # ``self._shell.<panel>.ui.<name>`` for cross-panel reads. Only
-        # the shell-owned widgets (notably ``comboBox_units`` in the
-        # E-stop toolbar via ui_shell.ui) are surfaced onto
-        # ``self.ui`` so the shell + the E-stop kill path keep a single
-        # owner for the safety-critical surface (AGENTS.md §2).
+        # the shell-owned widgets are surfaced onto ``self.ui`` so the
+        # shell + the E-stop kill path keep a single owner for the
+        # safety-critical surface (AGENTS.md §2).
         for panel in (
             self.laser_panel,
             self.motor_panel,
@@ -347,11 +376,13 @@ class Controller_MainWindow(QMainWindow):
         self.cfg_settings = copy.deepcopy(self._cfg_defaults)
         self.cfg_settings = cfg_read("config.ini", "Controller", self.cfg_settings)
 
-        units_cfg = str(self.cfg_settings["Units"])
-        if units_cfg == "\u03bcm" or units_cfg == "um":
-            self.units = "\u03bcm"
-        else:
-            self.units = "mm"
+        units_cfg = str(self.cfg_settings.get("Units", "mm"))
+        # The global units toggle is gone — per-field units are now fixed
+        # (motor travel in mm, plane step in µm). The legacy "Units"
+        # config key is retained for backward compatibility but no longer
+        # drives a shell attribute; a later plan applies per-field units
+        # via FieldSpec.
+        _ = units_cfg  # read so cfg_settings stays consistent; no attr set
 
         fmt_cfg = str(self.cfg_settings["Image File Format"]).lower()
         if fmt_cfg == "tiff":
@@ -375,13 +406,6 @@ class Controller_MainWindow(QMainWindow):
         self.save_description = ""
         self.open_directory = ""
         self.dataset_name = ""
-
-        # Set units comboBox options (default: millimeters)
-        self.ui.comboBox_units.insertItems(0, ["mm", "\u03bcm"])
-        if self.units == "\u03bcm":
-            self.ui.comboBox_units.setCurrentIndex(1)
-        else:
-            self.ui.comboBox_units.setCurrentIndex(0)
 
         if self.save_directory != "":
             self.save_panel.ui.lineEdit_saveDirectory.setText(self.save_directory)
@@ -483,15 +507,14 @@ class Controller_MainWindow(QMainWindow):
         self.ui.action_ShowHideMessageLog.triggered.connect(self.updateUi_show_hide_message_log)
         self.ui.action_lightTheme.triggered.connect(self.updateUi_light_theme)
         self.ui.action_darkTheme.triggered.connect(self.updateUi_dark_theme)
+        self.ui.action_followSystemTheme.triggered.connect(self.updateUi_follow_system_theme)
         self.ui.action_showSystemProperties.triggered.connect(self.open_properties_dialog)
         self.ui.actionGuidePdf.triggered.connect(self.open_help)
 
-        # Connection for unit change — re-renders BOTH the Motion position
-        # labels (motor_panel.updateUi_units) AND the Stack plane spinboxes
-        # (stack_panel._rerender_stack_units) so every dependent field
-        # updates immediately on a unit switch.
-        self.ui.comboBox_units.currentTextChanged.connect(self.motor_panel.updateUi_units)
-        self.ui.comboBox_units.currentTextChanged.connect(self.stack_panel._rerender_stack_units)
+        # Per-field units are now fixed (motor travel in mm, plane step in
+        # µm) — the global units toggle that re-rendered both panels on a
+        # unit switch is gone. A later plan applies per-field
+        # suffix/decimals via FieldSpec.
 
         # Connection for laser settings changes — target the laser panel slots.
         self.laser_panel.ui.doubleSpinBox_laserOneAmplitude.valueChanged.connect(
@@ -684,40 +707,6 @@ class Controller_MainWindow(QMainWindow):
                 self.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(float(step_s))
             except ValueError:
                 pass
-
-    @staticmethod
-    def _build_merged_tab(panels, _QScrollArea, _QVBoxLayout, _QWidget):
-        """Build a merged tab page hosting two panel widgets in a vertical
-        sub-layout inside a QScrollArea (widgetResizable=True).
-
-        The merge is a sub-layout in one tab (D-01), NOT a side-rail
-        or stacked-tool container refactor — the thin QTabWidget shell
-        stays and each
-        panel widget keeps its own widget tree. The QScrollArea lets the
-        two stacked panels overflow gracefully on small screens (UI-SPEC
-        QScrollArea Wrapping Rules). The scroll area's horizontal
-        scrollbar is always off (panels are vertical-scroll only).
-        """
-        from PySide6.QtCore import Qt as _Qt
-
-        container = _QWidget()
-        outer = _QVBoxLayout(container)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-        scroll = _QScrollArea(container)
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(_Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setFrameShape(_QScrollArea.Shape.NoFrame)
-        content = _QWidget()
-        content_layout = _QVBoxLayout(content)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(8)
-        for panel in panels:
-            content_layout.addWidget(panel)
-        content_layout.addStretch(1)
-        scroll.setWidget(content)
-        outer.addWidget(scroll)
-        return container
 
     def hardware_init(self) -> None:
         """Completes initialisation of hardware and image consumers.
@@ -935,6 +924,14 @@ class Controller_MainWindow(QMainWindow):
 
     def updateUi_dark_theme(self) -> None:
         self.sig_stylesheet.emit("dark")
+
+    def updateUi_follow_system_theme(self) -> None:
+        """Emit the 'system' stylesheet token so the theme manager follows
+        the operating system's light/dark setting. Mirrors
+        updateUi_light_theme / updateUi_dark_theme; the theme manager
+        resolves 'system' to the current OS appearance and persists the
+        override across sessions."""
+        self.sig_stylesheet.emit("system")
 
     def updateUi_show_hide_images_pane(self) -> None:
         """Toggle the images pane via splitter.setSizes() (audit #7).
@@ -1405,8 +1402,8 @@ class Controller_MainWindow(QMainWindow):
             f"Toggle Toptica iBeam ({self.lasers[1].wavelength} nm, COM4)"
         )
 
-        # Motors
-        self.motor_panel.updateUi_units()
-        # Re-render the Stack plane spinboxes with the current unit suffix
-        # (the spinboxes start with no suffix in the .ui; this sets it).
-        self.stack_panel._rerender_stack_units()
+        # Motors — refresh the position indicators with the fixed mm
+        # display unit. The global units toggle is gone; per-field units
+        # are fixed (motor travel in mm). The spinbox suffix/decimals are
+        # applied via FieldSpec in a later plan.
+        self.motor_panel.updateUi_position_indicators()

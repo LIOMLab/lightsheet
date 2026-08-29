@@ -19,9 +19,9 @@ MotorController is a motion collaborator, NOT a safety kill-path owner.
 This is a plain-Python object (NOT a ``QObject``) per the plain-Python
 collaborator pattern: collaborators emit through a shell reference, never
 declare their own ``Signal``, and never call ``.connect()``. The
-shell-owned state (``ui`` widgets, ``sig_message``/``sig_beep``, ``units``,
-``updateUi_position_*`` / ``updateUi_message_printer`` / ``updateUi_units``
-thin GUI-state setters, ``focus_selected`` /
+shell-owned state (``ui`` widgets, ``sig_message``/``sig_beep``,
+``updateUi_position_*`` / ``updateUi_message_printer`` /
+``updateUi_position_indicators`` thin GUI-state setters, ``focus_selected`` /
 ``horizontal_backward_boundary_selected`` /
 ``horizontal_forward_boundary_selected`` /
 ``camera_focus_relation`` / ``slope_camera`` / ``intercept_camera`` /
@@ -83,15 +83,15 @@ class MotorController:
         """Moves the sample to a specified horizontal position"""
         if (
             self._shell.motor_panel.ui.doubleSpinBox_sampleSetHPosition.value()
-            >= self.motors.horizontal.get_limit_low(self._shell.units)
+            >= self.motors.horizontal.get_limit_low("mm")
         ) and (
             self._shell.motor_panel.ui.doubleSpinBox_sampleSetHPosition.value()
-            <= self.motors.horizontal.get_limit_high(self._shell.units)
+            <= self.motors.horizontal.get_limit_high("mm")
         ):
             try:
                 self.motors.horizontal.move_absolute_position(
                     self._shell.motor_panel.ui.doubleSpinBox_sampleSetHPosition.value(),
-                    self._shell.units,
+                    "mm",
                 )
             except ValueError:
                 self._shell.sig_message.emit(
@@ -109,15 +109,15 @@ class MotorController:
         """Moves the sample to a specified vertical position"""
         if (
             self._shell.motor_panel.ui.doubleSpinBox_sampleSetVPosition.value()
-            >= self.motors.vertical.get_limit_low(self._shell.units)
+            >= self.motors.vertical.get_limit_low("mm")
         ) and (
             self._shell.motor_panel.ui.doubleSpinBox_sampleSetVPosition.value()
-            <= self.motors.vertical.get_limit_high(self._shell.units)
+            <= self.motors.vertical.get_limit_high("mm")
         ):
             try:
                 self.motors.vertical.move_absolute_position(
                     self._shell.motor_panel.ui.doubleSpinBox_sampleSetVPosition.value(),
-                    self._shell.units,
+                    "mm",
                 )
             except ValueError:
                 self._shell.sig_message.emit(
@@ -134,17 +134,17 @@ class MotorController:
     def updateUi_move_sample_to_origin(self) -> None:
         """Moves vertical and horizontal sample motors to origin position"""
         if (
-            self.motors.horizontal.get_origin(self._shell.units)
-            <= self.motors.horizontal.get_limit_high(self._shell.units)
+            self.motors.horizontal.get_origin("mm")
+            <= self.motors.horizontal.get_limit_high("mm")
         ) and (
-            self.motors.horizontal.get_origin(self._shell.units)
-            >= self.motors.horizontal.get_limit_low(self._shell.units)
+            self.motors.horizontal.get_origin("mm")
+            >= self.motors.horizontal.get_limit_low("mm")
         ):
             # Moving sample to horizontal origin
             try:
                 self.motors.horizontal.move_absolute_position(
-                    self.motors.horizontal.get_origin(self._shell.units),
-                    self._shell.units,
+                    self.motors.horizontal.get_origin("mm"),
+                    "mm",
                 )
             except ValueError:
                 self._shell.sig_message.emit(
@@ -159,17 +159,17 @@ class MotorController:
             self._shell.updateUi_message_printer("Horizontal origin out of boundaries")
 
         if (
-            self.motors.vertical.get_origin(self._shell.units)
-            <= self.motors.vertical.get_limit_high(self._shell.units)
+            self.motors.vertical.get_origin("mm")
+            <= self.motors.vertical.get_limit_high("mm")
         ) and (
-            self.motors.vertical.get_origin(self._shell.units)
-            >= self.motors.vertical.get_limit_low(self._shell.units)
+            self.motors.vertical.get_origin("mm")
+            >= self.motors.vertical.get_limit_low("mm")
         ):
             # Moving sample to vertical origin
             try:
                 self.motors.vertical.move_absolute_position(
-                    self.motors.vertical.get_origin(self._shell.units),
-                    self._shell.units,
+                    self.motors.vertical.get_origin("mm"),
+                    "mm",
                 )
             except ValueError:
                 self._shell.sig_message.emit(
@@ -187,15 +187,15 @@ class MotorController:
         """Moves the sample to a specified vertical position"""
         if (
             self._shell.motor_panel.ui.doubleSpinBox_cameraSetPosition.value()
-            >= self.motors.camera.get_limit_low(self._shell.units)
+            >= self.motors.camera.get_limit_low("mm")
         ) and (
             self._shell.motor_panel.ui.doubleSpinBox_cameraSetPosition.value()
-            <= self.motors.camera.get_limit_high(self._shell.units)
+            <= self.motors.camera.get_limit_high("mm")
         ):
             try:
                 self.motors.camera.move_absolute_position(
                     self._shell.motor_panel.ui.doubleSpinBox_cameraSetPosition.value(),
-                    self._shell.units,
+                    "mm",
                 )
             except ValueError:
                 self._shell.sig_message.emit(
@@ -213,17 +213,17 @@ class MotorController:
         """Moves camera to focus position"""
         if self._shell.focus_selected:
             if self.motors.camera.get_origin(
-                self._shell.units
-            ) > self.motors.camera.get_limit_high(self._shell.units):
-                # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_high(self._shell.units), self._shell.units)  # noqa: E501
+                "mm"
+            ) > self.motors.camera.get_limit_high("mm"):
+                # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_high("mm"), "mm")  # noqa: E501
                 # rather only report out of boundaries
                 self._shell.updateUi_message_printer("Focus out of boundaries")
                 self._shell.sig_beep.emit()
                 self._shell.motor_panel.updateUi_position_camera()
             elif self.motors.camera.get_origin(
-                self._shell.units
-            ) < self.motors.camera.get_limit_low(self._shell.units):
-                # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_low(self._shell.units), self._shell.units)  # noqa: E501
+                "mm"
+            ) < self.motors.camera.get_limit_low("mm"):
+                # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_low("mm"), "mm")  # noqa: E501
                 # rather only report out of boundaries
                 self._shell.updateUi_message_printer("Focus out of boundaries")
                 self._shell.sig_beep.emit()
@@ -231,8 +231,8 @@ class MotorController:
             else:
                 try:
                     self.motors.camera.move_absolute_position(
-                        self.motors.camera.get_origin(self._shell.units),
-                        self._shell.units,
+                        self.motors.camera.get_origin("mm"),
+                        "mm",
                     )
                 except ValueError:
                     self._shell.sig_message.emit(
@@ -245,8 +245,8 @@ class MotorController:
         else:
             try:
                 self.motors.camera.move_absolute_position(
-                    self.motors.camera.get_origin(self._shell.units),
-                    self._shell.units,
+                    self.motors.camera.get_origin("mm"),
+                    "mm",
                 )
             except ValueError:
                 self._shell.sig_message.emit(
@@ -266,14 +266,14 @@ class MotorController:
     def updateUi_move_sample_backward(self) -> None:
         """Sample motor backward horizontal motion"""
         if (
-            self.motors.horizontal.get_position(self._shell.units)
+            self.motors.horizontal.get_position("mm")
             - self._shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value()
-            >= self.motors.horizontal.get_limit_low(self._shell.units)
+            >= self.motors.horizontal.get_limit_low("mm")
         ):
             try:
                 self.motors.horizontal.move_relative_position(
                     -self._shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value(),
-                    self._shell.units,
+                    "mm",
                 )
             except ValueError:
                 self._shell.sig_message.emit(
@@ -284,7 +284,7 @@ class MotorController:
                 self._shell.updateUi_message_printer("Sample moving backward")
             self._shell.motor_panel.updateUi_position_horizontal()
         else:
-            # self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_low(self._shell.units), self._shell.units)  # noqa: E501
+            # self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_low("mm"), "mm")  # noqa: E501
             # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
@@ -293,14 +293,14 @@ class MotorController:
     def updateUi_move_sample_forward(self) -> None:
         """Sample motor forward horizontal motion"""
         if (
-            self.motors.horizontal.get_position(self._shell.units)
+            self.motors.horizontal.get_position("mm")
             + self._shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value()
-            <= self.motors.horizontal.get_limit_high(self._shell.units)
+            <= self.motors.horizontal.get_limit_high("mm")
         ):
             try:
                 self.motors.horizontal.move_relative_position(
                     self._shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value(),
-                    self._shell.units,
+                    "mm",
                 )
             except ValueError:
                 self._shell.sig_message.emit(
@@ -311,7 +311,7 @@ class MotorController:
                 self._shell.updateUi_message_printer("Sample moving forward")
             self._shell.motor_panel.updateUi_position_horizontal()
         else:
-            # self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_high(self._shell.units), self._shell.units)  # noqa: E501
+            # self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_high("mm"), "mm")  # noqa: E501
             # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
@@ -320,14 +320,14 @@ class MotorController:
     def updateUi_move_sample_up(self) -> None:
         """Sample motor upward vertical motion"""
         if (
-            self.motors.vertical.get_position(self._shell.units)
+            self.motors.vertical.get_position("mm")
             - self._shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value()
-            >= self.motors.vertical.get_limit_low(self._shell.units)
+            >= self.motors.vertical.get_limit_low("mm")
         ):
             try:
                 self.motors.vertical.move_relative_position(
                     -self._shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value(),
-                    self._shell.units,
+                    "mm",
                 )
             except ValueError:
                 self._shell.sig_message.emit(
@@ -338,7 +338,7 @@ class MotorController:
                 self._shell.updateUi_message_printer("Sample stepping up")
             self._shell.motor_panel.updateUi_position_vertical()
         else:
-            # self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_low(self._shell.units), self._shell.units)  # noqa: E501
+            # self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_low("mm"), "mm")  # noqa: E501
             # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
@@ -347,14 +347,14 @@ class MotorController:
     def updateUi_move_sample_down(self) -> None:
         """Sample motor downward vertical motion"""
         if (
-            self.motors.vertical.get_position(self._shell.units)
+            self.motors.vertical.get_position("mm")
             + self._shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value()
-            <= self.motors.vertical.get_limit_high(self._shell.units)
+            <= self.motors.vertical.get_limit_high("mm")
         ):
             try:
                 self.motors.vertical.move_relative_position(
                     self._shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value(),
-                    self._shell.units,
+                    "mm",
                 )
             except ValueError:
                 self._shell.sig_message.emit(
@@ -365,7 +365,7 @@ class MotorController:
                 self._shell.updateUi_message_printer("Sample stepping down")
             self._shell.motor_panel.updateUi_position_vertical()
         else:
-            # self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_high(self._shell.units), self._shell.units)  # noqa: E501
+            # self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_high("mm"), "mm")  # noqa: E501
             # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
@@ -374,14 +374,14 @@ class MotorController:
     def updateUi_move_camera_backward(self) -> None:
         """Camera motor backward horizontal motion"""
         if (
-            self.motors.camera.get_position(self._shell.units)
+            self.motors.camera.get_position("mm")
             - self._shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value()
-            >= self.motors.camera.get_limit_low(self._shell.units)
+            >= self.motors.camera.get_limit_low("mm")
         ):
             try:
                 self.motors.camera.move_relative_position(
                     -self._shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value(),
-                    self._shell.units,
+                    "mm",
                 )
             except ValueError:
                 self._shell.sig_message.emit(
@@ -392,7 +392,7 @@ class MotorController:
                 self._shell.updateUi_message_printer("Camera stepping backward")
             self._shell.motor_panel.updateUi_position_camera()
         else:
-            # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_low(self._shell.units), self._shell.units)  # noqa: E501
+            # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_low("mm"), "mm")  # noqa: E501
             # In case of a communication glitch with motor, this was bringing the stage back to min position  # noqa: E501
             # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
@@ -402,14 +402,14 @@ class MotorController:
     def updateUi_move_camera_forward(self) -> None:
         """Camera motor forward horizontal motion"""
         if (
-            self.motors.camera.get_position(self._shell.units)
+            self.motors.camera.get_position("mm")
             + self._shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value()
-            <= self.motors.camera.get_limit_high(self._shell.units)
+            <= self.motors.camera.get_limit_high("mm")
         ):
             try:
                 self.motors.camera.move_relative_position(
                     self._shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value(),
-                    self._shell.units,
+                    "mm",
                 )
             except ValueError:
                 self._shell.sig_message.emit(
@@ -420,7 +420,7 @@ class MotorController:
                 self._shell.updateUi_message_printer("Camera stepping forward")
             self._shell.motor_panel.updateUi_position_camera()
         else:
-            # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_high(self._shell.units), self._shell.units)  # noqa: E501
+            # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_high("mm"), "mm")  # noqa: E501
             # In case of a communication glitch with motor, this was bringing the stage back to max position  # noqa: E501
             # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
@@ -438,16 +438,16 @@ class MotorController:
         self._shell.calibration_panel.ui.pushButton_calHorizontalSetBackwardLimit.setEnabled(True)
         self._shell.calibration_panel.ui.label_calibrateRange.setText("Move Horizontal Position")
         # Default boundaries
-        self.motors.horizontal.set_limit_low(0, self._shell.units)
-        self.motors.horizontal.set_limit_high(0, self._shell.units)
-        self._shell.motor_panel.updateUi_units()
+        self.motors.horizontal.set_limit_low(0, "mm")
+        self.motors.horizontal.set_limit_high(0, "mm")
+        self._shell.motor_panel.updateUi_position_indicators()
 
     def updateUi_set_horizontal_backward_boundary(self) -> None:
         """Set lower limit of sample's horizontal motion"""
         self.motors.horizontal.set_limit_low(
-            self.motors.horizontal.get_position(self._shell.units), self._shell.units
+            self.motors.horizontal.get_position("mm"), "mm"
         )
-        self._shell.motor_panel.updateUi_units()
+        self._shell.motor_panel.updateUi_position_indicators()
         self._shell.horizontal_backward_boundary_selected = True
         self._shell.calibration_panel.ui.pushButton_calHorizontalSetBackwardLimit.setEnabled(False)
         if self._shell.horizontal_forward_boundary_selected:
@@ -457,9 +457,9 @@ class MotorController:
     def updateUi_set_horizontal_forward_boundary(self) -> None:
         """Set upper limit of sample's horizontal motion"""
         self.motors.horizontal.set_limit_high(
-            self.motors.horizontal.get_position(self._shell.units), self._shell.units
+            self.motors.horizontal.get_position("mm"), "mm"
         )
-        self._shell.motor_panel.updateUi_units()
+        self._shell.motor_panel.updateUi_position_indicators()
         self._shell.horizontal_forward_boundary_selected = True
         self._shell.calibration_panel.ui.pushButton_calHorizontalSetForwardLimit.setEnabled(False)
         if self._shell.horizontal_backward_boundary_selected:
@@ -469,21 +469,21 @@ class MotorController:
     def updateUi_set_sample_origin(self) -> None:
         """Modifies the sample origin position"""
         self.motors.horizontal.set_origin(
-            self.motors.horizontal.get_position(self._shell.units), self._shell.units
+            self.motors.horizontal.get_position("mm"), "mm"
         )
         self.motors.vertical.set_origin(
-            self.motors.vertical.get_position(self._shell.units), self._shell.units
+            self.motors.vertical.get_position("mm"), "mm"
         )
-        origin_text = f"Sample origin set at ({self.motors.horizontal.get_origin(self._shell.units)}, {self.motors.vertical.get_origin(self._shell.units)}) {self._shell.units}"  # noqa: E501
+        origin_text = f"Sample origin set at ({self.motors.horizontal.get_origin("mm")}, {self.motors.vertical.get_origin("mm")}) {"mm"}"  # noqa: E501
         self._shell.updateUi_message_printer(origin_text)
 
     def updateUi_set_camera_focus(self) -> None:
         """Modifies manually the camera focus position"""
         self._shell.focus_selected = True
         self.motors.camera.set_origin(
-            self.motors.camera.get_position(self._shell.units), self._shell.units
+            self.motors.camera.get_position("mm"), "mm"
         )
-        focus_text = f"Camera focus manually set at {self.motors.camera.get_origin(self._shell.units)} {self._shell.units}"  # noqa: E501
+        focus_text = f"Camera focus manually set at {self.motors.camera.get_origin("mm")} {"mm"}"  # noqa: E501
         self._shell.updateUi_message_printer(focus_text)
 
     # ------------------------------------------------------------------ #
@@ -497,12 +497,12 @@ class MotorController:
     def calculate_camera_focus(self) -> None:
         """Interpolates the camera focus position"""
         # Current sample position
-        current_position = self.motors.horizontal.get_position(self._shell.units)
+        current_position = self.motors.horizontal.get_position("mm")
         # Compute corresponding optimal focus position
         focus_regression = (
             self._shell.slope_camera * current_position + self._shell.intercept_camera
         )
-        self.motors.camera.set_origin(focus_regression, self._shell.units)
+        self.motors.camera.set_origin(focus_regression, "mm")
         logger.debug("focus_regression: %s", focus_regression)
         self._shell.focus_selected = True
         self._shell.updateUi_message_printer("Focus automatically set")
@@ -527,8 +527,8 @@ class MotorController:
         yreg = self._shell.slope_camera * xnew + self._shell.intercept_camera
 
         # Setting colormap
-        xstart = self.motors.horizontal.get_limit_low(self._shell.units)
-        xend = self.motors.horizontal.get_limit_high(self._shell.units)
+        xstart = self.motors.horizontal.get_limit_low("mm")
+        xend = self.motors.horizontal.get_limit_high("mm")
         ystart = self._shell.focus_forward_boundary
         yend = self._shell.focus_backward_boundary
         transp = copy.deepcopy(self._shell.donnees)
@@ -539,8 +539,8 @@ class MotorController:
         # Showing interpolation graph
         plt.figure(1)
         plt.title("Camera Focus Regression")
-        plt.xlabel(f"Sample Horizontal Position ({self._shell.units})")
-        plt.ylabel(f"Camera Position ({self._shell.units})")
+        plt.xlabel(f"Sample Horizontal Position ({"mm"})")
+        plt.ylabel(f"Camera Position ({"mm"})")
         plt.imshow(transp, cmap="gray", extent=[xstart, xend, ystart, yend])  # Colormap
         plt.plot(x, y, "o")  # Raw data
         plt.plot(xnew, yreg)  # Linear regression
