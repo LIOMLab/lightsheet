@@ -172,12 +172,12 @@ def test_past_acquisitions_browser_parses_compact_naming(
     data_dir = tmp_path / "LightSheetData"
     data_dir.mkdir()
     # No root attrs — wavelength must come from the filename token.
-    h5_path1 = data_dir / "tes1_stack_555nm.hdf5"
+    h5_path1 = data_dir / "tes1_555nm.hdf5"
     with h5py.File(h5_path1, "w") as f:
         f.create_dataset(
             "reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16)
         )
-    h5_path2 = data_dir / "tes1_stack_647nm_01.hdf5"
+    h5_path2 = data_dir / "tes1_647nm_01.hdf5"
     with h5py.File(h5_path2, "w") as f:
         f.create_dataset(
             "reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16)
@@ -189,6 +189,6 @@ def test_past_acquisitions_browser_parses_compact_naming(
     by_wl = {e.wavelength: e for e in entries}
     assert 555 in by_wl, "555nm first-file (no suffix) must parse"
     assert 647 in by_wl, "647nm suffixed file must parse"
-    # Sample name strips the _stack scan-type segment.
+    # Sample name is the prefix before the _<wl>nm token.
     assert by_wl[555].sample == "tes1", by_wl[555].sample
     assert by_wl[647].sample == "tes1", by_wl[647].sample

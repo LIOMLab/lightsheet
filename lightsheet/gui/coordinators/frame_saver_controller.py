@@ -273,16 +273,19 @@ class FrameSaver(QObject):
         are unique in the path to avoid overwrite on other files.
 
         Filename convention (compact, aligned with the Zarr store name
-        ``<files_name>.ome.zarr``): ``<files_name>_<scan_type>_<wavelength>nm``
-        with a per-channel sequential counter — NO suffix on the first
-        file, then ``_01``, ``_02``, ... (2-digit, width scales with the
-        file count so lexicographic sort is stable). The old
-        ``_plane_00001`` segment is dropped — it was always ``00001`` for
-        stitch (one file per channel) and redundant with the dataset name
-        inside the file for crop/full. Collision avoidance: if a
-        candidate name already exists on disk, the counter increments
-        past it until a free name is found (so a re-run in the same
-        directory produces ``_01``, ``_02``, ... instead of overwriting).
+        ``<files_name>.ome.zarr``): ``<files_name>_<wavelength>nm`` with
+        a per-channel sequential counter — NO suffix on the first file,
+        then ``_01``, ``_02``, ... (2-digit, width scales with the file
+        count so lexicographic sort is stable). The scan_type segment is
+        NOT included in the filename (it stays available as
+        ``self.scan_type`` for metadata). The old ``_plane_00001`` and
+        ``_stack`` segments are dropped — the former was always ``00001``
+        for stitch (one file per channel) and redundant with the dataset
+        name inside the file for crop/full, and the latter duplicated the
+        Zarr store name's role. Collision avoidance: if a candidate name
+        already exists on disk, the counter increments past it until a
+        free name is found (so a re-run in the same directory produces
+        ``_01``, ``_02``, ... instead of overwriting).
 
         ``wavelengths`` is required — every caller passes a non-None
         list. Multi-channel callers pass ``[wl1, wl2]``;
@@ -339,8 +342,6 @@ class FrameSaver(QObject):
             for _plane in range(self.number_of_files):
                 base = (
                     self.files_name
-                    + "_"
-                    + scan_type
                     + f"_{wl}nm"
                 )
                 if counter == 0:

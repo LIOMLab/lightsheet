@@ -280,13 +280,13 @@ def test_set_files_sequential_plane_numbers(tmp_path) -> None:
         os.chdir(cwd)
 
     assert saver.filenames_list == [
-        "stack_z_555nm.hdf5",
-        "stack_z_555nm_01.hdf5",
-        "stack_z_555nm_02.hdf5",
+        "stack_555nm.hdf5",
+        "stack_555nm_01.hdf5",
+        "stack_555nm_02.hdf5",
     ], (
         "set_files in a fresh directory must produce the compact "
-        "sequential names (no suffix on first, then _01, _02) with the "
-        "_{wavelength}nm suffix; got: "
+        "sequential names (no scan_type, no suffix on first, then _01, "
+        "_02) with the _{wavelength}nm suffix; got: "
         + repr(saver.filenames_list)
     )
 
@@ -309,7 +309,7 @@ def test_set_files_collision_suffix(tmp_path) -> None:
     saver.filenames_lists = []
 
     # Pre-create the colliding file in the fresh directory.
-    (tmp_path / "stack_z_555nm.hdf5").write_bytes(b"")
+    (tmp_path / "stack_555nm.hdf5").write_bytes(b"")
 
     import os
 
@@ -321,9 +321,9 @@ def test_set_files_collision_suffix(tmp_path) -> None:
         os.chdir(cwd)
 
     assert saver.filenames_list == [
-        "stack_z_555nm_01.hdf5",
-        "stack_z_555nm_02.hdf5",
-        "stack_z_555nm_03.hdf5",
+        "stack_555nm_01.hdf5",
+        "stack_555nm_02.hdf5",
+        "stack_555nm_03.hdf5",
     ], (
         "set_files must shift the sequential counter past a colliding "
         "first file (_01, _02, _03); got: "
@@ -347,8 +347,8 @@ def test_set_files_collision_suffix_increments(tmp_path) -> None:
     saver.filenames_lists = []
 
     # Pre-create both the base and the _01 collision files.
-    (tmp_path / "stack_z_555nm.hdf5").write_bytes(b"")
-    (tmp_path / "stack_z_555nm_01.hdf5").write_bytes(b"")
+    (tmp_path / "stack_555nm.hdf5").write_bytes(b"")
+    (tmp_path / "stack_555nm_01.hdf5").write_bytes(b"")
 
     import os
 
@@ -360,9 +360,9 @@ def test_set_files_collision_suffix_increments(tmp_path) -> None:
         os.chdir(cwd)
 
     assert saver.filenames_list == [
-        "stack_z_555nm_02.hdf5",
-        "stack_z_555nm_03.hdf5",
-        "stack_z_555nm_04.hdf5",
+        "stack_555nm_02.hdf5",
+        "stack_555nm_03.hdf5",
+        "stack_555nm_04.hdf5",
     ], (
         "set_files must increment the sequential counter past existing "
         "base and _01 to _02, _03, _04; got: "
@@ -423,11 +423,11 @@ def test_set_files_multi_channel_wavelength_suffix(tmp_path) -> None:
         assert re.search(r"_640nm(_\d+)?\.hdf5$", fn), (
             f"channel 1 filename must carry _640nm suffix: {fn}"
         )
-    # Compact sequential counter: no suffix on first, _01 on second.
-    assert saver.filenames_lists[0][0] == "scan_stack_555nm.hdf5"
-    assert saver.filenames_lists[0][1] == "scan_stack_555nm_01.hdf5"
-    assert saver.filenames_lists[1][0] == "scan_stack_640nm.hdf5"
-    assert saver.filenames_lists[1][1] == "scan_stack_640nm_01.hdf5"
+    # Compact sequential counter: no scan_type, no suffix on first, _01 on second.
+    assert saver.filenames_lists[0][0] == "scan_555nm.hdf5"
+    assert saver.filenames_lists[0][1] == "scan_555nm_01.hdf5"
+    assert saver.filenames_lists[1][0] == "scan_640nm.hdf5"
+    assert saver.filenames_lists[1][1] == "scan_640nm_01.hdf5"
 
 
 def test_set_files_single_channel_has_suffix(tmp_path) -> None:
@@ -526,7 +526,7 @@ def test_set_files_collision_avoidance_per_channel(tmp_path) -> None:
     saver.filenames_lists = []
 
     # Pre-create channel 0's first file so it collides
-    (tmp_path / "scan_stack_555nm.hdf5").write_bytes(b"")
+    (tmp_path / "scan_555nm.hdf5").write_bytes(b"")
 
     cwd = os.getcwd()
     os.chdir(tmp_path)
@@ -540,12 +540,12 @@ def test_set_files_collision_avoidance_per_channel(tmp_path) -> None:
 
     assert len(saver.filenames_lists) == 2
     # Channel 0 collides → shifts to _01
-    assert saver.filenames_lists[0][0] == "scan_stack_555nm_01.hdf5", (
+    assert saver.filenames_lists[0][0] == "scan_555nm_01.hdf5", (
         f"channel 0 colliding filename must shift to _01: "
         f"{saver.filenames_lists[0][0]}"
     )
     # Channel 1 does not collide → no sequential suffix
-    assert saver.filenames_lists[1][0] == "scan_stack_640nm.hdf5", (
+    assert saver.filenames_lists[1][0] == "scan_640nm.hdf5", (
         f"channel 1 non-colliding filename must have no sequential "
         f"suffix: {saver.filenames_lists[1][0]}"
     )
