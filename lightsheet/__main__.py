@@ -253,6 +253,15 @@ def _build_demo_bundle():
     )
 
     camera = MockCamera(verbose=True)
+    # Demo-mode timing observability: simulate the real camera's
+    # exposure-time delay in monitor_recorder so the operator sees the
+    # L1->L2 per-plane cycle at a realistic pace during demo UAT
+    # (without this the mock completes instantly and the per-plane
+    # sequencing is unobservable). MockCamera is never used on the
+    # real rig, so this delay never reaches safety-critical code. This
+    # is the ONLY place simulate_timing is set to True — the test
+    # fixture (make_bundle) does not set it, keeping the suite fast.
+    camera.simulate_timing = True
     # SigGen needs to know about Camera settings to generate proper scan
     # waveforms — dependency ordering preserved (the mock camera still
     # carries the xsize/ysize/line_time the SigGen waveform timing derives

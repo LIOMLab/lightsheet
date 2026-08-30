@@ -15,6 +15,7 @@ them as direct attributes, D-04/Pitfall 1): ``xsize``, ``ysize``,
 """
 
 import logging
+import time
 from typing import Any
 
 import numpy as np
@@ -65,6 +66,18 @@ class MockCamera(ICamera):
     lightsheet_exposed_lines: int = 0
     lightsheet_delay_lines: int = 0
     recorder_timeout_status: bool = False
+    # Demo-mode timing observability flag. Defaults to False so the
+    # test suite (which constructs MockCamera(verbose=False) without
+    # setting this) is unaffected. When True, monitor_recorder sleeps
+    # for self.exposure_time before setting new_data_ready — making
+    # the L1->L2 per-plane/per-frame sequencing observable in the
+    # --demo GUI launch (the mock otherwise completes instantly, so
+    # the operator cannot see the per-plane cycle during demo UAT).
+    # MockCamera is never used on the real rig, so this delay never
+    # reaches safety-critical code (E-stop, laser clamping, motor
+    # limits). Set to True only by _build_demo_bundle in
+    # lightsheet/__main__.py.
+    simulate_timing: bool = False
 
     def __init__(self, verbose: bool = False) -> None:
         self.verbose = verbose
@@ -159,7 +172,15 @@ class MockCamera(ICamera):
         return None
 
     def monitor_recorder(self, number_of_images: int) -> None:
-        # The mock "completes" instantly — all images are ready.
+        # When simulate_timing is True (demo GUI launch only), sleep
+        # for exposure_time before marking data ready — faithfully
+        # simulating the real Camera.monitor_recorder which blocks for
+        # the exposure duration. This makes the L1->L2 per-plane cycle
+        # observable at a realistic pace during demo UAT. When False
+        # (the default, including the entire test suite), return
+        # immediately as before — no test-suite slowdown.
+        if self.simulate_timing:
+            time.sleep(self.exposure_time)
         self.new_data_ready = True
         return None
 
