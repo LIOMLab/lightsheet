@@ -220,13 +220,23 @@ class AcquisitionPanelWidget(QWidget):
             # spawning the worker (AGENTS.md §11).
             self._shell._cache_auto_laser_flags()
 
+            # Multi-channel flag pre-sampled on the GUI thread (AGENTS.md
+            # §11 — no cross-thread widget reads from workers). When both
+            # auto-laser checkboxes are checked, SingleWorker.run executes
+            # the per-channel cycle (select_laser(0) -> acquire ->
+            # select_laser(1) -> acquire); otherwise the existing
+            # single-channel path runs unchanged.
+            multi_channel = (
+                self._shell._auto_laser1 and self._shell._auto_laser2
+            )
+
             # B-03: pre-sample the save-option widgets on the GUI thread
             # BEFORE constructing the worker (AGENTS.md §11).
             save_desc = str(self._shell.save_panel.ui.lineEdit_saveDescription.text())
             save_blend = self._shell.save_panel.ui.radioButton_saveStitchBlend.isChecked()
 
             # Spawn the single-image worker on a QThread (moveToThread pattern).
-            self._shell._single_worker = SingleWorker(self._shell._bundle, self._shell._hw, self._shell, save_desc, save_blend)  # noqa: E501
+            self._shell._single_worker = SingleWorker(self._shell._bundle, self._shell._hw, self._shell, save_desc, save_blend, multi_channel)  # noqa: E501
             self._shell._single_thread = QThread()
             self._shell._single_worker.moveToThread(self._shell._single_thread)
             self._shell._single_thread.started.connect(self._shell._single_worker.run)

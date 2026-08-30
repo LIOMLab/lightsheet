@@ -15,7 +15,7 @@ never a static-source grep.
 
 from __future__ import annotations
 
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
@@ -90,6 +90,11 @@ class _WorkerShell:
         # Buffer / reconstructed frame
         self.buffer = None
         self.reconstructed_frame = None
+        # Multi-channel per-channel frames dict (MCA-01/D-07). Populated
+        # by SingleWorker.run multi-channel branch keyed by laser
+        # wavelength; reconstructed_frame stays as an alias to the last
+        # channel's frame for back-compat.
+        self.reconstructed_frames: dict[int, np.ndarray] = {}
 
         # Metadata dicts
         self.buffer_metadata_general = {}
@@ -106,6 +111,11 @@ class _WorkerShell:
         self.save_description = "test sample"
         self.stack_starting_plane = 0.0
         self.stack_step = 10.0
+
+        # Lasers tuple — SingleWorker.run multi-channel branch reads
+        # self.lasers[0/1].wavelength to key reconstructed_frames.
+        bundle = _make_bundle()
+        self.lasers = bundle.lasers
 
         # updateUi_position_horizontal is called from stack worker
         self.updateUi_position_horizontal = Mock()
@@ -147,6 +157,27 @@ def _make_single_worker(qtbot) -> tuple[SingleWorker, _WorkerShell, Mock]:
     hw = Mock()
     worker = SingleWorker(
         bundle, hw, shell, save_description="test sample", save_stitch_blend=False
+    )
+    return worker, shell, hw
+
+
+def _make_single_worker_multi(
+    qtbot, multi_channel: bool = True
+) -> tuple[SingleWorker, _WorkerShell, Mock]:
+    """Construct a SingleWorker with the multi_channel constructor arg set.
+    The mock shell's reconstructed_frames dict is initialized so the
+    multi-channel run can store both channel frames."""
+    bundle = _make_bundle()
+    shell = _WorkerShell()
+    shell.reconstructed_frames = {}
+    hw = Mock()
+    worker = SingleWorker(
+        bundle,
+        hw,
+        shell,
+        save_description="test sample",
+        save_stitch_blend=False,
+        multi_channel=multi_channel,
     )
     return worker, shell, hw
 
@@ -539,3 +570,204 @@ def test_stack_mode_worker_exception_emits_message(qtbot) -> None:
     shell.sig_message.emit.assert_called_once()
     assert "Stack acquisition failed" in shell.sig_message.emit.call_args[0][0]
     assert len(finished_emits) == 1
+
+
+# -- SingleWorker multi-channel per-channel cycle (MCA-01) -------------------
+
+
+def test_single_worker_multi_channel_both_frames(qtbot) -> None:
+    """SingleWorker.run with multi_channel=True executes
+    select_laser(0) -> acquire_scan -> capture frame1 -> select_laser(1)
+    -> acquire_scan -> capture frame2, storing both in
+    self._shell.reconstructed_frames dict keyed by laser wavelength
+    (555 and 647 from MockLaser), with reconstructed_frame kept as an
+    alias equal to the last channel's frame."""
+    worker, shell, hw = _make_single_worker_multi(qtbot, multi_channel=True)
+    # Make acquire_scan populate reconstructed_frame with a distinct
+    # array per channel so we can verify both are captured.
+    call_count = {"n": 0}
+
+    def _fake_acquire_scan():
+        call_count["n"] += 1
+        # Each call produces a distinct frame.
+        shell.reconstructed_frame = np.full((4, 4), call_count["n"], dtype=np.uint16)
+
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+
+    # select_laser(0) then select_laser(1) called in order.
+    assert hw.select_laser.call_count == 2
+    assert hw.select_laser.call_args_list[0].args == (0,)
+    assert hw.select_laser.call_args_list[1].args == (1,)
+    # acquire_scan called twice (once per channel).
+    assert call_count["n"] == 2
+    # reconstructed_frames dict has 2 entries keyed by wavelength.
+    assert isinstance(shell.reconstructed_frames, dict)
+    assert len(shell.reconstructed_frames) == 2
+    assert 555 in shell.reconstructed_frames
+    assert 647 in shell.reconstructed_frames
+    # frame1 (channel 0, 555 nm) == array of 1s; frame2 (channel 1, 647 nm) == array of 2s.
+    assert (shell.reconstructed_frames[555] == 1).all()
+    assert (shell.reconstructed_frames[647] == 2).all()
+    # reconstructed_frame is an alias equal to the last channel's frame.
+    assert (shell.reconstructed_frame == 2).all()
+    # stop_lasers called at the end (safety — both off regardless).
+    hw.stop_lasers.assert_called_once()
+    # start_lasers NOT called in multi-channel branch (select_laser per channel instead).
+    hw.start_lasers.assert_not_called()
+    assert len(finished_emits) == 1
+
+
+def test_single_worker_single_channel_unchanged(qtbot) -> None:
+    """SingleWorker.run with multi_channel=False is byte-for-byte the
+    existing single-channel path: select_laser NEVER called,
+    start_lasers/stop_lasers called (existing path), acquire_scan called
+    once, reconstructed_frame set once (back-compat)."""
+    worker, shell, hw = _make_single_worker_multi(qtbot, multi_channel=False)
+    acquire_count = {"n": 0}
+
+    def _fake_acquire_scan():
+        acquire_count["n"] += 1
+        shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
+
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+
+    hw.select_laser.assert_not_called()
+    hw.start_lasers.assert_called_once()
+    hw.stop_lasers.assert_called_once()
+    assert acquire_count["n"] == 1
+    # reconstructed_frames dict stays empty (single-channel path does not populate it).
+    assert shell.reconstructed_frames == {}
+    assert len(finished_emits) == 1
+
+
+def test_single_worker_multi_channel_estop_after_first_channel(qtbot) -> None:
+    """SingleWorker.run multi-channel: if estop_event is set after the
+    first channel's acquire_scan, the second channel's acquire_scan is
+    skipped and the run exits cleanly via the finally block. Both
+    lasers are driven off by stop_lasers at the end. select_laser(1)
+    may still be called (it internally checks estop and does not
+    energize), but acquire_scan must NOT run for the second channel."""
+    worker, shell, hw = _make_single_worker_multi(qtbot, multi_channel=True)
+    shell.estop_event.is_set.return_value = False
+    acquire_count = {"n": 0}
+
+    def _fake_acquire_scan():
+        acquire_count["n"] += 1
+        shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
+        # Set estop after the first channel's acquire_scan so the second
+        # channel's acquire_scan is skipped.
+        shell.estop_event.is_set.return_value = True
+
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+
+    # acquire_scan called only once — second channel skipped after estop.
+    assert acquire_count["n"] == 1
+    # stop_lasers called at the end (safety — both off regardless).
+    hw.stop_lasers.assert_called_once()
+    assert len(finished_emits) == 1
+
+
+# -- FrameSaver.enqueue_buffer tagged-tuple acceptance (D-06) ----------------
+
+
+def test_enqueue_buffer_accepts_tagged_tuple(qtbot, request) -> None:
+    """FrameSaver.enqueue_buffer accepts a (channel_idx, frame) tuple in
+    addition to a bare np.ndarray; bare-ndarray calls preserve the
+    existing single-channel behavior unchanged. This plan only makes
+    enqueue_buffer accept the tagged form without raising — the
+    single-consumer workers branch on the tag in a later plan."""
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    fs = ctrl._fs.frame_saver
+    # Tagged tuple — must not raise.
+    tagged = (0, np.zeros((4, 4), dtype=np.uint16))
+    fs.enqueue_buffer(tagged)
+    # Bare ndarray — back-compat, must not raise.
+    fs.enqueue_buffer(np.zeros((4, 4), dtype=np.uint16))
+
+
+# -- updateUi_single_mode_button multi_channel pre-sampling (AGENTS.md §11) --
+
+
+def test_single_mode_button_presamples_multi_channel(qtbot, request) -> None:
+    """updateUi_single_mode_button with both auto-laser checkboxes
+    checked passes multi_channel=True to SingleWorker; with one
+    unchecked passes False. Verified by spying on the SingleWorker
+    constructor. Pre-sampling happens on the GUI thread after
+    _cache_auto_laser_flags() — the worker never reads the checkboxes
+    (AGENTS.md §11)."""
+    from _helpers.controller_fixture import make_controller
+    from lightsheet.gui import panels as panels_module
+
+    # --- Both checked -> multi_channel=True ---
+    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl._single_thread = None  # attribute exists only after first click
+    ctrl._single_worker = None
+    ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
+    ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(True)
+    ctrl.save_panel.ui.lineEdit_saveDescription.setText("test")
+
+    captured: dict[str, object] = {}
+
+    def _capture_worker(*args, **kwargs):
+        # The multi_channel kwarg may be positional (last arg) or keyword.
+        if "multi_channel" in kwargs:
+            captured["multi_channel"] = kwargs["multi_channel"]
+        else:
+            # Positional: signature is (bundle, hw, shell, save_description,
+            # save_stitch_blend, multi_channel).
+            captured["multi_channel"] = args[-1]
+        # Return a Mock-like object so moveToThread/connect/start are no-ops.
+        worker_mock = Mock()
+        worker_mock.finished = Mock()
+        worker_mock.moveToThread = Mock()
+        worker_mock.deleteLater = Mock()
+        return worker_mock
+
+    fake_thread = Mock()
+
+    with (
+        patch.object(panels_module.acquisition_panel, "SingleWorker", side_effect=_capture_worker),
+        patch.object(panels_module.acquisition_panel, "QThread", return_value=fake_thread),
+    ):
+        ctrl.acquisition_panel.updateUi_single_mode_button()
+
+    assert captured.get("multi_channel") is True, (
+        "Both auto-laser checkboxes checked -> multi_channel=True must be "
+        "passed to SingleWorker"
+    )
+
+    # Reset for the one-unchecked case.
+    ctrl.single_mode_started = False
+    ctrl._single_thread = None
+    ctrl._single_worker = None
+    ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(False)
+    captured.clear()
+    fake_thread2 = Mock()
+
+    with (
+        patch.object(panels_module.acquisition_panel, "SingleWorker", side_effect=_capture_worker),
+        patch.object(panels_module.acquisition_panel, "QThread", return_value=fake_thread2),
+    ):
+        ctrl.acquisition_panel.updateUi_single_mode_button()
+
+    assert captured.get("multi_channel") is False, (
+        "Only one auto-laser checkbox checked -> multi_channel=False must be "
+        "passed to SingleWorker"
+    )

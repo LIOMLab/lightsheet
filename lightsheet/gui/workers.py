@@ -408,6 +408,7 @@ class SingleWorker(QObject, _AcquireScanMixin):
         shell: "Controller_MainWindow",
         save_description: str,
         save_stitch_blend: bool,
+        multi_channel: bool = False,
     ) -> None:
         super().__init__()
         self.camera = bundle.camera
@@ -421,6 +422,16 @@ class SingleWorker(QObject, _AcquireScanMixin):
         # these to populate buffer metadata.
         self._save_description = save_description
         self._save_stitch_blend = save_stitch_blend
+        # Multi-channel flag pre-sampled on the GUI thread in
+        # updateUi_single_mode_button as (_auto_laser1 and _auto_laser2)
+        # immediately after _cache_auto_laser_flags() (AGENTS.md §11 —
+        # no cross-thread widget reads from workers). When True, run()
+        # executes the per-channel cycle: select_laser(0) -> acquire_scan
+        # -> capture frame1 -> select_laser(1) -> acquire_scan -> capture
+        # frame2, storing both in self._shell.reconstructed_frames dict
+        # keyed by laser wavelength. When False, run() is byte-for-byte
+        # the existing single-channel path (back-compat).
+        self._multi_channel = multi_channel
 
     @Slot()
     def run(self) -> None:
@@ -443,32 +454,124 @@ class SingleWorker(QObject, _AcquireScanMixin):
             # Setting the camera for scan acquisition
             self.camera.arm_scan()
 
-            # Start lasers
-            self._hw.start_lasers()
+            if self._multi_channel:
+                # Multi-channel per-channel cycle (MCA-01/D-07): energize
+                # L1 -> acquire -> capture frame1 -> energize L2 -> acquire
+                # -> capture frame2. select_laser(idx) is the
+                # one-laser-energized invariant choke point (MCA-02) — it
+                # de-energizes the other laser before energizing the
+                # target, so only one laser is active at any instant. Do
+                # NOT call start_lasers here (it would energize both at
+                # once, violating the invariant); select_laser per channel
+                # instead. stop_lasers at the end is safety — ensures
+                # both off regardless of the last select_laser state.
+                #
+                # Pitfall #3 (09-RESEARCH.md): acquire_scan overwrites
+                # self._shell.reconstructed_frame. Capture frame1
+                # immediately after the first acquire_scan (before the
+                # second select_laser + acquire_scan overwrites it).
+                self._hw.select_laser(0)
+                if self._shell.estop_event.is_set():
+                    self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+                    self._hw.stop_lasers()
+                    self.camera.disarm()
+                    return
+                # Refresh scan waveforms with current settings (once,
+                # before the first channel — the second channel reuses
+                # the same waveform).
+                self.siggen.compute_scan_waveforms()
+                self.acquire_scan()
+                if self.camera.recorder_timeout_status or self.siggen.error:
+                    self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+                    self._hw.stop_lasers()
+                    self.camera.disarm()
+                    return
+                # Capture frame1 immediately — the next acquire_scan
+                # overwrites reconstructed_frame (pitfall #3).
+                frame1 = (
+                    None
+                    if self._shell.reconstructed_frame is None
+                    else self._shell.reconstructed_frame.copy()
+                )
 
-            # E-stop poll point — checked before acquire_scan so a mid-acquisition
-            # E-stop (pressed between mode start and the single frame grab) aborts
-            # without acquiring the frame. The lasers are already dark from the
-            # synchronous GUI-thread zeroing in updateUi_estop_pressed.
-            if self._shell.estop_event.is_set():
-                # Put ETLs in standby and stop lasers/camera before exiting so the
-                # post-mode cleanup matches the normal single_mode_worker exit.
-                self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-                self._hw.stop_lasers()
-                self.camera.disarm()
-                return
+                self._hw.select_laser(1)
+                if self._shell.estop_event.is_set():
+                    self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+                    self._hw.stop_lasers()
+                    self.camera.disarm()
+                    return
+                self.acquire_scan()
+                if self.camera.recorder_timeout_status or self.siggen.error:
+                    self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+                    self._hw.stop_lasers()
+                    self.camera.disarm()
+                    return
+                frame2 = (
+                    None
+                    if self._shell.reconstructed_frame is None
+                    else self._shell.reconstructed_frame.copy()
+                )
 
-            # Refresh scan waveforms with current settings
-            self.siggen.compute_scan_waveforms()
+                # Store both frames in the per-channel dict keyed by
+                # laser wavelength (D-07). reconstructed_frame stays as
+                # an alias to the last channel's frame for back-compat
+                # with existing single-field consumers (save_panel,
+                # display).
+                wl1 = int(self._shell.lasers[0].wavelength)
+                wl2 = int(self._shell.lasers[1].wavelength)
+                self._shell.reconstructed_frames = {}
+                if frame1 is not None:
+                    self._shell.reconstructed_frames[wl1] = frame1
+                if frame2 is not None:
+                    self._shell.reconstructed_frames[wl2] = frame2
+                    # Alias to the last channel's frame for back-compat.
+                    self._shell.reconstructed_frame = frame2
 
-            # Acquire a single scan
-            self.acquire_scan()
+                # Enqueue both tagged frames for saving (D-06 channel-
+                # tagged save queue). The tagged form (channel_idx,
+                # frame) is accepted by enqueue_buffer; the
+                # single-consumer save worker branches on the tag in a
+                # later plan. Only enqueue when saving is allowed and
+                # both frames were captured.
+                if (
+                    self._shell.saving_allowed
+                    and frame1 is not None
+                    and frame2 is not None
+                ):
+                    self._shell._fs.enqueue_buffer((0, frame1))
+                    self._shell._fs.enqueue_buffer((1, frame2))
+            else:
+                # Single-channel path (unchanged — back-compat).
+
+                # Start lasers
+                self._hw.start_lasers()
+
+                # E-stop poll point — checked before acquire_scan so a mid-acquisition
+                # E-stop (pressed between mode start and the single frame grab) aborts
+                # without acquiring the frame. The lasers are already dark from the
+                # synchronous GUI-thread zeroing in updateUi_estop_pressed.
+                if self._shell.estop_event.is_set():
+                    # Put ETLs in standby and stop lasers/camera before exiting so the
+                    # post-mode cleanup matches the normal single_mode_worker exit.
+                    self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+                    self._hw.stop_lasers()
+                    self.camera.disarm()
+                    return
+
+                # Refresh scan waveforms with current settings
+                self.siggen.compute_scan_waveforms()
+
+                # Acquire a single scan
+                self.acquire_scan()
 
             # Put ETLs in standby mode
             # 2.5V corresponds no current through coil (mid 0-5V adjustable range)
             self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
 
-            # Stop lasers
+            # Stop lasers — safety: ensures both lasers off regardless of
+            # mode (multi-channel's last select_laser may have left L2 on;
+            # single-channel's start_lasers may have left the auto-selected
+            # laser on).
             self._hw.stop_lasers()
 
             # Stop camera

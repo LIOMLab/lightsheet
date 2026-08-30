@@ -301,8 +301,18 @@ class FrameSaver(QObject):
 
     # Saving methods
 
-    def enqueue_buffer(self, buffer: np.ndarray) -> None:
-        """Put an image in the save queue"""
+    def enqueue_buffer(self, buffer) -> None:
+        """Put an image in the save queue.
+
+        Accepts either a bare ``np.ndarray`` (the existing single-channel
+        form — back-compat) or a ``(channel_idx, frame)`` tuple (the
+        multi-channel channel-tagged form, D-06). The single-consumer
+        save workers (``frame_saver_worker`` / ``zarr_save_worker`` /
+        ``both_save_worker``) branch on the tag in a later plan; this
+        method only makes the queue accept the tagged form without
+        raising, so the multi-channel producer (``SingleWorker.run`` /
+        ``StackWorker.run``) can enqueue per-channel frames now.
+        """
         self.queue.put(item=buffer, block=True)
 
     def start_saving(self) -> None:
@@ -1127,7 +1137,9 @@ class FrameSaverController:
             datasets_name,
         )
 
-    def enqueue_buffer(self, buffer: np.ndarray) -> None:
+    def enqueue_buffer(self, buffer) -> None:
+        # Accepts bare np.ndarray (single-channel) or (channel_idx, frame)
+        # tuple (multi-channel, D-06) — passes through to FrameSaver.
         self.frame_saver.enqueue_buffer(buffer)
 
     def start_saving(self) -> None:
