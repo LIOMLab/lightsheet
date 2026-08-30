@@ -75,50 +75,44 @@ class SavePanelWidget(QWidget):
         """Allows the selection of an HDF5 file OR an OME-Zarr store
         folder, opens it, and lists its datasets/planes.
 
-        A non-native file dialog lets the operator pick the type via the
-        name-filter dropdown. HDF5 (.hdf5) is a file; OME-Zarr
-        (.ome.zarr) is a folder, so when the OME-Zarr filter is selected
-        the file dialog (ExistingFile mode) cannot pick a folder and a
-        follow-up directory dialog collects the store path. The open
-        logic branches on ``os.path.isdir``: directory → Zarr store,
-        file → HDF5. A corrupt or wrong-format path raises OSError /
-        KeyError / Exception — handled gracefully with a user-facing
-        message instead of crashing the GUI thread.
+        A single non-native file dialog in Directory mode with
+        ``ShowDirsOnly=False`` lets the operator pick EITHER a file
+        (HDF5, .hdf5) OR a folder (OME-Zarr store, .ome.zarr) in one
+        step — the documented Qt way to allow both files and
+        directories in a single dialog. A single combined name filter
+        lists both formats. The open logic branches on
+        ``os.path.isdir``: directory → Zarr store, file → HDF5. A
+        corrupt or wrong-format path raises OSError / KeyError /
+        ValueError — handled gracefully with a user-facing message
+        instead of crashing the GUI thread.
         """
 
-        # Non-native dialog so the operator can choose HDF5 vs OME-Zarr
-        # via the name-filter dropdown (the native dialog's filter
-        # selection is not queryable from the static getOpenFileName).
+        # Non-native dialog in Directory mode (ShowDirsOnly NOT set) so
+        # the operator can select either a file or a folder in one
+        # step. ExistingFile mode cannot select a folder (Open navigates
+        # into it); Directory mode with ShowDirsOnly=False is the only
+        # single-dialog way to accept both.
         dlg = QFileDialog(
             self._shell,
             "Choose HDF5 file or OME-Zarr store",
             self._shell.save_directory or "",
         )
-        dlg.setFileMode(QFileDialog.FileMode.ExistingFile)
-        dlg.setNameFilters(["HDF5 (*.hdf5)", "OME-Zarr (*.ome.zarr *.zarr)"])
+        dlg.setFileMode(QFileDialog.FileMode.Directory)
+        dlg.setOption(QFileDialog.Option.ShowDirsOnly, False)
         dlg.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        dlg.setNameFilters([
+            "Lightsheet acquisition files (*.hdf5 *.ome.zarr *.zarr)",
+            "HDF5 (*.hdf5)",
+            "OME-Zarr (*.ome.zarr *.zarr)",
+        ])
         if not dlg.exec():
             self.ui.label_currentFileDirectory.setText("None Specified")
             return
         selected = dlg.selectedFiles()
-        name_filter = dlg.selectedNameFilter()
         if not selected:
             self.ui.label_currentFileDirectory.setText("None Specified")
             return
         path = selected[0]
-
-        # If the operator picked the OME-Zarr filter, the file dialog
-        # (ExistingFile mode) cannot select a folder — re-prompt with a
-        # directory dialog so they can pick the .ome.zarr store folder.
-        if "OME-Zarr" in name_filter and not os.path.isdir(path):
-            path = QFileDialog.getExistingDirectory(
-                self._shell,
-                "Choose OME-Zarr store",
-                self._shell.save_directory or "",
-            )
-            if not path:
-                self.ui.label_currentFileDirectory.setText("None Specified")
-                return
 
         self._shell.open_directory = path
         self.ui.label_currentFileDirectory.setText(path)
