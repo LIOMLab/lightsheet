@@ -77,9 +77,9 @@ class ChannelRadio(QWidget):
 
         # L1 (channel index 0) is the default selection — keeps the
         # display consistent with what is actually being acquired in
-        # continuous modes (D-04: first-checked laser for the session)
-        # and with the first half of the per-plane sequential cycle in
-        # stack/single.
+        # continuous modes (the first-checked laser is energized for the
+        # session) and with the first half of the per-plane sequential
+        # cycle in stack/single.
         self._btn1.setChecked(True)
 
         # Hidden by default; shown only when both auto-laser checkboxes

@@ -226,7 +226,7 @@ class HardwareManager:
         HAL failures are surfaced via sig_message. The lock lives on the
         ILaser instance (self.lasers[0]._lock).
 
-        Cross-deenergization (D-03 all-modes strict): when the energizing
+        Cross-deenergization (all-modes strict): when the energizing
         branch is taken (L1 was inactive), L2 is de-energized BEFORE L1
         is energized — the one-laser-energized invariant holds across
         the manual-toggle path too. The L2 .off() runs OUTSIDE L1's lock
@@ -234,7 +234,7 @@ class HardwareManager:
         simultaneously (deadlock-free). The estop_event re-check-before-
         .on() guard is preserved on the energizing branch so a Class
         IIIB laser is never re-energized past the kill path."""
-        # Cross-deenergize L2 first (D-03), OUTSIDE L1's lock, only when
+        # Cross-deenergize L2 first, OUTSIDE L1's lock, only when
         # we are about to energize L1. Read L1.active without L1's lock
         # to decide the branch — the active flag is a plain bool read
         # (no HAL write), and the subsequent L1 lock + re-check inside
@@ -298,14 +298,14 @@ class HardwareManager:
         the ILaser instance (self.lasers[1]._lock, identity-shared with the
         inner IBeam._lock).
 
-        Cross-deenergization (D-03 all-modes strict): when the energizing
+        Cross-deenergization (all-modes strict): when the energizing
         branch is taken (L2 was inactive), L1 is de-energized BEFORE L2
         is energized — the one-laser-energized invariant holds across
         the manual-toggle path too. The L1 .off() runs OUTSIDE L2's lock
         (L1's lock is independent), so the two locks are never held
         simultaneously (deadlock-free). The estop_event re-check-before-
         .on() guard is preserved on the energizing branch."""
-        # Cross-deenergize L1 first (D-03), OUTSIDE L2's lock, only when
+        # Cross-deenergize L1 first, OUTSIDE L2's lock, only when
         # we are about to energize L2. See _toggle_laser1 for the
         # lock-ordering rationale.
         if not self._shell.estop_event.is_set() and not self.lasers[1].active:
@@ -471,14 +471,14 @@ class HardwareManager:
         self._refresh_laser_readback(0)
 
     # ------------------------------------------------------------------ #
-    # One-laser-energized invariant choke point (MCA-02).
+    # One-laser-energized invariant choke point.
     # ------------------------------------------------------------------ #
 
     def select_laser(self, idx: int) -> None:
         """Energize laser ``idx`` and de-energize the other, enforcing the
-        one-laser-energized invariant (MCA-02). Called from acquisition
-        worker threads in multi-channel mode (the per-plane / per-snap
-        sequential cycle).
+        one-laser-energized invariant. Called from acquisition worker
+        threads in multi-channel mode (the per-plane / per-snap sequential
+        cycle).
 
         Sequencing (de-energize-then-energize, with E-stop re-checks):
 

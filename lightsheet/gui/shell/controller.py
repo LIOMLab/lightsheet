@@ -608,10 +608,10 @@ class Controller_MainWindow(QMainWindow):
         self.image_cam_pos_text = ""
         self.buffer = None
         self.reconstructed_frame = None
-        # Multi-channel per-channel frames dict (MCA-01/D-07). Populated
-        # by SingleWorker.run / StackWorker.run multi-channel branch,
-        # keyed by laser wavelength (int nm). reconstructed_frame stays
-        # as an alias to the last channel's frame for back-compat with
+        # Multi-channel per-channel frames dict. Populated by
+        # SingleWorker.run / StackWorker.run multi-channel branch, keyed
+        # by laser wavelength (int nm). reconstructed_frame stays as an
+        # alias to the last channel's frame for back-compat with
         # existing single-field consumers (save_panel, display).
         self.reconstructed_frames: dict[int, np.ndarray] = {}
 

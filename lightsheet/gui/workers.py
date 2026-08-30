@@ -496,21 +496,21 @@ class SingleWorker(QObject, _AcquireScanMixin):
             self.camera.arm_scan()
 
             if self._multi_channel:
-                # Multi-channel per-channel cycle (MCA-01/D-07): energize
-                # L1 -> acquire -> capture frame1 -> energize L2 -> acquire
-                # -> capture frame2. select_laser(idx) is the
-                # one-laser-energized invariant choke point (MCA-02) — it
-                # de-energizes the other laser before energizing the
-                # target, so only one laser is active at any instant. Do
-                # NOT call start_lasers here (it would energize both at
-                # once, violating the invariant); select_laser per channel
-                # instead. stop_lasers at the end is safety — ensures
-                # both off regardless of the last select_laser state.
+                # Multi-channel per-channel cycle: energize L1 -> acquire
+                # -> capture frame1 -> energize L2 -> acquire -> capture
+                # frame2. select_laser(idx) is the one-laser-energized
+                # invariant choke point — it de-energizes the other laser
+                # before energizing the target, so only one laser is
+                # active at any instant. Do NOT call start_lasers here (it
+                # would energize both at once, violating the invariant);
+                # select_laser per channel instead. stop_lasers at the end
+                # is safety — ensures both off regardless of the last
+                # select_laser state.
                 #
-                # Pitfall #3 (09-RESEARCH.md): acquire_scan overwrites
-                # self._shell.reconstructed_frame. Capture frame1
-                # immediately after the first acquire_scan (before the
-                # second select_laser + acquire_scan overwrites it).
+                # Capture-frame-before-next-acquire pitfall: acquire_scan
+                # overwrites self._shell.reconstructed_frame. Capture
+                # frame1 immediately after the first acquire_scan (before
+                # the second select_laser + acquire_scan overwrites it).
                 self._hw.select_laser(0)
                 if self._shell.estop_event.is_set():
                     self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
@@ -554,10 +554,9 @@ class SingleWorker(QObject, _AcquireScanMixin):
                 )
 
                 # Store both frames in the per-channel dict keyed by
-                # laser wavelength (D-07). reconstructed_frame stays as
-                # an alias to the last channel's frame for back-compat
-                # with existing single-field consumers (save_panel,
-                # display).
+                # laser wavelength. reconstructed_frame stays as an alias
+                # to the last channel's frame for back-compat with
+                # existing single-field consumers (save_panel, display).
                 wl1 = int(self._shell.lasers[0].wavelength)
                 wl2 = int(self._shell.lasers[1].wavelength)
                 self._shell.reconstructed_frames = {}
@@ -568,12 +567,11 @@ class SingleWorker(QObject, _AcquireScanMixin):
                     # Alias to the last channel's frame for back-compat.
                     self._shell.reconstructed_frame = frame2
 
-                # Enqueue both tagged frames for saving (D-06 channel-
-                # tagged save queue). The tagged form (channel_idx,
-                # frame) is accepted by enqueue_buffer; the
-                # single-consumer save worker branches on the tag in a
-                # later plan. Only enqueue when saving is allowed and
-                # both frames were captured.
+                # Enqueue both tagged frames for saving. The tagged form
+                # (channel_idx, frame) is accepted by enqueue_buffer; the
+                # single-consumer save worker branches on the tag to pick
+                # the per-channel filename list. Only enqueue when saving
+                # is allowed and both frames were captured.
                 if (
                     self._shell.saving_allowed
                     and frame1 is not None
@@ -784,13 +782,13 @@ class StackWorker(QObject, _AcquireScanMixin):
             # and the end-of-method cleanup (stop_lasers/disarm/emit) runs
             # unchanged, so no lasers are left on and the UI re-enables.
             #
-            # Multi-channel mode (MCA-01 stack) MUST NOT call start_lasers
-            # here — it would energize both lasers simultaneously, violating
-            # the one-laser-energized invariant (MCA-02). The per-plane
-            # cycle below uses select_laser(0/1) per channel instead, which
+            # Multi-channel mode MUST NOT call start_lasers here — it
+            # would energize both lasers simultaneously, violating the
+            # one-laser-energized invariant. The per-plane cycle below
+            # uses select_laser(0/1) per channel instead, which
             # de-energizes the other laser before energizing the target.
-            # stop_lasers at the end of run() is safety — ensures both off
-            # regardless of the last select_laser state.
+            # stop_lasers at the end of run() is safety — ensures both
+            # off regardless of the last select_laser state.
             if (
                 not self._multi_channel
                 and self._shell.stack_mode_started
@@ -879,22 +877,24 @@ class StackWorker(QObject, _AcquireScanMixin):
                         break
 
                     if self._multi_channel:
-                        # Multi-channel per-plane sequential cycle (MCA-01
-                        # stack): energize L1 -> acquire -> capture frame1 ->
-                        # energize L2 -> acquire -> capture frame2 -> enqueue
-                        # both tagged frames. select_laser(idx) is the
-                        # one-laser-energized invariant choke point (MCA-02)
-                        # — it de-energizes the other laser before energizing
-                        # the target, so only one laser is active at any
-                        # instant. Do NOT call start_lasers here (it would
-                        # energize both at once, violating the invariant);
-                        # select_laser per channel instead.
+                        # Multi-channel per-plane sequential cycle:
+                        # energize L1 -> acquire -> capture frame1 ->
+                        # energize L2 -> acquire -> capture frame2 ->
+                        # enqueue both tagged frames. select_laser(idx)
+                        # is the one-laser-energized invariant choke
+                        # point — it de-energizes the other laser before
+                        # energizing the target, so only one laser is
+                        # active at any instant. Do NOT call start_lasers
+                        # here (it would energize both at once, violating
+                        # the invariant); select_laser per channel
+                        # instead.
                         #
-                        # Pitfall #3 (09-RESEARCH.md): acquire_scan overwrites
+                        # Capture-frame-before-next-acquire pitfall:
+                        # acquire_scan overwrites
                         # self._shell.reconstructed_frame. Capture frame1
                         # immediately after the first acquire_scan (before
-                        # the second select_laser + acquire_scan overwrites
-                        # it).
+                        # the second select_laser + acquire_scan
+                        # overwrites it).
                         self._hw.select_laser(0)
                         # E-stop poll point — checked after select_laser(0)
                         # and before acquire_scan so a mid-plane E-stop
@@ -936,8 +936,8 @@ class StackWorker(QObject, _AcquireScanMixin):
                             else self._shell.reconstructed_frame.copy()
                         )
 
-                        # Store both frames in the per-channel dict keyed by
-                        # laser wavelength (D-07). reconstructed_frame stays
+                        # Store both frames in the per-channel dict keyed
+                        # by laser wavelength. reconstructed_frame stays
                         # as an alias to the last channel's frame for
                         # back-compat with existing single-field consumers.
                         wl1 = int(self._shell.lasers[0].wavelength)
@@ -950,11 +950,11 @@ class StackWorker(QObject, _AcquireScanMixin):
                             # Alias to the last channel's frame for back-compat.
                             self._shell.reconstructed_frame = frame2
 
-                        # Enqueue both tagged frames for saving (D-06
-                        # channel-tagged save queue). The tagged form
-                        # (channel_idx, frame) is accepted by enqueue_buffer;
-                        # the single-consumer save worker branches on the
-                        # tag in a later plan. Only enqueue when saving is
+                        # Enqueue both tagged frames for saving. The
+                        # tagged form (channel_idx, frame) is accepted by
+                        # enqueue_buffer; the single-consumer save worker
+                        # branches on the tag to pick the per-channel
+                        # filename list. Only enqueue when saving is
                         # allowed and both frames were captured.
                         if (
                             self._shell.saving_allowed

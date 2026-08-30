@@ -200,11 +200,11 @@ class FrameSaver(QObject):
         self.sample_name = ""
         self.number_of_files = 1
         self.filenames_list = []
-        # Multi-channel per-channel filename lists (MCA-03/D-05). When
-        # set_files is called with wavelengths=[...], this becomes a list
-        # of lists — one per channel, each with number_of_files entries.
-        # When wavelengths=None (single-channel back-compat), this stays
-        # empty and the existing self.filenames_list path is used.
+        # Multi-channel per-channel filename lists. When set_files is
+        # called with wavelengths=[...], this becomes a list of lists —
+        # one per channel, each with number_of_files entries. When
+        # wavelengths=None (single-channel back-compat), this stays empty
+        # and the existing self.filenames_list path is used.
         self.filenames_lists: list[list[str]] = []
         self.horizontal_positions_list = []
         self.vertical_positions_list = []
@@ -277,7 +277,7 @@ class FrameSaver(QObject):
         a ``_vNN`` collision-avoidance suffix is appended so the plane
         number stays meaningful while the filename stays unique.
 
-        When ``wavelengths`` is provided (multi-channel mode, MCA-03/D-05),
+        When ``wavelengths`` is provided (multi-channel mode),
         ``self.filenames_lists`` is built as a list of lists — one per
         channel, each with ``number_of_files`` entries — where each
         filename ends in ``_{wavelength}nm.hdf5``. The wavelength values
@@ -579,7 +579,7 @@ class FrameSaver(QObject):
         logger.info("frame_saver_worker exited (saving_started=%s)", self.saving_started)
 
     def _frame_saver_worker_multi_channel(self) -> None:
-        """Multi-channel HDF5 save loop body (MCA-03/D-05).
+        """Multi-channel HDF5 save loop body.
 
         Consumes channel-tagged ``(channel_idx, frame)`` tuples from the
         single save queue and writes each frame to the correct per-channel
@@ -1065,7 +1065,7 @@ class FrameSaver(QObject):
         logger.info("both_save_worker exited (saving_started=%s)", self.saving_started)
 
     def _both_save_worker_multi_channel(self) -> None:
-        """Multi-channel both-save loop body (MCA-03/D-05).
+        """Multi-channel both-save loop body.
 
         Consumes channel-tagged ``(channel_idx, frame)`` tuples from the
         single save queue and writes each frame to BOTH the correct
