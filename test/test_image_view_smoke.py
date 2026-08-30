@@ -236,11 +236,11 @@ def test_levels_bar_wired_to_image_view(qtbot, request) -> None:
     frame = np.zeros((10, 10), dtype=np.uint16)
     frame[0, 0] = 4000
     ctrl.ui.imageView.setImage(frame)
-    # The demo launch pushes the demo image's uint8 data range (0-255) to
-    # the LevelsBar; reset it to the uint16 range so the window value below
-    # is not clamped, then drive the LevelsBar window via its property
-    # (the setter emits sig_levelsChanged, which the shell wires to
-    # set_levels).
+    # The demo launch pushes the demo image's uint16 data range (0-65535)
+    # to the LevelsBar; the explicit set_data_range below is a no-op guard
+    # so the window value is not clamped regardless of demo-image state,
+    # then drive the LevelsBar window via its property (the setter emits
+    # sig_levelsChanged, which the shell wires to set_levels).
     ctrl.ui.levelsBar.set_data_range(0, 65535)
     ctrl.ui.levelsBar.levels_max = 1000
     assert ctrl.ui.imageView._levels_max == 1000, (

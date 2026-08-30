@@ -829,9 +829,15 @@ class Controller_MainWindow(QMainWindow):
                 if not _img.isNull():
                     # Convert to grayscale numpy array for ImageView.
                     _ptr = _img.convertToFormat(QImage.Format_Grayscale8)
-                    _arr = _np.frombuffer(
+                    _arr_u8 = _np.frombuffer(
                         _ptr.bits(), dtype=_np.uint8
                     ).reshape(_ptr.height(), _ptr.width()).copy()
+                    # Scale the 8-bit sample to the microscope's uint16
+                    # range (0-65535) so the contrast bar / LevelsBar
+                    # shows the full range the operator sees on the rig.
+                    # 255 * 257 == 65535, so this maps the 8-bit gradient
+                    # onto the full 16-bit span without clipping.
+                    _arr = _arr_u8.astype(_np.uint16) * 257
                     self.ui.imageView.setImage(_arr)
                     # Push the demo frame's data range to the LevelsBar
                     # and update the live min/max readout.
