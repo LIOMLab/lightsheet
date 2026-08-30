@@ -31,15 +31,16 @@ from _helpers.controller_fixture import make_controller
         ("data-2026", "data-2026", True),
         # dots and slashes → underscores (path-injection chars sanitized)
         ("a.b/c", "a_b_c", True),
-        # leading underscores survive safe_char (they become "_" which
-        # rstrip("_") only strips from the RIGHT) — but the corpus case
-        # "__leading" sanitizes to "__leading" then rstrip("_") →
-        # "__leading" has no trailing "_", so it stays. The substring
-        # "leading" must be present in the final save_filename.
+        # leading underscores are stripped by strip("_") (both ends) —
+        # "__leading" sanitizes to "__leading" then strip("_") → "leading".
         ("__leading", "leading", True),
+        # leading spaces become underscores via safe_char, then strip("_")
+        # removes them so "  hello" → "__hello" → "hello" (no leading
+        # underscores in the final filename).
+        ("  hello", "hello", True),
         # empty input → save_filename stays "" → saving_allowed False
         ("", "", False),
-        # all-unsafe chars → safe_char produces "!!!"→"___" → rstrip("_")
+        # all-unsafe chars → safe_char produces "!!!"→"___" → strip("_")
         # → "" → saving_allowed False
         ("!!!", "", False),
     ],
@@ -47,7 +48,8 @@ from _helpers.controller_fixture import make_controller
         "spaces-to-underscores",
         "hyphens-kept",
         "dots-slashes-to-underscores",
-        "leading-underscores",
+        "leading-underscores-stripped",
+        "leading-spaces-stripped",
         "empty-rejected",
         "all-unsafe-rejected",
     ],

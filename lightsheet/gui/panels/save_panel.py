@@ -200,7 +200,11 @@ class SavePanelWidget(QWidget):
                 return "_"
 
         tmp_string = self.ui.lineEdit_saveFilename.text()
-        tmp_string = "".join(safe_char(c) for c in tmp_string).rstrip("_")
+        # safe_char maps every non-alnum/non-"-" char (including spaces)
+        # to "_". Strip leading/trailing underscores so leading spaces
+        # don't produce a "__hello" filename (rstrip would only clear the
+        # trailing end).
+        tmp_string = "".join(safe_char(c) for c in tmp_string).strip("_")
 
         if tmp_string != "":
             self._shell.save_filename = tmp_string
