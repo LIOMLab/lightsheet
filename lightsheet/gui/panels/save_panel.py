@@ -72,105 +72,196 @@ class SavePanelWidget(QWidget):
         return int(shell.lasers[0].wavelength)
 
     def updateUi_select_file(self) -> None:
-        """Allows the selection of a file (.hdf5), opens it and displays its datasets"""
+        """Allows the selection of an HDF5 file OR an OME-Zarr store
+        folder, opens it, and lists its datasets/planes.
 
-        # Retrieve File
-        self._shell.open_directory = QFileDialog.getOpenFileName(
-            self._shell, "Choose File", "", "Hierarchical files (*.hdf5)"
-        )[0]
+        A non-native file dialog lets the operator pick the type via the
+        name-filter dropdown. HDF5 (.hdf5) is a file; OME-Zarr
+        (.ome.zarr) is a folder, so when the OME-Zarr filter is selected
+        the file dialog (ExistingFile mode) cannot pick a folder and a
+        follow-up directory dialog collects the store path. The open
+        logic branches on ``os.path.isdir``: directory → Zarr store,
+        file → HDF5. A corrupt or wrong-format path raises OSError /
+        KeyError / Exception — handled gracefully with a user-facing
+        message instead of crashing the GUI thread.
+        """
 
-        if self._shell.open_directory != "":  # If file directory specified
-            self.ui.label_currentFileDirectory.setText(self._shell.open_directory)
-            self.ui.listWidget_fileDatasets.clear()
+        # Non-native dialog so the operator can choose HDF5 vs OME-Zarr
+        # via the name-filter dropdown (the native dialog's filter
+        # selection is not queryable from the static getOpenFileName).
+        dlg = QFileDialog(
+            self._shell,
+            "Choose HDF5 file or OME-Zarr store",
+            self._shell.save_directory or "",
+        )
+        dlg.setFileMode(QFileDialog.FileMode.ExistingFile)
+        dlg.setNameFilters(["HDF5 (*.hdf5)", "OME-Zarr (*.ome.zarr *.zarr)"])
+        dlg.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        if not dlg.exec():
+            self.ui.label_currentFileDirectory.setText("None Specified")
+            return
+        selected = dlg.selectedFiles()
+        name_filter = dlg.selectedNameFilter()
+        if not selected:
+            self.ui.label_currentFileDirectory.setText("None Specified")
+            return
+        path = selected[0]
 
-            # Open the file and display its datasets. A corrupt or
-            # non-HDF5 file (e.g. a truncated download) raises OSError
-            # or h5py.h5o.KeyError from h5py.File — handle it gracefully
-            # with a user-facing message instead of crashing the GUI
-            # thread (mirrors past_acquisitions_browser.py:242-253).
-            import h5py
-
-            try:
-                with h5py.File(self._shell.open_directory, "r") as f:
-                    dataset_names = list(f.keys())
-                    for item in range(len(dataset_names)):
-                        self.ui.listWidget_fileDatasets.insertItem(
-                            item, dataset_names[item]
-                        )
-            except (OSError, KeyError) as exc:
-                self._shell.sig_message.emit(
-                    f"Could not open {self._shell.open_directory}: {exc}"
-                )
+        # If the operator picked the OME-Zarr filter, the file dialog
+        # (ExistingFile mode) cannot select a folder — re-prompt with a
+        # directory dialog so they can pick the .ome.zarr store folder.
+        if "OME-Zarr" in name_filter and not os.path.isdir(path):
+            path = QFileDialog.getExistingDirectory(
+                self._shell,
+                "Choose OME-Zarr store",
+                self._shell.save_directory or "",
+            )
+            if not path:
                 self.ui.label_currentFileDirectory.setText("None Specified")
                 return
-            self.ui.listWidget_fileDatasets.setCurrentRow(0)
-            self._shell.updateUi_message_printer("File " + self._shell.open_directory + " opened")  # noqa: E501
-            self.ui.pushButton_selectDataset.setEnabled(True)
-        else:
+
+        self._shell.open_directory = path
+        self.ui.label_currentFileDirectory.setText(path)
+        self.ui.listWidget_fileDatasets.clear()
+
+        # Branch on type: directory → Zarr store, file → HDF5.
+        try:
+            if os.path.isdir(path):
+                dataset_names = self._list_zarr_datasets(path)
+            else:
+                dataset_names = self._list_hdf5_datasets(path)
+        except (OSError, KeyError, ValueError) as exc:
+            self._shell.sig_message.emit(
+                f"Could not open {path}: {exc}"
+            )
             self.ui.label_currentFileDirectory.setText("None Specified")
+            return
+
+        for item in range(len(dataset_names)):
+            self.ui.listWidget_fileDatasets.insertItem(
+                item, dataset_names[item]
+            )
+        self.ui.listWidget_fileDatasets.setCurrentRow(0)
+        self._shell.updateUi_message_printer("File " + path + " opened")
+        self.ui.pushButton_selectDataset.setEnabled(True)
+
+    def _list_hdf5_datasets(self, path: str) -> list[str]:
+        """Open an HDF5 file and return its top-level dataset names."""
+        import h5py
+
+        with h5py.File(path, "r") as f:
+            return list(f.keys())
+
+    def _list_zarr_datasets(self, path: str) -> list[str]:
+        """Open an OME-Zarr store and return a list of selectable
+        plane labels for the L0 multiscale array.
+
+        The writer produces a 4D ``(c, z, y, x)`` L0 array at
+        ``root["0"]``. For multi-channel stores (c > 1) the labels are
+        ``ch0_plane_0001``, ``ch1_plane_0001``, ... so the operator can
+        view any (channel, plane); for single-channel stores (c == 1)
+        the labels are just ``plane_0001``, ``plane_0002``, ...
+        (matching the HDF5 ``reconstructed_frameNNN`` UX). Raises
+        ``ValueError`` if the store has no L0 array or an unexpected
+        shape so the caller's except path surfaces a clear message.
+        """
+        import zarr
+
+        root = zarr.open_group(path, mode="r")
+        arr = root.get("0")
+        if arr is None:
+            raise ValueError("OME-Zarr store has no multiscale '0' array")
+        shape = getattr(arr, "shape", None)
+        if not shape or len(shape) < 3:
+            raise ValueError(
+                f"OME-Zarr L0 array has unexpected shape {shape!r} "
+                f"(expected (c, z, y, x) or (z, y, x))"
+            )
+        # 4D (c, z, y, x) — channel-aware labels. 3D (z, y, x) —
+        # single-channel fallback (treat as c=1).
+        if len(shape) == 4:
+            n_channels, n_planes = int(shape[0]), int(shape[1])
+        else:
+            n_channels, n_planes = 1, int(shape[0])
+        labels: list[str] = []
+        for ch in range(n_channels):
+            for z in range(n_planes):
+                if n_channels > 1:
+                    labels.append(f"ch{ch}_plane_{z + 1:04d}")
+                else:
+                    labels.append(f"plane_{z + 1:04d}")
+        return labels
 
     def updateUi_select_dataset(self) -> None:
         """
-        Opens one or many HDF5 datasets and displays its attributes and data as an image
+        Opens one or many datasets (HDF5 or OME-Zarr) and displays the
+        attributes and image of each.
         """
         if (self._shell.open_directory != "") and (
             self.ui.listWidget_fileDatasets.count() != 0
         ):
-            import h5py
             from matplotlib import pyplot as plt
 
+            is_zarr = os.path.isdir(self._shell.open_directory)
             for item in range(len(self.ui.listWidget_fileDatasets.selectedItems())):  # noqa: E501
                 self._shell.dataset_name = self.ui.listWidget_fileDatasets.selectedItems()[  # noqa: E501
                     item
                 ].text()
-                # Wrap the h5py open + dataset access in try/except — a
-                # corrupt or non-HDF5 file (or a missing dataset key)
-                # raises OSError / KeyError from h5py.File or the dataset
-                # lookup. Emit a user-facing message and skip this item
-                # instead of crashing the GUI thread.
+                # Wrap the open + dataset access in try/except — a
+                # corrupt file/store or a missing dataset key raises
+                # OSError / KeyError / ValueError. Emit a user-facing
+                # message and skip this item instead of crashing the GUI
+                # thread.
                 try:
-                    with h5py.File(self._shell.open_directory, "r") as f:
-                        dataset = f[self._shell.dataset_name]
+                    if is_zarr:
+                        data, attrs = self._read_zarr_dataset(
+                            self._shell.open_directory,
+                            self._shell.dataset_name,
+                        )
+                    else:
+                        data, attrs = self._read_hdf5_dataset(
+                            self._shell.open_directory,
+                            self._shell.dataset_name,
+                        )
 
-                        # Display attributes of the first selected dataset
-                        if item == 0:
-                            self.ui.label_currentDataset.setText(self._shell.dataset_name)
-                            attribute_names = list(dataset.attrs.keys())
-                            attribute_values = list(dataset.attrs.values())
-                            self.ui.tableWidget_fileAttributes.setColumnCount(2)
-                            self.ui.tableWidget_fileAttributes.setRowCount(
-                                len(attribute_names)
+                    # Display attributes of the first selected dataset
+                    if item == 0:
+                        self.ui.label_currentDataset.setText(self._shell.dataset_name)
+                        attribute_names = list(attrs.keys())
+                        attribute_values = list(attrs.values())
+                        self.ui.tableWidget_fileAttributes.setColumnCount(2)
+                        self.ui.tableWidget_fileAttributes.setRowCount(
+                            len(attribute_names)
+                        )
+                        self.ui.tableWidget_fileAttributes.setHorizontalHeaderItem(
+                            0, QTableWidgetItem("Attributes")
+                        )
+                        self.ui.tableWidget_fileAttributes.setHorizontalHeaderItem(
+                            1, QTableWidgetItem("Values")
+                        )
+                        for attribute in range(0, len(attribute_names)):
+                            self.ui.tableWidget_fileAttributes.setItem(
+                                attribute,
+                                0,
+                                QTableWidgetItem(attribute_names[attribute]),
                             )
-                            self.ui.tableWidget_fileAttributes.setHorizontalHeaderItem(
-                                0, QTableWidgetItem("Attributes")
+                            self.ui.tableWidget_fileAttributes.setItem(
+                                attribute,
+                                1,
+                                QTableWidgetItem(str(attribute_values[attribute])),
                             )
-                            self.ui.tableWidget_fileAttributes.setHorizontalHeaderItem(
-                                1, QTableWidgetItem("Values")
-                            )
-                            for attribute in range(0, len(attribute_names)):
-                                self.ui.tableWidget_fileAttributes.setItem(
-                                    attribute,
-                                    0,
-                                    QTableWidgetItem(attribute_names[attribute]),
-                                )
-                                self.ui.tableWidget_fileAttributes.setItem(
-                                    attribute,
-                                    1,
-                                    QTableWidgetItem(str(attribute_values[attribute])),
-                                )
-                            self.ui.tableWidget_fileAttributes.resizeColumnsToContents()
-                            self.ui.tableWidget_fileAttributes.setEditTriggers(
-                                QAbstractItemView.NoEditTriggers
-                            )  # No editing possible
+                        self.ui.tableWidget_fileAttributes.resizeColumnsToContents()
+                        self.ui.tableWidget_fileAttributes.setEditTriggers(
+                            QAbstractItemView.NoEditTriggers
+                        )  # No editing possible
 
-                        # Display image
-                        data = dataset[()]
-                        plt.figure(self._shell.open_directory + " (" + self._shell.dataset_name + ")")  # noqa: E501
-                        plt.imshow(data, cmap="gray")
-                        plt.show(
-                            block=False
-                        )  # Prevents the plot from blocking the execution of the code...
-                except (OSError, KeyError) as exc:
+                    # Display image
+                    plt.figure(self._shell.open_directory + " (" + self._shell.dataset_name + ")")  # noqa: E501
+                    plt.imshow(data, cmap="gray")
+                    plt.show(
+                        block=False
+                    )  # Prevents the plot from blocking the execution of the code...
+                except (OSError, KeyError, ValueError) as exc:
                     self._shell.sig_message.emit(
                         f"Could not open dataset {self._shell.dataset_name} "
                         f"in {self._shell.open_directory}: {exc}"
@@ -184,6 +275,43 @@ class SavePanelWidget(QWidget):
                     + self._shell.open_directory
                     + " displayed"
                 )
+
+    def _read_hdf5_dataset(self, path: str, name: str):
+        """Open an HDF5 file, return ``(data, attrs)`` for the named
+        top-level dataset."""
+        import h5py
+
+        with h5py.File(path, "r") as f:
+            dataset = f[name]
+            return dataset[()], dict(dataset.attrs)
+
+    def _read_zarr_dataset(self, path: str, label: str):
+        """Open an OME-Zarr store, return ``(data, attrs)`` for the
+        plane identified by ``label`` (``plane_NNNN`` or
+        ``chN_plane_NNNN`` as produced by ``_list_zarr_datasets``).
+
+        Returns the 2D ``(y, x)`` slice for the requested (channel,
+        plane) from the L0 multiscale array, plus the L0 array's attrs
+        (Zarr stores per-plane metadata at the group/array level, not
+        per-slice, so the attrs panel shows the array-level metadata).
+        """
+        import re
+
+        import zarr
+
+        m = re.match(r"(?:ch(\d+)_)?plane_(\d+)", label)
+        if not m:
+            raise ValueError(f"unrecognized zarr plane label: {label}")
+        ch = int(m.group(1)) if m.group(1) is not None else 0
+        z = int(m.group(2)) - 1  # label is 1-based; array index is 0-based
+        root = zarr.open_group(path, mode="r")
+        arr = root["0"]
+        shape = arr.shape
+        if len(shape) == 4:
+            data = arr[ch, z, :, :]
+        else:
+            data = arr[z, :, :]
+        return data, dict(arr.attrs)
 
     def updateUi_select_directory(self) -> None:
         """Allows the selection of a directory for single scan or stack saving"""
