@@ -762,14 +762,39 @@ class StackWorker(QObject, _AcquireScanMixin):
                         **set_files_kwargs,
                     )
                 else:
-                    self._shell._fs.set_files(
-                        1,
-                        self._shell.save_filepath,
-                        "stack",
-                        self._shell.number_of_planes,
-                        "reconstructed_frame",
-                        **set_files_kwargs,
-                    )
+                    # Stitch (reconstructed_frame) branch. The
+                    # single-channel convention is set_files(1, ...,
+                    # number_of_planes, ...) — "1 file containing N
+                    # datasets". Under multi-channel that convention
+                    # breaks: the save loops compute total_files =
+                    # n_channels * 1 = 2, write 2 files, and exit
+                    # while the acquisition thread enqueues
+                    # n_channels * n_planes frames into a bounded
+                    # queue (maxsize=6) that fills and blocks forever
+                    # (deadlock). Branch on _multi_channel so the
+                    # multi-channel path matches the crop/full
+                    # branches (number_of_files=number_of_planes,
+                    # number_of_datasets=1) — total_files then equals
+                    # n_channels * n_planes and the save worker drains
+                    # every enqueued frame.
+                    if self._multi_channel:
+                        self._shell._fs.set_files(
+                            self._shell.number_of_planes,
+                            self._shell.save_filepath,
+                            "stack",
+                            1,
+                            "reconstructed_frame",
+                            **set_files_kwargs,
+                        )
+                    else:
+                        self._shell._fs.set_files(
+                            1,
+                            self._shell.save_filepath,
+                            "stack",
+                            self._shell.number_of_planes,
+                            "reconstructed_frame",
+                            **set_files_kwargs,
+                        )
                 # Starting frame saver
                 self._shell._fs.start_saving()
 
