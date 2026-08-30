@@ -23,12 +23,16 @@ from _helpers.controller_fixture import make_controller
 
 
 def _add_valid_row(mgr, start, end, step, name):
+    """Add a valid queue row. ``start``/``end`` are in µm (the internal
+    unit the assertions compare against — ``row.start``/``row.end`` are µm);
+    they are converted to mm for the cell text (the display unit). ``step``
+    is µm and stays µm in the cell."""
     mgr.add_stack()
     row = mgr.table.rowCount() - 1
     mgr.set_cell(row, 0, name)
-    mgr.set_cell(row, 1, str(start))
-    mgr.set_cell(row, 2, str(end))
-    mgr.set_cell(row, 3, str(step))
+    mgr.set_cell(row, 1, str(start / 1000.0))  # µm → mm cell
+    mgr.set_cell(row, 2, str(end / 1000.0))    # µm → mm cell
+    mgr.set_cell(row, 3, str(step))            # step stays µm
     return row
 
 

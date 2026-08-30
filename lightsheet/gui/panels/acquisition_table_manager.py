@@ -61,8 +61,8 @@ _COL_ESTSIZE = 6
 
 _HEADERS = [
     "Name",
-    "Start (\u03bcm)",
-    "End (\u03bcm)",
+    "Start (mm)",
+    "End (mm)",
     "Step (\u03bcm)",
     "#Planes",
     "Est. Time",
@@ -83,7 +83,11 @@ _FLAG_COLOR = QColor(255, 200, 200)
 
 
 class _Row:
-    """A snapshot of one table row's values (in micrometres)."""
+    """A snapshot of one table row's values.
+
+    ``start``/``end`` are in micrometres (the internal unit the worker +
+    motor HAL use), converted from the mm cell text. ``step`` is in µm
+    (the step cell is already µm)."""
 
     __slots__ = ("name", "start", "end", "step", "n_planes",
                  "est_time_s", "est_size_mb")
@@ -277,7 +281,13 @@ class AcquisitionTableManager(QWidget):
         # cellChanged fires from setText; the recompute runs there.
 
     def row_at(self, row: int) -> _Row:
-        """Snapshot of one row's parsed values (micrometres).
+        """Snapshot of one row's parsed values.
+
+        Start/End cells display in mm and are converted to µm for the
+        internal ``_Row`` (the worker + motor HAL unit — safety-critical:
+        ``row.start``/``row.end`` feed ``stack_starting_plane`` and
+        ``move_absolute_position``, which must stay µm). The step cell is
+        already µm (no conversion).
 
         Non-numeric cell text (the operator typed "abc" or "1.0.0") is
         treated as 0.0 so the row computes to 0 planes and the queue's
@@ -286,11 +296,13 @@ class AcquisitionTableManager(QWidget):
         """
         name_item = self.table.item(row, _COL_NAME)
         name = name_item.text() if name_item is not None else ""
-        start = self._safe_float(row, _COL_START)
-        end = self._safe_float(row, _COL_END)
+        start_mm = self._safe_float(row, _COL_START)
+        end_mm = self._safe_float(row, _COL_END)
         step = self._safe_float(row, _COL_STEP)
-        n_planes, est_time_s, est_size_mb = self._compute(start, end, step)
-        return _Row(name, start, end, step, n_planes, est_time_s, est_size_mb)
+        start_um = start_mm * 1000.0
+        end_um = end_mm * 1000.0
+        n_planes, est_time_s, est_size_mb = self._compute(start_um, end_um, step)
+        return _Row(name, start_um, end_um, step, n_planes, est_time_s, est_size_mb)
 
     def _safe_float(self, row: int, col: int) -> float:
         """Parse a numeric cell's text to float, returning 0.0 on
@@ -507,7 +519,12 @@ class AcquisitionTableManager(QWidget):
         start = self._parse_or_flag(row, _COL_START, start_text)
         end = self._parse_or_flag(row, _COL_END, end_text)
         step = self._parse_or_flag(row, _COL_STEP, step_text)
-        n_planes, est_time_s, est_size_mb = self._compute(start, end, step)
+        # Start/End cells display in mm; convert to µm for the plane-count
+        # computation + limit check (the step cell is already µm, so all
+        # three must share the µm unit inside _compute).
+        start_um = start * 1000.0
+        end_um = end * 1000.0
+        n_planes, est_time_s, est_size_mb = self._compute(start_um, end_um, step)
 
         self.table.blockSignals(True)
         self._set_readonly_cell(row, _COL_NPLANES, str(n_planes))
@@ -547,10 +564,11 @@ class AcquisitionTableManager(QWidget):
             except (TypeError, ValueError, AttributeError):
                 low, high = None, None
             if low is not None and high is not None:
-                if start < low or start > high:
+                # start/end are mm cell values; limits are µm — compare in µm.
+                if start_um < low or start_um > high:
                     self._flag(row, _COL_START)
                     flagged = True
-                if end < low or end > high:
+                if end_um < low or end_um > high:
                     self._flag(row, _COL_END)
                     flagged = True
         if flagged:

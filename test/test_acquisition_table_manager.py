@@ -35,14 +35,14 @@ def test_table_manager_exists(qtbot, request) -> None:
 
 
 def test_table_columns(qtbot, request) -> None:
-    """Test 1: columns Name, Start (μm), End (μm), Step (μm), #Planes,
-    Est. Time, Est. Size."""
+    """Test 1: columns Name, Start (mm), End (mm), Step (μm), #Planes,
+    Est. Time, Est. Size. Start/End display in mm; Step stays µm."""
     _ctrl, mgr = _mgr(qtbot, request)
     headers = [
         mgr.table.horizontalHeaderItem(i).text()
         for i in range(mgr.table.columnCount())
     ]
-    assert headers == ["Name", "Start (\u03bcm)", "End (\u03bcm)",
+    assert headers == ["Name", "Start (mm)", "End (mm)",
                        "Step (\u03bcm)", "#Planes", "Est. Time", "Est. Size"]
 
 
@@ -79,18 +79,19 @@ def test_add_stack_default_row(qtbot, request) -> None:
 
 def test_cell_edit_recomputes(qtbot, request) -> None:
     """Test 4: editing a cell updates the value + recomputes #planes/est.
-    time/est. size."""
+    time/est. size. Start/End cells display in mm (converted to µm for the
+    internal _Row); Step stays µm."""
     _ctrl, mgr = _mgr(qtbot, request)
     mgr.add_stack()
-    # Edit start=100, end=200, step=10 → 11 planes.
-    mgr.set_cell(0, 1, "100")
-    mgr.set_cell(0, 2, "200")
+    # Edit start=10 mm, end=20 mm, step=10 µm → 1001 planes.
+    mgr.set_cell(0, 1, "10")
+    mgr.set_cell(0, 2, "20")
     mgr.set_cell(0, 3, "10")
     row = mgr.row_at(0)
-    assert row.start == 100.0
-    assert row.end == 200.0
+    assert row.start == 10000.0  # 10 mm → 10000 µm
+    assert row.end == 20000.0  # 20 mm → 20000 µm
     assert row.step == 10.0
-    assert row.n_planes == 11
+    assert row.n_planes == 1001
     assert row.est_time_s > 0
     assert row.est_size_mb > 0
 
@@ -151,9 +152,9 @@ def test_incomplete_row_disables_start_queue(qtbot, request) -> None:
     _ctrl, mgr = _mgr(qtbot, request)
     mgr.add_stack()  # default start=end=0, step=1 → incomplete (start==end)
     assert not mgr.start_queue_enabled()
-    # Make it complete.
-    mgr.set_cell(0, 1, "100")
-    mgr.set_cell(0, 2, "200")
+    # Make it complete (10 mm / 20 mm / 10 µm — within mock motor limits).
+    mgr.set_cell(0, 1, "10")
+    mgr.set_cell(0, 2, "20")
     mgr.set_cell(0, 3, "10")
     assert mgr.start_queue_enabled()
     # step == 0 → incomplete again.
@@ -168,8 +169,8 @@ def test_incomplete_row_flagged_visually(qtbot, request) -> None:
     mgr.add_stack()
     # default start==end → incomplete; the row should be flagged.
     assert mgr.is_row_flagged(0)
-    mgr.set_cell(0, 1, "100")
-    mgr.set_cell(0, 2, "200")
+    mgr.set_cell(0, 1, "10")
+    mgr.set_cell(0, 2, "20")
     mgr.set_cell(0, 3, "10")
     assert not mgr.is_row_flagged(0)
 
@@ -180,9 +181,10 @@ def test_out_of_range_row_flagged(qtbot, request) -> None:
     ctrl, mgr = _mgr(qtbot, request)
     high = ctrl.motors.horizontal.get_limit_high("\u03bcm")
     mgr.add_stack()
-    # End past the high limit.
-    mgr.set_cell(0, 1, "100")
-    mgr.set_cell(0, 2, str(high + 10000))
+    # End past the high limit. The cell displays in mm; convert the
+    # out-of-range µm value to mm for the cell text.
+    mgr.set_cell(0, 1, "10")
+    mgr.set_cell(0, 2, str((high + 10000.0) / 1000.0))
     mgr.set_cell(0, 3, "10")
     assert mgr.is_row_flagged(0)
     assert not mgr.start_queue_enabled()

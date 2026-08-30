@@ -13,13 +13,13 @@ from _helpers.controller_fixture import make_controller
 
 def _add_valid_row(table) -> int:
     """Add a planned-queue row with a non-zero range so it computes >0
-    planes, then return the row index."""
+    planes, then return the row index. Start/End cells display in mm;
+    Step stays µm. start=0 mm, end=1 mm (1000 µm), step=5 µm → 201 planes."""
     table.add_stack()
     row = table.table.rowCount() - 1
-    # start=0, end=1000, step=5 -> 201 planes
-    table.set_cell(row, 1, "0")     # Start
-    table.set_cell(row, 2, "1000")  # End
-    table.set_cell(row, 3, "5")     # Step
+    table.set_cell(row, 1, "0")  # Start (mm)
+    table.set_cell(row, 2, "1")  # End (mm) = 1000 µm
+    table.set_cell(row, 3, "5")  # Step (µm)
     return row
 
 

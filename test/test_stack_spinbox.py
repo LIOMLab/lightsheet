@@ -51,7 +51,9 @@ def test_set_starting_plane_populates_spinbox_and_flag(qtbot, request) -> None:
     pos = ctrl.motors.horizontal.get_position("\u03bcm")
     assert ctrl.stack_starting_plane == pos
     assert ctrl.stack_first_plane_set is True
-    assert ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.value() == pos
+    # The spinbox displays in mm; the internal stack_starting_plane stays
+    # µm (the worker + motor HAL unit).
+    assert ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.value() == pos / 1000.0
 
 
 def test_set_ending_plane_populates_spinbox_and_flag(qtbot, request) -> None:
@@ -61,19 +63,32 @@ def test_set_ending_plane_populates_spinbox_and_flag(qtbot, request) -> None:
     pos = ctrl.motors.horizontal.get_position("\u03bcm")
     assert ctrl.stack_ending_plane == pos
     assert ctrl.stack_last_plane_set is True
-    assert ctrl.stack_panel.ui.doubleSpinBox_acqLastPlane.value() == pos
+    assert ctrl.stack_panel.ui.doubleSpinBox_acqLastPlane.value() == pos / 1000.0
 
 
 def test_manual_entry_in_range_updates_shell_flag(qtbot, request) -> None:
     ctrl, _ = make_controller(qtbot, request)
     low = ctrl.motors.horizontal.get_limit_low("\u03bcm")
     high = ctrl.motors.horizontal.get_limit_high("\u03bcm")
-    in_range = (low + high) / 2
-    ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(in_range)
+    in_range_um = (low + high) / 2
+    # The spinbox displays in mm; the internal stack_starting_plane stays
+    # µm. Type the mm value; the editingFinished handler converts mm→µm
+    # for storage (safety-critical: no 1000× motor error).
+    in_range_mm = in_range_um / 1000.0
+    ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(in_range_mm)
     ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.editingFinished.emit()
     assert ctrl.stack_first_plane_set is True
-    # The spinbox rounds to 2 decimals; compare with tolerance.
-    assert ctrl.stack_starting_plane == pytest.approx(in_range, abs=0.01)
+    assert ctrl.stack_starting_plane == pytest.approx(in_range_um, abs=1.0)
+
+
+def test_mm_entry_produces_um_internal_value(qtbot, request) -> None:
+    """Safety gate (B2): a mm spinbox entry must produce a µm internal
+    stack_starting_plane — no 1000× motor over-travel error. 6.500 mm →
+    6500.0 µm."""
+    ctrl, _ = make_controller(qtbot, request)
+    ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(6.500)
+    ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.editingFinished.emit()
+    assert ctrl.stack_starting_plane == pytest.approx(6500.0, abs=1.0)
 
 
 def test_manual_entry_out_of_range_beeps_and_does_not_move(qtbot, request) -> None:
@@ -84,12 +99,17 @@ def test_manual_entry_out_of_range_beeps_and_does_not_move(qtbot, request) -> No
     ctrl.sig_message.connect(lambda m: messages.append(m))
     # Set an out-of-range value beyond the spinbox range by lowering the
     # range floor first so the spinbox accepts the value, then triggering
-    # editingFinished which validates against the motor limits.
+    # editingFinished which validates against the motor limits. The
+    # spinbox displays in mm; the motor limits are read in µm and the
+    # typed mm value is converted to µm for the comparison.
     low = ctrl.motors.horizontal.get_limit_low("\u03bcm")
     high = ctrl.motors.horizontal.get_limit_high("\u03bcm")
-    out_of_range = high + 1000.0
-    ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setRange(low, out_of_range + 1)
-    ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(out_of_range)
+    out_of_range_um = high + 1000.0
+    out_of_range_mm = out_of_range_um / 1000.0
+    ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setRange(
+        low / 1000.0, out_of_range_mm + 0.001
+    )
+    ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(out_of_range_mm)
     ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.editingFinished.emit()
     assert len(beeps) == 1, "out-of-range entry must beep"
     assert len(messages) == 1, "out-of-range entry must emit a message"
@@ -129,13 +149,14 @@ def test_spinbox_range_seeded_from_motor_limits(qtbot, request) -> None:
     ctrl, _ = make_controller(qtbot, request)
     low = ctrl.motors.horizontal.get_limit_low("\u03bcm")
     high = ctrl.motors.horizontal.get_limit_high("\u03bcm")
-    # The spinbox range may be wider than the motor limits (so an
+    # The spinbox displays in mm; _seed_spinbox_ranges seeds from the
+    # motor limits in mm. The range may be wider than the limits (so an
     # out-of-range entry is accepted by the spinbox and then rejected by
-    # the editingFinished validation). Assert the motor limits are within
-    # the spinbox range.
+    # the editingFinished validation). Assert the motor limits (in mm)
+    # are within the spinbox range.
     sb_first = ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane
-    assert sb_first.minimum() <= low
-    assert sb_first.maximum() >= high
+    assert sb_first.minimum() <= low / 1000.0
+    assert sb_first.maximum() >= high / 1000.0
 
 
 def test_worker_valueerror_catch_preserved() -> None:
