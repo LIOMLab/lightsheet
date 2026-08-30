@@ -27,6 +27,7 @@ Pitfall 5) — a typo'd key ('Max power' lowercase-p) is rejected, not silently
 lowercased and accepted.
 """
 
+import configparser
 import logging
 import os
 import sys
@@ -674,7 +675,24 @@ def load_sections_from_ini(
             # baseline's real values (a partial overlay would otherwise
             # wipe the tracked baseline and ValidationError on every
             # int/float/bool field the overlay did not re-list).
-            baseline.update({k: v for k, v in overlay.items() if v != ""})
+            #
+            # Filtering by ``v != ""`` would also drop an overlay key the
+            # operator explicitly set to empty (e.g. clearing a Log Dir).
+            # Instead, determine the set of keys the overlay section
+            # actually contains via configparser and merge only those —
+            # absent keys still don't clobber, but an explicitly-empty
+            # value now propagates as "".
+            _ov_cfg = configparser.ConfigParser()
+            _ov_cfg.optionxform = str  # preserve case (AGENTS.md §9)
+            _ov_cfg.read(overlay_path)
+            present_keys = (
+                set(_ov_cfg[section_name].keys())
+                if _ov_cfg.has_section(section_name)
+                else set()
+            )
+            baseline.update(
+                {k: v for k, v in overlay.items() if k in present_keys}
+            )
         sections[section_name] = baseline
     return sections
 

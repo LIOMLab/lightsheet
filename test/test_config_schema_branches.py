@@ -157,6 +157,35 @@ def test_load_sections_from_ini_overlay_partial_does_not_clobber(tmp_path) -> No
     assert sections["iBeam"]["Port"] == "COM4"
 
 
+def test_load_sections_from_ini_overlay_explicit_empty_propagates(tmp_path) -> None:
+    """An overlay key explicitly set to empty (``Key =`` with no value)
+    propagates as "" — it is distinct from a key merely absent from the
+    overlay. The merge filters by keys the overlay section actually
+    contains, not by ``v != ""``, so an operator can clear a baseline
+    value (e.g. clearing a Log Dir) via the overlay."""
+    baseline = tmp_path / "config.ini"
+    baseline.write_text(
+        "[iBeam]\n"
+        "Port = COM4\n"
+        "Baud Rate = 115200\n"
+        "Channel = 1\n"
+        "Wavelength = 647\n"
+        "Power = 0.0\n"
+        "Max Power = 50000\n"
+        "Status Poll Interval = 1000\n"
+    )
+    overlay = tmp_path / "overlay.ini"
+    overlay.write_text(
+        "[iBeam]\n"
+        "Port =\n"  # explicitly empty — should clear the baseline value
+    )
+    sections = load_sections_from_ini(str(baseline), overlay_path=str(overlay))
+    # Port explicitly cleared by overlay.
+    assert sections["iBeam"]["Port"] == ""
+    # Max Power NOT clobbered (absent from overlay, not explicitly empty).
+    assert sections["iBeam"]["Max Power"] == "50000"
+
+
 # -- ConfigValidator.validate_or_abort + _show_dialog -----------------------
 
 
