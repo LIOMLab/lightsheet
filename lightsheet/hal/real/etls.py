@@ -47,6 +47,8 @@ class ETLs(IETLs):
             self.etl_left.connect()
         except Exception:
             self.etl_left = None
+            self.error = 1
+            self.error_message = "Left ETL open failed"
             logger.exception("Left ETL error")
         else:
             print("Left ETL detected")
@@ -56,6 +58,8 @@ class ETLs(IETLs):
             self.etl_right.connect()
         except Exception:
             self.etl_right = None
+            self.error = 1
+            self.error_message = "Right ETL open failed"
             logger.exception("Right ETL error")
         else:
             print("Right ETL detected")

@@ -437,8 +437,14 @@ def test_update_galvos_sets_error_surface_on_task_failure() -> None:
         def __exit__(self, *exc: object) -> None:
             return None
 
+    # Capture the real nidaqmx.errors BEFORE patching — inside the
+    # patch block siggen_module.nidaqmx is the mock, so
+    # siggen_module.nidaqmx.errors would resolve to a MagicMock attribute
+    # (not a class) and the narrowed except clause would raise TypeError.
+    real_errors = siggen_module.nidaqmx.errors
     with patch.object(siggen_module, "nidaqmx") as fake_nidaqmx:
         fake_nidaqmx.Task = _FailingTask
+        fake_nidaqmx.errors = real_errors
         sg.update_galvos(left_galvo=1.0, right_galvo=2.0)
     assert sg.error == 1
     assert sg.error_message == "update_galvos error"
@@ -524,9 +530,14 @@ def test_create_scanner_error_path_nulls_tasks() -> None:
         def __exit__(self, *exc: object) -> None:
             return None
 
+    # Capture the real submodules BEFORE patching (see
+    # test_update_galvos_sets_error_surface_on_task_failure for why).
+    real_constants = siggen_module.nidaqmx.constants
+    real_errors = siggen_module.nidaqmx.errors
     with patch.object(siggen_module, "nidaqmx") as fake_nidaqmx:
         fake_nidaqmx.Task = _FailingTask
-        fake_nidaqmx.constants = siggen_module.nidaqmx.constants
+        fake_nidaqmx.constants = real_constants
+        fake_nidaqmx.errors = real_errors
         sg.create_scanner()
     assert sg.task_galvo_etl is None
     assert sg.task_camera is None

@@ -426,6 +426,15 @@ class SingleWorker(QObject, _AcquireScanMixin):
     def run(self) -> None:
         """Generates and display a single scan which can be saved afterwards"""
         try:
+            # Clear the prior run's frame so a failed acquire_scan (siggen
+            # error / camera timeout early-return) cannot leave a stale
+            # buffer that updateUi_save_single_image would silently save as
+            # this run's data. acquire_scan repopulates these only on a
+            # successful scan; the save button is gated on buffer being
+            # non-None in updateUi_post_single_mode.
+            self._shell.buffer = None
+            self._shell.reconstructed_frame = None
+
             # Getting positions for the image
             self._shell.image_hor_pos_text = self._shell.current_horizontal_position_text
             self._shell.image_ver_pos_text = self._shell.current_vertical_position_text

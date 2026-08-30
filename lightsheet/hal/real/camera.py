@@ -89,6 +89,10 @@ class Camera(ICamera):
         self._cfg["Lightsheet Exposed Lines"] = str(self.lightsheet_exposed_lines)
         self._cfg["Lightsheet Delay Lines"] = str(self.lightsheet_delay_lines)
         self._cfg["Recorder Timeout"] = str(self.recorder_timeout_interval)
+        self._cfg["Recorder Timeout Floor"] = str(self.recorder_timeout_floor)
+        self._cfg["Recorder Timeout Safety Factor"] = str(
+            self.recorder_timeout_safety_factor
+        )
         # write configuration to ini file
         self._cfg = cfg_write(self._cfg_filename, self._cfg_section, self._cfg)
 

@@ -416,13 +416,16 @@ def main() -> int:
         # nidaqmx not installed (macOS dev path uses the conftest stub) — skip.
         pass
 
-    # This block permits messages display of errors occurring in all the files
-    sys._excepthook = sys.excepthook
+    # This block permits messages display of errors occurring in all the files.
+    # Capture the original hook in a closure variable rather than on the sys
+    # module — sys._excepthook is not a documented API and could be overwritten
+    # by another library or reserved by a future CPython.
+    _original_excepthook = sys.excepthook
 
     def exception_hook(exctype: type, value: BaseException, traceback: object) -> None:
         """Permits messages display of errors occurring in all the files."""
         print(exctype, value, traceback)
-        sys._excepthook(exctype, value, traceback)
+        _original_excepthook(exctype, value, traceback)
         sys.exit(1)
 
     sys.excepthook = exception_hook

@@ -179,7 +179,7 @@ class SigGen(ISigGen):
             with nidaqmx.Task(new_task_name="galvo_etl_setpoint") as task_update_all:
                 task_update_all.ao_channels.add_ao_voltage_chan(self.ao_terminals)
                 task_update_all.write(galvo_etl_setpoints, auto_start=True)
-        except Exception:
+        except (nidaqmx.errors.Error, RuntimeError, OSError):
             self.error = 1
             self.error_message = "update_all error"
             logger.exception("SigGen - update_all error")
@@ -201,7 +201,7 @@ class SigGen(ISigGen):
             with nidaqmx.Task(new_task_name="galvo_single") as task_update_galvos:
                 task_update_galvos.ao_channels.add_ao_voltage_chan(self.galvo_terminals)
                 task_update_galvos.write(galvo_setpoints, auto_start=True)
-        except Exception:
+        except (nidaqmx.errors.Error, RuntimeError, OSError):
             self.error = 1
             self.error_message = "update_galvos error"
             logger.exception("SigGen - update_galvos error")
@@ -220,7 +220,7 @@ class SigGen(ISigGen):
             with nidaqmx.Task(new_task_name="etl_single") as task_update_etls:
                 task_update_etls.ao_channels.add_ao_voltage_chan(self.etl_terminals)
                 task_update_etls.write(etl_setpoints, auto_start=True)
-        except Exception:
+        except (nidaqmx.errors.Error, RuntimeError, OSError):
             self.error = 1
             self.error_message = "update_etls error"
             logger.exception("SigGen - update_etls error")
@@ -291,7 +291,7 @@ class SigGen(ISigGen):
             # Write waveforms to AO and DO tasks (to be started later)
             self.task_camera.write(self.waveform_camera, auto_start=False)
             self.task_galvo_etl.write(galvo_etl_waveforms, auto_start=False)
-        except Exception:
+        except (nidaqmx.errors.Error, RuntimeError, OSError):
             self.task_galvo_etl = None
             self.task_camera = None
             self.error = 1

@@ -216,6 +216,15 @@ def test_main_demo_mode_returns_app_exec_exit_code(
     # Import main AFTER patching sys.modules.
     from lightsheet.__main__ import main
 
+    # Patch sys.excepthook to a no-op BEFORE main() runs so the nested
+    # exception_hook's closure captures the no-op as the original hook.
+    # main() stores the original hook in a closure variable (not on
+    # sys._excepthook), so the capture happens at main()-call time. Calling
+    # sys.excepthook(...) later then forwards into the no-op instead of the
+    # real default hook (which would surface a "CALL ERROR" into Qt's event
+    # loop and fail the test).
+    monkeypatch.setattr(sys, "excepthook", lambda *a, **kw: None)
+
     # Run main() — should return 0 (app.exec mocked to return 0).
     result = main()
     assert result == 0
@@ -238,13 +247,13 @@ def test_main_demo_mode_returns_app_exec_exit_code(
     stylesheet_callback("neither")
 
     # 2. exception_hook: main() set sys.excepthook to the nested
-    #    exception_hook. Call it with mocked args to cover lines 233-235.
-    #    Mock sys.exit so it doesn't actually exit, and mock sys._excepthook
-    #    (the original hook main() saved) so the exception is not forwarded
-    #    into Qt's event loop (which would surface as a "CALL ERROR" and
-    #    fail the test).
+    #    exception_hook. Call it with mocked args to cover the print +
+    #    forward + sys.exit path. Mock sys.exit so it doesn't actually
+    #    exit. The original hook the closure captured is the no-op patched
+    #    above (before main() ran), so the exception is not forwarded into
+    #    Qt's event loop (which would surface as a "CALL ERROR" and fail
+    #    the test).
     monkeypatch.setattr(sys, "exit", lambda code: None)
-    monkeypatch.setattr(sys, "_excepthook", lambda *a, **kw: None)
     sys.excepthook(ValueError, ValueError("test"), None)
 
 

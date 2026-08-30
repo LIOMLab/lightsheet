@@ -250,8 +250,18 @@ class AcquisitionPanelWidget(QWidget):
         self._shell.single_mode_started = False
         self.ui.pushButton_acqGetSingleImage.setText("Get Single Image")
         self._shell._update_mode_badge("IDLE")
-        if self._shell.save_panel.ui.pushButton_saveCurrentImage not in self._shell.default_buttons:  # noqa: E501
-            self._shell.default_buttons.append(self._shell.save_panel.ui.pushButton_saveCurrentImage)
+        # Only arm the save button when this run actually produced a frame.
+        # SingleWorker.run clears buffer before acquire_scan; acquire_scan
+        # repopulates it only on a successful scan. A failed run (siggen
+        # error / camera timeout early-return) leaves buffer None, so the
+        # save button is dropped from the default-buttons list and stays
+        # disabled rather than offering to save a missing or stale frame.
+        save_btn = self._shell.save_panel.ui.pushButton_saveCurrentImage
+        if self._shell.buffer is not None:
+            if save_btn not in self._shell.default_buttons:
+                self._shell.default_buttons.append(save_btn)
+        elif save_btn in self._shell.default_buttons:
+            self._shell.default_buttons.remove(save_btn)
         self.updateUi_modes_buttons(self._shell.default_buttons)
 
     def updateUi_stack_mode_button(self) -> None:

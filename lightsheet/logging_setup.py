@@ -83,7 +83,15 @@ def configure() -> None:
             import tempfile
 
             log_dir = Path(tempfile.gettempdir()) / "lightsheet-logs"
-            log_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                log_dir.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                # System temp dir is also unwritable (read-only filesystem,
+                # restricted permissions, disk full). Give up on file logging
+                # and proceed stream-only so the GUI still starts — an
+                # unhandled OSError here would be an unrecoverable black
+                # screen before the window appears.
+                log_dir = None
         # Stream-only warning (file handler is not attached yet) — emitted to
         # stderr so the operator sees why logs are not where they configured.
         logging.getLogger(__name__).warning(
@@ -101,14 +109,15 @@ def configure() -> None:
 
     formatter = logging.Formatter(_LOG_FORMAT)
 
-    file_handler = logging.handlers.RotatingFileHandler(
-        log_dir / "lightsheet.log",
-        maxBytes=5_000_000,
-        backupCount=5,
-        encoding="utf-8",
-    )
-    file_handler.setFormatter(formatter)
-    root.addHandler(file_handler)
+    if log_dir is not None:
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_dir / "lightsheet.log",
+            maxBytes=5_000_000,
+            backupCount=5,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(formatter)
+        root.addHandler(file_handler)
 
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
