@@ -719,8 +719,9 @@ def test_channel_radio_default_l1_selected(qtbot, request) -> None:
 
 def test_channel_radio_switch_updates_imageview(qtbot, request) -> None:
     """Clicking L2 updates ImageView.setImage with the L2 channel's frame
-    (reconstructed_frames[wavelength]) and resets the LevelsBar window to
-    the displayed frame's min/max. No RGB overlay; no per-channel levels
+    (reconstructed_frames[wavelength]) AND the per-channel LUT tint
+    (red FF0000 for 647 nm), and resets the LevelsBar window to the
+    displayed frame's min/max. No RGB overlay; no per-channel levels
     state stored."""
     from unittest.mock import patch
 
@@ -755,11 +756,17 @@ def test_channel_radio_switch_updates_imageview(qtbot, request) -> None:
             timer.start(100)
 
     assert img_spy.called, "clicking L2 must call imageView.setImage"
-    # The slot must have called setImage with frame_b (the L2 frame).
+    # The slot must have called setImage with frame_b (the L2 frame) and
+    # the L2 wavelength tint (red FF0000 for 647 nm).
     called_frames = [c.args[0] for c in img_spy.call_args_list if c.args]
     assert any(f is frame_b for f in called_frames), (
         f"imageView.setImage must be called with the L2 frame (frame_b); "
         f"got calls={called_frames!r}"
+    )
+    called_tints = [c.kwargs.get("tint") for c in img_spy.call_args_list]
+    assert "FF0000" in called_tints, (
+        f"clicking L2 must pass tint='FF0000' (red for 647 nm); "
+        f"got tints={called_tints!r}"
     )
     # LevelsBar window reset to frame_b's min/max.
     lb = ctrl.ui.levelsBar
@@ -771,6 +778,115 @@ def test_channel_radio_switch_updates_imageview(qtbot, request) -> None:
         f"LevelsBar window_max must reset to frame_b.max()=400; "
         f"got {lb.window_max}"
     )
+
+
+def test_channel_radio_l1_tint_is_green(qtbot, request) -> None:
+    """Clicking L1 calls ImageView.setImage with tint='00FF00' (green for
+    555 nm) so the operator can visually distinguish L1 from L2 in demo
+    mode where the frames are otherwise identical."""
+    from unittest.mock import patch
+
+    import numpy as np
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    radio = ctrl.channel_radio
+
+    frame_a = np.zeros((64, 64), dtype=np.uint16)
+    frame_a[:] = 100
+    frame_b = np.zeros((64, 64), dtype=np.uint16)
+    frame_b[:] = 200
+    ctrl.reconstructed_frames = {555: frame_a, 647: frame_b}
+
+    timer = getattr(ctrl, "timer_imageview", None)
+    if timer is not None:
+        timer.stop()
+    try:
+        with patch.object(ctrl.ui.imageView, "setImage") as img_spy:
+            radio.click_button(0)
+    finally:
+        if timer is not None:
+            timer.start(100)
+
+    assert img_spy.called, "clicking L1 must call imageView.setImage"
+    called_tints = [c.kwargs.get("tint") for c in img_spy.call_args_list]
+    assert "00FF00" in called_tints, (
+        f"clicking L1 must pass tint='00FF00' (green for 555 nm); "
+        f"got tints={called_tints!r}"
+    )
+
+
+def test_channel_radio_container_at_layout_index_one(qtbot, request) -> None:
+    """The channel-radio container sits at imagesPane layout index 1 —
+    BETWEEN the ImageView (index 0) and the LevelsBar layout. The
+    container is a fixed-height QWidget wrapping the ChannelRadio so
+    show/hide of the inner radio does not reflow the layout."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    container = getattr(ctrl, "channel_radio_container", None)
+    assert container is not None, (
+        "controller must expose a channel_radio_container attribute "
+        "(fixed-height wrapper around the ChannelRadio)"
+    )
+    layout = ctrl.ui.imagesPane.layout()
+    assert layout is not None, "imagesPane has no layout"
+    # Index 0 must be the ImageView.
+    item0 = layout.itemAt(0)
+    assert item0 is not None and item0.widget() is ctrl.ui.imageView, (
+        "layout index 0 must be the ImageView"
+    )
+    # Index 1 must be the channel-radio container.
+    item1 = layout.itemAt(1)
+    assert item1 is not None and item1.widget() is container, (
+        "layout index 1 must be the channel-radio container (between "
+        "ImageView at 0 and the LevelsBar layout)"
+    )
+
+
+def test_channel_radio_toggle_does_not_reflow_imageview(qtbot, request) -> None:
+    """Showing/hiding the channel-radio does NOT change the ImageView
+    geometry — the fixed-height container reserves the layout slot
+    regardless of the inner radio's visibility."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    radio = ctrl.channel_radio
+    image_view = ctrl.ui.imageView
+
+    # Force a layout settle so the ImageView has a stable geometry.
+    ctrl.ui.imagesPane.adjustSize()
+    geo_hidden = image_view.geometry()
+    assert geo_hidden.width() > 0 and geo_hidden.height() > 0, (
+        "ImageView must have non-zero geometry before the toggle"
+    )
+
+    # Show the radio (both auto-lasers checked) then hide it again — the
+    # ImageView geometry must be identical at every step.
+    ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
+    ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(True)
+    ctrl.ui.imagesPane.adjustSize()
+    geo_after_show = image_view.geometry()
+    assert geo_after_show == geo_hidden, (
+        "ImageView geometry changed when the radio was shown — the "
+        "fixed-height container must reserve the slot (no reflow)"
+    )
+
+    ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(False)
+    ctrl.ui.imagesPane.adjustSize()
+    geo_after_hide = image_view.geometry()
+    assert geo_after_hide == geo_hidden, (
+        "ImageView geometry changed when the radio was hidden — the "
+        "fixed-height container must reserve the slot (no reflow)"
+    )
+
+
+def test_channel_radio_container_fixed_height(qtbot, request) -> None:
+    """The channel-radio container has a fixed height so it always
+    reserves its layout slot regardless of the inner radio's visibility
+    (the show/hide reflow fix)."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    container = ctrl.channel_radio_container
+    h = container.maximumHeight()
+    assert h == container.minimumHeight(), (
+        "container must have a fixed height (maximumHeight == minimumHeight)"
+    )
+    assert h > 0, "container fixed height must be > 0"
 
 
 def test_channel_radio_single_channel_hidden(qtbot, request) -> None:
