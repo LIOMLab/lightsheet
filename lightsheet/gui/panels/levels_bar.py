@@ -38,8 +38,12 @@ HANDLE_HIT_RADIUS_PX = 14
 # Vertical hit zone for a handle row. The range row sits near the top
 # (y=12) and the window row near the bottom (y=h-12). A click within
 # this many pixels of a row's y grabs that row. Generous so the
-# operator does not have to pixel-aim at a 10px-tall triangle.
-HANDLE_HIT_RADIUS_Y_PX = 20
+# operator does not have to pixel-aim at a 10px-tall triangle, but kept
+# at 10 so the hit zones ([2, 22] and [h-22, h-2]) do not overlap the
+# gradient band ([22, h-22]) — a click inside the gradient grabs
+# nothing, preventing an accidental range/window handle grab when the
+# operator clicks the bar to look at it.
+HANDLE_HIT_RADIUS_Y_PX = 10
 
 # Default data-following range for uint16 frames. ``set_data_range`` is the
 # canonical way to update this from the live frame; this default just gives
