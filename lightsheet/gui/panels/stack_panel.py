@@ -135,9 +135,15 @@ class StackPanelWidget(QWidget):
         the shell flag + starting plane. Out of range → beep + message,
         revert, do NOT move the motor (the worker's per-plane ValueError
         catch is the physical-safety backstop)."""
+        motors = getattr(self._shell, "motors", None)
+        if motors is None:
+            # hardware_init hasn't run yet (100ms single-shot timer) —
+            # nothing to validate against. _seed_spinbox_ranges documents
+            # the same race at line 81.
+            return
         value = self.ui.doubleSpinBox_acqFirstPlane.value()
-        low = self._shell.motors.horizontal.get_limit_low("\u03bcm")
-        high = self._shell.motors.horizontal.get_limit_high("\u03bcm")
+        low = motors.horizontal.get_limit_low("\u03bcm")
+        high = motors.horizontal.get_limit_high("\u03bcm")
         if value < low or value > high:
             self._shell.sig_beep.emit()
             self._shell.sig_message.emit(
@@ -159,9 +165,13 @@ class StackPanelWidget(QWidget):
     def _on_last_plane_edited(self) -> None:
         """editingFinished on doubleSpinBox_acqLastPlane: same validation
         as the first-plane handler, against the ending plane."""
+        motors = getattr(self._shell, "motors", None)
+        if motors is None:
+            # hardware_init hasn't run yet — nothing to validate against.
+            return
         value = self.ui.doubleSpinBox_acqLastPlane.value()
-        low = self._shell.motors.horizontal.get_limit_low("\u03bcm")
-        high = self._shell.motors.horizontal.get_limit_high("\u03bcm")
+        low = motors.horizontal.get_limit_low("\u03bcm")
+        high = motors.horizontal.get_limit_high("\u03bcm")
         if value < low or value > high:
             self._shell.sig_beep.emit()
             self._shell.sig_message.emit(
