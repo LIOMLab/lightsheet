@@ -647,3 +647,133 @@ def test_frame_saver_worker_single_channel_bare_ndarray(tmp_path) -> None:
     np.testing.assert_array_equal(
         written_files[saver.filenames_list[0]][0][1], frame
     )
+
+
+# ---------------------------------------------------------------------------
+# updateUi_save_single_image multi-channel dual-save (MCA-03 single mode)
+# ---------------------------------------------------------------------------
+#
+# These tests construct the real Controller_MainWindow via the shared
+# make_controller fixture (the same one test_controller_methods.py uses for
+# the single-image save tests) because updateUi_save_single_image reads
+# self._shell._auto_laser1 / _auto_laser2 / lasers / reconstructed_frames —
+# attributes that only exist on the real shell, not on the _ShellStandin
+# used by the FrameSaver-only tests above. The FrameSaver collaborator
+# (self._fs) is mocked so the test asserts on the routed calls without
+# spinning up the save worker thread.
+
+
+def test_save_single_image_multi_channel_writes_two_files(qtbot, request) -> None:
+    """Multi-channel single mode: when both auto-laser checkboxes are
+    checked, the Save button writes TWO wavelength-suffixed HDF5 files
+    (one per channel). set_files is called with wavelengths=[wl1, wl2]
+    read from the live ILaser instances, and enqueue_buffer is called
+    twice with (0, frameA) and (1, frameB) tagged tuples — one per
+    channel. The single-consumer queue contract is preserved (the two
+    tagged frames go through the same enqueue_buffer → single queue).
+    """
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl.saving_allowed = True
+    ctrl.save_directory = "/tmp"
+    ctrl.save_filename = "test"
+    ctrl.save_filepath = "/tmp/test"
+    ctrl.image_hor_pos_text = "0.0"
+    ctrl.image_ver_pos_text = "0.0"
+    ctrl.image_cam_pos_text = "0.0"
+
+    # Wavelengths come from the live ILaser instances — never hardcoded.
+    wl1 = ctrl.lasers[0].wavelength
+    wl2 = ctrl.lasers[1].wavelength
+    frameA = np.zeros((4, 4), dtype=np.uint16)
+    frameA[0, 0] = 100
+    frameB = np.zeros((4, 4), dtype=np.uint16)
+    frameB[0, 0] = 200
+    ctrl.reconstructed_frames = {wl1: frameA, wl2: frameB}
+
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = True
+
+    # reconstructed (default) radio path — neither crop nor full checked
+    ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
+    ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
+
+    ctrl._fs.reinit = Mock()
+    ctrl._fs.set_files = Mock()
+    ctrl._fs.enqueue_buffer = Mock()
+    ctrl._fs.start_saving = Mock()
+    ctrl._fs.stop_saving = Mock()
+    ctrl._fs.add_sample_name = Mock()
+    ctrl._fs.add_motor_parameters = Mock()
+
+    ctrl.save_panel.updateUi_save_single_image()
+
+    ctrl._fs.set_files.assert_called_once_with(
+        1, ctrl.save_filepath, "singleImage", 1, "reconstructed_frame",
+        wavelengths=[wl1, wl2],
+    )
+    enqueue_calls = ctrl._fs.enqueue_buffer.call_args_list
+    assert len(enqueue_calls) == 2, (
+        f"multi-channel must enqueue two tagged frames; got {len(enqueue_calls)}"
+    )
+    assert enqueue_calls[0].args == ((0, frameA),), (
+        f"first enqueue must be (0, frameA); got {enqueue_calls[0].args}"
+    )
+    assert enqueue_calls[1].args == ((1, frameB),), (
+        f"second enqueue must be (1, frameB); got {enqueue_calls[1].args}"
+    )
+    ctrl._fs.start_saving.assert_called_once()
+    ctrl._fs.stop_saving.assert_called_once()
+
+
+def test_save_single_image_single_channel_unchanged(qtbot, request) -> None:
+    """Back-compat: when only one auto-laser is checked (single-channel
+    mode), updateUi_save_single_image keeps today's path — set_files
+    called WITHOUT wavelengths, enqueue_buffer called once with the bare
+    reconstructed_frame (no channel tag). Byte-identical to the
+    pre-multi-channel behavior.
+    """
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl.saving_allowed = True
+    ctrl.save_directory = "/tmp"
+    ctrl.save_filename = "test"
+    ctrl.save_filepath = "/tmp/test"
+    ctrl.image_hor_pos_text = "0.0"
+    ctrl.image_ver_pos_text = "0.0"
+    ctrl.image_cam_pos_text = "0.0"
+
+    frameA = np.zeros((4, 4), dtype=np.uint16)
+    frameA[0, 0] = 100
+    ctrl.reconstructed_frame = frameA
+
+    # Single-channel: only one auto-laser checked
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = False
+
+    ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
+    ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
+
+    ctrl._fs.reinit = Mock()
+    ctrl._fs.set_files = Mock()
+    ctrl._fs.enqueue_buffer = Mock()
+    ctrl._fs.start_saving = Mock()
+    ctrl._fs.stop_saving = Mock()
+    ctrl._fs.add_sample_name = Mock()
+    ctrl._fs.add_motor_parameters = Mock()
+
+    ctrl.save_panel.updateUi_save_single_image()
+
+    # set_files called with no wavelengths kwarg (single-channel back-compat)
+    ctrl._fs.set_files.assert_called_once_with(
+        1, ctrl.save_filepath, "singleImage", 1, "reconstructed_frame",
+    )
+    _, kwargs = ctrl._fs.set_files.call_args
+    assert "wavelengths" not in kwargs or kwargs["wavelengths"] is None, (
+        f"single-channel set_files must not pass wavelengths; got kwargs={kwargs}"
+    )
+    ctrl._fs.enqueue_buffer.assert_called_once_with(frameA)
+    ctrl._fs.start_saving.assert_called_once()
+    ctrl._fs.stop_saving.assert_called_once()

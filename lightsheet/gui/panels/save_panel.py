@@ -267,11 +267,46 @@ class SavePanelWidget(QWidget):
                 # exclusive save_option_button_group but is not explicitly
                 # checked here because it is the implicit default (the
                 # else branch covers it).
-                self._shell._fs.set_files(
-                    1, self._shell.save_filepath, "singleImage", 1, "reconstructed_frame"  # noqa: E501
+                #
+                # Multi-channel single mode (both auto-laser checkboxes
+                # checked): write TWO wavelength-suffixed HDF5 files, one
+                # per channel. The wavelengths are read from the live
+                # ILaser instances so a rig with different lasers produces
+                # the correct suffixes. The per-channel frames come from
+                # the reconstructed_frames dict (keyed by laser
+                # wavelength, populated by the single-mode acquisition
+                # worker). The two tagged (channel_idx, frame) tuples go
+                # through the same enqueue_buffer → single save queue →
+                # single frame_saver_worker consumer; the worker branches
+                # on the channel tag to pick the per-channel filename
+                # list. Single-channel mode (one auto-laser checked, or
+                # neither) keeps today's path: one unsuffixed file from
+                # reconstructed_frame, enqueued as a bare ndarray.
+                multi_channel = (
+                    self._shell._auto_laser1 and self._shell._auto_laser2
                 )
-                self._shell._fs.enqueue_buffer(self._shell.reconstructed_frame)
-                self._shell.updateUi_message_printer("Saving Reconstructed Image")
+                if multi_channel:
+                    wl1 = self._shell.lasers[0].wavelength
+                    wl2 = self._shell.lasers[1].wavelength
+                    self._shell._fs.set_files(
+                        1, self._shell.save_filepath, "singleImage", 1,
+                        "reconstructed_frame", wavelengths=[wl1, wl2],
+                    )
+                    self._shell._fs.enqueue_buffer(
+                        (0, self._shell.reconstructed_frames[wl1])
+                    )
+                    self._shell._fs.enqueue_buffer(
+                        (1, self._shell.reconstructed_frames[wl2])
+                    )
+                    self._shell.updateUi_message_printer(
+                        "Saving Reconstructed Images (multi-channel)"
+                    )
+                else:
+                    self._shell._fs.set_files(
+                        1, self._shell.save_filepath, "singleImage", 1, "reconstructed_frame"  # noqa: E501
+                    )
+                    self._shell._fs.enqueue_buffer(self._shell.reconstructed_frame)
+                    self._shell.updateUi_message_printer("Saving Reconstructed Image")
 
             self._shell._fs.start_saving()
             self._shell._fs.stop_saving()
