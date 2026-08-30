@@ -112,6 +112,25 @@ class _WorkerShell:
         self.stack_starting_plane = 0.0
         self.stack_step = 10.0
 
+        # Auto-laser flags pre-sampled on the GUI thread by
+        # _cache_auto_laser_flags() before the worker is spawned. The D-04
+        # continuous-mode guard in PreviewWorker/LiveWorker reads these to
+        # decide whether to suppress L2 for the start_lasers call. Defaults
+        # to False/False so the existing preview/live tests (which use a
+        # Mock hw and never reach start_lasers' flag-reading branch) are
+        # unaffected.
+        self._auto_laser1 = False
+        self._auto_laser2 = False
+        # Power percentages read by HardwareManager.start_lasers when the
+        # D-04 tests use a real HardwareManager.
+        self.laser1_power_pct = 50.0
+        self.laser2_power_pct = 50.0
+        # Signals read by HardwareManager._poll_laser_status /
+        # _refresh_laser_readback when the D-04 tests use a real
+        # HardwareManager.
+        self.sig_laser_status = Mock()
+        self.sig_laser_readback = Mock()
+
         # Lasers tuple — SingleWorker.run multi-channel branch reads
         # self.lasers[0/1].wavelength to key reconstructed_frames.
         bundle = _make_bundle()
@@ -1024,3 +1043,118 @@ def test_spawn_stack_worker_presamples_multi_channel(qtbot, request) -> None:
         "Only one auto-laser checkbox checked -> multi_channel=False must "
         "be passed to StackWorker by _spawn_stack_worker"
     )
+
+
+# -- PreviewWorker / LiveWorker D-04 first-laser-only guard -----------------
+#
+# D-04 (09-CONTEXT.md): continuous modes (preview + live) energize ONLY the
+# first checked laser for the whole session when both auto-lasers are
+# checked. Live/preview have no per-plane boundary to sequence over, so
+# alternating L1<->L2 per frame would double frame time and flicker. With
+# both checked, the continuous modes energize only L1 and hold L2 off for
+# the session — the strict one-laser-energized invariant holds trivially.
+#
+# The guard suppresses _auto_laser2 temporarily for the start_lasers call
+# so start_lasers (which reads the cached flags) energizes only L1, then
+# restores the original flag so stop_lasers at the end still reads the
+# original value (L2 was never energized, so stop_lasers is a no-op for
+# L2, but the restore keeps the flag consistent for any subsequent read).
+
+
+def _make_d04_shell(auto_laser1: bool, auto_laser2: bool):
+    """Build a mock shell + real HardwareManager with MockLaser spies for
+    D-04 continuous-mode guard tests. The shell has the attributes
+    HardwareManager.start_lasers / stop_lasers / _poll_laser_status /
+    _refresh_laser_readback read."""
+    from lightsheet.gui.coordinators.hardware_manager import HardwareManager
+
+    bundle = _make_bundle()
+    shell = _WorkerShell()
+    # Auto-laser flags pre-sampled on the GUI thread (the worker reads
+    # these via start_lasers).
+    shell._auto_laser1 = auto_laser1
+    shell._auto_laser2 = auto_laser2
+    hw = HardwareManager(bundle, shell)
+    # Spy on the real MockLaser.on / .off so we can assert call counts
+    # without changing the real HAL state mutation.
+    laser0_on_spy = Mock(wraps=bundle.lasers[0].on)
+    laser0_off_spy = Mock(wraps=bundle.lasers[0].off)
+    laser1_on_spy = Mock(wraps=bundle.lasers[1].on)
+    laser1_off_spy = Mock(wraps=bundle.lasers[1].off)
+    bundle.lasers[0].on = laser0_on_spy  # type: ignore[method-assign]
+    bundle.lasers[0].off = laser0_off_spy  # type: ignore[method-assign]
+    bundle.lasers[1].on = laser1_on_spy  # type: ignore[method-assign]
+    bundle.lasers[1].off = laser1_off_spy  # type: ignore[method-assign]
+    spies = {
+        "laser0_on": laser0_on_spy,
+        "laser0_off": laser0_off_spy,
+        "laser1_on": laser1_on_spy,
+        "laser1_off": laser1_off_spy,
+    }
+    return bundle, shell, hw, spies
+
+
+def test_preview_worker_both_checked_energizes_only_l1(qtbot) -> None:
+    """PreviewWorker.run with both auto-lasers checked energizes ONLY L1
+    for the session (D-04). lasers[0].on is called; lasers[1].on is NEVER
+    called. stop_lasers at the end turns both off (L2 was never on, so
+    its .off() is a no-op gated by the restored _auto_laser2 flag)."""
+    bundle, shell, hw, spies = _make_d04_shell(
+        auto_laser1=True, auto_laser2=True
+    )
+    shell.preview_mode_started = False  # loop doesn't execute
+    worker = PreviewWorker(bundle, hw, shell)
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+    # L1 energized.
+    spies["laser0_on"].assert_called_once()
+    # L2 NEVER energized — the D-04 guard suppressed _auto_laser2 for the
+    # start_lasers call so start_lasers skipped the L2 branch.
+    spies["laser1_on"].assert_not_called()
+    # stop_lasers at the end — L1 off called (it was on); L2 off NOT
+    # called because the restored _auto_laser2 flag is True but L2 was
+    # never energized... actually stop_lasers reads _auto_laser2 (restored
+    # to True) and calls .off() unconditionally on L2. That is a safe
+    # no-op (L2 is already off). We only assert L1.off was called and L2.on
+    # was NOT called (the invariant).
+    spies["laser0_off"].assert_called_once()
+    assert len(finished_emits) == 1
+
+
+def test_live_worker_both_checked_energizes_only_l1(qtbot) -> None:
+    """LiveWorker.run with both auto-lasers checked energizes ONLY L1
+    for the session (D-04). lasers[0].on is called; lasers[1].on is NEVER
+    called."""
+    bundle, shell, hw, spies = _make_d04_shell(
+        auto_laser1=True, auto_laser2=True
+    )
+    shell.live_mode_started = False  # loop doesn't execute
+    worker = LiveWorker(bundle, hw, shell)
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+    spies["laser0_on"].assert_called_once()
+    spies["laser1_on"].assert_not_called()
+    spies["laser0_off"].assert_called_once()
+    assert len(finished_emits) == 1
+
+
+def test_preview_worker_single_laser_unchanged(qtbot) -> None:
+    """PreviewWorker.run with _auto_laser1=True, _auto_laser2=False
+    energizes only L1 (existing behavior unchanged — the D-04 guard does
+    not fire because both flags are not True). lasers[0].on called,
+    lasers[1].on NOT called (because _auto_laser2 is False, start_lasers
+    skips L2 without the guard)."""
+    bundle, shell, hw, spies = _make_d04_shell(
+        auto_laser1=True, auto_laser2=False
+    )
+    shell.preview_mode_started = False
+    worker = PreviewWorker(bundle, hw, shell)
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+    spies["laser0_on"].assert_called_once()
+    spies["laser1_on"].assert_not_called()
+    spies["laser0_off"].assert_called_once()
+    assert len(finished_emits) == 1
