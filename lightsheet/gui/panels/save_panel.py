@@ -285,9 +285,13 @@ class SavePanelWidget(QWidget):
         ``chN_plane_NNNN`` as produced by ``_list_zarr_datasets``).
 
         Returns the 2D ``(y, x)`` slice for the requested (channel,
-        plane) from the L0 multiscale array, plus the L0 array's attrs
-        (Zarr stores per-plane metadata at the group/array level, not
-        per-slice, so the attrs panel shows the array-level metadata).
+        plane) from the L0 multiscale array, plus the acquisition
+        group's attrs. Zarr stores scan/acquisition metadata on the
+        ``/acquisition`` group (the analog of the HDF5 dataset attrs —
+        Sample Name, Date, motor positions, siggen/camera params), not
+        per-slice on the L0 array. The OME-NGFF channel metadata lives
+        on the root group's ``ome`` attr and is merged in so the attrs
+        panel shows the channel wavelength too.
         """
         import re
 
@@ -305,7 +309,24 @@ class SavePanelWidget(QWidget):
             data = arr[ch, z, :, :]
         else:
             data = arr[z, :, :]
-        return data, dict(arr.attrs)
+        # Metadata: prefer the /acquisition group's attrs (the Zarr
+        # analog of the HDF5 dataset attrs). Fall back to the root attrs
+        # (OME-NGFF metadata) if no acquisition group exists (e.g. a
+        # store written by a different tool).
+        attrs: dict = {}
+        acq = root.get("acquisition")
+        if acq is not None:
+            attrs.update(dict(acq.attrs))
+        # Merge the OME-NGFF channel wavelength for the selected channel
+        # so the operator sees which channel they're viewing.
+        ome = root.attrs.get("ome")
+        if isinstance(ome, dict):
+            channels = ome.get("omero", {}).get("channels", [])
+            if 0 <= ch < len(channels):
+                wl = channels[ch].get("wavelength")
+                if wl is not None:
+                    attrs["Channel Wavelength"] = wl
+        return data, attrs
 
     def updateUi_select_directory(self) -> None:
         """Allows the selection of a directory for single scan or stack saving"""

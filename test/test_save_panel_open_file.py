@@ -27,14 +27,21 @@ def _write_hdf5(path, datasets: dict[str, np.ndarray]) -> None:
             f.create_dataset(name, data=arr)
 
 
-def _write_zarr_store(path, data: np.ndarray, n_channels: int = 1) -> None:
-    """Write a minimal (c, z, y, x) OME-Zarr L0 array via the project's
-    ZarrSaver is overkill; use zarr-python directly to write the L0
-    array the panel reads."""
+def _write_zarr_store(
+    path, data: np.ndarray, n_channels: int = 1, with_acquisition: bool = True
+) -> None:
+    """Write a minimal (c, z, y, x) OME-Zarr L0 array plus an
+    /acquisition group with the scan metadata attrs the panel reads
+    (mirrors what ZarrSaver._write_acquisition_group writes)."""
     import zarr
 
     root = zarr.open_group(path, mode="w")
     root.create_array("0", data=data)
+    if with_acquisition:
+        acq = root.create_group("acquisition")
+        acq.attrs["Sample Name"] = "test-sample"
+        acq.attrs["exposure_time_s"] = 0.05
+        acq.attrs["sample_rate"] = 100000.0
 
 
 def test_list_hdf5_datasets(qtbot, request, tmp_path) -> None:
@@ -120,7 +127,10 @@ def test_read_zarr_dataset_single_channel(qtbot, request, tmp_path) -> None:
     )
     assert slice_.shape == (4, 4)
     assert slice_[0, 0] == 99
-    assert isinstance(attrs, dict)
+    # Attrs come from the /acquisition group (the Zarr analog of the
+    # HDF5 dataset attrs).
+    assert attrs.get("Sample Name") == "test-sample"
+    assert attrs.get("exposure_time_s") == 0.05
 
 
 def test_read_zarr_dataset_multi_channel(qtbot, request, tmp_path) -> None:
@@ -133,11 +143,13 @@ def test_read_zarr_dataset_multi_channel(qtbot, request, tmp_path) -> None:
     data = np.zeros((2, 3, 4, 4), dtype=np.uint16)
     data[1, 2, 0, 0] = 77  # channel 1, plane 3 (0-based index 2)
     _write_zarr_store(zarr_path, data, n_channels=2)
-    slice_, _attrs = ctrl.save_panel._read_zarr_dataset(
+    slice_, attrs = ctrl.save_panel._read_zarr_dataset(
         str(zarr_path), "ch1_plane_0003"
     )
     assert slice_.shape == (4, 4)
     assert slice_[0, 0] == 77
+    # Attrs come from the /acquisition group.
+    assert attrs.get("Sample Name") == "test-sample"
 
 
 def test_list_zarr_datasets_rejects_no_l0_array(qtbot, request, tmp_path) -> None:
