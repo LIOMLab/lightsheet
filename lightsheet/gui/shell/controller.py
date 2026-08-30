@@ -1337,6 +1337,17 @@ class Controller_MainWindow(QMainWindow):
                 text += f" (row {queue_row}/{queue_total})"
         else:
             text = mode
+        # MULTI-CH pill: a persistent suffix appended to the mode text
+        # when both auto-laser checkboxes are checked (the multi-channel
+        # activator). The pill is tied to the checkbox-pair STATE, not to
+        # the per-mode behavior, so it appears/disappears synchronously
+        # with checking/unchecking the second auto-laser box regardless
+        # of mode. The pill inherits the badge's existing QDarkStyle
+        # default text color + bold weight — NO green accent (the green
+        # token is reserved exclusively for laser ● ON status, the
+        # one-laser-energized invariant's visual corollary).
+        if getattr(self, "_auto_laser1", False) and getattr(self, "_auto_laser2", False):
+            text = text + " · MULTI-CH"
         self.ui.label_modeBadge.setText(text)
 
     @Slot(int)
@@ -1373,6 +1384,14 @@ class Controller_MainWindow(QMainWindow):
         """
         self._auto_laser1 = self.laser_panel.ui.checkBox_laserOneAutomatic.isChecked()
         self._auto_laser2 = self.laser_panel.ui.checkBox_laserTwoAutomatic.isChecked()
+        # Re-render the stack-plan summary synchronously with the checkbox
+        # change so the 2ch re-estimate (2x time/size + "2 ch x N planes"
+        # clause) appears the instant the operator toggles the second
+        # auto-laser box. Guarded with hasattr for early-init safety
+        # (stack_panel may not be wired yet during two-phase construction).
+        stack_panel = getattr(self, "stack_panel", None)
+        if stack_panel is not None and hasattr(stack_panel, "_render_stack_plan_summary"):
+            stack_panel._render_stack_plan_summary()
 
     def close_modes(self) -> None:
         """Close all thread modes if they are active.

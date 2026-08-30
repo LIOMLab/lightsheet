@@ -455,3 +455,200 @@ def test_estop_warn_branch_does_not_fire_when_all_off_succeed(qtbot, request) ->
         f"warn branch must not fire when all off() calls succeed; "
         f"got {warn_msgs} in {messages}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# MCA-01 — MULTI-CH badge pill + stack-plan summary 2ch re-render + tooltip
+# --------------------------------------------------------------------------- #
+
+
+def _set_valid_stack_plan(ctrl) -> None:
+    """Set a valid full stack plan (both boundaries + step + n_planes)."""
+    ctrl.stack_first_plane_set = True
+    ctrl.stack_last_plane_set = True
+    ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(100.0)
+    ctrl.stack_panel.ui.doubleSpinBox_acqLastPlane.setValue(200.0)
+    ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
+    ctrl.stack_panel.updateUi_set_number_of_planes()
+
+
+def test_multi_ch_badge_pill_shown_when_both_checked(qtbot, request) -> None:
+    """When both auto-laser checkboxes are checked, _update_mode_badge
+    appends ' · MULTI-CH' to the badge text (the persistent multi-channel
+    pill tied to the checkbox-pair state). SINGLE mode is used because it
+    renders as a clean mode name (no RUNNING suffix), matching the UI-SPEC
+    'SINGLE · MULTI-CH' composition example."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
+    ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(True)
+    ctrl._cache_auto_laser_flags()
+
+    ctrl._update_mode_badge("SINGLE")
+
+    text = ctrl.ui.label_modeBadge.text()
+    assert text == "SINGLE · MULTI-CH", (
+        f"badge must read 'SINGLE · MULTI-CH' when both auto-lasers "
+        f"checked; got {text!r}"
+    )
+    # The pill must NOT apply a green accent stylesheet — the green token
+    # is reserved exclusively for laser ON status. The badge inherits the
+    # existing QDarkStyle default text color + bold weight.
+    assert "34C759" not in ctrl.ui.label_modeBadge.styleSheet().upper()
+
+
+def test_multi_ch_badge_pill_hidden_when_one_checked(qtbot, request) -> None:
+    """When only one (or zero) auto-laser checkbox is checked, the badge
+    text is exactly today's mode text — no pill, no separator."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
+    ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(False)
+    ctrl._cache_auto_laser_flags()
+
+    ctrl._update_mode_badge("SINGLE")
+
+    text = ctrl.ui.label_modeBadge.text()
+    assert text == "SINGLE", (
+        f"badge must read exactly 'SINGLE' (no pill) when only one "
+        f"auto-laser checked; got {text!r}"
+    )
+
+    # Zero checked → also no pill.
+    ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(False)
+    ctrl._cache_auto_laser_flags()
+    ctrl._update_mode_badge("STACK")
+    assert "MULTI-CH" not in ctrl.ui.label_modeBadge.text()
+
+
+def test_cache_auto_laser_flags_triggers_summary_refresh(qtbot, request) -> None:
+    """_cache_auto_laser_flags triggers a stack-plan summary re-render
+    after setting the cached flags, so the 2ch re-estimate appears
+    synchronously with the checkbox change."""
+    from unittest.mock import patch
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    _set_valid_stack_plan(ctrl)
+
+    with patch.object(
+        ctrl.stack_panel, "_render_stack_plan_summary",
+        wraps=ctrl.stack_panel._render_stack_plan_summary,
+    ) as spy:
+        ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
+        ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(True)
+        ctrl._cache_auto_laser_flags()
+
+    assert spy.called, (
+        "_cache_auto_laser_flags must call stack_panel._render_stack_plan_summary"
+    )
+
+
+def test_stack_plan_summary_2ch_doubles_time_and_size(qtbot, request) -> None:
+    """When both auto-laser checkboxes are checked AND a valid stack plan
+    exists, the summary inserts '2 ch × {N} planes' after the Planes clause
+    and doubles BOTH Est. time and Est. size."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    _set_valid_stack_plan(ctrl)
+
+    # Single-channel baseline (one auto-laser).
+    ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
+    ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(False)
+    ctrl.stack_panel._render_stack_plan_summary()
+    single_text = ctrl.stack_panel.ui.label_stackPlanSummary.text()
+
+    # Multi-channel (both checked).
+    ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(True)
+    ctrl.stack_panel._render_stack_plan_summary()
+    multi_text = ctrl.stack_panel.ui.label_stackPlanSummary.text()
+
+    assert "2 ch ×" in multi_text, (
+        f"multi-channel summary must contain '2 ch ×'; got {multi_text!r}"
+    )
+    # The 2ch clause is inserted after the Planes clause.
+    assert "Planes:" in multi_text
+    planes_idx = multi_text.index("Planes:")
+    ch_idx = multi_text.index("2 ch ×")
+    assert ch_idx > planes_idx, "2 ch clause must come after the Planes clause"
+
+    # Est. time doubled: extract the M:SS field from both and compare.
+    def _est_time_seconds(text: str) -> int:
+        marker = "Est. time: "
+        i = text.index(marker) + len(marker)
+        rest = text[i:]
+        mss = rest.split("|")[0].strip()
+        mm, ss = mss.split(":")
+        return int(mm) * 60 + int(ss)
+
+    def _est_size_mb(text: str) -> float:
+        marker = "Est. size: "
+        i = text.index(marker) + len(marker)
+        rest = text[i:]
+        num = rest.split("MB")[0].strip()
+        return float(num)
+
+    # Est. time is rendered as int(seconds) M:SS, so doubling the float
+    # before the int truncation can differ by up to 1s from 2x the
+    # truncated single-channel seconds. Allow a 2s tolerance.
+    single_s = _est_time_seconds(single_text)
+    multi_s = _est_time_seconds(multi_text)
+    assert abs(multi_s - 2 * single_s) <= 2, (
+        f"multi-channel Est. time must be ~2x single-channel; "
+        f"single={single_s}s multi={multi_s}s "
+        f"single={single_text!r} multi={multi_text!r}"
+    )
+    assert abs(_est_size_mb(multi_text) - 2 * _est_size_mb(single_text)) < 0.1, (
+        f"multi-channel Est. size must be 2x single-channel; "
+        f"single={single_text!r} multi={multi_text!r}"
+    )
+
+
+def test_stack_plan_summary_single_channel_byte_identical(qtbot, request) -> None:
+    """When only one auto-laser checkbox is checked, the summary is
+    byte-identical to today's single-channel render (no '2 ch' clause,
+    no doubling). The baseline is captured with zero auto-lasers checked
+    (the default 'today' state) and the one-checked render must match it
+    byte-for-byte."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    _set_valid_stack_plan(ctrl)
+
+    # Baseline: zero auto-lasers checked (today's default single-channel
+    # state — the summary does not branch on the checkbox pair).
+    ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(False)
+    ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(False)
+    ctrl.stack_panel._render_stack_plan_summary()
+    baseline = ctrl.stack_panel.ui.label_stackPlanSummary.text()
+
+    # One auto-laser checked — must be byte-identical to the baseline.
+    ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
+    ctrl.stack_panel._render_stack_plan_summary()
+    one_checked = ctrl.stack_panel.ui.label_stackPlanSummary.text()
+
+    assert one_checked == baseline, (
+        f"single-channel (one auto-laser) summary must be byte-identical "
+        f"to the zero-auto-laser baseline; baseline={baseline!r} "
+        f"one_checked={one_checked!r}"
+    )
+    assert "2 ch" not in baseline
+    assert "2 ch" not in one_checked
+    # Sanity: the baseline has the expected clause shape (no doubling
+    # marker, single Planes clause).
+    assert baseline.count("Planes:") == 1
+    assert baseline.count("Est. time:") == 1
+    assert baseline.count("Est. size:") == 1
+
+
+def test_auto_laser_tooltip_updated(qtbot, request) -> None:
+    """Both auto-laser checkbox tooltips contain the multi-channel
+    consequence sentence ('When BOTH auto-laser boxes are checked')."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    tip1 = ctrl.laser_panel.ui.checkBox_laserOneAutomatic.toolTip()
+    tip2 = ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.toolTip()
+    assert "When BOTH auto-laser boxes are checked" in tip1, (
+        f"L1 auto-laser tooltip must contain the multi-channel "
+        f"consequence sentence; got {tip1!r}"
+    )
+    assert "When BOTH auto-laser boxes are checked" in tip2, (
+        f"L2 auto-laser tooltip must contain the multi-channel "
+        f"consequence sentence; got {tip2!r}"
+    )
+    # The first sentence preserves the per-laser on/off explanation.
+    assert "automatically during acquisition" in tip1
+    assert "automatically during acquisition" in tip2

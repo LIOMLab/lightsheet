@@ -82,7 +82,7 @@
         <item>
          <widget class="QCheckBox" name="checkBox_laserOneAutomatic">
         <property name="toolTip">
-         <string>Auto on/off: when checked, Laser 1 is energized at the start of each acquisition and de-energized at the end. Safety: uncheck to keep the laser under manual toggle control.</string>
+         <string>When checked, this laser turns on/off automatically during acquisition. When BOTH auto-laser boxes are checked, stack and single modes run a sequential multi-channel cycle (laser 1 then laser 2 per plane) and the badge shows MULTI-CH; live and preview energize only the first-checked laser for the session.</string>
         </property>
           <property name="text">
            <string>Auto On/Off</string>
@@ -213,7 +213,7 @@
         <item>
          <widget class="QCheckBox" name="checkBox_laserTwoAutomatic">
         <property name="toolTip">
-         <string>Auto on/off: when checked, Laser 2 is energized at the start of each acquisition and de-energized at the end. Safety: uncheck to keep the laser under manual toggle control.</string>
+         <string>When checked, this laser turns on/off automatically during acquisition. When BOTH auto-laser boxes are checked, stack and single modes run a sequential multi-channel cycle (laser 1 then laser 2 per plane) and the badge shows MULTI-CH; live and preview energize only the first-checked laser for the session.</string>
         </property>
           <property name="text">
            <string>Auto On/Off</string>

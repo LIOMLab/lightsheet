@@ -281,10 +281,31 @@ class StackPanelWidget(QWidget):
         per_plane_s = self._estimate_per_plane_time()
         est_time_s = n_planes * per_plane_s
         est_size_mb = self._estimate_stack_size_mb(n_planes)
+        # Multi-channel: when both auto-laser checkboxes are checked the
+        # stack runs a sequential per-plane cycle (laser 1 then laser 2),
+        # so both Est. time and Est. size double, and a "2 ch x N planes"
+        # clause is inserted after the Planes clause. This is a GUI-thread
+        # slot — reading the checkbox widgets is allowed. Single-channel
+        # (zero or one auto-laser checked) is byte-identical to today's
+        # render: no 2ch clause, no doubling.
+        multi_channel = False
+        laser_panel = getattr(self._shell, "laser_panel", None)
+        if laser_panel is not None:
+            cb1 = getattr(laser_panel.ui, "checkBox_laserOneAutomatic", None)
+            cb2 = getattr(laser_panel.ui, "checkBox_laserTwoAutomatic", None)
+            if cb1 is not None and cb2 is not None:
+                multi_channel = bool(cb1.isChecked() and cb2.isChecked())
+        if multi_channel:
+            est_time_s = est_time_s * 2
+            est_size_mb = est_size_mb * 2
+            ch_clause = f"2 ch × {n_planes} planes | "
+        else:
+            ch_clause = ""
         mm, ss = divmod(int(est_time_s), 60)
         self.ui.label_stackPlanSummary.setText(
             f"Start: {start:.3f} {pos_unit} | End: {end:.3f} {pos_unit} | "
             f"Step: {step:.2f} {step_unit} | Planes: {n_planes} | "
+            f"{ch_clause}"
             f"Est. time: {mm}:{ss:02d} | Est. size: {est_size_mb:.1f} MB"
         )
 
