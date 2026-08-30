@@ -33,8 +33,8 @@ from functools import partial
 
 import numpy as np
 
-from PySide6.QtCore import Qt, QTimer, Signal, Slot
-from PySide6.QtGui import QCloseEvent, QKeySequence
+from PySide6.QtCore import QSize, Qt, QTimer, Signal, Slot
+from PySide6.QtGui import QActionGroup, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractButton,
     QApplication,
@@ -44,6 +44,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QStyle,
 )
 
 from lightsheet.config import cfg_read, cfg_write
@@ -209,6 +210,14 @@ class Controller_MainWindow(QMainWindow):
         # property (a floatable toolbar could be dragged off-screen).
         self.toolBar_estop.setMovable(False)
         self.toolBar_estop.setFloatable(False)
+        # UI-SPEC §Spacing Scale: lg = 24 px for the E-stop toolbar
+        # internal padding. Per-widget stylesheet on the toolbar itself —
+        # the E-stop button's own per-widget setStyleSheet overrides at
+        # the widget level, so this does not affect the safety-red
+        # background (AGENTS.md §2).
+        self.toolBar_estop.setStyleSheet(
+            "QToolBar { spacing: 24px; padding: 0 24px; }"
+        )
 
         # E-stop cooperative-abort event. Starts clear (not set) so the
         # system boots ARMED. Polled at the top of every acquisition worker
@@ -330,6 +339,36 @@ class Controller_MainWindow(QMainWindow):
         self.ui.toolButton_railMotion.setChecked(True)
         self.ui.stackedPanels.setCurrentIndex(0)
 
+        # UI-SPEC §Left-Rail Composition: each of the 8 rail buttons gets
+        # a 24x24 QStyle.SP_* standard icon + a per-button tooltip
+        # following the "{Panel}: {purpose}." pattern. The .ui ships the
+        # buttons with toolButtonStyle=ToolButtonTextUnderIcon, which
+        # reserves the icon area — setting the icons here fills that area
+        # instead of leaving empty space above the label.
+        _style = self.style()
+        _rail_icon_specs = (
+            (self.ui.toolButton_railMotion, QStyle.SP_MediaSkipForward,
+             "Motion: Jog the stage and set positions."),
+            (self.ui.toolButton_railAcquire, QStyle.SP_MediaPlay,
+             "Acquire: Start preview, live, or single-frame acquisition."),
+            (self.ui.toolButton_railStack, QStyle.SP_ToolBarHorizontalExtensionButton,
+             "Stack: Configure and run a z-stack."),
+            (self.ui.toolButton_railScan, QStyle.SP_MediaSeekForward,
+             "Scan: Set galvo/ETL scan parameters."),
+            (self.ui.toolButton_railLasers, QStyle.SP_DialogYesButton,
+             "Lasers: Toggle and set laser power; per-laser status."),
+            (self.ui.toolButton_railFiles, QStyle.SP_DialogSaveButton,
+             "Files: Set save directory, filename, and format."),
+            (self.ui.toolButton_railPast, QStyle.SP_DirOpenIcon,
+             "Past: Browse previously saved acquisitions."),
+            (self.ui.toolButton_railCalibrate, QStyle.SP_DialogResetButton,
+             "Calibrate: Camera/ETL calibration (advanced)."),
+        )
+        for _btn, _sp_icon, _tooltip in _rail_icon_specs:
+            _btn.setIcon(_style.standardIcon(_sp_icon))
+            _btn.setIconSize(QSize(24, 24))
+            _btn.setToolTip(_tooltip)
+
         # Merge each panel's SHELL-OWNED widget attributes onto self.ui.
         # Panel-internal widgets stay on their owning panel's ``ui`` and
         # are reached via the panel-qualified path (hybrid ownership,
@@ -390,6 +429,17 @@ class Controller_MainWindow(QMainWindow):
         # Set configurable settings to default values
         self.cfg_settings = copy.deepcopy(self._cfg_defaults)
         self.cfg_settings = cfg_read("config.ini", "Controller", self.cfg_settings)
+
+        # Reflect the persisted [Controller] Theme onto the checked action
+        # of the exclusive theme QActionGroup (wired above). The read side
+        # in __main__.py reads the same key with a "system" default.
+        _persisted_theme = str(self.cfg_settings.get("Theme", "system")).lower()
+        if _persisted_theme == "light":
+            self.ui.action_lightTheme.setChecked(True)
+        elif _persisted_theme == "dark":
+            self.ui.action_darkTheme.setChecked(True)
+        else:
+            self.ui.action_followSystemTheme.setChecked(True)
 
         units_cfg = str(self.cfg_settings.get("Units", "mm"))
         # The global units toggle is gone — per-field units are now fixed
@@ -524,6 +574,18 @@ class Controller_MainWindow(QMainWindow):
         self.ui.action_lightTheme.triggered.connect(self.updateUi_light_theme)
         self.ui.action_darkTheme.triggered.connect(self.updateUi_dark_theme)
         self.ui.action_followSystemTheme.triggered.connect(self.updateUi_follow_system_theme)
+        # UI-SPEC §Registry Safety: theme actions are checkable + held in
+        # an exclusive QActionGroup so the menu reflects the active theme.
+        # action_followSystemTheme is already checkable per the .ui; the
+        # other two are made checkable here. The persisted-theme → checked
+        # action reflection happens after cfg_settings is loaded below.
+        self.ui.action_lightTheme.setCheckable(True)
+        self.ui.action_darkTheme.setCheckable(True)
+        self._theme_action_group = QActionGroup(self)
+        self._theme_action_group.addAction(self.ui.action_lightTheme)
+        self._theme_action_group.addAction(self.ui.action_darkTheme)
+        self._theme_action_group.addAction(self.ui.action_followSystemTheme)
+        self._theme_action_group.setExclusive(True)
         self.ui.action_showSystemProperties.triggered.connect(self.open_properties_dialog)
         self.ui.actionGuidePdf.triggered.connect(self.open_help)
 
@@ -978,9 +1040,18 @@ class Controller_MainWindow(QMainWindow):
 
     def updateUi_light_theme(self) -> None:
         self.sig_stylesheet.emit("light")
+        # UI-SPEC §Theme Contract (D-01): persist the operator's choice to
+        # config.ini under [Controller] Theme so it survives restart, and
+        # show an ephemeral status-bar hint.
+        cfg_write("config.ini", "Controller", {"Theme": "light"})
+        self.ui.statusbar.showMessage("Theme: Light (saved).", 3000)
+        self.ui.action_lightTheme.setChecked(True)
 
     def updateUi_dark_theme(self) -> None:
         self.sig_stylesheet.emit("dark")
+        cfg_write("config.ini", "Controller", {"Theme": "dark"})
+        self.ui.statusbar.showMessage("Theme: Dark (saved).", 3000)
+        self.ui.action_darkTheme.setChecked(True)
 
     def updateUi_follow_system_theme(self) -> None:
         """Emit the 'system' stylesheet token so the theme manager follows
@@ -989,6 +1060,9 @@ class Controller_MainWindow(QMainWindow):
         resolves 'system' to the current OS appearance and persists the
         override across sessions."""
         self.sig_stylesheet.emit("system")
+        cfg_write("config.ini", "Controller", {"Theme": "system"})
+        self.ui.statusbar.showMessage("Theme: Follow System (saved).", 3000)
+        self.ui.action_followSystemTheme.setChecked(True)
 
     def updateUi_show_hide_images_pane(self) -> None:
         """Toggle the images pane via splitter.setSizes() (audit #7).
@@ -1381,8 +1455,14 @@ class Controller_MainWindow(QMainWindow):
             self._estop_disarmed = True
             self.label_estopStatus.setText("● DISARMED")
             self.label_estopStatus.setStyleSheet("color: #8E8E93; font-weight: bold;")
+            # UI-SPEC §Safety-Critical Invariant: the E-stop button
+            # background stays safety-red in ALL states (ARMED, DISARMED,
+            # ACTUATED) — only the border changes. The DISARMED state is
+            # communicated by the gray status label above, NOT by graying
+            # out the button (a gray E-stop is harder to spot in an
+            # emergency).
             self.pushButton_estop.setStyleSheet(
-                "QPushButton { background-color: #8E8E93; color: white; "
+                "QPushButton { background-color: #FF3B30; color: white; "
                 "font-size: 18px; font-weight: bold; border: 2px solid black; }"
             )
             self.pushButton_armReset.setText("Arm Lasers")

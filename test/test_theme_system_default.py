@@ -409,3 +409,97 @@ def test_build_breeze_script_exists() -> None:
     assert "BREEZE_COMMIT" in content, (
         "build-breeze.sh must pin the BreezeStyleSheets commit via BREEZE_COMMIT"
     )
+
+
+# ---------------------------------------------------------------------------
+# Theme slot persistence + QActionGroup exclusivity (UI-SPEC §Theme Contract).
+# These tests construct the real Controller_MainWindow via make_controller and
+# exercise the updateUi_*_theme slots, asserting cfg_write is called with the
+# right Theme value and the QActionGroup is exclusive + checkable.
+# ---------------------------------------------------------------------------
+
+
+def test_light_theme_slot_persists_to_config(qtbot, request, monkeypatch) -> None:
+    """updateUi_light_theme writes {"Theme": "light"} to config.ini and
+    shows the status-bar hint."""
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    captured: list[tuple] = []
+    import lightsheet.gui.shell.controller as ctrl_mod
+
+    monkeypatch.setattr(
+        ctrl_mod, "cfg_write",
+        lambda filename, section, data: captured.append((filename, section, dict(data))),
+    )
+    ctrl.updateUi_light_theme()
+    assert any(
+        d.get("Theme") == "light" for _, _, d in captured
+    ), f"Expected cfg_write Theme=light, got: {captured}"
+
+
+def test_dark_theme_slot_persists_to_config(qtbot, request, monkeypatch) -> None:
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    captured: list[tuple] = []
+    import lightsheet.gui.shell.controller as ctrl_mod
+
+    monkeypatch.setattr(
+        ctrl_mod, "cfg_write",
+        lambda filename, section, data: captured.append((filename, section, dict(data))),
+    )
+    ctrl.updateUi_dark_theme()
+    assert any(
+        d.get("Theme") == "dark" for _, _, d in captured
+    ), f"Expected cfg_write Theme=dark, got: {captured}"
+
+
+def test_follow_system_theme_slot_persists_to_config(qtbot, request, monkeypatch) -> None:
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    captured: list[tuple] = []
+    import lightsheet.gui.shell.controller as ctrl_mod
+
+    monkeypatch.setattr(
+        ctrl_mod, "cfg_write",
+        lambda filename, section, data: captured.append((filename, section, dict(data))),
+    )
+    ctrl.updateUi_follow_system_theme()
+    assert any(
+        d.get("Theme") == "system" for _, _, d in captured
+    ), f"Expected cfg_write Theme=system, got: {captured}"
+
+
+def test_theme_action_group_is_exclusive_with_three_checkable_actions(
+    qtbot, request,
+) -> None:
+    """ctrl._theme_action_group is exclusive with 3 actions, all checkable."""
+    from PySide6.QtGui import QActionGroup
+
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    group = ctrl._theme_action_group
+    assert isinstance(group, QActionGroup)
+    assert group.isExclusive(), "theme QActionGroup must be exclusive"
+    actions = group.actions()
+    assert len(actions) == 3, (
+        f"theme QActionGroup has {len(actions)} actions, expected 3"
+    )
+    for a in actions:
+        assert a.isCheckable(), f"theme action {a.text()!r} must be checkable"
+
+
+def test_startup_theme_reflected_on_checked_action(qtbot, request, monkeypatch) -> None:
+    """The persisted [Controller] Theme is reflected onto the checked
+    action of the exclusive group on startup. With the default config.ini
+    (no Theme key → 'system'), action_followSystemTheme is checked."""
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    # config.ini has no [Controller] Theme key → default 'system'.
+    assert ctrl.ui.action_followSystemTheme.isChecked()
+    assert not ctrl.ui.action_lightTheme.isChecked()
+    assert not ctrl.ui.action_darkTheme.isChecked()

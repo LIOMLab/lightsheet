@@ -71,7 +71,9 @@ def test_estop_actuated_state(qtbot, request) -> None:
 def test_first_arm_reset_press_transitions_to_disarmed(qtbot, request) -> None:
     """After the first Arm/Reset press (ACTUATED -> DISARMED):
     label_estopStatus shows '● DISARMED' with color #8E8E93,
-    pushButton_armReset shows 'Arm Lasers'."""
+    pushButton_armReset shows 'Arm Lasers'. The E-stop button itself
+    stays safety-red (#FF3B30) — only the status label goes gray
+    (UI-SPEC §Safety-Critical Invariant)."""
     ctrl, _bundle = make_controller(qtbot, request)
     _patch_refresh(ctrl, request)
 
@@ -86,6 +88,33 @@ def test_first_arm_reset_press_transitions_to_disarmed(qtbot, request) -> None:
     )
     # The cooperative-abort Event is cleared on the first press.
     assert not ctrl.estop_event.is_set()
+    # B1 safety: the E-stop button stays red in DISARMED state — the
+    # gray (#8E8E93) belongs to the status label only, NOT the button.
+    assert "#FF3B30" in ctrl.pushButton_estop.styleSheet(), (
+        "E-stop button must stay #FF3B30 red in DISARMED state "
+        "(UI-SPEC §Safety-Critical Invariant — a gray E-stop is harder "
+        "to spot in an emergency)"
+    )
+    assert "#8E8E93" not in ctrl.pushButton_estop.styleSheet(), (
+        "E-stop button must NOT be gray (#8E8E93) in DISARMED state — "
+        "the gray belongs on label_estopStatus only"
+    )
+
+
+def test_disarmed_button_stays_red(qtbot, request) -> None:
+    """B1 safety gate: after ACTUATED -> DISARMED, the E-stop button
+    background is #FF3B30 (red), NOT #8E8E93 (gray). The gray indicator
+    stays on label_estopStatus only."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    _patch_refresh(ctrl, request)
+
+    ctrl.updateUi_estop_pressed()
+    ctrl.updateUi_arm_reset_pressed()  # ACTUATED -> DISARMED
+
+    assert "#FF3B30" in ctrl.pushButton_estop.styleSheet()
+    assert "#8E8E93" not in ctrl.pushButton_estop.styleSheet()
+    # The label keeps the gray indicator.
+    assert "#8E8E93" in ctrl.label_estopStatus.styleSheet()
 
 
 def test_second_arm_reset_press_transitions_to_armed(qtbot, request) -> None:

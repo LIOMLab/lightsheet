@@ -24,6 +24,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import QSize
 from PySide6.QtWidgets import QButtonGroup, QWidget
 
 from _helpers.controller_fixture import make_controller
@@ -136,3 +137,24 @@ def test_phase9_extension_seam_adds_ninth_page(qtbot, request) -> None:
     # Clean up the added page so it does not leak into other tests.
     ctrl.ui.stackedPanels.removeWidget(ninth)
     ninth.deleteLater()
+
+
+def test_rail_buttons_have_icons_and_tooltips(qtbot, request) -> None:
+    """UI-SPEC §Left-Rail Composition: all 8 rail buttons have a non-null
+    24x24 icon and a non-empty tooltip matching the '{Panel}: {purpose}.'
+    pattern."""
+    ctrl, _ = make_controller(qtbot, request)
+    for name in _RAIL_BUTTON_NAMES:
+        btn = getattr(ctrl.ui, name)
+        assert not btn.icon().isNull(), (
+            f"{name} has no icon set (UI-SPEC mandates a 24x24 SP_* icon)"
+        )
+        assert btn.iconSize() == QSize(24, 24), (
+            f"{name} iconSize is {btn.iconSize()}, expected QSize(24, 24)"
+        )
+        tip = btn.toolTip()
+        assert tip != "", f"{name} has an empty tooltip"
+        # The tooltip pattern is "{Panel}: {purpose}." — assert it contains
+        # a colon and ends with a period.
+        assert ":" in tip, f"{name} tooltip {tip!r} should follow '{{Panel}}: {{purpose}}.'"
+        assert tip.endswith("."), f"{name} tooltip {tip!r} should end with '.'"
