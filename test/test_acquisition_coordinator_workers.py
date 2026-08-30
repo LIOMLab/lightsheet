@@ -943,6 +943,143 @@ def test_stack_worker_multi_channel_estop_mid_plane(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
+def test_stack_worker_multi_channel_timeout_after_channel0(qtbot) -> None:
+    """StackWorker.run multi-channel: if camera.recorder_timeout_status
+    is set after the channel-0 acquire_scan, the loop breaks before
+    select_laser(1) runs for that plane (the timeout/error check after
+    channel 0 aborts the per-plane cycle). finished.emit fires once."""
+    worker, shell, hw = _make_stack_worker(qtbot, multi_channel=True)
+    shell.stack_mode_started = True
+    shell.saving_allowed = False
+    shell.number_of_planes = 2
+    select_calls: list[int] = []
+    hw.select_laser.side_effect = lambda idx: select_calls.append(idx)
+    acquire_count = {"n": 0}
+
+    def _fake_acquire_scan():
+        acquire_count["n"] += 1
+        shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
+        # Set timeout after the first acquire_scan (channel 0 of plane 0).
+        worker.camera.recorder_timeout_status = True
+
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+    # Only select_laser(0) called (channel 0 of plane 0); select_laser(1)
+    # never called because the timeout check after channel 0 broke the
+    # per-plane cycle.
+    assert select_calls == [0]
+    assert acquire_count["n"] == 1
+    hw.stop_lasers.assert_called_once()
+    assert len(finished_emits) == 1
+
+
+def test_stack_worker_multi_channel_siggen_error_after_channel1(qtbot) -> None:
+    """StackWorker.run multi-channel: if siggen.error is set after the
+    channel-1 acquire_scan, the loop breaks (the timeout/error check
+    after channel 1 aborts before enqueuing). finished.emit fires once."""
+    worker, shell, hw = _make_stack_worker(qtbot, multi_channel=True)
+    shell.stack_mode_started = True
+    shell.saving_allowed = True
+    shell.number_of_planes = 2
+    hw.select_laser = Mock()
+    acquire_count = {"n": 0}
+
+    def _fake_acquire_scan():
+        acquire_count["n"] += 1
+        shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
+        if acquire_count["n"] == 2:
+            # Set siggen error after channel 1 of plane 0.
+            worker.siggen.error = 1
+
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+    # acquire_scan called twice (channel 0 + channel 1 of plane 0); the
+    # siggen error after channel 1 broke before enqueuing.
+    assert acquire_count["n"] == 2
+    # enqueue_buffer NOT called — the error break happened before the
+    # enqueue block.
+    shell._fs.enqueue_buffer.assert_not_called()
+    hw.stop_lasers.assert_called_once()
+    assert len(finished_emits) == 1
+
+
+def test_stack_worker_multi_channel_estop_after_select_laser1(qtbot) -> None:
+    """StackWorker.run multi-channel: if estop_event is set after
+    select_laser(1) (between channel 1 energize and channel 1
+    acquire_scan), the loop breaks before the channel-1 acquire_scan.
+    finished.emit fires once."""
+    worker, shell, hw = _make_stack_worker(qtbot, multi_channel=True)
+    shell.stack_mode_started = True
+    shell.saving_allowed = False
+    shell.number_of_planes = 2
+    shell.estop_event.is_set.return_value = False
+    select_calls: list[int] = []
+
+    def _fake_select_laser(idx):
+        select_calls.append(idx)
+        if idx == 1:
+            # E-stop after select_laser(1), before channel-1 acquire_scan.
+            shell.estop_event.is_set.return_value = True
+
+    hw.select_laser.side_effect = _fake_select_laser
+    acquire_count = {"n": 0}
+
+    def _fake_acquire_scan():
+        acquire_count["n"] += 1
+        shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
+
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+    # select_laser(0) + select_laser(1) called; acquire_scan ran once
+    # (channel 0 only — estop before channel 1's acquire_scan).
+    assert select_calls == [0, 1]
+    assert acquire_count["n"] == 1
+    hw.stop_lasers.assert_called_once()
+    assert len(finished_emits) == 1
+
+
+def test_stack_worker_multi_channel_none_frames_skips_enqueue(qtbot) -> None:
+    """StackWorker.run multi-channel: when acquire_scan leaves
+    reconstructed_frame as None (a failed scan that did not populate the
+    frame), frame1/frame2 are captured as None and the enqueue is
+    skipped (the `frame1 is not None and frame2 is not None` guard).
+    The reconstructed_frames dict stays empty. finished.emit fires once."""
+    worker, shell, hw = _make_stack_worker(qtbot, multi_channel=True)
+    shell.stack_mode_started = True
+    shell.saving_allowed = True
+    shell.number_of_planes = 1
+    hw.select_laser = Mock()
+
+    def _fake_acquire_scan():
+        # Leave reconstructed_frame as None (failed scan path).
+        shell.reconstructed_frame = None
+
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+    # enqueue_buffer NOT called — both frames were None.
+    shell._fs.enqueue_buffer.assert_not_called()
+    # reconstructed_frames dict stays empty (no non-None frames stored).
+    assert shell.reconstructed_frames == {}
+    hw.stop_lasers.assert_called_once()
+    assert len(finished_emits) == 1
+
+
 # -- _spawn_stack_worker multi_channel pre-sampling (AGENTS.md §11) ---------
 
 
