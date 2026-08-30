@@ -65,6 +65,31 @@ def test_levels_bar_has_sig_range_changed(qtbot) -> None:
     assert (0, 4000) in received
 
 
+def test_set_data_range_clamps_user_owned_range_into_narrowed_bounds(qtbot) -> None:
+    """When the operator has dragged a RANGE handle (_range_user_owned), a
+    subsequent dtype change that narrows the data bounds must clamp the
+    user-owned range into the new bounds. _value_to_x maps handle positions
+    against the data bounds, so an unclamped range_max > data_max would
+    draw the range_max handle off-screen (x > width). Also verifies
+    sig_rangeChanged fires so the ImageView colormap range stays
+    consistent."""
+    bar = _make_bar(qtbot)
+    bar.set_data_range(0, 65535)  # uint16
+    # Operator drags range_max out to 50000 (within uint16 data bounds).
+    bar._range_user_owned = True
+    bar._range_max = 50000
+    range_events: list[tuple[int, int]] = []
+    bar.sig_rangeChanged.connect(lambda lo, hi: range_events.append((lo, hi)))
+    # Dtype change narrows the data bounds to uint8 (0-255).
+    bar.set_data_range(0, 255)
+    assert bar.range_max <= 255, f"range_max {bar.range_max} not clamped into uint8 bounds"
+    assert bar.range_min >= 0
+    # The range was clamped, so sig_rangeChanged fired with the new bounds.
+    assert any(hi <= 255 for _, hi in range_events), (
+        f"sig_rangeChanged did not fire with clamped range: {range_events}"
+    )
+
+
 def test_levels_bar_min_size_and_size_policy(qtbot) -> None:
     from PySide6.QtWidgets import QSizePolicy
 

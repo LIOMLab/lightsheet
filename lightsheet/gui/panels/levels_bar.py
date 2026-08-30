@@ -179,12 +179,25 @@ class LevelsBar(QWidget):
         self._data_min = new_min
         self._data_max = new_max
         if self._range_user_owned:
-            # The operator owns the range; only clamp the window into it.
+            # The operator owns the range, but a dtype change can narrow
+            # the data bounds below the user-owned range (e.g. uint16 ->
+            # uint8). _value_to_x maps handle positions against the data
+            # bounds, so an unclamped range_max > data_max would draw the
+            # handle off-screen. Clamp the range into the new data bounds
+            # first, then clamp the window into the (now valid) range.
+            old_rmin, old_rmax = self._range_min, self._range_max
+            self._range_min = max(self._data_min, min(self._range_min, self._data_max))
+            self._range_max = max(self._range_min, min(self._range_max, self._data_max))
+            range_changed = (self._range_min, self._range_max) != (old_rmin, old_rmax)
             old_wmin, old_wmax = self._window_min, self._window_max
             self._window_min = max(self._range_min, min(self._window_min, self._range_max))
             self._window_max = max(self._window_min, min(self._window_max, self._range_max))
-            if (self._window_min, self._window_max) != (old_wmin, old_wmax):
+            window_changed = (self._window_min, self._window_max) != (old_wmin, old_wmax)
+            if range_changed:
+                self.sig_rangeChanged.emit(self._range_min, self._range_max)
+            if window_changed:
                 self.sig_levelsChanged.emit(self._window_min, self._window_max)
+            if range_changed or window_changed:
                 self.update()
             return
         if new_min == self._range_min and new_max == self._range_max:
