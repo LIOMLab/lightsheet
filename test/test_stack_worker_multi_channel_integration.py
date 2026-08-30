@@ -160,24 +160,30 @@ def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
             )
 
 
-def test_stack_worker_multi_channel_stitch_branch_writes_per_channel_files(
+def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
     qtbot, request, tmp_path
 ) -> None:
     """StackWorker.run in multi-channel stitch mode (the default
     reconstructed_frame branch — save_all_crop=False, save_all_full=False)
-    calls set_files with number_of_files=number_of_planes and
-    number_of_datasets=1, matching the crop/full branch convention, so
-    the save worker's total_files equals n_channels * n_planes and the
-    consumer drains every enqueued frame instead of exiting early and
-    deadlocking the producer on a full bounded queue.
+    writes ONE HDF5 file per channel, each containing all planes as
+    datasets — mirroring the single-channel stitch convention
+    (set_files(1, ..., number_of_planes, "reconstructed_frame")) extended
+    to one file per channel.
 
-    Regression gate for the stitch-branch convention mismatch: the
-    single-channel stitch call set_files(1, ..., number_of_planes, ...)
-    is the "1 file containing N datasets" form; under multi-channel the
-    save loops compute total_files = n_channels * 1 = 2, write 2 files,
-    and exit while the acquisition thread enqueues n_channels * n_planes
-    frames into a queue (maxsize=6) that fills and blocks forever.
+    The _plane_00001 segment in the filename is the collision-avoidance
+    sequence (number_of_files=1 → only plane_00001), NOT a plane index.
+    Each per-channel file holds number_of_planes datasets
+    (reconstructed_frame001.. reconstructed_frameNNN).
+
+    Regression gate for the per-(channel,plane) convention bug: the
+    prior fix switched multi-channel stitch to the crop/full convention
+    (one file per plane per channel), which produced one file per plane
+    instead of one container per channel. The save loop must open ONE
+    file per channel and write multiple datasets into it, terminating on
+    frames consumed (n_channels * n_planes) — not files written.
     """
+    import h5py
+
     from _helpers.controller_fixture import make_controller
     from lightsheet.gui.workers import StackWorker
 
@@ -203,11 +209,10 @@ def test_stack_worker_multi_channel_stitch_branch_writes_per_channel_files(
     ctrl.current_camera_position_text = "0.0"
 
     # Stitch save path (the default reconstructed_frame branch):
-    # save_all_crop=False, save_all_full=False. The fix branches
-    # set_files on _multi_channel so multi-channel uses
-    # number_of_files=number_of_planes, number_of_datasets=1 — matching
-    # the crop/full branches and yielding total_files = n_channels *
-    # n_planes (4) so the save worker drains every enqueued frame.
+    # save_all_crop=False, save_all_full=False. Multi-channel stitch
+    # uses the "1 file per channel containing N datasets" convention —
+    # set_files(1, ..., number_of_planes, "reconstructed_frame",
+    # wavelengths=[...]) — so filenames_lists has 1 entry per channel.
     ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
     ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
 
@@ -245,9 +250,8 @@ def test_stack_worker_multi_channel_stitch_branch_writes_per_channel_files(
         worker.finished.connect(lambda: finished_emits.append(None))
         worker.run()
 
-    # The worker must have emitted finished exactly once — the
-    # regression symptom is a deadlock where run() never returns and
-    # this assertion is never reached.
+    # The worker must have emitted finished exactly once — a deadlock
+    # would never reach this assertion.
     assert len(finished_emits) == 1, (
         f"StackWorker.run must emit finished exactly once; "
         f"got {len(finished_emits)} (stitch multi-channel must not "
@@ -256,17 +260,17 @@ def test_stack_worker_multi_channel_stitch_branch_writes_per_channel_files(
 
     # The save side must have drained: saving_started is False after
     # run() returns (the save worker exited its consumer loop after
-    # writing total_files = n_channels * n_planes frames).
+    # consuming n_channels * n_planes frames).
     assert ctrl._fs.frame_saver.saving_started is False, (
         "stitch multi-channel save worker must drain and exit — "
         "saving_started should be False after run() returns"
     )
 
     # set_files convention verification: the stitch branch must call
-    # set_files(number_of_planes, ..., 1, "reconstructed_frame",
-    # wavelengths=[...]) in multi-channel mode — yielding
-    # filenames_lists with 2 channels, each with number_of_planes
-    # entries (total_files = 2 * 2 = 4).
+    # set_files(1, ..., number_of_planes, "reconstructed_frame",
+    # wavelengths=[...]) in multi-channel mode — the "1 file per
+    # channel containing N datasets" form. filenames_lists has 2
+    # channels, each with 1 entry (number_of_files=1).
     fs = ctrl._fs.frame_saver
     assert isinstance(fs.filenames_lists, list), (
         "filenames_lists must be a list of lists in multi-channel "
@@ -277,9 +281,9 @@ def test_stack_worker_multi_channel_stitch_branch_writes_per_channel_files(
         f"got {len(fs.filenames_lists)}"
     )
     for ch in range(2):
-        assert len(fs.filenames_lists[ch]) == 2, (
-            f"channel {ch} must have number_of_planes (2) entries; "
-            f"got {len(fs.filenames_lists[ch])}"
+        assert len(fs.filenames_lists[ch]) == 1, (
+            f"channel {ch} must have 1 entry (one file per channel, "
+            f"not one per plane); got {len(fs.filenames_lists[ch])}"
         )
 
     # The filenames must carry the per-channel wavelength suffix read
@@ -293,17 +297,42 @@ def test_stack_worker_multi_channel_stitch_branch_writes_per_channel_files(
         f"got {fs.filenames_lists[1][0]}"
     )
 
-    # The real save worker must have written the HDF5 files to disk —
-    # the consumer drained every enqueued tagged frame (no deadlock).
+    # The real save worker must have written exactly ONE HDF5 file per
+    # channel to disk (the consumer drained every enqueued tagged frame
+    # into the per-channel container, no deadlock).
+    per_channel_files = []
     for ch in range(2):
-        for plane in range(2):
-            fname = fs.filenames_lists[ch][plane]
-            p = Path(fname)
-            assert p.exists(), (
-                f"channel {ch} plane {plane} HDF5 file must exist on "
-                f"disk after the real save worker drained: {p}"
+        fname = fs.filenames_lists[ch][0]
+        p = Path(fname)
+        assert p.exists(), (
+            f"channel {ch} HDF5 file must exist on disk after the real "
+            f"save worker drained: {p}"
+        )
+        assert p.suffix == ".hdf5", (
+            f"channel {ch} must be an .hdf5 file; got {p.suffix}"
+        )
+        per_channel_files.append(p)
+
+    # Each per-channel file must contain number_of_planes (2) datasets —
+    # the "1 file containing N datasets" convention. Datasets are named
+    # reconstructed_frame001, reconstructed_frame002 (per-channel
+    # counter, 1-based).
+    for ch, p in enumerate(per_channel_files):
+        with h5py.File(p, "r") as f:
+            ds_keys = [
+                k for k in f.keys()
+                if k.startswith("reconstructed_frame")
+            ]
+            assert len(ds_keys) == ctrl.number_of_planes, (
+                f"channel {ch} file {p.name} must contain "
+                f"{ctrl.number_of_planes} datasets (one per plane); "
+                f"got {len(ds_keys)}: {sorted(ds_keys)}"
             )
-            assert p.suffix == ".hdf5", (
-                f"channel {ch} plane {plane} must be an .hdf5 file; "
-                f"got {p.suffix}"
+            assert "reconstructed_frame001" in ds_keys, (
+                f"channel {ch} must have dataset reconstructed_frame001; "
+                f"got {sorted(ds_keys)}"
+            )
+            assert "reconstructed_frame002" in ds_keys, (
+                f"channel {ch} must have dataset reconstructed_frame002; "
+                f"got {sorted(ds_keys)}"
             )

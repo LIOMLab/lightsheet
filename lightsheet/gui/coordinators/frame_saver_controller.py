@@ -592,119 +592,179 @@ class FrameSaver(QObject):
         """Multi-channel HDF5 save loop body.
 
         Consumes channel-tagged ``(channel_idx, frame)`` tuples from the
-        single save queue and writes each frame to the correct per-channel
-        HDF5 file (``self.filenames_lists[channel_idx][plane_idx]``). The
-        ``_vNN`` collision avoidance already ran in ``set_files``; this
-        method only opens, writes, and closes each file.
+        single save queue and writes each frame as a dataset into the
+        correct per-channel HDF5 file. The file/dataset convention is
+        driven by ``number_of_files`` and ``number_of_datasets`` — the
+        same two conventions as single-channel mode:
+
+        - Stitch (``number_of_files=1``, ``number_of_datasets=n_planes``):
+          ONE file per channel containing all planes as datasets
+          (``reconstructed_frame001``.. ``reconstructed_frameNNN``).
+        - Crop/Full (``number_of_files=n_planes``,
+          ``number_of_datasets=1``): one file per (channel, plane), each
+          holding one dataset.
+
+        Frames arrive interleaved across channels (L1 plane0, L2 plane0,
+        L1 plane1, ...), so the loop opens the first file per channel up
+        front and advances each channel's (file_idx, dataset_counter)
+        state independently as that channel's tagged frames arrive. When
+        a channel's current file fills (``dataset_counter >
+        number_of_datasets``), the file is closed, the channel's file
+        index advances, and the next file (if any) is opened.
 
         The single-consumer queue contract is preserved: one queue, one
         consume loop, one ``sig_finished`` → ``thread.quit`` →
-        ``wait(10000)``. The channel tag branches WITHIN the existing
-        consume loop — the queue is NOT split into two queues and no
-        second consumer is added.
-
-        Per-channel plane counters track which file in each channel's
-        list is next. Both channels of the same plane share the same
-        motor position (``horizontal_positions_list[plane_idx]`` etc.)
-        — ``add_motor_parameters`` is called once per plane by the
-        acquisition worker, so the positions list has one entry per
-        plane regardless of channel count.
+        ``wait(10000)``. Termination is on frames consumed
+        (``n_channels * number_of_files * number_of_datasets``), NOT
+        files written. Both channels of the same plane share the same
+        motor position (``add_motor_parameters`` is called once per
+        plane by the acquisition worker).
         """
         n_channels = len(self.filenames_lists)
-        plane_counters = [0] * n_channels
-        total_files = sum(len(lst) for lst in self.filenames_lists)
-        files_written = 0
+        n_files_per_channel = self.number_of_files
+        n_datasets_per_file = int(self.number_of_datasets)
+        total_frames = n_channels * n_files_per_channel * n_datasets_per_file
+        # Per-channel state: file index (0-based into filenames_lists[ch]),
+        # dataset counter (1-based for naming), and the open file handle.
+        file_idx = [0] * n_channels
+        ds_counter = [1] * n_channels
+        outfiles: list = [None] * n_channels
+        frames_written = 0
         aborted = False
 
-        while files_written < total_files:
-            try:
-                item = self.queue.get(True, 1)
-            except queue.Empty:
-                if not self.saving_started:
-                    try:
-                        item = self.queue.get_nowait()
-                    except queue.Empty:
-                        aborted = True
-                        break
-                else:
-                    continue
-
-            # Branch on the channel tag: a tagged tuple routes to the
-            # correct per-channel filename list; a bare ndarray falls
-            # back to channel 0 (back-compat for any producer that has
-            # not migrated to the tagged form).
-            if isinstance(item, tuple):
-                channel_idx, frame = item
-            else:
-                channel_idx = 0
-                frame = item
-
-            if channel_idx < 0 or channel_idx >= n_channels:
-                self.sig_status_message.emit(
-                    f"Save error: channel index {channel_idx} out of range "
-                    f"(0..{n_channels - 1})"
-                )
-                self.saving_started = False
-                aborted = True
-                break
-
-            plane_idx = plane_counters[channel_idx]
-            if plane_idx >= len(self.filenames_lists[channel_idx]):
-                # Producer over-ran this channel — drop the extra frame
-                # without counting it as a write. Counting it would let
-                # files_written reach total_files while other channels
-                # still have unprocessed frames in the queue, exiting the
-                # loop early and dropping the remaining frames.
-                continue
-
-            filename = self.filenames_lists[channel_idx][plane_idx]
-            logger.info("File created: %s", filename)
-            outfile = h5py.File(filename, "a")
-            try:
+        try:
+            # Open the first file for each channel and write root metadata.
+            for ch in range(n_channels):
+                filename = self.filenames_lists[ch][0]
+                logger.info("File created: %s", filename)
+                outfile = h5py.File(filename, "a")
                 self._write_laser_metadata(outfile)
                 self._write_acquisition_metadata(outfile)
-                if frame.ndim == 2:
-                    frame = np.expand_dims(frame, axis=0)
-                counter = 1
-                for f_idx in range(frame.shape[0]):
-                    path_root = self.datasets_name + f"{counter:03d}"
-                    self.dataset = outfile.create_dataset(
-                        path_root, data=frame[f_idx, :, :]
+                outfiles[ch] = outfile
+
+            while frames_written < total_frames:
+                try:
+                    item = self.queue.get(True, 1)
+                except queue.Empty:
+                    if not self.saving_started:
+                        try:
+                            item = self.queue.get_nowait()
+                        except queue.Empty:
+                            aborted = True
+                            break
+                    else:
+                        continue
+
+                # Branch on the channel tag: a tagged tuple routes to
+                # the correct per-channel file; a bare ndarray falls back
+                # to channel 0 (back-compat for any producer that has not
+                # migrated to the tagged form).
+                if isinstance(item, tuple):
+                    channel_idx, frame = item
+                else:
+                    channel_idx = 0
+                    frame = item
+
+                if channel_idx < 0 or channel_idx >= n_channels:
+                    self.sig_status_message.emit(
+                        f"Save error: channel index {channel_idx} out of "
+                        f"range (0..{n_channels - 1})"
                     )
-                    logger.info(
-                        "Dataset created: %s (channel %d plane %d)",
-                        path_root, channel_idx, plane_idx,
+                    self.saving_started = False
+                    aborted = True
+                    break
+
+                if outfiles[channel_idx] is None:
+                    # Channel already filled all its files — producer
+                    # over-ran. Drop the extra frame without counting it
+                    # (counting would let frames_written reach
+                    # total_frames while other channels still have queued
+                    # frames, exiting early and dropping them).
+                    continue
+
+                outfile = outfiles[channel_idx]
+                # 0-based dataset index within the current file, and the
+                # global plane index within the channel (for motor
+                # positions — one snapshot per plane, shared by both
+                # channels of the same plane).
+                ds_idx = ds_counter[channel_idx] - 1
+                pos_index = (
+                    file_idx[channel_idx] * n_datasets_per_file + ds_idx
+                )
+                try:
+                    if frame.ndim == 2:
+                        frame = np.expand_dims(frame, axis=0)
+                    for f_idx in range(frame.shape[0]):
+                        path_root = (
+                            self.datasets_name
+                            + f"{ds_counter[channel_idx]:03d}"
+                        )
+                        self.dataset = outfile.create_dataset(
+                            path_root, data=frame[f_idx, :, :]
+                        )
+                        logger.info(
+                            "Dataset created: %s (channel %d plane %d)",
+                            path_root, channel_idx, pos_index,
+                        )
+                        self.dataset.attrs["Sample Name"] = self.sample_name
+                        self.dataset.attrs["Date"] = str(datetime.date.today())
+                        if pos_index < len(self.horizontal_positions_list):
+                            self.dataset.attrs["Horizontal Position"] = (
+                                self.horizontal_positions_list[pos_index]
+                            )
+                            self.dataset.attrs["Vertical Position"] = (
+                                self.vertical_positions_list[pos_index]
+                            )
+                            self.dataset.attrs["Camera Position"] = (
+                                self.camera_positions_list[pos_index]
+                            )
+                        ds_counter[channel_idx] += 1
+                        frames_written += 1
+                except Exception as e:
+                    self.sig_status_message.emit(f"Save error: {e}")
+                    self.saving_started = False
+                    aborted = True
+                    break
+
+                # If the current file is full, close it and open the
+                # next file for this channel (if any).
+                if ds_counter[channel_idx] > n_datasets_per_file:
+                    outfile.close()
+                    self.sig_status_message.emit(
+                        "File "
+                        + self.filenames_lists[channel_idx][file_idx[channel_idx]]
+                        + " saved"
                     )
-                    self.dataset.attrs["Sample Name"] = self.sample_name
-                    self.dataset.attrs["Date"] = str(datetime.date.today())
-                    # Both channels of the same plane share the motor position
-                    pos_index = plane_idx
-                    if pos_index < len(self.horizontal_positions_list):
-                        self.dataset.attrs["Horizontal Position"] = (
-                            self.horizontal_positions_list[pos_index]
-                        )
-                        self.dataset.attrs["Vertical Position"] = (
-                            self.vertical_positions_list[pos_index]
-                        )
-                        self.dataset.attrs["Camera Position"] = (
-                            self.camera_positions_list[pos_index]
-                        )
-                    counter += 1
-            except Exception as e:
-                self.sig_status_message.emit(f"Save error: {e}")
-                self.saving_started = False
-                aborted = True
-                outfile.close()
-                break
-            outfile.close()
-            self.sig_status_message.emit("File " + filename + " saved")
-            plane_counters[channel_idx] += 1
-            files_written += 1
+                    file_idx[channel_idx] += 1
+                    if file_idx[channel_idx] < n_files_per_channel:
+                        next_filename = self.filenames_lists[channel_idx][
+                            file_idx[channel_idx]
+                        ]
+                        logger.info("File created: %s", next_filename)
+                        next_outfile = h5py.File(next_filename, "a")
+                        self._write_laser_metadata(next_outfile)
+                        self._write_acquisition_metadata(next_outfile)
+                        outfiles[channel_idx] = next_outfile
+                        ds_counter[channel_idx] = 1
+                    else:
+                        # Channel exhausted its files — no more opens.
+                        outfiles[channel_idx] = None
+        except Exception as e:
+            self.sig_status_message.emit(f"Save error: {e}")
+            self.saving_started = False
+            aborted = True
+        finally:
+            for outfile in outfiles:
+                if outfile is not None:
+                    try:
+                        outfile.close()
+                    except Exception:
+                        pass
 
         logger.info(
             "frame_saver_worker (multi-channel) exited "
-            "(saving_started=%s, files_written=%d)",
-            self.saving_started, files_written,
+            "(saving_started=%s, frames_written=%d)",
+            self.saving_started, frames_written,
         )
 
     def zarr_save_worker(self) -> None:
@@ -1084,9 +1144,14 @@ class FrameSaver(QObject):
         single save queue and writes each frame to BOTH the correct
         per-channel HDF5 file AND the Zarr store in one pass.
 
-        HDF5 half: branches on the channel tag to write to
-        ``self.filenames_lists[channel_idx][plane_idx]`` — exactly as
-        ``_frame_saver_worker_multi_channel`` does.
+        HDF5 half: same file/dataset convention as
+        ``_frame_saver_worker_multi_channel`` — stitch (1 file/channel,
+        N datasets) or crop/full (N files/channel, 1 dataset each),
+        driven by ``number_of_files`` / ``number_of_datasets``. Frames
+        arrive interleaved across channels; the loop opens the first
+        file per channel up front and advances each channel's
+        (file_idx, dataset_counter) state independently, closing and
+        opening files as each fills.
 
         Zarr half: branches on the same channel tag to call
         ``write_plane(channel_idx, cz, frame, ...)`` with a per-channel
@@ -1095,9 +1160,10 @@ class FrameSaver(QObject):
         Channel 0 is the canonical motor-position recorder (write_plane
         guards the append on ``channel_idx == 0``).
 
-        The single-consumer queue contract is preserved: one queue, one
-        consume loop, one ``sig_finished`` → ``thread.quit`` →
-        ``wait(10000)``.
+        Termination is on frames consumed (``n_channels * n_planes``),
+        NOT files written. The single-consumer queue contract is
+        preserved: one queue, one consume loop, one ``sig_finished`` →
+        ``thread.quit`` → ``wait(10000)``.
         """
         n_planes = self.number_of_files * int(self.number_of_datasets)
         store_path = os.path.normpath(
@@ -1116,14 +1182,29 @@ class FrameSaver(QObject):
             self.saving_started = False
             return
 
-        plane_counters = [0] * n_channels
-        total_files = sum(len(lst) for lst in self.filenames_lists)
-        files_written = 0
+        n_files_per_channel = self.number_of_files
+        n_datasets_per_file = int(self.number_of_datasets)
+        total_frames = n_channels * n_files_per_channel * n_datasets_per_file
+        # Per-channel state: file index (0-based into filenames_lists[ch]),
+        # dataset counter (1-based for naming), and the open file handle.
+        file_idx = [0] * n_channels
+        ds_counter = [1] * n_channels
+        outfiles: list = [None] * n_channels
+        frames_written = 0
         z_idx_per_channel: dict[int, int] = {}
         aborted = False
 
         try:
-            while files_written < total_files:
+            # Open the first file for each channel and write root metadata.
+            for ch in range(n_channels):
+                filename = self.filenames_lists[ch][0]
+                logger.info("File created: %s", filename)
+                outfile = h5py.File(filename, "a")
+                self._write_laser_metadata(outfile)
+                self._write_acquisition_metadata(outfile)
+                outfiles[ch] = outfile
+
+            while frames_written < total_frames:
                 try:
                     item = self.queue.get(True, 1)
                 except queue.Empty:
@@ -1151,40 +1232,35 @@ class FrameSaver(QObject):
                     aborted = True
                     break
 
-                plane_idx = plane_counters[channel_idx]
-                if plane_idx >= len(self.filenames_lists[channel_idx]):
-                    # Producer over-ran this channel — drop the extra
-                    # frame without counting it (see
-                    # _frame_saver_worker_multi_channel for the rationale:
-                    # counting would let files_written reach total_files
-                    # while other channels still have queued frames).
+                if outfiles[channel_idx] is None:
+                    # Channel exhausted its files — producer over-ran.
+                    # Drop the extra frame without counting it (see
+                    # _frame_saver_worker_multi_channel for the rationale).
                     continue
 
-                filename = self.filenames_lists[channel_idx][plane_idx]
-                logger.info("File created: %s", filename)
-                outfile = h5py.File(filename, "a")
+                outfile = outfiles[channel_idx]
+                ds_idx = ds_counter[channel_idx] - 1
+                pos_index = (
+                    file_idx[channel_idx] * n_datasets_per_file + ds_idx
+                )
                 try:
-                    self._write_laser_metadata(outfile)
-                    self._write_acquisition_metadata(outfile)
                     if frame.ndim == 2:
                         frame = np.expand_dims(frame, axis=0)
-                    counter = 1
                     for f_idx in range(frame.shape[0]):
-                        # --- HDF5 write (mirrors _frame_saver_worker_multi_channel) ---
-                        path_root = self.datasets_name + f"{counter:03d}"
+                        # --- HDF5 write (one dataset per plane per channel) ---
+                        path_root = (
+                            self.datasets_name
+                            + f"{ds_counter[channel_idx]:03d}"
+                        )
                         self.dataset = outfile.create_dataset(
                             path_root, data=frame[f_idx, :, :]
                         )
                         logger.info(
                             "Dataset %s created: %s (channel %d plane %d)",
-                            f_idx, path_root, channel_idx, plane_idx,
+                            f_idx, path_root, channel_idx, pos_index,
                         )
                         self.dataset.attrs["Sample Name"] = self.sample_name
                         self.dataset.attrs["Date"] = str(datetime.date.today())
-                        # HDF5 motor positions use the per-channel plane
-                        # index (one motor snapshot per plane, shared by
-                        # both channels of the same plane).
-                        pos_index = plane_idx
                         if pos_index < len(self.horizontal_positions_list):
                             self.dataset.attrs["Horizontal Position"] = (
                                 self.horizontal_positions_list[pos_index]
@@ -1195,7 +1271,8 @@ class FrameSaver(QObject):
                             self.dataset.attrs["Camera Position"] = (
                                 self.camera_positions_list[pos_index]
                             )
-                        counter += 1
+                        ds_counter[channel_idx] += 1
+                        frames_written += 1
 
                         # --- Zarr write (per-channel — write_plane routes
                         # the frame to the channel-axis slice; channel 0
@@ -1204,9 +1281,9 @@ class FrameSaver(QObject):
                         if cz < n_planes:
                             # Zarr motor positions use cz (the per-channel
                             # Zarr z-index, which increments per f_idx) —
-                            # NOT plane_idx. For a multi-dataset frame
+                            # NOT pos_index. For a multi-dataset frame
                             # (frame.shape[0] > 1) each sub-frame must get
-                            # its own motor position; using plane_idx would
+                            # its own motor position; using pos_index would
                             # give every sub-frame the same position.
                             zarr_pos_index = cz
                             hor = (
@@ -1232,12 +1309,42 @@ class FrameSaver(QObject):
                     self.sig_status_message.emit(f"Save error: {e}")
                     self.saving_started = False
                     aborted = True
-                    outfile.close()
                     break
-                outfile.close()
-                self.sig_status_message.emit("File " + filename + " saved")
-                plane_counters[channel_idx] += 1
-                files_written += 1
+
+                # If the current file is full, close it and open the
+                # next file for this channel (if any).
+                if ds_counter[channel_idx] > n_datasets_per_file:
+                    outfile.close()
+                    self.sig_status_message.emit(
+                        "File "
+                        + self.filenames_lists[channel_idx][file_idx[channel_idx]]
+                        + " saved"
+                    )
+                    file_idx[channel_idx] += 1
+                    if file_idx[channel_idx] < n_files_per_channel:
+                        next_filename = self.filenames_lists[channel_idx][
+                            file_idx[channel_idx]
+                        ]
+                        logger.info("File created: %s", next_filename)
+                        next_outfile = h5py.File(next_filename, "a")
+                        self._write_laser_metadata(next_outfile)
+                        self._write_acquisition_metadata(next_outfile)
+                        outfiles[channel_idx] = next_outfile
+                        ds_counter[channel_idx] = 1
+                    else:
+                        outfiles[channel_idx] = None
+
+            # Close any per-channel HDF5 file still open (the consume loop
+            # is done — either all frames consumed or aborted). A channel
+            # whose last file filled via the in-loop close path has
+            # outfiles[ch] = None; a channel aborted mid-file still has
+            # an open handle that must be closed here.
+            for ch in range(n_channels):
+                if outfiles[ch] is not None:
+                    try:
+                        outfiles[ch].close()
+                    except Exception:
+                        pass
 
             # Finalize the Zarr store after all HDF5 files are closed.
             # Gate on channel 0's plane count (canonical recorder): if it
@@ -1261,10 +1368,17 @@ class FrameSaver(QObject):
         except Exception as e:
             self.sig_status_message.emit(f"Save error: {e}")
             self.saving_started = False
+        finally:
+            for outfile in outfiles:
+                if outfile is not None:
+                    try:
+                        outfile.close()
+                    except Exception:
+                        pass
         logger.info(
             "both_save_worker (multi-channel) exited "
-            "(saving_started=%s, files_written=%d)",
-            self.saving_started, files_written,
+            "(saving_started=%s, frames_written=%d)",
+            self.saving_started, frames_written,
         )
 
     def stop_saving(self) -> None:
