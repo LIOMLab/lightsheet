@@ -730,12 +730,34 @@ class FrameSaver(QObject):
             self.saving_started = False
             return
 
-        z_idx = 0
-        pos_index = 0
+        # Per-channel plane counter: each channel fills planes 0..n_planes-1
+        # independently (NGFF v0.5 channel dimension). Channel 0 is the
+        # canonical motor-position recorder (write_plane guards the append
+        # on channel_idx == 0), so its z_idx also serves as the per-plane
+        # position-list index.
+        #
+        # Two exit modes: (1) natural completion — saving_started is still
+        # True (the producer has not called stop_saving) and channel 0 has
+        # filled all its planes, so the single-channel stack is done; this
+        # is the production path where the worker is started, the producer
+        # enqueues exactly n_planes frames, and the worker exits without
+        # waiting for stop_saving. (2) drain — stop_saving() flipped
+        # saving_started to False, so drain every remaining frame (across
+        # ALL channels) then exit on the empty queue; this is the
+        # multi-channel path where all frames are pre-loaded and the flag
+        # is flipped before the worker drains.
+        z_idx_per_channel: dict[int, int] = {}
         try:
-            while z_idx < n_planes:
+            while True:
+                # Natural completion (single-channel production): the
+                # producer is still active but channel 0 filled its planes.
+                if (
+                    self.saving_started
+                    and z_idx_per_channel.get(0, 0) >= n_planes
+                ):
+                    break
                 try:
-                    buffer: np.ndarray = self.queue.get(True, 1)
+                    item = self.queue.get(True, 1)
                 except queue.Empty:
                     # stop_saving() may have flipped the flag. If so,
                     # drain any remaining frames with a non-blocking get
@@ -746,23 +768,37 @@ class FrameSaver(QObject):
                     # truly empty (genuine abort or all frames consumed).
                     if not self.saving_started:
                         try:
-                            buffer = self.queue.get_nowait()
+                            item = self.queue.get_nowait()
                         except queue.Empty:
                             break
                     else:
                         continue
 
-                if buffer.ndim == 2:
-                    buffer = np.expand_dims(buffer, axis=0)
-                for frame in range(buffer.shape[0]):
-                    if z_idx >= n_planes:
+                # Branch on the channel tag: a tagged (channel_idx, frame)
+                # tuple routes to that channel's axis index; a bare ndarray
+                # falls back to channel 0 (single-channel back-compat).
+                if isinstance(item, tuple):
+                    channel_idx, frame = item
+                else:
+                    channel_idx = 0
+                    frame = item
+
+                if frame.ndim == 2:
+                    frame = np.expand_dims(frame, axis=0)
+                for f_idx in range(frame.shape[0]):
+                    cz = z_idx_per_channel.get(channel_idx, 0)
+                    if cz >= n_planes:
+                        # This channel's plane slots are full — drop any
+                        # extra frames for it (a producer that over-ran).
                         break
-                    # Motor positions: one entry per plane, collected
-                    # by add_motor_parameters during the acquisition
-                    # loop. The entries are the shell's formatted display
-                    # strings (e.g. "99.82 μm"); _position_to_float strips
-                    # the unit suffix for the Zarr numeric datasets. Guard
-                    # against a short list (defensive).
+                    # Motor positions: one entry per plane, collected by
+                    # add_motor_parameters during the acquisition loop.
+                    # The entries are the shell's formatted display strings
+                    # (e.g. "99.82 μm"); _position_to_float strips the unit
+                    # suffix for the Zarr numeric datasets. Channel 0's
+                    # z_idx == plane index, so pos_index = cz. Guard against
+                    # a short list (defensive).
+                    pos_index = cz
                     hor = (
                         _position_to_float(self.horizontal_positions_list[pos_index])
                         if pos_index < len(self.horizontal_positions_list)
@@ -779,10 +815,9 @@ class FrameSaver(QObject):
                         else 0.0
                     )
                     self._zarr_saver.write_plane(
-                        z_idx, buffer[frame, :, :], hor, ver, cam
+                        channel_idx, cz, frame[f_idx, :, :], hor, ver, cam
                     )
-                    z_idx += 1
-                    pos_index += 1
+                    z_idx_per_channel[channel_idx] = cz + 1
         except Exception as e:
             self.sig_status_message.emit(f"Save error: {e}")
             self.saving_started = False
@@ -793,19 +828,19 @@ class FrameSaver(QObject):
             # contract). A finalize failure propagates to the except
             # above (NOT a silent HDF5 fallback).
             #
-            # Gate on z_idx < n_planes, NOT on saving_started: stop_saving()
-            # flips saving_started=False on NORMAL completion too (it is the
-            # winding-down path for both abort and success). If all planes
-            # were written (z_idx >= n_planes) the stack completed and the
-            # store MUST be finalized so napari/ome-zarr readers find the
-            # multiscales + omero metadata. Only skip finalize when the loop
-            # exited early (z_idx < n_planes) — a genuine abort leaving a
-            # partial store on disk.
-            if z_idx < n_planes:
+            # Gate on channel 0's plane count, NOT on saving_started:
+            # stop_saving() flips saving_started=False on NORMAL completion
+            # too. Channel 0 is the canonical recorder; if it reached
+            # n_planes the stack completed and the store MUST be finalized
+            # so napari/ome-zarr readers find the multiscales + omero
+            # metadata. Only skip finalize when channel 0 exited early
+            # (cz < n_planes) — a genuine abort leaving a partial store.
+            ch0_z = z_idx_per_channel.get(0, 0)
+            if ch0_z < n_planes:
                 logger.info(
                     "zarr_save_worker exiting before finalize "
-                    "(z_idx=%d < n_planes=%d) — partial store left on disk",
-                    z_idx, n_planes,
+                    "(ch0_z=%d < n_planes=%d) — partial store left on disk",
+                    ch0_z, n_planes,
                 )
             else:
                 try:
@@ -944,7 +979,7 @@ class FrameSaver(QObject):
                                     else 0.0
                                 )
                                 self._zarr_saver.write_plane(
-                                    z_idx, buffer[frame, :, :], hor, ver, cam
+                                    0, z_idx, buffer[frame, :, :], hor, ver, cam
                                 )
                                 z_idx += 1
                                 zarr_pos_index += 1
@@ -1018,13 +1053,12 @@ class FrameSaver(QObject):
         ``self.filenames_lists[channel_idx][plane_idx]`` — exactly as
         ``_frame_saver_worker_multi_channel`` does.
 
-        Zarr half: the existing ``write_plane(z_idx, frame, ...)`` call
-        is kept UNCHANGED — the ``write_plane`` signature does not yet
-        accept a ``channel_idx`` param. Only channel-0 frames are written
-        to Zarr (``z_idx`` increments only for channel 0); channel-1
-        frames are HDF5-only in this plan. A later plan extends
-        ``write_plane`` to accept ``channel_idx`` and adds the Zarr
-        channel-tag branching for full multi-channel Zarr support.
+        Zarr half: branches on the same channel tag to call
+        ``write_plane(channel_idx, cz, frame, ...)`` with a per-channel
+        plane counter (``cz``) — each channel fills planes 0..n_planes-1
+        on its own channel-axis slice (NGFF v0.5 channel dimension).
+        Channel 0 is the canonical motor-position recorder (write_plane
+        guards the append on ``channel_idx == 0``).
 
         The single-consumer queue contract is preserved: one queue, one
         consume loop, one ``sig_finished`` → ``thread.quit`` →
@@ -1045,7 +1079,7 @@ class FrameSaver(QObject):
         plane_counters = [0] * n_channels
         total_files = sum(len(lst) for lst in self.filenames_lists)
         files_written = 0
-        z_idx = 0
+        z_idx_per_channel: dict[int, int] = {}
         aborted = False
 
         try:
@@ -1122,10 +1156,11 @@ class FrameSaver(QObject):
                         )
                     counter += 1
 
-                    # --- Zarr write (channel 0 only — write_plane
-                    # signature does not yet accept channel_idx; a
-                    # later plan extends it for full multi-channel Zarr) ---
-                    if channel_idx == 0 and z_idx < n_planes:
+                    # --- Zarr write (per-channel — write_plane routes
+                    # the frame to the channel-axis slice; channel 0
+                    # records the motor positions via its guarded append) ---
+                    cz = z_idx_per_channel.get(channel_idx, 0)
+                    if cz < n_planes:
                         hor = (
                             _position_to_float(self.horizontal_positions_list[pos_index])
                             if pos_index < len(self.horizontal_positions_list)
@@ -1142,9 +1177,9 @@ class FrameSaver(QObject):
                             else 0.0
                         )
                         self._zarr_saver.write_plane(
-                            z_idx, frame[f_idx, :, :], hor, ver, cam
+                            channel_idx, cz, frame[f_idx, :, :], hor, ver, cam
                         )
-                        z_idx += 1
+                        z_idx_per_channel[channel_idx] = cz + 1
 
                 outfile.close()
                 self.sig_status_message.emit("File " + filename + " saved")
@@ -1152,11 +1187,14 @@ class FrameSaver(QObject):
                 files_written += 1
 
             # Finalize the Zarr store after all HDF5 files are closed.
-            if z_idx < n_planes:
+            # Gate on channel 0's plane count (canonical recorder): if it
+            # did not reach n_planes the stack is partial — skip finalize.
+            ch0_z = z_idx_per_channel.get(0, 0)
+            if ch0_z < n_planes:
                 logger.info(
                     "both_save_worker (multi-channel) exiting before finalize "
-                    "(z_idx=%d < n_planes=%d) — partial store left on disk",
-                    z_idx, n_planes,
+                    "(ch0_z=%d < n_planes=%d) — partial store left on disk",
+                    ch0_z, n_planes,
                 )
             else:
                 try:
@@ -1246,21 +1284,26 @@ class ZarrSaver:
         self._writer: AnalysisOmeZarrWriter | None = None
         self.saving_started = False
         self._finalized = False
+        self._n_channels = 1
         self._horizontal_positions: list[float] = []
         self._vertical_positions: list[float] = []
         self._camera_positions: list[float] = []
 
-    def start_stack(self, store_path: str, n_planes: int) -> None:
+    def start_stack(
+        self, store_path: str, n_planes: int, n_channels: int = 1
+    ) -> None:
         """Construct the OME-Zarr writer for a new stack.
 
         ``store_path`` is a PLAIN filesystem path (NOT ``file://`` — the
         writer raises ``ValueError`` on a ``file://`` prefix). The path
         is asserted to live inside the operator-selected save directory
         so a path-traversal attempt cannot write outside it. The L0
-        array is shaped ``(1, n_planes, ysize, xsize)`` — a 4D
-        single-channel store — and chunked one plane per chunk so each
-        streaming write touches exactly one chunk (peak RAM = one frame
-        + one chunk).
+        array is shaped ``(n_channels, n_planes, ysize, xsize)`` — a 4D
+        store whose leading axis is the OME-NGFF channel dimension — and
+        chunked one channel/plane per chunk so each streaming write
+        touches exactly one chunk (peak RAM = one frame + one chunk).
+        ``n_channels`` defaults to 1 so the single-channel path stays
+        byte-identical to the Phase 8 ``(1, n_planes, y, x)`` shape.
         """
         # Path-traversal guard: the resolved store_path must be inside
         # the operator-selected save directory.
@@ -1276,7 +1319,8 @@ class ZarrSaver:
             raise ValueError(msg)
 
         cam = self.parent.camera
-        shape = (1, int(n_planes), int(cam.ysize), int(cam.xsize))
+        n_channels = int(n_channels)
+        shape = (n_channels, int(n_planes), int(cam.ysize), int(cam.xsize))
         chunk_shape = (1, 1, int(cam.ysize), int(cam.xsize))
         self._writer = AnalysisOmeZarrWriter(
             store_path=resolved,
@@ -1286,6 +1330,7 @@ class ZarrSaver:
             overwrite=True,
             unit="micrometer",
         )
+        self._n_channels = n_channels
         self.saving_started = True
         self._finalized = False
         self._horizontal_positions = []
@@ -1294,6 +1339,7 @@ class ZarrSaver:
 
     def write_plane(
         self,
+        channel_idx: int,
         z_idx: int,
         frame: np.ndarray,
         hor_pos: float,
@@ -1302,17 +1348,21 @@ class ZarrSaver:
     ) -> None:
         """Stream one reconstructed 2D frame into the L0 array.
 
-        The writer indexes a 4D array ``(c, z, y, x)``; the per-plane
-        frame is 2D ``(y, x)`` so a channel axis is prepended for the
-        assignment. The motor positions are recorded for the
-        ``/acquisition`` group written at finalize time.
+        The writer indexes a 4D array ``(c, z, y, x)``; ``channel_idx``
+        selects the channel-axis slice the frame lands in (NGFF v0.5
+        channel dimension). The per-plane frame is 2D ``(y, x)``. Motor
+        positions are recorded ONCE per plane — both channels of the
+        same plane share the same motor position (the acquisition
+        worker records it once per plane), so the append is guarded by
+        ``channel_idx == 0`` to avoid duplicating the entry per channel.
         """
         if self._writer is None:
             raise RuntimeError("ZarrSaver.write_plane called before start_stack")
-        self._writer[:, z_idx, :, :] = frame[np.newaxis, :, :]
-        self._horizontal_positions.append(float(hor_pos))
-        self._vertical_positions.append(float(ver_pos))
-        self._camera_positions.append(float(cam_pos))
+        self._writer[channel_idx, z_idx, :, :] = frame
+        if channel_idx == 0:
+            self._horizontal_positions.append(float(hor_pos))
+            self._vertical_positions.append(float(ver_pos))
+            self._camera_positions.append(float(cam_pos))
 
     def _build_omero_channels(self, lasers) -> list[dict]:
         """Build the omero.channels list from the lasers that were
@@ -1421,6 +1471,33 @@ class ZarrSaver:
         base_res = (abs(self.parent.stack_step), 6.5 * binning_x, 6.5 * binning_y)
         logger.info("ZarrSaver.finalize base_res=%s", base_res)
         omero_channels = self._build_omero_channels(self.parent.lasers)
+
+        # Caller-sync guard: the writer's L0 channel axis was sized by
+        # start_stack's n_channels, and omero_channels is built from the
+        # auto-laser flags the operator set at run start. A mismatch would
+        # write NGFF metadata inconsistent with the array shape. The
+        # writer itself does not validate this; the ZarrSaver layer adds
+        # the check as defense-in-depth. Two failure modes:
+        #   - overflow: more omero channels declared than axis slots
+        #     (len(omero) > n_channels) — would index past the channel axis.
+        #   - multi-channel undercount: n_channels > 1 but fewer omero
+        #     channels than axis slots — a 2-channel writer with 1 omero
+        #     channel leaves a channel unlabeled.
+        # The single-channel no-flags case (n_channels=1, omero=0) is the
+        # Phase 8 back-compat path — no auto-laser flag was set so no
+        # channel is listed, but the writer still has its 1 channel axis.
+        # That is allowed: finalize_with_resolutions accepts an empty
+        # omero.channels list for a single-channel store.
+        if len(omero_channels) > self._n_channels or (
+            self._n_channels > 1 and len(omero_channels) != self._n_channels
+        ):
+            raise RuntimeError(
+                f"ZarrSaver.finalize: omero_channels length "
+                f"({len(omero_channels)}) inconsistent with writer "
+                f"channel axis ({self._n_channels}) — caller passed "
+                f"n_channels to start_stack that does not match the "
+                f"auto-laser flags"
+            )
 
         t0 = time.time()
         self._writer.finalize_with_resolutions(

@@ -73,7 +73,7 @@ def test_zarr_saver_streams_and_finalizes(qtbot, request, tmp_path) -> None:
     saver.start_stack(store_path, n_planes)
     frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
     for z in range(n_planes):
-        saver.write_plane(z, frame, 0.0, 0.0, 0.0)
+        saver.write_plane(0, z, frame, 0.0, 0.0, 0.0)
     saver.finalize()
 
     root = zarr.open(store_path, mode="r")
@@ -102,7 +102,7 @@ def test_omero_channels(qtbot, request, tmp_path) -> None:
     saver = ZarrSaver(ctrl)
     saver.start_stack(store_path, 1)
     frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
-    saver.write_plane(0, frame, 0.0, 0.0, 0.0)
+    saver.write_plane(0, 0, frame, 0.0, 0.0, 0.0)
     saver.finalize()
 
     root = zarr.open(store_path, mode="r")
@@ -148,7 +148,7 @@ def test_omero_from_live_lasers(qtbot, request, tmp_path) -> None:
         saver = ZarrSaver(ctrl)
         saver.start_stack(store_path, 1)
         frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
-        saver.write_plane(0, frame, 0.0, 0.0, 0.0)
+        saver.write_plane(0, 0, frame, 0.0, 0.0, 0.0)
         saver.finalize()
 
         root = zarr.open(store_path, mode="r")
@@ -175,7 +175,7 @@ def test_ngff_metadata(qtbot, request, tmp_path) -> None:
     saver = ZarrSaver(ctrl)
     saver.start_stack(store_path, 1)
     frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
-    saver.write_plane(0, frame, 0.0, 0.0, 0.0)
+    saver.write_plane(0, 0, frame, 0.0, 0.0, 0.0)
     saver.finalize()
 
     root = zarr.open(store_path, mode="r")
@@ -205,7 +205,7 @@ def test_acquisition_group(qtbot, request, tmp_path) -> None:
     saver.start_stack(store_path, n_planes)
     frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
     for z in range(n_planes):
-        saver.write_plane(z, frame, float(z), float(z) * 2.0, float(z) * 3.0)
+        saver.write_plane(0, z, frame, float(z), float(z) * 2.0, float(z) * 3.0)
     saver.finalize()
 
     root = zarr.open(store_path, mode="r")
