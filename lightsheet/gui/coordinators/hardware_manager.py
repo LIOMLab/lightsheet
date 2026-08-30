@@ -224,7 +224,34 @@ class HardwareManager:
         it was just turned on, immediately applies the staged percentage
         (scaled to mW) so the operator sees the chosen power, not 0.
         HAL failures are surfaced via sig_message. The lock lives on the
-        ILaser instance (self.lasers[0]._lock)."""
+        ILaser instance (self.lasers[0]._lock).
+
+        Cross-deenergization (D-03 all-modes strict): when the energizing
+        branch is taken (L1 was inactive), L2 is de-energized BEFORE L1
+        is energized — the one-laser-energized invariant holds across
+        the manual-toggle path too. The L2 .off() runs OUTSIDE L1's lock
+        (L2's lock is independent), so the two locks are never held
+        simultaneously (deadlock-free). The estop_event re-check-before-
+        .on() guard is preserved on the energizing branch so a Class
+        IIIB laser is never re-energized past the kill path."""
+        # Cross-deenergize L2 first (D-03), OUTSIDE L1's lock, only when
+        # we are about to energize L1. Read L1.active without L1's lock
+        # to decide the branch — the active flag is a plain bool read
+        # (no HAL write), and the subsequent L1 lock + re-check inside
+        # the lock handles a concurrent toggle racing this one. The L2
+        # .off() acquires L2's own lock internally (for IBeam) or is
+        # lock-free (for DAQLaser); either way it does not touch L1's
+        # lock, so no cross-laser lock-ordering hazard.
+        if not self._shell.estop_event.is_set() and not self.lasers[0].active:
+            if self.lasers[1].active:
+                self.lasers[1].off()
+                if self.lasers[1].error:
+                    self._shell.sig_message.emit(
+                        f"{self.lasers[1].label} off failed during "
+                        f"L1 toggle — may STILL BE ON. Cause: "
+                        f"{self.lasers[1].error_message}"
+                    )
+                    self.lasers[1].error = 0
         with self.lasers[0]._lock:
             # E-stop cooperative-skip: if E-stop was pressed while this
             # toggle thread was in flight (waiting on the lock or before it
@@ -269,7 +296,28 @@ class HardwareManager:
         the inner error surface, so the controller no longer needs its own
         iBeam-specific verify-before-mark-active branch. The lock lives on
         the ILaser instance (self.lasers[1]._lock, identity-shared with the
-        inner IBeam._lock)."""
+        inner IBeam._lock).
+
+        Cross-deenergization (D-03 all-modes strict): when the energizing
+        branch is taken (L2 was inactive), L1 is de-energized BEFORE L2
+        is energized — the one-laser-energized invariant holds across
+        the manual-toggle path too. The L1 .off() runs OUTSIDE L2's lock
+        (L1's lock is independent), so the two locks are never held
+        simultaneously (deadlock-free). The estop_event re-check-before-
+        .on() guard is preserved on the energizing branch."""
+        # Cross-deenergize L1 first (D-03), OUTSIDE L2's lock, only when
+        # we are about to energize L2. See _toggle_laser1 for the
+        # lock-ordering rationale.
+        if not self._shell.estop_event.is_set() and not self.lasers[1].active:
+            if self.lasers[0].active:
+                self.lasers[0].off()
+                if self.lasers[0].error:
+                    self._shell.sig_message.emit(
+                        f"{self.lasers[0].label} off failed during "
+                        f"L2 toggle — may STILL BE ON. Cause: "
+                        f"{self.lasers[0].error_message}"
+                    )
+                    self.lasers[0].error = 0
         with self.lasers[1]._lock:
             # E-stop cooperative-skip: if E-stop was pressed while this
             # toggle thread was in flight, do NOT energize. The E-stop path
@@ -404,6 +452,112 @@ class HardwareManager:
         # concern. The periodic timer_laser2_status will refresh the L2
         # readback on its next tick.
         self._refresh_laser_readback(0)
+
+    # ------------------------------------------------------------------ #
+    # One-laser-energized invariant choke point (MCA-02).
+    # ------------------------------------------------------------------ #
+
+    def select_laser(self, idx: int) -> None:
+        """Energize laser ``idx`` and de-energize the other, enforcing the
+        one-laser-energized invariant (MCA-02). Called from acquisition
+        worker threads in multi-channel mode (the per-plane / per-snap
+        sequential cycle).
+
+        Sequencing (de-energize-then-energize, with E-stop re-checks):
+
+        1. De-energize the *other* laser (``1 - idx``) under its own
+           per-instance ``ILaser._lock`` RLock. If it is already inactive,
+           the de-energize is a no-op (no redundant HAL write). If ``.off()``
+           fails, the error is surfaced via ``sig_message`` and the error
+           flag is cleared — the operator is told the laser may still be
+           on, but the invariant enforcement continues (we do not abort
+           the channel switch on a de-energize failure; the target is
+           still energized so acquisition can proceed, and the operator
+           sees the warning).
+        2. Re-check ``estop_event`` AFTER the de-energize releases its
+           lock and BEFORE the energize acquires the target lock. If
+           E-stop fired mid-call, return without energizing — a Class
+           IIIB laser must not be re-energized past the kill path
+           (AGENTS.md §2).
+        3. Energize the target laser under its own per-instance
+           ``ILaser._lock`` RLock. Re-check ``estop_event`` inside the
+           lock (it may have fired between step 2 and the lock
+           acquisition). If the target is already active, the energize
+           is a no-op (idempotent — no redundant ``.set_power`` / ``.on``).
+           Otherwise stage the power (``pct/100 * max_power``) via
+           ``.set_power(mw)`` BEFORE ``.on()`` so the DAQ backend writes
+           the staged power when it energizes the AO channel (mirrors
+           ``start_lasers``). Surface a ``.on()`` failure via
+           ``sig_message`` and clear the error flag.
+        4. Refresh both status labels via ``_poll_laser_status([0, 1])``.
+
+        Lock ordering: the two lasers have independent per-instance
+        ``RLock`` s. This method NEVER holds both locks simultaneously —
+        the de-energize acquires and releases the other laser's lock
+        first, then the energize acquires the target laser's lock. This
+        makes deadlock impossible (no cross-laser lock ordering hazard)
+        and preserves the E-stop lock-free contract: ``select_laser``
+        introduces NO new ``threading.Lock`` / ``threading.RLock``
+        attribute on ``HardwareManager`` — only the existing per-laser
+        ``ILaser._lock`` RLocks are used. The E-stop kill path
+        (``updateUi_estop_pressed``) iterates ``self.lasers`` calling
+        ``.off()`` directly on the GUI thread and never acquires either
+        lock (for ``DAQLaser``) or only acquires the inner IBeam lock
+        inside ``_send_cmd`` (for ``IBeamSmartLaser`` — the
+        already-accepted race).
+
+        Out-of-range ``idx`` (only two lasers exist) raises
+        ``IndexError`` from ``self.lasers[idx]`` before any HAL write.
+        """
+        other = 1 - idx
+        # 1. De-energize the other laser under its own lock. The lock is
+        # released before the energize acquires the target lock, so the
+        # two locks are never held simultaneously (deadlock-free).
+        with self.lasers[other]._lock:
+            if self.lasers[other].active:
+                self.lasers[other].off()
+                if self.lasers[other].error:
+                    self._shell.sig_message.emit(
+                        f"{self.lasers[other].label} off failed during "
+                        f"select_laser — may STILL BE ON. Cause: "
+                        f"{self.lasers[other].error_message}"
+                    )
+                    self.lasers[other].error = 0
+        # 2. E-stop re-check before energizing (AGENTS.md §2). If E-stop
+        # fired between the de-energize and the energize, do NOT call
+        # .on() — the kill path has already driven both lasers off; a
+        # queued select_laser that calls .on() would re-energize a Class
+        # IIIB laser past the kill path.
+        if self._shell.estop_event.is_set():
+            return
+        # 3. Energize the target laser under its own lock.
+        with self.lasers[idx]._lock:
+            # Re-check inside the lock — E-stop may have fired between
+            # the check above and the lock acquisition.
+            if self._shell.estop_event.is_set():
+                return
+            if not self.lasers[idx].active:
+                # Stage power before .on() (mirrors start_lasers pattern)
+                # so the DAQ backend writes the staged power when it
+                # energizes the AO channel.
+                pct = (
+                    self._shell.laser1_power_pct
+                    if idx == 0
+                    else self._shell.laser2_power_pct
+                )
+                mw = pct / 100.0 * self.lasers[idx].max_power
+                self.lasers[idx].set_power(mw)
+                self.lasers[idx].on()
+                if self.lasers[idx].error:
+                    self._shell.sig_message.emit(
+                        f"{self.lasers[idx].label} on failed during "
+                        f"select_laser — laser stays OFF. Cause: "
+                        f"{self.lasers[idx].error_message}"
+                    )
+                    self.lasers[idx].error = 0
+        # 4. Refresh both status labels (refresh-after-action — the
+        # periodic timers would otherwise lag).
+        self._poll_laser_status([0, 1])
 
     # ------------------------------------------------------------------ #
     # Status poll + readback refresh (emit through shell signals).
