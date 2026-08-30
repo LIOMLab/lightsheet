@@ -13,6 +13,7 @@ them via ``self._shell.ui.<widget>``.
 
 from __future__ import annotations
 
+import logging
 import typing
 import warnings
 
@@ -25,6 +26,8 @@ from lightsheet.gui.workers import LiveWorker, PreviewWorker, SingleWorker, Stac
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
+
+logger = logging.getLogger(__name__)
 
 
 class AcquisitionPanelWidget(QWidget):
@@ -363,7 +366,17 @@ class AcquisitionPanelWidget(QWidget):
         prev_thread = getattr(self._shell, "_stack_thread", None)
         if prev_thread is not None and prev_thread.isRunning():
             prev_thread.quit()
-            prev_thread.wait(5000)
+            if not prev_thread.wait(5000):
+                # A stuck worker that didn't exit within 5s — calling
+                # start() on a still-running QThread is a no-op, so the
+                # new row's worker would never start. Drop the reference
+                # and fall through to fresh-thread construction. The
+                # controller's closeEvent logs the same situation.
+                logger.warning(
+                    "_stack_thread still running after 5s wait "
+                    "— creating fresh thread"
+                )
+                prev_thread = None
         # If the thread was never created (first stack ever) or was
         # destroyed (teardown), construct a fresh one; otherwise reuse it.
         if prev_thread is None:
