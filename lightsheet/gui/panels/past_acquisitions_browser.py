@@ -180,8 +180,14 @@ class PastAcquisitionsBrowser(QObject):
             top_path = os.path.join(data_dir, name)
             # A .ome.zarr directory IS a Zarr store, not a folder to
             # recurse into — check the format suffix before the isdir
-            # recursion so the store is parsed as one acquisition.
-            if self._is_hdf5(name) or (self._is_zarr(name) and os.path.isdir(top_path)):
+            # recursion so the store is parsed as one acquisition. HDF5
+            # stores are regular files, so gate the .hdf5 suffix on
+            # isfile too — a directory named foo.hdf5 would otherwise be
+            # handed to h5py.File and fail (caught, but wasteful); it
+            # falls through to the isdir recursion below instead.
+            if (self._is_hdf5(name) and os.path.isfile(top_path)) or (
+                self._is_zarr(name) and os.path.isdir(top_path)
+            ):
                 entries.extend(self._parse_file(top_path, sample_hint=name))
                 continue
             if os.path.isdir(top_path):
