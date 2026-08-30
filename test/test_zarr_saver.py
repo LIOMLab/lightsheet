@@ -638,3 +638,143 @@ def test_both_mode_writes_both_formats(qtbot, request, tmp_path) -> None:
                 f"HDF5 plane {z} data mismatch: got max {ds[()].max()}, "
                 f"expected {(z + 1) * 100}"
             )
+
+
+# ---------------------------------------------------------------------------
+# write_empty_chunks — all-zero frames must produce data chunks on disk
+# (G-09-11 gap closure). zarr v3 defaults write_empty_chunks=False, which
+# silently skips all-zero chunks — MockCamera demo frames and dark real-rig
+# frames produce a metadata-only store with zero data chunk files. The
+# ZarrSaver.start_stack fix forwards config={'write_empty_chunks': True} to
+# the L0 array creation so all-zero chunks are persisted.
+# ---------------------------------------------------------------------------
+
+
+def _count_chunk_files(store_path: str) -> int:
+    """Walk the zarr store tree and count files under the ``0/c/``
+    directory (the L0 chunk files). A metadata-only store has zero
+    chunk files (only ``zarr.json`` files); a store with data has
+    chunk files like ``0/c/0/0/0/0``."""
+    import os
+
+    chunk_files = 0
+    for root, _dirs, files in os.walk(store_path):
+        rel = os.path.relpath(root, store_path)
+        # Count files in any directory under 0/c/ (chunk storage).
+        if rel.startswith("0/c/") or rel == "0/c":
+            chunk_files += len(files)
+    return chunk_files
+
+
+def test_zarr_all_zero_frames_produce_chunks(qtbot, request, tmp_path) -> None:
+    """G-09-11: a Zarr store written with all-zero uint16 frames (the
+    MockCamera demo case) must contain actual data chunk files under
+    ``0/c/`` — not just ``zarr.json`` metadata. zarr v3 defaults
+    ``write_empty_chunks=False`` which silently skips all-zero chunks;
+    ZarrSaver.start_stack forwards ``config={'write_empty_chunks': True}``
+    to the L0 array creation so all-zero chunks are persisted."""
+    ctrl, _ = make_controller(qtbot, request)
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1.0
+    # Shrink the camera frame so the Dask pyramid build in finalize is
+    # fast (2048x2048 takes minutes; 32x32 takes milliseconds).
+    ctrl.camera.xsize = 32
+    ctrl.camera.ysize = 32
+
+    store_path = str(tmp_path / "stack.ome.zarr")
+    saver = ZarrSaver(ctrl)
+    n_planes = 2
+    saver.start_stack(store_path, n_planes)
+    # All-zero frames — the MockCamera demo case.
+    frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
+    for z in range(n_planes):
+        saver.write_plane(0, z, frame, 0.0, 0.0, 0.0)
+    saver.finalize()
+
+    # The store must contain actual data chunk files under 0/c/, not
+    # just zarr.json metadata.
+    chunk_count = _count_chunk_files(store_path)
+    assert chunk_count >= 1, (
+        f"all-zero frames must produce at least one chunk file under "
+        f"0/c/; got {chunk_count} (metadata-only store — "
+        f"write_empty_chunks not forwarded)"
+    )
+
+
+def test_zarr_multi_channel_all_zero_produce_chunks(
+    qtbot, request, tmp_path
+) -> None:
+    """G-09-11 multi-channel: a 2-channel Zarr store with all-zero
+    frames must have chunk files for both channels (``c/0/`` and
+    ``c/1/`` directories contain chunk files)."""
+    import os
+
+    ctrl, _ = make_controller(qtbot, request)
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1.0
+    ctrl.camera.xsize = 32
+    ctrl.camera.ysize = 32
+
+    store_path = str(tmp_path / "stack.ome.zarr")
+    saver = ZarrSaver(ctrl)
+    n_planes = 2
+    n_channels = 2
+    saver.start_stack(store_path, n_planes, n_channels=n_channels)
+    frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
+    for ch in range(n_channels):
+        for z in range(n_planes):
+            saver.write_plane(ch, z, frame, float(z), float(z), float(z))
+    saver.finalize()
+
+    # Both channels must have chunk files.
+    for ch in range(n_channels):
+        ch_dir = os.path.join(store_path, "0", "c", str(ch))
+        ch_chunks = 0
+        if os.path.isdir(ch_dir):
+            for _root, _dirs, files in os.walk(ch_dir):
+                ch_chunks += len(files)
+        assert ch_chunks >= 1, (
+            f"channel {ch}: all-zero frames must produce at least one "
+            f"chunk file under 0/c/{ch}/; got {ch_chunks}"
+        )
+
+
+def test_zarr_non_zero_frames_still_produce_chunks(
+    qtbot, request, tmp_path
+) -> None:
+    """Regression: non-zero frames must still produce chunk files (the
+    write_empty_chunks=True fix must not break the non-zero path)."""
+    ctrl, _ = make_controller(qtbot, request)
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1.0
+    ctrl.camera.xsize = 32
+    ctrl.camera.ysize = 32
+
+    store_path = str(tmp_path / "stack.ome.zarr")
+    saver = ZarrSaver(ctrl)
+    n_planes = 2
+    saver.start_stack(store_path, n_planes)
+    # Non-zero frames with distinct values per plane.
+    for z in range(n_planes):
+        frame = np.full(
+            (ctrl.camera.ysize, ctrl.camera.xsize),
+            (z + 1) * 100,
+            dtype=np.uint16,
+        )
+        saver.write_plane(0, z, frame, float(z), float(z), float(z))
+    saver.finalize()
+
+    chunk_count = _count_chunk_files(store_path)
+    assert chunk_count >= 1, (
+        f"non-zero frames must produce chunk files; got {chunk_count}"
+    )
+
+    # Verify the data round-trips correctly.
+    import zarr
+
+    root = zarr.open(store_path, mode="r")
+    arr = root["0"]
+    for z in range(n_planes):
+        assert np.all(arr[0, z, :, :] == (z + 1) * 100), (
+            f"plane {z} data mismatch after round-trip"
+        )
