@@ -419,10 +419,14 @@ def test_set_files_multi_channel_wavelength_suffix(tmp_path) -> None:
     assert "plane_00002" in saver.filenames_lists[0][1]
 
 
-def test_set_files_single_channel_no_suffix(tmp_path) -> None:
-    """MCA-03 back-compat: set_files with wavelengths=None keeps today's
-    single self.filenames_list behavior — no _{wavelength}nm suffix.
-    Byte-identical to the pre-multi-channel path.
+def test_set_files_single_channel_has_suffix(tmp_path) -> None:
+    """Single-channel set_files with wavelengths=[555] builds
+    self.filenames_lists with one channel list (length number_of_files)
+    AND populates self.filenames_list from filenames_lists[0] so the
+    single-channel frame_saver_worker (which reads filenames_list) is
+    byte-identical except for the filename suffix. Each filename MUST
+    carry the _{wavelength}nm suffix — the wavelengths=None back-compat
+    branch is retired.
     """
     import os
     import re
@@ -439,18 +443,60 @@ def test_set_files_single_channel_no_suffix(tmp_path) -> None:
     try:
         saver.set_files(
             2, "scan", "stack", 1, "reconstructed_frame",
-            wavelengths=None,
+            wavelengths=[555],
         )
     finally:
         os.chdir(cwd)
 
+    # filenames_lists has one channel list (single-channel mode passes a
+    # 1-element wavelengths list).
+    assert len(saver.filenames_lists) == 1, (
+        "single-channel filenames_lists must have one channel list"
+    )
+    assert len(saver.filenames_lists[0]) == 2, (
+        "channel 0 list must have number_of_files entries"
+    )
+    # filenames_list is populated from filenames_lists[0] so the
+    # single-channel frame_saver_worker (which reads filenames_list) is
+    # unchanged.
     assert len(saver.filenames_list) == 2, (
         "single-channel filenames_list must have number_of_files entries"
     )
+    assert saver.filenames_list == saver.filenames_lists[0], (
+        "filenames_list must mirror filenames_lists[0] in single-channel mode"
+    )
     for fn in saver.filenames_list:
-        assert not re.search(r"_\d+nm\.hdf5$", fn), (
-            f"single-channel filename must NOT have wavelength suffix: {fn}"
+        assert re.search(r"_555nm\.hdf5$", fn), (
+            f"single-channel filename must carry _555nm suffix: {fn}"
         )
+
+
+def test_set_files_rejects_wavelengths_none(tmp_path) -> None:
+    """The wavelengths=None back-compat branch is retired. set_files
+    raises ValueError when wavelengths is None so a stale caller that
+    forgets to pass wavelengths fails loudly instead of producing an
+    unsuffixed file."""
+    import os
+
+    import pytest
+
+    bundle = _make_bundle()
+    shell = _make_shell()
+    fs = FrameSaverController(bundle, shell)
+    saver = fs.frame_saver
+    saver.filenames_list = []
+    saver.filenames_lists = []
+
+    cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        with pytest.raises(ValueError):
+            saver.set_files(
+                2, "scan", "stack", 1, "reconstructed_frame",
+                wavelengths=None,
+            )
+    finally:
+        os.chdir(cwd)
 
 
 def test_set_files_collision_avoidance_per_channel(tmp_path) -> None:
