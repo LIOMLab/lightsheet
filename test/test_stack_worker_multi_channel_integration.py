@@ -158,3 +158,152 @@ def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
                 f"channel {ch} plane {plane} must be an .hdf5 file; "
                 f"got {p.suffix}"
             )
+
+
+def test_stack_worker_multi_channel_stitch_branch_writes_per_channel_files(
+    qtbot, request, tmp_path
+) -> None:
+    """StackWorker.run in multi-channel stitch mode (the default
+    reconstructed_frame branch — save_all_crop=False, save_all_full=False)
+    calls set_files with number_of_files=number_of_planes and
+    number_of_datasets=1, matching the crop/full branch convention, so
+    the save worker's total_files equals n_channels * n_planes and the
+    consumer drains every enqueued frame instead of exiting early and
+    deadlocking the producer on a full bounded queue.
+
+    Regression gate for the stitch-branch convention mismatch: the
+    single-channel stitch call set_files(1, ..., number_of_planes, ...)
+    is the "1 file containing N datasets" form; under multi-channel the
+    save loops compute total_files = n_channels * 1 = 2, write 2 files,
+    and exit while the acquisition thread enqueues n_channels * n_planes
+    frames into a queue (maxsize=6) that fills and blocks forever.
+    """
+    from _helpers.controller_fixture import make_controller
+    from lightsheet.gui.workers import StackWorker
+
+    ctrl, _bundle = make_controller(qtbot, request)
+
+    # Multi-channel mode: both auto-laser checkboxes checked.
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = True
+
+    # Valid 2-plane stack plan.
+    ctrl.saving_allowed = True
+    ctrl.number_of_planes = 2
+    ctrl.stack_mode_started = True
+    ctrl.stack_starting_plane = 0.0
+    ctrl.stack_step = 10.0
+    ctrl.save_format = "hdf5"
+    ctrl.save_directory = str(tmp_path)
+    ctrl.save_filepath = str(tmp_path / "test")
+    ctrl.save_description = "stitch integration test sample"
+    # Position text attrs read by add_motor_parameters.
+    ctrl.current_horizontal_position_text = "0.0"
+    ctrl.current_vertical_position_text = "0.0"
+    ctrl.current_camera_position_text = "0.0"
+
+    # Stitch save path (the default reconstructed_frame branch):
+    # save_all_crop=False, save_all_full=False. The fix branches
+    # set_files on _multi_channel so multi-channel uses
+    # number_of_files=number_of_planes, number_of_datasets=1 — matching
+    # the crop/full branches and yielding total_files = n_channels *
+    # n_planes (4) so the save worker drains every enqueued frame.
+    ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
+    ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
+
+    # Wavelengths come from the live ILaser instances — never hardcoded.
+    wl1 = int(ctrl.lasers[0].wavelength)
+    wl2 = int(ctrl.lasers[1].wavelength)
+
+    # Construct the StackWorker exactly as _spawn_stack_worker does.
+    worker = StackWorker(
+        ctrl._bundle, ctrl._hw, ctrl,
+        save_description="stitch integration test sample",
+        save_stitch_blend=False,
+        save_all_crop=False,
+        save_all_full=False,
+        multi_channel=True,
+    )
+
+    # Stub acquire_scan so we don't run the full camera+siggen scan
+    # logic — just set reconstructed_frame to a small frame so the
+    # multi-channel capture+enqueue path runs. The real _fs receives
+    # the tagged tuples.
+    def _fake_acquire_scan():
+        ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    # Stub the motor move so MockMotors travel-limit enforcement does
+    # not abort the stack (the mock enforces limits; a 10um step from 0
+    # is fine but stubbing keeps the test independent of mock limits).
+    with patch.object(
+        worker.motors.horizontal, "move_absolute_position"
+    ):
+        finished_emits: list[None] = []
+        worker.finished.connect(lambda: finished_emits.append(None))
+        worker.run()
+
+    # The worker must have emitted finished exactly once — the
+    # regression symptom is a deadlock where run() never returns and
+    # this assertion is never reached.
+    assert len(finished_emits) == 1, (
+        f"StackWorker.run must emit finished exactly once; "
+        f"got {len(finished_emits)} (stitch multi-channel must not "
+        f"deadlock)"
+    )
+
+    # The save side must have drained: saving_started is False after
+    # run() returns (the save worker exited its consumer loop after
+    # writing total_files = n_channels * n_planes frames).
+    assert ctrl._fs.frame_saver.saving_started is False, (
+        "stitch multi-channel save worker must drain and exit — "
+        "saving_started should be False after run() returns"
+    )
+
+    # set_files convention verification: the stitch branch must call
+    # set_files(number_of_planes, ..., 1, "reconstructed_frame",
+    # wavelengths=[...]) in multi-channel mode — yielding
+    # filenames_lists with 2 channels, each with number_of_planes
+    # entries (total_files = 2 * 2 = 4).
+    fs = ctrl._fs.frame_saver
+    assert isinstance(fs.filenames_lists, list), (
+        "filenames_lists must be a list of lists in multi-channel "
+        "stitch mode"
+    )
+    assert len(fs.filenames_lists) == 2, (
+        f"filenames_lists must have one list per channel (2); "
+        f"got {len(fs.filenames_lists)}"
+    )
+    for ch in range(2):
+        assert len(fs.filenames_lists[ch]) == 2, (
+            f"channel {ch} must have number_of_planes (2) entries; "
+            f"got {len(fs.filenames_lists[ch])}"
+        )
+
+    # The filenames must carry the per-channel wavelength suffix read
+    # from the live ILaser instances.
+    assert f"_{wl1}nm" in fs.filenames_lists[0][0], (
+        f"channel 0 filename must carry _{wl1}nm suffix; "
+        f"got {fs.filenames_lists[0][0]}"
+    )
+    assert f"_{wl2}nm" in fs.filenames_lists[1][0], (
+        f"channel 1 filename must carry _{wl2}nm suffix; "
+        f"got {fs.filenames_lists[1][0]}"
+    )
+
+    # The real save worker must have written the HDF5 files to disk —
+    # the consumer drained every enqueued tagged frame (no deadlock).
+    for ch in range(2):
+        for plane in range(2):
+            fname = fs.filenames_lists[ch][plane]
+            p = Path(fname)
+            assert p.exists(), (
+                f"channel {ch} plane {plane} HDF5 file must exist on "
+                f"disk after the real save worker drained: {p}"
+            )
+            assert p.suffix == ".hdf5", (
+                f"channel {ch} plane {plane} must be an .hdf5 file; "
+                f"got {p.suffix}"
+            )
