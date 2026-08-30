@@ -118,7 +118,8 @@ def test_preview_worker_calls_start_lasers_after_arm_and_stop_before_disarm(
             worker.camera, "disarm", side_effect=lambda: call_log.append("camera.disarm")
         ),
         patch.object(
-            ctrl._hw, "start_lasers", side_effect=lambda: call_log.append("hw.start_lasers")
+            ctrl._hw, "start_lasers",
+            side_effect=lambda *a, **k: call_log.append("hw.start_lasers"),
         ),
         patch.object(
             ctrl._hw, "stop_lasers", side_effect=lambda: call_log.append("hw.stop_lasers")

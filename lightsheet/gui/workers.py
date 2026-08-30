@@ -115,27 +115,29 @@ class PreviewWorker(QObject):
             # auto-laser flags sampled on the GUI thread by
             # _cache_auto_laser_flags() in updateUi_preview_mode_button.
             #
-            # D-04 continuous-mode first-laser-only guard: when both
-            # auto-laser checkboxes are checked, preview (a continuous
-            # mode with no per-plane boundary to sequence over) energizes
-            # ONLY L1 for the session and holds L2 off. Alternating L1<->L2
-            # per frame would double frame time and flicker; instead the
-            # operator switches which single laser is live by unchecking
-            # one auto-laser checkbox and checking the other (the existing
-            # _cache_auto_laser_flags() resampling path). The guard
-            # suppresses _auto_laser2 temporarily for the start_lasers
-            # call so start_lasers (which reads the cached flags) energizes
-            # only L1, then restores the original flag so stop_lasers at
-            # the end still reads the original value (L2 was never
-            # energized, so stop_lasers's L2 .off() is a safe no-op). The
-            # strict one-laser-energized invariant holds trivially.
-            orig_auto2 = self._shell._auto_laser2
+            # Continuous-mode first-laser-only guard: when both auto-laser
+            # checkboxes are checked, preview (a continuous mode with no
+            # per-plane boundary to sequence over) energizes ONLY L1 for
+            # the session and holds L2 off. Alternating L1<->L2 per frame
+            # would double frame time and flicker; instead the operator
+            # switches which single laser is live by unchecking one
+            # auto-laser checkbox and checking the other (the existing
+            # _cache_auto_laser_flags() resampling path). The guard passes
+            # a local (l1, l2=False) tuple to start_lasers so it energizes
+            # only L1 for this call without mutating the shared
+            # _auto_laser2 attribute — the cached flag stays at its
+            # GUI-thread value, so stop_lasers at the end still reads the
+            # original value (L2 was never energized, so stop_lasers's L2
+            # .off() is a safe no-op). The strict one-laser-energized
+            # invariant holds trivially. Passing the flag as a local
+            # argument (instead of the prior save/restore of _auto_laser2)
+            # avoids a data race with the GUI thread's
+            # _cache_auto_laser_flags() resampling.
             if self._shell._auto_laser1 and self._shell._auto_laser2:
-                self._shell._auto_laser2 = False
-            try:
-                self._hw.start_lasers()
-            finally:
-                self._shell._auto_laser2 = orig_auto2
+                energize_lasers = (True, False)
+            else:
+                energize_lasers = None
+            self._hw.start_lasers(energize_lasers=energize_lasers)
 
             while self._shell.preview_mode_started:
                 # E-stop poll point — checked at the top of each iteration
@@ -360,27 +362,24 @@ class LiveWorker(QObject, _AcquireScanMixin):
         try:
             # Starting lasers.
             #
-            # D-04 continuous-mode first-laser-only guard: when both
-            # auto-laser checkboxes are checked, live (a continuous mode
-            # with no per-plane boundary to sequence over) energizes ONLY
-            # L1 for the session and holds L2 off. Alternating L1<->L2 per
-            # frame would double frame time and flicker; instead the
-            # operator switches which single laser is live by unchecking
-            # one auto-laser checkbox and checking the other (the existing
-            # _cache_auto_laser_flags() resampling path). The guard
-            # suppresses _auto_laser2 temporarily for the start_lasers
-            # call so start_lasers (which reads the cached flags) energizes
-            # only L1, then restores the original flag so stop_lasers at
-            # the end still reads the original value (L2 was never
-            # energized, so stop_lasers's L2 .off() is a safe no-op). The
-            # strict one-laser-energized invariant holds trivially.
-            orig_auto2 = self._shell._auto_laser2
+            # Continuous-mode first-laser-only guard: when both auto-laser
+            # checkboxes are checked, live (a continuous mode with no
+            # per-plane boundary to sequence over) energizes ONLY L1 for
+            # the session and holds L2 off. Alternating L1<->L2 per frame
+            # would double frame time and flicker; instead the operator
+            # switches which single laser is live by unchecking one
+            # auto-laser checkbox and checking the other (the existing
+            # _cache_auto_laser_flags() resampling path). The guard passes
+            # a local (l1, l2=False) tuple to start_lasers so it energizes
+            # only L1 for this call without mutating the shared
+            # _auto_laser2 attribute — see PreviewWorker.run for the full
+            # rationale (avoids the data race with the GUI thread's
+            # _cache_auto_laser_flags() resampling).
             if self._shell._auto_laser1 and self._shell._auto_laser2:
-                self._shell._auto_laser2 = False
-            try:
-                self._hw.start_lasers()
-            finally:
-                self._shell._auto_laser2 = orig_auto2
+                energize_lasers = (True, False)
+            else:
+                energize_lasers = None
+            self._hw.start_lasers(energize_lasers=energize_lasers)
 
             while self._shell.live_mode_started:
                 # E-stop poll point — checked at the top of each iteration before

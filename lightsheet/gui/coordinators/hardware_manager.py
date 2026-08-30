@@ -368,7 +368,9 @@ class HardwareManager:
     # Acquisition-worker laser start/stop.
     # ------------------------------------------------------------------ #
 
-    def start_lasers(self) -> None:
+    def start_lasers(
+        self, energize_lasers: tuple[bool, bool] | None = None
+    ) -> None:
         """Starts the lasers at a certain power. Called from acquisition
         worker threads (not the GUI thread), so no further nested thread is
         needed — only the %-to-absolute scaling at the HAL boundary.
@@ -383,8 +385,23 @@ class HardwareManager:
         sampled on the GUI thread by _cache_auto_laser_flags() before the
         worker is spawned, so this method reads only cached bools and never
         touches a Qt widget (AGENTS.md §11).
+
+        ``energize_lasers`` (optional) overrides the cached auto-laser
+        flags for THIS call only — the caller passes a local (l1, l2)
+        tuple instead of mutating self._shell._auto_laser2 around the
+        call. Used by the continuous-mode workers (PreviewWorker /
+        LiveWorker) to suppress L2 energization when both auto-laser
+        checkboxes are checked (continuous mode energizes only L1 for
+        the session to avoid per-frame alternation flicker). When None
+        (the default), the cached flags are read as before — back-compat
+        for the single/stack callers that do not need the override.
         """
-        if self._shell._auto_laser1:
+        if energize_lasers is not None:
+            energize_l1, energize_l2 = energize_lasers
+        else:
+            energize_l1 = self._shell._auto_laser1
+            energize_l2 = self._shell._auto_laser2
+        if energize_l1:
             mw = self._shell.laser1_power_pct / 100.0 * self.lasers[0].max_power
             self.lasers[0].set_power(mw)
             self.lasers[0].on()
@@ -401,7 +418,7 @@ class HardwareManager:
                     f"the laser. Cause: {self.lasers[0].error_message}"
                 )
                 self.lasers[0].error = 0
-        if self._shell._auto_laser2:
+        if energize_l2:
             mw = self._shell.laser2_power_pct / 100.0 * self.lasers[1].max_power
             self.lasers[1].set_power(mw)
             self.lasers[1].on()
