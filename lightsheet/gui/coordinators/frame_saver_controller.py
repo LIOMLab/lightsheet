@@ -33,6 +33,7 @@ import numpy as np
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from lightsheet.hal.bundle import DeviceBundle
+from lightsheet.wavelength_color import wavelength_to_hex
 
 from liom_toolkit.utils.zarr_writer import AnalysisOmeZarrWriter
 
@@ -1285,24 +1286,6 @@ class FrameSaver(QObject):
                 )
 
 
-def _wavelength_to_hex(wavelength: int) -> str:
-    """Map a laser wavelength (nm) to a 6-char hex color string (no ``#``).
-
-    The mapping covers the wavelengths configured on this rig:
-    488 nm -> cyan, 555 nm -> green, 640/647 nm -> red. Any other
-    wavelength falls back to white so an unrecognised channel is still
-    visible in viewers that honour the omero channel color. The operator
-    may override the recorded color at UAT.
-    """
-    if wavelength == 488:
-        return "00FFFF"  # cyan
-    if wavelength == 555:
-        return "00FF00"  # green
-    if wavelength in (640, 647):
-        return "FF0000"  # red
-    return "FFFFFF"  # white fallback
-
-
 class ZarrSaver:
     """Plain-Python collaborator that streams reconstructed frames into an
     OME-Zarr store and finalizes the analysis pyramid + NGFF metadata.
@@ -1430,7 +1413,7 @@ class ZarrSaver:
             channels.append(
                 {
                     "label": laser.label,
-                    "color": _wavelength_to_hex(laser.wavelength),
+                    "color": wavelength_to_hex(laser.wavelength),
                     "active": True,
                     "wavelength": int(laser.wavelength),
                 }

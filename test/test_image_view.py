@@ -6,6 +6,12 @@ grayscale values modulated by the tint color (``channel_c = (frame_scaled *
 color_c) // 255``). When no tint is passed, the existing grayscale
 ``Format_Grayscale8`` path runs unchanged (single-channel back-compat).
 
+The format is asserted on the source QImage the widget builds
+(``view._src_qimage``) — the QPixmap round-trip converts to the
+screen-backed 32-bit format and would mask the source format. The pixel
+data is asserted on the source QImage's interleaved RGB bytes, which
+survive the round-trip as the same color on screen.
+
 Runs headless on Mac via ``QT_QPA_PLATFORM=offscreen`` (set by conftest).
 """
 
@@ -43,16 +49,16 @@ def test_set_image_with_tint_produces_rgb888(qtbot) -> None:
     view.setImage(frame, tint="00FF00")
 
     assert view._pixmap_item is not None, "pixmap item not set after setImage"
-    qimage = view._pixmap_item.pixmap().toImage()
+    qimage = view._src_qimage
+    assert qimage is not None
     assert qimage.format() == QImage.Format.Format_RGB888, (
-        f"tinted image must be Format_RGB888; got {qimage.format()}"
+        f"tinted source image must be Format_RGB888; got {qimage.format()}"
     )
 
     # The default levels window is 0-20000; 10000 -> uint8 127.
     expected_g = _scaled_uint8(frame, 0, 20000)
-    # Pull the interleaved RGB bytes back out of the QImage and compare
-    # per-channel. QImage stores the buffer row-major; for a 10x10 RGB888
-    # image the buffer is 10 * (10 * 3) bytes.
+    # Pull the interleaved RGB bytes out of the source QImage (RGB888 is
+    # packed as (H, W, 3) uint8 row-major).
     ptr = qimage.constBits()
     arr = np.frombuffer(ptr, dtype=np.uint8, count=10 * 10 * 3).reshape(10, 10, 3)
     assert np.all(arr[:, :, 0] == 0), "R channel must be zero for a green tint"
@@ -77,7 +83,8 @@ def test_set_image_with_red_tint_produces_red_channel_only(qtbot) -> None:
 
     view.setImage(frame, tint="FF0000")
 
-    qimage = view._pixmap_item.pixmap().toImage()
+    qimage = view._src_qimage
+    assert qimage is not None
     assert qimage.format() == QImage.Format.Format_RGB888
 
     expected_r = _scaled_uint8(frame, 0, 20000)
@@ -103,16 +110,18 @@ def test_set_image_without_tint_is_grayscale8(qtbot) -> None:
 
     view.setImage(frame)
 
-    qimage = view._pixmap_item.pixmap().toImage()
+    qimage = view._src_qimage
+    assert qimage is not None
     assert qimage.format() == QImage.Format.Format_Grayscale8, (
-        f"no-tint image must be Format_Grayscale8; got {qimage.format()}"
+        f"no-tint source image must be Format_Grayscale8; got {qimage.format()}"
     )
 
 
 def test_set_image_stores_last_tint_for_levels_rerender(qtbot) -> None:
     """After setImage(frame, tint='00FF00'), set_levels re-renders WITH the
     stored tint so the operator does not lose the channel color after
-    dragging the levels window. The re-rendered image is still RGB888."""
+    dragging the levels window. The re-rendered source image is still
+    RGB888."""
     from PySide6.QtGui import QImage
 
     from lightsheet.gui.panels.image_view import ImageView
@@ -127,9 +136,10 @@ def test_set_image_stores_last_tint_for_levels_rerender(qtbot) -> None:
 
     # Re-render via set_levels — the tint must survive the re-render.
     view.set_levels(0, 20000)
-    qimage = view._pixmap_item.pixmap().toImage()
+    qimage = view._src_qimage
+    assert qimage is not None
     assert qimage.format() == QImage.Format.Format_RGB888, (
-        "set_levels must re-apply the stored tint (RGB888)"
+        "set_levels must re-apply the stored tint (RGB888 source image)"
     )
 
 

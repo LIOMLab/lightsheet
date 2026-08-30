@@ -81,6 +81,18 @@ class ImageView(QGraphicsView):
         # to re-supply the frame. The clamp is applied to a COPY for
         # display — this attribute holds the raw frame.
         self._last_frame: np.ndarray | None = None
+        # The most recent tint (6-char hex, no "#") applied by setImage,
+        # kept so set_levels / set_colormap_range can re-render WITH the
+        # tint and the operator does not lose the L1/L2 color cue after
+        # dragging the levels window. None means grayscale (single-channel
+        # back-compat — set_levels re-renders Format_Grayscale8).
+        self._last_tint: str | None = None
+        # The source QImage built by the most recent setImage (before the
+        # QPixmap.fromImage round-trip, which converts to the
+        # screen-backed 32-bit format). Exposed so tests can assert the
+        # format we actually built (Format_RGB888 vs Format_Grayscale8)
+        # without the pixmap conversion masking it.
+        self._src_qimage: QImage | None = None
         # Left-click drag pans the image (hand-drag). This is essential
         # for the operator to navigate a zoomed-in frame.
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
@@ -100,7 +112,7 @@ class ImageView(QGraphicsView):
         self._levels_min = int(levels_min)
         self._levels_max = int(levels_max)
         if self._last_frame is not None:
-            self.setImage(self._last_frame)
+            self.setImage(self._last_frame, tint=self._last_tint)
 
     def set_colormap_range(self, range_min: int, range_max: int) -> None:
         """Set the colormap scaling range (the LevelsBar RANGE set).
@@ -125,7 +137,7 @@ class ImageView(QGraphicsView):
             self._levels_min = new_levels_min
             self._levels_max = new_levels_max
         if self._last_frame is not None:
-            self.setImage(self._last_frame)
+            self.setImage(self._last_frame, tint=self._last_tint)
 
     def resizeEvent(self, event) -> None:
         """Re-fit the image to the viewport on resize — but ONLY if the
@@ -169,8 +181,10 @@ class ImageView(QGraphicsView):
         autoRange: bool = False,
         autoLevels: bool = False,
         autoHistogramRange: bool = False,
+        tint: str | None = None,
     ) -> None:
-        """Display a uint16 numpy array as a grayscale image.
+        """Display a uint16 numpy array as a grayscale image, optionally
+        tinted with a per-channel color.
 
         The ``auto*`` kwargs are accepted for call-signature
         compatibility with the historical call sites in
@@ -185,12 +199,26 @@ class ImageView(QGraphicsView):
         range (RANGE set) frames the data range and constrains the window;
         dragging the RANGE handles inward clamps the window into the new
         range, which is the visible effect on the display.
+
+        ``tint`` is an optional 6-char hex color string (no ``#`` prefix,
+        e.g. ``"00FF00"`` for the 555 nm channel). When provided, the
+        scaled grayscale is modulated per-channel
+        (``channel_c = (frame_scaled * color_c) // 255``) and the QImage
+        is built as ``Format_RGB888`` so the operator can visually
+        distinguish L1 from L2 in demo mode where the frames are
+        otherwise identical. When ``tint`` is None, the existing
+        ``Format_Grayscale8`` path runs unchanged (single-channel
+        back-compat — byte-identical display). The tint is stored on
+        ``self._last_tint`` so ``set_levels`` / ``set_colormap_range``
+        re-render WITH the tint (the channel color cue survives level
+        adjustments).
         """
         # Scale uint16 [levels_min, levels_max] to uint8 [0, 255].
         # np.clip + linear scaling; values outside the window saturate.
         # The raw frame is retained for set_levels re-render and for the
         # save path (which receives the unclamped frame separately).
         self._last_frame = frame
+        self._last_tint = tint
         frame_clamped = np.clip(frame, self._levels_min, self._levels_max)
         # Guard against a degenerate levels window where both LevelsBar
         # handles coincide (levels_max == levels_min). The LevelsBar
@@ -213,21 +241,49 @@ class ImageView(QGraphicsView):
         # QPixmap round-trip reliably). The SC2 smoke test asserts
         # non-zero pixel data, not 16-bit fidelity.
         #
+        # When a tint is provided, the grayscale is modulated per-channel
+        # (channel_c = (frame_scaled * color_c) // 255) and the QImage is
+        # built as Format_RGB888 so the operator can visually distinguish
+        # L1 from L2 in demo mode where the frames are otherwise
+        # identical. The interleaved RGB buffer is (H, W, 3) uint8.
+        #
         # The bytes buffer MUST stay alive until QPixmap.fromImage
         # completes the copy — QImage does not copy the data, it just
         # wraps the pointer. Binding tobytes() to an instance attribute
         # keeps the buffer alive across the fromImage call and until the
         # next setImage replaces it.
         height, width = frame_scaled.shape
-        bytes_per_line = width
-        self._image_buffer = frame_scaled.tobytes()
-        qimage = QImage(
-            self._image_buffer,
-            width,
-            height,
-            bytes_per_line,
-            QImage.Format.Format_Grayscale8,
-        )
+        if tint is not None:
+            r = int(tint[0:2], 16)
+            g = int(tint[2:4], 16)
+            b = int(tint[4:6], 16)
+            # Modulate per-channel in uint16 to avoid uint8 overflow
+            # (frame_scaled * 255 overflows uint8 before the // 255).
+            scaled = frame_scaled.astype(np.uint16)
+            rgb = np.empty((height, width, 3), dtype=np.uint8)
+            rgb[:, :, 0] = (scaled * r) // 255
+            rgb[:, :, 1] = (scaled * g) // 255
+            rgb[:, :, 2] = (scaled * b) // 255
+            bytes_per_line = width * 3
+            self._image_buffer = rgb.tobytes()
+            qimage = QImage(
+                self._image_buffer,
+                width,
+                height,
+                bytes_per_line,
+                QImage.Format.Format_RGB888,
+            )
+        else:
+            bytes_per_line = width
+            self._image_buffer = frame_scaled.tobytes()
+            qimage = QImage(
+                self._image_buffer,
+                width,
+                height,
+                bytes_per_line,
+                QImage.Format.Format_Grayscale8,
+            )
+        self._src_qimage = qimage
 
         # Convert to QPixmap and place on the scene. First call adds the
         # pixmap item and sets the scene rect; subsequent calls update
