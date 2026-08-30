@@ -7,10 +7,11 @@ sanitization code that runs here is the same code that runs on the rig.
 
 The corpus locks the ``safe_char`` behavior (alnum + ``-`` kept; everything
 else → ``_``; trailing ``_`` stripped; ``os.path.normpath`` joins
-``save_directory + \"\\\\\" + save_filename``) before the Phase 5 god-object
-split. There is NO ``QRegExp`` in this codebase (RESEARCH Correction 1) —
-the corpus targets ``safe_char`` + ``rstrip(\"_\")`` + the Windows path
-join, not a regex port.
+``save_directory + \"\\\\\" + save_filename`` into ``save_filepath``).
+``save_filename`` holds the bare sanitized name; ``save_filepath`` holds the
+joined absolute path passed to ``FrameSaver.set_files``. There is NO
+``QRegExp`` in this codebase (RESEARCH Correction 1) — the corpus targets
+``safe_char`` + ``rstrip(\"_\")`` + the Windows path join, not a regex port.
 
 Inline ``@pytest.mark.parametrize`` (D-13 — no JSON/YAML data file): the
 corpus is small, semantically stable, and readable at the assertion site.
@@ -68,25 +69,33 @@ def test_safe_char_sanitizes(
         assert expected_substring in ctrl.save_filename, (
             f"expected {expected_substring!r} in save_filename={ctrl.save_filename!r}"
         )
+        # save_filepath is the joined path; the bare name is a substring of it.
+        assert expected_substring in ctrl.save_filepath, (
+            f"expected {expected_substring!r} in save_filepath={ctrl.save_filepath!r}"
+        )
     else:
         assert ctrl.saving_allowed is False
 
 
 def test_safe_char_join_uses_save_directory(qtbot, request) -> None:
     """The sanitized filename is joined to save_directory via
-    os.path.normpath(save_directory + '\\\\' + save_filename). On a
-    non-Windows host normpath collapses the backslash separator, so we
-    assert the sanitized name is present and the directory appears in the
-    joined path."""
+    os.path.normpath(save_directory + '\\\\' + save_filename) into
+    ``save_filepath``. ``save_filename`` holds the bare sanitized name;
+    ``save_filepath`` holds the joined path. On a non-Windows host normpath
+    collapses the backslash separator, so we assert the bare name is in
+    ``save_filename`` and the directory appears in ``save_filepath``."""
     ctrl, _ = make_controller(qtbot, request)
     ctrl.save_panel.ui.lineEdit_saveFilename.setText("plane 01")
     ctrl.save_directory = "/tmp/data"
     ctrl.save_filename = ""
+    ctrl.save_filepath = ""
     ctrl.saving_allowed = False
     ctrl.save_panel.validate_file_name()
     assert ctrl.saving_allowed is True
-    # normpath on POSIX collapses the Windows separator: /tmp/data\plane_01
-    # → /tmp/data/plane_01. On Windows it stays /tmp/data\plane_01. Either
-    # way the sanitized name and the directory are both present.
+    # save_filename holds the bare sanitized name.
     assert "plane_01" in ctrl.save_filename
-    assert "tmp" in ctrl.save_filename or "data" in ctrl.save_filename
+    # save_filepath holds the joined path: normpath on POSIX collapses the
+    # Windows separator /tmp/data\plane_01 → /tmp/data/plane_01. On Windows
+    # it stays /tmp/data\plane_01. Either way the directory is present.
+    assert "plane_01" in ctrl.save_filepath
+    assert "tmp" in ctrl.save_filepath or "data" in ctrl.save_filepath

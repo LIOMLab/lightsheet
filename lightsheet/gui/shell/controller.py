@@ -418,6 +418,7 @@ class Controller_MainWindow(QMainWindow):
             os.path.join(os.path.expanduser("~"), "Desktop", "LightSheetData")
         )
         self.save_filename = ""
+        self.save_filepath = ""
         self.save_description = ""
         self.open_directory = ""
         self.dataset_name = ""

@@ -563,7 +563,7 @@ class StackWorker(QObject, _AcquireScanMixin):
                 if self._save_all_crop:
                     self._shell._fs.set_files(
                         self._shell.number_of_planes,
-                        self._shell.save_filename,
+                        self._shell.save_filepath,
                         "stack",
                         1,
                         "ETLscan",
@@ -571,7 +571,7 @@ class StackWorker(QObject, _AcquireScanMixin):
                 elif self._save_all_full:
                     self._shell._fs.set_files(
                         self._shell.number_of_planes,
-                        self._shell.save_filename,
+                        self._shell.save_filepath,
                         "stack",
                         1,
                         "FullETLscan",
@@ -579,7 +579,7 @@ class StackWorker(QObject, _AcquireScanMixin):
                 else:
                     self._shell._fs.set_files(
                         1,
-                        self._shell.save_filename,
+                        self._shell.save_filepath,
                         "stack",
                         self._shell.number_of_planes,
                         "reconstructed_frame",

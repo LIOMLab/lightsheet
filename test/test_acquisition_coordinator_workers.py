@@ -102,6 +102,7 @@ class _WorkerShell:
         self.saving_allowed = False
         self.number_of_planes = 1
         self.save_filename = "test.hdf5"
+        self.save_filepath = "test.hdf5"
         self.save_description = "test sample"
         self.stack_starting_plane = 0.0
         self.stack_step = 10.0

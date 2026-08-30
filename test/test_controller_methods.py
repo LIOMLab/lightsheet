@@ -548,7 +548,7 @@ def test_updateUi_save_single_image_saving_allowed_crop(qtbot, request) -> None:
     ctrl.save_panel.updateUi_save_single_image()
     ctrl._fs.reinit.assert_called_with(1)
     ctrl._fs.set_files.assert_called_with(
-        1, ctrl.save_filename, "singleImage", 1, "ETLscan"
+        1, ctrl.save_filepath, "singleImage", 1, "ETLscan"
     )
     ctrl._fs.start_saving.assert_called_once()
     ctrl._fs.stop_saving.assert_called_once()
@@ -574,7 +574,7 @@ def test_updateUi_save_single_image_saving_allowed_full(qtbot, request) -> None:
     ctrl._fs.add_motor_parameters = Mock()
     ctrl.save_panel.updateUi_save_single_image()
     ctrl._fs.set_files.assert_called_with(
-        1, ctrl.save_filename, "singleImage", 1, "FullETLscan"
+        1, ctrl.save_filepath, "singleImage", 1, "FullETLscan"
     )
 
 
@@ -598,7 +598,7 @@ def test_updateUi_save_single_image_saving_allowed_reconstructed(qtbot, request)
     ctrl._fs.add_motor_parameters = Mock()
     ctrl.save_panel.updateUi_save_single_image()
     ctrl._fs.set_files.assert_called_with(
-        1, ctrl.save_filename, "singleImage", 1, "reconstructed_frame"
+        1, ctrl.save_filepath, "singleImage", 1, "reconstructed_frame"
     )
 
 

@@ -205,8 +205,14 @@ class SavePanelWidget(QWidget):
         if tmp_string != "":
             self._shell.save_filename = tmp_string
 
+        # save_filename holds the bare sanitized name; save_filepath holds
+        # the joined absolute path passed to FrameSaver.set_files (whose
+        # ``files_name`` arg is a path prefix, not a bare filename — see
+        # frame_saver_controller.py:278-285). Keeping the two separate
+        # avoids the lineEdit restore at controller.py:427 ever showing a
+        # full path in the filename field.
         if (self._shell.save_directory != "") and (self._shell.save_filename != ""):
-            self._shell.save_filename = os.path.normpath(
+            self._shell.save_filepath = os.path.normpath(
                 os.path.join(self._shell.save_directory, self._shell.save_filename)
             )
             self._shell.saving_allowed = True
@@ -235,7 +241,7 @@ class SavePanelWidget(QWidget):
             """Saving frame"""
             if self.ui.radioButton_saveAllCrop.isChecked():
                 self._shell._fs.set_files(
-                    1, self._shell.save_filename, "singleImage", 1, "ETLscan"
+                    1, self._shell.save_filepath, "singleImage", 1, "ETLscan"
                 )
                 cropped_buffer = self._shell._fs.crop_buffer(self._shell.buffer)
                 self._shell._fs.enqueue_buffer(cropped_buffer)
@@ -244,7 +250,7 @@ class SavePanelWidget(QWidget):
                 )
             elif self.ui.radioButton_saveAllFull.isChecked():
                 self._shell._fs.set_files(
-                    1, self._shell.save_filename, "singleImage", 1, "FullETLscan"
+                    1, self._shell.save_filepath, "singleImage", 1, "FullETLscan"
                 )
                 self._shell._fs.enqueue_buffer(self._shell.buffer)
                 self._shell.updateUi_message_printer(
@@ -258,7 +264,7 @@ class SavePanelWidget(QWidget):
                 # checked here because it is the implicit default (the
                 # else branch covers it).
                 self._shell._fs.set_files(
-                    1, self._shell.save_filename, "singleImage", 1, "reconstructed_frame"  # noqa: E501
+                    1, self._shell.save_filepath, "singleImage", 1, "reconstructed_frame"  # noqa: E501
                 )
                 self._shell._fs.enqueue_buffer(self._shell.reconstructed_frame)
                 self._shell.updateUi_message_printer("Saving Reconstructed Image")

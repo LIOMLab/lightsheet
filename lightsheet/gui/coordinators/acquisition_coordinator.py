@@ -18,7 +18,7 @@ shell-owned state (``sig_message``, ``sig_progress_update``,
 ``sig_*_mode_finished``, ``estop_event``, the ``<mode>_mode_started``
 flags, ``_fs``, ``ui.*`` widgets, ``buffer`` / ``reconstructed_frame`` /
 ``buffer_metadata_*`` / ``saving_allowed`` / ``number_of_planes`` /
-``save_filename`` / ``save_description`` / ``stack_starting_plane`` /
+``save_filename`` / ``save_filepath`` / ``save_description`` / ``stack_starting_plane`` /
 ``stack_step`` / ``image_*_pos_text`` / ``current_*_position_text`` /
 ``sig_beep``) is read off the shell reference. The coordinator's own
 attributes are ``self.camera`` / ``self.siggen`` / ``self.motors`` (the
