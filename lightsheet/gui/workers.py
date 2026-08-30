@@ -702,6 +702,24 @@ class StackWorker(QObject, _AcquireScanMixin):
         # single-channel path (back-compat): start_lasers once at top,
         # one acquire_scan per plane, one bare-ndarray enqueue per plane.
         self._multi_channel = multi_channel
+        # Pre-sample the configured laser wavelengths on the GUI thread
+        # (the constructor runs on the GUI thread inside
+        # _spawn_stack_worker) so the worker thread never reaches into
+        # the live ILaser instances from run() (AGENTS.md §11 — no
+        # cross-thread reads of shared HAL state from workers). The
+        # wavelengths are read from the live ILaser instances here, never
+        # hardcoded. In multi-channel mode these are passed to
+        # set_files(wavelengths=...) so the save side builds one
+        # per-channel filename list (and the Zarr writer allocates a
+        # channel axis); in single-channel mode this stays None and the
+        # existing single-filename-list path is used unchanged.
+        if multi_channel:
+            self._wavelengths: list[int] | None = [
+                int(self._shell.lasers[0].wavelength),
+                int(self._shell.lasers[1].wavelength),
+            ]
+        else:
+            self._wavelengths = None
 
     @Slot()
     def run(self) -> None:
@@ -717,6 +735,17 @@ class StackWorker(QObject, _AcquireScanMixin):
                 # Setting frame saver
                 self._shell._fs.reinit(3)
                 self._shell._fs.add_sample_name(self._shell.save_description)
+                # In multi-channel mode, pass the pre-sampled wavelengths
+                # to set_files so the save side builds one per-channel
+                # filename list (HDF5) and the Zarr writer allocates a
+                # channel axis sized to the channel count. Without this,
+                # filenames_lists stays empty and the multi-channel save
+                # workers crash (HDF5/both: AttributeError on tuple.ndim;
+                # Zarr: IndexError on channel-1 write_plane).
+                if self._multi_channel and self._wavelengths:
+                    set_files_kwargs = {"wavelengths": self._wavelengths}
+                else:
+                    set_files_kwargs = {}
                 if self._save_all_crop:
                     self._shell._fs.set_files(
                         self._shell.number_of_planes,
@@ -724,6 +753,7 @@ class StackWorker(QObject, _AcquireScanMixin):
                         "stack",
                         1,
                         "ETLscan",
+                        **set_files_kwargs,
                     )
                 elif self._save_all_full:
                     self._shell._fs.set_files(
@@ -732,6 +762,7 @@ class StackWorker(QObject, _AcquireScanMixin):
                         "stack",
                         1,
                         "FullETLscan",
+                        **set_files_kwargs,
                     )
                 else:
                     self._shell._fs.set_files(
@@ -740,6 +771,7 @@ class StackWorker(QObject, _AcquireScanMixin):
                         "stack",
                         self._shell.number_of_planes,
                         "reconstructed_frame",
+                        **set_files_kwargs,
                     )
                 # Starting frame saver
                 self._shell._fs.start_saving()
