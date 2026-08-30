@@ -723,8 +723,18 @@ class FrameSaver(QObject):
         store_path = os.path.normpath(
             os.path.join(self.parent.save_directory, self.files_name + ".ome.zarr")
         )
+        # Derive the channel count from the per-channel filename lists
+        # built by set_files(wavelengths=...). When set_files was called
+        # with wavelengths (multi-channel mode), filenames_lists has one
+        # list per channel; otherwise it is empty and the writer is
+        # shaped (1, n_planes, y, x) (single-channel back-compat). The
+        # writer MUST be sized to the channel count before any
+        # write_plane(channel_idx, ...) call — otherwise a channel-1
+        # write indexes past the channel axis (size 1) and raises
+        # IndexError.
+        n_channels = len(self.filenames_lists) if self.filenames_lists else 1
         try:
-            self._zarr_saver.start_stack(store_path, n_planes)
+            self._zarr_saver.start_stack(store_path, n_planes, n_channels=n_channels)
         except Exception as e:
             self.sig_status_message.emit(f"Save error: {e}")
             self.saving_started = False
@@ -741,7 +751,13 @@ class FrameSaver(QObject):
         # filled all its planes, so the single-channel stack is done; this
         # is the production path where the worker is started, the producer
         # enqueues exactly n_planes frames, and the worker exits without
-        # waiting for stop_saving. (2) drain — stop_saving() flipped
+        # waiting for stop_saving. This natural-completion exit is ONLY
+        # used in single-channel mode (n_channels == 1): in multi-channel
+        # mode the producer enqueues (0, frame1) then (1, frame2) per
+        # plane, so after the last plane's channel-0 frame is processed
+        # channel 0 has filled but the channel-1 frame is still in the
+        # queue — breaking on channel-0-full would drop the final
+        # channel-1 plane (data loss). (2) drain — stop_saving() flipped
         # saving_started to False, so drain every remaining frame (across
         # ALL channels) then exit on the empty queue; this is the
         # multi-channel path where all frames are pre-loaded and the flag
@@ -749,10 +765,14 @@ class FrameSaver(QObject):
         z_idx_per_channel: dict[int, int] = {}
         try:
             while True:
-                # Natural completion (single-channel production): the
+                # Natural completion (single-channel production only): the
                 # producer is still active but channel 0 filled its planes.
+                # In multi-channel mode this break is skipped — the drain
+                # path (stop_saving) is the only exit, so the last
+                # channel-1 frame is never dropped.
                 if (
                     self.saving_started
+                    and n_channels == 1
                     and z_idx_per_channel.get(0, 0) >= n_planes
                 ):
                     break
@@ -1068,14 +1088,19 @@ class FrameSaver(QObject):
         store_path = os.path.normpath(
             os.path.join(self.parent.save_directory, self.files_name + ".ome.zarr")
         )
+        # Compute the channel count BEFORE start_stack so the Zarr writer
+        # is shaped (n_channels, n_planes, y, x) — a channel-1 write_plane
+        # call would otherwise index past a size-1 channel axis and raise
+        # IndexError. The channel count comes from the per-channel
+        # filename lists built by set_files(wavelengths=...).
+        n_channels = len(self.filenames_lists)
         try:
-            self._zarr_saver.start_stack(store_path, n_planes)
+            self._zarr_saver.start_stack(store_path, n_planes, n_channels=n_channels)
         except Exception as e:
             self.sig_status_message.emit(f"Save error: {e}")
             self.saving_started = False
             return
 
-        n_channels = len(self.filenames_lists)
         plane_counters = [0] * n_channels
         total_files = sum(len(lst) for lst in self.filenames_lists)
         files_written = 0
