@@ -71,6 +71,7 @@ from lightsheet.gui.panels.stack_panel import StackPanelWidget
 from lightsheet.gui.shell.ui_shell import Ui_Shell
 from lightsheet.gui.widgets.channel_radio import ChannelRadio
 from lightsheet.hal.bundle import DeviceBundle
+from lightsheet.wavelength_color import wavelength_to_hex
 
 logger = logging.getLogger(__name__)
 
@@ -964,20 +965,36 @@ class Controller_MainWindow(QMainWindow):
         self.updateUi_initial_hardware_state()
         # Channel-radio (L1/L2 display selector) for the ImageView area.
         # Constructed here (after self.lasers is populated) so the button
-        # labels read the live ILaser.wavelength values. Parented to the
-        # ImageView container and inserted at the top of its vertical
-        # layout so it sits ABOVE the ImageView viewport (does not
-        # displace the LevelsBar below the viewport). Hidden by default;
-        # shown only when both auto-laser checkboxes are checked.
+        # labels read the live ILaser.wavelength values. The radio lives
+        # inside a fixed-height container that is inserted at layout
+        # index 1 — BETWEEN the ImageView (index 0) and the LevelsBar
+        # layout — so the radio sits below the ImageView viewport, not
+        # above it. The container is always visible (it always reserves
+        # its fixed height in the layout); only the inner ChannelRadio
+        # is shown/hidden. This prevents the show/hide reflow that
+        # displaced the ImageView on every visibility toggle: the layout
+        # slot is reserved regardless of the radio's visibility.
         wl1 = getattr(self.lasers[0], "wavelength", None) if len(self.lasers) > 0 else None
         wl2 = getattr(self.lasers[1], "wavelength", None) if len(self.lasers) > 1 else None
         self.channel_radio = ChannelRadio(
             parent=self.ui.imagesPane, wl1=wl1, wl2=wl2,
         )
-        # Insert at index 0 (above the ImageView) of the imagesPane layout.
+        # Fixed-height container wrapping the ChannelRadio. The container
+        # reserves the layout slot; the inner radio shows/hides without
+        # reflowing the ImageView or LevelsBar.
+        from PySide6.QtWidgets import QVBoxLayout, QWidget
+
+        self.channel_radio_container = QWidget(self.ui.imagesPane)
+        self.channel_radio_container.setFixedHeight(32)
+        container_layout = QVBoxLayout(self.channel_radio_container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(0)
+        container_layout.addWidget(self.channel_radio)
+        # Insert the container at index 1 (between the ImageView at 0
+        # and the LevelsBar layout).
         images_layout = self.ui.imagesPane.layout()
         if images_layout is not None:
-            images_layout.insertWidget(0, self.channel_radio)
+            images_layout.insertWidget(1, self.channel_radio_container)
         # Switch the ImageView + reset the LevelsBar when the operator
         # clicks L1/L2. Reads reconstructed_frames[wavelength] (no RGB
         # overlay; no per-channel levels state stored — the LevelsBar
@@ -1481,7 +1498,14 @@ class Controller_MainWindow(QMainWindow):
         if frame is None:
             # No frame for this channel yet — leave the placeholder.
             return
-        self.ui.imageView.setImage(frame)
+        # Tint the displayed frame with the active channel's wavelength
+        # color so the operator can visually distinguish L1 from L2 in
+        # demo mode where the frames are otherwise identical. The tint
+        # is derived from the live laser wavelength (trusted, set at
+        # startup from config.ini) via the shared wavelength_to_hex
+        # mapping (also used by the Zarr omero channels metadata path).
+        color = wavelength_to_hex(int(wl))
+        self.ui.imageView.setImage(frame, tint=color)
         # Reset the LevelsBar window to the displayed frame's observed
         # min/max so the new channel is visible at a sensible contrast.
         # Set window_max first so the window_min setter (which clamps to

@@ -8,6 +8,11 @@ activator); hidden otherwise (single-channel back-compat — the radio is
 HIDDEN, not disabled, so the ImageView area stays visually identical to
 today's single-channel experience).
 
+The widget is expected to live inside a fixed-height container (created
+by the shell at hardware_init) so its show/hide toggles do NOT reflow the
+parent layout — the container reserves the layout slot regardless of the
+radio's visibility, and only the inner radio shows/hides.
+
 The widget uses QDarkStyle default text color + regular weight (matching
 other widget labels). It does NOT use the green accent (#34C759) — that
 token is reserved exclusively for laser ``\u25cf ON`` status, the
