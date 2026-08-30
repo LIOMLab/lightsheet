@@ -73,20 +73,6 @@
               </property>
              </widget>
             </item>
-            <item>
-            <widget class="QSlider" name="slider_doubleSpinBox_etlLeftAmplitude">
-            <property name="orientation">
-            <enum>Qt::Horizontal</enum>
-            </property>
-            <property name="minimumSize">
-            <size>
-            <width>120</width>
-            <height>0</height>
-            </size>
-            </property>
-            </widget>
-            </item>
-
             <item row="1" column="0">
              <widget class="QLabel" name="label_79">
               <property name="sizePolicy">
@@ -216,20 +202,6 @@
               </property>
              </widget>
             </item>
-            <item>
-            <widget class="QSlider" name="slider_doubleSpinBox_etlRightAmplitude">
-            <property name="orientation">
-            <enum>Qt::Horizontal</enum>
-            </property>
-            <property name="minimumSize">
-            <size>
-            <width>120</width>
-            <height>0</height>
-            </size>
-            </property>
-            </widget>
-            </item>
-
             <item row="1" column="0">
              <widget class="QLabel" name="label_82">
               <property name="sizePolicy">
@@ -424,20 +396,6 @@
               </property>
              </widget>
             </item>
-            <item>
-            <widget class="QSlider" name="slider_doubleSpinBox_galvoLeftAmplitude">
-            <property name="orientation">
-            <enum>Qt::Horizontal</enum>
-            </property>
-            <property name="minimumSize">
-            <size>
-            <width>120</width>
-            <height>0</height>
-            </size>
-            </property>
-            </widget>
-            </item>
-
             <item row="1" column="0">
              <widget class="QLabel" name="label_62">
               <property name="sizePolicy">
@@ -558,20 +516,6 @@
               </property>
              </widget>
             </item>
-            <item>
-            <widget class="QSlider" name="slider_doubleSpinBox_galvoRightAmplitude">
-            <property name="orientation">
-            <enum>Qt::Horizontal</enum>
-            </property>
-            <property name="minimumSize">
-            <size>
-            <width>120</width>
-            <height>0</height>
-            </size>
-            </property>
-            </widget>
-            </item>
-
             <item row="1" column="0">
              <widget class="QLabel" name="label_66">
               <property name="sizePolicy">

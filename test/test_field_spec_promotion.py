@@ -1,11 +1,11 @@
 """Promotion integration test — every canonical FieldSpecSpinBox has its
-FieldSpec applied at construction, the 10 selective QSlider pairings are
-synchronized bidirectionally, and the focus-gated wheel is in effect across
-all panels.
+FieldSpec applied at construction, no QSlider pairings remain (the sliders
+were removed from the panel .ui files because the spinboxes are themselves
+scrollable), and the focus-gated wheel is in effect across all panels.
 
 Constructs the real ``Controller_MainWindow`` via the shared
 ``make_controller`` fixture (AGENTS.md §5) so the panel ``__init__`` applySpec
-loops + QSlider sync wiring run against the real widget tree. Headless via
+loops run against the real widget tree. Headless via
 ``QT_QPA_PLATFORM=offscreen`` (set by conftest).
 """
 
@@ -17,7 +17,6 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, Qt  # noqa: E402
 from PySide6.QtGui import QWheelEvent  # noqa: E402
-from PySide6.QtWidgets import QSlider  # noqa: E402
 
 from _helpers.controller_fixture import make_controller  # noqa: E402
 from lightsheet.gui.widgets.field_spec import FIELD_SPECS  # noqa: E402
@@ -59,14 +58,13 @@ _OBJNAME_TO_PANEL = {
     "doubleSpinBox_laserTwoAmplitude": "laser_panel",
 }
 
-# The 10 selective QSlider-paired fields (slider_<field> widget added in
-# Task 1). All 10 have a QSlider sibling widget; the 8 in
-# SLIDER_SYNCED_FIELDS have bidirectional sync wired. The 2 stack
-# first/last plane fields (in SLIDER_PAIRED_BUT_NOT_SYNCED) have the
-# slider widget present but sync is deferred — the stack panel's
-# pre-existing µm-units convention conflicts with the FieldSpec mm range
-# (the slider's int range would clamp the spinbox's widened µm value).
-SLIDER_PAIRED_FIELDS = (
+# The fields that previously had QSlider siblings. The sliders were
+# removed from the panel .ui files because the FieldSpecSpinBox is itself
+# scrollable (wheel + arrow keys + Ctrl/Shift page-step), so a separate
+# coarse-drag slider was redundant and broke the form-layout alignment.
+# This tuple is kept so the no-sliders regression test can iterate the
+# exact set of fields that used to carry a slider.
+FORMER_SLIDER_PAIRED_FIELDS = (
     "doubleSpinBox_sampleSetHPosition",
     "doubleSpinBox_sampleSetVPosition",
     "doubleSpinBox_cameraSetPosition",
@@ -77,25 +75,6 @@ SLIDER_PAIRED_FIELDS = (
     "doubleSpinBox_galvoLeftAmplitude",
     "doubleSpinBox_galvoRightAmplitude",
     "doubleSpinBox_cameraExposureTime",
-)
-
-# Fields with bidirectional slider sync wired in the panel __init__.
-SLIDER_SYNCED_FIELDS = (
-    "doubleSpinBox_sampleSetHPosition",
-    "doubleSpinBox_sampleSetVPosition",
-    "doubleSpinBox_cameraSetPosition",
-    "doubleSpinBox_etlLeftAmplitude",
-    "doubleSpinBox_etlRightAmplitude",
-    "doubleSpinBox_galvoLeftAmplitude",
-    "doubleSpinBox_galvoRightAmplitude",
-    "doubleSpinBox_cameraExposureTime",
-)
-
-# Slider widget present but sync deferred (stack panel µm-vs-mm units
-# conflict — see deviation note in the plan SUMMARY).
-SLIDER_PAIRED_BUT_NOT_SYNCED = (
-    "doubleSpinBox_acqFirstPlane",
-    "doubleSpinBox_acqLastPlane",
 )
 
 
@@ -105,13 +84,6 @@ def _get_spinbox(ctrl, obj_name: str) -> FieldSpecSpinBox:
     panel_attr = _OBJNAME_TO_PANEL[obj_name]
     panel = getattr(ctrl, panel_attr)
     return getattr(panel.ui, obj_name)
-
-
-def _get_slider(ctrl, obj_name: str) -> QSlider:
-    """Resolve a slider-paired field to its QSlider sibling."""
-    panel_attr = _OBJNAME_TO_PANEL[obj_name]
-    panel = getattr(ctrl, panel_attr)
-    return getattr(panel.ui, f"slider_{obj_name}")
 
 
 def test_every_canonical_spinbox_is_field_spec_subclass(qtbot, request) -> None:
@@ -178,65 +150,18 @@ def test_applySpec_applied_suffix_decimals_range(qtbot, request) -> None:
         )
 
 
-def test_slider_pairing_exists_for_10_fields(qtbot, request) -> None:
-    """Each of the 10 selective QSlider-paired fields has a QSlider
-    sibling widget (slider_<field>) on the same panel."""
+def test_no_slider_widgets_remain(qtbot, request) -> None:
+    """None of the formerly slider-paired fields has a QSlider sibling
+    widget anymore. The sliders were removed from the panel .ui files
+    because the FieldSpecSpinBox is itself scrollable; a separate
+    coarse-drag slider was redundant and broke the form-layout alignment.
+    This test guards against an accidental re-introduction."""
     ctrl, _ = make_controller(qtbot, request)
-    for obj_name in SLIDER_PAIRED_FIELDS:
-        slider = _get_slider(ctrl, obj_name)
-        assert isinstance(slider, QSlider), (
-            f"slider_{obj_name} is {type(slider).__name__}, not QSlider"
-        )
-
-
-def test_slider_range_matches_spec(qtbot, request) -> None:
-    """Each synced QSlider's range/singleStep match the FieldSpec
-    (coarse step = page_step). The 2 stack first/last plane sliders are
-    present but not synced (units conflict) — excluded here."""
-    ctrl, _ = make_controller(qtbot, request)
-    for obj_name in SLIDER_SYNCED_FIELDS:
-        spec = FIELD_SPECS[obj_name]
-        slider = _get_slider(ctrl, obj_name)
-        assert slider.minimum() == int(spec.minimum), (
-            f"slider_{obj_name}: minimum {slider.minimum()} != {int(spec.minimum)}"
-        )
-        assert slider.maximum() == int(spec.maximum), (
-            f"slider_{obj_name}: maximum {slider.maximum()} != {int(spec.maximum)}"
-        )
-        assert slider.singleStep() == int(spec.page_step), (
-            f"slider_{obj_name}: singleStep {slider.singleStep()} != {int(spec.page_step)}"
-        )
-
-
-def test_slider_sync_spinbox_to_slider(qtbot, request) -> None:
-    """Spinbox → slider: changing the spinbox value updates the slider
-    (for the 8 synced fields)."""
-    ctrl, _ = make_controller(qtbot, request)
-    for obj_name in SLIDER_SYNCED_FIELDS:
-        sb = _get_spinbox(ctrl, obj_name)
-        slider = _get_slider(ctrl, obj_name)
-        spec = FIELD_SPECS[obj_name]
-        # Pick a value strictly inside the int range, distinct from the
-        # current value when possible.
-        target = int(spec.minimum) + max(1, (int(spec.maximum) - int(spec.minimum)) // 3)
-        sb.setValue(float(target))
-        assert slider.value() == target, (
-            f"{obj_name}: spinbox setValue({target}) → slider {slider.value()}"
-        )
-
-
-def test_slider_sync_slider_to_spinbox(qtbot, request) -> None:
-    """Slider → spinbox: changing the slider value updates the spinbox
-    (for the 8 synced fields)."""
-    ctrl, _ = make_controller(qtbot, request)
-    for obj_name in SLIDER_SYNCED_FIELDS:
-        sb = _get_spinbox(ctrl, obj_name)
-        slider = _get_slider(ctrl, obj_name)
-        spec = FIELD_SPECS[obj_name]
-        target = int(spec.minimum) + max(1, (int(spec.maximum) - int(spec.minimum)) // 2)
-        slider.setValue(target)
-        assert abs(sb.value() - float(target)) < 1e-9, (
-            f"{obj_name}: slider setValue({target}) → spinbox {sb.value()}"
+    for obj_name in FORMER_SLIDER_PAIRED_FIELDS:
+        panel_attr = _OBJNAME_TO_PANEL[obj_name]
+        panel = getattr(ctrl, panel_attr)
+        assert not hasattr(panel.ui, f"slider_{obj_name}"), (
+            f"slider_{obj_name} should have been removed but is still present"
         )
 
 

@@ -45,18 +45,6 @@ class AcquisitionPanelWidget(QWidget):
             w = getattr(self.ui, obj_name, None)
             if w is not None and hasattr(w, "applySpec"):
                 w.applySpec(spec)
-        # Selective QSlider pairing for the wide-range coarse camera
-        # exposure-time field. Bare bound-method connections (no lambdas).
-        field_name = "doubleSpinBox_cameraExposureTime"
-        spinbox = getattr(self.ui, field_name, None)
-        slider = getattr(self.ui, f"slider_{field_name}", None)
-        if spinbox is not None and slider is not None:
-            spec = FIELD_SPECS[field_name]
-            slider.setRange(int(spec.minimum), int(spec.maximum))
-            slider.setSingleStep(int(spec.page_step))
-            slider.setValue(int(spinbox.value()))
-            spinbox.valueChanged.connect(slider.setValue)
-            slider.valueChanged.connect(spinbox.setValue)
 
     def updateUi_modes_buttons(self, buttons_to_enable: list[QPushButton]) -> None:
         """Update mode buttons status : disable buttons, except for those specified to be enabled"""  # noqa: E501

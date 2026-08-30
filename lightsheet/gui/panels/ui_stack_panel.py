@@ -16,8 +16,8 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QFrame, QGroupBox, QHBoxLayout,
-    QLabel, QPushButton, QSizePolicy, QSlider,
-    QSpacerItem, QVBoxLayout, QWidget)
+    QLabel, QPushButton, QSizePolicy, QSpacerItem,
+    QVBoxLayout, QWidget)
 
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
@@ -122,6 +122,7 @@ class Ui_StackPanel(object):
         self.pushButton_acqSetFirstPlane.setObjectName(u"pushButton_acqSetFirstPlane")
         sizePolicy3.setHeightForWidth(self.pushButton_acqSetFirstPlane.sizePolicy().hasHeightForWidth())
         self.pushButton_acqSetFirstPlane.setSizePolicy(sizePolicy3)
+        self.pushButton_acqSetFirstPlane.setMinimumSize(QSize(140, 0))
 
         self.horizontalLayout_90.addWidget(self.pushButton_acqSetFirstPlane)
 
@@ -136,13 +137,6 @@ class Ui_StackPanel(object):
 
         self.horizontalLayout_90.addWidget(self.doubleSpinBox_acqFirstPlane)
 
-        self.slider_doubleSpinBox_acqFirstPlane = QSlider(self.groupBox_18)
-        self.slider_doubleSpinBox_acqFirstPlane.setObjectName(u"slider_doubleSpinBox_acqFirstPlane")
-        self.slider_doubleSpinBox_acqFirstPlane.setOrientation(Qt.Horizontal)
-        self.slider_doubleSpinBox_acqFirstPlane.setMinimumSize(QSize(120, 0))
-
-        self.horizontalLayout_90.addWidget(self.slider_doubleSpinBox_acqFirstPlane)
-
 
         self.verticalLayout_14.addLayout(self.horizontalLayout_90)
 
@@ -153,6 +147,7 @@ class Ui_StackPanel(object):
         self.pushButton_acqSetLastPlane.setObjectName(u"pushButton_acqSetLastPlane")
         sizePolicy3.setHeightForWidth(self.pushButton_acqSetLastPlane.sizePolicy().hasHeightForWidth())
         self.pushButton_acqSetLastPlane.setSizePolicy(sizePolicy3)
+        self.pushButton_acqSetLastPlane.setMinimumSize(QSize(140, 0))
 
         self.horizontalLayout_91.addWidget(self.pushButton_acqSetLastPlane)
 
@@ -166,13 +161,6 @@ class Ui_StackPanel(object):
         self.doubleSpinBox_acqLastPlane.setMaximum(100000.000000000000000)
 
         self.horizontalLayout_91.addWidget(self.doubleSpinBox_acqLastPlane)
-
-        self.slider_doubleSpinBox_acqLastPlane = QSlider(self.groupBox_18)
-        self.slider_doubleSpinBox_acqLastPlane.setObjectName(u"slider_doubleSpinBox_acqLastPlane")
-        self.slider_doubleSpinBox_acqLastPlane.setOrientation(Qt.Horizontal)
-        self.slider_doubleSpinBox_acqLastPlane.setMinimumSize(QSize(120, 0))
-
-        self.horizontalLayout_91.addWidget(self.slider_doubleSpinBox_acqLastPlane)
 
 
         self.verticalLayout_14.addLayout(self.horizontalLayout_91)

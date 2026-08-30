@@ -147,8 +147,8 @@ class FrameViewer(QObject):
 
         # Empty frame
         frame_init = np.zeros((self.rows, self.columns), dtype=np.uint16)
-        # Set one pixel to trick histogram initial range (0-2000)
-        frame_init[0, 0] = 2000
+        # Set one pixel to trick histogram initial range (0-20000)
+        frame_init[0, 0] = 20000
         # Transpose since setImage is column-major
         frame_init = np.transpose(frame_init)
         # Set initial view

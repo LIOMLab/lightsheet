@@ -175,6 +175,12 @@
               <verstretch>0</verstretch>
              </sizepolicy>
             </property>
+            <property name="minimumSize">
+             <size>
+              <width>140</width>
+              <height>0</height>
+             </size>
+            </property>
             <property name="toolTip">
              <string>Set the current horizontal position as starting point for stack acquisition</string>
             </property>
@@ -214,21 +220,7 @@
             </property>
            </widget>
           </item>
-          <item>
-          <widget class="QSlider" name="slider_doubleSpinBox_acqFirstPlane">
-          <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-          </property>
-          <property name="minimumSize">
-          <size>
-          <width>120</width>
-          <height>0</height>
-          </size>
-          </property>
-          </widget>
-          </item>
-
-         </layout>
+          </layout>
         </item>
         <item>
          <layout class="QHBoxLayout" name="horizontalLayout_91">
@@ -242,6 +234,12 @@
               <horstretch>0</horstretch>
               <verstretch>0</verstretch>
              </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>140</width>
+              <height>0</height>
+             </size>
             </property>
             <property name="toolTip">
              <string>Set the current horizontal position as ending point for stack acquisition</string>
@@ -282,21 +280,7 @@
             </property>
            </widget>
           </item>
-          <item>
-          <widget class="QSlider" name="slider_doubleSpinBox_acqLastPlane">
-          <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-          </property>
-          <property name="minimumSize">
-          <size>
-          <width>120</width>
-          <height>0</height>
-          </size>
-          </property>
-          </widget>
-          </item>
-
-         </layout>
+          </layout>
         </item>
         <item>
          <widget class="QLabel" name="label_stackPlanSummary">

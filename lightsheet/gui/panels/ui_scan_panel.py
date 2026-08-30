@@ -17,7 +17,7 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QFrame,
     QGroupBox, QHBoxLayout, QLabel, QSizePolicy,
-    QSlider, QVBoxLayout, QWidget)
+    QVBoxLayout, QWidget)
 
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
@@ -76,13 +76,6 @@ class Ui_ScanPanel(object):
         self.doubleSpinBox_etlLeftAmplitude.setSingleStep(0.100000000000000)
 
         self.formLayout_16.setWidget(0, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_etlLeftAmplitude)
-
-        self.slider_doubleSpinBox_etlLeftAmplitude = QSlider(self.groupBox_13)
-        self.slider_doubleSpinBox_etlLeftAmplitude.setObjectName(u"slider_doubleSpinBox_etlLeftAmplitude")
-        self.slider_doubleSpinBox_etlLeftAmplitude.setOrientation(Qt.Horizontal)
-        self.slider_doubleSpinBox_etlLeftAmplitude.setMinimumSize(QSize(120, 0))
-
-        self.formLayout_16.setWidget(0, QFormLayout.ItemRole.LabelRole, self.slider_doubleSpinBox_etlLeftAmplitude)
 
         self.label_79 = QLabel(self.groupBox_13)
         self.label_79.setObjectName(u"label_79")
@@ -152,13 +145,6 @@ class Ui_ScanPanel(object):
         self.doubleSpinBox_etlRightAmplitude.setSingleStep(0.100000000000000)
 
         self.formLayout_17.setWidget(0, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_etlRightAmplitude)
-
-        self.slider_doubleSpinBox_etlRightAmplitude = QSlider(self.groupBox_13)
-        self.slider_doubleSpinBox_etlRightAmplitude.setObjectName(u"slider_doubleSpinBox_etlRightAmplitude")
-        self.slider_doubleSpinBox_etlRightAmplitude.setOrientation(Qt.Horizontal)
-        self.slider_doubleSpinBox_etlRightAmplitude.setMinimumSize(QSize(120, 0))
-
-        self.formLayout_17.setWidget(0, QFormLayout.ItemRole.LabelRole, self.slider_doubleSpinBox_etlRightAmplitude)
 
         self.label_82 = QLabel(self.groupBox_13)
         self.label_82.setObjectName(u"label_82")
@@ -270,13 +256,6 @@ class Ui_ScanPanel(object):
 
         self.formLayout_10.setWidget(0, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_galvoLeftAmplitude)
 
-        self.slider_doubleSpinBox_galvoLeftAmplitude = QSlider(self.groupBox_11)
-        self.slider_doubleSpinBox_galvoLeftAmplitude.setObjectName(u"slider_doubleSpinBox_galvoLeftAmplitude")
-        self.slider_doubleSpinBox_galvoLeftAmplitude.setOrientation(Qt.Horizontal)
-        self.slider_doubleSpinBox_galvoLeftAmplitude.setMinimumSize(QSize(120, 0))
-
-        self.formLayout_10.setWidget(0, QFormLayout.ItemRole.LabelRole, self.slider_doubleSpinBox_galvoLeftAmplitude)
-
         self.label_62 = QLabel(self.groupBox_11)
         self.label_62.setObjectName(u"label_62")
         sizePolicy1.setHeightForWidth(self.label_62.sizePolicy().hasHeightForWidth())
@@ -342,13 +321,6 @@ class Ui_ScanPanel(object):
         self.doubleSpinBox_galvoRightAmplitude.setSingleStep(0.100000000000000)
 
         self.formLayout_11.setWidget(0, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_galvoRightAmplitude)
-
-        self.slider_doubleSpinBox_galvoRightAmplitude = QSlider(self.groupBox_11)
-        self.slider_doubleSpinBox_galvoRightAmplitude.setObjectName(u"slider_doubleSpinBox_galvoRightAmplitude")
-        self.slider_doubleSpinBox_galvoRightAmplitude.setOrientation(Qt.Horizontal)
-        self.slider_doubleSpinBox_galvoRightAmplitude.setMinimumSize(QSize(120, 0))
-
-        self.formLayout_11.setWidget(0, QFormLayout.ItemRole.LabelRole, self.slider_doubleSpinBox_galvoRightAmplitude)
 
         self.label_66 = QLabel(self.groupBox_11)
         self.label_66.setObjectName(u"label_66")

@@ -96,6 +96,18 @@ def _press_at(bar, x, y=32):
     QApplication.sendEvent(bar, evt)
 
 
+def _window_row_y(bar) -> int:
+    """The y pixel center of the WINDOW + central handle row."""
+    _range_y, window_y = bar._row_y()
+    return window_y
+
+
+def _range_row_y(bar) -> int:
+    """The y pixel center of the RANGE handle row (upper half)."""
+    range_y, _window_y = bar._row_y()
+    return range_y
+
+
 def _move_to(bar, x, y=32):
     from PySide6.QtCore import QEvent, QPointF, Qt
     from PySide6.QtGui import QMouseEvent
@@ -219,8 +231,8 @@ def test_press_near_center_starts_center_drag(qtbot) -> None:
     bar.set_data_range(0, 1000)
     bar.window_min = 200
     bar.window_max = 400
-    # center@120; press at 120.
-    _press_at(bar, 120)
+    # center@120; press at 120 on the window row.
+    _press_at(bar, 120, _window_row_y(bar))
     assert bar._dragging_handle == "center"
     _release(bar)
 
@@ -238,8 +250,8 @@ def test_center_drag_preserves_width_and_shifts(qtbot) -> None:
     received: list[tuple[int, int]] = []
     bar.sig_levelsChanged.connect(lambda lo, hi: received.append((lo, hi)))
     # center@120 (value 300). Press, drag to value 500 → x = 500/1000*400 = 200.
-    _press_at(bar, 120)
-    _move_to(bar, 200)
+    _press_at(bar, 120, _window_row_y(bar))
+    _move_to(bar, 200, _window_row_y(bar))
     _release(bar)
     assert bar.window_min == 400, (
         f"expected window_min=400 after center drag, got {bar.window_min}"
@@ -256,10 +268,10 @@ def test_center_drag_clamps_at_range_max(qtbot) -> None:
     bar.set_data_range(0, 1000)
     bar.window_min = 200
     bar.window_max = 400  # half_width = 100
-    _press_at(bar, 120)  # center@120
+    _press_at(bar, 120, _window_row_y(bar))  # center@120
     # Drag center to a value that would push window_max past 1000.
     # value 2000 → x = 2000/1000*400 = 800.
-    _move_to(bar, 800)
+    _move_to(bar, 800, _window_row_y(bar))
     _release(bar)
     assert bar.window_max == 1000, (
         f"window_max should clamp to range_max=1000, got {bar.window_max}"
@@ -275,9 +287,9 @@ def test_center_drag_clamps_at_range_min(qtbot) -> None:
     bar.window_min = 600
     bar.window_max = 800  # half_width = 100, center = 700
     # center@x = 700/1000*400 = 280.
-    _press_at(bar, 280)
+    _press_at(bar, 280, _window_row_y(bar))
     # Drag center to a negative-ish value: x=0 → value 0.
-    _move_to(bar, 0)
+    _move_to(bar, 0, _window_row_y(bar))
     _release(bar)
     assert bar.window_min == 0, (
         f"window_min should clamp to range_min=0, got {bar.window_min}"
@@ -305,8 +317,8 @@ def test_drag_window_min_handle(qtbot) -> None:
     )
     # window_min@80. Press, drag to x=160 (value 400) — but that's window_max's
     # position; drag to x=120 (value 300) instead to stay below window_max.
-    _press_at(bar, 80)
-    _move_to(bar, 120)
+    _press_at(bar, 80, _window_row_y(bar))
+    _move_to(bar, 120, _window_row_y(bar))
     _release(bar)
     assert bar.window_min == 300, (
         f"expected window_min=300, got {bar.window_min}"
@@ -325,8 +337,8 @@ def test_drag_window_max_handle(qtbot) -> None:
     bar.sig_levelsChanged.connect(lambda lo, hi: received.append((lo, hi)))
     # window_max@160. Press, drag to x=120 (value 300) — below window_min? No,
     # window_min=200 → x=80. Drag to x=200 (value 500).
-    _press_at(bar, 160)
-    _move_to(bar, 200)
+    _press_at(bar, 160, _window_row_y(bar))
+    _move_to(bar, 200, _window_row_y(bar))
     _release(bar)
     assert bar.window_max == 500, (
         f"expected window_max=500, got {bar.window_max}"
@@ -340,8 +352,8 @@ def test_window_handle_drag_clamps_to_range(qtbot) -> None:
     bar.set_data_range(0, 1000)
     bar.window_min = 200
     bar.window_max = 400
-    _press_at(bar, 80)  # window_min@80
-    _move_to(bar, 0)  # value 0
+    _press_at(bar, 80, _window_row_y(bar))  # window_min@80
+    _move_to(bar, 0, _window_row_y(bar))  # value 0
     _release(bar)
     assert bar.window_min == 0, (
         f"window_min should clamp to range_min=0, got {bar.window_min}"
@@ -354,9 +366,9 @@ def test_window_handles_swap_when_dragged_past(qtbot) -> None:
     bar.set_data_range(0, 1000)
     bar.window_min = 200
     bar.window_max = 400
-    _press_at(bar, 80)  # window_min@80 (value 200)
+    _press_at(bar, 80, _window_row_y(bar))  # window_min@80 (value 200)
     # Drag to x=200 (value 500) — past window_max (400).
-    _move_to(bar, 200)
+    _move_to(bar, 200, _window_row_y(bar))
     _release(bar)
     # After swap: window_min = old window_max (400), window_max = 500.
     assert bar.window_min == 400, (
@@ -382,8 +394,8 @@ def test_drag_range_min_handle(qtbot) -> None:
     range_received: list[tuple[int, int]] = []
     bar.sig_rangeChanged.connect(lambda lo, hi: range_received.append((lo, hi)))
     # range_min@0. Press, drag to x=100 (value 250).
-    _press_at(bar, 0)
-    _move_to(bar, 100)
+    _press_at(bar, 0, _range_row_y(bar))
+    _move_to(bar, 100, _range_row_y(bar))
     _release(bar)
     assert bar.range_min == 250, (
         f"expected range_min=250, got {bar.range_min}"
@@ -399,8 +411,8 @@ def test_range_handles_cannot_cross(qtbot) -> None:
     bar.window_min = 200
     bar.window_max = 400
     # range_max@400 (value 1000). Drag range_min to x=400 (value 1000).
-    _press_at(bar, 0)
-    _move_to(bar, 400)
+    _press_at(bar, 0, _range_row_y(bar))
+    _move_to(bar, 400, _range_row_y(bar))
     _release(bar)
     assert bar.range_min == 1000, (
         f"range_min should clamp to range_max=1000, got {bar.range_min}"

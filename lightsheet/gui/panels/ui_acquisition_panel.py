@@ -17,7 +17,7 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QComboBox, QFormLayout, QFrame,
     QGroupBox, QLabel, QPushButton, QSizePolicy,
-    QSlider, QSpacerItem, QVBoxLayout, QWidget)
+    QSpacerItem, QVBoxLayout, QWidget)
 
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
@@ -108,13 +108,6 @@ class Ui_AcquisitionPanel(object):
         self.doubleSpinBox_cameraExposureTime.setValue(25.000000000000000)
 
         self.formLayout.setWidget(2, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_cameraExposureTime)
-
-        self.slider_doubleSpinBox_cameraExposureTime = QSlider(self.groupBox_12)
-        self.slider_doubleSpinBox_cameraExposureTime.setObjectName(u"slider_doubleSpinBox_cameraExposureTime")
-        self.slider_doubleSpinBox_cameraExposureTime.setOrientation(Qt.Horizontal)
-        self.slider_doubleSpinBox_cameraExposureTime.setMinimumSize(QSize(120, 0))
-
-        self.formLayout.setWidget(0, QFormLayout.ItemRole.LabelRole, self.slider_doubleSpinBox_cameraExposureTime)
 
         self.label_doubleSpinBox_cameraLineTime = QLabel(self.groupBox_12)
         self.label_doubleSpinBox_cameraLineTime.setObjectName(u"label_doubleSpinBox_cameraLineTime")

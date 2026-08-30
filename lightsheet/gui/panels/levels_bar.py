@@ -18,7 +18,7 @@ Implementation is intentionally stock-Qt6 only: ``paintEvent`` +
 dependency.
 
 The display clamp is applied to a COPY for display only — saved frames are
-the raw uint16. The 0-2000 floor from the earlier single-handle widget is
+the raw uint16. The 0-20000 floor from the earlier single-handle widget is
 gone; the range is data-following.
 
 Mock-testable under ``QT_QPA_PLATFORM=offscreen`` via synthesized
@@ -34,7 +34,12 @@ from PySide6.QtWidgets import QSizePolicy, QWidget
 
 # Hit radius for every handle (px). A press within this many pixels of a
 # handle's x position grabs that handle.
-HANDLE_HIT_RADIUS_PX = 8
+HANDLE_HIT_RADIUS_PX = 14
+# Vertical hit zone for a handle row. The range row sits near the top
+# (y=12) and the window row near the bottom (y=h-12). A click within
+# this many pixels of a row's y grabs that row. Generous so the
+# operator does not have to pixel-aim at a 10px-tall triangle.
+HANDLE_HIT_RADIUS_Y_PX = 20
 
 # Default data-following range for uint16 frames. ``set_data_range`` is the
 # canonical way to update this from the live frame; this default just gives
@@ -65,6 +70,21 @@ class LevelsBar(QWidget):
         self._window_min = DEFAULT_RANGE_MIN
         self._window_max = DEFAULT_RANGE_MAX
         self._dragging_handle: str | None = None
+        # Once the operator drags a RANGE handle, the range is
+        # user-owned: set_data_range (called per-frame from the
+        # controller) must not reset it. Without this flag, the
+        # per-frame set_data_range(0, 65535) would undo the drag.
+        self._range_user_owned = False
+        # The DATA bounds (dtype range, e.g. 0-65535 for uint16) frame
+        # the coordinate mapping. The gradient spans this full range,
+        # and the RANGE/WINDOW handles move freely within it. This is
+        # distinct from the operator-adjustable RANGE set: the data
+        # bounds are fixed by the dtype, so dragging a RANGE handle
+        # inward moves the handle to a new x position (instead of
+        # pinning it to the edge, which happens if the coordinate
+        # mapping uses the RANGE set itself as the span).
+        self._data_min = DEFAULT_RANGE_MIN
+        self._data_max = DEFAULT_RANGE_MAX
         # Minimum 320x64 so all 5 handles + the central handle are
         # grabbable and the two slider rows have height. Expanding/Fixed
         # with horstretch=1 so the bar grows with the image pane and never
@@ -138,13 +158,31 @@ class LevelsBar(QWidget):
         ImageView's display window stays consistent with the new range.
         No-ops (no signal, no repaint) when the range is unchanged — callers
         invoke this on every incoming frame, and for a fixed dtype the range
-        is constant, so the guard prevents redundant emissions and keeps the
-        operator's RANGE handle adjustments stable across frames.
+        is constant, so the guard prevents redundant emissions.
+
+        Once the operator has manually dragged a RANGE handle
+        (``_range_user_owned``), this method no longer resets the range —
+        the per-frame call would otherwise undo the operator's adjustment.
+        The window is still clamped into the (now user-owned) range so a
+        dtype change does not leave the window outside it.
         """
         new_min = int(dmin)
         new_max = int(dmax)
         if new_max < new_min:
             new_min, new_max = new_max, new_min
+        # Always update the data bounds (the coordinate-mapping frame)
+        # so the gradient and handle positions track the dtype range.
+        self._data_min = new_min
+        self._data_max = new_max
+        if self._range_user_owned:
+            # The operator owns the range; only clamp the window into it.
+            old_wmin, old_wmax = self._window_min, self._window_max
+            self._window_min = max(self._range_min, min(self._window_min, self._range_max))
+            self._window_max = max(self._window_min, min(self._window_max, self._range_max))
+            if (self._window_min, self._window_max) != (old_wmin, old_wmax):
+                self.sig_levelsChanged.emit(self._window_min, self._window_max)
+                self.update()
+            return
         if new_min == self._range_min and new_max == self._range_max:
             return
         self._range_min = new_min
@@ -161,33 +199,72 @@ class LevelsBar(QWidget):
     # -- coordinate mapping ------------------------------------------------
 
     def _value_to_x(self, value: int) -> int:
-        """Map a value in [range_min, range_max] to an x pixel in [0, width]."""
+        """Map a value in [data_min, data_max] to an x pixel in [0, width].
+
+        The data bounds (dtype range) frame the coordinate mapping, NOT
+        the operator-adjustable RANGE set. This is critical: if the
+        mapping used the RANGE set as the span, range_max would always
+        map to x=width and the handle would be pinned to the right edge
+        — dragging it would never appear to move it. Using the fixed
+        data bounds lets the RANGE handles move freely to any x position
+        within the full data range.
+        """
         width = max(1, self.width())
-        span = max(1, self._range_max - self._range_min)
-        return int((value - self._range_min) / span * width)
+        span = max(1, self._data_max - self._data_min)
+        return int((value - self._data_min) / span * width)
 
     def _x_to_value(self, x: int) -> int:
-        """Map an x pixel in [0, width] to a value in [range_min, range_max]."""
+        """Map an x pixel in [0, width] to a value in [data_min, data_max]."""
         width = max(1, self.width())
-        span = max(1, self._range_max - self._range_min)
-        return int(self._range_min + x / width * span)
+        span = max(1, self._data_max - self._data_min)
+        return int(self._data_min + x / width * span)
 
     # -- painting ----------------------------------------------------------
 
+    def _row_y(self) -> tuple[int, int]:
+        """Return the (range_row_y, window_row_y) pixel centers for the
+        two handle rows. The RANGE handles sit above the gradient as
+        downward-pointing triangles (apex touching the gradient top); the
+        WINDOW handles + central handle sit below the gradient as
+        upward-pointing triangles (apex touching the gradient bottom).
+        The two rows are on opposite sides of the gradient so the handles
+        never visually overlap when they coincide (the default full-range
+        state has window == range, so all four handles share x positions)
+        and each handle is visually attached to the bar via its triangle
+        apex."""
+        h = self.height()
+        y_range = 12
+        y_window = h - 12
+        return y_range, y_window
+
+    def _gradient_bounds(self) -> tuple[int, int]:
+        """Return the (top, bottom) y pixels of the gradient band. The
+        band sits between the two handle rows so the triangles point at it."""
+        h = self.height()
+        return 22, h - 22
+
     def paintEvent(self, event) -> None:  # noqa: N802 - Qt API name
+        from PySide6.QtGui import QPolygonF
+        from PySide6.QtCore import QPointF
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         width = self.width()
         height = self.height()
 
-        # Grayscale gradient across the full widget width (the data range).
+        # Grayscale gradient band in the middle of the widget, between the
+        # two handle rows. The RANGE triangles above point down at it; the
+        # WINDOW triangles below point up at it — so every handle is
+        # visually attached to the bar.
+        g_top, g_bottom = self._gradient_bounds()
         gradient = QLinearGradient(0, 0, width, 0)
         gradient.setColorAt(0.0, QColor(0, 0, 0))
         gradient.setColorAt(1.0, QColor(255, 255, 255))
-        painter.fillRect(0, 0, width, height, gradient)
+        painter.fillRect(0, g_top, width, g_bottom - g_top, gradient)
 
-        cy = height // 2
-        handle_radius = 7
+        y_range, y_window = self._row_y()
+        tri_half = 7  # half-width of the triangle base
+        tri_h = 10    # triangle height (apex to base)
 
         # Handle x positions.
         x_rmin = self._value_to_x(self._range_min)
@@ -196,68 +273,98 @@ class LevelsBar(QWidget):
         x_wmax = self._value_to_x(self._window_max)
         x_center = (x_wmin + x_wmax) // 2
 
-        # RANGE handles: dark gray filled circles, drawn first (outer).
+        # RANGE handles: dark gray downward-pointing triangles above the
+        # gradient. Apex at (x, g_top) touches the gradient; base at
+        # y = g_top - tri_h.
         painter.setBrush(QColor(80, 80, 80))
         painter.setPen(QColor(20, 20, 20))
-        painter.drawEllipse(
-            x_rmin - handle_radius, cy - handle_radius,
-            handle_radius * 2, handle_radius * 2,
-        )
-        painter.drawEllipse(
-            x_rmax - handle_radius, cy - handle_radius,
-            handle_radius * 2, handle_radius * 2,
-        )
+        for x in (x_rmin, x_rmax):
+            tri = QPolygonF([
+                QPointF(x - tri_half, g_top - tri_h),
+                QPointF(x + tri_half, g_top - tri_h),
+                QPointF(float(x), float(g_top)),
+            ])
+            painter.drawPolygon(tri)
 
-        # WINDOW handles: lighter gray with a distinct outline.
+        # WINDOW handles: lighter gray upward-pointing triangles below the
+        # gradient. Apex at (x, g_bottom) touches the gradient; base at
+        # y = g_bottom + tri_h.
         painter.setBrush(QColor(180, 180, 180))
         painter.setPen(QColor(40, 40, 40))
-        painter.drawEllipse(
-            x_wmin - handle_radius, cy - handle_radius,
-            handle_radius * 2, handle_radius * 2,
-        )
-        painter.drawEllipse(
-            x_wmax - handle_radius, cy - handle_radius,
-            handle_radius * 2, handle_radius * 2,
-        )
+        for x in (x_wmin, x_wmax):
+            tri = QPolygonF([
+                QPointF(x - tri_half, g_bottom + tri_h),
+                QPointF(x + tri_half, g_bottom + tri_h),
+                QPointF(float(x), float(g_bottom)),
+            ])
+            painter.drawPolygon(tri)
 
         # Central handle: small neutral-gray square between the window
-        # handles. UI-SPEC §LevelsBar Redesign Contract: handles are
-        # neutral gray (QColor(80, 80, 80) carried forward from 07.1); the
-        # central handle uses a lighter neutral gray so it reads as a
-        # distinct affordance without introducing a new accent color
-        # (UI-SPEC §Color: "Do NOT introduce new accent colors").
+        # handles on the lower row. Uses a lighter neutral gray so it
+        # reads as a distinct affordance without introducing a new accent
+        # color.
         painter.setBrush(QColor(120, 120, 120))
         painter.setPen(QColor(60, 60, 60))
-        half = handle_radius - 1
-        painter.drawRect(x_center - half, cy - half, half * 2, half * 2)
+        half = tri_half - 1
+        painter.drawRect(x_center - half, y_window - half, half * 2, half * 2)
 
     # -- mouse interaction -------------------------------------------------
 
-    def _hit_handle(self, x: int) -> str | None:
-        """Return the name of the handle within ±8px of x, or None.
+    def _hit_handle(self, x: int, y: int | None = None) -> str | None:
+        """Return the name of the handle within ±14px of (x, y), or None.
 
-        When two handles are within the hit radius, the closer one wins.
-        Ties prefer the more-often-grabbed handle (window > center > range)
-        so the operator can grab the window handles even when they coincide
-        with the range handles (the default full-range state).
+        The RANGE handles sit above the gradient (y near ``y_range``), the
+        WINDOW + central handles below it (y near ``y_window``). When
+        ``y`` is supplied, the click is assigned to the row whose y is
+        closer — but only if the click is within the hit radius of that
+        row's y. A click in the gradient band (between the rows) or far
+        from both rows grabs nothing, so the operator cannot
+        accidentally grab the wrong row's handle when both rows have a
+        handle at the same x (the default full-range state). When two
+        handles on the same row are within the hit radius, the closer
+        one wins.
         """
         x_rmin = self._value_to_x(self._range_min)
         x_rmax = self._value_to_x(self._range_max)
         x_wmin = self._value_to_x(self._window_min)
         x_wmax = self._value_to_x(self._window_max)
         x_center = (x_wmin + x_wmax) // 2
+        y_range, y_window = self._row_y()
+
+        # Assign the click to a row only if the click's y is within the
+        # hit radius of that row's y. A click in the gradient band
+        # (equidistant from both rows, or closer to the band than to
+        # either row) grabs nothing — this prevents grabbing the wrong
+        # handle when both rows share an x position.
+        upper_row = None
+        if y is not None:
+            d_range = abs(y - y_range)
+            d_window = abs(y - y_window)
+            if d_range <= HANDLE_HIT_RADIUS_Y_PX and d_range <= d_window:
+                upper_row = "range"
+            elif d_window <= HANDLE_HIT_RADIUS_Y_PX and d_window < d_range:
+                upper_row = "window"
+            else:
+                return None
+        else:
+            upper_row = "range"
 
         candidates = [
-            (abs(x - x_wmin), "window_min"),
-            (abs(x - x_wmax), "window_max"),
-            (abs(x - x_center), "center"),
-            (abs(x - x_rmin), "range_min"),
-            (abs(x - x_rmax), "range_max"),
+            (abs(x - x_wmin), y_window, "window_min"),
+            (abs(x - x_wmax), y_window, "window_max"),
+            (abs(x - x_center), y_window, "center"),
+            (abs(x - x_rmin), y_range, "range_min"),
+            (abs(x - x_rmax), y_range, "range_max"),
         ]
-        # Filter to within hit radius, then pick the closest. The list
-        # ordering above is the tiebreaker (window first).
-        in_range = [(d, name) for (d, name) in candidates
-                    if d <= HANDLE_HIT_RADIUS_PX]
+        in_range = []
+        for dx, cy, name in candidates:
+            if dx > HANDLE_HIT_RADIUS_PX:
+                continue
+            if y is not None:
+                cand_row = "range" if cy == y_range else "window"
+                if cand_row != upper_row:
+                    continue
+            in_range.append((dx, name))
         if not in_range:
             return None
         in_range.sort(key=lambda dn: dn[0])
@@ -267,7 +374,7 @@ class LevelsBar(QWidget):
         if event.button() != Qt.MouseButton.LeftButton:
             event.ignore()
             return
-        handle = self._hit_handle(int(event.position().x()))
+        handle = self._hit_handle(int(event.position().x()), int(event.position().y()))
         if handle is None:
             event.ignore()
             return
@@ -282,39 +389,27 @@ class LevelsBar(QWidget):
         h = self._dragging_handle
 
         if h == "range_min":
-            new_min = min(value, self._range_max)
+            # Clamp to [data_min, range_max] so the handle stays within
+            # the data bounds and cannot cross the range_max handle.
+            new_min = max(self._data_min, min(value, self._range_max))
             if new_min != self._range_min:
+                self._range_user_owned = True
                 self._range_min = new_min
-                # Clamp the window into the new range.
-                old_wmin, old_wmax = self._window_min, self._window_max
-                self._window_min = max(
-                    self._range_min, min(self._window_min, self._range_max)
-                )
-                self._window_max = max(
-                    self._window_min, min(self._window_max, self._range_max)
-                )
+                # Do NOT clamp the window during the drag — clamping
+                # makes the window handles jump, which reads as
+                # "spazzing" when the operator is only dragging a range
+                # handle. The window is clamped into the new range on
+                # mouseReleaseEvent.
                 self.sig_rangeChanged.emit(self._range_min, self._range_max)
-                if (self._window_min, self._window_max) != (old_wmin, old_wmax):
-                    self.sig_levelsChanged.emit(
-                        self._window_min, self._window_max
-                    )
                 self.update()
         elif h == "range_max":
-            new_max = max(value, self._range_min)
+            # Clamp to [range_min, data_max] so the handle stays within
+            # the data bounds and cannot cross the range_min handle.
+            new_max = min(self._data_max, max(value, self._range_min))
             if new_max != self._range_max:
+                self._range_user_owned = True
                 self._range_max = new_max
-                old_wmin, old_wmax = self._window_min, self._window_max
-                self._window_min = max(
-                    self._range_min, min(self._window_min, self._range_max)
-                )
-                self._window_max = max(
-                    self._window_min, min(self._window_max, self._range_max)
-                )
                 self.sig_rangeChanged.emit(self._range_min, self._range_max)
-                if (self._window_min, self._window_max) != (old_wmin, old_wmax):
-                    self.sig_levelsChanged.emit(
-                        self._window_min, self._window_max
-                    )
                 self.update()
         elif h == "window_min":
             if value > self._window_max:
@@ -374,5 +469,21 @@ class LevelsBar(QWidget):
         event.accept()
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt API name
+        # If a RANGE handle was dragged, clamp the window into the new
+        # range now (deferred from mouseMoveEvent so the window handles
+        # do not jump during the drag).
+        if self._dragging_handle in ("range_min", "range_max"):
+            old_wmin, old_wmax = self._window_min, self._window_max
+            self._window_min = max(
+                self._range_min, min(self._window_min, self._range_max)
+            )
+            self._window_max = max(
+                self._window_min, min(self._window_max, self._range_max)
+            )
+            if (self._window_min, self._window_max) != (old_wmin, old_wmax):
+                self.sig_levelsChanged.emit(
+                    self._window_min, self._window_max
+                )
+            self.update()
         self._dragging_handle = None
         event.accept()

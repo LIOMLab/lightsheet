@@ -21,11 +21,11 @@ def test_image_view_render_nonzero(qtbot) -> None:
     view = ImageView()
     qtbot.addWidget(view)
 
-    # Create a 100x100 uint16 frame with a single seed pixel at 2000
-    # (the maximum of the fixed 0-2000 levels window). After scaling to
+    # Create a 100x100 uint16 frame with a single seed pixel at 20000
+    # (the maximum of the fixed 0-20000 levels window). After scaling to
     # uint8 [0, 255] this pixel must map to 255; every other pixel is 0.
     frame = np.zeros((100, 100), dtype=np.uint16)
-    frame[50, 50] = 2000
+    frame[50, 50] = 20000
 
     view.setImage(frame)
 
@@ -123,7 +123,7 @@ def test_resize_refits_pixmap(qtbot) -> None:
 
     # 100x100 frame with a seed pixel at the levels max.
     frame = np.zeros((100, 100), dtype=np.uint16)
-    frame[50, 50] = 2000
+    frame[50, 50] = 20000
     view.setImage(frame)
     qtbot.wait(20)
     scale_before = view.transform().m11()
@@ -158,7 +158,7 @@ def test_resize_event_no_recursion(qtbot) -> None:
     qtbot.waitExposed(view)
 
     frame = np.zeros((100, 100), dtype=np.uint16)
-    frame[50, 50] = 2000
+    frame[50, 50] = 20000
     view.setImage(frame)
 
     # Several resizes — if resizeEvent recursed this would hang/CPU-spin

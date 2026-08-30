@@ -33,8 +33,16 @@ from functools import partial
 
 import numpy as np
 
-from PySide6.QtCore import QSize, Qt, QTimer, Signal, Slot
-from PySide6.QtGui import QActionGroup, QCloseEvent, QKeySequence
+from PySide6.QtCore import QRect, QSize, Qt, QTimer, Signal, Slot
+from PySide6.QtGui import (
+    QActionGroup,
+    QCloseEvent,
+    QFontMetrics,
+    QIcon,
+    QKeySequence,
+    QPainter,
+    QPalette,
+)
 from PySide6.QtWidgets import (
     QAbstractButton,
     QApplication,
@@ -45,6 +53,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QStyle,
+    QStyleOptionToolButton,
 )
 
 from lightsheet.config import cfg_read, cfg_write
@@ -63,6 +72,61 @@ from lightsheet.gui.shell.ui_shell import Ui_Shell
 from lightsheet.hal.bundle import DeviceBundle
 
 logger = logging.getLogger(__name__)
+
+
+def _center_toolbutton_paint(btn) -> None:
+    """Override ``paintEvent`` so the icon and text are horizontally
+    centered within the full button width.
+
+    macOS's Aqua style left-aligns the icon within the icon rect under
+    ``ToolButtonTextUnderIcon`` and clips the text to the icon width,
+    leaving the label truncated with empty space to the right. This
+    draws the standard button chrome (so pressed/checked states still
+    look native), then paints the icon centered at the top and the text
+    centered below it using the full content rect.
+    """
+    icon = btn.icon()
+    icon_size = btn.iconSize()
+    text = btn.text()
+    style = btn.style()
+
+    def _paint(_event):
+        p = QPainter(btn)
+        opt = QStyleOptionToolButton()
+        opt.initFrom(btn)
+        opt.features = QStyleOptionToolButton.None_
+        # Draw only the button chrome (background/border for the
+        # pressed/checked state) — pass an empty icon and no text so
+        # the native style does not draw its own (left-aligned, clipped)
+        # icon/text. We draw the centered icon+text ourselves below.
+        opt.toolButtonStyle = Qt.ToolButtonStyle.ToolButtonIconOnly
+        opt.text = ""
+        opt.icon = QIcon()
+        opt.iconSize = icon_size
+        style.drawComplexControl(QStyle.CC_ToolButton, opt, p, btn)
+        # Use the full widget rect as the content area (the button chrome
+        # is already drawn; center icon+text within the widget bounds).
+        cr = btn.rect()
+        icon_h = icon_size.height()
+        text_h = QFontMetrics(btn.font()).height()
+        gap = 4
+        total = icon_h + gap + text_h
+        icon_y = cr.top() + max(0, (cr.height() - total) // 2)
+        text_y = icon_y + icon_h + gap
+        pix = icon.pixmap(icon_size)
+        # Use icon_size (the requested size) for centering, not
+        # pix.width() — on HiDPI/retina displays pix.width() can return
+        # the physical width (2x), which would offset the icon.
+        icon_w = icon_size.width()
+        p.drawPixmap(cr.left() + (cr.width() - icon_w) // 2, icon_y, pix)
+        p.setPen(btn.palette().color(QPalette.ColorRole.ButtonText))
+        p.drawText(
+            QRect(cr.left(), text_y, cr.width(), text_h),
+            int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop),
+            text,
+        )
+
+    btn.paintEvent = _paint
 
 # Shell-owned widget objectNames. The ``vars(panel.ui)`` merge loop below
 # only surfaces these onto ``self.ui``; panel-internal widgets stay on
@@ -294,6 +358,16 @@ class Controller_MainWindow(QMainWindow):
             scroll.setVerticalScrollBarPolicy(
                 Qt.ScrollBarPolicy.ScrollBarAsNeeded
             )
+            # Zero the panel's top-level layout margins so the panel
+            # content aligns edge-to-edge with the message log (a
+            # sibling in the splitter). Without this the panel content
+            # is inset 9px (the layout default) while the message log
+            # spans the full width — an incohesive left/right edge.
+            # The group boxes inside each panel provide their own
+            # internal padding, so zeroing the outer margin does not
+            # crowd the content against the pane edge.
+            if panel.layout() is not None:
+                panel.layout().setContentsMargins(0, 0, 0, 0)
             scroll.setWidget(panel)
             return scroll
 
@@ -368,6 +442,7 @@ class Controller_MainWindow(QMainWindow):
             _btn.setIcon(_style.standardIcon(_sp_icon))
             _btn.setIconSize(QSize(24, 24))
             _btn.setToolTip(_tooltip)
+            _center_toolbutton_paint(_btn)
 
         # Merge each panel's SHELL-OWNED widget attributes onto self.ui.
         # Panel-internal widgets stay on their owning panel's ``ui`` and
@@ -425,6 +500,13 @@ class Controller_MainWindow(QMainWindow):
         # disconnect (the reference-cycle break).
         self.ui.levelsBar.sig_levelsChanged.connect(self._on_levels_changed)
         self.ui.levelsBar.sig_rangeChanged.connect(self._on_range_changed)
+
+        # Auto-fit the levels window to the first frame's observed min/max
+        # so the initial image is visible at a sensible contrast (the
+        # ImageView defaults to a 0-20000 window which makes a full-range
+        # uint16 demo image render mostly white). Set once on the first
+        # frame; subsequent frames keep the operator's adjustments.
+        self._levels_autofit_done = False
 
         # Set configurable settings to default values
         self.cfg_settings = copy.deepcopy(self._cfg_defaults)
@@ -726,18 +808,36 @@ class Controller_MainWindow(QMainWindow):
         """Apply a LevelsBar WINDOW handle drag to the ImageView display
         clamp window and re-render."""
         self.ui.imageView.set_levels(levels_min, levels_max)
+        self._update_levels_handle_readout()
 
     def _on_range_changed(self, range_min: int, range_max: int) -> None:
         """Apply a LevelsBar RANGE handle drag (or set_data_range) to the
         ImageView colormap scaling bounds. The range frames the grayscale
         gradient; the window (sig_levelsChanged) clamps the display."""
         self.ui.imageView.set_colormap_range(range_min, range_max)
+        self._update_levels_handle_readout()
+
+    def _update_levels_handle_readout(self) -> None:
+        """Show the current RANGE and WINDOW handle values in the readout
+        label so the operator sees the values change during a drag."""
+        lb = self.ui.levelsBar
+        self.ui.label_levelsReadout.setText(
+            f"range: {lb.range_min}-{lb.range_max}   "
+            f"window: {lb.window_min}-{lb.window_max}"
+        )
 
     def _update_levels_readout(self, frame) -> None:
         """Update the live min/max QLabel readout with the actual pixel
         range of the supplied frame (not the display window), and push the
         data-following range to the LevelsBar so its RANGE handles track
-        the frame's dtype bounds (0-65535 for uint16)."""
+        the frame's dtype bounds (0-65535 for uint16).
+
+        On the first frame, auto-fit the WINDOW (levels) to the frame's
+        observed min/max so the initial image is visible at a sensible
+        contrast — the ImageView defaults to a 0-20000 window which makes
+        a full-range uint16 frame render mostly white. After the first
+        frame the operator owns the window; later frames do not reset it.
+        """
         if frame is None:
             return
         try:
@@ -745,7 +845,15 @@ class Controller_MainWindow(QMainWindow):
             hi = int(frame.max())
         except (ValueError, TypeError):
             return
-        self.ui.label_levelsReadout.setText(f"min: {lo}   max: {hi}")
+        # Show the frame's observed pixel range AND the current handle
+        # values so the operator sees both the data range and the
+        # display window/range in one readout.
+        lb = self.ui.levelsBar
+        self.ui.label_levelsReadout.setText(
+            f"frame: {lo}-{hi}   "
+            f"range: {lb.range_min}-{lb.range_max}   "
+            f"window: {lb.window_min}-{lb.window_max}"
+        )
         # Push the data-following range to the LevelsBar. For integer
         # dtypes the range is the dtype bounds (0-65535 for uint16); for
         # float dtypes the range is the observed pixel range. set_data_range
@@ -761,6 +869,14 @@ class Controller_MainWindow(QMainWindow):
             self.ui.levelsBar.set_data_range(dmin, dmax)
         except (ValueError, TypeError):
             pass
+        # Auto-fit the window to the first frame's observed range. Use a
+        # small percentile guard so a single saturated pixel does not
+        # stretch the window to the full dtype range (e.g. one hot pixel
+        # at 65535 would otherwise make the rest of the frame black).
+        if not self._levels_autofit_done and hi > lo:
+            self._levels_autofit_done = True
+            self.ui.levelsBar.window_min = lo
+            self.ui.levelsBar.window_max = hi
 
     def _save_stack_params(self) -> None:
         """Persist the last stack's start/end/step to config.ini so a

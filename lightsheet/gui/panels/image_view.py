@@ -8,7 +8,7 @@ moving-target plotting dependency from the PySide6/Qt6 combo matrix and
 eliminates the ViewBox C++ destructor segfault that dependency caused
 during garbage collection at process exit.
 
-The fixed 0-2000 levels window replaces the historical
+The fixed 0-20000 levels window replaces the historical
 seed-one-pixel-to-2000 trick that worked around an auto-detected
 histogram range: the seed pixel is still set by callers
 (``frame_saver_controller.py``), but the levels window is now explicit
@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import numpy as np
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QImage, QPainter, QPixmap
+from PySide6.QtGui import QImage, QPainter, QPixmap, QWheelEvent
 from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
     QGraphicsScene,
@@ -31,7 +31,7 @@ class ImageView(QGraphicsView):
     """Native Qt6 grayscale image display widget for uint16 numpy arrays.
 
     Displays uint16 numpy arrays as grayscale images with a fixed
-    levels window (0-2000). No histogram, LUT, ROI, or auto-range —
+    levels window (0-20000). No histogram, LUT, ROI, or auto-range —
     only ``setImage`` is used.
     """
 
@@ -44,7 +44,7 @@ class ImageView(QGraphicsView):
         # ImageView clamps the frame to this window for display. Saved
         # frames are the raw uint16 — the clamp is display-only.
         self._levels_min = 0
-        self._levels_max = 2000
+        self._levels_max = 20000
         # Colormap scaling range (the RANGE set from the LevelsBar). The
         # grayscale ramp spans this range; the window clamps within it.
         # Defaults to the uint16 range so the widget is sane before the
@@ -54,7 +54,8 @@ class ImageView(QGraphicsView):
         # QGraphicsView adds a default 4px margin that can cause blank
         # rendering in tight layouts; the SC2 exit criterion requires
         # this padding fix.
-        self.setStyleSheet("QGraphicsView { padding: 0px; }")
+        self.setStyleSheet("QGraphicsView { padding: 0px; border: none; }")
+        self.setFrameShape(QGraphicsView.Shape.NoFrame)
         # No antialiasing — pixel-accurate display of grayscale frames.
         # QPainter.RenderHint(0) is the "no hints" value (Antialiasing
         # and friends all default to off, but set it explicitly so the
@@ -80,6 +81,13 @@ class ImageView(QGraphicsView):
         # to re-supply the frame. The clamp is applied to a COPY for
         # display — this attribute holds the raw frame.
         self._last_frame: np.ndarray | None = None
+        # Left-click drag pans the image (hand-drag). This is essential
+        # for the operator to navigate a zoomed-in frame.
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        # Track whether the operator has zoomed/panned away from the
+        # fit-to-view default. Once they have, resizeEvent must NOT
+        # reset the view (fitInView) — it would discard their zoom/pan.
+        self._user_transformed = False
 
     def set_levels(self, levels_min: int, levels_max: int) -> None:
         """Update the display levels window and re-render the current
@@ -120,15 +128,40 @@ class ImageView(QGraphicsView):
             self.setImage(self._last_frame)
 
     def resizeEvent(self, event) -> None:
-        """Re-call fitInView on every resize so the pixmap fills the
-        viewport (KeepAspectRatio). With scrollbar policy AlwaysOff the
-        viewport size only changes on real resizes, so this is
-        non-reentrant — no re-entrancy guard needed."""
+        """Re-fit the image to the viewport on resize — but ONLY if the
+        operator has not zoomed/panned. Once they have, their transform
+        is preserved across resizes (fitInView would discard it)."""
         super().resizeEvent(event)
-        if self._pixmap_item is not None:
+        if self._pixmap_item is not None and not self._user_transformed:
             self.fitInView(
                 self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio
             )
+
+    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802 - Qt override
+        """Zoom the view with the mouse wheel, centered on the cursor.
+
+        The base QGraphicsView.wheelEvent scrolls the scene, which with
+        scrollbars off drifts the image vertically. Instead, use the
+        wheel to zoom in/out around the cursor position — the standard
+        image-viewer pattern. Once the operator zooms, mark the view as
+        user-transformed so resizeEvent no longer auto-fits (which would
+        discard the zoom).
+        """
+        if self._pixmap_item is None:
+            event.accept()
+            return
+        zoom_factor = 1.15
+        if event.angleDelta().y() < 0:
+            zoom_factor = 1.0 / zoom_factor
+        # Zoom around the cursor position so the point under the mouse
+        # stays fixed (the standard image-viewer feel).
+        cursor_scene = self.mapToScene(event.position().toPoint())
+        self.scale(zoom_factor, zoom_factor)
+        # Adjust the view center so the cursor scene point stays put.
+        delta = cursor_scene - self.mapToScene(event.position().toPoint())
+        self.translate(delta.x(), delta.y())
+        self._user_transformed = True
+        event.accept()
 
     def setImage(
         self,
@@ -203,7 +236,18 @@ class ImageView(QGraphicsView):
         pixmap = QPixmap.fromImage(qimage)
         if self._pixmap_item is None:
             self._pixmap_item = self._scene.addPixmap(pixmap)
-            self._scene.setSceneRect(0, 0, width, height)
+            # A large symmetric scene rect so the operator can pan the
+            # image freely beyond every panel edge (the viewport can
+            # scroll anywhere within the scene rect). Without this the
+            # scene rect starts at (0,0) and the top edge is pinned.
+            pad = 8 * max(width, height)
+            self._scene.setSceneRect(-pad, -pad, width + 2 * pad, height + 2 * pad)
         else:
             self._pixmap_item.setPixmap(pixmap)
-        self.fitInView(self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
+        # Only auto-fit on the first frame. Once the operator has zoomed
+        # or panned (_user_transformed), preserve their transform across
+        # contrast changes (set_levels / set_colormap_range re-call
+        # setImage) and across new frames — fitInView would discard
+        # their zoom/pan.
+        if not self._user_transformed:
+            self.fitInView(self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)

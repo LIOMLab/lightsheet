@@ -19,7 +19,6 @@ from __future__ import annotations
 import typing
 
 import numpy as np
-from PySide6.QtCore import QSignalBlocker
 from PySide6.QtWidgets import QWidget
 
 from lightsheet.gui.panels.acquisition_table_manager import AcquisitionTableManager
@@ -62,34 +61,6 @@ class StackPanelWidget(QWidget):
             w = getattr(self.ui, obj_name, None)
             if w is not None and hasattr(w, "applySpec"):
                 w.applySpec(spec)
-        # Selective QSlider pairing for the wide-range coarse first/last
-        # plane fields. The spinbox displays in mm (FieldSpec unit); the
-        # slider's int range is the spec's 0–41 mm. Bare bound-method
-        # connections (no lambdas) preserve the Phase 6 reference-cycle
-        # break. The spinbox→slider direction blocks the slider's
-        # valueChanged so the int truncation does not round-trip back into
-        # the spinbox and discard the fractional part the operator typed
-        # (e.g. 6.5 mm → 6 → 6.0). The slider→spinbox direction stays a
-        # plain connection so a slider drag still drives the spinbox.
-        for field_name in (
-            "doubleSpinBox_acqFirstPlane",
-            "doubleSpinBox_acqLastPlane",
-        ):
-            spinbox = getattr(self.ui, field_name, None)
-            slider = getattr(self.ui, f"slider_{field_name}", None)
-            if spinbox is None or slider is None:
-                continue
-            spec = FIELD_SPECS[field_name]
-            slider.setRange(int(spec.minimum), int(spec.maximum))
-            slider.setSingleStep(int(spec.page_step))
-            slider.setValue(int(spinbox.value()))
-
-            def _on_spinbox_changed(val, _slider=slider) -> None:
-                with QSignalBlocker(_slider):
-                    _slider.setValue(int(val))
-
-            spinbox.valueChanged.connect(_on_spinbox_changed)
-            slider.valueChanged.connect(spinbox.setValue)
 
     def _seed_spinbox_ranges(self) -> None:
         """Seed the first/last plane spinbox ranges from the motor travel

@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import typing
 
-from PySide6.QtCore import QSignalBlocker
 from PySide6.QtWidgets import QWidget
 
 from lightsheet.gui.panels.ui_motor_panel import Ui_MotorPanel
@@ -37,41 +36,6 @@ class MotorPanelWidget(QWidget):
             w = getattr(self.ui, obj_name, None)
             if w is not None and hasattr(w, "applySpec"):
                 w.applySpec(spec)
-        # Selective QSlider pairing for the wide-range coarse motor-travel
-        # fields. Bare bound-method connections (no lambdas) preserve the
-        # Phase 6 reference-cycle break. Qt's setValue does not re-emit
-        # valueChanged when the value is unchanged, so the bidirectional
-        # sync cannot recurse.
-        #
-        # The spinbox→slider direction scales the float to the slider's
-        # int range and blocks the slider's valueChanged signal during the
-        # setValue so the truncated int does not feed back into the spinbox
-        # and silently discard the fractional part (e.g. 6.5 → 6 → 6.0).
-        # The slider→spinbox direction stays a plain connection so a slider
-        # drag still drives the spinbox.
-        for field_name in (
-            "doubleSpinBox_sampleSetHPosition",
-            "doubleSpinBox_sampleSetVPosition",
-            "doubleSpinBox_cameraSetPosition",
-        ):
-            spinbox = getattr(self.ui, field_name, None)
-            slider = getattr(self.ui, f"slider_{field_name}", None)
-            if spinbox is None or slider is None:
-                continue
-            spec = FIELD_SPECS[field_name]
-            slider.setRange(int(spec.minimum), int(spec.maximum))
-            slider.setSingleStep(int(spec.page_step))
-            slider.setValue(int(spinbox.value()))
-
-            def _on_spinbox_changed(val, _slider=slider) -> None:
-                # Block the slider's valueChanged so the int truncation
-                # does not round-trip back into the spinbox and discard
-                # the fractional part the operator typed.
-                with QSignalBlocker(_slider):
-                    _slider.setValue(int(val))
-
-            spinbox.valueChanged.connect(_on_spinbox_changed)
-            slider.valueChanged.connect(spinbox.setValue)
 
     def updateUi_motor_buttons(self, disable_button: bool = True) -> None:
         """Enable or disable all motor buttons"""

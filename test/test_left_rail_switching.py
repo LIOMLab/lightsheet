@@ -141,16 +141,21 @@ def test_phase9_extension_seam_adds_ninth_page(qtbot, request) -> None:
 
 def test_rail_buttons_have_icons_and_tooltips(qtbot, request) -> None:
     """UI-SPEC §Left-Rail Composition: all 8 rail buttons have a non-null
-    24x24 icon and a non-empty tooltip matching the '{Panel}: {purpose}.'
-    pattern."""
+    SP_* icon and a non-empty tooltip matching the '{Panel}: {purpose}.'
+    pattern. The iconSize width is set to the button content width (60px)
+    so the TextUnderIcon text area is full-width and the label is not
+    clipped to the icon's 24px width; the icon itself is drawn 24px tall
+    within that area, so the visual icon stays 24x24."""
     ctrl, _ = make_controller(qtbot, request)
     for name in _RAIL_BUTTON_NAMES:
         btn = getattr(ctrl.ui, name)
         assert not btn.icon().isNull(), (
             f"{name} has no icon set (UI-SPEC mandates a 24x24 SP_* icon)"
         )
-        assert btn.iconSize() == QSize(24, 24), (
-            f"{name} iconSize is {btn.iconSize()}, expected QSize(24, 24)"
+        # The iconSize height is 24px (the visual icon height); the width
+        # is the button content width so the text area is full-width.
+        assert btn.iconSize().height() == 24, (
+            f"{name} iconSize height is {btn.iconSize().height()}, expected 24"
         )
         tip = btn.toolTip()
         assert tip != "", f"{name} has an empty tooltip"

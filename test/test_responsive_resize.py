@@ -195,37 +195,34 @@ def test_sample_movement_group_box_min_width_content_driven(qtbot, request) -> N
 
 
 def test_jog_arrow_button_no_width_cap(qtbot, request) -> None:
-    """The jog arrow buttons keep their 60px minimum width (touch target)
-    but no longer have a setMaximumSize(60, ...) width cap — the layout's
-    natural width wins. The .ui sets minimumSize to 60x60, but Qt's
-    layout engine can reduce the effective minimum height to the
-    content-driven value (button text + padding, ~25px) under certain
-    layout settle states (non-deterministic under xdist). The key
-    remediation assertion is the WIDTH cap removal; the height is
-    content-driven and asserted as a reasonable touch target (>= 20px)."""
+    """The jog arrow buttons are uniform 48x48 touch targets. The .ui
+    sets minimumSize and maximumSize to 48x48 so the buttons stay uniform
+    regardless of layout; Qt's layout engine can reduce the effective
+    minimum height to the content-driven value under certain layout
+    settle states (non-deterministic under xdist). The key assertions are
+    the uniform 48px width and a reasonable touch-target height floor."""
     controller, _bundle = make_controller(qtbot, request)
     controller.show()
     qtbot.waitExposed(controller)
     _show_motion_tab(controller, qtbot)
 
     btn = controller.motor_panel.ui.pushButton_sampleStepForward
-    # Keep the 60px minimum width (touch target).
-    assert btn.minimumSize().width() == 60, (
-        f"jog button min width {btn.minimumSize().width()} != 60 "
+    # Uniform 48px minimum width (touch target).
+    assert btn.minimumSize().width() == 48, (
+        f"jog button min width {btn.minimumSize().width()} != 48 "
         f"(touch target lost)"
     )
     # The minimum height is content-driven (Qt layout engine can reduce
-    # the .ui's 60px to the content-driven ~25px). Assert a reasonable
+    # the .ui's 48px to the content-driven ~25px). Assert a reasonable
     # touch target floor rather than an exact pixel value.
     assert btn.minimumSize().height() >= 20, (
         f"jog button min height {btn.minimumSize().height()} < 20 "
         f"(touch target too small)"
     )
-    # The width cap (60) must be gone — Qt's default max width is
-    # 16777215 (QWIDGETSIZE_MAX). The old cap set width to 60.
+    # The old 60px cap must be gone — the buttons are now 48px uniform.
     assert btn.maximumSize().width() != 60, (
         f"jog button max width {btn.maximumSize().width()} == 60 "
-        f"(old width cap still present — should be 16777215 default)"
+        f"(old width cap still present — should be 48 uniform)"
     )
 
 
@@ -262,7 +259,7 @@ def test_left_rail_visible_at_all_target_sizes(qtbot, request) -> None:
         assert rail.isVisible(), (
             f"leftRail not visible at {width}x{height}"
         )
-        # The rail is a fixed-width column (72 px per the convention).
+        # The rail is a fixed-width column (80 px per the convention).
         assert rail.width() <= 96, (
             f"leftRail width {rail.width()} > 96 at {width}x{height} "
             f"(rail should be a narrow fixed-width column, not a pane)"

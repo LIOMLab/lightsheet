@@ -39,16 +39,20 @@ class FieldSpec:
 # without re-affirming against the rig's physical ranges; the HAL is the
 # safety backstop, but the widget soft-block should still match the rig.
 FIELD_SPECS: dict[str, FieldSpec] = {
-    # Motion panel — motor positions (mm) + step sizes (mm)
-    "doubleSpinBox_sampleSetHPosition": FieldSpec("mm", 3, 0.1, 1.0, 0.0, 41.0),
-    "doubleSpinBox_sampleSetVPosition": FieldSpec("mm", 3, 0.1, 1.0, 0.0, 18.8),
-    "doubleSpinBox_cameraSetPosition": FieldSpec("mm", 3, 0.1, 1.0, 0.0, 35.0),
-    "doubleSpinBox_sampleHStepSize": FieldSpec("mm", 3, 0.01, 0.1, 0.0, 5.0),
-    "doubleSpinBox_sampleVStepSize": FieldSpec("mm", 3, 0.01, 0.1, 0.0, 5.0),
-    "doubleSpinBox_cameraStepSize": FieldSpec("mm", 3, 0.01, 0.1, 0.0, 5.0),
-    # Stack panel — first/last plane (mm, motor H travel) + plane step (µm)
-    "doubleSpinBox_acqFirstPlane": FieldSpec("mm", 3, 0.1, 1.0, 0.0, 41.0),
-    "doubleSpinBox_acqLastPlane": FieldSpec("mm", 3, 0.1, 1.0, 0.0, 41.0),
+    # Motion panel — motor positions (mm) + step sizes (mm). 2 decimals
+    # (0.01 mm = 10 µm) is enough for manual control; the µm precision
+    # matters only for the automatic stack plane step, not for jogging.
+    "doubleSpinBox_sampleSetHPosition": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 41.0),
+    "doubleSpinBox_sampleSetVPosition": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 18.8),
+    "doubleSpinBox_cameraSetPosition": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 35.0),
+    "doubleSpinBox_sampleHStepSize": FieldSpec("mm", 2, 0.01, 0.1, 0.0, 5.0),
+    "doubleSpinBox_sampleVStepSize": FieldSpec("mm", 2, 0.01, 0.1, 0.0, 5.0),
+    "doubleSpinBox_cameraStepSize": FieldSpec("mm", 2, 0.01, 0.1, 0.0, 5.0),
+    # Stack panel — first/last plane (mm, motor H travel) + plane step (µm).
+    # Plane positions use 2 decimals (manual control); the plane step keeps
+    # µm precision (2 decimals in µm = 0.01 µm) for thin-section stacks.
+    "doubleSpinBox_acqFirstPlane": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 41.0),
+    "doubleSpinBox_acqLastPlane": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 41.0),
     "doubleSpinBox_acqPlaneStepSize": FieldSpec("µm", 2, 0.5, 5.0, 0.0, 25000.0),
     # Scan panel — ETL amplitudes/offsets (V, 0–5V) + ETL steps (dimensionless)
     "doubleSpinBox_etlLeftAmplitude": FieldSpec("V", 2, 0.05, 0.5, 0.0, 5.0),
