@@ -58,15 +58,26 @@ class SavePanelWidget(QWidget):
             self.ui.label_currentFileDirectory.setText(self._shell.open_directory)
             self.ui.listWidget_fileDatasets.clear()
 
-            # Open the file and display its datasets
+            # Open the file and display its datasets. A corrupt or
+            # non-HDF5 file (e.g. a truncated download) raises OSError
+            # or h5py.h5o.KeyError from h5py.File — handle it gracefully
+            # with a user-facing message instead of crashing the GUI
+            # thread (mirrors past_acquisitions_browser.py:242-253).
             import h5py
 
-            with h5py.File(self._shell.open_directory, "r") as f:
-                dataset_names = list(f.keys())
-                for item in range(len(dataset_names)):
-                    self.ui.listWidget_fileDatasets.insertItem(
-                        item, dataset_names[item]
-                    )
+            try:
+                with h5py.File(self._shell.open_directory, "r") as f:
+                    dataset_names = list(f.keys())
+                    for item in range(len(dataset_names)):
+                        self.ui.listWidget_fileDatasets.insertItem(
+                            item, dataset_names[item]
+                        )
+            except (OSError, KeyError) as exc:
+                self._shell.sig_message.emit(
+                    f"Could not open {self._shell.open_directory}: {exc}"
+                )
+                self.ui.label_currentFileDirectory.setText("None Specified")
+                return
             self.ui.listWidget_fileDatasets.setCurrentRow(0)
             self._shell.updateUi_message_printer("File " + self._shell.open_directory + " opened")  # noqa: E501
             self.ui.pushButton_selectDataset.setEnabled(True)
@@ -87,47 +98,59 @@ class SavePanelWidget(QWidget):
                 self._shell.dataset_name = self.ui.listWidget_fileDatasets.selectedItems()[  # noqa: E501
                     item
                 ].text()
-                with h5py.File(self._shell.open_directory, "r") as f:
-                    dataset = f[self._shell.dataset_name]
+                # Wrap the h5py open + dataset access in try/except — a
+                # corrupt or non-HDF5 file (or a missing dataset key)
+                # raises OSError / KeyError from h5py.File or the dataset
+                # lookup. Emit a user-facing message and skip this item
+                # instead of crashing the GUI thread.
+                try:
+                    with h5py.File(self._shell.open_directory, "r") as f:
+                        dataset = f[self._shell.dataset_name]
 
-                    # Display attributes of the first selected dataset
-                    if item == 0:
-                        self.ui.label_currentDataset.setText(self._shell.dataset_name)
-                        attribute_names = list(dataset.attrs.keys())
-                        attribute_values = list(dataset.attrs.values())
-                        self.ui.tableWidget_fileAttributes.setColumnCount(2)
-                        self.ui.tableWidget_fileAttributes.setRowCount(
-                            len(attribute_names)
-                        )
-                        self.ui.tableWidget_fileAttributes.setHorizontalHeaderItem(
-                            0, QTableWidgetItem("Attributes")
-                        )
-                        self.ui.tableWidget_fileAttributes.setHorizontalHeaderItem(
-                            1, QTableWidgetItem("Values")
-                        )
-                        for attribute in range(0, len(attribute_names)):
-                            self.ui.tableWidget_fileAttributes.setItem(
-                                attribute,
-                                0,
-                                QTableWidgetItem(attribute_names[attribute]),
+                        # Display attributes of the first selected dataset
+                        if item == 0:
+                            self.ui.label_currentDataset.setText(self._shell.dataset_name)
+                            attribute_names = list(dataset.attrs.keys())
+                            attribute_values = list(dataset.attrs.values())
+                            self.ui.tableWidget_fileAttributes.setColumnCount(2)
+                            self.ui.tableWidget_fileAttributes.setRowCount(
+                                len(attribute_names)
                             )
-                            self.ui.tableWidget_fileAttributes.setItem(
-                                attribute,
-                                1,
-                                QTableWidgetItem(str(attribute_values[attribute])),
+                            self.ui.tableWidget_fileAttributes.setHorizontalHeaderItem(
+                                0, QTableWidgetItem("Attributes")
                             )
-                        self.ui.tableWidget_fileAttributes.resizeColumnsToContents()
-                        self.ui.tableWidget_fileAttributes.setEditTriggers(
-                            QAbstractItemView.NoEditTriggers
-                        )  # No editing possible
+                            self.ui.tableWidget_fileAttributes.setHorizontalHeaderItem(
+                                1, QTableWidgetItem("Values")
+                            )
+                            for attribute in range(0, len(attribute_names)):
+                                self.ui.tableWidget_fileAttributes.setItem(
+                                    attribute,
+                                    0,
+                                    QTableWidgetItem(attribute_names[attribute]),
+                                )
+                                self.ui.tableWidget_fileAttributes.setItem(
+                                    attribute,
+                                    1,
+                                    QTableWidgetItem(str(attribute_values[attribute])),
+                                )
+                            self.ui.tableWidget_fileAttributes.resizeColumnsToContents()
+                            self.ui.tableWidget_fileAttributes.setEditTriggers(
+                                QAbstractItemView.NoEditTriggers
+                            )  # No editing possible
 
-                    # Display image
-                    data = dataset[()]
-                    plt.figure(self._shell.open_directory + " (" + self._shell.dataset_name + ")")  # noqa: E501
-                    plt.imshow(data, cmap="gray")
-                    plt.show(
-                        block=False
-                    )  # Prevents the plot from blocking the execution of the code...
+                        # Display image
+                        data = dataset[()]
+                        plt.figure(self._shell.open_directory + " (" + self._shell.dataset_name + ")")  # noqa: E501
+                        plt.imshow(data, cmap="gray")
+                        plt.show(
+                            block=False
+                        )  # Prevents the plot from blocking the execution of the code...
+                except (OSError, KeyError) as exc:
+                    self._shell.sig_message.emit(
+                        f"Could not open dataset {self._shell.dataset_name} "
+                        f"in {self._shell.open_directory}: {exc}"
+                    )
+                    continue
 
                 self._shell.updateUi_message_printer(
                     "Dataset "
