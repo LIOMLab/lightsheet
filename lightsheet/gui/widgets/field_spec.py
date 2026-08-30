@@ -3,7 +3,7 @@
 A ``FieldSpec`` is a frozen dataclass describing the per-field display
 contract (unit, decimals, single/page step, soft min/max) for one
 ``QDoubleSpinBox`` in a panel ``.ui`` file. ``FIELD_SPECS`` is the canonical
-table keyed by widget ``objectName`` — the 22 entries below are copied
+table keyed by widget ``objectName`` — the 24 entries below are copied
 verbatim from the UI-SPEC FieldSpec Policy Table.
 
 The ``minimum``/``maximum`` values are a SOFT widget-layer block only. The
@@ -34,7 +34,7 @@ class FieldSpec:
 
 
 # Canonical FieldSpec entries — per-field fixed units (UI-SPEC §FieldSpec
-# Policy Table). The 22 objectName keys are the widgets promoted to
+# Policy Table). The 24 objectName keys are the widgets promoted to
 # FieldSpecSpinBox in the panel .ui files. Do NOT change unit/min/max here
 # without re-affirming against the rig's physical ranges; the HAL is the
 # safety backstop, but the widget soft-block should still match the rig.
