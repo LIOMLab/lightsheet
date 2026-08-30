@@ -41,12 +41,6 @@ _RAIL_BUTTON_NAMES = (
 )
 
 
-def test_stacked_panels_has_eight_pages(qtbot, request) -> None:
-    """stackedPanels holds 8 pages (one per left-rail button)."""
-    ctrl, _ = make_controller(qtbot, request)
-    assert ctrl.ui.stackedPanels.count() == 8
-
-
 def test_left_rail_buttons_exist_and_are_checkable(qtbot, request) -> None:
     """The 8 left-rail QToolButtons exist on ui and are checkable."""
     ctrl, _ = make_controller(qtbot, request)

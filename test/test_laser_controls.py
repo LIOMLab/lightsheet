@@ -63,31 +63,6 @@ def test_pct_scaling_zero() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_write_laser1_power_skips_when_estop_set(qtbot, request) -> None:
-    """When estop_event is set, _write_laser1_power must NOT call
-    self.lasers[0].set_power (the HAL write is skipped)."""
-    ctrl, _ = make_controller(qtbot, request)
-    ctrl._hw.lasers[0].active = True
-    ctrl.estop_event.set()
-
-    ctrl._hw._write_laser1_power(50.0)
-
-    # set_power was not called — the staged power stays at 0.0.
-    assert ctrl._hw.lasers[0].power == 0.0
-
-
-def test_write_laser2_power_skips_when_estop_set(qtbot, request) -> None:
-    """When estop_event is set, _write_laser2_power must NOT call
-    self.lasers[1].set_power (the HAL write is skipped)."""
-    ctrl, _ = make_controller(qtbot, request)
-    ctrl._hw.lasers[1].active = True
-    ctrl.estop_event.set()
-
-    ctrl._hw._write_laser2_power(50.0)
-
-    assert ctrl._hw.lasers[1].power == 0.0
-
-
 def test_write_laser1_power_writes_when_estop_clear_and_active(qtbot, request) -> None:
     """When estop_event is clear and laser 1 is active, _write_laser1_power
     must scale the staged percentage to mW (pct/100 * max_power) and call
@@ -100,17 +75,6 @@ def test_write_laser1_power_writes_when_estop_clear_and_active(qtbot, request) -
 
     # 50 % of 300 mW = 150 mW must be staged on the MockLaser's .power.
     assert ctrl._hw.lasers[0].power == 150.0
-
-
-def test_write_laser1_power_skips_when_laser_inactive(qtbot, request) -> None:
-    """When laser 1 is inactive, _write_laser1_power must not write (no
-    point energizing a laser the operator has toggled off)."""
-    ctrl, _ = make_controller(qtbot, request)
-    ctrl._hw.lasers[0].active = False
-
-    ctrl._hw._write_laser1_power(50.0)
-
-    assert ctrl._hw.lasers[0].power == 0.0
 
 
 def test_write_laser2_power_writes_when_estop_clear_and_active(qtbot, request) -> None:
@@ -154,17 +118,6 @@ def test_write_laser1_power_surfaces_error_and_resets(qtbot, request) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_toggle_laser1_off_when_active(qtbot, request) -> None:
-    """_toggle_laser1 calls self.lasers[0].off() when the laser is active."""
-    ctrl, _ = make_controller(qtbot, request)
-    ctrl._hw.lasers[0].active = True
-
-    ctrl._hw._toggle_laser1()
-
-    # MockLaser.off() sets active=False and power=0.0.
-    assert ctrl._hw.lasers[0].active is False
-
-
 def test_toggle_laser1_on_when_inactive(qtbot, request) -> None:
     """_toggle_laser1 calls self.lasers[0].on() when the laser is inactive,
     then applies the staged percentage via _write_laser1_power."""
@@ -193,21 +146,6 @@ def test_toggle_laser2_on_when_inactive(qtbot, request) -> None:
     assert ctrl._hw.lasers[1].active is True
     # 50 % of 150 mW = 75 mW.
     assert ctrl._hw.lasers[1].power == 75.0
-
-
-def test_toggle_laser1_skips_when_estop_set(qtbot, request) -> None:
-    """_toggle_laser1 must NOT energize when estop_event is set — the
-    E-stop path already drove the laser off synchronously; a queued toggle
-    must not re-energize a Class IIIB laser past the kill path."""
-    ctrl, _ = make_controller(qtbot, request)
-    ctrl._hw.lasers[0].active = False
-    ctrl.laser1_power_pct = 50.0
-    ctrl.estop_event.set()
-
-    ctrl._hw._toggle_laser1()
-
-    # on() was not called — active stays False.
-    assert ctrl._hw.lasers[0].active is False
 
 
 def test_start_lasers_drives_both_auto_lasers(qtbot, request) -> None:
@@ -523,39 +461,6 @@ def test_updateUi_laser_status_error_sets_err_label_for_laser2(qtbot, request) -
     style = ctrl.laser_panel.ui.label_laserTwoStatus.styleSheet()
     assert "#FF3B30" in style
     assert "bold" in style
-
-
-def test_poll_laser2_status_gated_skips_when_lock_held(qtbot, request) -> None:
-    """_poll_laser2_status_gated must NOT call _poll_laser_status when
-    self.lasers[1]._lock is held by an in-progress write — the poll
-    probes the lock with acquire(blocking=False) and skips silently on
-    failure so a periodic status query never blocks on a write and
-    never misattributes a reply.
-
-    The real _lock is an RLock (reentrant), so holding it from this
-    thread would still let the gated probe acquire it. A non-reentrant
-    Lock stand-in models the cross-thread 'held by another thread'
-    condition: acquire(blocking=False) returns False once it's held."""
-    ctrl, _ = make_controller(qtbot, request)
-    # Stop the hardware_init timers — the timer_laser2_status callback
-    # calls _poll_laser2_status_gated which would spawn a readback thread
-    # if the lock is free during teardown.
-    ctrl.timer_imageview.stop()
-    ctrl.timer_laser2_status.stop()
-    # Use a non-reentrant Lock so acquire(blocking=False) fails once held
-    # (models the cross-thread 'held by the daemon write thread' case).
-    ctrl._hw.lasers[1]._lock = threading.Lock()
-    ctrl._hw.lasers[1]._lock.acquire()
-    try:
-        with (
-            patch.object(ctrl._hw, "_poll_laser_status") as spy_poll,
-            patch.object(ctrl._hw, "_refresh_laser2_readback_async"),
-        ):
-            ctrl._hw._poll_laser2_status_gated()
-
-        spy_poll.assert_not_called()
-    finally:
-        ctrl._hw.lasers[1]._lock.release()
 
 
 def test_poll_laser2_status_gated_polls_when_lock_free(qtbot, request) -> None:

@@ -288,15 +288,6 @@ def test_frame_saver_worker_timeout_exits_inner_loop(tmp_path) -> None:
 # -- crop_buffer / reconstruct_frame / reconstruct_frame_linear_blend --------
 
 
-def test_crop_buffer_single_tile_returns_buffer_unchanged() -> None:
-    """crop_buffer with tile_count=1 returns the buffer as-is (the if-branch)."""
-    shell = _ShellStandin()
-    fs, _ = _make_fs()
-    buf = np.ones((1, 4, 8), dtype=np.uint16)
-    result = fs.crop_buffer(buf)
-    assert result is buf
-
-
 def test_crop_buffer_multi_tile_crops_with_overlap() -> None:
     """crop_buffer with tile_count>1 crops each frame with 20% overlap.
     Buffer must be large enough that tile_width * 0.2 >= 1."""

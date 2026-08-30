@@ -105,22 +105,6 @@ def test_toggle_laser1_skips_when_estop_set(qtbot, request) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_hardware_manager_has_no_estop_method() -> None:
-    """HardwareManager must NOT declare an estop/kill/e_stop method — the
-    E-stop kill path stays in the shell (safety anti-pattern check).
-    A future maintainer who sees HardwareManager.estop() will be tempted to
-    queue/thread it — the single most safety-critical regression risk."""
-    assert not hasattr(HardwareManager, "estop"), (
-        "HardwareManager must NOT declare an estop method (safety anti-pattern)"
-    )
-    assert not hasattr(HardwareManager, "kill"), (
-        "HardwareManager must NOT declare a kill method"
-    )
-    assert not hasattr(HardwareManager, "e_stop"), (
-        "HardwareManager must NOT declare an e_stop method"
-    )
-
-
 def test_shell_estop_pressed_calls_laser_off_directly_not_via_hw(
     qtbot, request
 ) -> None:

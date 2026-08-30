@@ -176,12 +176,20 @@ def test_move_sample_backward_preflight_boundary_check_skips_hal_call() -> None:
 
 
 # -- Absolute-move slots: in-range happy path + out-of-boundaries path -------
+#
+# The three axes (horizontal/vertical/camera) share the same three arcs
+# (in-range happy path, ValueError abort, out-of-boundaries beep). The
+# horizontal ValueError arc has its own dedicated regression gate above
+# (test_move_to_horizontal_position_valueerror_aborts_with_beep_and_message)
+# because it carries the full reject-and-beep contract assertion. The
+# remaining 8 arcs are covered by three per-condition tests, each
+# exercising all three axes.
 
 
-def test_move_to_horizontal_position_in_range_emits_moving_message() -> None:
-    """In-range absolute horizontal move calls move_absolute_position and
-    emits the 'Sample moving to horizontal position' message (the else
-    branch of the try/except — the happy path)."""
+def test_move_to_position_in_range_emits_moving_message() -> None:
+    """In-range absolute move calls move_absolute_position and emits the
+    per-axis 'moving to ... position' message (the happy path) for all
+    three axes."""
     mc, shell = _make_mc()
     mc.motors.horizontal.move_absolute_position = Mock()
     shell.motor_panel.ui.doubleSpinBox_sampleSetHPosition.value.return_value = 5.0
@@ -189,23 +197,6 @@ def test_move_to_horizontal_position_in_range_emits_moving_message() -> None:
     mc.motors.horizontal.move_absolute_position.assert_called_once()
     assert any("Sample moving to horizontal position" in m for m in shell.message_printer_calls)
 
-
-def test_move_to_horizontal_position_out_of_boundaries_beeps() -> None:
-    """Out-of-boundaries absolute horizontal move skips the HAL call and
-    emits 'Out of boundaries' + beep (the else branch of the outer if)."""
-    mc, shell = _make_mc()
-    mc.motors.horizontal.move_absolute_position = Mock()
-    # Position below the low limit.
-    mc.motors.horizontal.get_limit_low = Mock(return_value=10.0)
-    mc.motors.horizontal.get_limit_high = Mock(return_value=20.0)
-    shell.motor_panel.ui.doubleSpinBox_sampleSetHPosition.value.return_value = 5.0
-    mc.updateUi_move_to_horizontal_position()
-    mc.motors.horizontal.move_absolute_position.assert_not_called()
-    assert any("Out of boundaries" in m for m in shell.message_printer_calls)
-    assert shell.sig_beep.emit.called
-
-
-def test_move_to_vertical_position_in_range_emits_moving_message() -> None:
     mc, shell = _make_mc()
     mc.motors.vertical.move_absolute_position = Mock()
     shell.motor_panel.ui.doubleSpinBox_sampleSetVPosition.value.return_value = 5.0
@@ -213,30 +204,6 @@ def test_move_to_vertical_position_in_range_emits_moving_message() -> None:
     mc.motors.vertical.move_absolute_position.assert_called_once()
     assert any("Sample moving to vertical position" in m for m in shell.message_printer_calls)
 
-
-def test_move_to_vertical_position_valueerror_aborts() -> None:
-    """ValueError on vertical absolute move emits sig_message + beep."""
-    mc, shell = _make_mc()
-    mc.motors.vertical.move_absolute_position = Mock(side_effect=ValueError("over-travel"))
-    mc.motors.vertical.get_limit_low = Mock(return_value=0.0)
-    mc.motors.vertical.get_limit_high = Mock(return_value=100.0)
-    mc.updateUi_move_to_vertical_position()
-    assert shell.sig_message.emit.called
-    assert shell.sig_beep.emit.called
-
-
-def test_move_to_vertical_position_out_of_boundaries_beeps() -> None:
-    mc, shell = _make_mc()
-    mc.motors.vertical.move_absolute_position = Mock()
-    mc.motors.vertical.get_limit_low = Mock(return_value=10.0)
-    mc.motors.vertical.get_limit_high = Mock(return_value=20.0)
-    shell.motor_panel.ui.doubleSpinBox_sampleSetVPosition.value.return_value = 5.0
-    mc.updateUi_move_to_vertical_position()
-    mc.motors.vertical.move_absolute_position.assert_not_called()
-    assert shell.sig_beep.emit.called
-
-
-def test_move_camera_to_position_in_range_emits_moving_message() -> None:
     mc, shell = _make_mc()
     mc.motors.camera.move_absolute_position = Mock()
     shell.motor_panel.ui.doubleSpinBox_cameraSetPosition.value.return_value = 5.0
@@ -245,7 +212,18 @@ def test_move_camera_to_position_in_range_emits_moving_message() -> None:
     assert any("Camera moving to position" in m for m in shell.message_printer_calls)
 
 
-def test_move_camera_to_position_valueerror_aborts() -> None:
+def test_move_to_position_valueerror_aborts() -> None:
+    """ValueError (over-travel) on absolute move emits sig_message + beep
+    for the vertical and camera axes. The horizontal axis is covered by
+    the dedicated reject-and-beep regression gate above."""
+    mc, shell = _make_mc()
+    mc.motors.vertical.move_absolute_position = Mock(side_effect=ValueError("over-travel"))
+    mc.motors.vertical.get_limit_low = Mock(return_value=0.0)
+    mc.motors.vertical.get_limit_high = Mock(return_value=100.0)
+    mc.updateUi_move_to_vertical_position()
+    assert shell.sig_message.emit.called
+    assert shell.sig_beep.emit.called
+
     mc, shell = _make_mc()
     mc.motors.camera.move_absolute_position = Mock(side_effect=ValueError("over-travel"))
     mc.motors.camera.get_limit_low = Mock(return_value=0.0)
@@ -255,7 +233,29 @@ def test_move_camera_to_position_valueerror_aborts() -> None:
     assert shell.sig_beep.emit.called
 
 
-def test_move_camera_to_position_out_of_boundaries_beeps() -> None:
+def test_move_to_position_out_of_boundaries_beeps() -> None:
+    """Out-of-boundaries absolute move skips the HAL call and emits 'Out of
+    boundaries' + beep (the else branch of the outer if) for all three
+    axes."""
+    mc, shell = _make_mc()
+    mc.motors.horizontal.move_absolute_position = Mock()
+    mc.motors.horizontal.get_limit_low = Mock(return_value=10.0)
+    mc.motors.horizontal.get_limit_high = Mock(return_value=20.0)
+    shell.motor_panel.ui.doubleSpinBox_sampleSetHPosition.value.return_value = 5.0
+    mc.updateUi_move_to_horizontal_position()
+    mc.motors.horizontal.move_absolute_position.assert_not_called()
+    assert any("Out of boundaries" in m for m in shell.message_printer_calls)
+    assert shell.sig_beep.emit.called
+
+    mc, shell = _make_mc()
+    mc.motors.vertical.move_absolute_position = Mock()
+    mc.motors.vertical.get_limit_low = Mock(return_value=10.0)
+    mc.motors.vertical.get_limit_high = Mock(return_value=20.0)
+    shell.motor_panel.ui.doubleSpinBox_sampleSetVPosition.value.return_value = 5.0
+    mc.updateUi_move_to_vertical_position()
+    mc.motors.vertical.move_absolute_position.assert_not_called()
+    assert shell.sig_beep.emit.called
+
     mc, shell = _make_mc()
     mc.motors.camera.move_absolute_position = Mock()
     mc.motors.camera.get_limit_low = Mock(return_value=10.0)

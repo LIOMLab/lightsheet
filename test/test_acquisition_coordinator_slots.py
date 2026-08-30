@@ -91,66 +91,60 @@ def _make_acq() -> tuple[AcquisitionCoordinator, _Shell]:
 # -- Galvo amplitude/offset slots (sync + no-sync branches) ------------------
 
 
-def test_galvo_left_amplitude_no_sync_propagates_to_siggen() -> None:
+def test_galvo_amplitude_slots_propagate_and_sync() -> None:
+    """The four galvo amplitude arcs (left/right x sync/no-sync) in one
+    test: no-sync propagates the widget value to siggen; sync mirrors the
+    value to the sibling widget via setValue. Mock's setValue does not
+    update value.return_value, so the siggen reads the sibling's
+    pre-existing value after the mirror — asserted verbatim."""
+    # Left, no-sync.
     acq, shell = _make_acq()
     acq.updateUi_galvo_left_amplitude()
     assert acq.siggen.galvo_left_amplitude == 1.5
-    # Offset min/max adjusted to keep amplitude+offset in [-10, 10].
     shell.scan_panel.ui.doubleSpinBox_galvoLeftOffset.setMinimum.assert_called()
     shell.scan_panel.ui.doubleSpinBox_galvoLeftOffset.setMaximum.assert_called()
 
-
-def test_galvo_left_amplitude_with_sync_mirrors_to_right() -> None:
+    # Left, sync -> mirrors to right.
     acq, shell = _make_acq()
     shell.scan_panel.ui.checkBox_galvoSync.isChecked.return_value = True
     acq.updateUi_galvo_left_amplitude()
-    # Right amplitude/offset mirrored from left via setValue calls.
     shell.scan_panel.ui.doubleSpinBox_galvoRightAmplitude.setValue.assert_called_with(1.5)
     shell.scan_panel.ui.doubleSpinBox_galvoRightOffset.setValue.assert_called_with(0.5)
-    # siggen.galvo_right_amplitude is set from the right widget's .value()
-    # AFTER setValue — Mock's setValue does not update value.return_value,
-    # so the siggen reads the right widget's pre-existing value (1.0).
     assert acq.siggen.galvo_right_amplitude == 1.0
 
-
-def test_galvo_right_amplitude_no_sync_propagates_to_siggen() -> None:
+    # Right, no-sync.
     acq, shell = _make_acq()
     acq.updateUi_galvo_right_amplitude()
     assert acq.siggen.galvo_right_amplitude == 1.0
 
-
-def test_galvo_right_amplitude_with_sync_mirrors_to_left() -> None:
+    # Right, sync -> mirrors to left.
     acq, shell = _make_acq()
     shell.scan_panel.ui.checkBox_galvoSync.isChecked.return_value = True
     acq.updateUi_galvo_right_amplitude()
     shell.scan_panel.ui.doubleSpinBox_galvoLeftAmplitude.setValue.assert_called_with(1.0)
-    # siggen.galvo_left_amplitude is set from the left widget's .value()
-    # AFTER setValue — Mock's setValue does not update value.return_value,
-    # so the siggen reads the left widget's pre-existing value (1.5).
     assert acq.siggen.galvo_left_amplitude == 1.5
 
 
-def test_galvo_left_offset_no_sync_propagates() -> None:
-    acq, shell = _make_acq()
+def test_galvo_offset_slots_propagate_and_sync() -> None:
+    """The four galvo offset arcs (left/right x sync/no-sync) in one test."""
+    # Left, no-sync.
+    acq, _shell = _make_acq()
     acq.updateUi_galvo_left_offset()
     assert acq.siggen.galvo_left_offset == 0.5
 
-
-def test_galvo_left_offset_with_sync_mirrors_to_right() -> None:
+    # Left, sync -> mirrors to right.
     acq, shell = _make_acq()
     shell.scan_panel.ui.checkBox_galvoSync.isChecked.return_value = True
     acq.updateUi_galvo_left_offset()
     shell.scan_panel.ui.doubleSpinBox_galvoRightOffset.setValue.assert_called_with(0.5)
     assert acq.siggen.galvo_right_offset == 0.5
 
-
-def test_galvo_right_offset_no_sync_propagates() -> None:
-    acq, shell = _make_acq()
+    # Right, no-sync.
+    acq, _shell = _make_acq()
     acq.updateUi_galvo_right_offset()
     assert acq.siggen.galvo_right_offset == 0.5
 
-
-def test_galvo_right_offset_with_sync_mirrors_to_left() -> None:
+    # Right, sync -> mirrors to left.
     acq, shell = _make_acq()
     shell.scan_panel.ui.checkBox_galvoSync.isChecked.return_value = True
     acq.updateUi_galvo_right_offset()
@@ -199,29 +193,28 @@ def test_galvo_invert_propagates_to_siggen() -> None:
 # -- ETL amplitude/offset slots (sync + no-sync branches) --------------------
 
 
-def test_etl_left_amplitude_no_sync_propagates() -> None:
+def test_etl_amplitude_slots_propagate_and_sync() -> None:
+    """The four ETL amplitude arcs (left/right x sync/no-sync) in one test."""
+    # Left, no-sync.
     acq, shell = _make_acq()
     acq.updateUi_etl_left_amplitude()
     assert acq.siggen.etl_left_amplitude == 1.0
     shell.scan_panel.ui.doubleSpinBox_etlLeftOffset.setMinimum.assert_called()
     shell.scan_panel.ui.doubleSpinBox_etlLeftOffset.setMaximum.assert_called()
 
-
-def test_etl_left_amplitude_with_sync_mirrors_to_right() -> None:
+    # Left, sync -> mirrors to right.
     acq, shell = _make_acq()
     shell.scan_panel.ui.checkBox_etlSync.isChecked.return_value = True
     acq.updateUi_etl_left_amplitude()
     shell.scan_panel.ui.doubleSpinBox_etlRightAmplitude.setValue.assert_called_with(1.0)
     assert acq.siggen.etl_right_amplitude == 1.0
 
-
-def test_etl_right_amplitude_no_sync_propagates() -> None:
-    acq, shell = _make_acq()
+    # Right, no-sync.
+    acq, _shell = _make_acq()
     acq.updateUi_etl_right_amplitude()
     assert acq.siggen.etl_right_amplitude == 1.0
 
-
-def test_etl_right_amplitude_with_sync_mirrors_to_left() -> None:
+    # Right, sync -> mirrors to left.
     acq, shell = _make_acq()
     shell.scan_panel.ui.checkBox_etlSync.isChecked.return_value = True
     acq.updateUi_etl_right_amplitude()
@@ -229,27 +222,26 @@ def test_etl_right_amplitude_with_sync_mirrors_to_left() -> None:
     assert acq.siggen.etl_left_amplitude == 1.0
 
 
-def test_etl_left_offset_no_sync_propagates() -> None:
-    acq, shell = _make_acq()
+def test_etl_offset_slots_propagate_and_sync() -> None:
+    """The four ETL offset arcs (left/right x sync/no-sync) in one test."""
+    # Left, no-sync.
+    acq, _shell = _make_acq()
     acq.updateUi_etl_left_offset()
     assert acq.siggen.etl_left_offset == 2.5
 
-
-def test_etl_left_offset_with_sync_mirrors_to_right() -> None:
+    # Left, sync -> mirrors to right.
     acq, shell = _make_acq()
     shell.scan_panel.ui.checkBox_etlSync.isChecked.return_value = True
     acq.updateUi_etl_left_offset()
     shell.scan_panel.ui.doubleSpinBox_etlRightOffset.setValue.assert_called_with(2.5)
     assert acq.siggen.etl_right_offset == 2.5
 
-
-def test_etl_right_offset_no_sync_propagates() -> None:
-    acq, shell = _make_acq()
+    # Right, no-sync.
+    acq, _shell = _make_acq()
     acq.updateUi_etl_right_offset()
     assert acq.siggen.etl_right_offset == 2.5
 
-
-def test_etl_right_offset_with_sync_mirrors_to_left() -> None:
+    # Right, sync -> mirrors to left.
     acq, shell = _make_acq()
     shell.scan_panel.ui.checkBox_etlSync.isChecked.return_value = True
     acq.updateUi_etl_right_offset()
