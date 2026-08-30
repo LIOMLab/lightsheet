@@ -507,8 +507,16 @@ class HardwareManager:
         already-accepted race).
 
         Out-of-range ``idx`` (only two lasers exist) raises
-        ``IndexError`` from ``self.lasers[idx]`` before any HAL write.
+        ``IndexError`` before any HAL write. The validation runs BEFORE
+        ``other = 1 - idx`` is computed so a negative ``other`` (e.g.
+        ``idx=2`` → ``other=-1``) cannot index the wrong laser via
+        Python negative indexing and de-energize it before the
+        out-of-range energize raises.
         """
+        if idx not in (0, 1):
+            raise IndexError(
+                f"select_laser: idx={idx} out of range (only two lasers, 0..1)"
+            )
         other = 1 - idx
         # 1. De-energize the other laser under its own lock. The lock is
         # released before the energize acquires the target lock, so the
