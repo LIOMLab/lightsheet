@@ -388,6 +388,17 @@ class AcquisitionPanelWidget(QWidget):
         save_blend = self._shell.save_panel.ui.radioButton_saveStitchBlend.isChecked()
         save_all_crop = self._shell.save_panel.ui.radioButton_saveAllCrop.isChecked()
         save_all_full = self._shell.save_panel.ui.radioButton_saveAllFull.isChecked()
+        # Multi-channel flag pre-sampled on the GUI thread (AGENTS.md §11
+        # — no cross-thread widget reads from workers). When both
+        # auto-laser checkboxes are checked, StackWorker.run executes the
+        # per-plane sequential cycle (move -> select_laser(0) -> acquire
+        # -> select_laser(1) -> acquire -> enqueue both); otherwise the
+        # existing single-channel path runs unchanged. _cache_auto_laser_flags()
+        # was called by the caller (updateUi_stack_mode_button) before
+        # _spawn_stack_worker, so _auto_laser1/_auto_laser2 are fresh.
+        multi_channel = (
+            self._shell._auto_laser1 and self._shell._auto_laser2
+        )
 
         # Disconnect the previous worker's signals so its finished→quit
         # can't fire the reused thread a second time and its started→run
@@ -419,6 +430,7 @@ class AcquisitionPanelWidget(QWidget):
         self._shell._stack_worker = StackWorker(
             self._shell._bundle, self._shell._hw, self._shell,
             save_desc, save_blend, save_all_crop, save_all_full,
+            multi_channel,
         )
         self._shell._stack_worker.moveToThread(self._shell._stack_thread)
         # When reusing the thread (2nd+ queue row), disconnect the prior

@@ -182,11 +182,16 @@ def _make_single_worker_multi(
     return worker, shell, hw
 
 
-def _make_stack_worker(qtbot) -> tuple[StackWorker, _WorkerShell, Mock]:
+def _make_stack_worker(
+    qtbot, multi_channel: bool = False
+) -> tuple[StackWorker, _WorkerShell, Mock]:
     """Construct a StackWorker (QObject) against the mock shell + hw.
-    Requires qtbot for the QApplication."""
+    Requires qtbot for the QApplication. The ``multi_channel`` arg is the
+    final StackWorker constructor arg pre-sampled on the GUI thread in
+    _spawn_stack_worker as (_auto_laser1 and _auto_laser2)."""
     bundle = _make_bundle()
     shell = _WorkerShell()
+    shell.reconstructed_frames = {}
     hw = Mock()
     worker = StackWorker(
         bundle,
@@ -196,6 +201,7 @@ def _make_stack_worker(qtbot) -> tuple[StackWorker, _WorkerShell, Mock]:
         save_stitch_blend=False,
         save_all_crop=False,
         save_all_full=False,
+        multi_channel=multi_channel,
     )
     return worker, shell, hw
 
@@ -770,4 +776,251 @@ def test_single_mode_button_presamples_multi_channel(qtbot, request) -> None:
     assert captured.get("multi_channel") is False, (
         "Only one auto-laser checkbox checked -> multi_channel=False must be "
         "passed to SingleWorker"
+    )
+
+
+# -- StackWorker multi-channel per-plane cycle (MCA-01 stack) ---------------
+
+
+def test_stack_worker_multi_channel_per_plane_cycle(qtbot) -> None:
+    """StackWorker.run with multi_channel=True and number_of_planes=2 runs
+    the per-plane sequential cycle: for each plane, move motor ->
+    select_laser(0) -> acquire_scan -> capture frame1 -> select_laser(1)
+    -> acquire_scan -> capture frame2 -> enqueue (0, frame1) and
+    (1, frame2). start_lasers is NOT called at the top in multi-channel
+    mode (it would energize both lasers simultaneously, violating the
+    one-laser-energized invariant). select_laser is called twice per
+    plane (once per channel), acquire_scan twice per plane, and
+    enqueue_buffer receives 2 tagged tuples per plane (4 total for 2
+    planes). stop_lasers is called at the end (safety — both off
+    regardless of the last select_laser state)."""
+    worker, shell, hw = _make_stack_worker(qtbot, multi_channel=True)
+    shell.stack_mode_started = True
+    shell.saving_allowed = True
+    shell.number_of_planes = 2
+    # Distinct frames per acquire_scan so we can verify both channels captured.
+    call_count = {"n": 0}
+
+    def _fake_acquire_scan():
+        call_count["n"] += 1
+        shell.reconstructed_frame = np.full(
+            (4, 4), call_count["n"], dtype=np.uint16
+        )
+
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+
+    # start_lasers MUST NOT be called in multi-channel mode.
+    hw.start_lasers.assert_not_called()
+    # select_laser called twice per plane (channel 0 then channel 1) -> 4 total.
+    assert hw.select_laser.call_count == 4
+    # The call order alternates 0, 1, 0, 1 across the two planes.
+    select_args = [c.args for c in hw.select_laser.call_args_list]
+    assert select_args == [(0,), (1,), (0,), (1,)]
+    # acquire_scan called twice per plane -> 4 total.
+    assert call_count["n"] == 4
+    # enqueue_buffer called with (channel_idx, frame) tagged tuples,
+    # 2 per plane -> 4 total.
+    assert shell._fs.enqueue_buffer.call_count == 4
+    enqueued_args = [c.args[0] for c in shell._fs.enqueue_buffer.call_args_list]
+    # Each enqueued item is a (channel_idx, ndarray) tuple.
+    for item in enqueued_args:
+        assert isinstance(item, tuple)
+        assert len(item) == 2
+        assert item[0] in (0, 1)
+        assert isinstance(item[1], np.ndarray)
+    # Channel indices alternate 0, 1, 0, 1 across the two planes.
+    assert [item[0] for item in enqueued_args] == [0, 1, 0, 1]
+    # stop_lasers called at the end (safety — both off regardless).
+    hw.stop_lasers.assert_called_once()
+    assert len(finished_emits) == 1
+
+
+def test_stack_worker_single_channel_unchanged(qtbot) -> None:
+    """StackWorker.run with multi_channel=False is byte-for-byte the
+    existing single-channel path: start_lasers called once at the top,
+    select_laser NEVER called, acquire_scan called once per plane,
+    enqueue_buffer called with a bare ndarray once per plane (back-compat
+    — no tagged tuple)."""
+    worker, shell, hw = _make_stack_worker(qtbot, multi_channel=False)
+    shell.stack_mode_started = True
+    shell.saving_allowed = True
+    shell.number_of_planes = 2
+    acquire_count = {"n": 0}
+
+    def _fake_acquire_scan():
+        acquire_count["n"] += 1
+        shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
+
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+
+    # Single-channel path: start_lasers called once at top.
+    hw.start_lasers.assert_called_once()
+    # select_laser NEVER called (single-channel back-compat).
+    hw.select_laser.assert_not_called()
+    # acquire_scan called once per plane -> 2 total.
+    assert acquire_count["n"] == 2
+    # enqueue_buffer called with a bare ndarray (no tagged tuple) once per
+    # plane -> 2 total.
+    assert shell._fs.enqueue_buffer.call_count == 2
+    for c in shell._fs.enqueue_buffer.call_args_list:
+        arg = c.args[0]
+        assert isinstance(arg, np.ndarray), (
+            "Single-channel stack enqueue_buffer must receive a bare "
+            "ndarray, not a tagged tuple (back-compat)"
+        )
+    # stop_lasers called at the end.
+    hw.stop_lasers.assert_called_once()
+    assert len(finished_emits) == 1
+
+
+def test_stack_worker_multi_channel_estop_mid_plane(qtbot) -> None:
+    """StackWorker.run multi-channel: if estop_event is set after the
+    first select_laser(0) in plane 0, the loop breaks, select_laser(1)
+    is NOT called for that plane, and finished.emit fires exactly once.
+    Both lasers are driven off by stop_lasers at the end."""
+    worker, shell, hw = _make_stack_worker(qtbot, multi_channel=True)
+    shell.stack_mode_started = True
+    shell.saving_allowed = False
+    shell.number_of_planes = 2
+    shell.estop_event.is_set.return_value = False
+    select_calls: list[int] = []
+
+    def _fake_select_laser(idx):
+        select_calls.append(idx)
+        # Set estop after the first select_laser(0) of plane 0 so the
+        # post-select_laser estop poll breaks the loop before
+        # select_laser(1) and acquire_scan run.
+        if idx == 0 and select_calls.count(0) == 1:
+            shell.estop_event.is_set.return_value = True
+
+    hw.select_laser.side_effect = _fake_select_laser
+    worker.acquire_scan = Mock()  # type: ignore[method-assign]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+
+    # Only select_laser(0) was called for plane 0 — select_laser(1) was
+    # NOT called because estop was set after select_laser(0).
+    assert select_calls == [0], (
+        f"Expected only [0] (estop after first select_laser(0)), got {select_calls}"
+    )
+    # acquire_scan never ran (estop before the first acquire_scan).
+    worker.acquire_scan.assert_not_called()
+    # stop_lasers called at the end (safety — both off regardless).
+    hw.stop_lasers.assert_called_once()
+    # finished signal emitted exactly once.
+    assert len(finished_emits) == 1
+
+
+# -- _spawn_stack_worker multi_channel pre-sampling (AGENTS.md §11) ---------
+
+
+def test_spawn_stack_worker_presamples_multi_channel(qtbot, request) -> None:
+    """_spawn_stack_worker with both auto-laser checkboxes checked passes
+    multi_channel=True to StackWorker; with one unchecked passes False.
+    Verified by spying on the StackWorker constructor. Pre-sampling
+    happens on the GUI thread after _cache_auto_laser_flags() — the
+    worker never reads the checkboxes (AGENTS.md §11)."""
+    from _helpers.controller_fixture import make_controller
+    from lightsheet.gui import panels as panels_module
+
+    # --- Both checked -> multi_channel=True ---
+    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl._stack_thread = None
+    ctrl._stack_worker = None
+    # Configure a valid stack so updateUi_stack_mode_button reaches
+    # _spawn_stack_worker: first/last plane set + non-zero step.
+    ctrl.stack_first_plane_set = True
+    ctrl.stack_last_plane_set = True
+    ctrl.stack_starting_plane = 0.0
+    ctrl.stack_ending_plane = 10.0
+    ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(1.0)
+    ctrl.stack_mode_started = False
+    # saving_allowed False -> the QMessageBox.question path is taken; the
+    # default Yes answer lets the spawn proceed without a save filename.
+    ctrl.save_panel.validate_file_name = Mock()
+    ctrl.saving_allowed = False
+    # Patch QMessageBox.question to auto-answer Yes (proceed without saving).
+    with patch.object(
+        panels_module.acquisition_panel, "QMessageBox"
+    ) as msg_box_mod:
+        msg_box_mod.question.return_value = msg_box_mod.StandardButton.Yes
+        msg_box_mod.warning = Mock()
+
+        ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
+        ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(True)
+        ctrl.save_panel.ui.lineEdit_saveDescription.setText("test")
+
+        captured: dict[str, object] = {}
+
+        def _capture_worker(*args, **kwargs):
+            if "multi_channel" in kwargs:
+                captured["multi_channel"] = kwargs["multi_channel"]
+            else:
+                # Positional: signature ends with multi_channel.
+                captured["multi_channel"] = args[-1]
+            worker_mock = Mock()
+            worker_mock.finished = Mock()
+            worker_mock.moveToThread = Mock()
+            worker_mock.deleteLater = Mock()
+            return worker_mock
+
+        fake_thread = Mock()
+        with (
+            patch.object(
+                panels_module.acquisition_panel,
+                "StackWorker",
+                side_effect=_capture_worker,
+            ),
+            patch.object(
+                panels_module.acquisition_panel, "QThread", return_value=fake_thread
+            ),
+        ):
+            ctrl.acquisition_panel.updateUi_stack_mode_button()
+
+    assert captured.get("multi_channel") is True, (
+        "Both auto-laser checkboxes checked -> multi_channel=True must be "
+        "passed to StackWorker by _spawn_stack_worker"
+    )
+
+    # --- One unchecked -> multi_channel=False ---
+    ctrl.stack_mode_started = False
+    ctrl._stack_thread = None
+    ctrl._stack_worker = None
+    ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(False)
+    captured.clear()
+    fake_thread2 = Mock()
+
+    with patch.object(
+        panels_module.acquisition_panel, "QMessageBox"
+    ) as msg_box_mod2:
+        msg_box_mod2.question.return_value = msg_box_mod2.StandardButton.Yes
+        msg_box_mod2.warning = Mock()
+        with (
+            patch.object(
+                panels_module.acquisition_panel,
+                "StackWorker",
+                side_effect=_capture_worker,
+            ),
+            patch.object(
+                panels_module.acquisition_panel, "QThread", return_value=fake_thread2
+            ),
+        ):
+            ctrl.acquisition_panel.updateUi_stack_mode_button()
+
+    assert captured.get("multi_channel") is False, (
+        "Only one auto-laser checkbox checked -> multi_channel=False must "
+        "be passed to StackWorker by _spawn_stack_worker"
     )

@@ -633,6 +633,7 @@ class StackWorker(QObject, _AcquireScanMixin):
         save_stitch_blend: bool,
         save_all_crop: bool,
         save_all_full: bool,
+        multi_channel: bool = False,
     ) -> None:
         super().__init__()
         self.camera = bundle.camera
@@ -648,6 +649,17 @@ class StackWorker(QObject, _AcquireScanMixin):
         self._save_stitch_blend = save_stitch_blend
         self._save_all_crop = save_all_crop
         self._save_all_full = save_all_full
+        # Multi-channel flag pre-sampled on the GUI thread in
+        # _spawn_stack_worker as (_auto_laser1 and _auto_laser2)
+        # immediately after _cache_auto_laser_flags() (AGENTS.md §11 —
+        # no cross-thread widget reads from workers). When True, run()
+        # executes the per-plane sequential cycle: for each plane,
+        # move -> select_laser(0) -> acquire -> capture frame1 ->
+        # select_laser(1) -> acquire -> capture frame2 -> enqueue both
+        # tagged frames. When False, run() is byte-for-byte the existing
+        # single-channel path (back-compat): start_lasers once at top,
+        # one acquire_scan per plane, one bare-ndarray enqueue per plane.
+        self._multi_channel = multi_channel
 
     @Slot()
     def run(self) -> None:
@@ -698,7 +710,19 @@ class StackWorker(QObject, _AcquireScanMixin):
             # The per-plane loop's first-iteration poll then breaks immediately
             # and the end-of-method cleanup (stop_lasers/disarm/emit) runs
             # unchanged, so no lasers are left on and the UI re-enables.
-            if self._shell.stack_mode_started and not self._shell.estop_event.is_set():
+            #
+            # Multi-channel mode (MCA-01 stack) MUST NOT call start_lasers
+            # here — it would energize both lasers simultaneously, violating
+            # the one-laser-energized invariant (MCA-02). The per-plane
+            # cycle below uses select_laser(0/1) per channel instead, which
+            # de-energizes the other laser before energizing the target.
+            # stop_lasers at the end of run() is safety — ensures both off
+            # regardless of the last select_laser state.
+            if (
+                not self._multi_channel
+                and self._shell.stack_mode_started
+                and not self._shell.estop_event.is_set()
+            ):
                 self._hw.start_lasers()
 
             # Set progress bar
@@ -781,41 +805,129 @@ class StackWorker(QObject, _AcquireScanMixin):
                     ):
                         break
 
-                    # Getting image
-                    self.acquire_scan()
+                    if self._multi_channel:
+                        # Multi-channel per-plane sequential cycle (MCA-01
+                        # stack): energize L1 -> acquire -> capture frame1 ->
+                        # energize L2 -> acquire -> capture frame2 -> enqueue
+                        # both tagged frames. select_laser(idx) is the
+                        # one-laser-energized invariant choke point (MCA-02)
+                        # — it de-energizes the other laser before energizing
+                        # the target, so only one laser is active at any
+                        # instant. Do NOT call start_lasers here (it would
+                        # energize both at once, violating the invariant);
+                        # select_laser per channel instead.
+                        #
+                        # Pitfall #3 (09-RESEARCH.md): acquire_scan overwrites
+                        # self._shell.reconstructed_frame. Capture frame1
+                        # immediately after the first acquire_scan (before
+                        # the second select_laser + acquire_scan overwrites
+                        # it).
+                        self._hw.select_laser(0)
+                        # E-stop poll point — checked after select_laser(0)
+                        # and before acquire_scan so a mid-plane E-stop
+                        # (pressed between the channel-0 energize and the
+                        # channel-0 frame grab) aborts without acquiring.
+                        # The lasers are already dark (driven off
+                        # synchronously on the GUI thread); select_laser(0)
+                        # self-skips the energize when estop is set, and this
+                        # break stops the per-plane cycle.
+                        if self._shell.estop_event.is_set():
+                            break
+                        self.acquire_scan()
+                        # Abort the stack if the camera timed out or the DAQ
+                        # scan task failed on this channel — acquire_scan
+                        # already emitted the warning and cleaned up the
+                        # recorder/scanner; do not attempt channel 2 or the
+                        # next plane.
+                        if self.camera.recorder_timeout_status or self.siggen.error:
+                            break
+                        # Capture frame1 immediately — the next acquire_scan
+                        # overwrites reconstructed_frame (pitfall #3).
+                        frame1 = (
+                            None
+                            if self._shell.reconstructed_frame is None
+                            else self._shell.reconstructed_frame.copy()
+                        )
 
-                    # Abort the stack if the camera timed out on this plane —
-                    # acquire_scan already emitted the timeout warning and cleaned
-                    # up the recorder/scanner; do not enqueue a (nonexistent)
-                    # frame for this plane or attempt the next one.
-                    if self.camera.recorder_timeout_status:
-                        break
+                        self._hw.select_laser(1)
+                        # E-stop poll point — checked after select_laser(1)
+                        # and before the channel-1 acquire_scan.
+                        if self._shell.estop_event.is_set():
+                            break
+                        self.acquire_scan()
+                        if self.camera.recorder_timeout_status or self.siggen.error:
+                            break
+                        frame2 = (
+                            None
+                            if self._shell.reconstructed_frame is None
+                            else self._shell.reconstructed_frame.copy()
+                        )
 
-                    # A DAQ scan-task failure would recur on every remaining
-                    # plane — abort the stack instead of emitting the same
-                    # message N times. acquire_scan already emitted the
-                    # operator message and cleaned up the scanner/camera for
-                    # this plane; the post-loop stop_lasers/disarm cleanup
-                    # runs unchanged.
-                    if self.siggen.error:
-                        break
+                        # Store both frames in the per-channel dict keyed by
+                        # laser wavelength (D-07). reconstructed_frame stays
+                        # as an alias to the last channel's frame for
+                        # back-compat with existing single-field consumers.
+                        wl1 = int(self._shell.lasers[0].wavelength)
+                        wl2 = int(self._shell.lasers[1].wavelength)
+                        self._shell.reconstructed_frames = {}
+                        if frame1 is not None:
+                            self._shell.reconstructed_frames[wl1] = frame1
+                        if frame2 is not None:
+                            self._shell.reconstructed_frames[wl2] = frame2
+                            # Alias to the last channel's frame for back-compat.
+                            self._shell.reconstructed_frame = frame2
 
-                    # Saving frame
-                    if self._shell.saving_allowed:
-                        if self._save_all_crop:
-                            cropped_buffer = self._shell._fs.crop_buffer(self._shell.buffer)
-                            self._shell._fs.enqueue_buffer(cropped_buffer)
-                            self._shell.sig_message.emit(
-                                "Saving All Images (one for each ETL step, cropped)"
-                            )
-                        elif self._save_all_full:
-                            self._shell._fs.enqueue_buffer(self._shell.buffer)
-                            self._shell.sig_message.emit(
-                                "Saving All Images (one for each ETL step, full)"
-                            )
-                        else:
-                            self._shell._fs.enqueue_buffer(self._shell.reconstructed_frame)
-                            self._shell.sig_message.emit("Saving Reconstructed Image")
+                        # Enqueue both tagged frames for saving (D-06
+                        # channel-tagged save queue). The tagged form
+                        # (channel_idx, frame) is accepted by enqueue_buffer;
+                        # the single-consumer save worker branches on the
+                        # tag in a later plan. Only enqueue when saving is
+                        # allowed and both frames were captured.
+                        if (
+                            self._shell.saving_allowed
+                            and frame1 is not None
+                            and frame2 is not None
+                        ):
+                            self._shell._fs.enqueue_buffer((0, frame1))
+                            self._shell._fs.enqueue_buffer((1, frame2))
+                    else:
+                        # Single-channel path (unchanged — back-compat).
+
+                        # Getting image
+                        self.acquire_scan()
+
+                        # Abort the stack if the camera timed out on this plane —
+                        # acquire_scan already emitted the timeout warning and cleaned
+                        # up the recorder/scanner; do not enqueue a (nonexistent)
+                        # frame for this plane or attempt the next one.
+                        if self.camera.recorder_timeout_status:
+                            break
+
+                        # A DAQ scan-task failure would recur on every remaining
+                        # plane — abort the stack instead of emitting the same
+                        # message N times. acquire_scan already emitted the
+                        # operator message and cleaned up the scanner/camera for
+                        # this plane; the post-loop stop_lasers/disarm cleanup
+                        # runs unchanged.
+                        if self.siggen.error:
+                            break
+
+                        # Saving frame
+                        if self._shell.saving_allowed:
+                            if self._save_all_crop:
+                                cropped_buffer = self._shell._fs.crop_buffer(self._shell.buffer)
+                                self._shell._fs.enqueue_buffer(cropped_buffer)
+                                self._shell.sig_message.emit(
+                                    "Saving All Images (one for each ETL step, cropped)"
+                                )
+                            elif self._save_all_full:
+                                self._shell._fs.enqueue_buffer(self._shell.buffer)
+                                self._shell.sig_message.emit(
+                                    "Saving All Images (one for each ETL step, full)"
+                                )
+                            else:
+                                self._shell._fs.enqueue_buffer(self._shell.reconstructed_frame)
+                                self._shell.sig_message.emit("Saving Reconstructed Image")
 
                     # Update progress bar
                     progress_value += progress_increment
@@ -832,7 +944,12 @@ class StackWorker(QObject, _AcquireScanMixin):
             # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)  # noqa: E501
             self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
 
-            # Stopping laser
+            # Stopping laser — safety: ensures both lasers off regardless
+            # of mode. In multi-channel mode the last select_laser(1) may
+            # have left L2 on; in single-channel mode start_lasers may
+            # have left the auto-selected laser on. stop_lasers reads the
+            # cached auto-laser flags and drives .off() on each active
+            # laser (AGENTS.md §2 — both off before camera disarm).
             self._hw.stop_lasers()
 
             # Stopping camera
