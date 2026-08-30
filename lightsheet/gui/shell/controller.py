@@ -1453,7 +1453,14 @@ class Controller_MainWindow(QMainWindow):
         checked; hide it otherwise. Single-channel back-compat: the radio
         is HIDDEN (not disabled) so the ImageView area stays visually
         identical to today's single-channel experience. Guarded for
-        early-init (channel_radio may not be constructed yet)."""
+        early-init (channel_radio may not be constructed yet).
+
+        When entering multi-channel, the currently-displayed frame is
+        immediately tinted with the selected channel's wavelength color
+        (L1 green by default) so the operator sees the L1/L2 cue the
+        instant the radio appears — without first clicking a button.
+        When leaving multi-channel, the tint is cleared (back to
+        grayscale) so the single-channel display matches today's path."""
         radio = getattr(self, "channel_radio", None)
         if radio is None:
             return
@@ -1465,32 +1472,47 @@ class Controller_MainWindow(QMainWindow):
         )
         if both:
             radio.show_for_multi_channel()
+            # Apply the selected channel's tint to the currently-displayed
+            # frame so the color cue is visible immediately on enable.
+            # Only the tint is applied — the LevelsBar window is NOT reset
+            # here because the displayed frame does not change when
+            # enabling multi-channel (it is still the demo image / last
+            # live frame), and resetting the window would reflow the
+            # ImageView geometry (the LevelsBar window setters trigger a
+            # layout recompute). The window reset belongs only in the
+            # radio-click path where switching channels changes the frame.
+            checked_id = -1
+            for idx in (0, 1):
+                if radio.is_checked(idx):
+                    checked_id = idx
+                    break
+            if checked_id >= 0:
+                self._apply_channel_tint(checked_id, reset_window=False)
         else:
             radio.hide_for_single_channel()
+            # Clear the tint so the single-channel display is grayscale.
+            frame = self.ui.imageView._last_frame
+            if frame is not None:
+                self.ui.imageView.setImage(frame, tint=None)
 
-    def _on_auto_laser_checkbox_changed(self, _state: int) -> None:
-        """Auto-laser checkbox stateChanged slot — re-cache the flags
-        (so the badge pill + summary re-render + radio visibility track
-        the checkbox-pair state synchronously) when the operator toggles
-        an auto-laser checkbox outside a mode-start entry point. GUI
-        thread only."""
-        self._cache_auto_laser_flags()
+    def _apply_channel_tint(
+        self, channel_idx: int, reset_window: bool = True
+    ) -> None:
+        """Apply the per-channel LUT tint for ``channel_idx`` to the
+        currently-displayed frame. Shared by the radio-click slot and the
+        visibility-update path.
 
-    @Slot(int)
-    def _on_channel_radio_clicked(self, channel_idx: int) -> None:
-        """Channel-radio idClicked slot — switch the ImageView to the
-        selected channel's frame and reset the LevelsBar window to the
-        displayed frame's min/max.
+        When ``reset_window`` is True (the radio-click path), the LevelsBar
+        window is reset to the displayed frame's min/max so a freshly
+        switched channel is visible at a sensible contrast. When False
+        (the visibility-update path on enabling multi-channel), the window
+        is left alone — the displayed frame does not change on enable, and
+        resetting the window would reflow the ImageView geometry.
 
-        Reads ``self.reconstructed_frames[wavelength]`` (the per-channel
-        frames dict populated by the multi-channel worker branch). If no
-        frame exists for the selected channel yet (e.g. at boot, before
-        any acquisition, only the demo image is loaded), falls back to
-        the ImageView's currently-displayed frame so the operator can
-        still verify the per-channel LUT tint against the demo image
-        without first running a multi-channel acquisition. No RGB overlay;
-        no per-channel levels state stored (the LevelsBar reads the
-        displayed frame's histogram on switch)."""
+        Falls back to the ImageView's last frame (the demo image at boot,
+        or the last live/preview frame) when no acquisition frame exists
+        for the channel. No-op if the channel index is out of range, the
+        laser has no wavelength, or nothing is displayed."""
         if not (0 <= channel_idx < len(self.lasers)):
             return
         wl = getattr(self.lasers[channel_idx], "wavelength", None)
@@ -1501,19 +1523,14 @@ class Controller_MainWindow(QMainWindow):
             # No acquisition frame for this channel yet — fall back to the
             # frame currently displayed in the ImageView (the boot demo
             # image, or the last live/preview frame) so the operator can
-            # still test the per-channel LUT tint without an acquisition.
+            # still see the per-channel LUT tint without an acquisition.
             frame = self.ui.imageView._last_frame
             if frame is None:
-                # Nothing displayed at all — leave the placeholder.
                 return
-        # Tint the displayed frame with the active channel's wavelength
-        # color so the operator can visually distinguish L1 from L2 in
-        # demo mode where the frames are otherwise identical. The tint
-        # is derived from the live laser wavelength (trusted, set at
-        # startup from config.ini) via the shared wavelength_to_hex
-        # mapping (also used by the Zarr omero channels metadata path).
         color = wavelength_to_hex(int(wl))
         self.ui.imageView.setImage(frame, tint=color)
+        if not reset_window:
+            return
         # Reset the LevelsBar window to the displayed frame's observed
         # min/max so the new channel is visible at a sensible contrast.
         # Set window_max first so the window_min setter (which clamps to
@@ -1529,6 +1546,27 @@ class Controller_MainWindow(QMainWindow):
         if hi >= lo:
             self.ui.levelsBar.window_max = hi
             self.ui.levelsBar.window_min = lo
+
+    def _on_auto_laser_checkbox_changed(self, _state: int) -> None:
+        """Auto-laser checkbox stateChanged slot — re-cache the flags
+        (so the badge pill + summary re-render + radio visibility track
+        the checkbox-pair state synchronously) when the operator toggles
+        an auto-laser checkbox outside a mode-start entry point. GUI
+        thread only."""
+        self._cache_auto_laser_flags()
+
+    @Slot(int)
+    def _on_channel_radio_clicked(self, channel_idx: int) -> None:
+        """Channel-radio idClicked slot — switch the ImageView to the
+        selected channel's frame and reset the LevelsBar window to the
+        displayed frame's min/max.
+
+        Delegates to ``_apply_channel_tint`` (shared with the
+        visibility-update path) so the tint application logic (frame
+        fallback + LevelsBar window reset) is identical whether the
+        operator clicks L1/L2 or the tint is auto-applied on enabling
+        the second auto-laser."""
+        self._apply_channel_tint(channel_idx)
 
     def close_modes(self) -> None:
         """Close all thread modes if they are active.

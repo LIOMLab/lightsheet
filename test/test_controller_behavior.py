@@ -865,6 +865,53 @@ def test_channel_radio_tints_demo_image_when_no_acquisition_frame(
     )
 
 
+def test_channel_radio_auto_tints_demo_image_when_second_laser_enabled(
+    qtbot, request
+) -> None:
+    """When the operator checks the SECOND auto-laser box (so both are
+    checked and the channel-radio appears), the currently-displayed demo
+    image must immediately take the L1 (default-selected) green tint —
+    the operator should NOT have to click L1/L2 first to see the color
+    cue. Unchecking back to single-channel must clear the tint (back to
+    grayscale)."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    radio = ctrl.channel_radio
+    image_view = ctrl.ui.imageView
+
+    # Boot state: demo image loaded, no tint (grayscale).
+    assert image_view._last_frame is not None, "demo image must be loaded"
+    assert image_view._last_tint is None, (
+        "demo image must start grayscale (no tint) before both lasers checked"
+    )
+
+    # Stop the imageview refresh timer so its queue-driven setImage does
+    # not interleave with the visibility-update's tint application.
+    timer = getattr(ctrl, "timer_imageview", None)
+    if timer is not None:
+        timer.stop()
+    try:
+        # Check both auto-laser boxes -> radio shows -> demo image tinted.
+        ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
+        ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(True)
+        assert radio.is_checked(0), "L1 must be the default-selected channel"
+        assert image_view._last_tint == "00FF00", (
+            f"checking both auto-lasers must auto-apply the L1 green tint "
+            f"to the displayed demo image; got _last_tint="
+            f"{image_view._last_tint!r}"
+        )
+
+        # Uncheck one -> single-channel -> tint cleared (grayscale).
+        ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(False)
+        assert image_view._last_tint is None, (
+            f"unchecking back to single-channel must clear the tint "
+            f"(back to grayscale); got _last_tint="
+            f"{image_view._last_tint!r}"
+        )
+    finally:
+        if timer is not None:
+            timer.start(100)
+
+
 def test_channel_radio_container_at_layout_index_one(qtbot, request) -> None:
     """The channel-radio container sits at imagesPane layout index 1 —
     BETWEEN the ImageView (index 0) and the LevelsBar layout. The
