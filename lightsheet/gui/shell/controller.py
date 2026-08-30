@@ -867,6 +867,14 @@ class Controller_MainWindow(QMainWindow):
             # self.timer_laser2_status are not yet set — skip the hardware
             # shutdown path entirely (nothing to shut down).
             if not hasattr(self, "lasers"):
+                # Stop the past-acquisitions browser scan thread even when
+                # hardware_init hasn't run yet — past_panel is constructed
+                # in __init__ (before hardware_init), so an async scan
+                # could be running if the operator opened the Past panel
+                # and triggered a scan before closing the window. Without
+                # this the QThread is destroyed while still running on
+                # app exit (crash).
+                self.past_panel.stop_scan()
                 self.timer_hardware_init.stop()
                 QApplication.restoreOverrideCursor()
                 event.accept()
