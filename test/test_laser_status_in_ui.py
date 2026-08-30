@@ -130,7 +130,7 @@ def test_updateUi_laser_status_error_red(qtbot, request) -> None:
     ctrl, _ = make_controller(qtbot, request)
     ctrl.laser_panel.updateUi_laser_status(1, "error")
     label = ctrl.laser_panel.ui.label_laserTwoStatus
-    assert label.text() == "\u25cf ERR"
+    assert label.text() == "\u25cf FAULT"
     assert "#FF3B30" in label.styleSheet()
 
 

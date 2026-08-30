@@ -98,7 +98,7 @@
            </size>
           </property>
           <property name="toolTip">
-           <string>Laser 1 emission state (ON / OFF / ERR)</string>
+           <string>Laser 1 emission state (ON / OFF / FAULT)</string>
           </property>
           <property name="styleSheet">
            <string notr="true">color: #8E8E93; font-weight: bold;</string>
@@ -229,7 +229,7 @@
            </size>
           </property>
           <property name="toolTip">
-           <string>Laser 2 emission state (ON / OFF / ERR)</string>
+           <string>Laser 2 emission state (ON / OFF / FAULT)</string>
           </property>
           <property name="styleSheet">
            <string notr="true">color: #8E8E93; font-weight: bold;</string>

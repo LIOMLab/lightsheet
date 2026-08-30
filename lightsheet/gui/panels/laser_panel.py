@@ -117,7 +117,7 @@ class LaserPanelWidget(QWidget):
             )
             buttons[idx].setChecked(False)
         else:  # "error"
-            labels[idx].setText("● ERR")
+            labels[idx].setText("● FAULT")
             labels[idx].setStyleSheet(
                 "color: #FF3B30; font-weight: bold;"
             )

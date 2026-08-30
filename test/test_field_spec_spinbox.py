@@ -121,6 +121,49 @@ def test_apply_spec_empty_unit_no_leading_space(qtbot) -> None:
     assert sb.suffix() == ""
 
 
+def test_apply_spec_generates_tooltip(qtbot) -> None:
+    """UI-SPEC §Tooltips (D-02): applySpec generates a tooltip documenting
+    the wheel-gate + Ctrl/Shift page-step from the FieldSpec + purpose."""
+    from lightsheet.gui.widgets.field_spec import FIELD_SPECS
+
+    sb = _make_spinbox(qtbot)
+    sb.setObjectName("doubleSpinBox_acqFirstPlane")
+    sb.applySpec(FIELD_SPECS["doubleSpinBox_acqFirstPlane"])
+    tip = sb.toolTip()
+    assert tip != "", "applySpec did not generate a tooltip"
+    assert "Stack first plane position" in tip  # purpose
+    assert "Unit: mm" in tip
+    assert "Range:" in tip
+    assert "Step:" in tip
+    assert "Ctrl/Shift" in tip
+    assert "Wheel: click in first to scroll." in tip
+
+
+def test_apply_spec_empty_unit_tooltip_omits_unit_labels(qtbot) -> None:
+    """Dimensionless fields (empty unit) get a tooltip without unit labels."""
+    from lightsheet.gui.widgets.field_spec import FIELD_SPECS
+
+    sb = _make_spinbox(qtbot)
+    sb.setObjectName("doubleSpinBox_etlSteps")
+    sb.applySpec(FIELD_SPECS["doubleSpinBox_etlSteps"])
+    tip = sb.toolTip()
+    assert tip != ""
+    assert "Unit:" not in tip
+    assert "Range:" in tip
+    assert "Step:" in tip
+    assert "Ctrl/Shift" in tip
+    assert "Wheel: click in first to scroll." in tip
+
+
+def test_field_purposes_covers_all_field_specs() -> None:
+    """FIELD_PURPOSES has a purpose for every FIELD_SPECS key."""
+    from lightsheet.gui.widgets.field_spec import FIELD_PURPOSES, FIELD_SPECS
+
+    assert set(FIELD_PURPOSES.keys()) == set(FIELD_SPECS.keys())
+    for key, purpose in FIELD_PURPOSES.items():
+        assert purpose, f"empty purpose for {key}"
+
+
 # ---------------------------------------------------------------------------
 # Wheel gate (focus-gated)
 # ---------------------------------------------------------------------------

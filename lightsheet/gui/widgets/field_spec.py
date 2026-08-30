@@ -70,3 +70,41 @@ FIELD_SPECS: dict[str, FieldSpec] = {
     "doubleSpinBox_laserOneAmplitude": FieldSpec("%", 1, 1.0, 10.0, 0.0, 100.0),
     "doubleSpinBox_laserTwoAmplitude": FieldSpec("%", 1, 1.0, 10.0, 0.0, 100.0),
 }
+
+# Author-supplied one-line purpose per field, used by FieldSpecSpinBox
+# .applySpec() to generate the UI-SPEC §Tooltips (D-02) tooltip:
+# ``{field purpose}. Unit: {unit}. Range: {min}–{max} {unit}. Step: …
+# (Ctrl/Shift = …). Wheel: click in first to scroll.`` The purpose is the
+# only author-supplied part; the rest is generated from the FieldSpec.
+FIELD_PURPOSES: dict[str, str] = {
+    # Motion panel
+    "doubleSpinBox_sampleSetHPosition": "Horizontal stage position",
+    "doubleSpinBox_sampleSetVPosition": "Vertical stage position",
+    "doubleSpinBox_cameraSetPosition": "Camera focus stage position",
+    "doubleSpinBox_sampleHStepSize": "Horizontal stage jog step size",
+    "doubleSpinBox_sampleVStepSize": "Vertical stage jog step size",
+    "doubleSpinBox_cameraStepSize": "Camera stage jog step size",
+    # Stack panel
+    "doubleSpinBox_acqFirstPlane": "Stack first plane position",
+    "doubleSpinBox_acqLastPlane": "Stack last plane position",
+    "doubleSpinBox_acqPlaneStepSize": "Stack plane step size",
+    # Scan panel — ETL
+    "doubleSpinBox_etlLeftAmplitude": "ETL left amplitude",
+    "doubleSpinBox_etlRightAmplitude": "ETL right amplitude",
+    "doubleSpinBox_etlLeftOffset": "ETL left offset",
+    "doubleSpinBox_etlRightOffset": "ETL right offset",
+    "doubleSpinBox_etlSteps": "ETL steps per scan cycle",
+    # Scan panel — galvo
+    "doubleSpinBox_galvoLeftAmplitude": "Galvo left amplitude",
+    "doubleSpinBox_galvoRightAmplitude": "Galvo right amplitude",
+    "doubleSpinBox_galvoLeftOffset": "Galvo left offset",
+    "doubleSpinBox_galvoRightOffset": "Galvo right offset",
+    # Acquisition panel — camera timing
+    "doubleSpinBox_cameraExposureTime": "Camera exposure time",
+    "doubleSpinBox_cameraLineTime": "Camera line time",
+    "doubleSpinBox_cameraExposedLines": "Camera exposed lines per line time",
+    "doubleSpinBox_cameraDelayLines": "Camera delay lines per line time",
+    # Lasers panel
+    "doubleSpinBox_laserOneAmplitude": "Laser 1 power",
+    "doubleSpinBox_laserTwoAmplitude": "Laser 2 power",
+}

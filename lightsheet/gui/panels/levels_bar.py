@@ -220,9 +220,14 @@ class LevelsBar(QWidget):
             handle_radius * 2, handle_radius * 2,
         )
 
-        # Central handle: small accent square between the window handles.
-        painter.setBrush(QColor(220, 120, 40))
-        painter.setPen(QColor(60, 30, 0))
+        # Central handle: small neutral-gray square between the window
+        # handles. UI-SPEC §LevelsBar Redesign Contract: handles are
+        # neutral gray (QColor(80, 80, 80) carried forward from 07.1); the
+        # central handle uses a lighter neutral gray so it reads as a
+        # distinct affordance without introducing a new accent color
+        # (UI-SPEC §Color: "Do NOT introduce new accent colors").
+        painter.setBrush(QColor(120, 120, 120))
+        painter.setPen(QColor(60, 60, 60))
         half = handle_radius - 1
         painter.drawRect(x_center - half, cy - half, half * 2, half * 2)
 

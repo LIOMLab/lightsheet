@@ -359,7 +359,7 @@ def test_close_modes_calls_stop_lasers_when_a_laser_active(qtbot, request) -> No
 # Per-laser status indicator tests — _poll_laser_status computes a status
 # string per requested laser index (error > active > inactive precedence)
 # and emits sig_laser_status(idx, status); updateUi_laser_status maps that
-# string to the ● ON / ● OFF / ● ERR label text + semantic color. The gated
+# string to the ● ON / ● OFF / ● FAULT label text + semantic color. The gated
 # L2 poll (_poll_laser2_status_gated) skips silently when the iBeam
 # per-instance lock is held so a periodic status query never blocks on a
 # write in progress and never misattributes a reply.
@@ -403,7 +403,7 @@ def test_poll_laser_status_error_wins_over_active(qtbot, request) -> None:
 
     ctrl._hw._poll_laser_status([1])
 
-    assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "● ERR"
+    assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "● FAULT"
 
 
 def test_poll_laser_status_both_indices_emits_twice(qtbot, request) -> None:
@@ -452,12 +452,12 @@ def test_updateUi_laser_status_inactive_sets_off_label(qtbot, request) -> None:
 
 def test_updateUi_laser_status_error_sets_err_label_for_laser2(qtbot, request) -> None:
     """updateUi_laser_status(1, 'error') sets label_laserTwoStatus text
-    to '● ERR' and a red bold stylesheet."""
+    to '● FAULT' and a red bold stylesheet."""
     ctrl, _ = make_controller(qtbot, request)
 
     ctrl.laser_panel.updateUi_laser_status(1, "error")
 
-    assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "● ERR"
+    assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "● FAULT"
     style = ctrl.laser_panel.ui.label_laserTwoStatus.styleSheet()
     assert "#FF3B30" in style
     assert "bold" in style

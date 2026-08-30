@@ -192,7 +192,6 @@ class Ui_ScanPanel(object):
         sizePolicy.setHeightForWidth(self.checkBox_etlSync.sizePolicy().hasHeightForWidth())
         self.checkBox_etlSync.setSizePolicy(sizePolicy)
         self.checkBox_etlSync.setMinimumSize(QSize(0, 20))
-        self.checkBox_etlSync.setMaximumSize(QSize(16777215, 20))
         self.checkBox_etlSync.setLayoutDirection(Qt.LeftToRight)
 
         self.verticalLayout_45.addWidget(self.checkBox_etlSync)
@@ -382,7 +381,6 @@ class Ui_ScanPanel(object):
         sizePolicy.setHeightForWidth(self.checkBox_galvoSync.sizePolicy().hasHeightForWidth())
         self.checkBox_galvoSync.setSizePolicy(sizePolicy)
         self.checkBox_galvoSync.setMinimumSize(QSize(0, 20))
-        self.checkBox_galvoSync.setMaximumSize(QSize(16777215, 20))
         self.checkBox_galvoSync.setLayoutDirection(Qt.LeftToRight)
 
         self.verticalLayout_39.addWidget(self.checkBox_galvoSync)

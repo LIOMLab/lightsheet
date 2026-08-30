@@ -33,9 +33,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QWheelEvent
 from PySide6.QtWidgets import QApplication, QDoubleSpinBox
 
-from lightsheet.gui.widgets.field_spec import FIELD_SPECS, FieldSpec
+from lightsheet.gui.widgets.field_spec import FIELD_PURPOSES, FIELD_SPECS, FieldSpec
 
-__all__ = ["FieldSpecSpinBox", "FieldSpec", "FIELD_SPECS"]
+__all__ = ["FieldSpecSpinBox", "FieldSpec", "FIELD_SPECS", "FIELD_PURPOSES"]
 
 
 class FieldSpecSpinBox(QDoubleSpinBox):
@@ -52,10 +52,19 @@ class FieldSpecSpinBox(QDoubleSpinBox):
         self._spec: FieldSpec | None = None
 
     def applySpec(self, spec: FieldSpec) -> None:  # noqa: N802 - Qt API name
-        """Apply a FieldSpec: set suffix, decimals, singleStep, min, max.
+        """Apply a FieldSpec: set suffix, decimals, singleStep, min, max,
+        and generate the UI-SPEC §Tooltips (D-02) tooltip.
 
         The suffix is ``" {unit}"`` when ``unit`` is non-empty (leading
         space per Qt convention) and ``""`` otherwise (no leading space).
+
+        The tooltip documents the wheel-gate + Ctrl/Shift page-step so the
+        operator discovers the focus-gating by reading the tooltip rather
+        than by surprise. Format (UI-SPEC §Tooltips):
+        ``{field purpose}. Unit: {unit}. Range: {min}–{max} {unit}. Step:
+        {single_step} {unit} (Ctrl/Shift = {page_step} {unit}). Wheel:
+        click in first to scroll.`` Dimensionless fields (empty unit) omit
+        the unit labels.
         """
         self._spec = spec
         self.setSuffix(f" {spec.unit}" if spec.unit else "")
@@ -63,6 +72,27 @@ class FieldSpecSpinBox(QDoubleSpinBox):
         self.setSingleStep(spec.single_step)
         self.setMinimum(spec.minimum)
         self.setMaximum(spec.maximum)
+        self.setToolTip(self._build_tooltip(spec))
+
+    def _build_tooltip(self, spec: FieldSpec) -> str:
+        """Generate the UI-SPEC §Tooltips tooltip from the FieldSpec +
+        the author-supplied purpose (FIELD_PURPOSES). Dimensionless fields
+        (empty unit) omit the unit labels."""
+        purpose = FIELD_PURPOSES.get(self.objectName(), "")
+        if spec.unit:
+            return (
+                f"{purpose}. Unit: {spec.unit}. "
+                f"Range: {spec.minimum}\u2013{spec.maximum} {spec.unit}. "
+                f"Step: {spec.single_step} {spec.unit} "
+                f"(Ctrl/Shift = {spec.page_step} {spec.unit}). "
+                "Wheel: click in first to scroll."
+            )
+        return (
+            f"{purpose}. "
+            f"Range: {spec.minimum}\u2013{spec.maximum}. "
+            f"Step: {spec.single_step} (Ctrl/Shift = {spec.page_step}). "
+            "Wheel: click in first to scroll."
+        )
 
     def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802 - Qt override
         """Ignore the wheel unless the spinbox has focus.

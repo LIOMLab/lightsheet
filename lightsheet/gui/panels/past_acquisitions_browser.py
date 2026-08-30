@@ -64,10 +64,14 @@ _PAST_COL_SIZE = 3
 _PAST_COL_DATE = 4
 _PAST_COL_FORMAT = 5
 
-_PAST_EMPTY_COPY = "No past acquisitions found in {folder}."
-_PAST_SCANNING_COPY = "Scanning {folder} for past acquisitions\u2026"
+_PAST_EMPTY_COPY = (
+    "No past acquisitions in {save_directory}. Run an acquisition, then "
+    "click Refresh to list saved stacks here."
+)
+_PAST_SCANNING_COPY = "Scanning {save_directory}\u2026"
 _PAST_ERROR_COPY = (
-    "Cannot read past acquisitions: {folder} is missing or not readable."
+    "Save directory is empty or does not exist: {save_directory}. "
+    "Set a save directory in the Files panel first."
 )
 
 
@@ -702,7 +706,7 @@ class PastAcquisitionsPanel(QWidget):
             return
         folder = str(getattr(self._shell, "save_directory", ""))
         self.ui.label_pastStatus.setText(
-            _PAST_SCANNING_COPY.format(folder=folder)
+            _PAST_SCANNING_COPY.format(save_directory=folder)
         )
         self.ui.label_pastStatus.setVisible(True)
         self.ui.tableWidget_pastAcquisitions.setVisible(False)
@@ -726,9 +730,18 @@ class PastAcquisitionsPanel(QWidget):
         self.ui.label_pastStatus.setVisible(not has_rows)
         if not has_rows:
             folder = str(getattr(self._shell, "save_directory", ""))
-            self.ui.label_pastStatus.setText(
-                _PAST_EMPTY_COPY.format(folder=folder)
-            )
+            # Distinguish "directory missing/empty" (point the operator to
+            # the Files panel) from "directory exists but has no stacks"
+            # (tell them to run an acquisition + Refresh). UI-SPEC
+            # §Copywriting Past Acquisitions empty vs empty-save-directory.
+            if not folder or not os.path.isdir(folder):
+                self.ui.label_pastStatus.setText(
+                    _PAST_ERROR_COPY.format(save_directory=folder or "(unset)")
+                )
+            else:
+                self.ui.label_pastStatus.setText(
+                    _PAST_EMPTY_COPY.format(save_directory=folder)
+                )
         # Re-emit so external observers (tests) can subscribe.
         self.past_acquisitions_scan_finished.emit(entries)
 

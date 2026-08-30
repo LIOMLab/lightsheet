@@ -247,7 +247,7 @@ def test_updateUi_laser_status_inactive(qtbot, request) -> None:
 def test_updateUi_laser_status_error(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.laser_panel.updateUi_laser_status(0, "error")
-    assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "● ERR"
+    assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "● FAULT"
 
 
 # -- Position indicators (fixed mm display unit) ---------------------------
