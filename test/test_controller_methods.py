@@ -47,77 +47,49 @@ def test_updateUi_dark_theme_emits_stylesheet(qtbot, request) -> None:
     assert received == ["dark"]
 
 
-def test_updateUi_show_hide_images_pane_visible(qtbot, request) -> None:
+def test_updateUi_show_hide_images_pane_toggles_both_ways(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.show()
     qtbot.waitExposed(ctrl)
     # The images pane starts visible (splitter size > 0).
     assert ctrl.ui.splitter.sizes()[0] > 0
-    ctrl.updateUi_show_hide_images_pane()
-    # Toggling hides the pane via splitter.setSizes([0, total]) — the
+    # Toggle off — hides the pane via splitter.setSizes([0, total]); the
     # splitter size is the authoritative signal (audit #7).
+    ctrl.updateUi_show_hide_images_pane()
     assert ctrl.ui.splitter.sizes()[0] == 0
     assert ctrl.ui.action_ShowHideImagesPane.isChecked() is False
-
-
-def test_updateUi_show_hide_images_pane_hidden(qtbot, request) -> None:
-    ctrl, _bundle = make_controller(qtbot, request)
-    ctrl.show()
-    qtbot.waitExposed(ctrl)
-    # Hide the pane via the slot, then toggle back on.
-    ctrl.updateUi_show_hide_images_pane()
-    assert ctrl.ui.splitter.sizes()[0] == 0
+    # Toggle back on — restores the pane.
     ctrl.updateUi_show_hide_images_pane()
     assert ctrl.ui.splitter.sizes()[0] > 0
     assert ctrl.ui.action_ShowHideImagesPane.isChecked() is True
 
 
-def test_updateUi_show_hide_controls_pane_visible(qtbot, request) -> None:
+def test_updateUi_show_hide_controls_pane_toggles_both_ways(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.show()
     qtbot.waitExposed(ctrl)
-    # The controls pane starts visible (splitter size > 0).
+    # The controls pane starts visible (splitter size > 0). controlsPane is
+    # the SECOND widget (index 1).
     assert ctrl.ui.splitter.sizes()[1] > 0
     ctrl.updateUi_show_hide_controls_pane()
-    # controlsPane is the SECOND widget (index 1).
     assert ctrl.ui.splitter.sizes()[1] == 0
     assert ctrl.ui.action_ShowHideControlsPane.isChecked() is False
-
-
-def test_updateUi_show_hide_controls_pane_hidden(qtbot, request) -> None:
-    ctrl, _bundle = make_controller(qtbot, request)
-    ctrl.show()
-    qtbot.waitExposed(ctrl)
-    ctrl.updateUi_show_hide_controls_pane()
-    assert ctrl.ui.splitter.sizes()[1] == 0
     ctrl.updateUi_show_hide_controls_pane()
     assert ctrl.ui.splitter.sizes()[1] > 0
     assert ctrl.ui.action_ShowHideControlsPane.isChecked() is True
 
 
-def test_updateUi_show_hide_message_log_visible(qtbot, request) -> None:
+def test_updateUi_show_hide_message_log_toggles_both_ways(qtbot, request) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.show()
     qtbot.waitExposed(ctrl)
-    qtbot.wait(50)
     splitter = ctrl.ui.message_splitter
     # Log starts visible (splitter section > 0).
     assert splitter.sizes()[1] > 0
-    ctrl.updateUi_show_hide_message_log()
     # After toggling, the log section is 0 (hidden via splitter sizes).
+    ctrl.updateUi_show_hide_message_log()
     assert splitter.sizes()[1] == 0
     assert ctrl.ui.action_ShowHideMessageLog.isChecked() is False
-
-
-def test_updateUi_show_hide_message_log_hidden(qtbot, request) -> None:
-    ctrl, _bundle = make_controller(qtbot, request)
-    ctrl.show()
-    qtbot.waitExposed(ctrl)
-    qtbot.wait(50)
-    splitter = ctrl.ui.message_splitter
-    # Hide the log first via the toggle.
-    ctrl.updateUi_show_hide_message_log()
-    assert splitter.sizes()[1] == 0
     # Toggle again to show.
     ctrl.updateUi_show_hide_message_log()
     assert splitter.sizes()[1] > 0

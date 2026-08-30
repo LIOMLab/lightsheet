@@ -91,7 +91,7 @@ ignore = ["ANN401"]
 [tool.pytest.ini_options]
 minversion = "9.1"
 # xdist flags:
-#   -n auto --maxprocesses=6  caps workers at 6 to bound PyQt5 worker memory on
+#   -n auto --maxprocesses=6  caps workers at 6 to bound PySide6 worker memory on
 #                             high-core machines (rig, CI); -n auto alone would
 #                             spawn 10 workers on a 10-core Mac, each importing
 #                             Qt + stubs.

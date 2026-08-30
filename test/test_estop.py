@@ -13,7 +13,7 @@ lightsheet/gui/controller.py relies on for the E-stop:
   - A worker loop that polls `if estop_event.is_set(): break` at the top of
     each iteration exits immediately (zero body executions) when the Event is
     pre-set — validating the poll-point placement logic independent of the
-    real PyQt5 GUI, which cannot be instantiated on this Mac.
+    real PySide6 GUI, which cannot be instantiated on this Mac.
 
 The kill-path wiring itself (updateUi_estop_pressed drives both lasers off,
 every worker polls estop_event.is_set()) is NOT verified by static-source

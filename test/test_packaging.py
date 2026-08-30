@@ -67,12 +67,12 @@ def test_console_script_entry_point_registered() -> None:
 
 def test_gui_controller_imports() -> None:
     """``lightsheet.gui.shell.controller.Controller_MainWindow`` imports where
-    PyQt5 is available; skipped otherwise (PyQt5 is not stubbed by
+    PySide6 is available; skipped otherwise (PySide6 is not stubbed by
     conftest)."""
     try:
         from lightsheet.gui.shell.controller import Controller_MainWindow  # noqa: F401
     except ImportError as exc:
-        pytest.skip(f"PyQt5 not installed: {exc}")
+        pytest.skip(f"PySide6 not installed: {exc}")
 
 
 def test_gui_controller_imports_from_foreign_cwd(tmp_path: Path) -> None:

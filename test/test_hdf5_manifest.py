@@ -8,7 +8,7 @@ Vertical Position / Camera Position). This is a STRUCTURAL smoke
 HDF5 equality (h5py version drift Mac vs rig would break byte equality).
 
 The harness writes a canonical plane directly with h5py (it does NOT
-instantiate FrameSaver — that needs the controller/PyQt5). The dataset
+instantiate FrameSaver — that needs the controller/PySide6). The dataset
 layout, dtype, and attribute names match what the real frame-saver
 worker writes, so a refactor that changes the on-disk schema is caught
 here.
