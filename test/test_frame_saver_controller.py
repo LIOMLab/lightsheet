@@ -183,7 +183,9 @@ def test_pass_through_methods_route_to_frame_saver() -> None:
     fs.frame_saver.add_motor_parameters.assert_called_once_with("h", "v", "c")
 
     fs.set_files(1, "name", "singleImage", 1, "ETLscan")
-    fs.frame_saver.set_files.assert_called_once_with(1, "name", "singleImage", 1, "ETLscan")
+    fs.frame_saver.set_files.assert_called_once_with(
+        1, "name", "singleImage", 1, "ETLscan", wavelengths=None
+    )
 
     fs.enqueue_buffer(np.zeros((1, 1), dtype=np.uint16))
     fs.frame_saver.enqueue_buffer.assert_called_once()
