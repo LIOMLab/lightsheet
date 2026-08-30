@@ -350,13 +350,13 @@ class FrameSaver(QObject):
 
     # Saving methods
 
-    def enqueue_buffer(self, buffer) -> None:
+    def enqueue_buffer(self, buffer: np.ndarray | tuple[int, np.ndarray]) -> None:
         """Put an image in the save queue.
 
         Accepts either a bare ``np.ndarray`` (the existing single-channel
         form — back-compat) or a ``(channel_idx, frame)`` tuple (the
-        multi-channel channel-tagged form, D-06). The single-consumer
-        save workers (``frame_saver_worker`` / ``zarr_save_worker`` /
+        multi-channel channel-tagged form). The single-consumer save
+        workers (``frame_saver_worker`` / ``zarr_save_worker`` /
         ``both_save_worker``) branch on the tag in a later plan; this
         method only makes the queue accept the tagged form without
         raising, so the multi-channel producer (``SingleWorker.run`` /
@@ -640,50 +640,52 @@ class FrameSaver(QObject):
 
             plane_idx = plane_counters[channel_idx]
             if plane_idx >= len(self.filenames_lists[channel_idx]):
-                # No more files for this channel — skip the extra frame
-                files_written += 1
+                # Producer over-ran this channel — drop the extra frame
+                # without counting it as a write. Counting it would let
+                # files_written reach total_files while other channels
+                # still have unprocessed frames in the queue, exiting the
+                # loop early and dropping the remaining frames.
                 continue
 
             filename = self.filenames_lists[channel_idx][plane_idx]
             logger.info("File created: %s", filename)
+            outfile = h5py.File(filename, "a")
             try:
-                outfile = h5py.File(filename, "a")
                 self._write_laser_metadata(outfile)
                 self._write_acquisition_metadata(outfile)
+                if frame.ndim == 2:
+                    frame = np.expand_dims(frame, axis=0)
+                counter = 1
+                for f_idx in range(frame.shape[0]):
+                    path_root = self.datasets_name + f"{counter:03d}"
+                    self.dataset = outfile.create_dataset(
+                        path_root, data=frame[f_idx, :, :]
+                    )
+                    logger.info(
+                        "Dataset created: %s (channel %d plane %d)",
+                        path_root, channel_idx, plane_idx,
+                    )
+                    self.dataset.attrs["Sample Name"] = self.sample_name
+                    self.dataset.attrs["Date"] = str(datetime.date.today())
+                    # Both channels of the same plane share the motor position
+                    pos_index = plane_idx
+                    if pos_index < len(self.horizontal_positions_list):
+                        self.dataset.attrs["Horizontal Position"] = (
+                            self.horizontal_positions_list[pos_index]
+                        )
+                        self.dataset.attrs["Vertical Position"] = (
+                            self.vertical_positions_list[pos_index]
+                        )
+                        self.dataset.attrs["Camera Position"] = (
+                            self.camera_positions_list[pos_index]
+                        )
+                    counter += 1
             except Exception as e:
                 self.sig_status_message.emit(f"Save error: {e}")
                 self.saving_started = False
                 aborted = True
+                outfile.close()
                 break
-
-            if frame.ndim == 2:
-                frame = np.expand_dims(frame, axis=0)
-            counter = 1
-            for f_idx in range(frame.shape[0]):
-                path_root = self.datasets_name + f"{counter:03d}"
-                self.dataset = outfile.create_dataset(
-                    path_root, data=frame[f_idx, :, :]
-                )
-                logger.info(
-                    "Dataset created: %s (channel %d plane %d)",
-                    path_root, channel_idx, plane_idx,
-                )
-                self.dataset.attrs["Sample Name"] = self.sample_name
-                self.dataset.attrs["Date"] = str(datetime.date.today())
-                # Both channels of the same plane share the motor position
-                pos_index = plane_idx
-                if pos_index < len(self.horizontal_positions_list):
-                    self.dataset.attrs["Horizontal Position"] = (
-                        self.horizontal_positions_list[pos_index]
-                    )
-                    self.dataset.attrs["Vertical Position"] = (
-                        self.vertical_positions_list[pos_index]
-                    )
-                    self.dataset.attrs["Camera Position"] = (
-                        self.camera_positions_list[pos_index]
-                    )
-                counter += 1
-
             outfile.close()
             self.sig_status_message.emit("File " + filename + " saved")
             plane_counters[channel_idx] += 1
@@ -1138,74 +1140,87 @@ class FrameSaver(QObject):
 
                 plane_idx = plane_counters[channel_idx]
                 if plane_idx >= len(self.filenames_lists[channel_idx]):
-                    files_written += 1
+                    # Producer over-ran this channel — drop the extra
+                    # frame without counting it (see
+                    # _frame_saver_worker_multi_channel for the rationale:
+                    # counting would let files_written reach total_files
+                    # while other channels still have queued frames).
                     continue
 
                 filename = self.filenames_lists[channel_idx][plane_idx]
                 logger.info("File created: %s", filename)
+                outfile = h5py.File(filename, "a")
                 try:
-                    outfile = h5py.File(filename, "a")
                     self._write_laser_metadata(outfile)
                     self._write_acquisition_metadata(outfile)
+                    if frame.ndim == 2:
+                        frame = np.expand_dims(frame, axis=0)
+                    counter = 1
+                    for f_idx in range(frame.shape[0]):
+                        # --- HDF5 write (mirrors _frame_saver_worker_multi_channel) ---
+                        path_root = self.datasets_name + f"{counter:03d}"
+                        self.dataset = outfile.create_dataset(
+                            path_root, data=frame[f_idx, :, :]
+                        )
+                        logger.info(
+                            "Dataset %s created: %s (channel %d plane %d)",
+                            f_idx, path_root, channel_idx, plane_idx,
+                        )
+                        self.dataset.attrs["Sample Name"] = self.sample_name
+                        self.dataset.attrs["Date"] = str(datetime.date.today())
+                        # HDF5 motor positions use the per-channel plane
+                        # index (one motor snapshot per plane, shared by
+                        # both channels of the same plane).
+                        pos_index = plane_idx
+                        if pos_index < len(self.horizontal_positions_list):
+                            self.dataset.attrs["Horizontal Position"] = (
+                                self.horizontal_positions_list[pos_index]
+                            )
+                            self.dataset.attrs["Vertical Position"] = (
+                                self.vertical_positions_list[pos_index]
+                            )
+                            self.dataset.attrs["Camera Position"] = (
+                                self.camera_positions_list[pos_index]
+                            )
+                        counter += 1
+
+                        # --- Zarr write (per-channel — write_plane routes
+                        # the frame to the channel-axis slice; channel 0
+                        # records the motor positions via its guarded append) ---
+                        cz = z_idx_per_channel.get(channel_idx, 0)
+                        if cz < n_planes:
+                            # Zarr motor positions use cz (the per-channel
+                            # Zarr z-index, which increments per f_idx) —
+                            # NOT plane_idx. For a multi-dataset frame
+                            # (frame.shape[0] > 1) each sub-frame must get
+                            # its own motor position; using plane_idx would
+                            # give every sub-frame the same position.
+                            zarr_pos_index = cz
+                            hor = (
+                                _position_to_float(self.horizontal_positions_list[zarr_pos_index])
+                                if zarr_pos_index < len(self.horizontal_positions_list)
+                                else 0.0
+                            )
+                            ver = (
+                                _position_to_float(self.vertical_positions_list[zarr_pos_index])
+                                if zarr_pos_index < len(self.vertical_positions_list)
+                                else 0.0
+                            )
+                            cam = (
+                                _position_to_float(self.camera_positions_list[zarr_pos_index])
+                                if zarr_pos_index < len(self.camera_positions_list)
+                                else 0.0
+                            )
+                            self._zarr_saver.write_plane(
+                                channel_idx, cz, frame[f_idx, :, :], hor, ver, cam
+                            )
+                            z_idx_per_channel[channel_idx] = cz + 1
                 except Exception as e:
                     self.sig_status_message.emit(f"Save error: {e}")
                     self.saving_started = False
                     aborted = True
+                    outfile.close()
                     break
-
-                if frame.ndim == 2:
-                    frame = np.expand_dims(frame, axis=0)
-                counter = 1
-                for f_idx in range(frame.shape[0]):
-                    # --- HDF5 write (mirrors _frame_saver_worker_multi_channel) ---
-                    path_root = self.datasets_name + f"{counter:03d}"
-                    self.dataset = outfile.create_dataset(
-                        path_root, data=frame[f_idx, :, :]
-                    )
-                    logger.info(
-                        "Dataset %s created: %s (channel %d plane %d)",
-                        f_idx, path_root, channel_idx, plane_idx,
-                    )
-                    self.dataset.attrs["Sample Name"] = self.sample_name
-                    self.dataset.attrs["Date"] = str(datetime.date.today())
-                    pos_index = plane_idx
-                    if pos_index < len(self.horizontal_positions_list):
-                        self.dataset.attrs["Horizontal Position"] = (
-                            self.horizontal_positions_list[pos_index]
-                        )
-                        self.dataset.attrs["Vertical Position"] = (
-                            self.vertical_positions_list[pos_index]
-                        )
-                        self.dataset.attrs["Camera Position"] = (
-                            self.camera_positions_list[pos_index]
-                        )
-                    counter += 1
-
-                    # --- Zarr write (per-channel — write_plane routes
-                    # the frame to the channel-axis slice; channel 0
-                    # records the motor positions via its guarded append) ---
-                    cz = z_idx_per_channel.get(channel_idx, 0)
-                    if cz < n_planes:
-                        hor = (
-                            _position_to_float(self.horizontal_positions_list[pos_index])
-                            if pos_index < len(self.horizontal_positions_list)
-                            else 0.0
-                        )
-                        ver = (
-                            _position_to_float(self.vertical_positions_list[pos_index])
-                            if pos_index < len(self.vertical_positions_list)
-                            else 0.0
-                        )
-                        cam = (
-                            _position_to_float(self.camera_positions_list[pos_index])
-                            if pos_index < len(self.camera_positions_list)
-                            else 0.0
-                        )
-                        self._zarr_saver.write_plane(
-                            channel_idx, cz, frame[f_idx, :, :], hor, ver, cam
-                        )
-                        z_idx_per_channel[channel_idx] = cz + 1
-
                 outfile.close()
                 self.sig_status_message.emit("File " + filename + " saved")
                 plane_counters[channel_idx] += 1
@@ -1603,9 +1618,9 @@ class FrameSaverController:
             wavelengths=wavelengths,
         )
 
-    def enqueue_buffer(self, buffer) -> None:
+    def enqueue_buffer(self, buffer: np.ndarray | tuple[int, np.ndarray]) -> None:
         # Accepts bare np.ndarray (single-channel) or (channel_idx, frame)
-        # tuple (multi-channel, D-06) — passes through to FrameSaver.
+        # tuple (multi-channel) — passes through to FrameSaver.
         self.frame_saver.enqueue_buffer(buffer)
 
     def start_saving(self) -> None:
