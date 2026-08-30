@@ -421,7 +421,14 @@ def test_build_breeze_script_exists() -> None:
 
 def test_light_theme_slot_persists_to_config(qtbot, request, monkeypatch) -> None:
     """updateUi_light_theme writes {"Theme": "light"} to config.ini and
-    shows the status-bar hint."""
+    shows the status-bar hint.
+
+    The controller is constructed with demo=True (per make_controller), and
+    the theme slots skip cfg_write in demo mode to avoid corrupting the real
+    config.ini during the test suite. These tests verify the rig-path
+    persistence, so they flip _demo_mode off (with cfg_write monkeypatched,
+    no real file is touched).
+    """
     from _helpers.controller_fixture import make_controller
 
     ctrl, _bundle = make_controller(qtbot, request)
@@ -432,6 +439,7 @@ def test_light_theme_slot_persists_to_config(qtbot, request, monkeypatch) -> Non
         ctrl_mod, "cfg_write",
         lambda filename, section, data: captured.append((filename, section, dict(data))),
     )
+    ctrl._demo_mode = False
     ctrl.updateUi_light_theme()
     assert any(
         d.get("Theme") == "light" for _, _, d in captured
@@ -449,6 +457,7 @@ def test_dark_theme_slot_persists_to_config(qtbot, request, monkeypatch) -> None
         ctrl_mod, "cfg_write",
         lambda filename, section, data: captured.append((filename, section, dict(data))),
     )
+    ctrl._demo_mode = False
     ctrl.updateUi_dark_theme()
     assert any(
         d.get("Theme") == "dark" for _, _, d in captured
@@ -466,6 +475,7 @@ def test_follow_system_theme_slot_persists_to_config(qtbot, request, monkeypatch
         ctrl_mod, "cfg_write",
         lambda filename, section, data: captured.append((filename, section, dict(data))),
     )
+    ctrl._demo_mode = False
     ctrl.updateUi_follow_system_theme()
     assert any(
         d.get("Theme") == "system" for _, _, d in captured

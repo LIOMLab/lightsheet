@@ -1156,16 +1156,23 @@ class Controller_MainWindow(QMainWindow):
 
     def updateUi_light_theme(self) -> None:
         self.sig_stylesheet.emit("light")
-        # UI-SPEC §Theme Contract (D-01): persist the operator's choice to
+        # UI-SPEC §Theme Contract: persist the operator's choice to
         # config.ini under [Controller] Theme so it survives restart, and
-        # show an ephemeral status-bar hint.
-        cfg_write("config.ini", "Controller", {"Theme": "light"})
+        # show an ephemeral status-bar hint. Skipped in demo mode so the
+        # test suite (which constructs many controllers with demo=True and
+        # tears them down concurrently under xdist) does not corrupt the
+        # real config.ini — mirrors the _save_stack_params guard. The
+        # sig_stylesheet emission and action-checkmark stay outside the
+        # guard (in-memory only).
+        if not getattr(self, "_demo_mode", False):
+            cfg_write("config.ini", "Controller", {"Theme": "light"})
         self.ui.statusbar.showMessage("Theme: Light (saved).", 3000)
         self.ui.action_lightTheme.setChecked(True)
 
     def updateUi_dark_theme(self) -> None:
         self.sig_stylesheet.emit("dark")
-        cfg_write("config.ini", "Controller", {"Theme": "dark"})
+        if not getattr(self, "_demo_mode", False):
+            cfg_write("config.ini", "Controller", {"Theme": "dark"})
         self.ui.statusbar.showMessage("Theme: Dark (saved).", 3000)
         self.ui.action_darkTheme.setChecked(True)
 
@@ -1176,7 +1183,8 @@ class Controller_MainWindow(QMainWindow):
         resolves 'system' to the current OS appearance and persists the
         override across sessions."""
         self.sig_stylesheet.emit("system")
-        cfg_write("config.ini", "Controller", {"Theme": "system"})
+        if not getattr(self, "_demo_mode", False):
+            cfg_write("config.ini", "Controller", {"Theme": "system"})
         self.ui.statusbar.showMessage("Theme: Follow System (saved).", 3000)
         self.ui.action_followSystemTheme.setChecked(True)
 
