@@ -241,7 +241,14 @@ class PastAcquisitionsBrowser(QObject):
         fname = os.path.basename(path)
         try:
             with h5py.File(path, "r") as f:
-                n_planes = len(f.keys())
+                # Count only actual datasets at the root, not groups or
+                # metadata keys — a future writer change adding a non-
+                # dataset root key (e.g. a 'metadata' group) would
+                # otherwise inflate the plane count. Mirrors the Zarr
+                # parser which inspects the array shape instead of keys.
+                n_planes = sum(
+                    1 for k in f.keys() if isinstance(f[k], h5py.Dataset)
+                )
                 # Wavelength: root attrs first, else filename token.
                 wl = self._hdf5_wavelength(f, fname)
                 sample = self._hdf5_sample(f, fname, sample_hint)
