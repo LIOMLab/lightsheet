@@ -172,8 +172,13 @@ def test_frame_saver_start_saving_starts_thread() -> None:
     saver.start_saving()
     assert saver.saving_started is True
     assert hasattr(saver, "_saver_thread")
-    # Wait for the QThread to finish (empty filenames_list -> immediate exit).
-    saver._saver_thread.wait(2000)
+    # stop_saving() does quit()+wait() and reaps the worker thread. A bare
+    # blocking wait(2000) here (without quit()) stalls the main event loop
+    # and races quit() ahead of the thread's exec() under the offscreen
+    # platform — the same anti-pattern the make_controller fixture's
+    # _quit_thread_draining helper exists to avoid. With an empty
+    # filenames_list the worker exits immediately; stop_saving's quit()+
+    # wait() reaps it without the 2s timeout the bare wait() hit.
     saver.stop_saving()
 
 
