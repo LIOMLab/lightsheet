@@ -46,6 +46,31 @@ class SavePanelWidget(QWidget):
             if w is not None and hasattr(w, "applySpec"):
                 w.applySpec(spec)
 
+    def _active_single_channel_wavelength(self) -> int:
+        """Return the active laser wavelength for single-channel mode.
+
+        Reads the cached ``_auto_laser1`` / ``_auto_laser2`` flags on the
+        shell (sampled at acquisition start by
+        ``_cache_auto_laser_flags``) and returns the wavelength of the
+        laser that will actually fire:
+
+        - ``_auto_laser1`` -> ``lasers[0].wavelength``
+        - ``_auto_laser2`` (only L2 checked) -> ``lasers[1].wavelength``
+        - neither checked (manual mode / edge case) -> ``lasers[0].wavelength``
+          as the fallback
+
+        The wavelength is read from the live ``ILaser`` instance set at
+        startup from ``config.ini`` — a trusted value, never hardcoded.
+        Single-channel callers pass ``[this]`` to ``set_files`` so the
+        saved HDF5 filename carries the ``_{wavelength}nm`` suffix.
+        """
+        shell = self._shell
+        if getattr(shell, "_auto_laser1", False):
+            return int(shell.lasers[0].wavelength)
+        if getattr(shell, "_auto_laser2", False):
+            return int(shell.lasers[1].wavelength)
+        return int(shell.lasers[0].wavelength)
+
     def updateUi_select_file(self) -> None:
         """Allows the selection of a file (.hdf5), opens it and displays its datasets"""
 
@@ -245,7 +270,8 @@ class SavePanelWidget(QWidget):
             """Saving frame"""
             if self.ui.radioButton_saveAllCrop.isChecked():
                 self._shell._fs.set_files(
-                    1, self._shell.save_filepath, "singleImage", 1, "ETLscan"
+                    1, self._shell.save_filepath, "singleImage", 1, "ETLscan",
+                    wavelengths=[self._active_single_channel_wavelength()],
                 )
                 cropped_buffer = self._shell._fs.crop_buffer(self._shell.buffer)
                 self._shell._fs.enqueue_buffer(cropped_buffer)
@@ -254,7 +280,8 @@ class SavePanelWidget(QWidget):
                 )
             elif self.ui.radioButton_saveAllFull.isChecked():
                 self._shell._fs.set_files(
-                    1, self._shell.save_filepath, "singleImage", 1, "FullETLscan"
+                    1, self._shell.save_filepath, "singleImage", 1, "FullETLscan",
+                    wavelengths=[self._active_single_channel_wavelength()],
                 )
                 self._shell._fs.enqueue_buffer(self._shell.buffer)
                 self._shell.updateUi_message_printer(
@@ -280,8 +307,9 @@ class SavePanelWidget(QWidget):
                 # single frame_saver_worker consumer; the worker branches
                 # on the channel tag to pick the per-channel filename
                 # list. Single-channel mode (one auto-laser checked, or
-                # neither) keeps today's path: one unsuffixed file from
-                # reconstructed_frame, enqueued as a bare ndarray.
+                # neither) passes wavelengths=[active_wavelength] so the
+                # saved file carries the _{wavelength}nm suffix; the
+                # frame is enqueued as a bare ndarray.
                 multi_channel = (
                     self._shell._auto_laser1 and self._shell._auto_laser2
                 )
@@ -314,7 +342,9 @@ class SavePanelWidget(QWidget):
                     )
                 else:
                     self._shell._fs.set_files(
-                        1, self._shell.save_filepath, "singleImage", 1, "reconstructed_frame"  # noqa: E501
+                        1, self._shell.save_filepath, "singleImage", 1,
+                        "reconstructed_frame",
+                        wavelengths=[self._active_single_channel_wavelength()],
                     )
                     self._shell._fs.enqueue_buffer(self._shell.reconstructed_frame)
                     self._shell.updateUi_message_printer("Saving Reconstructed Image")

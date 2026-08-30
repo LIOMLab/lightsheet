@@ -201,11 +201,12 @@ class FrameSaver(QObject):
         self.sample_name = ""
         self.number_of_files = 1
         self.filenames_list = []
-        # Multi-channel per-channel filename lists. When set_files is
-        # called with wavelengths=[...], this becomes a list of lists —
-        # one per channel, each with number_of_files entries. When
-        # wavelengths=None (single-channel back-compat), this stays empty
-        # and the existing self.filenames_list path is used.
+        # Per-channel filename lists. set_files always populates this
+        # with one list per channel — single-channel mode has one
+        # channel list (and filenames_list mirrors filenames_lists[0]
+        # so the single-channel frame_saver_worker path is unchanged);
+        # multi-channel mode has one list per channel. The
+        # wavelengths=None back-compat branch is retired.
         self.filenames_lists: list[list[str]] = []
         self.horizontal_positions_list = []
         self.vertical_positions_list = []
@@ -278,76 +279,80 @@ class FrameSaver(QObject):
         a ``_vNN`` collision-avoidance suffix is appended so the plane
         number stays meaningful while the filename stays unique.
 
-        When ``wavelengths`` is provided (multi-channel mode),
+        ``wavelengths`` is required — every caller passes a non-None
+        list. Multi-channel callers pass ``[wl1, wl2]``;
+        single-channel callers pass ``[active_wavelength]``. The
+        ``wavelengths=None`` back-compat branch is retired: passing
+        ``None`` raises ``ValueError`` so a stale caller that forgets
+        to pass wavelengths fails loudly instead of producing an
+        unsuffixed file.
+
         ``self.filenames_lists`` is built as a list of lists — one per
         channel, each with ``number_of_files`` entries — where each
         filename ends in ``_{wavelength}nm.hdf5``. The wavelength values
         are read from the live ``ILaser`` instance by the caller and
         passed in here; they are never hardcoded inside this method. The
         ``_vNN`` collision-avoidance suffix runs independently per channel.
-        When ``wavelengths`` is None (single-channel back-compat), the
-        existing ``self.filenames_list`` path is used unchanged — no
-        wavelength suffix.
+
+        When there is exactly one channel (single-channel mode),
+        ``self.filenames_list`` (singular) is also populated from
+        ``filenames_lists[0]`` so the single-channel
+        ``frame_saver_worker`` (which reads ``filenames_list``, not
+        ``filenames_lists``) is byte-identical except for the filename
+        suffix.
         """
+        if wavelengths is None:
+            raise ValueError(
+                "set_files requires a non-None wavelengths list — the "
+                "single-channel None branch is retired. Pass "
+                "[active_wavelength] for single-channel or [wl1, wl2] "
+                "for multi-channel."
+            )
+
         self.number_of_files = int(number_of_files)
         self.files_name = str(files_name)
         self.scan_type = str(scan_type)
         self.number_of_datasets = int(number_of_datasets)
         self.datasets_name = str(datasets_name)
 
-        if wavelengths is not None:
-            # Multi-channel: build one filename list per channel, each
-            # with the _{wavelength}nm suffix. The _vNN collision
-            # avoidance runs independently per channel so a collision in
-            # channel 0 does not affect channel 1's filenames.
-            self.filenames_lists = []
-            for wl in wavelengths:
-                channel_list: list[str] = []
-                for plane in range(self.number_of_files):
-                    base = (
-                        self.files_name
-                        + "_"
-                        + scan_type
-                        + "_plane_"
-                        + f"{plane + 1:05d}"
-                        + f"_{wl}nm"
-                    )
-                    new_filename = base + ".hdf5"
-                    if os.path.isfile(new_filename):
-                        version = 2
-                        while True:
-                            candidate = f"{base}_v{version:02d}.hdf5"
-                            if not os.path.isfile(candidate):
-                                new_filename = candidate
-                                break
-                            version += 1
-                    channel_list.append(new_filename)
-                self.filenames_lists.append(channel_list)
-            return
+        # Build one filename list per channel, each with the
+        # _{wavelength}nm suffix. The _vNN collision avoidance runs
+        # independently per channel so a collision in channel 0 does not
+        # affect channel 1's filenames.
+        self.filenames_lists = []
+        for wl in wavelengths:
+            channel_list: list[str] = []
+            for plane in range(self.number_of_files):
+                base = (
+                    self.files_name
+                    + "_"
+                    + scan_type
+                    + "_plane_"
+                    + f"{plane + 1:05d}"
+                    + f"_{wl}nm"
+                )
+                new_filename = base + ".hdf5"
+                if os.path.isfile(new_filename):
+                    version = 2
+                    while True:
+                        candidate = f"{base}_v{version:02d}.hdf5"
+                        if not os.path.isfile(candidate):
+                            new_filename = candidate
+                            break
+                        version += 1
+                channel_list.append(new_filename)
+            self.filenames_lists.append(channel_list)
 
-        for plane in range(self.number_of_files):
-            base = (
-                self.files_name
-                + "_"
-                + scan_type
-                + "_plane_"
-                + f"{plane + 1:05d}"
-            )
-            new_filename = base + ".hdf5"
-            # Collision avoidance: if the sequential filename already
-            # exists, append a _vNN suffix (starting at v2) until a free
-            # name is found. The plane number in the base stays sequential
-            # so downstream tools can still parse it; only the suffix
-            # carries the collision count.
-            if os.path.isfile(new_filename):
-                version = 2
-                while True:
-                    candidate = f"{base}_v{version:02d}.hdf5"
-                    if not os.path.isfile(candidate):
-                        new_filename = candidate
-                        break
-                    version += 1
-            self.filenames_list.append(new_filename)
+        # Single-channel back-compat: populate filenames_list (singular)
+        # from filenames_lists[0] so the single-channel frame_saver_worker
+        # (which reads filenames_list, not filenames_lists) is
+        # byte-identical except for the filename suffix.
+        if len(self.filenames_lists) == 1:
+            self.filenames_list = list(self.filenames_lists[0])
+        else:
+            # Multi-channel: clear filenames_list so the multi-channel
+            # worker branch (filenames_lists populated) is taken.
+            self.filenames_list = []
 
     # Saving methods
 
@@ -454,16 +459,19 @@ class FrameSaver(QObject):
         """Thread for saving 3D arrays (or 2D arrays).
         The number of datasets per file is the number of 2D arrays.
 
-        In multi-channel mode (``self.filenames_lists`` is populated),
-        the worker branches on the channel tag from the dequeued
-        ``(channel_idx, frame)`` tuple to select the correct per-channel
-        filename list and plane index. The single-consumer queue contract
-        is preserved — one queue, one consume loop, one
-        ``sig_finished`` → ``thread.quit`` → ``wait(10000)``. Bare-ndarray
-        dequeues (single-channel back-compat) use the existing
-        ``self.filenames_list`` path unchanged.
+        In multi-channel mode (``self.filenames_lists`` has more than one
+        channel list), the worker branches on the channel tag from the
+        dequeued ``(channel_idx, frame)`` tuple to select the correct
+        per-channel filename list and plane index. The single-consumer
+        queue contract is preserved — one queue, one consume loop, one
+        ``sig_finished`` → ``thread.quit`` → ``wait(10000)``. Single-
+        channel mode (one channel list) uses the existing
+        ``self.filenames_list`` path unchanged — ``set_files`` populates
+        ``filenames_list`` from ``filenames_lists[0]`` so the single-
+        channel save loop is byte-identical except for the filename
+        suffix.
         """
-        if self.filenames_lists:
+        if len(self.filenames_lists) > 1:
             self._frame_saver_worker_multi_channel()
             return
         aborted = False
@@ -904,17 +912,20 @@ class FrameSaver(QObject):
         the inner loop exits; a finalize failure surfaces the same way.
         ``sig_finished`` still emits in the worker's finally gate.
 
-        In multi-channel mode (``self.filenames_lists`` is populated),
-        the HDF5 half branches on the channel tag from the dequeued
-        ``(channel_idx, frame)`` tuple to write to the correct
+        In multi-channel mode (``self.filenames_lists`` has more than one
+        channel list), the HDF5 half branches on the channel tag from the
+        dequeued ``(channel_idx, frame)`` tuple to write to the correct
         per-channel wavelength-suffixed file. The Zarr half keeps the
         existing ``write_plane(z_idx, frame, ...)`` call unchanged
         (channel 0 only) — the ``write_plane`` signature does not yet
         accept a ``channel_idx`` param, so multi-channel Zarr
         channel-tag branching is deferred to a later plan. The
-        single-consumer queue contract is preserved.
+        single-consumer queue contract is preserved. Single-channel mode
+        (one channel list) uses the existing ``self.filenames_list`` path
+        — ``set_files`` populates ``filenames_list`` from
+        ``filenames_lists[0]``.
         """
-        if self.filenames_lists:
+        if len(self.filenames_lists) > 1:
             self._both_save_worker_multi_channel()
             return
 

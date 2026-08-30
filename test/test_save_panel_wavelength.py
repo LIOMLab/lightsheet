@@ -151,15 +151,17 @@ def test_stack_worker_single_channel_presamples_wavelength(
     ctrl.current_vertical_position_text = "0.0"
     ctrl.current_camera_position_text = "0.0"
 
-    # Crop save path: one HDF5 file per plane.
-    ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(True)
+    # Stitch save path (reconstructed_frame) — the default branch,
+    # does not need self._shell.buffer (crop/full do). One HDF5 file
+    # per plane in single-channel stitch mode.
+    ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
     ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
 
     worker = StackWorker(
         ctrl._bundle, ctrl._hw, ctrl,
         save_description="single-channel stack test",
         save_stitch_blend=False,
-        save_all_crop=True,
+        save_all_crop=False,
         save_all_full=False,
         multi_channel=False,
     )
@@ -196,7 +198,9 @@ def test_stack_worker_single_channel_presamples_wavelength(
 
     fs = ctrl._fs.frame_saver
     # Single-channel set_files was called with wavelengths=[wl] —
-    # filenames_lists has one channel list.
+    # filenames_lists has one channel list. The stitch branch uses
+    # number_of_files=1 (the "1 file containing N datasets" convention),
+    # so the channel list has 1 entry.
     assert len(fs.filenames_lists) == 1, (
         f"single-channel stack save must populate filenames_lists with "
         f"one channel list; got {len(fs.filenames_lists)}"
@@ -207,12 +211,10 @@ def test_stack_worker_single_channel_presamples_wavelength(
             f"single-channel stack filename must carry _{wl}nm suffix; "
             f"got {fn}"
         )
-    # The HDF5 files were written to disk.
-    for plane in range(2):
-        fname = fs.filenames_lists[0][plane]
+    # The HDF5 file was written to disk.
+    for fname in fs.filenames_lists[0]:
         assert Path(fname).exists(), (
-            f"single-channel stack plane {plane} HDF5 file must exist: "
-            f"{fname}"
+            f"single-channel stack HDF5 file must exist: {fname}"
         )
 
 

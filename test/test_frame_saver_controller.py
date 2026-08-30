@@ -251,10 +251,10 @@ def test_frame_saver_worker_surfaces_h5py_error_and_stops(tmp_path) -> None:
 
 def test_set_files_sequential_plane_numbers(tmp_path) -> None:
     """IN-05: in a FRESH directory, set_files(number_of_files=3,
-    files_name="stack", scan_type="z", ...) produces filenames_list =
-    ["stack_z_plane_00001.hdf5", "stack_z_plane_00002.hdf5",
-    "stack_z_plane_00003.hdf5"] — per-file 1-based sequential plane
-    index, 5-digit zero-padded.
+    files_name="stack", scan_type="z", ..., wavelengths=[555]) produces
+    filenames_list = ["stack_z_plane_00001_555nm.hdf5", ...] — per-file
+    1-based sequential plane index, 5-digit zero-padded, with the
+    _{wavelength}nm suffix (the wavelengths=None branch is retired).
 
     set_files uses os.path.isfile against the CWD-relative filename, so
     the test chdir's into tmp_path (a fresh directory) for the duration
@@ -266,31 +266,33 @@ def test_set_files_sequential_plane_numbers(tmp_path) -> None:
     fs = FrameSaverController(bundle, shell)
     saver = fs.frame_saver
     saver.filenames_list = []
+    saver.filenames_lists = []
 
     import os
 
     cwd = os.getcwd()
     os.chdir(tmp_path)
     try:
-        saver.set_files(3, "stack", "z", 1, "dataset_")
+        saver.set_files(3, "stack", "z", 1, "dataset_", wavelengths=[555])
     finally:
         os.chdir(cwd)
 
     assert saver.filenames_list == [
-        "stack_z_plane_00001.hdf5",
-        "stack_z_plane_00002.hdf5",
-        "stack_z_plane_00003.hdf5",
+        "stack_z_plane_00001_555nm.hdf5",
+        "stack_z_plane_00002_555nm.hdf5",
+        "stack_z_plane_00003_555nm.hdf5",
     ], (
         "set_files in a fresh directory must produce per-file 1-based "
-        "sequential 5-digit zero-padded plane numbers; got: "
+        "sequential 5-digit zero-padded plane numbers with the "
+        "_{wavelength}nm suffix; got: "
         + repr(saver.filenames_list)
     )
 
 
 def test_set_files_collision_suffix(tmp_path) -> None:
-    """IN-05: in a directory where "stack_z_plane_00001.hdf5" ALREADY
-    EXISTS, set_files produces "stack_z_plane_00001_v02.hdf5" for that
-    plane (the _vNN collision suffix, starting at v2), while
+    """IN-05: in a directory where "stack_z_plane_00001_555nm.hdf5"
+    ALREADY EXISTS, set_files produces "stack_z_plane_00001_555nm_v02.hdf5"
+    for that plane (the _vNN collision suffix, starting at v2), while
     non-colliding planes stay sequential.
 
     Pre-creates the colliding file in tmp_path, chdir's there for the
@@ -302,23 +304,24 @@ def test_set_files_collision_suffix(tmp_path) -> None:
     fs = FrameSaverController(bundle, shell)
     saver = fs.frame_saver
     saver.filenames_list = []
+    saver.filenames_lists = []
 
     # Pre-create the colliding file in the fresh directory.
-    (tmp_path / "stack_z_plane_00001.hdf5").write_bytes(b"")
+    (tmp_path / "stack_z_plane_00001_555nm.hdf5").write_bytes(b"")
 
     import os
 
     cwd = os.getcwd()
     os.chdir(tmp_path)
     try:
-        saver.set_files(3, "stack", "z", 1, "dataset_")
+        saver.set_files(3, "stack", "z", 1, "dataset_", wavelengths=[555])
     finally:
         os.chdir(cwd)
 
     assert saver.filenames_list == [
-        "stack_z_plane_00001_v02.hdf5",
-        "stack_z_plane_00002.hdf5",
-        "stack_z_plane_00003.hdf5",
+        "stack_z_plane_00001_555nm_v02.hdf5",
+        "stack_z_plane_00002_555nm.hdf5",
+        "stack_z_plane_00003_555nm.hdf5",
     ], (
         "set_files must append _v02 to a colliding plane while leaving "
         "non-colliding planes sequential; got: "
@@ -327,8 +330,9 @@ def test_set_files_collision_suffix(tmp_path) -> None:
 
 
 def test_set_files_collision_suffix_increments(tmp_path) -> None:
-    """IN-05: when both plane_00001.hdf5 and plane_00001_v02.hdf5 exist,
-    the suffix increments to _v03 for that plane.
+    """IN-05: when both plane_00001_555nm.hdf5 and
+    plane_00001_555nm_v02.hdf5 exist, the suffix increments to _v03 for
+    that plane.
 
     Pre-creates both colliding files in tmp_path, chdir's there for the
     set_files call, then asserts the third plane gets _v03.
@@ -338,24 +342,25 @@ def test_set_files_collision_suffix_increments(tmp_path) -> None:
     fs = FrameSaverController(bundle, shell)
     saver = fs.frame_saver
     saver.filenames_list = []
+    saver.filenames_lists = []
 
     # Pre-create both the base and the _v02 collision files.
-    (tmp_path / "stack_z_plane_00001.hdf5").write_bytes(b"")
-    (tmp_path / "stack_z_plane_00001_v02.hdf5").write_bytes(b"")
+    (tmp_path / "stack_z_plane_00001_555nm.hdf5").write_bytes(b"")
+    (tmp_path / "stack_z_plane_00001_555nm_v02.hdf5").write_bytes(b"")
 
     import os
 
     cwd = os.getcwd()
     os.chdir(tmp_path)
     try:
-        saver.set_files(3, "stack", "z", 1, "dataset_")
+        saver.set_files(3, "stack", "z", 1, "dataset_", wavelengths=[555])
     finally:
         os.chdir(cwd)
 
     assert saver.filenames_list == [
-        "stack_z_plane_00001_v03.hdf5",
-        "stack_z_plane_00002.hdf5",
-        "stack_z_plane_00003.hdf5",
+        "stack_z_plane_00001_555nm_v03.hdf5",
+        "stack_z_plane_00002_555nm.hdf5",
+        "stack_z_plane_00003_555nm.hdf5",
     ], (
         "set_files must increment the collision suffix past existing "
         "_v02 to _v03 when both base and _v02 exist; got: "
@@ -774,11 +779,12 @@ def test_save_single_image_multi_channel_writes_two_files(qtbot, request) -> Non
 
 
 def test_save_single_image_single_channel_unchanged(qtbot, request) -> None:
-    """Back-compat: when only one auto-laser is checked (single-channel
-    mode), updateUi_save_single_image keeps today's path — set_files
-    called WITHOUT wavelengths, enqueue_buffer called once with the bare
-    reconstructed_frame (no channel tag). Byte-identical to the
-    pre-multi-channel behavior.
+    """Single-channel mode (one auto-laser checked): updateUi_save_single_image
+    calls set_files with wavelengths=[active_wavelength] so the saved
+    filename carries the _{wavelength}nm suffix. enqueue_buffer is called
+    once with the bare reconstructed_frame (no channel tag) — the single-
+    channel save worker reads filenames_list (populated from
+    filenames_lists[0]).
     """
     from _helpers.controller_fixture import make_controller
 
@@ -812,13 +818,13 @@ def test_save_single_image_single_channel_unchanged(qtbot, request) -> None:
 
     ctrl.save_panel.updateUi_save_single_image()
 
-    # set_files called with no wavelengths kwarg (single-channel back-compat)
+    # set_files called with wavelengths=[active_wavelength] (single-channel
+    # now passes the active laser wavelength so the suffix is always
+    # present).
+    active_wl = int(ctrl.lasers[0].wavelength)
     ctrl._fs.set_files.assert_called_once_with(
         1, ctrl.save_filepath, "singleImage", 1, "reconstructed_frame",
-    )
-    _, kwargs = ctrl._fs.set_files.call_args
-    assert "wavelengths" not in kwargs or kwargs["wavelengths"] is None, (
-        f"single-channel set_files must not pass wavelengths; got kwargs={kwargs}"
+        wavelengths=[active_wl],
     )
     ctrl._fs.enqueue_buffer.assert_called_once_with(frameA)
     ctrl._fs.start_saving.assert_called_once()
@@ -1229,12 +1235,14 @@ def test_zarr_save_worker_single_channel_bare_ndarray_calls_write_plane_channel0
 
 def test_save_path_round_trips_channel_axis(qtbot, request, tmp_path) -> None:
     """MCA-04 companion contract test (assumption_delta_decision): for
-    both n_channels=1 and n_channels=2, every enqueued frame round-trips
-    through the channel axis — a (channel_idx, frame) enqueue produces a
+    n_channels=2, every enqueued tagged (channel_idx, frame) tuple
+    round-trips through the channel axis — a tagged enqueue produces a
     Zarr writer shape whose shape[0] == n_channels AND an HDF5 filename
-    in filenames_lists[channel_idx]. This test goes red the instant a
-    future phase reintroduces the singular assumption (a save path that
-    bypasses the channel axis)."""
+    in filenames_lists[channel_idx]. For n_channels=1, the single-channel
+    path enqueues a bare ndarray and the frame lands in
+    filenames_lists[0] (mirrored to filenames_list). This test goes red
+    the instant a future phase reintroduces the singular assumption (a
+    save path that bypasses the channel axis)."""
     from unittest.mock import patch
 
     for n_channels in (1, 2):
@@ -1243,7 +1251,7 @@ def test_save_path_round_trips_channel_axis(qtbot, request, tmp_path) -> None:
         fs = FrameSaverController(bundle, shell)
         saver = fs.frame_saver
 
-        # Build per-channel filenames_lists (MCA-03 set_files path).
+        # Build per-channel filenames_lists (set_files with wavelengths).
         wavelengths = [555] if n_channels == 1 else [555, 640]
         saver.filenames_lists = []
         saver.filenames_list = []
@@ -1259,20 +1267,6 @@ def test_save_path_round_trips_channel_axis(qtbot, request, tmp_path) -> None:
         finally:
             os.chdir(cwd)
 
-        # The Zarr channel axis: shape[0] == n_channels. We assert this
-        # via the ZarrSaver directly (the worker would construct it on
-        # the save thread; here we exercise the contract at the saver
-        # layer).
-        from lightsheet.gui.coordinators.frame_saver_controller import (
-            ZarrSaver,
-        )
-
-        # The shell stand-in does not have camera/etc, so build a
-        # minimal ZarrSaver stand-in shape check via the writer API
-        # using the bundle's camera dimensions. We construct a real
-        # ZarrSaver against a real controller-like shell only for the
-        # shape assertion; the HDF5 round-trip is asserted via the
-        # filenames_lists structure.
         assert len(saver.filenames_lists) == n_channels, (
             f"n_channels={n_channels}: filenames_lists must have "
             f"{n_channels} lists; got {len(saver.filenames_lists)}"
@@ -1283,15 +1277,22 @@ def test_save_path_round_trips_channel_axis(qtbot, request, tmp_path) -> None:
                 f"2 entries; got {len(saver.filenames_lists[ch_idx])}"
             )
 
-        # Enqueue tagged frames (one per channel per plane) and assert
-        # the HDF5 worker routes each to filenames_lists[channel_idx].
+        # Enqueue frames: tagged tuples for multi-channel, bare ndarray
+        # for single-channel (the production single-channel path enqueues
+        # bare ndarrays — the worker reads filenames_list).
         mock_file_cls, written_files = _make_mock_h5py()
         frames = []
-        for ch_idx in range(n_channels):
+        if n_channels == 1:
             f = np.zeros((4, 4), dtype=np.uint16)
-            f[0, 0] = 100 + ch_idx
+            f[0, 0] = 100
             frames.append(f)
-            saver.enqueue_buffer((ch_idx, f))
+            saver.enqueue_buffer(f)
+        else:
+            for ch_idx in range(n_channels):
+                f = np.zeros((4, 4), dtype=np.uint16)
+                f[0, 0] = 100 + ch_idx
+                frames.append(f)
+                saver.enqueue_buffer((ch_idx, f))
         saver.number_of_datasets = 1
         saver.datasets_name = "dataset_"
         saver.sample_name = "test"
@@ -1308,13 +1309,25 @@ def test_save_path_round_trips_channel_axis(qtbot, request, tmp_path) -> None:
             saver._write_acquisition_metadata = Mock()
             saver.frame_saver_worker()
 
-        # Each channel's frame landed in filenames_lists[channel_idx].
-        for ch_idx in range(n_channels):
-            expected_file = saver.filenames_lists[ch_idx][0]
+        # Each channel's frame landed in the correct file. For
+        # single-channel, the file is filenames_lists[0][0] (also
+        # filenames_list[0]); for multi-channel, filenames_lists[ch][0].
+        if n_channels == 1:
+            expected_file = saver.filenames_lists[0][0]
             assert expected_file in written_files, (
-                f"n_channels={n_channels} ch={ch_idx}: file must be opened: "
-                f"{expected_file}; got {list(written_files.keys())}"
+                f"n_channels=1: file must be opened: {expected_file}; "
+                f"got {list(written_files.keys())}"
             )
             np.testing.assert_array_equal(
-                written_files[expected_file][0][1], frames[ch_idx]
+                written_files[expected_file][0][1], frames[0]
             )
+        else:
+            for ch_idx in range(n_channels):
+                expected_file = saver.filenames_lists[ch_idx][0]
+                assert expected_file in written_files, (
+                    f"n_channels={n_channels} ch={ch_idx}: file must be opened: "
+                    f"{expected_file}; got {list(written_files.keys())}"
+                )
+                np.testing.assert_array_equal(
+                    written_files[expected_file][0][1], frames[ch_idx]
+                )

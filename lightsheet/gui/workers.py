@@ -708,15 +708,25 @@ class StackWorker(QObject, _AcquireScanMixin):
         # hardcoded. In multi-channel mode these are passed to
         # set_files(wavelengths=...) so the save side builds one
         # per-channel filename list (and the Zarr writer allocates a
-        # channel axis); in single-channel mode this stays None and the
-        # existing single-filename-list path is used unchanged.
+        # channel axis); in single-channel mode the active laser's
+        # wavelength is pre-sampled (lasers[0] if _auto_laser1,
+        # lasers[1] if only _auto_laser2, lasers[0] fallback) so the
+        # saved HDF5 filename carries the _{wavelength}nm suffix.
         if multi_channel:
             self._wavelengths: list[int] | None = [
                 int(self._shell.lasers[0].wavelength),
                 int(self._shell.lasers[1].wavelength),
             ]
+        elif getattr(self._shell, "_auto_laser1", False):
+            self._wavelengths = [int(self._shell.lasers[0].wavelength)]
+        elif getattr(self._shell, "_auto_laser2", False):
+            self._wavelengths = [int(self._shell.lasers[1].wavelength)]
         else:
-            self._wavelengths = None
+            # Neither auto-laser checked (manual mode / edge case) —
+            # fall back to lasers[0].wavelength so the suffix is still
+            # written. The wavelength is a trusted value from the live
+            # ILaser instance set at startup from config.ini.
+            self._wavelengths = [int(self._shell.lasers[0].wavelength)]
 
     @Slot()
     def run(self) -> None:
@@ -738,8 +748,11 @@ class StackWorker(QObject, _AcquireScanMixin):
                 # channel axis sized to the channel count. Without this,
                 # filenames_lists stays empty and the multi-channel save
                 # workers crash (HDF5/both: AttributeError on tuple.ndim;
-                # Zarr: IndexError on channel-1 write_plane).
-                if self._multi_channel and self._wavelengths:
+                # Zarr: IndexError on channel-1 write_plane). In
+                # single-channel mode the pre-sampled [active_wavelength]
+                # is passed so the saved filename carries the
+                # _{wavelength}nm suffix.
+                if self._wavelengths:
                     set_files_kwargs = {"wavelengths": self._wavelengths}
                 else:
                     set_files_kwargs = {}
