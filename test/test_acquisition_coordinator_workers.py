@@ -477,7 +477,7 @@ def test_stack_mode_worker_saving_crop(qtbot) -> None:
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
-    shell._fs.set_files.assert_called_once_with(1, "test.hdf5", "stack", 1, "ETLscan")
+    shell._fs.set_files.assert_called_once_with(1, "test.hdf5", "stack", 1, "ETLscan", wavelengths=[555])
     shell._fs.crop_buffer.assert_called_once()
 
 
@@ -495,7 +495,7 @@ def test_stack_mode_worker_saving_full(qtbot) -> None:
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
-    shell._fs.set_files.assert_called_once_with(1, "test.hdf5", "stack", 1, "FullETLscan")
+    shell._fs.set_files.assert_called_once_with(1, "test.hdf5", "stack", 1, "FullETLscan", wavelengths=[555])
 
 
 def test_stack_mode_worker_saving_reconstructed(qtbot) -> None:
@@ -511,7 +511,7 @@ def test_stack_mode_worker_saving_reconstructed(qtbot) -> None:
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
-    shell._fs.set_files.assert_called_once_with(1, "test.hdf5", "stack", 1, "reconstructed_frame")
+    shell._fs.set_files.assert_called_once_with(1, "test.hdf5", "stack", 1, "reconstructed_frame", wavelengths=[555])
 
 
 def test_stack_mode_worker_motor_value_error_aborts(qtbot) -> None:

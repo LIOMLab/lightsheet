@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING
 
 import h5py
 import numpy as np
+import zarr
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from lightsheet.hal.bundle import DeviceBundle
@@ -1322,6 +1323,12 @@ class ZarrSaver:
         self._horizontal_positions: list[float] = []
         self._vertical_positions: list[float] = []
         self._camera_positions: list[float] = []
+        # ``write_empty_chunks`` global-config override state. Set in
+        # start_stack, restored in finalize. Defaults to False here so
+        # _restore_write_empty_chunks is a no-op if start_stack never ran
+        # or finalize is entered without a prior override.
+        self._write_empty_chunks_overridden = False
+        self._prev_write_empty_chunks: bool = False
 
     def start_stack(
         self, store_path: str, n_planes: int, n_channels: int = 1
@@ -1356,6 +1363,31 @@ class ZarrSaver:
         n_channels = int(n_channels)
         shape = (n_channels, int(n_planes), int(cam.ysize), int(cam.xsize))
         chunk_shape = (1, 1, int(cam.ysize), int(cam.xsize))
+
+        # Force zarr v3 to persist all-zero chunks (write_empty_chunks=True).
+        # zarr v3 (3.3.0) defaults ``array.write_empty_chunks`` to False, so
+        # all-zero chunks — MockCamera demo frames and dark real-rig frames
+        # — are silently skipped, producing a metadata-only store with zero
+        # data chunk files (the store appears valid but contains no data).
+        # ``write_empty_chunks`` is a RUNTIME config only: it is NOT persisted
+        # to the on-disk zarr.json, so an array re-fetched from the store
+        # loses any config injected at creation time. The writer's
+        # ``__setitem__`` -> ``_level0_array()`` -> ``self.root["0"]``
+        # re-fetches the L0 array on EVERY write, so a creation-time config
+        # injection (e.g. patching ``require_array``) is discarded before the
+        # first frame is written. The only mechanism that survives the
+        # re-fetch is zarr's GLOBAL config — the fallback used when a
+        # re-fetched array builds its ArrayConfig. Set the global for the
+        # duration of this ZarrSaver's write phase and restore it in
+        # finalize() (and on any finalize-path raise). The app is
+        # single-operator (one save at a time), so no concurrent zarr writer
+        # conflicts with this transient global override.
+        self._prev_write_empty_chunks = bool(
+            zarr.config.get("array.write_empty_chunks", False)
+        )
+        zarr.config.set({"array.write_empty_chunks": True})
+        self._write_empty_chunks_overridden = True
+
         self._writer = AnalysisOmeZarrWriter(
             store_path=resolved,
             shape=shape,
@@ -1364,6 +1396,7 @@ class ZarrSaver:
             overwrite=True,
             unit="micrometer",
         )
+
         self._n_channels = n_channels
         self.saving_started = True
         self._finalized = False
@@ -1494,6 +1527,30 @@ class ZarrSaver:
         if self._finalized:
             raise RuntimeError("ZarrSaver.finalize called twice")
 
+        try:
+            self._finalize_body()
+        finally:
+            # Always restore the global write_empty_chunks config, even if
+            # the pyramid build or acquisition-group write raised — the
+            # override was scoped to this ZarrSaver's write phase and must
+            # not leak to unrelated zarr usage in the process. The flag
+            # makes this a no-op when start_stack never overrode it.
+            self._restore_write_empty_chunks()
+
+    def _restore_write_empty_chunks(self) -> None:
+        """Restore zarr's global ``array.write_empty_chunks`` to the value
+        captured in ``start_stack``. Idempotent: a second call (e.g. a
+        double-finalize from the worker error path) is a no-op because the
+        flag is cleared on the first restore.
+        """
+        if not self._write_empty_chunks_overridden:
+            return
+        zarr.config.set(
+            {"array.write_empty_chunks": self._prev_write_empty_chunks}
+        )
+        self._write_empty_chunks_overridden = False
+
+    def _finalize_body(self) -> None:
         cam = self.parent.camera
         # The ICameraCore contract declares binning_x/binning_y as int
         # (not int | None), and both MockCamera and the real Camera

@@ -92,6 +92,12 @@ class _PositionEmitShell:
         self.save_description = "test sample"
         self.stack_starting_plane = 0.0
         self.stack_step = 10.0
+        # Auto-laser flags + lasers tuple — StackWorker.__init__ pre-samples
+        # the single-channel wavelength from lasers[0] (fallback when neither
+        # auto-laser flag is set) so set_files always receives wavelengths.
+        self._auto_laser1 = False
+        self._auto_laser2 = False
+        self.lasers: tuple = ()
 
 
 def test_stack_worker_position_emit_uses_signal_not_direct_call(qtbot) -> None:
@@ -99,6 +105,9 @@ def test_stack_worker_position_emit_uses_signal_not_direct_call(qtbot) -> None:
     move and NEVER calls updateUi_position_horizontal directly."""
     bundle = _make_bundle()
     shell = _PositionEmitShell()
+    # StackWorker.__init__ reads shell.lasers[0].wavelength to pre-sample
+    # the single-channel wavelength for set_files(wavelengths=[...]).
+    shell.lasers = bundle.lasers
     hw = Mock()
     worker = StackWorker(
         bundle, hw, shell,

@@ -323,6 +323,7 @@ def test_close_ordering(qtbot, request, tmp_path) -> None:
         scan_type="z",
         number_of_datasets=1,
         datasets_name="ch",
+        wavelengths=[555],
     )
     saver.horizontal_positions_list = [0.0, 1.0]
     saver.vertical_positions_list = [0.0, 2.0]
@@ -393,6 +394,7 @@ def test_zarr_save_finalizes_after_stop_saving_on_normal_completion(
         scan_type="z",
         number_of_datasets=1,
         datasets_name="ch",
+        wavelengths=[555],
     )
     # Use the shell's formatted display strings (the real input shape —
     # add_motor_parameters stores units_fixformat output like "99.82 μm").
@@ -485,6 +487,7 @@ def test_zarr_drains_queue_after_stop_saving(qtbot, request, tmp_path) -> None:
         scan_type="z",
         number_of_datasets=1,
         datasets_name="ch",
+        wavelengths=[555],
     )
     saver.horizontal_positions_list = [f"{i}.00 μm" for i in range(n_planes)]
     saver.vertical_positions_list = [f"{i}.00 μm" for i in range(n_planes)]
@@ -591,6 +594,7 @@ def test_both_mode_writes_both_formats(qtbot, request, tmp_path) -> None:
         scan_type="z",
         number_of_datasets=1,
         datasets_name="ch",
+        wavelengths=[555],
     )
     saver.horizontal_positions_list = [0.0, 1.0, 2.0]
     saver.vertical_positions_list = [0.0, 2.0, 4.0]
@@ -625,9 +629,10 @@ def test_both_mode_writes_both_formats(qtbot, request, tmp_path) -> None:
 
     # --- HDF5 files have image datasets (NOT metadata-only) ---
     # set_files creates one .hdf5 file per plane (full path = files_name
-    # + _z_plane_NNNNN.hdf5).
+    # + _z_plane_NNNNN_{wavelength}nm.hdf5 — the wavelength suffix is
+    # always appended now that the wavelengths=None branch is retired).
     for z in range(n_planes):
-        h5_path = str(tmp_path / f"stack_z_plane_{z + 1:05d}.hdf5")
+        h5_path = str(tmp_path / f"stack_z_plane_{z + 1:05d}_555nm.hdf5")
         with h5py.File(h5_path, "r") as f:
             keys = list(f.keys())
             # The dataset name pattern is datasets_name + counter (1-based).
@@ -714,6 +719,10 @@ def test_zarr_multi_channel_all_zero_produce_chunks(
     ctrl.stack_step = 1.0
     ctrl.camera.xsize = 32
     ctrl.camera.ysize = 32
+    # Both auto-laser flags set so the omero channels match n_channels=2
+    # (finalize asserts omero_channels length == n_channels for >1 ch).
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = True
 
     store_path = str(tmp_path / "stack.ome.zarr")
     saver = ZarrSaver(ctrl)
