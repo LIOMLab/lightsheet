@@ -14,6 +14,7 @@ them via ``self._shell.ui.<widget>``.
 from __future__ import annotations
 
 import typing
+import warnings
 
 from PySide6.QtCore import QThread, Slot
 from PySide6.QtWidgets import QMessageBox, QPushButton, QWidget
@@ -372,10 +373,23 @@ class AcquisitionPanelWidget(QWidget):
         # can't double-fire when the reused thread starts for the new row.
         prev_worker = getattr(self._shell, "_stack_worker", None)
         if prev_worker is not None:
-            try:
-                prev_worker.finished.disconnect()
-            except (TypeError, RuntimeError):
-                pass
+            # libpyside emits a RuntimeWarning ("Failed to disconnect (None)
+            # from signal finished()...") via warnings.warn when the signal
+            # has no connections to disconnect — that is not a raised
+            # exception, so the try/except below does not catch it. Suppress
+            # it scoped to this call so -W error::RuntimeWarning does not
+            # promote it to a fatal error. The try/except stays as a second
+            # layer for the typed-exception arc.
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message='.*Failed to disconnect .* from signal "finished\\(\\)"',
+                    category=RuntimeWarning,
+                )
+                try:
+                    prev_worker.finished.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
 
         # Spawn the stack worker on the (reused) QThread (moveToThread
         # pattern). A new worker per row is fine — it's a Python object
@@ -391,10 +405,16 @@ class AcquisitionPanelWidget(QWidget):
         # row's run. Skip on the first spawn — no prior connection exists
         # and disconnect() would warn.
         if prev_thread is not None:
-            try:
-                self._shell._stack_thread.started.disconnect()
-            except (TypeError, RuntimeError):
-                pass
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message='.*Failed to disconnect .* from signal "started\\(\\)"',
+                    category=RuntimeWarning,
+                )
+                try:
+                    self._shell._stack_thread.started.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
         self._shell._stack_thread.started.connect(self._shell._stack_worker.run)
         self._shell._stack_worker.finished.connect(self.updateUi_post_stack_mode)
         self._shell._stack_worker.finished.connect(self._shell._stack_thread.quit)
@@ -409,10 +429,16 @@ class AcquisitionPanelWidget(QWidget):
         # disconnect above only clears the worker's own signals, not the
         # thread's finished signal.
         if prev_thread is not None:
-            try:
-                self._shell._stack_thread.finished.disconnect()
-            except (TypeError, RuntimeError):
-                pass
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message='.*Failed to disconnect .* from signal "finished\\(\\)"',
+                    category=RuntimeWarning,
+                )
+                try:
+                    self._shell._stack_thread.finished.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
         self._shell._stack_thread.finished.connect(self._shell._stack_worker.deleteLater)
         self._shell._stack_thread.start()
         return self._shell._stack_worker
