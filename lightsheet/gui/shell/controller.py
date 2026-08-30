@@ -1484,11 +1484,13 @@ class Controller_MainWindow(QMainWindow):
 
         Reads ``self.reconstructed_frames[wavelength]`` (the per-channel
         frames dict populated by the multi-channel worker branch). If no
-        frame exists for the selected channel yet, leaves the ImageView
-        placeholder in place (no error text — the empty viewport is the
-        existing, sufficient signal). No RGB overlay; no per-channel
-        levels state stored (the LevelsBar reads the displayed frame's
-        histogram on switch)."""
+        frame exists for the selected channel yet (e.g. at boot, before
+        any acquisition, only the demo image is loaded), falls back to
+        the ImageView's currently-displayed frame so the operator can
+        still verify the per-channel LUT tint against the demo image
+        without first running a multi-channel acquisition. No RGB overlay;
+        no per-channel levels state stored (the LevelsBar reads the
+        displayed frame's histogram on switch)."""
         if not (0 <= channel_idx < len(self.lasers)):
             return
         wl = getattr(self.lasers[channel_idx], "wavelength", None)
@@ -1496,8 +1498,14 @@ class Controller_MainWindow(QMainWindow):
             return
         frame = self.reconstructed_frames.get(wl)
         if frame is None:
-            # No frame for this channel yet — leave the placeholder.
-            return
+            # No acquisition frame for this channel yet — fall back to the
+            # frame currently displayed in the ImageView (the boot demo
+            # image, or the last live/preview frame) so the operator can
+            # still test the per-channel LUT tint without an acquisition.
+            frame = self.ui.imageView._last_frame
+            if frame is None:
+                # Nothing displayed at all — leave the placeholder.
+                return
         # Tint the displayed frame with the active channel's wavelength
         # color so the operator can visually distinguish L1 from L2 in
         # demo mode where the frames are otherwise identical. The tint

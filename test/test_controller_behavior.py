@@ -815,6 +815,56 @@ def test_channel_radio_l1_tint_is_green(qtbot, request) -> None:
     )
 
 
+def test_channel_radio_tints_demo_image_when_no_acquisition_frame(
+    qtbot, request
+) -> None:
+    """At boot (before any acquisition) reconstructed_frames is empty and
+    only the demo image is loaded into the ImageView. Clicking L1/L2 must
+    STILL apply the per-channel LUT tint to the currently-displayed frame
+    (the demo image) so the operator can verify the L1=green / L2=red cue
+    without first running a multi-channel acquisition."""
+    from unittest.mock import patch
+
+    import numpy as np
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    radio = ctrl.channel_radio
+
+    # Boot state: no acquisition frames, demo image loaded by hardware_init.
+    assert ctrl.reconstructed_frames == {}, (
+        "reconstructed_frames must be empty before any acquisition"
+    )
+    demo_frame = ctrl.ui.imageView._last_frame
+    assert demo_frame is not None, (
+        "hardware_init must have loaded the demo image into ImageView._last_frame"
+    )
+
+    timer = getattr(ctrl, "timer_imageview", None)
+    if timer is not None:
+        timer.stop()
+    try:
+        with patch.object(ctrl.ui.imageView, "setImage") as img_spy:
+            radio.click_button(1)  # L2 (647 nm -> red)
+    finally:
+        if timer is not None:
+            timer.start(100)
+
+    assert img_spy.called, (
+        "clicking L2 with only the demo image loaded must still call "
+        "imageView.setImage (fall back to the displayed frame)"
+    )
+    called_tints = [c.kwargs.get("tint") for c in img_spy.call_args_list]
+    assert "FF0000" in called_tints, (
+        f"clicking L2 must pass tint='FF0000' (red for 647 nm) even with "
+        f"no acquisition frame; got tints={called_tints!r}"
+    )
+    called_frames = [c.args[0] for c in img_spy.call_args_list if c.args]
+    assert any(f is demo_frame for f in called_frames), (
+        "imageView.setImage must be called with the demo frame "
+        "(ImageView._last_frame) when no acquisition frame exists"
+    )
+
+
 def test_channel_radio_container_at_layout_index_one(qtbot, request) -> None:
     """The channel-radio container sits at imagesPane layout index 1 —
     BETWEEN the ImageView (index 0) and the LevelsBar layout. The
