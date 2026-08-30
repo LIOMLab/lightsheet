@@ -219,10 +219,17 @@ def test_out_of_range_row_caught(qtbot, request) -> None:
     high = ctrl.motors.horizontal.get_limit_high("\u03bcm")
     _add_valid_row(mgr, 1000, 1100, 10, "A")
     # Row B: start past the high limit — flagged by table validation.
+    # Cells display in mm; ``high`` is µm, so convert to mm for the cell
+    # text. Using a mm-scale cell value (not a µm-scale one) makes the test
+    # actually verify the mm->µm conversion in _recompute_row: with the
+    # conversion present, (high+50000)/1000 mm -> high+50000 µm > high is
+    # flagged; if the conversion were missing, the raw (high+50000)/1000
+    # (~151) would be < high (~101600) and the row would NOT be flagged,
+    # failing the assertion below.
     mgr.add_stack()
     mgr.set_cell(1, 0, "B")
-    mgr.set_cell(1, 1, str(high + 50000))
-    mgr.set_cell(1, 2, str(high + 51000))
+    mgr.set_cell(1, 1, str((high + 50000.0) / 1000.0))  # µm -> mm cell
+    mgr.set_cell(1, 2, str((high + 51000.0) / 1000.0))  # µm -> mm cell
     mgr.set_cell(1, 3, "10")
     # Start Queue is disabled because row B is flagged.
     assert not mgr.start_queue_enabled()
