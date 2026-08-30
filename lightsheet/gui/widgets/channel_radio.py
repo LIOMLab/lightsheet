@@ -19,10 +19,6 @@ the LevelsBar to the displayed frame's min/max on switch (avoids the
 RGB-overlay levels-bar conflict).
 """
 
-from __future__ import annotations
-
-from typing import Optional
-
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -43,9 +39,9 @@ class ChannelRadio(QWidget):
 
     def __init__(
         self,
-        parent: Optional[QWidget] = None,
-        wl1: Optional[int] = None,
-        wl2: Optional[int] = None,
+        parent: QWidget | None = None,
+        wl1: int | None = None,
+        wl2: int | None = None,
     ) -> None:
         super().__init__(parent)
         # Compact horizontal pair: sm (8px) gap between the two buttons,
@@ -90,7 +86,7 @@ class ChannelRadio(QWidget):
     # Public API
     # ------------------------------------------------------------------ #
 
-    def set_wavelengths(self, wl1: Optional[int], wl2: Optional[int]) -> None:
+    def set_wavelengths(self, wl1: int | None, wl2: int | None) -> None:
         """Update the button labels from the live laser wavelengths.
 
         Falls back to ``L1`` / ``L2`` (index only) when a wavelength is
