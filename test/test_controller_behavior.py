@@ -652,3 +652,142 @@ def test_auto_laser_tooltip_updated(qtbot, request) -> None:
     # The first sentence preserves the per-laser on/off explanation.
     assert "automatically during acquisition" in tip1
     assert "automatically during acquisition" in tip2
+
+
+# --------------------------------------------------------------------------- #
+# MCA-01 / D-07 — ChannelRadio widget (L1/L2 display selector) + visibility
+# --------------------------------------------------------------------------- #
+
+
+def test_channel_radio_hidden_by_default(qtbot, request) -> None:
+    """The channel-radio group is hidden by default (only one or zero
+    auto-laser checkboxes checked at startup) — the ImageView area is
+    visually identical to today's single-channel experience."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    radio = ctrl.channel_radio
+    assert radio is not None, "controller must expose a channel_radio attribute"
+    assert not radio.isVisible(), (
+        "channel-radio must be hidden by default (single-channel back-compat)"
+    )
+
+
+def test_channel_radio_shown_when_both_checked(qtbot, request) -> None:
+    """When both auto-laser checkboxes become checked, the channel-radio
+    group is shown (the operator can now switch between L1/L2 display)."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    radio = ctrl.channel_radio
+    # Force the widget to be actually visible-shown (Qt needs the parent
+    # shown for show() to flip isVisible(); in offscreen tests we check
+    # the isVisibleTo-parent / explicit show state instead).
+    ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
+    ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(True)
+
+    # The radio's visibility flag must be True (shown). Use isVisibleTo
+    # against the parent so the offscreen (never-shown) top-level window
+    # does not mask the explicit show() call.
+    parent = radio.parent() if radio.parent() is not None else ctrl
+    assert radio.isVisibleTo(parent), (
+        "channel-radio must be shown when both auto-lasers are checked"
+    )
+
+
+def test_channel_radio_labels_from_live_wavelength(qtbot, request) -> None:
+    """The channel-radio button labels read the live ILaser.wavelength
+    values (555 / 647 from the fixture), with an L1/L2 fallback when a
+    wavelength is unavailable."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    radio = ctrl.channel_radio
+    # The fixture's bundle has Laser 1 = 555 nm, Laser 2 = 647 nm.
+    t1 = radio.button_text(0)
+    t2 = radio.button_text(1)
+    assert "555" in t1, f"L1 button must contain the live wavelength 555; got {t1!r}"
+    assert "647" in t2, f"L2 button must contain the live wavelength 647; got {t2!r}"
+    assert t1.startswith("L1"), f"L1 button must start with 'L1'; got {t1!r}"
+    assert t2.startswith("L2"), f"L2 button must start with 'L2'; got {t2!r}"
+
+
+def test_channel_radio_default_l1_selected(qtbot, request) -> None:
+    """When the channel-radio is shown, L1 (channel index 0) is the
+    default checked button."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    radio = ctrl.channel_radio
+    assert radio.is_checked(0), (
+        "L1 (channel index 0) must be the default selected button"
+    )
+    assert not radio.is_checked(1), "L2 must not be checked by default"
+
+
+def test_channel_radio_switch_updates_imageview(qtbot, request) -> None:
+    """Clicking L2 updates ImageView.setImage with the L2 channel's frame
+    (reconstructed_frames[wavelength]) and resets the LevelsBar window to
+    the displayed frame's min/max. No RGB overlay; no per-channel levels
+    state stored."""
+    from unittest.mock import patch
+
+    import numpy as np
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    radio = ctrl.channel_radio
+
+    # Two distinct uint16 frames keyed by the fixture's wavelengths.
+    # frame_b has a real min/max range so the LevelsBar window reset is
+    # observable (a uniform frame would leave the window degenerate).
+    frame_a = np.zeros((64, 64), dtype=np.uint16)
+    frame_a[:] = 100
+    frame_b = np.zeros((64, 64), dtype=np.uint16)
+    frame_b[:, :32] = 200
+    frame_b[:, 32:] = 400
+    ctrl.reconstructed_frames = {555: frame_a, 647: frame_b}
+
+    # Click L2 (channel index 1) — emits the group's idClicked(1).
+    # Stop the imageview refresh timer for the duration of the click so
+    # the timer-driven setImage does not interleave with the slot's call
+    # (the timer fires every 100ms and would otherwise appear in the
+    # spy's call list with a different frame).
+    timer = getattr(ctrl, "timer_imageview", None)
+    if timer is not None:
+        timer.stop()
+    try:
+        with patch.object(ctrl.ui.imageView, "setImage") as img_spy:
+            radio.click_button(1)
+    finally:
+        if timer is not None:
+            timer.start(100)
+
+    assert img_spy.called, "clicking L2 must call imageView.setImage"
+    # The slot must have called setImage with frame_b (the L2 frame).
+    called_frames = [c.args[0] for c in img_spy.call_args_list if c.args]
+    assert any(f is frame_b for f in called_frames), (
+        f"imageView.setImage must be called with the L2 frame (frame_b); "
+        f"got calls={called_frames!r}"
+    )
+    # LevelsBar window reset to frame_b's min/max.
+    lb = ctrl.ui.levelsBar
+    assert lb.window_min == int(frame_b.min()), (
+        f"LevelsBar window_min must reset to frame_b.min()=200; "
+        f"got {lb.window_min}"
+    )
+    assert lb.window_max == int(frame_b.max()), (
+        f"LevelsBar window_max must reset to frame_b.max()=400; "
+        f"got {lb.window_max}"
+    )
+
+
+def test_channel_radio_single_channel_hidden(qtbot, request) -> None:
+    """When only one auto-laser checkbox is checked, the channel-radio is
+    HIDDEN (not just disabled) — the ImageView area stays visually
+    identical to today's single-channel experience."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    radio = ctrl.channel_radio
+    ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
+    ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(True)
+    # Now show both, then uncheck one — radio must hide.
+    ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(False)
+    parent = radio.parent() if radio.parent() is not None else ctrl
+    assert not radio.isVisibleTo(parent), (
+        "channel-radio must be hidden (not disabled) when only one "
+        "auto-laser is checked"
+    )
+    # And it must not be merely disabled-while-visible.
+    assert not radio.isEnabled() and not radio.isVisibleTo(parent) or \
+        not radio.isVisibleTo(parent)

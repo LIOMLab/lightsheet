@@ -69,6 +69,7 @@ from lightsheet.gui.panels.save_panel import SavePanelWidget
 from lightsheet.gui.panels.scan_panel import ScanPanelWidget
 from lightsheet.gui.panels.stack_panel import StackPanelWidget
 from lightsheet.gui.shell.ui_shell import Ui_Shell
+from lightsheet.gui.widgets.channel_radio import ChannelRadio
 from lightsheet.hal.bundle import DeviceBundle
 
 logger = logging.getLogger(__name__)
@@ -961,6 +962,40 @@ class Controller_MainWindow(QMainWindow):
 
         # Update Ui with initial hardware state
         self.updateUi_initial_hardware_state()
+        # Channel-radio (L1/L2 display selector) for the ImageView area.
+        # Constructed here (after self.lasers is populated) so the button
+        # labels read the live ILaser.wavelength values. Parented to the
+        # ImageView container and inserted at the top of its vertical
+        # layout so it sits ABOVE the ImageView viewport (does not
+        # displace the LevelsBar below the viewport). Hidden by default;
+        # shown only when both auto-laser checkboxes are checked.
+        wl1 = getattr(self.lasers[0], "wavelength", None) if len(self.lasers) > 0 else None
+        wl2 = getattr(self.lasers[1], "wavelength", None) if len(self.lasers) > 1 else None
+        self.channel_radio = ChannelRadio(
+            parent=self.ui.imagesPane, wl1=wl1, wl2=wl2,
+        )
+        # Insert at index 0 (above the ImageView) of the imagesPane layout.
+        images_layout = self.ui.imagesPane.layout()
+        if images_layout is not None:
+            images_layout.insertWidget(0, self.channel_radio)
+        # Switch the ImageView + reset the LevelsBar when the operator
+        # clicks L1/L2. Reads reconstructed_frames[wavelength] (no RGB
+        # overlay; no per-channel levels state stored — the LevelsBar
+        # reads the displayed frame's min/max on switch).
+        self.channel_radio.idClicked.connect(self._on_channel_radio_clicked)
+        # Wire the auto-laser checkbox stateChanged signals so the radio
+        # visibility tracks the checkbox-pair state synchronously. The
+        # slot re-caches the flags (harmless on the GUI thread) and
+        # updates the radio visibility.
+        self.laser_panel.ui.checkBox_laserOneAutomatic.stateChanged.connect(
+            self._on_auto_laser_checkbox_changed
+        )
+        self.laser_panel.ui.checkBox_laserTwoAutomatic.stateChanged.connect(
+            self._on_auto_laser_checkbox_changed
+        )
+        # Apply the initial visibility (hidden — checkboxes default
+        # unchecked).
+        self._update_channel_radio_visibility()
         # Now that motors are assigned, seed the stack plane spinbox ranges
         # from the motor travel limits (the soft widget-layer block).
         self.stack_panel._seed_spinbox_ranges()
@@ -1392,6 +1427,76 @@ class Controller_MainWindow(QMainWindow):
         stack_panel = getattr(self, "stack_panel", None)
         if stack_panel is not None and hasattr(stack_panel, "_render_stack_plan_summary"):
             stack_panel._render_stack_plan_summary()
+        # Keep the channel-radio visibility in sync with the checkbox-pair
+        # state (the radio is shown only when both auto-lasers are checked).
+        self._update_channel_radio_visibility()
+
+    def _update_channel_radio_visibility(self) -> None:
+        """Show the channel-radio when both auto-laser checkboxes are
+        checked; hide it otherwise. Single-channel back-compat: the radio
+        is HIDDEN (not disabled) so the ImageView area stays visually
+        identical to today's single-channel experience. Guarded for
+        early-init (channel_radio may not be constructed yet)."""
+        radio = getattr(self, "channel_radio", None)
+        if radio is None:
+            return
+        cb1 = getattr(self.laser_panel.ui, "checkBox_laserOneAutomatic", None)
+        cb2 = getattr(self.laser_panel.ui, "checkBox_laserTwoAutomatic", None)
+        both = bool(
+            cb1 is not None and cb2 is not None
+            and cb1.isChecked() and cb2.isChecked()
+        )
+        if both:
+            radio.show_for_multi_channel()
+        else:
+            radio.hide_for_single_channel()
+
+    def _on_auto_laser_checkbox_changed(self, _state: int) -> None:
+        """Auto-laser checkbox stateChanged slot — re-cache the flags
+        (so the badge pill + summary re-render + radio visibility track
+        the checkbox-pair state synchronously) when the operator toggles
+        an auto-laser checkbox outside a mode-start entry point. GUI
+        thread only."""
+        self._cache_auto_laser_flags()
+
+    @Slot(int)
+    def _on_channel_radio_clicked(self, channel_idx: int) -> None:
+        """Channel-radio idClicked slot — switch the ImageView to the
+        selected channel's frame and reset the LevelsBar window to the
+        displayed frame's min/max.
+
+        Reads ``self.reconstructed_frames[wavelength]`` (the per-channel
+        frames dict populated by the multi-channel worker branch). If no
+        frame exists for the selected channel yet, leaves the ImageView
+        placeholder in place (no error text — the empty viewport is the
+        existing, sufficient signal). No RGB overlay; no per-channel
+        levels state stored (the LevelsBar reads the displayed frame's
+        histogram on switch)."""
+        if not (0 <= channel_idx < len(self.lasers)):
+            return
+        wl = getattr(self.lasers[channel_idx], "wavelength", None)
+        if wl is None:
+            return
+        frame = self.reconstructed_frames.get(wl)
+        if frame is None:
+            # No frame for this channel yet — leave the placeholder.
+            return
+        self.ui.imageView.setImage(frame)
+        # Reset the LevelsBar window to the displayed frame's observed
+        # min/max so the new channel is visible at a sensible contrast.
+        # Set window_max first so the window_min setter (which clamps to
+        # [range_min, window_max]) does not clamp the new min down to the
+        # old window_max. The LevelsBar setters permit equality (a
+        # degenerate window renders as a binary threshold, which is the
+        # sane display for a uniform frame).
+        try:
+            lo = int(frame.min())
+            hi = int(frame.max())
+        except (ValueError, TypeError):
+            return
+        if hi >= lo:
+            self.ui.levelsBar.window_max = hi
+            self.ui.levelsBar.window_min = lo
 
     def close_modes(self) -> None:
         """Close all thread modes if they are active.
