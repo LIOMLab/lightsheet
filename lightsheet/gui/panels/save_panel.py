@@ -288,16 +288,27 @@ class SavePanelWidget(QWidget):
                 if multi_channel:
                     wl1 = self._shell.lasers[0].wavelength
                     wl2 = self._shell.lasers[1].wavelength
+                    # Guard against a partial acquisition: the single-mode
+                    # multi-channel worker only adds a wavelength key to
+                    # reconstructed_frames when that channel's frame was
+                    # captured (a camera timeout or siggen error on one
+                    # channel leaves the dict missing that key). Indexing
+                    # the dict directly would raise KeyError; use .get()
+                    # and abort the save with an operator message instead.
+                    frame1 = self._shell.reconstructed_frames.get(wl1)
+                    frame2 = self._shell.reconstructed_frames.get(wl2)
+                    if frame1 is None or frame2 is None:
+                        self._shell.updateUi_message_printer(
+                            "Cannot save — one or both channel frames are "
+                            "missing. Re-run the acquisition."
+                        )
+                        return
                     self._shell._fs.set_files(
                         1, self._shell.save_filepath, "singleImage", 1,
                         "reconstructed_frame", wavelengths=[wl1, wl2],
                     )
-                    self._shell._fs.enqueue_buffer(
-                        (0, self._shell.reconstructed_frames[wl1])
-                    )
-                    self._shell._fs.enqueue_buffer(
-                        (1, self._shell.reconstructed_frames[wl2])
-                    )
+                    self._shell._fs.enqueue_buffer((0, frame1))
+                    self._shell._fs.enqueue_buffer((1, frame2))
                     self._shell.updateUi_message_printer(
                         "Saving Reconstructed Images (multi-channel)"
                     )
