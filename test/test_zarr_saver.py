@@ -628,11 +628,13 @@ def test_both_mode_writes_both_formats(qtbot, request, tmp_path) -> None:
         assert np.all(arr[0, z, :, :] == (z + 1) * 100)
 
     # --- HDF5 files have image datasets (NOT metadata-only) ---
-    # set_files creates one .hdf5 file per plane (full path = files_name
-    # + _z_plane_NNNNN_{wavelength}nm.hdf5 — the wavelength suffix is
-    # always appended now that the wavelengths=None branch is retired).
+    # set_files builds the per-channel filenames_list; read the actual
+    # paths from there instead of reconstructing the old
+    # _plane_NNNNN convention (the naming is now compact: no suffix on
+    # the first file, then _01, _02, ...).
+    assert len(saver.filenames_list) == n_planes
     for z in range(n_planes):
-        h5_path = str(tmp_path / f"stack_z_plane_{z + 1:05d}_555nm.hdf5")
+        h5_path = saver.filenames_list[z]
         with h5py.File(h5_path, "r") as f:
             keys = list(f.keys())
             # The dataset name pattern is datasets_name + counter (1-based).

@@ -250,11 +250,13 @@ def test_frame_saver_worker_surfaces_h5py_error_and_stops(tmp_path) -> None:
 
 
 def test_set_files_sequential_plane_numbers(tmp_path) -> None:
-    """IN-05: in a FRESH directory, set_files(number_of_files=3,
+    """In a FRESH directory, set_files(number_of_files=3,
     files_name="stack", scan_type="z", ..., wavelengths=[555]) produces
-    filenames_list = ["stack_z_plane_00001_555nm.hdf5", ...] — per-file
-    1-based sequential plane index, 5-digit zero-padded, with the
-    _{wavelength}nm suffix (the wavelengths=None branch is retired).
+    filenames_list = ["stack_z_555nm.hdf5", "stack_z_555nm_01.hdf5",
+    "stack_z_555nm_02.hdf5"] — the compact convention: NO suffix on the
+    first file, then _01, _02 (2-digit, width scales with file count),
+    with the _{wavelength}nm suffix (the wavelengths=None branch is
+    retired). The old _plane_00001 segment is dropped.
 
     set_files uses os.path.isfile against the CWD-relative filename, so
     the test chdir's into tmp_path (a fresh directory) for the duration
@@ -278,22 +280,22 @@ def test_set_files_sequential_plane_numbers(tmp_path) -> None:
         os.chdir(cwd)
 
     assert saver.filenames_list == [
-        "stack_z_plane_00001_555nm.hdf5",
-        "stack_z_plane_00002_555nm.hdf5",
-        "stack_z_plane_00003_555nm.hdf5",
+        "stack_z_555nm.hdf5",
+        "stack_z_555nm_01.hdf5",
+        "stack_z_555nm_02.hdf5",
     ], (
-        "set_files in a fresh directory must produce per-file 1-based "
-        "sequential 5-digit zero-padded plane numbers with the "
+        "set_files in a fresh directory must produce the compact "
+        "sequential names (no suffix on first, then _01, _02) with the "
         "_{wavelength}nm suffix; got: "
         + repr(saver.filenames_list)
     )
 
 
 def test_set_files_collision_suffix(tmp_path) -> None:
-    """IN-05: in a directory where "stack_z_plane_00001_555nm.hdf5"
-    ALREADY EXISTS, set_files produces "stack_z_plane_00001_555nm_v02.hdf5"
-    for that plane (the _vNN collision suffix, starting at v2), while
-    non-colliding planes stay sequential.
+    """In a directory where "stack_z_555nm.hdf5" ALREADY EXISTS,
+    set_files produces "stack_z_555nm_01.hdf5" for the first slot (the
+    sequential counter increments past the collision), and subsequent
+    slots continue _02, _03.
 
     Pre-creates the colliding file in tmp_path, chdir's there for the
     set_files call (set_files uses os.path.isfile on the bare filename),
@@ -307,7 +309,7 @@ def test_set_files_collision_suffix(tmp_path) -> None:
     saver.filenames_lists = []
 
     # Pre-create the colliding file in the fresh directory.
-    (tmp_path / "stack_z_plane_00001_555nm.hdf5").write_bytes(b"")
+    (tmp_path / "stack_z_555nm.hdf5").write_bytes(b"")
 
     import os
 
@@ -319,23 +321,23 @@ def test_set_files_collision_suffix(tmp_path) -> None:
         os.chdir(cwd)
 
     assert saver.filenames_list == [
-        "stack_z_plane_00001_555nm_v02.hdf5",
-        "stack_z_plane_00002_555nm.hdf5",
-        "stack_z_plane_00003_555nm.hdf5",
+        "stack_z_555nm_01.hdf5",
+        "stack_z_555nm_02.hdf5",
+        "stack_z_555nm_03.hdf5",
     ], (
-        "set_files must append _v02 to a colliding plane while leaving "
-        "non-colliding planes sequential; got: "
+        "set_files must shift the sequential counter past a colliding "
+        "first file (_01, _02, _03); got: "
         + repr(saver.filenames_list)
     )
 
 
 def test_set_files_collision_suffix_increments(tmp_path) -> None:
-    """IN-05: when both plane_00001_555nm.hdf5 and
-    plane_00001_555nm_v02.hdf5 exist, the suffix increments to _v03 for
-    that plane.
+    """When both stack_z_555nm.hdf5 and stack_z_555nm_01.hdf5 exist, the
+    counter increments past both — the first slot gets _02, then _03,
+    _04.
 
     Pre-creates both colliding files in tmp_path, chdir's there for the
-    set_files call, then asserts the third plane gets _v03.
+    set_files call, then asserts the sequential counter bumped past both.
     """
     bundle = _make_bundle()
     shell = _make_shell()
@@ -344,9 +346,9 @@ def test_set_files_collision_suffix_increments(tmp_path) -> None:
     saver.filenames_list = []
     saver.filenames_lists = []
 
-    # Pre-create both the base and the _v02 collision files.
-    (tmp_path / "stack_z_plane_00001_555nm.hdf5").write_bytes(b"")
-    (tmp_path / "stack_z_plane_00001_555nm_v02.hdf5").write_bytes(b"")
+    # Pre-create both the base and the _01 collision files.
+    (tmp_path / "stack_z_555nm.hdf5").write_bytes(b"")
+    (tmp_path / "stack_z_555nm_01.hdf5").write_bytes(b"")
 
     import os
 
@@ -358,12 +360,12 @@ def test_set_files_collision_suffix_increments(tmp_path) -> None:
         os.chdir(cwd)
 
     assert saver.filenames_list == [
-        "stack_z_plane_00001_555nm_v03.hdf5",
-        "stack_z_plane_00002_555nm.hdf5",
-        "stack_z_plane_00003_555nm.hdf5",
+        "stack_z_555nm_02.hdf5",
+        "stack_z_555nm_03.hdf5",
+        "stack_z_555nm_04.hdf5",
     ], (
-        "set_files must increment the collision suffix past existing "
-        "_v02 to _v03 when both base and _v02 exist; got: "
+        "set_files must increment the sequential counter past existing "
+        "base and _01 to _02, _03, _04; got: "
         + repr(saver.filenames_list)
     )
 
@@ -374,11 +376,12 @@ def test_set_files_collision_suffix_increments(tmp_path) -> None:
 
 
 def test_set_files_multi_channel_wavelength_suffix(tmp_path) -> None:
-    """MCA-03: set_files with wavelengths=[555, 640] builds
+    """set_files with wavelengths=[555, 640] builds
     self.filenames_lists as a list of 2 lists (one per channel), each
-    length number_of_files, with _{wavelength}nm suffix and 5-digit
-    zero-padded plane index. Wavelength values come from the caller
-    (which reads them from the live ILaser instance).
+    length number_of_files, with _{wavelength}nm suffix and the compact
+    sequential counter (no suffix on first, then _01, _02). Wavelength
+    values come from the caller (which reads them from the live ILaser
+    instance).
     """
     bundle = _make_bundle()
     shell = _make_shell()
@@ -388,6 +391,7 @@ def test_set_files_multi_channel_wavelength_suffix(tmp_path) -> None:
     saver.filenames_lists = []
 
     import os
+    import re
 
     cwd = os.getcwd()
     os.chdir(tmp_path)
@@ -412,16 +416,18 @@ def test_set_files_multi_channel_wavelength_suffix(tmp_path) -> None:
         "channel 1 list must have number_of_files entries"
     )
     for fn in saver.filenames_lists[0]:
-        assert fn.endswith("_555nm.hdf5"), (
-            f"channel 0 filename must end with _555nm.hdf5: {fn}"
+        assert re.search(r"_555nm(_\d+)?\.hdf5$", fn), (
+            f"channel 0 filename must carry _555nm suffix: {fn}"
         )
     for fn in saver.filenames_lists[1]:
-        assert fn.endswith("_640nm.hdf5"), (
-            f"channel 1 filename must end with _640nm.hdf5: {fn}"
+        assert re.search(r"_640nm(_\d+)?\.hdf5$", fn), (
+            f"channel 1 filename must carry _640nm suffix: {fn}"
         )
-    # Plane index is 1-based, 5-digit zero-padded
-    assert "plane_00001" in saver.filenames_lists[0][0]
-    assert "plane_00002" in saver.filenames_lists[0][1]
+    # Compact sequential counter: no suffix on first, _01 on second.
+    assert saver.filenames_lists[0][0] == "scan_stack_555nm.hdf5"
+    assert saver.filenames_lists[0][1] == "scan_stack_555nm_01.hdf5"
+    assert saver.filenames_lists[1][0] == "scan_stack_640nm.hdf5"
+    assert saver.filenames_lists[1][1] == "scan_stack_640nm_01.hdf5"
 
 
 def test_set_files_single_channel_has_suffix(tmp_path) -> None:
@@ -471,8 +477,9 @@ def test_set_files_single_channel_has_suffix(tmp_path) -> None:
         "filenames_list must mirror filenames_lists[0] in single-channel mode"
     )
     for fn in saver.filenames_list:
-        assert re.search(r"_555nm\.hdf5$", fn), (
-            f"single-channel filename must carry _555nm suffix: {fn}"
+        assert re.search(r"_555nm(_\d+)?\.hdf5$", fn), (
+            f"single-channel filename must carry _555nm suffix "
+            f"(optionally followed by a sequential _NN): {fn}"
         )
 
 
@@ -505,9 +512,9 @@ def test_set_files_rejects_wavelengths_none(tmp_path) -> None:
 
 
 def test_set_files_collision_avoidance_per_channel(tmp_path) -> None:
-    """MCA-03: _vNN collision avoidance runs independently per channel —
-    pre-create a file in channel 0's first plane; channel 0 gets _v02
-    while channel 1 (no collision) stays unsuffixed.
+    """Collision avoidance runs independently per channel — pre-create
+    channel 0's first file; channel 0 shifts to _01 while channel 1 (no
+    collision) stays unsuffixed.
     """
     import os
 
@@ -519,7 +526,7 @@ def test_set_files_collision_avoidance_per_channel(tmp_path) -> None:
     saver.filenames_lists = []
 
     # Pre-create channel 0's first file so it collides
-    (tmp_path / "scan_stack_plane_00001_555nm.hdf5").write_bytes(b"")
+    (tmp_path / "scan_stack_555nm.hdf5").write_bytes(b"")
 
     cwd = os.getcwd()
     os.chdir(tmp_path)
@@ -532,13 +539,15 @@ def test_set_files_collision_avoidance_per_channel(tmp_path) -> None:
         os.chdir(cwd)
 
     assert len(saver.filenames_lists) == 2
-    # Channel 0 collides → gets _v02
-    assert "_v02" in saver.filenames_lists[0][0], (
-        f"channel 0 colliding filename must get _v02: {saver.filenames_lists[0][0]}"
+    # Channel 0 collides → shifts to _01
+    assert saver.filenames_lists[0][0] == "scan_stack_555nm_01.hdf5", (
+        f"channel 0 colliding filename must shift to _01: "
+        f"{saver.filenames_lists[0][0]}"
     )
-    # Channel 1 does not collide → no _vNN
-    assert "_v" not in saver.filenames_lists[1][0], (
-        f"channel 1 non-colliding filename must NOT get _vNN: {saver.filenames_lists[1][0]}"
+    # Channel 1 does not collide → no sequential suffix
+    assert saver.filenames_lists[1][0] == "scan_stack_640nm.hdf5", (
+        f"channel 1 non-colliding filename must have no sequential "
+        f"suffix: {saver.filenames_lists[1][0]}"
     )
 
 

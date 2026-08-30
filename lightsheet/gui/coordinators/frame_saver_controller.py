@@ -272,13 +272,17 @@ class FrameSaver(QObject):
         """Set the number and name of files to save and makes sure the filenames
         are unique in the path to avoid overwrite on other files.
 
-        Plane numbers in filenames are sequential and 1-based (plane_00001,
-        plane_00002, ...) so they correspond to the actual plane index in
-        the stack — downstream analysis tools that expect sequential
-        numbering are not confused by gaps. If a sequential filename
-        already exists (e.g. from a previous run in the same directory),
-        a ``_vNN`` collision-avoidance suffix is appended so the plane
-        number stays meaningful while the filename stays unique.
+        Filename convention (compact, aligned with the Zarr store name
+        ``<files_name>.ome.zarr``): ``<files_name>_<scan_type>_<wavelength>nm``
+        with a per-channel sequential counter — NO suffix on the first
+        file, then ``_01``, ``_02``, ... (2-digit, width scales with the
+        file count so lexicographic sort is stable). The old
+        ``_plane_00001`` segment is dropped — it was always ``00001`` for
+        stitch (one file per channel) and redundant with the dataset name
+        inside the file for crop/full. Collision avoidance: if a
+        candidate name already exists on disk, the counter increments
+        past it until a free name is found (so a re-run in the same
+        directory produces ``_01``, ``_02``, ... instead of overwriting).
 
         ``wavelengths`` is required — every caller passes a non-None
         list. Multi-channel callers pass ``[wl1, wl2]``;
@@ -290,10 +294,11 @@ class FrameSaver(QObject):
 
         ``self.filenames_lists`` is built as a list of lists — one per
         channel, each with ``number_of_files`` entries — where each
-        filename ends in ``_{wavelength}nm.hdf5``. The wavelength values
-        are read from the live ``ILaser`` instance by the caller and
-        passed in here; they are never hardcoded inside this method. The
-        ``_vNN`` collision-avoidance suffix runs independently per channel.
+        filename ends in ``_{wavelength}nm.hdf5`` (plus the sequential
+        suffix for files after the first). The wavelength values are
+        read from the live ``ILaser`` instance by the caller and passed
+        in here; they are never hardcoded inside this method. The
+        collision-avoidance counter runs independently per channel.
 
         When there is exactly one channel (single-channel mode),
         ``self.filenames_list`` (singular) is also populated from
@@ -316,32 +321,39 @@ class FrameSaver(QObject):
         self.number_of_datasets = int(number_of_datasets)
         self.datasets_name = str(datasets_name)
 
+        # Sequential-suffix width: 2-digit minimum, scales with the file
+        # count so lexicographic sort stays stable (e.g. 100 files →
+        # 3-digit _001.._100). The first file in each channel has NO
+        # suffix; subsequent files get _01, _02, ... Collision avoidance
+        # increments the counter past any name that already exists on
+        # disk, so a re-run in the same directory shifts to _01, _02, ...
+        # instead of overwriting.
+        width = max(2, len(str(self.number_of_files)))
+
         # Build one filename list per channel, each with the
-        # _{wavelength}nm suffix. The _vNN collision avoidance runs
-        # independently per channel so a collision in channel 0 does not
-        # affect channel 1's filenames.
+        # _{wavelength}nm suffix and the per-channel sequential counter.
         self.filenames_lists = []
         for wl in wavelengths:
             channel_list: list[str] = []
-            for plane in range(self.number_of_files):
+            counter = 0  # 0 → no suffix; 1 → _01; 2 → _02; ...
+            for _plane in range(self.number_of_files):
                 base = (
                     self.files_name
                     + "_"
                     + scan_type
-                    + "_plane_"
-                    + f"{plane + 1:05d}"
                     + f"_{wl}nm"
                 )
-                new_filename = base + ".hdf5"
-                if os.path.isfile(new_filename):
-                    version = 2
-                    while True:
-                        candidate = f"{base}_v{version:02d}.hdf5"
-                        if not os.path.isfile(candidate):
-                            new_filename = candidate
-                            break
-                        version += 1
-                channel_list.append(new_filename)
+                if counter == 0:
+                    candidate = base + ".hdf5"
+                else:
+                    candidate = f"{base}_{counter:0{width}d}.hdf5"
+                # Collision avoidance: bump the counter until the name is
+                # free (and recompute the suffix once counter > 0).
+                while os.path.isfile(candidate):
+                    counter += 1
+                    candidate = f"{base}_{counter:0{width}d}.hdf5"
+                channel_list.append(candidate)
+                counter += 1
             self.filenames_lists.append(channel_list)
 
         # Single-channel back-compat: populate filenames_list (singular)

@@ -149,3 +149,46 @@ def test_past_acquisitions_browser_degrades_on_missing_attrs(
     assert entry.wavelength == 647, entry.wavelength
     assert entry.format_label == "HDF5"
     assert entry.n_planes == 1
+
+
+def test_past_acquisitions_browser_parses_compact_naming(
+    qtbot, request, tmp_path
+) -> None:
+    """The compact filename convention (no _plane_00001 segment; no
+    suffix on the first file, then _01, _02) must parse correctly — the
+    wavelength is inferred from the _<wl>nm token (followed by '.' for
+    the first file or '_' for suffixed files) and the sample name is
+    recovered by stripping the _<scan_type> segment.
+
+    Covers both the first-file form (foo_stack_555nm.hdf5) and the
+    suffixed form (foo_stack_555nm_01.hdf5) with no root attrs (so the
+    filename fallback path is exercised).
+    """
+    import h5py
+    import numpy as np
+
+    ctrl, _ = make_controller(qtbot, request)
+
+    data_dir = tmp_path / "LightSheetData"
+    data_dir.mkdir()
+    # No root attrs — wavelength must come from the filename token.
+    h5_path1 = data_dir / "tes1_stack_555nm.hdf5"
+    with h5py.File(h5_path1, "w") as f:
+        f.create_dataset(
+            "reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16)
+        )
+    h5_path2 = data_dir / "tes1_stack_647nm_01.hdf5"
+    with h5py.File(h5_path2, "w") as f:
+        f.create_dataset(
+            "reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16)
+        )
+
+    browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
+    entries = browser.list_acquisitions()
+    assert len(entries) == 2
+    by_wl = {e.wavelength: e for e in entries}
+    assert 555 in by_wl, "555nm first-file (no suffix) must parse"
+    assert 647 in by_wl, "647nm suffixed file must parse"
+    # Sample name strips the _stack scan-type segment.
+    assert by_wl[555].sample == "tes1", by_wl[555].sample
+    assert by_wl[647].sample == "tes1", by_wl[647].sample

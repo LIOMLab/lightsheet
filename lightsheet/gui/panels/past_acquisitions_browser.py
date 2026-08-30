@@ -93,13 +93,27 @@ def _format_bytes(n: int | None) -> str:
         value /= 1024.0
     return f"{value:.1f} TB"
 
-# Targets the writer's finalize_with_resolutions uses (mirrored for the
-# level-count estimate in the table manager; not used by the parser).
-_WAVELENGTH_TOKEN_RE = re.compile(r"_(\d{3})nm_", re.IGNORECASE)
+# Wavelength token: matches _<3-digit>nm followed by a separator (_ or .)
+# or end-of-string. The trailing separator is a lookahead so it is not
+# consumed — this lets the regex match both the old naming
+# (foo_555nm_stack_plane_00001.hdf5) and the compact naming
+# (foo_stack_555nm.hdf5, foo_stack_555nm_01.hdf5).
+_WAVELENGTH_TOKEN_RE = re.compile(r"_(\d{3})nm(?=[._]|$)", re.IGNORECASE)
+# HDF5 filename pattern — handles BOTH conventions:
+#   old:    <sample>_<wl>nm_stack_plane_<idx>.hdf5
+#   new:    <sample>_<scan>_<wl>nm.hdf5  /  <sample>_<scan>_<wl>nm_<idx>.hdf5
+# The _stack_plane_<idx> segment (old) and the bare _<idx> suffix (new)
+# are both optional. For the new convention the `sample` group includes
+# the scan-type segment (e.g. "tes1_stack"); _hdf5_sample strips a known
+# scan-type suffix to recover the bare sample name.
 _HDF5_FILENAME_RE = re.compile(
-    r"^(?P<sample>.+?)_(?P<wl>\d{3})nm_stack_plane_(?P<idx>\d+)\.hdf5$",
+    r"^(?P<sample>.+?)_(?P<wl>\d{3})nm"
+    r"(?:_stack_plane_(?P<oldidx>\d+)|_(?P<idx>\d+))?\.hdf5$",
     re.IGNORECASE,
 )
+# Known scan-type segments appended to the sample name under the compact
+# convention (set_files passes scan_type as the second filename segment).
+_SCAN_TYPE_SUFFIXES = ("_stack", "_singleImage", "_z")
 
 
 @dataclass
@@ -308,11 +322,19 @@ class PastAcquisitionsBrowser(QObject):
 
     def _hdf5_sample(self, f, fname: str, sample_hint: str) -> str:
         # The Sample Name attr is empty in all probed files — use the
-        # filename prefix (before the _<wavelength>nm_ token) or the
+        # filename prefix (before the _<wavelength>nm token) or the
         # folder name.
         m = _HDF5_FILENAME_RE.match(fname)
         if m and m.group("sample"):
-            return m.group("sample")
+            sample = m.group("sample")
+            # Under the compact naming convention the sample group
+            # includes the scan-type segment (e.g. "tes1_stack"). Strip a
+            # known scan-type suffix to recover the bare sample name.
+            for suffix in _SCAN_TYPE_SUFFIXES:
+                if sample.lower().endswith(suffix):
+                    sample = sample[: -len(suffix)]
+                    break
+            return sample
         # No wavelength token in the filename (e.g. "test5_stack_plane_
         # 00001.hdf5") — strip the _stack_plane_NNNNN suffix to get the
         # sample name. Without this the full filename shows in the
