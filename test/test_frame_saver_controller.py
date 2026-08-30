@@ -359,3 +359,289 @@ def test_set_files_collision_suffix_increments(tmp_path) -> None:
         "_v02 to _v03 when both base and _v02 exist; got: "
         + repr(saver.filenames_list)
     )
+
+
+# ---------------------------------------------------------------------------
+# Multi-channel per-channel HDF5 save separation (MCA-03 / D-05)
+# ---------------------------------------------------------------------------
+
+
+def test_set_files_multi_channel_wavelength_suffix(tmp_path) -> None:
+    """MCA-03: set_files with wavelengths=[555, 640] builds
+    self.filenames_lists as a list of 2 lists (one per channel), each
+    length number_of_files, with _{wavelength}nm suffix and 5-digit
+    zero-padded plane index. Wavelength values come from the caller
+    (which reads them from the live ILaser instance).
+    """
+    bundle = _make_bundle()
+    shell = _make_shell()
+    fs = FrameSaverController(bundle, shell)
+    saver = fs.frame_saver
+    saver.filenames_list = []
+    saver.filenames_lists = []
+
+    import os
+
+    cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        saver.set_files(
+            2, "scan", "stack", 1, "reconstructed_frame",
+            wavelengths=[555, 640],
+        )
+    finally:
+        os.chdir(cwd)
+
+    assert isinstance(saver.filenames_lists, list), (
+        "filenames_lists must be a list of lists in multi-channel mode"
+    )
+    assert len(saver.filenames_lists) == 2, (
+        "filenames_lists must have one list per channel (2 channels)"
+    )
+    assert len(saver.filenames_lists[0]) == 2, (
+        "channel 0 list must have number_of_files entries"
+    )
+    assert len(saver.filenames_lists[1]) == 2, (
+        "channel 1 list must have number_of_files entries"
+    )
+    for fn in saver.filenames_lists[0]:
+        assert fn.endswith("_555nm.hdf5"), (
+            f"channel 0 filename must end with _555nm.hdf5: {fn}"
+        )
+    for fn in saver.filenames_lists[1]:
+        assert fn.endswith("_640nm.hdf5"), (
+            f"channel 1 filename must end with _640nm.hdf5: {fn}"
+        )
+    # Plane index is 1-based, 5-digit zero-padded
+    assert "plane_00001" in saver.filenames_lists[0][0]
+    assert "plane_00002" in saver.filenames_lists[0][1]
+
+
+def test_set_files_single_channel_no_suffix(tmp_path) -> None:
+    """MCA-03 back-compat: set_files with wavelengths=None keeps today's
+    single self.filenames_list behavior — no _{wavelength}nm suffix.
+    Byte-identical to the pre-multi-channel path.
+    """
+    import os
+    import re
+
+    bundle = _make_bundle()
+    shell = _make_shell()
+    fs = FrameSaverController(bundle, shell)
+    saver = fs.frame_saver
+    saver.filenames_list = []
+    saver.filenames_lists = []
+
+    cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        saver.set_files(
+            2, "scan", "stack", 1, "reconstructed_frame",
+            wavelengths=None,
+        )
+    finally:
+        os.chdir(cwd)
+
+    assert len(saver.filenames_list) == 2, (
+        "single-channel filenames_list must have number_of_files entries"
+    )
+    for fn in saver.filenames_list:
+        assert not re.search(r"_\d+nm\.hdf5$", fn), (
+            f"single-channel filename must NOT have wavelength suffix: {fn}"
+        )
+
+
+def test_set_files_collision_avoidance_per_channel(tmp_path) -> None:
+    """MCA-03: _vNN collision avoidance runs independently per channel —
+    pre-create a file in channel 0's first plane; channel 0 gets _v02
+    while channel 1 (no collision) stays unsuffixed.
+    """
+    import os
+
+    bundle = _make_bundle()
+    shell = _make_shell()
+    fs = FrameSaverController(bundle, shell)
+    saver = fs.frame_saver
+    saver.filenames_list = []
+    saver.filenames_lists = []
+
+    # Pre-create channel 0's first file so it collides
+    (tmp_path / "scan_stack_plane_00001_555nm.hdf5").write_bytes(b"")
+
+    cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        saver.set_files(
+            1, "scan", "stack", 1, "reconstructed_frame",
+            wavelengths=[555, 640],
+        )
+    finally:
+        os.chdir(cwd)
+
+    assert len(saver.filenames_lists) == 2
+    # Channel 0 collides → gets _v02
+    assert "_v02" in saver.filenames_lists[0][0], (
+        f"channel 0 colliding filename must get _v02: {saver.filenames_lists[0][0]}"
+    )
+    # Channel 1 does not collide → no _vNN
+    assert "_v" not in saver.filenames_lists[1][0], (
+        f"channel 1 non-colliding filename must NOT get _vNN: {saver.filenames_lists[1][0]}"
+    )
+
+
+def _make_mock_h5py():
+    """Build a Mock h5py.File replacement that records create_dataset calls.
+
+    Returns (mock_file_class, written_files) where written_files is a dict
+    mapping filename -> list of (dataset_name, data_array) tuples.
+    """
+    written_files: dict[str, list[tuple[str, np.ndarray]]] = {}
+
+    class _MockDataset:
+        def __init__(self, name: str, data: np.ndarray) -> None:
+            self.name = name
+            self.data = data
+            self.attrs: dict = {}
+
+    class _MockFile:
+        def __init__(self, path: str, mode: str = "a") -> None:
+            self.path = path
+            self.attrs: dict = {}
+            written_files.setdefault(path, [])
+
+        def create_dataset(self, name: str, data=None, **kwargs):
+            ds = _MockDataset(name, data)
+            written_files[self.path].append((name, data))
+            return ds
+
+        def close(self) -> None:
+            pass
+
+    return _MockFile, written_files
+
+
+def test_frame_saver_worker_branches_on_channel_tag(tmp_path) -> None:
+    """MCA-03: frame_saver_worker branches on the channel tag from the
+    dequeued (channel_idx, frame) tuple — frameA → filenames_lists[0][0],
+    frameB → filenames_lists[1][0]. The single-consumer queue contract
+    is preserved (one queue, one consume loop, no split).
+    """
+    from unittest.mock import patch
+
+    bundle = _make_bundle()
+    shell = _make_shell()
+    fs = FrameSaverController(bundle, shell)
+    saver = fs.frame_saver
+
+    # Set up multi-channel filenames_lists (2 channels × 2 planes each)
+    saver.filenames_lists = [
+        [
+            str(tmp_path / "ch0_plane_00001.hdf5"),
+            str(tmp_path / "ch0_plane_00002.hdf5"),
+        ],
+        [
+            str(tmp_path / "ch1_plane_00001.hdf5"),
+            str(tmp_path / "ch1_plane_00002.hdf5"),
+        ],
+    ]
+    saver.filenames_list = []
+    saver.number_of_datasets = 1
+    saver.datasets_name = "dataset_"
+    saver.sample_name = "test"
+    saver.horizontal_positions_list = ["0", "0"]
+    saver.vertical_positions_list = ["0", "0"]
+    saver.camera_positions_list = ["0", "0"]
+    saver.saving_started = True
+
+    mock_file_cls, written_files = _make_mock_h5py()
+
+    frameA = np.zeros((4, 4), dtype=np.uint16)
+    frameA[0, 0] = 100
+    frameB = np.zeros((4, 4), dtype=np.uint16)
+    frameB[0, 0] = 200
+
+    saver.enqueue_buffer((0, frameA))
+    saver.enqueue_buffer((1, frameB))
+
+    # Simulate stop_saving() flipping the flag after the acquisition
+    # queued all frames — the worker drains the remaining frames then
+    # exits on the next queue.Empty (the documented termination
+    # contract, frame_saver_controller.py lines 542-550). Without this
+    # the worker loops forever waiting for the 2 unwritten planes
+    # (total_files=4, only 2 frames enqueued).
+    saver.saving_started = False
+
+    with patch(
+        "lightsheet.gui.coordinators.frame_saver_controller.h5py.File",
+        mock_file_cls,
+    ):
+        # Mock metadata methods (they need lasers/motors/siggen/camera
+        # which the _ShellStandin does not have)
+        saver._write_laser_metadata = Mock()
+        saver._write_acquisition_metadata = Mock()
+        saver.frame_saver_worker()
+
+    # frameA → filenames_lists[0][0], frameB → filenames_lists[1][0]
+    ch0_file = saver.filenames_lists[0][0]
+    ch1_file = saver.filenames_lists[1][0]
+    assert ch0_file in written_files, (
+        f"channel 0 file must be opened: {ch0_file}"
+    )
+    assert ch1_file in written_files, (
+        f"channel 1 file must be opened: {ch1_file}"
+    )
+    assert len(written_files[ch0_file]) == 1, (
+        "channel 0 file must have exactly 1 dataset"
+    )
+    assert len(written_files[ch1_file]) == 1, (
+        "channel 1 file must have exactly 1 dataset"
+    )
+    np.testing.assert_array_equal(written_files[ch0_file][0][1], frameA)
+    np.testing.assert_array_equal(written_files[ch1_file][0][1], frameB)
+
+
+def test_frame_saver_worker_single_channel_bare_ndarray(tmp_path) -> None:
+    """Back-compat: a bare ndarray (no channel tag) dequeued by
+    frame_saver_worker uses the existing self.filenames_list path —
+    written to filenames_list[0]. The multi-channel filenames_lists
+    is empty so the worker takes the single-channel branch.
+    """
+    from unittest.mock import patch
+
+    bundle = _make_bundle()
+    shell = _make_shell()
+    fs = FrameSaverController(bundle, shell)
+    saver = fs.frame_saver
+
+    saver.filenames_list = [str(tmp_path / "plane_00001.hdf5")]
+    saver.filenames_lists = []  # empty → single-channel mode
+    saver.number_of_datasets = 1
+    saver.datasets_name = "dataset_"
+    saver.sample_name = "test"
+    saver.horizontal_positions_list = ["0"]
+    saver.vertical_positions_list = ["0"]
+    saver.camera_positions_list = ["0"]
+    saver.saving_started = True
+
+    mock_file_cls, written_files = _make_mock_h5py()
+
+    frame = np.zeros((4, 4), dtype=np.uint16)
+    frame[0, 0] = 42
+
+    saver.enqueue_buffer(frame)
+
+    with patch(
+        "lightsheet.gui.coordinators.frame_saver_controller.h5py.File",
+        mock_file_cls,
+    ):
+        saver._write_laser_metadata = Mock()
+        saver._write_acquisition_metadata = Mock()
+        saver.frame_saver_worker()
+
+    assert saver.filenames_list[0] in written_files, (
+        f"single-channel file must be opened: {saver.filenames_list[0]}"
+    )
+    assert len(written_files[saver.filenames_list[0]]) == 1
+    np.testing.assert_array_equal(
+        written_files[saver.filenames_list[0]][0][1], frame
+    )

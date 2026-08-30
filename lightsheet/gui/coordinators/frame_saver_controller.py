@@ -200,6 +200,12 @@ class FrameSaver(QObject):
         self.sample_name = ""
         self.number_of_files = 1
         self.filenames_list = []
+        # Multi-channel per-channel filename lists (MCA-03/D-05). When
+        # set_files is called with wavelengths=[...], this becomes a list
+        # of lists — one per channel, each with number_of_files entries.
+        # When wavelengths=None (single-channel back-compat), this stays
+        # empty and the existing self.filenames_list path is used.
+        self.filenames_lists: list[list[str]] = []
         self.horizontal_positions_list = []
         self.vertical_positions_list = []
         self.camera_positions_list = []
@@ -231,6 +237,7 @@ class FrameSaver(QObject):
         self.sample_name = ""
         self.number_of_files = 1
         self.filenames_list = []
+        self.filenames_lists: list[list[str]] = []
         self.horizontal_positions_list = []
         self.vertical_positions_list = []
         self.camera_positions_list = []
@@ -257,6 +264,7 @@ class FrameSaver(QObject):
         scan_type: str,
         number_of_datasets: int,
         datasets_name: str,
+        wavelengths: list[int] | None = None,
     ) -> None:
         """Set the number and name of files to save and makes sure the filenames
         are unique in the path to avoid overwrite on other files.
@@ -268,12 +276,53 @@ class FrameSaver(QObject):
         already exists (e.g. from a previous run in the same directory),
         a ``_vNN`` collision-avoidance suffix is appended so the plane
         number stays meaningful while the filename stays unique.
+
+        When ``wavelengths`` is provided (multi-channel mode, MCA-03/D-05),
+        ``self.filenames_lists`` is built as a list of lists — one per
+        channel, each with ``number_of_files`` entries — where each
+        filename ends in ``_{wavelength}nm.hdf5``. The wavelength values
+        are read from the live ``ILaser`` instance by the caller and
+        passed in here; they are never hardcoded inside this method. The
+        ``_vNN`` collision-avoidance suffix runs independently per channel.
+        When ``wavelengths`` is None (single-channel back-compat), the
+        existing ``self.filenames_list`` path is used unchanged — no
+        wavelength suffix.
         """
         self.number_of_files = int(number_of_files)
         self.files_name = str(files_name)
         self.scan_type = str(scan_type)
         self.number_of_datasets = int(number_of_datasets)
         self.datasets_name = str(datasets_name)
+
+        if wavelengths is not None:
+            # Multi-channel: build one filename list per channel, each
+            # with the _{wavelength}nm suffix. The _vNN collision
+            # avoidance runs independently per channel so a collision in
+            # channel 0 does not affect channel 1's filenames.
+            self.filenames_lists = []
+            for wl in wavelengths:
+                channel_list: list[str] = []
+                for plane in range(self.number_of_files):
+                    base = (
+                        self.files_name
+                        + "_"
+                        + scan_type
+                        + "_plane_"
+                        + f"{plane + 1:05d}"
+                        + f"_{wl}nm"
+                    )
+                    new_filename = base + ".hdf5"
+                    if os.path.isfile(new_filename):
+                        version = 2
+                        while True:
+                            candidate = f"{base}_v{version:02d}.hdf5"
+                            if not os.path.isfile(candidate):
+                                new_filename = candidate
+                                break
+                            version += 1
+                    channel_list.append(new_filename)
+                self.filenames_lists.append(channel_list)
+            return
 
         for plane in range(self.number_of_files):
             base = (
@@ -402,7 +451,20 @@ class FrameSaver(QObject):
 
     def frame_saver_worker(self) -> None:
         """Thread for saving 3D arrays (or 2D arrays).
-        The number of datasets per file is the number of 2D arrays"""
+        The number of datasets per file is the number of 2D arrays.
+
+        In multi-channel mode (``self.filenames_lists`` is populated),
+        the worker branches on the channel tag from the dequeued
+        ``(channel_idx, frame)`` tuple to select the correct per-channel
+        filename list and plane index. The single-consumer queue contract
+        is preserved — one queue, one consume loop, one
+        ``sig_finished`` → ``thread.quit`` → ``wait(10000)``. Bare-ndarray
+        dequeues (single-channel back-compat) use the existing
+        ``self.filenames_list`` path unchanged.
+        """
+        if self.filenames_lists:
+            self._frame_saver_worker_multi_channel()
+            return
         aborted = False
         for idx in range(len(self.filenames_list)):
             logger.info("File created: %s", self.filenames_list[idx])
@@ -515,6 +577,123 @@ class FrameSaver(QObject):
             if aborted:
                 break
         logger.info("frame_saver_worker exited (saving_started=%s)", self.saving_started)
+
+    def _frame_saver_worker_multi_channel(self) -> None:
+        """Multi-channel HDF5 save loop body (MCA-03/D-05).
+
+        Consumes channel-tagged ``(channel_idx, frame)`` tuples from the
+        single save queue and writes each frame to the correct per-channel
+        HDF5 file (``self.filenames_lists[channel_idx][plane_idx]``). The
+        ``_vNN`` collision avoidance already ran in ``set_files``; this
+        method only opens, writes, and closes each file.
+
+        The single-consumer queue contract is preserved: one queue, one
+        consume loop, one ``sig_finished`` → ``thread.quit`` →
+        ``wait(10000)``. The channel tag branches WITHIN the existing
+        consume loop — the queue is NOT split into two queues and no
+        second consumer is added.
+
+        Per-channel plane counters track which file in each channel's
+        list is next. Both channels of the same plane share the same
+        motor position (``horizontal_positions_list[plane_idx]`` etc.)
+        — ``add_motor_parameters`` is called once per plane by the
+        acquisition worker, so the positions list has one entry per
+        plane regardless of channel count.
+        """
+        n_channels = len(self.filenames_lists)
+        plane_counters = [0] * n_channels
+        total_files = sum(len(lst) for lst in self.filenames_lists)
+        files_written = 0
+        aborted = False
+
+        while files_written < total_files:
+            try:
+                item = self.queue.get(True, 1)
+            except queue.Empty:
+                if not self.saving_started:
+                    try:
+                        item = self.queue.get_nowait()
+                    except queue.Empty:
+                        aborted = True
+                        break
+                else:
+                    continue
+
+            # Branch on the channel tag: a tagged tuple routes to the
+            # correct per-channel filename list; a bare ndarray falls
+            # back to channel 0 (back-compat for any producer that has
+            # not migrated to the tagged form).
+            if isinstance(item, tuple):
+                channel_idx, frame = item
+            else:
+                channel_idx = 0
+                frame = item
+
+            if channel_idx < 0 or channel_idx >= n_channels:
+                self.sig_status_message.emit(
+                    f"Save error: channel index {channel_idx} out of range "
+                    f"(0..{n_channels - 1})"
+                )
+                self.saving_started = False
+                aborted = True
+                break
+
+            plane_idx = plane_counters[channel_idx]
+            if plane_idx >= len(self.filenames_lists[channel_idx]):
+                # No more files for this channel — skip the extra frame
+                files_written += 1
+                continue
+
+            filename = self.filenames_lists[channel_idx][plane_idx]
+            logger.info("File created: %s", filename)
+            try:
+                outfile = h5py.File(filename, "a")
+                self._write_laser_metadata(outfile)
+                self._write_acquisition_metadata(outfile)
+            except Exception as e:
+                self.sig_status_message.emit(f"Save error: {e}")
+                self.saving_started = False
+                aborted = True
+                break
+
+            if frame.ndim == 2:
+                frame = np.expand_dims(frame, axis=0)
+            counter = 1
+            for f_idx in range(frame.shape[0]):
+                path_root = self.datasets_name + f"{counter:03d}"
+                self.dataset = outfile.create_dataset(
+                    path_root, data=frame[f_idx, :, :]
+                )
+                logger.info(
+                    "Dataset created: %s (channel %d plane %d)",
+                    path_root, channel_idx, plane_idx,
+                )
+                self.dataset.attrs["Sample Name"] = self.sample_name
+                self.dataset.attrs["Date"] = str(datetime.date.today())
+                # Both channels of the same plane share the motor position
+                pos_index = plane_idx
+                if pos_index < len(self.horizontal_positions_list):
+                    self.dataset.attrs["Horizontal Position"] = (
+                        self.horizontal_positions_list[pos_index]
+                    )
+                    self.dataset.attrs["Vertical Position"] = (
+                        self.vertical_positions_list[pos_index]
+                    )
+                    self.dataset.attrs["Camera Position"] = (
+                        self.camera_positions_list[pos_index]
+                    )
+                counter += 1
+
+            outfile.close()
+            self.sig_status_message.emit("File " + filename + " saved")
+            plane_counters[channel_idx] += 1
+            files_written += 1
+
+        logger.info(
+            "frame_saver_worker (multi-channel) exited "
+            "(saving_started=%s, files_written=%d)",
+            self.saving_started, files_written,
+        )
 
     def zarr_save_worker(self) -> None:
         """ZarrSaver-driven save loop body — streams reconstructed frames
@@ -666,7 +845,21 @@ class FrameSaver(QObject):
         ``sig_status_message`` and flips ``saving_started`` to False so
         the inner loop exits; a finalize failure surfaces the same way.
         ``sig_finished`` still emits in the worker's finally gate.
+
+        In multi-channel mode (``self.filenames_lists`` is populated),
+        the HDF5 half branches on the channel tag from the dequeued
+        ``(channel_idx, frame)`` tuple to write to the correct
+        per-channel wavelength-suffixed file. The Zarr half keeps the
+        existing ``write_plane(z_idx, frame, ...)`` call unchanged
+        (channel 0 only) — the ``write_plane`` signature does not yet
+        accept a ``channel_idx`` param, so multi-channel Zarr
+        channel-tag branching is deferred to a later plan. The
+        single-consumer queue contract is preserved.
         """
+        if self.filenames_lists:
+            self._both_save_worker_multi_channel()
+            return
+
         n_planes = self.number_of_files * int(self.number_of_datasets)
         store_path = os.path.normpath(
             os.path.join(self.parent.save_directory, self.files_name + ".ome.zarr")
@@ -813,6 +1006,175 @@ class FrameSaver(QObject):
             self.sig_status_message.emit(f"Save error: {e}")
             self.saving_started = False
         logger.info("both_save_worker exited (saving_started=%s)", self.saving_started)
+
+    def _both_save_worker_multi_channel(self) -> None:
+        """Multi-channel both-save loop body (MCA-03/D-05).
+
+        Consumes channel-tagged ``(channel_idx, frame)`` tuples from the
+        single save queue and writes each frame to BOTH the correct
+        per-channel HDF5 file AND the Zarr store in one pass.
+
+        HDF5 half: branches on the channel tag to write to
+        ``self.filenames_lists[channel_idx][plane_idx]`` — exactly as
+        ``_frame_saver_worker_multi_channel`` does.
+
+        Zarr half: the existing ``write_plane(z_idx, frame, ...)`` call
+        is kept UNCHANGED — the ``write_plane`` signature does not yet
+        accept a ``channel_idx`` param. Only channel-0 frames are written
+        to Zarr (``z_idx`` increments only for channel 0); channel-1
+        frames are HDF5-only in this plan. A later plan extends
+        ``write_plane`` to accept ``channel_idx`` and adds the Zarr
+        channel-tag branching for full multi-channel Zarr support.
+
+        The single-consumer queue contract is preserved: one queue, one
+        consume loop, one ``sig_finished`` → ``thread.quit`` →
+        ``wait(10000)``.
+        """
+        n_planes = self.number_of_files * int(self.number_of_datasets)
+        store_path = os.path.normpath(
+            os.path.join(self.parent.save_directory, self.files_name + ".ome.zarr")
+        )
+        try:
+            self._zarr_saver.start_stack(store_path, n_planes)
+        except Exception as e:
+            self.sig_status_message.emit(f"Save error: {e}")
+            self.saving_started = False
+            return
+
+        n_channels = len(self.filenames_lists)
+        plane_counters = [0] * n_channels
+        total_files = sum(len(lst) for lst in self.filenames_lists)
+        files_written = 0
+        z_idx = 0
+        aborted = False
+
+        try:
+            while files_written < total_files:
+                try:
+                    item = self.queue.get(True, 1)
+                except queue.Empty:
+                    if not self.saving_started:
+                        try:
+                            item = self.queue.get_nowait()
+                        except queue.Empty:
+                            aborted = True
+                            break
+                    else:
+                        continue
+
+                if isinstance(item, tuple):
+                    channel_idx, frame = item
+                else:
+                    channel_idx = 0
+                    frame = item
+
+                if channel_idx < 0 or channel_idx >= n_channels:
+                    self.sig_status_message.emit(
+                        f"Save error: channel index {channel_idx} out of range "
+                        f"(0..{n_channels - 1})"
+                    )
+                    self.saving_started = False
+                    aborted = True
+                    break
+
+                plane_idx = plane_counters[channel_idx]
+                if plane_idx >= len(self.filenames_lists[channel_idx]):
+                    files_written += 1
+                    continue
+
+                filename = self.filenames_lists[channel_idx][plane_idx]
+                logger.info("File created: %s", filename)
+                try:
+                    outfile = h5py.File(filename, "a")
+                    self._write_laser_metadata(outfile)
+                    self._write_acquisition_metadata(outfile)
+                except Exception as e:
+                    self.sig_status_message.emit(f"Save error: {e}")
+                    self.saving_started = False
+                    aborted = True
+                    break
+
+                if frame.ndim == 2:
+                    frame = np.expand_dims(frame, axis=0)
+                counter = 1
+                for f_idx in range(frame.shape[0]):
+                    # --- HDF5 write (mirrors _frame_saver_worker_multi_channel) ---
+                    path_root = self.datasets_name + f"{counter:03d}"
+                    self.dataset = outfile.create_dataset(
+                        path_root, data=frame[f_idx, :, :]
+                    )
+                    logger.info(
+                        "Dataset %s created: %s (channel %d plane %d)",
+                        f_idx, path_root, channel_idx, plane_idx,
+                    )
+                    self.dataset.attrs["Sample Name"] = self.sample_name
+                    self.dataset.attrs["Date"] = str(datetime.date.today())
+                    pos_index = plane_idx
+                    if pos_index < len(self.horizontal_positions_list):
+                        self.dataset.attrs["Horizontal Position"] = (
+                            self.horizontal_positions_list[pos_index]
+                        )
+                        self.dataset.attrs["Vertical Position"] = (
+                            self.vertical_positions_list[pos_index]
+                        )
+                        self.dataset.attrs["Camera Position"] = (
+                            self.camera_positions_list[pos_index]
+                        )
+                    counter += 1
+
+                    # --- Zarr write (channel 0 only — write_plane
+                    # signature does not yet accept channel_idx; a
+                    # later plan extends it for full multi-channel Zarr) ---
+                    if channel_idx == 0 and z_idx < n_planes:
+                        hor = (
+                            _position_to_float(self.horizontal_positions_list[pos_index])
+                            if pos_index < len(self.horizontal_positions_list)
+                            else 0.0
+                        )
+                        ver = (
+                            _position_to_float(self.vertical_positions_list[pos_index])
+                            if pos_index < len(self.vertical_positions_list)
+                            else 0.0
+                        )
+                        cam = (
+                            _position_to_float(self.camera_positions_list[pos_index])
+                            if pos_index < len(self.camera_positions_list)
+                            else 0.0
+                        )
+                        self._zarr_saver.write_plane(
+                            z_idx, frame[f_idx, :, :], hor, ver, cam
+                        )
+                        z_idx += 1
+
+                outfile.close()
+                self.sig_status_message.emit("File " + filename + " saved")
+                plane_counters[channel_idx] += 1
+                files_written += 1
+
+            # Finalize the Zarr store after all HDF5 files are closed.
+            if z_idx < n_planes:
+                logger.info(
+                    "both_save_worker (multi-channel) exiting before finalize "
+                    "(z_idx=%d < n_planes=%d) — partial store left on disk",
+                    z_idx, n_planes,
+                )
+            else:
+                try:
+                    self._zarr_saver.finalize()
+                    self.sig_status_message.emit(
+                        "Zarr store " + store_path + " saved"
+                    )
+                except Exception as e:
+                    self.sig_status_message.emit(f"Save error: {e}")
+                    self.saving_started = False
+        except Exception as e:
+            self.sig_status_message.emit(f"Save error: {e}")
+            self.saving_started = False
+        logger.info(
+            "both_save_worker (multi-channel) exited "
+            "(saving_started=%s, files_written=%d)",
+            self.saving_started, files_written,
+        )
 
     def stop_saving(self) -> None:
         """Signal the save worker to stop and join it with a bounded timeout.
@@ -1128,6 +1490,7 @@ class FrameSaverController:
         scan_type: str,
         number_of_datasets: int,
         datasets_name: str,
+        wavelengths: list[int] | None = None,
     ) -> None:
         self.frame_saver.set_files(
             number_of_files,
@@ -1135,6 +1498,7 @@ class FrameSaverController:
             scan_type,
             number_of_datasets,
             datasets_name,
+            wavelengths=wavelengths,
         )
 
     def enqueue_buffer(self, buffer) -> None:
