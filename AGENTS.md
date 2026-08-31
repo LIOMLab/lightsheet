@@ -158,6 +158,37 @@ Then run the suite:
 uv run pytest test/ -q
 ```
 
+**Use the convenience scripts instead of constructing pytest flags by hand**
+(this avoids a common trap — see the warning below):
+```bash
+bash scripts/test.sh              # xdist-parallel (default, ~21s) — use this
+bash scripts/test-serial.sh       # single-process (debugging only, ~3-4 min)
+bash scripts/test.sh test/test_foo.py::test_bar   # xdist, one test
+```
+
+**WARNING — never override `addopts`.** xdist is the default via `addopts`
+in `pyproject.toml` (`-n auto --maxprocesses=6 --dist=load
+--max-worker-restart=0`). Any `addopts` override silently strips the xdist
+flags and drops to single-process — a ~10x slowdown (21s → 3:36) that is
+invisible on a single test but catastrophic on the full suite. The trap:
+
+| Command | xdist? | Why |
+|---|---|---|
+| `uv run pytest test/ -q` | ✓ on | addopts untouched |
+| `-o addopts="-ra --strict-markers"` | ✗ **off** | overrides addopts, strips xdist |
+| `--override-ini="addopts="` | ✗ **off** | same |
+| `-p no:xdist` (alone) | **ERRORS** | addopts still has `-n auto` → unrecognized arg |
+
+If you genuinely need single-process (debugging a hang, reading `--durations`
+without xdist scheduling noise, `-p no:xdist` for a traceback), use
+`scripts/test-serial.sh` or pass **both** flags together:
+```bash
+uv run pytest test/ -q -p no:xdist -o addopts="-ra --strict-markers"
+```
+The `-p no:xdist` disables the plugin; the `-o addopts=...` clears the flags
+that reference it. Either alone breaks. When done debugging, go back to the
+bare `uv run pytest test/ -q` (or `scripts/test.sh`).
+
 - `test/conftest.py` auto-stubs `nidaqmx`, `pco`, and (as fallback) `serial`
   into `sys.modules` before collection, gated by `find_spec` + a smoke check
   (`nidaqmx.Task()` / `pco.Camera()` must construct). Real SDKs are used on the
