@@ -223,20 +223,6 @@ class _AcquireScanMixin:
         # Clear any error left over from a previous acquisition so the check
         # below reflects this create_scanner() call only.
         self.siggen.error = 0
-        # Route scan-time L2 control through the DAQ gate: when L2 is active,
-        # enable the camera-aligned finite AO gate on /Dev7/ao1 so the L2
-        # voltage pulse is nonzero only over camera-exposure samples. When L2
-        # is not active, disable the gate so /Dev7/ao1 stays at 0 V throughout
-        # the scan. The gate is configured inside create_scanner() based on
-        # this flag — the staged L2 power (set via the DAQLaser's set_power)
-        # scales the gate amplitude.
-        lasers = getattr(self._hw, "lasers", None)
-        l2_active = (
-            isinstance(lasers, (list, tuple))
-            and len(lasers) > 1
-            and getattr(lasers[1], "active", False)
-        )
-        self.siggen.set_laser2_gate(l2_active)
         self.siggen.create_scanner()
         # create_scanner() wraps its DAQ task creation in a bare except that
         # sets self.siggen.error = 1 + a generic 'create_scan error' message

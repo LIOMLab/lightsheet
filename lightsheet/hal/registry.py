@@ -223,9 +223,9 @@ class DeviceRegistry:
             calibration_curve=_calibration_curve,
         )
 
-        # Laser 2: DAQ-primary on /Dev7/ao1 (0-5 V analog modulation,
-        # camera-aligned). The retained iBeam serial backend is attached as
-        # the readback_backend — used for channel enable at open and
+        # Laser 2: DAQ-primary on /Dev7/ao1 (0-5 V analog modulation).
+        # The retained iBeam serial backend is attached as the
+        # readback_backend — used for channel enable at open and
         # power/status readback only, never for on/off or power writes.
         # The analog-mode-enable prerequisite (TOPAS GUI, one-time manual)
         # is documented in config.ini; there is no serial command for it.
@@ -239,8 +239,7 @@ class DeviceRegistry:
             readback_backend=l2_readback,
         )
 
-        # Inject the L2 DAQLaser into SigGen for gate-task ownership.
-        siggen = SigGen(camera, laser2_daq=l2)
+        siggen = SigGen(camera)
 
         lasers = (l1, l2)
 

@@ -36,14 +36,6 @@ class MockSigGen(ISigGen):
         self.error = 0
         self.error_message = ""
 
-        # L2 DAQ gate parity — the mock has no DAQ hardware, but the
-        # controller-reachable set_laser2_gate contract and the normalized
-        # L2 window must exist so the demo path and conformance tests do not
-        # AttributeError.
-        self._laser2_daq = None
-        self._laser2_gate_enabled = False
-        self.waveform_laser2_window = None
-
         # Hardcoded synthetic defaults mirroring real SigGen config.ini.
         self.sample_rate = 40000
         self.galvo_pre_time = 0.001
@@ -82,11 +74,6 @@ class MockSigGen(ISigGen):
 
     def close(self) -> None:
         return None
-
-    def set_laser2_gate(self, enabled: bool) -> None:
-        """Parity with real SigGen.set_laser2_gate — stores the enabled flag.
-        The mock has no DAQ hardware so no task is configured."""
-        self._laser2_gate_enabled = bool(enabled)
 
     def create_scanner(self) -> None:
         return None
@@ -202,9 +189,6 @@ class MockSigGen(ISigGen):
             repeat=camera_repeat,
             inverted=False,
         )
-
-        # Normalized L2 exposure window — parity with real SigGen.
-        self.waveform_laser2_window = self.waveform_camera.astype(float)
 
         self.waveform_galvo_left = sawtooth(
             activated=self.galvo_activated,
