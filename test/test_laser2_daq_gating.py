@@ -20,6 +20,7 @@ SigGen code under the conftest nidaqmx stub and asserts on runtime state.
 
 from __future__ import annotations
 
+import threading
 from unittest.mock import patch
 
 import nidaqmx
@@ -66,7 +67,7 @@ class _RecordingTask:
     test can find the L2 gate task by its ``new_task_name`` kwarg.
     """
 
-    instances: list["_RecordingTask"] = []
+    instances: list[_RecordingTask] = []  # noqa: RUF012 — test recording sink, mutated by design
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         self.name = str(kwargs.get("new_task_name", ""))
@@ -78,7 +79,7 @@ class _RecordingTask:
         self.calls: list[str] = []
         _RecordingTask.instances.append(self)
 
-    def __enter__(self) -> "_RecordingTask":
+    def __enter__(self) -> _RecordingTask:
         return self
 
     def __exit__(self, *exc: object) -> None:
@@ -145,7 +146,7 @@ def _make_siggen_with_l2(shutter_mode: str = "Lightsheet") -> tuple[SigGen, DAQL
 # where the camera waveform is active and 0.0 V at every other sample, with
 # matching shape/repeat count.
 # --------------------------------------------------------------------------- #
-def test_gate_window_5v_at_camera_active_samples():
+def test_gate_window_5v_at_camera_active_samples() -> None:
     _reset_tasks()
     sg, l2 = _make_siggen_with_l2("Lightsheet")
     sg.compute_scan_waveforms()
@@ -173,7 +174,7 @@ def test_gate_window_5v_at_camera_active_samples():
 # Behavior 2: a disabled L2 gate produces an all-zero /Dev7/ao1 payload even
 # when a nonzero L2 power is staged.
 # --------------------------------------------------------------------------- #
-def test_gate_disabled_produces_all_zero_payload():
+def test_gate_disabled_produces_all_zero_payload() -> None:
     _reset_tasks()
     sg, l2 = _make_siggen_with_l2("Lightsheet")
     sg.compute_scan_waveforms()
@@ -194,7 +195,7 @@ def test_gate_disabled_produces_all_zero_payload():
 # Behavior 3: staged power above 150 mW is clamped in mW and the generated AO
 # payload is independently clipped to the backend's 5.0 V ceiling.
 # --------------------------------------------------------------------------- #
-def test_voltage_clamp_mw_and_volts_layers():
+def test_voltage_clamp_mw_and_volts_layers() -> None:
     _reset_tasks()
     sg, l2 = _make_siggen_with_l2("Lightsheet")
     sg.compute_scan_waveforms()
@@ -215,7 +216,7 @@ def test_voltage_clamp_mw_and_volts_layers():
     assert float(np.max(payload)) <= 5.0 + 1e-9
 
 
-def test_voltage_clamp_independent_of_mw_clamp():
+def test_voltage_clamp_independent_of_mw_clamp() -> None:
     """The V clip in configure_gate is independent of the mW clamp in
     set_power. Bypass set_power to stage 200 mW (above the 150 mW ceiling)
     and confirm configure_gate still clips to 5.0 V."""
@@ -241,7 +242,7 @@ def test_voltage_clamp_independent_of_mw_clamp():
 # Dev1 galvo/ETL AO master; monitor/stop/delete cover all three tasks and
 # clear every handle.
 # --------------------------------------------------------------------------- #
-def test_scanner_lifecycle_order_and_cleanup():
+def test_scanner_lifecycle_order_and_cleanup() -> None:
     _reset_tasks()
     sg, l2 = _make_siggen_with_l2("Lightsheet")
     sg.compute_scan_waveforms()
@@ -297,7 +298,7 @@ def test_scanner_lifecycle_order_and_cleanup():
 # 0 V write, clears active/power, returns synchronously, and never acquires
 # the per-laser lock.
 # --------------------------------------------------------------------------- #
-def test_daqlaser_off_aborts_gate_before_zero_write():
+def test_daqlaser_off_aborts_gate_before_zero_write() -> None:
     _reset_tasks()
     l2 = _make_l2_daq()
     l2.set_power(150.0)
@@ -331,7 +332,7 @@ def test_daqlaser_off_aborts_gate_before_zero_write():
     assert float(zero_tasks[-1].written[0]) == pytest.approx(0.0)
 
 
-def test_daqlaser_off_is_lock_free_with_gate_armed():
+def test_daqlaser_off_is_lock_free_with_gate_armed() -> None:
     """SAFETY (AGENTS.md §2): DAQLaser.off() MUST NOT acquire self._lock even
     when a gate task is armed. A daemon set_power holding the RLock on another
     thread must never delay the E-stop kill path."""
@@ -384,7 +385,7 @@ def test_daqlaser_off_is_lock_free_with_gate_armed():
 # and surfaces gate-task failures on the HAL error surface rather than raising
 # through the controller.
 # --------------------------------------------------------------------------- #
-def test_daqlaser_configure_gate_surfaces_failure_without_raising():
+def test_daqlaser_configure_gate_surfaces_failure_without_raising() -> None:
     """When nidaqmx.Task raises inside configure_gate, the error is surfaced
     on the DAQLaser HAL error surface (error=1, non-empty message) and no
     exception propagates. The conftest nidaqmx stub makes Task() raise
@@ -401,7 +402,7 @@ def test_daqlaser_configure_gate_surfaces_failure_without_raising():
     assert l2._gate_task is None
 
 
-def test_siggen_create_scanner_propagates_l2_gate_failure():
+def test_siggen_create_scanner_propagates_l2_gate_failure() -> None:
     """When the L2 gate task creation fails inside create_scanner, the failure
     propagates to SigGen's error surface and all partial tasks are cleaned up
     so acquire_scan() aborts before camera recording."""
@@ -415,7 +416,7 @@ def test_siggen_create_scanner_propagates_l2_gate_failure():
         def __init__(self, *a: object, **k: object) -> None:
             raise RuntimeError("DAQ unavailable")
 
-        def __enter__(self) -> "_FailingTask":
+        def __enter__(self) -> _FailingTask:
             return self
 
         def __exit__(self, *exc: object) -> None:
@@ -437,7 +438,7 @@ def test_siggen_create_scanner_propagates_l2_gate_failure():
 # MockSigGen parity: set_laser2_gate and waveform_laser2_window exist on the
 # mock so the demo path and conformance tests do not AttributeError.
 # --------------------------------------------------------------------------- #
-def test_mock_siggen_set_laser2_gate_parity():
+def test_mock_siggen_set_laser2_gate_parity() -> None:
     from lightsheet.hal import MockSigGen
 
     msg = MockSigGen(MockCamera())
@@ -464,13 +465,13 @@ def test_mock_siggen_set_laser2_gate_parity():
 # serial readback. These tests patch hardware-bound constructors/enumeration
 # and inspect runtime objects/call arguments only — no real SDK calls.
 # --------------------------------------------------------------------------- #
-def _parse_terminals_helper():
+def _parse_terminals_helper() -> object:
     """Expose the registry's terminal parser for direct unit testing."""
     from lightsheet.hal.registry import _parse_laser_terminals
     return _parse_laser_terminals
 
 
-def test_terminal_pair_parses_two_channel_range():
+def test_terminal_pair_parses_two_channel_range() -> None:
     """_parse_laser_terminals expands /Dev7/ao0:1 into (/Dev7/ao0,
     /Dev7/ao1)."""
     parse = _parse_terminals_helper()
@@ -479,7 +480,7 @@ def test_terminal_pair_parses_two_channel_range():
     assert l2 == "/Dev7/ao1"
 
 
-def test_terminal_pair_rejects_malformed_range():
+def test_terminal_pair_rejects_malformed_range() -> None:
     """Malformed or non-two-channel ranges raise ValueError before HAL
     construction."""
     parse = _parse_terminals_helper()
@@ -488,7 +489,9 @@ def test_terminal_pair_rejects_malformed_range():
             parse(bad)
 
 
-def test_registry_composes_l2_daq_with_readback_and_siggen(monkeypatch):
+def test_registry_composes_l2_daq_with_readback_and_siggen(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """DeviceRegistry.resolve() constructs lasers[1] as a DAQLaser on
     /Dev7/ao1 with wavelength 647, max_power 150.0 mW, mw_per_volt 30.0,
     a 5.0 V ceiling, and a retained IBeamSmartLaser as readback_backend.
@@ -499,7 +502,7 @@ def test_registry_composes_l2_daq_with_readback_and_siggen(monkeypatch):
     # calls happen. We inspect the constructed objects and call arguments.
     constructed: dict[str, object] = {}
 
-    def fake_resolve_ports(self):
+    def fake_resolve_ports(self: object) -> dict[str, str]:
         # Return a minimal resolved-port map so resolve() proceeds.
         return {"motors": "COM7", "etl_left": "COM5", "etl_right": "COM6"}
 
@@ -514,7 +517,7 @@ def test_registry_composes_l2_daq_with_readback_and_siggen(monkeypatch):
 
     # Capture the IBeamSmartLaser readback instance.
     class _FakeIBeam:
-        def __init__(self, label=""):
+        def __init__(self, label: str = "") -> None:
             self.label = label
             constructed["readback"] = self
 
@@ -524,7 +527,7 @@ def test_registry_composes_l2_daq_with_readback_and_siggen(monkeypatch):
     real_daqlaser = registry_module.DAQLaser
 
     class _CapturingDAQLaser(real_daqlaser):
-        def __init__(self, **kwargs):
+        def __init__(self, **kwargs: object) -> None:
             super().__init__(**kwargs)
             if "ao1" in kwargs.get("terminal", ""):
                 constructed["l2"] = self
@@ -536,7 +539,7 @@ def test_registry_composes_l2_daq_with_readback_and_siggen(monkeypatch):
     siggen_calls: list[dict] = {}
 
     class _CapturingSigGen:
-        def __init__(self, camera, laser2_daq=None):
+        def __init__(self, camera: object, laser2_daq: object = None) -> None:
             self.camera = camera
             self.laser2_daq = laser2_daq
             siggen_calls["camera"] = camera
@@ -570,23 +573,283 @@ def test_registry_composes_l2_daq_with_readback_and_siggen(monkeypatch):
     assert constructed["l1"].terminal == "/Dev7/ao0"
     # DeviceBundle is frozen.
     import dataclasses
-    assert dataclasses.is_dataclass(bundle) and getattr(
-        bundle.__class__, "__dataclass_params__"
-    ).frozen
+    assert dataclasses.is_dataclass(bundle)
+    assert bundle.__class__.__dataclass_params__.frozen
 
 
-def test_demo_bundle_remains_all_mock_and_frozen():
+def test_demo_bundle_remains_all_mock_and_frozen() -> None:
     """_build_demo_bundle() remains all-Mock, constructs successfully without
     pyserial/nidaqmx hardware, and keeps DeviceBundle frozen with lasers as a
     tuple."""
-    from lightsheet.__main__ import _build_demo_bundle
     import dataclasses
+
+    from lightsheet.__main__ import _build_demo_bundle
 
     bundle = _build_demo_bundle()
     assert dataclasses.is_dataclass(bundle)
-    assert getattr(bundle.__class__, "__dataclass_params__").frozen
+    assert bundle.__class__.__dataclass_params__.frozen
     assert isinstance(bundle.lasers, tuple)
     assert len(bundle.lasers) == 2
     # L2 in demo is a MockLaser, not a DAQLaser.
     from lightsheet.hal import MockLaser
     assert isinstance(bundle.lasers[1], MockLaser)
+
+
+# --------------------------------------------------------------------------- #
+# Task 3: DAQLaser readback delegation + scan-time gate routing.
+# --------------------------------------------------------------------------- #
+
+class _RecordingReadback:
+    """Fake IBeamSmartLaser readback backend that records calls and returns
+    a canned mW value from get_output_power()."""
+
+    def __init__(self, readback_mw: float | None = 75.0) -> None:
+        self.label = "Laser 2 (647 nm)"
+        self.wavelength = 647
+        self.max_power = 150.0
+        self.power = 0.0
+        self.active = False
+        self.error = 0
+        self.error_message = ""
+        self._lock = threading.RLock()
+        self._readback_mw = readback_mw
+        self.opened = False
+        self.closed = False
+        self.on_calls = 0
+        self.off_calls = 0
+        self.set_power_calls: list[float] = []
+
+    def open(self) -> None:
+        self.opened = True
+
+    def close(self) -> None:
+        self.closed = True
+
+    def on(self) -> None:
+        self.on_calls += 1
+
+    def off(self) -> None:
+        self.off_calls += 1
+
+    def set_power(self, mw: float) -> None:
+        self.set_power_calls.append(mw)
+
+    def get_output_power(self) -> float | None:
+        return self._readback_mw
+
+
+def test_daqlaser_open_delegates_to_readback_backend() -> None:
+    """DAQLaser.open() with a readback_backend delegates to the iBeam serial
+    open + channel enable, and mirrors the readback error surface."""
+    l2 = _make_l2_daq()
+    rb = _RecordingReadback()
+    l2.readback_backend = rb
+    l2.open()
+    assert rb.opened is True
+    # No error on a clean open.
+    assert l2.error == 0
+
+
+def test_daqlaser_open_surfaces_readback_error() -> None:
+    """When the readback backend's open() sets an error (channel enable
+    rejected), DAQLaser.open() mirrors it onto its own error surface so the
+    controller can surface it via sig_message."""
+    l2 = _make_l2_daq()
+    rb = _RecordingReadback()
+    rb.error = 1
+    rb.error_message = "enable_channel rejected: %SYS-E"
+    l2.readback_backend = rb
+    l2.open()
+    assert l2.error == 1
+    assert "enable_channel rejected" in l2.error_message
+
+
+def test_daqlaser_close_delegates_to_readback_backend() -> None:
+    """DAQLaser.close() with a readback_backend delegates to the iBeam serial
+    close so the serial port is released."""
+    l2 = _make_l2_daq()
+    rb = _RecordingReadback()
+    l2.readback_backend = rb
+    l2.close()
+    assert rb.closed is True
+
+
+def test_daqlaser_get_output_power_delegates_to_readback() -> None:
+    """DAQLaser.get_output_power() with a readback_backend delegates to the
+    iBeam serial readback (show level power) for real hardware readback,
+    not the staged DAQ value."""
+    l2 = _make_l2_daq()
+    l2.set_power(100.0)  # staged 100 mW on the DAQ path
+    rb = _RecordingReadback(readback_mw=75.0)  # iBeam reports 75 mW actual
+    l2.readback_backend = rb
+    result = l2.get_output_power()
+    assert result == 75.0  # real readback, not the staged 100 mW
+
+
+def test_daqlaser_get_output_power_returns_none_on_readback_error() -> None:
+    """When the readback backend reports an error, get_output_power() returns
+    None so the controller falls back to the commanded value label."""
+    l2 = _make_l2_daq()
+    rb = _RecordingReadback(readback_mw=75.0)
+    rb.error = 1
+    l2.readback_backend = rb
+    result = l2.get_output_power()
+    assert result is None
+
+
+def test_daqlaser_get_output_power_no_readback_returns_staged() -> None:
+    """Without a readback backend (L1 DAQLaser), get_output_power() returns
+    the staged/commanded power — NI-DAQ AO has no hardware readback."""
+    l2 = _make_l2_daq()
+    l2.set_power(50.0)
+    assert l2.readback_backend is None
+    result = l2.get_output_power()
+    assert result == 50.0
+
+
+def test_daqlaser_on_off_set_power_do_not_call_readback() -> None:
+    """The DAQ emission-control path (on/off/set_power) NEVER calls the
+    readback backend's on/off/set_power — the serial path is read-only for
+    emission control. The DAQ AO channel is the sole emission-control path."""
+    l2 = _make_l2_daq()
+    rb = _RecordingReadback()
+    l2.readback_backend = rb
+    l2.set_power(100.0)
+    l2.on()
+    l2.off()
+    assert rb.on_calls == 0
+    assert rb.off_calls == 0
+    assert rb.set_power_calls == []
+
+
+def test_ibeam_smart_laser_on_off_set_power_remain_present() -> None:
+    """The IBeamSmartLaser adapter's on/off/set_power methods remain present
+    (ILaser conformance) even though they are not called by the controller
+    in the DAQ-gated configuration — the serial path is read-only for
+    emission control, but the methods exist for conformance and any
+    standalone serial-only usage path."""
+    from lightsheet.hal.real.ibeam_smart import IBeamSmartLaser
+
+    l2 = IBeamSmartLaser(label="Laser 2 (647 nm)")
+    assert callable(l2.on)
+    assert callable(l2.off)
+    assert callable(l2.set_power)
+    assert callable(l2.open)
+    assert callable(l2.close)
+    assert callable(l2.get_output_power)
+
+
+def test_acquire_scan_enables_gate_when_l2_active() -> None:
+    """acquire_scan() calls siggen.set_laser2_gate(True) before
+    create_scanner() when L2 is active, routing scan-time L2 control through
+    the DAQ gate. Verified via the _AcquireScanMixin against a mock siggen
+    that records the set_laser2_gate call."""
+    from lightsheet.gui.workers import _AcquireScanMixin
+
+    class _MockSigGen:
+        def __init__(self) -> None:
+            self.error = 0
+            self.error_message = ""
+            self.waveform_cycles = 1
+            self.waveform_metadata = {}
+            self.gate_calls: list[bool] = []
+            self.scanner_created = False
+
+        def set_laser2_gate(self, enabled: bool) -> None:
+            self.gate_calls.append(enabled)
+
+        def create_scanner(self) -> None:
+            self.scanner_created = True
+            # Simulate a successful create — no error.
+
+        def start_scanner(self) -> None:
+            pass
+
+        def monitor_scanner(self) -> None:
+            pass
+
+        def stop_scanner(self) -> None:
+            pass
+
+        def delete_scanner(self) -> None:
+            pass
+
+    class _MockCamera:
+        def __init__(self) -> None:
+            self.recorder_timeout_status = False
+
+        def start_recorder(self, n: int) -> None:
+            pass
+
+        def monitor_recorder(self, n: int) -> None:
+            pass
+
+        def stop_recorder(self) -> None:
+            pass
+
+        def delete_recorder(self) -> None:
+            pass
+
+        def copy_recorder_images(self, n: int) -> list:
+            return [np.zeros((4, 4), dtype=np.uint16)]
+
+        def disarm(self) -> None:
+            pass
+
+    class _MockLaser:
+        def __init__(self, active: bool) -> None:
+            self.active = active
+            self._lock = threading.RLock()
+
+    class _MockHW:
+        def __init__(self, l2_active: bool) -> None:
+            self.lasers = [_MockLaser(True), _MockLaser(l2_active)]
+
+    class _MockFrameSaver:
+        def reconstruct_frame(self, buf: object) -> np.ndarray:
+            return np.zeros((4, 4), dtype=np.uint16)
+
+        def reconstruct_frame_linear_blend(self, buf: object) -> np.ndarray:
+            return np.zeros((4, 4), dtype=np.uint16)
+
+        def enqueue_frame(self, frame: object) -> None:
+            pass
+
+    class _MockShell:
+        def __init__(self) -> None:
+            self.buffer_metadata_general = {}
+            self.buffer_metadata_waveforms = {}
+            self.buffer_metadata_motors = {}
+            self.buffer_metadata_lasers = {}
+            self.buffer_metadata_camera = {}
+            self.buffer = None
+            self.reconstructed_frame = None
+            self._fs = _MockFrameSaver()
+            self.sig_message = _MockSignal()
+
+    class _MockSignal:
+        def emit(self, *args: object, **kwargs: object) -> None:
+            pass
+
+    # L2 active -> gate enabled.
+    mixin = _AcquireScanMixin()
+    mixin.siggen = _MockSigGen()
+    mixin.camera = _MockCamera()
+    mixin._hw = _MockHW(l2_active=True)
+    mixin._shell = _MockShell()
+    mixin._save_description = "test"
+    mixin._save_stitch_blend = False
+    mixin.acquire_scan()
+    assert mixin.siggen.gate_calls == [True]
+    assert mixin.siggen.scanner_created is True
+
+    # L2 inactive -> gate disabled.
+    mixin2 = _AcquireScanMixin()
+    mixin2.siggen = _MockSigGen()
+    mixin2.camera = _MockCamera()
+    mixin2._hw = _MockHW(l2_active=False)
+    mixin2._shell = _MockShell()
+    mixin2._save_description = "test"
+    mixin2._save_stitch_blend = False
+    mixin2.acquire_scan()
+    assert mixin2.siggen.gate_calls == [False]

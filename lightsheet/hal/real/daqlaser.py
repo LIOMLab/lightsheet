@@ -214,21 +214,53 @@ class DAQLaser(ILaser):
         self.power = 0.0
 
     def open(self) -> None:
-        """No-op lifecycle verb -- DAQLaser opens its nidaqmx.Task per-write
-        inside _write_volts."""
+        """Open the DAQ laser for emission.
+
+        The DAQ AO channel is opened per-write inside ``_write_volts`` (no
+        persistent DAQ connection). When a serial readback backend is attached
+        (e.g. the retained iBeam), delegate ``open()`` to it so the serial
+        port is opened and the diode channel is enabled for power/status
+        readback. The serial open is NOT an emission-control path — the DAQ
+        AO channel is the sole emission-control path.
+        """
+        if self.readback_backend is not None:
+            self.readback_backend.open()
+            # Mirror the readback backend's error surface so the controller
+            # can surface channel-enable failures via sig_message.
+            self.error = self.readback_backend.error
+            self.error_message = self.readback_backend.error_message
         return None
 
     def close(self) -> None:
-        """No-op lifecycle verb — DAQLaser holds no persistent DAQ connection."""
+        """Close the DAQ laser.
+
+        Delegates to the readback backend's ``close()`` when present so the
+        serial port is released. The DAQ AO channel holds no persistent
+        connection to close.
+        """
+        if self.readback_backend is not None:
+            self.readback_backend.close()
+            self.error = self.readback_backend.error
+            self.error_message = self.readback_backend.error_message
         return None
 
     def get_output_power(self) -> float | None:
-        """Return the output power in milliwatts (mW) — the commanded power.
+        """Return the output power in milliwatts (mW).
 
-        NI-DAQ AO has no hardware power readback. When calibrated, the inverse
-        curve ensures the voltage produces this optical power. When uncalibrated,
-        the staged value is a linear estimate. Never returns None.
+        When a serial readback backend is attached (e.g. the retained iBeam),
+        delegates to its ``get_output_power()`` for real hardware readback
+        (the iBeam reports actual diode output via ``show level power``).
+        When no readback backend is present (L1 DAQLaser), returns the
+        commanded/staged power — NI-DAQ AO has no hardware power readback.
+        When calibrated, the inverse curve ensures the voltage produces this
+        optical power. When uncalibrated, the staged value is a linear
+        estimate.
         """
+        if self.readback_backend is not None:
+            value = self.readback_backend.get_output_power()
+            if value is not None and not self.readback_backend.error:
+                return value
+            return None
         return self.power
 
     def set_power(self, mw: float) -> None:

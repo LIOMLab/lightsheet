@@ -266,7 +266,7 @@ def _parse_laser_terminals(terminals: str) -> tuple[str, str]:
         raise ValueError(
             f"Lasers Terminals {terminals!r} is malformed — expected "
             f"'/Dev7/ao0:1' (device + two-channel range)"
-        )
+        ) from None
     if not channel_range.startswith("ao"):
         raise ValueError(
             f"Lasers Terminals {terminals!r} channel part does not start "
@@ -283,7 +283,7 @@ def _parse_laser_terminals(terminals: str) -> tuple[str, str]:
     except ValueError:
         raise ValueError(
             f"Lasers Terminals {terminals!r} channel indices are not integers"
-        )
+        ) from None
     if ch_end - ch_start != 1:
         raise ValueError(
             f"Lasers Terminals {terminals!r} is not a two-channel range — "

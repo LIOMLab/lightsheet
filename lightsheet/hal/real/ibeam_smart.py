@@ -322,6 +322,18 @@ class IBeamSmartLaser(ILaser):
     Wraps the ``IBeam`` serial engine. mW -> µW (x 1000). ``off()`` is
     synchronous (E-stop kill path). ``_lock`` is the same object as the inner
     ``IBeam._lock`` (lock identity).
+
+    **Readback-backend role:** when L2 emission is driven by DAQ-gated analog
+    modulation (``DAQLaser`` on ``/Dev7/ao1``), this adapter is retained as
+    the ``readback_backend`` on the ``DAQLaser``. In that role, ONLY
+    ``open()``, ``close()``, and ``get_output_power()`` are called by the
+    controller — for channel enable at startup, serial port release at
+    shutdown, and live power/status readback respectively. The
+    ``on()``/``off()``/``set_power()`` methods are NOT called by the
+    controller in the DAQ-gated configuration; the DAQ AO channel is the
+    sole emission-control path. The serial path is read-only for emission
+    control. The methods remain present for ILaser conformance and for any
+    standalone serial-only usage path.
     """
 
     def __init__(self, label: str = "Laser 2 (647 nm)") -> None:

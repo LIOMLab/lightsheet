@@ -61,12 +61,16 @@ class HardwareManager:
     # ------------------------------------------------------------------ #
 
     def open_laser2(self) -> None:
-        """Open the Toptica iBeam serial laser (COM4 / self.lasers[1]).
+        """Open the L2 laser (self.lasers[1], a DAQLaser on /Dev7/ao1 with
+        a retained iBeam serial readback backend).
 
-        Failure is non-fatal — the DAQ laser path still works if the iBeam
-        is offline. Called from ``hardware_init`` (post-show), NOT from
-        ``__init__`` — calling it in ``__init__`` would block on the serial
-        round-trip.
+        The DAQLaser.open() delegates to the iBeam serial open + channel
+        enable so the readback path is live. The DAQ AO channel is opened
+        per-write inside _write_volts (no persistent connection). Failure is
+        non-fatal — the DAQ laser emission path still works if the iBeam
+        serial is offline (readback will report None). Called from
+        ``hardware_init`` (post-show), NOT from ``__init__`` — calling it in
+        ``__init__`` would block on the serial round-trip.
         """
         try:
             self.lasers[1].open()
@@ -444,8 +448,10 @@ class HardwareManager:
         L1 (DAQLaser, idx=0) has no hardware readback — get_output_power()
         returns a staged or curve-interpolated mW estimate. The label
         suffix distinguishes calibrated ('(cal.)') from unverified linear
-        estimate ('(est.)'). L2 (iBeam, idx=1) queries the serial
-        readback and may return None (fallback to commanded value).
+        estimate ('(est.)'). L2 (DAQLaser on /Dev7/ao1 with retained iBeam
+        serial readback, idx=1) delegates to the iBeam serial readback
+        (show level power) and may return None (fallback to commanded value)
+        when the serial is offline or the parse fails.
         """
         laser = self.lasers[idx]
         if not laser._lock.acquire(blocking=False):
