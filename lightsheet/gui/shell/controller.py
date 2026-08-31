@@ -545,6 +545,13 @@ class Controller_MainWindow(QMainWindow):
         self.stack_ending_plane = None
         self.number_of_planes = 0
         self.stack_step = 0
+        # Set True at the end of hardware_init (deferred via a 100ms
+        # single-shot timer from __init__). Acquisition entry points gate
+        # on this so the deferred hardware_init cannot fire mid-acquisition
+        # and clobber stack params (e.g. _load_stack_params' step-spinbox
+        # setValue triggers updateUi_set_number_of_planes, which re-reads
+        # the first-plane spinbox and overwrites stack_starting_plane).
+        self._hardware_initialized = False
 
         # Image display state (referenced by save_panel.updateUi_save_single_image)
         self.image_hor_pos_text = ""
@@ -1140,6 +1147,15 @@ class Controller_MainWindow(QMainWindow):
         # .ui file, so without this Qt defaults to 50/50.
         _total = self.ui.splitter.width() or 1280
         self.ui.splitter.setSizes([int(_total * 0.6), int(_total * 0.4)])
+
+        # Hardware init complete — acquisition entry points (queue, single
+        # stack) may now run. Set LAST so a deferred timer callback that
+        # fires mid-acquisition cannot clobber stack params (the race that
+        # produced stack_starting_plane=0.0 on the rig: hardware_init's
+        # _load_stack_params setValue triggered updateUi_set_number_of_planes,
+        # which re-read the first-plane spinbox and overwrote the queue's
+        # value).
+        self._hardware_initialized = True
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Making sure that everything is closed when the user exits the software."""

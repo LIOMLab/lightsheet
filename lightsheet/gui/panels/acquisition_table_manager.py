@@ -641,6 +641,24 @@ class AcquisitionTableManager(QWidget):
         """
         from PySide6.QtCore import QEventLoop
 
+        # Gate on hardware_init completion. hardware_init is deferred via
+        # a 100ms single-shot timer from __init__; on the rig (real Zaber
+        # serial + ETL + iBeam init) it can take longer than 100ms, so
+        # without this gate it fires mid-queue via the QEventLoop's event
+        # pump. Its _load_stack_params does a step-spinbox setValue that
+        # triggers updateUi_set_number_of_planes, which re-reads the
+        # first-plane spinbox (still 0.0 when StackLastStart is empty) and
+        # clobbers stack_starting_plane — the first-row 0.0 regression.
+        # The queue also does a real motor move below, so self.motors must
+        # be assigned (which happens in hardware_init) before the queue runs.
+        if not getattr(self._shell, "_hardware_initialized", False):
+            self._shell.sig_message.emit(
+                "Hardware is still initializing — wait for the status bar "
+                "to read \u201cReady\u201d before starting the queue."
+            )
+            self._shell.sig_beep.emit()
+            return
+
         rows = [self.row_at(i) for i in range(self.table.rowCount())]
 
         # --- Validate before starting ---
