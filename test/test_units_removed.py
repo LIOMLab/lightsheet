@@ -37,7 +37,7 @@ _STACK_PANEL = _REPO_ROOT / "lightsheet" / "gui" / "panels" / "stack_panel.py"
 
 def test_comboBox_units_absent_from_ui_file() -> None:
     """comboBox_units is not declared in ui_shell.ui."""
-    text = _UI_SHELL_UI.read_text()
+    text = _UI_SHELL_UI.read_text(encoding="utf-8")
     assert "comboBox_units" not in text, (
         "comboBox_units still declared in ui_shell.ui — the units selector "
         "was not removed from the .ui file"
@@ -46,7 +46,7 @@ def test_comboBox_units_absent_from_ui_file() -> None:
 
 def test_comboBox_units_absent_from_generated_ui_py() -> None:
     """comboBox_units is not in the generated ui_shell.py."""
-    text = _UI_SHELL_PY.read_text()
+    text = _UI_SHELL_PY.read_text(encoding="utf-8")
     assert "comboBox_units" not in text, (
         "comboBox_units still present in ui_shell.py — the .ui was not "
         "regenerated after the units selector removal"

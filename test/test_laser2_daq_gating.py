@@ -30,11 +30,16 @@ import threading
 
 import pytest
 
+# Whether the nidaqmx stub is active (dev machine) vs the real nidaqmx (rig).
+# The write-failure tests below assert the stub's "Task() raises" behavior;
+# they must skip when the real nidaqmx is active (the real write succeeds).
+# On the rig the real nidaqmx is active even for the mock-suite run (without
+# LIGHTSHEET_HW=1), so gating on the stub — not the env var — is correct.
+from conftest import _nidaqmx_is_stub
+
 from lightsheet.hal.real.daqlaser import DAQLaser
 
-# Module-level hardware gate — the on()-write-failure tests depend on the
-# Mac nidaqmx stub making Task() raise; on the rig the real DAQ write
-# succeeds (and would energize the laser, a safety concern per AGENTS.md §2).
+# Kept for parity with test_daqlaser.py; not used for skip gating here.
 _has_hardware: bool = os.environ.get("LIGHTSHEET_HW", "0") == "1"
 
 
@@ -101,10 +106,14 @@ def test_l2_on_write_failure_reverts_state() -> None:
     """on() attempts a DAQ write; the conftest stub makes it raise so the
     write-failure revert fires (error=1, active=False).
 
-    Skipped on the rig: the real DAQmx write succeeds and would energize the
-    laser — a power-setting command requiring explicit operator action."""
-    if _has_hardware:
-        pytest.skip("Mac-only stub-failure path")
+    Skipped when the real nidaqmx is active: the real DAQ write succeeds and
+    would energize the laser — a power-setting command requiring explicit
+    operator action."""
+    if not _nidaqmx_is_stub:
+        pytest.skip(
+            "Stub-only failure path -- the real nidaqmx is active, so the "
+            "DAQ write succeeds instead of raising"
+        )
     laser = _make_l2_daq()
     laser.set_power(75.0)
     laser.on()
@@ -117,10 +126,14 @@ def test_l2_set_power_active_writes_via_write_volts() -> None:
     """set_power on an ACTIVE L2 writes via _write_volts (the active=True
     branch). The conftest stub raises so the write-failure revert fires.
 
-    Skipped on the rig: the real DAQmx write succeeds and would change
-    emission — a power-setting command requiring explicit operator action."""
-    if _has_hardware:
-        pytest.skip("Mac-only stub-failure path")
+    Skipped when the real nidaqmx is active: the real DAQ write succeeds and
+    would change emission — a power-setting command requiring explicit
+    operator action."""
+    if not _nidaqmx_is_stub:
+        pytest.skip(
+            "Stub-only failure path -- the real nidaqmx is active, so the "
+            "DAQ write succeeds instead of raising"
+        )
     laser = _make_l2_daq()
     laser.active = True
     laser.set_power(75.0)

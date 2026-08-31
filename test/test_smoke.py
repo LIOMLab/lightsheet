@@ -8,6 +8,7 @@ also succeed at collection time.
 import os
 
 import pytest
+from conftest import _nidaqmx_is_stub, _pco_is_stub
 
 _has_hardware: bool = os.environ.get("LIGHTSHEET_HW", "0") == "1"
 
@@ -34,10 +35,10 @@ def test_camera_imports() -> None:
 
 def test_nidaqmx_stub_raises_on_task() -> None:
     """The nidaqmx stub imports fine but Task() raises — mirrors the
-    "no driver runtime" behavior the laser tests rely on. Mac-only: on
-    the rig the real nidaqmx.Task() succeeds."""
-    if _has_hardware:
-        pytest.skip("Mac-only stub-raises check — real nidaqmx on the rig")
+    "no driver runtime" behavior the laser tests rely on. Skipped when the
+    real nidaqmx is active (rig): the real nidaqmx.Task() succeeds."""
+    if not _nidaqmx_is_stub:
+        pytest.skip("Stub-only check — real nidaqmx is active")
     import nidaqmx
 
     with pytest.raises(nidaqmx.errors.Error):
@@ -45,10 +46,10 @@ def test_nidaqmx_stub_raises_on_task() -> None:
 
 
 def test_pco_stub_raises_on_camera() -> None:
-    """The pco stub imports fine but Camera() raises. Mac-only: on the
-    rig the real pco.Camera() succeeds."""
-    if _has_hardware:
-        pytest.skip("Mac-only stub-raises check — real pco on the rig")
+    """The pco stub imports fine but Camera() raises. Skipped when the real
+    pco is active (rig): the real pco.Camera() succeeds."""
+    if not _pco_is_stub:
+        pytest.skip("Stub-only check — real pco is active")
     import pco
 
     with pytest.raises(RuntimeError):

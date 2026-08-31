@@ -39,6 +39,13 @@ from lightsheet.hal.real.daqlaser import DAQLaser
 # succeeds (and would energize the laser, a safety concern per AGENTS.md §2).
 _has_hardware: bool = os.environ.get("LIGHTSHEET_HW", "0") == "1"
 
+# Whether the nidaqmx stub is active (dev machine) vs the real nidaqmx (rig).
+# The write-failure tests below assert the stub's "Task() raises" behavior;
+# they must skip when the real nidaqmx is active (the real write succeeds).
+# On the rig the real nidaqmx is active even for the mock-suite run (without
+# LIGHTSHEET_HW=1), so gating on the stub — not the env var — is correct.
+from conftest import _nidaqmx_is_stub  # noqa: E402 — pythonpath includes test/
+
 
 def _make_l1() -> DAQLaser:
     """Construct a DAQLaser mirroring Laser 1's config (555 nm, 300 mW max,
@@ -105,9 +112,10 @@ def test_on_write_failure_reverts_state() -> None:
     Skipped on the rig: the real DAQmx write succeeds (no stub to raise),
     and on() would energize the laser — a power-setting command that
     requires explicit operator action per AGENTS.md §2."""
-    if _has_hardware:
+    if not _nidaqmx_is_stub:
         pytest.skip(
-            "Mac-only stub-failure path -- on the rig the real DAQ write succeeds"
+            "Stub-only failure path -- the real nidaqmx is active, so the "
+            "DAQ write succeeds instead of raising"
         )
     laser = _make_l1()
     laser.set_power(150.0)
@@ -130,9 +138,10 @@ def test_set_power_active_writes_via_write_volts() -> None:
     Skipped on the rig: the real DAQmx write succeeds (no stub to raise),
     and set_power on an active laser energizes it — a power-setting
     command that requires explicit operator action per AGENTS.md §2."""
-    if _has_hardware:
+    if not _nidaqmx_is_stub:
         pytest.skip(
-            "Mac-only stub-failure path -- on the rig the real DAQ write succeeds"
+            "Stub-only failure path -- the real nidaqmx is active, so the "
+            "DAQ write succeeds instead of raising"
         )
     laser = _make_l1()
     # Energize the laser (on() attempts a 0 V write which fails on the
@@ -303,7 +312,16 @@ def test_write_volts_aborts_on_zero_mw_per_volt() -> None:
     constructed (e.g. by a subclass or a future refactor that bypasses
     the __init__ guard), _write_volts must NOT raise ZeroDivisionError
     on the clamp division. It sets the error surface, reverts active,
-    and returns early — the daemon write thread stays alive."""
+    and returns early — the daemon write thread stays alive.
+
+    Skipped when the real nidaqmx is active: the clamp reduces 2.5 V to 0.0 V
+    (max_power/mw_per_volt = 0), and the real DAQ write of 0.0 V succeeds, so
+    the error surface stays clean. The ZeroDivisionError guard is still
+    verified on the stub path (the write raises, surfacing the error)."""
+    if not _nidaqmx_is_stub:
+        pytest.skip(
+            "Stub-only failure path -- the real nidaqmx writes 0.0 V cleanly"
+        )
     laser = DAQLaser(
         terminal="/Dev7/ao0",
         wavelength=555,

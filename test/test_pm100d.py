@@ -51,7 +51,12 @@ def test_construction_defaults() -> None:
 
 def test_load_dll_raises_on_non_windows() -> None:
     """_load_dll raises PM100DError on non-Windows platforms (the
-    ``sys.platform != 'win32'`` branch). On Mac this is the first guard."""
+    ``sys.platform != 'win32'`` branch). On Mac this is the first guard.
+
+    Skipped on Windows (the rig): the non-Windows guard does not fire there,
+    so _load_dll proceeds to load the real DLL instead of raising."""
+    if sys.platform == "win32":
+        pytest.skip("Non-Windows guard test — on Windows the guard does not fire")
     meter = PM100D()
     with pytest.raises(PM100DError, match="only supported on Windows"):
         meter._load_dll()
@@ -60,7 +65,11 @@ def test_load_dll_raises_on_non_windows() -> None:
 def test_open_raises_pm100d_error_on_mac() -> None:
     """open() on Mac propagates the PM100DError from _load_dll (the
     non-Windows guard). The error surface is NOT set by open() on this
-    path (the exception fires before the error-setting lines)."""
+    path (the exception fires before the error-setting lines).
+
+    Skipped on Windows (the rig): the non-Windows guard does not fire there."""
+    if sys.platform == "win32":
+        pytest.skip("Non-Windows guard test — on Windows the guard does not fire")
     meter = PM100D()
     with pytest.raises(PM100DError, match="only supported on Windows"):
         meter.open()

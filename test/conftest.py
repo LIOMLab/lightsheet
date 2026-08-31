@@ -301,6 +301,20 @@ _ensure_stub("pco", _make_pco_stub, real_check=_pco_real_check)
 _ensure_stub("serial", _make_serial_stub)
 
 
+# Whether the nidaqmx stub is active (True on a dev machine without the NI
+# driver runtime) vs the real nidaqmx (True on the rig, where Task() succeeds).
+# Tests that assert the stub's "Task() raises" behavior must skip when the
+# real nidaqmx is active — otherwise the real DAQ write succeeds and the
+# write-failure assertions fail. This is distinct from ``_has_hardware``
+# (which gates on LIGHTSHEET_HW): on the rig the real nidaqmx is active even
+# for the mock-suite run (without LIGHTSHEET_HW=1), so the stub-behavior
+# tests must skip based on stub presence, not the env var.
+_nidaqmx_is_stub: bool = getattr(
+    sys.modules.get("nidaqmx"), "_lightsheet_stub", False
+)
+_pco_is_stub: bool = getattr(sys.modules.get("pco"), "_lightsheet_stub", False)
+
+
 # Disable garbage collection for the entire test session. Qt widget
 # destructors segfault during garbage collection on macOS, killing xdist
 # worker processes before they can send coverage data back to the master.
