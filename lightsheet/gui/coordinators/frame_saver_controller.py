@@ -24,19 +24,17 @@ import datetime
 import logging
 import os
 import queue
-import threading
 import time
 from typing import TYPE_CHECKING
 
 import h5py
 import numpy as np
 import zarr
+from liom_toolkit.utils.zarr_writer import AnalysisOmeZarrWriter
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from lightsheet.hal.bundle import DeviceBundle
 from lightsheet.wavelength_color import wavelength_to_hex
-
-from liom_toolkit.utils.zarr_writer import AnalysisOmeZarrWriter
 
 if TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -89,7 +87,7 @@ class FrameSaverWorker(QObject):
 
     sig_finished = Signal()
 
-    def __init__(self, saver: "FrameSaver") -> None:
+    def __init__(self, saver: FrameSaver) -> None:
         super().__init__()
         self._saver = saver
 
@@ -222,9 +220,16 @@ class FrameSaver(QObject):
         # Adaptive trajectory samples (schema-a). Cleared in reinit.
         # Populated by record_adaptive_sample() during the per-plane
         # loop; written to HDF5 /adaptive_trajectory by
-        # _write_adaptive_hdf5() before file close.
+        # _write_adaptive_hdf5() before file close, and to Zarr
+        # /acquisition/adaptive by ZarrSaver._write_adaptive_group()
+        # during finalize.
         self.adaptive_trajectory: list = []
         self._adaptive_enabled: bool = False
+        # Frozen AdaptiveConfig (schema-a bounds + gains). Stored when
+        # configure_adaptive(enabled, config=...) is called so the
+        # HDF5 / Zarr writers can publish the full config attrs
+        # alongside the per-plane trajectory. None in fixed mode.
+        self._adaptive_config: object | None = None
 
     def reinit(self, block_size: int) -> None:
         if self.saving_started:
@@ -255,6 +260,7 @@ class FrameSaver(QObject):
         # over the previous run's samples.
         self.adaptive_trajectory = []
         self._adaptive_enabled = False
+        self._adaptive_config = None
 
     def add_sample_name(self, sample_name: str) -> None:
         """Add to a list the different motor positions"""
@@ -351,10 +357,7 @@ class FrameSaver(QObject):
             channel_list: list[str] = []
             counter = 0  # 0 → no suffix; 1 → _01; 2 → _02; ...
             for _plane in range(self.number_of_files):
-                base = (
-                    self.files_name
-                    + f"_{wl}nm"
-                )
+                base = self.files_name + f"_{wl}nm"
                 if counter == 0:
                     candidate = base + ".hdf5"
                 else:
@@ -428,11 +431,11 @@ class FrameSaver(QObject):
         units mean no per-laser unit attr is needed.
         """
         for i, laser in enumerate(self.parent.lasers):
-            outfile.attrs[f"Laser{i+1} Wavelength"] = laser.wavelength
-            outfile.attrs[f"Laser{i+1} Power"] = laser.power
-            outfile.attrs[f"Laser{i+1} Max Power"] = laser.max_power
-            outfile.attrs[f"Laser{i+1} Active"] = bool(laser.active)
-            outfile.attrs[f"Laser{i+1} Label"] = laser.label
+            outfile.attrs[f"Laser{i + 1} Wavelength"] = laser.wavelength
+            outfile.attrs[f"Laser{i + 1} Power"] = laser.power
+            outfile.attrs[f"Laser{i + 1} Max Power"] = laser.max_power
+            outfile.attrs[f"Laser{i + 1} Active"] = bool(laser.active)
+            outfile.attrs[f"Laser{i + 1} Label"] = laser.label
 
     def _write_acquisition_metadata(self, outfile: h5py.File) -> None:
         """Write motor + scan-param + camera metadata as HDF5 root attrs,
@@ -480,16 +483,25 @@ class FrameSaver(QObject):
         outfile.attrs["X Size"] = cam.xsize
         outfile.attrs["Y Size"] = cam.ysize
 
-    def configure_adaptive(self, enabled: bool) -> None:
+    def configure_adaptive(self, enabled: bool, config: object | None = None) -> None:
         """Configure the adaptive trajectory recorder for this acquisition.
 
         When ``enabled`` is True, the per-plane loop calls
         ``record_adaptive_sample`` once per main plane, and the HDF5
         writer writes the ``/adaptive_trajectory`` group before file
-        close. When False, no trajectory is recorded or written.
+        close while the Zarr writer writes ``/acquisition/adaptive``
+        during finalize. When False, no trajectory is recorded or
+        written and no adaptive group is created in either format.
+
+        ``config`` is the frozen ``AdaptiveConfig`` whose bounds + gains
+        are published as group attrs alongside the per-plane trajectory
+        (schema-a reproducibility contract). It may be omitted in fixed
+        mode (``enabled=False``); when ``enabled=True`` the config attrs
+        are required so the saved trajectory is self-describing.
         """
         self._adaptive_enabled = bool(enabled)
         self.adaptive_trajectory = []
+        self._adaptive_config = config if enabled else None
 
     def record_adaptive_sample(self, sample: object) -> None:
         """Append a frozen AdaptiveSample to the trajectory list.
@@ -514,31 +526,71 @@ class FrameSaver(QObject):
             sample.power_fallback,
         )
 
-    def _write_adaptive_hdf5(self, outfile: h5py.File) -> None:
+    def _adaptive_config_attrs(self) -> dict:
+        """Build the schema-a AdaptiveConfig attrs dict from the frozen
+        ``self._adaptive_config``. Returns an empty dict when no config
+        is set (fixed mode) so the caller can decide whether to write
+        the group at all.
+        """
+        cfg = self._adaptive_config
+        if cfg is None:
+            return {}
+        return {
+            "enabled": bool(cfg.enabled),
+            "min_exposure_s": float(cfg.min_exposure_s),
+            "max_exposure_s": float(cfg.max_exposure_s),
+            "min_power_mw": np.array(cfg.min_power_mw, dtype=float),
+            "max_power_mw": np.array(cfg.max_power_mw, dtype=float),
+            "target_band_lo": float(cfg.target_band_lo),
+            "target_band_hi": float(cfg.target_band_hi),
+            "reacquire_threshold": float(cfg.reacquire_threshold),
+            "block_size_n": int(cfg.block_size_n),
+            "kp": float(cfg.kp),
+            "ki": float(cfg.ki),
+            "pilot_count": int(cfg.pilot_count),
+            "sensor_max": int(cfg.sensor_max),
+            "max_reacquire_attempts": int(cfg.max_reacquire_attempts),
+        }
+
+    def _write_adaptive_hdf5(
+        self,
+        outfile: h5py.File,
+        samples: list | None = None,
+    ) -> None:
         """Write the /adaptive_trajectory group (schema-a) to an open
-        HDF5 file. Called before file close in the single-channel
-        stitch save path.
+        HDF5 file. Called before file close in every HDF5 save path
+        (single-channel stitch, per-plane crop/full, multi-channel).
+
+        ``samples`` defaults to the full ``self.adaptive_trajectory``.
+        Per-plane layouts pass a one-row subset (the file's global plane
+        index) so each file carries exactly its own row without
+        duplicating the full trajectory. Multi-channel and stitch
+        layouts pass the full trajectory (every channel file carries
+        the same complete record).
 
         The group carries one row per main plane with the approved
         field names: plane_index, intensity_fraction, exposure_s,
         laser_power_mw, control_variable_active, reacquired,
         power_fallback. Inactive-channel intensity entries are NaN
-        (schema-a convention).
+        (schema-a convention). The frozen AdaptiveConfig bounds + gains
+        are published as group attrs so the saved trajectory is
+        self-describing.
         """
-        if not self._adaptive_enabled or not self.adaptive_trajectory:
+        if not self._adaptive_enabled:
             return
-        traj = self.adaptive_trajectory
+        traj = samples if samples is not None else self.adaptive_trajectory
+        if not traj:
+            return
         grp = outfile.create_group("adaptive_trajectory")
-        grp.attrs["enabled"] = True
+        for k, v in self._adaptive_config_attrs().items():
+            grp.attrs[k] = v
         grp.create_dataset(
             "plane_index",
             data=np.array([s.plane_index for s in traj], dtype=int),
         )
         grp.create_dataset(
             "intensity_fraction",
-            data=np.array(
-                [list(s.intensity_fraction) for s in traj], dtype=float
-            ),
+            data=np.array([list(s.intensity_fraction) for s in traj], dtype=float),
         )
         grp.create_dataset(
             "exposure_s",
@@ -546,9 +598,7 @@ class FrameSaver(QObject):
         )
         grp.create_dataset(
             "laser_power_mw",
-            data=np.array(
-                [list(s.laser_power_mw) for s in traj], dtype=float
-            ),
+            data=np.array([list(s.laser_power_mw) for s in traj], dtype=float),
         )
         grp.create_dataset(
             "control_variable_active",
@@ -565,6 +615,29 @@ class FrameSaver(QObject):
             "power_fallback",
             data=np.array([s.power_fallback for s in traj], dtype=bool),
         )
+
+    def _write_adaptive_hdf5_for_file(
+        self,
+        outfile: h5py.File,
+        file_idx: int,
+        n_files: int,
+    ) -> None:
+        """Write the adaptive trajectory group for a specific file's
+        plane subset. Stitch (``n_files == 1``) writes the full
+        trajectory; per-plane (``n_files > 1``) writes only the row at
+        ``file_idx`` (the file's global plane index). No-op when
+        adaptive is disabled or the plane index is out of range.
+        Raises on write failure — the caller's try/except surfaces it.
+        """
+        if not self._adaptive_enabled or not self.adaptive_trajectory:
+            return
+        if n_files > 1:
+            if file_idx < len(self.adaptive_trajectory):
+                self._write_adaptive_hdf5(
+                    outfile, samples=[self.adaptive_trajectory[file_idx]]
+                )
+        else:
+            self._write_adaptive_hdf5(outfile)
 
     def frame_saver_worker(self) -> None:
         """Thread for saving 3D arrays (or 2D arrays).
@@ -646,15 +719,22 @@ class FrameSaver(QObject):
                             else:
                                 pos_index = idx
 
-                            self.dataset.attrs["Horizontal Position"] = (
-                                self.horizontal_positions_list[pos_index]
-                            )
-                            self.dataset.attrs["Vertical Position"] = (
-                                self.vertical_positions_list[pos_index]
-                            )
-                            self.dataset.attrs["Camera Position"] = (
-                                self.camera_positions_list[pos_index]
-                            )
+                            # Guard against empty/short position lists —
+                            # the multi-channel and both paths already guard
+                            # the same access. Without this, a save started
+                            # before add_motor_parameters has populated the
+                            # lists aborts the whole stack with an
+                            # IndexError on the first dataset.
+                            if pos_index < len(self.horizontal_positions_list):
+                                self.dataset.attrs["Horizontal Position"] = (
+                                    self.horizontal_positions_list[pos_index]
+                                )
+                                self.dataset.attrs["Vertical Position"] = (
+                                    self.vertical_positions_list[pos_index]
+                                )
+                                self.dataset.attrs["Camera Position"] = (
+                                    self.camera_positions_list[pos_index]
+                                )
 
                             counter += 1
                         break
@@ -694,13 +774,30 @@ class FrameSaver(QObject):
                     break
             # Write the adaptive trajectory group before file close
             # (schema-a). Only writes when adaptive was enabled and
-            # samples were recorded.
-            self._write_adaptive_hdf5(outfile)
+            # samples were recorded. Stitch (1 file) writes the full
+            # trajectory; per-plane (N files) writes only this file's
+            # plane row so the trajectory is not duplicated across files.
+            # A write error surfaces to the operator and stops the worker
+            # — the file is still closed so no handle leaks.
+            try:
+                if len(self.filenames_list) > 1 and idx < len(self.adaptive_trajectory):
+                    self._write_adaptive_hdf5(
+                        outfile, samples=[self.adaptive_trajectory[idx]]
+                    )
+                else:
+                    self._write_adaptive_hdf5(outfile)
+            except Exception as e:
+                self.sig_status_message.emit(f"Save error: {e}")
+                self.saving_started = False
+                outfile.close()
+                break
             outfile.close()
             self.sig_status_message.emit("File " + self.filenames_list[idx] + " saved")
             if aborted:
                 break
-        logger.info("frame_saver_worker exited (saving_started=%s)", self.saving_started)
+        logger.info(
+            "frame_saver_worker exited (saving_started=%s)", self.saving_started
+        )
 
     def _frame_saver_worker_multi_channel(self) -> None:
         """Multi-channel HDF5 save loop body.
@@ -744,7 +841,6 @@ class FrameSaver(QObject):
         ds_counter = [1] * n_channels
         outfiles: list = [None] * n_channels
         frames_written = 0
-        aborted = False
 
         try:
             # Open the first file for each channel and write root metadata.
@@ -764,7 +860,6 @@ class FrameSaver(QObject):
                         try:
                             item = self.queue.get_nowait()
                         except queue.Empty:
-                            aborted = True
                             break
                     else:
                         continue
@@ -785,7 +880,6 @@ class FrameSaver(QObject):
                         f"range (0..{n_channels - 1})"
                     )
                     self.saving_started = False
-                    aborted = True
                     break
 
                 if outfiles[channel_idx] is None:
@@ -802,23 +896,22 @@ class FrameSaver(QObject):
                 # positions — one snapshot per plane, shared by both
                 # channels of the same plane).
                 ds_idx = ds_counter[channel_idx] - 1
-                pos_index = (
-                    file_idx[channel_idx] * n_datasets_per_file + ds_idx
-                )
+                pos_index = file_idx[channel_idx] * n_datasets_per_file + ds_idx
                 try:
                     if frame.ndim == 2:
                         frame = np.expand_dims(frame, axis=0)
                     for f_idx in range(frame.shape[0]):
                         path_root = (
-                            self.datasets_name
-                            + f"{ds_counter[channel_idx]:03d}"
+                            self.datasets_name + f"{ds_counter[channel_idx]:03d}"
                         )
                         self.dataset = outfile.create_dataset(
                             path_root, data=frame[f_idx, :, :]
                         )
                         logger.info(
                             "Dataset created: %s (channel %d plane %d)",
-                            path_root, channel_idx, pos_index,
+                            path_root,
+                            channel_idx,
+                            pos_index,
                         )
                         self.dataset.attrs["Sample Name"] = self.sample_name
                         self.dataset.attrs["Date"] = str(datetime.date.today())
@@ -837,12 +930,18 @@ class FrameSaver(QObject):
                 except Exception as e:
                     self.sig_status_message.emit(f"Save error: {e}")
                     self.saving_started = False
-                    aborted = True
                     break
 
                 # If the current file is full, close it and open the
                 # next file for this channel (if any).
                 if ds_counter[channel_idx] > n_datasets_per_file:
+                    # Write the adaptive trajectory group before close
+                    # (schema-a). Stitch (1 file/channel) writes the
+                    # full trajectory; per-plane (N files/channel)
+                    # writes only this file's plane row.
+                    self._write_adaptive_hdf5_for_file(
+                        outfile, file_idx[channel_idx], n_files_per_channel
+                    )
                     outfile.close()
                     self.sig_status_message.emit(
                         "File "
@@ -866,11 +965,19 @@ class FrameSaver(QObject):
         except Exception as e:
             self.sig_status_message.emit(f"Save error: {e}")
             self.saving_started = False
-            aborted = True
         finally:
-            for outfile in outfiles:
+            for ch in range(n_channels):
+                outfile = outfiles[ch]
                 if outfile is not None:
                     try:
+                        # Write the adaptive trajectory group before
+                        # close (schema-a). Uses the channel's current
+                        # file_idx — the file that was still open when
+                        # the loop exited (stitch: 0; per-plane: the
+                        # file that was being filled).
+                        self._write_adaptive_hdf5_for_file(
+                            outfile, file_idx[ch], n_files_per_channel
+                        )
                         outfile.close()
                     except Exception:
                         pass
@@ -878,7 +985,8 @@ class FrameSaver(QObject):
         logger.info(
             "frame_saver_worker (multi-channel) exited "
             "(saving_started=%s, frames_written=%d)",
-            self.saving_started, frames_written,
+            self.saving_started,
+            frames_written,
         )
 
     def zarr_save_worker(self) -> None:
@@ -1046,14 +1154,16 @@ class FrameSaver(QObject):
                 logger.info(
                     "zarr_save_worker exiting before finalize "
                     "(ch0_z=%d < n_planes=%d) — partial store left on disk",
-                    ch0_z, n_planes,
+                    ch0_z,
+                    n_planes,
                 )
             else:
                 try:
-                    self._zarr_saver.finalize()
-                    self.sig_status_message.emit(
-                        "Zarr store " + store_path + " saved"
+                    self._zarr_saver.set_adaptive_trajectory(
+                        self.adaptive_trajectory, self._adaptive_config
                     )
+                    self._zarr_saver.finalize()
+                    self.sig_status_message.emit("Zarr store " + store_path + " saved")
                 except Exception as e:
                     self.sig_status_message.emit(f"Save error: {e}")
                     self.saving_started = False
@@ -1155,35 +1265,51 @@ class FrameSaver(QObject):
                                 self.dataset.attrs["Date"] = str(datetime.date.today())
 
                                 if buffer.shape[0] == 1:
-                                    h5_pos_index = (
-                                        dataset + idx * int(self.number_of_datasets)
+                                    h5_pos_index = dataset + idx * int(
+                                        self.number_of_datasets
                                     )
                                 else:
                                     h5_pos_index = idx
-                                self.dataset.attrs["Horizontal Position"] = (
-                                    self.horizontal_positions_list[h5_pos_index]
-                                )
-                                self.dataset.attrs["Vertical Position"] = (
-                                    self.vertical_positions_list[h5_pos_index]
-                                )
-                                self.dataset.attrs["Camera Position"] = (
-                                    self.camera_positions_list[h5_pos_index]
-                                )
+                                # Guard against empty/short position lists —
+                                # the multi-channel both path and the Zarr
+                                # writes below already guard; the single-
+                                # channel HDF5 path must too so a save
+                                # started before add_motor_parameters has
+                                # populated the lists does not abort the
+                                # whole stack with an IndexError.
+                                if h5_pos_index < len(self.horizontal_positions_list):
+                                    self.dataset.attrs["Horizontal Position"] = (
+                                        self.horizontal_positions_list[h5_pos_index]
+                                    )
+                                    self.dataset.attrs["Vertical Position"] = (
+                                        self.vertical_positions_list[h5_pos_index]
+                                    )
+                                    self.dataset.attrs["Camera Position"] = (
+                                        self.camera_positions_list[h5_pos_index]
+                                    )
                                 counter += 1
 
                                 # --- Zarr write (mirrors zarr_save_worker) ---
                                 hor = (
-                                    _position_to_float(self.horizontal_positions_list[zarr_pos_index])
-                                    if zarr_pos_index < len(self.horizontal_positions_list)
+                                    _position_to_float(
+                                        self.horizontal_positions_list[zarr_pos_index]
+                                    )
+                                    if zarr_pos_index
+                                    < len(self.horizontal_positions_list)
                                     else 0.0
                                 )
                                 ver = (
-                                    _position_to_float(self.vertical_positions_list[zarr_pos_index])
-                                    if zarr_pos_index < len(self.vertical_positions_list)
+                                    _position_to_float(
+                                        self.vertical_positions_list[zarr_pos_index]
+                                    )
+                                    if zarr_pos_index
+                                    < len(self.vertical_positions_list)
                                     else 0.0
                                 )
                                 cam = (
-                                    _position_to_float(self.camera_positions_list[zarr_pos_index])
+                                    _position_to_float(
+                                        self.camera_positions_list[zarr_pos_index]
+                                    )
                                     if zarr_pos_index < len(self.camera_positions_list)
                                     else 0.0
                                 )
@@ -1218,6 +1344,26 @@ class FrameSaver(QObject):
                             break
                     if aborted or z_idx >= n_planes:
                         break
+                # Write the adaptive trajectory group before close
+                # (schema-a). Stitch (1 file) writes the full
+                # trajectory; per-plane (N files) writes only this
+                # file's plane row. A write error surfaces and stops
+                # the worker — the file is still closed.
+                try:
+                    if len(self.filenames_list) > 1 and idx < len(
+                        self.adaptive_trajectory
+                    ):
+                        self._write_adaptive_hdf5(
+                            outfile, samples=[self.adaptive_trajectory[idx]]
+                        )
+                    else:
+                        self._write_adaptive_hdf5(outfile)
+                except Exception as e:
+                    self.sig_status_message.emit(f"Save error: {e}")
+                    self.saving_started = False
+                    outfile.close()
+                    aborted = True
+                    break
                 outfile.close()
                 self.sig_status_message.emit(
                     "File " + self.filenames_list[idx] + " saved"
@@ -1235,14 +1381,16 @@ class FrameSaver(QObject):
                 logger.info(
                     "both_save_worker exiting before finalize "
                     "(z_idx=%d < n_planes=%d) — partial store left on disk",
-                    z_idx, n_planes,
+                    z_idx,
+                    n_planes,
                 )
             else:
                 try:
-                    self._zarr_saver.finalize()
-                    self.sig_status_message.emit(
-                        "Zarr store " + store_path + " saved"
+                    self._zarr_saver.set_adaptive_trajectory(
+                        self.adaptive_trajectory, self._adaptive_config
                     )
+                    self._zarr_saver.finalize()
+                    self.sig_status_message.emit("Zarr store " + store_path + " saved")
                 except Exception as e:
                     self.sig_status_message.emit(f"Save error: {e}")
                     self.saving_started = False
@@ -1306,7 +1454,6 @@ class FrameSaver(QObject):
         outfiles: list = [None] * n_channels
         frames_written = 0
         z_idx_per_channel: dict[int, int] = {}
-        aborted = False
 
         try:
             # Open the first file for each channel and write root metadata.
@@ -1326,7 +1473,6 @@ class FrameSaver(QObject):
                         try:
                             item = self.queue.get_nowait()
                         except queue.Empty:
-                            aborted = True
                             break
                     else:
                         continue
@@ -1343,7 +1489,6 @@ class FrameSaver(QObject):
                         f"(0..{n_channels - 1})"
                     )
                     self.saving_started = False
-                    aborted = True
                     break
 
                 if outfiles[channel_idx] is None:
@@ -1354,24 +1499,24 @@ class FrameSaver(QObject):
 
                 outfile = outfiles[channel_idx]
                 ds_idx = ds_counter[channel_idx] - 1
-                pos_index = (
-                    file_idx[channel_idx] * n_datasets_per_file + ds_idx
-                )
+                pos_index = file_idx[channel_idx] * n_datasets_per_file + ds_idx
                 try:
                     if frame.ndim == 2:
                         frame = np.expand_dims(frame, axis=0)
                     for f_idx in range(frame.shape[0]):
                         # --- HDF5 write (one dataset per plane per channel) ---
                         path_root = (
-                            self.datasets_name
-                            + f"{ds_counter[channel_idx]:03d}"
+                            self.datasets_name + f"{ds_counter[channel_idx]:03d}"
                         )
                         self.dataset = outfile.create_dataset(
                             path_root, data=frame[f_idx, :, :]
                         )
                         logger.info(
                             "Dataset %s created: %s (channel %d plane %d)",
-                            f_idx, path_root, channel_idx, pos_index,
+                            f_idx,
+                            path_root,
+                            channel_idx,
+                            pos_index,
                         )
                         self.dataset.attrs["Sample Name"] = self.sample_name
                         self.dataset.attrs["Date"] = str(datetime.date.today())
@@ -1401,17 +1546,23 @@ class FrameSaver(QObject):
                             # give every sub-frame the same position.
                             zarr_pos_index = cz
                             hor = (
-                                _position_to_float(self.horizontal_positions_list[zarr_pos_index])
+                                _position_to_float(
+                                    self.horizontal_positions_list[zarr_pos_index]
+                                )
                                 if zarr_pos_index < len(self.horizontal_positions_list)
                                 else 0.0
                             )
                             ver = (
-                                _position_to_float(self.vertical_positions_list[zarr_pos_index])
+                                _position_to_float(
+                                    self.vertical_positions_list[zarr_pos_index]
+                                )
                                 if zarr_pos_index < len(self.vertical_positions_list)
                                 else 0.0
                             )
                             cam = (
-                                _position_to_float(self.camera_positions_list[zarr_pos_index])
+                                _position_to_float(
+                                    self.camera_positions_list[zarr_pos_index]
+                                )
                                 if zarr_pos_index < len(self.camera_positions_list)
                                 else 0.0
                             )
@@ -1422,12 +1573,14 @@ class FrameSaver(QObject):
                 except Exception as e:
                     self.sig_status_message.emit(f"Save error: {e}")
                     self.saving_started = False
-                    aborted = True
                     break
 
                 # If the current file is full, close it and open the
                 # next file for this channel (if any).
                 if ds_counter[channel_idx] > n_datasets_per_file:
+                    self._write_adaptive_hdf5_for_file(
+                        outfile, file_idx[channel_idx], n_files_per_channel
+                    )
                     outfile.close()
                     self.sig_status_message.emit(
                         "File "
@@ -1456,6 +1609,9 @@ class FrameSaver(QObject):
             for ch in range(n_channels):
                 if outfiles[ch] is not None:
                     try:
+                        self._write_adaptive_hdf5_for_file(
+                            outfiles[ch], file_idx[ch], n_files_per_channel
+                        )
                         outfiles[ch].close()
                     except Exception:
                         pass
@@ -1468,14 +1624,16 @@ class FrameSaver(QObject):
                 logger.info(
                     "both_save_worker (multi-channel) exiting before finalize "
                     "(ch0_z=%d < n_planes=%d) — partial store left on disk",
-                    ch0_z, n_planes,
+                    ch0_z,
+                    n_planes,
                 )
             else:
                 try:
-                    self._zarr_saver.finalize()
-                    self.sig_status_message.emit(
-                        "Zarr store " + store_path + " saved"
+                    self._zarr_saver.set_adaptive_trajectory(
+                        self.adaptive_trajectory, self._adaptive_config
                     )
+                    self._zarr_saver.finalize()
+                    self.sig_status_message.emit("Zarr store " + store_path + " saved")
                 except Exception as e:
                     self.sig_status_message.emit(f"Save error: {e}")
                     self.saving_started = False
@@ -1485,14 +1643,13 @@ class FrameSaver(QObject):
         finally:
             for outfile in outfiles:
                 if outfile is not None:
-                    try:
+                    with contextlib.suppress(Exception):
                         outfile.close()
-                    except Exception:
-                        pass
         logger.info(
             "both_save_worker (multi-channel) exited "
             "(saving_started=%s, frames_written=%d)",
-            self.saving_started, frames_written,
+            self.saving_started,
+            frames_written,
         )
 
     def stop_saving(self) -> None:
@@ -1542,7 +1699,7 @@ class ZarrSaver:
     flag guards against a double-finalize from the worker's error path.
     """
 
-    def __init__(self, shell: "Controller_MainWindow") -> None:
+    def __init__(self, shell: Controller_MainWindow) -> None:
         self.parent = shell
         self._writer: AnalysisOmeZarrWriter | None = None
         self.saving_started = False
@@ -1551,6 +1708,12 @@ class ZarrSaver:
         self._horizontal_positions: list[float] = []
         self._vertical_positions: list[float] = []
         self._camera_positions: list[float] = []
+        # Adaptive trajectory (schema-a). Set by set_adaptive_trajectory
+        # before finalize so _write_adaptive_group can publish the
+        # /acquisition/adaptive group. Empty list + None config = fixed
+        # mode (no adaptive group written).
+        self._adaptive_trajectory: list = []
+        self._adaptive_config: object | None = None
         # ``write_empty_chunks`` global-config override state. Set in
         # start_stack, restored in finalize. Defaults to False here so
         # _restore_write_empty_chunks is a no-op if start_stack never ran
@@ -1558,9 +1721,7 @@ class ZarrSaver:
         self._write_empty_chunks_overridden = False
         self._prev_write_empty_chunks: bool = False
 
-    def start_stack(
-        self, store_path: str, n_planes: int, n_channels: int = 1
-    ) -> None:
+    def start_stack(self, store_path: str, n_planes: int, n_channels: int = 1) -> None:
         """Construct the OME-Zarr writer for a new stack.
 
         ``store_path`` is a PLAIN filesystem path (NOT ``file://`` — the
@@ -1705,7 +1866,9 @@ class ZarrSaver:
         HAL instances.
         """
         if self._writer is None:
-            raise RuntimeError("ZarrSaver._write_acquisition_group called with no writer")
+            raise RuntimeError(
+                "ZarrSaver._write_acquisition_group called with no writer"
+            )
         root = self._writer.root
         grp = root.create_group("acquisition")
         motor = grp.create_group("motor")
@@ -1715,9 +1878,7 @@ class ZarrSaver:
         motor.create_array(
             "vertical", data=np.array(self._vertical_positions, dtype=float)
         )
-        motor.create_array(
-            "camera", data=np.array(self._camera_positions, dtype=float)
-        )
+        motor.create_array("camera", data=np.array(self._camera_positions, dtype=float))
 
         siggen = self.parent.siggen
         cam = self.parent.camera
@@ -1737,6 +1898,92 @@ class ZarrSaver:
         grp.attrs["sample_rate"] = siggen.sample_rate
         grp.attrs["binning_x"] = cam.binning_x
         grp.attrs["binning_y"] = cam.binning_y
+
+    def set_adaptive_trajectory(
+        self,
+        trajectory: list,
+        config: object | None,
+    ) -> None:
+        """Provide the adaptive trajectory samples + frozen config so
+        ``finalize`` can publish the ``/acquisition/adaptive`` group
+        (schema-a). Called by the save worker before finalize when
+        adaptive is enabled. An empty trajectory or None config means
+        fixed mode — no adaptive group is written.
+        """
+        self._adaptive_trajectory = list(trajectory) if trajectory else []
+        self._adaptive_config = config
+
+    def _write_adaptive_group(self) -> None:
+        """Write the ``/acquisition/adaptive`` group (schema-a) via the
+        writer's public ``root`` handle.
+
+        Called AFTER ``finalize_with_resolutions`` and after
+        ``_write_acquisition_group`` so the adaptive group is a sibling
+        under ``/acquisition``. The group carries one row per main plane
+        with the same field names as the HDF5 ``/adaptive_trajectory``
+        group: plane_index, intensity_fraction, exposure_s,
+        laser_power_mw, control_variable_active, reacquired,
+        power_fallback. The frozen AdaptiveConfig bounds + gains are
+        published as group attrs. No-op when the trajectory is empty
+        (fixed mode).
+        """
+        if not self._adaptive_trajectory:
+            return
+        if self._writer is None:
+            raise RuntimeError("ZarrSaver._write_adaptive_group called with no writer")
+        root = self._writer.root
+        acq = root["acquisition"]
+        grp = acq.create_group("adaptive")
+        traj = self._adaptive_trajectory
+        cfg = self._adaptive_config
+
+        # AdaptiveConfig attrs (schema-a reproducibility contract).
+        # zarr v3 attrs are JSON-serialised, so tuple fields are stored
+        # as lists (not np.array, which is not JSON serialisable).
+        if cfg is not None:
+            grp.attrs["enabled"] = bool(cfg.enabled)
+            grp.attrs["min_exposure_s"] = float(cfg.min_exposure_s)
+            grp.attrs["max_exposure_s"] = float(cfg.max_exposure_s)
+            grp.attrs["min_power_mw"] = list(cfg.min_power_mw)
+            grp.attrs["max_power_mw"] = list(cfg.max_power_mw)
+            grp.attrs["target_band_lo"] = float(cfg.target_band_lo)
+            grp.attrs["target_band_hi"] = float(cfg.target_band_hi)
+            grp.attrs["reacquire_threshold"] = float(cfg.reacquire_threshold)
+            grp.attrs["block_size_n"] = int(cfg.block_size_n)
+            grp.attrs["kp"] = float(cfg.kp)
+            grp.attrs["ki"] = float(cfg.ki)
+            grp.attrs["pilot_count"] = int(cfg.pilot_count)
+            grp.attrs["sensor_max"] = int(cfg.sensor_max)
+            grp.attrs["max_reacquire_attempts"] = int(cfg.max_reacquire_attempts)
+
+        grp.create_array(
+            "plane_index",
+            data=np.array([s.plane_index for s in traj], dtype=int),
+        )
+        grp.create_array(
+            "intensity_fraction",
+            data=np.array([list(s.intensity_fraction) for s in traj], dtype=float),
+        )
+        grp.create_array(
+            "exposure_s",
+            data=np.array([s.exposure_s for s in traj], dtype=float),
+        )
+        grp.create_array(
+            "laser_power_mw",
+            data=np.array([list(s.laser_power_mw) for s in traj], dtype=float),
+        )
+        # zarr v3 does not support object-dtype arrays; use a fixed-width
+        # unicode dtype (U32 is ample for "exposure"/"power"/"fixed").
+        cva = np.array([s.control_variable_active for s in traj], dtype="U32")
+        grp.create_array("control_variable_active", data=cva)
+        grp.create_array(
+            "reacquired",
+            data=np.array([s.reacquired for s in traj], dtype=bool),
+        )
+        grp.create_array(
+            "power_fallback",
+            data=np.array([s.power_fallback for s in traj], dtype=bool),
+        )
 
     def finalize(self) -> None:
         """Build the analysis pyramid + NGFF metadata, then the
@@ -1773,9 +2020,7 @@ class ZarrSaver:
         """
         if not self._write_empty_chunks_overridden:
             return
-        zarr.config.set(
-            {"array.write_empty_chunks": self._prev_write_empty_chunks}
-        )
+        zarr.config.set({"array.write_empty_chunks": self._prev_write_empty_chunks})
         self._write_empty_chunks_overridden = False
 
     def _finalize_body(self) -> None:
@@ -1825,10 +2070,12 @@ class ZarrSaver:
             make_isotropic=True,
             omero_channels=omero_channels,
         )
-        logger.info(
-            "Zarr finalize_with_resolutions took %.2fs", time.time() - t0
-        )
+        logger.info("Zarr finalize_with_resolutions took %.2fs", time.time() - t0)
         self._write_acquisition_group()
+        # Write the adaptive trajectory group after /acquisition so it
+        # is a sibling under /acquisition/adaptive (schema-a). No-op
+        # when the trajectory is empty (fixed mode).
+        self._write_adaptive_group()
         self._finalized = True
         self.saving_started = False
 
@@ -1842,7 +2089,7 @@ class FrameSaverController:
     with the shell and their thread-affinity is the GUI thread.
     """
 
-    def __init__(self, bundle: DeviceBundle, shell: "Controller_MainWindow") -> None:
+    def __init__(self, bundle: DeviceBundle, shell: Controller_MainWindow) -> None:
         self._shell = shell
         # FrameViewer is sized from the bundle's camera dimensions — the
         # same rows/columns the pre-extraction hardware_init passed.
@@ -1908,8 +2155,8 @@ class FrameSaverController:
     def stop_saving(self) -> None:
         self.frame_saver.stop_saving()
 
-    def configure_adaptive(self, enabled: bool) -> None:
-        self.frame_saver.configure_adaptive(enabled)
+    def configure_adaptive(self, enabled: bool, config: object | None = None) -> None:
+        self.frame_saver.configure_adaptive(enabled, config=config)
 
     def record_adaptive_sample(self, sample: object) -> None:
         self.frame_saver.record_adaptive_sample(sample)

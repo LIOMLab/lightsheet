@@ -101,12 +101,21 @@ def _setup_ctrl(
         ctrl._auto_laser2 = True
     saver = ctrl._fs.frame_saver
     saver.parent.save_format = "hdf5"
+    # Reinit with a block_size large enough that the queue (maxsize
+    # 2*block_size) can hold all test frames without blocking the put
+    # call — the default block_size=1 gives maxsize=2, which blocks on
+    # the 3rd put. Use 32 as a generous bound for any test plane count.
+    saver.reinit(block_size=32)
     return ctrl, saver
 
 
 def _enqueue_planes(saver: Any, n_planes: int, n_channels: int = 1) -> None:
     """Enqueue ``n_planes`` frames (or ``n_planes * n_channels`` tagged
-    frames) into the saver queue."""
+    frames) into the saver queue. Also populates the motor position
+    lists (one entry per plane) so the HDF5 per-dataset attrs path does
+    not raise ``list index out of range``."""
+    for _i in range(n_planes):
+        saver.add_motor_parameters("0.0 μm", "0.0 μm", "0.0 μm")
     frame = np.zeros((_FRAME_SIZE, _FRAME_SIZE), dtype=np.uint16)
     if n_channels == 1:
         for _ in range(n_planes):
@@ -122,7 +131,7 @@ def _chdir(tmp_path: Path) -> Any:
     from contextlib import contextmanager
 
     @contextmanager
-    def _ctx():
+    def _ctx() -> Any:
         cwd = os.getcwd()
         os.chdir(str(tmp_path))
         try:
@@ -161,7 +170,9 @@ _DATASET_NAMES = [
 ]
 
 
-def _assert_adaptive_group(grp, samples, config: AdaptiveConfig) -> None:
+def _assert_adaptive_group(
+    grp: Any, samples: list[AdaptiveSample], config: AdaptiveConfig
+) -> None:
     """Assert a group (HDF5 or Zarr) carries the schema-a datasets and
     AdaptiveConfig attrs matching ``samples``."""
     for name in _DATASET_NAMES:

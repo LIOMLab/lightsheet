@@ -48,8 +48,8 @@ from PySide6.QtCore import QObject, Signal, Slot
 from lightsheet.hal.bundle import DeviceBundle
 
 if TYPE_CHECKING:
-    from lightsheet.gui.shell.controller import Controller_MainWindow
     from lightsheet.gui.coordinators.hardware_manager import HardwareManager
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +72,8 @@ class PreviewWorker(QObject):
     def __init__(
         self,
         bundle: DeviceBundle,
-        hw: "HardwareManager",
-        shell: "Controller_MainWindow",
+        hw: HardwareManager,
+        shell: Controller_MainWindow,
     ) -> None:
         super().__init__()
         self.camera = bundle.camera
@@ -101,9 +101,7 @@ class PreviewWorker(QObject):
         try:
             # Setting the camera for self triggered acquisition
             self.camera.set_trigger_mode("auto_trigger")
-            self.camera.set_exposure_time(
-                self._camera_exposure_time
-            )
+            self.camera.set_exposure_time(self._camera_exposure_time)
             self.camera.arm()
 
             # Start the auto-selected lasers after camera.arm() and before
@@ -215,9 +213,7 @@ class _AcquireScanMixin:
         # Store metadata about buffer to be acquired
         self._shell.buffer_metadata_general = {}
         self._shell.buffer_metadata_general["Date"] = str(datetime.date.today())
-        self._shell.buffer_metadata_general["Sample Name"] = str(
-            self._save_description
-        )
+        self._shell.buffer_metadata_general["Sample Name"] = str(self._save_description)
 
         self._shell.buffer_metadata_waveforms = {}
         self._shell.buffer_metadata_waveforms = self.siggen.waveform_metadata
@@ -309,11 +305,13 @@ class _AcquireScanMixin:
 
         # Frame reconstruction options
         if self._save_stitch_blend:
-            self._shell.reconstructed_frame = self._shell._fs.reconstruct_frame_linear_blend(
-                self._shell.buffer
+            self._shell.reconstructed_frame = (
+                self._shell._fs.reconstruct_frame_linear_blend(self._shell.buffer)
             )
         else:
-            self._shell.reconstructed_frame = self._shell._fs.reconstruct_frame(self._shell.buffer)
+            self._shell.reconstructed_frame = self._shell._fs.reconstruct_frame(
+                self._shell.buffer
+            )
 
         # Send reconstructed frame to display port
         self._shell._fs.enqueue_frame(self._shell.reconstructed_frame)
@@ -340,8 +338,8 @@ class LiveWorker(QObject, _AcquireScanMixin):
     def __init__(
         self,
         bundle: DeviceBundle,
-        hw: "HardwareManager",
-        shell: "Controller_MainWindow",
+        hw: HardwareManager,
+        shell: Controller_MainWindow,
     ) -> None:
         super().__init__()
         self.camera = bundle.camera
@@ -445,8 +443,8 @@ class SingleWorker(QObject, _AcquireScanMixin):
     def __init__(
         self,
         bundle: DeviceBundle,
-        hw: "HardwareManager",
-        shell: "Controller_MainWindow",
+        hw: HardwareManager,
+        shell: Controller_MainWindow,
         save_description: str,
         save_stitch_blend: bool,
         multi_channel: bool = False,
@@ -488,7 +486,9 @@ class SingleWorker(QObject, _AcquireScanMixin):
             self._shell.reconstructed_frame = None
 
             # Getting positions for the image
-            self._shell.image_hor_pos_text = self._shell.current_horizontal_position_text
+            self._shell.image_hor_pos_text = (
+                self._shell.current_horizontal_position_text
+            )
             self._shell.image_ver_pos_text = self._shell.current_vertical_position_text
             self._shell.image_cam_pos_text = self._shell.current_camera_position_text
 
@@ -674,8 +674,8 @@ class StackWorker(QObject, _AcquireScanMixin):
     def __init__(
         self,
         bundle: DeviceBundle,
-        hw: "HardwareManager",
-        shell: "Controller_MainWindow",
+        hw: HardwareManager,
+        shell: Controller_MainWindow,
         save_description: str,
         save_stitch_blend: bool,
         save_all_crop: bool,
@@ -751,9 +751,7 @@ class StackWorker(QObject, _AcquireScanMixin):
             # Making sure saving is allowed and filename isn't empty
             if self._shell.saving_allowed:
                 # Getting sample name
-                self._shell.save_description = str(
-                    self._save_description
-                )
+                self._shell.save_description = str(self._save_description)
 
                 # Setting frame saver
                 self._shell._fs.reinit(3)
@@ -821,12 +819,18 @@ class StackWorker(QObject, _AcquireScanMixin):
                 # side. When adaptive is enabled, the per-plane loop
                 # records one AdaptiveSample per main plane and the HDF5
                 # writer writes the /adaptive_trajectory group before file
-                # close. When disabled, no trajectory is recorded.
+                # close (and the Zarr writer writes /acquisition/adaptive
+                # during finalize). The frozen AdaptiveConfig is passed
+                # through so the writers publish the full bounds + gains
+                # as group attrs (schema-a reproducibility contract).
+                # When disabled, no trajectory is recorded or written.
                 adaptive_enabled = (
-                    self._adaptive_cfg is not None
-                    and self._adaptive_cfg.enabled
+                    self._adaptive_cfg is not None and self._adaptive_cfg.enabled
                 )
-                self._shell._fs.configure_adaptive(adaptive_enabled)
+                self._shell._fs.configure_adaptive(
+                    adaptive_enabled,
+                    config=self._adaptive_cfg if adaptive_enabled else None,
+                )
 
             # Setting the camera for scan acquisition
             self.camera.arm_scan()
@@ -895,17 +899,17 @@ class StackWorker(QObject, _AcquireScanMixin):
                 pilot_exposures = [
                     self.camera.exposure_time
                 ] * self._adaptive_cfg.pilot_count
-                self._adaptive_controller.prime(
-                    pilot_indices, pilot_exposures
-                )
+                self._adaptive_controller.prime(pilot_indices, pilot_exposures)
                 # The initial command for plane 0 is the feedforward
                 # baseline (current exposure + current staged powers).
                 # The controller's update() will refine it from plane 0's
                 # observed intensity for plane 1 onwards.
                 current_powers = (
-                    self._shell.laser1_power_pct / 100.0
+                    self._shell.laser1_power_pct
+                    / 100.0
                     * self._shell.lasers[0].max_power,
-                    self._shell.laser2_power_pct / 100.0
+                    self._shell.laser2_power_pct
+                    / 100.0
                     * self._shell.lasers[1].max_power,
                 )
                 from lightsheet.adaptive.types import AdaptiveCommand
@@ -985,9 +989,7 @@ class StackWorker(QObject, _AcquireScanMixin):
                     # are applied — the existing fixed stack path runs
                     # unchanged.
                     if self._adaptive_controller is not None:
-                        self._apply_adaptive_command(
-                            self._adaptive_current_cmd
-                        )
+                        self._apply_adaptive_command(self._adaptive_current_cmd)
 
                     if self._multi_channel:
                         # Multi-channel per-plane sequential cycle:
@@ -1117,7 +1119,9 @@ class StackWorker(QObject, _AcquireScanMixin):
                         self._record_adaptive_step(plane)
                         if self._shell.saving_allowed:
                             if self._save_all_crop:
-                                cropped_buffer = self._shell._fs.crop_buffer(self._shell.buffer)
+                                cropped_buffer = self._shell._fs.crop_buffer(
+                                    self._shell.buffer
+                                )
                                 self._shell._fs.enqueue_buffer(cropped_buffer)
                                 self._shell.sig_message.emit(
                                     "Saving All Images (one for each ETL step, cropped)"
@@ -1128,8 +1132,12 @@ class StackWorker(QObject, _AcquireScanMixin):
                                     "Saving All Images (one for each ETL step, full)"
                                 )
                             else:
-                                self._shell._fs.enqueue_buffer(self._shell.reconstructed_frame)
-                                self._shell.sig_message.emit("Saving Reconstructed Image")
+                                self._shell._fs.enqueue_buffer(
+                                    self._shell.reconstructed_frame
+                                )
+                                self._shell.sig_message.emit(
+                                    "Saving Reconstructed Image"
+                                )
 
                     # Update progress bar
                     progress_value += progress_increment
@@ -1223,12 +1231,10 @@ class StackWorker(QObject, _AcquireScanMixin):
         if self._adaptive_controller is None:
             current_exposure = self.camera.exposure_time
             current_l1 = (
-                self._shell.laser1_power_pct / 100.0
-                * self._shell.lasers[0].max_power
+                self._shell.laser1_power_pct / 100.0 * self._shell.lasers[0].max_power
             )
             current_l2 = (
-                self._shell.laser2_power_pct / 100.0
-                * self._shell.lasers[1].max_power
+                self._shell.laser2_power_pct / 100.0 * self._shell.lasers[1].max_power
             )
             cmd = AdaptiveCommand.fixed(
                 exposure_s=current_exposure,
@@ -1253,13 +1259,9 @@ class StackWorker(QObject, _AcquireScanMixin):
         if self._multi_channel:
             frames = self._shell.reconstructed_frames
             intensities = []
-            for wl in [
-                int(laser.wavelength) for laser in self._shell.lasers
-            ]:
+            for wl in [int(laser.wavelength) for laser in self._shell.lasers]:
                 frame = frames.get(wl) if frames else None
-                intensities.append(
-                    frame_intensity_pct(frame, cfg.sensor_max)
-                )
+                intensities.append(frame_intensity_pct(frame, cfg.sensor_max))
             # The brighter channel drives the shared exposure.
             brighter_idx = max(
                 range(len(intensities)),
