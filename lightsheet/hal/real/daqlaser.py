@@ -14,6 +14,7 @@ from collections.abc import Sequence
 
 import nidaqmx
 import numpy as np
+from nidaqmx.constants import AcquisitionType, Edge
 
 from lightsheet.hal.interfaces import ILaser
 
@@ -31,6 +32,7 @@ class DAQLaser(ILaser):
         max_power_mw: float,
         label: str,
         calibration_curve: Sequence[tuple[float, float]] | None = None,
+        readback_backend: ILaser | None = None,
     ) -> None:
         # HAL error surface — cleared on construct.
         self.error = 0
@@ -125,6 +127,18 @@ class DAQLaser(ILaser):
         # paths can re-acquire without deadlocking.
         self._lock = threading.RLock()
 
+        # Optional serial readback backend (e.g. retained IBeamSmartLaser).
+        # Used for channel enable at open, power/status readback, and
+        # disconnect — NEVER for on/off/set_power emission control. The DAQ
+        # AO channel is the sole emission-control path.
+        self.readback_backend = readback_backend
+
+        # Owned finite gated-AO task (set by configure_gate, cleared by
+        # delete_gate / off). When non-None, the AO channel is held by a
+        # buffered finite task and on-demand _write_volts writes are skipped
+        # (set_power stages the next gate amplitude instead).
+        self._gate_task = None
+
     def _mw_to_volts(self, mw: float) -> float:
         """Convert desired optical power (mW) to DAQ voltage (V).
 
@@ -171,12 +185,30 @@ class DAQLaser(ILaser):
     def off(self) -> None:
         """Synchronous E-stop kill path.
 
-        Writes 0 V, sets active=False, power=0.0, returns None immediately.
+        Aborts and closes any owned finite gate task BEFORE the 0 V write so a
+        buffered task cannot retain /Dev7/ao1 and defeat the E-stop. Then
+        writes 0 V, sets active=False, power=0.0, returns None immediately.
 
         No thread/queue offload — offloading would break the synchronous-off
         safety contract for a Class IIIB laser. Lock-free: the per-write
-        nidaqmx.Task is independent of any concurrent write.
+        nidaqmx.Task is independent of any concurrent write, and the gate
+        abort/close must not wait on the per-laser lock (a daemon set_power
+        holding the lock must never delay the kill path).
         """
+        # Abort any in-flight finite gate task first — the critical race
+        # mitigation. A buffered task holding /Dev7/ao1 would defeat the 0 V
+        # on-demand write below. Cleanup errors set the HAL error surface but
+        # still allow the 0 V write to proceed.
+        if self._gate_task is not None:
+            try:
+                self._gate_task.stop()
+                self._gate_task.close()
+            except Exception as e:
+                self.error = 1
+                self.error_message = f"gate cleanup failed during off: {e}"
+                logger.exception("DAQLaser gate cleanup failed during off()")
+            finally:
+                self._gate_task = None
         self._write_volts(0.0)
         self.active = False
         self.power = 0.0
@@ -203,11 +235,94 @@ class DAQLaser(ILaser):
         """Set the staged laser power in milliwatts (mW canonical).
 
         Clamps mw to [0.0, max_power] (mW) as the first safety layer — do not
-        remove this clamp. If active, also writes converted V to DAQ AO channel
-        (_write_volts applies the second, native-unit V clamp).
+        remove this clamp. If active and no gate task owns the AO channel,
+        also writes converted V to DAQ AO channel (_write_volts applies the
+        second, native-unit V clamp). While a gate task is armed, a power edit
+        stages the next gate amplitude without attempting a conflicting
+        on-demand write — the gate task's buffered waveform is regenerated on
+        the next configure_gate call.
         """
         mw = max(0.0, min(mw, self.max_power))
         with self._lock:
             self.power = mw
-            if self.active:
+            if self.active and self._gate_task is None:
                 self._write_volts(self._mw_to_volts(mw))
+
+    # ------------------------------------------------------------------ #
+    # Finite gated-AO task lifecycle (owned by this DAQLaser, orchestrated
+    # by SigGen). The gate task writes a camera-aligned voltage pulse on
+    # self.terminal, triggered from the Dev1 AO master StartTrigger. While
+    # the gate task is armed, on-demand _write_volts calls are skipped so
+    # the buffered waveform is not disturbed.
+    # ------------------------------------------------------------------ #
+    def configure_gate(
+        self,
+        mask: np.ndarray,
+        sample_rate: int,
+        total_samples: int,
+        start_trigger: str,
+    ) -> None:
+        """Configure a finite AO gate task from a normalized exposure mask.
+
+        Scales the mask (0.0/1.0 per sample) by the currently staged mW
+        through ``_mw_to_volts``, then independently clips the resulting
+        voltage array to ``[0.0, _max_volts]`` before creating a finite task
+        on ``self.terminal``. The task is triggered from ``start_trigger``
+        (the Dev1 AO master StartTrigger) and written with auto_start=False
+        so SigGen.start_scanner can arm all slaves before the master.
+
+        On failure, surfaces the error on the HAL error surface (error=1,
+        non-empty message) and does not retain the gate handle — no
+        exception propagates so the controller's error-check loop catches it.
+        """
+        volts = self._mw_to_volts(self.power) * np.asarray(mask, dtype=float)
+        volts = np.clip(volts, 0.0, self._max_volts)
+        try:
+            self._gate_task = nidaqmx.Task(new_task_name="laser2_gate_ao")
+            self._gate_task.ao_channels.add_ao_voltage_chan(self.terminal)
+            self._gate_task.timing.cfg_samp_clk_timing(
+                rate=sample_rate,
+                sample_mode=AcquisitionType.FINITE,
+                samps_per_chan=total_samples,
+            )
+            self._gate_task.triggers.start_trigger.cfg_dig_edge_start_trig(
+                start_trigger, trigger_edge=Edge.RISING
+            )
+            self._gate_task.write(volts, auto_start=False)
+        except (nidaqmx.errors.Error, RuntimeError, OSError) as e:
+            self.error = 1
+            self.error_message = f"configure_gate failed: {e}"
+            self._gate_task = None
+            logger.exception("DAQLaser configure_gate failed")
+
+    def start_gate(self) -> None:
+        """Start the owned finite gate task (no-op if none configured)."""
+        if self._gate_task is not None:
+            self._gate_task.start()
+
+    def wait_gate(self) -> None:
+        """Wait for the owned finite gate task to complete (no-op if none)."""
+        if self._gate_task is not None:
+            self._gate_task.wait_until_done()
+
+    def stop_gate(self) -> None:
+        """Stop the owned finite gate task (no-op if none)."""
+        if self._gate_task is not None:
+            try:
+                self._gate_task.stop()
+            except Exception as e:
+                self.error = 1
+                self.error_message = f"stop_gate failed: {e}"
+                logger.exception("DAQLaser stop_gate failed")
+
+    def delete_gate(self) -> None:
+        """Close and clear the owned finite gate task (no-op if none)."""
+        if self._gate_task is not None:
+            try:
+                self._gate_task.close()
+            except Exception as e:
+                self.error = 1
+                self.error_message = f"delete_gate failed: {e}"
+                logger.exception("DAQLaser delete_gate failed")
+            finally:
+                self._gate_task = None

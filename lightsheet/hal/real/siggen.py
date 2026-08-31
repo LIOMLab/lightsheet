@@ -4,6 +4,7 @@ Created on May 16, 2019
 @author: Pierre Girard-Collins
 """
 
+import contextlib
 import logging
 
 # National Instruments Imports
@@ -15,6 +16,7 @@ from lightsheet.channel_map import ChannelMap
 from lightsheet.config import cfg_read, cfg_str2bool, cfg_write
 from lightsheet.hal.interfaces import ISigGen
 from lightsheet.hal.real.camera import Camera
+from lightsheet.hal.real.daqlaser import DAQLaser
 from lightsheet.waveforms import sawtooth, squarewave, staircase
 
 logger = logging.getLogger(__name__)
@@ -54,7 +56,7 @@ class SigGen(ISigGen):
         "False"  # Boolean — rig-verification flip, mechanism only
     )
 
-    def __init__(self, camera: Camera) -> None:
+    def __init__(self, camera: Camera, laser2_daq: DAQLaser | None = None) -> None:
         self.error = 0
         self.error_message = ""
 
@@ -62,6 +64,14 @@ class SigGen(ISigGen):
 
         # We need to know about camera settings to generate the proper waveforms
         self.camera = camera
+
+        # Optional L2 DAQLaser for camera-aligned analog gating on /Dev7/ao1.
+        # When present, create_scanner configures a finite AO gate task whose
+        # voltage pulse is nonzero only over camera-exposure samples. Existing
+        # isolated constructions (no L2 DAQ) remain valid — laser2_daq=None
+        # skips all gate lifecycle calls.
+        self._laser2_daq = laser2_daq
+        self._laser2_gate_enabled = False
 
         self.task_galvo_etl = None
         self.task_camera = None
@@ -73,6 +83,7 @@ class SigGen(ISigGen):
         self.waveform_galvo_right = None
         self.waveform_etl_left = None
         self.waveform_etl_right = None
+        self.waveform_laser2_window = None
 
         self._cfg_filename = "config.ini"
         self._cfg_section = "SigGen"
@@ -202,8 +213,26 @@ class SigGen(ISigGen):
             self.error_message = "update_etls error"
             logger.exception("SigGen - update_etls error")
 
+    def set_laser2_gate(self, enabled: bool) -> None:
+        """Enable or disable the camera-aligned L2 AO gate for the next scan.
+
+        When enabled, ``create_scanner`` configures a finite AO task on the
+        L2 DAQLaser whose voltage pulse is nonzero only over camera-exposure
+        samples. When disabled, the gate task writes zeros so /Dev7/ao1 stays
+        at 0 V throughout the scan.
+        """
+        self._laser2_gate_enabled = bool(enabled)
+
     def create_scanner(self) -> None:
-        """Creates Galvo + ETL scan task (AO) + Camera Exposure Control task (DO)"""
+        """Creates Galvo + ETL scan task (AO) + Camera Exposure Control task (DO)
+
+        When an L2 DAQLaser is present, also configures its finite AO gate task
+        on /Dev7/ao1, triggered from the Dev1 AO master StartTrigger. The gate
+        waveform is the camera exposure window scaled by the staged L2 mW
+        (enabled) or zeros (disabled). All three tasks are cleaned up on any
+        partial-construction failure so acquire_scan() aborts before camera
+        recording.
+        """
 
         # Channel-reversal — order_galvos called with (waveform_right,
         # waveform_left) so swap=False preserves today's stack order. Array
@@ -270,39 +299,86 @@ class SigGen(ISigGen):
 
             self.task_camera.write(self.waveform_camera, auto_start=False)
             self.task_galvo_etl.write(galvo_etl_waveforms, auto_start=False)
+
+            # L2 finite AO gate on /Dev7/ao1 — camera-aligned voltage pulse.
+            # Configured last so a failure here cleans up the galvo/ETL and
+            # camera tasks that were already created. When disabled, the gate
+            # task writes zeros so /Dev7/ao1 stays at 0 V throughout the scan.
+            if self._laser2_daq is not None:
+                if self._laser2_gate_enabled:
+                    l2_mask = self.waveform_laser2_window
+                else:
+                    l2_mask = np.zeros_like(self.waveform_laser2_window)
+                self._laser2_daq.configure_gate(
+                    l2_mask,
+                    sample_rate=self.sample_rate,
+                    total_samples=self.total_samples,
+                    start_trigger=self.do_start_trigger,
+                )
+                # Propagate L2 gate failures onto SigGen's error surface so
+                # acquire_scan() aborts before camera recording starts.
+                if self._laser2_daq.error:
+                    raise RuntimeError(
+                        f"L2 gate: {self._laser2_daq.error_message}"
+                    )
         except (nidaqmx.errors.Error, RuntimeError, OSError):
-            self.task_galvo_etl = None
-            self.task_camera = None
+            # Clean up all partial tasks before nulling handles.
+            self._cleanup_scanner_tasks()
             self.error = 1
             self.error_message = "create_scan error"
             logger.exception("SigGen - create_scan error")
 
     def start_scanner(self) -> None:
-        """Start both AO and DO tasks"""
+        """Start slave tasks (camera DO + L2 AO gate) before the Dev1 AO master."""
         if self.task_galvo_etl is not None and self.task_camera is not None:
-            # Master task needs to be started last
+            # Slave tasks first, master task last.
             self.task_camera.start()
+            if self._laser2_daq is not None:
+                self._laser2_daq.start_gate()
             self.task_galvo_etl.start()
 
     def monitor_scanner(self) -> None:
-        """Wait for AO and DO tasks to complete"""
+        """Wait for all scanner tasks to complete."""
         if self.task_galvo_etl is not None and self.task_camera is not None:
             self.task_camera.wait_until_done()
+            if self._laser2_daq is not None:
+                self._laser2_daq.wait_gate()
             self.task_galvo_etl.wait_until_done()
 
     def stop_scanner(self) -> None:
-        """Stop AO and DO tasks"""
+        """Stop all scanner tasks."""
         if self.task_galvo_etl is not None and self.task_camera is not None:
             self.task_camera.stop()
+            if self._laser2_daq is not None:
+                self._laser2_daq.stop_gate()
             self.task_galvo_etl.stop()
 
     def delete_scanner(self) -> None:
-        """Delete AO and DO tasks"""
+        """Close and clear all scanner task handles."""
         if self.task_galvo_etl is not None and self.task_camera is not None:
             self.task_camera.close()
             self.task_camera = None
+            if self._laser2_daq is not None:
+                self._laser2_daq.delete_gate()
             self.task_galvo_etl.close()
             self.task_galvo_etl = None
+
+    def _cleanup_scanner_tasks(self) -> None:
+        """Close any partially-constructed scanner tasks and clear handles.
+
+        Called from the create_scanner except handler so a failure at any
+        point (galvo/ETL, camera, or L2 gate) does not leak task handles.
+        """
+        if self.task_galvo_etl is not None:
+            with contextlib.suppress(Exception):
+                self.task_galvo_etl.close()
+            self.task_galvo_etl = None
+        if self.task_camera is not None:
+            with contextlib.suppress(Exception):
+                self.task_camera.close()
+            self.task_camera = None
+        if self._laser2_daq is not None:
+            self._laser2_daq.delete_gate()
 
     def compute_scan_waveforms(self) -> None:
         """Compute Galvo + ETL scan ramps and Camera Exposure waveforms."""
@@ -456,6 +532,11 @@ class SigGen(ISigGen):
             repeat=camera_repeat,
             inverted=camera_inverted,
         )
+
+        # Normalized L2 exposure window — 1.0 where the camera is active,
+        # 0.0 elsewhere. DAQLaser.configure_gate scales this by the staged
+        # L2 mW to produce a camera-aligned voltage pulse on /Dev7/ao1.
+        self.waveform_laser2_window = self.waveform_camera.astype(float)
         self.waveform_galvo_left = sawtooth(
             activated=galvo_activated,
             pre_samples=galvo_pre_samples,

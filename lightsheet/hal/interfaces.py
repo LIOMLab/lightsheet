@@ -175,6 +175,12 @@ class ISigGenCore(ABC):
     etl_right_offset: float
     waveform_cycles: int | None
     waveform_metadata: dict | None
+    # Normalized L2 exposure window (0.0/1.0 per sample, aligned to
+    # waveform_camera). Used by DAQLaser.configure_gate to scale the staged
+    # L2 mW into a camera-aligned voltage pulse on /Dev7/ao1. Typed as Any
+    # because this interface module does not import numpy (concrete backends
+    # do); the concrete type is np.ndarray | None.
+    waveform_laser2_window: Any
 
     # open/close are NOT declared — the real SigGen class does not expose them.
     @abstractmethod
@@ -191,6 +197,18 @@ class ISigGenCore(ABC):
 
     @abstractmethod
     def delete_scanner(self) -> None: ...
+
+    @abstractmethod
+    def set_laser2_gate(self, enabled: bool) -> None:
+        """Enable or disable the camera-aligned L2 AO gate for the next scan.
+
+        When enabled, ``create_scanner`` configures a finite AO task on the
+        L2 DAQLaser whose voltage pulse is nonzero only over camera-exposure
+        samples. When disabled, the gate task writes zeros so /Dev7/ao1 stays
+        at 0 V throughout the scan. The gate becomes active only when
+        ``start_scanner`` arms the slave tasks.
+        """
+        ...
 
 
 class ISigGen(ISigGenCore):
