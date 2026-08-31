@@ -65,11 +65,10 @@ cd "${REPO_ROOT}"
 # killing workers before pytest-cov wrote their .coverage.<worker> files
 # ("coverage: failed workers", lost data). The signal-lambda cycle is now
 # broken at the connection layer: wire_collaborators() uses bare bound-method
-# connections (PyQt5 decomposes these into weakref(__self__) +
+# connections (PySide6 decomposes these into weakref(__self__) +
 # strong(__func__), so the signal system holds zero strong refs to the
 # controller), so the Python wrapper reaches refcount zero naturally and the
-# deferred C++ destructor no longer fires at shutdown. Phase 7 (Qt6 port) will
-# confirm the cycle stays broken under PySide6.
+# deferred C++ destructor no longer fires at shutdown.
 #
 # The -o addopts override deliberately RE-DECLARES addopts rather than
 # inheriting from pyproject.toml: -o replaces the default addopts entirely, so
@@ -78,7 +77,45 @@ cd "${REPO_ROOT}"
 # handling is already tuned for the shutdown segfault). -n auto is included
 # explicitly so xdist parallelism is not silently dropped; --maxprocesses=6 is
 # added here explicitly for memory-bound consistency with the iteration path.
-uv run pytest test/ -q --cov=lightsheet --cov-branch -o "addopts=--strict-markers -n auto --maxprocesses=6" || _pytest_exit=$?
+#
+# Hang guard: xdist can occasionally deadlock at shutdown under gc.disable()
+# (a Qt/shiboken teardown race — the main process stalls at 0% CPU waiting on
+# workers that have already died). The segfault (exit 139) is already
+# tolerated below because .coverage is written before atexit; a hang is
+# different — the process never exits, so the gate would stall forever. We
+# wrap the xdist run in a hard timeout (5 min — xdist normally finishes in
+# ~45s, so this is generous headroom). On timeout (exit 124) we fall back to
+# single-process collection (~4 min, reliable: no xdist shutdown race). If
+# `timeout` is unavailable (non-GNU environment), we run xdist unguarded —
+# the hang is intermittent, not deterministic.
+_XDIST_TIMEOUT=300
+_run_cov_xdist() {
+  uv run pytest test/ -q --cov=lightsheet --cov-branch \
+    -o "addopts=--strict-markers -n auto --maxprocesses=6"
+}
+_run_cov_serial() {
+  uv run pytest test/ -q --cov=lightsheet --cov-branch \
+    -o "addopts=--strict-markers" -p no:xdist
+}
+# Export so `timeout` (which execs, not a shell builtin) can invoke them
+# via `bash -c`. This script already requires bash (${BASH_SOURCE[0]}).
+export -f _run_cov_xdist _run_cov_serial
+
+_pytest_exit=0
+if command -v timeout >/dev/null 2>&1; then
+  timeout --kill-after=10 "${_XDIST_TIMEOUT}" bash -c _run_cov_xdist || _pytest_exit=$?
+else
+  _run_cov_xdist || _pytest_exit=$?
+fi
+
+# 124 = timeout fired (xdist hung); 137 = SIGKILL'd after --kill-after.
+# Fall back to single-process, which has no xdist shutdown race.
+if [ "${_pytest_exit:-0}" = "124" ] || [ "${_pytest_exit:-0}" = "137" ]; then
+  echo "coverage.sh: xdist coverage run hung (exit ${_pytest_exit}); falling back to single-process" >&2
+  _pytest_exit=0
+  _run_cov_serial || _pytest_exit=$?
+fi
+
 # Tolerate the shutdown segfault (exit 139): the .coverage file is written
 # BEFORE Python atexit runs, so the data is complete even when the process
 # segfaults at shutdown. Any other non-zero exit (test failure, real error)

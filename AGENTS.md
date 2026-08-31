@@ -285,11 +285,14 @@ bare `uv run pytest test/ -q` (or `scripts/test.sh`).
     unnecessary. `conftest.py` still calls `gc.disable()` for the whole
     session (line 312) as a guard against Qt widget destructor segfaults
     during the run. `scripts/coverage.sh` runs xdist-parallel (`-n auto
-    --maxprocesses=6` in its `-o addopts` override) — the single-process
-    `-p no:xdist` workaround is removed. A separate shutdown-time
-    `QApplication` teardown segfault was historical under the legacy Qt5/sip
-    binding; whether it still applies under PySide6/shiboken is unverified —
-    do not assert it as current. It fires AFTER coverage data is written so it
+    --maxprocesses=6` in its `-o addopts` override) with a 5-minute hard
+    timeout; if xdist deadlocks at shutdown (an intermittent Qt/shiboken
+    teardown race under gc.disable()) it falls back to single-process
+    collection (`-p no:xdist`, ~4 min, no xdist shutdown race). A separate
+    shutdown-time `QApplication` teardown segfault was historical under the
+    legacy Qt5/sip binding; whether it still applies under PySide6/shiboken
+    is unverified — do not assert it as current. It fires AFTER coverage
+    data is written so it
     does not affect the gate either way.
 - **Coverage-gate invocation** (`bash scripts/coverage.sh`) runs the explicit
   3-step gate: `pytest --cov=lightsheet --cov-branch --cov-fail-under=70` →
