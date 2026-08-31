@@ -692,12 +692,18 @@ def _count_chunk_files(store_path: str) -> int:
     """Walk the zarr store tree and count files under the ``0/c/``
     directory (the L0 chunk files). A metadata-only store has zero
     chunk files (only ``zarr.json`` files); a store with data has
-    chunk files like ``0/c/0/0/0/0``."""
+    chunk files like ``0/c/0/0/0/0``.
+
+    Uses forward-slash normalization (``as_posix``) so the prefix check
+    works on Windows, where ``os.path.relpath`` returns backslash paths
+    (``0\\c\\0\\0\\0``) — a hardcoded ``"0/c/"`` prefix would match nothing
+    on Windows and falsely report zero chunk files."""
     import os
+    from pathlib import Path
 
     chunk_files = 0
     for root, _dirs, files in os.walk(store_path):
-        rel = os.path.relpath(root, store_path)
+        rel = Path(root).relative_to(Path(store_path)).as_posix()
         # Count files in any directory under 0/c/ (chunk storage).
         if rel.startswith("0/c/") or rel == "0/c":
             chunk_files += len(files)

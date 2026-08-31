@@ -55,7 +55,7 @@ def test_comboBox_units_absent_from_generated_ui_py() -> None:
 
 def test_label_units_absent_from_ui_file() -> None:
     """label_units is not declared in ui_shell.ui."""
-    text = _UI_SHELL_UI.read_text()
+    text = _UI_SHELL_UI.read_text(encoding="utf-8")
     assert 'name="label_units"' not in text, (
         "label_units still declared in ui_shell.ui"
     )
@@ -97,7 +97,7 @@ def test_controller_has_no_units_fixformat(
 
 def test_motor_panel_has_no_shell_units_reads() -> None:
     """motor_panel.py has no ``self._shell.units`` reads."""
-    text = _MOTOR_PANEL.read_text()
+    text = _MOTOR_PANEL.read_text(encoding="utf-8")
     assert "_shell.units" not in text, (
         "motor_panel.py still reads self._shell.units — the units removal "
         "left a stale read site"
@@ -107,7 +107,7 @@ def test_motor_panel_has_no_shell_units_reads() -> None:
 def test_stack_panel_has_no_shell_units_reads() -> None:
     """stack_panel.py has no ``self._shell.units`` reads and no
     comboBox_units reads."""
-    text = _STACK_PANEL.read_text()
+    text = _STACK_PANEL.read_text(encoding="utf-8")
     assert "_shell.units" not in text, (
         "stack_panel.py still reads self._shell.units — the units removal "
         "left a stale read site"
