@@ -47,7 +47,7 @@ class AcquisitionPanelWidget(QWidget):
                 w.applySpec(spec)
 
     def updateUi_modes_buttons(self, buttons_to_enable: list[QPushButton]) -> None:
-        """Update mode buttons status : disable buttons, except for those specified to be enabled"""  # noqa: E501
+        """Update mode buttons status : disable buttons, except for those specified to be enabled"""
         aquisition_buttons = [
             self.ui.pushButton_acqStartPreviewMode,
             self.ui.pushButton_acqStartLiveMode,
@@ -139,7 +139,7 @@ class AcquisitionPanelWidget(QWidget):
             self._shell._cache_auto_laser_flags()
 
             # Spawn the preview worker on a QThread (moveToThread pattern).
-            self._shell._preview_worker = PreviewWorker(self._shell._bundle, self._shell._hw, self._shell)  # noqa: E501
+            self._shell._preview_worker = PreviewWorker(self._shell._bundle, self._shell._hw, self._shell)
             self._shell._preview_thread = QThread()
             self._shell._preview_worker.moveToThread(self._shell._preview_thread)
             self._shell._preview_thread.started.connect(self._shell._preview_worker.run)
@@ -185,7 +185,7 @@ class AcquisitionPanelWidget(QWidget):
             self._shell._cache_auto_laser_flags()
 
             # Spawn the live worker on a QThread (moveToThread pattern).
-            self._shell._live_worker = LiveWorker(self._shell._bundle, self._shell._hw, self._shell)  # noqa: E501
+            self._shell._live_worker = LiveWorker(self._shell._bundle, self._shell._hw, self._shell)
             self._shell._live_thread = QThread()
             self._shell._live_worker.moveToThread(self._shell._live_thread)
             self._shell._live_thread.started.connect(self._shell._live_worker.run)
@@ -236,7 +236,7 @@ class AcquisitionPanelWidget(QWidget):
             save_blend = self._shell.save_panel.ui.radioButton_saveStitchBlend.isChecked()
 
             # Spawn the single-image worker on a QThread (moveToThread pattern).
-            self._shell._single_worker = SingleWorker(self._shell._bundle, self._shell._hw, self._shell, save_desc, save_blend, multi_channel)  # noqa: E501
+            self._shell._single_worker = SingleWorker(self._shell._bundle, self._shell._hw, self._shell, save_desc, save_blend, multi_channel)
             self._shell._single_thread = QThread()
             self._shell._single_worker.moveToThread(self._shell._single_thread)
             self._shell._single_thread.started.connect(self._shell._single_worker.run)
@@ -283,24 +283,24 @@ class AcquisitionPanelWidget(QWidget):
                 or (self._shell.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.value() == 0)
             ):
                 self._shell.sig_message.emit(
-                    "Set starting and ending points and select a non-zero plane step value"  # noqa: E501
+                    "Set starting and ending points and select a non-zero plane step value"
                 )
                 self._shell.sig_beep.emit()
                 QMessageBox.warning(
                     self._shell,
                     "Stack Acquisition Warning",
-                    "Set starting and ending points and select a non-zero plane step value",  # noqa: E501
+                    "Set starting and ending points and select a non-zero plane step value",
                     QMessageBox.StandardButton.Ok,
                     QMessageBox.StandardButton.Ok,
                 )
             else:
-                # Setting stack step size sign (taking into account the direction of acquisition)  # noqa: E501
+                # Setting stack step size sign (taking into account the direction of acquisition)
                 if self._shell.stack_starting_plane > self._shell.stack_ending_plane:
                     self._shell.stack_step = (
                         -1 * self._shell.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.value()
                     )
                 else:
-                    self._shell.stack_step = self._shell.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.value()  # noqa: E501
+                    self._shell.stack_step = self._shell.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.value()
 
                 # Check that filename is valid and saving is allowed
                 self._shell.save_panel.validate_file_name()
@@ -317,9 +317,9 @@ class AcquisitionPanelWidget(QWidget):
                     )
 
                 if self._shell.saving_allowed or nosave_answer:
-                    self._shell.stack_panel.ui.pushButton_acqStartStackMode.setText("Stop Stack Mode")  # noqa: E501
-                    self._shell.ui.statusBar_label.setText("Current Acquisition Mode: Stack ")  # noqa: E501
-                    self._shell.ui.statusBar_progress.setValue(0)  # To reset progress bar  # noqa: E501
+                    self._shell.stack_panel.ui.pushButton_acqStartStackMode.setText("Stop Stack Mode")
+                    self._shell.ui.statusBar_label.setText("Current Acquisition Mode: Stack ")
+                    self._shell.ui.statusBar_progress.setValue(0)  # To reset progress bar
                     self._shell.ui.statusBar_progress.show()
                     self._shell.stack_mode_started = True
 
@@ -441,6 +441,26 @@ class AcquisitionPanelWidget(QWidget):
             adaptive_cfg=adaptive_cfg,
         )
         self._shell._stack_worker.moveToThread(self._shell._stack_thread)
+        # Connect the per-plane adaptive trajectory signal to the
+        # shell's GUI-thread slot. The connection is queued (the worker
+        # runs on the QThread, the slot runs on the GUI thread) so the
+        # worker NEVER calls pyqtgraph directly — it emits data only
+        # (AGENTS.md §11, threat T-10-05). Disconnect any prior
+        # connection from a previous queue row first so the slot does
+        # not fire twice.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message='.*Failed to disconnect .* from signal "sig_adaptive_trajectory\\(\\)"',
+                category=RuntimeWarning,
+            )
+            try:
+                self._shell._stack_worker.sig_adaptive_trajectory.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+        self._shell._stack_worker.sig_adaptive_trajectory.connect(
+            self._shell._on_adaptive_trajectory
+        )
         # When reusing the thread (2nd+ queue row), disconnect the prior
         # started→run so the reused thread's started only invokes this
         # row's run. Skip on the first spawn — no prior connection exists

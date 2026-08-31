@@ -32,7 +32,6 @@ import webbrowser
 from functools import partial
 
 import numpy as np
-
 from PySide6.QtCore import QRect, QSize, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import (
     QActionGroup,
@@ -51,7 +50,6 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QProgressBar,
-    QPushButton,
     QStyle,
     QStyleOptionToolButton,
 )
@@ -69,6 +67,7 @@ from lightsheet.gui.panels.save_panel import SavePanelWidget
 from lightsheet.gui.panels.scan_panel import ScanPanelWidget
 from lightsheet.gui.panels.stack_panel import StackPanelWidget
 from lightsheet.gui.shell.ui_shell import Ui_Shell
+from lightsheet.gui.widgets.adaptive_trajectory import AdaptiveTrajectoryWidget
 from lightsheet.gui.widgets.channel_radio import ChannelRadio
 from lightsheet.hal.bundle import DeviceBundle
 from lightsheet.wavelength_color import wavelength_to_hex
@@ -348,7 +347,7 @@ class Controller_MainWindow(QMainWindow):
         # vertical-scroll only). The page order matches the left-rail
         # button order: Motion(0), Acquire(1), Stack(2), Scan(3),
         # Lasers(4), Files(5), Past(6), Calibrate(7).
-        from PySide6.QtWidgets import QScrollArea, QWidget
+        from PySide6.QtWidgets import QScrollArea
 
         def _wrap(panel) -> QScrollArea:
             scroll = QScrollArea()
@@ -565,9 +564,9 @@ class Controller_MainWindow(QMainWindow):
             self.save_panel.ui.lineEdit_saveDescription.setEnabled(True)
         else:
             self.save_panel.ui.lineEdit_saveDirectory.setText("")
-            self.save_panel.ui.lineEdit_saveFilename.setPlaceholderText("Filename - Select Save Directory First")  # noqa: E501
+            self.save_panel.ui.lineEdit_saveFilename.setPlaceholderText("Filename - Select Save Directory First")
             self.save_panel.ui.lineEdit_saveFilename.setEnabled(False)
-            self.save_panel.ui.lineEdit_saveDescription.setPlaceholderText("Description - Select Save Directory First")  # noqa: E501
+            self.save_panel.ui.lineEdit_saveDescription.setPlaceholderText("Description - Select Save Directory First")
             self.save_panel.ui.lineEdit_saveDescription.setEnabled(False)
 
         # Flags
@@ -811,6 +810,35 @@ class Controller_MainWindow(QMainWindow):
         self._laser2_amplitude_timer = QTimer()
         self._laser2_amplitude_timer.setSingleShot(True)
         self._laser2_amplitude_timer.timeout.connect(self.laser_panel._apply_laser2_amplitude)
+
+        # --- D-04 adaptive trajectory dock ---
+        # A QDockWidget in the RightDockWidgetArea hosts the live
+        # per-plane trajectory plot. The dock is visible across all
+        # left-rail panels (a QDockWidget on the QMainWindow, not a
+        # QStackedWidget page) and is floatable to a 2nd monitor. The
+        # dock is hidden until adaptive is enabled; the plot widget is
+        # GUI-thread-only (the worker emits a queued Signal, the shell
+        # slot calls append_sample — AGENTS.md §11).
+        self._adaptive_dock_state_key = "ui/adaptiveTrajectoryDockState"
+        self._build_adaptive_trajectory_dock()
+        # Restore the persisted dock state (geometry + dock-widget-area)
+        # from QSettings. This is the dock-state persistence reversibility
+        # concern noted in D-04 — QSettings, not config.ini, so demo
+        # tests do not write config.ini.
+        self._restore_adaptive_dock_state()
+
+        # Wire the adaptive enable toggle on the stack panel to show/hide
+        # the dock. The toggle handler lives on the shell so the dock
+        # lifecycle stays with the QMainWindow owner.
+        self.stack_panel.ui.checkBox_adaptiveEnable.toggled.connect(
+            self._on_adaptive_enabled_toggled
+        )
+        # The mode badge min width accommodates the longest single-line
+        # adaptive string: "ADAPTIVE RUNNING — plane 999/999 (row 3/5)
+        # · MULTI-CH" (UI-SPEC §UI Considerations — long-text E3). Set
+        # once at construction so the badge reserves the width before
+        # the first ADAPTIVE mode render.
+        self.ui.label_modeBadge.setMinimumWidth(180)
 
     def _on_levels_changed(self, levels_min: int, levels_max: int) -> None:
         """Apply a LevelsBar WINDOW handle drag to the ImageView display
@@ -1059,8 +1087,8 @@ class Controller_MainWindow(QMainWindow):
                 "resources", "demo_image.png",
             )
             try:
-                from PySide6.QtGui import QImage
                 import numpy as _np
+                from PySide6.QtGui import QImage
                 _img = QImage(_demo_img_path)
                 if not _img.isNull():
                     # Convert to grayscale numpy array for ImageView.
@@ -1104,6 +1132,11 @@ class Controller_MainWindow(QMainWindow):
             # Persist the last stack's start/end/step so a re-run does not
             # require re-driving the stage.
             self._save_stack_params()
+            # Persist the adaptive trajectory dock state (geometry +
+            # dock-widget-area) to QSettings for the next session (D-04
+            # dock-state persistence). After the synchronous shutdown
+            # decision so a "No" does not persist. Skipped in demo mode.
+            self._save_adaptive_dock_state()
             # Guard: hardware_init may not have run yet (100ms single-shot
             # timer). If the window is closed before it fires, self.lasers /
             # self.camera / self.etls / self.timer_imageview /
@@ -1136,7 +1169,7 @@ class Controller_MainWindow(QMainWindow):
             # after close_modes() cleared its mode-started flag. The 4 laser
             # daemon threads stay threading.Thread and are NOT in this loop
             # (lock-free E-stop, AGENTS.md §2).
-            for attr in ("_preview_thread", "_live_thread", "_single_thread", "_stack_thread"):  # noqa: E501
+            for attr in ("_preview_thread", "_live_thread", "_single_thread", "_stack_thread"):
                 worker_thread = getattr(self, attr, None)
                 if worker_thread is not None and worker_thread.isRunning():
                     worker_thread.quit()
@@ -1370,6 +1403,8 @@ class Controller_MainWindow(QMainWindow):
         - single → "SINGLE"
         - stack running → "STACK RUNNING — plane {plane}/{total}"
         - stack running in a queue → appended " (row {queue_row}/{queue_total})"
+        - adaptive running → "ADAPTIVE RUNNING — plane {plane}/{total}"
+        - adaptive aborted → "ADAPTIVE ABORTED — plane {plane}/{total}"
         """
         if mode == "IDLE":
             text = "IDLE"
@@ -1385,6 +1420,12 @@ class Controller_MainWindow(QMainWindow):
             text = f"STACK {state} \u2014 plane {n}/{n_total}" if state else (
                 f"STACK RUNNING \u2014 plane {n}/{n_total}"
             )
+            if queue_row and queue_total:
+                text += f" (row {queue_row}/{queue_total})"
+        elif mode == "ADAPTIVE":
+            n = plane if plane > 0 else 1
+            n_total = total if total > 0 else int(getattr(self, "number_of_planes", 0))
+            text = f"ADAPTIVE {state} \u2014 plane {n}/{n_total}"
             if queue_row and queue_total:
                 text += f" (row {queue_row}/{queue_total})"
         else:
@@ -1662,6 +1703,147 @@ class Controller_MainWindow(QMainWindow):
         self.calibration_panel.ui.pushButton_calHorizontalSetForwardLimit.clicked.connect(self._mc.updateUi_set_horizontal_forward_boundary)
         self.calibration_panel.ui.pushButton_calHorizontalSetBackwardLimit.clicked.connect(self._mc.updateUi_set_horizontal_backward_boundary)
 
+    # --- D-04 adaptive trajectory dock lifecycle ---
+
+    def _build_adaptive_trajectory_dock(self) -> None:
+        """Create the adaptive trajectory QDockWidget in the
+        RightDockWidgetArea. The dock is movable + floatable (operator
+        can drag it to a 2nd monitor) and hidden initially — shown when
+        adaptive is enabled. The plot widget is GUI-thread-only."""
+        from PySide6.QtWidgets import QDockWidget
+
+        self.dockWidget_adaptiveTrajectory = QDockWidget(
+            "Adaptive Trajectory", self
+        )
+        self.dockWidget_adaptiveTrajectory.setObjectName(
+            "dockWidget_adaptiveTrajectory"
+        )
+        self.dockWidget_adaptiveTrajectory.setAllowedAreas(
+            Qt.DockWidgetArea.LeftDockWidgetArea
+            | Qt.DockWidgetArea.RightDockWidgetArea
+            | Qt.DockWidgetArea.TopDockWidgetArea
+            | Qt.DockWidgetArea.BottomDockWidgetArea
+        )
+        self.dockWidget_adaptiveTrajectory.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+            | QDockWidget.DockWidgetFeature.DockWidgetClosable
+        )
+        self.adaptiveTrajectoryWidget = AdaptiveTrajectoryWidget(
+            self.dockWidget_adaptiveTrajectory
+        )
+        self.dockWidget_adaptiveTrajectory.setWidget(
+            self.adaptiveTrajectoryWidget
+        )
+        # Expose the plot + label on the dock for test reachability.
+        self.plotWidget_adaptiveTrajectory = (
+            self.adaptiveTrajectoryWidget.plotWidget_adaptiveTrajectory
+        )
+        self.label_adaptiveTrajectoryEmpty = (
+            self.adaptiveTrajectoryWidget.label_adaptiveTrajectoryEmpty
+        )
+        self.addDockWidget(
+            Qt.DockWidgetArea.RightDockWidgetArea,
+            self.dockWidget_adaptiveTrajectory,
+        )
+        # Hidden until adaptive is enabled.
+        self.dockWidget_adaptiveTrajectory.hide()
+
+    def _restore_adaptive_dock_state(self) -> None:
+        """Restore the persisted dock geometry + dock-widget-area from
+        QSettings. No-op if no saved state exists (first run). Uses
+        QSettings (not config.ini) so demo tests do not write
+        config.ini."""
+        from PySide6.QtCore import QSettings
+
+        settings = QSettings("lightsheet", "shell")
+        state = settings.value(self._adaptive_dock_state_key)
+        if state is not None:
+            try:
+                self.restoreState(state)
+            except (TypeError, RuntimeError):
+                pass  # stale/corrupt state — ignore, dock keeps defaults
+
+    def _save_adaptive_dock_state(self) -> None:
+        """Persist the dock geometry + dock-widget-area to QSettings.
+        Called from closeEvent after the synchronous shutdown decision.
+        Skipped in demo mode so the test suite does not persist dock
+        state across test runs (mirrors the _save_stack_params /
+        theme-persistence guards)."""
+        if getattr(self, "_demo_mode", False):
+            return
+        from PySide6.QtCore import QSettings
+
+        settings = QSettings("lightsheet", "shell")
+        settings.setValue(self._adaptive_dock_state_key, self.saveState())
+
+    @Slot(bool)
+    def _on_adaptive_enabled_toggled(self, enabled: bool) -> None:
+        """Show/hide the trajectory dock when the adaptive enable
+        checkbox is toggled. When enabled, the dock shows the
+        empty-state label (plot hidden until the first sample). When
+        disabled, the dock is hidden entirely (the default
+        fixed-exposure stack behavior is unchanged)."""
+        if enabled:
+            self.dockWidget_adaptiveTrajectory.show()
+            self.adaptiveTrajectoryWidget.set_empty()
+        else:
+            self.dockWidget_adaptiveTrajectory.hide()
+
+    @Slot(int, float, float, float, str, bool, bool)
+    def _on_adaptive_trajectory(
+        self,
+        plane_idx: int,
+        intensity: float,
+        exposure_s: float,
+        power1_mw: float,
+        control_variable_active: str,
+        reacquired: bool,
+        power_fallback: bool,
+    ) -> None:
+        """GUI-thread slot for the per-plane adaptive trajectory signal.
+
+        The worker emits ``sig_adaptive_trajectory`` (a queued
+        ``Signal``); this slot appends one sample to the plot. The
+        worker NEVER calls pyqtgraph directly (AGENTS.md §11). On the
+        first sample of a run, the plot initializes with the current
+        target band from the stack panel's build_adaptive_config."""
+        if not self.dockWidget_adaptiveTrajectory.isVisible():
+            return
+        # Track the last plane index for the ADAPTIVE ABORTED badge
+        # (set by _freeze_adaptive_trajectory on E-stop).
+        self._adaptive_last_plane = plane_idx
+        # On the first sample, reset the plot with the current target
+        # band so the LinearRegionItem spans the operator's bounds.
+        if not self.adaptiveTrajectoryWidget.plotWidget_adaptiveTrajectory.isVisible():
+            cfg = self.stack_panel.build_adaptive_config()
+            if cfg is not None:
+                self.adaptiveTrajectoryWidget.reset(
+                    target_band_lo=cfg.target_band_lo,
+                    target_band_hi=cfg.target_band_hi,
+                )
+            else:
+                self.adaptiveTrajectoryWidget.reset()
+        self.adaptiveTrajectoryWidget.append_sample(
+            plane_idx=plane_idx,
+            intensity=intensity,
+            exposure_s=exposure_s,
+            power1_mw=power1_mw,
+            control_variable_active=control_variable_active,
+            reacquired=reacquired,
+            power_fallback=power_fallback,
+        )
+
+    def _freeze_adaptive_trajectory(self) -> None:
+        """Freeze the trajectory plot and set the badge to ADAPTIVE
+        ABORTED. Called from the E-stop handler AFTER the synchronous
+        laser-off kill path completes (the kill path precedes the GUI
+        freeze/badge work — threat T-10-02)."""
+        self.adaptiveTrajectoryWidget.freeze()
+        plane = int(getattr(self, "_adaptive_last_plane", 0))
+        total = int(getattr(self, "number_of_planes", 0))
+        self._update_mode_badge("ADAPTIVE", "ABORTED", plane=plane, total=total)
+
     @Slot()
     def updateUi_estop_pressed(self) -> None:
         """E-stop button / F12 hotkey handler.
@@ -1697,6 +1879,13 @@ class Controller_MainWindow(QMainWindow):
                     f"microscope. Cause: {laser.error_message}"
                 )
                 laser.error = 0
+        # Freeze the adaptive trajectory plot AFTER the synchronous
+        # laser-off kill path completes (threat T-10-02 — the kill path
+        # precedes the GUI freeze/badge work). The dock stays visible so
+        # the operator can review the partial trajectory. No-op if the
+        # dock does not exist (no adaptive run in progress).
+        if hasattr(self, "adaptiveTrajectoryWidget"):
+            self._freeze_adaptive_trajectory()
         # Refresh-after-action: both status labels reflect the post-E-stop
         # state. Deferred via QTimer.singleShot(0, ...) so the GUI thread
         # releases within ~1 ms of the press — the synchronous kill loop

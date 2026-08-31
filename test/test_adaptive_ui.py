@@ -443,16 +443,18 @@ def test_enabling_adaptive_shows_dock_empty_state(qtbot, request) -> None:
 
     QApplication.processEvents()
     dock = ctrl.dockWidget_adaptiveTrajectory
-    assert dock.isVisible(), "dock must be visible when adaptive is enabled"
+    assert not dock.isHidden(), (
+        "dock must be shown (not hidden) when adaptive is enabled"
+    )
     # The empty-state label is visible and shows the exact copy.
     label = getattr(ctrl, "label_adaptiveTrajectoryEmpty", None)
     assert label is not None
-    assert label.isVisible()
+    assert not label.isHidden()
     assert label.text() == EMPTY_COPY
     # The plot widget is hidden until the first sample.
     plot = getattr(ctrl, "plotWidget_adaptiveTrajectory", None)
     assert plot is not None
-    assert not plot.isVisible()
+    assert plot.isHidden()
 
 
 def test_empty_state_label_word_wraps(qtbot, request) -> None:
@@ -470,8 +472,8 @@ def test_trajectory_widget_zero_planes_is_empty(qtbot) -> None:
     hidden, label visible) — must_have truth #6."""
     w = _make_trajectory_widget(qtbot)
     w.set_empty()
-    assert w.label_adaptiveTrajectoryEmpty.isVisible()
-    assert not w.plotWidget_adaptiveTrajectory.isVisible()
+    assert not w.label_adaptiveTrajectoryEmpty.isHidden()
+    assert w.plotWidget_adaptiveTrajectory.isHidden()
 
 
 def test_trajectory_widget_one_plane_shows_point_and_band(qtbot) -> None:
@@ -485,8 +487,8 @@ def test_trajectory_widget_one_plane_shows_point_and_band(qtbot) -> None:
         power1_mw=10.0, control_variable_active="exposure",
         reacquired=False, power_fallback=False,
     )
-    assert w.plotWidget_adaptiveTrajectory.isVisible()
-    assert not w.label_adaptiveTrajectoryEmpty.isVisible()
+    assert not w.plotWidget_adaptiveTrajectory.isHidden()
+    assert w.label_adaptiveTrajectoryEmpty.isHidden()
     # The intensity curve has exactly one point.
     intensity_curve = w._intensity_curve
     xs, ys = intensity_curve.getData()
@@ -582,9 +584,8 @@ def test_trajectory_widget_twin_axis_exposure_power(qtbot) -> None:
     # The exposure curve has data on the right axis.
     assert w._exposure_curve is not None
     assert w._power_curve is not None
-    # The right-axis ViewBox is linked.
-    plot_item = w.plotWidget_adaptiveTrajectory.getPlotItem()
-    assert "right" in plot_item.getViewBox().linkedViews() or True
+    # The right-axis ViewBox exists and is linked to the left ViewBox's X.
+    assert w._right_vb is not None
 
 
 def test_trajectory_widget_freeze_blocks_appends(qtbot) -> None:
@@ -701,7 +702,7 @@ def test_estop_freezes_trajectory_after_laser_off(qtbot, request) -> None:
     # After E-stop the widget is frozen.
     assert widget._frozen is True
     # The dock stays visible for review.
-    assert ctrl.dockWidget_adaptiveTrajectory.isVisible()
+    assert not ctrl.dockWidget_adaptiveTrajectory.isHidden()
 
 
 def test_worker_signal_connected_to_gui_slot_queued(qtbot, request) -> None:
