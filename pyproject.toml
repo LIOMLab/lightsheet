@@ -29,6 +29,7 @@ lightsheet = "lightsheet.__main__:main"
 [tool.setuptools]
 packages = [
     "lightsheet",
+    "lightsheet.adaptive",
     "lightsheet.gui",
     "lightsheet.hal",
     "lightsheet.hal.real",
