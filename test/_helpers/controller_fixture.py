@@ -204,6 +204,15 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
     # directly so self.lasers / timers are populated before the test
     # exercises any method that reads them).
     controller.hardware_init()
+    # Stop the deferred timer_hardware_init (started in __init__) so it
+    # cannot fire a SECOND hardware_init during a test's QEventLoop spin
+    # (e.g. the queue's loop.exec). A double-call clobbers stack params:
+    # _load_stack_params' step-spinbox setValue triggers
+    # updateUi_set_number_of_planes, which re-reads the first-plane
+    # spinbox and overwrites stack_starting_plane. On Mac the mock init
+    # is fast and the timer fires between tests (harmless); on the rig
+    # the real init is slow so the pending timer fires mid-test.
+    controller.timer_hardware_init.stop()
 
     def _stop_worker_threads() -> None:
         # Mirror closeEvent's quit()+wait() shutdown so no worker QThread
