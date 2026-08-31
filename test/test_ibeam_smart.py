@@ -468,3 +468,63 @@ def test_ibeam_smart_satisfies_ilaser_abc() -> None:
         assert hasattr(adapter, attr), (
             f"IBeamSmartLaser must expose ILaser attribute {attr!r}"
         )
+
+
+# --------------------------------------------------------------------------- #
+# Task 2: analog_ceiling_mw constructor — routes open() to the analog-modulation
+# setup sequence (CH1=0, CH2=ceiling, enable 1, enable 2, laser on, en ext).
+# --------------------------------------------------------------------------- #
+def test_ibeam_smart_analog_ceiling_routes_open_to_analog_setup() -> None:
+    """When analog_ceiling_mw is set, IBeamSmartLaser.open() runs the
+    analog-modulation setup sequence via IBeam.open_for_analog_setup. The
+    CH2 ceiling is the configured mW value (clamped to max_power). The
+    default open (enable configured channel) is NOT issued."""
+    with patch("lightsheet.hal.real.ibeam_smart.serial.Serial") as MockSerial:
+        mock_ser = MagicMock()
+        MockSerial.return_value = mock_ser
+        mock_ser.readline.return_value = b"[OK]\r\n"
+        adapter = ibeam_smart_mod.IBeamSmartLaser(analog_ceiling_mw=150.0)
+        adapter.open()
+    writes = [c.args[0].decode("ascii") for c in mock_ser.write.call_args_list]
+    decoded = [w.rstrip("\r\n") for w in writes]
+    # The analog setup sequence, not the default open+enable_channel.
+    assert decoded == [
+        "echo off",
+        "channel 1 power 0 micro",
+        "channel 2 power 150000 micro",
+        "enable 1",
+        "enable 2",
+        "laser on",
+        "en ext",
+    ], f"analog setup sequence mismatch: {decoded}"
+    # The default enable-channel (enable 1 alone, after echo off) is NOT
+    # the only enable — both channels are enabled as part of the sequence.
+    assert adapter.error == 0
+    assert adapter._ibeam._is_on is True
+
+
+def test_ibeam_smart_analog_ceiling_clamped_to_max_power() -> None:
+    """analog_ceiling_mw above max_power (150 mW) is clamped at construct
+    time so a config typo cannot command a ceiling above the diode limit."""
+    adapter = ibeam_smart_mod.IBeamSmartLaser(analog_ceiling_mw=999.0)
+    assert adapter._analog_ceiling_mw == pytest.approx(150.0)
+
+
+def test_ibeam_smart_no_analog_ceiling_uses_default_open() -> None:
+    """Without analog_ceiling_mw, open() uses the default IBeam.open()
+    (echo off + enable configured channel) — the standalone serial-only
+    usage path is preserved."""
+    with patch("lightsheet.hal.real.ibeam_smart.serial.Serial") as MockSerial:
+        mock_ser = MagicMock()
+        MockSerial.return_value = mock_ser
+        mock_ser.readline.return_value = b"[OK]\r\n"
+        adapter = ibeam_smart_mod.IBeamSmartLaser()
+        adapter.open()
+    writes = [c.args[0].decode("ascii") for c in mock_ser.write.call_args_list]
+    decoded = [w.rstrip("\r\n") for w in writes]
+    # Default open: echo off + enable 1 (configured channel). No CH1=0,
+    # no CH2 ceiling, no en ext.
+    assert "echo off" in decoded
+    assert "enable 1" in decoded
+    assert "channel 1 power 0 micro" not in decoded
+    assert "en ext" not in decoded

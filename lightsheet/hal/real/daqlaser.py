@@ -342,19 +342,43 @@ class DAQLaser(ILaser):
     def open(self) -> None:
         """Open the DAQ laser for emission.
 
-        The DAQ AO channel is opened per-write inside ``_write_volts`` (no
-        persistent DAQ connection). When a serial readback backend is attached
-        (e.g. the retained iBeam), delegate ``open()`` to it so the serial
-        port is opened and the diode channel is enabled for power/status
-        readback. The serial open is NOT an emission-control path — the DAQ
-        AO channel is the sole emission-control path.
+        When a serial readback backend is attached (e.g. the retained iBeam
+        for L2), writes the map's off-voltage to the DAQ AO channel FIRST
+        (5 V for inverted L2) so the analog input is at the true-off state
+        before any serial setup, then delegates to the readback backend's
+        ``open()`` so the serial port is opened and the analog-modulation
+        setup sequence runs. If the DAQ off-voltage write fails, serial
+        setup is NOT attempted — driving ``laser on`` while the analog
+        input is at 0 V on an inverted L2 would command maximum output.
+
+        L1 (no readback backend) open() remains a no-op: the DAQ AO channel
+        is opened per-write inside ``_write_volts`` (no persistent DAQ
+        connection), so there is nothing to open here. The serial open is
+        NOT an emission-control path — the DAQ AO channel is the sole
+        emission-control path.
         """
-        if self.readback_backend is not None:
-            self.readback_backend.open()
-            # Mirror the readback backend's error surface so the controller
-            # can surface channel-enable failures via sig_message.
-            self.error = self.readback_backend.error
-            self.error_message = self.readback_backend.error_message
+        if self.readback_backend is None:
+            # L1 path — no persistent DAQ connection, no serial backend.
+            return None
+        # L2 path — establish the true-off DAQ state before serial setup.
+        # The _write_volts clamp and error surface apply. Save/restore the
+        # prior error state so a pre-existing construction error is not
+        # masked by a successful off-write.
+        prior_error = self.error
+        prior_msg = self.error_message
+        self._write_volts(self._volt_map.off_volts)
+        if self.error:
+            # DAQ off-voltage write failed — do not attempt serial setup.
+            return None
+        # Restore the prior error state so a successful off-write does not
+        # mask a pre-existing error from construction (e.g. bad calibration).
+        self.error = prior_error
+        self.error_message = prior_msg
+        self.readback_backend.open()
+        # Mirror the readback backend's error surface so the controller
+        # can surface channel-enable failures via sig_message.
+        self.error = self.readback_backend.error
+        self.error_message = self.readback_backend.error_message
         return None
 
     def close(self) -> None:

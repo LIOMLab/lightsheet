@@ -372,25 +372,45 @@ class _RecordingReadback:
 
 
 def test_daqlaser_open_delegates_to_readback_backend() -> None:
-    """DAQLaser.open() with a readback_backend delegates to the iBeam serial
-    open + channel enable, and mirrors the readback error surface."""
+    """DAQLaser.open() with a readback_backend writes the off-voltage to the
+    DAQ AO channel first, then delegates to the iBeam serial open + channel
+    enable, and mirrors the readback error surface. The DAQ off-write must
+    succeed (using a capturing nidaqmx.Task) so serial setup is attempted."""
+    import nidaqmx
+
     l2 = _make_l2_daq()
     rb = _RecordingReadback()
     l2.readback_backend = rb
-    l2.open()
+    CapturingTask, _captured = _capturing_task_factory()
+    original = nidaqmx.Task
+    nidaqmx.Task = CapturingTask  # type: ignore[attr-defined]
+    try:
+        l2.open()
+    finally:
+        nidaqmx.Task = original  # type: ignore[attr-defined]
     assert rb.opened is True
     assert l2.error == 0
 
 
 def test_daqlaser_open_surfaces_readback_error() -> None:
     """When the readback backend's open() sets an error (channel enable
-    rejected), DAQLaser.open() mirrors it onto its own error surface."""
+    rejected), DAQLaser.open() mirrors it onto its own error surface. The
+    DAQ off-write must succeed (using a capturing nidaqmx.Task) so serial
+    setup is attempted and the readback error is surfaced."""
+    import nidaqmx
+
     l2 = _make_l2_daq()
     rb = _RecordingReadback()
     rb.error = 1
     rb.error_message = "enable_channel rejected: %SYS-E"
     l2.readback_backend = rb
-    l2.open()
+    CapturingTask, _captured = _capturing_task_factory()
+    original = nidaqmx.Task
+    nidaqmx.Task = CapturingTask  # type: ignore[attr-defined]
+    try:
+        l2.open()
+    finally:
+        nidaqmx.Task = original  # type: ignore[attr-defined]
     assert l2.error == 1
     assert "enable_channel rejected" in l2.error_message
 
@@ -686,3 +706,110 @@ def test_linear_l1_off_still_writes_zero_volts() -> None:
         assert laser.power == 0.0
     finally:
         nidaqmx.Task = original  # type: ignore[attr-defined]
+
+
+# --------------------------------------------------------------------------- #
+# Task 2: DAQLaser.open() preloads the off-voltage before serial setup.
+#
+# For inverted L2, open() must write 5 V (true-off) BEFORE opening the
+# configured serial backend. If the DAQ off-voltage write fails, serial
+# setup is not attempted. L1 (no readback backend) open() remains a no-op.
+# --------------------------------------------------------------------------- #
+def test_inverted_open_preloads_five_volts_before_serial_setup() -> None:
+    """inverted DAQLaser.open() writes 5 V before opening the configured
+    serial backend. The DAQ off write happens first; the serial open is
+    only attempted after the DAQ write succeeds."""
+    import nidaqmx
+
+    from lightsheet.hal.real.daqlaser import InvertedVoltMap
+
+    laser = DAQLaser(
+        terminal="/Dev7/ao1",
+        wavelength=647,
+        max_power_mw=150.0,
+        label="Laser 2 (647 nm)",
+        volt_map=InvertedVoltMap(max_volts=5.0, max_power_mw=150.0),
+    )
+
+    # Recording readback that tracks open call order.
+    class _OrderedReadback:
+        def __init__(self) -> None:
+            self.error = 0
+            self.error_message = ""
+            self.opened = False
+            self.opened_after_daq_write = False
+
+        def open(self) -> None:
+            self.opened = True
+            self.opened_after_daq_write = captured.get("volts") is not None
+
+        def close(self) -> None:
+            pass
+
+        def get_output_power(self) -> float | None:
+            return None
+
+    rb = _OrderedReadback()
+    laser.readback_backend = rb
+
+    CapturingTask, captured = _capturing_task_factory()
+    original = nidaqmx.Task
+    nidaqmx.Task = CapturingTask  # type: ignore[attr-defined]
+    try:
+        laser.open()
+        # 5 V was written first (true-off for inverted L2).
+        assert float(captured["volts"][0]) == pytest.approx(5.0), (
+            "inverted L2 open() must write 5.0 V (true-off) before serial "
+            "setup — the DAQ input must be at 5 V before laser on / en ext"
+        )
+        # Serial backend was opened after the DAQ write.
+        assert rb.opened is True
+        assert rb.opened_after_daq_write is True
+        assert laser.error == 0
+    finally:
+        nidaqmx.Task = original  # type: ignore[attr-defined]
+
+
+def test_inverted_open_aborts_serial_setup_when_daq_off_fails() -> None:
+    """If the DAQ off-voltage write fails (nidaqmx stub raises), serial
+    setup is not attempted — the readback backend's open() is NOT called.
+    The DAQ failure surfaces on the HAL error surface."""
+    from lightsheet.hal.real.daqlaser import InvertedVoltMap
+
+    laser = DAQLaser(
+        terminal="/Dev7/ao1",
+        wavelength=647,
+        max_power_mw=150.0,
+        label="Laser 2 (647 nm)",
+        volt_map=InvertedVoltMap(max_volts=5.0, max_power_mw=150.0),
+    )
+
+    class _TrackingReadback:
+        def __init__(self) -> None:
+            self.error = 0
+            self.error_message = ""
+            self.opened = False
+
+        def open(self) -> None:
+            self.opened = True
+
+        def close(self) -> None:
+            pass
+
+        def get_output_power(self) -> float | None:
+            return None
+
+    rb = _TrackingReadback()
+    laser.readback_backend = rb
+    # The conftest nidaqmx stub makes Task() raise — the DAQ off write fails.
+    if not _nidaqmx_is_stub:
+        pytest.skip("Stub-only failure path -- requires nidaqmx stub")
+    laser.open()
+    # Serial setup was NOT attempted.
+    assert rb.opened is False, (
+        "open() must not attempt serial setup when the DAQ off-voltage "
+        "write fails — the iBeam analog input must be at 5 V before "
+        "laser on / en ext"
+    )
+    assert laser.error == 1
+    assert laser.error_message != ""

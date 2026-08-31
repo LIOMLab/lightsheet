@@ -480,3 +480,103 @@ def test_ibeam_set_power_sets_error_on_serial_exception() -> None:
         "raised — the HAL would otherwise believe the commanded power was "
         "applied when the diode state is unknown"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Task 2: Analog modulation setup — exact command sequence, abort-on-rejection.
+#
+# The rig-measured recipe: CH1=0, CH2=ceiling, enable 1, enable 2, laser on,
+# en ext. Every command goes through _send_cmd (RLock, flush, 50ms gap). A
+# firmware rejection at any step aborts before later energizing commands.
+# --------------------------------------------------------------------------- #
+def test_ibeam_analog_setup_command_sequence() -> None:
+    """setup_analog_modulation(ch2_power_uw=150000) emits exactly:
+    echo off, channel 1 power 0 micro, channel 2 power 150000 micro,
+    enable 1, enable 2, laser on, en ext — in that order. Every command
+    reaches _send_cmd (RLock, flush, 50ms gap retained)."""
+    with patch("lightsheet.hal.real.ibeam_smart.serial.Serial") as MockSerial:
+        mock_ser = MagicMock()
+        MockSerial.return_value = mock_ser
+        mock_ser.readline.return_value = b"[OK]\r\n"
+        ib = ibeam_mod.IBeam(port="COM4")
+        ib.open_for_analog_setup(ch2_power_uw=150000)
+    writes = _write_sequence(mock_ser)
+    decoded = [w.rstrip("\r\n") for w in writes]
+    # The exact seven-command sequence (echo off is part of open, then the
+    # six setup commands).
+    assert decoded == [
+        "echo off",
+        "channel 1 power 0 micro",
+        "channel 2 power 150000 micro",
+        "enable 1",
+        "enable 2",
+        "laser on",
+        "en ext",
+    ], f"analog setup sequence mismatch: {decoded}"
+    # No digital-modulation command issued.
+    assert not any("modulation" in w for w in decoded), (
+        "digital modulation command must not be issued — this unit has no "
+        "pulse board (analog modulation is via en ext, not modulation on)"
+    )
+    # _is_on is set only after the full sequence succeeds.
+    assert ib._is_on is True
+    assert ib.error == 0
+
+
+def test_ibeam_analog_setup_aborts_on_rejection() -> None:
+    """A firmware rejection at any setup step stops the sequence before
+    later energizing commands. If 'channel 2 power 150000 micro' is
+    rejected, 'enable 2', 'laser on', and 'en ext' must NOT be issued.
+    The error remains visible on the HAL error surface."""
+    with patch("lightsheet.hal.real.ibeam_smart.serial.Serial") as MockSerial:
+        mock_ser = MagicMock()
+        MockSerial.return_value = mock_ser
+        # echo off -> [OK], channel 1 power 0 -> [OK], channel 2 power ->
+        # %SYS-E rejection, then [OK] terminator.
+        mock_ser.readline.side_effect = [
+            b"[OK]\r\n",  # echo off
+            b"[OK]\r\n",  # channel 1 power 0 micro
+            b"%SYS-E-00025, parameter error\r\n",  # channel 2 power rejected
+            b"[OK]\r\n",  # terminator
+        ]
+        ib = ibeam_mod.IBeam(port="COM4")
+        ib.open_for_analog_setup(ch2_power_uw=150000)
+    writes = _write_sequence(mock_ser)
+    decoded = [w.rstrip("\r\n") for w in writes]
+    # The sequence aborted after the CH2 rejection — no enable/laser/en ext.
+    assert "channel 2 power 150000 micro" in decoded
+    assert "enable 2" not in decoded, (
+        "setup must abort after CH2 rejection — enable 2 must not be issued"
+    )
+    assert "laser on" not in decoded, (
+        "setup must abort after CH2 rejection — laser on must not be issued"
+    )
+    assert "en ext" not in decoded, (
+        "setup must abort after CH2 rejection — en ext must not be issued"
+    )
+    assert ib.error == 1
+    assert "%SYS-E" in ib.error_message
+    # _is_on must NOT be set — the sequence did not complete.
+    assert ib._is_on is False
+
+
+def test_ibeam_set_channel_power_delegates_to_send_cmd() -> None:
+    """set_channel_power(channel=2, power_uw=150000) issues
+    'channel 2 power 150000 micro' via _send_cmd and clamps to max_power.
+    set_power delegates to set_channel_power without changing standalone
+    behavior (channel 1 power <uW> micro)."""
+    # Three [OK] responses for the three set_channel_power/set_power calls.
+    ib, mock_ser = _make_open_ibeam(
+        readline_side_effect=[b"[OK]\r\n", b"[OK]\r\n", b"[OK]\r\n"]
+    )
+    ib.set_channel_power(channel=2, power_uw=150000)
+    text = _last_write_text(mock_ser)
+    assert "channel 2 power 150000 micro" in text
+    # Clamp still applies.
+    ib.set_channel_power(channel=2, power_uw=999999)
+    text = _last_write_text(mock_ser)
+    assert "150000" in text  # clamped to max_power
+    # set_power delegates to set_channel_power with the configured channel.
+    ib.set_power(5000)
+    text = _last_write_text(mock_ser)
+    assert "channel 1 power 5000 micro" in text

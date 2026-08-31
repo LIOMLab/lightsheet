@@ -88,7 +88,15 @@ class IBeam:
     # Lifecycle
     # ------------------------------------------------------------------ #
     def open(self) -> None:
-        """Open the serial port and disable command echo."""
+        """Open the serial port and disable command echo.
+
+        The default open enables the configured diode channel so a
+        standalone serial-only usage path can drive emission immediately.
+        For DAQ-gated analog modulation, use ``open_for_analog_setup``
+        instead — it skips the early ``enable <configured channel>`` and
+        runs the analog-modulation setup sequence (CH1=0, CH2=ceiling,
+        enable 1, enable 2, laser on, en ext).
+        """
         try:
             # serial.Serial open unreachable on Mac; set_power/off/_send_cmd
             # stay measured (mock-serial via test_ibeam.py)
@@ -110,6 +118,83 @@ class IBeam:
                     self.ser.close()
                 self.ser = None
             logger.exception("IBeam open failed")
+            raise
+        return None
+
+    def open_for_analog_setup(self, ch2_power_uw: int) -> None:
+        """Open the serial port and run the analog-modulation setup sequence.
+
+        This is the L2 DAQ-gated open path. It opens the serial port, sends
+        ``echo off``, then runs the rig-measured analog-modulation recipe:
+
+            channel 1 power 0 micro        (no constant baseline)
+            channel 2 power <ch2_power_uw> micro  (the modulation ceiling)
+            enable 1
+            enable 2
+            laser on
+            en ext                          (enable external/analog input)
+
+        Every command goes through ``_send_cmd`` (RLock, flush, 50 ms gap).
+        The sequence aborts on the first firmware rejection (``%SYS-E``) —
+        later energizing commands (``enable 2``, ``laser on``, ``en ext``)
+        are NOT issued. ``_is_on`` is set only after the full sequence
+        succeeds. ``ch2_power_uw`` is clamped to ``[0, max_power]`` before
+        the command is built.
+
+        The DAQ AO channel must already be at the true-off voltage (5 V for
+        inverted L2) before this is called — the DAQLaser.open() writes the
+        off-voltage first, then delegates here. Driving ``laser on`` while
+        the analog input is at 0 V would command maximum output on an
+        inverted L2.
+        """
+        try:
+            self.ser = serial.Serial()  # pragma: no cover
+            self.ser.baudrate = self.baud_rate
+            self.ser.port = self.port
+            self.ser.timeout = 3.0
+            self.ser.open()
+            self._send_cmd("echo off")
+            if self.error:
+                return
+            # CH1 setpoint = 0 mW (no constant baseline; the analog input
+            # modulates the full range when CH1 is at 0).
+            self._send_cmd("channel 1 power 0 micro")
+            if self.error:
+                return
+            # CH2 setpoint = the modulation ceiling (clamped to max_power).
+            ch2_clamped = max(0, min(int(ch2_power_uw), self.max_power))
+            self._send_cmd(f"channel 2 power {ch2_clamped} micro")
+            if self.error:
+                return
+            # Enable both channels so the modulation path is routed.
+            self._send_cmd("enable 1")
+            if self.error:
+                return
+            self._send_cmd("enable 2")
+            if self.error:
+                return
+            # Global emission enable. The DAQ AO is at the off-voltage so
+            # the diode stays dark until the DAQ drives a non-off voltage.
+            self._send_cmd("laser on")
+            if self.error:
+                return
+            # Enable the external/analog input — this routes the analog
+            # modulation signal to the diode current driver. Without en ext
+            # the analog input has no effect (the digital `modulation on`
+            # command is the pulse-board enable, NOT the analog input).
+            self._send_cmd("en ext")
+            if self.error:
+                return
+            # Only mark the laser as on if the full sequence succeeded.
+            self._is_on = True
+        except serial.SerialException as e:
+            self.error = 1
+            self.error_message = str(e)
+            if self.ser is not None:
+                with contextlib.suppress(Exception):
+                    self.ser.close()
+                self.ser = None
+            logger.exception("IBeam open_for_analog_setup failed")
             raise
         return None
 
@@ -182,22 +267,40 @@ class IBeam:
         return None
 
     def set_power(self, power_uw: int) -> None:
-        """Set channel power in microwatts, clamped to [0, max_power].
+        """Set the configured channel's power in microwatts, clamped to
+        ``[0, max_power]``.
 
-        The clamp is a physical-safety control bounding the maximum power any
+        Delegates to ``set_channel_power`` with the configured channel. The
+        clamp is a physical-safety control bounding the maximum power any
         caller can command, protecting the diode against a config.ini typo.
         """
-        power_uw = max(0, min(power_uw, self.max_power))
+        self.set_channel_power(channel=self.channel, power_uw=power_uw)
+        return None
+
+    def set_channel_power(self, channel: int, power_uw: int) -> None:
+        """Set a specific channel's power in microwatts, clamped to
+        ``[0, max_power]``.
+
+        Used by ``open_for_analog_setup`` to set CH1=0 and CH2=ceiling
+        independently, and by ``set_power`` for the configured channel.
+        The clamp is a physical-safety control bounding the maximum power
+        any caller can command, protecting the diode against a config.ini
+        typo. Only records ``self._power`` when the command targets the
+        configured channel and the firmware accepted the write.
+        """
+        ch = int(channel)
+        power_uw = max(0, min(int(power_uw), self.max_power))
         try:
-            self._send_cmd(f"channel {self.channel} power {power_uw} micro")
+            self._send_cmd(f"channel {ch} power {power_uw} micro")
             # Only record the commanded power if the firmware accepted the
-            # write. _send_cmd sets self.error on rejection without raising.
-            if not self.error:
+            # write AND the command targeted the configured channel.
+            # _send_cmd sets self.error on rejection without raising.
+            if not self.error and ch == self.channel:
                 self._power = power_uw
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
-            logger.exception("IBeam set_power failed")
+            logger.exception("IBeam set_channel_power failed")
         return None
 
     def get_output_power(self) -> int | None:
@@ -336,7 +439,11 @@ class IBeamSmartLaser(ILaser):
     standalone serial-only usage path.
     """
 
-    def __init__(self, label: str = "Laser 2 (647 nm)") -> None:
+    def __init__(
+        self,
+        label: str = "Laser 2 (647 nm)",
+        analog_ceiling_mw: float | None = None,
+    ) -> None:
         # The inner serial engine. __init__ does NOT open the serial port —
         # the controller's hardware_init is responsible for calling open().
         self._ibeam = IBeam()
@@ -350,6 +457,17 @@ class IBeamSmartLaser(ILaser):
         self.active = False
         self.error = 0
         self.error_message = ""
+
+        # When analog_ceiling_mw is set, open() runs the analog-modulation
+        # setup sequence (CH1=0, CH2=ceiling, enable 1, enable 2, laser on,
+        # en ext) instead of the default open+enable_channel. The ceiling is
+        # the modulation maximum at 0 V on the inverted L2 transfer
+        # function. It is clamped to max_power (mW) at construct time.
+        self._analog_ceiling_mw: float | None = None
+        if analog_ceiling_mw is not None:
+            self._analog_ceiling_mw = max(
+                0.0, min(float(analog_ceiling_mw), self.max_power)
+            )
 
         # Lock identity: the adapter's lock IS the inner IBeam's lock — the
         # same object, not a new lock, so daemon writes exclude concurrent
@@ -366,9 +484,26 @@ class IBeamSmartLaser(ILaser):
         self.error_message = self._ibeam.error_message
 
     def open(self) -> None:
-        """Open the inner iBeam serial port and enable the configured diode
-        channel. Mirrors the inner error surface onto the adapter."""
-        self._ibeam.open()
+        """Open the inner iBeam serial port.
+
+        When ``analog_ceiling_mw`` was set at construction, runs the
+        analog-modulation setup sequence (CH1=0, CH2=ceiling, enable 1,
+        enable 2, laser on, en ext) via ``IBeam.open_for_analog_setup``.
+        Otherwise opens with the default ``enable <configured channel>``
+        path. Mirrors the inner error surface onto the adapter.
+
+        The DAQLaser caller MUST write its map's off-voltage to the DAQ AO
+        channel BEFORE calling this — driving ``laser on`` while the analog
+        input is at 0 V on an inverted L2 would command maximum output.
+        """
+        if self._analog_ceiling_mw is not None:
+            # mW -> uW for the inner IBeam command. round() so 149.9999 mW
+            # converts to 150000 uW (not 149999).
+            self._ibeam.open_for_analog_setup(
+                ch2_power_uw=round(self._analog_ceiling_mw * 1000)
+            )
+        else:
+            self._ibeam.open()
         self.error = self._ibeam.error
         self.error_message = self._ibeam.error_message
 
