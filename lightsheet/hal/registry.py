@@ -27,6 +27,7 @@ from lightsheet.hal import (
     DAQLaser,
     ETLs,
     IBeamSmartLaser,
+    InvertedVoltMap,
     Motors,
     SigGen,
 )
@@ -224,19 +225,40 @@ class DeviceRegistry:
         )
 
         # Laser 2: DAQ-primary on /Dev7/ao1 (0-5 V analog modulation).
+        # The rig-measured iBeam analog modulation transfer function is
+        # INVERTED: 0 mW -> 5 V (true-off), max_power -> 0 V (max output).
+        # Higher requested power = LOWER voltage. InvertedVoltMap encodes
+        # this polarity and provides off_volts=5.0 V so the synchronous
+        # E-stop off() writes 5 V (true-off), NOT 0 V (which would drive
+        # the laser to MAXIMUM power on an inverted L2).
+        #
+        # Laser2 Max Power is the SOLE L2 ceiling: it supplies both the
+        # DAQLaser mW ceiling (InvertedVoltMap.max_power_mw) AND the CH2
+        # serial ceiling (IBeamSmartLaser.analog_ceiling_mw). A single
+        # config value bounds both the DAQ and serial paths.
+        #
         # The retained iBeam serial backend is attached as the
-        # readback_backend — used for channel enable at open and
-        # power/status readback only, never for on/off or power writes.
-        # The analog-mode-enable prerequisite (TOPAS GUI, one-time manual)
-        # is documented in config.ini; there is no serial command for it.
-        l2_readback = IBeamSmartLaser(label="Laser 2 (647 nm)")
+        # readback_backend — used for channel enable at open (via the
+        # analog-modulation setup sequence: CH1=0, CH2=ceiling, enable 1,
+        # enable 2, laser on, en ext) and power/status readback only,
+        # never for on/off or power writes. The analog-mode-enable
+        # prerequisite (TOPAS GUI, one-time manual) is documented in
+        # config.ini; there is no serial command for it.
+        _l2_max_power_mw = float(_l_cfg["Laser2 Max Power"])
+        l2_readback = IBeamSmartLaser(
+            label="Laser 2 (647 nm)",
+            analog_ceiling_mw=_l2_max_power_mw,
+        )
         l2 = DAQLaser(
             terminal=l2_terminal,
             wavelength=int(_l_cfg["Laser2 Wavelength"]),
-            mw_per_volt=float(_l_cfg["Laser2 mW per Volt"]),
-            max_power_mw=float(_l_cfg["Laser2 Max Power"]),
+            max_power_mw=_l2_max_power_mw,
             label="Laser 2 (647 nm)",
             readback_backend=l2_readback,
+            volt_map=InvertedVoltMap(
+                max_volts=5.0,
+                max_power_mw=_l2_max_power_mw,
+            ),
         )
 
         siggen = SigGen(camera)

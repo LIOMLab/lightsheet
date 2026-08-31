@@ -240,12 +240,15 @@ def test_registry_composes_l2_daq_with_readback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """DeviceRegistry.resolve() constructs lasers[1] as a DAQLaser on
-    /Dev7/ao1 with wavelength 647, max_power 150.0 mW, mw_per_volt 30.0,
-    a 5.0 V ceiling, and a retained IBeamSmartLaser as readback_backend.
-    SigGen is constructed with only the camera (no L2 injection)."""
+    /Dev7/ao1 with wavelength 647, max_power 150.0 mW, an InvertedVoltMap
+    (5.0 V ceiling, 150 mW max), and a retained IBeamSmartLaser as
+    readback_backend (constructed with analog_ceiling_mw=150.0). SigGen is
+    constructed with only the camera (no L2 injection)."""
     from lightsheet.hal import registry as registry_module
+    from lightsheet.hal.real.daqlaser import InvertedVoltMap
 
     constructed: dict[str, object] = {}
+    ibeam_kwargs: dict[str, object] = {}
 
     def fake_resolve_ports(self: object) -> dict[str, str]:
         return {"motors": "COM7", "etl_left": "COM5", "etl_right": "COM6"}
@@ -258,8 +261,9 @@ def test_registry_composes_l2_daq_with_readback(
     monkeypatch.setattr(registry_module, "ETLs", lambda **kw: object())
 
     class _FakeIBeam:
-        def __init__(self, label: str = "") -> None:
-            self.label = label
+        def __init__(self, **kwargs: object) -> None:
+            self.label = kwargs.get("label", "")
+            ibeam_kwargs.update(kwargs)
             constructed["readback"] = self
 
     monkeypatch.setattr(registry_module, "IBeamSmartLaser", _FakeIBeam)
@@ -271,8 +275,10 @@ def test_registry_composes_l2_daq_with_readback(
             super().__init__(**kwargs)
             if "ao1" in kwargs.get("terminal", ""):
                 constructed["l2"] = self
+                constructed["l2_kwargs"] = kwargs
             else:
                 constructed["l1"] = self
+                constructed["l1_kwargs"] = kwargs
 
     monkeypatch.setattr(registry_module, "DAQLaser", _CapturingDAQLaser)
 
@@ -295,9 +301,14 @@ def test_registry_composes_l2_daq_with_readback(
     assert l2.terminal == "/Dev7/ao1"
     assert l2.wavelength == 647
     assert l2.max_power == 150.0
-    assert l2.mw_per_volt == 30.0
+    # L2 uses an InvertedVoltMap (rig-measured inverted transfer function).
+    assert isinstance(l2._volt_map, InvertedVoltMap)
+    assert l2._volt_map.off_volts == pytest.approx(5.0)
     assert l2._max_volts == pytest.approx(5.0)
     assert l2.readback_backend is constructed["readback"]
+    # The readback backend was constructed with analog_ceiling_mw = Laser2
+    # Max Power (the sole L2 ceiling source).
+    assert ibeam_kwargs.get("analog_ceiling_mw") == pytest.approx(150.0)
     # SigGen was constructed with only the camera — no L2 injection.
     assert len(siggen_calls) == 1
     assert not hasattr(siggen_calls[0], "laser2_daq")
@@ -309,6 +320,58 @@ def test_registry_composes_l2_daq_with_readback(
     import dataclasses
     assert dataclasses.is_dataclass(bundle)
     assert bundle.__class__.__dataclass_params__.frozen
+
+
+def test_registry_l1_retains_linear_volt_map(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """L1 retains its LinearVoltMap (normal polarity, optional calibration
+    curve) — the registry does NOT switch L1 to InvertedVoltMap. L1's
+    off_volts is 0.0 V (normal polarity: 0 V = off)."""
+    from lightsheet.hal import registry as registry_module
+    from lightsheet.hal.real.daqlaser import LinearVoltMap
+
+    constructed: dict[str, object] = {}
+
+    def fake_resolve_ports(self: object) -> dict[str, str]:
+        return {"motors": "COM7", "etl_left": "COM5", "etl_right": "COM6"}
+
+    monkeypatch.setattr(
+        registry_module.DeviceRegistry, "_resolve_ports", fake_resolve_ports
+    )
+    monkeypatch.setattr(registry_module, "Camera", lambda **kw: object())
+    monkeypatch.setattr(registry_module, "Motors", lambda **kw: object())
+    monkeypatch.setattr(registry_module, "ETLs", lambda **kw: object())
+
+    class _FakeIBeam:
+        def __init__(self, **kwargs: object) -> None:
+            constructed["readback"] = self
+
+    monkeypatch.setattr(registry_module, "IBeamSmartLaser", _FakeIBeam)
+
+    real_daqlaser = registry_module.DAQLaser
+
+    class _CapturingDAQLaser(real_daqlaser):
+        def __init__(self, **kwargs: object) -> None:
+            super().__init__(**kwargs)
+            if "ao0" in kwargs.get("terminal", ""):
+                constructed["l1"] = self
+
+    monkeypatch.setattr(registry_module, "DAQLaser", _CapturingDAQLaser)
+    monkeypatch.setattr(registry_module, "SigGen", lambda camera: object())
+
+    reg = registry_module.DeviceRegistry(
+        inventory_path="hardware_inventory.yaml",
+        config_path="config.ini",
+    )
+    reg.resolve()
+
+    l1 = constructed["l1"]
+    assert isinstance(l1._volt_map, LinearVoltMap)
+    assert l1._volt_map.off_volts == pytest.approx(0.0)
+    # L1 still accepts mw_per_volt + calibration_curve (backwards compat).
+    assert l1.mw_per_volt is not None
+    assert l1.mw_per_volt > 0
 
 
 def test_demo_bundle_remains_all_mock_and_frozen() -> None:
