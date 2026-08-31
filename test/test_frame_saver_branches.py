@@ -14,9 +14,9 @@ static-source grep.
 
 from __future__ import annotations
 
-import os
-import queue
 import threading
+import time
+from pathlib import Path
 from unittest.mock import Mock
 
 import h5py
@@ -26,8 +26,19 @@ from PySide6.QtCore import QObject
 
 pytest.importorskip("PySide6")
 
-from lightsheet.gui.coordinators.frame_saver_controller import FrameSaver, FrameViewer, FrameSaverController
-from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
+from lightsheet.gui.coordinators.frame_saver_controller import (
+    FrameSaver,
+    FrameSaverController,
+    FrameViewer,
+)
+from lightsheet.hal import (
+    DeviceBundle,
+    MockCamera,
+    MockETLs,
+    MockLaser,
+    MockMotors,
+    MockSigGen,
+)
 
 
 class _ShellStandin(QObject):
@@ -61,7 +72,9 @@ def _make_bundle() -> DeviceBundle:
         MockLaser(wavelength=647, max_power_mw=150.0, label="L2"),
     )
     etls = MockETLs()
-    return DeviceBundle(camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers)
+    return DeviceBundle(
+        camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers
+    )
 
 
 def _make_fs() -> tuple[FrameSaverController, _ShellStandin]:
@@ -96,7 +109,7 @@ def test_frame_viewer_enqueue_frame_suppresses_queue_full() -> None:
     shell = _ShellStandin()
     fv = FrameViewer(shell, rows=4, columns=4)
     # Fill the queue (maxsize=3).
-    for i in range(3):
+    for _i in range(3):
         fv.enqueue_frame(np.zeros((4, 4), dtype=np.uint16))
     # Fourth put must not raise — queue.Full is suppressed.
     fv.enqueue_frame(np.zeros((4, 4), dtype=np.uint16))
@@ -182,7 +195,9 @@ def test_frame_saver_start_saving_starts_thread() -> None:
     saver.stop_saving()
 
 
-def test_frame_saver_write_laser_metadata_writes_per_laser_attrs(tmp_path) -> None:
+def test_frame_saver_write_laser_metadata_writes_per_laser_attrs(
+    tmp_path: Path,
+) -> None:
     """_write_laser_metadata writes Laser{i+1} attrs for each laser on the shell."""
     shell = _ShellStandin()
     saver = FrameSaver(shell)
@@ -199,7 +214,9 @@ def test_frame_saver_write_laser_metadata_writes_per_laser_attrs(tmp_path) -> No
 # -- FrameSaver.frame_saver_worker happy path --------------------------------
 
 
-def test_frame_saver_worker_writes_dataset_and_emits_saved_message(tmp_path) -> None:
+def test_frame_saver_worker_writes_dataset_and_emits_saved_message(
+    tmp_path: Path,
+) -> None:
     """The happy path: frame_saver_worker creates a file, writes a dataset,
     closes the file, and emits a 'File ... saved' message."""
     shell = _ShellStandin()
@@ -221,7 +238,7 @@ def test_frame_saver_worker_writes_dataset_and_emits_saved_message(tmp_path) -> 
     saver.frame_saver_worker()
 
     # File was created and contains the dataset.
-    assert os.path.isfile(filepath), "frame_saver_worker must create the file"
+    assert Path(filepath).is_file(), "frame_saver_worker must create the file"
     with h5py.File(filepath, "r") as f:
         assert "dataset_001" in f, "dataset_001 must exist in the saved file"
         assert f["dataset_001"].attrs["Sample Name"] == "test_sample"
@@ -232,7 +249,7 @@ def test_frame_saver_worker_writes_dataset_and_emits_saved_message(tmp_path) -> 
     assert saved_msgs, "frame_saver_worker must emit a 'File ... saved' message"
 
 
-def test_frame_saver_worker_3d_buffer_uses_idx_for_pos_index(tmp_path) -> None:
+def test_frame_saver_worker_3d_buffer_uses_idx_for_pos_index(tmp_path: Path) -> None:
     """When buffer.ndim == 3 (multiple frames), pos_index uses idx (not dataset+idx)."""
     shell = _ShellStandin()
     saver = FrameSaver(shell)
@@ -257,7 +274,7 @@ def test_frame_saver_worker_3d_buffer_uses_idx_for_pos_index(tmp_path) -> None:
         assert "dataset_002" in f
 
 
-def test_frame_saver_worker_timeout_exits_inner_loop(tmp_path) -> None:
+def test_frame_saver_worker_timeout_exits_inner_loop(tmp_path: Path) -> None:
     """When the queue is empty and saving_started is False, the inner loop
     breaks on queue.Empty + the not-saving_started check (line 294-295)."""
     shell = _ShellStandin()
@@ -278,7 +295,6 @@ def test_frame_saver_worker_timeout_exits_inner_loop(tmp_path) -> None:
     t.start()
     # Give the worker time to enter the queue.get(timeout=1) call, then
     # flip saving_started to False so the Empty handler breaks.
-    import time
     time.sleep(0.1)
     saver.saving_started = False
     t.join(timeout=5.0)

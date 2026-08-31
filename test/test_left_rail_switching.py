@@ -21,13 +21,13 @@ Runs headless on Mac via ``QT_QPA_PLATFORM=offscreen`` (set by conftest).
 from __future__ import annotations
 
 import pytest
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QSize
-from PySide6.QtWidgets import QButtonGroup, QWidget
-
 from _helpers.controller_fixture import make_controller
+from PySide6.QtWidgets import QButtonGroup, QWidget
 
 # The 8 left-rail button objectNames in left-rail order (index 0..7).
 _RAIL_BUTTON_NAMES = (
@@ -42,7 +42,9 @@ _RAIL_BUTTON_NAMES = (
 )
 
 
-def test_left_rail_buttons_exist_and_are_checkable(qtbot, request) -> None:
+def test_left_rail_buttons_exist_and_are_checkable(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The 8 left-rail QToolButtons exist on ui and are checkable."""
     ctrl, _ = make_controller(qtbot, request)
     for name in _RAIL_BUTTON_NAMES:
@@ -51,7 +53,9 @@ def test_left_rail_buttons_exist_and_are_checkable(qtbot, request) -> None:
         assert btn.isCheckable(), f"{name} must be checkable"
 
 
-def test_rail_group_is_exclusive_with_eight_buttons(qtbot, request) -> None:
+def test_rail_group_is_exclusive_with_eight_buttons(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """ctrl._rail_group is an exclusive QButtonGroup with 8 buttons."""
     ctrl, _ = make_controller(qtbot, request)
     group = ctrl._rail_group
@@ -62,7 +66,9 @@ def test_rail_group_is_exclusive_with_eight_buttons(qtbot, request) -> None:
     )
 
 
-def test_rail_button_ids_match_page_indices(qtbot, request) -> None:
+def test_rail_button_ids_match_page_indices(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """Each left-rail button's QButtonGroup id matches its page index
     (Motion=0, Acquire=1, ..., Calibrate=7)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -74,7 +80,9 @@ def test_rail_button_ids_match_page_indices(qtbot, request) -> None:
         )
 
 
-def test_clicking_each_rail_button_switches_stacked_page(qtbot, request) -> None:
+def test_clicking_each_rail_button_switches_stacked_page(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """Clicking each left-rail button sets stackedPanels.currentIndex to
     the corresponding index."""
     ctrl, _ = make_controller(qtbot, request)
@@ -91,14 +99,18 @@ def test_clicking_each_rail_button_switches_stacked_page(qtbot, request) -> None
         )
 
 
-def test_motion_is_default_active_page(qtbot, request) -> None:
+def test_motion_is_default_active_page(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """Motion (index 0) is the default active page after construction."""
     ctrl, _ = make_controller(qtbot, request)
     assert ctrl.ui.stackedPanels.currentIndex() == 0
     assert ctrl.ui.toolButton_railMotion.isChecked() is True
 
 
-def test_estop_toolbar_visible_across_all_switches(qtbot, request) -> None:
+def test_estop_toolbar_visible_across_all_switches(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The E-stop toolbar stays visible across all panel switches (it is
     in the TopToolBarArea, not inside any stacked page)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -116,8 +128,10 @@ def test_estop_toolbar_visible_across_all_switches(qtbot, request) -> None:
         )
 
 
-def test_estop_toolbar_is_not_movable(qtbot, request) -> None:
-    """The E-stop toolbar is fixed (movable=False) — the safety-critical
+def test_estop_toolbar_is_not_movable(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """The E-stop toolbar is fixed (movable=False) -- the safety-critical
     E-stop button must not be draggable off the TopToolBarArea."""
     ctrl, _ = make_controller(qtbot, request)
     assert ctrl.ui.toolBar_estop.isMovable() is False, (
@@ -126,7 +140,9 @@ def test_estop_toolbar_is_not_movable(qtbot, request) -> None:
     )
 
 
-def test_phase9_extension_seam_adds_ninth_page(qtbot, request) -> None:
+def test_phase9_extension_seam_adds_ninth_page(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The Phase 9 extension seam: a 9th page can be added to
     stackedPanels without re-architecture (addWidget appends)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -139,7 +155,9 @@ def test_phase9_extension_seam_adds_ninth_page(qtbot, request) -> None:
     ninth.deleteLater()
 
 
-def test_rail_buttons_have_icons_and_tooltips(qtbot, request) -> None:
+def test_rail_buttons_have_icons_and_tooltips(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """UI-SPEC §Left-Rail Composition: all 8 rail buttons have a non-null
     SP_* icon and a non-empty tooltip matching the '{Panel}: {purpose}.'
     pattern. The iconSize width is set to the button content width (60px)
@@ -161,5 +179,7 @@ def test_rail_buttons_have_icons_and_tooltips(qtbot, request) -> None:
         assert tip != "", f"{name} has an empty tooltip"
         # The tooltip pattern is "{Panel}: {purpose}." — assert it contains
         # a colon and ends with a period.
-        assert ":" in tip, f"{name} tooltip {tip!r} should follow '{{Panel}}: {{purpose}}.'"
+        assert ":" in tip, (
+            f"{name} tooltip {tip!r} should follow '{{Panel}}: {{purpose}}.'"
+        )
         assert tip.endswith("."), f"{name} tooltip {tip!r} should end with '.'"

@@ -19,9 +19,13 @@ These tests verify:
      assertion, not just introspection).
 """
 
+from __future__ import annotations
+
 import inspect
 
 from _helpers.controller_fixture import make_controller
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
 
 
 def test_init_has_no_lambda_collaborator_connections() -> None:
@@ -43,11 +47,13 @@ def test_wire_collaborators_exists() -> None:
 
     assert hasattr(controller_mod.Controller_MainWindow, "wire_collaborators")
     assert callable(
-        getattr(controller_mod.Controller_MainWindow, "wire_collaborators")
+        controller_mod.Controller_MainWindow.wire_collaborators
     )
 
 
-def test_converted_connection_fires_collaborator_slot(qtbot, request) -> None:
+def test_converted_connection_fires_collaborator_slot(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """A converted bound-method connection (pushButton_sampleStepUp →
     self._mc.updateUi_move_sample_up) actually fires the MotorController
     slot when the button is clicked — proving the bound-method connection
@@ -78,7 +84,9 @@ def test_converted_connection_fires_collaborator_slot(qtbot, request) -> None:
     assert "Sample stepping up" in log_text or "Out of boundaries" in log_text
 
 
-def test_converted_acq_connection_fires_collaborator_slot(qtbot, request) -> None:
+def test_converted_acq_connection_fires_collaborator_slot(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """A converted AcquisitionCoordinator bound-method connection
     (doubleSpinBox_etlLeftAmplitude valueChanged →
     self._acq.updateUi_etl_left_amplitude) fires the coordinator slot

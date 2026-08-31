@@ -19,6 +19,7 @@ the Mock* tests run, now behind the [real, mock] parametrize).
 This is a BEHAVIOR test (AGENTS.md §5).
 """
 
+import contextlib
 import os
 
 import pytest
@@ -124,10 +125,8 @@ def test_laser_conformance(device_factory: object) -> None:
     # COM4. If the port is held, skip rather than fail — this is a
     # hardware-availability condition, not a conformance regression.
     if isinstance(dev, IBeamSmartLaser):
-        try:
-            dev._ibeam.ser is None  # check not already opened
-        except Exception:
-            pass
+        with contextlib.suppress(Exception):
+            assert dev._ibeam.ser is None  # check not already opened
     try:
         LASER_CONTRACT.assert_lifecycle(dev)
     except Exception as e:

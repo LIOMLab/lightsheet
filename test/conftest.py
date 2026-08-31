@@ -308,7 +308,8 @@ _ensure_stub("serial", _make_serial_stub)
 # introspection (getfuncargnames → signature → unwrap → GC) or at worker
 # exit. Disabling GC prevents the segfault without affecting test behavior
 # (test objects are never explicitly collected during the test run).
-import gc as _gc
+import gc as _gc  # noqa: E402
+
 _gc.disable()
 
 

@@ -25,7 +25,6 @@ under the conftest nidaqmx stub and asserts on runtime state.
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 from lightsheet.hal.real.daqlaser import DAQLaser

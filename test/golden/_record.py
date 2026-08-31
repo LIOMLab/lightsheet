@@ -41,14 +41,15 @@ seeded with them so the body resolves them at call time.
 import datetime
 import json
 import logging
-import os
 import re
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
 
 import numpy as np
 
+from lightsheet.gui.coordinators.hardware_manager import HardwareManager
 from lightsheet.hal import (
     DeviceBundle,
     MockCamera,
@@ -57,24 +58,20 @@ from lightsheet.hal import (
     MockMotors,
     MockSigGen,
 )
-from lightsheet.gui.coordinators.hardware_manager import HardwareManager
 
-_CONTROLLER_SRC = os.path.join(
-    os.path.dirname(__file__), "..", "..", "lightsheet", "gui", "controller.py"
+_HERE = Path(__file__).resolve().parent
+_CONTROLLER_SRC = _HERE / ".." / ".." / "lightsheet" / "gui" / "controller.py"
+_ACQ_SRC = (
+    _HERE / ".." / ".." / "lightsheet" / "gui" / "acquisition_coordinator.py"
 )
-_ACQ_SRC = os.path.join(
-    os.path.dirname(__file__), "..", "..", "lightsheet", "gui", "acquisition_coordinator.py"
-)
-_WORKERS_SRC = os.path.join(
-    os.path.dirname(__file__), "..", "..", "lightsheet", "gui", "workers.py"
-)
+_WORKERS_SRC = _HERE / ".." / ".." / "lightsheet" / "gui" / "workers.py"
 
 # Module-level logger the exec'd body references (controller.py:45).
 _logger = logging.getLogger("lightsheet.gui.shell.controller")
 
 
 def _read_controller_source() -> str:
-    with open(_CONTROLLER_SRC, encoding="utf-8") as f:
+    with Path(_CONTROLLER_SRC).open(encoding="utf-8") as f:
         return f.read()
 
 
@@ -90,7 +87,9 @@ def _slice_method(src: str, method_sig: str) -> str:
     return body
 
 
-def _load_method(method_sig: str, src_path: str = _CONTROLLER_SRC) -> Callable[..., Any]:
+def _load_method(
+    method_sig: str, src_path: str = str(_CONTROLLER_SRC)
+) -> Callable[..., Any]:
     """Extract a method body from the given source file and return a callable.
 
     Defaults to controller.py; pass ``_ACQ_SRC`` for ``acquire_scan`` (moved
@@ -99,7 +98,7 @@ def _load_method(method_sig: str, src_path: str = _CONTROLLER_SRC) -> Callable[.
     (``datetime``, ``logger``, ``np``) so the function resolves them at
     call time via its ``__globals__``.
     """
-    with open(src_path, encoding="utf-8") as f:
+    with Path(src_path).open(encoding="utf-8") as f:
         src = f.read()
     body = _slice_method(src, method_sig)
     namespace: dict[str, Any] = {
@@ -323,20 +322,18 @@ def capture_acquisition_sequence(scenario: str) -> list[dict]:
 def record_acquisition(out_path: str, scenario: str = "default") -> None:
     """Capture a scenario and write it to ``out_path`` as JSON."""
     seq = capture_acquisition_sequence(scenario)
-    with open(out_path, "w", encoding="utf-8") as f:
+    with Path(out_path).open("w", encoding="utf-8") as f:
         json.dump(seq, f, indent=2)
         f.write("\n")
 
 
 if __name__ == "__main__":
-    base = os.path.dirname(__file__)
+    base = Path(__file__).resolve().parent
     scenarios = {
-        "default": os.path.join(base, "default.json"),
-        "siggen_create_scanner_fail": os.path.join(
-            base, "siggen_create_scanner_fail.json"
-        ),
-        "preview_auto_laser": os.path.join(base, "preview_auto_laser.json"),
+        "default": base / "default.json",
+        "siggen_create_scanner_fail": base / "siggen_create_scanner_fail.json",
+        "preview_auto_laser": base / "preview_auto_laser.json",
     }
     for name, path in scenarios.items():
-        record_acquisition(path, name)
+        record_acquisition(str(path), name)
         print(f"Wrote {path}")

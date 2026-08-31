@@ -13,16 +13,25 @@ static-source grep.
 
 from __future__ import annotations
 
-import os
 import sys
 import types
+from typing import Any, Never
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from lightsheet.__main__ import _build_demo_bundle, _resolve_demo, _show_missing_device_dialog
-from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
-
+from lightsheet.__main__ import (
+    _build_demo_bundle,
+    _show_missing_device_dialog,
+)
+from lightsheet.hal import (
+    DeviceBundle,
+    MockCamera,
+    MockETLs,
+    MockLaser,
+    MockMotors,
+    MockSigGen,
+)
 
 # -- _build_demo_bundle -----------------------------------------------------
 
@@ -36,11 +45,12 @@ def test_build_demo_bundle_returns_device_bundle_with_mock_hal() -> None:
     assert isinstance(bundle.motors, MockMotors)
     assert isinstance(bundle.etls, MockETLs)
     assert len(bundle.lasers) == 2
-    assert all(isinstance(l, MockLaser) for l in bundle.lasers)
+    assert all(isinstance(laser, MockLaser) for laser in bundle.lasers)
 
 
 def test_build_demo_bundle_laser_wavelengths() -> None:
-    """The two lasers are 555 nm and 647 nm (the demo bundle's configured wavelengths)."""
+    """The two lasers are 555 nm and 647 nm (the demo bundle's
+    configured wavelengths)."""
     bundle = _build_demo_bundle()
     assert bundle.lasers[0].wavelength == 555
     assert bundle.lasers[1].wavelength == 647
@@ -73,7 +83,8 @@ def test_show_missing_device_dialog_renders_under_offscreen(
         # Include a non-✕, non-first line ("Details: ...") to exercise
         # the else branch (no bold-red styling on that label).
         _show_missing_device_dialog(
-            "Header line\n\n✕ Device X not found\n✕ Device Y not found\nDetails: check cables"
+            "Header line\n\n✕ Device X not found\n"
+            "✕ Device Y not found\nDetails: check cables"
         )
 
 
@@ -116,9 +127,9 @@ def test_main_demo_mode_returns_app_exec_exit_code(
     class _MockController(QObject):
         # Class-level slot to record the last instance so the test can
         # access the controller main() constructed.
-        _last_instance: "_MockController | None" = None
+        _last_instance: _MockController | None = None
 
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__()
             # Stubs for attributes main() wires onto the controller.
             self.ui = Mock()
@@ -144,24 +155,26 @@ def test_main_demo_mode_returns_app_exec_exit_code(
             self.position_calls: list[str] = []
             _MockController._last_instance = self
 
-        def __getattr__(self, name: str):
+        def __getattr__(self, name: str) -> Any:
             """Auto-return a Mock for any signal/attribute not explicitly set."""
             mock = Mock()
             self.__dict__[name] = mock
             return mock
 
-        def show(self):
+        def show(self) -> None:
             pass
 
-        def updateUi_message_printer(self, msg):
+        def updateUi_message_printer(self, msg: Any) -> None:
             self.message_printer_calls.append(msg)
 
-        def closeEvent(self, event):
+        def closeEvent(self, event: Any) -> None:
             pass
 
     mock_controller_mod = types.ModuleType("lightsheet.gui.shell.controller")
     mock_controller_mod.Controller_MainWindow = _MockController
-    monkeypatch.setitem(sys.modules, "lightsheet.gui.shell.controller", mock_controller_mod)
+    monkeypatch.setitem(
+        sys.modules, "lightsheet.gui.shell.controller", mock_controller_mod
+    )
 
     # Replace QApplication with a pure-Python fake so main()'s
     # ``QApplication(sys.argv)`` call doesn't construct a real C++
@@ -207,7 +220,9 @@ def test_main_demo_mode_returns_app_exec_exit_code(
     import lightsheet.config_schema
 
     monkeypatch.setattr(
-        lightsheet.config_schema, "ConfigValidator", lambda: MagicMock(validate_or_abort=MagicMock())
+        lightsheet.config_schema,
+        "ConfigValidator",
+        lambda: MagicMock(validate_or_abort=MagicMock()),
     )
     monkeypatch.setattr(
         lightsheet.config_schema, "load_sections_from_ini", lambda *a, **kw: {}
@@ -275,10 +290,10 @@ def test_main_rig_path_unresolved_device_shows_dialog_and_exits(
         pass
 
     class DeviceRegistry:
-        def __init__(self, *a, **kw):
+        def __init__(self, *a: Any, **kw: Any) -> None:
             pass
 
-        def resolve(self):
+        def resolve(self) -> Never:
             raise UnresolvedDeviceError("✕ Device X not found\n✕ Device Y not found")
 
     mock_registry_mod.DeviceRegistry = DeviceRegistry
@@ -296,7 +311,7 @@ def test_main_rig_path_unresolved_device_shows_dialog_and_exits(
     )
 
     # Mock sys.exit to raise SystemExit so we can catch it.
-    def fake_exit(code):
+    def fake_exit(code: Any) -> Never:
         raise SystemExit(code)
 
     monkeypatch.setattr(sys, "exit", fake_exit)

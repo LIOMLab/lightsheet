@@ -32,16 +32,30 @@ Behavior covered (per the plan's ``<behavior>`` block):
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
 from unittest.mock import Mock
 
 import numpy as np
 import pytest
 from PySide6.QtCore import QObject
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")  # FrameSaver/FrameViewer are QObjects
 
-from lightsheet.gui.coordinators.frame_saver_controller import FrameSaver, FrameViewer, FrameSaverController
-from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
+from lightsheet.gui.coordinators.frame_saver_controller import (
+    FrameSaver,
+    FrameSaverController,
+    FrameViewer,
+)
+from lightsheet.hal import (
+    DeviceBundle,
+    MockCamera,
+    MockETLs,
+    MockLaser,
+    MockMotors,
+    MockSigGen,
+)
 
 
 class _ShellStandin(QObject):
@@ -78,7 +92,9 @@ def _make_bundle() -> DeviceBundle:
         MockLaser(wavelength=647, max_power_mw=150.0, label="Laser 2 (647 nm)"),
     )
     etls = MockETLs()
-    return DeviceBundle(camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers)
+    return DeviceBundle(
+        camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers
+    )
 
 
 def _make_shell() -> _ShellStandin:
@@ -197,7 +213,7 @@ def test_pass_through_methods_route_to_frame_saver() -> None:
     fs.frame_saver.stop_saving.assert_called_once()
 
 
-def test_frame_saver_worker_surfaces_h5py_error_and_stops(tmp_path) -> None:
+def test_frame_saver_worker_surfaces_h5py_error_and_stops(tmp_path: Path) -> None:
     """IN-04: a non-timeout exception (h5py write error, disk full, HDF5
     corruption) in frame_saver_worker must surface to the operator via
     sig_status_message and set saving_started=False so the worker stops,
@@ -249,7 +265,7 @@ def test_frame_saver_worker_surfaces_h5py_error_and_stops(tmp_path) -> None:
     ro_dir.chmod(0o755)
 
 
-def test_set_files_sequential_plane_numbers(tmp_path) -> None:
+def test_set_files_sequential_plane_numbers(tmp_path: Path) -> None:
     """In a FRESH directory, set_files(number_of_files=3,
     files_name="stack", scan_type="z", ..., wavelengths=[555]) produces
     filenames_list = ["stack_z_555nm.hdf5", "stack_z_555nm_01.hdf5",
@@ -272,7 +288,7 @@ def test_set_files_sequential_plane_numbers(tmp_path) -> None:
 
     import os
 
-    cwd = os.getcwd()
+    cwd = Path.cwd()
     os.chdir(tmp_path)
     try:
         saver.set_files(3, "stack", "z", 1, "dataset_", wavelengths=[555])
@@ -291,7 +307,7 @@ def test_set_files_sequential_plane_numbers(tmp_path) -> None:
     )
 
 
-def test_set_files_collision_suffix(tmp_path) -> None:
+def test_set_files_collision_suffix(tmp_path: Path) -> None:
     """In a directory where "stack_z_555nm.hdf5" ALREADY EXISTS,
     set_files produces "stack_z_555nm_01.hdf5" for the first slot (the
     sequential counter increments past the collision), and subsequent
@@ -313,7 +329,7 @@ def test_set_files_collision_suffix(tmp_path) -> None:
 
     import os
 
-    cwd = os.getcwd()
+    cwd = Path.cwd()
     os.chdir(tmp_path)
     try:
         saver.set_files(3, "stack", "z", 1, "dataset_", wavelengths=[555])
@@ -331,7 +347,7 @@ def test_set_files_collision_suffix(tmp_path) -> None:
     )
 
 
-def test_set_files_collision_suffix_increments(tmp_path) -> None:
+def test_set_files_collision_suffix_increments(tmp_path: Path) -> None:
     """When both stack_z_555nm.hdf5 and stack_z_555nm_01.hdf5 exist, the
     counter increments past both — the first slot gets _02, then _03,
     _04.
@@ -352,7 +368,7 @@ def test_set_files_collision_suffix_increments(tmp_path) -> None:
 
     import os
 
-    cwd = os.getcwd()
+    cwd = Path.cwd()
     os.chdir(tmp_path)
     try:
         saver.set_files(3, "stack", "z", 1, "dataset_", wavelengths=[555])
@@ -375,7 +391,7 @@ def test_set_files_collision_suffix_increments(tmp_path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_set_files_multi_channel_wavelength_suffix(tmp_path) -> None:
+def test_set_files_multi_channel_wavelength_suffix(tmp_path: Path) -> None:
     """set_files with wavelengths=[555, 640] builds
     self.filenames_lists as a list of 2 lists (one per channel), each
     length number_of_files, with _{wavelength}nm suffix and the compact
@@ -393,7 +409,7 @@ def test_set_files_multi_channel_wavelength_suffix(tmp_path) -> None:
     import os
     import re
 
-    cwd = os.getcwd()
+    cwd = Path.cwd()
     os.chdir(tmp_path)
     try:
         saver.set_files(
@@ -430,7 +446,7 @@ def test_set_files_multi_channel_wavelength_suffix(tmp_path) -> None:
     assert saver.filenames_lists[1][1] == "scan_640nm_01.hdf5"
 
 
-def test_set_files_single_channel_has_suffix(tmp_path) -> None:
+def test_set_files_single_channel_has_suffix(tmp_path: Path) -> None:
     """Single-channel set_files with wavelengths=[555] builds
     self.filenames_lists with one channel list (length number_of_files)
     AND populates self.filenames_list from filenames_lists[0] so the
@@ -449,7 +465,7 @@ def test_set_files_single_channel_has_suffix(tmp_path) -> None:
     saver.filenames_list = []
     saver.filenames_lists = []
 
-    cwd = os.getcwd()
+    cwd = Path.cwd()
     os.chdir(tmp_path)
     try:
         saver.set_files(
@@ -483,7 +499,7 @@ def test_set_files_single_channel_has_suffix(tmp_path) -> None:
         )
 
 
-def test_set_files_rejects_wavelengths_none(tmp_path) -> None:
+def test_set_files_rejects_wavelengths_none(tmp_path: Path) -> None:
     """The wavelengths=None back-compat branch is retired. set_files
     raises ValueError when wavelengths is None so a stale caller that
     forgets to pass wavelengths fails loudly instead of producing an
@@ -499,7 +515,7 @@ def test_set_files_rejects_wavelengths_none(tmp_path) -> None:
     saver.filenames_list = []
     saver.filenames_lists = []
 
-    cwd = os.getcwd()
+    cwd = Path.cwd()
     os.chdir(tmp_path)
     try:
         with pytest.raises(ValueError):
@@ -511,7 +527,7 @@ def test_set_files_rejects_wavelengths_none(tmp_path) -> None:
         os.chdir(cwd)
 
 
-def test_set_files_collision_avoidance_per_channel(tmp_path) -> None:
+def test_set_files_collision_avoidance_per_channel(tmp_path: Path) -> None:
     """Collision avoidance runs independently per channel — pre-create
     channel 0's first file; channel 0 shifts to _01 while channel 1 (no
     collision) stays unsuffixed.
@@ -528,7 +544,7 @@ def test_set_files_collision_avoidance_per_channel(tmp_path) -> None:
     # Pre-create channel 0's first file so it collides
     (tmp_path / "scan_555nm.hdf5").write_bytes(b"")
 
-    cwd = os.getcwd()
+    cwd = Path.cwd()
     os.chdir(tmp_path)
     try:
         saver.set_files(
@@ -551,7 +567,7 @@ def test_set_files_collision_avoidance_per_channel(tmp_path) -> None:
     )
 
 
-def _make_mock_h5py():
+def _make_mock_h5py() -> tuple[type, dict[str, list[tuple[str, np.ndarray]]]]:
     """Build a Mock h5py.File replacement that records create_dataset calls.
 
     Returns (mock_file_class, written_files) where written_files is a dict
@@ -571,7 +587,9 @@ def _make_mock_h5py():
             self.attrs: dict = {}
             written_files.setdefault(path, [])
 
-        def create_dataset(self, name: str, data=None, **kwargs):
+        def create_dataset(
+            self, name: str, data: Any = None, **kwargs: Any
+        ) -> _MockDataset:
             ds = _MockDataset(name, data)
             written_files[self.path].append((name, data))
             return ds
@@ -582,7 +600,7 @@ def _make_mock_h5py():
     return _MockFile, written_files
 
 
-def test_frame_saver_worker_branches_on_channel_tag(tmp_path) -> None:
+def test_frame_saver_worker_branches_on_channel_tag(tmp_path: Path) -> None:
     """MCA-03: frame_saver_worker branches on the channel tag from the
     dequeued (channel_idx, frame) tuple — frameA → filenames_lists[0][0],
     frameB → filenames_lists[1][0]. The single-consumer queue contract
@@ -595,7 +613,7 @@ def test_frame_saver_worker_branches_on_channel_tag(tmp_path) -> None:
     fs = FrameSaverController(bundle, shell)
     saver = fs.frame_saver
 
-    # Set up multi-channel filenames_lists (2 channels × 2 planes each)
+    # Set up multi-channel filenames_lists (2 channels x 2 planes each)
     saver.filenames_lists = [
         [
             str(tmp_path / "ch0_plane_00001.hdf5"),
@@ -662,7 +680,7 @@ def test_frame_saver_worker_branches_on_channel_tag(tmp_path) -> None:
     np.testing.assert_array_equal(written_files[ch1_file][0][1], frameB)
 
 
-def test_frame_saver_worker_single_channel_bare_ndarray(tmp_path) -> None:
+def test_frame_saver_worker_single_channel_bare_ndarray(tmp_path: Path) -> None:
     """Back-compat: a bare ndarray (no channel tag) dequeued by
     frame_saver_worker uses the existing self.filenames_list path —
     written to filenames_list[0]. The multi-channel filenames_lists
@@ -723,7 +741,9 @@ def test_frame_saver_worker_single_channel_bare_ndarray(tmp_path) -> None:
 # spinning up the save worker thread.
 
 
-def test_save_single_image_multi_channel_writes_two_files(qtbot, request) -> None:
+def test_save_single_image_multi_channel_writes_two_files(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """Multi-channel single mode: when both auto-laser checkboxes are
     checked, the Save button writes TWO wavelength-suffixed HDF5 files
     (one per channel). set_files is called with wavelengths=[wl1, wl2]
@@ -787,7 +807,9 @@ def test_save_single_image_multi_channel_writes_two_files(qtbot, request) -> Non
     ctrl._fs.stop_saving.assert_called_once()
 
 
-def test_save_single_image_single_channel_unchanged(qtbot, request) -> None:
+def test_save_single_image_single_channel_unchanged(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """Single-channel mode (one auto-laser checked): updateUi_save_single_image
     calls set_files with wavelengths=[active_wavelength] so the saved
     filename carries the _{wavelength}nm suffix. enqueue_buffer is called
@@ -857,7 +879,9 @@ def test_save_single_image_single_channel_unchanged(qtbot, request) -> None:
 # on the real shell.
 
 
-def test_zarr_saver_start_stack_n_channels(qtbot, request, tmp_path) -> None:
+def test_zarr_saver_start_stack_n_channels(
+    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+) -> None:
     """MCA-04: start_stack(store_path, n_planes=3, n_channels=2)
     constructs the writer with shape (2, 3, ysize, xsize) and
     chunk_shape (1, 1, ysize, xsize). The channel axis is the leading
@@ -887,7 +911,7 @@ def test_zarr_saver_start_stack_n_channels(qtbot, request, tmp_path) -> None:
 
 
 def test_zarr_saver_start_stack_single_channel_back_compat(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
 ) -> None:
     """MCA-04 back-compat: start_stack with n_channels=1 (and with
     n_channels omitted — default=1) produces shape (1, n_planes, y, x) —
@@ -920,7 +944,9 @@ def test_zarr_saver_start_stack_single_channel_back_compat(
     assert saver_b._n_channels == 1
 
 
-def test_zarr_saver_write_plane_channel_idx(qtbot, request, tmp_path) -> None:
+def test_zarr_saver_write_plane_channel_idx(
+    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+) -> None:
     """MCA-04: after start_stack(n_channels=2), write_plane(channel_idx=0,
     z_idx=1, frame=A, ...) writes A to writer[0, 1, :, :] and
     write_plane(channel_idx=1, z_idx=1, frame=B, ...) writes B to
@@ -957,7 +983,7 @@ def test_zarr_saver_write_plane_channel_idx(qtbot, request, tmp_path) -> None:
 
 
 def test_zarr_saver_write_plane_motor_positions_once_per_plane(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
 ) -> None:
     """MCA-04 / T-09-12: write_plane records motor positions only when
     channel_idx == 0 (once per plane, not per channel) — avoids
@@ -1002,7 +1028,7 @@ def test_zarr_saver_write_plane_motor_positions_once_per_plane(
 
 
 def test_zarr_saver_finalize_omero_channels_length(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
 ) -> None:
     """MCA-04 / T-09-11: with n_channels=2 and both auto-laser flags set,
     finalize() calls finalize_with_resolutions with len(omero_channels)
@@ -1011,7 +1037,6 @@ def test_zarr_saver_finalize_omero_channels_length(
     over the writer's non-validating API) and raises RuntimeError on
     mismatch."""
     import zarr
-
     from _helpers.controller_fixture import make_controller
 
     from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
@@ -1059,7 +1084,7 @@ def test_zarr_saver_finalize_omero_channels_length(
 
 
 def test_zarr_saver_finalize_raises_on_channel_count_mismatch(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
 ) -> None:
     """MCA-04 / T-09-11: if the caller passes n_channels that differs
     from len(_build_omero_channels()), finalize raises RuntimeError —
@@ -1091,7 +1116,7 @@ def test_zarr_saver_finalize_raises_on_channel_count_mismatch(
 
 
 def test_zarr_save_worker_branches_on_channel_tag(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
 ) -> None:
     """MCA-04: zarr_save_worker branches on the channel tag from the
     dequeued (channel_idx, frame) tuple and calls
@@ -1119,7 +1144,7 @@ def test_zarr_save_worker_branches_on_channel_tag(
     saver._zarr_saver.write_plane = MagicMock()
     saver._zarr_saver.finalize = MagicMock()
 
-    # Multi-channel: 2 channels × 2 planes = 4 frames total.
+    # Multi-channel: 2 channels x 2 planes = 4 frames total.
     saver.filenames_lists = []  # not used by zarr_save_worker
     saver.number_of_files = 2
     saver.number_of_datasets = 1
@@ -1188,7 +1213,7 @@ def test_zarr_save_worker_branches_on_channel_tag(
 
 
 def test_zarr_save_worker_single_channel_bare_ndarray_calls_write_plane_channel0(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
 ) -> None:
     """MCA-04 back-compat: a bare ndarray (no channel tag) dequeued by
     zarr_save_worker calls write_plane(0, z_idx, frame, ...) — channel
@@ -1242,7 +1267,9 @@ def test_zarr_save_worker_single_channel_bare_ndarray_calls_write_plane_channel0
     np.testing.assert_array_equal(write_calls[0].args[2], frame)
 
 
-def test_save_path_round_trips_channel_axis(qtbot, request, tmp_path) -> None:
+def test_save_path_round_trips_channel_axis(
+    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+) -> None:
     """MCA-04 companion contract test (assumption_delta_decision): for
     n_channels=2, every enqueued tagged (channel_idx, frame) tuple
     round-trips through the channel axis — a tagged enqueue produces a
@@ -1266,7 +1293,7 @@ def test_save_path_round_trips_channel_axis(qtbot, request, tmp_path) -> None:
         saver.filenames_list = []
         import os
 
-        cwd = os.getcwd()
+        cwd = Path.cwd()
         os.chdir(tmp_path)
         try:
             saver.set_files(

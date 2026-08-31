@@ -4,6 +4,7 @@ Created on April 1st, 2022
 
 import configparser
 import logging
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ def cfg_read(
     """
     tmp_dictionary = {}
     cfg = configparser.ConfigParser()
-    cfg.optionxform = str  # ty: ignore[invalid-assignment]  # preserve case (AGENTS.md §9); ty stubs type optionxform as a method
+    cfg.optionxform = str  # ty: ignore[invalid-assignment]  # preserve case; ty stubs type optionxform as a method
     cfg.read(cfg_filename)
     if cfg.has_section(cfg_section):
         for key, value in cfg[cfg_section].items():
@@ -38,13 +39,13 @@ def cfg_write(
     keys found in the same section.
     """
     cfg = configparser.ConfigParser()
-    cfg.optionxform = str  # ty: ignore[invalid-assignment]  # preserve case (AGENTS.md §9); ty stubs type optionxform as a method
+    cfg.optionxform = str  # ty: ignore[invalid-assignment]  # preserve case; ty stubs type optionxform as a method
     cfg.read(cfg_filename)
     if not cfg.has_section(cfg_section):
         cfg.add_section(cfg_section)
     for key in cfg_dictionary:
         cfg.set(cfg_section, str(key), str(cfg_dictionary[key]))
-    with open(cfg_filename, "w", encoding="utf-8") as output_file:
+    with Path(cfg_filename).open("w", encoding="utf-8") as output_file:
         cfg.write(output_file)
     return cfg_dictionary
 

@@ -1,16 +1,14 @@
 """SavePanelWidget — per-panel widget/controller for save/file-manager controls.
 
-Owns the save updateUi_* slots grouped by concern (D-01 gui modularization):
-file/dataset/directory selection and single-image save. Reads
-``self._shell.ui.<objectName>`` for its widgets (the shell's composed widget
-tree) and ``self._shell._fs`` / ``self._shell.save_*`` for shell-owned
-state. Emits through ``self._shell.sig_*``.
+Owns the save updateUi_* slots: file/dataset/directory selection and
+single-image save. Reads ``self._shell.ui.<objectName>`` for its widgets
+and ``self._shell._fs`` / ``self._shell.save_*`` for shell-owned state.
 """
 
 from __future__ import annotations
 
-import os
 import typing
+from pathlib import Path
 
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -37,10 +35,8 @@ class SavePanelWidget(QWidget):
         self.ui = Ui_SavePanel()
         self.ui.setupUi(self)
         # Apply the declarative FieldSpec policy table to every promoted
-        # FieldSpecSpinBox by objectName. save_panel has no
-        # FieldSpecSpinBox widgets, so the loop is a no-op (getattr →
-        # None for every key); it is kept for mechanical consistency
-        # across all 7 panels.
+        # FieldSpecSpinBox by objectName. save_panel has no FieldSpecSpinBox
+        # widgets, so the loop is a no-op; kept for consistency across panels.
         for obj_name, spec in FIELD_SPECS.items():
             w = getattr(self.ui, obj_name, None)
             if w is not None and hasattr(w, "applySpec"):
@@ -120,7 +116,7 @@ class SavePanelWidget(QWidget):
 
         # Branch on type: directory → Zarr store, file → HDF5.
         try:
-            if os.path.isdir(path):
+            if Path(path).is_dir():
                 dataset_names = self._list_zarr_datasets(path)
             else:
                 dataset_names = self._list_hdf5_datasets(path)
@@ -196,8 +192,8 @@ class SavePanelWidget(QWidget):
         ):
             from matplotlib import pyplot as plt
 
-            is_zarr = os.path.isdir(self._shell.open_directory)
-            for item in range(len(self.ui.listWidget_fileDatasets.selectedItems())):  # noqa: E501
+            is_zarr = Path(self._shell.open_directory).is_dir()
+            for item in range(len(self.ui.listWidget_fileDatasets.selectedItems())):
                 self._shell.dataset_name = self.ui.listWidget_fileDatasets.selectedItems()[  # noqa: E501
                     item
                 ].text()
@@ -270,7 +266,7 @@ class SavePanelWidget(QWidget):
                     + " displayed"
                 )
 
-    def _read_hdf5_dataset(self, path: str, name: str):
+    def _read_hdf5_dataset(self, path: str, name: str) -> tuple[typing.Any, dict]:
         """Open an HDF5 file, return ``(data, attrs)`` for the named
         top-level dataset."""
         import h5py
@@ -279,7 +275,7 @@ class SavePanelWidget(QWidget):
             dataset = f[name]
             return dataset[()], dict(dataset.attrs)
 
-    def _read_zarr_dataset(self, path: str, label: str):
+    def _read_zarr_dataset(self, path: str, label: str) -> tuple[typing.Any, dict]:
         """Open an OME-Zarr store, return ``(data, attrs)`` for the
         plane identified by ``label`` (``plane_NNNN`` or
         ``chN_plane_NNNN`` as produced by ``_list_zarr_datasets``).
@@ -305,10 +301,7 @@ class SavePanelWidget(QWidget):
         root = zarr.open_group(path, mode="r")
         arr = root["0"]
         shape = arr.shape
-        if len(shape) == 4:
-            data = arr[ch, z, :, :]
-        else:
-            data = arr[z, :, :]
+        data = arr[ch, z, :, :] if len(shape) == 4 else arr[z, :, :]
         # Metadata: prefer the /acquisition group's attrs (the Zarr
         # analog of the HDF5 dataset attrs). Fall back to the root attrs
         # (OME-NGFF metadata) if no acquisition group exists (e.g. a
@@ -338,7 +331,7 @@ class SavePanelWidget(QWidget):
             self._shell, "Choose Directory", self._shell.save_directory, options
         )
         if tmp_directory != "":
-            self._shell.save_directory = os.path.normpath(tmp_directory)
+            self._shell.save_directory = str(Path(tmp_directory))
 
         if self._shell.save_directory != "":
             self.ui.lineEdit_saveDirectory.setText(self._shell.save_directory)
@@ -384,8 +377,8 @@ class SavePanelWidget(QWidget):
         # avoids the lineEdit restore at controller.py:427 ever showing a
         # full path in the filename field.
         if (self._shell.save_directory != "") and (self._shell.save_filename != ""):
-            self._shell.save_filepath = os.path.normpath(
-                os.path.join(self._shell.save_directory, self._shell.save_filename)
+            self._shell.save_filepath = str(
+                Path(self._shell.save_directory) / self._shell.save_filename
             )
             self._shell.saving_allowed = True
         else:
@@ -399,7 +392,7 @@ class SavePanelWidget(QWidget):
 
         if self._shell.saving_allowed:
             # Getting sample name
-            self._shell.save_description = str(self.ui.lineEdit_saveDescription.text())  # noqa: E501
+            self._shell.save_description = str(self.ui.lineEdit_saveDescription.text())
 
             """Setting up frame saver"""
             self._shell._fs.reinit(1)

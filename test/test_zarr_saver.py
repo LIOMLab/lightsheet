@@ -15,17 +15,23 @@ VALIDATION.md automated commands resolve by node id.
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
 import numpy as np
+from _helpers.controller_fixture import make_controller
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
 
 from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
 
-from _helpers.controller_fixture import make_controller
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
-def _save_directory(ctrl, tmp_path) -> str:
+def _save_directory(ctrl: Controller_MainWindow, tmp_path: Path) -> str:
     """Point the controller's save_directory at tmp_path so the
     ZarrSaver's path-traversal guard accepts the tmp_path store."""
-    import os
 
     ctrl.save_directory = str(tmp_path)
     return str(tmp_path)
@@ -57,7 +63,9 @@ def test_position_to_float_strips_unit_suffix() -> None:
         _position_to_float("not a number")
 
 
-def test_zarr_saver_streams_and_finalizes(qtbot, request, tmp_path) -> None:
+def test_zarr_saver_streams_and_finalizes(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+) -> None:
     """SAV-01: N planes stream into the L0 dataset and finalize builds
     the pyramid. Read back via ``zarr.open`` and assert the L0 shape
     matches (1, N, ysize, xsize) and an ``acquisition`` group exists."""
@@ -82,7 +90,9 @@ def test_zarr_saver_streams_and_finalizes(qtbot, request, tmp_path) -> None:
     assert root["0"].shape == (1, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)
 
 
-def test_omero_channels(qtbot, request, tmp_path) -> None:
+def test_omero_channels(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+) -> None:
     """SAV-02: the omero channels carry wavelength / color / label /
     active per laser that was actually used in the acquisition. Only
     lasers whose auto-laser flag was set at acquisition start are
@@ -121,7 +131,9 @@ def test_omero_channels(qtbot, request, tmp_path) -> None:
     assert ch["active"] is True
 
 
-def test_omero_from_live_lasers(qtbot, request, tmp_path) -> None:
+def test_omero_from_live_lasers(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+) -> None:
     """SAV-02: the omero channel metadata is built from the live
     ``list[ILaser]`` the controller holds, not from a config re-parse.
     A laser whose ``label`` was mutated at runtime is reflected in the
@@ -162,7 +174,9 @@ def test_omero_from_live_lasers(qtbot, request, tmp_path) -> None:
         ctrl.lasers[0].label = original_label
 
 
-def test_ngff_metadata(qtbot, request, tmp_path) -> None:
+def test_ngff_metadata(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+) -> None:
     """SAV-02: NGFF v0.5 metadata is written — ``ome.version`` and the
     ``multiscales`` structure with at least one dataset pointing at L0."""
     import zarr
@@ -188,7 +202,9 @@ def test_ngff_metadata(qtbot, request, tmp_path) -> None:
     assert datasets[0]["path"] == "0"
 
 
-def test_acquisition_group(qtbot, request, tmp_path) -> None:
+def test_acquisition_group(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+) -> None:
     """D-04: the ``/acquisition`` group records the motor 1D datasets
     (horizontal/vertical/camera positions, length n_planes) and the
     scan-parameter group attrs (galvo/ETL amplitudes+offsets, exposure,
@@ -228,7 +244,9 @@ def test_acquisition_group(qtbot, request, tmp_path) -> None:
 # file (VALIDATION.md resolves them by node id).
 
 
-def test_format_branch(qtbot, request, tmp_path) -> None:
+def test_format_branch(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+) -> None:
     """SAV-01: the ``save_format`` branch selects the Zarr saver path.
     When ``save_format == 'zarr'`` the worker calls ``zarr_save_worker``
     (not ``frame_saver_worker``); ``'hdf5'`` -> ``frame_saver_worker``;
@@ -299,7 +317,9 @@ def test_format_branch(qtbot, request, tmp_path) -> None:
     assert len(finished) == 1
 
 
-def test_close_ordering(qtbot, request, tmp_path) -> None:
+def test_close_ordering(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+) -> None:
     """SAV-01: ``sig_finished`` fires only AFTER finalize completes
     (close ordering). The try/finally + ``sig_finished.emit()`` shape
     in ``FrameSaverWorker.start_saving`` is the load-bearing contract —
@@ -355,7 +375,7 @@ def test_close_ordering(qtbot, request, tmp_path) -> None:
 
 
 def test_zarr_save_finalizes_after_stop_saving_on_normal_completion(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
 ) -> None:
     """Regression: on normal stack completion ``stop_saving()`` flips
     ``saving_started=False`` (it is the winding-down path for BOTH abort
@@ -411,18 +431,20 @@ def test_zarr_save_finalizes_after_stop_saving_on_normal_completion(
     # Queue wrapper that flips saving_started=False once the last frame is
     # consumed — mimicking stop_saving() on normal completion.
     class _StopAfterLastQueue:
-        def __init__(self, real, n_frames: int) -> None:
+        def __init__(self, real: Any, n_frames: int) -> None:
             self._real = real
             self._remaining = n_frames
 
-        def get(self, block=True, timeout=None):
+        def get(
+            self, block: bool = True, timeout: float | None = None
+        ) -> Any:
             buf = self._real.get(block=block, timeout=timeout)
             self._remaining -= 1
             if self._remaining <= 0:
                 saver.saving_started = False
             return buf
 
-        def __getattr__(self, name):
+        def __getattr__(self, name: str) -> Any:
             return getattr(self._real, name)
 
     saver.queue = _StopAfterLastQueue(saver.queue, n_planes)
@@ -450,7 +472,9 @@ def test_zarr_save_finalizes_after_stop_saving_on_normal_completion(
     )
 
 
-def test_zarr_drains_queue_after_stop_saving(qtbot, request, tmp_path) -> None:
+def test_zarr_drains_queue_after_stop_saving(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+) -> None:
     """Regression: all frames queued, then stop_saving() flips
     saving_started=False BEFORE the worker drains the queue.
 
@@ -461,11 +485,11 @@ def test_zarr_drains_queue_after_stop_saving(qtbot, request, tmp_path) -> None:
     producing a 1-plane store with no finalize. The fix drains remaining
     frames via get_nowait() on queue.Empty when saving_started is False.
     """
+    import zarr
+
     from lightsheet.gui.coordinators.frame_saver_controller import (
         FrameSaverWorker,
     )
-
-    import zarr
 
     ctrl, _ = make_controller(qtbot, request)
     _save_directory(ctrl, tmp_path)
@@ -510,21 +534,23 @@ def test_zarr_drains_queue_after_stop_saving(qtbot, request, tmp_path) -> None:
     # Use a wrapper that flips the flag after the first get, so the worker
     # sees saving_started=False while frames are still in the queue.
     class _FlipAfterFirstGet:
-        def __init__(self, real) -> None:
+        def __init__(self, real: Any) -> None:
             self._real = real
             self._count = 0
 
-        def get(self, block=True, timeout=None):
+        def get(
+            self, block: bool = True, timeout: float | None = None
+        ) -> Any:
             buf = self._real.get(block=block, timeout=timeout)
             self._count += 1
             if self._count >= 1:
                 saver.saving_started = False
             return buf
 
-        def get_nowait(self):
+        def get_nowait(self) -> Any:
             return self._real.get_nowait()
 
-        def __getattr__(self, name):
+        def __getattr__(self, name: str) -> Any:
             return getattr(self._real, name)
 
     saver.queue = _FlipAfterFirstGet(saver.queue)
@@ -554,7 +580,9 @@ def test_zarr_drains_queue_after_stop_saving(qtbot, request, tmp_path) -> None:
     )
 
 
-def test_both_mode_writes_both_formats(qtbot, request, tmp_path) -> None:
+def test_both_mode_writes_both_formats(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+) -> None:
     """CR-01 regression: ``both`` save mode must write image data to BOTH
     the OME-Zarr store AND the HDF5 files from a single queue-consume
     pass. The previous two-loop design (zarr_save_worker then
@@ -638,7 +666,10 @@ def test_both_mode_writes_both_formats(qtbot, request, tmp_path) -> None:
         with h5py.File(h5_path, "r") as f:
             keys = list(f.keys())
             # The dataset name pattern is datasets_name + counter (1-based).
-            assert len(keys) == 1, f"HDF5 file {h5_path} has {len(keys)} datasets, expected 1"
+            assert len(keys) == 1, (
+                f"HDF5 file {h5_path} has {len(keys)} datasets, "
+                f"expected 1"
+            )
             ds = f[keys[0]]
             assert ds.shape == (ctrl.camera.ysize, ctrl.camera.xsize)
             assert np.all(ds[()] == (z + 1) * 100), (
@@ -673,7 +704,9 @@ def _count_chunk_files(store_path: str) -> int:
     return chunk_files
 
 
-def test_zarr_all_zero_frames_produce_chunks(qtbot, request, tmp_path) -> None:
+def test_zarr_all_zero_frames_produce_chunks(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+) -> None:
     """G-09-11: a Zarr store written with all-zero uint16 frames (the
     MockCamera demo case) must contain actual data chunk files under
     ``0/c/`` — not just ``zarr.json`` metadata. zarr v3 defaults
@@ -709,7 +742,7 @@ def test_zarr_all_zero_frames_produce_chunks(qtbot, request, tmp_path) -> None:
 
 
 def test_zarr_multi_channel_all_zero_produce_chunks(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
 ) -> None:
     """G-09-11 multi-channel: a 2-channel Zarr store with all-zero
     frames must have chunk files for both channels (``c/0/`` and
@@ -739,9 +772,9 @@ def test_zarr_multi_channel_all_zero_produce_chunks(
 
     # Both channels must have chunk files.
     for ch in range(n_channels):
-        ch_dir = os.path.join(store_path, "0", "c", str(ch))
+        ch_dir = Path(store_path) / "0" / "c" / str(ch)
         ch_chunks = 0
-        if os.path.isdir(ch_dir):
+        if ch_dir.is_dir():
             for _root, _dirs, files in os.walk(ch_dir):
                 ch_chunks += len(files)
         assert ch_chunks >= 1, (
@@ -751,7 +784,7 @@ def test_zarr_multi_channel_all_zero_produce_chunks(
 
 
 def test_zarr_non_zero_frames_still_produce_chunks(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
 ) -> None:
     """Regression: non-zero frames must still produce chunk files (the
     write_empty_chunks=True fix must not break the non-zero path)."""

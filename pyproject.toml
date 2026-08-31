@@ -44,6 +44,10 @@ required-environments = ["sys_platform == 'win32'", "sys_platform == 'darwin'"]
 
 [tool.ruff]
 extend-exclude = [
+    # Qt resource compiler output (pyside6-rcc) — generated, do not edit.
+    "lightsheet/gui/breeze_pyside6.py",
+    # Vendored breeze stylesheets — upstream code, not ours to lint.
+    "lightsheet/gui/_vendor",
     "lightsheet/gui/panels/ui_properties.py",
     # 7B generated per-panel .ui/.qrc files (pyside6-uic/pyside6-rcc output).
     # Pre-registered so 7B regen does not trip ruff.
@@ -81,7 +85,7 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "ANN"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "ANN", "PTH"]
 ignore = ["ANN401"]
 
 [tool.ruff.lint.per-file-ignores]

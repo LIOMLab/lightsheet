@@ -1,4 +1,4 @@
-"""Past-acquisitions browser (D-05).
+"""Past-acquisitions browser.
 
 Parses both HDF5 and OME-Zarr acquisitions under the operator's save
 directory (``~/Desktop/LightSheetData`` by default) so the operator can
@@ -11,7 +11,7 @@ Wavelength normalization (operator-locked): filenames use ``555nm``,
 channel (the iBeam is labeled "Laser 2 (640 nm)" in recent metadata;
 older files used ``647nm`` in the filename). The browser normalizes both
 to ``647`` in the parsed entry — a DISPLAY transform only. The
-underlying filename and HDF5 root attrs are NOT modified (Pitfall 6).
+underlying filename and HDF5 root attrs are NOT modified.
 
 Graceful degradation: older HDF5 files (pre-Phase-4, May 2025 and
 earlier) have ZERO root attrs — the wavelength is inferred from the
@@ -20,22 +20,25 @@ filename prefix. Files that fail to open are skipped with a per-file
 ``sig_message``; the table shows the parseable rows.
 
 The scan runs asynchronously (``QThread`` + ``moveToThread``) so a
-~30-folder × 2000-dataset scan does not freeze the GUI thread (and the
-E-stop kill path stays responsive, AGENTS.md §2). The worker emits a
+~30-folder x 2000-dataset scan does not freeze the GUI thread (and the
+E-stop kill path stays responsive). The worker emits a
 single ``sig_scan_finished(list)`` signal when done; the table is
 populated in one batch on the GUI thread.
 """
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import logging
 import os
 import re
 import typing
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
-from PySide6.QtCore import QObject, QThread, Qt, Signal
+from PySide6.QtCore import QObject, Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QHeaderView,
@@ -92,6 +95,7 @@ def _format_bytes(n: int | None) -> str:
             return f"{value:.1f} {unit}"
         value /= 1024.0
     return f"{value:.1f} TB"
+
 
 # Wavelength token: matches _<3-digit>nm followed by a separator (_ or .)
 # or end-of-string. The trailing separator is a lookahead so it is not
@@ -159,14 +163,14 @@ class PastAcquisitionsBrowser(QObject):
 
     def __init__(
         self,
-        shell: "Controller_MainWindow",
+        shell: Controller_MainWindow,
         data_dir: str | None = None,
     ) -> None:
         super().__init__()
         self._shell = shell
         self._data_dir = data_dir
         self._thread: QThread | None = None
-        self._worker: "_ScanWorker" | None = None
+        self._worker: _ScanWorker | None = None
 
     def _resolve_data_dir(self) -> str:
         if self._data_dir:
@@ -178,7 +182,7 @@ class PastAcquisitionsBrowser(QObject):
         entries. Skips files that fail to open with a per-file
         ``sig_message``; never raises on a malformed file."""
         data_dir = self._resolve_data_dir()
-        if not data_dir or not os.path.isdir(data_dir):
+        if not data_dir or not Path(data_dir).is_dir():
             return []
         return self._scan_directory(data_dir)
 
@@ -187,7 +191,9 @@ class PastAcquisitionsBrowser(QObject):
         (two-level depth, matching the rig probe) for HDF5 + Zarr stores."""
         entries: list[PastAcquisitionEntry] = []
         try:
-            top_entries = sorted(os.listdir(data_dir))
+            top_entries = sorted(
+                child.name for child in Path(data_dir).iterdir()
+            )
         except OSError as exc:
             self.sig_message.emit(
                 f"Cannot read past acquisitions: {data_dir} is missing or "
@@ -195,7 +201,7 @@ class PastAcquisitionsBrowser(QObject):
             )
             return []
         for name in top_entries:
-            top_path = os.path.join(data_dir, name)
+            top_path = str(Path(data_dir) / name)
             # A .ome.zarr directory IS a Zarr store, not a folder to
             # recurse into — check the format suffix before the isdir
             # recursion so the store is parsed as one acquisition. HDF5
@@ -203,21 +209,23 @@ class PastAcquisitionsBrowser(QObject):
             # isfile too — a directory named foo.hdf5 would otherwise be
             # handed to h5py.File and fail (caught, but wasteful); it
             # falls through to the isdir recursion below instead.
-            if (self._is_hdf5(name) and os.path.isfile(top_path)) or (
-                self._is_zarr(name) and os.path.isdir(top_path)
+            if (self._is_hdf5(name) and Path(top_path).is_file()) or (
+                self._is_zarr(name) and Path(top_path).is_dir()
             ):
                 entries.extend(self._parse_file(top_path, sample_hint=name))
                 continue
-            if os.path.isdir(top_path):
+            if Path(top_path).is_dir():
                 # Two-level depth: sample folder + immediate child folders.
                 entries.extend(self._scan_folder(top_path, sample_hint=name))
                 try:
-                    children = sorted(os.listdir(top_path))
+                    children = sorted(
+                        child.name for child in Path(top_path).iterdir()
+                    )
                 except OSError:
                     continue
                 for child in children:
-                    child_path = os.path.join(top_path, child)
-                    if os.path.isdir(child_path) and not self._is_zarr(child):
+                    child_path = str(Path(top_path) / child)
+                    if Path(child_path).is_dir() and not self._is_zarr(child):
                         entries.extend(
                             self._scan_folder(child_path, sample_hint=child)
                         )
@@ -231,14 +239,14 @@ class PastAcquisitionsBrowser(QObject):
         """Parse the HDF5 + Zarr files directly inside one folder."""
         out: list[PastAcquisitionEntry] = []
         try:
-            names = sorted(os.listdir(folder))
+            names = sorted(child.name for child in Path(folder).iterdir())
         except OSError:
             return out
         for name in names:
-            path = os.path.join(folder, name)
-            if self._is_hdf5(name):
-                out.extend(self._parse_file(path, sample_hint=sample_hint))
-            elif self._is_zarr(name) and os.path.isdir(path):
+            path = str(Path(folder) / name)
+            if self._is_hdf5(name) or (
+                self._is_zarr(name) and Path(path).is_dir()
+            ):
                 out.extend(self._parse_file(path, sample_hint=sample_hint))
         return out
 
@@ -248,7 +256,7 @@ class PastAcquisitionsBrowser(QObject):
             if entry is not None:
                 return [entry]
             return []
-        if self._is_zarr(path) and os.path.isdir(path):
+        if self._is_zarr(path) and Path(path).is_dir():
             entry = self._parse_zarr(path, sample_hint)
             if entry is not None:
                 return [entry]
@@ -257,12 +265,10 @@ class PastAcquisitionsBrowser(QObject):
 
     # -- HDF5 ---------------------------------------------------------- #
 
-    def _parse_hdf5(
-        self, path: str, sample_hint: str
-    ) -> PastAcquisitionEntry | None:
+    def _parse_hdf5(self, path: str, sample_hint: str) -> PastAcquisitionEntry | None:
         import h5py
 
-        fname = os.path.basename(path)
+        fname = Path(path).name
         try:
             with h5py.File(path, "r") as f:
                 # Count only actual datasets at the root, not groups or
@@ -270,16 +276,12 @@ class PastAcquisitionsBrowser(QObject):
                 # dataset root key (e.g. a 'metadata' group) would
                 # otherwise inflate the plane count. Mirrors the Zarr
                 # parser which inspects the array shape instead of keys.
-                n_planes = sum(
-                    1 for k in f.keys() if isinstance(f[k], h5py.Dataset)
-                )
+                n_planes = sum(1 for k in f if isinstance(f[k], h5py.Dataset))
                 # Wavelength: root attrs first, else filename token.
                 wl = self._hdf5_wavelength(f, fname)
                 sample = self._hdf5_sample(f, fname, sample_hint)
-        except Exception as exc:  # noqa: BLE001
-            self.sig_message.emit(
-                f"Could not parse {fname}: {exc}. Skipped."
-            )
+        except Exception as exc:
+            self.sig_message.emit(f"Could not parse {fname}: {exc}. Skipped.")
             logger.debug("past-acquisitions HDF5 parse failed: %s (%s)", path, exc)
             return None
         size = self._file_size(path)
@@ -294,7 +296,7 @@ class PastAcquisitionsBrowser(QObject):
             source_path=path,
         )
 
-    def _hdf5_wavelength(self, f, fname: str) -> int | None:
+    def _hdf5_wavelength(self, f: Any, fname: str) -> int | None:
         # Root attrs: prefer the ACTIVE laser's wavelength. The file
         # stores both lasers' metadata, but only the active one was used
         # for this acquisition. Checking Laser1 first would always
@@ -320,7 +322,7 @@ class PastAcquisitionsBrowser(QObject):
         # Fall back to the filename _<wl>nm_ token (pre-Phase-4 files).
         return self._wavelength_from_filename(fname)
 
-    def _hdf5_sample(self, f, fname: str, sample_hint: str) -> str:
+    def _hdf5_sample(self, f: Any, fname: str, sample_hint: str) -> str:
         # The Sample Name attr is empty in all probed files — use the
         # filename prefix (before the _<wavelength>nm token) or the
         # folder name.
@@ -342,30 +344,24 @@ class PastAcquisitionsBrowser(QObject):
         stem = fname
         if stem.lower().endswith(".hdf5"):
             stem = stem[: -len(".hdf5")]
-        m2 = re.match(
-            r"^(.+?)_stack_plane_\d+$", stem, re.IGNORECASE
-        )
+        m2 = re.match(r"^(.+?)_stack_plane_\d+$", stem, re.IGNORECASE)
         if m2 and m2.group(1):
             return m2.group(1)
         return sample_hint
 
     # -- Zarr ---------------------------------------------------------- #
 
-    def _parse_zarr(
-        self, path: str, sample_hint: str
-    ) -> PastAcquisitionEntry | None:
+    def _parse_zarr(self, path: str, sample_hint: str) -> PastAcquisitionEntry | None:
         import zarr
 
-        fname = os.path.basename(path)
+        fname = Path(path).name
         try:
             root = zarr.open_group(path, mode="r")
             n_planes = self._zarr_n_planes(root)
             wl = self._zarr_wavelength(root, fname)
             sample = self._zarr_sample(fname, sample_hint)
-        except Exception as exc:  # noqa: BLE001
-            self.sig_message.emit(
-                f"Could not parse {fname}: {exc}. Skipped."
-            )
+        except Exception as exc:
+            self.sig_message.emit(f"Could not parse {fname}: {exc}. Skipped.")
             logger.debug("past-acquisitions Zarr parse failed: %s (%s)", path, exc)
             return None
         size = self._dir_size(path)
@@ -380,7 +376,7 @@ class PastAcquisitionsBrowser(QObject):
             source_path=path,
         )
 
-    def _zarr_n_planes(self, root) -> int:
+    def _zarr_n_planes(self, root: Any) -> int:
         # L0 is the multiscale level "0" array. The writer produces a 4D
         # (c, z, y, x) array; plane count is shape[1]. A 3D (z, y, x)
         # array (no channel dimension) would return shape[0] instead —
@@ -395,7 +391,7 @@ class PastAcquisitionsBrowser(QObject):
             return 0
         return int(shape[1])
 
-    def _zarr_wavelength(self, root, fname: str) -> int | None:
+    def _zarr_wavelength(self, root: Any, fname: str) -> int | None:
         # The writer nests omero inside the "ome" attrs key. Fall back to
         # a top-level "omero" key for robustness, then the filename token.
         ome = root.attrs.get("ome")
@@ -458,7 +454,7 @@ class PastAcquisitionsBrowser(QObject):
     @staticmethod
     def _file_size(path: str) -> int:
         try:
-            return int(os.path.getsize(path))
+            return int(Path(path).stat().st_size)
         except OSError:
             return 0
 
@@ -467,16 +463,14 @@ class PastAcquisitionsBrowser(QObject):
         total = 0
         for _root, _dirs, files in os.walk(path):
             for f in files:
-                try:
-                    total += os.path.getsize(os.path.join(_root, f))
-                except OSError:
-                    pass
+                with contextlib.suppress(OSError):
+                    total += (Path(_root) / f).stat().st_size
         return total
 
     @staticmethod
     def _date_str(path: str) -> str:
         try:
-            mtime = os.path.getmtime(path)
+            mtime = Path(path).stat().st_mtime
             return datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
         except OSError:
             return ""
@@ -541,10 +535,8 @@ class PastAcquisitionsBrowser(QObject):
         allowed to finish its current file; the thread quits and is
         waited on briefly."""
         if self._worker is not None:
-            try:
+            with contextlib.suppress(TypeError, RuntimeError):
                 self._worker.finished.disconnect()
-            except (TypeError, RuntimeError):
-                pass
         if self._thread is not None and self._thread.isRunning():
             self._thread.quit()
             self._thread.wait(2000)
@@ -573,12 +565,12 @@ class _ScanWorker(QObject):
 
     def run(self) -> None:
         try:
-            if not self._data_dir or not os.path.isdir(self._data_dir):
+            if not self._data_dir or not Path(self._data_dir).is_dir():
                 self.finished.emit([])
                 return
             entries = self._browser._scan_directory(self._data_dir)
             self.finished.emit(entries)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.exception("past-acquisitions scan failed: %s", exc)
             self.finished.emit([])
 
@@ -594,9 +586,13 @@ class _NumericTableWidgetItem(QTableWidgetItem):
     column header.
     """
 
-    def __lt__(self, other) -> bool:  # noqa: D601 - Qt override
+    def __lt__(self, other: object) -> bool:
         sv = self.data(Qt.ItemDataRole.UserRole)
-        ov = other.data(Qt.ItemDataRole.UserRole) if isinstance(other, QTableWidgetItem) else None
+        ov = (
+            other.data(Qt.ItemDataRole.UserRole)
+            if isinstance(other, QTableWidgetItem)
+            else None
+        )
         if sv is not None and ov is not None:
             try:
                 return float(sv) < float(ov)
@@ -632,7 +628,7 @@ class PastAcquisitionsPanel(QWidget):
     # the table is populated internally in _on_scan_finished.
     past_acquisitions_scan_finished = Signal(list)
 
-    def __init__(self, shell: "Controller_MainWindow") -> None:
+    def __init__(self, shell: Controller_MainWindow) -> None:
         super().__init__()
         self._shell = shell
         self.ui = Ui_PastAcquisitionsPanel()
@@ -651,14 +647,10 @@ class PastAcquisitionsPanel(QWidget):
             QTableWidget.EditTrigger.NoEditTriggers
         )
         past_header = self.ui.tableWidget_pastAcquisitions.horizontalHeader()
-        past_header.setSectionResizeMode(
-            QHeaderView.ResizeMode.ResizeToContents
-        )
+        past_header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         past_header.setStretchLastSection(True)
         self.ui.tableWidget_pastAcquisitions.setWordWrap(False)
-        self.ui.tableWidget_pastAcquisitions.textElideMode = (
-            Qt.TextElideMode.ElideRight
-        )
+        self.ui.tableWidget_pastAcquisitions.textElideMode = Qt.TextElideMode.ElideRight
         self.ui.tableWidget_pastAcquisitions.setSortingEnabled(True)
 
         # Status label styling (empty/scanning/error copy).
@@ -703,7 +695,7 @@ class PastAcquisitionsPanel(QWidget):
     # Internal slots
     # ------------------------------------------------------------------ #
 
-    def _on_view_changed(self, button) -> None:
+    def _on_view_changed(self, button: object) -> None:
         """Planned/Past toggle handler. "Planned" switches the left-rail to
         the Stack page (index 2); "Past" re-checks itself (this page)."""
         if button is self.ui.radioButton_viewPlanned:
@@ -756,7 +748,7 @@ class PastAcquisitionsPanel(QWidget):
             # the Files panel) from "directory exists but has no stacks"
             # (tell them to run an acquisition + Refresh). UI-SPEC
             # §Copywriting Past Acquisitions empty vs empty-save-directory.
-            if not folder or not os.path.isdir(folder):
+            if not folder or not Path(folder).is_dir():
                 self.ui.label_pastStatus.setText(
                     _PAST_ERROR_COPY.format(save_directory=folder or "(unset)")
                 )
@@ -767,34 +759,41 @@ class PastAcquisitionsPanel(QWidget):
         # Re-emit so external observers (tests) can subscribe.
         self.past_acquisitions_scan_finished.emit(entries)
 
-    def _add_past_row(self, entry) -> None:
+    def _add_past_row(self, entry: PastAcquisitionEntry) -> None:
         row = self.ui.tableWidget_pastAcquisitions.rowCount()
         self.ui.tableWidget_pastAcquisitions.insertRow(row)
         self._set_past_cell(row, _PAST_COL_SAMPLE, entry.sample)
         wl = normalize_wavelength(entry.wavelength)
         self._set_past_cell(
-            row, _PAST_COL_CHANNEL, "" if wl is None else str(wl),
+            row,
+            _PAST_COL_CHANNEL,
+            "" if wl is None else str(wl),
             sort_value=wl if wl is not None else None,
         )
         self._set_past_cell(
-            row, _PAST_COL_NPLANES, str(entry.n_planes),
+            row,
+            _PAST_COL_NPLANES,
+            str(entry.n_planes),
             sort_value=entry.n_planes,
         )
         self._set_past_cell(
-            row, _PAST_COL_SIZE, _format_bytes(entry.size_bytes),
+            row,
+            _PAST_COL_SIZE,
+            _format_bytes(entry.size_bytes),
             sort_value=entry.size_bytes,
         )
         self._set_past_cell(row, _PAST_COL_DATE, entry.date_str)
         self._set_past_cell(row, _PAST_COL_FORMAT, entry.format_label)
 
     def _set_past_cell(
-        self, row: int, col: int, text: str, sort_value=None
+        self, row: int, col: int, text: str, sort_value: float | None = None
     ) -> None:
         # Use the numeric item subclass when a numeric sort value is
         # provided so Qt sorts the column numerically (via __lt__ on the
         # UserRole data) instead of lexically on the string text.
         item = (
-            _NumericTableWidgetItem(text) if sort_value is not None
+            _NumericTableWidgetItem(text)
+            if sort_value is not None
             else QTableWidgetItem(text)
         )
         item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)

@@ -25,7 +25,14 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QObject
-from PySide6.QtWidgets import QCheckBox, QDoubleSpinBox, QPushButton
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QDoubleSpinBox,
+    QPushButton,
+    QWidget,
+)
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
@@ -46,7 +53,10 @@ _FRENCH_KEYWORDS = (
 
 # The E-stop tooltip is preserved verbatim per the UI-SPEC Copywriting
 # contract — do not change this string without updating the UI-SPEC.
-ESTOP_TOOLTIP = "Emergency stop (F12) — drives all lasers to 0 V and aborts the current acquisition"
+ESTOP_TOOLTIP = (
+    "Emergency stop (F12) — drives all lasers to 0 V and "
+    "aborts the current acquisition"
+)
 
 # The iBeam readback tooltip is preserved verbatim per the UI-SPEC
 # Copywriting contract.
@@ -63,20 +73,24 @@ def _panel_classes() -> dict[str, str]:
     return {
         "laser_panel": "lightsheet.gui.panels.laser_panel.LaserPanelWidget",
         "motor_panel": "lightsheet.gui.panels.motor_panel.MotorPanelWidget",
-        "acquisition_panel": "lightsheet.gui.panels.acquisition_panel.AcquisitionPanelWidget",
+        "acquisition_panel": (
+            "lightsheet.gui.panels.acquisition_panel.AcquisitionPanelWidget"
+        ),
         "stack_panel": "lightsheet.gui.panels.stack_panel.StackPanelWidget",
         "scan_panel": "lightsheet.gui.panels.scan_panel.ScanPanelWidget",
         "save_panel": "lightsheet.gui.panels.save_panel.SavePanelWidget",
-        "calibration_panel": "lightsheet.gui.panels.calibration_panel.CalibrationPanelWidget",
+        "calibration_panel": (
+            "lightsheet.gui.panels.calibration_panel.CalibrationPanelWidget"
+        ),
     }
 
 
-def _import(path: str):
+def _import(path: str) -> type:
     mod, _, cls = path.rpartition(".")
     return getattr(__import__(mod, fromlist=[cls]), cls)
 
 
-def _assert_spinboxes_have_tooltips(panel) -> list[str]:
+def _assert_spinboxes_have_tooltips(panel: QWidget) -> list[str]:
     missing: list[str] = []
     for sb in panel.findChildren(QDoubleSpinBox):
         name = sb.objectName()
@@ -89,7 +103,7 @@ def _assert_spinboxes_have_tooltips(panel) -> list[str]:
     return missing
 
 
-def _assert_checkboxes_have_tooltips(panel) -> list[str]:
+def _assert_checkboxes_have_tooltips(panel: QWidget) -> list[str]:
     missing: list[str] = []
     for cb in panel.findChildren(QCheckBox):
         name = cb.objectName()
@@ -101,7 +115,7 @@ def _assert_checkboxes_have_tooltips(panel) -> list[str]:
     return missing
 
 
-def _assert_checkable_pushbuttons_have_tooltips(panel) -> list[str]:
+def _assert_checkable_pushbuttons_have_tooltips(panel: QWidget) -> list[str]:
     missing: list[str] = []
     for btn in panel.findChildren(QPushButton):
         if not btn.isCheckable():
@@ -115,7 +129,9 @@ def _assert_checkable_pushbuttons_have_tooltips(panel) -> list[str]:
     return missing
 
 
-def test_all_panels_spinboxes_have_tooltips(qtbot, request) -> None:
+def test_all_panels_spinboxes_have_tooltips(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """Every QDoubleSpinBox across all 7 panels has a non-empty tooltip."""
     from _helpers.controller_fixture import make_controller
 
@@ -130,7 +146,9 @@ def test_all_panels_spinboxes_have_tooltips(qtbot, request) -> None:
     )
 
 
-def test_all_panels_checkboxes_have_tooltips(qtbot, request) -> None:
+def test_all_panels_checkboxes_have_tooltips(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """Every QCheckBox across all 7 panels has a non-empty tooltip."""
     from _helpers.controller_fixture import make_controller
 
@@ -144,7 +162,9 @@ def test_all_panels_checkboxes_have_tooltips(qtbot, request) -> None:
     )
 
 
-def test_all_panels_checkable_pushbuttons_have_tooltips(qtbot, request) -> None:
+def test_all_panels_checkable_pushbuttons_have_tooltips(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """Every checkable QPushButton across all 7 panels has a non-empty tooltip."""
     from _helpers.controller_fixture import make_controller
 
@@ -160,7 +180,9 @@ def test_all_panels_checkable_pushbuttons_have_tooltips(qtbot, request) -> None:
     )
 
 
-def test_estop_button_tooltip_preserved(qtbot, request) -> None:
+def test_estop_button_tooltip_preserved(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The E-stop button tooltip is preserved verbatim (UI-SPEC Copywriting)."""
     from _helpers.controller_fixture import make_controller
 
@@ -173,7 +195,9 @@ def test_estop_button_tooltip_preserved(qtbot, request) -> None:
     )
 
 
-def test_arm_reset_button_has_tooltip(qtbot, request) -> None:
+def test_arm_reset_button_has_tooltip(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The Arm/Reset button carries a tooltip documenting the two-press sequence."""
     from _helpers.controller_fixture import make_controller
 
@@ -211,7 +235,9 @@ def test_no_french_labels_in_ui_files() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_help_menu_links_guide_pdf(qtbot, request) -> None:
+def test_help_menu_links_guide_pdf(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The Help menu contains an action that opens Guide.pdf, wired to open_help."""
     from _helpers.controller_fixture import make_controller
 

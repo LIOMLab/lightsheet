@@ -25,12 +25,18 @@ The real ``Controller_MainWindow`` is constructed via ``make_controller``
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
 from unittest.mock import patch
 
 from _helpers.controller_fixture import make_controller
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
 
 
-def test_estop_handler_defers_post_kill_refresh(qtbot, request) -> None:
+def test_estop_handler_defers_post_kill_refresh(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The three post-kill refresh calls (_poll_laser_status /
     _refresh_laser_readback / _refresh_laser2_readback_async) are deferred
     via QTimer.singleShot(0, ...) — they are NOT called synchronously
@@ -53,19 +59,19 @@ def test_estop_handler_defers_post_kill_refresh(qtbot, request) -> None:
     deferred_readback_l2: list[int] = []
     in_handler = {"value": False}
 
-    def _fake_poll(indices):
+    def _fake_poll(indices: object) -> None:
         if in_handler["value"]:
             sync_poll.append(1)
         else:
             deferred_poll.append(1)
 
-    def _fake_readback_l1(idx):
+    def _fake_readback_l1(idx: object) -> None:
         if in_handler["value"]:
             sync_readback_l1.append(1)
         else:
             deferred_readback_l1.append(1)
 
-    def _fake_readback_l2():
+    def _fake_readback_l2() -> None:
         if in_handler["value"]:
             sync_readback_l2.append(1)
         else:
@@ -93,7 +99,7 @@ def test_estop_handler_defers_post_kill_refresh(qtbot, request) -> None:
     # after the handler returns (no synchronous refresh blocking it).
     probe_fired = {"value": False}
 
-    def _probe():
+    def _probe() -> None:
         probe_fired["value"] = True
 
     QTimer.singleShot(0, _probe)
@@ -137,7 +143,9 @@ def test_estop_handler_defers_post_kill_refresh(qtbot, request) -> None:
     assert len(deferred_readback_l2) >= 1
 
 
-def test_estop_kill_path_stays_synchronous_and_lock_free(qtbot, request) -> None:
+def test_estop_kill_path_stays_synchronous_and_lock_free(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The kill loop (estop_event.set() + for laser in self.lasers:
     laser.off()) stays synchronous on the GUI thread — no thread/queue
     offload (AGENTS.md §2). The cooperative-abort Event is set before the
@@ -152,8 +160,8 @@ def test_estop_kill_path_stays_synchronous_and_lock_free(qtbot, request) -> None
     for idx, laser in enumerate(ctrl.lasers):
         original_offs.append(laser.off)
 
-        def _make_recorder(i, _orig):
-            def _off():
+        def _make_recorder(i: int, _orig: Any) -> Callable[[], None]:
+            def _off() -> None:
                 off_calls.append(i)
                 _orig()
 
@@ -193,7 +201,9 @@ def test_estop_kill_path_stays_synchronous_and_lock_free(qtbot, request) -> None
         laser.off = original_offs[idx]
 
 
-def test_arm_reset_first_press_clears_estop_event(qtbot, request) -> None:
+def test_arm_reset_first_press_clears_estop_event(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """After E-stop, the first Arm/Reset press clears the cooperative-abort
     Event (transitions to DISARMED). The GUI thread must stay responsive
     through the press — a QTimer.singleShot(0, ...) probe fires within
@@ -220,7 +230,7 @@ def test_arm_reset_first_press_clears_estop_event(qtbot, request) -> None:
 
     flag = {"value": False}
 
-    def _probe():
+    def _probe() -> None:
         flag["value"] = True
 
     QTimer.singleShot(0, _probe)

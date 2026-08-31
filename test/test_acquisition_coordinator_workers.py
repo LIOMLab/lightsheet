@@ -15,16 +15,26 @@ never a static-source grep.
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
 from lightsheet.gui.coordinators.acquisition_coordinator import AcquisitionCoordinator
+from lightsheet.gui.coordinators.hardware_manager import HardwareManager
 from lightsheet.gui.workers import LiveWorker, PreviewWorker, SingleWorker, StackWorker
-from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
+from lightsheet.hal import (
+    DeviceBundle,
+    MockCamera,
+    MockETLs,
+    MockLaser,
+    MockMotors,
+    MockSigGen,
+)
 
 
 def _make_bundle() -> DeviceBundle:
@@ -36,7 +46,9 @@ def _make_bundle() -> DeviceBundle:
         MockLaser(wavelength=647, max_power_mw=150.0, label="L2"),
     )
     etls = MockETLs()
-    return DeviceBundle(camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers)
+    return DeviceBundle(
+        camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers
+    )
 
 
 class _WorkerShell:
@@ -48,7 +60,8 @@ class _WorkerShell:
         # via shell.acquisition_panel.ui.<name> (panel-internal widget, no
         # longer on the flat shell.ui namespace).
         self.acquisition_panel = Mock()
-        self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.value.return_value = 100
+        spinbox = self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime
+        spinbox.value.return_value = 100
         self.ui.lineEdit_saveDescription.text.return_value = "test sample"
         self.ui.radioButton_saveStitchBlend.isChecked.return_value = False
         self.ui.radioButton_saveAllCrop.isChecked.return_value = False
@@ -148,7 +161,7 @@ def _make_acq() -> tuple[AcquisitionCoordinator, _WorkerShell, Mock]:
     return acq, shell, hw
 
 
-def _make_preview_worker(qtbot) -> tuple[PreviewWorker, _WorkerShell, Mock]:
+def _make_preview_worker(qtbot: QtBot) -> tuple[PreviewWorker, _WorkerShell, Mock]:
     """Construct a PreviewWorker (QObject) against the mock shell + hw.
     Requires qtbot for the QApplication."""
     bundle = _make_bundle()
@@ -158,7 +171,7 @@ def _make_preview_worker(qtbot) -> tuple[PreviewWorker, _WorkerShell, Mock]:
     return worker, shell, hw
 
 
-def _make_live_worker(qtbot) -> tuple[LiveWorker, _WorkerShell, Mock]:
+def _make_live_worker(qtbot: QtBot) -> tuple[LiveWorker, _WorkerShell, Mock]:
     """Construct a LiveWorker (QObject) against the mock shell + hw.
     Requires qtbot for the QApplication."""
     bundle = _make_bundle()
@@ -168,7 +181,7 @@ def _make_live_worker(qtbot) -> tuple[LiveWorker, _WorkerShell, Mock]:
     return worker, shell, hw
 
 
-def _make_single_worker(qtbot) -> tuple[SingleWorker, _WorkerShell, Mock]:
+def _make_single_worker(qtbot: QtBot) -> tuple[SingleWorker, _WorkerShell, Mock]:
     """Construct a SingleWorker (QObject) against the mock shell + hw.
     Requires qtbot for the QApplication."""
     bundle = _make_bundle()
@@ -181,7 +194,7 @@ def _make_single_worker(qtbot) -> tuple[SingleWorker, _WorkerShell, Mock]:
 
 
 def _make_single_worker_multi(
-    qtbot, multi_channel: bool = True
+    qtbot: QtBot, multi_channel: bool = True
 ) -> tuple[SingleWorker, _WorkerShell, Mock]:
     """Construct a SingleWorker with the multi_channel constructor arg set.
     The mock shell's reconstructed_frames dict is initialized so the
@@ -202,7 +215,7 @@ def _make_single_worker_multi(
 
 
 def _make_stack_worker(
-    qtbot, multi_channel: bool = False
+    qtbot: QtBot, multi_channel: bool = False
 ) -> tuple[StackWorker, _WorkerShell, Mock]:
     """Construct a StackWorker (QObject) against the mock shell + hw.
     Requires qtbot for the QApplication. The ``multi_channel`` arg is the
@@ -228,7 +241,7 @@ def _make_stack_worker(
 # -- PreviewWorker.run ------------------------------------------------------
 
 
-def test_preview_worker_normal_exit(qtbot) -> None:
+def test_preview_worker_normal_exit(qtbot: QtBot) -> None:
     """PreviewWorker.run with preview_mode_started=False exits the loop
     immediately, calls stop_lasers + disarm, emits finished signal."""
     worker, shell, hw = _make_preview_worker(qtbot)
@@ -242,7 +255,7 @@ def test_preview_worker_normal_exit(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_preview_worker_estop_break(qtbot) -> None:
+def test_preview_worker_estop_break(qtbot: QtBot) -> None:
     """PreviewWorker.run with estop_event set breaks out of the loop."""
     worker, shell, hw = _make_preview_worker(qtbot)
     shell.preview_mode_started = True
@@ -254,9 +267,9 @@ def test_preview_worker_estop_break(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_preview_worker_exception_emits_message(qtbot) -> None:
+def test_preview_worker_exception_emits_message(qtbot: QtBot) -> None:
     """PreviewWorker.run catches exceptions and emits sig_message."""
-    worker, shell, hw = _make_preview_worker(qtbot)
+    worker, shell, _hw = _make_preview_worker(qtbot)
     # Make camera.arm() raise to trigger the except block.
     worker.camera.arm = Mock(side_effect=RuntimeError("camera error"))
     finished_emits: list[None] = []
@@ -270,7 +283,7 @@ def test_preview_worker_exception_emits_message(qtbot) -> None:
 # -- LiveWorker.run ---------------------------------------------------------
 
 
-def test_live_mode_worker_normal_exit(qtbot) -> None:
+def test_live_mode_worker_normal_exit(qtbot: QtBot) -> None:
     """LiveWorker.run with live_mode_started=False exits immediately."""
     worker, shell, hw = _make_live_worker(qtbot)
     shell.live_mode_started = False
@@ -281,7 +294,7 @@ def test_live_mode_worker_normal_exit(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_live_mode_worker_estop_break(qtbot) -> None:
+def test_live_mode_worker_estop_break(qtbot: QtBot) -> None:
     """LiveWorker.run with estop_event set breaks out of the loop."""
     worker, shell, hw = _make_live_worker(qtbot)
     shell.live_mode_started = True
@@ -293,7 +306,7 @@ def test_live_mode_worker_estop_break(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_live_mode_worker_acquire_scan_does_not_skip_cleanup(qtbot) -> None:
+def test_live_mode_worker_acquire_scan_does_not_skip_cleanup(qtbot: QtBot) -> None:
     """LiveWorker.run must call stop_lasers even when acquire_scan() runs.
 
     Regression guard: acquire_scan() reads self._save_description and
@@ -331,7 +344,7 @@ def test_live_mode_worker_acquire_scan_does_not_skip_cleanup(qtbot) -> None:
 # -- SingleWorker.run -------------------------------------------------------
 
 
-def test_single_mode_worker_estop_early_return(qtbot) -> None:
+def test_single_mode_worker_estop_early_return(qtbot: QtBot) -> None:
     """SingleWorker.run with estop_event set returns early after
     ETL standby + stop_lasers + disarm (line 251-257)."""
     worker, shell, hw = _make_single_worker(qtbot)
@@ -343,10 +356,10 @@ def test_single_mode_worker_estop_early_return(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_single_mode_worker_normal_path(qtbot) -> None:
+def test_single_mode_worker_normal_path(qtbot: QtBot) -> None:
     """SingleWorker.run normal path: arm_scan, start_lasers, compute_scan,
     acquire_scan, ETL standby, stop_lasers, disarm, emit finished."""
-    worker, shell, hw = _make_single_worker(qtbot)
+    worker, _shell, hw = _make_single_worker(qtbot)
     # Mock acquire_scan to avoid running the full scan logic.
     worker.acquire_scan = Mock()
     finished_emits: list[None] = []
@@ -357,9 +370,9 @@ def test_single_mode_worker_normal_path(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_single_mode_worker_exception_emits_message(qtbot) -> None:
+def test_single_mode_worker_exception_emits_message(qtbot: QtBot) -> None:
     """SingleWorker.run catches exceptions and emits sig_message."""
-    worker, shell, hw = _make_single_worker(qtbot)
+    worker, shell, _hw = _make_single_worker(qtbot)
     worker.camera.arm_scan = Mock(side_effect=RuntimeError("arm failed"))
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
@@ -372,12 +385,12 @@ def test_single_mode_worker_exception_emits_message(qtbot) -> None:
 # -- acquire_scan (via SingleWorker / _AcquireScanMixin) --------------------
 
 
-def test_acquire_scan_siggen_error_aborts(qtbot) -> None:
+def test_acquire_scan_siggen_error_aborts(qtbot: QtBot) -> None:
     """acquire_scan with siggen.error set after create_scanner emits
     message + returns early (lines 337-344)."""
-    worker, shell, hw = _make_single_worker(qtbot)
+    worker, shell, _hw = _make_single_worker(qtbot)
     # Make create_scanner set error=1.
-    def _fake_create_scanner():
+    def _fake_create_scanner() -> None:
         worker.siggen.error = 1
         worker.siggen.error_message = "DAQ error"
     worker.siggen.create_scanner = _fake_create_scanner
@@ -386,12 +399,12 @@ def test_acquire_scan_siggen_error_aborts(qtbot) -> None:
     assert "Scan task creation failed" in shell.sig_message.emit.call_args[0][0]
 
 
-def test_acquire_scan_camera_timeout_aborts(qtbot) -> None:
+def test_acquire_scan_camera_timeout_aborts(qtbot: QtBot) -> None:
     """acquire_scan with camera.recorder_timeout_status set after monitor
     emits timeout message + returns early (lines 363-384)."""
-    worker, shell, hw = _make_single_worker(qtbot)
+    worker, shell, _hw = _make_single_worker(qtbot)
     # Make monitor_recorder set recorder_timeout_status.
-    def _fake_monitor(n):
+    def _fake_monitor(n: object) -> None:
         worker.camera.recorder_timeout_status = True
     worker.camera.monitor_recorder = _fake_monitor
     worker.acquire_scan()
@@ -399,10 +412,10 @@ def test_acquire_scan_camera_timeout_aborts(qtbot) -> None:
     assert "Camera timeout" in shell.sig_message.emit.call_args[0][0]
 
 
-def test_acquire_scan_normal_path_no_stitch(qtbot) -> None:
+def test_acquire_scan_normal_path_no_stitch(qtbot: QtBot) -> None:
     """acquire_scan normal path with stitch blend unchecked -> reconstruct_frame
     (line 401)."""
-    worker, shell, hw = _make_single_worker(qtbot)
+    worker, shell, _hw = _make_single_worker(qtbot)
     worker.siggen.waveform_cycles = 1
     # Mock camera copy_recorder_images to return a simple array.
     worker.camera.copy_recorder_images = Mock(return_value=np.zeros((1, 100, 100)))
@@ -413,10 +426,10 @@ def test_acquire_scan_normal_path_no_stitch(qtbot) -> None:
     shell._fs.enqueue_frame.assert_called_once()
 
 
-def test_acquire_scan_normal_path_with_stitch(qtbot) -> None:
-    """acquire_scan normal path with stitch blend checked -> reconstruct_frame_linear_blend
-    (lines 396-399)."""
-    worker, shell, hw = _make_single_worker(qtbot)
+def test_acquire_scan_normal_path_with_stitch(qtbot: QtBot) -> None:
+    """acquire_scan normal path with stitch blend checked ->
+    reconstruct_frame_linear_blend (lines 396-399)."""
+    worker, shell, _hw = _make_single_worker(qtbot)
     worker._save_stitch_blend = True
     worker.siggen.waveform_cycles = 1
     worker.camera.copy_recorder_images = Mock(return_value=np.zeros((1, 100, 100)))
@@ -430,7 +443,7 @@ def test_acquire_scan_normal_path_with_stitch(qtbot) -> None:
 # -- StackWorker.run --------------------------------------------------------
 
 
-def test_stack_mode_worker_estop_before_start(qtbot) -> None:
+def test_stack_mode_worker_estop_before_start(qtbot: QtBot) -> None:
     """StackWorker.run with estop_event set before start -> no lasers
     started, loop breaks immediately."""
     worker, shell, hw = _make_stack_worker(qtbot)
@@ -444,7 +457,7 @@ def test_stack_mode_worker_estop_before_start(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_stack_mode_worker_normal_path_no_saving(qtbot) -> None:
+def test_stack_mode_worker_normal_path_no_saving(qtbot: QtBot) -> None:
     """StackWorker.run normal path with saving_allowed=False, 1 plane,
     no E-stop -> acquires 1 plane, emits progress, stop_lasers, disarm."""
     worker, shell, hw = _make_stack_worker(qtbot)
@@ -462,10 +475,10 @@ def test_stack_mode_worker_normal_path_no_saving(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_stack_mode_worker_saving_crop(qtbot) -> None:
+def test_stack_mode_worker_saving_crop(qtbot: QtBot) -> None:
     """StackWorker.run with saving_allowed + save_all_crop ->
     set_files with 'ETLscan' + enqueue_buffer with cropped."""
-    worker, shell, hw = _make_stack_worker(qtbot)
+    worker, shell, _hw = _make_stack_worker(qtbot)
     shell.stack_mode_started = True
     shell.saving_allowed = True
     shell.number_of_planes = 1
@@ -477,14 +490,16 @@ def test_stack_mode_worker_saving_crop(qtbot) -> None:
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
-    shell._fs.set_files.assert_called_once_with(1, "test.hdf5", "stack", 1, "ETLscan", wavelengths=[555])
+    shell._fs.set_files.assert_called_once_with(
+        1, "test.hdf5", "stack", 1, "ETLscan", wavelengths=[555]
+    )
     shell._fs.crop_buffer.assert_called_once()
 
 
-def test_stack_mode_worker_saving_full(qtbot) -> None:
+def test_stack_mode_worker_saving_full(qtbot: QtBot) -> None:
     """StackWorker.run with saving_allowed + save_all_full ->
     set_files with 'FullETLscan' + enqueue_buffer with full."""
-    worker, shell, hw = _make_stack_worker(qtbot)
+    worker, shell, _hw = _make_stack_worker(qtbot)
     shell.stack_mode_started = True
     shell.saving_allowed = True
     shell.number_of_planes = 1
@@ -495,13 +510,15 @@ def test_stack_mode_worker_saving_full(qtbot) -> None:
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
-    shell._fs.set_files.assert_called_once_with(1, "test.hdf5", "stack", 1, "FullETLscan", wavelengths=[555])
+    shell._fs.set_files.assert_called_once_with(
+        1, "test.hdf5", "stack", 1, "FullETLscan", wavelengths=[555]
+    )
 
 
-def test_stack_mode_worker_saving_reconstructed(qtbot) -> None:
+def test_stack_mode_worker_saving_reconstructed(qtbot: QtBot) -> None:
     """StackWorker.run with saving_allowed + neither crop nor full ->
     set_files with 'reconstructed_frame' + enqueue_buffer with reconstructed."""
-    worker, shell, hw = _make_stack_worker(qtbot)
+    worker, shell, _hw = _make_stack_worker(qtbot)
     shell.stack_mode_started = True
     shell.saving_allowed = True
     shell.number_of_planes = 1
@@ -511,31 +528,36 @@ def test_stack_mode_worker_saving_reconstructed(qtbot) -> None:
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
-    shell._fs.set_files.assert_called_once_with(1, "test.hdf5", "stack", 1, "reconstructed_frame", wavelengths=[555])
+    shell._fs.set_files.assert_called_once_with(
+        1, "test.hdf5", "stack", 1, "reconstructed_frame", wavelengths=[555]
+    )
 
 
-def test_stack_mode_worker_motor_value_error_aborts(qtbot) -> None:
+def test_stack_mode_worker_motor_value_error_aborts(qtbot: QtBot) -> None:
     """StackWorker.run where motor.move_absolute_position raises ValueError
     -> emits message + beep + break."""
-    worker, shell, hw = _make_stack_worker(qtbot)
+    worker, shell, _hw = _make_stack_worker(qtbot)
     shell.stack_mode_started = True
     shell.saving_allowed = False
     shell.number_of_planes = 1
     worker.acquire_scan = Mock()
     # Make the motor raise ValueError on move_absolute_position.
-    worker.motors.horizontal.move_absolute_position = Mock(side_effect=ValueError("over limit"))
+    worker.motors.horizontal.move_absolute_position = Mock(
+        side_effect=ValueError("over limit")
+    )
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
     shell.sig_message.emit.assert_any_call(
-        "Move rejected — horizontal would exceed travel limits. Stack acquisition aborted."
+        "Move rejected \u2014 horizontal would exceed travel limits. "
+        "Stack acquisition aborted."
     )
     shell.sig_beep.emit.assert_called_once()
 
 
-def test_stack_mode_worker_camera_timeout_breaks(qtbot) -> None:
+def test_stack_mode_worker_camera_timeout_breaks(qtbot: QtBot) -> None:
     """StackWorker.run where camera times out on a plane -> break."""
-    worker, shell, hw = _make_stack_worker(qtbot)
+    worker, shell, _hw = _make_stack_worker(qtbot)
     shell.stack_mode_started = True
     shell.saving_allowed = False
     shell.number_of_planes = 1
@@ -549,9 +571,9 @@ def test_stack_mode_worker_camera_timeout_breaks(qtbot) -> None:
     worker.acquire_scan.assert_called_once()
 
 
-def test_stack_mode_worker_siggen_error_breaks(qtbot) -> None:
+def test_stack_mode_worker_siggen_error_breaks(qtbot: QtBot) -> None:
     """StackWorker.run where siggen.error is set after acquire_scan -> break."""
-    worker, shell, hw = _make_stack_worker(qtbot)
+    worker, shell, _hw = _make_stack_worker(qtbot)
     shell.stack_mode_started = True
     shell.saving_allowed = False
     shell.number_of_planes = 2
@@ -565,16 +587,16 @@ def test_stack_mode_worker_siggen_error_breaks(qtbot) -> None:
     worker.acquire_scan.assert_called_once()
 
 
-def test_stack_mode_worker_stop_interrupts(qtbot) -> None:
+def test_stack_mode_worker_stop_interrupts(qtbot: QtBot) -> None:
     """StackWorker.run where stack_mode_started is False at loop top ->
     emits 'Interrupted' + break."""
-    worker, shell, hw = _make_stack_worker(qtbot)
+    worker, shell, _hw = _make_stack_worker(qtbot)
     shell.stack_mode_started = True  # start True so lasers start
     shell.saving_allowed = False
     shell.number_of_planes = 1
     # Set stack_mode_started to False before the loop body runs.
     # We'll use a side_effect on sig_progress_update to flip it.
-    def _flip(*a):
+    def _flip(*a: Any) -> None:
         shell.stack_mode_started = False
     shell.sig_progress_update.side_effect = _flip
     worker.acquire_scan = Mock()
@@ -585,9 +607,9 @@ def test_stack_mode_worker_stop_interrupts(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_stack_mode_worker_exception_emits_message(qtbot) -> None:
+def test_stack_mode_worker_exception_emits_message(qtbot: QtBot) -> None:
     """StackWorker.run catches exceptions and emits sig_message."""
-    worker, shell, hw = _make_stack_worker(qtbot)
+    worker, shell, _hw = _make_stack_worker(qtbot)
     worker.camera.arm_scan = Mock(side_effect=RuntimeError("arm failed"))
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
@@ -600,7 +622,7 @@ def test_stack_mode_worker_exception_emits_message(qtbot) -> None:
 # -- SingleWorker multi-channel per-channel cycle (MCA-01) -------------------
 
 
-def test_single_worker_multi_channel_both_frames(qtbot) -> None:
+def test_single_worker_multi_channel_both_frames(qtbot: QtBot) -> None:
     """SingleWorker.run with multi_channel=True executes
     select_laser(0) -> acquire_scan -> capture frame1 -> select_laser(1)
     -> acquire_scan -> capture frame2, storing both in
@@ -612,7 +634,7 @@ def test_single_worker_multi_channel_both_frames(qtbot) -> None:
     # array per channel so we can verify both are captured.
     call_count = {"n": 0}
 
-    def _fake_acquire_scan():
+    def _fake_acquire_scan() -> None:
         call_count["n"] += 1
         # Each call produces a distinct frame.
         shell.reconstructed_frame = np.full((4, 4), call_count["n"], dtype=np.uint16)
@@ -635,19 +657,21 @@ def test_single_worker_multi_channel_both_frames(qtbot) -> None:
     assert len(shell.reconstructed_frames) == 2
     assert 555 in shell.reconstructed_frames
     assert 647 in shell.reconstructed_frames
-    # frame1 (channel 0, 555 nm) == array of 1s; frame2 (channel 1, 647 nm) == array of 2s.
+    # frame1 (channel 0, 555 nm) == array of 1s;
+    # frame2 (channel 1, 647 nm) == array of 2s.
     assert (shell.reconstructed_frames[555] == 1).all()
     assert (shell.reconstructed_frames[647] == 2).all()
     # reconstructed_frame is an alias equal to the last channel's frame.
     assert (shell.reconstructed_frame == 2).all()
     # stop_lasers called at the end (safety — both off regardless).
     hw.stop_lasers.assert_called_once()
-    # start_lasers NOT called in multi-channel branch (select_laser per channel instead).
+    # start_lasers NOT called in multi-channel branch
+    # (select_laser per channel instead).
     hw.start_lasers.assert_not_called()
     assert len(finished_emits) == 1
 
 
-def test_single_worker_single_channel_unchanged(qtbot) -> None:
+def test_single_worker_single_channel_unchanged(qtbot: QtBot) -> None:
     """SingleWorker.run with multi_channel=False is byte-for-byte the
     existing single-channel path: select_laser NEVER called,
     start_lasers/stop_lasers called (existing path), acquire_scan called
@@ -655,7 +679,7 @@ def test_single_worker_single_channel_unchanged(qtbot) -> None:
     worker, shell, hw = _make_single_worker_multi(qtbot, multi_channel=False)
     acquire_count = {"n": 0}
 
-    def _fake_acquire_scan():
+    def _fake_acquire_scan() -> None:
         acquire_count["n"] += 1
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
 
@@ -675,7 +699,7 @@ def test_single_worker_single_channel_unchanged(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_single_worker_multi_channel_estop_after_first_channel(qtbot) -> None:
+def test_single_worker_multi_channel_estop_after_first_channel(qtbot: QtBot) -> None:
     """SingleWorker.run multi-channel: if estop_event is set after the
     first channel's acquire_scan, the second channel's acquire_scan is
     skipped and the run exits cleanly via the finally block. Both
@@ -686,7 +710,7 @@ def test_single_worker_multi_channel_estop_after_first_channel(qtbot) -> None:
     shell.estop_event.is_set.return_value = False
     acquire_count = {"n": 0}
 
-    def _fake_acquire_scan():
+    def _fake_acquire_scan() -> None:
         acquire_count["n"] += 1
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
         # Set estop after the first channel's acquire_scan so the second
@@ -710,7 +734,9 @@ def test_single_worker_multi_channel_estop_after_first_channel(qtbot) -> None:
 # -- FrameSaver.enqueue_buffer tagged-tuple acceptance (D-06) ----------------
 
 
-def test_enqueue_buffer_accepts_tagged_tuple(qtbot, request) -> None:
+def test_enqueue_buffer_accepts_tagged_tuple(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """FrameSaver.enqueue_buffer accepts a (channel_idx, frame) tuple in
     addition to a bare np.ndarray; bare-ndarray calls preserve the
     existing single-channel behavior unchanged. This plan only makes
@@ -730,7 +756,9 @@ def test_enqueue_buffer_accepts_tagged_tuple(qtbot, request) -> None:
 # -- updateUi_single_mode_button multi_channel pre-sampling (AGENTS.md §11) --
 
 
-def test_single_mode_button_presamples_multi_channel(qtbot, request) -> None:
+def test_single_mode_button_presamples_multi_channel(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """updateUi_single_mode_button with both auto-laser checkboxes
     checked passes multi_channel=True to SingleWorker; with one
     unchecked passes False. Verified by spying on the SingleWorker
@@ -738,6 +766,7 @@ def test_single_mode_button_presamples_multi_channel(qtbot, request) -> None:
     _cache_auto_laser_flags() — the worker never reads the checkboxes
     (AGENTS.md §11)."""
     from _helpers.controller_fixture import make_controller
+
     from lightsheet.gui import panels as panels_module
 
     # --- Both checked -> multi_channel=True ---
@@ -750,7 +779,7 @@ def test_single_mode_button_presamples_multi_channel(qtbot, request) -> None:
 
     captured: dict[str, object] = {}
 
-    def _capture_worker(*args, **kwargs):
+    def _capture_worker(*args: Any, **kwargs: Any) -> Mock:
         # The multi_channel kwarg may be positional (last arg) or keyword.
         if "multi_channel" in kwargs:
             captured["multi_channel"] = kwargs["multi_channel"]
@@ -768,8 +797,12 @@ def test_single_mode_button_presamples_multi_channel(qtbot, request) -> None:
     fake_thread = Mock()
 
     with (
-        patch.object(panels_module.acquisition_panel, "SingleWorker", side_effect=_capture_worker),
-        patch.object(panels_module.acquisition_panel, "QThread", return_value=fake_thread),
+        patch.object(
+            panels_module.acquisition_panel, "SingleWorker", side_effect=_capture_worker
+        ),
+        patch.object(
+            panels_module.acquisition_panel, "QThread", return_value=fake_thread
+        ),
     ):
         ctrl.acquisition_panel.updateUi_single_mode_button()
 
@@ -787,8 +820,12 @@ def test_single_mode_button_presamples_multi_channel(qtbot, request) -> None:
     fake_thread2 = Mock()
 
     with (
-        patch.object(panels_module.acquisition_panel, "SingleWorker", side_effect=_capture_worker),
-        patch.object(panels_module.acquisition_panel, "QThread", return_value=fake_thread2),
+        patch.object(
+            panels_module.acquisition_panel, "SingleWorker", side_effect=_capture_worker
+        ),
+        patch.object(
+            panels_module.acquisition_panel, "QThread", return_value=fake_thread2
+        ),
     ):
         ctrl.acquisition_panel.updateUi_single_mode_button()
 
@@ -801,7 +838,7 @@ def test_single_mode_button_presamples_multi_channel(qtbot, request) -> None:
 # -- StackWorker multi-channel per-plane cycle (MCA-01 stack) ---------------
 
 
-def test_stack_worker_multi_channel_per_plane_cycle(qtbot) -> None:
+def test_stack_worker_multi_channel_per_plane_cycle(qtbot: QtBot) -> None:
     """StackWorker.run with multi_channel=True and number_of_planes=2 runs
     the per-plane sequential cycle: for each plane, move motor ->
     select_laser(0) -> acquire_scan -> capture frame1 -> select_laser(1)
@@ -820,7 +857,7 @@ def test_stack_worker_multi_channel_per_plane_cycle(qtbot) -> None:
     # Distinct frames per acquire_scan so we can verify both channels captured.
     call_count = {"n": 0}
 
-    def _fake_acquire_scan():
+    def _fake_acquire_scan() -> None:
         call_count["n"] += 1
         shell.reconstructed_frame = np.full(
             (4, 4), call_count["n"], dtype=np.uint16
@@ -859,7 +896,7 @@ def test_stack_worker_multi_channel_per_plane_cycle(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_stack_worker_single_channel_unchanged(qtbot) -> None:
+def test_stack_worker_single_channel_unchanged(qtbot: QtBot) -> None:
     """StackWorker.run with multi_channel=False is byte-for-byte the
     existing single-channel path: start_lasers called once at the top,
     select_laser NEVER called, acquire_scan called once per plane,
@@ -871,7 +908,7 @@ def test_stack_worker_single_channel_unchanged(qtbot) -> None:
     shell.number_of_planes = 2
     acquire_count = {"n": 0}
 
-    def _fake_acquire_scan():
+    def _fake_acquire_scan() -> None:
         acquire_count["n"] += 1
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
 
@@ -902,7 +939,7 @@ def test_stack_worker_single_channel_unchanged(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_stack_worker_multi_channel_estop_mid_plane(qtbot) -> None:
+def test_stack_worker_multi_channel_estop_mid_plane(qtbot: QtBot) -> None:
     """StackWorker.run multi-channel: if estop_event is set after the
     first select_laser(0) in plane 0, the loop breaks, select_laser(1)
     is NOT called for that plane, and finished.emit fires exactly once.
@@ -914,7 +951,7 @@ def test_stack_worker_multi_channel_estop_mid_plane(qtbot) -> None:
     shell.estop_event.is_set.return_value = False
     select_calls: list[int] = []
 
-    def _fake_select_laser(idx):
+    def _fake_select_laser(idx: int) -> None:
         select_calls.append(idx)
         # Set estop after the first select_laser(0) of plane 0 so the
         # post-select_laser estop poll breaks the loop before
@@ -943,7 +980,7 @@ def test_stack_worker_multi_channel_estop_mid_plane(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_stack_worker_multi_channel_timeout_after_channel0(qtbot) -> None:
+def test_stack_worker_multi_channel_timeout_after_channel0(qtbot: QtBot) -> None:
     """StackWorker.run multi-channel: if camera.recorder_timeout_status
     is set after the channel-0 acquire_scan, the loop breaks before
     select_laser(1) runs for that plane (the timeout/error check after
@@ -956,7 +993,7 @@ def test_stack_worker_multi_channel_timeout_after_channel0(qtbot) -> None:
     hw.select_laser.side_effect = lambda idx: select_calls.append(idx)
     acquire_count = {"n": 0}
 
-    def _fake_acquire_scan():
+    def _fake_acquire_scan() -> None:
         acquire_count["n"] += 1
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
         # Set timeout after the first acquire_scan (channel 0 of plane 0).
@@ -977,7 +1014,7 @@ def test_stack_worker_multi_channel_timeout_after_channel0(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_stack_worker_multi_channel_siggen_error_after_channel1(qtbot) -> None:
+def test_stack_worker_multi_channel_siggen_error_after_channel1(qtbot: QtBot) -> None:
     """StackWorker.run multi-channel: if siggen.error is set after the
     channel-1 acquire_scan, the loop breaks (the timeout/error check
     after channel 1 aborts before enqueuing). finished.emit fires once."""
@@ -988,7 +1025,7 @@ def test_stack_worker_multi_channel_siggen_error_after_channel1(qtbot) -> None:
     hw.select_laser = Mock()
     acquire_count = {"n": 0}
 
-    def _fake_acquire_scan():
+    def _fake_acquire_scan() -> None:
         acquire_count["n"] += 1
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
         if acquire_count["n"] == 2:
@@ -1011,7 +1048,7 @@ def test_stack_worker_multi_channel_siggen_error_after_channel1(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_stack_worker_multi_channel_estop_after_select_laser1(qtbot) -> None:
+def test_stack_worker_multi_channel_estop_after_select_laser1(qtbot: QtBot) -> None:
     """StackWorker.run multi-channel: if estop_event is set after
     select_laser(1) (between channel 1 energize and channel 1
     acquire_scan), the loop breaks before the channel-1 acquire_scan.
@@ -1023,7 +1060,7 @@ def test_stack_worker_multi_channel_estop_after_select_laser1(qtbot) -> None:
     shell.estop_event.is_set.return_value = False
     select_calls: list[int] = []
 
-    def _fake_select_laser(idx):
+    def _fake_select_laser(idx: int) -> None:
         select_calls.append(idx)
         if idx == 1:
             # E-stop after select_laser(1), before channel-1 acquire_scan.
@@ -1032,7 +1069,7 @@ def test_stack_worker_multi_channel_estop_after_select_laser1(qtbot) -> None:
     hw.select_laser.side_effect = _fake_select_laser
     acquire_count = {"n": 0}
 
-    def _fake_acquire_scan():
+    def _fake_acquire_scan() -> None:
         acquire_count["n"] += 1
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
 
@@ -1050,7 +1087,7 @@ def test_stack_worker_multi_channel_estop_after_select_laser1(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_stack_worker_multi_channel_none_frames_skips_enqueue(qtbot) -> None:
+def test_stack_worker_multi_channel_none_frames_skips_enqueue(qtbot: QtBot) -> None:
     """StackWorker.run multi-channel: when acquire_scan leaves
     reconstructed_frame as None (a failed scan that did not populate the
     frame), frame1/frame2 are captured as None and the enqueue is
@@ -1062,7 +1099,7 @@ def test_stack_worker_multi_channel_none_frames_skips_enqueue(qtbot) -> None:
     shell.number_of_planes = 1
     hw.select_laser = Mock()
 
-    def _fake_acquire_scan():
+    def _fake_acquire_scan() -> None:
         # Leave reconstructed_frame as None (failed scan path).
         shell.reconstructed_frame = None
 
@@ -1083,13 +1120,16 @@ def test_stack_worker_multi_channel_none_frames_skips_enqueue(qtbot) -> None:
 # -- _spawn_stack_worker multi_channel pre-sampling (AGENTS.md §11) ---------
 
 
-def test_spawn_stack_worker_presamples_multi_channel(qtbot, request) -> None:
+def test_spawn_stack_worker_presamples_multi_channel(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """_spawn_stack_worker with both auto-laser checkboxes checked passes
     multi_channel=True to StackWorker; with one unchecked passes False.
     Verified by spying on the StackWorker constructor. Pre-sampling
     happens on the GUI thread after _cache_auto_laser_flags() — the
     worker never reads the checkboxes (AGENTS.md §11)."""
     from _helpers.controller_fixture import make_controller
+
     from lightsheet.gui import panels as panels_module
 
     # --- Both checked -> multi_channel=True ---
@@ -1121,7 +1161,7 @@ def test_spawn_stack_worker_presamples_multi_channel(qtbot, request) -> None:
 
         captured: dict[str, object] = {}
 
-        def _capture_worker(*args, **kwargs):
+        def _capture_worker(*args: Any, **kwargs: Any) -> Mock:
             if "multi_channel" in kwargs:
                 captured["multi_channel"] = kwargs["multi_channel"]
             else:
@@ -1198,13 +1238,13 @@ def test_spawn_stack_worker_presamples_multi_channel(qtbot, request) -> None:
 # L2, but the restore keeps the flag consistent for any subsequent read).
 
 
-def _make_d04_shell(auto_laser1: bool, auto_laser2: bool):
+def _make_d04_shell(
+    auto_laser1: bool, auto_laser2: bool
+) -> tuple[DeviceBundle, _WorkerShell, HardwareManager, dict[str, Mock]]:
     """Build a mock shell + real HardwareManager with MockLaser spies for
     D-04 continuous-mode guard tests. The shell has the attributes
     HardwareManager.start_lasers / stop_lasers / _poll_laser_status /
     _refresh_laser_readback read."""
-    from lightsheet.gui.coordinators.hardware_manager import HardwareManager
-
     bundle = _make_bundle()
     shell = _WorkerShell()
     # Auto-laser flags pre-sampled on the GUI thread (the worker reads
@@ -1231,7 +1271,7 @@ def _make_d04_shell(auto_laser1: bool, auto_laser2: bool):
     return bundle, shell, hw, spies
 
 
-def test_preview_worker_both_checked_energizes_only_l1(qtbot) -> None:
+def test_preview_worker_both_checked_energizes_only_l1(qtbot: QtBot) -> None:
     """PreviewWorker.run with both auto-lasers checked energizes ONLY L1
     for the session (D-04). lasers[0].on is called; lasers[1].on is NEVER
     called. stop_lasers at the end turns both off (L2 was never on, so
@@ -1259,7 +1299,7 @@ def test_preview_worker_both_checked_energizes_only_l1(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_live_worker_both_checked_energizes_only_l1(qtbot) -> None:
+def test_live_worker_both_checked_energizes_only_l1(qtbot: QtBot) -> None:
     """LiveWorker.run with both auto-lasers checked energizes ONLY L1
     for the session (D-04). lasers[0].on is called; lasers[1].on is NEVER
     called."""
@@ -1277,7 +1317,7 @@ def test_live_worker_both_checked_energizes_only_l1(qtbot) -> None:
     assert len(finished_emits) == 1
 
 
-def test_preview_worker_single_laser_unchanged(qtbot) -> None:
+def test_preview_worker_single_laser_unchanged(qtbot: QtBot) -> None:
     """PreviewWorker.run with _auto_laser1=True, _auto_laser2=False
     energizes only L1 (existing behavior unchanged — the D-04 guard does
     not fire because both flags are not True). lasers[0].on called,

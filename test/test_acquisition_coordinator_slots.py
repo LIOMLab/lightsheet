@@ -21,7 +21,14 @@ import pytest
 pytest.importorskip("PySide6")
 
 from lightsheet.gui.coordinators.acquisition_coordinator import AcquisitionCoordinator
-from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
+from lightsheet.hal import (
+    DeviceBundle,
+    MockCamera,
+    MockETLs,
+    MockLaser,
+    MockMotors,
+    MockSigGen,
+)
 
 
 def _make_bundle() -> DeviceBundle:
@@ -33,7 +40,9 @@ def _make_bundle() -> DeviceBundle:
         MockLaser(wavelength=647, max_power_mw=150.0, label="L2"),
     )
     etls = MockETLs()
-    return DeviceBundle(camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers)
+    return DeviceBundle(
+        camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers
+    )
 
 
 class _Shell:
@@ -58,11 +67,23 @@ class _Shell:
         self.scan_panel.ui.doubleSpinBox_etlLeftOffset.value.return_value = 2.5
         self.scan_panel.ui.doubleSpinBox_etlRightOffset.value.return_value = 2.5
         self.scan_panel.ui.doubleSpinBox_etlSteps.value.return_value = 5
-        self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.value.return_value = 100
-        self.acquisition_panel.ui.doubleSpinBox_cameraLineTime.value.return_value = 48.8
-        self.acquisition_panel.ui.doubleSpinBox_cameraExposedLines.value.return_value = 16
+        exposure_spinbox = (
+            self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime
+        )
+        exposure_spinbox.value.return_value = 100
+        line_time_spinbox = (
+            self.acquisition_panel.ui.doubleSpinBox_cameraLineTime
+        )
+        line_time_spinbox.value.return_value = 48.8
+        exposed_spinbox = (
+            self.acquisition_panel.ui.doubleSpinBox_cameraExposedLines
+        )
+        exposed_spinbox.value.return_value = 16
         self.acquisition_panel.ui.doubleSpinBox_cameraDelayLines.value.return_value = 0
-        self.acquisition_panel.ui.comboBox_cameraShutterMode.currentText.return_value = "Rolling"
+        shutter_combo = (
+            self.acquisition_panel.ui.comboBox_cameraShutterMode
+        )
+        shutter_combo.currentText.return_value = "Rolling"
         # Sync checkboxes — default unchecked (the no-sync branch).
         self.scan_panel.ui.checkBox_galvoSync.isChecked.return_value = False
         self.scan_panel.ui.checkBox_etlSync.isChecked.return_value = False
@@ -169,7 +190,7 @@ def test_galvo_sync_checked_mirrors_left_to_right() -> None:
 def test_galvo_sync_unchecked_is_noop_on_siggen() -> None:
     """updateUi_galvo_sync with sync unchecked does not mirror (the
     else-branch — no siggen write)."""
-    acq, shell = _make_acq()
+    acq, _shell = _make_acq()
     acq.siggen.galvo_right_amplitude = 0.0
     acq.updateUi_galvo_sync()
     # No right-amplitude write occurred.
@@ -259,14 +280,14 @@ def test_etl_sync_checked_mirrors_left_to_right() -> None:
 
 
 def test_etl_sync_unchecked_is_noop_on_siggen() -> None:
-    acq, shell = _make_acq()
+    acq, _shell = _make_acq()
     acq.siggen.etl_right_amplitude = 0.0
     acq.updateUi_etl_sync()
     assert acq.siggen.etl_right_amplitude == 0.0
 
 
 def test_etl_steps_propagates_to_siggen_as_int() -> None:
-    acq, shell = _make_acq()
+    acq, _shell = _make_acq()
     acq.updateUi_etl_steps()
     assert acq.siggen.etl_steps == 5
     assert isinstance(acq.siggen.etl_steps, int)
@@ -282,54 +303,64 @@ def test_etl_activate_propagates_to_siggen() -> None:
 # -- Camera shutter mode + setting slots ------------------------------------
 
 
-def test_camera_shutter_mode_rolling_enables_exposure_disables_lightsheet_widgets() -> None:
+def test_camera_shutter_mode_rolling_enables_exposure_disables_lightsheet_widgets(
+) -> None:
     acq, shell = _make_acq()
-    shell.acquisition_panel.ui.comboBox_cameraShutterMode.currentText.return_value = "Rolling"
+    shutter = shell.acquisition_panel.ui.comboBox_cameraShutterMode
+    shutter.currentText.return_value = "Rolling"
     acq.updateUi_camera_shutter_mode()
     assert acq.camera.shutter_mode == "Rolling"
-    shell.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.setEnabled.assert_any_call(True)
-    shell.acquisition_panel.ui.doubleSpinBox_cameraLineTime.setEnabled.assert_any_call(False)
+    exposure = shell.acquisition_panel.ui.doubleSpinBox_cameraExposureTime
+    exposure.setEnabled.assert_any_call(True)
+    line_time = shell.acquisition_panel.ui.doubleSpinBox_cameraLineTime
+    line_time.setEnabled.assert_any_call(False)
 
 
 def test_camera_shutter_mode_lightsheet_enables_lightsheet_widgets() -> None:
     acq, shell = _make_acq()
-    shell.acquisition_panel.ui.comboBox_cameraShutterMode.currentText.return_value = "Lightsheet"
+    shutter = shell.acquisition_panel.ui.comboBox_cameraShutterMode
+    shutter.currentText.return_value = "Lightsheet"
     acq.updateUi_camera_shutter_mode()
     assert acq.camera.shutter_mode == "Lightsheet"
-    shell.acquisition_panel.ui.doubleSpinBox_cameraLineTime.setEnabled.assert_any_call(True)
-    shell.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.setEnabled.assert_any_call(False)
+    line_time = shell.acquisition_panel.ui.doubleSpinBox_cameraLineTime
+    line_time.setEnabled.assert_any_call(True)
+    exposure = shell.acquisition_panel.ui.doubleSpinBox_cameraExposureTime
+    exposure.setEnabled.assert_any_call(False)
 
 
 def test_camera_shutter_mode_else_branch_enables_exposure_only() -> None:
     """The else branch (e.g. 'Global') enables exposure + disables the
     lightsheet-specific widgets."""
     acq, shell = _make_acq()
-    shell.acquisition_panel.ui.comboBox_cameraShutterMode.currentText.return_value = "Global"
+    shutter = shell.acquisition_panel.ui.comboBox_cameraShutterMode
+    shutter.currentText.return_value = "Global"
     acq.updateUi_camera_shutter_mode()
     assert acq.camera.shutter_mode == "Global"
-    shell.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.setEnabled.assert_any_call(True)
-    shell.acquisition_panel.ui.doubleSpinBox_cameraLineTime.setEnabled.assert_any_call(False)
+    exposure = shell.acquisition_panel.ui.doubleSpinBox_cameraExposureTime
+    exposure.setEnabled.assert_any_call(True)
+    line_time = shell.acquisition_panel.ui.doubleSpinBox_cameraLineTime
+    line_time.setEnabled.assert_any_call(False)
 
 
 def test_camera_exposure_time_converts_ms_to_seconds() -> None:
-    acq, shell = _make_acq()
+    acq, _shell = _make_acq()
     acq.updateUi_camera_exposure_time()
     assert acq.camera.exposure_time == pytest.approx(0.1)
 
 
 def test_camera_line_time_converts_us_to_seconds() -> None:
-    acq, shell = _make_acq()
+    acq, _shell = _make_acq()
     acq.updateUi_camera_line_time()
     assert acq.camera.lightsheet_line_time == pytest.approx(48.8e-6)
 
 
 def test_camera_exposed_lines_propagates_as_int() -> None:
-    acq, shell = _make_acq()
+    acq, _shell = _make_acq()
     acq.updateUi_camera_exposed_lines()
     assert acq.camera.lightsheet_exposed_lines == 16
 
 
 def test_camera_delay_lines_propagates_as_int() -> None:
-    acq, shell = _make_acq()
+    acq, _shell = _make_acq()
     acq.updateUi_camera_delay_lines()
     assert acq.camera.lightsheet_delay_lines == 0

@@ -107,7 +107,7 @@ def test_logger_exception_writes_to_log_file(
     assert log_files, f"no *.log file under {tmp_path / 'logs'}"
     parts = []
     for log_path in log_files:
-        with open(log_path, encoding="utf-8") as log_file:
+        with Path(log_path).open(encoding="utf-8") as log_file:
             parts.append(log_file.read())
     contents = "\n".join(parts)
     assert "boom" in contents

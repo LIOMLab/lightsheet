@@ -36,13 +36,13 @@ Two scenarios are replayed:
 """
 
 import json
-import os
+from pathlib import Path
 
 import pytest
 
 from test.golden._record import capture_acquisition_sequence
 
-_GOLDEN_DIR = os.path.join(os.path.dirname(__file__), "golden")
+_GOLDEN_DIR = Path(__file__).parent / "golden"
 
 _SCENARIOS = [
     "default",
@@ -60,8 +60,8 @@ def test_golden_acquisition(scenario: str) -> None:
     regenerate the fixture and review the diff before committing — a
     divergence is the behavioral change to audit, not a test bug.
     """
-    fixture = os.path.join(_GOLDEN_DIR, f"{scenario}.json")
-    with open(fixture, encoding="utf-8") as f:
+    fixture = _GOLDEN_DIR / f"{scenario}.json"
+    with fixture.open(encoding="utf-8") as f:
         expected = json.load(f)
     actual = capture_acquisition_sequence(scenario)
     assert actual == expected, (

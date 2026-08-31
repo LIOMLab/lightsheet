@@ -89,8 +89,15 @@ class _Row:
     motor HAL use), converted from the mm cell text. ``step`` is in µm
     (the step cell is already µm)."""
 
-    __slots__ = ("name", "start", "end", "step", "n_planes",
-                 "est_time_s", "est_size_mb")
+    __slots__ = (
+        "end",
+        "est_size_mb",
+        "est_time_s",
+        "n_planes",
+        "name",
+        "start",
+        "step",
+    )
 
     def __init__(self, name: str, start: float, end: float, step: float,
                  n_planes: int, est_time_s: float, est_size_mb: float) -> None:
@@ -116,7 +123,7 @@ class AcquisitionTableManager(QWidget):
     keeps only the Planned queue + add/edit/remove/start-queue controls.
     """
 
-    def __init__(self, shell: "Controller_MainWindow") -> None:
+    def __init__(self, shell: Controller_MainWindow) -> None:
         super().__init__()
         self._shell = shell
 
@@ -343,10 +350,7 @@ class AcquisitionTableManager(QWidget):
         flagged (incomplete/out-of-range) cells."""
         if self.table.rowCount() == 0:
             return False
-        for row in range(self.table.rowCount()):
-            if self.is_row_flagged(row):
-                return False
-        return True
+        return all(not self.is_row_flagged(row) for row in range(self.table.rowCount()))
 
     # ------------------------------------------------------------------ #
     # Internal helpers
@@ -373,7 +377,7 @@ class AcquisitionTableManager(QWidget):
         """Compute (#planes, est. time s, est. size MB) for a row."""
         if step == 0 or start == end:
             return 0, 0.0, 0.0
-        n_planes = int(math.ceil(abs((end - start) / step))) + 1
+        n_planes = math.ceil(abs((end - start) / step)) + 1
         per_plane_s = self._estimate_per_plane_time()
         est_time_s = n_planes * per_plane_s
         est_size_mb = self._estimate_stack_size_mb(n_planes)
@@ -401,7 +405,7 @@ class AcquisitionTableManager(QWidget):
           6.5*binning_y)`` — the same target-validity filter the writer's
           ``finalize_with_resolutions`` applies (so the estimate tracks
           the real on-disk pyramid, NOT a hardcoded level count). Each
-          downsampled level is ~1/4 of the previous (2× Y/X downsample),
+          downsampled level is ~1/4 of the previous (2x Y/X downsample),
           so the total pyramid overhead is
           ``L0 * sum(0.25**i for i in range(level_count))``.
         - ``both``: ``hdf5_estimate + zarr_estimate`` (sum).
@@ -433,7 +437,7 @@ class AcquisitionTableManager(QWidget):
         ``stack_step``, XY from the camera binning) using the writer's
         target-validity filter: a target resolution is kept only if
         ``target_um >= max(base_res)``. Each retained level is ~1/4 of
-        the previous (2× Y/X downsample), so the geometric sum
+        the previous (2x Y/X downsample), so the geometric sum
         ``sum(0.25**i for i in range(level_count))`` is the overhead
         factor on top of L0 (level 0 contributes 1.0).
         """
@@ -659,13 +663,14 @@ class AcquisitionTableManager(QWidget):
         # Save-path check: if saving is allowed, a save directory must be
         # set. (If saving is not allowed, the queue runs without saving —
         # the worker checks self._shell.saving_allowed per row.)
-        if getattr(self._shell, "saving_allowed", False):
-            if not getattr(self._shell, "save_directory", ""):
-                self._shell.sig_message.emit(
-                    self.error_state_text("no save path is set")
-                )
-                self._shell.sig_beep.emit()
-                return
+        if getattr(self._shell, "saving_allowed", False) and not getattr(
+            self._shell, "save_directory", ""
+        ):
+            self._shell.sig_message.emit(
+                self.error_state_text("no save path is set")
+            )
+            self._shell.sig_beep.emit()
+            return
 
         # --- Execute the queue ---
         self._queue_active = True

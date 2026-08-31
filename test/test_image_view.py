@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
@@ -32,7 +33,7 @@ def _scaled_uint8(frame: np.ndarray, levels_min: int, levels_max: int) -> np.nda
     return ((clamped - levels_min) / span * 255).astype(np.uint8)
 
 
-def test_set_image_with_tint_produces_rgb888(qtbot) -> None:
+def test_set_image_with_tint_produces_rgb888(qtbot: QtBot) -> None:
     """setImage(frame, tint='00FF00') produces a Format_RGB888 QImage where
     R is all-zero, G equals the scaled grayscale, and B is all-zero — the
     displayed pixmap is green-tinted."""
@@ -68,7 +69,7 @@ def test_set_image_with_tint_produces_rgb888(qtbot) -> None:
     )
 
 
-def test_set_image_with_red_tint_produces_red_channel_only(qtbot) -> None:
+def test_set_image_with_red_tint_produces_red_channel_only(qtbot: QtBot) -> None:
     """setImage(frame, tint='FF0000') puts the grayscale into the R channel
     only (G and B are zero) — the displayed pixmap is red-tinted."""
     from PySide6.QtGui import QImage
@@ -90,12 +91,14 @@ def test_set_image_with_red_tint_produces_red_channel_only(qtbot) -> None:
     expected_r = _scaled_uint8(frame, 0, 20000)
     ptr = qimage.constBits()
     arr = np.frombuffer(ptr, dtype=np.uint8, count=8 * 8 * 3).reshape(8, 8, 3)
-    assert np.array_equal(arr[:, :, 0], expected_r), "R channel must equal scaled grayscale"
+    assert np.array_equal(arr[:, :, 0], expected_r), (
+        "R channel must equal scaled grayscale"
+    )
     assert np.all(arr[:, :, 1] == 0), "G channel must be zero for a red tint"
     assert np.all(arr[:, :, 2] == 0), "B channel must be zero for a red tint"
 
 
-def test_set_image_without_tint_is_grayscale8(qtbot) -> None:
+def test_set_image_without_tint_is_grayscale8(qtbot: QtBot) -> None:
     """setImage(frame) with no tint produces Format_Grayscale8 exactly as
     before (single-channel back-compat — byte-identical display path)."""
     from PySide6.QtGui import QImage
@@ -117,7 +120,7 @@ def test_set_image_without_tint_is_grayscale8(qtbot) -> None:
     )
 
 
-def test_set_image_stores_last_tint_for_levels_rerender(qtbot) -> None:
+def test_set_image_stores_last_tint_for_levels_rerender(qtbot: QtBot) -> None:
     """After setImage(frame, tint='00FF00'), set_levels re-renders WITH the
     stored tint so the operator does not lose the channel color after
     dragging the levels window. The re-rendered source image is still
@@ -143,7 +146,7 @@ def test_set_image_stores_last_tint_for_levels_rerender(qtbot) -> None:
     )
 
 
-def test_set_image_without_tint_stores_none(qtbot) -> None:
+def test_set_image_without_tint_stores_none(qtbot: QtBot) -> None:
     """When no tint is passed, _last_tint is None so set_levels re-renders
     grayscale (single-channel back-compat across level adjustments)."""
     from lightsheet.gui.panels.image_view import ImageView

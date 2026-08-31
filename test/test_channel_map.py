@@ -3,7 +3,7 @@ RFR-04 pure-logic tests for lightsheet.channel_map.
 
 ChannelMap is the channel-reversal MECHANISM (RFR-04): a frozen, pure-logic
 dataclass that swaps galvo left/right ordering and clamps per-channel
-voltage to the AGENTS.md §2 hardware limits (±10 V galvos / 0–5 V ETL
+voltage to the AGENTS.md §2 hardware limits (±10 V galvos / 0-5 V ETL
 drive). The actual flip against real hardware is rig-verification work
 (HW2-02) and is explicitly NOT attempted here.
 
@@ -17,7 +17,6 @@ import dataclasses
 import pytest
 
 from lightsheet.channel_map import Channel, ChannelMap
-
 
 # --------------------------------------------------------------------------- #
 # Channel enum
@@ -65,14 +64,14 @@ def test_clamp_galvo() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# clamp_etl — 0–5 V (Optotune EL-10-30 analog input range, AGENTS.md §2)
+# clamp_etl — 0-5 V (Optotune EL-10-30 analog input range, AGENTS.md §2)
 # --------------------------------------------------------------------------- #
 
 
 def test_clamp_etl() -> None:
     """ETL drive voltage clamped to [0, etl_voltage_limit]; in-range
-    unchanged. The DAQ AO channel writes volts to the EL-10-30's 0–5 V
-    analog input; the lens driver maps that to its 0–292.84 mA
+    unchanged. The DAQ AO channel writes volts to the EL-10-30's 0-5 V
+    analog input; the lens driver maps that to its 0-292.84 mA
     coil-current range internally. Call sites pass volts, so the clamp
     ceiling is the 5 V analog input limit, not the mA coil-current
     limit."""

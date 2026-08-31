@@ -17,9 +17,11 @@ Inline ``@pytest.mark.parametrize`` (D-13 — no JSON/YAML data file): the
 corpus is small, semantically stable, and readable at the assertion site.
 """
 
-import pytest
+from __future__ import annotations
 
+import pytest
 from _helpers.controller_fixture import make_controller
+from pytestqt.qtbot import QtBot
 
 
 @pytest.mark.parametrize(
@@ -55,7 +57,11 @@ from _helpers.controller_fixture import make_controller
     ],
 )
 def test_safe_char_sanitizes(
-    qtbot, request, raw: str, expected_substring: str, allows: bool
+    qtbot: QtBot,
+    request: pytest.FixtureRequest,
+    raw: str,
+    expected_substring: str,
+    allows: bool,
 ) -> None:
     """validate_file_name sanitizes the filename via safe_char + rstrip('_')
     and joins it to save_directory; saving_allowed is True only when both
@@ -79,7 +85,9 @@ def test_safe_char_sanitizes(
         assert ctrl.saving_allowed is False
 
 
-def test_safe_char_join_uses_save_directory(qtbot, request) -> None:
+def test_safe_char_join_uses_save_directory(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """The sanitized filename is joined to save_directory via
     os.path.normpath(save_directory + '\\\\' + save_filename) into
     ``save_filepath``. ``save_filename`` holds the bare sanitized name;

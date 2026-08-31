@@ -1,53 +1,27 @@
 """DeviceRegistry — USB-serial device role resolver for the rig path.
 
-The registry replaces the god object's implicit "open config.ini ports and
-hope the right device is on the other end" pattern with explicit VID/PID +
-serial-number matching against ``hardware_inventory.yaml``. This is the
-RFR-02 fix: COM ports reorder on replug, so a config.ini ``Port`` value
-alone is not a reliable identity for serial-numbered USB-serial adapters.
+The registry replaces implicit "open config.ini ports and hope" with explicit
+VID/PID + serial-number matching against ``hardware_inventory.yaml``. COM ports
+reorder on replug, so a config.ini ``Port`` value alone is not reliable identity.
 
-Resolution rules (D-02 strict abort):
-
-* **Serial-numbered devices** (Optotune ETLs COM5/COM6, Toptica iBeam COM4)
-  match on ``(vid, pid, serial_number)`` alone. ``config.ini``'s ``Port``
-  value is **never** consulted as a fallback for these devices — that is
-  the exact bug RFR-02 exists to fix.
-
-* **Null-serial devices** (the Prolific/Zaber adapter on COM7,
-  ``vid_pid 067B:2303``, ``serial_number: null``) cannot be disambiguated
-  by serial number, so ``config.ini``'s ``[Motors] Port`` is used as the
-  sole sanctioned second factor. Ambiguity (2+ candidates, no config.ini
-  match) triggers strict abort rather than picking the first match
-  (T-05-09 mitigation).
-
-* **Strict collect-all abort** (D-02): every unresolved role is collected
-  into one ``UnresolvedDeviceError`` listing every missing device, then
-  raised once. The microscope cannot function meaningfully with a missing
-  sub-system, so failing the whole startup rather than degrading is the
-  correct posture (T-05-10 accepted availability trade-off).
-
-* **Demo carve-out**: the registry is never imported or constructed on the
-  ``--demo`` / ``LIGHTSHEET_DEMO=1`` path. An empty Mac USB-serial port
-  list would otherwise abort every device (Pitfall 6). The ``--demo``
-  branch lives in ``main()``, not here — this module contains no
-  demo-class reference.
-
-* **Motherboard serial port**: the ``hardware_inventory.yaml`` entry with
-  only an ``hwid`` key (no ``vid_pid``) is skipped — it carries no role
-  this registry needs to resolve.
-
-The role-resolution seam is exposed as ``_resolve_ports()`` which returns a
-``dict[role, port]`` mapping BEFORE any HAL class is constructed. The
-05-05-PLAN composition root calls ``resolve()`` (which wraps
-``_resolve_ports()`` + HAL construction) on the rig path only.
+Resolution rules:
+- Serial-numbered devices match on ``(vid, pid, serial_number)`` alone.
+  config.ini's ``Port`` is never consulted as a fallback for these.
+- Null-serial devices use config.ini's ``[Motors] Port`` as a second factor.
+  Ambiguity triggers strict abort rather than picking the first match.
+- Every unresolved role is collected into one ``UnresolvedDeviceError`` listing
+  every missing device, then raised once.
+- The registry is never imported on the ``--demo`` path.
+- The motherboard serial port entry (``hwid`` only, no ``vid_pid``) is skipped.
 """
 
 import logging
-import serial.tools.list_ports  # pyserial 3.5 — comports() + ListPortInfo
-import yaml  # parse hardware_inventory.yaml
+from pathlib import Path
+
+import serial.tools.list_ports  # pyserial 3.5 -- comports() + ListPortInfo
+import yaml
 
 from lightsheet.config import cfg_read
-from lightsheet.hal.bundle import DeviceBundle
 from lightsheet.hal import (
     Camera,
     DAQLaser,
@@ -56,6 +30,7 @@ from lightsheet.hal import (
     Motors,
     SigGen,
 )
+from lightsheet.hal.bundle import DeviceBundle
 
 logger = logging.getLogger(__name__)
 
@@ -63,18 +38,10 @@ logger = logging.getLogger(__name__)
 def _parse_calibration_curve(
     raw: str,
 ) -> list[tuple[float, float]] | None:
-    """Parse a ``Laser1 Calibration Curve`` config string into a list of
-    ``(V, mW)`` breakpoints.
-
-    Format: semicolon-separated ``"V,mW"`` pairs, e.g.
-    ``"0,0;0.8,0;1.5,30;5,236.6"``. Whitespace around pairs and the comma
-    is tolerated. Empty/whitespace-only string -> ``None`` (no curve,
-    linear-through-origin estimate). Malformed entries (non-numeric, wrong
-    arity) are logged and the whole curve is rejected -> ``None`` (falls
-    back to linear mode rather than constructing a DAQLaser with a
-    half-parsed curve). Strictly-increasing V + non-negative mW validation
-    happens in ``DAQLaser.__init__``; this helper only handles parsing.
-    """
+    """Parse a ``Laser1 Calibration Curve`` config string into ``(V, mW)``
+    breakpoint pairs. Empty/whitespace-only -> ``None``. Malformed entries
+    reject the whole curve -> ``None``. Strictly-increasing V + non-negative
+    mW validation happens in ``DAQLaser.__init__``."""
     if not raw:
         return None
     pairs: list[tuple[float, float]] = []
@@ -104,36 +71,26 @@ def _parse_calibration_curve(
 
 class UnresolvedDeviceError(Exception):
     """Raised when one or more manifest devices cannot be resolved on the
-    USB-serial bus. The message lists every unresolved role (collect-all,
-    not fail-fast-on-first) so the operator sees the full set of devices
-    to reconnect in one dialog (D-02 strict abort)."""
+    USB-serial bus. Lists every unresolved role (collect-all, not fail-fast)."""
 
 
 class DeviceRegistry:
     """Resolves ``hardware_inventory.yaml`` serial-device roles to live
-    USB-serial COM ports by VID/PID + serial-number matching, then
-    constructs the real HAL bundle.
-
-    Constructed only on the rig path (``main()``'s ``else:`` branch of the
-    ``if demo:`` split). Never imported on the ``--demo`` path.
-    """
+    USB-serial COM ports by VID/PID + serial-number matching, then constructs
+    the real HAL bundle. Constructed only on the rig path."""
 
     def __init__(self, inventory_path: str, config_path: str) -> None:
-        with open(inventory_path) as f:
+        with Path(inventory_path).open() as f:
             self._inventory = yaml.safe_load(f)
         self._config_path = config_path
 
     def _resolve_ports(self) -> dict[str, str]:
         """Resolve every ``serial_devices`` manifest entry to a COM port.
-
-        Returns a ``dict[role, port]`` mapping. Raises ``UnresolvedDeviceError``
-        listing every unresolved role if any device is missing or ambiguous
-        (collect-all, not fail-fast-on-first).
-        """
+        Raises ``UnresolvedDeviceError`` listing every unresolved role if any
+        device is missing or ambiguous (collect-all, not fail-fast)."""
         ports = list(serial.tools.list_ports.comports())
 
-        # Index live ports by (vid, pid, serial_number) for serial-numbered
-        # devices, and by (vid, pid) for null-serial devices.
+        # Index live ports by (vid, pid, serial_number) and by (vid, pid).
         by_vid_pid_serial: dict[tuple[int, int, str], str] = {}
         by_vid_pid: dict[tuple[int, int], list[str]] = {}
         for p in ports:
@@ -148,8 +105,7 @@ class DeviceRegistry:
         resolved: dict[str, str] = {}
 
         for dev in self._inventory["devices"]["serial_devices"]:
-            # Skip the motherboard serial port entry — it has no vid_pid key
-            # and carries no role this registry needs to resolve.
+            # Skip the motherboard serial port entry — no vid_pid, no role.
             if "vid_pid" not in dev:
                 continue
 
@@ -159,10 +115,8 @@ class DeviceRegistry:
 
             if dev["serial_number"] is not None:
                 # Serial-numbered device — match on (vid, pid, serial) alone.
-                # config.ini's Port value is NEVER consulted as a fallback
-                # for these devices (RFR-02). Coerce to str: YAML parses
-                # all-digit serial numbers as ints, but ListPortInfo.
-                # serial_number is always a string.
+                # config.ini's Port is NEVER consulted as a fallback. Coerce
+                # to str: YAML parses all-digit serial numbers as ints.
                 sn_str = str(dev["serial_number"])
                 port = by_vid_pid_serial.get((vid, pid, sn_str))
                 if port is None:
@@ -174,8 +128,7 @@ class DeviceRegistry:
                 else:
                     resolved[role] = port
             else:
-                # Null-serial device — disambiguate by config.ini [Motors]
-                # Port (the sole sanctioned config.ini port fallback).
+                # Null-serial device — disambiguate by config.ini [Motors] Port.
                 cfg_port = str(
                     cfg_read(self._config_path, "Motors", {"Port": "COM7"})["Port"]
                 )
@@ -217,14 +170,10 @@ class DeviceRegistry:
     def resolve(self) -> DeviceBundle:
         """Resolve all manifest devices and construct the real HAL bundle.
 
-        Calls ``_resolve_ports()`` first (raises ``UnresolvedDeviceError``
-        on any miss), then constructs the real HAL classes at their
-        resolved ports. The HAL classes read their own config.ini ports
-        for opening — on a correctly-wired rig, those match the resolved
-        ports. The registry's job is to validate presence on the USB bus
-        before the HAL classes attempt to open serial connections, so a
-        missing device surfaces as a clear operator-facing error rather
-        than a cryptic serial-open failure.
+        Calls ``_resolve_ports()`` first (raises on any miss), then constructs
+        the real HAL classes at their resolved ports. Validating presence on
+        the USB bus before opening serial connections surfaces a clear
+        operator-facing error rather than a cryptic serial-open failure.
         """
         resolved = self._resolve_ports()
         logger.debug("DeviceRegistry resolved ports: %s", resolved)
@@ -234,9 +183,8 @@ class DeviceRegistry:
         motors = Motors()
         etls = ETLs()
 
-        # Laser 1 (DAQ AO /Dev7/ao0, 555 nm) — mW-native constructor args
-        # derived from config.ini [Lasers], mirroring the lifted
-        # hardware_init factory branch.
+        # Laser 1 (DAQ AO /Dev7/ao0, 555 nm) -- mW-native constructor
+        # args from config.ini [Lasers].
         _l1_cfg = cfg_read(
             self._config_path,
             "Lasers",
@@ -248,11 +196,8 @@ class DeviceRegistry:
                 "Laser1 Calibration Curve": "",
             },
         )
-        # Optional V->mW calibration curve (display-only). Config format:
-        # semicolon-separated "V,mW" pairs, e.g. "0,0;0.8,0;1.5,30;5,236.6".
-        # Empty/absent -> None (linear-through-origin estimate, current
-        # behavior). Parsed to a list of (float, float) tuples; DAQLaser
-        # validates strictly-increasing V + non-negative mW on construct.
+        # Optional V->mW calibration curve (display-only). Empty/absent -> None.
+        # DAQLaser validates strictly-increasing V + non-negative mW on construct.
         _curve_raw = str(_l1_cfg.get("Laser1 Calibration Curve", "")).strip()
         _calibration_curve = _parse_calibration_curve(_curve_raw)
         lasers = (

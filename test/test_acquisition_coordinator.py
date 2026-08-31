@@ -42,10 +42,14 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
 from _helpers.controller_fixture import make_controller
+from pytestqt.qtbot import QtBot
 
 
-def test_acquisition_coordinator_no_worker_bodies(qtbot, request) -> None:
+def test_acquisition_coordinator_no_worker_bodies(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """AcquisitionCoordinator(bundle, hw, shell) constructed via
     make_controller no longer owns any acquisition worker body — all
     four (preview/live/single/stack) + acquire_scan have relocated to
@@ -64,7 +68,7 @@ def test_acquisition_coordinator_no_worker_bodies(qtbot, request) -> None:
 
 
 def test_acquisition_coordinator_stores_bundle_handles_and_collaborators(
-    qtbot, request
+    qtbot: QtBot, request: pytest.FixtureRequest
 ) -> None:
     """The coordinator stores the bundle's HAL handles as its own
     attributes (self.camera / self.siggen / self.motors) and the hw +
@@ -86,7 +90,7 @@ def test_acquisition_coordinator_stores_bundle_handles_and_collaborators(
 
 
 def test_preview_worker_calls_start_lasers_after_arm_and_stop_before_disarm(
-    qtbot, request
+    qtbot: QtBot, request: pytest.FixtureRequest
 ) -> None:
     """PreviewWorker.run now calls self._hw.start_lasers()
     immediately after self.camera.arm() (before the while loop) and
@@ -113,23 +117,30 @@ def test_preview_worker_calls_start_lasers_after_arm_and_stop_before_disarm(
     # real PreviewWorker.run is called — only the collaborator methods are
     # intercepted to observe the ordering.
     with (
-        patch.object(worker.camera, "arm", side_effect=lambda: call_log.append("camera.arm")),
         patch.object(
-            worker.camera, "disarm", side_effect=lambda: call_log.append("camera.disarm")
+            worker.camera, "arm",
+            side_effect=lambda: call_log.append("camera.arm"),
+        ),
+        patch.object(
+            worker.camera, "disarm",
+            side_effect=lambda: call_log.append("camera.disarm"),
         ),
         patch.object(
             ctrl._hw, "start_lasers",
             side_effect=lambda *a, **k: call_log.append("hw.start_lasers"),
         ),
         patch.object(
-            ctrl._hw, "stop_lasers", side_effect=lambda: call_log.append("hw.stop_lasers")
+            ctrl._hw, "stop_lasers",
+            side_effect=lambda: call_log.append("hw.stop_lasers"),
         ),
     ):
         worker.run()
 
     # start_lasers called after camera.arm.
     assert "camera.arm" in call_log, "camera.arm must be called"
-    assert "hw.start_lasers" in call_log, "hw.start_lasers must be called (start_lasers)"
+    assert "hw.start_lasers" in call_log, (
+        "hw.start_lasers must be called (start_lasers)"
+    )
     assert call_log.index("camera.arm") < call_log.index("hw.start_lasers"), (
         "start_lasers: start_lasers must come AFTER camera.arm"
     )
@@ -142,7 +153,7 @@ def test_preview_worker_calls_start_lasers_after_arm_and_stop_before_disarm(
 
 
 def test_updateUi_preview_mode_button_caches_auto_laser_flags_before_thread_spawn(
-    qtbot, request
+    qtbot: QtBot, request: pytest.FixtureRequest
 ) -> None:
     """updateUi_preview_mode_button: updateUi_preview_mode_button must call
     self._cache_auto_laser_flags() before spawning the preview worker
@@ -165,12 +176,18 @@ def test_updateUi_preview_mode_button_caches_auto_laser_flags_before_thread_spaw
             "_cache_auto_laser_flags",
             side_effect=lambda: call_log.append("_cache_auto_laser_flags"),
         ),
-        patch.object(ctrl, "close_modes", side_effect=lambda: call_log.append("close_modes")),
+        patch.object(
+            ctrl, "close_modes",
+            side_effect=lambda: call_log.append("close_modes"),
+        ),
         # Patch QThread.start so no real thread is started. The real QThread
         # is constructed, the worker is moveToThread'd, and the signal
         # connections are wired — only start() is intercepted to record the
         # spawn timing without launching a worker thread.
-        patch.object(QThread, "start", side_effect=lambda: call_log.append("thread_spawn")),
+        patch.object(
+            QThread, "start",
+            side_effect=lambda: call_log.append("thread_spawn"),
+        ),
     ):
         ctrl.acquisition_panel.updateUi_preview_mode_button()
 

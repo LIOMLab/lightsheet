@@ -29,7 +29,13 @@ range/window values.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QLinearGradient, QPainter
+from PySide6.QtGui import (
+    QColor,
+    QLinearGradient,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+)
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
 # Hit radius for every handle (px). A press within this many pixels of a
@@ -67,7 +73,7 @@ class LevelsBar(QWidget):
     sig_levelsChanged = Signal(int, int)  # window min, window max
     sig_rangeChanged = Signal(int, int)  # range min, range max
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._range_min = DEFAULT_RANGE_MIN
         self._range_max = DEFAULT_RANGE_MAX
@@ -190,9 +196,15 @@ class LevelsBar(QWidget):
             self._range_max = max(self._range_min, min(self._range_max, self._data_max))
             range_changed = (self._range_min, self._range_max) != (old_rmin, old_rmax)
             old_wmin, old_wmax = self._window_min, self._window_max
-            self._window_min = max(self._range_min, min(self._window_min, self._range_max))
-            self._window_max = max(self._window_min, min(self._window_max, self._range_max))
-            window_changed = (self._window_min, self._window_max) != (old_wmin, old_wmax)
+            self._window_min = max(
+                self._range_min, min(self._window_min, self._range_max)
+            )
+            self._window_max = max(
+                self._window_min, min(self._window_max, self._range_max)
+            )
+            window_changed = (
+                (self._window_min, self._window_max) != (old_wmin, old_wmax)
+            )
             if range_changed:
                 self.sig_rangeChanged.emit(self._range_min, self._range_max)
             if window_changed:
@@ -260,14 +272,14 @@ class LevelsBar(QWidget):
         h = self.height()
         return 22, h - 22
 
-    def paintEvent(self, event) -> None:  # noqa: N802 - Qt API name
-        from PySide6.QtGui import QPolygonF
+    def paintEvent(self, event: QPaintEvent) -> None:
         from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QPolygonF
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         width = self.width()
-        height = self.height()
+        self.height()
 
         # Grayscale gradient band in the middle of the widget, between the
         # two handle rows. The RANGE triangles above point down at it; the
@@ -279,7 +291,7 @@ class LevelsBar(QWidget):
         gradient.setColorAt(1.0, QColor(255, 255, 255))
         painter.fillRect(0, g_top, width, g_bottom - g_top, gradient)
 
-        y_range, y_window = self._row_y()
+        _y_range, y_window = self._row_y()
         tri_half = 7  # half-width of the triangle base
         tri_h = 10    # triangle height (apex to base)
 
@@ -387,7 +399,7 @@ class LevelsBar(QWidget):
         in_range.sort(key=lambda dn: dn[0])
         return in_range[0][1]
 
-    def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt API name
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() != Qt.MouseButton.LeftButton:
             event.ignore()
             return
@@ -398,7 +410,7 @@ class LevelsBar(QWidget):
         self._dragging_handle = handle
         event.accept()
 
-    def mouseMoveEvent(self, event) -> None:  # noqa: N802 - Qt API name
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
         if self._dragging_handle is None:
             event.ignore()
             return
@@ -485,7 +497,7 @@ class LevelsBar(QWidget):
                 self.update()
         event.accept()
 
-    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt API name
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         # If a RANGE handle was dragged, clamp the window into the new
         # range now (deferred from mouseMoveEvent so the window handles
         # do not jump during the drag).

@@ -84,10 +84,8 @@ class PreviewWorker(QObject):
         # well-typed without implying a save will occur.
         self._save_description = ""
         self._save_stitch_blend = False
-        # B-03: pre-sample the camera exposure time on the GUI thread (the
-        # constructor runs on the GUI thread before moveToThread) so run()
-        # never reaches into the shell's ui.* from the worker thread
-        # (AGENTS.md §11).
+        # Pre-sample the camera exposure time on the GUI thread so run()
+        # never reaches into the shell's ui.* from the worker thread.
         self._camera_exposure_time = int(
             shell.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.value()
         )
@@ -146,7 +144,7 @@ class PreviewWorker(QObject):
                 # generation, but the camera stays armed and grabbing until
                 # the operator manually stops — polling estop_event aligns
                 # preview_mode_worker with live/single/stack per the
-                # AGENTS.md §2 rule that E-stop is polled in all acquisition
+                # rule that E-stop is polled in all acquisition
                 # worker loops.
                 if self._shell.estop_event.is_set():
                     break
@@ -190,18 +188,14 @@ class PreviewWorker(QObject):
 class _AcquireScanMixin:
     """Shared ``acquire_scan`` helper for the worker QObjects.
 
-    Relocated verbatim from ``AcquisitionCoordinator.acquire_scan`` with
-    exactly two attribute-access changes: the save-description widget read
-    becomes ``self._save_description``, and the stitch-blend checkbox read
-    becomes ``self._save_stitch_blend``. Both are pre-sampled on the GUI
-    thread in the mode-button slot and passed as worker constructor args,
-    so the worker thread never reaches into the shell's UI widgets
-    (AGENTS.md §11).
+    Relocated from ``AcquisitionCoordinator.acquire_scan`` with two
+    attribute-access changes: the save-description and stitch-blend reads
+    become ``self._save_description`` / ``self._save_stitch_blend``
+    (pre-sampled on the GUI thread and passed as constructor args, so the
+    worker thread never reaches into the shell's UI widgets).
 
-    ``SingleWorker`` and (later) ``StackWorker`` both inherit this mixin
-    so the single shared scan-acquisition body stays in one place. The
-    mixin is a plain class (no ``QObject`` base) — the worker QObjects
-    provide the ``QObject`` base and the ``finished`` signal.
+    ``SingleWorker`` and ``StackWorker`` both inherit this mixin so the
+    scan-acquisition body stays in one place.
     """
 
     def acquire_scan(self) -> None:
@@ -435,7 +429,7 @@ class SingleWorker(QObject, _AcquireScanMixin):
     (``save_description``, ``save_stitch_blend``) so
     ``_AcquireScanMixin.acquire_scan`` reads ``self._save_description``
     / ``self._save_stitch_blend`` instead of reaching into
-    the shell's ``ui.*`` from the worker thread (AGENTS.md §11).
+    the shell's ``ui.*`` from the worker thread.
     """
 
     finished = Signal()
@@ -461,15 +455,11 @@ class SingleWorker(QObject, _AcquireScanMixin):
         # these to populate buffer metadata.
         self._save_description = save_description
         self._save_stitch_blend = save_stitch_blend
-        # Multi-channel flag pre-sampled on the GUI thread in
-        # updateUi_single_mode_button as (_auto_laser1 and _auto_laser2)
-        # immediately after _cache_auto_laser_flags() (AGENTS.md §11 —
-        # no cross-thread widget reads from workers). When True, run()
-        # executes the per-channel cycle: select_laser(0) -> acquire_scan
-        # -> capture frame1 -> select_laser(1) -> acquire_scan -> capture
-        # frame2, storing both in self._shell.reconstructed_frames dict
-        # keyed by laser wavelength. When False, run() is byte-for-byte
-        # the existing single-channel path (back-compat).
+        # Multi-channel flag pre-sampled on the GUI thread.
+        # When True, run() executes the per-channel cycle:
+        # select_laser(0) -> acquire_scan -> capture frame1 ->
+        # select_laser(1) -> acquire_scan -> capture frame2.
+        # When False, the single-channel path runs (back-compat).
         self._multi_channel = multi_channel
 
     @Slot()
@@ -648,13 +638,13 @@ class StackWorker(QObject, _AcquireScanMixin):
     ``updateUi_stack_mode_button`` and passed as constructor args
     (``save_description``, ``save_stitch_blend``, ``save_all_crop``,
     ``save_all_full``) so the worker thread never reaches into
-    the shell's ``ui.*`` (AGENTS.md §11).
+    the shell's ``ui.*``.
 
     The per-plane position update reaches the GUI thread via the queued
     ``sig_refresh_position_horizontal`` signal (already declared on the
     shell and connected to the GUI-thread position-refresh slot) instead
     of a legacy direct cross-thread widget mutation — closing the last
-    AGENTS.md §11 direct-widget-mutation violation.
+    direct-widget-mutation violation.
 
     Known limitation: stack mode does not adjust camera focus between
     planes (the single-frame worker does). Adding per-plane focus
@@ -665,7 +655,7 @@ class StackWorker(QObject, _AcquireScanMixin):
     # Adaptive trajectory signal: plane_idx, intensity, exposure_s,
     # power1_mw, control_variable_active, reacquired, power_fallback.
     # Emitted per main plane for the GUI-thread trajectory plot (the
-    # worker NEVER calls pyqtgraph directly — AGENTS.md §11). The
+    # worker NEVER calls pyqtgraph directly). The
     # full power tuple (L1, L2) is recorded in the HDF5 trajectory
     # group via AdaptiveSample; the signal carries L1 power for the
     # live plot.
@@ -697,24 +687,17 @@ class StackWorker(QObject, _AcquireScanMixin):
         self._save_stitch_blend = save_stitch_blend
         self._save_all_crop = save_all_crop
         self._save_all_full = save_all_full
-        # Multi-channel flag pre-sampled on the GUI thread in
-        # _spawn_stack_worker as (_auto_laser1 and _auto_laser2)
-        # immediately after _cache_auto_laser_flags() (AGENTS.md §11 —
-        # no cross-thread widget reads from workers). When True, run()
-        # executes the per-plane sequential cycle: for each plane,
+        # Multi-channel flag pre-sampled on the GUI thread.
+        # When True, run() executes the per-plane sequential cycle:
         # move -> select_laser(0) -> acquire -> capture frame1 ->
-        # select_laser(1) -> acquire -> capture frame2 -> enqueue both
-        # tagged frames. When False, run() is byte-for-byte the existing
-        # single-channel path (back-compat): start_lasers once at top,
+        # select_laser(1) -> acquire -> capture frame2 -> enqueue both.
+        # When False, the single-channel path runs (back-compat).
         # one acquire_scan per plane, one bare-ndarray enqueue per plane.
         self._multi_channel = multi_channel
         # Pre-sample the configured laser wavelengths on the GUI thread
-        # (the constructor runs on the GUI thread inside
-        # _spawn_stack_worker) so the worker thread never reaches into
-        # the live ILaser instances from run() (AGENTS.md §11 — no
-        # cross-thread reads of shared HAL state from workers). The
-        # wavelengths are read from the live ILaser instances here, never
-        # hardcoded. In multi-channel mode these are passed to
+        # so the worker thread never reads shared HAL state from run().
+        # The wavelengths are read from the live ILaser instances here,
+        # never hardcoded. In multi-channel mode these are passed to
         # set_files(wavelengths=...) so the save side builds one
         # per-channel filename list (and the Zarr writer allocates a
         # channel axis); in single-channel mode the active laser's
@@ -822,7 +805,7 @@ class StackWorker(QObject, _AcquireScanMixin):
                 # close (and the Zarr writer writes /acquisition/adaptive
                 # during finalize). The frozen AdaptiveConfig is passed
                 # through so the writers publish the full bounds + gains
-                # as group attrs (schema-a reproducibility contract).
+                # as group attrs (reproducibility contract).
                 # When disabled, no trajectory is recorded or written.
                 adaptive_enabled = (
                     self._adaptive_cfg is not None and self._adaptive_cfg.enabled
@@ -959,7 +942,7 @@ class StackWorker(QObject, _AcquireScanMixin):
                     # queued sig_refresh_position_horizontal signal (already
                     # declared on the shell and connected to
                     # updateUi_position_horizontal) instead of a direct
-                    # cross-thread widget mutation (AGENTS.md §11).
+                    # cross-thread widget mutation.
                     self._shell.sig_refresh_position_horizontal.emit()
 
                     if self._shell.saving_allowed:
@@ -1159,7 +1142,7 @@ class StackWorker(QObject, _AcquireScanMixin):
             # have left L2 on; in single-channel mode start_lasers may
             # have left the auto-selected laser on. stop_lasers reads the
             # cached auto-laser flags and drives .off() on each active
-            # laser (AGENTS.md §2 — both off before camera disarm).
+            # laser.
             self._hw.stop_lasers()
 
             # Stopping camera
@@ -1272,7 +1255,7 @@ class StackWorker(QObject, _AcquireScanMixin):
             intensities = [frame_intensity_pct(frame, cfg.sensor_max)]
             brighter_idx = 0
 
-        # Record the trajectory sample (schema-a).
+        # Record the trajectory sample .
         sample = AdaptiveSample(
             plane_index=plane_idx,
             intensity_fraction=intensities,

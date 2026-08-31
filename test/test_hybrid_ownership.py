@@ -14,18 +14,31 @@ Runs headless on Mac via ``QT_QPA_PLATFORM=offscreen`` (set by conftest).
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
+
+from lightsheet.hal import DeviceBundle
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 pytest.importorskip("PySide6")
 
 
-def _make(qtbot, request):
+def _make(
+    qtbot: QtBot, request: FixtureRequest
+) -> tuple[Controller_MainWindow, DeviceBundle]:
     from _helpers.controller_fixture import make_controller
 
     return make_controller(qtbot, request)
 
 
-def test_shell_owned_widgets_stay_on_ui(qtbot, request) -> None:
+def test_shell_owned_widgets_stay_on_ui(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """Shell-owned widgets stay accessible via ``controller.ui`` after the
     merge-loop trim (E-stop invariant + status bar + message log +
     left-rail navigation)."""
@@ -58,7 +71,9 @@ def test_shell_owned_widgets_stay_on_ui(qtbot, request) -> None:
     assert hasattr(ctrl.ui, "imageView")
 
 
-def test_panel_internal_widget_not_on_shell_ui(qtbot, request) -> None:
+def test_panel_internal_widget_not_on_shell_ui(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """A panel-internal widget is NOT accessible via ``controller.ui`` after
     the merge-loop trim — it lives on its owning panel's ``ui`` only."""
     ctrl, _ = _make(qtbot, request)
@@ -72,7 +87,9 @@ def test_panel_internal_widget_not_on_shell_ui(qtbot, request) -> None:
     assert hasattr(ctrl.stack_panel.ui, "doubleSpinBox_acqFirstPlane")
 
 
-def test_panel_internal_widgets_not_on_shell_ui_sample(qtbot, request) -> None:
+def test_panel_internal_widgets_not_on_shell_ui_sample(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """Several panel-internal widgets across panels are NOT on controller.ui."""
     ctrl, _ = _make(qtbot, request)
 
@@ -126,7 +143,9 @@ def test_shell_owned_objectnames_whitelist_exists() -> None:
         )
 
 
-def test_merge_loop_only_sets_shell_owned_widgets(qtbot, request) -> None:
+def test_merge_loop_only_sets_shell_owned_widgets(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The merge loop only sets shell-owned widgets onto ``self.ui`` — no
     panel-internal widget leaks. Reconstruct the merge by iterating each
     panel's ``vars(panel.ui)`` and asserting every attr that would land on

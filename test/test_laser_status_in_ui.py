@@ -16,13 +16,26 @@ colors (green/gray/red) matching ``label_estopStatus``.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from _helpers.controller_fixture import make_controller
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
 
-_CONTROLLER_PATH = Path(__file__).resolve().parents[1] / "lightsheet" / "gui" / "shell" / "controller.py"
-_UI_PATH = Path(__file__).resolve().parents[1] / "lightsheet" / "gui" / "panels" / "ui_laser_panel.ui"
+_CONTROLLER_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "lightsheet"
+    / "gui"
+    / "shell"
+    / "controller.py"
+)
+_UI_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "lightsheet"
+    / "gui"
+    / "panels"
+    / "ui_laser_panel.ui"
+)
 
 
 def _controller_source() -> str:
@@ -81,25 +94,33 @@ def test_controller_no_programmatic_laser_status_labels() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_label_laserOneStatus_minimum_width_in_ui(qtbot, request) -> None:
+def test_label_laserOneStatus_minimum_width_in_ui(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     ctrl, _ = make_controller(qtbot, request)
     label = ctrl.laser_panel.ui.label_laserOneStatus
     assert label.minimumWidth() >= 140
 
 
-def test_label_laserOneReadback_minimum_width_in_ui(qtbot, request) -> None:
+def test_label_laserOneReadback_minimum_width_in_ui(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     ctrl, _ = make_controller(qtbot, request)
     label = ctrl.laser_panel.ui.label_laserOneReadback
     assert label.minimumWidth() >= 80
 
 
-def test_label_laserTwoStatus_minimum_width_in_ui(qtbot, request) -> None:
+def test_label_laserTwoStatus_minimum_width_in_ui(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     ctrl, _ = make_controller(qtbot, request)
     label = ctrl.laser_panel.ui.label_laserTwoStatus
     assert label.minimumWidth() >= 140
 
 
-def test_label_laserTwoReadback_minimum_width_in_ui(qtbot, request) -> None:
+def test_label_laserTwoReadback_minimum_width_in_ui(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     ctrl, _ = make_controller(qtbot, request)
     label = ctrl.laser_panel.ui.label_laserTwoReadback
     assert label.minimumWidth() >= 80
@@ -110,7 +131,9 @@ def test_label_laserTwoReadback_minimum_width_in_ui(qtbot, request) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_updateUi_laser_status_active_green(qtbot, request) -> None:
+def test_updateUi_laser_status_active_green(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     ctrl, _ = make_controller(qtbot, request)
     ctrl.laser_panel.updateUi_laser_status(0, "active")
     label = ctrl.laser_panel.ui.label_laserOneStatus
@@ -118,7 +141,9 @@ def test_updateUi_laser_status_active_green(qtbot, request) -> None:
     assert "#34C759" in label.styleSheet()
 
 
-def test_updateUi_laser_status_inactive_gray(qtbot, request) -> None:
+def test_updateUi_laser_status_inactive_gray(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     ctrl, _ = make_controller(qtbot, request)
     ctrl.laser_panel.updateUi_laser_status(0, "inactive")
     label = ctrl.laser_panel.ui.label_laserOneStatus
@@ -126,7 +151,9 @@ def test_updateUi_laser_status_inactive_gray(qtbot, request) -> None:
     assert "#8E8E93" in label.styleSheet()
 
 
-def test_updateUi_laser_status_error_red(qtbot, request) -> None:
+def test_updateUi_laser_status_error_red(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     ctrl, _ = make_controller(qtbot, request)
     ctrl.laser_panel.updateUi_laser_status(1, "error")
     label = ctrl.laser_panel.ui.label_laserTwoStatus
@@ -143,9 +170,13 @@ def test_laser_panel_slots_reference_panel_local_ui() -> None:
     """laser_panel.py:updateUi_laser_status / updateUi_laser_readback must
     reference ``self.ui.label_laser*`` (panel-local), not
     ``self._shell.label_laser*`` (the old cross-panel reach)."""
-    src = (Path(__file__).resolve().parents[1] / "lightsheet" / "gui" / "panels" / "laser_panel.py").read_text(
-        encoding="utf-8"
-    )
+    src = (
+        Path(__file__).resolve().parents[1]
+        / "lightsheet"
+        / "gui"
+        / "panels"
+        / "laser_panel.py"
+    ).read_text(encoding="utf-8")
     # The status slot must use the panel-local ui attribute.
     assert "self.ui.label_laserOneStatus" in src
     assert "self.ui.label_laserTwoStatus" in src
@@ -163,11 +194,13 @@ def test_laser_panel_slots_reference_panel_local_ui() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_sig_laser_status_connected(qtbot, request) -> None:
+def test_sig_laser_status_connected(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     ctrl, _ = make_controller(qtbot, request)
     seen = {"status": None}
 
-    def _spy(idx, status):
+    def _spy(idx: int, status: str) -> None:
         seen["status"] = (idx, status)
 
     ctrl.sig_laser_status.connect(_spy)
@@ -179,11 +212,13 @@ def test_sig_laser_status_connected(qtbot, request) -> None:
     assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "\u25cf ON"
 
 
-def test_sig_laser_readback_connected(qtbot, request) -> None:
+def test_sig_laser_readback_connected(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     ctrl, _ = make_controller(qtbot, request)
     seen = {"rb": None}
 
-    def _spy(idx, text, tooltip):
+    def _spy(idx: int, text: str, tooltip: str) -> None:
         seen["rb"] = (idx, text, tooltip)
 
     ctrl.sig_laser_readback.connect(_spy)
@@ -192,7 +227,9 @@ def test_sig_laser_readback_connected(qtbot, request) -> None:
     assert ctrl.laser_panel.ui.label_laserTwoReadback.text() == "12.3 mW (cmd)"
 
 
-def test_pushButton_laserTwoRefresh_clicked_connected(qtbot, request) -> None:
+def test_pushButton_laserTwoRefresh_clicked_connected(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     ctrl, _ = make_controller(qtbot, request)
     btn = ctrl.laser_panel.ui.pushButton_laserTwoRefresh
     # Wire a spy slot alongside the real one and click — the spy firing
@@ -200,7 +237,7 @@ def test_pushButton_laserTwoRefresh_clicked_connected(qtbot, request) -> None:
     # routes to the hardware manager helpers, which are no-ops on mocks).
     seen = {"clicked": False}
 
-    def _spy():
+    def _spy() -> None:
         seen["clicked"] = True
 
     btn.clicked.connect(_spy)
@@ -208,7 +245,9 @@ def test_pushButton_laserTwoRefresh_clicked_connected(qtbot, request) -> None:
     assert seen["clicked"] is True, "pushButton_laserTwoRefresh.clicked must fire"
 
 
-def test_refresh_button_emits_via_slot(qtbot, request) -> None:
+def test_refresh_button_emits_via_slot(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """Clicking Refresh Power routes to the laser panel refresh slot, which
     calls the hardware manager readback/poll helpers. Patch those helpers to
     assert the wiring end-to-end without a real serial round-trip."""
@@ -218,7 +257,7 @@ def test_refresh_button_emits_via_slot(qtbot, request) -> None:
     def _fake_refresh_async() -> None:
         called["refresh"] = True
 
-    def _fake_poll(indices) -> None:
+    def _fake_poll(indices: object) -> None:
         called["poll"] = True
 
     ctrl._hw._refresh_laser2_readback_async = _fake_refresh_async  # type: ignore[assignment]

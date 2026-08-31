@@ -43,7 +43,9 @@ def _make_axis(
         ("\u03bcm", 10**-6),
     ],
 )
-def test_position_to_microsteps_unit_branches(units: str, expected_factor: float) -> None:
+def test_position_to_microsteps_unit_branches(
+    units: str, expected_factor: float
+) -> None:
     """Each supported unit branch in position_to_microsteps produces the
     expected microstep count for a known position."""
     axis = _make_axis(microstep_size=0.047625)
@@ -58,7 +60,8 @@ def test_position_to_microsteps_unit_branches(units: str, expected_factor: float
 def test_position_to_microsteps_microstep_unit_branch() -> None:
     """The µStep unit branch uses microstep_size * 1e-6 as the factor."""
     axis = _make_axis(microstep_size=0.047625)
-    # 1 µStep => factor = microstep_size * 1e-6; position * factor / (microstep_size * 1e-6) = position
+    # 1 uStep => factor = microstep_size * 1e-6;
+    # position * factor / (microstep_size * 1e-6) = position
     assert axis.position_to_microsteps(500.0, "\u03bcStep") == 500
 
 

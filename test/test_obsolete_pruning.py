@@ -30,6 +30,7 @@ from unittest.mock import Mock
 
 import pytest
 from PySide6.QtCore import QObject
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
@@ -39,7 +40,7 @@ pytest.importorskip("PySide6")
 # --------------------------------------------------------------------------- #
 
 
-def test_calCameraStartCalibration_button_is_deleted(qtbot) -> None:
+def test_calCameraStartCalibration_button_is_deleted(qtbot: QtBot) -> None:
     """The dead 'Start Camera Calibration' button is pruned from the .ui."""
     from lightsheet.gui.panels.calibration_panel import CalibrationPanelWidget
 
@@ -51,7 +52,7 @@ def test_calCameraStartCalibration_button_is_deleted(qtbot) -> None:
     )
 
 
-def test_calEtlStartCalibration_button_is_deleted(qtbot) -> None:
+def test_calEtlStartCalibration_button_is_deleted(qtbot: QtBot) -> None:
     """The dead 'Start ETL Calibration' button is pruned from the .ui."""
     from lightsheet.gui.panels.calibration_panel import CalibrationPanelWidget
 
@@ -63,7 +64,7 @@ def test_calEtlStartCalibration_button_is_deleted(qtbot) -> None:
     )
 
 
-def test_resetSettings_button_is_deleted(qtbot) -> None:
+def test_resetSettings_button_is_deleted(qtbot: QtBot) -> None:
     """The dead 'Reset Settings' button is pruned from the scan panel .ui."""
     from lightsheet.gui.panels.scan_panel import ScanPanelWidget
 
@@ -81,7 +82,7 @@ def test_resetSettings_button_is_deleted(qtbot) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_live_calibration_buttons_have_tooltips(qtbot) -> None:
+def test_live_calibration_buttons_have_tooltips(qtbot: QtBot) -> None:
     """The live calibration buttons remain and carry a non-empty tooltip."""
     from lightsheet.gui.panels.calibration_panel import CalibrationPanelWidget
 
@@ -106,7 +107,7 @@ def test_live_calibration_buttons_have_tooltips(qtbot) -> None:
         )
 
 
-def test_live_calibration_spinboxes_have_tooltips(qtbot) -> None:
+def test_live_calibration_spinboxes_have_tooltips(qtbot: QtBot) -> None:
     """The live calibration numeric inputs carry a non-empty tooltip."""
     from lightsheet.gui.panels.calibration_panel import CalibrationPanelWidget
 

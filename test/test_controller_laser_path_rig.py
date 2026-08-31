@@ -21,13 +21,16 @@ operator does not need to be present.
 Rig-only: skipped when the real nidaqmx driver is absent (Mac stub).
 """
 
+from __future__ import annotations
+
 import contextlib
 import importlib.util
 import threading
 
 import pytest
-
 from _helpers.controller_fixture import make_controller
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
 
 
 def _real_nidaqmx_available() -> bool:
@@ -55,7 +58,9 @@ pytestmark = [
 ]
 
 
-def test_toggle_laser1_real_daq_no_access_violation(qtbot, request) -> None:
+def test_toggle_laser1_real_daq_no_access_violation(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The real _toggle_laser1 (daemon-thread toggle) via ctrl._hw.
 
     Reproduces the "manual 555nm" path the operator ran during UAT, where
@@ -79,7 +84,9 @@ def test_toggle_laser1_real_daq_no_access_violation(qtbot, request) -> None:
     )
 
 
-def test_toggle_laser1_on_daemon_thread_real_daq(qtbot, request) -> None:
+def test_toggle_laser1_on_daemon_thread_real_daq(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """_toggle_laser1 spawned on a daemon thread (as the GUI does it).
 
     The phase offloads the toggle to a daemon thread. If the access
@@ -105,11 +112,14 @@ def test_toggle_laser1_on_daemon_thread_real_daq(qtbot, request) -> None:
     t.join(timeout=5)
     assert not errors, "Daemon-thread _toggle_laser1 crashed:\n" + "\n".join(errors)
     assert ctrl._hw.lasers[0].error == 0, (
-        f"Laser 1 HAL error after daemon-thread toggle: {ctrl._hw.lasers[0].error_message}"
+        f"Laser 1 HAL error after daemon-thread toggle: "
+        f"{ctrl._hw.lasers[0].error_message}"
     )
 
 
-def test_write_laser1_power_real_daq_repeated(qtbot, request) -> None:
+def test_write_laser1_power_real_daq_repeated(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The real _write_laser1_power (debounce-slot worker) repeatedly.
 
     Reproduces the spinbox-edit path: each debounce timeout spawns a daemon
@@ -128,11 +138,14 @@ def test_write_laser1_power_real_daq_repeated(qtbot, request) -> None:
             errors.append(repr(e))
     assert not errors, "_write_laser1_power crashed on real DAQ:\n" + "\n".join(errors)
     assert ctrl._hw.lasers[0].error == 0, (
-        f"Laser 1 HAL error after repeated 0 mW writes: {ctrl._hw.lasers[0].error_message}"
+        f"Laser 1 HAL error after repeated 0 mW writes: "
+        f"{ctrl._hw.lasers[0].error_message}"
     )
 
 
-def test_start_lasers_real_daq_then_siggen_create(qtbot, request) -> None:
+def test_start_lasers_real_daq_then_siggen_create(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The real start_lasers (acquisition worker path) then siggen create.
 
     Reproduces the single_mode_worker sequence: start_lasers() energizes

@@ -15,8 +15,8 @@ dict, dialog return value), never a static-source grep.
 
 from __future__ import annotations
 
-import os
 import sys
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -28,7 +28,6 @@ from lightsheet.config_schema import (
     collect_config_errors,
     load_sections_from_ini,
 )
-
 
 # -- Validator raise paths --------------------------------------------------
 
@@ -82,7 +81,7 @@ def test_collect_config_errors_missing_required_key() -> None:
 # -- load_sections_from_ini -------------------------------------------------
 
 
-def test_load_sections_from_ini_reads_baseline(tmp_path) -> None:
+def test_load_sections_from_ini_reads_baseline(tmp_path: Path) -> None:
     """load_sections_from_ini reads a baseline config.ini and returns a
     sections dict with every section's keys populated."""
     ini = tmp_path / "config.ini"
@@ -102,7 +101,7 @@ def test_load_sections_from_ini_reads_baseline(tmp_path) -> None:
     assert sections["iBeam"]["Port"] == "COM4"
 
 
-def test_load_sections_from_ini_merges_overlay(tmp_path) -> None:
+def test_load_sections_from_ini_merges_overlay(tmp_path: Path) -> None:
     """When an overlay_path exists, its non-empty values override the
     baseline (lines 592-603)."""
     baseline = tmp_path / "config.ini"
@@ -131,7 +130,9 @@ def test_load_sections_from_ini_merges_overlay(tmp_path) -> None:
     assert sections["iBeam"]["Max Power"] == "80000"
 
 
-def test_load_sections_from_ini_overlay_partial_does_not_clobber(tmp_path) -> None:
+def test_load_sections_from_ini_overlay_partial_does_not_clobber(
+    tmp_path: Path,
+) -> None:
     """A partial overlay (only some keys present) must not clobber baseline
     values with empty sentinels (lines 596-603)."""
     baseline = tmp_path / "config.ini"
@@ -157,7 +158,9 @@ def test_load_sections_from_ini_overlay_partial_does_not_clobber(tmp_path) -> No
     assert sections["iBeam"]["Port"] == "COM4"
 
 
-def test_load_sections_from_ini_overlay_explicit_empty_propagates(tmp_path) -> None:
+def test_load_sections_from_ini_overlay_explicit_empty_propagates(
+    tmp_path: Path,
+) -> None:
     """An overlay key explicitly set to empty (``Key =`` with no value)
     propagates as "" — it is distinct from a key merely absent from the
     overlay. The merge filters by keys the overlay section actually
@@ -208,7 +211,7 @@ def test_validate_or_abort_errors_calls_sys_exit(
 
     from PySide6.QtWidgets import QApplication
 
-    app = QApplication.instance() or QApplication(sys.argv)
+    QApplication.instance() or QApplication(sys.argv)
 
     # Sections with an unknown section -> errors.
     sections = {"UnknownSection": {"foo": "bar"}}
@@ -264,7 +267,7 @@ def test_validate_or_abort_warnings_only_proceed_does_not_exit(
 
     from PySide6.QtWidgets import QApplication
 
-    app = QApplication.instance() or QApplication(sys.argv)
+    QApplication.instance() or QApplication(sys.argv)
 
     sections = _make_siggen_sections_with_warning()
 
@@ -276,7 +279,9 @@ def test_validate_or_abort_warnings_only_proceed_does_not_exit(
         validator = ConfigValidator()
         validator.validate_or_abort(sections)
 
-    assert exit_called == [], "validate_or_abort must NOT exit when operator proceeds with warnings"
+    assert exit_called == [], (
+        "validate_or_abort must NOT exit when operator proceeds with warnings"
+    )
 
 
 def test_validate_or_abort_warnings_only_exit_calls_sys_exit(
@@ -289,7 +294,7 @@ def test_validate_or_abort_warnings_only_exit_calls_sys_exit(
 
     from PySide6.QtWidgets import QApplication
 
-    app = QApplication.instance() or QApplication(sys.argv)
+    QApplication.instance() or QApplication(sys.argv)
 
     sections = _make_siggen_sections_with_warning()
 
@@ -301,4 +306,6 @@ def test_validate_or_abort_warnings_only_exit_calls_sys_exit(
         validator = ConfigValidator()
         validator.validate_or_abort(sections)
 
-    assert exit_called == [1], "validate_or_abort must exit when operator clicks Exit on warnings"
+    assert exit_called == [1], (
+        "validate_or_abort must exit when operator clicks Exit on warnings"
+    )

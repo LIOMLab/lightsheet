@@ -9,15 +9,19 @@ the wavelength from the filename).
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from _helpers.controller_fixture import make_controller
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
+
 from lightsheet.gui.panels.past_acquisitions_browser import (
     PastAcquisitionsBrowser,
 )
 
-from _helpers.controller_fixture import make_controller
-
 
 def test_past_acquisitions_browser_parses_hdf5_and_zarr(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
 ) -> None:
     """D-05: the browser lists both HDF5 and OME-Zarr acquisitions under
     the save directory. The iBeam 640 nm wavelength label is normalized to
@@ -87,7 +91,7 @@ def test_past_acquisitions_browser_parses_hdf5_and_zarr(
 
 
 def test_past_acquisitions_hdf5_picks_active_laser_wavelength(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
 ) -> None:
     """The HDF5 wavelength parser must return the ACTIVE laser's
     wavelength, not just the first one found. When only Laser2 (647nm)
@@ -120,7 +124,7 @@ def test_past_acquisitions_hdf5_picks_active_laser_wavelength(
 
 
 def test_past_acquisitions_browser_degrades_on_missing_attrs(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
 ) -> None:
     """D-05: an HDF5 file with no root attrs (pre-Phase-4 style) degrades
     gracefully — the wavelength is inferred from the filename token and
@@ -152,7 +156,7 @@ def test_past_acquisitions_browser_degrades_on_missing_attrs(
 
 
 def test_past_acquisitions_browser_parses_compact_naming(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
 ) -> None:
     """The compact filename convention (no _plane_00001 segment; no
     suffix on the first file, then _01, _02) must parse correctly — the

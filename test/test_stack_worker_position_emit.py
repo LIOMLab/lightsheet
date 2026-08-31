@@ -24,13 +24,20 @@ from __future__ import annotations
 
 from unittest.mock import Mock
 
-import numpy as np
 import pytest
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
 from lightsheet.gui.workers import StackWorker
-from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
+from lightsheet.hal import (
+    DeviceBundle,
+    MockCamera,
+    MockETLs,
+    MockLaser,
+    MockMotors,
+    MockSigGen,
+)
 
 
 def _make_bundle() -> DeviceBundle:
@@ -42,7 +49,10 @@ def _make_bundle() -> DeviceBundle:
         MockLaser(wavelength=647, max_power_mw=150.0, label="L2"),
     )
     etls = MockETLs()
-    return DeviceBundle(camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers)
+    return DeviceBundle(
+        camera=camera, siggen=siggen,
+        motors=motors, etls=etls, lasers=lasers,
+    )
 
 
 class _PositionEmitShell:
@@ -100,7 +110,7 @@ class _PositionEmitShell:
         self.lasers: tuple = ()
 
 
-def test_stack_worker_position_emit_uses_signal_not_direct_call(qtbot) -> None:
+def test_stack_worker_position_emit_uses_signal_not_direct_call(qtbot: QtBot) -> None:
     """StackWorker.run emits sig_refresh_position_horizontal after the motor
     move and NEVER calls updateUi_position_horizontal directly."""
     bundle = _make_bundle()

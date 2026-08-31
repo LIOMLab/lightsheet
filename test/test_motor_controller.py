@@ -21,14 +21,21 @@ method bodies and assert on runtime behavior.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
 import pytest
 
 pytest.importorskip("PySide6")  # MotorController is constructed with a QObject shell
 
 from lightsheet.gui.coordinators.motor_controller import MotorController
-from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
+from lightsheet.hal import (
+    DeviceBundle,
+    MockCamera,
+    MockETLs,
+    MockLaser,
+    MockMotors,
+    MockSigGen,
+)
 
 
 class _ShellStandin:
@@ -96,7 +103,10 @@ def _make_bundle() -> DeviceBundle:
         MockLaser(wavelength=647, max_power_mw=150.0, label="Laser 2 (647 nm)"),
     )
     etls = MockETLs()
-    return DeviceBundle(camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers)
+    return DeviceBundle(
+        camera=camera, siggen=siggen, motors=motors,
+        etls=etls, lasers=lasers,
+    )
 
 
 def _make_mc() -> tuple[MotorController, _ShellStandin]:
@@ -123,7 +133,9 @@ def test_move_to_horizontal_position_valueerror_aborts_with_beep_and_message() -
     mc, shell = _make_mc()
     # Force the horizontal motor's move_absolute_position to raise ValueError
     # (over-travel) — and track that it is called exactly once.
-    mc.motors.horizontal.move_absolute_position = Mock(side_effect=ValueError("over-travel"))
+    mc.motors.horizontal.move_absolute_position = Mock(
+        side_effect=ValueError("over-travel"),
+    )
     # The pre-move boundary check uses get_limit_low/high; provide permissive
     # values so the move is attempted (the ValueError is the gate under test).
     mc.motors.horizontal.get_limit_low = Mock(return_value=0.0)
@@ -132,7 +144,9 @@ def test_move_to_horizontal_position_valueerror_aborts_with_beep_and_message() -
     mc.updateUi_move_to_horizontal_position()
 
     # sig_message emitted with a "travel limits" message.
-    assert shell.sig_message.emit.called, "sig_message.emit must be called on ValueError"
+    assert shell.sig_message.emit.called, (
+        "sig_message.emit must be called on ValueError"
+    )
     msg = shell.sig_message.emit.call_args.args[0]
     assert "travel limits" in msg, f"message must mention travel limits, got: {msg}"
     # sig_beep emitted (reject-and-beep).
@@ -195,14 +209,20 @@ def test_move_to_position_in_range_emits_moving_message() -> None:
     shell.motor_panel.ui.doubleSpinBox_sampleSetHPosition.value.return_value = 5.0
     mc.updateUi_move_to_horizontal_position()
     mc.motors.horizontal.move_absolute_position.assert_called_once()
-    assert any("Sample moving to horizontal position" in m for m in shell.message_printer_calls)
+    assert any(
+        "Sample moving to horizontal position" in m
+        for m in shell.message_printer_calls
+    )
 
     mc, shell = _make_mc()
     mc.motors.vertical.move_absolute_position = Mock()
     shell.motor_panel.ui.doubleSpinBox_sampleSetVPosition.value.return_value = 5.0
     mc.updateUi_move_to_vertical_position()
     mc.motors.vertical.move_absolute_position.assert_called_once()
-    assert any("Sample moving to vertical position" in m for m in shell.message_printer_calls)
+    assert any(
+        "Sample moving to vertical position" in m
+        for m in shell.message_printer_calls
+    )
 
     mc, shell = _make_mc()
     mc.motors.camera.move_absolute_position = Mock()
@@ -217,7 +237,9 @@ def test_move_to_position_valueerror_aborts() -> None:
     for the vertical and camera axes. The horizontal axis is covered by
     the dedicated reject-and-beep regression gate above."""
     mc, shell = _make_mc()
-    mc.motors.vertical.move_absolute_position = Mock(side_effect=ValueError("over-travel"))
+    mc.motors.vertical.move_absolute_position = Mock(
+        side_effect=ValueError("over-travel"),
+    )
     mc.motors.vertical.get_limit_low = Mock(return_value=0.0)
     mc.motors.vertical.get_limit_high = Mock(return_value=100.0)
     mc.updateUi_move_to_vertical_position()
@@ -225,7 +247,9 @@ def test_move_to_position_valueerror_aborts() -> None:
     assert shell.sig_beep.emit.called
 
     mc, shell = _make_mc()
-    mc.motors.camera.move_absolute_position = Mock(side_effect=ValueError("over-travel"))
+    mc.motors.camera.move_absolute_position = Mock(
+        side_effect=ValueError("over-travel"),
+    )
     mc.motors.camera.get_limit_low = Mock(return_value=0.0)
     mc.motors.camera.get_limit_high = Mock(return_value=100.0)
     mc.updateUi_move_camera_to_position()
@@ -302,7 +326,10 @@ def test_move_sample_to_origin_horizontal_out_of_boundaries() -> None:
     mc.motors.vertical.get_limit_high = Mock(return_value=100.0)
     mc.updateUi_move_sample_to_origin()
     mc.motors.horizontal.move_absolute_position.assert_not_called()
-    assert any("Horizontal origin out of boundaries" in m for m in shell.message_printer_calls)
+    assert any(
+        "Horizontal origin out of boundaries" in m
+        for m in shell.message_printer_calls
+    )
 
 
 def test_move_sample_to_origin_vertical_out_of_boundaries() -> None:
@@ -317,13 +344,18 @@ def test_move_sample_to_origin_vertical_out_of_boundaries() -> None:
     mc.motors.vertical.get_limit_high = Mock(return_value=100.0)
     mc.updateUi_move_sample_to_origin()
     mc.motors.vertical.move_absolute_position.assert_not_called()
-    assert any("Vertical origin out of boundaries" in m for m in shell.message_printer_calls)
+    assert any(
+        "Vertical origin out of boundaries" in m
+        for m in shell.message_printer_calls
+    )
 
 
 def test_move_sample_to_origin_horizontal_valueerror_aborts() -> None:
     """ValueError on horizontal origin move emits sig_message + beep."""
     mc, shell = _make_mc()
-    mc.motors.horizontal.move_absolute_position = Mock(side_effect=ValueError("over-travel"))
+    mc.motors.horizontal.move_absolute_position = Mock(
+        side_effect=ValueError("over-travel"),
+    )
     mc.motors.vertical.move_absolute_position = Mock()
     mc.motors.horizontal.get_origin = Mock(return_value=5.0)
     mc.motors.vertical.get_origin = Mock(return_value=5.0)
@@ -381,7 +413,9 @@ def test_move_camera_to_focus_focus_selected_below_low_boundary() -> None:
 def test_move_camera_to_focus_focus_selected_valueerror_aborts() -> None:
     """focus_selected=True, in-range but HAL raises ValueError -> sig_message + beep."""
     mc, shell = _make_mc()
-    mc.motors.camera.move_absolute_position = Mock(side_effect=ValueError("over-travel"))
+    mc.motors.camera.move_absolute_position = Mock(
+        side_effect=ValueError("over-travel"),
+    )
     shell.focus_selected = True
     mc.motors.camera.get_origin = Mock(return_value=5.0)
     mc.motors.camera.get_limit_low = Mock(return_value=0.0)
@@ -405,7 +439,9 @@ def test_move_camera_to_focus_not_selected_moves_to_default() -> None:
 def test_move_camera_to_focus_not_selected_valueerror_aborts() -> None:
     """focus_selected=False, HAL raises ValueError -> sig_message + beep."""
     mc, shell = _make_mc()
-    mc.motors.camera.move_absolute_position = Mock(side_effect=ValueError("over-travel"))
+    mc.motors.camera.move_absolute_position = Mock(
+        side_effect=ValueError("over-travel"),
+    )
     shell.focus_selected = False
     mc.motors.camera.get_origin = Mock(return_value=5.0)
     mc.updateUi_move_camera_to_focus()
@@ -440,7 +476,9 @@ def test_move_sample_forward_out_of_boundaries_beeps() -> None:
 
 def test_move_sample_forward_valueerror_aborts() -> None:
     mc, shell = _make_mc()
-    mc.motors.horizontal.move_relative_position = Mock(side_effect=ValueError("over-travel"))
+    mc.motors.horizontal.move_relative_position = Mock(
+        side_effect=ValueError("over-travel"),
+    )
     mc.motors.horizontal.get_position = Mock(return_value=5.0)
     mc.motors.horizontal.get_limit_high = Mock(return_value=100.0)
     shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value.return_value = 1.0
@@ -561,7 +599,8 @@ def test_set_horizontal_backward_boundary_sets_limit_low() -> None:
     assert shell.horizontal_backward_boundary_selected is True
 
 
-def test_set_horizontal_backward_boundary_with_forward_already_set_enables_start() -> None:
+def test_set_horizontal_backward_boundary_with_forward_already_set_enables_start(
+) -> None:
     """When horizontal_forward_boundary_selected is True, setting the
     backward boundary enables the start-range button (the if-branch)."""
     mc, shell = _make_mc()
@@ -582,7 +621,8 @@ def test_set_horizontal_forward_boundary_sets_limit_high() -> None:
     assert shell.horizontal_forward_boundary_selected is True
 
 
-def test_set_horizontal_forward_boundary_with_backward_already_set_enables_start() -> None:
+def test_set_horizontal_forward_boundary_with_backward_already_set_enables_start(
+) -> None:
     mc, shell = _make_mc()
     mc.motors.horizontal.set_limit_high = Mock()
     mc.motors.horizontal.get_position = Mock(return_value=7.0)

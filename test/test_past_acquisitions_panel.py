@@ -15,11 +15,14 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QObject  # noqa: E402
-from PySide6.QtWidgets import QScrollArea  # noqa: E402
+from PySide6.QtCore import QObject
+from PySide6.QtWidgets import QScrollArea
+from pytestqt.qtbot import QtBot
 
 
-def test_past_panel_at_stacked_index_6(qtbot, request) -> None:
+def test_past_panel_at_stacked_index_6(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """The dedicated PastAcquisitionsPanel is at stackedPanels index 6,
     wrapped in a QScrollArea(widgetResizable=True)."""
     from _helpers.controller_fixture import make_controller
@@ -42,7 +45,9 @@ def test_past_panel_at_stacked_index_6(qtbot, request) -> None:
     )
 
 
-def test_past_panel_has_browser_table_toggle_refresh(qtbot, request) -> None:
+def test_past_panel_has_browser_table_toggle_refresh(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """The dedicated Past panel owns the past table, the Planned/Past
     toggle, and the Refresh button (moved from the Stack panel)."""
     from _helpers.controller_fixture import make_controller
@@ -61,7 +66,9 @@ def test_past_panel_has_browser_table_toggle_refresh(qtbot, request) -> None:
     assert panel.findChild(QObject, "label_pastStatus") is not None
 
 
-def test_past_panel_toggle_and_refresh_not_in_stack_panel(qtbot, request) -> None:
+def test_past_panel_toggle_and_refresh_not_in_stack_panel(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """The Planned/Past toggle + Refresh button + past table are NOT in
     the Stack panel's AcquisitionTableManager (they moved to the
     dedicated Past panel)."""
@@ -90,7 +97,9 @@ def test_past_panel_toggle_and_refresh_not_in_stack_panel(qtbot, request) -> Non
     )
 
 
-def test_planned_queue_stays_in_stack_panel(qtbot, request) -> None:
+def test_planned_queue_stays_in_stack_panel(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """The Planned queue QTableWidget + add/edit/remove/start-queue
     controls stay in the Stack panel's AcquisitionTableManager."""
     from _helpers.controller_fixture import make_controller
@@ -108,12 +117,15 @@ def test_planned_queue_stays_in_stack_panel(qtbot, request) -> None:
     assert table_manager.findChild(QObject, "pushButton_startQueue") is not None
 
 
-def test_past_panel_owns_async_scan_worker(qtbot, request) -> None:
+def test_past_panel_owns_async_scan_worker(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """The PastAcquisitionsPanel owns a PastAcquisitionsBrowser with the
     async-scan pattern intact (QThread + moveToThread + _ScanWorker).
     The browser's start_scan_async + _clear_thread_refs teardown are
     present."""
     from _helpers.controller_fixture import make_controller
+
     from lightsheet.gui.panels.past_acquisitions_browser import (
         PastAcquisitionsBrowser,
         _ScanWorker,
@@ -131,7 +143,9 @@ def test_past_panel_owns_async_scan_worker(qtbot, request) -> None:
     assert _ScanWorker is not None
 
 
-def test_refresh_button_triggers_start_scan_async(qtbot, request) -> None:
+def test_refresh_button_triggers_start_scan_async(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """Clicking the Refresh button triggers the browser's
     start_scan_async (the async scan is offloaded to a QThread so the
     GUI thread + E-stop kill path stay responsive)."""
@@ -153,10 +167,13 @@ def test_refresh_button_triggers_start_scan_async(qtbot, request) -> None:
         )
 
 
-def test_past_panel_scan_finished_populates_table(qtbot, request) -> None:
+def test_past_panel_scan_finished_populates_table(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """When the browser emits sig_scan_finished, the panel populates the
     past table in one batch and emits past_acquisitions_scan_finished."""
     from _helpers.controller_fixture import make_controller
+
     from lightsheet.gui.panels.past_acquisitions_browser import (
         PastAcquisitionEntry,
     )
@@ -210,7 +227,9 @@ def test_past_panel_scan_finished_populates_table(qtbot, request) -> None:
     assert len(received) == 2
 
 
-def test_past_panel_empty_scan_shows_empty_copy(qtbot, request) -> None:
+def test_past_panel_empty_scan_shows_empty_copy(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """When the browser emits sig_scan_finished with no entries, the
     panel shows the empty-state copy and hides the table."""
     from _helpers.controller_fixture import make_controller
@@ -231,10 +250,13 @@ def test_past_panel_empty_scan_shows_empty_copy(qtbot, request) -> None:
     assert "No past acquisitions" in panel.ui.label_pastStatus.text()
 
 
-def test_past_panel_wavelength_normalization(qtbot, request) -> None:
+def test_past_panel_wavelength_normalization(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """The past table normalizes 640 -> 647 in the Channel column
     (display only — the underlying file is unchanged)."""
     from _helpers.controller_fixture import make_controller
+
     from lightsheet.gui.panels.past_acquisitions_browser import (
         PastAcquisitionEntry,
     )

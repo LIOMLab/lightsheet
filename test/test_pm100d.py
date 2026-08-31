@@ -17,6 +17,7 @@ This is a BEHAVIOR test (AGENTS.md §5).
 """
 
 import sys
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -117,7 +118,7 @@ def test_read_power_returns_value_on_success() -> None:
     meter._dll = MagicMock()
     meter._session = 1
 
-    def fake_meas_power(session, power_ref, channel):
+    def fake_meas_power(session: Any, power_ref: Any, channel: Any) -> int:
         power_ref._obj.value = 0.0042
         return 0
 
@@ -269,7 +270,7 @@ def test_find_resource_raises_when_no_resources() -> None:
     meter = PM100D()
     meter._dll = MagicMock()
 
-    def fake_find_rsrc(_vi, count_ref):
+    def fake_find_rsrc(_vi: Any, count_ref: Any) -> int:
         count_ref._obj.value = 0
         return 0
 
@@ -284,11 +285,11 @@ def test_find_resource_returns_name_on_success() -> None:
     meter = PM100D()
     meter._dll = MagicMock()
 
-    def fake_find_rsrc(_vi, count_ref):
+    def fake_find_rsrc(_vi: Any, count_ref: Any) -> int:
         count_ref._obj.value = 1
         return 0
 
-    def fake_get_rsrc_name(_vi, _idx, buf):
+    def fake_get_rsrc_name(_vi: Any, _idx: Any, buf: Any) -> int:
         # buf is a ctypes string buffer; write the resource name into it.
         name = b"USB0::0x1313::PM100D"
         buf.raw = name + b"\x00" * (len(buf.raw) - len(name))
@@ -306,7 +307,7 @@ def test_find_resource_raises_when_get_rsrc_name_fails() -> None:
     meter = PM100D()
     meter._dll = MagicMock()
 
-    def fake_find_rsrc(_vi, count_ref):
+    def fake_find_rsrc(_vi: Any, count_ref: Any) -> int:
         count_ref._obj.value = 1
         return 0
 
@@ -342,7 +343,7 @@ def test_open_succeeds_and_sets_wavelength() -> None:
     meter._load_dll = MagicMock(return_value=fake_dll)
     meter._find_resource = MagicMock(return_value="USB0::PM100D")
 
-    def fake_init(_rsrc, _id_query, _reset, session_ref):
+    def fake_init(_rsrc: Any, _id_query: Any, _reset: Any, session_ref: Any) -> int:
         session_ref._obj.value = 99
         return 0
 

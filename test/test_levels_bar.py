@@ -11,12 +11,18 @@ QMouseEvent sequences.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
+from pytestqt.qtbot import QtBot
+
+if TYPE_CHECKING:
+    from lightsheet.gui.panels.levels_bar import LevelsBar
 
 pytest.importorskip("PySide6")
 
 
-def _make_bar(qtbot):
+def _make_bar(qtbot: QtBot) -> LevelsBar:
     from lightsheet.gui.panels.levels_bar import LevelsBar
 
     bar = LevelsBar()
@@ -27,14 +33,14 @@ def _make_bar(qtbot):
     return bar
 
 
-def test_levels_bar_is_qwidget_subclass(qtbot) -> None:
+def test_levels_bar_is_qwidget_subclass(qtbot: QtBot) -> None:
     from PySide6.QtWidgets import QWidget
 
     bar = _make_bar(qtbot)
     assert isinstance(bar, QWidget)
 
 
-def test_levels_bar_default_range_and_window(qtbot) -> None:
+def test_levels_bar_default_range_and_window(qtbot: QtBot) -> None:
     """Default range is 0-65535 (uint16); window defaults to the full range."""
     bar = _make_bar(qtbot)
     assert bar.range_min == 0
@@ -46,7 +52,7 @@ def test_levels_bar_default_range_and_window(qtbot) -> None:
     assert bar.levels_max == 65535
 
 
-def test_levels_bar_has_sig_levels_changed(qtbot) -> None:
+def test_levels_bar_has_sig_levels_changed(qtbot: QtBot) -> None:
     bar = _make_bar(qtbot)
     received: list[tuple[int, int]] = []
     bar.sig_levelsChanged.connect(lambda lo, hi: received.append((lo, hi)))
@@ -54,7 +60,7 @@ def test_levels_bar_has_sig_levels_changed(qtbot) -> None:
     assert (500, 65535) in received
 
 
-def test_levels_bar_has_sig_range_changed(qtbot) -> None:
+def test_levels_bar_has_sig_range_changed(qtbot: QtBot) -> None:
     """sig_rangeChanged is Signal(int, int) and fires on set_data_range."""
     bar = _make_bar(qtbot)
     received: list[tuple[int, int]] = []
@@ -65,7 +71,9 @@ def test_levels_bar_has_sig_range_changed(qtbot) -> None:
     assert (0, 4000) in received
 
 
-def test_set_data_range_clamps_user_owned_range_into_narrowed_bounds(qtbot) -> None:
+def test_set_data_range_clamps_user_owned_range_into_narrowed_bounds(
+    qtbot: QtBot,
+) -> None:
     """When the operator has dragged a RANGE handle (_range_user_owned), a
     subsequent dtype change that narrows the data bounds must clamp the
     user-owned range into the new bounds. _value_to_x maps handle positions
@@ -82,7 +90,9 @@ def test_set_data_range_clamps_user_owned_range_into_narrowed_bounds(qtbot) -> N
     bar.sig_rangeChanged.connect(lambda lo, hi: range_events.append((lo, hi)))
     # Dtype change narrows the data bounds to uint8 (0-255).
     bar.set_data_range(0, 255)
-    assert bar.range_max <= 255, f"range_max {bar.range_max} not clamped into uint8 bounds"
+    assert bar.range_max <= 255, (
+        f"range_max {bar.range_max} not clamped into uint8 bounds"
+    )
     assert bar.range_min >= 0
     # The range was clamped, so sig_rangeChanged fired with the new bounds.
     assert any(hi <= 255 for _, hi in range_events), (
@@ -90,7 +100,7 @@ def test_set_data_range_clamps_user_owned_range_into_narrowed_bounds(qtbot) -> N
     )
 
 
-def test_levels_bar_min_size_and_size_policy(qtbot) -> None:
+def test_levels_bar_min_size_and_size_policy(qtbot: QtBot) -> None:
     from PySide6.QtWidgets import QSizePolicy
 
     bar = _make_bar(qtbot)
@@ -103,7 +113,7 @@ def test_levels_bar_min_size_and_size_policy(qtbot) -> None:
     assert sp.verticalStretch() == 0
 
 
-def _press_at(bar, x, y=32):
+def _press_at(bar: LevelsBar, x: int, y: int = 32) -> None:
     """Synthesize a left-button press at widget-local coords (x, y)."""
     from PySide6.QtCore import QEvent, QPointF, Qt
     from PySide6.QtGui import QMouseEvent
@@ -121,19 +131,19 @@ def _press_at(bar, x, y=32):
     QApplication.sendEvent(bar, evt)
 
 
-def _window_row_y(bar) -> int:
+def _window_row_y(bar: LevelsBar) -> int:
     """The y pixel center of the WINDOW + central handle row."""
     _range_y, window_y = bar._row_y()
     return window_y
 
 
-def _range_row_y(bar) -> int:
+def _range_row_y(bar: LevelsBar) -> int:
     """The y pixel center of the RANGE handle row (upper half)."""
     range_y, _window_y = bar._row_y()
     return range_y
 
 
-def _move_to(bar, x, y=32):
+def _move_to(bar: LevelsBar, x: int, y: int = 32) -> None:
     from PySide6.QtCore import QEvent, QPointF, Qt
     from PySide6.QtGui import QMouseEvent
     from PySide6.QtWidgets import QApplication
@@ -150,7 +160,7 @@ def _move_to(bar, x, y=32):
     QApplication.sendEvent(bar, evt)
 
 
-def _release(bar):
+def _release(bar: LevelsBar) -> None:
     from PySide6.QtCore import QEvent, QPointF, Qt
     from PySide6.QtGui import QMouseEvent
     from PySide6.QtWidgets import QApplication
@@ -170,7 +180,7 @@ def _release(bar):
 # -- set_data_range behavior ----------------------------------------------
 
 
-def test_set_data_range_sets_range_and_clamps_window(qtbot) -> None:
+def test_set_data_range_sets_range_and_clamps_window(qtbot: QtBot) -> None:
     """set_data_range(0, 65535) sets the range; window clamps into it."""
     bar = _make_bar(qtbot)
     bar.set_data_range(0, 65535)
@@ -180,7 +190,7 @@ def test_set_data_range_sets_range_and_clamps_window(qtbot) -> None:
     assert 0 <= bar.window_min <= bar.window_max <= 65535
 
 
-def test_set_data_range_clamps_existing_window_in(qtbot) -> None:
+def test_set_data_range_clamps_existing_window_in(qtbot: QtBot) -> None:
     """set_data_range(100, 500) with prior window (200, 300) keeps it;
     with prior window (50, 600) clamps to (100, 500)."""
     bar = _make_bar(qtbot)
@@ -206,7 +216,7 @@ def test_set_data_range_clamps_existing_window_in(qtbot) -> None:
     )
 
 
-def test_set_data_range_emits_sig_range_changed(qtbot) -> None:
+def test_set_data_range_emits_sig_range_changed(qtbot: QtBot) -> None:
     bar = _make_bar(qtbot)
     received: list[tuple[int, int]] = []
     bar.sig_rangeChanged.connect(lambda lo, hi: received.append((lo, hi)))
@@ -214,7 +224,7 @@ def test_set_data_range_emits_sig_range_changed(qtbot) -> None:
     assert (100, 500) in received
 
 
-def test_hardcoded_2000_bound_is_gone(qtbot) -> None:
+def test_hardcoded_2000_bound_is_gone(qtbot: QtBot) -> None:
     """The old LEVELS_MAX_BOUND=2000 would have clipped set_data_range(0, 65535).
     The new widget accepts the full uint16 range."""
     bar = _make_bar(qtbot)
@@ -225,7 +235,7 @@ def test_hardcoded_2000_bound_is_gone(qtbot) -> None:
 # -- _hit_handle behavior -------------------------------------------------
 
 
-def test_hit_handle_returns_none_outside_all_radii(qtbot) -> None:
+def test_hit_handle_returns_none_outside_all_radii(qtbot: QtBot) -> None:
     """A click far from every handle returns None."""
     bar = _make_bar(qtbot)
     bar.set_data_range(0, 1000)
@@ -236,7 +246,7 @@ def test_hit_handle_returns_none_outside_all_radii(qtbot) -> None:
     assert bar._hit_handle(250) is None
 
 
-def test_hit_handle_returns_handle_names(qtbot) -> None:
+def test_hit_handle_returns_handle_names(qtbot: QtBot) -> None:
     """Pressing within ±8px of each handle returns its name."""
     bar = _make_bar(qtbot)
     bar.set_data_range(0, 1000)
@@ -250,7 +260,7 @@ def test_hit_handle_returns_handle_names(qtbot) -> None:
     assert bar._hit_handle(120) == "center"
 
 
-def test_press_near_center_starts_center_drag(qtbot) -> None:
+def test_press_near_center_starts_center_drag(qtbot: QtBot) -> None:
     """Pressing within ±8px of the central handle starts a 'center' drag."""
     bar = _make_bar(qtbot)
     bar.set_data_range(0, 1000)
@@ -265,7 +275,7 @@ def test_press_near_center_starts_center_drag(qtbot) -> None:
 # -- central-handle drag --------------------------------------------------
 
 
-def test_center_drag_preserves_width_and_shifts(qtbot) -> None:
+def test_center_drag_preserves_width_and_shifts(qtbot: QtBot) -> None:
     """From window (200, 400) (width 200, center 300), dragging center to
     500 yields window (400, 600) (width preserved)."""
     bar = _make_bar(qtbot)
@@ -287,7 +297,7 @@ def test_center_drag_preserves_width_and_shifts(qtbot) -> None:
     assert any(lo == 400 and hi == 600 for (lo, hi) in received)
 
 
-def test_center_drag_clamps_at_range_max(qtbot) -> None:
+def test_center_drag_clamps_at_range_max(qtbot: QtBot) -> None:
     """Dragging center past range_max shifts both so window_max == range_max."""
     bar = _make_bar(qtbot)
     bar.set_data_range(0, 1000)
@@ -305,7 +315,7 @@ def test_center_drag_clamps_at_range_max(qtbot) -> None:
     assert bar.window_max - bar.window_min == 200
 
 
-def test_center_drag_clamps_at_range_min(qtbot) -> None:
+def test_center_drag_clamps_at_range_min(qtbot: QtBot) -> None:
     """Dragging center past range_min shifts both so window_min == range_min."""
     bar = _make_bar(qtbot)
     bar.set_data_range(0, 1000)
@@ -325,7 +335,7 @@ def test_center_drag_clamps_at_range_min(qtbot) -> None:
 # -- WINDOW handle drag ---------------------------------------------------
 
 
-def test_drag_window_min_handle(qtbot) -> None:
+def test_drag_window_min_handle(qtbot: QtBot) -> None:
     """Dragging the window_min handle updates window_min and emits
     sig_levelsChanged (not sig_rangeChanged)."""
     bar = _make_bar(qtbot)
@@ -353,7 +363,7 @@ def test_drag_window_min_handle(qtbot) -> None:
     assert range_received == []
 
 
-def test_drag_window_max_handle(qtbot) -> None:
+def test_drag_window_max_handle(qtbot: QtBot) -> None:
     bar = _make_bar(qtbot)
     bar.set_data_range(0, 1000)
     bar.window_min = 200
@@ -371,7 +381,7 @@ def test_drag_window_max_handle(qtbot) -> None:
     assert any(hi == 500 for (_lo, hi) in received)
 
 
-def test_window_handle_drag_clamps_to_range(qtbot) -> None:
+def test_window_handle_drag_clamps_to_range(qtbot: QtBot) -> None:
     """Dragging window_min below range_min clamps to range_min."""
     bar = _make_bar(qtbot)
     bar.set_data_range(0, 1000)
@@ -385,7 +395,7 @@ def test_window_handle_drag_clamps_to_range(qtbot) -> None:
     )
 
 
-def test_window_handles_swap_when_dragged_past(qtbot) -> None:
+def test_window_handles_swap_when_dragged_past(qtbot: QtBot) -> None:
     """Dragging window_min past window_max swaps them."""
     bar = _make_bar(qtbot)
     bar.set_data_range(0, 1000)
@@ -407,7 +417,7 @@ def test_window_handles_swap_when_dragged_past(qtbot) -> None:
 # -- RANGE handle drag ----------------------------------------------------
 
 
-def test_drag_range_min_handle(qtbot) -> None:
+def test_drag_range_min_handle(qtbot: QtBot) -> None:
     """Dragging the range_min handle updates range_min and emits
     sig_rangeChanged."""
     bar = _make_bar(qtbot)
@@ -428,7 +438,7 @@ def test_drag_range_min_handle(qtbot) -> None:
     assert any(lo == 250 for (lo, _hi) in range_received)
 
 
-def test_range_handles_cannot_cross(qtbot) -> None:
+def test_range_handles_cannot_cross(qtbot: QtBot) -> None:
     """Dragging range_min past range_max clamps range_min to range_max."""
     bar = _make_bar(qtbot)
     bar.set_data_range(0, 1000)
@@ -448,7 +458,7 @@ def test_range_handles_cannot_cross(qtbot) -> None:
 # -- paint + misc ---------------------------------------------------------
 
 
-def test_paint_event_renders_without_error(qtbot) -> None:
+def test_paint_event_renders_without_error(qtbot: QtBot) -> None:
     """paintEvent draws 5 handles on the gradient without error at 320x64."""
     bar = _make_bar(qtbot)
     bar.set_data_range(0, 65535)
@@ -462,7 +472,7 @@ def test_paint_event_renders_without_error(qtbot) -> None:
     assert bar.height() == 64
 
 
-def test_click_far_from_handle_does_not_grab(qtbot) -> None:
+def test_click_far_from_handle_does_not_grab(qtbot: QtBot) -> None:
     """A click >8px from every handle does NOT grab any handle."""
     bar = _make_bar(qtbot)
     bar.set_data_range(0, 1000)

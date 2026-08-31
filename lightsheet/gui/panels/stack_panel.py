@@ -1,25 +1,11 @@
 """StackPanelWidget — per-panel widget/controller for stack acquisition setup.
 
-Owns the stack updateUi_* slots grouped by concern: stack starting/ending
-point selection and number-of-planes calculation. Reads
-``self.ui.<objectName>`` for its widgets and ``self._shell.motors`` /
-``self._shell.stack_*`` for shell-owned state. Emits through
-``self._shell.sig_*``.
-
-The boundary-set boolean migrates from checkboxes to shell flags
-``self._shell.stack_first_plane_set`` / ``stack_last_plane_set``. The Set
-button populates the spinbox from the motor position; the operator can also
-type a value directly. Manual entry validates against the motor travel
-limits and rejects with a beep on out-of-range (the worker's per-plane
-ValueError catch stays as the physical-safety backstop).
-
-The adaptive configuration group (enable toggle + 13 bounded spinboxes +
-shutter hint) is an opt-in overlay on top of the fixed-exposure stack.
-Bounds are pre-sampled on the GUI thread in ``build_adaptive_config`` and
-passed as a frozen ``AdaptiveConfig`` to the StackWorker constructor — the
-worker thread never reads ``ui.*`` (the cross-thread widget-access
-prohibition). Invalid min/max pairs beep + emit the documented message +
-revert + latch fixed-fallback until a later valid edit clears the latch.
+Owns the stack updateUi_* slots: stack starting/ending point selection and
+number-of-planes calculation. The adaptive configuration group (enable
+toggle + 13 bounded spinboxes + shutter hint) is an opt-in overlay on top
+of the fixed-exposure stack. Bounds are pre-sampled on the GUI thread in
+``build_adaptive_config`` and passed as a frozen ``AdaptiveConfig`` to the
+StackWorker constructor — the worker thread never reads ``ui.*``.
 """
 
 from __future__ import annotations
@@ -39,28 +25,25 @@ if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
-# The exact operator-facing copy for an invalid adaptive bound pair
-# (UI-SPEC §Copywriting Contract). Emitted via sig_message + sig_beep;
-# the offending spinbox reverts to its prior value and the latch forces
-# fixed-fallback until a later valid edit clears it.
+# The exact operator-facing copy for an invalid adaptive bound pair.
+# Emitted via sig_message + sig_beep; the offending spinbox reverts to its
+# prior value and the latch forces fixed-fallback until a later valid edit.
 _ADAPTIVE_BOUND_INVALID_MSG = (
     "Adaptive bound invalid: {field} minimum is greater than maximum. "
     "Not applied — the stack will run with fixed exposure/power. "
     "Adjust the bounds or uncheck Adaptive Control."
 )
 
-# The shutter-mode hint copy (UI-SPEC §Shutter-mode coupling).
+# The shutter-mode hint copy.
 _HINT_ROLLING = "Rolling shutter — exposure bound in milliseconds."
-_HINT_LIGHTSHEET = (
-    "Lightsheet shutter — exposure bound in exposed lines × line time."
-)
+_HINT_LIGHTSHEET = "Lightsheet shutter — exposure bound in exposed lines x line time."
 
 
 class StackPanelWidget(QWidget):
     """Stack acquisition setup panel — owns stack starting/ending point
     and number-of-planes calculation slots."""
 
-    def __init__(self, shell: "Controller_MainWindow") -> None:
+    def __init__(self, shell: Controller_MainWindow) -> None:
         super().__init__()
         self._shell = shell
         self.ui = Ui_StackPanel()
@@ -107,9 +90,7 @@ class StackPanelWidget(QWidget):
         # Wire the enable toggle → fields-container visibility. The
         # group box title row stays visible (the affordance) while only
         # the fields container is hidden on toggle-off.
-        self.ui.checkBox_adaptiveEnable.toggled.connect(
-            self._on_adaptive_toggled
-        )
+        self.ui.checkBox_adaptiveEnable.toggled.connect(self._on_adaptive_toggled)
         # Initialize the fields container visibility from the toggle
         # state (default unchecked → hidden).
         self.ui.widget_adaptiveFields.setVisible(
@@ -262,7 +243,7 @@ class StackPanelWidget(QWidget):
         FieldSpec) to micrometres (the internal unit the worker + motor HAL
         use). Safety-critical: ``stack_starting_plane`` /
         ``stack_ending_plane`` MUST stay µm — a missing conversion here is a
-        1000× motor over-travel error."""
+        1000x motor over-travel error."""
         return value * 1000.0
 
     def _step_display_to_um(self, value: float) -> float:
@@ -275,16 +256,13 @@ class StackPanelWidget(QWidget):
     def updateUi_set_number_of_planes(self) -> None:
         """Calculates the number of planes that will be saved in the stack acquisition"""  # noqa: E501
         if self.ui.doubleSpinBox_acqPlaneStepSize.value() != 0:
-            if (
-                self._shell.stack_first_plane_set
-                and self._shell.stack_last_plane_set
-            ):
+            if self._shell.stack_first_plane_set and self._shell.stack_last_plane_set:
                 # Read the boundary values from the spinboxes (the
                 # operator may have typed them directly) and convert to
                 # μm (the internal unit the worker + motor HAL use).
-                # Positions display in mm → ×1000; the step displays in
+                # Positions display in mm → x1000; the step displays in
                 # µm → pass-through. Mixing the two converters would feed
-                # a mm value to the worker as µm (1000× motor error).
+                # a mm value to the worker as µm (1000x motor error).
                 self._shell.stack_starting_plane = self._position_display_to_um(
                     self.ui.doubleSpinBox_acqFirstPlane.value()
                 )
@@ -294,14 +272,23 @@ class StackPanelWidget(QWidget):
                 step_um = self._step_display_to_um(
                     self.ui.doubleSpinBox_acqPlaneStepSize.value()
                 )
-                self._shell.number_of_planes = int(np.ceil(
-                    abs(
-                        (self._shell.stack_ending_plane - self._shell.stack_starting_plane)  # noqa: E501
-                        / step_um
+                self._shell.number_of_planes = int(
+                    np.ceil(
+                        abs(
+                            (
+                                self._shell.stack_ending_plane
+                                - self._shell.stack_starting_plane
+                            )
+                            / step_um
+                        )
                     )
-                ))
-                self._shell.number_of_planes += 1  # Takes into account the initial plane  # noqa: E501
-                self.ui.label_acqNumberOfPlanes.setText(str(self._shell.number_of_planes))
+                )
+                self._shell.number_of_planes += (
+                    1  # Takes into account the initial plane
+                )
+                self.ui.label_acqNumberOfPlanes.setText(
+                    str(self._shell.number_of_planes)
+                )
         else:
             self._shell.sig_message.emit("Set a non-zero value to plane step")
         # Always re-render the summary so the operator sees the current
@@ -316,7 +303,7 @@ class StackPanelWidget(QWidget):
         step = self.ui.doubleSpinBox_acqPlaneStepSize.value()
         # Positions display in mm (FieldSpec unit); the plane step displays
         # in µm. Separate unit labels so the summary does not relabel a mm
-        # value as µm (the pre-reconciliation 1000× display error).
+        # value as µm (the pre-reconciliation 1000x display error).
         pos_unit = "mm"
         step_unit = "\u03bcm"
 
@@ -339,7 +326,7 @@ class StackPanelWidget(QWidget):
         start = self.ui.doubleSpinBox_acqFirstPlane.value()
         end = self.ui.doubleSpinBox_acqLastPlane.value()
         n_planes = int(getattr(self._shell, "number_of_planes", 0))
-        # Estimated time: per-plane time × #planes. The per-plane time is
+        # Estimated time: per-plane time x #planes. The per-plane time is
         # advisory — read from the camera exposure if available, else a
         # sensible default. Estimates are advisory (the actual acquisition
         # time depends on real hardware behavior).
@@ -363,7 +350,7 @@ class StackPanelWidget(QWidget):
         if multi_channel:
             est_time_s = est_time_s * 2
             est_size_mb = est_size_mb * 2
-            ch_clause = f"2 ch × {n_planes} planes | "
+            ch_clause = f"2 ch x {n_planes} planes | "
         else:
             ch_clause = ""
         mm, ss = divmod(int(est_time_s), 60)
@@ -378,8 +365,9 @@ class StackPanelWidget(QWidget):
         """Advisory per-plane acquisition time in seconds. Falls back to a
         sensible default when the camera/exposure is unavailable."""
         try:
-            exposure = float(self._shell.acquisition_panel.ui
-                             .doubleSpinBox_cameraExposureTime.value())
+            exposure = float(
+                self._shell.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.value()
+            )
             # Exposure is in ms; add overhead for galvo/ETL scan + motor
             # settle. 1.5x exposure is a rough advisory factor.
             return exposure / 1000.0 * 1.5
@@ -387,8 +375,8 @@ class StackPanelWidget(QWidget):
             return 0.5
 
     def _estimate_stack_size_mb(self, n_planes: int) -> float:
-        """Advisory stack size in MB. Uses the camera frame dims × 2 bytes
-        (uint16) when available; falls back to a 2000×2000 default."""
+        """Advisory stack size in MB. Uses the camera frame dims x 2 bytes
+        (uint16) when available; falls back to a 2000x2000 default."""
         try:
             rows = int(getattr(self._shell.camera, "rows", 2000))
             cols = int(getattr(self._shell.camera, "columns", 2000))
@@ -423,16 +411,20 @@ class StackPanelWidget(QWidget):
     # for the error message).
     _ADAPTIVE_BOUND_PAIRS: ClassVar[dict[str, tuple[str, str]]] = {
         "doubleSpinBox_adaptiveMinExposure": (
-            "doubleSpinBox_adaptiveMaxExposure", "exposure",
+            "doubleSpinBox_adaptiveMaxExposure",
+            "exposure",
         ),
         "doubleSpinBox_adaptiveLaser1MinPower": (
-            "doubleSpinBox_adaptiveLaser1MaxPower", "Laser1 power",
+            "doubleSpinBox_adaptiveLaser1MaxPower",
+            "Laser1 power",
         ),
         "doubleSpinBox_adaptiveLaser2MinPower": (
-            "doubleSpinBox_adaptiveLaser2MaxPower", "Laser2 power",
+            "doubleSpinBox_adaptiveLaser2MaxPower",
+            "Laser2 power",
         ),
         "doubleSpinBox_adaptiveTargetBandLo": (
-            "doubleSpinBox_adaptiveTargetBandHi", "target band",
+            "doubleSpinBox_adaptiveTargetBandHi",
+            "target band",
         ),
     }
 
@@ -482,7 +474,8 @@ class StackPanelWidget(QWidget):
             "Target Band Lo": ("doubleSpinBox_adaptiveTargetBandLo", "float"),
             "Target Band Hi": ("doubleSpinBox_adaptiveTargetBandHi", "float"),
             "Reacquire Threshold": (
-                "doubleSpinBox_adaptiveReacquireThreshold", "float",
+                "doubleSpinBox_adaptiveReacquireThreshold",
+                "float",
             ),
             "Block Size N": ("doubleSpinBox_adaptiveBlockSizeN", "float"),
             "Kp": ("doubleSpinBox_adaptiveKp", "float"),
@@ -517,8 +510,10 @@ class StackPanelWidget(QWidget):
         if not isinstance(lasers, (tuple, list)) or len(lasers) < 2:
             return
         for i, sb_name in enumerate(
-            ("doubleSpinBox_adaptiveLaser1MaxPower",
-             "doubleSpinBox_adaptiveLaser2MaxPower")
+            (
+                "doubleSpinBox_adaptiveLaser1MaxPower",
+                "doubleSpinBox_adaptiveLaser2MaxPower",
+            )
         ):
             sb = getattr(self.ui, sb_name, None)
             if sb is None:
@@ -538,8 +533,10 @@ class StackPanelWidget(QWidget):
         # narrowed max (the pair validator catches it, but the soft
         # range should match).
         for i, sb_name in enumerate(
-            ("doubleSpinBox_adaptiveLaser1MinPower",
-             "doubleSpinBox_adaptiveLaser2MinPower")
+            (
+                "doubleSpinBox_adaptiveLaser1MinPower",
+                "doubleSpinBox_adaptiveLaser2MinPower",
+            )
         ):
             sb = getattr(self.ui, sb_name, None)
             if sb is None:
@@ -636,10 +633,10 @@ class StackPanelWidget(QWidget):
         is unchecked or the fixed-fallback latch is set).
 
         Normalizes the GUI values to the worker's canonical units:
-        - Exposure: ms → seconds (×1e-3) in Rolling; lines × line_time
-          (µs × 1e-6) → seconds in Lightsheet.
+        - Exposure: ms → seconds (x1e-3) in Rolling; lines x line_time
+          (µs x 1e-6) → seconds in Lightsheet.
         - Power: mW, narrowed to the live laser maxima.
-        - Target band / reacquire threshold: % → fraction (×1e-2).
+        - Target band / reacquire threshold: % → fraction (x1e-2).
         - Block size N, Kp, Ki, Pilot Count: pass-through.
 
         The frozen dataclass is safe to share across threads (immutable)
@@ -671,9 +668,9 @@ class StackPanelWidget(QWidget):
             sb = getattr(self.ui, sb_name)
             v = float(sb.value())
             if mode == "Lightsheet":
-                # lines × line_time(µs) × 1e-6 = seconds
+                # lines x line_time(µs) x 1e-6 = seconds
                 return v * line_time_us * 1e-6
-            # Rolling — ms × 1e-3 = seconds
+            # Rolling — ms x 1e-3 = seconds
             return v * 1e-3
 
         min_exp_s = _exposure_to_seconds("doubleSpinBox_adaptiveMinExposure")

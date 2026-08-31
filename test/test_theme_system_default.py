@@ -17,17 +17,19 @@ Verifies the BreezeStyleSheets integration that replaced qdarkstyle:
 - qdarkstyle is no longer a project dependency.
 """
 
-import os
-import sys
+from __future__ import annotations
+
+from pathlib import Path
+from types import ModuleType
 
 import pytest
+from pytest import FixtureRequest, MonkeyPatch
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication
-
 
 # ---------------------------------------------------------------------------
 # Helpers — import the theme resolution + stylesheet loading helpers from
@@ -36,7 +38,7 @@ from PySide6.QtWidgets import QApplication
 # ---------------------------------------------------------------------------
 
 
-def _import_theme_module():
+def _import_theme_module() -> ModuleType:
     """Import the lightsheet.__main__ module and return it.
 
     ``lightsheet.__main__`` defers its PySide6 / controller imports to inside
@@ -60,7 +62,7 @@ def _reset_app_stylesheet(app: QApplication) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_load_breeze_stylesheet_light_non_empty(qtbot) -> None:
+def test_load_breeze_stylesheet_light_non_empty(qtbot: QtBot) -> None:
     m = _import_theme_module()
     sheet = m._load_breeze_stylesheet("light")
     assert isinstance(sheet, str)
@@ -68,7 +70,7 @@ def test_load_breeze_stylesheet_light_non_empty(qtbot) -> None:
     assert "Breeze" in sheet or "breeze" in sheet.lower()
 
 
-def test_load_breeze_stylesheet_dark_non_empty(qtbot) -> None:
+def test_load_breeze_stylesheet_dark_non_empty(qtbot: QtBot) -> None:
     m = _import_theme_module()
     sheet = m._load_breeze_stylesheet("dark")
     assert isinstance(sheet, str)
@@ -80,7 +82,7 @@ def test_load_breeze_stylesheet_dark_non_empty(qtbot) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_set_app_stylesheet_dark_applied(qtbot) -> None:
+def test_set_app_stylesheet_dark_applied(qtbot: QtBot) -> None:
     m = _import_theme_module()
     app = QApplication.instance()
     _reset_app_stylesheet(app)
@@ -90,7 +92,7 @@ def test_set_app_stylesheet_dark_applied(qtbot) -> None:
     assert "Breeze" in app.styleSheet() or "breeze" in app.styleSheet().lower()
 
 
-def test_set_app_stylesheet_light_applied(qtbot) -> None:
+def test_set_app_stylesheet_light_applied(qtbot: QtBot) -> None:
     m = _import_theme_module()
     app = QApplication.instance()
     _reset_app_stylesheet(app)
@@ -98,7 +100,7 @@ def test_set_app_stylesheet_light_applied(qtbot) -> None:
     assert app.styleSheet() != "", "light stylesheet was not applied"
 
 
-def test_set_app_stylesheet_light_distinct_from_dark(qtbot) -> None:
+def test_set_app_stylesheet_light_distinct_from_dark(qtbot: QtBot) -> None:
     m = _import_theme_module()
     app = QApplication.instance()
     _reset_app_stylesheet(app)
@@ -120,7 +122,7 @@ def test_set_app_stylesheet_light_distinct_from_dark(qtbot) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_color_scheme_to_theme_mapping(qtbot) -> None:
+def test_color_scheme_to_theme_mapping(qtbot: QtBot) -> None:
     """The pure 1-line mapping function covers all three Qt.ColorScheme
     inputs in a single collected test (Dark -> dark, Light -> light,
     Unknown -> dark fallback)."""
@@ -130,7 +132,9 @@ def test_color_scheme_to_theme_mapping(qtbot) -> None:
     assert m._color_scheme_to_theme(Qt.ColorScheme.Unknown) == "dark"
 
 
-def test_system_theme_reads_color_scheme(qtbot, monkeypatch) -> None:
+def test_system_theme_reads_color_scheme(
+    qtbot: QtBot, monkeypatch: MonkeyPatch
+) -> None:
     # _system_theme delegates to _color_scheme_to_theme after reading
     # QGuiApplication.styleHints().colorScheme(). Patch the reader to verify
     # the delegation without depending on the platform honoring
@@ -148,7 +152,9 @@ def test_system_theme_reads_color_scheme(qtbot, monkeypatch) -> None:
     assert m._system_theme() == "light"
 
 
-def test_set_app_stylesheet_system_follows_dark(qtbot, monkeypatch) -> None:
+def test_set_app_stylesheet_system_follows_dark(
+    qtbot: QtBot, monkeypatch: MonkeyPatch
+) -> None:
     m = _import_theme_module()
     app = QApplication.instance()
     _reset_app_stylesheet(app)
@@ -159,7 +165,9 @@ def test_set_app_stylesheet_system_follows_dark(qtbot, monkeypatch) -> None:
     assert app.styleSheet() == m._load_breeze_stylesheet("dark")
 
 
-def test_set_app_stylesheet_system_follows_light(qtbot, monkeypatch) -> None:
+def test_set_app_stylesheet_system_follows_light(
+    qtbot: QtBot, monkeypatch: MonkeyPatch
+) -> None:
     m = _import_theme_module()
     app = QApplication.instance()
     _reset_app_stylesheet(app)
@@ -174,7 +182,9 @@ def test_set_app_stylesheet_system_follows_light(qtbot, monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_theme_system_uses_color_scheme(qtbot, monkeypatch) -> None:
+def test_resolve_theme_system_uses_color_scheme(
+    qtbot: QtBot, monkeypatch: MonkeyPatch
+) -> None:
     m = _import_theme_module()
     monkeypatch.setattr(m, "_system_theme", lambda: "dark")
     assert m._resolve_theme("system") == "dark"
@@ -182,20 +192,22 @@ def test_resolve_theme_system_uses_color_scheme(qtbot, monkeypatch) -> None:
     assert m._resolve_theme("system") == "light"
 
 
-def test_resolve_theme_explicit_dark(qtbot, monkeypatch) -> None:
+def test_resolve_theme_explicit_dark(qtbot: QtBot, monkeypatch: MonkeyPatch) -> None:
     m = _import_theme_module()
     # An explicit "dark" persisted choice is honored regardless of OS scheme.
     monkeypatch.setattr(m, "_system_theme", lambda: "light")
     assert m._resolve_theme("dark") == "dark"
 
 
-def test_resolve_theme_explicit_light(qtbot, monkeypatch) -> None:
+def test_resolve_theme_explicit_light(qtbot: QtBot, monkeypatch: MonkeyPatch) -> None:
     m = _import_theme_module()
     monkeypatch.setattr(m, "_system_theme", lambda: "dark")
     assert m._resolve_theme("light") == "light"
 
 
-def test_resolve_theme_unknown_value_falls_back_to_system(qtbot, monkeypatch) -> None:
+def test_resolve_theme_unknown_value_falls_back_to_system(
+    qtbot: QtBot, monkeypatch: MonkeyPatch
+) -> None:
     # A malformed persisted value (e.g. "" or "purple") resolves to system
     # rather than crashing — the config_schema Literal rejects "purple" at
     # load time, but _resolve_theme must still be defensive.
@@ -215,7 +227,9 @@ def test_resolve_theme_unknown_value_falls_back_to_system(qtbot, monkeypatch) ->
 # ---------------------------------------------------------------------------
 
 
-def test_colorSchemeChanged_follows_when_system(qtbot, monkeypatch) -> None:
+def test_colorSchemeChanged_follows_when_system(
+    qtbot: QtBot, monkeypatch: MonkeyPatch
+) -> None:
     """When the persisted choice is "system", a mid-session OS theme switch
     triggers a reload of the matching Breeze sheet.
 
@@ -242,7 +256,9 @@ def test_colorSchemeChanged_follows_when_system(qtbot, monkeypatch) -> None:
     )
 
 
-def test_colorSchemeChanged_ignored_when_explicit(qtbot, monkeypatch) -> None:
+def test_colorSchemeChanged_ignored_when_explicit(
+    qtbot: QtBot, monkeypatch: MonkeyPatch
+) -> None:
     """When the persisted choice is explicitly "dark" or "light", a
     mid-session OS theme switch must NOT reload the stylesheet."""
     m = _import_theme_module()
@@ -347,9 +363,9 @@ def test_controller_overlay_theme_rejects_unknown() -> None:
 
 
 def test_qdarkstyle_absent_from_pyproject() -> None:
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    pyproject = os.path.join(project_root, "pyproject.toml")
-    with open(pyproject, encoding="utf-8") as f:
+    project_root = Path(__file__).resolve().parent.parent
+    pyproject = project_root / "pyproject.toml"
+    with pyproject.open(encoding="utf-8") as f:
         content = f.read()
     assert "qdarkstyle" not in content.lower(), (
         "qdarkstyle must be removed from pyproject.toml"
@@ -357,9 +373,9 @@ def test_qdarkstyle_absent_from_pyproject() -> None:
 
 
 def test_qdarkstyle_not_imported_in_main() -> None:
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    main_py = os.path.join(project_root, "lightsheet", "__main__.py")
-    with open(main_py, encoding="utf-8") as f:
+    project_root = Path(__file__).resolve().parent.parent
+    main_py = project_root / "lightsheet" / "__main__.py"
+    with main_py.open(encoding="utf-8") as f:
         content = f.read()
     assert "import qdarkstyle" not in content, (
         "lightsheet/__main__.py must not import qdarkstyle"
@@ -370,38 +386,36 @@ def test_qdarkstyle_not_imported_in_main() -> None:
 
 
 def test_breeze_compiled_resource_committed() -> None:
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    breeze_py = os.path.join(
-        project_root, "lightsheet", "gui", "breeze_pyside6.py"
-    )
-    assert os.path.isfile(breeze_py), (
+    project_root = Path(__file__).resolve().parent.parent
+    breeze_py = project_root / "lightsheet" / "gui" / "breeze_pyside6.py"
+    assert breeze_py.is_file(), (
         "lightsheet/gui/breeze_pyside6.py (compiled resource) must be committed"
     )
 
 
 def test_breeze_vendor_license_retained() -> None:
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    license_path = os.path.join(
-        project_root,
-        "lightsheet",
-        "gui",
-        "_vendor",
-        "breezestylesheets",
-        "LICENSE.md",
+    project_root = Path(__file__).resolve().parent.parent
+    license_path = (
+        project_root
+        / "lightsheet"
+        / "gui"
+        / "_vendor"
+        / "breezestylesheets"
+        / "LICENSE.md"
     )
-    assert os.path.isfile(license_path), (
+    assert license_path.is_file(), (
         "BreezeStyleSheets MIT LICENSE.md must be retained in the vendored tree"
     )
-    with open(license_path, encoding="utf-8") as f:
+    with license_path.open(encoding="utf-8") as f:
         text = f.read()
     assert "MIT" in text, "Vendored LICENSE.md must be the MIT license"
 
 
 def test_build_breeze_script_exists() -> None:
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    script = os.path.join(project_root, "scripts", "build-breeze.sh")
-    assert os.path.isfile(script), "scripts/build-breeze.sh must exist"
-    with open(script, encoding="utf-8") as f:
+    project_root = Path(__file__).resolve().parent.parent
+    script = project_root / "scripts" / "build-breeze.sh"
+    assert script.is_file(), "scripts/build-breeze.sh must exist"
+    with script.open(encoding="utf-8") as f:
         content = f.read()
     assert "configure.py" in content, (
         "build-breeze.sh must run configure.py to build the compiled resource"
@@ -419,7 +433,9 @@ def test_build_breeze_script_exists() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_light_theme_slot_persists_to_config(qtbot, request, monkeypatch) -> None:
+def test_light_theme_slot_persists_to_config(
+    qtbot: QtBot, request: FixtureRequest, monkeypatch: MonkeyPatch
+) -> None:
     """updateUi_light_theme writes {"Theme": "light"} to config.ini and
     shows the status-bar hint.
 
@@ -437,7 +453,9 @@ def test_light_theme_slot_persists_to_config(qtbot, request, monkeypatch) -> Non
 
     monkeypatch.setattr(
         ctrl_mod, "cfg_write",
-        lambda filename, section, data: captured.append((filename, section, dict(data))),
+        lambda filename, section, data: captured.append(
+            (filename, section, dict(data))
+        ),
     )
     ctrl._demo_mode = False
     ctrl.updateUi_light_theme()
@@ -446,7 +464,9 @@ def test_light_theme_slot_persists_to_config(qtbot, request, monkeypatch) -> Non
     ), f"Expected cfg_write Theme=light, got: {captured}"
 
 
-def test_dark_theme_slot_persists_to_config(qtbot, request, monkeypatch) -> None:
+def test_dark_theme_slot_persists_to_config(
+    qtbot: QtBot, request: FixtureRequest, monkeypatch: MonkeyPatch
+) -> None:
     from _helpers.controller_fixture import make_controller
 
     ctrl, _bundle = make_controller(qtbot, request)
@@ -455,7 +475,9 @@ def test_dark_theme_slot_persists_to_config(qtbot, request, monkeypatch) -> None
 
     monkeypatch.setattr(
         ctrl_mod, "cfg_write",
-        lambda filename, section, data: captured.append((filename, section, dict(data))),
+        lambda filename, section, data: captured.append(
+            (filename, section, dict(data))
+        ),
     )
     ctrl._demo_mode = False
     ctrl.updateUi_dark_theme()
@@ -464,7 +486,9 @@ def test_dark_theme_slot_persists_to_config(qtbot, request, monkeypatch) -> None
     ), f"Expected cfg_write Theme=dark, got: {captured}"
 
 
-def test_follow_system_theme_slot_persists_to_config(qtbot, request, monkeypatch) -> None:
+def test_follow_system_theme_slot_persists_to_config(
+    qtbot: QtBot, request: FixtureRequest, monkeypatch: MonkeyPatch
+) -> None:
     from _helpers.controller_fixture import make_controller
 
     ctrl, _bundle = make_controller(qtbot, request)
@@ -473,7 +497,9 @@ def test_follow_system_theme_slot_persists_to_config(qtbot, request, monkeypatch
 
     monkeypatch.setattr(
         ctrl_mod, "cfg_write",
-        lambda filename, section, data: captured.append((filename, section, dict(data))),
+        lambda filename, section, data: captured.append(
+            (filename, section, dict(data))
+        ),
     )
     ctrl._demo_mode = False
     ctrl.updateUi_follow_system_theme()
@@ -483,12 +509,11 @@ def test_follow_system_theme_slot_persists_to_config(qtbot, request, monkeypatch
 
 
 def test_theme_action_group_is_exclusive_with_three_checkable_actions(
-    qtbot, request,
+    qtbot: QtBot, request: FixtureRequest,
 ) -> None:
     """ctrl._theme_action_group is exclusive with 3 actions, all checkable."""
-    from PySide6.QtGui import QActionGroup
-
     from _helpers.controller_fixture import make_controller
+    from PySide6.QtGui import QActionGroup
 
     ctrl, _bundle = make_controller(qtbot, request)
     group = ctrl._theme_action_group
@@ -502,7 +527,9 @@ def test_theme_action_group_is_exclusive_with_three_checkable_actions(
         assert a.isCheckable(), f"theme action {a.text()!r} must be checkable"
 
 
-def test_startup_theme_reflected_on_checked_action(qtbot, request, monkeypatch) -> None:
+def test_startup_theme_reflected_on_checked_action(
+    qtbot: QtBot, request: FixtureRequest, monkeypatch: MonkeyPatch
+) -> None:
     """The persisted [Controller] Theme is reflected onto the checked
     action of the exclusive group on startup. With the default config.ini
     (no Theme key → 'system'), action_followSystemTheme is checked."""

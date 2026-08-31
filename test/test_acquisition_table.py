@@ -9,9 +9,13 @@ shows a format-suffixed human-readable value (e.g. "16.9 GB (HDF5)").
 from __future__ import annotations
 
 from _helpers.controller_fixture import make_controller
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
+
+from lightsheet.gui.panels.acquisition_table_manager import AcquisitionTableManager
 
 
-def _add_valid_row(table) -> int:
+def _add_valid_row(table: AcquisitionTableManager) -> int:
     """Add a planned-queue row with a non-zero range so it computes >0
     planes, then return the row index. Start/End cells display in mm;
     Step stays µm. start=0 mm, end=1 mm (1000 µm), step=5 µm → 201 planes."""
@@ -23,7 +27,9 @@ def _add_valid_row(table) -> int:
     return row
 
 
-def test_est_size_suffix_reflects_save_format(qtbot, request) -> None:
+def test_est_size_suffix_reflects_save_format(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The Est. Size cell text carries the format suffix and changes when
     the save format changes (HDF5 -> OME-Zarr -> Both)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -49,7 +55,9 @@ def test_est_size_suffix_reflects_save_format(qtbot, request) -> None:
     assert "(Both)" in both_text, both_text
 
 
-def test_zarr_estimate_is_larger_than_hdf5(qtbot, request) -> None:
+def test_zarr_estimate_is_larger_than_hdf5(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The OME-Zarr estimate includes the multiscale pyramid overhead, so
     it is strictly larger than the raw-bytes HDF5 estimate for the same
     stack. Both = hdf5 + zarr (sum)."""
@@ -85,7 +93,9 @@ def test_zarr_estimate_is_larger_than_hdf5(qtbot, request) -> None:
     assert abs(both_mb - (hdf5_mb + zarr_mb)) < 1.0, (hdf5_mb, zarr_mb, both_mb)
 
 
-def test_format_radio_re_estimates_table(qtbot, request) -> None:
+def test_format_radio_re_estimates_table(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """Switching the save-format radio re-estimates the Est. Size cell via
     the controller subscription (the buttonClicked signal is wired to
     recompute_all_rows)."""

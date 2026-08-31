@@ -117,7 +117,10 @@ def _laser_like_write(errors: list[str]) -> None:
                 new_task_name=f"concurrency_laser_like_{time.time_ns()}"
             ) as task:
                 task.ao_channels.add_ao_voltage_chan(_LASER_LIKE_TERMINALS)
-                task.write(np.stack((np.array([0.0]), np.array([0.0]))), auto_start=True)
+                task.write(
+                    np.stack((np.array([0.0]), np.array([0.0]))),
+                    auto_start=True,
+                )
             return
         except BaseException as e:
             if _is_concurrency_noise_error(e) and attempt < _DAQ_RETRY_COUNT - 1:
@@ -192,7 +195,10 @@ def test_concurrent_daq_task_creation_does_not_corrupt_session() -> None:
     # corruption this test hunts for — the production shared-DAQ-lock fix
     # prevents the null-pointer access violation, not these driver-level
     # registry races.
-    corruption_errors = [e for e in errors if not _is_concurrency_noise_error_from_repr(e)]
+    corruption_errors = [
+        e for e in errors
+        if not _is_concurrency_noise_error_from_repr(e)
+    ]
     assert not corruption_errors, (
         "Concurrent nidaqmx.Task creation produced access-violation errors "
         "(DAQ session corruption):\n" + "\n".join(corruption_errors[:10])

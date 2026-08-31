@@ -21,6 +21,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
@@ -59,7 +61,9 @@ def test_label_units_absent_from_ui_file() -> None:
     )
 
 
-def test_controller_ui_has_no_comboBox_units(qtbot, request) -> None:
+def test_controller_ui_has_no_comboBox_units(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The constructed controller's ui has no comboBox_units attribute."""
     ctrl, _ = make_controller(qtbot, request)
     assert not hasattr(ctrl.ui, "comboBox_units"), (
@@ -68,7 +72,9 @@ def test_controller_ui_has_no_comboBox_units(qtbot, request) -> None:
     )
 
 
-def test_controller_has_no_units_attribute(qtbot, request) -> None:
+def test_controller_has_no_units_attribute(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The controller has no ``units`` attribute (the global toggle's
     backing attribute is gone)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -78,7 +84,9 @@ def test_controller_has_no_units_attribute(qtbot, request) -> None:
     )
 
 
-def test_controller_has_no_units_fixformat(qtbot, request) -> None:
+def test_controller_has_no_units_fixformat(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The controller has no ``units_fixformat`` / ``units_decimals`` /
     ``units_increment`` attributes (set by the old updateUi_units)."""
     ctrl, _ = make_controller(qtbot, request)

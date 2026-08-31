@@ -11,17 +11,23 @@ loops run against the real widget tree. Headless via
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import TYPE_CHECKING
+
 import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QEvent, QPoint, QPointF, Qt  # noqa: E402
-from PySide6.QtGui import QWheelEvent  # noqa: E402
+from _helpers.controller_fixture import make_controller
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtGui import QWheelEvent
+from pytestqt.qtbot import QtBot
 
-from _helpers.controller_fixture import make_controller  # noqa: E402
-from lightsheet.gui.widgets.field_spec import FIELD_SPECS  # noqa: E402
-from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox  # noqa: E402
+from lightsheet.gui.widgets.field_spec import FIELD_SPECS
+from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 # Map each canonical objectName to the panel attribute that owns it
 # (hybrid ownership — panel-internal widgets live on the panel's ``ui``,
@@ -92,7 +98,7 @@ FORMER_SLIDER_PAIRED_FIELDS = (
 )
 
 
-def _get_spinbox(ctrl, obj_name: str) -> FieldSpecSpinBox:
+def _get_spinbox(ctrl: Controller_MainWindow, obj_name: str) -> FieldSpecSpinBox:
     """Resolve a canonical objectName to its FieldSpecSpinBox via the
     panel-qualified hybrid-ownership path."""
     panel_attr = _OBJNAME_TO_PANEL[obj_name]
@@ -100,7 +106,9 @@ def _get_spinbox(ctrl, obj_name: str) -> FieldSpecSpinBox:
     return getattr(panel.ui, obj_name)
 
 
-def test_every_canonical_spinbox_is_field_spec_subclass(qtbot, request) -> None:
+def test_every_canonical_spinbox_is_field_spec_subclass(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """Each of the 24 canonical objectNames resolves to a FieldSpecSpinBox
     instance (the .ui promotion took effect + ui_*.py regenerated)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -138,7 +146,9 @@ _SPEC_RANGE_OVERRIDDEN_FIELDS = frozenset(
 )
 
 
-def test_applySpec_applied_suffix_decimals_range(qtbot, request) -> None:
+def test_applySpec_applied_suffix_decimals_range(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """applySpec was called for every canonical spinbox: suffix and
     decimals match the FIELD_SPECS entry. minimum/maximum also match
     except for fields whose range is overridden by pre-existing runtime
@@ -164,7 +174,9 @@ def test_applySpec_applied_suffix_decimals_range(qtbot, request) -> None:
         )
 
 
-def test_no_slider_widgets_remain(qtbot, request) -> None:
+def test_no_slider_widgets_remain(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """None of the formerly slider-paired fields has a QSlider sibling
     widget anymore. The sliders were removed from the panel .ui files
     because the FieldSpecSpinBox is itself scrollable; a separate
@@ -179,7 +191,7 @@ def test_no_slider_widgets_remain(qtbot, request) -> None:
         )
 
 
-def _make_wheel_event(angle_delta=120):
+def _make_wheel_event(angle_delta: int = 120) -> QWheelEvent:
     """Synthesize a QWheelEvent with a positive (up) angle delta.
 
     Matches the constructor signature used in test_field_spec_spinbox.py:
@@ -202,7 +214,9 @@ def _make_wheel_event(angle_delta=120):
     )
 
 
-def test_wheel_gate_unfocused_spinbox_ignores_wheel(qtbot, request) -> None:
+def test_wheel_gate_unfocused_spinbox_ignores_wheel(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """An unfocused FieldSpecSpinBox ignores the mouse wheel (the
     wheel-steal fix). The value must not change when a wheel event is
     delivered without focus."""
@@ -237,7 +251,7 @@ def test_wheel_gate_unfocused_spinbox_ignores_wheel(qtbot, request) -> None:
         )
 
 
-def test_wheel_gate_focused_spinbox_responds(qtbot) -> None:
+def test_wheel_gate_focused_spinbox_responds(qtbot: QtBot) -> None:
     """A focused FieldSpecSpinBox still responds to the wheel (the gate
     is focus-gated, not a blanket disable).
 
@@ -256,7 +270,12 @@ def test_wheel_gate_focused_spinbox_responds(qtbot) -> None:
     qtbot.addWidget(sb)
     sb.show()
     qtbot.waitExposed(sb)
-    sb.applySpec(FieldSpec(unit="", decimals=0, single_step=1, page_step=10, minimum=0, maximum=1000))
+    sb.applySpec(
+        FieldSpec(
+            unit="", decimals=0, single_step=1, page_step=10,
+            minimum=0, maximum=1000,
+        )
+    )
     sb.setValue(5.0)
     sb.setFocus()
     QApplication.processEvents()
@@ -281,7 +300,9 @@ def test_hal_validators_untouched() -> None:
     ).strip()
     # config_schema.py motor limit validators + ZaberMotor reject-and-beep
     # must still be present (grep, not a diff — this is a presence check).
-    schema = open(f"{repo_root}/lightsheet/config_schema.py").read()
+    with Path(f"{repo_root}/lightsheet/config_schema.py").open() as f:
+        schema = f.read()
     assert "Limit High" in schema, "config_schema.py motor limit validator missing"
-    motors = open(f"{repo_root}/lightsheet/hal/real/motors.py").read()
+    with Path(f"{repo_root}/lightsheet/hal/real/motors.py").open() as f:
+        motors = f.read()
     assert "ValueError" in motors, "ZaberMotor reject-and-beep missing"

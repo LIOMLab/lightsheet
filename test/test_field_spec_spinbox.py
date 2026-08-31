@@ -8,8 +8,16 @@ and QApplication.keyboardModifiers monkeypatching.
 from __future__ import annotations
 
 import dataclasses
+from typing import TYPE_CHECKING
 
 import pytest
+from pytest import MonkeyPatch
+from pytestqt.qtbot import QtBot
+
+if TYPE_CHECKING:
+    from PySide6.QtGui import QWheelEvent
+
+    from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
 pytest.importorskip("PySide6")
 
@@ -57,7 +65,7 @@ EXPECTED_FIELD_SPEC_KEYS = [
 ]
 
 
-def _make_spinbox(qtbot):
+def _make_spinbox(qtbot: QtBot) -> FieldSpecSpinBox:
     from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
     sb = FieldSpecSpinBox()
@@ -78,8 +86,13 @@ def test_field_spec_is_frozen_dataclass() -> None:
 
     assert dataclasses.is_dataclass(FieldSpec)
     fields = [f.name for f in dataclasses.fields(FieldSpec)]
-    assert fields == ["unit", "decimals", "single_step", "page_step", "minimum", "maximum"]
-    spec = FieldSpec(unit="mm", decimals=3, single_step=0.1, page_step=1.0, minimum=0.0, maximum=41.0)
+    assert fields == [
+        "unit", "decimals", "single_step", "page_step", "minimum", "maximum"
+    ]
+    spec = FieldSpec(
+        unit="mm", decimals=3, single_step=0.1,
+        page_step=1.0, minimum=0.0, maximum=41.0,
+    )
     assert spec.unit == "mm"
     with pytest.raises(dataclasses.FrozenInstanceError):
         spec.unit = "um"  # type: ignore[misc]
@@ -90,7 +103,7 @@ def test_field_spec_is_frozen_dataclass() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_spinbox_constructs_with_parent_none(qtbot) -> None:
+def test_spinbox_constructs_with_parent_none(qtbot: QtBot) -> None:
     from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
     sb = FieldSpecSpinBox(parent=None)
@@ -98,7 +111,7 @@ def test_spinbox_constructs_with_parent_none(qtbot) -> None:
     assert sb._spec is None
 
 
-def test_spinbox_constructs_with_parent(qtbot) -> None:
+def test_spinbox_constructs_with_parent(qtbot: QtBot) -> None:
     from PySide6.QtWidgets import QWidget
 
     from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
@@ -114,11 +127,14 @@ def test_spinbox_constructs_with_parent(qtbot) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_apply_spec_sets_all_properties(qtbot) -> None:
+def test_apply_spec_sets_all_properties(qtbot: QtBot) -> None:
     from lightsheet.gui.widgets.field_spec import FieldSpec
 
     sb = _make_spinbox(qtbot)
-    sb.applySpec(FieldSpec(unit="mm", decimals=3, single_step=0.1, page_step=1.0, minimum=0.0, maximum=41.0))
+    sb.applySpec(FieldSpec(
+        unit="mm", decimals=3, single_step=0.1,
+        page_step=1.0, minimum=0.0, maximum=41.0,
+    ))
     assert sb.suffix() == " mm"
     assert sb.decimals() == 3
     assert sb.singleStep() == pytest.approx(0.1)
@@ -127,15 +143,18 @@ def test_apply_spec_sets_all_properties(qtbot) -> None:
     assert sb._spec is not None
 
 
-def test_apply_spec_empty_unit_no_leading_space(qtbot) -> None:
+def test_apply_spec_empty_unit_no_leading_space(qtbot: QtBot) -> None:
     from lightsheet.gui.widgets.field_spec import FieldSpec
 
     sb = _make_spinbox(qtbot)
-    sb.applySpec(FieldSpec(unit="", decimals=0, single_step=1, page_step=10, minimum=0, maximum=1000))
+    sb.applySpec(FieldSpec(
+        unit="", decimals=0, single_step=1,
+        page_step=10, minimum=0, maximum=1000,
+    ))
     assert sb.suffix() == ""
 
 
-def test_apply_spec_generates_tooltip(qtbot) -> None:
+def test_apply_spec_generates_tooltip(qtbot: QtBot) -> None:
     """UI-SPEC §Tooltips (D-02): applySpec generates a tooltip documenting
     the wheel-gate + Ctrl/Shift page-step from the FieldSpec + purpose."""
     from lightsheet.gui.widgets.field_spec import FIELD_SPECS
@@ -153,7 +172,7 @@ def test_apply_spec_generates_tooltip(qtbot) -> None:
     assert "Wheel: click in first to scroll." in tip
 
 
-def test_apply_spec_empty_unit_tooltip_omits_unit_labels(qtbot) -> None:
+def test_apply_spec_empty_unit_tooltip_omits_unit_labels(qtbot: QtBot) -> None:
     """Dimensionless fields (empty unit) get a tooltip without unit labels."""
     from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 
@@ -183,7 +202,7 @@ def test_field_purposes_covers_all_field_specs() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _make_wheel_event(angle_delta=120):
+def _make_wheel_event(angle_delta: int = 120) -> QWheelEvent:
     """Synthesize a QWheelEvent with a positive (up) angle delta."""
     from PySide6.QtCore import QPoint, QPointF, Qt
     from PySide6.QtGui import QWheelEvent
@@ -204,13 +223,16 @@ def _make_wheel_event(angle_delta=120):
     )
 
 
-def test_wheel_ignored_when_unfocused(qtbot) -> None:
+def test_wheel_ignored_when_unfocused(qtbot: QtBot) -> None:
     from PySide6.QtWidgets import QApplication, QLineEdit
 
     from lightsheet.gui.widgets.field_spec import FieldSpec
 
     sb = _make_spinbox(qtbot)
-    sb.applySpec(FieldSpec(unit="mm", decimals=3, single_step=0.1, page_step=1.0, minimum=0.0, maximum=41.0))
+    sb.applySpec(FieldSpec(
+        unit="mm", decimals=3, single_step=0.1,
+        page_step=1.0, minimum=0.0, maximum=41.0,
+    ))
     sb.setValue(5.0)
     # clearFocus() alone does not remove focus when the spinbox is the only
     # focusable widget in the window — Qt re-assigns focus to it. Give focus
@@ -230,13 +252,16 @@ def test_wheel_ignored_when_unfocused(qtbot) -> None:
     assert sb.value() == pytest.approx(5.0)
 
 
-def test_wheel_steps_value_when_focused(qtbot) -> None:
+def test_wheel_steps_value_when_focused(qtbot: QtBot) -> None:
     from PySide6.QtWidgets import QApplication
 
     from lightsheet.gui.widgets.field_spec import FieldSpec
 
     sb = _make_spinbox(qtbot)
-    sb.applySpec(FieldSpec(unit="mm", decimals=3, single_step=0.1, page_step=1.0, minimum=0.0, maximum=41.0))
+    sb.applySpec(FieldSpec(
+        unit="mm", decimals=3, single_step=0.1,
+        page_step=1.0, minimum=0.0, maximum=41.0,
+    ))
     sb.setValue(5.0)
     sb.setFocus()
     QApplication.processEvents()
@@ -254,14 +279,17 @@ def test_wheel_steps_value_when_focused(qtbot) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_step_by_no_modifier_uses_single_step(qtbot) -> None:
+def test_step_by_no_modifier_uses_single_step(qtbot: QtBot) -> None:
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication
 
     from lightsheet.gui.widgets.field_spec import FieldSpec
 
     sb = _make_spinbox(qtbot)
-    sb.applySpec(FieldSpec(unit="mm", decimals=3, single_step=0.1, page_step=1.0, minimum=0.0, maximum=41.0))
+    sb.applySpec(FieldSpec(
+        unit="mm", decimals=3, single_step=0.1,
+        page_step=1.0, minimum=0.0, maximum=41.0,
+    ))
     sb.setValue(5.0)
 
     # No modifier: stepBy(1) advances by single_step (0.1).
@@ -272,53 +300,71 @@ def test_step_by_no_modifier_uses_single_step(qtbot) -> None:
     assert sb.value() == pytest.approx(5.1)
 
 
-def test_step_by_control_modifier_uses_page_step(qtbot, monkeypatch) -> None:
+def test_step_by_control_modifier_uses_page_step(
+    qtbot: QtBot, monkeypatch: MonkeyPatch
+) -> None:
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication
 
     from lightsheet.gui.widgets.field_spec import FieldSpec
 
     sb = _make_spinbox(qtbot)
-    sb.applySpec(FieldSpec(unit="mm", decimals=3, single_step=0.1, page_step=1.0, minimum=0.0, maximum=41.0))
+    sb.applySpec(FieldSpec(
+        unit="mm", decimals=3, single_step=0.1,
+        page_step=1.0, minimum=0.0, maximum=41.0,
+    ))
     sb.setValue(5.0)
 
     monkeypatch.setattr(
-        QApplication, "keyboardModifiers", staticmethod(lambda: Qt.KeyboardModifier.ControlModifier)
+        QApplication, "keyboardModifiers",
+        staticmethod(lambda: Qt.KeyboardModifier.ControlModifier),
     )
     sb.stepBy(1)
     # page_step / single_step = 1.0 / 0.1 = 10 → 10 single steps = +1.0
     assert sb.value() == pytest.approx(6.0)
 
 
-def test_step_by_shift_modifier_uses_page_step(qtbot, monkeypatch) -> None:
+def test_step_by_shift_modifier_uses_page_step(
+    qtbot: QtBot, monkeypatch: MonkeyPatch
+) -> None:
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication
 
     from lightsheet.gui.widgets.field_spec import FieldSpec
 
     sb = _make_spinbox(qtbot)
-    sb.applySpec(FieldSpec(unit="mm", decimals=3, single_step=0.1, page_step=1.0, minimum=0.0, maximum=41.0))
+    sb.applySpec(FieldSpec(
+        unit="mm", decimals=3, single_step=0.1,
+        page_step=1.0, minimum=0.0, maximum=41.0,
+    ))
     sb.setValue(5.0)
 
     monkeypatch.setattr(
-        QApplication, "keyboardModifiers", staticmethod(lambda: Qt.KeyboardModifier.ShiftModifier)
+        QApplication, "keyboardModifiers",
+        staticmethod(lambda: Qt.KeyboardModifier.ShiftModifier),
     )
     sb.stepBy(1)
     assert sb.value() == pytest.approx(6.0)
 
 
-def test_step_by_negative_with_modifier_decrements(qtbot, monkeypatch) -> None:
+def test_step_by_negative_with_modifier_decrements(
+    qtbot: QtBot, monkeypatch: MonkeyPatch
+) -> None:
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication
 
     from lightsheet.gui.widgets.field_spec import FieldSpec
 
     sb = _make_spinbox(qtbot)
-    sb.applySpec(FieldSpec(unit="V", decimals=2, single_step=0.05, page_step=0.5, minimum=-10.0, maximum=10.0))
+    sb.applySpec(FieldSpec(
+        unit="V", decimals=2, single_step=0.05,
+        page_step=0.5, minimum=-10.0, maximum=10.0,
+    ))
     sb.setValue(0.0)
 
     monkeypatch.setattr(
-        QApplication, "keyboardModifiers", staticmethod(lambda: Qt.KeyboardModifier.ControlModifier)
+        QApplication, "keyboardModifiers",
+        staticmethod(lambda: Qt.KeyboardModifier.ControlModifier),
     )
     sb.stepBy(-1)
     # page_step / single_step = 0.5 / 0.05 = 10 → -10 single steps = -0.5

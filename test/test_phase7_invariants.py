@@ -40,6 +40,7 @@ import threading
 from pathlib import Path
 
 import pytest
+from pytestqt.qtbot import QtBot
 
 # Importing any panel module pulls in PySide6 transitively, so gate the whole
 # module on PySide6 being importable — mirrors test_panel_structure.py.
@@ -143,7 +144,9 @@ def test_monolithic_ui_controller_deleted_and_panels_exist() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_controller_estop_event_is_threading_event(qtbot, request) -> None:
+def test_controller_estop_event_is_threading_event(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """The real controller's ``estop_event`` is a ``threading.Event``
     instance — the MIG-07 invariant that the cooperative-abort mechanism
     stays ``threading.Event`` under the QThread migration (NOT replaced by

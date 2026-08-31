@@ -1,35 +1,22 @@
 """Dockable pyqtgraph trajectory widget for the adaptive exposure + laser
-power control loop (D-04).
+power control loop.
 
 A ``QWidget`` containing a ``pyqtgraph.PlotWidget`` and a word-wrapped
-empty-state ``QLabel``. The widget is GUI-thread-only — the
-``StackWorker`` emits ``sig_adaptive_trajectory`` (a queued ``Signal``)
-and the shell's GUI-thread slot calls ``append_sample``. The worker
-NEVER calls pyqtgraph directly (AGENTS.md §11 — no cross-thread Qt
-widget access from workers).
+empty-state ``QLabel``. The widget is GUI-thread-only — the ``StackWorker``
+emits ``sig_adaptive_trajectory`` (a queued ``Signal``) and the shell's
+GUI-thread slot calls ``append_sample``. The worker NEVER calls pyqtgraph
+directly.
 
-Plot layout (UI-SPEC §Color, §States/Interactions):
+Plot layout:
 - Left Y axis: intensity (% of max) + a target-band LinearRegionItem
   (accent blue at ~25% alpha, fixed — does not scroll).
-- Right Y axis (linked ViewBox): exposure (ms) and L1 power (mW),
-  twin-axis so the operator sees the control variable the loop is
-  actuating alongside the intensity it is tracking.
-- X axis: plane index. Beyond 200 planes the X view auto-scrolls to
-  the last 200 while retaining the complete in-memory data for
-  zoom-out (downsampling + a sliding X-range window).
-- Re-acquire events: vertical dashed warning lines at the plane index.
-- Power-fallback events: small information-blue triangles at the plane.
+- Right Y axis (linked ViewBox): exposure (ms) and L1 power (mW).
+- X axis: plane index. Beyond 200 planes the X view auto-scrolls.
+- Re-acquire events: vertical dashed warning lines.
+- Power-fallback events: small information-blue triangles.
 
-States:
-- empty (no run): label visible, plot hidden.
-- populated (run in progress): plot visible, label hidden; one point
-  per plane appended via the same append path (zero/one/many all work).
-- frozen (E-stop / abort): further appends are ignored so the last
-  trajectory is preserved for operator review.
-
-pyqtgraph is reintroduced ONLY for ``PlotWidget`` — no image-view
-widget from pyqtgraph is imported (UI-SPEC §Registry Safety). The
-native ``lightsheet/gui/image_view.py`` stays the image viewer.
+States: empty (label visible, plot hidden), populated (plot visible,
+label hidden), frozen (further appends ignored).
 """
 
 from __future__ import annotations
@@ -38,14 +25,14 @@ import pyqtgraph as pg
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QSizePolicy, QVBoxLayout, QWidget
 
-# Breeze dark theme tokens (UI-SPEC §Color).
+# Breeze dark theme tokens.
 _BG = "#1d2023"  # view:background — plot background
 _FG = "#eff0f1"  # foreground — axis pens / text
 _ACCENT = "#3daee9"  # highlight — target band + exposure curve
 _WARNING = "#99995C"  # re-acquire marker
 _INFORMATION = "#406880"  # power-fallback marker
 
-# The exact empty-state copy (UI-SPEC §Copywriting Contract).
+# The exact empty-state copy.
 EMPTY_COPY = (
     "No adaptive run yet. Enable Adaptive Control in the Stack panel "
     "and start a stack to see the per-plane intensity trajectory."
@@ -73,8 +60,7 @@ class AdaptiveTrajectoryWidget(QWidget):
         layout.setSpacing(8)
 
         # Empty-state label: word-wrapped so the fixed English sentence
-        # wraps without clipping at the dock's minimum width (backstop
-        # truths #11, #12).
+        # wraps without clipping at the dock's minimum width.
         self.label_adaptiveTrajectoryEmpty = QLabel(EMPTY_COPY, self)
         self.label_adaptiveTrajectoryEmpty.setWordWrap(True)
         self.label_adaptiveTrajectoryEmpty.setAlignment(
@@ -96,7 +82,7 @@ class AdaptiveTrajectoryWidget(QWidget):
         self._power_fallback_scatter: pg.ScatterPlotItem | None = None
         self._right_vb: pg.ViewBox | None = None
 
-        # PlotWidget — the only pyqtgraph surface reintroduced this phase.
+        # PlotWidget — the only pyqtgraph surface in this widget.
         self.plotWidget_adaptiveTrajectory = pg.PlotWidget(self)
         self.plotWidget_adaptiveTrajectory.setBackground(_BG)
         self._configure_plot()
@@ -133,12 +119,10 @@ class AdaptiveTrajectoryWidget(QWidget):
         # axes share the plane index.
         self._right_vb.setXLink(item.getViewBox())
         right_ax.setLabel("Exposure (ms) / Power (mW)")
-        # Downsampling keeps long stacks responsive (threat T-10-06).
+        # Downsampling keeps long stacks responsive.
         item.getViewBox().enableAutoRange(axis="x", enable=False)
 
-    def reset(
-        self, target_band_lo: float = 0.90, target_band_hi: float = 0.95
-    ) -> None:
+    def reset(self, target_band_lo: float = 0.90, target_band_hi: float = 0.95) -> None:
         """Reset the plot for a new run with the given target band
         (fractions 0..1). Clears all curves/markers and re-adds the
         target band region."""
@@ -178,20 +162,26 @@ class AdaptiveTrajectoryWidget(QWidget):
             for it in list(self._right_vb.addedItems):
                 self._right_vb.removeItem(it)
             self._exposure_curve = pg.PlotDataItem(
-                [], [],
+                [],
+                [],
                 pen=pg.mkPen(_ACCENT, width=1, style=Qt.PenStyle.DashLine),
                 name="Exposure",
             )
             self._right_vb.addItem(self._exposure_curve)
             self._power_curve = pg.PlotDataItem(
-                [], [], pen=pg.mkPen(_INFORMATION, width=1),
+                [],
+                [],
+                pen=pg.mkPen(_INFORMATION, width=1),
                 name="Power L1",
             )
             self._right_vb.addItem(self._power_curve)
         # Power-fallback scatter (information-blue triangles).
         self._power_fallback_scatter = pg.ScatterPlotItem(
-            symbol="t", size=10, pen=pg.mkPen(_INFORMATION),
-            brush=pg.mkBrush(_INFORMATION), name="Power fallback",
+            symbol="t",
+            size=10,
+            pen=pg.mkPen(_INFORMATION),
+            brush=pg.mkBrush(_INFORMATION),
+            name="Power fallback",
         )
         item.addItem(self._power_fallback_scatter)
         # Show the plot, hide the empty label.
@@ -243,7 +233,8 @@ class AdaptiveTrajectoryWidget(QWidget):
         # Re-acquire marker: vertical dashed warning line.
         if reacquired:
             line = pg.InfiniteLine(
-                pos=float(plane_idx), angle=90,
+                pos=float(plane_idx),
+                angle=90,
                 pen=pg.mkPen(_WARNING, style=Qt.PenStyle.DashLine, width=1),
             )
             self.plotWidget_adaptiveTrajectory.getPlotItem().addItem(line)
@@ -259,7 +250,7 @@ class AdaptiveTrajectoryWidget(QWidget):
             existing_y.append(exposure_s * 1000.0)
             self._power_fallback_scatter.setData(existing_x, existing_y)
         # Sliding X window: show the last _X_WINDOW planes, retain all
-        # in-memory data for zoom-out (threat T-10-06).
+        # in-memory data for zoom-out.
         if len(self._xs) > _X_WINDOW:
             x_min = self._xs[-_X_WINDOW]
             x_max = self._xs[-1] + 1

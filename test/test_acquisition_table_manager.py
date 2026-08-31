@@ -13,28 +13,37 @@ covered by test_table_queue_execution.py.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 import pytest
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
 from _helpers.controller_fixture import make_controller
-
 from PySide6.QtWidgets import QTableWidget, QWidget
-from PySide6.QtGui import QColor
+
+if TYPE_CHECKING:
+    from lightsheet.gui.panels.acquisition_table_manager import (
+        AcquisitionTableManager,
+    )
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
-def _mgr(qtbot, request):
+def _mgr(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> tuple[Controller_MainWindow, AcquisitionTableManager]:
     ctrl, _ = make_controller(qtbot, request)
     return ctrl, ctrl.stack_panel.table_manager
 
 
-def test_table_manager_exists(qtbot, request) -> None:
-    ctrl, mgr = _mgr(qtbot, request)
+def test_table_manager_exists(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
+    _ctrl, mgr = _mgr(qtbot, request)
     assert isinstance(mgr, QWidget)
     assert isinstance(mgr.table, QTableWidget)
 
 
-def test_table_columns(qtbot, request) -> None:
+def test_table_columns(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     """Test 1: columns Name, Start (mm), End (mm), Step (μm), #Planes,
     Est. Time, Est. Size. Start/End display in mm; Step stays µm."""
     _ctrl, mgr = _mgr(qtbot, request)
@@ -46,7 +55,7 @@ def test_table_columns(qtbot, request) -> None:
                        "Step (\u03bcm)", "#Planes", "Est. Time", "Est. Size"]
 
 
-def test_empty_state_copy(qtbot, request) -> None:
+def test_empty_state_copy(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     """Test 2: empty state renders the documented copy."""
     _ctrl, mgr = _mgr(qtbot, request)
     assert mgr.table.rowCount() == 0
@@ -55,7 +64,7 @@ def test_empty_state_copy(qtbot, request) -> None:
     assert "re-driving the stage" in text
 
 
-def test_add_stack_default_row(qtbot, request) -> None:
+def test_add_stack_default_row(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     """Test 3: Add Stack appends a row pre-filled with the current stack
     panel values (first plane, last plane, step size) + computed #planes."""
     ctrl, mgr = _mgr(qtbot, request)
@@ -77,7 +86,7 @@ def test_add_stack_default_row(qtbot, request) -> None:
     assert row.n_planes == 0
 
 
-def test_cell_edit_recomputes(qtbot, request) -> None:
+def test_cell_edit_recomputes(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     """Test 4: editing a cell updates the value + recomputes #planes/est.
     time/est. size. Start/End cells display in mm (converted to µm for the
     internal _Row); Step stays µm."""
@@ -96,10 +105,13 @@ def test_cell_edit_recomputes(qtbot, request) -> None:
     assert row.est_size_mb > 0
 
 
-def test_remove_stack_confirmation(qtbot, request) -> None:
+def test_remove_stack_confirmation(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """Test 5: Remove Stack shows a confirmation dialog with the row name;
     Yes removes, Cancel does not."""
     from unittest.mock import patch
+
     from PySide6.QtWidgets import QMessageBox
 
     _ctrl, mgr = _mgr(qtbot, request)
@@ -118,7 +130,9 @@ def test_remove_stack_confirmation(qtbot, request) -> None:
     seen_prompt: list[str] = []
     mgr.table.selectRow(0)
 
-    def _capture(_parent, _title, text, *a, **k):
+    def _capture(
+        _parent: Any, _title: str, text: str, *args: Any, **kwargs: Any
+    ) -> QMessageBox.StandardButton:
         seen_prompt.append(text)
         return QMessageBox.StandardButton.Yes
 
@@ -130,12 +144,15 @@ def test_remove_stack_confirmation(qtbot, request) -> None:
     assert "Remove" in seen_prompt[0]
 
 
-def test_move_up_down(qtbot, request) -> None:
+def test_move_up_down(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     """Test 6: Move Up / Move Down reorder the selected row."""
     _ctrl, mgr = _mgr(qtbot, request)
-    mgr.add_stack(); mgr.set_cell(0, 0, "A")
-    mgr.add_stack(); mgr.set_cell(1, 0, "B")
-    mgr.add_stack(); mgr.set_cell(2, 0, "C")
+    mgr.add_stack()
+    mgr.set_cell(0, 0, "A")
+    mgr.add_stack()
+    mgr.set_cell(1, 0, "B")
+    mgr.add_stack()
+    mgr.set_cell(2, 0, "C")
     # Select row 2 (C) and move it up → order A, C, B.
     mgr.table.selectRow(2)
     mgr.move_up()
@@ -146,7 +163,9 @@ def test_move_up_down(qtbot, request) -> None:
     assert [mgr.row_at(i).name for i in range(3)] == ["A", "B", "C"]
 
 
-def test_incomplete_row_disables_start_queue(qtbot, request) -> None:
+def test_incomplete_row_disables_start_queue(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """Test 7: a row with start == end or step == 0 is flagged; Start Queue
     disabled while any row is incomplete."""
     _ctrl, mgr = _mgr(qtbot, request)
@@ -162,7 +181,9 @@ def test_incomplete_row_disables_start_queue(qtbot, request) -> None:
     assert not mgr.start_queue_enabled()
 
 
-def test_incomplete_row_flagged_visually(qtbot, request) -> None:
+def test_incomplete_row_flagged_visually(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """Test 7b: an incomplete row is flagged with a red background on the
     offending cell."""
     _ctrl, mgr = _mgr(qtbot, request)
@@ -175,7 +196,7 @@ def test_incomplete_row_flagged_visually(qtbot, request) -> None:
     assert not mgr.is_row_flagged(0)
 
 
-def test_out_of_range_row_flagged(qtbot, request) -> None:
+def test_out_of_range_row_flagged(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     """Test 8: a start/end value outside the motor travel limits is flagged
     + the row shows the out-of-range error."""
     ctrl, mgr = _mgr(qtbot, request)
@@ -190,7 +211,9 @@ def test_out_of_range_row_flagged(qtbot, request) -> None:
     assert not mgr.start_queue_enabled()
 
 
-def test_long_name_truncates_with_tooltip(qtbot, request) -> None:
+def test_long_name_truncates_with_tooltip(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """Test 9: long stack names truncate with ellipsis; the full name is in
     the cell tooltip."""
     _ctrl, mgr = _mgr(qtbot, request)
@@ -201,16 +224,22 @@ def test_long_name_truncates_with_tooltip(qtbot, request) -> None:
     assert item.toolTip() == long_name
 
 
-def test_table_scrollable(qtbot, request) -> None:
+def test_table_scrollable(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     """Test 10: the table scrolls horizontally/vertically when content
     exceeds the viewport."""
     _ctrl, mgr = _mgr(qtbot, request)
     from PySide6.QtCore import Qt
-    assert mgr.table.horizontalScrollBarPolicy() != Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-    assert mgr.table.verticalScrollBarPolicy() != Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert (
+        mgr.table.horizontalScrollBarPolicy()
+        != Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    )
+    assert (
+        mgr.table.verticalScrollBarPolicy()
+        != Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    )
 
 
-def test_zero_one_many(qtbot, request) -> None:
+def test_zero_one_many(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     """Test 11: the table renders 0 (empty copy), 1, and N rows."""
     _ctrl, mgr = _mgr(qtbot, request)
     # 0 rows.

@@ -28,11 +28,17 @@ This test verifies:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 from _helpers.controller_fixture import make_controller
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
 
-_LASER_PANEL_PATH = Path(__file__).resolve().parents[1] / "lightsheet" / "gui" / "panels" / "laser_panel.py"
+_LASER_PANEL_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "lightsheet" / "gui" / "panels" / "laser_panel.py"
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -40,12 +46,12 @@ _LASER_PANEL_PATH = Path(__file__).resolve().parents[1] / "lightsheet" / "gui" /
 # --------------------------------------------------------------------------- #
 
 
-def test_laser1_toggle_is_checkable(qtbot, request) -> None:
+def test_laser1_toggle_is_checkable(qtbot: QtBot, request: FixtureRequest) -> None:
     ctrl, _ = make_controller(qtbot, request)
     assert ctrl.laser_panel.ui.pushButton_laserOneToggle.isCheckable() is True
 
 
-def test_laser2_toggle_is_checkable(qtbot, request) -> None:
+def test_laser2_toggle_is_checkable(qtbot: QtBot, request: FixtureRequest) -> None:
     ctrl, _ = make_controller(qtbot, request)
     assert ctrl.laser_panel.ui.pushButton_laserTwoToggle.isCheckable() is True
 
@@ -55,7 +61,9 @@ def test_laser2_toggle_is_checkable(qtbot, request) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_optimistic_echo_on_when_turning_on(qtbot, request) -> None:
+def test_optimistic_echo_on_when_turning_on(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """Pressing the L1 toggle when OFF immediately sets the status label to
     '● ON' green BEFORE the toggle thread starts. We patch the thread spawn
     so the HAL never runs — the optimistic echo is purely GUI-thread."""
@@ -66,12 +74,14 @@ def test_optimistic_echo_on_when_turning_on(qtbot, request) -> None:
     assert label.text() == "\u25cf OFF"
 
     spawned = {"did": False}
-    real_thread = __import__("lightsheet.gui.panels.laser_panel", fromlist=["threading"]).threading
+    real_thread = __import__(
+        "lightsheet.gui.panels.laser_panel", fromlist=["threading"]
+    ).threading
 
-    def _fake_thread(*args, **kwargs):
+    def _fake_thread(*args: Any, **kwargs: Any) -> Any:
         spawned["did"] = True
         class _T:
-            def start(self):
+            def start(self) -> None:
                 pass
         return _T()
 
@@ -85,7 +95,9 @@ def test_optimistic_echo_on_when_turning_on(qtbot, request) -> None:
     assert spawned["did"] is True
 
 
-def test_optimistic_echo_off_when_turning_off(qtbot, request) -> None:
+def test_optimistic_echo_off_when_turning_off(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """Pressing the L1 toggle when ON immediately sets the status label to
     '● OFF' gray."""
     ctrl, _ = make_controller(qtbot, request)
@@ -97,11 +109,13 @@ def test_optimistic_echo_off_when_turning_off(qtbot, request) -> None:
     label.setText("\u25cf ON")
     label.setStyleSheet("color: #34C759; font-weight: bold;")
 
-    real_thread = __import__("lightsheet.gui.panels.laser_panel", fromlist=["threading"]).threading
+    real_thread = __import__(
+        "lightsheet.gui.panels.laser_panel", fromlist=["threading"]
+    ).threading
 
-    def _fake_thread(*args, **kwargs):
+    def _fake_thread(*args: Any, **kwargs: Any) -> Any:
         class _T:
-            def start(self):
+            def start(self) -> None:
                 pass
         return _T()
 
@@ -118,7 +132,9 @@ def test_optimistic_echo_off_when_turning_off(qtbot, request) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_poll_corrects_button_checked_state_active(qtbot, request) -> None:
+def test_poll_corrects_button_checked_state_active(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     ctrl, _ = make_controller(qtbot, request)
     btn = ctrl.laser_panel.ui.pushButton_laserOneToggle
     assert not btn.isChecked()
@@ -126,7 +142,9 @@ def test_poll_corrects_button_checked_state_active(qtbot, request) -> None:
     assert btn.isChecked() is True
 
 
-def test_poll_corrects_button_checked_state_inactive(qtbot, request) -> None:
+def test_poll_corrects_button_checked_state_inactive(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     ctrl, _ = make_controller(qtbot, request)
     btn = ctrl.laser_panel.ui.pushButton_laserOneToggle
     btn.setChecked(True)
@@ -139,7 +157,7 @@ def test_poll_corrects_button_checked_state_inactive(qtbot, request) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def _patch_question(return_value):
+def _patch_question(return_value: object) -> Any:
     """Patch QMessageBox.question (the modal helper used by the dialog gate)
     to return the supplied value without showing a popup."""
     return patch(
@@ -148,7 +166,9 @@ def _patch_question(return_value):
     )
 
 
-def test_first_energize_dialog_appears_first_time(qtbot, request) -> None:
+def test_first_energize_dialog_appears_first_time(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The first time a laser is energized in a session, a QMessageBox appears
     with the UI-SPEC copy. We capture the heading/body via the patched
     question() call args."""
@@ -160,15 +180,19 @@ def test_first_energize_dialog_appears_first_time(qtbot, request) -> None:
 
     from PySide6.QtWidgets import QMessageBox
 
-    def _capture(parent, title, text, *args, **kwargs):
+    def _capture(
+        parent: object, title: str, text: str, *args: Any, **kwargs: Any
+    ) -> object:
         captured["text"] = (title, text)
         return QMessageBox.StandardButton.Yes  # Energize
 
-    real_thread = __import__("lightsheet.gui.panels.laser_panel", fromlist=["threading"]).threading
+    real_thread = __import__(
+        "lightsheet.gui.panels.laser_panel", fromlist=["threading"]
+    ).threading
 
-    def _fake_thread(*a, **k):
+    def _fake_thread(*a: Any, **k: Any) -> Any:
         class _T:
-            def start(self):
+            def start(self) -> None:
                 pass
         return _T()
 
@@ -186,7 +210,9 @@ def test_first_energize_dialog_appears_first_time(qtbot, request) -> None:
     assert "eye protection" in text.lower() or "Class IIIB" in text
 
 
-def test_first_energize_cancel_reverts_button_and_does_not_energize(qtbot, request) -> None:
+def test_first_energize_cancel_reverts_button_and_does_not_energize(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """If the operator clicks Cancel on the first-energize dialog, the laser
     is NOT energized (the toggle thread does not start), the button checked
     state reverts to unchecked, and the label reverts to '● OFF'."""
@@ -196,12 +222,14 @@ def test_first_energize_cancel_reverts_button_and_does_not_energize(qtbot, reque
     ctrl._laser1_first_energize_done = False
 
     spawned = {"did": False}
-    real_thread = __import__("lightsheet.gui.panels.laser_panel", fromlist=["threading"]).threading
+    real_thread = __import__(
+        "lightsheet.gui.panels.laser_panel", fromlist=["threading"]
+    ).threading
 
-    def _fake_thread(*a, **k):
+    def _fake_thread(*a: Any, **k: Any) -> Any:
         spawned["did"] = True
         class _T:
-            def start(self):
+            def start(self) -> None:
                 pass
         return _T()
 
@@ -219,7 +247,9 @@ def test_first_energize_cancel_reverts_button_and_does_not_energize(qtbot, reque
     assert ctrl._laser1_first_energize_done is False
 
 
-def test_first_energize_dont_warn_again_sets_flag(qtbot, request) -> None:
+def test_first_energize_dont_warn_again_sets_flag(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """If the operator clicks 'Don't warn again this session', the per-session
     flag is set and subsequent energizes skip the dialog."""
     ctrl, _ = make_controller(qtbot, request)
@@ -227,11 +257,13 @@ def test_first_energize_dont_warn_again_sets_flag(qtbot, request) -> None:
     ctrl._laser1_first_energize_done = False
 
     call_count = {"n": 0}
-    real_thread = __import__("lightsheet.gui.panels.laser_panel", fromlist=["threading"]).threading
+    real_thread = __import__(
+        "lightsheet.gui.panels.laser_panel", fromlist=["threading"]
+    ).threading
 
-    def _fake_thread(*a, **k):
+    def _fake_thread(*a: Any, **k: Any) -> Any:
         class _T:
-            def start(self):
+            def start(self) -> None:
                 pass
         return _T()
 
@@ -240,7 +272,9 @@ def test_first_energize_dont_warn_again_sets_flag(qtbot, request) -> None:
     # The "Don't warn again this session" button maps to Discard in the
     # implementation; patching question() to return Discard simulates the
     # operator clicking that button.
-    def _question(parent, title, text, *args, **kwargs):
+    def _question(
+        parent: object, title: str, text: str, *args: Any, **kwargs: Any
+    ) -> object:
         call_count["n"] += 1
         return QMessageBox.StandardButton.Discard
 
@@ -257,7 +291,9 @@ def test_first_energize_dont_warn_again_sets_flag(qtbot, request) -> None:
     assert ctrl._laser1_first_energize_done is True
 
 
-def test_first_energize_energize_proceeds(qtbot, request) -> None:
+def test_first_energize_energize_proceeds(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """If the operator clicks Energize, the toggle thread starts and the
     optimistic echo stays."""
     ctrl, _ = make_controller(qtbot, request)
@@ -266,12 +302,14 @@ def test_first_energize_energize_proceeds(qtbot, request) -> None:
     ctrl._laser1_first_energize_done = False
 
     spawned = {"did": False}
-    real_thread = __import__("lightsheet.gui.panels.laser_panel", fromlist=["threading"]).threading
+    real_thread = __import__(
+        "lightsheet.gui.panels.laser_panel", fromlist=["threading"]
+    ).threading
 
-    def _fake_thread(*a, **k):
+    def _fake_thread(*a: Any, **k: Any) -> Any:
         spawned["did"] = True
         class _T:
-            def start(self):
+            def start(self) -> None:
                 pass
         return _T()
 
@@ -288,7 +326,9 @@ def test_first_energize_energize_proceeds(qtbot, request) -> None:
     assert ctrl._laser1_first_energize_done is True
 
 
-def test_per_session_flags_initialized_false(qtbot, request) -> None:
+def test_per_session_flags_initialized_false(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     ctrl, _ = make_controller(qtbot, request)
     assert ctrl._laser1_first_energize_done is False
     assert ctrl._laser2_first_energize_done is False
@@ -321,7 +361,7 @@ def test_no_qthread_in_laser_panel() -> None:
     )
 
 
-def test_estop_kill_path_unchanged(qtbot, request) -> None:
+def test_estop_kill_path_unchanged(qtbot: QtBot, request: FixtureRequest) -> None:
     """The E-stop kill path stays synchronous + lock-free in the shell:
     estop_event.set() + for laser in self.lasers: laser.off()."""
     ctrl, _ = make_controller(qtbot, request)

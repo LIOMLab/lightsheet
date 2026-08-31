@@ -1,24 +1,9 @@
-"""HardwareManager — god-object split collaborator.
+"""HardwareManager — laser write/toggle/poll collaborator.
 
-Owns the laser write/toggle daemon threads, the per-laser RLock-guarded
-write paths, both status-poll methods, and ``start_lasers``/``stop_lasers``.
-
-Does NOT own an ``estop()``/kill-path method of any kind (safety
-anti-pattern, the pitfall). The E-stop kill path
-(``Controller_MainWindow.updateUi_estop_pressed``) stays in the thin shell
-with a direct ``list[ILaser]`` ref, lock-free, on the GUI thread. A future
-maintainer who sees ``HardwareManager.estop()`` will be tempted to
-queue/thread it — the single most safety-critical regression risk.
-
-This is a plain-Python object (NOT a ``QObject``) per the plain-Python collaborator pattern
-1: collaborators emit through a shell reference, never declare their own
-``Signal``, and never call ``.connect()``. The shell-owned state
-(``sig_message``, ``estop_event``, ``_auto_laser1``/``_auto_laser2``,
-``laser1_power_pct``/``laser2_power_pct``) is read off the shell reference
-— these cached-flag/percentage values are sampled on the GUI thread by
-``_cache_auto_laser_flags()`` and the amplitude spinbox slots, which stay
-in the shell. The manager holds its own ``self.lasers = bundle.lasers``
-reference (identical objects to ``shell.lasers``).
+Owns the laser daemon threads, per-laser RLock-guarded write paths, status
+poll methods, and ``start_lasers``/``stop_lasers``. Does NOT own an
+``estop()`` method — the E-stop kill path stays in the shell (lock-free,
+GUI-thread, synchronous ``.off()``).
 """
 
 from __future__ import annotations
@@ -37,29 +22,18 @@ logger = logging.getLogger(__name__)
 
 
 class LaserReadbackWorker(QObject):
-    """Worker ``QObject`` for the iBeam L2 serial readback, affined to a
-    dedicated ``QThread`` via ``moveToThread``.
-
-    Fire-and-forget single-shot: ``start_readback`` runs the serial query
-    on the worker thread (calling ``HardwareManager._refresh_laser_readback``
-    which emits the result via the shell's ``sig_laser_readback`` signal —
-    a thread-safe Qt signal that crosses to the GUI thread for the QLabel
-    mutation). When the readback completes, ``sig_finished`` emits which
-    quits the thread's event loop via a direct connection (so the thread
-    exits without waiting for the main thread's event loop to process a
-    queued quit).
-    """
+    """Worker QObject for the iBeam L2 serial readback on a dedicated QThread."""
 
     sig_finished = Signal()
 
-    def __init__(self, hw: "HardwareManager") -> None:
+    def __init__(self, hw: HardwareManager) -> None:
         super().__init__()
         self._hw = hw
 
     @Slot()
     def start_readback(self) -> None:
-        """Entry point connected to QThread.started — runs the L2 readback
-        (idx=1, the iBeam) on the worker thread, then signals completion."""
+        """Runs the L2 readback (idx=1) on the worker thread, then
+        signals completion."""
         try:
             self._hw._refresh_laser_readback(1)
         finally:
@@ -67,36 +41,20 @@ class LaserReadbackWorker(QObject):
 
 
 class HardwareManager:
-    """Laser write/toggle/poll collaborator.
+    """Laser write/toggle/poll collaborator."""
 
-    All laser write/toggle logic moved verbatim from
-    ``Controller_MainWindow`` — only the attribute-access prefix changes
-    (``self.`` -> ``self._shell.`` for shell-owned state; ``self.lasers``
-    stays ``self.lasers`` since the manager holds its own bundle.lasers
-    reference). Every existing ``if self.estop_event.is_set(): return`` /
-    ``mw = 0.0`` re-check survives unchanged (the E-stop cooperative-skip mitigation).
-    """
-
-    def __init__(self, bundle: DeviceBundle, shell: "Controller_MainWindow") -> None:
+    def __init__(self, bundle: DeviceBundle, shell: Controller_MainWindow) -> None:
         self._bundle = bundle
         self._shell = shell
-        # Direct list[ILaser] for daemon-thread writes — identical objects
-        # to shell.lasers (the shell's list copy of the bundle's tuple).
-        # The per-laser RLock already lives on each ILaser instance.
         self.lasers = list(bundle.lasers)
         # Tracks the in-flight async iBeam readback QThread so the 1s status
         # timer cannot stack readback threads when the serial round-trip
-        # (~3s firmware latency) exceeds the timer interval. See
-        # _refresh_laser2_readback_async.
+        # (~3s firmware latency) exceeds the timer interval.
         self._readback_thread: QThread | None = None
         self._readback_worker: LaserReadbackWorker | None = None
-        # NOTE: __init__ deliberately performs NO laser HAL lifecycle
-        # calls (no .open()/.on()/.set_power()). It runs synchronously in
-        # main()'s composition root BEFORE controller.show() — calling
-        # the iBeam serial open here would block the GUI window on the
-        # serial round-trip. The iBeam serial open is driven post-show
-        # from hardware_init via open_laser2() (see below), preserving
-        # the pre-extraction 100ms-timer-triggered timing exactly.
+        # __init__ performs NO laser HAL lifecycle calls — it runs
+        # synchronously before controller.show() and would block the GUI
+        # on the serial round-trip.
 
     # ------------------------------------------------------------------ #
     # iBeam serial-open lifecycle (called post-show from hardware_init).
@@ -105,26 +63,10 @@ class HardwareManager:
     def open_laser2(self) -> None:
         """Open the Toptica iBeam serial laser (COM4 / self.lasers[1]).
 
-        Moved verbatim from ``Controller_MainWindow.hardware_init``'s inline
-        iBeam serial-open try/except block. The IBeamSmartLaser
-        adapter constructs the inner IBeam serial engine in ``__init__`` but
-        does NOT open the serial port — ``open()`` is a real-hardware
-        lifecycle verb driven here, mirroring the pre-rewrite pattern.
-
         Failure is non-fatal — the DAQ laser path still works if the iBeam
-        is offline — but the error is surfaced via ``sig_message`` so the
-        operator knows the red laser is unavailable. ``open()`` calls
-        ``enable_channel()`` internally; ``enable_channel()`` catches
-        ``SerialException`` and sets ``self.error`` without re-raising, so a
-        plain ``try/except`` around ``open()`` cannot detect a channel-enable
-        failure — the error surface must be inspected after ``open()``
-        returns.
-
-        Timing invariant: this method is invoked from ``hardware_init``
-        (the 100ms ``timer_hardware_init`` callback), which cannot fire
-        until the Qt event loop is pumping via ``app.exec()`` (i.e. after
-        ``controller.show()``). It is NOT called from ``__init__`` — that
-        would block the composition root on the serial round-trip.
+        is offline. Called from ``hardware_init`` (post-show), NOT from
+        ``__init__`` — calling it in ``__init__`` would block on the serial
+        round-trip.
         """
         try:
             self.lasers[1].open()
@@ -142,28 +84,17 @@ class HardwareManager:
     # ------------------------------------------------------------------ #
 
     def _write_laser1_power(self, pct: float) -> None:
-        """Worker-thread HAL write for laser 1. Scales the staged percentage
-        to mW at the HAL boundary (pct/100 * max_power) and calls
-        self.lasers[0].set_power(mw). The DAQLaser backend converts mW -> V
-        internally and clamps both units (two-layer safety, AGENTS.md §2).
-
-        Cooperative-skip: checks estop_event immediately before the HAL write
-        and skips entirely if set — the E-stop has already driven laser 1 off
-        with its own synchronous write, and a queued amplitude write must not
-        re-energize or mutate its state after that point. The lock lives on
-        the ILaser instance (self.lasers[0]._lock), not the manager.
+        """Worker-thread HAL write for laser 1. Scales pct to mW at the HAL
+        boundary. Checks estop_event before the HAL write and skips if set.
         """
         with self.lasers[0]._lock:
             if self._shell.estop_event.is_set():
                 return
             if self.lasers[0].active:
                 mw = pct / 100.0 * self.lasers[0].max_power
-                # Re-check E-stop immediately before the HAL write — E-stop
-                # is intentionally lock-free (it runs on the GUI thread and
-                # zeroes the laser via .off() without taking this lock), so
-                # it can fire between the top-of-method check and this
-                # point. If it did, force mw = 0 so the HAL write cannot
-                # re-energize the laser past the kill path.
+                # Re-check E-stop before the HAL write — E-stop is lock-free
+                # so it can fire between the top-of-method check and here.
+                # Force mw=0 so the write cannot re-energize past the kill path.
                 if self._shell.estop_event.is_set():
                     mw = 0.0
                 self.lasers[0].set_power(mw)
@@ -175,23 +106,12 @@ class HardwareManager:
                         f"{self.lasers[0].error_message}"
                     )
                     self.lasers[0].error = 0
-                # Refresh-after-action: the status label reflects the
-                # post-write state immediately, not just on the 100ms
-                # timer tick.
                 self._poll_laser_status([0])
                 self._refresh_laser_readback(0)
 
     def _write_laser2_power(self, pct: float) -> None:
-        """Worker-thread HAL write for laser 2. Scales the staged percentage
-        to mW at the HAL boundary (pct/100 * max_power) and calls
-        self.lasers[1].set_power(mw). The IBeamSmartLaser adapter converts
-        mW -> µW internally and the inner IBeam.set_power clamps µW as a
-        second physical-safety layer.
-
-        Cooperative-skip: checks estop_event immediately before the HAL write
-        and skips entirely if set — the E-stop has already driven laser 2 off
-        with its own synchronous write. The lock lives on the ILaser instance
-        (self.lasers[1]._lock, identity-shared with the inner IBeam._lock).
+        """Worker-thread HAL write for laser 2. Scales pct to mW at the HAL
+        boundary. Checks estop_event before the HAL write.
         """
         with self.lasers[1]._lock:
             if self._shell.estop_event.is_set():
@@ -209,9 +129,6 @@ class HardwareManager:
                         f"{self.lasers[1].error_message}"
                     )
                     self.lasers[1].error = 0
-                # Refresh-after-action: the iBeam status label reflects
-                # the post-write state immediately (the gated ~1s poll
-                # would otherwise lag up to a second behind the write).
                 self._poll_laser_status([1])
                 self._refresh_laser_readback(1)
 
@@ -220,54 +137,35 @@ class HardwareManager:
     # ------------------------------------------------------------------ #
 
     def _toggle_laser1(self) -> None:
-        """Worker-thread toggle for laser 1. Toggles self.lasers[0], and if
-        it was just turned on, immediately applies the staged percentage
-        (scaled to mW) so the operator sees the chosen power, not 0.
-        HAL failures are surfaced via sig_message. The lock lives on the
-        ILaser instance (self.lasers[0]._lock).
-
-        Cross-deenergization (all-modes strict): when the energizing
-        branch is taken (L1 was inactive), L2 is de-energized BEFORE L1
-        is energized — the one-laser-energized invariant holds across
-        the manual-toggle path too. The L2 .off() runs OUTSIDE L1's lock
-        (L2's lock is independent), so the two locks are never held
-        simultaneously (deadlock-free). The estop_event re-check-before-
-        .on() guard is preserved on the energizing branch so a Class
-        IIIB laser is never re-energized past the kill path."""
-        # Cross-deenergize L2 first, OUTSIDE L1's lock, only when
-        # we are about to energize L1. Read L1.active without L1's lock
-        # to decide the branch — the active flag is a plain bool read
-        # (no HAL write), and the subsequent L1 lock + re-check inside
-        # the lock handles a concurrent toggle racing this one. The L2
-        # .off() acquires L2's own lock internally (for IBeam) or is
-        # lock-free (for DAQLaser); either way it does not touch L1's
-        # lock, so no cross-laser lock-ordering hazard.
-        if not self._shell.estop_event.is_set() and not self.lasers[0].active:
-            if self.lasers[1].active:
-                self.lasers[1].off()
-                if self.lasers[1].error:
-                    self._shell.sig_message.emit(
-                        f"{self.lasers[1].label} off failed during "
-                        f"L1 toggle — may STILL BE ON. Cause: "
-                        f"{self.lasers[1].error_message}"
-                    )
-                    self.lasers[1].error = 0
+        """Worker-thread toggle for laser 1. When energizing, L2 is
+        de-energized first (one-laser-energized invariant). The L2 .off()
+        runs outside L1's lock so the two locks are never held simultaneously.
+        E-stop is re-checked before .on() so a Class IIIB laser is never
+        re-energized past the kill path.
+        """
+        # Cross-deenergize L2 outside L1's lock before energizing L1.
+        if (
+            not self._shell.estop_event.is_set()
+            and not self.lasers[0].active
+            and self.lasers[1].active
+        ):
+            self.lasers[1].off()
+            if self.lasers[1].error:
+                self._shell.sig_message.emit(
+                    f"{self.lasers[1].label} off failed during "
+                    f"L1 toggle -- may STILL BE ON. Cause: "
+                    f"{self.lasers[1].error_message}"
+                )
+                self.lasers[1].error = 0
         with self.lasers[0]._lock:
-            # E-stop cooperative-skip: if E-stop was pressed while this
-            # toggle thread was in flight (waiting on the lock or before it
-            # was scheduled), do NOT energize. The E-stop path already drove
-            # the laser off synchronously on the GUI thread via .off();
-            # a queued toggle that calls .on() would re-energize a Class
-            # IIIB laser past the kill path. E-stop must be the final word.
+            # Do NOT energize if E-stop fired while this toggle was in flight.
             if self._shell.estop_event.is_set():
                 return
             if self.lasers[0].active:
                 self.lasers[0].off()
             else:
                 self.lasers[0].on()
-            # Re-check after the toggle — E-stop may have fired mid-toggle
-            # (between .on()/.off() returning and this line). If it did,
-            # force the laser back off and do not apply the staged power.
+            # Force off if E-stop fired mid-toggle.
             if self._shell.estop_event.is_set():
                 self.lasers[0].off()
                 return
@@ -279,51 +177,33 @@ class HardwareManager:
                 )
                 self.lasers[0].error = 0
             elif self.lasers[0].active:
-                # Just turned on — apply the staged percentage (scaled).
-                # _write_laser1_power re-acquires the same RLock (reentrant)
-                # and checks estop_event before the write.
                 self._write_laser1_power(self._shell.laser1_power_pct)
-            # Refresh-after-action: the status label reflects the
-            # post-toggle state immediately (the 100ms timer would
-            # otherwise lag up to 100ms behind the toggle).
             self._poll_laser_status([0])
             self._refresh_laser_readback(0)
 
     def _toggle_laser2(self) -> None:
-        """Worker-thread toggle for laser 2. Symmetric with _toggle_laser1
-        — both operate on self.lasers[i] uniformly. The IBeamSmartLaser
-        adapter's .on() mirrors active from the inner _is_on and guards on
-        the inner error surface, so the controller no longer needs its own
-        iBeam-specific verify-before-mark-active branch. The lock lives on
-        the ILaser instance (self.lasers[1]._lock, identity-shared with the
-        inner IBeam._lock).
-
-        Cross-deenergization (all-modes strict): when the energizing
-        branch is taken (L2 was inactive), L1 is de-energized BEFORE L2
-        is energized — the one-laser-energized invariant holds across
-        the manual-toggle path too. The L1 .off() runs OUTSIDE L2's lock
-        (L1's lock is independent), so the two locks are never held
-        simultaneously (deadlock-free). The estop_event re-check-before-
-        .on() guard is preserved on the energizing branch."""
+        """Worker-thread toggle for laser 2. Symmetric with _toggle_laser1.
+        Cross-deenergizes L1 before energizing L2 (one-laser-energized
+        invariant); L1 .off() runs outside L2's lock (deadlock-free).
+        E-stop is re-checked before .on().
+        """
         # Cross-deenergize L1 first, OUTSIDE L2's lock, only when
-        # we are about to energize L2. See _toggle_laser1 for the
-        # lock-ordering rationale.
-        if not self._shell.estop_event.is_set() and not self.lasers[1].active:
-            if self.lasers[0].active:
-                self.lasers[0].off()
-                if self.lasers[0].error:
-                    self._shell.sig_message.emit(
-                        f"{self.lasers[0].label} off failed during "
-                        f"L2 toggle — may STILL BE ON. Cause: "
-                        f"{self.lasers[0].error_message}"
-                    )
-                    self.lasers[0].error = 0
+        # about to energize L2.
+        if (
+            not self._shell.estop_event.is_set()
+            and not self.lasers[1].active
+            and self.lasers[0].active
+        ):
+            self.lasers[0].off()
+            if self.lasers[0].error:
+                self._shell.sig_message.emit(
+                    f"{self.lasers[0].label} off failed during "
+                    f"L2 toggle -- may STILL BE ON. Cause: "
+                    f"{self.lasers[0].error_message}"
+                )
+                self.lasers[0].error = 0
         with self.lasers[1]._lock:
-            # E-stop cooperative-skip: if E-stop was pressed while this
-            # toggle thread was in flight, do NOT energize. The E-stop path
-            # already drove the laser off synchronously on the GUI thread
-            # via .off(); a queued toggle that calls .on() would re-enable
-            # emission of a Class IIIB laser past the kill path.
+            # Do NOT energize if E-stop was pressed while this toggle was in flight.
             if self._shell.estop_event.is_set():
                 return
             if self.lasers[1].active:
@@ -338,8 +218,7 @@ class HardwareManager:
                     self.lasers[1].error = 0
             else:
                 # Re-check before energizing — E-stop may have fired while
-                # we were waiting on the lock or inside the off() branch
-                # above. Do not call .on() if the kill path has run.
+                # waiting on the lock or inside the off() branch above.
                 if self._shell.estop_event.is_set():
                     return
                 self.lasers[1].on()
@@ -353,14 +232,10 @@ class HardwareManager:
                     self._poll_laser_status([1])
                     return
                 # Apply the staged percentage (scaled to mW).
-                # _write_laser2_power re-acquires the same RLock (reentrant)
-                # and checks estop_event before the write.
                 self._write_laser2_power(self._shell.laser2_power_pct)
                 if self.lasers[1].error:
                     self.lasers[1].off()
-            # Refresh-after-action: the iBeam status label reflects the
-            # post-toggle state immediately (the gated ~1s poll would
-            # otherwise lag up to a second behind the toggle).
+            # Refresh status immediately (the gated poll would otherwise lag).
             self._poll_laser_status([1])
             self._refresh_laser_readback(1)
 
@@ -368,33 +243,14 @@ class HardwareManager:
     # Acquisition-worker laser start/stop.
     # ------------------------------------------------------------------ #
 
-    def start_lasers(
-        self, energize_lasers: tuple[bool, bool] | None = None
-    ) -> None:
-        """Starts the lasers at a certain power. Called from acquisition
-        worker threads (not the GUI thread), so no further nested thread is
-        needed — only the %-to-absolute scaling at the HAL boundary.
+    def start_lasers(self, energize_lasers: tuple[bool, bool] | None = None) -> None:
+        """Start the lasers at staged power. Called from acquisition worker
+        threads. Stages power via .set_power(mw) BEFORE .on() so the backend
+        writes the staged power when energizing.
 
-        Drives self.lasers[0] and self.lasers[1] uniformly: stage the
-        scaled power via .set_power(mw) BEFORE .on() so the DAQLaser
-        backend writes the staged power when it energizes the AO channel,
-        and the IBeamSmartLaser adapter stages the channel power before
-        enabling global emission.
-
-        The auto-laser flags (self._shell._auto_laser1 / _auto_laser2) are
-        sampled on the GUI thread by _cache_auto_laser_flags() before the
-        worker is spawned, so this method reads only cached bools and never
-        touches a Qt widget (AGENTS.md §11).
-
-        ``energize_lasers`` (optional) overrides the cached auto-laser
-        flags for THIS call only — the caller passes a local (l1, l2)
-        tuple instead of mutating self._shell._auto_laser2 around the
-        call. Used by the continuous-mode workers (PreviewWorker /
-        LiveWorker) to suppress L2 energization when both auto-laser
-        checkboxes are checked (continuous mode energizes only L1 for
-        the session to avoid per-frame alternation flicker). When None
-        (the default), the cached flags are read as before — back-compat
-        for the single/stack callers that do not need the override.
+        ``energize_lasers`` overrides the cached auto-laser flags for THIS
+        call only — used by continuous-mode workers to suppress L2 when both
+        checkboxes are checked. When None, the cached flags are read.
         """
         if energize_lasers is not None:
             energize_l1, energize_l2 = energize_lasers
@@ -405,12 +261,7 @@ class HardwareManager:
             mw = self._shell.laser1_power_pct / 100.0 * self.lasers[0].max_power
             self.lasers[0].set_power(mw)
             self.lasers[0].on()
-            # Surface a HAL write failure to the operator. The backend's
-            # .on() catches the write failure, sets .error = 1, mirrors
-            # .active = False, and deliberately does NOT raise (hardware-
-            # absence tolerance). The caller is responsible for reading the
-            # flag — a failed laser start during acquisition was previously
-            # a silent no-op (PSU dark, no message).
+            # Surface a HAL write failure (backend sets .error, does not raise).
             if self.lasers[0].error:
                 self._shell.sig_message.emit(
                     f"{self.lasers[0].label} on failed — laser reverted to "
@@ -429,18 +280,15 @@ class HardwareManager:
                     f"{self.lasers[1].error_message}"
                 )
                 self.lasers[1].error = 0
-        # Refresh-after-action: both status labels reflect the post-start
-        # state immediately (the periodic timers would otherwise lag).
+        # Refresh both status labels immediately.
         self._poll_laser_status([0, 1])
         self._refresh_laser_readback(0)
         self._refresh_laser_readback(1)
 
     def stop_lasers(self) -> None:
-        """Stops the lasers. Called from acquisition worker threads (not the
-        GUI thread). Drives self.lasers[0] and self.lasers[1] uniformly via
-        .off(). Reads only the cached auto-laser flags sampled on the GUI
-        thread by _cache_auto_laser_flags() — never a Qt widget
-        (AGENTS.md §11)."""
+        """Stop the lasers. Called from acquisition worker threads. Drives
+        both lasers via .off(), reading only the cached auto-laser flags.
+        """
         if self._shell._auto_laser1:
             self.lasers[0].off()
             if self.lasers[0].error:
@@ -459,15 +307,12 @@ class HardwareManager:
                     f"microscope. Cause: {self.lasers[1].error_message}"
                 )
                 self.lasers[1].error = 0
-        # Refresh-after-action: both status labels reflect the post-stop
-        # state immediately (the periodic timers would otherwise lag).
+        # Refresh both status labels immediately.
         self._poll_laser_status([0, 1])
-        # L1 readback is instant (staged mW, no serial). L2 (iBeam) readback
-        # is a ~3s serial query — skip it here because stop_lasers() is
-        # called from close_modes() on the GUI thread during E-stop and
-        # closeEvent, where a 3s GUI freeze is a safety-adjacent UX
-        # concern. The periodic timer_laser2_status will refresh the L2
-        # readback on its next tick.
+        # Skip L2 readback (~3s serial) — stop_lasers() is called from
+        # close_modes() on the GUI thread during E-stop/closeEvent where a
+        # 3s GUI freeze is a safety-adjacent UX concern. The periodic timer
+        # will refresh L2 readback on its next tick.
         self._refresh_laser_readback(0)
 
     # ------------------------------------------------------------------ #
@@ -477,67 +322,27 @@ class HardwareManager:
     def select_laser(self, idx: int) -> None:
         """Energize laser ``idx`` and de-energize the other, enforcing the
         one-laser-energized invariant. Called from acquisition worker
-        threads in multi-channel mode (the per-plane / per-snap sequential
-        cycle).
+        threads in multi-channel mode.
 
         Sequencing (de-energize-then-energize, with E-stop re-checks):
+        1. De-energize the other laser under its own lock.
+        2. Re-check estop_event before energizing — do not re-energize
+           a Class IIIB laser past the kill path.
+        3. Energize the target under its own lock; re-check estop_event
+           inside. Stage power before .on().
+        4. Refresh both status labels.
 
-        1. De-energize the *other* laser (``1 - idx``) under its own
-           per-instance ``ILaser._lock`` RLock. If it is already inactive,
-           the de-energize is a no-op (no redundant HAL write). If ``.off()``
-           fails, the error is surfaced via ``sig_message`` and the error
-           flag is cleared — the operator is told the laser may still be
-           on, but the invariant enforcement continues (we do not abort
-           the channel switch on a de-energize failure; the target is
-           still energized so acquisition can proceed, and the operator
-           sees the warning).
-        2. Re-check ``estop_event`` AFTER the de-energize releases its
-           lock and BEFORE the energize acquires the target lock. If
-           E-stop fired mid-call, return without energizing — a Class
-           IIIB laser must not be re-energized past the kill path
-           (AGENTS.md §2).
-        3. Energize the target laser under its own per-instance
-           ``ILaser._lock`` RLock. Re-check ``estop_event`` inside the
-           lock (it may have fired between step 2 and the lock
-           acquisition). If the target is already active, the energize
-           is a no-op (idempotent — no redundant ``.set_power`` / ``.on``).
-           Otherwise stage the power (``pct/100 * max_power``) via
-           ``.set_power(mw)`` BEFORE ``.on()`` so the DAQ backend writes
-           the staged power when it energizes the AO channel (mirrors
-           ``start_lasers``). Surface a ``.on()`` failure via
-           ``sig_message`` and clear the error flag.
-        4. Refresh both status labels via ``_poll_laser_status([0, 1])``.
-
-        Lock ordering: the two lasers have independent per-instance
-        ``RLock`` s. This method NEVER holds both locks simultaneously —
-        the de-energize acquires and releases the other laser's lock
-        first, then the energize acquires the target laser's lock. This
-        makes deadlock impossible (no cross-laser lock ordering hazard)
-        and preserves the E-stop lock-free contract: ``select_laser``
-        introduces NO new ``threading.Lock`` / ``threading.RLock``
-        attribute on ``HardwareManager`` — only the existing per-laser
-        ``ILaser._lock`` RLocks are used. The E-stop kill path
-        (``updateUi_estop_pressed``) iterates ``self.lasers`` calling
-        ``.off()`` directly on the GUI thread and never acquires either
-        lock (for ``DAQLaser``) or only acquires the inner IBeam lock
-        inside ``_send_cmd`` (for ``IBeamSmartLaser`` — the
-        already-accepted race).
-
-        Out-of-range ``idx`` (only two lasers exist) raises
-        ``IndexError`` before any HAL write. The validation runs BEFORE
-        ``other = 1 - idx`` is computed so a negative ``other`` (e.g.
-        ``idx=2`` → ``other=-1``) cannot index the wrong laser via
-        Python negative indexing and de-energize it before the
-        out-of-range energize raises.
+        Lock ordering: independent per-instance RLocks, never held
+        simultaneously — deadlock-free. E-stop kill path never acquires
+        either lock. Out-of-range ``idx`` raises ``IndexError`` before
+        any HAL write.
         """
         if idx not in (0, 1):
             raise IndexError(
                 f"select_laser: idx={idx} out of range (only two lasers, 0..1)"
             )
         other = 1 - idx
-        # 1. De-energize the other laser under its own lock. The lock is
-        # released before the energize acquires the target lock, so the
-        # two locks are never held simultaneously (deadlock-free).
+        # 1. De-energize the other laser under its own lock.
         with self.lasers[other]._lock:
             if self.lasers[other].active:
                 self.lasers[other].off()
@@ -548,23 +353,15 @@ class HardwareManager:
                         f"{self.lasers[other].error_message}"
                     )
                     self.lasers[other].error = 0
-        # 2. E-stop re-check before energizing (AGENTS.md §2). If E-stop
-        # fired between the de-energize and the energize, do NOT call
-        # .on() — the kill path has already driven both lasers off; a
-        # queued select_laser that calls .on() would re-energize a Class
-        # IIIB laser past the kill path.
+        # 2. E-stop re-check before energizing.
         if self._shell.estop_event.is_set():
             return
         # 3. Energize the target laser under its own lock.
         with self.lasers[idx]._lock:
-            # Re-check inside the lock — E-stop may have fired between
-            # the check above and the lock acquisition.
             if self._shell.estop_event.is_set():
                 return
             if not self.lasers[idx].active:
-                # Stage power before .on() (mirrors start_lasers pattern)
-                # so the DAQ backend writes the staged power when it
-                # energizes the AO channel.
+                # Stage power before .on() so the backend writes staged power.
                 pct = (
                     self._shell.laser1_power_pct
                     if idx == 0
@@ -580,8 +377,7 @@ class HardwareManager:
                         f"{self.lasers[idx].error_message}"
                     )
                     self.lasers[idx].error = 0
-        # 4. Refresh both status labels (refresh-after-action — the
-        # periodic timers would otherwise lag).
+        # 4. Refresh both status labels.
         self._poll_laser_status([0, 1])
 
     # ------------------------------------------------------------------ #
@@ -589,17 +385,9 @@ class HardwareManager:
     # ------------------------------------------------------------------ #
 
     def _poll_laser_status(self, indices: list[int]) -> None:
-        """Compute a status string per requested laser index and emit
-        sig_laser_status(idx, status) on the shell. Called from the L1
-        100ms display timer, the L2 gated ~1s iBeam timer, and the
-        refresh-after-action call sites (toggle / write / start / stop /
-        E-stop).
-
-        Status precedence is error > active > inactive: an errored-but-
-        still-active laser shows ERR, not ON (the HAL error surface is
-        authoritative — AGENTS.md §10). The emit crosses through the Qt
-        signal/slot queue so the QLabel mutation happens on the GUI
-        thread (AGENTS.md §11 — no direct widget write from a timer).
+        """Emit sig_laser_status(idx, status) on the shell. Status
+        precedence: error > active > inactive. The emit crosses the Qt
+        signal/slot queue so QLabel mutation happens on the GUI thread.
         """
         for i in indices:
             laser = self.lasers[i]
@@ -612,22 +400,12 @@ class HardwareManager:
             self._shell.sig_laser_status.emit(i, status)
 
     def _poll_laser2_status_gated(self) -> None:
-        """Gated L2 status + readback poll driven by the ~1s iBeam status
-        QTimer.
+        """Gated L2 status + readback poll driven by the ~1s iBeam QTimer.
 
-        Probes self.lasers[1]._lock with acquire(blocking=False): if the
-        lock is held by an in-progress power write, skip this cycle
-        silently (no error surfaced — the operator can retry via the
-        Refresh button or wait for the next tick). If the lock is free,
-        release it immediately and proceed with the status poll + the
-        readback refresh. The status poll reads only instant in-HAL
-        attributes (.error / .active — no serial I/O, no misattribution
-        risk); the readback refresh is offloaded to a daemon thread via
-        _refresh_laser2_readback_async so the ~3s iBeam serial round-trip
-        never blocks the GUI event loop. The probe-then-release pattern
-        means a write can start between the probe and the readback's own
-        acquire, but the readback's acquire(blocking=False) will then
-        skip — the operator simply sees the next tick's reading.
+        Probes self.lasers[1]._lock with acquire(blocking=False): if held
+        by an in-progress power write, skip this cycle. The readback
+        refresh is offloaded to a daemon thread so the ~3s serial
+        round-trip never blocks the GUI event loop.
         """
         if not self.lasers[1]._lock.acquire(blocking=False):
             return
@@ -636,35 +414,14 @@ class HardwareManager:
         self._refresh_laser2_readback_async()
 
     def _refresh_laser2_readback_async(self) -> None:
-        """Offload the iBeam (L2) serial readback to a QThread + worker
-        QObject.
+        """Offload the iBeam (L2) serial readback to a QThread + worker.
 
-        The iBeam serial round-trip (show level power) takes ~3s due to
-        firmware response latency. Running it on the GUI thread — as the
-        1s status QTimer and the refresh-after-action call sites
-        previously did — freezes the UI for the duration of every
-        round-trip. This spawns a QThread with a LaserReadbackWorker that
-        calls _refresh_laser_readback(1) on the worker thread, which
-        performs the serial query and emits the result via
-        sig_laser_readback (a thread-safe Qt signal — the QLabel mutation
-        happens on the GUI thread in the slot, per AGENTS.md §11).
-
-        A guard on self._readback_thread prevents stacking when the 1s
-        timer fires faster than the ~3s round-trip completes: if a prior
-        readback thread is still running, this call is a no-op and the
-        next timer tick retries. The L1/DAQLaser readback
-        (_refresh_laser_readback(0)) stays synchronous — it returns the
-        staged mW power with no serial I/O, so there is nothing to
-        offload.
-
-        The readback thread is fire-and-forget (single-shot): the worker's
-        do_readback slot runs the query, emits sig_finished which quits
-        the thread's event loop, and the thread exits.
+        The iBeam serial round-trip takes ~3s; running it on the GUI
+        thread would freeze the UI. A guard on self._readback_thread
+        prevents stacking when the 1s timer fires faster than the
+        round-trip completes.
         """
-        if (
-            self._readback_thread is not None
-            and self._readback_thread.isRunning()
-        ):
+        if self._readback_thread is not None and self._readback_thread.isRunning():
             return
         self._readback_thread = QThread()
         self._readback_worker = LaserReadbackWorker(self)
@@ -679,40 +436,16 @@ class HardwareManager:
         self._readback_thread.start()
 
     def _refresh_laser_readback(self, idx: int) -> None:
-        """Query self.lasers[idx].get_output_power() and emit the readback
-        text + tooltip on the shell's sig_laser_readback for the GUI-thread
-        slot to apply. Acquires the laser's per-instance lock with
-        acquire(blocking=False): if held by an in-progress write, return
-        silently (no-op — the operator can retry). On success, query and
-        emit, then release in finally.
-
-        Thread-safe by design: the HAL query (get_output_power) is
-        lock-protected and the QLabel mutation is deferred to the
-        GUI-thread slot via the signal, so this method is safe to call
-        from any thread (QTimer callback or acquisition worker) per
-        AGENTS.md §11 — no worker thread ever writes a QLabel directly.
-
-        On a populated readback (float mW): emits text '{value:.1f} mW'
-        with an empty tooltip (clears any prior stale-value warning). On a
-        None readback (parse failure / unsupported variant): emits text
-        '{power:.1f} mW (cmd)' — the last commanded power — with a tooltip
-        explaining the fallback so the operator can distinguish a live
-        readback from a stale commanded value.
+        """Query get_output_power() and emit readback text + tooltip via
+        sig_laser_readback. Acquires the laser's lock with
+        acquire(blocking=False): if held, returns silently. Thread-safe
+        by design — the QLabel mutation is deferred to the GUI-thread slot.
 
         L1 (DAQLaser, idx=0) has no hardware readback — get_output_power()
-        returns either the staged mW (linear-through-origin estimate, no
-        calibration curve loaded) or a curve-interpolated mW (calibrated).
-        The label suffix distinguishes the two so the operator knows
-        whether the number is an unverified linear estimate or a
-        rig-measured calibration: '(est.)' when uncalibrated, '(cal.)'
-        when a V->mW curve is loaded. The linear model predicts 300 mW
-        at 5V, but the rig-measured output is ~107.5 mW at 5V (DPSS
-        threshold knee + free-space measurement geometry), so the
-        unverified estimate is flagged explicitly.
-
-        Works for both lasers: idx=0 (L1/DAQLaser — staged or
-        curve-interpolated mW, never None) and idx=1 (L2/iBeam —
-        get_output_power() queries the serial readback, may return None).
+        returns a staged or curve-interpolated mW estimate. The label
+        suffix distinguishes calibrated ('(cal.)') from unverified linear
+        estimate ('(est.)'). L2 (iBeam, idx=1) queries the serial
+        readback and may return None (fallback to commanded value).
         """
         laser = self.lasers[idx]
         if not laser._lock.acquire(blocking=False):
@@ -721,9 +454,7 @@ class HardwareManager:
             value = laser.get_output_power()
             if value is not None:
                 if idx == 0:
-                    # L1 (DAQLaser) — no hardware readback. Branch on
-                    # calibrated to flag unverified linear estimate vs
-                    # rig-measured curve interpolation.
+                    # L1 (DAQLaser) — no hardware readback; flag estimate vs calibrated.
                     if getattr(laser, "calibrated", False):
                         self._shell.sig_laser_readback.emit(
                             idx,
@@ -745,9 +476,7 @@ class HardwareManager:
                             "measured V->mW curve.",
                         )
                 else:
-                    self._shell.sig_laser_readback.emit(
-                        idx, f"{value:.1f} mW", ""
-                    )
+                    self._shell.sig_laser_readback.emit(idx, f"{value:.1f} mW", "")
             else:
                 self._shell.sig_laser_readback.emit(
                     idx,

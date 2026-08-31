@@ -68,35 +68,25 @@ class AdaptiveConfig:
                 f"max_power_mw[1] ({self.max_power_mw[1]})"
             )
         if self.block_size_n <= 0:
-            raise ValueError(
-                f"block_size_n must be positive; got {self.block_size_n}"
-            )
+            raise ValueError(f"block_size_n must be positive; got {self.block_size_n}")
         if self.target_band_lo > self.target_band_hi:
             raise ValueError(
                 f"target_band_lo ({self.target_band_lo}) must be <= "
                 f"target_band_hi ({self.target_band_hi})"
             )
         if self.pilot_count <= 0:
-            raise ValueError(
-                f"pilot_count must be positive; got {self.pilot_count}"
-            )
+            raise ValueError(f"pilot_count must be positive; got {self.pilot_count}")
 
     def clamp_exposure(self, exposure_s: float) -> float:
         """Clamp an exposure in seconds to [min_exposure_s, max_exposure_s]."""
-        return max(
-            self.min_exposure_s, min(self.max_exposure_s, exposure_s)
-        )
+        return max(self.min_exposure_s, min(self.max_exposure_s, exposure_s))
 
     def clamp_power(self, powers_mw: tuple[float, float]) -> tuple[float, float]:
         """Clamp per-laser power in mW to [min_power_mw, max_power_mw] per
         laser. Mirrors the ChannelMap.clamp_* shape: hard-cap before
         returning so the worker inherits a pre-tested clamp."""
-        p1 = max(
-            self.min_power_mw[0], min(self.max_power_mw[0], powers_mw[0])
-        )
-        p2 = max(
-            self.min_power_mw[1], min(self.max_power_mw[1], powers_mw[1])
-        )
+        p1 = max(self.min_power_mw[0], min(self.max_power_mw[0], powers_mw[0]))
+        p2 = max(self.min_power_mw[1], min(self.max_power_mw[1], powers_mw[1]))
         return (p1, p2)
 
     @property
@@ -128,9 +118,7 @@ class AdaptiveCommand:
     power_fallback: bool
 
     @staticmethod
-    def fixed(
-        exposure_s: float, laser1_mw: float, laser2_mw: float
-    ) -> AdaptiveCommand:
+    def fixed(exposure_s: float, laser1_mw: float, laser2_mw: float) -> AdaptiveCommand:
         """Construct a constant fixed-mode command (adaptive off).
 
         The caller applies the same fixed command every plane — zero
@@ -149,11 +137,11 @@ class AdaptiveCommand:
 
 @dataclass(frozen=True)
 class AdaptiveSample:
-    """Frozen per-plane trajectory sample (schema-a storage contract).
+    """Frozen per-plane trajectory sample (storage contract).
 
     One row per saved main plane. ``intensity_fraction`` is a list
     with one entry per active channel; inactive channels are NaN
-    (schema-a). ``laser_power_mw`` is a 2-tuple (L1, L2) in mW.
+    . ``laser_power_mw`` is a 2-tuple (L1, L2) in mW.
 
     The HDF5 /adaptive_trajectory group and the Zarr
     /acquisition/adaptive group carry identical field names and units
@@ -171,19 +159,18 @@ class AdaptiveSample:
 
     def __post_init__(self) -> None:
         # Normalize inactive-channel entries to NaN so the saved
-        # trajectory carries the schema-a convention regardless of
+        # trajectory carries the convention regardless of
         # what the caller passed. Use object.__setattr__ because the
         # dataclass is frozen.
         normalized = [
-            v if v is not None else float("nan")
-            for v in self.intensity_fraction
+            v if v is not None else float("nan") for v in self.intensity_fraction
         ]
         object.__setattr__(self, "intensity_fraction", normalized)
 
 
 def nan_inactive(intensities: list[float], active_mask: list[bool]) -> list[float]:
     """Return a copy of ``intensities`` with inactive channels replaced
-    by NaN (schema-a convention for the saved trajectory)."""
+    by NaN (convention for the saved trajectory)."""
     return [
         v if active else float("nan")
         for v, active in zip(intensities, active_mask, strict=False)

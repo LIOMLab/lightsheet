@@ -25,17 +25,19 @@ import pytest
 
 pytest.importorskip("PySide6")
 
+from _helpers.controller_fixture import make_controller
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QSplitter
+from pytestqt.qtbot import QtBot
 
-from _helpers.controller_fixture import make_controller
 
-
-def _make(qtbot, request):
+def _make(qtbot: QtBot, request: pytest.FixtureRequest) -> tuple[object, object]:
     return make_controller(qtbot, request)
 
 
-def test_message_log_cap_removed(qtbot, request) -> None:
+def test_message_log_cap_removed(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """The fixed 80 px max-height cap is gone (set to 16777215)."""
     ctrl, _ = _make(qtbot, request)
     max_h = ctrl.ui.plainTextEdit_messageLog.maximumHeight()
@@ -49,7 +51,9 @@ def test_message_log_cap_removed(qtbot, request) -> None:
     )
 
 
-def test_message_splitter_exists(qtbot, request) -> None:
+def test_message_splitter_exists(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """A vertical QSplitter (message_splitter) hosts stackedPanels + the
     message log inside controlsPane."""
     ctrl, _ = _make(qtbot, request)
@@ -73,7 +77,9 @@ def test_message_splitter_exists(qtbot, request) -> None:
     )
 
 
-def test_message_log_default_height_about_5_lines(qtbot, request) -> None:
+def test_message_log_default_height_about_5_lines(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """The message log minimum height is ~96 px (5 lines)."""
     ctrl, _ = _make(qtbot, request)
     min_h = ctrl.ui.plainTextEdit_messageLog.minimumHeight()
@@ -82,7 +88,9 @@ def test_message_log_default_height_about_5_lines(qtbot, request) -> None:
     )
 
 
-def test_message_splitter_drag_resizes_log(qtbot, request) -> None:
+def test_message_splitter_drag_resizes_log(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """The splitter handle is live and resizes the log. The log must not
     be collapsible to 0 via handle drag (childrenCollapsible=False); hiding
     is via the View-menu only.
@@ -96,7 +104,6 @@ def test_message_splitter_drag_resizes_log(qtbot, request) -> None:
     below proves setSizes changes the log size (hide → 0, show → > 0)."""
     ctrl, _ = _make(qtbot, request)
     splitter = ctrl.ui.message_splitter
-    log = ctrl.ui.plainTextEdit_messageLog
     # childrenCollapsible=False — the handle cannot collapse a section to 0.
     assert splitter.childrenCollapsible() is False, (
         "message_splitter must have childrenCollapsible=False so the "
@@ -127,7 +134,9 @@ def test_message_splitter_drag_resizes_log(qtbot, request) -> None:
     )
 
 
-def test_message_log_select_and_copy_enabled(qtbot, request) -> None:
+def test_message_log_select_and_copy_enabled(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """textInteractionFlags is TextSelectableByMouse (operator can
     select-and-copy an error string)."""
     ctrl, _ = _make(qtbot, request)
@@ -138,7 +147,9 @@ def test_message_log_select_and_copy_enabled(qtbot, request) -> None:
     )
 
 
-def test_message_log_still_read_only(qtbot, request) -> None:
+def test_message_log_still_read_only(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """readOnly stays True — only select-and-copy is enabled, not editing."""
     ctrl, _ = _make(qtbot, request)
     assert ctrl.ui.plainTextEdit_messageLog.isReadOnly() is True, (
@@ -146,7 +157,9 @@ def test_message_log_still_read_only(qtbot, request) -> None:
     )
 
 
-def test_view_menu_show_message_log_syncs_with_splitter(qtbot, request) -> None:
+def test_view_menu_show_message_log_syncs_with_splitter(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """The View-menu "Show Message Log" action toggles the splitter sizes
     (hide/show) and the action's checked state syncs with the log
     visibility (audit #7 pattern)."""

@@ -19,11 +19,12 @@ from __future__ import annotations
 
 import numpy as np
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QImage, QPainter, QPixmap, QWheelEvent
+from PySide6.QtGui import QImage, QPainter, QPixmap, QResizeEvent, QWheelEvent
 from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
     QGraphicsScene,
     QGraphicsView,
+    QWidget,
 )
 
 
@@ -35,7 +36,7 @@ class ImageView(QGraphicsView):
     only ``setImage`` is used.
     """
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._scene = QGraphicsScene(self)
         self.setScene(self._scene)
@@ -131,15 +132,19 @@ class ImageView(QGraphicsView):
         # have a visible effect: a window setpoint outside the new range
         # is pulled back inside, narrowing the display window and changing
         # the contrast.
-        new_levels_min = max(self._colormap_min, min(self._levels_min, self._colormap_max))
-        new_levels_max = max(self._colormap_min, min(self._levels_max, self._colormap_max))
+        new_levels_min = max(
+            self._colormap_min, min(self._levels_min, self._colormap_max)
+        )
+        new_levels_max = max(
+            self._colormap_min, min(self._levels_max, self._colormap_max)
+        )
         if (new_levels_min, new_levels_max) != (self._levels_min, self._levels_max):
             self._levels_min = new_levels_min
             self._levels_max = new_levels_max
         if self._last_frame is not None:
             self.setImage(self._last_frame, tint=self._last_tint)
 
-    def resizeEvent(self, event) -> None:
+    def resizeEvent(self, event: QResizeEvent) -> None:
         """Re-fit the image to the viewport on resize — but ONLY if the
         operator has not zoomed/panned. Once they have, their transform
         is preserved across resizes (fitInView would discard it)."""
@@ -149,7 +154,7 @@ class ImageView(QGraphicsView):
                 self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio
             )
 
-    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802 - Qt override
+    def wheelEvent(self, event: QWheelEvent) -> None:
         """Zoom the view with the mouse wheel, centered on the cursor.
 
         The base QGraphicsView.wheelEvent scrolls the scene, which with

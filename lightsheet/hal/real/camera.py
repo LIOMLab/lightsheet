@@ -33,8 +33,8 @@ class Camera(ICamera):
     def __init__(self, verbose: bool = False) -> None:
         self.verbose = verbose
 
-        # HAL error surface (per AGENTS.md §10 — a physically-absent device
-        # sets self.error / self.error_message instead of raising)
+        # HAL error surface -- a physically-absent device sets
+        # error/error_message instead of raising.
         self.error = 0
         self.error_message = ""
 
@@ -47,11 +47,8 @@ class Camera(ICamera):
         self.camera = None
         self.xsize = None
         self.ysize = None
-        # Binning readback (D-02) — defaults to 1x1 so the attrs exist even
-        # if open() fails (pco.Camera() raises). The ZarrSaver finalize path
-        # reads these for the XY voxel-size source; without the default an
-        # open() failure would AttributeError downstream. open()/arm()
-        # overwrite them with the live SDK binning readback.
+        # Binning readback defaults to 1x1 so attrs exist if open() fails;
+        # open()/arm() overwrite with live SDK readback.
         self.binning_x = 1
         self.binning_y = 1
         self.bytes_per_image = None
@@ -118,9 +115,8 @@ class Camera(ICamera):
                 )  # 16 bit images (2 bytes per pixel)
                 self.camera.sdk.set_image_parameters(self.xsize, self.ysize)
 
-                # Binning readback (D-02) — the XY voxel-size source for the
-                # ZarrSaver's base_res assembly. The .get(..., 1) fallback
-                # handles a dict missing the expected keys.
+                # Binning readback -- XY voxel-size source for ZarrSaver;
+                # .get(...,1) handles missing keys.
                 binning = self.camera.sdk.get_binning()
                 self.binning_x = int(binning.get("binning x", 1))
                 self.binning_y = int(binning.get("binning y", 1))
@@ -167,8 +163,8 @@ class Camera(ICamera):
             )  # 16 bit images (2 bytes per pixel)
             self.camera.sdk.set_image_parameters(self.xsize, self.ysize)
 
-            # Binning re-read after arm (D-02) — the operator may change
-            # binning between open and arm via the camera software.
+            # Binning re-read after arm -- operator may change binning
+            # between open and arm.
             binning = self.camera.sdk.get_binning()
             self.binning_x = int(binning.get("binning x", 1))
             self.binning_y = int(binning.get("binning y", 1))
@@ -183,14 +179,8 @@ class Camera(ICamera):
         return None
 
     def arm_scan(self) -> None:
-        # Clear any stale timeout flag from a previous run BEFORE the
-        # hardware-present guard. A worker that died mid-timeout can leave
-        # recorder_timeout_status=True; without this unconditional reset the
-        # next arm_scan() would inherit the poisoned state and the next
-        # acquisition could not recover without an app restart. Resetting
-        # here (rather than only in start_recorder) guarantees every scan
-        # starts from a clean timeout state regardless of how the previous
-        # one ended.
+        # Clear stale timeout flag before the hardware-present guard so
+        # every scan starts clean.
         self.recorder_timeout_status = False
         if self.camera is not None:
             if self.shutter_mode == "Lightsheet":
@@ -305,33 +295,19 @@ class Camera(ICamera):
         return None
 
     def _compute_per_image_time(self) -> float:
-        """Estimate the time required to acquire a single image, in seconds,
-        based on the current shutter mode.
-
-        Lightsheet mode exposes a fixed number of lines per image, so the
-        per-image time is line_time * exposed_lines. Rolling/Global modes
-        are exposure-time-bound, so the per-image time is the exposure time.
-        """
+        """Estimate per-image acquisition time (seconds), shutter-mode dependent."""
         if self.shutter_mode == "Lightsheet":
             return self.line_time * self.lightsheet_exposed_lines
         else:  # Rolling or Global
             return self.exposure_time
 
     def monitor_recorder(self, number_of_images: int) -> None:
-        """Monitor the camera recorder until all images arrive or the timeout
-        expires. The timeout scales with the number of images and the
-        per-image time (shutter-mode dependent), floored by both a
-        configurable minimum (Recorder Timeout Floor) and the legacy flat
-        Recorder Timeout interval (rig-confirmed to work for
-        Rolling/Global-shutter acquisitions), and multiplied by a safety
-        factor — so legitimate long acquisitions are not falsely aborted
-        while genuinely stuck runs still time out. The legacy-interval
-        floor is critical because the per-image time estimate for
-        Rolling/Global mode (pure exposure_time) ignores trigger-wait,
-        readout, and DAQ-cycle overhead, so without it the scaled value
-        can fall below what actually worked under the pre-phase flat
-        timeout. On timeout, recorder_timeout_status is set so the
-        caller can abort before any zero-filled frames are saved.
+        """Monitor recorder until all images arrive or timeout expires.
+
+        Timeout scales with image count and per-image time, floored by both
+        Recorder Timeout Floor and the legacy Recorder Timeout interval, and
+        multiplied by a safety factor. On timeout, recorder_timeout_status
+        is set so the caller can abort before zero-filled frames are saved.
         """
         if self.is_recording:
             per_image_time = self._compute_per_image_time()
@@ -391,14 +367,9 @@ class Camera(ICamera):
     def delete_recorder(self) -> None:
         """Delete the camera recorder session.
 
-        Does NOT reset recorder_timeout_status — that flag is set by
-        monitor_recorder when a timeout occurs and must survive long enough
-        for the acquisition worker (e.g. stack_mode_worker) to inspect it
-        after acquire_scan returns and abort the run. Resetting it here
-        would clear the timeout before the worker's post-acquire check,
-        making the stack-mode abort dead code. start_recorder resets the
-        flag to False at the beginning of each plane, so the next plane
-        starts with a clean timeout state.
+        Does NOT reset recorder_timeout_status — it must survive for the
+        acquisition worker to inspect after acquire_scan returns and abort.
+        start_recorder resets the flag at the beginning of each plane.
         """
         if self.camera is not None:
             self.camera.rec.delete()
@@ -441,22 +412,7 @@ class Camera(ICamera):
         return None
 
     def set_trigger_mode(self, trigger_mode: str) -> None:
-        """Set the trigger mode for the camera
-
-        'auto_trigger':         Exposure of a new image is started automatically,
-                                according to the currently set timing parameters.
-                                Signals at the trigger input line are irrelevant
-
-        'external':             A delay / exposure sequence is started depending
-                                on the HW signal at the trigger input line or by
-                                a force trigger software command
-
-        'external_exposure':    An exposure sequence is started depending on the
-                                HW signal at the trigger input line. The exposure
-                                time is defined by the pulse length of the HW
-                                signal. The delay and exposure timing parameters
-                                are ineffective.
-        """
+        """Set the trigger mode: 'auto_trigger', 'external', or 'external_exposure'."""
         if self.camera is not None:
             if self.verbose:
                 print("Setting camera trigger mode:", trigger_mode)

@@ -45,7 +45,9 @@ _ETL_RIGHT_PORT = (0x03EB, 0x2018, "75738303238351916161", "COM6")
 _ZABER_PORT = (0x067B, 0x2303, None, "COM7")
 
 
-def _fake_port(vid: int | None, pid: int | None, sn: str | None, device: str) -> MagicMock:
+def _fake_port(
+    vid: int | None, pid: int | None, sn: str | None, device: str
+) -> MagicMock:
     """Build a MagicMock stand-in for a serial.tools.list_ports.ListPortInfo."""
     p = MagicMock()
     p.vid = vid

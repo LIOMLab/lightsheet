@@ -3,13 +3,10 @@
 A ``FieldSpec`` is a frozen dataclass describing the per-field display
 contract (unit, decimals, single/page step, soft min/max) for one
 ``QDoubleSpinBox`` in a panel ``.ui`` file. ``FIELD_SPECS`` is the canonical
-table keyed by widget ``objectName`` — the 24 entries below are copied
-verbatim from the UI-SPEC FieldSpec Policy Table.
+table keyed by widget ``objectName``.
 
 The ``minimum``/``maximum`` values are a SOFT widget-layer block only. The
-HAL motor travel-limit validator (``config_schema.py`` +
-``ZaberMotor.move_absolute_position`` ``ValueError``) is the safety
-boundary. The subclass never relaxes any HAL validator.
+HAL motor travel-limit validator is the safety boundary.
 """
 
 from __future__ import annotations
@@ -19,11 +16,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class FieldSpec:
-    """Per-field display contract for a promoted ``FieldSpecSpinBox``.
-
-    Fields are ordered to match the UI-SPEC dataclass shape exactly:
-    ``unit`` first (drives the suffix), then numeric display/step/range.
-    """
+    """Per-field display contract for a promoted ``FieldSpecSpinBox``."""
 
     unit: str  # "mm", "µm", "V", "ms", "µs", "" (dimensionless)
     decimals: int  # displayed decimals
@@ -33,11 +26,8 @@ class FieldSpec:
     maximum: float  # soft widget-layer block
 
 
-# Canonical FieldSpec entries — per-field fixed units (UI-SPEC §FieldSpec
-# Policy Table). The 24 objectName keys are the widgets promoted to
-# FieldSpecSpinBox in the panel .ui files. Do NOT change unit/min/max here
-# without re-affirming against the rig's physical ranges; the HAL is the
-# safety backstop, but the widget soft-block should still match the rig.
+# Canonical FieldSpec entries — per-field fixed units. Do NOT change
+# unit/min/max here without re-affirming against the rig's physical ranges.
 FIELD_SPECS: dict[str, FieldSpec] = {
     # Motion panel — motor positions (mm) + step sizes (mm). 2 decimals
     # (0.01 mm = 10 µm) is enough for manual control; the µm precision
@@ -54,13 +44,13 @@ FIELD_SPECS: dict[str, FieldSpec] = {
     "doubleSpinBox_acqFirstPlane": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 41.0),
     "doubleSpinBox_acqLastPlane": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 41.0),
     "doubleSpinBox_acqPlaneStepSize": FieldSpec("µm", 2, 0.5, 5.0, 0.0, 25000.0),
-    # Scan panel — ETL amplitudes/offsets (V, 0–5V) + ETL steps (dimensionless)
+    # Scan panel — ETL amplitudes/offsets (V, 0-5V) + ETL steps (dimensionless)
     "doubleSpinBox_etlLeftAmplitude": FieldSpec("V", 2, 0.05, 0.5, 0.0, 5.0),
     "doubleSpinBox_etlRightAmplitude": FieldSpec("V", 2, 0.05, 0.5, 0.0, 5.0),
     "doubleSpinBox_etlLeftOffset": FieldSpec("V", 2, 0.05, 0.5, 0.0, 5.0),
     "doubleSpinBox_etlRightOffset": FieldSpec("V", 2, 0.05, 0.5, 0.0, 5.0),
     "doubleSpinBox_etlSteps": FieldSpec("", 0, 1, 10, 0, 1000),
-    # Scan panel — galvo amplitudes (V, 0–10V) + offsets (V, ±10V)
+    # Scan panel — galvo amplitudes (V, 0-10V) + offsets (V, ±10V)
     "doubleSpinBox_galvoLeftAmplitude": FieldSpec("V", 2, 0.05, 0.5, 0.0, 10.0),
     "doubleSpinBox_galvoRightAmplitude": FieldSpec("V", 2, 0.05, 0.5, 0.0, 10.0),
     "doubleSpinBox_galvoLeftOffset": FieldSpec("V", 2, 0.05, 0.5, -10.0, 10.0),
@@ -70,15 +60,13 @@ FIELD_SPECS: dict[str, FieldSpec] = {
     "doubleSpinBox_cameraLineTime": FieldSpec("µs", 0, 1, 10, 1, 100000),
     "doubleSpinBox_cameraExposedLines": FieldSpec("", 0, 1, 100, 0, 4096),
     "doubleSpinBox_cameraDelayLines": FieldSpec("", 0, 1, 100, 0, 4096),
-    # Lasers panel — amplitudes (%, 0–100)
+    # Lasers panel — amplitudes (%, 0-100)
     "doubleSpinBox_laserOneAmplitude": FieldSpec("%", 1, 1.0, 10.0, 0.0, 100.0),
     "doubleSpinBox_laserTwoAmplitude": FieldSpec("%", 1, 1.0, 10.0, 0.0, 100.0),
     # Stack panel — adaptive config group (13 enumerated spinboxes). The
     # exposure bound unit is shutter-mode-dependent (ms in Rolling / lines
-    # in Lightsheet) and swapped at runtime by _update_adaptive_shutter_units;
-    # the FieldSpec carries the Rolling-mode (ms) defaults. The power bound
-    # maximum (150.0) is narrowed at runtime to min(150.0, live laser
-    # max_power). The HAL two-layer clamp is the safety backstop.
+    # in Lightsheet) and swapped at runtime. The power bound maximum is
+    # narrowed at runtime to min(150.0, live laser max_power).
     "doubleSpinBox_adaptiveMinExposure": FieldSpec("ms", 0, 1, 10, 1, 1000),
     "doubleSpinBox_adaptiveMaxExposure": FieldSpec("ms", 0, 1, 10, 1, 1000),
     "doubleSpinBox_adaptiveLaser1MinPower": FieldSpec("mW", 1, 0.5, 5.0, 0.0, 150.0),
@@ -95,10 +83,7 @@ FIELD_SPECS: dict[str, FieldSpec] = {
 }
 
 # Author-supplied one-line purpose per field, used by FieldSpecSpinBox
-# .applySpec() to generate the UI-SPEC §Tooltips (D-02) tooltip:
-# ``{field purpose}. Unit: {unit}. Range: {min}–{max} {unit}. Step: …
-# (Ctrl/Shift = …). Wheel: click in first to scroll.`` The purpose is the
-# only author-supplied part; the rest is generated from the FieldSpec.
+# .applySpec() to generate the tooltip.
 FIELD_PURPOSES: dict[str, str] = {
     # Motion panel
     "doubleSpinBox_sampleSetHPosition": "Horizontal stage position",

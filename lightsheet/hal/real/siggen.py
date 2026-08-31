@@ -14,7 +14,7 @@ from nidaqmx.constants import AcquisitionType, Edge, LineGrouping
 from lightsheet.channel_map import ChannelMap
 from lightsheet.config import cfg_read, cfg_str2bool, cfg_write
 from lightsheet.hal.interfaces import ISigGen
-from lightsheet.hal.real.camera import Camera  # real→real dep (D-01)
+from lightsheet.hal.real.camera import Camera
 from lightsheet.waveforms import sawtooth, squarewave, staircase
 
 logger = logging.getLogger(__name__)
@@ -25,8 +25,7 @@ class SigGen(ISigGen):
     Class for generating and sending timing signals to galvos, etls and camera
     """
 
-    # Configurable settings defaults
-    # Used as base dictionnary for .ini file allowable keys
+    # Configurable settings defaults (base dictionary for .ini file allowable keys)
     _cfg_defaults: dict[str, str] = {}  # noqa: RUF012 - class-level config template, populated at definition, never mutated at runtime
     _cfg_defaults["AO Terminals"] = (
         "/Dev1/ao0:3"  # DAQ board AO terminals for Galvo + ETL scan ramps
@@ -56,11 +55,9 @@ class SigGen(ISigGen):
     )
 
     def __init__(self, camera: Camera) -> None:
-        # Error status
         self.error = 0
         self.error_message = ""
 
-        # Set diag mode ON
         self.diag = False
 
         # We need to know about camera settings to generate the proper waveforms
@@ -77,7 +74,6 @@ class SigGen(ISigGen):
         self.waveform_etl_left = None
         self.waveform_etl_right = None
 
-        # read configurable settings from config.ini file
         self._cfg_filename = "config.ini"
         self._cfg_section = "SigGen"
         self.cfg_load_ini()
@@ -85,7 +81,6 @@ class SigGen(ISigGen):
     def cfg_load_ini(self) -> None:
         self._cfg = cfg_read(self._cfg_filename, self._cfg_section, self._cfg_defaults)
 
-        # set instance variables from configuration dictionary values
         self.ao_terminals = str(self._cfg["AO Terminals"])
         self.do_terminals = str(self._cfg["DO Terminals"])
         self.sample_rate = int(self._cfg["Sample Rate"])
@@ -106,15 +101,9 @@ class SigGen(ISigGen):
         self.etl_right_amplitude = float(self._cfg["ETL Right Amplitude"])
         self.etl_right_offset = float(self._cfg["ETL Right Offset"])
         self.galvo_left_right_swap = cfg_str2bool(self._cfg["Galvo Left Right Swap"])
-        # Channel-reversal + per-channel clamp policy (RFR-04 mechanism).
-        # galvo_left_right_swap defaults to False — the actual flip against
-        # real hardware is rig-verification work (HW2-02) and is NOT
-        # attempted from the dev Mac (AGENTS.md §13). The clamp methods are
-        # applied unconditionally at all four np.stack sites, independent of
-        # the swap flag (threat T-05-12 mitigation).
-        self.channel_map = ChannelMap(
-            galvo_left_right_swap=self.galvo_left_right_swap
-        )
+        # Channel-reversal + per-channel clamp policy. galvo_left_right_swap
+        # defaults to False; clamps are applied unconditionally at all np.stack sites.
+        self.channel_map = ChannelMap(galvo_left_right_swap=self.galvo_left_right_swap)
 
         ao_device = self.ao_terminals.rsplit("/", 1)[0]
         ao_channels = self.ao_terminals.rsplit("/", 1)[1][2:].rsplit(":")
@@ -127,7 +116,6 @@ class SigGen(ISigGen):
         )
 
     def cfg_save_ini(self) -> None:
-        # pack current instance variables into configuration dictionary
         self._cfg = {}
         self._cfg["AO Terminals"] = str(self.ao_terminals)
         self._cfg["DO Terminals"] = str(self.do_terminals)
@@ -155,14 +143,8 @@ class SigGen(ISigGen):
     def update_all(
         self, left_galvo: float, right_galvo: float, left_etl: float, right_etl: float
     ) -> None:
-        # Channel-reversal mechanism (RFR-04): order_galvos is called with
-        # (right, left) positionally so galvo_left_right_swap=False returns
-        # (right, left) unchanged — preserving today's literal stack order
-        # exactly — and only =True returns (left, right), the swap the FIXME
-        # comments describe. The actual flip is rig-verification work
-        # (HW2-02); the default ships behavior-preserving (AGENTS.md §13).
-        # Per-channel clamps are applied unconditionally, independent of the
-        # swap flag (threat T-05-12 mitigation).
+        # Channel-reversal: order_galvos called with (right, left) positionally
+        # so swap=False preserves today's stack order. Clamps are unconditional.
         galvo_first, galvo_second = self.channel_map.order_galvos(
             right_galvo, left_galvo
         )
@@ -174,7 +156,6 @@ class SigGen(ISigGen):
                 np.array([self.channel_map.clamp_etl(right_etl)]),
             )
         )
-        # Running task
         try:
             with nidaqmx.Task(new_task_name="galvo_etl_setpoint") as task_update_all:
                 task_update_all.ao_channels.add_ao_voltage_chan(self.ao_terminals)
@@ -185,8 +166,7 @@ class SigGen(ISigGen):
             logger.exception("SigGen - update_all error")
 
     def update_galvos(self, left_galvo: float, right_galvo: float) -> None:
-        # Channel-reversal mechanism (RFR-04) — see update_all for the
-        # (right, left) positional call rationale. Clamp is unconditional.
+        # Channel-reversal — see update_all for rationale. Clamp is unconditional.
         galvo_first, galvo_second = self.channel_map.order_galvos(
             right_galvo, left_galvo
         )
@@ -196,7 +176,6 @@ class SigGen(ISigGen):
                 np.array([self.channel_map.clamp_galvo(galvo_second)]),
             )
         )
-        # Running task
         try:
             with nidaqmx.Task(new_task_name="galvo_single") as task_update_galvos:
                 task_update_galvos.ao_channels.add_ao_voltage_chan(self.galvo_terminals)
@@ -207,15 +186,13 @@ class SigGen(ISigGen):
             logger.exception("SigGen - update_galvos error")
 
     def update_etls(self, left_etl: float, right_etl: float) -> None:
-        # ETL channels are not subject to the galvo left/right swap; the
-        # per-channel clamp is applied unconditionally (threat T-05-12).
+        # ETL channels are not subject to galvo swap; clamp is unconditional.
         etl_setpoints = np.stack(
             (
                 np.array([self.channel_map.clamp_etl(left_etl)]),
                 np.array([self.channel_map.clamp_etl(right_etl)]),
             )
         )
-        # Running task
         try:
             with nidaqmx.Task(new_task_name="etl_single") as task_update_etls:
                 task_update_etls.ao_channels.add_ao_voltage_chan(self.etl_terminals)
@@ -228,12 +205,9 @@ class SigGen(ISigGen):
     def create_scanner(self) -> None:
         """Creates Galvo + ETL scan task (AO) + Camera Exposure Control task (DO)"""
 
-        # Channel-reversal mechanism (RFR-04) — order_galvos called with
-        # (waveform_right, waveform_left) positionally so swap=False returns
-        # (right, left) unchanged, preserving today's literal stack order.
-        # Array clamps use np.clip against the channel_map limits; the galvo
-        # ±10V clamp and the ETL non-negative ceiling are applied
-        # unconditionally, independent of the swap flag (threat T-05-12).
+        # Channel-reversal — order_galvos called with (waveform_right,
+        # waveform_left) so swap=False preserves today's stack order. Array
+        # clamps (galvo ±10V, ETL non-negative) are unconditional.
         galvo_first, galvo_second = self.channel_map.order_galvos(
             self.waveform_galvo_right, self.waveform_galvo_left
         )
@@ -263,8 +237,11 @@ class SigGen(ISigGen):
         )
 
         try:
-            # Creating and setting up the galvo + ETL scan task (AO)
-            self.task_galvo_etl = nidaqmx.Task(new_task_name="galvo_etl_scan")  # pragma: no cover — nidaqmx.Task open unreachable on Mac (conftest stub raises); compute_scan_waveforms + ChannelMap sites stay measured
+            # nidaqmx.Task open unreachable on Mac (conftest stub raises);
+            # compute_scan_waveforms + ChannelMap sites stay measured
+            self.task_galvo_etl = nidaqmx.Task(
+                new_task_name="galvo_etl_scan"
+            )  # pragma: no cover
             self.task_galvo_etl.ao_channels.add_ao_voltage_chan(self.ao_terminals)
             self.task_galvo_etl.timing.cfg_samp_clk_timing(
                 rate=self.sample_rate,
@@ -272,8 +249,11 @@ class SigGen(ISigGen):
                 samps_per_chan=self.total_samples,
             )
 
-            # Creating and setting up the camera exposure control task (DO)
-            self.task_camera = nidaqmx.Task(new_task_name="camera_scan")  # pragma: no cover — nidaqmx.Task open unreachable on Mac (conftest stub raises); compute_scan_waveforms + ChannelMap sites stay measured
+            # nidaqmx.Task open unreachable on Mac (conftest stub raises);
+            # compute_scan_waveforms + ChannelMap sites stay measured
+            self.task_camera = nidaqmx.Task(
+                new_task_name="camera_scan"
+            )  # pragma: no cover
             self.task_camera.do_channels.add_do_chan(
                 self.do_terminals, line_grouping=LineGrouping.CHAN_PER_LINE
             )
@@ -283,12 +263,11 @@ class SigGen(ISigGen):
                 samps_per_chan=self.total_samples,
             )
 
-            # Setup DO task triggered by AO start_trigger (AO is master task)
+            # DO task triggered by AO start_trigger (AO is master task)
             self.task_camera.triggers.start_trigger.cfg_dig_edge_start_trig(
                 self.do_start_trigger, trigger_edge=Edge.RISING
             )
 
-            # Write waveforms to AO and DO tasks (to be started later)
             self.task_camera.write(self.waveform_camera, auto_start=False)
             self.task_galvo_etl.write(galvo_etl_waveforms, auto_start=False)
         except (nidaqmx.errors.Error, RuntimeError, OSError):
@@ -329,13 +308,11 @@ class SigGen(ISigGen):
         """Compute Galvo + ETL scan ramps and Camera Exposure waveforms."""
 
         if self.camera.shutter_mode == "Lightsheet":
-            # Assuming vertical scan amplitude exactly matching camera FOV,
             # galvo line speed must match camera line speed
             # TODO Add correction for potential galvo overscan
             # (will require voltage to optical displacement conversion)
             self.galvo_scan_time = self.camera.line_time * self.camera.ysize
             # In Lightsheet mode, exposure time is overriden by line time
-            # and exposed lines settings
             camera_active_time = (
                 self.camera.line_time * self.camera.lightsheet_exposed_lines
             )
@@ -429,12 +406,9 @@ class SigGen(ISigGen):
         self.waveform_metadata["ETL Right Amplitude"] = str(self.etl_right_amplitude)
         self.waveform_metadata["ETL Right Offset"] = str(self.etl_right_offset)
 
-        # Number of period cycles over the complete waveform
-        # (equal to current etl_steps value, but only updated with
-        # waveform generation)
+        # Number of period cycles (equal to etl_steps, updated with waveform generation)
         self.waveform_cycles = self.etl_steps
 
-        # galvo waveform generator inputs
         galvo_activated = self.galvo_activated
         galvo_pre_samples = int(np.ceil(self.galvo_pre_time * self.sample_rate))
         galvo_scan_samples = int(np.ceil(self.galvo_scan_time * self.sample_rate))
@@ -450,7 +424,6 @@ class SigGen(ISigGen):
         galvo_repeat = self.waveform_cycles
         galvo_inverted = self.galvo_inverted
 
-        # etl waveform generator inputs
         etl_activated = self.etl_activated
         etl_step_samples = galvo_period_samples
         etl_steps = self.waveform_cycles
@@ -460,7 +433,6 @@ class SigGen(ISigGen):
             - galvo_post_samples
         )
 
-        # camera waveform generator inputs
         camera_pre_samples = galvo_pre_samples
         camera_active_samples = int(np.ceil(camera_active_time * self.sample_rate))
         camera_post_samples = (
@@ -474,10 +446,8 @@ class SigGen(ISigGen):
         # (period * number of etl focus positions)
         self.total_samples = galvo_period_samples * self.waveform_cycles
 
-        # Time required for an acquisition sequence
         self.total_time = self.total_samples / self.sample_rate
 
-        # Compute camera waveform
         self.waveform_camera = squarewave(
             pre_samples=camera_pre_samples,
             active_samples=camera_active_samples,
@@ -486,7 +456,6 @@ class SigGen(ISigGen):
             repeat=camera_repeat,
             inverted=camera_inverted,
         )
-        # Compute galvos waveforms
         self.waveform_galvo_left = sawtooth(
             activated=galvo_activated,
             pre_samples=galvo_pre_samples,
@@ -514,7 +483,6 @@ class SigGen(ISigGen):
             inverted=galvo_inverted,
             filtered=True,
         )
-        # Compute etls waveforms
         self.waveform_etl_left = staircase(
             activated=etl_activated,
             step_samples=etl_step_samples,

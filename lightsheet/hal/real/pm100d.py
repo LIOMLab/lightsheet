@@ -35,6 +35,7 @@ import logging
 import os
 import sys
 import time
+from pathlib import Path
 
 from lightsheet.hal.interfaces import IPowerMeter
 
@@ -106,7 +107,7 @@ class PM100D(IPowerMeter):
                 "PM100D is only supported on Windows (the TLPMX DLL is "
                 f"Windows-only). Current platform: {sys.platform}"
             )
-        if not os.path.exists(self._dll_path):
+        if not Path(self._dll_path).exists():
             raise PM100DError(
                 f"TLPMX DLL not found at {self._dll_path}. Install the "
                 "Thorlabs OPM software (which installs TLPMX_64.dll in the "
@@ -300,7 +301,7 @@ def is_pm100d_available() -> bool:
     """
     if sys.platform != "win32":
         return False
-    if not os.path.exists(_DEFAULT_DLL_PATH):
+    if not Path(_DEFAULT_DLL_PATH).exists():
         return False
     try:
         dll = ctypes.cdll.LoadLibrary(_DEFAULT_DLL_PATH)

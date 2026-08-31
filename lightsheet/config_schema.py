@@ -1,83 +1,76 @@
 """
-PKG-04 two-tier pydantic-settings config schema — layers validation ON TOP
-of the existing cfg_read/cfg_write configparser helpers (D-03: does NOT
-replace them).
+Two-tier pydantic-settings config schema — layers validation ON TOP
+of the existing cfg_read/cfg_write configparser helpers.
 
 The strict baseline tier (extra='forbid') rejects unknown/typo'd keys
-instead of silently falling into the configparser fallback — the PKG-04
-root-cause bug. The lax overlay tier (extra='ignore') tolerates extra keys
-in the rig-specific overlay so rig calibration freedom is preserved.
+instead of silently falling into the configparser fallback. The lax overlay
+tier (extra='ignore') tolerates extra keys in the rig-specific overlay so rig
+calibration freedom is preserved.
 
 Safety-critical keys ([iBeam] Max Power <= 150000 uW, [Motors] * Limit High
-<= their AGENTS.md Sec.2 mechanical limits) are REJECTED (not clamped)
-out-of-range in BOTH tiers via the same field_validator — a tampered overlay
-cannot bypass the same check that guards the tracked baseline.
+<= their mechanical limits) are REJECTED (not clamped) out-of-range in BOTH
+tiers via the same field_validator — a tampered overlay cannot bypass the
+same check that guards the tracked baseline.
 
-Non-safety out-of-range values (galvo/ETL amplitudes, negative exposure
-time) are collected as WARNings by the collect-all entry point AFTER
-construction succeeds — they do NOT raise ValidationError.
+Non-safety out-of-range values are collected as WARNings by the collect-all
+entry point AFTER construction succeeds — they do NOT raise ValidationError.
 
 settings_customise_sources returns ONLY the init (kwargs) source — no
-environment-variable source, no dotenv source (Pitfall 4: env-var pollution
-into extra='forbid' validation).
+environment-variable source, no dotenv source.
 
 case_sensitive=True + Field(alias="<Exact INI Key>") + populate_by_name=True
-preserves the case-sensitive Title-Case INI key contract (AGENTS.md Sec.9,
-Pitfall 5) — a typo'd key ('Max power' lowercase-p) is rejected, not silently
-lowercased and accepted.
+preserves the case-sensitive Title-Case INI key contract — a typo'd key is
+rejected, not silently lowercased and accepted.
 """
 
 import configparser
 import logging
-import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import Field, ValidationError, field_validator
 from pydantic.fields import FieldInfo
+from pydantic_core.core_schema import ValidationInfo
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from lightsheet.config import cfg_read
 
 logger = logging.getLogger(__name__)
 
-# --- Safety-critical constants (AGENTS.md Sec.2 / hardware_inventory.yaml) ---
-# iBeam Smart 640 hard limit: 150 mW = 150000 uW (rig-confirmed). The schema
-# validates Max Power, not wavelength — 640 nm is the physical diode emission
-# peak; 647 nm is the recorded capture/detection wavelength. The 150 mW /
-# 150000 uW hard limit applies regardless of which wavelength label is shown.
+# --- Safety-critical constants ---
+# iBeam Smart 640 hard limit: 150 mW = 150000 uW. The schema validates Max
+# Power, not wavelength — 640 nm is the physical diode emission peak; 647 nm
+# is the recorded capture/detection wavelength.
 _IBEAM_MAX_MW: int = 150000  # uW
 
-# Zaber T-LS mechanical travel limits per AGENTS.md Sec.2 / config.ini tracked
-# values as the ceiling. A stage driven past mechanical limits damages hardware.
+# Zaber T-LS mechanical travel limits. A stage driven past mechanical limits
+# damages hardware.
 _MOTORS_VERTICAL_LIMIT_HIGH_MM: float = 41.0
 _MOTORS_HORIZONTAL_LIMIT_HIGH_MM: float = 18.8
 _MOTORS_CAMERA_LIMIT_HIGH_MM: float = 35.0
 
 # --- Non-safety recommended ranges (WARN, not REJECT) ---
 _GALVO_VOLTAGE_LIMIT: float = 10.0  # ±10 V NI-6363 AO range
-# ETL drive is a 0–5 V analog input to the EL-10-30 lens driver, which
-# maps it to its 0–292.84 mA coil-current range internally. The config
-# [SigGen] ETL Left/Right Amplitude values are volts (the DAQ AO drive),
-# so the warn check compares volts against the 5 V analog input range,
-# not the 292.84 mA coil-current limit.
-_ETL_VOLTAGE_LIMIT: float = 5.0  # 0–5 V Optotune EL-10-30 analog input
+# ETL drive is a 0-5 V analog input to the EL-10-30 lens driver, which maps
+# it to its 0-292.84 mA coil-current range internally. The config [SigGen]
+# ETL Amplitude values are volts (the DAQ AO drive), so the warn check
+# compares volts against the 5 V analog input range.
+_ETL_VOLTAGE_LIMIT: float = 5.0  # 0-5 V Optotune EL-10-30 analog input
 
 
 # ---------------------------------------------------------------------------
 # Shared base — provides settings_customise_sources so no environment or
-# dotenv source is ever registered (Pitfall 4). Each per-section model
-# declares its own model_config with the tier-appropriate extra policy.
+# dotenv source is ever registered. Each per-section model declares its own
+# model_config with the tier-appropriate extra policy.
 # ---------------------------------------------------------------------------
 
 
 class _NoEnvBaseSettings(BaseSettings):
     """BaseSettings that reads ONLY the init (kwargs) source — no
-    environment-variable source, no dotenv source, no file-secret source.
-    The models validate already-parsed dicts handed back by cfg_read; the
-    Pitfall 4 env-var pollution path into extra='forbid' is closed."""
+    environment-variable, dotenv, or file-secret source."""
 
     @classmethod
     def settings_customise_sources(
@@ -100,8 +93,7 @@ class _NoEnvBaseSettings(BaseSettings):
 def _validate_ibeam_max_power(v: int) -> int:
     if v > _IBEAM_MAX_MW:
         raise ValueError(
-            f"Max Power {v} uW exceeds iBeam hard limit {_IBEAM_MAX_MW} uW "
-            f"(150 mW)"
+            f"Max Power {v} uW exceeds iBeam hard limit {_IBEAM_MAX_MW} uW (150 mW)"
         )
     return v
 
@@ -134,9 +126,9 @@ def _validate_camera_limit_high(v: float) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Per-section models. Field aliases match config.ini's verbatim key casing
-# (AGENTS.md Sec.9). One strict (extra='forbid') + one overlay
-# (extra='ignore') subclass per section.
+# Per-section models. Field aliases match config.ini's verbatim key casing.
+# One strict (extra='forbid') + one overlay (extra='ignore') subclass per
+# section.
 # ---------------------------------------------------------------------------
 
 
@@ -146,35 +138,16 @@ class ControllerSettings(_NoEnvBaseSettings):
     )
     units: str = Field(alias="Units")
     # Image File Format — the persisted default save format loaded at
-    # startup into self.save_format. The radio group overrides it per
-    # session. Literal rejects unknown values at startup (the collect-all
-    # gate); the before-validator lowercases so the rig's Title-Case
-    # "HDF5"/"Zarr"/"Both"/"TIFF" config.ini values are accepted.
-    #
-    # load_sections_from_ini builds the cfg_read defaults dict with "" for
-    # every alias, so a key absent from config.ini arrives here as "" (not
-    # as a missing kwarg). The pydantic default="both" therefore never fires
-    # for the load_sections path — the before-validator must map the ""
-    # sentinel to the operator-facing default itself. "hdf5" matches
-    # controller._cfg_defaults["Image File Format"] = "HDF5" and the rig's
-    # historical behavior; "both" would silently double disk usage on a
-    # config that never opted into dual-format saving.
+    # startup. The before-validator lowercases so the rig's Title-Case
+    # config.ini values are accepted, and maps the "" sentinel (a key
+    # absent from config.ini arrives as "" via load_sections_from_ini)
+    # to "hdf5" (the operator-facing default).
     image_file_format: Literal["hdf5", "zarr", "both", "tiff"] = Field(
         alias="Image File Format", default="both"
     )
-    # Theme — the persisted UI theme override loaded at startup into
-    # set_app_stylesheet. "system" follows the OS light/dark via
-    # QGuiApplication.styleHints().colorScheme(); "light"/"dark" are explicit
-    # overrides. The before-validator lowercases so the rig's Title-Case
-    # "Dark"/"Light"/"System" config.ini values are accepted, and maps the
-    # "" sentinel (a key absent from config.ini arrives as "" via
-    # load_sections_from_ini) to the operator-facing default "system".
-    # Non-safety key — an unknown value is rejected by the Literal here in
-    # the strict tier (collected by ConfigValidator as an error) and the
-    # overlay tier handles a missing key via the "" -> "system" mapping.
-    theme: Literal["light", "dark", "system"] = Field(
-        alias="Theme", default="system"
-    )
+    # Theme — the persisted UI theme override. The before-validator
+    # lowercases and maps "" to "system".
+    theme: Literal["light", "dark", "system"] = Field(alias="Theme", default="system")
 
     @field_validator("image_file_format", mode="before")
     @classmethod
@@ -203,9 +176,7 @@ class ControllerSettingsOverlay(_NoEnvBaseSettings):
     image_file_format: Literal["hdf5", "zarr", "both", "tiff"] = Field(
         alias="Image File Format", default="both"
     )
-    theme: Literal["light", "dark", "system"] = Field(
-        alias="Theme", default="system"
-    )
+    theme: Literal["light", "dark", "system"] = Field(alias="Theme", default="system")
 
     @field_validator("image_file_format", mode="before")
     @classmethod
@@ -281,11 +252,8 @@ class SigGenSettings(_NoEnvBaseSettings):
     etl_left_offset: float = Field(alias="ETL Left Offset")
     etl_right_amplitude: float = Field(alias="ETL Right Amplitude")
     etl_right_offset: float = Field(alias="ETL Right Offset")
-    # 05-08-PLAN wires the real config.ini key + siggen.py consumption.
     # Default False so a missing key does not break existing configs.
-    galvo_left_right_swap: bool = Field(
-        alias="Galvo Left Right Swap", default=False
-    )
+    galvo_left_right_swap: bool = Field(alias="Galvo Left Right Swap", default=False)
 
 
 class SigGenSettingsOverlay(_NoEnvBaseSettings):
@@ -311,9 +279,7 @@ class SigGenSettingsOverlay(_NoEnvBaseSettings):
     etl_left_offset: float = Field(alias="ETL Left Offset")
     etl_right_amplitude: float = Field(alias="ETL Right Amplitude")
     etl_right_offset: float = Field(alias="ETL Right Offset")
-    galvo_left_right_swap: bool = Field(
-        alias="Galvo Left Right Swap", default=False
-    )
+    galvo_left_right_swap: bool = Field(alias="Galvo Left Right Swap", default=False)
 
 
 class LasersSettings(_NoEnvBaseSettings):
@@ -326,12 +292,8 @@ class LasersSettings(_NoEnvBaseSettings):
     laser1_max_power: float = Field(alias="Laser1 Max Power")
     laser1_mw_per_volt: float = Field(alias="Laser1 mW per Volt")
     # Optional V->mW calibration curve (display-only). Semicolon-separated
-    # "V,mW" pairs. Empty/absent -> linear-through-origin estimate. Optional
-    # with a default so the existing config.ini (no curve key) still
-    # validates under extra="forbid".
-    laser1_calibration_curve: str = Field(
-        alias="Laser1 Calibration Curve", default=""
-    )
+    # "V,mW" pairs. Empty/absent -> linear-through-origin estimate.
+    laser1_calibration_curve: str = Field(alias="Laser1 Calibration Curve", default="")
 
 
 class LasersSettingsOverlay(_NoEnvBaseSettings):
@@ -343,9 +305,7 @@ class LasersSettingsOverlay(_NoEnvBaseSettings):
     laser1_power: float = Field(alias="Laser1 Power")
     laser1_max_power: float = Field(alias="Laser1 Max Power")
     laser1_mw_per_volt: float = Field(alias="Laser1 mW per Volt")
-    laser1_calibration_curve: str = Field(
-        alias="Laser1 Calibration Curve", default=""
-    )
+    laser1_calibration_curve: str = Field(alias="Laser1 Calibration Curve", default="")
 
 
 class IBeamSettings(_NoEnvBaseSettings):
@@ -499,19 +459,14 @@ class LoggingSettingsOverlay(_NoEnvBaseSettings):
 # --- Adaptive section (operator-configurable bounds + gains) ---------------
 #
 # The [Adaptive] section is an OPTIONAL baseline section: a config.ini
-# without it must validate using the model defaults (load_sections_from_ini
-# supplies {} for an absent optional section so the pydantic defaults
-# apply, never an empty-string parse failure). Both tiers carry identical
-# aliases/defaults and the same range/pair validators so a tampered overlay
-# cannot bypass the same check that guards the tracked baseline.
+# without it must validate using the model defaults. Both tiers carry
+# identical aliases/defaults and the same range/pair validators so a
+# tampered overlay cannot bypass the same check that guards the tracked
+# baseline.
 #
 # Field ranges (rejected, not clamped, in BOTH tiers):
-# - Exposure: 1..1000 (ms in Rolling / lines in Lightsheet — the unit is
-#   shutter-mode-dependent and resolved by the GUI; the schema validates
-#   the raw numeric range).
-# - Each laser power: 0..150 mW (150 mirrors the [iBeam] Max Power ceiling;
-#   the cross-section check below further narrows to each configured
-#   laser's maximum).
+# - Exposure: 1..1000 (ms in Rolling / lines in Lightsheet).
+# - Each laser power: 0..150 mW.
 # - Target band: 0..100 %, lo <= hi.
 # - Reacquire threshold: 0..50 %.
 # - Block size N: 1..100 planes.
@@ -521,9 +476,7 @@ class LoggingSettingsOverlay(_NoEnvBaseSettings):
 # Cross-section rejection (collect-all, after per-section validation):
 # Adaptive Laser1 Max Power > [Lasers] Laser1 Max Power (mW) and
 # Adaptive Laser2 Max Power > [iBeam] Max Power / 1000 (uW -> mW) are
-# rejected in one pass — never silently clamped. The two-layer runtime
-# clamp is the defense during a session; the schema is the defense at
-# startup.
+# rejected in one pass — never silently clamped.
 
 
 class AdaptiveSettings(_NoEnvBaseSettings):
@@ -549,30 +502,26 @@ class AdaptiveSettings(_NoEnvBaseSettings):
     @classmethod
     def _exposure_range(cls, v: float) -> float:
         if v < 1 or v > 1000:
-            raise ValueError(
-                f"exposure {v} is outside the valid range 1..1000"
-            )
+            raise ValueError(f"exposure {v} is outside the valid range 1..1000")
         return v
 
     @field_validator(
-        "laser1_min_power", "laser1_max_power",
-        "laser2_min_power", "laser2_max_power",
+        "laser1_min_power",
+        "laser1_max_power",
+        "laser2_min_power",
+        "laser2_max_power",
     )
     @classmethod
     def _power_range(cls, v: float) -> float:
         if v < 0 or v > 150:
-            raise ValueError(
-                f"power {v} mW is outside the valid range 0..150 mW"
-            )
+            raise ValueError(f"power {v} mW is outside the valid range 0..150 mW")
         return v
 
     @field_validator("target_band_lo", "target_band_hi")
     @classmethod
     def _target_range(cls, v: float) -> float:
         if v < 0 or v > 100:
-            raise ValueError(
-                f"target band {v} % is outside the valid range 0..100 %"
-            )
+            raise ValueError(f"target band {v} % is outside the valid range 0..100 %")
         return v
 
     @field_validator("reacquire_threshold")
@@ -588,41 +537,33 @@ class AdaptiveSettings(_NoEnvBaseSettings):
     @classmethod
     def _block_range(cls, v: int) -> int:
         if v < 1 or v > 100:
-            raise ValueError(
-                f"block size N {v} is outside the valid range 1..100"
-            )
+            raise ValueError(f"block size N {v} is outside the valid range 1..100")
         return v
 
     @field_validator("kp")
     @classmethod
     def _kp_range(cls, v: float) -> float:
         if v < 0 or v > 5:
-            raise ValueError(
-                f"Kp {v} is outside the valid range 0..5"
-            )
+            raise ValueError(f"Kp {v} is outside the valid range 0..5")
         return v
 
     @field_validator("ki")
     @classmethod
     def _ki_range(cls, v: float) -> float:
         if v < 0 or v > 1:
-            raise ValueError(
-                f"Ki {v} is outside the valid range 0..1"
-            )
+            raise ValueError(f"Ki {v} is outside the valid range 0..1")
         return v
 
     @field_validator("pilot_count")
     @classmethod
     def _pilot_range(cls, v: int) -> int:
         if v < 0 or v > 50:
-            raise ValueError(
-                f"pilot count {v} is outside the valid range 0..50"
-            )
+            raise ValueError(f"pilot count {v} is outside the valid range 0..50")
         return v
 
     @field_validator("max_exposure")
     @classmethod
-    def _exposure_pair(cls, v: float, info) -> float:
+    def _exposure_pair(cls, v: float, info: ValidationInfo) -> float:
         # Validate min <= max after both fields are parsed. The
         # values-by-name path is available via info.data.
         min_v = info.data.get("min_exposure")
@@ -634,29 +575,27 @@ class AdaptiveSettings(_NoEnvBaseSettings):
 
     @field_validator("laser1_max_power")
     @classmethod
-    def _laser1_pair(cls, v: float, info) -> float:
+    def _laser1_pair(cls, v: float, info: ValidationInfo) -> float:
         min_v = info.data.get("laser1_min_power")
         if min_v is not None and min_v > v:
             raise ValueError(
-                f"Laser1 Min Power ({min_v}) is greater than "
-                f"Laser1 Max Power ({v})"
+                f"Laser1 Min Power ({min_v}) is greater than Laser1 Max Power ({v})"
             )
         return v
 
     @field_validator("laser2_max_power")
     @classmethod
-    def _laser2_pair(cls, v: float, info) -> float:
+    def _laser2_pair(cls, v: float, info: ValidationInfo) -> float:
         min_v = info.data.get("laser2_min_power")
         if min_v is not None and min_v > v:
             raise ValueError(
-                f"Laser2 Min Power ({min_v}) is greater than "
-                f"Laser2 Max Power ({v})"
+                f"Laser2 Min Power ({min_v}) is greater than Laser2 Max Power ({v})"
             )
         return v
 
     @field_validator("target_band_hi")
     @classmethod
-    def _target_pair(cls, v: float, info) -> float:
+    def _target_pair(cls, v: float, info: ValidationInfo) -> float:
         lo = info.data.get("target_band_lo")
         if lo is not None and lo > v:
             raise ValueError(
@@ -688,30 +627,26 @@ class AdaptiveSettingsOverlay(_NoEnvBaseSettings):
     @classmethod
     def _exposure_range(cls, v: float) -> float:
         if v < 1 or v > 1000:
-            raise ValueError(
-                f"exposure {v} is outside the valid range 1..1000"
-            )
+            raise ValueError(f"exposure {v} is outside the valid range 1..1000")
         return v
 
     @field_validator(
-        "laser1_min_power", "laser1_max_power",
-        "laser2_min_power", "laser2_max_power",
+        "laser1_min_power",
+        "laser1_max_power",
+        "laser2_min_power",
+        "laser2_max_power",
     )
     @classmethod
     def _power_range(cls, v: float) -> float:
         if v < 0 or v > 150:
-            raise ValueError(
-                f"power {v} mW is outside the valid range 0..150 mW"
-            )
+            raise ValueError(f"power {v} mW is outside the valid range 0..150 mW")
         return v
 
     @field_validator("target_band_lo", "target_band_hi")
     @classmethod
     def _target_range(cls, v: float) -> float:
         if v < 0 or v > 100:
-            raise ValueError(
-                f"target band {v} % is outside the valid range 0..100 %"
-            )
+            raise ValueError(f"target band {v} % is outside the valid range 0..100 %")
         return v
 
     @field_validator("reacquire_threshold")
@@ -727,41 +662,33 @@ class AdaptiveSettingsOverlay(_NoEnvBaseSettings):
     @classmethod
     def _block_range(cls, v: int) -> int:
         if v < 1 or v > 100:
-            raise ValueError(
-                f"block size N {v} is outside the valid range 1..100"
-            )
+            raise ValueError(f"block size N {v} is outside the valid range 1..100")
         return v
 
     @field_validator("kp")
     @classmethod
     def _kp_range(cls, v: float) -> float:
         if v < 0 or v > 5:
-            raise ValueError(
-                f"Kp {v} is outside the valid range 0..5"
-            )
+            raise ValueError(f"Kp {v} is outside the valid range 0..5")
         return v
 
     @field_validator("ki")
     @classmethod
     def _ki_range(cls, v: float) -> float:
         if v < 0 or v > 1:
-            raise ValueError(
-                f"Ki {v} is outside the valid range 0..1"
-            )
+            raise ValueError(f"Ki {v} is outside the valid range 0..1")
         return v
 
     @field_validator("pilot_count")
     @classmethod
     def _pilot_range(cls, v: int) -> int:
         if v < 0 or v > 50:
-            raise ValueError(
-                f"pilot count {v} is outside the valid range 0..50"
-            )
+            raise ValueError(f"pilot count {v} is outside the valid range 0..50")
         return v
 
     @field_validator("max_exposure")
     @classmethod
-    def _exposure_pair(cls, v: float, info) -> float:
+    def _exposure_pair(cls, v: float, info: ValidationInfo) -> float:
         min_v = info.data.get("min_exposure")
         if min_v is not None and min_v > v:
             raise ValueError(
@@ -771,29 +698,27 @@ class AdaptiveSettingsOverlay(_NoEnvBaseSettings):
 
     @field_validator("laser1_max_power")
     @classmethod
-    def _laser1_pair(cls, v: float, info) -> float:
+    def _laser1_pair(cls, v: float, info: ValidationInfo) -> float:
         min_v = info.data.get("laser1_min_power")
         if min_v is not None and min_v > v:
             raise ValueError(
-                f"Laser1 Min Power ({min_v}) is greater than "
-                f"Laser1 Max Power ({v})"
+                f"Laser1 Min Power ({min_v}) is greater than Laser1 Max Power ({v})"
             )
         return v
 
     @field_validator("laser2_max_power")
     @classmethod
-    def _laser2_pair(cls, v: float, info) -> float:
+    def _laser2_pair(cls, v: float, info: ValidationInfo) -> float:
         min_v = info.data.get("laser2_min_power")
         if min_v is not None and min_v > v:
             raise ValueError(
-                f"Laser2 Min Power ({min_v}) is greater than "
-                f"Laser2 Max Power ({v})"
+                f"Laser2 Min Power ({min_v}) is greater than Laser2 Max Power ({v})"
             )
         return v
 
     @field_validator("target_band_hi")
     @classmethod
-    def _target_pair(cls, v: float, info) -> float:
+    def _target_pair(cls, v: float, info: ValidationInfo) -> float:
         lo = info.data.get("target_band_lo")
         if lo is not None and lo > v:
             raise ValueError(
@@ -804,19 +729,17 @@ class AdaptiveSettingsOverlay(_NoEnvBaseSettings):
 
 # ---------------------------------------------------------------------------
 # Collect-all entry point — iterate ALL sections, collect every error +
-# warning into two lists BEFORE any dialog is shown (UI-SPEC collect-all).
-# REJECT (safety out-of-range, unknown key, wrong type, missing required) ->
-# errors list. WARN (non-safety out-of-range: galvo >±10 V, ETL drive
-# >0–5 V, negative exposure) -> warnings list. Construction uses the STRICT tier for
-# baseline-tier error classification; the same field_validators run on the
-# overlay tier when 05-05-PLAN's composition root wires the overlay merge.
+# warning into two lists BEFORE any dialog is shown. REJECT (safety
+# out-of-range, unknown key, wrong type, missing required) -> errors list.
+# WARN (non-safety out-of-range: galvo >+-10 V, ETL drive >0-5 V, negative
+# exposure) -> warnings list. Construction uses the STRICT tier for
+# baseline-tier error classification.
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class ConfigValidationResult:
-    """Collect-all validation result — errors block startup, warnings are
-    advisory (operator may proceed after review)."""
+    """Collect-all validation result — errors block startup, warnings are advisory."""
 
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -836,9 +759,7 @@ _SECTION_MODELS: dict[str, tuple[type[BaseSettings], type[BaseSettings]]] = {
 }
 
 # Optional baseline sections — a config.ini without one of these sections
-# validates using the model defaults (load_sections_from_ini supplies {}
-# for an absent section in this set so the pydantic defaults apply, never
-# an empty-string parse failure). Sections NOT in this set are required.
+# validates using the model defaults. Sections NOT in this set are required.
 _OPTIONAL_SECTIONS: frozenset[str] = frozenset({"Adaptive"})
 
 
@@ -859,10 +780,26 @@ def _exposure_time_warn(v: float) -> bool:
 
 _WARN_CHECKS: dict[str, list[tuple[str, Callable[[Any], bool], str]]] = {
     "SigGen": [
-        ("galvo_left_amplitude", _galvo_amplitude_warn, "is above the galvo voltage limit"),
-        ("galvo_right_amplitude", _galvo_amplitude_warn, "is above the galvo voltage limit"),
-        ("etl_left_amplitude", _etl_amplitude_warn, "is outside the ETL drive voltage range"),
-        ("etl_right_amplitude", _etl_amplitude_warn, "is outside the ETL drive voltage range"),
+        (
+            "galvo_left_amplitude",
+            _galvo_amplitude_warn,
+            "is above the galvo voltage limit",
+        ),
+        (
+            "galvo_right_amplitude",
+            _galvo_amplitude_warn,
+            "is above the galvo voltage limit",
+        ),
+        (
+            "etl_left_amplitude",
+            _etl_amplitude_warn,
+            "is outside the ETL drive voltage range",
+        ),
+        (
+            "etl_right_amplitude",
+            _etl_amplitude_warn,
+            "is outside the ETL drive voltage range",
+        ),
     ],
     "Camera": [
         ("exposure_time", _exposure_time_warn, "is negative"),
@@ -871,10 +808,7 @@ _WARN_CHECKS: dict[str, list[tuple[str, Callable[[Any], bool], str]]] = {
 
 
 def _format_pydantic_errors(section: str, err: ValidationError) -> list[str]:
-    """Translate pydantic ValidationError errors into operator-readable
-    rows. Pydantic-internal jargon (extra_forbidden, value_error, etc.) is
-    NOT surfaced — the error type drives classification, never the displayed
-    text (UI-SPEC Copywriting Contract)."""
+    """Translate pydantic ValidationError errors into operator-readable rows."""
     rows: list[str] = []
     for e in err.errors():
         loc = ".".join(str(part) for part in e["loc"])
@@ -883,13 +817,12 @@ def _format_pydantic_errors(section: str, err: ValidationError) -> list[str]:
             # Unknown/typo'd key — loc is the alias of the offending key.
             key = loc
             rows.append(
-                f"[{section}] Unknown key \"{key}\". Remove it or correct "
-                f"the spelling."
+                f'[{section}] Unknown key "{key}". Remove it or correct the spelling.'
             )
         elif "missing" in etype:
             key = loc
             rows.append(
-                f"[{section}] Required key \"{key}\" is missing. Add it "
+                f'[{section}] Required key "{key}" is missing. Add it '
                 f"with the correct type and value."
             )
         else:
@@ -898,9 +831,7 @@ def _format_pydantic_errors(section: str, err: ValidationError) -> list[str]:
             msg = e.get("msg", "is invalid")
             input_val = e.get("input")
             if input_val is not None:
-                rows.append(
-                    f"[{section}] {loc} = {input_val!r}: {msg}."
-                )
+                rows.append(f"[{section}] {loc} = {input_val!r}: {msg}.")
             else:
                 rows.append(f"[{section}] {loc}: {msg}.")
     return rows
@@ -910,10 +841,7 @@ def collect_config_errors(
     sections: dict[str, dict],
 ) -> ConfigValidationResult:
     """Validate all sections collect-all: every error and warning surfaces
-    in one pass, not fail-fast on the first. REJECT (safety out-of-range,
-    unknown key, wrong type, missing required) -> errors. WARN (non-safety
-    out-of-range) -> warnings, surfaced only when the section constructed
-    successfully."""
+    in one pass, not fail-fast on the first."""
     result = ConfigValidationResult()
     # Track the constructed settings objects so cross-section checks can
     # compare fields across sections after every section validated.
@@ -945,8 +873,7 @@ def collect_config_errors(
                     f"[{section_name}] {key} = {value}: {violation}."
                 )
     # Cross-section safety checks — reject (never clamp) adaptive laser
-    # maxima above the configured laser maxima. Runs after every section
-    # validated so both errors surface in one collect-all pass.
+    # maxima above the configured laser maxima.
     _cross_section_adaptive_power(result, constructed)
     return result
 
@@ -956,12 +883,6 @@ def _cross_section_adaptive_power(
     constructed: dict[str, BaseSettings],
 ) -> None:
     """Reject adaptive laser maxima above the configured laser maxima.
-
-    - Adaptive Laser1 Max Power is compared against [Lasers] Laser1 Max
-      Power (mW). Reject if Adaptive L1 Max > [Lasers] Laser1 Max Power.
-    - Adaptive Laser2 Max Power is compared against [iBeam] Max Power
-      / 1000 (uW -> mW). Reject if Adaptive L2 Max > [iBeam] Max Power
-      / 1000.
 
     Both checks are collect-all: a config violating both surfaces two
     errors in one pass. The comparison is strict (>) so a value sitting
@@ -1009,105 +930,67 @@ def load_sections_from_ini(
     baseline_path: str, overlay_path: str | None
 ) -> dict[str, dict[str, str]]:
     """Load all config.ini sections as raw string dicts, ready for
-    ``collect_config_errors``.
-
-    For each section in ``_SECTION_MODELS``, reads the baseline file via
-    ``cfg_read`` (using the strict model's Field aliases as the defaults
-    dict so every file key is captured), then merges the overlay file's
-    values on top if ``overlay_path`` exists (overlay values win via dict
-    update). Returns a ``dict[section_name, dict[key, raw_string_value]]``.
-    """
+    ``collect_config_errors``."""
     sections: dict[str, dict[str, str]] = {}
     # Detect which sections the baseline file actually contains so an
     # absent OPTIONAL section (e.g. [Adaptive]) is supplied as {} and the
     # pydantic model defaults apply — never an empty-string parse failure.
     _base_cfg = configparser.ConfigParser()
-    _base_cfg.optionxform = str  # preserve case (AGENTS.md §9)
+    _base_cfg.optionxform = str  # preserve case
     _base_cfg.read(baseline_path)
     for section_name, (strict_cls, _overlay_cls) in _SECTION_MODELS.items():
         # An optional section absent from the baseline file is supplied
-        # as {} so the pydantic model defaults apply (no empty-string
-        # parse failure on int/float/bool fields). Required sections
-        # still go through cfg_read which fills every alias key.
-        if (
-            section_name in _OPTIONAL_SECTIONS
-            and not _base_cfg.has_section(section_name)
+        # as {} so the pydantic model defaults apply.
+        if section_name in _OPTIONAL_SECTIONS and not _base_cfg.has_section(
+            section_name
         ):
             sections[section_name] = {}
             continue
         # Build the defaults dict from the strict model's Field aliases so
-        # cfg_read captures every file key (cfg_read only returns keys
-        # present in the defaults dict — passing {} would yield {}).
+        # cfg_read captures every file key.
         defaults_template: dict[str, str] = {}
         for field_info in strict_cls.model_fields.values():
             key = field_info.alias or field_info.name
             defaults_template[key] = ""
         # cfg_read mutates the passed dict in place, so pass a fresh copy.
-        baseline = cfg_read(
-            baseline_path, section_name, dict(defaults_template)
-        )
-        if overlay_path is not None and os.path.exists(overlay_path):
-            overlay = cfg_read(
-                overlay_path, section_name, dict(defaults_template)
-            )
+        baseline = cfg_read(baseline_path, section_name, dict(defaults_template))
+        if overlay_path is not None and Path(overlay_path).exists():
+            overlay = cfg_read(overlay_path, section_name, dict(defaults_template))
             # Only override baseline with keys the overlay file actually
             # contains. cfg_read fills every alias key from the defaults
             # dict, returning the "" sentinel for keys absent from the
             # overlay file — those sentinels must NOT clobber the
-            # baseline's real values (a partial overlay would otherwise
-            # wipe the tracked baseline and ValidationError on every
-            # int/float/bool field the overlay did not re-list).
-            #
-            # Filtering by ``v != ""`` would also drop an overlay key the
-            # operator explicitly set to empty (e.g. clearing a Log Dir).
-            # Instead, determine the set of keys the overlay section
-            # actually contains via configparser and merge only those —
-            # absent keys still don't clobber, but an explicitly-empty
-            # value now propagates as "".
+            # baseline's real values. Determine the set of keys the
+            # overlay section actually contains via configparser and merge
+            # only those — an explicitly-empty value propagates as "".
             _ov_cfg = configparser.ConfigParser()
-            _ov_cfg.optionxform = str  # preserve case (AGENTS.md §9)
+            _ov_cfg.optionxform = str  # preserve case
             _ov_cfg.read(overlay_path)
             present_keys = (
                 set(_ov_cfg[section_name].keys())
                 if _ov_cfg.has_section(section_name)
                 else set()
             )
-            baseline.update(
-                {k: v for k, v in overlay.items() if k in present_keys}
-            )
+            baseline.update({k: v for k, v in overlay.items() if k in present_keys})
         sections[section_name] = baseline
     return sections
 
 
 # ---------------------------------------------------------------------------
 # ConfigValidator — collect-all validation with a modal QDialog abort path.
-# validate_or_abort() runs collect_config_errors on the sections dict, shows
-# a modal QDialog listing all errors (red, startup-blocking) and warnings
-# (amber, advisory), then aborts via sys.exit(1) if any errors exist. If
-# only warnings are present, the operator may proceed. PySide6 is imported
-# inside _show_dialog so the module stays importable without Qt for the
-# pure-logic collect_config_errors tests.
+# validate_or_abort() runs collect_config_errors, shows a modal QDialog
+# listing all errors (red) and warnings (amber), then aborts via sys.exit(1)
+# if any errors exist. PySide6 is imported inside _show_dialog so the module
+# stays importable without Qt for pure-logic tests.
 # ---------------------------------------------------------------------------
 
 
 class ConfigValidator:
-    """Collect-all config validation with a modal QDialog abort path.
+    """Collect-all config validation with a modal QDialog abort path."""
 
-    The composition root (``main()``) calls ``validate_or_abort`` AFTER the
-    DeviceBundle exists but BEFORE any collaborator or the shell is
-    constructed (UI-SPEC order-of-operations). A REJECT-classified error
-    aborts via ``sys.exit(1)`` before any Qt window shows.
-    """
-
-    def validate_or_abort(
-        self, sections: dict[str, dict[str, str]]
-    ) -> None:
-        """Run collect-all validation on the sections dict. If any errors
-        or warnings exist, show a modal QDialog. Abort via ``sys.exit(1)``
-        if any errors exist OR the operator clicked "Exit" on a
-        warnings-only dialog (reject result). On a warnings-only dialog
-        the operator may click "Proceed with warnings" (accept) to
-        continue."""
+    def validate_or_abort(self, sections: dict[str, dict[str, str]]) -> None:
+        """Run collect-all validation. Abort via sys.exit(1) if any errors
+        exist OR the operator clicked "Exit" on a warnings-only dialog."""
         result = collect_config_errors(sections)
         if not result.errors and not result.warnings:
             return
@@ -1115,22 +998,11 @@ class ConfigValidator:
         if result.errors or not accepted:
             sys.exit(1)
 
-    def _show_dialog(
-        self, errors: list[str], warnings: list[str]
-    ) -> bool:
-        """Show the collect-all config-error QDialog (D-03 / PKG-04).
+    def _show_dialog(self, errors: list[str], warnings: list[str]) -> bool:
+        """Show the collect-all config-error QDialog.
 
-        Layout: errors block (red header + per-error rows) first, then
-        warnings block (amber header + per-warning rows), then a
-        right-aligned button row with "Exit" (always, default) and
-        "Proceed with warnings" (only if 0 errors and ≥1 warning).
-
-        Returns ``True`` if the operator clicked "Proceed with warnings"
-        (``QDialog.DialogCode.Accepted``) and ``False`` otherwise
-        (``QDialog.DialogCode.Rejected`` — the "Exit" button, window close,
-        or ESC). The caller uses this to decide whether to abort on the
-        warnings-only path: an errors dialog always aborts regardless of
-        the return value.
+        Returns True if the operator clicked "Proceed with warnings"
+        and False otherwise.
         """
         from PySide6.QtWidgets import (
             QDialog,

@@ -1,21 +1,11 @@
 """FrameSaverController — god-object split collaborator.
 
 Owns the ``FrameSaver`` + ``FrameViewer`` QObject instances and routes the
-shell's save/enqueue calls through to them. The ``FrameSaver`` and
-``FrameViewer`` QObject classes are DEFINED in this module (moved verbatim
-from ``lightsheet/gui/controller.py`` — a behavior-preserving mechanical
-relocation). The shell delegates through ``self._fs``.
-
-This is a plain-Python object (NOT a ``QObject``) per the plain-Python
-collaborator pattern 1: collaborators emit through a shell reference,
-never declare their own
-``Signal``, and never call ``.connect()``. The one exception is the
-``FrameSaver.sig_status_message`` → ``shell.updateUi_message_printer``
-connection, which is preserved verbatim from the pre-extraction
-``hardware_init`` — ``FrameSaver`` runs its save worker on a thread and
-its status messages must cross to the GUI thread via the signal/slot
-queue (AGENTS.md §11). That connection is made on the owned ``FrameSaver``
-instance, not on this collaborator.
+shell's save/enqueue calls through to them. The shell delegates through
+``self._fs``. Plain-Python object (NOT a ``QObject``); emits through the
+shell reference. The ``FrameSaver.sig_status_message`` →
+``shell.updateUi_message_printer`` connection is preserved on the owned
+``FrameSaver`` instance.
 """
 
 from __future__ import annotations
@@ -26,6 +16,7 @@ import logging
 import os
 import queue
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import h5py
@@ -44,16 +35,9 @@ logger = logging.getLogger(__name__)
 
 
 def _position_to_float(value: str | float) -> float:
-    """Coerce a motor-position entry to ``float``.
-
-    ``add_motor_parameters`` stores the shell's formatted display strings
-    (e.g. ``"99.82 μm"`` from ``units_fixformat``) so the HDF5 per-dataset
-    attr path can write them verbatim. The Zarr ``/acquisition/motor``
-    datasets need numeric values, so this helper strips the trailing unit
-    suffix. A bare numeric string or an already-numeric value is passed
-    through. Raises ``ValueError`` if the leading token is not numeric —
-    the caller's try/except surfaces it as a save error rather than
-    writing a malformed store.
+    """Coerce a motor-position entry to ``float``. Strips trailing unit
+    suffix from formatted display strings (e.g. ``"99.82 μm"``). Raises
+    ``ValueError`` if the leading token is not numeric.
     """
     if isinstance(value, (int, float)):
         return float(value)
@@ -62,28 +46,13 @@ def _position_to_float(value: str | float) -> float:
 
 
 class FrameSaverWorker(QObject):
-    """Worker ``QObject`` for the save loop, affined to a dedicated
-    ``QThread`` via ``moveToThread``.
+    """Worker QObject for the save loop, affined to a dedicated QThread.
 
-    The save loop body itself stays on ``FrameSaver`` — this worker's
+    The save loop body stays on ``FrameSaver``; this worker's
     ``start_saving`` slot invokes the appropriate loop method on the
     worker thread and emits ``sig_finished`` when it returns. The
-    ``sig_finished`` → ``thread.quit`` connection ensures the thread's
-    event loop exits after the save loop completes, so ``thread.wait()``
-    unblocks only after the save loop (HDF5 close OR Zarr finalize) has
-    returned on the worker thread (the load-bearing close-ordering
-    contract — preserved verbatim for both formats).
-
-    The format branch selects the loop body based on
-    ``self._saver.parent.save_format``: ``hdf5`` -> the existing
-    ``frame_saver_worker`` (byte-identical); ``zarr`` -> the new
-    ``zarr_save_worker`` (ZarrSaver-driven); ``both`` ->
-    ``both_save_worker`` (a single consume loop that writes each frame
-    to BOTH formats, then finalizes Zarr — the previous two-loop design
-    drained the shared queue twice and produced empty HDF5 files). The
-    ``try/finally`` + ``sig_finished.emit()`` shape is preserved verbatim
-    — the finally gate fires after the branched loop returns, so a Zarr
-    finalize completes before the join.
+    ``sig_finished`` → ``thread.quit`` connection ensures the thread
+    exits after the save loop completes (the close-ordering contract).
     """
 
     sig_finished = Signal()
@@ -94,13 +63,7 @@ class FrameSaverWorker(QObject):
 
     @Slot()
     def start_saving(self) -> None:
-        """Run the save loop on the worker thread, then signal completion.
-
-        The format branch is inside the ``try`` so a finalize/write
-        failure propagates to the worker's error handler; the
-        ``finally: sig_finished.emit()`` gate is UNCHANGED and fires
-        after the branched loop returns (the close-ordering contract).
-        """
+        """Run the save loop on the worker thread, then signal completion."""
         try:
             fmt = self._saver.parent.save_format
             if fmt == "hdf5":
@@ -108,21 +71,9 @@ class FrameSaverWorker(QObject):
             elif fmt == "zarr":
                 self._saver.zarr_save_worker()
             elif fmt == "both":
-                # Single consume loop writing each frame to BOTH zarr and
-                # hdf5, then finalizes zarr. The previous two-loop design
-                # (zarr_save_worker then frame_saver_worker) drained the
-                # shared single-consumer self.queue twice — the Zarr loop
-                # consumed every frame, leaving the HDF5 loop with an
-                # empty queue and producing empty (metadata-only) HDF5
-                # files. both_save_worker consumes each buffer once and
-                # writes it to both formats. Never concurrent — all
-                # writes are on this single worker thread, serialized
-                # per-frame. sig_finished still emits once in the finally
-                # gate after both formats are fully closed/finalized.
+                # Single consume loop writing each frame to BOTH formats.
                 self._saver.both_save_worker()
             else:
-                # Default to HDF5 for "tiff" legacy + unknown — matches
-                # the controller's save_format parse else branch.
                 self._saver.frame_saver_worker()
         finally:
             self.sig_finished.emit()
@@ -201,48 +152,32 @@ class FrameSaver(QObject):
         self.sample_name = ""
         self.number_of_files = 1
         self.filenames_list = []
-        # Per-channel filename lists. set_files always populates this
-        # with one list per channel — single-channel mode has one
-        # channel list (and filenames_list mirrors filenames_lists[0]
-        # so the single-channel frame_saver_worker path is unchanged);
-        # multi-channel mode has one list per channel. The
-        # wavelengths=None back-compat branch is retired.
+        # Per-channel filename lists. set_files populates one list per
+        # channel; single-channel mode has one list (filenames_list mirrors
+        # filenames_lists[0]).
         self.filenames_lists: list[list[str]] = []
         self.horizontal_positions_list = []
         self.vertical_positions_list = []
         self.camera_positions_list = []
 
-        # ZarrSaver is a plain-Python sibling collaborator (NOT a
-        # QObject) — no QObject parenting needed. Constructed once per
-        # FrameSaver; reinit resets it so a per-acquisition format
-        # change takes effect without controller reconstruction.
+        # ZarrSaver is a plain-Python sibling collaborator (NOT a QObject).
         self._zarr_saver = ZarrSaver(parent)
 
-        # Adaptive trajectory samples (schema-a). Cleared in reinit.
-        # Populated by record_adaptive_sample() during the per-plane
-        # loop; written to HDF5 /adaptive_trajectory by
-        # _write_adaptive_hdf5() before file close, and to Zarr
-        # /acquisition/adaptive by ZarrSaver._write_adaptive_group()
-        # during finalize.
+        # Adaptive trajectory samples. Cleared in reinit.
         self.adaptive_trajectory: list = []
         self._adaptive_enabled: bool = False
-        # Frozen AdaptiveConfig (schema-a bounds + gains). Stored when
-        # configure_adaptive(enabled, config=...) is called so the
-        # HDF5 / Zarr writers can publish the full config attrs
-        # alongside the per-plane trajectory. None in fixed mode.
+        # Frozen AdaptiveConfig (bounds + gains). Stored when
+        # configure_adaptive is called so the writers can publish config
+        # attrs alongside the trajectory. None in fixed mode.
         self._adaptive_config: object | None = None
 
     def reinit(self, block_size: int) -> None:
         if self.saving_started:
             self.saving_started = False
 
-        # Re-read save_format so a per-acquisition format change (set
-        # by the save-panel format radio) takes effect without
-        # controller reconstruction.
+        # Re-read save_format so a per-acquisition format change takes effect.
         self.file_format = self.parent.save_format
-        # Reset the ZarrSaver so a per-acquisition format change takes
-        # effect (a fresh writer is constructed on the next
-        # zarr_save_worker call).
+        # Reset the ZarrSaver for the next acquisition.
         self._zarr_saver = ZarrSaver(self.parent)
 
         self.block_size = block_size
@@ -257,8 +192,7 @@ class FrameSaver(QObject):
         self.horizontal_positions_list = []
         self.vertical_positions_list = []
         self.camera_positions_list = []
-        # Clear adaptive trajectory state so a re-run does not carry
-        # over the previous run's samples.
+        # Clear adaptive trajectory state so a re-run does not carry over.
         self.adaptive_trajectory = []
         self._adaptive_enabled = False
         self._adaptive_config = None
@@ -287,46 +221,17 @@ class FrameSaver(QObject):
         datasets_name: str,
         wavelengths: list[int] | None = None,
     ) -> None:
-        """Set the number and name of files to save and makes sure the filenames
-        are unique in the path to avoid overwrite on other files.
+        """Set the number and name of files to save, ensuring unique filenames.
 
-        Filename convention (compact, aligned with the Zarr store name
-        ``<files_name>.ome.zarr``): ``<files_name>_<wavelength>nm`` with
-        a per-channel sequential counter — NO suffix on the first file,
-        then ``_01``, ``_02``, ... (2-digit, width scales with the file
-        count so lexicographic sort is stable). The scan_type segment is
-        NOT included in the filename (it stays available as
-        ``self.scan_type`` for metadata). The old ``_plane_00001`` and
-        ``_stack`` segments are dropped — the former was always ``00001``
-        for stitch (one file per channel) and redundant with the dataset
-        name inside the file for crop/full, and the latter duplicated the
-        Zarr store name's role. Collision avoidance: if a candidate name
-        already exists on disk, the counter increments past it until a
-        free name is found (so a re-run in the same directory produces
-        ``_01``, ``_02``, ... instead of overwriting).
+        Filename convention: ``<files_name>_<wavelength>nm`` with a
+        per-channel sequential counter (no suffix on the first file, then
+        ``_01``, ``_02``, ...). Collision avoidance increments past
+        existing files on disk.
 
-        ``wavelengths`` is required — every caller passes a non-None
-        list. Multi-channel callers pass ``[wl1, wl2]``;
-        single-channel callers pass ``[active_wavelength]``. The
-        ``wavelengths=None`` back-compat branch is retired: passing
-        ``None`` raises ``ValueError`` so a stale caller that forgets
-        to pass wavelengths fails loudly instead of producing an
-        unsuffixed file.
-
-        ``self.filenames_lists`` is built as a list of lists — one per
-        channel, each with ``number_of_files`` entries — where each
-        filename ends in ``_{wavelength}nm.hdf5`` (plus the sequential
-        suffix for files after the first). The wavelength values are
-        read from the live ``ILaser`` instance by the caller and passed
-        in here; they are never hardcoded inside this method. The
-        collision-avoidance counter runs independently per channel.
-
-        When there is exactly one channel (single-channel mode),
-        ``self.filenames_list`` (singular) is also populated from
-        ``filenames_lists[0]`` so the single-channel
-        ``frame_saver_worker`` (which reads ``filenames_list``, not
-        ``filenames_lists``) is byte-identical except for the filename
-        suffix.
+        ``wavelengths`` is required — passing ``None`` raises
+        ``ValueError``. ``self.filenames_lists`` is built as a list of
+        lists (one per channel). Single-channel mode also populates
+        ``self.filenames_list`` from ``filenames_lists[0]``.
         """
         if wavelengths is None:
             raise ValueError(
@@ -342,73 +247,50 @@ class FrameSaver(QObject):
         self.number_of_datasets = int(number_of_datasets)
         self.datasets_name = str(datasets_name)
 
-        # Sequential-suffix width: 2-digit minimum, scales with the file
-        # count so lexicographic sort stays stable (e.g. 100 files →
-        # 3-digit _001.._100). The first file in each channel has NO
-        # suffix; subsequent files get _01, _02, ... Collision avoidance
-        # increments the counter past any name that already exists on
-        # disk, so a re-run in the same directory shifts to _01, _02, ...
-        # instead of overwriting.
+        save_dir = Path(getattr(self.parent, "save_directory", "") or "")
         width = max(2, len(str(self.number_of_files)))
 
-        # Build one filename list per channel, each with the
-        # _{wavelength}nm suffix and the per-channel sequential counter.
         self.filenames_lists = []
         for wl in wavelengths:
             channel_list: list[str] = []
-            counter = 0  # 0 → no suffix; 1 → _01; 2 → _02; ...
+            counter = 0
             for _plane in range(self.number_of_files):
                 base = self.files_name + f"_{wl}nm"
                 if counter == 0:
                     candidate = base + ".hdf5"
                 else:
                     candidate = f"{base}_{counter:0{width}d}.hdf5"
-                # Collision avoidance: bump the counter until the name is
-                # free (and recompute the suffix once counter > 0).
-                while os.path.isfile(candidate):
+                full = str(save_dir / candidate)
+                while Path(full).is_file():
                     counter += 1
                     candidate = f"{base}_{counter:0{width}d}.hdf5"
-                channel_list.append(candidate)
+                    full = str(save_dir / candidate)
+                channel_list.append(full)
                 counter += 1
             self.filenames_lists.append(channel_list)
 
-        # Single-channel back-compat: populate filenames_list (singular)
-        # from filenames_lists[0] so the single-channel frame_saver_worker
-        # (which reads filenames_list, not filenames_lists) is
-        # byte-identical except for the filename suffix.
+        # Single-channel back-compat: populate filenames_list from
+        # filenames_lists[0] so the single-channel save worker path works.
         if len(self.filenames_lists) == 1:
             self.filenames_list = list(self.filenames_lists[0])
         else:
-            # Multi-channel: clear filenames_list so the multi-channel
-            # worker branch (filenames_lists populated) is taken.
+            # Multi-channel: clear so the multi-channel worker branch is taken.
             self.filenames_list = []
 
     # Saving methods
 
     def enqueue_buffer(self, buffer: np.ndarray | tuple[int, np.ndarray]) -> None:
-        """Put an image in the save queue.
-
-        Accepts either a bare ``np.ndarray`` (the existing single-channel
-        form — back-compat) or a ``(channel_idx, frame)`` tuple (the
-        multi-channel channel-tagged form). The single-consumer save
-        workers (``frame_saver_worker`` / ``zarr_save_worker`` /
-        ``both_save_worker``) branch on the tag in a later plan; this
-        method only makes the queue accept the tagged form without
-        raising, so the multi-channel producer (``SingleWorker.run`` /
-        ``StackWorker.run``) can enqueue per-channel frames now.
+        """Put an image in the save queue. Accepts a bare ``np.ndarray``
+        (single-channel) or a ``(channel_idx, frame)`` tuple (multi-channel).
         """
         self.queue.put(item=buffer, block=True)
 
     def start_saving(self) -> None:
-        """Initiates the save worker on a dedicated QThread.
-
-        The worker ``QObject`` is moved to the thread via ``moveToThread``;
-        the thread's ``started`` signal invokes the worker's ``start_saving``
-        slot, which runs the save loop on the worker thread. When the save
-        loop exits, the worker emits ``sig_finished`` which quits the
-        thread's event loop — so ``stop_saving``'s ``wait(10000)`` unblocks
-        only after ``h5py.File.close()`` has returned on the worker thread
-        (the h5py close-ordering contract).
+        """Initiates the save worker on a dedicated QThread. The worker's
+        ``start_saving`` slot runs the save loop on the worker thread;
+        ``sig_finished`` quits the thread's event loop so ``stop_saving``'s
+        ``wait(10000)`` unblocks only after ``h5py.File.close()`` has
+        returned (the close-ordering contract).
         """
         self.saving_started = True
         self._saver_thread = QThread()
@@ -496,7 +378,7 @@ class FrameSaver(QObject):
 
         ``config`` is the frozen ``AdaptiveConfig`` whose bounds + gains
         are published as group attrs alongside the per-plane trajectory
-        (schema-a reproducibility contract). It may be omitted in fixed
+        . It may be omitted in fixed
         mode (``enabled=False``); when ``enabled=True`` the config attrs
         are required so the saved trajectory is self-describing.
         """
@@ -528,7 +410,7 @@ class FrameSaver(QObject):
         )
 
     def _adaptive_config_attrs(self) -> dict:
-        """Build the schema-a AdaptiveConfig attrs dict from the frozen
+        """Build the AdaptiveConfig attrs dict from the frozen
         ``self._adaptive_config``. Returns an empty dict when no config
         is set (fixed mode) so the caller can decide whether to write
         the group at all.
@@ -558,7 +440,7 @@ class FrameSaver(QObject):
         outfile: h5py.File,
         samples: list | None = None,
     ) -> None:
-        """Write the /adaptive_trajectory group (schema-a) to an open
+        """Write the /adaptive_trajectory group  to an open
         HDF5 file. Called before file close in every HDF5 save path
         (single-channel stitch, per-plane crop/full, multi-channel).
 
@@ -573,7 +455,7 @@ class FrameSaver(QObject):
         field names: plane_index, intensity_fraction, exposure_s,
         laser_power_mw, control_variable_active, reacquired,
         power_fallback. Inactive-channel intensity entries are NaN
-        (schema-a convention). The frozen AdaptiveConfig bounds + gains
+        (convention). The frozen AdaptiveConfig bounds + gains
         are published as group attrs so the saved trajectory is
         self-describing.
         """
@@ -773,13 +655,10 @@ class FrameSaver(QObject):
                         break
                 if aborted:
                     break
-            # Write the adaptive trajectory group before file close
-            # (schema-a). Only writes when adaptive was enabled and
-            # samples were recorded. Stitch (1 file) writes the full
-            # trajectory; per-plane (N files) writes only this file's
-            # plane row so the trajectory is not duplicated across files.
-            # A write error surfaces to the operator and stops the worker
-            # — the file is still closed so no handle leaks.
+            # Write the adaptive trajectory group before file close.
+            # Only writes when adaptive was enabled and samples were
+            # recorded. Stitch (1 file) writes the full trajectory;
+            # per-plane (N files) writes only this file's plane row.
             try:
                 if len(self.filenames_list) > 1 and idx < len(self.adaptive_trajectory):
                     self._write_adaptive_hdf5(
@@ -936,10 +815,9 @@ class FrameSaver(QObject):
                 # If the current file is full, close it and open the
                 # next file for this channel (if any).
                 if ds_counter[channel_idx] > n_datasets_per_file:
-                    # Write the adaptive trajectory group before close
-                    # (schema-a). Stitch (1 file/channel) writes the
-                    # full trajectory; per-plane (N files/channel)
-                    # writes only this file's plane row.
+                    # Write the adaptive trajectory group before close.
+                    # Stitch (1 file/channel) writes the full trajectory;
+                    # per-plane (N files/channel) writes only this file's row.
                     self._write_adaptive_hdf5_for_file(
                         outfile, file_idx[channel_idx], n_files_per_channel
                     )
@@ -972,7 +850,7 @@ class FrameSaver(QObject):
                 if outfile is not None:
                     try:
                         # Write the adaptive trajectory group before
-                        # close (schema-a). Uses the channel's current
+                        # close . Uses the channel's current
                         # file_idx — the file that was still open when
                         # the loop exited (stitch: 0; per-plane: the
                         # file that was being filled).
@@ -1015,8 +893,8 @@ class FrameSaver(QObject):
         operator to inspect/delete).
         """
         n_planes = self.number_of_files * int(self.number_of_datasets)
-        store_path = os.path.normpath(
-            os.path.join(self.parent.save_directory, self.files_name + ".ome.zarr")
+        store_path = str(
+            Path(self.parent.save_directory) / (self.files_name + ".ome.zarr")
         )
         # Derive the channel count from the per-channel filename lists
         # built by set_files(wavelengths=...). When set_files was called
@@ -1216,8 +1094,8 @@ class FrameSaver(QObject):
             return
 
         n_planes = self.number_of_files * int(self.number_of_datasets)
-        store_path = os.path.normpath(
-            os.path.join(self.parent.save_directory, self.files_name + ".ome.zarr")
+        store_path = str(
+            Path(self.parent.save_directory) / (self.files_name + ".ome.zarr")
         )
         try:
             self._zarr_saver.start_stack(store_path, n_planes)
@@ -1345,11 +1223,9 @@ class FrameSaver(QObject):
                             break
                     if aborted or z_idx >= n_planes:
                         break
-                # Write the adaptive trajectory group before close
-                # (schema-a). Stitch (1 file) writes the full
-                # trajectory; per-plane (N files) writes only this
-                # file's plane row. A write error surfaces and stops
-                # the worker — the file is still closed.
+                # Write the adaptive trajectory group before close.
+                # Stitch (1 file) writes the full trajectory; per-plane
+                # (N files) writes only this file's plane row.
                 try:
                     if len(self.filenames_list) > 1 and idx < len(
                         self.adaptive_trajectory
@@ -1429,8 +1305,8 @@ class FrameSaver(QObject):
         ``thread.quit`` → ``wait(10000)``.
         """
         n_planes = self.number_of_files * int(self.number_of_datasets)
-        store_path = os.path.normpath(
-            os.path.join(self.parent.save_directory, self.files_name + ".ome.zarr")
+        store_path = str(
+            Path(self.parent.save_directory) / (self.files_name + ".ome.zarr")
         )
         # Compute the channel count BEFORE start_stack so the Zarr writer
         # is shaped (n_channels, n_planes, y, x) — a channel-1 write_plane
@@ -1709,7 +1585,7 @@ class ZarrSaver:
         self._horizontal_positions: list[float] = []
         self._vertical_positions: list[float] = []
         self._camera_positions: list[float] = []
-        # Adaptive trajectory (schema-a). Set by set_adaptive_trajectory
+        # Adaptive trajectory . Set by set_adaptive_trajectory
         # before finalize so _write_adaptive_group can publish the
         # /acquisition/adaptive group. Empty list + None config = fixed
         # mode (no adaptive group written).
@@ -1734,14 +1610,14 @@ class ZarrSaver:
         chunked one channel/plane per chunk so each streaming write
         touches exactly one chunk (peak RAM = one frame + one chunk).
         ``n_channels`` defaults to 1 so the single-channel path stays
-        byte-identical to the Phase 8 ``(1, n_planes, y, x)`` shape.
+        byte-identical to the ``(1, n_planes, y, x)`` shape.
         """
         # Path-traversal guard: the resolved store_path must be inside
         # the operator-selected save directory.
         save_dir = os.path.normpath(self.parent.save_directory)
         resolved = os.path.normpath(store_path)
         try:
-            common = os.path.commonpath([save_dir, os.path.dirname(resolved)])
+            common = os.path.commonpath([save_dir, str(Path(resolved).parent)])
         except ValueError:
             common = ""
         if common != save_dir:
@@ -1755,23 +1631,13 @@ class ZarrSaver:
         chunk_shape = (1, 1, int(cam.ysize), int(cam.xsize))
 
         # Force zarr v3 to persist all-zero chunks (write_empty_chunks=True).
-        # zarr v3 (3.3.0) defaults ``array.write_empty_chunks`` to False, so
-        # all-zero chunks — MockCamera demo frames and dark real-rig frames
-        # — are silently skipped, producing a metadata-only store with zero
-        # data chunk files (the store appears valid but contains no data).
-        # ``write_empty_chunks`` is a RUNTIME config only: it is NOT persisted
-        # to the on-disk zarr.json, so an array re-fetched from the store
-        # loses any config injected at creation time. The writer's
-        # ``__setitem__`` -> ``_level0_array()`` -> ``self.root["0"]``
-        # re-fetches the L0 array on EVERY write, so a creation-time config
-        # injection (e.g. patching ``require_array``) is discarded before the
-        # first frame is written. The only mechanism that survives the
-        # re-fetch is zarr's GLOBAL config — the fallback used when a
-        # re-fetched array builds its ArrayConfig. Set the global for the
-        # duration of this ZarrSaver's write phase and restore it in
-        # finalize() (and on any finalize-path raise). The app is
-        # single-operator (one save at a time), so no concurrent zarr writer
-        # conflicts with this transient global override.
+        # zarr v3 defaults ``write_empty_chunks`` to False, so all-zero chunks
+        # (MockCamera demo frames, dark real-rig frames) are silently skipped,
+        # producing a metadata-only store with zero data chunk files.
+        # ``write_empty_chunks`` is a runtime config only (not persisted to
+        # zarr.json), and the writer re-fetches the L0 array on every write,
+        # so the only mechanism that survives is zarr's GLOBAL config.
+        # Set it for the write phase and restore in finalize().
         self._prev_write_empty_chunks = bool(
             zarr.config.get("array.write_empty_chunks", False)
         )
@@ -1907,7 +1773,7 @@ class ZarrSaver:
     ) -> None:
         """Provide the adaptive trajectory samples + frozen config so
         ``finalize`` can publish the ``/acquisition/adaptive`` group
-        (schema-a). Called by the save worker before finalize when
+        . Called by the save worker before finalize when
         adaptive is enabled. An empty trajectory or None config means
         fixed mode — no adaptive group is written.
         """
@@ -1915,7 +1781,7 @@ class ZarrSaver:
         self._adaptive_config = config
 
     def _write_adaptive_group(self) -> None:
-        """Write the ``/acquisition/adaptive`` group (schema-a) via the
+        """Write the ``/acquisition/adaptive`` group  via the
         writer's public ``root`` handle.
 
         Called AFTER ``finalize_with_resolutions`` and after
@@ -1938,7 +1804,7 @@ class ZarrSaver:
         traj = self._adaptive_trajectory
         cfg = self._adaptive_config
 
-        # AdaptiveConfig attrs (schema-a reproducibility contract).
+        # AdaptiveConfig attrs .
         # zarr v3 attrs are JSON-serialised, so tuple fields are stored
         # as lists (not np.array, which is not JSON serialisable).
         if cfg is not None:
@@ -2049,7 +1915,7 @@ class ZarrSaver:
         #     channels than axis slots — a 2-channel writer with 1 omero
         #     channel leaves a channel unlabeled.
         # The single-channel no-flags case (n_channels=1, omero=0) is the
-        # Phase 8 back-compat path — no auto-laser flag was set so no
+        # back-compat path — no auto-laser flag was set so no
         # channel is listed, but the writer still has its 1 channel axis.
         # That is allowed: finalize_with_resolutions accepts an empty
         # omero.channels list for a single-channel store.
@@ -2074,7 +1940,7 @@ class ZarrSaver:
         logger.info("Zarr finalize_with_resolutions took %.2fs", time.time() - t0)
         self._write_acquisition_group()
         # Write the adaptive trajectory group after /acquisition so it
-        # is a sibling under /acquisition/adaptive (schema-a). No-op
+        # is a sibling under /acquisition/adaptive . No-op
         # when the trajectory is empty (fixed mode).
         self._write_adaptive_group()
         self._finalized = True

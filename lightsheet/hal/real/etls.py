@@ -1,7 +1,4 @@
-"""
-Created on April 20, 2022
-
-"""
+"""ETLs — Optotune tunable lens HAL."""
 
 import copy
 import logging
@@ -123,7 +120,9 @@ class Optotune(IOptotune):
         """
         Open the serial port and connect
         """
-        self.ser = serial.Serial()  # pragma: no cover — serial.Serial open unreachable on Mac; ETLs.__init__ + set_analog_mode stay measured
+        self.ser = serial.Serial()  # pragma: no cover -- serial.Serial
+        # open unreachable on Mac; ETLs.__init__ + set_analog_mode
+        # stay measured
         self.ser.baudrate = 115200
         self.ser.port = self.port
         self.ser.timeout = 1.0

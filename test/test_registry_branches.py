@@ -16,6 +16,7 @@ message), never a static-source grep.
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
@@ -25,7 +26,6 @@ from lightsheet.hal.registry import (
     UnresolvedDeviceError,
     _parse_calibration_curve,
 )
-
 
 # -- _parse_calibration_curve -----------------------------------------------
 
@@ -93,21 +93,21 @@ def _make_port(
     return p
 
 
-def _make_registry(inventory: dict, tmp_path) -> DeviceRegistry:
+def _make_registry(inventory: dict, tmp_path: Path) -> DeviceRegistry:
     """Build a DeviceRegistry with a mock inventory YAML."""
     import yaml
 
     inv_path = tmp_path / "hardware_inventory.yaml"
-    with open(inv_path, "w") as f:
+    with inv_path.open("w") as f:
         yaml.safe_dump(inventory, f)
-    config_path = str(tmp_path / "config.ini")
+    config_path = tmp_path / "config.ini"
     # Write a minimal config.ini with a [Motors] Port.
-    with open(config_path, "w") as f:
+    with config_path.open("w") as f:
         f.write("[Motors]\nPort = COM7\n")
-    return DeviceRegistry(str(inv_path), config_path)
+    return DeviceRegistry(str(inv_path), str(config_path))
 
 
-def test_resolve_ports_serial_numbered_match(tmp_path) -> None:
+def test_resolve_ports_serial_numbered_match(tmp_path: Path) -> None:
     """A serial-numbered device matching (vid, pid, sn) resolves to its port."""
     inv = {
         "devices": {
@@ -122,12 +122,15 @@ def test_resolve_ports_serial_numbered_match(tmp_path) -> None:
     }
     reg = _make_registry(inv, tmp_path)
     ports = [_make_port("COM5", 0x10C4, 0xEA60, "AB1234")]
-    with patch("lightsheet.hal.registry.serial.tools.list_ports.comports", return_value=ports):
+    with patch(
+        "lightsheet.hal.registry.serial.tools.list_ports.comports",
+        return_value=ports,
+    ):
         result = reg._resolve_ports()
     assert result == {"etl_left": "COM5"}
 
 
-def test_resolve_ports_serial_numbered_miss_raises(tmp_path) -> None:
+def test_resolve_ports_serial_numbered_miss_raises(tmp_path: Path) -> None:
     """A serial-numbered device not on the bus raises UnresolvedDeviceError."""
     inv = {
         "devices": {
@@ -142,14 +145,19 @@ def test_resolve_ports_serial_numbered_miss_raises(tmp_path) -> None:
     }
     reg = _make_registry(inv, tmp_path)
     ports = []  # No ports at all
-    with patch("lightsheet.hal.registry.serial.tools.list_ports.comports", return_value=ports):
-        with pytest.raises(UnresolvedDeviceError) as exc_info:
-            reg._resolve_ports()
+    with (
+        patch(
+            "lightsheet.hal.registry.serial.tools.list_ports.comports",
+            return_value=ports,
+        ),
+        pytest.raises(UnresolvedDeviceError) as exc_info,
+    ):
+        reg._resolve_ports()
     assert "etl_left" in str(exc_info.value)
     assert "not found" in str(exc_info.value)
 
 
-def test_resolve_ports_null_serial_config_port_match(tmp_path) -> None:
+def test_resolve_ports_null_serial_config_port_match(tmp_path: Path) -> None:
     """A null-serial device matching config.ini [Motors] Port resolves."""
     inv = {
         "devices": {
@@ -168,12 +176,15 @@ def test_resolve_ports_null_serial_config_port_match(tmp_path) -> None:
         _make_port("COM7", 0x067B, 0x2303, None),
         _make_port("COM8", 0x067B, 0x2303, None),
     ]
-    with patch("lightsheet.hal.registry.serial.tools.list_ports.comports", return_value=ports):
+    with patch(
+        "lightsheet.hal.registry.serial.tools.list_ports.comports",
+        return_value=ports,
+    ):
         result = reg._resolve_ports()
     assert result == {"motors": "COM7"}
 
 
-def test_resolve_ports_null_serial_single_candidate(tmp_path) -> None:
+def test_resolve_ports_null_serial_single_candidate(tmp_path: Path) -> None:
     """A null-serial device with exactly one candidate resolves to it
     (the elif len(candidates) == 1 branch, line 186)."""
     inv = {
@@ -191,12 +202,15 @@ def test_resolve_ports_null_serial_single_candidate(tmp_path) -> None:
     # One candidate, but config.ini says COM7 and the candidate is COM3.
     # Since there's only one candidate, it resolves to COM3.
     ports = [_make_port("COM3", 0x067B, 0x2303, None)]
-    with patch("lightsheet.hal.registry.serial.tools.list_ports.comports", return_value=ports):
+    with patch(
+        "lightsheet.hal.registry.serial.tools.list_ports.comports",
+        return_value=ports,
+    ):
         result = reg._resolve_ports()
     assert result == {"motors": "COM3"}
 
 
-def test_resolve_ports_null_serial_zero_candidates_raises(tmp_path) -> None:
+def test_resolve_ports_null_serial_zero_candidates_raises(tmp_path: Path) -> None:
     """A null-serial device with no candidates raises UnresolvedDeviceError."""
     inv = {
         "devices": {
@@ -211,15 +225,20 @@ def test_resolve_ports_null_serial_zero_candidates_raises(tmp_path) -> None:
     }
     reg = _make_registry(inv, tmp_path)
     ports = []
-    with patch("lightsheet.hal.registry.serial.tools.list_ports.comports", return_value=ports):
-        with pytest.raises(UnresolvedDeviceError) as exc_info:
-            reg._resolve_ports()
+    with (
+        patch(
+            "lightsheet.hal.registry.serial.tools.list_ports.comports",
+            return_value=ports,
+        ),
+        pytest.raises(UnresolvedDeviceError) as exc_info,
+    ):
+        reg._resolve_ports()
     assert "motors" in str(exc_info.value)
     assert "no match" in str(exc_info.value)
 
 
 def test_resolve_ports_null_serial_multi_candidates_no_config_match_raises(
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     """A null-serial device with 2+ candidates, none matching config.ini,
     raises UnresolvedDeviceError (ambiguous — strict abort)."""
@@ -240,14 +259,22 @@ def test_resolve_ports_null_serial_multi_candidates_no_config_match_raises(
         _make_port("COM3", 0x067B, 0x2303, None),
         _make_port("COM8", 0x067B, 0x2303, None),
     ]
-    with patch("lightsheet.hal.registry.serial.tools.list_ports.comports", return_value=ports):
-        with pytest.raises(UnresolvedDeviceError) as exc_info:
-            reg._resolve_ports()
+    with (
+        patch(
+            "lightsheet.hal.registry.serial.tools.list_ports.comports",
+            return_value=ports,
+        ),
+        pytest.raises(UnresolvedDeviceError) as exc_info,
+    ):
+        reg._resolve_ports()
     assert "motors" in str(exc_info.value)
-    assert "multiple" in str(exc_info.value).lower() or "ambiguous" in str(exc_info.value).lower()
+    assert (
+        "multiple" in str(exc_info.value).lower()
+        or "ambiguous" in str(exc_info.value).lower()
+    )
 
 
-def test_resolve_ports_skips_motherboard_entry(tmp_path) -> None:
+def test_resolve_ports_skips_motherboard_entry(tmp_path: Path) -> None:
     """A manifest entry without vid_pid (motherboard serial port) is skipped."""
     inv = {
         "devices": {
@@ -266,14 +293,17 @@ def test_resolve_ports_skips_motherboard_entry(tmp_path) -> None:
     }
     reg = _make_registry(inv, tmp_path)
     ports = [_make_port("COM5", 0x10C4, 0xEA60, "AB1234")]
-    with patch("lightsheet.hal.registry.serial.tools.list_ports.comports", return_value=ports):
+    with patch(
+        "lightsheet.hal.registry.serial.tools.list_ports.comports",
+        return_value=ports,
+    ):
         result = reg._resolve_ports()
     # Only etl_left resolved; motherboard entry skipped.
     assert "etl_left" in result
     assert "motherboard" not in result
 
 
-def test_resolve_ports_skips_vid_none_ports(tmp_path) -> None:
+def test_resolve_ports_skips_vid_none_ports(tmp_path: Path) -> None:
     """Ports with vid=None (motherboard/non-USB) are skipped during indexing
     (line 141)."""
     inv = {
@@ -292,6 +322,9 @@ def test_resolve_ports_skips_vid_none_ports(tmp_path) -> None:
         _make_port("COM1", None, None, None),  # motherboard — skipped
         _make_port("COM5", 0x10C4, 0xEA60, "AB1234"),
     ]
-    with patch("lightsheet.hal.registry.serial.tools.list_ports.comports", return_value=ports):
+    with patch(
+        "lightsheet.hal.registry.serial.tools.list_ports.comports",
+        return_value=ports,
+    ):
         result = reg._resolve_ports()
     assert result == {"etl_left": "COM5"}

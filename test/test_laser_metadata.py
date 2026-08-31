@@ -14,15 +14,20 @@ holds ``ctrl.lasers`` (the live list[ILaser]). This exercises the real
 method on the real object — the same code that runs on the rig.
 """
 
+from __future__ import annotations
+
+from pathlib import Path
+
 import h5py
 import pytest
-
 from _helpers.controller_fixture import make_controller
+from pytestqt.qtbot import QtBot
+
 from lightsheet.hal.mocks.mock_laser import MockLaser
 
 
 def test_write_laser_metadata_writes_all_five_attrs_per_laser(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
 ) -> None:
     """_write_laser_metadata writes Wavelength / Power / Max Power / Active
     / Label as h5py.File ROOT attrs once per file, for ALL configured
@@ -43,7 +48,7 @@ def test_write_laser_metadata_writes_all_five_attrs_per_laser(
         assert f.attrs["Laser1 Wavelength"] == 555
         assert f.attrs["Laser1 Power"] == 150.0
         assert f.attrs["Laser1 Max Power"] == 300.0
-        assert f.attrs["Laser1 Active"] == True
+        assert f.attrs["Laser1 Active"]
         assert f.attrs["Laser1 Label"] == "Laser 1 (555 nm)"
 
         # Laser 2 (inactive, 0 mW, 647 nm, 150 mW max) — included even
@@ -51,12 +56,12 @@ def test_write_laser_metadata_writes_all_five_attrs_per_laser(
         assert f.attrs["Laser2 Wavelength"] == 647
         assert f.attrs["Laser2 Power"] == 0.0
         assert f.attrs["Laser2 Max Power"] == 150.0
-        assert f.attrs["Laser2 Active"] == False
+        assert not f.attrs["Laser2 Active"]
         assert f.attrs["Laser2 Label"] == "Laser 2 (647 nm)"
 
 
 def test_write_laser_metadata_includes_inactive_laser(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
 ) -> None:
     """An inactive laser (active=False, power=0) is NOT skipped — its
     attrs are written with whatever the live instance holds. This is the
@@ -76,14 +81,14 @@ def test_write_laser_metadata_includes_inactive_laser(
         # Both lasers present in the metadata even though neither fired.
         assert "Laser1 Wavelength" in f.attrs
         assert "Laser2 Wavelength" in f.attrs
-        assert f.attrs["Laser1 Active"] == False
-        assert f.attrs["Laser2 Active"] == False
+        assert not f.attrs["Laser1 Active"]
+        assert not f.attrs["Laser2 Active"]
         assert f.attrs["Laser1 Power"] == 0.0
         assert f.attrs["Laser2 Power"] == 0.0
 
 
 def test_write_laser_metadata_reads_live_instance_not_config(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
 ) -> None:
     """The metadata values match the live ILaser instance state at save
     time, not a config.ini value. If the live instance's power was
@@ -113,7 +118,7 @@ def test_write_laser_metadata_reads_live_instance_not_config(
 
         with h5py.File(outfile_path, "r") as f:
             assert f.attrs["Laser1 Power"] == 42.0
-            assert f.attrs["Laser1 Active"] == True
+            assert f.attrs["Laser1 Active"]
     finally:
         ctrl.lasers = original_lasers
 
@@ -131,7 +136,7 @@ def test_write_laser_metadata_reads_live_instance_not_config(
 
 
 def test_motor_and_scan_params_in_hdf5_metadata(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
 ) -> None:
     """SAV-03: ``_write_acquisition_metadata`` writes the motor positions
     (horizontal/vertical/camera) + scan params (galvo/ETL amplitudes +
@@ -147,7 +152,9 @@ def test_motor_and_scan_params_in_hdf5_metadata(
 
     with h5py.File(outfile_path, "r") as f:
         # Motor position root attrs — current snapshot from live motors.
-        assert f.attrs["Horizontal Position"] == ctrl.motors.horizontal.get_position("mm")
+        assert f.attrs["Horizontal Position"] == ctrl.motors.horizontal.get_position(
+            "mm"
+        )
         assert f.attrs["Vertical Position"] == ctrl.motors.vertical.get_position("mm")
         assert f.attrs["Camera Position"] == ctrl.motors.camera.get_position("mm")
         # Scan-parameter root attrs from the live siggen.
@@ -169,7 +176,9 @@ def test_motor_and_scan_params_in_hdf5_metadata(
         assert f.attrs["Y Size"] == ctrl.camera.ysize
 
 
-def test_no_config_reparse(qtbot, request, tmp_path) -> None:
+def test_no_config_reparse(
+    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+) -> None:
     """SAV-03: the motor-position root attr reflects the LIVE motor value,
     not a config-parsed default. Mutating a siggen amplitude after
     construction is reflected in the saved attr — the saver reads the live

@@ -32,7 +32,8 @@ collaborators without the shell can call ``make_bundle()`` directly.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+import contextlib
+from typing import Any
 
 from PySide6.QtCore import QEventLoop, QTimer
 from PySide6.QtWidgets import QApplication
@@ -47,7 +48,7 @@ from lightsheet.hal import (
 )
 
 
-def _quit_thread_draining(thread: Optional[Any], timeout_ms: int = 2000) -> None:
+def _quit_thread_draining(thread: Any | None, timeout_ms: int = 2000) -> None:
     """Quit a worker ``QThread`` and pump the event loop until it stops.
 
     Unlike ``QThread.wait()`` (which blocks the calling thread without
@@ -142,11 +143,13 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
     hardware_init timers are also stopped at teardown so no pending
     timer callbacks fire after the test returns.
     """
-    from lightsheet.gui.coordinators.acquisition_coordinator import AcquisitionCoordinator
-    from lightsheet.gui.shell.controller import Controller_MainWindow
+    from lightsheet.gui.coordinators.acquisition_coordinator import (
+        AcquisitionCoordinator,
+    )
     from lightsheet.gui.coordinators.frame_saver_controller import FrameSaverController
     from lightsheet.gui.coordinators.hardware_manager import HardwareManager
     from lightsheet.gui.coordinators.motor_controller import MotorController
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
     bundle = make_bundle()
     # Start the QMessageBox.question patch WITHOUT a `with` block so it
@@ -302,10 +305,8 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
         # triggered during the spin does not pop a modal exit dialog
         # that blocks the test runner.
         for widget in owned_toplevels:
-            try:
+            with contextlib.suppress(RuntimeError):
                 widget.deleteLater()
-            except RuntimeError:
-                pass
         controller.deleteLater()
 
         # (e) Drain DeferredDelete events via a bounded REAL
@@ -329,7 +330,7 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
     return controller, bundle
 
 
-def patch_qmessage_question():
+def patch_qmessage_question() -> Any:
     """Return a context manager (unittest.mock.patch) that patches
     ``PySide6.QtWidgets.QMessageBox.question`` to return
     ``QMessageBox.StandardButton.Yes`` without showing a modal dialog.

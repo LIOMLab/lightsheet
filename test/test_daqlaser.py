@@ -106,7 +106,9 @@ def test_on_write_failure_reverts_state() -> None:
     and on() would energize the laser — a power-setting command that
     requires explicit operator action per AGENTS.md §2."""
     if _has_hardware:
-        pytest.skip("Mac-only stub-failure path — on the rig the real DAQ write succeeds")
+        pytest.skip(
+            "Mac-only stub-failure path -- on the rig the real DAQ write succeeds"
+        )
     laser = _make_l1()
     laser.set_power(150.0)
     assert laser.power == 150.0
@@ -129,7 +131,9 @@ def test_set_power_active_writes_via_write_volts() -> None:
     and set_power on an active laser energizes it — a power-setting
     command that requires explicit operator action per AGENTS.md §2."""
     if _has_hardware:
-        pytest.skip("Mac-only stub-failure path — on the rig the real DAQ write succeeds")
+        pytest.skip(
+            "Mac-only stub-failure path -- on the rig the real DAQ write succeeds"
+        )
     laser = _make_l1()
     # Energize the laser (on() attempts a 0 V write which fails on the
     # stub, reverting active=False). Set active=True directly to simulate

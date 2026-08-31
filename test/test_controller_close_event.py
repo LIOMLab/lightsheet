@@ -14,10 +14,14 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from _helpers.controller_fixture import make_controller, patch_qmessage_question
+from _helpers.controller_fixture import make_controller
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
 
 
-def test_close_event_quits_preview_thread(qtbot, request) -> None:
+def test_close_event_quits_preview_thread(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """closeEvent quits + waits the preview QThread (not join). Starting
     preview mode spawns ``self._preview_thread`` (a QThread); closeEvent
     must call ``quit()`` + ``wait(5000)`` on it and the thread must no
@@ -33,7 +37,9 @@ def test_close_event_quits_preview_thread(qtbot, request) -> None:
 
     # The preview thread should now exist and be running.
     assert hasattr(ctrl, "_preview_thread"), "preview thread must be spawned"
-    assert ctrl._preview_thread.isRunning(), "preview thread must be running after start"
+    assert ctrl._preview_thread.isRunning(), (
+        "preview thread must be running after start"
+    )
 
     # Trigger closeEvent with a real QCloseEvent. The QMessageBox.question
     # patch (started by make_controller) returns Yes so shutdown proceeds.
@@ -49,7 +55,9 @@ def test_close_event_quits_preview_thread(qtbot, request) -> None:
     )
 
 
-def test_close_event_no_join_on_preview_thread(qtbot, request) -> None:
+def test_close_event_no_join_on_preview_thread(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """closeEvent must NOT call join() on the preview thread — the QThread
     vehicle uses quit() + wait() instead. Verified by asserting the
     _preview_thread attribute is a QThread (which has no join method)."""
@@ -73,7 +81,9 @@ def test_close_event_no_join_on_preview_thread(qtbot, request) -> None:
     ctrl._preview_thread.wait(2000)
 
 
-def test_close_event_preview_timeout_logs_warning(qtbot, request) -> None:
+def test_close_event_preview_timeout_logs_warning(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """closeEvent with the preview thread not exiting within 5s: the
     wait() timeout fires and logger.warning is emitted (log-only, no
     sig_message — the UI is tearing down). Verified by patching
@@ -96,19 +106,19 @@ def test_close_event_preview_timeout_logs_warning(qtbot, request) -> None:
     with (
         patch.object(QThread, "wait", return_value=False),
         patch.object(QThread, "quit", lambda self: None),
-    ):
-        with patch.object(
+        patch.object(
             logging.getLogger("lightsheet.gui.shell.controller"),
             "warning",
-        ) as mock_warning:
-            event = QCloseEvent()
-            ctrl.closeEvent(event)
-            assert event.isAccepted()
-            mock_warning.assert_called()
-            # The warning message mentions _preview_thread and the timeout.
-            warning_msg = " ".join(str(a) for a in mock_warning.call_args[0])
-            assert "_preview_thread" in warning_msg
-            assert "5s" in warning_msg
+        ) as mock_warning
+    ):
+        event = QCloseEvent()
+        ctrl.closeEvent(event)
+        assert event.isAccepted()
+        mock_warning.assert_called()
+        # The warning message mentions _preview_thread and the timeout.
+        warning_msg = " ".join(str(a) for a in mock_warning.call_args[0])
+        assert "_preview_thread" in warning_msg
+        assert "5s" in warning_msg
 
     # Clean up: stop the thread for real.
     ctrl.preview_mode_started = False

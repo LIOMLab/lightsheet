@@ -1,17 +1,14 @@
 """LaserPanelWidget — per-panel widget/controller for the laser controls.
 
-Owns the laser updateUi_* slots grouped by concern (D-01 gui modularization).
-Follows the plain-Python collaborator pattern extended to a QWidget: holds a
-shell reference, reads ``self._shell.ui.<objectName>`` for its widgets, emits
-through ``self._shell.sig_*``, and delegates HAL writes to
-``self._shell._hw``.
+Owns the laser updateUi_* slots. Holds a shell reference, reads
+``self._shell.ui.<objectName>`` for its widgets, emits through
+``self._shell.sig_*``, and delegates HAL writes to ``self._shell._hw``.
 
-The 4 laser daemon ``threading.Thread`` spawns (targeting
-``self._shell._hw._write_laser*_power`` / ``self._shell._hw._toggle_laser*``)
-stay ``threading.Thread`` per the lock-free E-stop kill path contract
-(AGENTS.md §2). They are NOT migrated to QThread — a queued slot dispatch
-window between ``estop_event.set()`` and the slot's first estop poll would
-re-energize a Class IIIB laser past the kill path.
+The 4 laser daemon ``threading.Thread`` spawns stay ``threading.Thread``
+per the lock-free E-stop kill path contract. They are NOT migrated to
+QThread — a queued slot dispatch window between ``estop_event.set()`` and
+the slot's first estop poll would re-energize a Class IIIB laser past the
+kill path.
 
 The E-stop kill path itself (``updateUi_estop_pressed``) stays in the thin
 shell — it is NOT in this panel.
@@ -23,7 +20,7 @@ import threading
 import typing
 
 from PySide6.QtCore import Slot
-from PySide6.QtWidgets import QMessageBox, QWidget
+from PySide6.QtWidgets import QLabel, QMessageBox, QWidget
 
 from lightsheet.gui.panels.ui_laser_panel import Ui_LaserPanel
 from lightsheet.gui.widgets.field_spec import FIELD_SPECS
@@ -47,9 +44,8 @@ class LaserPanelWidget(QWidget):
         self.ui = Ui_LaserPanel()
         self.ui.setupUi(self)
         # Apply the declarative FieldSpec policy table to every promoted
-        # FieldSpecSpinBox by objectName (suffix/decimals/step/soft min-max).
-        # FieldSpec min/max are a SOFT widget-layer block; the two-layer
-        # runtime clamp (ILaser.set_power + DAQLaser._write_volts) and the
+        # FieldSpecSpinBox by objectName. FieldSpec min/max are a SOFT
+        # widget-layer block; the two-layer runtime clamp and the
         # config_schema startup gate are the safety-critical clamps.
         for obj_name, spec in FIELD_SPECS.items():
             w = getattr(self.ui, obj_name, None)
@@ -138,14 +134,14 @@ class LaserPanelWidget(QWidget):
         # 300ms until the debounce fires. The debounce timer still governs
         # when the actual DAQ write happens; this only updates the staged
         # value the toggle reads.
-        self._shell.laser1_power_pct = self.ui.doubleSpinBox_laserOneAmplitude.value()  # noqa: E501
+        self._shell.laser1_power_pct = self.ui.doubleSpinBox_laserOneAmplitude.value()
         self._shell._laser1_amplitude_timer.start(300)
 
     def updateUi_laser2_amplitude(self) -> None:
         # Debounce-only slot for laser 2 (iBeam). See updateUi_laser1_amplitude.
         # Capture the staged percentage now for the same reason as laser 1:
         # _toggle_laser2's just-on path reads laser2_power_pct.
-        self._shell.laser2_power_pct = self.ui.doubleSpinBox_laserTwoAmplitude.value()  # noqa: E501
+        self._shell.laser2_power_pct = self.ui.doubleSpinBox_laserTwoAmplitude.value()
         self._shell._laser2_amplitude_timer.start(300)
 
     def _apply_laser1_amplitude(self) -> None:
@@ -234,7 +230,7 @@ class LaserPanelWidget(QWidget):
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _optimistic_echo(label, turning_on: bool) -> None:
+    def _optimistic_echo(label: QLabel, turning_on: bool) -> None:
         """Set the status label to the desired state synchronously on the
         GUI thread (ON green / OFF gray). Called BEFORE the toggle thread
         starts so the label is never stale after a press. The next poll
@@ -248,15 +244,8 @@ class LaserPanelWidget(QWidget):
 
     def _show_first_energize_dialog(self, idx: int) -> str:
         """Show the Class IIIB first-energize confirmation dialog and return
-        the operator's choice as a string: ``"energize"`` / ``"cancel"`` /
-        ``"dont_warn_again"``.
-
-        The dialog copy matches the UI-SPEC: heading ``Energize {label}?``,
-        body with wavelength + max_power + eye-protection warning, buttons
-        Energize / Cancel / Don't warn again this session. The wavelength
-        and max_power are read off the live laser instance so the warning
-        reflects the actual laser being energized.
-        """
+        the operator's choice: ``"energize"`` / ``"cancel"`` /
+        ``"dont_warn_again"``."""
         laser = self._shell.lasers[idx]
         heading = f"Energize {laser.label}?"
         body = (
@@ -268,7 +257,6 @@ class LaserPanelWidget(QWidget):
         # QMessageBox.question is the standard modal helper; the third
         # button is the "Don't warn again this session" affordance. The
         # return value maps to one of the three choices below.
-        from PySide6.QtWidgets import QMessageBox
 
         result = QMessageBox.question(
             self,

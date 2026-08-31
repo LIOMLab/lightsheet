@@ -36,17 +36,20 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
 
 def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
 ) -> None:
     """StackWorker.run in multi-channel mode calls set_files with
     wavelengths and the real save worker writes one HDF5 file per
     channel per plane."""
     from _helpers.controller_fixture import make_controller
+
     from lightsheet.gui.workers import StackWorker
 
     ctrl, _bundle = make_controller(qtbot, request)
@@ -94,7 +97,7 @@ def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
     # logic — just set reconstructed_frame to a small frame so the
     # multi-channel capture+enqueue path runs. The real _fs receives
     # the tagged tuples.
-    def _fake_acquire_scan():
+    def _fake_acquire_scan() -> None:
         ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
     worker.camera.recorder_timeout_status = False
@@ -161,7 +164,7 @@ def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
 
 
 def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
-    qtbot, request, tmp_path
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
 ) -> None:
     """StackWorker.run in multi-channel stitch mode (the default
     reconstructed_frame branch — save_all_crop=False, save_all_full=False)
@@ -183,8 +186,8 @@ def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
     frames consumed (n_channels * n_planes) — not files written.
     """
     import h5py
-
     from _helpers.controller_fixture import make_controller
+
     from lightsheet.gui.workers import StackWorker
 
     ctrl, _bundle = make_controller(qtbot, request)
@@ -234,7 +237,7 @@ def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
     # logic — just set reconstructed_frame to a small frame so the
     # multi-channel capture+enqueue path runs. The real _fs receives
     # the tagged tuples.
-    def _fake_acquire_scan():
+    def _fake_acquire_scan() -> None:
         ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
     worker.camera.recorder_timeout_status = False
@@ -320,7 +323,7 @@ def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
     for ch, p in enumerate(per_channel_files):
         with h5py.File(p, "r") as f:
             ds_keys = [
-                k for k in f.keys()
+                k for k in f
                 if k.startswith("reconstructed_frame")
             ]
             assert len(ds_keys) == ctrl.number_of_planes, (

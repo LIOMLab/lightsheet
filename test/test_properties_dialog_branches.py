@@ -13,7 +13,7 @@ postcondition (label text, emitted signal), never a static-source grep.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -48,14 +48,14 @@ def _make_mock_parent() -> Mock:
     return parent
 
 
-def _make_dialog(parent: Mock):
+def _make_dialog(parent: Mock) -> Mock:
     """Construct Properties_Dialog via __new__ bypass — no QDialog.__init__,
     no setupUi. The ui attribute is a Mock so label.setText calls are captured."""
     pytest.importorskip("PySide6")
     import os
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
-    app = QApplication.instance() or QApplication([])
+    QApplication.instance() or QApplication([])
 
     from lightsheet.gui.panels.properties_dialog import Properties_Dialog
 

@@ -132,7 +132,7 @@ def _chdir(tmp_path: Path) -> Any:
 
     @contextmanager
     def _ctx() -> Any:
-        cwd = os.getcwd()
+        cwd = Path.cwd()
         os.chdir(str(tmp_path))
         try:
             yield
@@ -396,7 +396,7 @@ def test_zarr_writes_adaptive_group(qtbot: Any, request: Any, tmp_path: Path) ->
         _enqueue_planes(saver, n_planes)
         saver.zarr_save_worker()
 
-        store_path = os.path.normpath(os.path.join(str(tmp_path), "scan.ome.zarr"))
+        store_path = str(tmp_path / "scan.ome.zarr")
         root = zarr.open(store_path, mode="r")
         assert "acquisition" in root
         acq = root["acquisition"]
@@ -445,7 +445,7 @@ def test_both_writes_adaptive_in_both_formats(
                 f["adaptive_trajectory"], saver.adaptive_trajectory, config
             )
         # Zarr
-        store_path = os.path.normpath(os.path.join(str(tmp_path), "scan.ome.zarr"))
+        store_path = str(tmp_path / "scan.ome.zarr")
         root = zarr.open(store_path, mode="r")
         assert "acquisition" in root
         assert "adaptive" in root["acquisition"]
@@ -512,7 +512,7 @@ def test_fixed_mode_omits_adaptive_group_zarr(
         _enqueue_planes(saver, n_planes)
         saver.zarr_save_worker()
 
-        store_path = os.path.normpath(os.path.join(str(tmp_path), "scan.ome.zarr"))
+        store_path = str(tmp_path / "scan.ome.zarr")
         root = zarr.open(store_path, mode="r")
         assert "acquisition" in root
         assert "adaptive" not in root["acquisition"], (

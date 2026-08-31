@@ -18,7 +18,8 @@ import threading
 from unittest.mock import patch
 
 from _helpers.controller_fixture import make_controller
-
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
 
 # --------------------------------------------------------------------------- #
 # Pure-math tests for the %-to-absolute scaling at the HAL boundary.
@@ -63,7 +64,9 @@ def test_pct_scaling_zero() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_write_laser1_power_writes_when_estop_clear_and_active(qtbot, request) -> None:
+def test_write_laser1_power_writes_when_estop_clear_and_active(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """When estop_event is clear and laser 1 is active, _write_laser1_power
     must scale the staged percentage to mW (pct/100 * max_power) and call
     self.lasers[0].set_power(mw). The mW value is the canonical ILaser
@@ -77,7 +80,9 @@ def test_write_laser1_power_writes_when_estop_clear_and_active(qtbot, request) -
     assert ctrl._hw.lasers[0].power == 150.0
 
 
-def test_write_laser2_power_writes_when_estop_clear_and_active(qtbot, request) -> None:
+def test_write_laser2_power_writes_when_estop_clear_and_active(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """When estop_event is clear and laser 2 is active, _write_laser2_power
     must scale the staged percentage to mW (pct/100 * max_power) and call
     self.lasers[1].set_power(mw)."""
@@ -90,7 +95,9 @@ def test_write_laser2_power_writes_when_estop_clear_and_active(qtbot, request) -
     assert ctrl._hw.lasers[1].power == 75.0
 
 
-def test_write_laser1_power_surfaces_error_and_resets(qtbot, request) -> None:
+def test_write_laser1_power_surfaces_error_and_resets(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """When self.lasers[0].set_power leaves .error set, _write_laser1_power
     must emit a sig_message naming the laser's label + error_message and
     reset .error = 0."""
@@ -101,9 +108,11 @@ def test_write_laser1_power_surfaces_error_and_resets(qtbot, request) -> None:
         ctrl._hw.lasers[0].error = 1
         ctrl._hw.lasers[0].error_message = "daq write failed"
 
-    with patch.object(ctrl._hw.lasers[0], "set_power", side_effect=_fail_set_power):
-        with qtbot.waitSignal(ctrl.sig_message, timeout=1000) as blocker:
-            ctrl._hw._write_laser1_power(50.0)
+    with (
+        patch.object(ctrl._hw.lasers[0], "set_power", side_effect=_fail_set_power),
+        qtbot.waitSignal(ctrl.sig_message, timeout=1000) as blocker,
+    ):
+        ctrl._hw._write_laser1_power(50.0)
 
     msg = blocker.args[0]
     assert "Laser 1 (555 nm)" in msg
@@ -118,7 +127,7 @@ def test_write_laser1_power_surfaces_error_and_resets(qtbot, request) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_toggle_laser1_on_when_inactive(qtbot, request) -> None:
+def test_toggle_laser1_on_when_inactive(qtbot: QtBot, request: FixtureRequest) -> None:
     """_toggle_laser1 calls self.lasers[0].on() when the laser is inactive,
     then applies the staged percentage via _write_laser1_power."""
     ctrl, _ = make_controller(qtbot, request)
@@ -133,7 +142,7 @@ def test_toggle_laser1_on_when_inactive(qtbot, request) -> None:
     assert ctrl._hw.lasers[0].power == 150.0
 
 
-def test_toggle_laser2_on_when_inactive(qtbot, request) -> None:
+def test_toggle_laser2_on_when_inactive(qtbot: QtBot, request: FixtureRequest) -> None:
     """_toggle_laser2 calls self.lasers[1].on() when inactive, then applies
     the staged percentage via _write_laser2_power. Symmetric with laser 1 —
     no laser-2-specific self.ibeam branch."""
@@ -148,7 +157,9 @@ def test_toggle_laser2_on_when_inactive(qtbot, request) -> None:
     assert ctrl._hw.lasers[1].power == 75.0
 
 
-def test_start_lasers_drives_both_auto_lasers(qtbot, request) -> None:
+def test_start_lasers_drives_both_auto_lasers(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """start_lasers drives self.lasers[0] and self.lasers[1] uniformly
     (.on() / .set_power(mw)) for the auto-selected lasers — no
     laser-2-specific self.ibeam branch."""
@@ -169,7 +180,9 @@ def test_start_lasers_drives_both_auto_lasers(qtbot, request) -> None:
     assert ctrl._hw.lasers[1].power == 75.0
 
 
-def test_start_lasers_skips_non_auto_lasers(qtbot, request) -> None:
+def test_start_lasers_skips_non_auto_lasers(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """start_lasers only energizes lasers whose auto-checkbox was sampled
     True; the other laser is untouched."""
     ctrl, _ = make_controller(qtbot, request)
@@ -187,7 +200,9 @@ def test_start_lasers_skips_non_auto_lasers(qtbot, request) -> None:
     assert ctrl._hw.lasers[1].active is False
 
 
-def test_stop_lasers_drives_both_auto_lasers_off(qtbot, request) -> None:
+def test_stop_lasers_drives_both_auto_lasers_off(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """stop_lasers drives self.lasers[0].off() / self.lasers[1].off()
     uniformly for the auto-selected lasers — no laser-2-specific
     self.ibeam branch."""
@@ -219,7 +234,9 @@ def test_stop_lasers_drives_both_auto_lasers_off(qtbot, request) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_estop_drives_both_lasers_off_in_loop(qtbot, request) -> None:
+def test_estop_drives_both_lasers_off_in_loop(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """updateUi_estop_pressed must call .off() on BOTH self.lasers[0] and
     self.lasers[1] (a loop over self.lasers), synchronously on the GUI
     thread. The pre-rewrite code calls self.lasers.laser1_off() and
@@ -242,7 +259,9 @@ def test_estop_drives_both_lasers_off_in_loop(qtbot, request) -> None:
     assert ctrl.estop_event.is_set()
 
 
-def test_estop_emits_per_laser_warning_on_error(qtbot, request) -> None:
+def test_estop_emits_per_laser_warning_on_error(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """When a laser's .off() leaves .error set, updateUi_estop_pressed must
     emit a sig_message naming that laser's .label and .error_message, then
     reset .error = 0 — mirroring the existing per-laser warning pattern but
@@ -256,9 +275,8 @@ def test_estop_emits_per_laser_warning_on_error(qtbot, request) -> None:
 
     with patch.object(ctrl._hw, "_refresh_laser2_readback_async"), patch.object(
         ctrl.lasers[1], "off", side_effect=_fail_off
-    ):
-        with qtbot.waitSignal(ctrl.sig_message, timeout=1000) as blocker:
-            ctrl.updateUi_estop_pressed()
+    ), qtbot.waitSignal(ctrl.sig_message, timeout=1000) as blocker:
+        ctrl.updateUi_estop_pressed()
 
     # laser2 had an error — a warning was emitted naming its label + cause.
     msg = blocker.args[0]
@@ -268,7 +286,7 @@ def test_estop_emits_per_laser_warning_on_error(qtbot, request) -> None:
     assert ctrl.lasers[1].error == 0
 
 
-def test_estop_acquires_no_laser_lock(qtbot, request) -> None:
+def test_estop_acquires_no_laser_lock(qtbot: QtBot, request: FixtureRequest) -> None:
     """The E-stop kill path must NOT acquire self.lasers[i]._lock anywhere
     in the method body — a stuck daemon write thread holding a laser's lock
     must never delay the kill path (AGENTS.md §2). This test records any
@@ -327,7 +345,9 @@ def test_estop_acquires_no_laser_lock(qtbot, request) -> None:
         ctrl.updateUi_estop_pressed()
 
 
-def test_close_modes_reads_lasers_index_active(qtbot, request) -> None:
+def test_close_modes_reads_lasers_index_active(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """close_modes must read self.lasers[0].active or self.lasers[1].active
     (the list[ILaser] surface), not the old self.lasers.laser1_active /
     self.lasers.laser2_active 2-channel container reads. When both lasers
@@ -342,7 +362,9 @@ def test_close_modes_reads_lasers_index_active(qtbot, request) -> None:
     spy.assert_not_called()
 
 
-def test_close_modes_calls_stop_lasers_when_a_laser_active(qtbot, request) -> None:
+def test_close_modes_calls_stop_lasers_when_a_laser_active(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """close_modes must call stop_lasers when either laser is active —
     reading self.lasers[0].active or self.lasers[1].active."""
     ctrl, _ = make_controller(qtbot, request)
@@ -366,7 +388,9 @@ def test_close_modes_calls_stop_lasers_when_a_laser_active(qtbot, request) -> No
 # --------------------------------------------------------------------------- #
 
 
-def test_poll_laser_status_active_emits_active(qtbot, request) -> None:
+def test_poll_laser_status_active_emits_active(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """_poll_laser_status([0]) on an active, error-free laser emits
     sig_laser_status(0, 'active') — the connected updateUi_laser_status
     slot sets label_laserOneStatus to '● ON'."""
@@ -379,7 +403,9 @@ def test_poll_laser_status_active_emits_active(qtbot, request) -> None:
     assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "● ON"
 
 
-def test_poll_laser_status_inactive_emits_inactive(qtbot, request) -> None:
+def test_poll_laser_status_inactive_emits_inactive(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """_poll_laser_status([0]) on an inactive, error-free laser emits
     sig_laser_status(0, 'inactive') — the connected slot sets
     label_laserOneStatus to '● OFF'."""
@@ -392,7 +418,9 @@ def test_poll_laser_status_inactive_emits_inactive(qtbot, request) -> None:
     assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "● OFF"
 
 
-def test_poll_laser_status_error_wins_over_active(qtbot, request) -> None:
+def test_poll_laser_status_error_wins_over_active(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """_poll_laser_status([1]) on a laser with error=1 AND active=True
     emits 'error' — the HAL error surface is authoritative (AGENTS.md §10)
     so an errored-but-still-active laser shows ERR, not ON."""
@@ -406,7 +434,9 @@ def test_poll_laser_status_error_wins_over_active(qtbot, request) -> None:
     assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "● FAULT"
 
 
-def test_poll_laser_status_both_indices_emits_twice(qtbot, request) -> None:
+def test_poll_laser_status_both_indices_emits_twice(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """_poll_laser_status([0, 1]) emits once per index — used by the
     E-stop / start_lasers / stop_lasers refresh-after-action paths that
     touch both lasers."""
@@ -424,7 +454,9 @@ def test_poll_laser_status_both_indices_emits_twice(qtbot, request) -> None:
     assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "● OFF"
 
 
-def test_updateUi_laser_status_active_sets_on_label(qtbot, request) -> None:
+def test_updateUi_laser_status_active_sets_on_label(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """updateUi_laser_status(0, 'active') sets label_laserOneStatus text
     to '● ON' and a green bold stylesheet."""
     ctrl, _ = make_controller(qtbot, request)
@@ -437,7 +469,9 @@ def test_updateUi_laser_status_active_sets_on_label(qtbot, request) -> None:
     assert "bold" in style
 
 
-def test_updateUi_laser_status_inactive_sets_off_label(qtbot, request) -> None:
+def test_updateUi_laser_status_inactive_sets_off_label(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """updateUi_laser_status(0, 'inactive') sets label_laserOneStatus text
     to '● OFF' and a gray bold stylesheet."""
     ctrl, _ = make_controller(qtbot, request)
@@ -450,7 +484,9 @@ def test_updateUi_laser_status_inactive_sets_off_label(qtbot, request) -> None:
     assert "bold" in style
 
 
-def test_updateUi_laser_status_error_sets_err_label_for_laser2(qtbot, request) -> None:
+def test_updateUi_laser_status_error_sets_err_label_for_laser2(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """updateUi_laser_status(1, 'error') sets label_laserTwoStatus text
     to '● FAULT' and a red bold stylesheet."""
     ctrl, _ = make_controller(qtbot, request)
@@ -463,7 +499,9 @@ def test_updateUi_laser_status_error_sets_err_label_for_laser2(qtbot, request) -
     assert "bold" in style
 
 
-def test_poll_laser2_status_gated_polls_when_lock_free(qtbot, request) -> None:
+def test_poll_laser2_status_gated_polls_when_lock_free(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """_poll_laser2_status_gated must call _poll_laser_status([1]) when
     the iBeam lock is free — the probe acquires (blocking=False),
     releases immediately, then proceeds with the poll."""
@@ -497,7 +535,9 @@ def test_poll_laser2_status_gated_polls_when_lock_free(qtbot, request) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_refresh_laser2_readback_populated(qtbot, request) -> None:
+def test_refresh_laser2_readback_populated(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """_refresh_laser_readback(1) on a stand-in where the lock is free and
     get_output_power() returns 75.0 emits (1, '75.0 mW', '') on
     sig_laser_readback — the GUI-thread slot applies it to the label."""
@@ -512,7 +552,7 @@ def test_refresh_laser2_readback_populated(qtbot, request) -> None:
 
 
 def test_refresh_laser2_readback_degraded_shows_commanded_fallback(
-    qtbot, request
+    qtbot: QtBot, request: FixtureRequest
 ) -> None:
     """_refresh_laser_readback(1) on a stand-in where get_output_power()
     returns None (parse failure / unsupported variant) emits
@@ -529,7 +569,9 @@ def test_refresh_laser2_readback_degraded_shows_commanded_fallback(
     assert "readback unavailable" in tooltip or "parse failure" in tooltip
 
 
-def test_refresh_laser2_readback_lock_skip_is_noop(qtbot, request) -> None:
+def test_refresh_laser2_readback_lock_skip_is_noop(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """_refresh_laser_readback(1) on a stand-in where the lock is held
     returns silently without calling get_output_power() and without
     emitting on sig_laser_readback — the lock-skip no-op contract. Uses a
@@ -552,21 +594,27 @@ def test_refresh_laser2_readback_lock_skip_is_noop(qtbot, request) -> None:
         ctrl._hw.lasers[1]._lock.release()
 
 
-def test_refresh_laser2_readback_releases_lock_in_finally(qtbot, request) -> None:
+def test_refresh_laser2_readback_releases_lock_in_finally(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """_refresh_laser_readback(1) always releases the lock in the finally
     block when acquire(blocking=False) succeeded — even if
     get_output_power raises. Verified by acquiring the lock after the
     call returns (a non-released lock would block)."""
     ctrl, _ = make_controller(qtbot, request)
 
-    with patch.object(
-        ctrl._hw.lasers[1], "get_output_power", side_effect=RuntimeError("serial glitch")
+    with (
+        patch.object(
+            ctrl._hw.lasers[1],
+            "get_output_power",
+            side_effect=RuntimeError("serial glitch"),
+        ),
+        contextlib.suppress(RuntimeError),
     ):
         # The method must not let the exception escape (or if it does, the
         # lock is still released). Wrap so we can assert the lock is free
         # afterward regardless.
-        with contextlib.suppress(RuntimeError):
-            ctrl._hw._refresh_laser_readback(1)
+        ctrl._hw._refresh_laser_readback(1)
 
     # The lock must be releasable (free) — acquire(blocking=False)
     # succeeds iff it was released by the finally block.
@@ -577,7 +625,9 @@ def test_refresh_laser2_readback_releases_lock_in_finally(qtbot, request) -> Non
     ctrl._hw.lasers[1]._lock.release()
 
 
-def test_refresh_laser1_readback_shows_staged_mw(qtbot, request) -> None:
+def test_refresh_laser1_readback_shows_staged_mw(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """_refresh_laser_readback(0) emits (0, '12.5 mW (est.)', <tooltip>) on
     sig_laser_readback with the staged mW from get_output_power().
     DAQLaser has no hardware readback — get_output_power() returns
@@ -608,7 +658,9 @@ def test_refresh_laser1_readback_shows_staged_mw(qtbot, request) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_updateUi_laser_readback_live_clears_tooltip(qtbot, request) -> None:
+def test_updateUi_laser_readback_live_clears_tooltip(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """updateUi_laser_readback(1, '75.0 mW', '') sets label_laserTwoReadback
     text to '75.0 mW' and clears the tooltip (empty string) — a live
     readback must not keep a stale degraded-readback tooltip."""
@@ -622,7 +674,9 @@ def test_updateUi_laser_readback_live_clears_tooltip(qtbot, request) -> None:
     assert ctrl.laser_panel.ui.label_laserOneReadback.text() == "0.0 mW (est.)"
 
 
-def test_updateUi_laser_readback_degraded_sets_tooltip(qtbot, request) -> None:
+def test_updateUi_laser_readback_degraded_sets_tooltip(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """updateUi_laser_readback(1, '42.0 mW (cmd)', <tooltip>) sets the
     label text to the commanded fallback and applies the degraded-readback
     tooltip so the operator can distinguish a live readback from a stale
@@ -639,7 +693,9 @@ def test_updateUi_laser_readback_degraded_sets_tooltip(qtbot, request) -> None:
     assert ctrl.laser_panel.ui.label_laserTwoReadback.toolTip() == tooltip
 
 
-def test_updateUi_laser_readback_l1_routes_to_l1_label(qtbot, request) -> None:
+def test_updateUi_laser_readback_l1_routes_to_l1_label(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """updateUi_laser_readback(0, ...) routes to label_laserOneReadback,
     not label_laserTwoReadback — the idx selects the correct label."""
     ctrl, _ = make_controller(qtbot, request)

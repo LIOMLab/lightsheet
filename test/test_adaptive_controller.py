@@ -70,7 +70,7 @@ def _cfg(**overrides: object) -> AdaptiveConfig:
 
 def test_config_frozen() -> None:
     cfg = _cfg()
-    with pytest.raises(Exception):
+    with pytest.raises(AttributeError):
         cfg.enabled = False  # type: ignore[misc]
 
 
@@ -468,5 +468,5 @@ def test_adaptive_sample_frozen() -> None:
         reacquired=False,
         power_fallback=False,
     )
-    with pytest.raises(Exception):
+    with pytest.raises(AttributeError):
         sample.plane_index = 99  # type: ignore[misc]

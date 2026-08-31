@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
 
-def test_image_view_render_nonzero(qtbot) -> None:
+def test_image_view_render_nonzero(qtbot: QtBot) -> None:
     """SC2: native ImageView renders non-zero pixel data after setImage."""
     from lightsheet.gui.panels.image_view import ImageView
 
@@ -61,7 +63,7 @@ def test_image_view_render_nonzero(qtbot) -> None:
     assert has_nonzero, "ImageView rendered a blank image (all pixels zero)"
 
 
-def test_scrollbar_policy_always_off(qtbot) -> None:
+def test_scrollbar_policy_always_off(qtbot: QtBot) -> None:
     """ImageView scrollbar policy is AlwaysOff on both axes — prevents
     resize→fitInView→scrollbar-toggle→resize recursion."""
     from PySide6.QtCore import Qt
@@ -79,7 +81,7 @@ def test_scrollbar_policy_always_off(qtbot) -> None:
     ), "verticalScrollBarPolicy must be ScrollBarAlwaysOff"
 
 
-def test_scene_rect_at_construction(qtbot) -> None:
+def test_scene_rect_at_construction(qtbot: QtBot) -> None:
     """ImageView has a non-empty sceneRect at construction so fitInView
     has geometry before the first frame (no tiny black square)."""
     from lightsheet.gui.panels.image_view import ImageView
@@ -92,7 +94,7 @@ def test_scene_rect_at_construction(qtbot) -> None:
     assert rect.height() > 0, "sceneRect height must be > 0 at construction"
 
 
-def test_min_size_floor(qtbot) -> None:
+def test_min_size_floor(qtbot: QtBot) -> None:
     """ImageView minimum size is 320x240 (dropped from 700x700) so it can
     actually shrink on small screens."""
     from lightsheet.gui.panels.image_view import ImageView
@@ -108,7 +110,7 @@ def test_min_size_floor(qtbot) -> None:
     )
 
 
-def test_resize_refits_pixmap(qtbot) -> None:
+def test_resize_refits_pixmap(qtbot: QtBot) -> None:
     """resizeEvent re-calls fitInView so the pixmap fills the viewport
     on every resize (no tiny black square)."""
     import numpy as np
@@ -143,7 +145,7 @@ def test_resize_refits_pixmap(qtbot) -> None:
     )
 
 
-def test_resize_event_no_recursion(qtbot) -> None:
+def test_resize_event_no_recursion(qtbot: QtBot) -> None:
     """resizeEvent must not cause infinite recursion (scrollbar AlwaysOff
     prevents the show/hide→resize cycle). The test simply asserts the
     widget survives a resize without hanging or crashing."""
@@ -171,7 +173,7 @@ def test_resize_event_no_recursion(qtbot) -> None:
     assert view.width() == 500
 
 
-def test_levels_driven_clamp(qtbot) -> None:
+def test_levels_driven_clamp(qtbot: QtBot) -> None:
     """set_levels updates the display window; a frame with values 0-4000
     displayed with levels 1000-3000 clamps to that window (pixels below
     1000 render black, pixels above 3000 render white)."""
@@ -206,7 +208,7 @@ def test_levels_driven_clamp(qtbot) -> None:
     assert 100 <= v2 <= 155, f"midpoint pixel should be ~127, got {v2}"
 
 
-def test_levels_readout_updates(qtbot, request) -> None:
+def test_levels_readout_updates(qtbot: QtBot, request: FixtureRequest) -> None:
     """After setImage, the live min/max QLabel readout shows the frame's
     actual pixel range (not the display window)."""
     from _helpers.controller_fixture import make_controller
@@ -225,7 +227,9 @@ def test_levels_readout_updates(qtbot, request) -> None:
     assert "5678" in text, f"readout missing frame max: {text!r}"
 
 
-def test_levels_bar_wired_to_image_view(qtbot, request) -> None:
+def test_levels_bar_wired_to_image_view(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """Dragging the LevelsBar handles updates the ImageView display
     window via the shell's sig_levelsChanged → set_levels wiring."""
     from _helpers.controller_fixture import make_controller

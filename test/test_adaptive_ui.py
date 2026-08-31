@@ -26,9 +26,13 @@ Covers the operator-facing contracts:
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import pytest
+from pytest import FixtureRequest, MonkeyPatch
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
@@ -36,6 +40,12 @@ from _helpers.controller_fixture import make_controller
 
 from lightsheet.adaptive.types import AdaptiveConfig
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
+
+if TYPE_CHECKING:
+    from lightsheet.gui.panels.ui_stack_panel import Ui_StackPanel
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+    from lightsheet.gui.widgets.adaptive_trajectory import AdaptiveTrajectoryWidget
+    from lightsheet.gui.workers import StackWorker
 
 # The 13 enumerated adaptive spinbox objectNames (UI-SPEC §Component
 # Inventory). The prose count of 14 in the FieldSpec policy table is an
@@ -58,12 +68,14 @@ ADAPTIVE_SPINBOX_OBJNAMES = (
 )
 
 
-def _adaptive_ui(ctrl):
+def _adaptive_ui(ctrl: Controller_MainWindow) -> Ui_StackPanel:
     """Return the stack panel adaptive group widgets as a namespace."""
     return ctrl.stack_panel.ui
 
 
-def test_adaptive_group_widgets_exist(qtbot, request) -> None:
+def test_adaptive_group_widgets_exist(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The adaptive config group + toggle + 13 spinboxes + shutter hint
     exist on the stack panel with the exact UI-SPEC objectNames."""
     ctrl, _ = make_controller(qtbot, request)
@@ -76,7 +88,9 @@ def test_adaptive_group_widgets_exist(qtbot, request) -> None:
         assert hasattr(ui, name), f"missing adaptive spinbox {name}"
 
 
-def test_adaptive_spinboxes_are_field_spec_subclass(qtbot, request) -> None:
+def test_adaptive_spinboxes_are_field_spec_subclass(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """Each of the 13 adaptive spinboxes is a promoted FieldSpecSpinBox."""
     ctrl, _ = make_controller(qtbot, request)
     ui = _adaptive_ui(ctrl)
@@ -87,7 +101,9 @@ def test_adaptive_spinboxes_are_field_spec_subclass(qtbot, request) -> None:
         )
 
 
-def test_adaptive_toggle_off_hides_fields_container(qtbot, request) -> None:
+def test_adaptive_toggle_off_hides_fields_container(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """When the toggle is unchecked, only the fields container is hidden
     — the group box title row (the affordance) stays visible."""
     ctrl, _ = make_controller(qtbot, request)
@@ -106,7 +122,9 @@ def test_adaptive_toggle_off_hides_fields_container(qtbot, request) -> None:
     )
 
 
-def test_adaptive_toggle_on_shows_fields_container(qtbot, request) -> None:
+def test_adaptive_toggle_on_shows_fields_container(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """When the toggle is checked, the fields container becomes visible."""
     ctrl, _ = make_controller(qtbot, request)
     ui = _adaptive_ui(ctrl)
@@ -117,7 +135,9 @@ def test_adaptive_toggle_on_shows_fields_container(qtbot, request) -> None:
     assert ui.widget_adaptiveFields.isVisibleTo(ui.widget_adaptiveFields.parentWidget())
 
 
-def test_adaptive_invalid_pair_beeps_messages_reverts(qtbot, request) -> None:
+def test_adaptive_invalid_pair_beeps_messages_reverts(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """Setting Min Exposure > Max Exposure emits the documented message
     + beep, reverts the offending spinbox, and latches fixed-fallback
     (build_adaptive_config returns None until a later valid edit clears
@@ -144,7 +164,9 @@ def test_adaptive_invalid_pair_beeps_messages_reverts(qtbot, request) -> None:
     assert ctrl.stack_panel.build_adaptive_config() is None
 
 
-def test_adaptive_invalid_pair_reverts_offending_spinbox(qtbot, request) -> None:
+def test_adaptive_invalid_pair_reverts_offending_spinbox(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The offending spinbox reverts to its prior valid value after the
     invalid edit."""
     ctrl, _ = make_controller(qtbot, request)
@@ -159,7 +181,9 @@ def test_adaptive_invalid_pair_reverts_offending_spinbox(qtbot, request) -> None
     assert ui.doubleSpinBox_adaptiveMinExposure.value() == prior
 
 
-def test_adaptive_later_valid_edit_clears_latch(qtbot, request) -> None:
+def test_adaptive_later_valid_edit_clears_latch(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """After an invalid pair latches fixed-fallback, a later valid edit
     clears the latch so build_adaptive_config returns a frozen config."""
     ctrl, _ = make_controller(qtbot, request)
@@ -180,7 +204,9 @@ def test_adaptive_later_valid_edit_clears_latch(qtbot, request) -> None:
     assert isinstance(cfg, AdaptiveConfig)
 
 
-def test_adaptive_unchecked_returns_none(qtbot, request) -> None:
+def test_adaptive_unchecked_returns_none(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """With the toggle unchecked, build_adaptive_config returns None
     (fixed stack behavior is selected)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -189,7 +215,9 @@ def test_adaptive_unchecked_returns_none(qtbot, request) -> None:
     assert ctrl.stack_panel.build_adaptive_config() is None
 
 
-def test_adaptive_checked_valid_returns_frozen_config(qtbot, request) -> None:
+def test_adaptive_checked_valid_returns_frozen_config(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """With the toggle checked and valid bounds, build_adaptive_config
     returns a frozen AdaptiveConfig with target 0.90/0.95 and L2 block
     size 8 (the tracked defaults)."""
@@ -205,7 +233,9 @@ def test_adaptive_checked_valid_returns_frozen_config(qtbot, request) -> None:
     assert cfg.block_size_n == 8
 
 
-def test_adaptive_rolling_shutter_shows_ms(qtbot, request) -> None:
+def test_adaptive_rolling_shutter_shows_ms(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """In Rolling shutter mode the exposure bound spinboxes show the ms
     suffix and the hint reads the Rolling copy."""
     ctrl, _ = make_controller(qtbot, request)
@@ -221,7 +251,9 @@ def test_adaptive_rolling_shutter_shows_ms(qtbot, request) -> None:
     assert "millisecond" in hint
 
 
-def test_adaptive_lightsheet_shutter_shows_lines(qtbot, request) -> None:
+def test_adaptive_lightsheet_shutter_shows_lines(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """In Lightsheet shutter mode the exposure bound spinboxes show the
     lines suffix and the hint reads the Lightsheet copy."""
     ctrl, _ = make_controller(qtbot, request)
@@ -237,7 +269,9 @@ def test_adaptive_lightsheet_shutter_shows_lines(qtbot, request) -> None:
     assert "exposed lines" in hint
 
 
-def test_adaptive_lightsheet_bound_converts_to_seconds(qtbot, request) -> None:
+def test_adaptive_lightsheet_bound_converts_to_seconds(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """In Lightsheet shutter mode the exposure bound converts to seconds
     as exposed_lines x line_time. Set Min Exposure = 25 lines with
     line_time = 100 µs → 25 x 100e-6 = 2.5e-3 s."""
@@ -255,7 +289,9 @@ def test_adaptive_lightsheet_bound_converts_to_seconds(qtbot, request) -> None:
     assert cfg.min_exposure_s == pytest.approx(25 * 100e-6, rel=1e-6)
 
 
-def test_adaptive_rolling_bound_converts_ms_to_seconds(qtbot, request) -> None:
+def test_adaptive_rolling_bound_converts_ms_to_seconds(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """In Rolling shutter mode the exposure bound converts ms to seconds
     (x1e-3). Set Min Exposure = 5 ms -> 5e-3 s."""
     ctrl, _ = make_controller(qtbot, request)
@@ -270,7 +306,9 @@ def test_adaptive_rolling_bound_converts_ms_to_seconds(qtbot, request) -> None:
     assert cfg.min_exposure_s == pytest.approx(5e-3, rel=1e-9)
 
 
-def test_adaptive_power_narrowed_to_live_max(qtbot, request) -> None:
+def test_adaptive_power_narrowed_to_live_max(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The laser max-power spinbox maximum is narrowed at runtime to
     min(150.0, shell._bundle.lasers[i].max_power). The test fixture's
     laser[0] has max_power 300 mW → narrowed to 150.0; laser[1] has
@@ -281,7 +319,9 @@ def test_adaptive_power_narrowed_to_live_max(qtbot, request) -> None:
     assert ui.doubleSpinBox_adaptiveLaser2MaxPower.maximum() <= 150.0
 
 
-def test_spawn_stack_worker_passes_frozen_adaptive_cfg(qtbot, request) -> None:
+def test_spawn_stack_worker_passes_frozen_adaptive_cfg(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """_spawn_stack_worker pre-samples the adaptive config on the GUI
     thread and passes one frozen AdaptiveConfig as the final StackWorker
     constructor arg. With the toggle checked + valid bounds, the worker
@@ -305,7 +345,7 @@ def test_spawn_stack_worker_passes_frozen_adaptive_cfg(qtbot, request) -> None:
 
     orig_init = workers_mod.StackWorker.__init__
 
-    def capture_init(self, *args, **kwargs):
+    def capture_init(self: StackWorker, *args: Any, **kwargs: Any) -> None:
         captured["adaptive_cfg"] = kwargs.get("adaptive_cfg")
         captured["args"] = args
         # Call the real init so the worker is fully constructed (the
@@ -328,7 +368,9 @@ def test_spawn_stack_worker_passes_frozen_adaptive_cfg(qtbot, request) -> None:
     assert cfg.enabled is True
 
 
-def test_spawn_stack_worker_unchecked_passes_none(qtbot, request) -> None:
+def test_spawn_stack_worker_unchecked_passes_none(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """With the toggle unchecked, _spawn_stack_worker passes None as the
     adaptive_cfg arg (fixed stack behavior)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -345,7 +387,7 @@ def test_spawn_stack_worker_unchecked_passes_none(qtbot, request) -> None:
 
     orig_init = workers_mod.StackWorker.__init__
 
-    def capture_init(self, *args, **kwargs):
+    def capture_init(self: StackWorker, *args: Any, **kwargs: Any) -> None:
         captured["adaptive_cfg"] = kwargs.get("adaptive_cfg")
         orig_init(self, *args, **kwargs)
 
@@ -360,7 +402,9 @@ def test_spawn_stack_worker_unchecked_passes_none(qtbot, request) -> None:
     assert captured.get("adaptive_cfg") is None
 
 
-def test_stack_worker_run_does_not_read_ui(qtbot, request) -> None:
+def test_stack_worker_run_does_not_read_ui(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The StackWorker.run body never reaches into the shell's ui.* —
     the adaptive config is pre-sampled on the GUI thread and passed as
     a constructor arg. This is a static-source guard on the worker
@@ -397,7 +441,7 @@ EMPTY_COPY = (
 )
 
 
-def _make_trajectory_widget(qtbot):
+def _make_trajectory_widget(qtbot: QtBot) -> AdaptiveTrajectoryWidget:
     """Construct an AdaptiveTrajectoryWidget headless for unit testing.
 
     Imported lazily so the existing (passing) tests in this module are
@@ -413,7 +457,9 @@ def _make_trajectory_widget(qtbot):
     return widget
 
 
-def test_dock_exists_and_hidden_initially(qtbot, request) -> None:
+def test_dock_exists_and_hidden_initially(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The trajectory dock is created in the RightDockWidgetArea and is
     hidden until adaptive is enabled (D-04)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -431,7 +477,9 @@ def test_dock_exists_and_hidden_initially(qtbot, request) -> None:
     assert not dock.isVisible()
 
 
-def test_enabling_adaptive_shows_dock_empty_state(qtbot, request) -> None:
+def test_enabling_adaptive_shows_dock_empty_state(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """With adaptive enabled but no stack started, the dock becomes
     visible and shows the empty-state label with the plot hidden until
     the first sample (must_have truth #1, #2)."""
@@ -457,7 +505,9 @@ def test_enabling_adaptive_shows_dock_empty_state(qtbot, request) -> None:
     assert plot.isHidden()
 
 
-def test_empty_state_label_word_wraps(qtbot, request) -> None:
+def test_empty_state_label_word_wraps(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The empty-state label has wordWrap enabled so the fixed English
     sentence wraps without clipping at the dock's minimum width
     (backstop truth #11, #12)."""
@@ -467,7 +517,7 @@ def test_empty_state_label_word_wraps(qtbot, request) -> None:
     assert label.wordWrap() is True
 
 
-def test_trajectory_widget_zero_planes_is_empty(qtbot) -> None:
+def test_trajectory_widget_zero_planes_is_empty(qtbot: QtBot) -> None:
     """The append path renders zero planes as the empty state (plot
     hidden, label visible) — must_have truth #6."""
     w = _make_trajectory_widget(qtbot)
@@ -476,7 +526,7 @@ def test_trajectory_widget_zero_planes_is_empty(qtbot) -> None:
     assert w.plotWidget_adaptiveTrajectory.isHidden()
 
 
-def test_trajectory_widget_one_plane_shows_point_and_band(qtbot) -> None:
+def test_trajectory_widget_one_plane_shows_point_and_band(qtbot: QtBot) -> None:
     """One sample swaps to the plot and renders one intensity point plus
     the target band region (must_have truth #6). The band is a
     LinearRegionItem spanning lo..hi %."""
@@ -502,7 +552,7 @@ def test_trajectory_widget_one_plane_shows_point_and_band(qtbot) -> None:
     assert hi == pytest.approx(95.0, abs=0.01)
 
 
-def test_trajectory_widget_many_planes_appends(qtbot) -> None:
+def test_trajectory_widget_many_planes_appends(qtbot: QtBot) -> None:
     """Many samples render a live trajectory (must_have truth #6)."""
     w = _make_trajectory_widget(qtbot)
     w.reset(target_band_lo=0.90, target_band_hi=0.95)
@@ -516,7 +566,7 @@ def test_trajectory_widget_many_planes_appends(qtbot) -> None:
     assert len(xs) == 10
 
 
-def test_trajectory_widget_201_planes_retains_full_data(qtbot) -> None:
+def test_trajectory_widget_201_planes_retains_full_data(qtbot: QtBot) -> None:
     """Beyond 200 planes the X view auto-scrolls to the last 200 while
     retaining the complete in-memory data for zoom-out (must_have truth
     #5). After 201 appends the curve holds all 201 points; the visible
@@ -537,7 +587,7 @@ def test_trajectory_widget_201_planes_retains_full_data(qtbot) -> None:
     assert x_min >= 1  # window starts at plane 1 (last 200 of 0..200)
 
 
-def test_trajectory_widget_reacquire_marker(qtbot) -> None:
+def test_trajectory_widget_reacquire_marker(qtbot: QtBot) -> None:
     """A re-acquire event renders a vertical dashed warning line at the
     plane index (must_have truth #3)."""
     w = _make_trajectory_widget(qtbot)
@@ -553,7 +603,7 @@ def test_trajectory_widget_reacquire_marker(qtbot) -> None:
     assert reacquire_lines[0].value() == pytest.approx(3.0)
 
 
-def test_trajectory_widget_power_fallback_marker(qtbot) -> None:
+def test_trajectory_widget_power_fallback_marker(qtbot: QtBot) -> None:
     """A power-fallback event renders a triangle marker at the plane
     (must_have truth #3)."""
     w = _make_trajectory_widget(qtbot)
@@ -570,7 +620,7 @@ def test_trajectory_widget_power_fallback_marker(qtbot) -> None:
     assert spots[0][0] == pytest.approx(2.0)
 
 
-def test_trajectory_widget_twin_axis_exposure_power(qtbot) -> None:
+def test_trajectory_widget_twin_axis_exposure_power(qtbot: QtBot) -> None:
     """Exposure and L1 power render on a linked right ViewBox (twin-axis,
     must_have truth #3). The right axis exists and the exposure curve
     uses it."""
@@ -588,7 +638,7 @@ def test_trajectory_widget_twin_axis_exposure_power(qtbot) -> None:
     assert w._right_vb is not None
 
 
-def test_trajectory_widget_freeze_blocks_appends(qtbot) -> None:
+def test_trajectory_widget_freeze_blocks_appends(qtbot: QtBot) -> None:
     """After freeze() (E-stop), further append_sample calls are ignored
     so the last trajectory is preserved for review (must_have truth #4)."""
     w = _make_trajectory_widget(qtbot)
@@ -608,7 +658,9 @@ def test_trajectory_widget_freeze_blocks_appends(qtbot) -> None:
     assert len(xs) == 1, "post-freeze append must be ignored"
 
 
-def test_badge_adaptive_running_min_width_180(qtbot, request) -> None:
+def test_badge_adaptive_running_min_width_180(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The mode badge has a minimum width of 180 px so the single-line
     'ADAPTIVE RUNNING — plane 999/999 (row 3/5) · MULTI-CH' fits without
     elision (must_have truth #7)."""
@@ -617,7 +669,9 @@ def test_badge_adaptive_running_min_width_180(qtbot, request) -> None:
     assert badge.minimumSize().width() >= 180
 
 
-def test_badge_adaptive_running_string(qtbot, request) -> None:
+def test_badge_adaptive_running_string(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The badge renders 'ADAPTIVE RUNNING — plane {n}/{N}' with the
     em-dash, and composes with the queue-row + MULTI-CH suffixes
     (must_have truth #7)."""
@@ -637,7 +691,9 @@ def test_badge_adaptive_running_string(qtbot, request) -> None:
     assert "MULTI-CH" in text
 
 
-def test_badge_adaptive_aborted_string(qtbot, request) -> None:
+def test_badge_adaptive_aborted_string(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """E-stop mid-adaptive-run transitions the badge to 'ADAPTIVE
     ABORTED — plane {n}/{N}' (must_have truth #4)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -648,7 +704,9 @@ def test_badge_adaptive_aborted_string(qtbot, request) -> None:
     assert "plane 12/50" in text
 
 
-def test_badge_no_green_or_accent_stylesheet(qtbot, request) -> None:
+def test_badge_no_green_or_accent_stylesheet(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The badge adds no green/accent stylesheet — it inherits the
     existing bold weight + default text color (must_have truth #7,
     UI-SPEC §Color)."""
@@ -658,7 +716,9 @@ def test_badge_no_green_or_accent_stylesheet(qtbot, request) -> None:
     assert "#3daee9" not in ss.lower()
 
 
-def test_estop_freezes_trajectory_after_laser_off(qtbot, request) -> None:
+def test_estop_freezes_trajectory_after_laser_off(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """E-stop performs synchronous laser.off() first, then freezes the
     trajectory plot and sets the badge to ABORTED (must_have truth #4,
     threat T-10-02). The kill path precedes the GUI freeze/badge work."""
@@ -683,8 +743,8 @@ def test_estop_freezes_trajectory_after_laser_off(qtbot, request) -> None:
     freeze_before_off: list[bool] = []
     real_off = [laser.off for laser in ctrl.lasers]
 
-    def _tracking_off(idx):
-        def _off():
+    def _tracking_off(idx: int) -> Any:
+        def _off() -> None:
             if widget._frozen:
                 freeze_before_off.append(True)
             off_calls.append(idx)
@@ -705,7 +765,9 @@ def test_estop_freezes_trajectory_after_laser_off(qtbot, request) -> None:
     assert not ctrl.dockWidget_adaptiveTrajectory.isHidden()
 
 
-def test_worker_signal_connected_to_gui_slot_queued(qtbot, request) -> None:
+def test_worker_signal_connected_to_gui_slot_queued(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """_spawn_stack_worker connects sig_adaptive_trajectory to a
     GUI-thread slot via a queued connection (must_have truth #3,
     threat T-10-05). The connection exists after spawning."""
@@ -724,7 +786,7 @@ def test_worker_signal_connected_to_gui_slot_queued(qtbot, request) -> None:
 
     orig_init = workers_mod.StackWorker.__init__
 
-    def capture_init(self, *args, **kwargs):
+    def capture_init(self: StackWorker, *args: Any, **kwargs: Any) -> None:
         captured["worker"] = self
         orig_init(self, *args, **kwargs)
 
@@ -756,7 +818,9 @@ def test_worker_signal_connected_to_gui_slot_queued(qtbot, request) -> None:
                 thread.wait(2000)
 
 
-def test_worker_run_does_not_call_plotwidget(qtbot, request) -> None:
+def test_worker_run_does_not_call_plotwidget(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The worker run() body never calls pyqtgraph or PlotWidget
     directly (threat T-10-05). Static-source guard on the worker
     module."""
@@ -775,19 +839,23 @@ def test_worker_run_does_not_call_plotwidget(qtbot, request) -> None:
     )
 
 
-def test_no_imageview_reintroduction(qtbot, request) -> None:
+def test_no_imageview_reintroduction(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """pyqtgraph is reintroduced ONLY for PlotWidget — no
     pyqtgraph.ImageView / pyqtgraph.imageview import exists in
     production code (UI-SPEC §Registry Safety, threat T-10-SC)."""
     import lightsheet.gui.widgets.adaptive_trajectory as mod
 
-    with open(mod.__file__) as f:
+    with Path(mod.__file__).open() as f:
         src = f.read()
     assert "ImageView" not in src
     assert "imageview" not in src.lower()
 
 
-def test_dock_state_persistence(qtbot, request, tmp_path, monkeypatch) -> None:
+def test_dock_state_persistence(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
     """QSettings saveState/restoreState preserves the dock area/geometry
     without writing config.ini during demo tests (must_have truth:
     dock persistence). The controller restores the dock state from
@@ -807,7 +875,9 @@ def test_dock_state_persistence(qtbot, request, tmp_path, monkeypatch) -> None:
     assert len(bytes(state)) > 0
 
 
-def test_dock_is_floatable_and_movable(qtbot, request) -> None:
+def test_dock_is_floatable_and_movable(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The dock is floatable + movable so the operator can drag it to a
     2nd monitor (D-04)."""
     ctrl, _ = make_controller(qtbot, request)

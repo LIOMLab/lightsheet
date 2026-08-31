@@ -1,88 +1,29 @@
-"""Toptica iBeam Smart serial HAL — engine + ``ILaser`` adapter (one file per
-device family, per AGENTS.md §10).
+"""Toptica iBeam Smart serial HAL — engine + ``ILaser`` adapter.
 
-This module hosts two classes:
-
-- ``IBeam`` — the rig-confirmed serial engine that drives the red Toptica iBeam
-  Smart laser over its virtual COM port (FTDI USB-to-serial). The protocol is
-  ASCII text: commands are terminated with CRLF, and the device replies with
-  one or more lines followed by a ``CMD> `` prompt. (Some firmware variants
-  also emit an ``[OK]`` terminator line; this driver accepts either so it is
-  robust across firmware versions.)
+- ``IBeam`` — the serial engine that drives the red Toptica iBeam Smart laser
+  over its virtual COM port (FTDI USB-to-serial). The protocol is ASCII text:
+  commands are terminated with CRLF, and the device replies with one or more
+  lines followed by a ``CMD> `` prompt.
 - ``IBeamSmartLaser`` — the ``ILaser``-shaped adapter that wraps ``IBeam``,
-  converting mW <-> µW and mirroring ``active`` / ``error`` / ``error_message``
-  for the unified laser interface.
-
-Protocol assumptions were confirmed against the physical rig on COM4 via SSH
-(iBeam Smart 640, SN iBEAM-SMART-640-S-G1-15601, firmware iBPs-001A01-05):
-  - 115200 baud, 8-N-1
-  - `laser on` / `laser off`    -> global emission enable/disable
-  - `enable <ch>`               -> per-channel enable (gates channel power)
-  - `channel <ch> power <uW> micro` -> set channel power in microwatts
-  - `status laser`              -> replies `ON` or `OFF`
-  - `show level power`          -> multiline `CH<n>, PWR: <value> mW`
-  - `show serial` / `version`   -> identification queries
-  - `reset system`              -> reboot (recovery path for protocol desync)
-
-Device-level rejections are signalled by a `%SYS-E...` reply line; `_send_cmd`
-surfaces these on the HAL error surface (`self.error` / `self.error_message`)
-so a firmware rejection is not mistaken for success.
+  converting mW <-> µW and mirroring ``active`` / ``error`` / ``error_message``.
 
 The iBeam Smart has a known reply-lag firmware quirk: rapid command sequences
-can cause response misattribution. Mitigations: a per-instance lock
-serializing all serial access, an inter-command gap, and an input-buffer flush
-before every command.
+can cause response misattribution. Mitigations: a per-instance lock serializing
+all serial access, an inter-command gap, and an input-buffer flush before every
+command.
 
-This is a Class IIIB laser. The `set_power` clamp to `max_power` (loaded from
-config.ini `[iBeam] Max Power`) is a physical-safety control enforced inside
-the HAL method so any caller (GUI, future script, E-stop path) is bounded.
+This is a Class IIIB laser. ``set_power`` clamps to ``max_power`` (from
+config.ini `[iBeam] Max Power`) as a physical-safety control enforced inside
+the HAL so any caller is bounded. Two-layer clamp: the adapter clamps mW, the
+inner ``IBeam.set_power`` clamps µW independently.
 
-``IBeamSmartLaser`` is a **re-wrap, not a rewrite**: the inner ``IBeam``
-engine and its reply-lag mitigations (per-instance lock, 50 ms inter-command
-gap, input-buffer flush before every command) are untouched. The adapter
-converts mW <-> µW, mirrors ``active`` / ``error`` / ``error_message`` from
-the inner engine, and exposes ``get_output_power()`` in mW for the GUI
-readback field.
+``off()`` is synchronous — no thread/queue offload. The GUI-thread E-stop
+handler calls this directly; offloading would break the synchronous-off safety
+contract.
 
-**mW -> µW conversion (D-01):** ``set_power(mw)`` takes milliwatts; ``power``
-/ ``max_power`` attrs are in mW. The adapter converts mW to µW (x 1000) and
-delegates the actual serial round-trip to ``self._ibeam.set_power(uw)``.
-
-**Two-layer clamp (AGENTS.md §2 — Class IIIB laser safety):**
-1. ``set_power`` clamps ``mw`` to ``[0.0, max_power]`` (mW) at the adapter
-   layer before converting to µW — the interface-layer clamp.
-2. The inner ``IBeam.set_power`` clamps ``power_uw`` to
-   ``[0, self._ibeam.max_power]`` (µW) independently — the native-unit
-   clamp, independent of the mW clamp so a config typo in one unit cannot
-   bypass the other layer.
-
-**Lock identity (D-02):** ``self._lock`` IS ``self._ibeam._lock`` — the same
-object, not a new lock. The daemon-thread write paths acquire
-``self.lasers[i]._lock`` (the adapter's lock), and the inner ``_send_cmd``
-acquires ``self._lock`` (the inner engine's lock); lock identity guarantees
-they are the same lock so a daemon write holding the adapter lock excludes
-a concurrent ``_send_cmd`` round-trip on the same engine.
-
-**Synchronous ``off()`` (AGENTS.md §2 — E-stop kill path):** ``off()``
-calls ``self._ibeam.off()``, sets ``active = False`` and ``power = 0.0``,
-and returns ``None`` immediately — no thread/queue offload. The GUI-thread
-E-stop handler calls this directly; offloading it would break the
-synchronous-off safety contract.
-
-**Error-surface mirroring:** ``on()`` mirrors ``active`` from the inner
-``_is_on`` and ``error`` / ``error_message`` from the inner error surface,
-so a firmware rejection (``%SYS-E``) leaves the adapter's ``active = False``
-— the GUI never shows the laser as energized when the firmware refused.
-``set_power`` guards the ``self.power`` mirror on the inner error surface
-so a rejected write does not leave the adapter believing the commanded
-power was applied. ``get_output_power()`` returns ``None`` on an inner
-error so the GUI readback field can distinguish "no reading" from
-"reading is 0".
-
-The inner ``IBeam`` engine is constructed in ``__init__`` but NOT opened
-(``IBeam.__init__`` does not call ``open()``); the controller's
-``hardware_init`` is responsible for calling ``open()`` on the inner engine
-(or the adapter may expose a passthrough — left to the controller rewrite).
+``self._lock`` IS ``self._ibeam._lock`` — the same object, not a new lock, so
+a daemon write holding the adapter lock excludes a concurrent ``_send_cmd``
+round-trip on the same engine.
 """
 
 import contextlib
@@ -107,18 +48,15 @@ class IBeam:
     _cfg_settings["Port"] = "COM4"
     _cfg_settings["Baud Rate"] = "115200"
     _cfg_settings["Channel"] = "1"
-    _cfg_settings["Wavelength"] = "647"  # Capture/detection wavelength in nm (physical iBeam Smart 640 diode emits at 640 nm; 647 nm is the recorded capture wavelength)
+    # Capture/detection wavelength in nm (physical diode emits at 640 nm;
+    # 647 nm is the recorded capture wavelength)
+    _cfg_settings["Wavelength"] = "647"
     _cfg_settings["Power"] = "0"  # In uW
     _cfg_settings["Max Power"] = "150000"  # In uW (150 mW diode limit, rig-confirmed)
-    # Per-readline timeout for the response-read loop. The iBeam Smart
-    # firmware sends data lines and error replies in <30ms but takes ~3s
-    # to send the CMD> prompt that terminates the response. Waiting for
-    # the prompt wastes ~3s per command. Instead, _send_cmd uses this
-    # short timeout per readline: data/error lines arrive within it, and
-    # a timeout (b"") signals the response is complete. The CMD> prompt
-    # is flushed by reset_input_buffer on the next command. Rig-probed:
-    # 0.2s catches all data + %SYS-E replies with margin; configurable
-    # here so a slower firmware version can be tuned without code change.
+    # Per-readline timeout. The firmware sends data/error lines in <30ms but
+    # takes ~3s to send the CMD> prompt. A short timeout per readline lets
+    # data lines arrive; a timeout (b"") signals the response is complete.
+    # The late CMD> prompt is flushed by reset_input_buffer on the next command.
     _cfg_settings["Read Timeout"] = "0.2"  # seconds per readline
 
     def __init__(self, port: str | None = None) -> None:
@@ -126,7 +64,6 @@ class IBeam:
         self.error = 0
         self.error_message = ""
 
-        # Load configurable settings, then assign to instance variables.
         self.cfg_settings = copy.deepcopy(self._cfg_settings)
         self.cfg_settings = cfg_read("config.ini", "iBeam", self.cfg_settings)
 
@@ -136,22 +73,15 @@ class IBeam:
         self.wavelength = int(self.cfg_settings["Wavelength"])
         self._power = int(self.cfg_settings["Power"])
         self.max_power = int(self.cfg_settings["Max Power"])
-        # Per-readline timeout for the response-read loop (see _cfg_settings
-        # "Read Timeout" for rationale). Parsed from config so it is tunable
-        # without code change.
         self._read_timeout = float(self.cfg_settings["Read Timeout"])
 
-        # Serial connection + laser state.
         self.ser = None
         self._is_on = False
 
         # Reply-lag mitigations.
         self._inter_command_gap = 0.05  # 50 ms starting point
         # Reentrant (RLock) so the controller's nested acquisition pattern
-        # (adapter lock -> inner _send_cmd lock, both aliased to this same
-        # object via IBeamSmartLaser._lock = self._ibeam._lock) does not
-        # deadlock. Matches the ILaser ABC contract (_lock: threading.RLock)
-        # and the DAQLaser / MockLaser backends.
+        # (adapter lock -> inner _send_cmd lock, both aliased) does not deadlock.
         self._lock = threading.RLock()
 
     # ------------------------------------------------------------------ #
@@ -160,16 +90,17 @@ class IBeam:
     def open(self) -> None:
         """Open the serial port and disable command echo."""
         try:
-            self.ser = serial.Serial()  # pragma: no cover — serial.Serial open unreachable on Mac; set_power/off/_send_cmd stay measured (mock-serial via test_ibeam.py)
+            # serial.Serial open unreachable on Mac; set_power/off/_send_cmd
+            # stay measured (mock-serial via test_ibeam.py)
+            self.ser = serial.Serial()  # pragma: no cover
             self.ser.baudrate = self.baud_rate
             self.ser.port = self.port
             self.ser.timeout = 3.0
             self.ser.open()
             # Disable command echo so replies are not doubled.
             self._send_cmd("echo off")
-            # Enable the configured diode channel so a subsequent channel
-            # power command actually reaches the output. Without `enable <ch>`
-            # the firmware accepts the power write but the diode stays dark.
+            # Enable the configured diode channel — without `enable <ch>` the
+            # firmware accepts the power write but the diode stays dark.
             self.enable_channel()
         except serial.SerialException as e:
             self.error = 1
@@ -203,26 +134,15 @@ class IBeam:
         """Enable laser emission (global enable)."""
         try:
             self._send_cmd("laser on")
-            # Bail before re-enabling the channel if the global emission
-            # enable was rejected. _send_cmd resets self.error=0 at the top
-            # of every round-trip, so the subsequent enable_channel() call
-            # would clear a 'laser on' rejection and leave the HAL believing
-            # emission is enabled when the firmware refused. Checking here —
-            # between the two sub-commands — preserves the rejection on the
-            # error surface (Class IIIB laser safety).
+            # Bail before re-enabling the channel if the global emission enable
+            # was rejected — _send_cmd resets self.error=0 at the top of every
+            # round-trip, so a subsequent enable_channel() would clear the
+            # rejection (Class IIIB laser safety).
             if self.error:
                 return
-            # Re-enable the configured diode channel with each emission
-            # enable. The channel enable is independent of the global
-            # `laser on` state; reasserting it here guarantees a power
-            # command issued afterwards reaches the output.
+            # Re-enable the configured diode channel with each emission enable.
             self.enable_channel()
-            # Only mark the laser as on if neither the `laser on` write nor
-            # the channel enable was rejected by the firmware. _send_cmd and
-            # enable_channel both set self.error on a %SYS-E reply without
-            # raising, so guard the state update on the error surface to
-            # avoid the HAL believing emission is enabled when the firmware
-            # refused.
+            # Only mark the laser as on if neither sub-command was rejected.
             if not self.error:
                 self._is_on = True
         except serial.SerialException as e:
@@ -240,12 +160,8 @@ class IBeam:
         except serial.SerialException as e:
             self.error = 1
             self.error_message = str(e)
-            # The operator intent was off; the actual emission state is
-            # unknown (the command may or may not have reached the laser).
-            # False is the safer default for a Class IIIB laser — the GUI
-            # treats the laser as off and the operator is warned (via the
-            # error surface) to manually verify, rather than the GUI
-            # showing it as on and the operator assuming it is off.
+            # False is the safer default for a Class IIIB laser — the GUI treats
+            # the laser as off and the operator is warned to manually verify.
             self._is_on = False
             logger.exception("IBeam off failed")
         return None
@@ -253,12 +169,8 @@ class IBeam:
     def enable_channel(self, channel: int | None = None) -> None:
         """Enable a diode channel so channel power commands take effect.
 
-        The iBeam Smart protocol gates output on both the global emission
-        state (`laser on`) and a per-channel enable. Without `enable <ch>`
-        a `channel <ch> power ... micro` command is accepted by the
-        firmware but does not change the output.
-
-        channel: 1-based channel index; defaults to the configured channel.
+        Without `enable <ch>` a power command is accepted but does not change
+        the output. channel: 1-based index; defaults to the configured channel.
         """
         ch = self.channel if channel is None else int(channel)
         try:
@@ -272,19 +184,14 @@ class IBeam:
     def set_power(self, power_uw: int) -> None:
         """Set channel power in microwatts, clamped to [0, max_power].
 
-        The clamp is a physical-safety control: it bounds the maximum power
-        any caller can command, protecting the diode against a typo or tamper
-        in config.ini `Max Power`.
+        The clamp is a physical-safety control bounding the maximum power any
+        caller can command, protecting the diode against a config.ini typo.
         """
         power_uw = max(0, min(power_uw, self.max_power))
         try:
             self._send_cmd(f"channel {self.channel} power {power_uw} micro")
             # Only record the commanded power if the firmware accepted the
-            # write. _send_cmd does not raise on a %SYS-E rejection — it
-            # sets self.error and returns normally — so guard the state
-            # update on the error surface to keep the HAL's internal power
-            # consistent with the actual hardware state. The max_power clamp
-            # above is a physical-safety control and is NOT affected.
+            # write. _send_cmd sets self.error on rejection without raising.
             if not self.error:
                 self._power = power_uw
         except serial.SerialException as e:
@@ -296,14 +203,8 @@ class IBeam:
     def get_output_power(self) -> int | None:
         """Read the current channel output power in microwatts.
 
-        Sends `show level power` and parses the `CH<n>, PWR: <value> mW` line
-        for this driver's channel. Returns the parsed value in µW, or
-        ``None`` when no matching ``CH{channel}`` line is found (e.g. the
-        firmware returned an unexpected format or an empty reply after the
-        terminator) so the adapter can surface "no reading" to the GUI
-        rather than presenting the last commanded power as a live
-        readback. ``None`` is also returned on a serial error (the HAL
-        error surface is set in that case).
+        Sends `show level power` and parses the `CH<n>, PWR: <value> mW` line.
+        Returns ``None`` when no matching line is found or on a serial error.
         """
         try:
             response = self._send_cmd("show level power")
@@ -322,9 +223,8 @@ class IBeam:
                     except (ValueError, IndexError):
                         # Malformed line -> fall through to None fallback.
                         break
-            # No matching CH line found in the response (or the response
-            # was empty after the terminator). Return None so the adapter
-            # surfaces "no reading" instead of the stale commanded value.
+            # No matching CH line found — return None so the adapter surfaces
+            # "no reading" instead of the stale commanded value.
             return None
         except serial.SerialException as e:
             self.error = 1
@@ -363,41 +263,26 @@ class IBeam:
     def _send_cmd(self, cmd: str) -> list[str]:
         """Send an ASCII command and read the response lines.
 
-        Acquires the per-instance lock, flushes the input buffer (reply-lag
-        mitigation), writes the command with a CRLF terminator, reads lines
-        until a per-readline timeout fires (no more data) or the ``[OK]`` /
-        ``CMD>`` terminator is seen, then sleeps for the inter-command gap.
-        Returns the collected response lines (stripped).
-
-        The iBeam Smart firmware sends data lines and ``%SYS-E`` error
-        replies in <30ms but takes ~3s to send the ``CMD>`` prompt that
-        terminates the response. Waiting for the prompt wastes ~3s per
-        command. Instead, this method uses a short per-readline timeout
-        (``self._read_timeout``, default 0.2s, configurable via
-        ``[iBeam] Read Timeout`` in config.ini): data/error lines arrive
-        within it, and a timeout (``b""``) signals the response is
-        complete. The late ``CMD>`` prompt is flushed by
-        ``reset_input_buffer`` on the next command. Rig-probed: data
-        arrives in 30ms, errors in 20ms — 0.2s catches both with margin.
+        Acquires the per-instance lock, flushes the input buffer, writes the
+        command with CRLF, reads lines until a per-readline timeout fires or
+        the ``[OK]`` / ``CMD>`` terminator is seen, then sleeps for the
+        inter-command gap. Uses a short per-readline timeout to avoid waiting
+        ~3s for the CMD> prompt.
         """
         with self._lock:
             if self.ser is None:
                 raise serial.SerialException("Serial not connected")
 
             # Clear any stale error from a prior command so this command's
-            # result is not masked by a previous failure. The error surface
-            # is reset before the serial round-trip and only re-set below if
-            # this command itself fails (a %SYS-E reply) or raises.
+            # result is not masked by a previous failure.
             self.error = 0
             self.error_message = ""
 
             self.ser.reset_input_buffer()
             self.ser.write(f"{cmd}\r\n".encode("ascii"))
 
-            # Use the short per-readline timeout so we don't wait ~3s for
-            # the CMD> prompt. Save and restore the original timeout so the
-            # serial port's configured timeout (used elsewhere if ever) is
-            # not permanently changed.
+            # Use the short per-readline timeout; save/restore the original so
+            # the serial port's configured timeout is not permanently changed.
             original_timeout = self.ser.timeout
             self.ser.timeout = self._read_timeout
             try:
@@ -405,14 +290,11 @@ class IBeam:
                 while True:
                     raw = self.ser.readline()
                     if raw == b"":
-                        # readline returns b'' on timeout (no bytes received
-                        # within the read-timeout window). The response is
-                        # complete — the CMD> prompt will arrive ~3s later
-                        # and is flushed by reset_input_buffer on the next
-                        # command. A genuine blank response line is b'\r\n'
-                        # (decodes to '' after strip) and is NOT a timeout —
-                        # it is appended below and the loop continues until
-                        # the next readline times out.
+                        # readline returns b'' on timeout — the response is
+                        # complete. The CMD> prompt arrives ~3s later and is
+                        # flushed by reset_input_buffer on the next command.
+                        # A genuine blank line is b'\r\n' (decodes to '') and
+                        # is NOT a timeout — it is appended and the loop continues.
                         break
                     line = raw.decode("ascii", errors="replace").strip()
                     response_lines.append(line)
@@ -421,13 +303,9 @@ class IBeam:
             finally:
                 self.ser.timeout = original_timeout
 
-            # Surface a device-level rejection on the HAL error surface
-            # instead of letting it look like success. The firmware prefixes
-            # error replies with a `%SYS-E` code (e.g.
-            # `%SYS-E-00025, parameter error`). The controller polls
-            # self.error after every write and emits the operator message
-            # from there; we do not raise so the existing call sites keep
-            # working unchanged.
+            # Surface a device-level rejection on the HAL error surface.
+            # The firmware prefixes error replies with `%SYS-E`; we do not
+            # raise so existing call sites keep working unchanged.
             for line in response_lines:
                 if line.startswith("%SYS-E"):
                     self.error = 1
@@ -441,24 +319,18 @@ class IBeam:
 class IBeamSmartLaser(ILaser):
     """``ILaser`` adapter for the Toptica iBeam Smart (L2, COM4 serial).
 
-    Wraps the rig-confirmed ``IBeam`` serial engine (defined above in this
-    same module). mW -> µW (x 1000). ``off()`` is synchronous (E-stop kill
-    path). ``_lock`` is the same object as the inner ``IBeam._lock`` (lock
-    identity).
+    Wraps the ``IBeam`` serial engine. mW -> µW (x 1000). ``off()`` is
+    synchronous (E-stop kill path). ``_lock`` is the same object as the inner
+    ``IBeam._lock`` (lock identity).
     """
 
     def __init__(self, label: str = "Laser 2 (647 nm)") -> None:
-        # The inner rig-confirmed serial engine. __init__ does NOT open the
-        # serial port — the controller's hardware_init is responsible for
-        # calling open() (mirrors the existing IBeam construction pattern).
+        # The inner serial engine. __init__ does NOT open the serial port —
+        # the controller's hardware_init is responsible for calling open().
         self._ibeam = IBeam()
 
-        # mW-canonical ILaser surface (D-01). The inner IBeam reports
-        # wavelength in nm (647, the recorded capture wavelength — the
-        # physical iBeam Smart 640 diode emits at 640 nm; 647 nm is the
-        # detection/capture wavelength recorded and displayed) and max_power
-        # in µW (150000 = 150 mW, rig-confirmed + `show data` Pmax field);
-        # the adapter converts max_power to mW for the interface.
+        # mW-canonical ILaser surface. The inner IBeam reports wavelength in
+        # nm and max_power in µW; the adapter converts max_power to mW.
         self.label = label
         self.wavelength = self._ibeam.wavelength  # 647 (nm)
         self.max_power = self._ibeam.max_power / 1000.0  # uW -> mW
@@ -467,65 +339,40 @@ class IBeamSmartLaser(ILaser):
         self.error = 0
         self.error_message = ""
 
-        # Lock identity (D-02): the adapter's lock IS the inner IBeam's
-        # lock — the same object, not a new lock. The daemon-thread write
-        # paths acquire self.lasers[i]._lock (the adapter's lock), and the
-        # inner _send_cmd acquires self._lock (the inner engine's lock);
-        # identity guarantees they are the same lock so a daemon write
-        # holding the adapter lock excludes a concurrent _send_cmd
-        # round-trip on the same engine.
+        # Lock identity: the adapter's lock IS the inner IBeam's lock — the
+        # same object, not a new lock, so daemon writes exclude concurrent
+        # _send_cmd round-trips on the same engine.
         self._lock = self._ibeam._lock
 
     def on(self) -> None:
-        """Energize the laser — delegates the serial round-trip to the inner
-        ``IBeam.on()``, then mirrors ``active`` from the inner ``_is_on`` and
-        ``error`` / ``error_message`` from the inner error surface. If the
-        inner ``laser on`` was rejected (``%SYS-E``), the inner engine keeps
-        ``_is_on = False`` and the adapter mirrors ``active = False`` so the
-        GUI never shows the laser as energized when the firmware refused.
-        """
+        """Energize the laser — delegates to ``IBeam.on()``, then mirrors
+        ``active`` and ``error`` / ``error_message`` from the inner engine.
+        If the inner ``laser on`` was rejected, ``active`` stays ``False``."""
         self._ibeam.on()
         self.active = self._ibeam._is_on
         self.error = self._ibeam.error
         self.error_message = self._ibeam.error_message
 
     def open(self) -> None:
-        """Open the inner iBeam serial port (COM4) and enable the configured
-        diode channel. Delegates to ``self._ibeam.open()`` (which also calls
-        ``enable_channel()`` internally) and then mirrors the inner engine's
-        error surface onto the adapter's ``self.error`` / ``self.error_message``
-        so the controller can read the adapter surface uniformly after open
-        — the controller no longer reaches through to ``self._ibeam.error``.
-
-        Replaces the controller's ``self.lasers[1]._ibeam.open()``
-        reach-through; ``MockLaser.open()`` is a no-op so the same
-        controller call site works in demo mode.
-        """
+        """Open the inner iBeam serial port and enable the configured diode
+        channel. Mirrors the inner error surface onto the adapter."""
         self._ibeam.open()
         self.error = self._ibeam.error
         self.error_message = self._ibeam.error_message
 
     def close(self) -> None:
-        """Release the inner iBeam serial port. Delegates to
-        ``self._ibeam.close()`` (which turns the laser off and closes the
-        serial port) and mirrors the inner error surface onto the adapter.
-
-        Replaces the controller's ``self.lasers[1]._ibeam.close()``
-        reach-through; ``MockLaser.close()`` is a no-op so the same
-        controller call site works in demo mode.
-        """
+        """Release the inner iBeam serial port. Mirrors the inner error
+        surface onto the adapter."""
         self._ibeam.close()
         self.error = self._ibeam.error
         self.error_message = self._ibeam.error_message
 
     def off(self) -> None:
-        """Synchronous E-stop kill path (AGENTS.md §2).
+        """Synchronous E-stop kill path.
 
-        Calls ``self._ibeam.off()``, sets ``active = False`` and
-        ``power = 0.0``, and returns ``None`` immediately — no thread/queue
-        offload. The GUI-thread E-stop handler calls this directly;
-        offloading it would break the synchronous-off safety contract for a
-        Class IIIB laser.
+        Sets ``active = False`` and ``power = 0.0``, returns ``None``
+        immediately — no thread/queue offload. Offloading would break the
+        synchronous-off safety contract for a Class IIIB laser.
         """
         self._ibeam.off()
         self.active = False
@@ -534,24 +381,14 @@ class IBeamSmartLaser(ILaser):
     def set_power(self, mw: float) -> None:
         """Set the staged laser power in milliwatts (mW canonical).
 
-        Clamps ``mw`` to ``[0.0, max_power]`` (mW) at the adapter layer
-        (first safety layer, AGENTS.md §2), converts to µW (x 1000), and
-        delegates the serial round-trip to ``self._ibeam.set_power(uw)``.
-        The inner ``IBeam.set_power`` clamps the µW value to its own
-        ``max_power`` independently (second safety layer). On a firmware
-        rejection (inner ``error != 0``) the adapter MUST NOT update
-        ``self.power`` — the inner engine already guards its own ``_power``
-        on the error surface, and the adapter mirrors that guard on the mW
-        side so a failed write does not leave the adapter believing the
-        commanded power was applied.
+        Clamps ``mw`` to ``[0.0, max_power]`` (mW) at the adapter layer (first
+        safety layer), converts to µW, and delegates to ``IBeam.set_power``
+        which clamps µW independently (second safety layer). On a firmware
+        rejection the adapter does NOT update ``self.power``.
         """
         mw = max(0.0, min(mw, self.max_power))
-        # mW -> uW. round() rather than int() so a value like 149.9999 mW
-        # converts to 150000 uW (not 149999) — round-to-nearest is the
-        # correct conversion for a value, vs int() which truncates toward
-        # zero. The sub-uW precision difference is below the diode's
-        # practical resolution and not a safety issue, but round() is more
-        # correct. The inner IBeam.set_power clamp still applies.
+        # mW -> uW. round() rather than int() so 149.9999 mW converts to
+        # 150000 uW (not 149999). The inner IBeam.set_power clamp still applies.
         self._ibeam.set_power(round(mw * 1000))
         if not self._ibeam.error:
             self.power = mw
@@ -559,14 +396,9 @@ class IBeamSmartLaser(ILaser):
     def get_output_power(self) -> float | None:
         """Read the current channel output power in milliwatts (mW).
 
-        Delegates the serial round-trip to the inner
-        ``IBeam.get_output_power()`` (which returns µW and already filters
-        the multi-channel ``show level power`` reply by ``CH{channel}`` —
-        the adapter does NOT re-implement that parse). Returns the µW value
-        divided by 1000.0 (mW), or ``None`` on an inner error (parse
-        failure / firmware rejection) or when the inner method returns
-        ``None`` (no matching ``CH{channel}`` line in the response) so the
-        GUI readback field can distinguish "no reading" from "reading is 0".
+        Delegates to ``IBeam.get_output_power()`` (returns µW) and divides by
+        1000.0. Returns ``None`` on an inner error or when no matching channel
+        line is found in the response.
         """
         uw = self._ibeam.get_output_power()
         if uw is None or self._ibeam.error:

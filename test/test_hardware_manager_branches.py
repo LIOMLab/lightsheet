@@ -19,11 +19,19 @@ import threading
 from unittest.mock import Mock
 
 import pytest
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
 from lightsheet.gui.coordinators.hardware_manager import HardwareManager
-from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
+from lightsheet.hal import (
+    DeviceBundle,
+    MockCamera,
+    MockETLs,
+    MockLaser,
+    MockMotors,
+    MockSigGen,
+)
 
 
 def _make_bundle() -> DeviceBundle:
@@ -35,7 +43,9 @@ def _make_bundle() -> DeviceBundle:
         MockLaser(wavelength=647, max_power_mw=150.0, label="L2"),
     )
     etls = MockETLs()
-    return DeviceBundle(camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers)
+    return DeviceBundle(
+        camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers
+    )
 
 
 def _make_laser(
@@ -82,7 +92,10 @@ def _make_hw(
     if estop:
         shell.estop_event.set()
     hw = HardwareManager(bundle, shell)
-    hw.lasers = [laser1 or _make_laser("L1"), laser2 or _make_laser("L2", max_power=150.0)]
+    hw.lasers = [
+        laser1 or _make_laser("L1"),
+        laser2 or _make_laser("L2", max_power=150.0),
+    ]
     return hw, shell
 
 
@@ -92,7 +105,7 @@ def _make_hw(
 def test_write_laser1_power_skips_when_estop_set() -> None:
     """estop_event set at top-of-method -> return before HAL write."""
     laser1 = _make_laser(active=True)
-    hw, shell = _make_hw(laser1=laser1, estop=True)
+    hw, _shell = _make_hw(laser1=laser1, estop=True)
     hw._write_laser1_power(50.0)
     laser1.set_power.assert_not_called()
 
@@ -100,14 +113,14 @@ def test_write_laser1_power_skips_when_estop_set() -> None:
 def test_write_laser1_power_skips_when_laser_inactive() -> None:
     """laser.active False -> no set_power call (the if-active branch)."""
     laser1 = _make_laser(active=False)
-    hw, shell = _make_hw(laser1=laser1)
+    hw, _shell = _make_hw(laser1=laser1)
     hw._write_laser1_power(50.0)
     laser1.set_power.assert_not_called()
 
 
 def test_write_laser1_power_writes_when_active() -> None:
     laser1 = _make_laser(active=True)
-    hw, shell = _make_hw(laser1=laser1)
+    hw, _shell = _make_hw(laser1=laser1)
     hw._write_laser1_power(50.0)
     # 50% of 300 = 150 mW
     laser1.set_power.assert_called_once_with(150.0)
@@ -120,9 +133,8 @@ def test_write_laser1_power_zeroes_mw_when_estop_set_mid_write() -> None:
     # Set estop AFTER the top-of-method check passes — patch is_set to
     # return False on first call, True on second.
     call_count = [0]
-    orig_is_set = shell.estop_event.is_set
 
-    def side_effect():
+    def side_effect() -> bool:
         call_count[0] += 1
         return call_count[0] >= 2  # False first, True second
 
@@ -137,7 +149,7 @@ def test_write_laser1_power_surfaces_error_via_sig_message() -> None:
     laser1 = _make_laser(active=True)
     hw, shell = _make_hw(laser1=laser1)
     # set_power sets error=1
-    def set_power_side_effect(mw):
+    def set_power_side_effect(mw: float) -> None:
         laser1.error = 1
         laser1.error_message = "DAQ write failed"
     laser1.set_power.side_effect = set_power_side_effect
@@ -151,14 +163,14 @@ def test_write_laser1_power_surfaces_error_via_sig_message() -> None:
 
 def test_write_laser2_power_skips_when_estop_set() -> None:
     laser2 = _make_laser("L2", max_power=150.0, active=True)
-    hw, shell = _make_hw(laser2=laser2, estop=True)
+    hw, _shell = _make_hw(laser2=laser2, estop=True)
     hw._write_laser2_power(50.0)
     laser2.set_power.assert_not_called()
 
 
 def test_write_laser2_power_writes_when_active() -> None:
     laser2 = _make_laser("L2", max_power=150.0, active=True)
-    hw, shell = _make_hw(laser2=laser2)
+    hw, _shell = _make_hw(laser2=laser2)
     hw._write_laser2_power(50.0)
     # 50% of 150 = 75 mW
     laser2.set_power.assert_called_once_with(75.0)
@@ -167,7 +179,7 @@ def test_write_laser2_power_writes_when_active() -> None:
 def test_write_laser2_power_surfaces_error_via_sig_message() -> None:
     laser2 = _make_laser("L2", max_power=150.0, active=True)
     hw, shell = _make_hw(laser2=laser2)
-    def set_power_side_effect(mw):
+    def set_power_side_effect(mw: float) -> None:
         laser2.error = 1
         laser2.error_message = "iBeam write failed"
     laser2.set_power.side_effect = set_power_side_effect
@@ -182,7 +194,7 @@ def test_write_laser2_power_surfaces_error_via_sig_message() -> None:
 def test_toggle_laser1_off_when_active() -> None:
     """laser1 active -> .off() called (the if-active branch)."""
     laser1 = _make_laser(active=True)
-    hw, shell = _make_hw(laser1=laser1)
+    hw, _shell = _make_hw(laser1=laser1)
     hw._toggle_laser1()
     laser1.off.assert_called_once()
     laser1.on.assert_not_called()
@@ -191,9 +203,9 @@ def test_toggle_laser1_off_when_active() -> None:
 def test_toggle_laser1_on_when_inactive_applies_staged_power() -> None:
     """laser1 inactive -> .on() called + _write_laser1_power applies staged pct."""
     laser1 = _make_laser(active=False)
-    hw, shell = _make_hw(laser1=laser1, pct1=50.0)
+    hw, _shell = _make_hw(laser1=laser1, pct1=50.0)
     # After .on(), active becomes True so the write path runs.
-    def on_side_effect():
+    def on_side_effect() -> None:
         laser1.active = True
     laser1.on.side_effect = on_side_effect
     hw._toggle_laser1()
@@ -206,7 +218,7 @@ def test_toggle_laser1_error_after_toggle_emits_sig_message() -> None:
     """laser.error set after on/off -> sig_message emit + error cleared."""
     laser1 = _make_laser(active=False)
     hw, shell = _make_hw(laser1=laser1)
-    def on_side_effect():
+    def on_side_effect() -> None:
         laser1.error = 1
         laser1.error_message = "on failed"
         laser1.active = False
@@ -221,7 +233,7 @@ def test_toggle_laser1_estop_mid_toggle_forces_off() -> None:
     laser1 = _make_laser(active=False)
     hw, shell = _make_hw(laser1=laser1)
     # estop fires after .on() but before the staged-power write.
-    def on_side_effect():
+    def on_side_effect() -> None:
         laser1.active = True
         shell.estop_event.set()
     laser1.on.side_effect = on_side_effect
@@ -240,7 +252,7 @@ def test_toggle_laser2_off_when_active_surfaces_off_error() -> None:
     """laser2 active -> .off() called; if .error set after, sig_message emit."""
     laser2 = _make_laser("L2", active=True)
     hw, shell = _make_hw(laser2=laser2)
-    def off_side_effect():
+    def off_side_effect() -> None:
         laser2.error = 1
         laser2.error_message = "off failed"
     laser2.off.side_effect = off_side_effect
@@ -252,8 +264,8 @@ def test_toggle_laser2_off_when_active_surfaces_off_error() -> None:
 
 def test_toggle_laser2_on_when_inactive_applies_staged_power() -> None:
     laser2 = _make_laser("L2", max_power=150.0, active=False)
-    hw, shell = _make_hw(laser2=laser2, pct2=50.0)
-    def on_side_effect():
+    hw, _shell = _make_hw(laser2=laser2, pct2=50.0)
+    def on_side_effect() -> None:
         laser2.active = True
     laser2.on.side_effect = on_side_effect
     hw._toggle_laser2()
@@ -266,7 +278,7 @@ def test_toggle_laser2_on_error_emits_sig_message_and_returns() -> None:
     """laser2.on() sets error -> sig_message emit + early return (no staged power)."""
     laser2 = _make_laser("L2", max_power=150.0, active=False)
     hw, shell = _make_hw(laser2=laser2)
-    def on_side_effect():
+    def on_side_effect() -> None:
         laser2.error = 1
         laser2.error_message = "on failed"
         laser2.active = False
@@ -291,7 +303,7 @@ def test_toggle_laser2_estop_before_energize_skips_on() -> None:
     # only via the else (inactive) branch. Set estop just before the
     # inner check by patching is_set.
     call_count = [0]
-    def is_set_side():
+    def is_set_side() -> bool:
         call_count[0] += 1
         # First call (top-of-method) False; second call (inner re-check) True.
         return call_count[0] >= 2
@@ -306,8 +318,8 @@ def test_toggle_laser2_write_path_runs_after_on() -> None:
     (line 279) sees error=0, so the forced-off branch (line 280) is not
     reached — this test covers the happy-path write after a successful on."""
     laser2 = _make_laser("L2", max_power=150.0, active=False)
-    hw, shell = _make_hw(laser2=laser2, pct2=50.0)
-    def on_side_effect():
+    hw, _shell = _make_hw(laser2=laser2, pct2=50.0)
+    def on_side_effect() -> None:
         laser2.active = True
     laser2.on.side_effect = on_side_effect
     hw._toggle_laser2()
@@ -321,7 +333,7 @@ def test_toggle_laser2_write_path_runs_after_on() -> None:
 
 def test_start_lasers_auto_laser2_writes_and_energizes() -> None:
     laser2 = _make_laser("L2", max_power=150.0, active=False)
-    hw, shell = _make_hw(laser2=laser2, auto2=True, pct2=50.0)
+    hw, _shell = _make_hw(laser2=laser2, auto2=True, pct2=50.0)
     hw.start_lasers()
     # 50% of 150 = 75 mW
     laser2.set_power.assert_called_once_with(75.0)
@@ -331,7 +343,7 @@ def test_start_lasers_auto_laser2_writes_and_energizes() -> None:
 def test_start_lasers_auto_laser2_surfaces_on_error() -> None:
     laser2 = _make_laser("L2", max_power=150.0, active=False)
     hw, shell = _make_hw(laser2=laser2, auto2=True, pct2=50.0)
-    def on_side_effect():
+    def on_side_effect() -> None:
         laser2.error = 1
         laser2.error_message = "on failed"
     laser2.on.side_effect = on_side_effect
@@ -343,7 +355,7 @@ def test_start_lasers_auto_laser2_surfaces_on_error() -> None:
 def test_start_lasers_auto_laser1_surfaces_on_error() -> None:
     laser1 = _make_laser("L1", active=False)
     hw, shell = _make_hw(laser1=laser1, auto1=True, pct1=50.0)
-    def on_side_effect():
+    def on_side_effect() -> None:
         laser1.error = 1
         laser1.error_message = "on failed"
     laser1.on.side_effect = on_side_effect
@@ -354,14 +366,14 @@ def test_start_lasers_auto_laser1_surfaces_on_error() -> None:
 
 def test_stop_lasers_auto_laser1_off() -> None:
     laser1 = _make_laser("L1", active=True)
-    hw, shell = _make_hw(laser1=laser1, auto1=True)
+    hw, _shell = _make_hw(laser1=laser1, auto1=True)
     hw.stop_lasers()
     laser1.off.assert_called_once()
 
 
 def test_stop_lasers_auto_laser2_off() -> None:
     laser2 = _make_laser("L2", active=True)
-    hw, shell = _make_hw(laser2=laser2, auto2=True)
+    hw, _shell = _make_hw(laser2=laser2, auto2=True)
     hw.stop_lasers()
     laser2.off.assert_called_once()
 
@@ -369,7 +381,7 @@ def test_stop_lasers_auto_laser2_off() -> None:
 def test_stop_lasers_auto_laser1_surfaces_off_error() -> None:
     laser1 = _make_laser("L1", active=True)
     hw, shell = _make_hw(laser1=laser1, auto1=True)
-    def off_side_effect():
+    def off_side_effect() -> None:
         laser1.error = 1
         laser1.error_message = "off failed"
     laser1.off.side_effect = off_side_effect
@@ -381,7 +393,7 @@ def test_stop_lasers_auto_laser1_surfaces_off_error() -> None:
 def test_stop_lasers_auto_laser2_surfaces_off_error() -> None:
     laser2 = _make_laser("L2", active=True)
     hw, shell = _make_hw(laser2=laser2, auto2=True)
-    def off_side_effect():
+    def off_side_effect() -> None:
         laser2.error = 1
         laser2.error_message = "off failed"
     laser2.off.side_effect = off_side_effect
@@ -426,7 +438,7 @@ def test_poll_laser2_status_gated_skips_when_lock_held() -> None:
     held = threading.Event()
     release = threading.Event()
 
-    def hold_lock():
+    def hold_lock() -> None:
         with laser2._lock:
             held.set()
             release.wait(timeout=2.0)
@@ -456,7 +468,7 @@ def test_poll_laser2_status_gated_proceeds_when_lock_free() -> None:
 def test_refresh_laser2_readback_async_skips_when_thread_alive() -> None:
     """When a prior readback thread is still running, the async refresh is a no-op."""
     laser2 = _make_laser("L2")
-    hw, shell = _make_hw(laser2=laser2)
+    hw, _shell = _make_hw(laser2=laser2)
     # Plant a fake running QThread.
     fake_thread = Mock()
     fake_thread.isRunning.return_value = True
@@ -466,7 +478,7 @@ def test_refresh_laser2_readback_async_skips_when_thread_alive() -> None:
     assert hw._readback_thread is fake_thread
 
 
-def test_refresh_laser2_readback_async_starts_thread_when_none(qtbot) -> None:
+def test_refresh_laser2_readback_async_starts_thread_when_none(qtbot: QtBot) -> None:
     """When no prior thread exists, a new QThread is started."""
     laser2 = _make_laser("L2", output_power=10.0)
     hw, shell = _make_hw(laser2=laser2)
@@ -498,7 +510,7 @@ def test_refresh_laser_readback_skips_when_lock_held() -> None:
     held = threading.Event()
     release = threading.Event()
 
-    def hold_lock():
+    def hold_lock() -> None:
         with laser1._lock:
             held.set()
             release.wait(timeout=2.0)

@@ -13,16 +13,30 @@ kill path stays responsive.
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import pytest
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
 from _helpers.controller_fixture import make_controller
 
+if TYPE_CHECKING:
+    from lightsheet.gui.panels.acquisition_table_manager import (
+        AcquisitionTableManager,
+    )
+    from lightsheet.gui.workers import StackWorker
 
-def _add_valid_row(mgr, start, end, step, name):
+
+def _add_valid_row(
+    mgr: AcquisitionTableManager,
+    start: float,
+    end: float,
+    step: float,
+    name: str,
+) -> int:
     """Add a valid queue row. ``start``/``end`` are in µm (the internal
     unit the assertions compare against — ``row.start``/``row.end`` are µm);
     they are converted to mm for the cell text (the display unit). ``step``
@@ -36,24 +50,24 @@ def _add_valid_row(mgr, start, end, step, name):
     return row
 
 
-def _patch_worker_run(record):
+def _patch_worker_run(record: list[float]) -> Any:
     """Patch StackWorker.run to record the configured starting plane + emit
     finished. The fake runs on the worker QThread."""
     from lightsheet.gui.workers import StackWorker
 
-    def _fake_run(self):
+    def _fake_run(self: StackWorker) -> None:
         record.append(self._shell.stack_starting_plane)
         self.finished.emit()
 
     return patch.object(StackWorker, "run", _fake_run)
 
 
-def _patch_worker_run_slow(record, delay_s=0.1):
+def _patch_worker_run_slow(record: list[float], delay_s: float = 0.1) -> Any:
     """Like _patch_worker_run but sleeps so the QEventLoop wait is long
     enough for a QTimer probe to fire (GUI-responsiveness test)."""
     from lightsheet.gui.workers import StackWorker
 
-    def _fake_run(self):
+    def _fake_run(self: StackWorker) -> None:
         record.append(self._shell.stack_starting_plane)
         time.sleep(delay_s)
         self.finished.emit()
@@ -61,7 +75,9 @@ def _patch_worker_run_slow(record, delay_s=0.1):
     return patch.object(StackWorker, "run", _fake_run)
 
 
-def test_queue_executes_rows_in_order(qtbot, request) -> None:
+def test_queue_executes_rows_in_order(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """Test 1: Start Queue with 3 rows executes them in order."""
     ctrl, _ = make_controller(qtbot, request)
     mgr = ctrl.stack_panel.table_manager
@@ -78,7 +94,9 @@ def test_queue_executes_rows_in_order(qtbot, request) -> None:
     )
 
 
-def test_queue_configures_stack_params_per_row(qtbot, request) -> None:
+def test_queue_configures_stack_params_per_row(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """Test 2: each row configures stack_starting_plane/ending_plane/
     number_of_planes from the row's start/end/step before running."""
     ctrl, _ = make_controller(qtbot, request)
@@ -89,7 +107,7 @@ def test_queue_configures_stack_params_per_row(qtbot, request) -> None:
     seen: list[tuple] = []
     from lightsheet.gui.workers import StackWorker
 
-    def _fake_run(self):
+    def _fake_run(self: StackWorker) -> None:
         seen.append((
             self._shell.stack_starting_plane,
             self._shell.stack_ending_plane,
@@ -102,7 +120,9 @@ def test_queue_configures_stack_params_per_row(qtbot, request) -> None:
     assert seen == [(500.0, 600.0, 11), (700.0, 702.0, 3)]
 
 
-def test_queue_mode_badge_shows_row_index(qtbot, request) -> None:
+def test_queue_mode_badge_shows_row_index(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """Test 3: the mode badge shows 'STACK RUNNING' with the row index
     during queue execution."""
     ctrl, _ = make_controller(qtbot, request)
@@ -114,7 +134,7 @@ def test_queue_mode_badge_shows_row_index(qtbot, request) -> None:
     from PySide6.QtCore import QTimer
     badge_texts: list[str] = []
 
-    def _probe():
+    def _probe() -> None:
         badge_texts.append(ctrl.ui.label_modeBadge.text())
 
     # Schedule the probe to fire during the first row's QEventLoop wait.
@@ -129,7 +149,9 @@ def test_queue_mode_badge_shows_row_index(qtbot, request) -> None:
     )
 
 
-def test_queue_moves_stage_to_row_start(qtbot, request) -> None:
+def test_queue_moves_stage_to_row_start(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """Test 4: between rows, the stage moves to the next row's start
     position (the operator does NOT re-drive the stage)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -140,14 +162,13 @@ def test_queue_moves_stage_to_row_start(qtbot, request) -> None:
     positions: list[float] = []
     orig = ctrl.motors.horizontal.move_absolute_position
 
-    def _record(pos, units):
+    def _record(pos: float, units: Any) -> Any:
         positions.append(pos)
         return orig(pos, units)
 
     with patch.object(ctrl.motors.horizontal, "move_absolute_position",
-                      side_effect=_record):
-        with _patch_worker_run([]):
-            mgr._start_queue()
+                      side_effect=_record), _patch_worker_run([]):
+        mgr._start_queue()
     # The queue moves to each row's start (1000, 3000) before the worker
     # runs. The worker's per-plane moves also call move_absolute_position,
     # but the row-start moves must include 1000 and 3000.
@@ -155,7 +176,7 @@ def test_queue_moves_stage_to_row_start(qtbot, request) -> None:
     assert 3000.0 in positions
 
 
-def test_estop_aborts_queue(qtbot, request) -> None:
+def test_estop_aborts_queue(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     """Test 5: E-stop during queue execution aborts the current stack +
     stops the queue (no more rows execute)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -168,7 +189,7 @@ def test_estop_aborts_queue(qtbot, request) -> None:
 
     from lightsheet.gui.workers import StackWorker
 
-    def _fake_run(self):
+    def _fake_run(self: StackWorker) -> None:
         executed.append(self._shell.stack_starting_plane)
         # Trigger E-stop after the first row completes.
         if len(executed) == 1:
@@ -185,7 +206,9 @@ def test_estop_aborts_queue(qtbot, request) -> None:
     ctrl.estop_event.clear()
 
 
-def test_no_auto_resume_after_estop(qtbot, request) -> None:
+def test_no_auto_resume_after_estop(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """Test 6: after E-stop, the queue does not auto-resume; the operator
     must re-arm + manually restart."""
     ctrl, _ = make_controller(qtbot, request)
@@ -196,7 +219,7 @@ def test_no_auto_resume_after_estop(qtbot, request) -> None:
     executed: list[float] = []
     from lightsheet.gui.workers import StackWorker
 
-    def _fake_run(self):
+    def _fake_run(self: StackWorker) -> None:
         executed.append(self._shell.stack_starting_plane)
         if len(executed) == 1:
             ctrl.estop_event.set()
@@ -210,7 +233,7 @@ def test_no_auto_resume_after_estop(qtbot, request) -> None:
     ctrl.estop_event.clear()
 
 
-def test_out_of_range_row_caught(qtbot, request) -> None:
+def test_out_of_range_row_caught(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     """Test 7: a row whose range exceeds travel limits is caught (the
     table validation flags it; if it slips, the worker's per-plane
     ValueError catch aborts that row)."""
@@ -235,7 +258,7 @@ def test_out_of_range_row_caught(qtbot, request) -> None:
     assert not mgr.start_queue_enabled()
 
 
-def test_error_copy_on_no_rows(qtbot, request) -> None:
+def test_error_copy_on_no_rows(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     """Test 8: the error-state copy renders if start-attempt fails (no
     rows)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -249,7 +272,9 @@ def test_error_copy_on_no_rows(qtbot, request) -> None:
     )
 
 
-def test_queue_uses_qeventloop_not_threading_wait(qtbot, request) -> None:
+def test_queue_uses_qeventloop_not_threading_wait(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """Test 9: the queue loop uses QEventLoop with quit() connected to the
     worker's finished signal — NOT threading.Event.wait()."""
     ctrl, _ = make_controller(qtbot, request)
@@ -260,23 +285,24 @@ def test_queue_uses_qeventloop_not_threading_wait(qtbot, request) -> None:
     used_qeventloop = {"value": False}
     used_threading_wait = {"value": False}
 
-    from PySide6.QtCore import QEventLoop
     import threading
+
+    from PySide6.QtCore import QEventLoop
 
     orig_eventloop_exec = QEventLoop.exec
     orig_event_wait = threading.Event.wait
 
-    def _spy_exec(self, *a, **k):
+    def _spy_exec(self: Any, *args: Any, **kwargs: Any) -> Any:
         used_qeventloop["value"] = True
-        return orig_eventloop_exec(self, *a, **k)
+        return orig_eventloop_exec(self, *args, **kwargs)
 
-    def _spy_wait(self, *a, **k):
+    def _spy_wait(self: Any, *args: Any, **kwargs: Any) -> Any:
         # Only flag if called on the estop_event from the GUI thread during
         # the queue (the worker thread's internal polling uses it too, but
         # that runs on the worker thread — here we only care that the queue
         # loop on the GUI thread does not call wait).
         used_threading_wait["value"] = True
-        return orig_event_wait(self, *a, **k)
+        return orig_event_wait(self, *args, **kwargs)
 
     with patch.object(QEventLoop, "exec", _spy_exec), \
          patch.object(threading.Event, "wait", _spy_wait), \
@@ -287,10 +313,13 @@ def test_queue_uses_qeventloop_not_threading_wait(qtbot, request) -> None:
     )
 
 
-def test_worker_stays_threading_no_qthread_in_table(qtbot, request) -> None:
+def test_worker_stays_threading_no_qthread_in_table(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """Test 10: no new worker bypasses the per-plane ValueError catch; the
     queue re-uses the existing StackWorker (which has the catch)."""
     import inspect
+
     from lightsheet.gui.panels.acquisition_table_manager import AcquisitionTableManager
     from lightsheet.gui.workers import StackWorker
 
@@ -304,7 +333,9 @@ def test_worker_stays_threading_no_qthread_in_table(qtbot, request) -> None:
     assert "ValueError" in worker_src
 
 
-def test_gui_thread_responsive_during_queue(qtbot, request) -> None:
+def test_gui_thread_responsive_during_queue(
+    qtbot: QtBot, request: pytest.FixtureRequest
+) -> None:
     """Test 11: GUI thread stays responsive during queue execution — a
     QTimer.singleShot fires within 200ms while a multi-row queue is
     running (the QEventLoop non-blocking wait keeps the event loop
@@ -318,7 +349,7 @@ def test_gui_thread_responsive_during_queue(qtbot, request) -> None:
     from PySide6.QtCore import QTimer
     probe_fired = {"value": False}
 
-    def _probe():
+    def _probe() -> None:
         probe_fired["value"] = True
 
     # Schedule the probe before the queue starts; it must fire during the

@@ -23,18 +23,30 @@ Runs headless on Mac via ``QT_QPA_PLATFORM=offscreen`` (set by conftest).
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
 from _helpers.controller_fixture import make_controller
 
+if TYPE_CHECKING:
+    from PySide6.QtWidgets import QLabel, QToolBar
 
-def _make(qtbot, request):
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+    from lightsheet.hal import DeviceBundle
+
+
+def _make(
+    qtbot: QtBot, request: FixtureRequest
+) -> tuple[Controller_MainWindow, DeviceBundle]:
     return make_controller(qtbot, request)
 
 
-def _badge_is_in_toolbar(badge, toolbar) -> bool:
+def _badge_is_in_toolbar(badge: QLabel, toolbar: QToolBar) -> bool:
     """Return True if ``badge`` is a descendant of ``toolbar``."""
     parent = badge.parent()
     while parent is not None:
@@ -44,7 +56,9 @@ def _badge_is_in_toolbar(badge, toolbar) -> bool:
     return False
 
 
-def test_mode_badge_exists_in_estop_toolbar(qtbot, request) -> None:
+def test_mode_badge_exists_in_estop_toolbar(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """A QLabel objectName label_modeBadge exists in the E-stop toolbar."""
     ctrl, _ = _make(qtbot, request)
     assert hasattr(ctrl.ui, "label_modeBadge"), (
@@ -58,7 +72,7 @@ def test_mode_badge_exists_in_estop_toolbar(qtbot, request) -> None:
     )
 
 
-def test_mode_badge_initial_idle(qtbot, request) -> None:
+def test_mode_badge_initial_idle(qtbot: QtBot, request: FixtureRequest) -> None:
     """Initial state (idle) — badge text is 'IDLE'."""
     ctrl, _ = _make(qtbot, request)
     assert ctrl.ui.label_modeBadge.text() == "IDLE", (
@@ -67,7 +81,7 @@ def test_mode_badge_initial_idle(qtbot, request) -> None:
     )
 
 
-def test_mode_badge_preview(qtbot, request) -> None:
+def test_mode_badge_preview(qtbot: QtBot, request: FixtureRequest) -> None:
     """When preview starts — badge text is 'PREVIEW'."""
     ctrl, _ = _make(qtbot, request)
     ctrl._update_mode_badge("PREVIEW")
@@ -77,7 +91,7 @@ def test_mode_badge_preview(qtbot, request) -> None:
     )
 
 
-def test_mode_badge_live(qtbot, request) -> None:
+def test_mode_badge_live(qtbot: QtBot, request: FixtureRequest) -> None:
     """When live starts — badge text is 'LIVE'."""
     ctrl, _ = _make(qtbot, request)
     ctrl._update_mode_badge("LIVE")
@@ -87,7 +101,7 @@ def test_mode_badge_live(qtbot, request) -> None:
     )
 
 
-def test_mode_badge_single(qtbot, request) -> None:
+def test_mode_badge_single(qtbot: QtBot, request: FixtureRequest) -> None:
     """When single acquisition starts — badge text is 'SINGLE'."""
     ctrl, _ = _make(qtbot, request)
     ctrl._update_mode_badge("SINGLE")
@@ -97,7 +111,7 @@ def test_mode_badge_single(qtbot, request) -> None:
     )
 
 
-def test_mode_badge_stack_running(qtbot, request) -> None:
+def test_mode_badge_stack_running(qtbot: QtBot, request: FixtureRequest) -> None:
     """When stack starts — badge text is 'STACK RUNNING — plane 1/{N}'."""
     ctrl, _ = _make(qtbot, request)
     ctrl.number_of_planes = 240
@@ -109,7 +123,7 @@ def test_mode_badge_stack_running(qtbot, request) -> None:
     )
 
 
-def test_mode_badge_progress_mirror(qtbot, request) -> None:
+def test_mode_badge_progress_mirror(qtbot: QtBot, request: FixtureRequest) -> None:
     """During a stack run, sig_progress_update updates the badge to
     'STACK RUNNING — plane {n}/{N}' mirroring the progress bar value."""
     ctrl, _ = _make(qtbot, request)
@@ -124,7 +138,9 @@ def test_mode_badge_progress_mirror(qtbot, request) -> None:
     )
 
 
-def test_mode_badge_reverts_to_idle_on_complete(qtbot, request) -> None:
+def test_mode_badge_reverts_to_idle_on_complete(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """When a run completes/aborts — badge text reverts to 'IDLE'."""
     ctrl, _ = _make(qtbot, request)
     ctrl._update_mode_badge("STACK", "RUNNING", plane=1, total=240)
@@ -136,7 +152,7 @@ def test_mode_badge_reverts_to_idle_on_complete(qtbot, request) -> None:
     )
 
 
-def test_mode_badge_no_accent_color(qtbot, request) -> None:
+def test_mode_badge_no_accent_color(qtbot: QtBot, request: FixtureRequest) -> None:
     """The badge uses QDarkStyle default text color + bold weight (no
     accent color — no #FF/#34/#8E in the badge stylesheet)."""
     ctrl, _ = _make(qtbot, request)
@@ -150,7 +166,7 @@ def test_mode_badge_no_accent_color(qtbot, request) -> None:
         )
 
 
-def test_mode_badge_bold_weight(qtbot, request) -> None:
+def test_mode_badge_bold_weight(qtbot: QtBot, request: FixtureRequest) -> None:
     """The badge uses bold font weight (the QDarkStyle default text color
     with bold weight, matching the existing status-label pattern)."""
     ctrl, _ = _make(qtbot, request)

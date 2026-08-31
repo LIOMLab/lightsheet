@@ -72,6 +72,7 @@ import csv
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 
@@ -305,7 +306,7 @@ def _write_csv(
     output: str, pairs: list[tuple[float, float, str]]
 ) -> None:
     """Write the (V, mW, direction) rows to ``output`` as CSV."""
-    with open(output, "w", newline="") as f:
+    with Path(output).open("w", newline="") as f:
         f.write(
             f"# Laser 1 V->mW calibration sweep (v4 auto, HAL PM100D) - "
             f"{datetime.now().isoformat()}\n"

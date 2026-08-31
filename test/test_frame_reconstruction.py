@@ -26,7 +26,14 @@ from PySide6.QtCore import QObject
 pytest.importorskip("PySide6")  # FrameSaverController wraps QObjects
 
 from lightsheet.gui.coordinators.frame_saver_controller import FrameSaverController
-from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
+from lightsheet.hal import (
+    DeviceBundle,
+    MockCamera,
+    MockETLs,
+    MockLaser,
+    MockMotors,
+    MockSigGen,
+)
 
 
 class _ShellStandin(QObject):
@@ -59,7 +66,10 @@ def _make_bundle() -> DeviceBundle:
         MockLaser(wavelength=647, max_power_mw=150.0, label="Laser 2 (647 nm)"),
     )
     etls = MockETLs()
-    return DeviceBundle(camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers)
+    return DeviceBundle(
+        camera=camera, siggen=siggen,
+        motors=motors, etls=etls, lasers=lasers,
+    )
 
 
 def _make_fs() -> FrameSaverController:
@@ -148,7 +158,8 @@ def test_reconstruct_frame_multi_tile_places_tile_slices_correctly() -> None:
     for t in range(tile_count):
         band = out[:, t * tile_width : (t + 1) * tile_width]
         assert np.all(band == (t + 1) * 100), (
-            f"tile {t} band expected all {(t + 1) * 100}, got min={band.min()} max={band.max()}"
+            f"tile {t} band expected all {(t + 1) * 100}, "
+            f"got min={band.min()} max={band.max()}"
         )
 
 

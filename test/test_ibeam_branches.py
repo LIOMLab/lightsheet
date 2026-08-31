@@ -153,7 +153,7 @@ def test_enable_channel_serial_exception_sets_error() -> None:
 
 def test_get_output_power_parses_mw_value() -> None:
     """get_output_power parses 'CH1, PWR: 75.000 mW' -> 75000 µW (line 318-319)."""
-    ib, mock_ser = _make_open_ibeam(
+    ib, _mock_ser = _make_open_ibeam(
         readline_side_effect=[
             b"CH1, PWR: 75.000 mW\r\n",
             b"[OK]\r\n",
@@ -165,7 +165,7 @@ def test_get_output_power_parses_mw_value() -> None:
 
 def test_get_output_power_parses_uw_value() -> None:
     """get_output_power parses 'CH1, PWR: 5000 uW' -> 5000 µW (line 320-321)."""
-    ib, mock_ser = _make_open_ibeam(
+    ib, _mock_ser = _make_open_ibeam(
         readline_side_effect=[
             b"CH1, PWR: 5000 uW\r\n",
             b"[OK]\r\n",
@@ -178,7 +178,7 @@ def test_get_output_power_parses_uw_value() -> None:
 def test_get_output_power_malformed_line_returns_none() -> None:
     """A malformed PWR line (ValueError/IndexError) -> break -> None
     (lines 322-324)."""
-    ib, mock_ser = _make_open_ibeam(
+    ib, _mock_ser = _make_open_ibeam(
         readline_side_effect=[
             b"CH1, PWR: garbage\r\n",
             b"[OK]\r\n",
@@ -192,7 +192,7 @@ def test_get_output_power_unknown_unit_continues_loop_returns_none() -> None:
     """A CH line with an unknown unit (neither 'mW' nor 'uW') -> neither
     return fires -> for loop continues -> no matching line -> None
     (branch 320->310)."""
-    ib, mock_ser = _make_open_ibeam(
+    ib, _mock_ser = _make_open_ibeam(
         readline_side_effect=[
             b"CH1, PWR: 75.000 nW\r\n",  # unknown unit
             b"[OK]\r\n",
@@ -216,7 +216,7 @@ def test_get_output_power_serial_exception_returns_none() -> None:
 
 def test_is_enabled_returns_true_on_on() -> None:
     """is_enabled() with 'ON' line returns True (line 340-341)."""
-    ib, mock_ser = _make_open_ibeam(
+    ib, _mock_ser = _make_open_ibeam(
         readline_side_effect=[
             b"ON\r\n",
             b"[OK]\r\n",
@@ -227,7 +227,7 @@ def test_is_enabled_returns_true_on_on() -> None:
 
 def test_is_enabled_returns_false_on_off() -> None:
     """is_enabled() with 'OFF' line returns False (line 342-343)."""
-    ib, mock_ser = _make_open_ibeam(
+    ib, _mock_ser = _make_open_ibeam(
         readline_side_effect=[
             b"OFF\r\n",
             b"[OK]\r\n",
@@ -239,7 +239,7 @@ def test_is_enabled_returns_false_on_off() -> None:
 def test_is_enabled_returns_false_on_unknown_lines() -> None:
     """is_enabled() with neither ON nor OFF -> loop exhausts -> False
     (line 342->339 continuation + line 348)."""
-    ib, mock_ser = _make_open_ibeam(
+    ib, _mock_ser = _make_open_ibeam(
         readline_side_effect=[
             b"UNKNOWN\r\n",
             b"[OK]\r\n",

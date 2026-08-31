@@ -13,13 +13,17 @@ These tests construct a real ``Controller_MainWindow`` via
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
 
-def _write_hdf5(path, datasets: dict[str, np.ndarray]) -> None:
+def _write_hdf5(path: Path, datasets: dict[str, np.ndarray]) -> None:
     import h5py
 
     with h5py.File(path, "w") as f:
@@ -28,7 +32,10 @@ def _write_hdf5(path, datasets: dict[str, np.ndarray]) -> None:
 
 
 def _write_zarr_store(
-    path, data: np.ndarray, n_channels: int = 1, with_acquisition: bool = True
+    path: Path,
+    data: np.ndarray,
+    n_channels: int = 1,
+    with_acquisition: bool = True,
 ) -> None:
     """Write a minimal (c, z, y, x) OME-Zarr L0 array plus an
     /acquisition group with the scan metadata attrs the panel reads
@@ -44,7 +51,9 @@ def _write_zarr_store(
         acq.attrs["sample_rate"] = 100000.0
 
 
-def test_list_hdf5_datasets(qtbot, request, tmp_path) -> None:
+def test_list_hdf5_datasets(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+) -> None:
     """_list_hdf5_datasets returns the top-level dataset names."""
     from _helpers.controller_fixture import make_controller
 
@@ -61,7 +70,9 @@ def test_list_hdf5_datasets(qtbot, request, tmp_path) -> None:
     assert names == ["reconstructed_frame001", "reconstructed_frame002"], names
 
 
-def test_list_zarr_datasets_single_channel(qtbot, request, tmp_path) -> None:
+def test_list_zarr_datasets_single_channel(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+) -> None:
     """_list_zarr_datasets for a (1, z, y, x) store returns plane_NNNN
     labels (one per plane), matching the HDF5 reconstructed_frameNNN UX."""
     from _helpers.controller_fixture import make_controller
@@ -77,7 +88,9 @@ def test_list_zarr_datasets_single_channel(qtbot, request, tmp_path) -> None:
     assert labels == ["plane_0001", "plane_0002", "plane_0003"], labels
 
 
-def test_list_zarr_datasets_multi_channel(qtbot, request, tmp_path) -> None:
+def test_list_zarr_datasets_multi_channel(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+) -> None:
     """_list_zarr_datasets for a (2, z, y, x) store returns
     chN_plane_NNNN labels so the operator can view any (channel, plane)."""
     from _helpers.controller_fixture import make_controller
@@ -96,7 +109,9 @@ def test_list_zarr_datasets_multi_channel(qtbot, request, tmp_path) -> None:
     ], labels
 
 
-def test_read_hdf5_dataset_returns_data_and_attrs(qtbot, request, tmp_path) -> None:
+def test_read_hdf5_dataset_returns_data_and_attrs(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+) -> None:
     """_read_hdf5_dataset returns (data, attrs) for the named dataset."""
     from _helpers.controller_fixture import make_controller
 
@@ -112,7 +127,9 @@ def test_read_hdf5_dataset_returns_data_and_attrs(qtbot, request, tmp_path) -> N
     assert isinstance(attrs, dict)
 
 
-def test_read_zarr_dataset_single_channel(qtbot, request, tmp_path) -> None:
+def test_read_zarr_dataset_single_channel(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+) -> None:
     """_read_zarr_dataset returns the (y, x) slice for plane_NNNN from
     the L0 (1, z, y, x) array, with the correct pixel values."""
     from _helpers.controller_fixture import make_controller
@@ -133,7 +150,9 @@ def test_read_zarr_dataset_single_channel(qtbot, request, tmp_path) -> None:
     assert attrs.get("exposure_time_s") == 0.05
 
 
-def test_read_zarr_dataset_multi_channel(qtbot, request, tmp_path) -> None:
+def test_read_zarr_dataset_multi_channel(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+) -> None:
     """_read_zarr_dataset returns the (y, x) slice for chN_plane_NNNN
     from the L0 (2, z, y, x) array, indexing the correct channel."""
     from _helpers.controller_fixture import make_controller
@@ -152,11 +171,12 @@ def test_read_zarr_dataset_multi_channel(qtbot, request, tmp_path) -> None:
     assert attrs.get("Sample Name") == "test-sample"
 
 
-def test_list_zarr_datasets_rejects_no_l0_array(qtbot, request, tmp_path) -> None:
+def test_list_zarr_datasets_rejects_no_l0_array(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+) -> None:
     """_list_zarr_datasets raises ValueError for a store with no L0
     '0' array so the caller's except path surfaces a clear message."""
     import zarr
-
     from _helpers.controller_fixture import make_controller
 
     ctrl, _ = make_controller(qtbot, request)

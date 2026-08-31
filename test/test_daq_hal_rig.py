@@ -81,7 +81,10 @@ def _laser_ao_write_0v(terminals: str, errors: list[tuple[str, str]]) -> None:
         try:
             with nidaqmx.Task(new_task_name="probe_laser") as task:
                 task.ao_channels.add_ao_voltage_chan(terminals)
-                task.write(np.stack((np.array([0.0]), np.array([0.0]))), auto_start=True)
+                task.write(
+                    np.stack((np.array([0.0]), np.array([0.0]))),
+                    auto_start=True,
+                )
             return
         except BaseException as e:
             if "-50103" in repr(e) and attempt < _DAQ_RETRY_COUNT - 1:
@@ -111,7 +114,8 @@ def _siggen_create_scanner(
             task_ao = nidaqmx.Task(new_task_name="probe_siggen_ao")
             task_ao.ao_channels.add_ao_voltage_chan(ao_terminals)
             task_ao.timing.cfg_samp_clk_timing(
-                rate=40000, sample_mode=AcquisitionType.FINITE, samps_per_chan=total_samples
+                rate=40000, sample_mode=AcquisitionType.FINITE,
+                samps_per_chan=total_samples
             )
             # DO camera trigger task
             task_do = nidaqmx.Task(new_task_name="probe_siggen_do")
@@ -119,7 +123,8 @@ def _siggen_create_scanner(
                 do_terminals, line_grouping=LineGrouping.CHAN_PER_LINE
             )
             task_do.timing.cfg_samp_clk_timing(
-                rate=40000, sample_mode=AcquisitionType.FINITE, samps_per_chan=total_samples
+                rate=40000, sample_mode=AcquisitionType.FINITE,
+                samps_per_chan=total_samples
             )
             ao_device = ao_terminals.rsplit("/", 1)[0]
             do_start_trigger = ao_device + "/ao/StartTrigger"

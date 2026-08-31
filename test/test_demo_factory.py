@@ -22,11 +22,15 @@ plus the conftest SDK stubs make real construction work on the Mac dev box,
 producing genuine branch coverage that the exec pattern structurally cannot.
 """
 
+from __future__ import annotations
+
 from unittest.mock import Mock
 
 from _helpers.controller_fixture import make_controller
-from lightsheet.__main__ import _resolve_demo
+from pytest import FixtureRequest
+from pytestqt.qtbot import QtBot
 
+from lightsheet.__main__ import _resolve_demo
 
 # --------------------------------------------------------------------------- #
 # _resolve_demo: CLI-overrides-env precedence.
@@ -64,7 +68,7 @@ def test_resolve_demo_cli_true_overrides_env_zero() -> None:
 
 
 def test_hardware_init_assigns_mock_camera_from_bundle_under_demo(
-    qtbot, request
+    qtbot: QtBot, request: FixtureRequest
 ) -> None:
     """When demo=True (bundle built from Mock* by _build_demo_bundle),
     hardware_init assigns the bundle's MockCamera onto self.camera — no
@@ -81,7 +85,7 @@ def test_hardware_init_assigns_mock_camera_from_bundle_under_demo(
 
 
 def test_hardware_init_preserves_siggen_camera_dependency(
-    qtbot, request
+    qtbot: QtBot, request: FixtureRequest
 ) -> None:
     """The bundle's SigGen was constructed with the bundle's camera
     reference (waveform timing derives from camera settings). After
@@ -93,7 +97,7 @@ def test_hardware_init_preserves_siggen_camera_dependency(
 
 
 def test_hardware_init_demo_indicator_emitted_via_statusbar_not_sigmessage(
-    qtbot, request
+    qtbot: QtBot, request: FixtureRequest
 ) -> None:
     """Under demo mode the indicator (window-title suffix + status-bar
     message) must go through QStatusBar.showMessage directly, NOT via
@@ -143,7 +147,9 @@ def test_hardware_init_demo_indicator_emitted_via_statusbar_not_sigmessage(
 # --------------------------------------------------------------------------- #
 
 
-def test_hardware_init_assigns_from_bundle(qtbot, request) -> None:
+def test_hardware_init_assigns_from_bundle(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """hardware_init must assign HAL handles from the injected bundle,
     not construct them itself. After execution, ctrl.camera IS
     bundle.camera (identity, not a new instance). Verified via real
@@ -160,7 +166,9 @@ def test_hardware_init_assigns_from_bundle(qtbot, request) -> None:
     )
 
 
-def test_hardware_init_does_not_construct_hal_classes(qtbot, request) -> None:
+def test_hardware_init_does_not_construct_hal_classes(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """hardware_init must NOT import or construct MockCamera/Camera/SigGen/
     Motors/DAQLaser/IBeamSmartLaser/ETLs/Mock* — those constructions moved
     to main()'s _build_demo_bundle / DeviceRegistry. Verified via real
@@ -182,6 +190,6 @@ def test_hardware_init_does_not_construct_hal_classes(qtbot, request) -> None:
     assert isinstance(ctrl.siggen, MockSigGen)
     assert isinstance(ctrl.motors, MockMotors)
     assert isinstance(ctrl.etls, MockETLs)
-    assert all(isinstance(l, MockLaser) for l in ctrl.lasers), (
+    assert all(isinstance(laser, MockLaser) for laser in ctrl.lasers), (
         "every laser handle must be a MockLaser (no real HAL construction)"
     )

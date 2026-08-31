@@ -46,3 +46,9 @@ logs/
 .coverage
 coverage.json
 htmlcov/
+
+# Stray test artifacts — HDF5/Zarr files written to repo root when a
+# test forgets tmp_path. set_files now joins with save_directory, but
+# keep this as a backstop.
+/*.hdf5
+/*.zarr

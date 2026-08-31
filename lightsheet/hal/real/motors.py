@@ -197,7 +197,9 @@ class ZaberMotor(IMotor):
 
         try:
             # Try to open a serial connection
-            motor = serial.Serial(  # pragma: no branch — serial-open unreachable on Mac (no Zaber stage); move_*_position ValueError arcs are Mac-tested via __new__ bypass
+            # serial-open unreachable on Mac (no Zaber stage);
+            # move_*_position ValueError arcs are Mac-tested via __new__ bypass
+            motor = serial.Serial(  # pragma: no branch
                 port=self.port,
                 baudrate=9600,
                 bytesize=serial.EIGHTBITS,
@@ -214,7 +216,9 @@ class ZaberMotor(IMotor):
             reply_bytes = motor.read(6)
             # Close serial connection to motor
             motor.close()
-        except Exception:  # pragma: no branch — serial-open unreachable on Mac (no Zaber stage); move_*_position ValueError arcs are Mac-tested via __new__ bypass
+        except Exception:  # pragma: no branch
+            # serial-open unreachable on Mac (no Zaber stage);
+            # move_*_position ValueError arcs are Mac-tested via __new__ bypass
             self.error = 1
             self.error_message = "Serial port error"
             logger.exception("Serial port error!")

@@ -14,11 +14,19 @@ import threading
 from unittest.mock import Mock
 
 import pytest
+from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
 from lightsheet.gui.workers import PreviewWorker
-from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
+from lightsheet.hal import (
+    DeviceBundle,
+    MockCamera,
+    MockETLs,
+    MockLaser,
+    MockMotors,
+    MockSigGen,
+)
 
 
 def _make_bundle() -> DeviceBundle:
@@ -30,7 +38,9 @@ def _make_bundle() -> DeviceBundle:
         MockLaser(wavelength=647, max_power_mw=150.0, label="L2"),
     )
     etls = MockETLs()
-    return DeviceBundle(camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers)
+    return DeviceBundle(
+        camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers
+    )
 
 
 class _PreviewShell:
@@ -44,14 +54,17 @@ class _PreviewShell:
         # before moveToThread). The shell.ui namespace is not touched for
         # panel-internal widgets.
         self.acquisition_panel = Mock()
-        self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.value.return_value = 100
+        exposure_spinbox = (
+            self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime
+        )
+        exposure_spinbox.value.return_value = 100
         self.preview_mode_started = False  # skip the frame-grab loop
         self.estop_event = threading.Event()
         self._fs = Mock()
         self.sig_message = Mock()
 
 
-def test_preview_worker_finished_emits_exactly_once_normal(qtbot) -> None:
+def test_preview_worker_finished_emits_exactly_once_normal(qtbot: QtBot) -> None:
     """PreviewWorker.run with preview_mode_started=False completes
     normally and emits finished exactly once."""
     bundle = _make_bundle()
@@ -67,7 +80,7 @@ def test_preview_worker_finished_emits_exactly_once_normal(qtbot) -> None:
     assert len(finished_count) == 1, "finished must emit exactly once on normal exit"
 
 
-def test_preview_worker_finished_emits_exactly_once_estop(qtbot) -> None:
+def test_preview_worker_finished_emits_exactly_once_estop(qtbot: QtBot) -> None:
     """PreviewWorker.run with estop_event set breaks out of the loop and
     emits finished exactly once."""
     bundle = _make_bundle()
@@ -85,7 +98,7 @@ def test_preview_worker_finished_emits_exactly_once_estop(qtbot) -> None:
     assert len(finished_count) == 1, "finished must emit exactly once on E-stop break"
 
 
-def test_preview_worker_finished_emits_exactly_once_exception(qtbot) -> None:
+def test_preview_worker_finished_emits_exactly_once_exception(qtbot: QtBot) -> None:
     """PreviewWorker.run with a camera.arm() exception catches it, emits
     sig_message, and still emits finished exactly once from finally."""
     bundle = _make_bundle()
@@ -104,7 +117,7 @@ def test_preview_worker_finished_emits_exactly_once_exception(qtbot) -> None:
     assert len(finished_count) == 1, "finished must emit exactly once on exception"
 
 
-def test_preview_worker_never_accesses_ui_widgets(qtbot) -> None:
+def test_preview_worker_never_accesses_ui_widgets(qtbot: QtBot) -> None:
     """PreviewWorker.run must NOT access any self._shell.ui.* widget. The
     exposure-time spinbox read happens in PreviewWorker.__init__ on the
     GUI thread (before moveToThread), so run() never reaches into the

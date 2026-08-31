@@ -1,38 +1,7 @@
-"""MotorController — god-object split collaborator.
-
-Owns all sample/vertical/camera motor-move GUI-thread slots plus the
-focus-calibration-display methods (``calculate_camera_focus``,
-``show_camera_interpolation``, ``show_etl_interpolation``) moved verbatim
-from ``Controller_MainWindow``. Every motor move's ``try/except ValueError``
--> ``sig_message.emit`` + ``sig_beep.emit`` abort survives the move verbatim
-(AGENTS.md §2 travel-limit enforcement — only the ``self.``-prefix on
-shell-owned attributes changes to ``self._shell.``).
-
-Does NOT own an ``estop()``/kill-path method of any kind (safety
-anti-pattern, mirroring the HardwareManager anti-pattern check). The E-stop
-kill path (``Controller_MainWindow.updateUi_estop_pressed``) stays in the
-thin shell with a direct ``list[ILaser]`` ref, lock-free, on the GUI thread.
-A future maintainer who sees ``MotorController.estop()`` will be tempted to
-queue/thread it — the single most safety-critical regression risk.
-MotorController is a motion collaborator, NOT a safety kill-path owner.
-
-This is a plain-Python object (NOT a ``QObject``) per the plain-Python
-collaborator pattern: collaborators emit through a shell reference, never
-declare their own ``Signal``, and never call ``.connect()``. The
-shell-owned state (``ui`` widgets, ``sig_message``/``sig_beep``,
-``updateUi_position_*`` / ``updateUi_message_printer`` /
-``updateUi_position_indicators`` thin GUI-state setters, ``focus_selected`` /
-``horizontal_backward_boundary_selected`` /
-``horizontal_forward_boundary_selected`` /
-``camera_focus_relation`` / ``slope_camera`` / ``intercept_camera`` /
-``donnees`` / ``popt`` / ``xdata`` / ``ydata`` /
-``focus_forward_boundary`` / ``focus_backward_boundary`` /
-``number_of_calibration_planes`` / ``number_of_camera_positions`` /
-``number_of_etls_points`` / ``etl_l_relation`` / ``etl_r_relation``) is read
-off the shell reference. The controller holds its own ``self.motors =
-bundle.motors`` reference (identical objects to ``shell.motors``); the camera
-HAL stays ``self._shell.camera`` since MotorController does not own the
-camera HAL.
+"""MotorController — sample/vertical/camera motor-move slots + focus
+calibration display methods. Plain-Python collaborator (not a QObject);
+emits through the shell reference. MotorController is a motion collaborator,
+NOT a safety kill-path owner — E-stop stays in the shell.
 """
 
 from __future__ import annotations
@@ -55,24 +24,11 @@ logger = logging.getLogger(__name__)
 
 
 class MotorController:
-    """Motor-move + focus/interpolation-display collaborator.
-
-    All 19 motor-move / focus-calibration-display methods moved verbatim from
-    ``Controller_MainWindow`` — only the attribute-access prefix changes
-    (``self.`` -> ``self._shell.`` for shell-owned state; ``self.motors``
-    stays ``self.motors`` since the controller holds its own bundle.motors
-    reference). Every existing ``except ValueError:`` -> ``sig_message.emit``
-    + ``sig_beep.emit`` abort path survives unchanged (AGENTS.md §2
-    travel-limit enforcement).
-    """
+    """Motor-move + focus/interpolation-display collaborator."""
 
     def __init__(self, bundle: DeviceBundle, shell: Controller_MainWindow) -> None:
         self._bundle = bundle
         self._shell = shell
-        # Direct IMotors reference — identical objects to shell.motors (the
-        # shell's bundle.motors). MotorController owns the motor-move call
-        # graph; the camera HAL stays on the shell (self._shell.camera) since
-        # MotorController does not own the camera HAL.
         self.motors = bundle.motors
 
     # ------------------------------------------------------------------ #
@@ -140,7 +96,6 @@ class MotorController:
             self.motors.horizontal.get_origin("mm")
             >= self.motors.horizontal.get_limit_low("mm")
         ):
-            # Moving sample to horizontal origin
             try:
                 self.motors.horizontal.move_absolute_position(
                     self.motors.horizontal.get_origin("mm"),
@@ -165,7 +120,6 @@ class MotorController:
             self.motors.vertical.get_origin("mm")
             >= self.motors.vertical.get_limit_low("mm")
         ):
-            # Moving sample to vertical origin
             try:
                 self.motors.vertical.move_absolute_position(
                     self.motors.vertical.get_origin("mm"),
@@ -212,19 +166,11 @@ class MotorController:
     def updateUi_move_camera_to_focus(self) -> None:
         """Moves camera to focus position"""
         if self._shell.focus_selected:
-            if self.motors.camera.get_origin(
-                "mm"
-            ) > self.motors.camera.get_limit_high("mm"):
-                # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_high("mm"), "mm")  # noqa: E501
-                # rather only report out of boundaries
-                self._shell.updateUi_message_printer("Focus out of boundaries")
-                self._shell.sig_beep.emit()
-                self._shell.motor_panel.updateUi_position_camera()
-            elif self.motors.camera.get_origin(
-                "mm"
-            ) < self.motors.camera.get_limit_low("mm"):
-                # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_low("mm"), "mm")  # noqa: E501
-                # rather only report out of boundaries
+            cam_origin = self.motors.camera.get_origin("mm")
+            if (
+                cam_origin > self.motors.camera.get_limit_high("mm")
+                or cam_origin < self.motors.camera.get_limit_low("mm")
+            ):
                 self._shell.updateUi_message_printer("Focus out of boundaries")
                 self._shell.sig_beep.emit()
                 self._shell.motor_panel.updateUi_position_camera()
@@ -284,8 +230,6 @@ class MotorController:
                 self._shell.updateUi_message_printer("Sample moving backward")
             self._shell.motor_panel.updateUi_position_horizontal()
         else:
-            # self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_low("mm"), "mm")  # noqa: E501
-            # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
             self._shell.motor_panel.updateUi_position_horizontal()
@@ -311,8 +255,6 @@ class MotorController:
                 self._shell.updateUi_message_printer("Sample moving forward")
             self._shell.motor_panel.updateUi_position_horizontal()
         else:
-            # self.motors.horizontal.move_absolute_position(self.motors.horizontal.get_limit_high("mm"), "mm")  # noqa: E501
-            # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
             self._shell.motor_panel.updateUi_position_horizontal()
@@ -338,8 +280,6 @@ class MotorController:
                 self._shell.updateUi_message_printer("Sample stepping up")
             self._shell.motor_panel.updateUi_position_vertical()
         else:
-            # self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_low("mm"), "mm")  # noqa: E501
-            # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
             self._shell.motor_panel.updateUi_position_vertical()
@@ -365,8 +305,6 @@ class MotorController:
                 self._shell.updateUi_message_printer("Sample stepping down")
             self._shell.motor_panel.updateUi_position_vertical()
         else:
-            # self.motors.vertical.move_absolute_position(self.motors.vertical.get_limit_high("mm"), "mm")  # noqa: E501
-            # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
             self._shell.motor_panel.updateUi_position_vertical()
@@ -392,9 +330,6 @@ class MotorController:
                 self._shell.updateUi_message_printer("Camera stepping backward")
             self._shell.motor_panel.updateUi_position_camera()
         else:
-            # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_low("mm"), "mm")  # noqa: E501
-            # In case of a communication glitch with motor, this was bringing the stage back to min position  # noqa: E501
-            # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
             self._shell.motor_panel.updateUi_position_camera()
@@ -420,9 +355,6 @@ class MotorController:
                 self._shell.updateUi_message_printer("Camera stepping forward")
             self._shell.motor_panel.updateUi_position_camera()
         else:
-            # self.motors.camera.move_absolute_position(self.motors.camera.get_limit_high("mm"), "mm")  # noqa: E501
-            # In case of a communication glitch with motor, this was bringing the stage back to max position  # noqa: E501
-            # rather only report out of boundaries
             self._shell.updateUi_message_printer("Out of boundaries")
             self._shell.sig_beep.emit()
             self._shell.motor_panel.updateUi_position_camera()
@@ -435,9 +367,12 @@ class MotorController:
         """Reset variables for setting sample's horizontal motion range"""
         self._shell.calibration_panel.ui.pushButton_calHorizontalStartRangeSelection.setEnabled(False)
         self._shell.calibration_panel.ui.pushButton_calHorizontalSetForwardLimit.setEnabled(True)
-        self._shell.calibration_panel.ui.pushButton_calHorizontalSetBackwardLimit.setEnabled(True)
-        self._shell.calibration_panel.ui.label_calibrateRange.setText("Move Horizontal Position")
-        # Default boundaries
+        self._shell.calibration_panel.ui.pushButton_calHorizontalSetBackwardLimit.setEnabled(
+            True
+        )
+        self._shell.calibration_panel.ui.label_calibrateRange.setText(
+            "Move Horizontal Position"
+        )
         self.motors.horizontal.set_limit_low(0, "mm")
         self.motors.horizontal.set_limit_high(0, "mm")
         self._shell.motor_panel.updateUi_position_indicators()
@@ -487,18 +422,12 @@ class MotorController:
         self._shell.updateUi_message_printer(focus_text)
 
     # ------------------------------------------------------------------ #
-    # Focus-calculcation + interpolation-display methods (calibration-tab
-    # compute/show buttons). Cohesive with the move methods — the camera
-    # focus relation is motor-position-driven. The calibration *workers*
-    # that used to populate this data were deleted (D-01); these three
-    # display/compute methods remain live and move here for cohesion.
+    # Focus-calculation + interpolation-display methods (calibration tab)
     # ------------------------------------------------------------------ #
 
     def calculate_camera_focus(self) -> None:
         """Interpolates the camera focus position"""
-        # Current sample position
         current_position = self.motors.horizontal.get_position("mm")
-        # Compute corresponding optimal focus position
         focus_regression = (
             self._shell.slope_camera * current_position + self._shell.intercept_camera
         )
@@ -512,12 +441,11 @@ class MotorController:
         x = self._shell.camera_focus_relation[:, 0]
         y = self._shell.camera_focus_relation[:, 1]
 
-        # Calculating linear regression
         xnew = np.linspace(
             self._shell.camera_focus_relation[0, 0],
             self._shell.camera_focus_relation[-1, 0],
             1000,
-        )  ##1000 points
+        )
         self._shell.slope_camera, self._shell.intercept_camera, r_value, p_value, std_err = (  # noqa: E501
             stats.linregress(x, y)
         )
@@ -526,7 +454,6 @@ class MotorController:
         logger.debug("std_err: %s", std_err)
         yreg = self._shell.slope_camera * xnew + self._shell.intercept_camera
 
-        # Setting colormap
         xstart = self.motors.horizontal.get_limit_low("mm")
         xend = self.motors.horizontal.get_limit_high("mm")
         ystart = self._shell.focus_forward_boundary
@@ -536,17 +463,16 @@ class MotorController:
             transp[q, :] = np.flip(transp[q, :])
         transp = np.transpose(transp)
 
-        # Showing interpolation graph
         plt.figure(1)
         plt.title("Camera Focus Regression")
         plt.xlabel(f"Sample Horizontal Position ({"mm"})")
         plt.ylabel(f"Camera Position ({"mm"})")
-        plt.imshow(transp, cmap="gray", extent=[xstart, xend, ystart, yend])  # Colormap
-        plt.plot(x, y, "o")  # Raw data
-        plt.plot(xnew, yreg)  # Linear regression
+        plt.imshow(transp, cmap="gray", extent=[xstart, xend, ystart, yend])
+        plt.plot(x, y, "o")
+        plt.plot(xnew, yreg)
         plt.show(
             block=False
-        )  # Prevents the plot from blocking the execution of the code...
+        )
 
         # debugging
         n = int(self._shell.number_of_camera_positions)
@@ -561,10 +487,9 @@ class MotorController:
         """Shows the etl focus interpolation"""
         xl = self._shell.etl_l_relation[:, 0]
         yl = self._shell.etl_l_relation[:, 1]
-        # Left linear regression
         xlnew = np.linspace(
             self._shell.etl_l_relation[0, 0], self._shell.etl_l_relation[-1, 0], 1000
-        )  # 1000 points
+        )
         lslope, lintercept, r_value, p_value, std_err = stats.linregress(xl, yl)
         logger.debug("r_value: %s", r_value)
         logger.debug("p_value: %s", p_value)
@@ -573,29 +498,27 @@ class MotorController:
 
         xr = self._shell.etl_r_relation[:, 0]
         yr = self._shell.etl_r_relation[:, 1]
-        # Right linear regression
         xrnew = np.linspace(
             self._shell.etl_r_relation[0, 0], self._shell.etl_r_relation[-1, 0], 1000
-        )  # 1000 points
+        )
         rslope, rintercept, r_value, p_value, std_err = stats.linregress(xr, yr)
         logger.debug("r_value: %s", r_value)
         logger.debug("p_value: %s", p_value)
         logger.debug("std_err: %s", std_err)
         yrnew = rslope * xrnew + rintercept
 
-        # Showing interpolation graph
         plt.figure(1)
         plt.title("ETL Focus Regression")
         plt.xlabel("ETL Voltage (V)")
         plt.ylabel("Focal Point Horizontal Position (column)")
-        plt.plot(xl, yl, "o", label="Left ETL")  # Raw left data
-        plt.plot(xlnew, ylnew)  # Left regression
-        plt.plot(xr, yr, "o", label="Right ETL")  # Raw right data
-        plt.plot(xrnew, yrnew)  # Right regression
+        plt.plot(xl, yl, "o", label="Left ETL")
+        plt.plot(xlnew, ylnew)
+        plt.plot(xr, yr, "o", label="Right ETL")
+        plt.plot(xrnew, yrnew)
         plt.legend()
         plt.show(
             block=False
-        )  # Prevents the plot from blocking the execution of the code...
+        )
 
         # debugging
         for g in range(int(self._shell.number_of_etls_points)):

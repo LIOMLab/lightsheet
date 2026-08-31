@@ -22,7 +22,6 @@ from lightsheet.hal.mocks.mock_camera import MockCamera
 from lightsheet.hal.mocks.mock_etls import MockETLs, MockOptotune
 from lightsheet.hal.mocks.mock_siggen import MockSigGen
 
-
 # -- MockCamera -------------------------------------------------------------
 
 
@@ -39,7 +38,7 @@ def test_mock_camera_open_is_idempotent_and_sets_sentinel() -> None:
 
 def test_mock_camera_verbose_open_prints(capsys: pytest.CaptureFixture) -> None:
     """The verbose=True branch in open() prints the opening messages."""
-    cam = MockCamera(verbose=True)
+    MockCamera(verbose=True)
     out = capsys.readouterr().out
     assert "Opening mock camera" in out
     assert "Mock camera opened" in out
