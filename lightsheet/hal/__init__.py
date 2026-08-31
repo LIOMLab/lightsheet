@@ -30,7 +30,7 @@ from lightsheet.hal.mocks.mock_motors import MockMotors
 from lightsheet.hal.mocks.mock_power_meter import MockPowerMeter
 from lightsheet.hal.mocks.mock_siggen import MockSigGen
 from lightsheet.hal.real.camera import Camera
-from lightsheet.hal.real.daqlaser import DAQLaser
+from lightsheet.hal.real.daqlaser import DAQLaser, InvertedVoltMap, LinearVoltMap
 from lightsheet.hal.real.etls import ETLs
 from lightsheet.hal.real.ibeam_smart import IBeam, IBeamSmartLaser
 from lightsheet.hal.real.motors import Motors
@@ -65,6 +65,8 @@ __all__ = [
     "IPowerMeter",
     "ISigGen",
     "ISigGenCore",
+    "InvertedVoltMap",
+    "LinearVoltMap",
     "MockCamera",
     "MockETLs",
     "MockLaser",

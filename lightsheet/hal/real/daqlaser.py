@@ -1,16 +1,21 @@
 """DAQLaser -- single-channel NI-DAQ AO laser backend behind the unified
 ``ILaser`` ABC (mW-canonical).
 
-One instance wraps one DAQ AO channel. mW -> V conversion via ``mw_per_volt``.
-Two-layer power clamp: ``set_power`` clamps mW to [0, max_power]; ``_write_volts``
-clamps V to [0, max_power/mw_per_volt]. ``off()`` is synchronous (E-stop kill path).
-Optional V->mW calibration curve overrides the linear conversion for both control
-and display.
+One instance wraps one DAQ AO channel. mW -> V conversion is owned by an
+injectable voltage-map strategy (``LinearVoltMap`` for normal-polarity L1,
+``InvertedVoltMap`` for the rig-measured inverted L2 analog modulation
+transfer function). Two-layer power clamp: ``set_power`` clamps mW to
+``[0, max_power]``; ``_write_volts`` clamps V to ``[0, volt_map.max_volts]``.
+``off()`` is synchronous and lock-free (E-stop kill path) — it writes
+``volt_map.off_volts`` (0 V for linear, 5 V for inverted) before clearing
+state. Optional V->mW calibration curve overrides the linear conversion for
+both control and display.
 """
 
 import logging
 import threading
 from collections.abc import Sequence
+from typing import Protocol
 
 import nidaqmx
 import numpy as np
@@ -20,107 +25,254 @@ from lightsheet.hal.interfaces import ILaser
 logger = logging.getLogger(__name__)
 
 
-class DAQLaser(ILaser):
-    """Single-channel NI-DAQ AO laser backend (mW-canonical)."""
+class VoltMap(Protocol):
+    """Injectable mW-to-V conversion strategy.
+
+    ``max_volts`` is the V ceiling used by ``_write_volts`` as the
+    independent native-unit clamp. ``off_volts`` is the true-off voltage
+    written by the synchronous, lock-free ``off()`` (0 V for linear
+    normal-polarity lasers, 5 V for inverted-polarity analog modulation
+    where 0 V would mean MAXIMUM power). ``to_volts(mw)`` converts desired
+    optical power (mW) to the DAQ voltage. ``error`` / ``error_message``
+    surface construction-time validation failures (e.g. malformed
+    calibration curve, invalid mw_per_volt) so DAQLaser can inherit them
+    onto its own HAL error surface.
+    """
+
+    max_volts: float
+    off_volts: float
+    calibrated: bool
+    error: int
+    error_message: str
+
+    def to_volts(self, mw: float) -> float: ...
+
+
+class LinearVoltMap:
+    """Normal-polarity linear mW-to-V map: ``V = mw / mw_per_volt``.
+
+    The optional V->mW calibration curve overrides the linear conversion
+    (inverse ``np.interp``) and overrides ``max_volts`` / the curve-derived
+    max power. ``off_volts`` is 0.0 V (normal polarity: 0 V = off).
+
+    Malformed calibration curves surface on the ``error`` / ``error_message``
+    attributes and fall back to the linear model — never raises.
+    """
 
     def __init__(
         self,
-        terminal: str,
-        wavelength: int,
         mw_per_volt: float,
-        max_power_mw: float,
-        label: str,
+        max_volts: float,
         calibration_curve: Sequence[tuple[float, float]] | None = None,
-        readback_backend: ILaser | None = None,
+        label: str = "",
     ) -> None:
-        # HAL error surface — cleared on construct.
+        self.mw_per_volt = mw_per_volt
+        self.max_volts = max_volts
+        self.off_volts = 0.0
+        self.calibrated = False
         self.error = 0
         self.error_message = ""
+        self.label = label
+        self._curve_v: np.ndarray | None = None
+        self._curve_mw: np.ndarray | None = None
+        # Curve-derived max power (mW); None when uncalibrated.
+        self.max_power_mw: float | None = None
 
-        # Validate mw_per_volt before storing; a config typo (e.g. 0) would
-        # cause ZeroDivisionError on first write.
+        # Validate mw_per_volt before any conversion; a config typo (e.g. 0)
+        # would cause ZeroDivisionError on first write.
         if mw_per_volt <= 0:
             self.error = 1
             self.error_message = (
                 f"mw_per_volt must be > 0, got {mw_per_volt!r}"
             )
             logger.error(
-                "DAQLaser(%s) constructed with invalid mw_per_volt=%r",
+                "LinearVoltMap(%s) constructed with invalid mw_per_volt=%r",
                 label,
                 mw_per_volt,
             )
 
-        # DAQ AO channel + calibration.
+        # Optional V->mW calibration curve. Malformed curve is surfaced on
+        # the error surface and falls back to None.
+        if calibration_curve:
+            self._parse_calibration_curve(calibration_curve)
+
+    def _parse_calibration_curve(
+        self,
+        calibration_curve: Sequence[tuple[float, float]],
+    ) -> None:
+        """Validate and store the calibration curve, overriding max_volts
+        and max_power_mw on success. Surfaces errors on self.error."""
+        try:
+            pairs = [(float(v), float(mw)) for v, mw in calibration_curve]
+        except (TypeError, ValueError) as exc:
+            self.error = 1
+            self.error_message = (
+                f"calibration_curve has non-numeric entries: {exc}"
+            )
+            logger.error(
+                "LinearVoltMap(%s) calibration_curve non-numeric: %r",
+                self.label,
+                calibration_curve,
+            )
+            return
+
+        vs = [v for v, _ in pairs]
+        mws = [mw for _, mw in pairs]
+        if len(vs) < 2 or vs != sorted(vs) or vs[0] == vs[-1]:
+            self.error = 1
+            self.error_message = (
+                "calibration_curve must have >= 2 points with "
+                "strictly-increasing V"
+            )
+            logger.error(
+                "LinearVoltMap(%s) calibration_curve not strictly "
+                "increasing: %r",
+                self.label,
+                vs,
+            )
+            return
+
+        if any(mw < 0 for mw in mws):
+            self.error = 1
+            self.error_message = "calibration_curve has negative mW entries"
+            logger.error(
+                "LinearVoltMap(%s) calibration_curve negative mW: %r",
+                self.label,
+                mws,
+            )
+            return
+
+        self._curve_v = np.array(vs)
+        self._curve_mw = np.array(mws)
+        self.calibrated = True
+        # Override max_volts and max_power to the curve's endpoints so the
+        # slider maps to the actual optical power range.
+        self.max_volts = float(self._curve_v[-1])
+        self.max_power_mw = float(self._curve_mw[-1])
+
+    def to_volts(self, mw: float) -> float:
+        """Convert desired optical power (mW) to DAQ voltage (V).
+
+        When calibrated, uses the inverse calibration curve. When
+        uncalibrated, uses the linear model (mw / mw_per_volt). mw <= 0
+        always returns 0.0 V (off).
+        """
+        if mw <= 0:
+            return 0.0
+        if self.calibrated and self._curve_v is not None and self._curve_mw is not None:
+            return float(np.interp(mw, self._curve_mw, self._curve_v))
+        if self.mw_per_volt <= 0:
+            return 0.0
+        return mw / self.mw_per_volt
+
+
+class InvertedVoltMap:
+    """Inverted-polarity mW-to-V map for the rig-measured iBeam analog
+    modulation transfer function: ``V = max_volts * (1 - mw / max_power_mw)``.
+
+    0 mW -> max_volts (5 V = true-off), max_power_mw -> 0 V (maximum output).
+    Higher requested power = LOWER voltage. ``off_volts`` is ``max_volts``
+    (5 V) — writing 0 V on an inverted L2 would drive it to MAXIMUM power
+    during E-stop (Class IIIB laser safety).
+
+    Hostile mW inputs are clamped to ``[0, max_power_mw]`` BEFORE the V
+    formula, and the V result is independently clamped to ``[0.0, 5.0]`` so
+    negative voltage can never reach the iBeam analog input (negative V
+    trips the current-clip latch — a documented near-miss).
+    """
+
+    def __init__(self, max_volts: float = 5.0, max_power_mw: float = 0.0) -> None:
+        self.max_volts = max_volts
+        self.max_power_mw = max_power_mw
+        self.off_volts = max_volts
+        self.calibrated = False
+        self.error = 0
+        self.error_message = ""
+        # No linear mW/V factor for inverted polarity.
+        self.mw_per_volt: float | None = None
+        self.max_power_mw_curve: float | None = None
+
+    def to_volts(self, mw: float) -> float:
+        """Convert desired optical power (mW) to DAQ voltage (V) with
+        inverted polarity and double clamping (mW then V)."""
+        # Clamp mW to [0, max_power_mw] before the formula.
+        mw = max(0.0, min(mw, self.max_power_mw))
+        if self.max_power_mw <= 0:
+            return self.max_volts  # safe: off
+        v = self.max_volts * (1.0 - mw / self.max_power_mw)
+        # Clamp V to [0.0, 5.0] — NEVER negative (current-clip latch).
+        return max(0.0, min(v, 5.0))
+
+
+class DAQLaser(ILaser):
+    """Single-channel NI-DAQ AO laser backend (mW-canonical).
+
+    Accepts an injectable ``volt_map`` strategy (``LinearVoltMap`` or
+    ``InvertedVoltMap``) that owns the mW-to-V conversion and the off-voltage.
+    For backwards compatibility, the legacy ``mw_per_volt`` +
+    ``calibration_curve`` constructor path builds a ``LinearVoltMap``
+    internally.
+    """
+
+    def __init__(
+        self,
+        terminal: str,
+        wavelength: int,
+        max_power_mw: float = 0.0,
+        label: str = "",
+        mw_per_volt: float | None = None,
+        calibration_curve: Sequence[tuple[float, float]] | None = None,
+        readback_backend: ILaser | None = None,
+        volt_map: VoltMap | None = None,
+    ) -> None:
+        # HAL error surface — cleared on construct; inherited from the map.
+        self.error = 0
+        self.error_message = ""
+
         self.terminal = terminal
         self.wavelength = wavelength
-        self.mw_per_volt = mw_per_volt
-        self.max_power = max_power_mw  # mW (canonical)
         self.label = label
 
-        # Optional V->mW calibration curve. Malformed curve is surfaced on
-        # the HAL error surface and falls back to None.
-        self._curve_v: np.ndarray | None = None
-        self._curve_mw: np.ndarray | None = None
-        self.calibrated = False
-        if calibration_curve:
-            try:
-                pairs = [(float(v), float(mw)) for v, mw in calibration_curve]
-            except (TypeError, ValueError) as exc:
-                self.error = 1
-                self.error_message = (
-                    f"calibration_curve has non-numeric entries: {exc}"
-                )
-                logger.error(
-                    "DAQLaser(%s) calibration_curve non-numeric: %r",
-                    label,
-                    calibration_curve,
-                )
-            else:
-                vs = [v for v, _ in pairs]
-                mws = [mw for _, mw in pairs]
-                if len(vs) < 2 or vs != sorted(vs) or vs[0] == vs[-1]:
-                    self.error = 1
-                    self.error_message = (
-                        "calibration_curve must have >= 2 points with "
-                        "strictly-increasing V"
-                    )
-                    logger.error(
-                        "DAQLaser(%s) calibration_curve not strictly "
-                        "increasing: %r",
-                        label,
-                        vs,
-                    )
-                elif any(mw < 0 for mw in mws):
-                    self.error = 1
-                    self.error_message = (
-                        "calibration_curve has negative mW entries"
-                    )
-                    logger.error(
-                        "DAQLaser(%s) calibration_curve negative mW: %r",
-                        label,
-                        mws,
-                    )
-                else:
-                    self._curve_v = np.array(vs)
-                    self._curve_mw = np.array(mws)
-                    self.calibrated = True
-                    # Override max_power to curve's max mW so slider maps to
-                    # actual optical power range.
-                    self.max_power = float(self._curve_mw[-1])
-                    self._max_volts = float(self._curve_v[-1])
+        # Build or accept the voltage-map strategy.
+        if volt_map is not None:
+            self._volt_map = volt_map
+        else:
+            # Backwards-compatible L1 fallback: build a LinearVoltMap from
+            # mw_per_volt + calibration_curve. Compute the V ceiling safely
+            # (avoid ZeroDivisionError when mw_per_volt <= 0 — the map
+            # validates and surfaces the error itself).
+            computed_max_volts = (
+                max_power_mw / mw_per_volt
+                if mw_per_volt is not None and mw_per_volt > 0
+                else 0.0
+            )
+            self._volt_map = LinearVoltMap(
+                mw_per_volt=mw_per_volt if mw_per_volt is not None else 0.0,
+                max_volts=computed_max_volts,
+                calibration_curve=calibration_curve,
+                label=label,
+            )
+
+        # Inherit calibration/error state from the map so the existing
+        # compatibility surfaces (calibrated, mw_per_volt, _max_volts) work.
+        self.calibrated = self._volt_map.calibrated
+        self.error = self._volt_map.error
+        self.error_message = self._volt_map.error_message
+        self.mw_per_volt = getattr(self._volt_map, "mw_per_volt", None)
+
+        # max_power: the curve-derived max overrides the constructor arg
+        # when calibrated; otherwise the constructor arg is the mW ceiling.
+        curve_max = getattr(self._volt_map, "max_power_mw", None)
+        if self.calibrated and curve_max is not None:
+            self.max_power = float(curve_max)
+        else:
+            self.max_power = max_power_mw  # mW (canonical)
+
+        self._max_volts = self._volt_map.max_volts
 
         # Laser state — mW canonical.
         self.power = 0.0
         self.active = False
-
-        # Native-unit V clamp ceiling. Used by _write_volts as the
-        # independent V safety clamp.
-        if not self.calibrated:
-            self._max_volts = (
-                self.max_power / self.mw_per_volt
-                if self.mw_per_volt > 0
-                else 0.0
-            )
 
         # Per-instance reentrant lock. RLock so controller's daemon write
         # paths can re-acquire without deadlocking.
@@ -135,16 +287,10 @@ class DAQLaser(ILaser):
     def _mw_to_volts(self, mw: float) -> float:
         """Convert desired optical power (mW) to DAQ voltage (V).
 
-        When calibrated, uses the inverse calibration curve. When uncalibrated,
-        uses the linear model (mw / mw_per_volt). mw <= 0 always returns 0.0 V.
+        Delegates to the injectable voltage-map strategy. Preserved as a
+        compatibility surface for existing callers/tests.
         """
-        if mw <= 0:
-            return 0.0
-        if self.calibrated and self._curve_v is not None and self._curve_mw is not None:
-            return float(np.interp(mw, self._curve_mw, self._curve_v))
-        if self.mw_per_volt <= 0:
-            return 0.0
-        return mw / self.mw_per_volt
+        return self._volt_map.to_volts(mw)
 
     def _write_volts(self, volts: float) -> None:
         """Write ``volts`` to the DAQ AO channel, clamped to
@@ -178,14 +324,18 @@ class DAQLaser(ILaser):
     def off(self) -> None:
         """Synchronous E-stop kill path.
 
-        Writes 0 V to the DAQ AO channel, sets active=False, power=0.0, and
-        returns None immediately — no thread/queue offload. Offloading would
-        break the synchronous-off safety contract for a Class IIIB laser.
-        Lock-free: the per-write nidaqmx.Task is independent of any concurrent
-        write, so a daemon set_power holding the lock never delays the kill
-        path.
+        Writes ``volt_map.off_volts`` to the DAQ AO channel (0 V for linear
+        L1, 5 V for inverted L2 — true-off in both cases), sets
+        active=False, power=0.0, and returns None immediately — no
+        thread/queue offload. Offloading would break the synchronous-off
+        safety contract for a Class IIIB laser. Lock-free: the per-write
+        nidaqmx.Task is independent of any concurrent write, so a daemon
+        set_power holding the lock never delays the kill path.
+
+        For inverted L2, writing 0 V would mean MAXIMUM power — off_volts
+        is 5 V so E-stop drives the laser to true-off, not to max emission.
         """
-        self._write_volts(0.0)
+        self._write_volts(self._volt_map.off_volts)
         self.active = False
         self.power = 0.0
 

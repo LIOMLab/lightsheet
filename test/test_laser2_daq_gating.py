@@ -464,3 +464,225 @@ def test_ibeam_smart_laser_methods_remain_present() -> None:
     assert callable(l2.open)
     assert callable(l2.close)
     assert callable(l2.get_output_power)
+
+
+# --------------------------------------------------------------------------- #
+# Task 1: Injectable voltage-map strategies (LinearVoltMap / InvertedVoltMap)
+# and polarity-aware synchronous off().
+#
+# The inverted L2 transfer function (rig-measured): 0 mW -> 5 V (true off),
+# 75 mW -> 2.5 V, 150 mW -> 0 V (max output). Polarity is INVERTED: higher
+# voltage = lower power. off() MUST write 5 V (true-off), NEVER 0 V — writing
+# 0 V on an inverted L2 would drive it to MAXIMUM power during E-stop.
+# Every V write clamps to [0.0, 5.0] — NEVER negative (negative V trips the
+# iBeam current-clip latch, a documented near-miss).
+# --------------------------------------------------------------------------- #
+def test_linear_volt_map_maps_mw_to_volts() -> None:
+    """LinearVoltMap(mw_per_volt=60.0, max_volts=5.0) maps 0/150/300 mW to
+    0/2.5/5 V at 60 mW/V. 0 mW always returns 0.0 V (the off-voltage for
+    linear/normal-polarity lasers)."""
+    from lightsheet.hal.real.daqlaser import LinearVoltMap
+
+    vm = LinearVoltMap(mw_per_volt=60.0, max_volts=5.0)
+    assert vm.off_volts == 0.0
+    assert vm.max_volts == pytest.approx(5.0)
+    assert vm.to_volts(0.0) == pytest.approx(0.0)
+    assert vm.to_volts(150.0) == pytest.approx(2.5)
+    assert vm.to_volts(300.0) == pytest.approx(5.0)
+
+
+def test_inverted_volt_map_maps_and_clamps() -> None:
+    """InvertedVoltMap(max_volts=5.0, max_power_mw=150.0) maps 0/75/150 mW
+    to 5/2.5/0 V (inverted polarity: higher power = lower voltage). Hostile
+    mW inputs are clamped to [0, max_power_mw] BEFORE the V formula, and the
+    V result is independently clamped to [0.0, 5.0] so negative voltage can
+    never reach the iBeam analog input (negative V trips the current-clip
+    latch — a documented near-miss)."""
+    from lightsheet.hal.real.daqlaser import InvertedVoltMap
+
+    vm = InvertedVoltMap(max_volts=5.0, max_power_mw=150.0)
+    assert vm.off_volts == pytest.approx(5.0), (
+        "InvertedVoltMap.off_volts MUST be 5.0 V (true-off) — writing 0 V "
+        "on an inverted L2 drives it to MAXIMUM power"
+    )
+    assert vm.max_volts == pytest.approx(5.0)
+    # Inverted mapping: 0 mW -> 5 V (off), 75 mW -> 2.5 V, 150 mW -> 0 V (max).
+    assert vm.to_volts(0.0) == pytest.approx(5.0)
+    assert vm.to_volts(75.0) == pytest.approx(2.5)
+    assert vm.to_volts(150.0) == pytest.approx(0.0)
+    # Hostile mW clamped before the formula: below-zero -> 0 mW -> 5 V (off).
+    assert vm.to_volts(-10.0) == pytest.approx(5.0)
+    # Above-ceiling -> 150 mW -> 0 V (max, not beyond).
+    assert vm.to_volts(999.0) == pytest.approx(0.0)
+
+
+def _make_inverted_l2_daq() -> DAQLaser:
+    """Construct an inverted-polarity L2 DAQLaser on /Dev7/ao1 with
+    InvertedVoltMap(5.0 V, 150 mW) — the rig-measured transfer function."""
+    from lightsheet.hal.real.daqlaser import InvertedVoltMap
+
+    return DAQLaser(
+        terminal="/Dev7/ao1",
+        wavelength=647,
+        max_power_mw=150.0,
+        label="Laser 2 (647 nm)",
+        volt_map=InvertedVoltMap(max_volts=5.0, max_power_mw=150.0),
+    )
+
+
+def _capturing_task_factory() -> tuple[type, dict[str, object]]:
+    """Build a capturing nidaqmx.Task replacement that records the volts
+    array passed to task.write. Returns (TaskClass, captured_dict)."""
+
+    captured: dict[str, object] = {}
+
+    class _CapturingChannels:
+        def add_ao_voltage_chan(self, terminal: str) -> None:
+            captured["terminal"] = terminal
+
+    class _CapturingTask:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            self.ao_channels = _CapturingChannels()
+
+        def write(self, data, auto_start: bool = True) -> None:  # noqa: ANN001
+            captured["volts"] = data
+
+        def __enter__(self) -> "_CapturingTask":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    return _CapturingTask, captured
+
+
+def test_inverted_daqlaser_set_power_writes_mapped_voltage() -> None:
+    """An active inverted DAQLaser writes the mapped (inverted) voltage for
+    set_power: set_power(75.0) -> to_volts(75) = 2.5 V -> _write_volts(2.5).
+    The mW clamp in set_power and the V clamp in _write_volts are independent
+    safety layers."""
+    import nidaqmx
+
+    laser = _make_inverted_l2_daq()
+    laser.active = True
+    CapturingTask, captured = _capturing_task_factory()
+    original = nidaqmx.Task
+    nidaqmx.Task = CapturingTask  # type: ignore[attr-defined]
+    try:
+        laser.set_power(75.0)
+        assert laser.power == 75.0
+        assert float(captured["volts"][0]) == pytest.approx(2.5), (
+            "set_power(75.0 mW) on an inverted L2 must write 2.5 V "
+            "(InvertedVoltMap: 75 mW -> 2.5 V)"
+        )
+        # set_power(150.0) -> 0 V (max power at min voltage).
+        laser.set_power(150.0)
+        assert float(captured["volts"][0]) == pytest.approx(0.0)
+        # set_power(0.0) -> 5 V (off at max voltage).
+        laser.set_power(0.0)
+        assert float(captured["volts"][0]) == pytest.approx(5.0)
+    finally:
+        nidaqmx.Task = original  # type: ignore[attr-defined]
+
+
+def test_inverted_daqlaser_write_volts_clamps_hostile_inputs() -> None:
+    """Direct hostile V inputs to _write_volts are independently clamped to
+    [0.0, 5.0] — the second safety layer, independent of the mW clamp.
+    999 V -> 5.0 V, -10 V -> 0.0 V. NEVER negative (current-clip latch)."""
+    import nidaqmx
+
+    laser = _make_inverted_l2_daq()
+    CapturingTask, captured = _capturing_task_factory()
+    original = nidaqmx.Task
+    nidaqmx.Task = CapturingTask  # type: ignore[attr-defined]
+    try:
+        laser._write_volts(999.0)
+        assert float(captured["volts"][0]) == pytest.approx(5.0), (
+            "_write_volts must clamp 999 V to 5.0 V (max_volts)"
+        )
+        laser._write_volts(-10.0)
+        assert float(captured["volts"][0]) == pytest.approx(0.0), (
+            "_write_volts must clamp -10 V to 0.0 V — NEVER negative "
+            "(negative V trips the iBeam current-clip latch)"
+        )
+        laser._write_volts(2.5)
+        assert float(captured["volts"][0]) == pytest.approx(2.5)
+    finally:
+        nidaqmx.Task = original  # type: ignore[attr-defined]
+
+
+def test_inverted_daqlaser_off_writes_five_volts_lock_free() -> None:
+    """SAFETY (Class IIIB): inverted DAQLaser.off() MUST write exactly 5 V
+    (true-off), NOT 0 V. Writing 0 V on an inverted L2 would drive it to
+    MAXIMUM power during E-stop — a potentially blinding misfire. off()
+    clears active/power, returns None, and completes while another thread
+    holds _lock (lock-free E-stop kill path)."""
+    import nidaqmx
+
+    laser = _make_inverted_l2_daq()
+    CapturingTask, captured = _capturing_task_factory()
+    original = nidaqmx.Task
+    nidaqmx.Task = CapturingTask  # type: ignore[attr-defined]
+
+    held = threading.Event()
+    release = threading.Event()
+
+    def hold_lock() -> None:
+        with laser._lock:
+            held.set()
+            release.wait(timeout=5.0)
+
+    holder = threading.Thread(target=hold_lock, daemon=True)
+    holder.start()
+    held.wait(timeout=5.0)
+    try:
+        laser.set_power(75.0)
+        assert laser.power == 75.0
+
+        done = threading.Event()
+
+        def call_off() -> None:
+            laser.off()
+            done.set()
+
+        off_thread = threading.Thread(target=call_off, daemon=True)
+        off_thread.start()
+        assert done.wait(timeout=2.0), (
+            "inverted DAQLaser.off() did not return within 2 s while "
+            "another thread held self._lock — it must be lock-free "
+            "(E-stop kill path, AGENTS.md §2)"
+        )
+        # THE critical safety assertion: 5 V was written, NOT 0 V.
+        assert float(captured["volts"][0]) == pytest.approx(5.0), (
+            "inverted L2 off() MUST write 5.0 V (true-off) — writing 0 V "
+            "would drive the laser to MAXIMUM power during E-stop "
+            "(Class IIIB laser safety)"
+        )
+        assert laser.active is False
+        assert laser.power == 0.0
+    finally:
+        nidaqmx.Task = original  # type: ignore[attr-defined]
+        release.set()
+        holder.join(timeout=5.0)
+
+
+def test_linear_l1_off_still_writes_zero_volts() -> None:
+    """Linear L1 off() still writes 0 V (normal polarity: 0 V = off).
+    The polarity-aware off() uses volt_map.off_volts, which is 0.0 for
+    LinearVoltMap and 5.0 for InvertedVoltMap."""
+    import nidaqmx
+
+    laser = _make_l2_daq()  # linear fallback (mw_per_volt=30, max_power=150)
+    CapturingTask, captured = _capturing_task_factory()
+    original = nidaqmx.Task
+    nidaqmx.Task = CapturingTask  # type: ignore[attr-defined]
+    try:
+        laser.set_power(75.0)
+        laser.off()
+        assert float(captured["volts"][0]) == pytest.approx(0.0), (
+            "linear L1 off() must write 0.0 V (normal polarity: 0 V = off)"
+        )
+        assert laser.active is False
+        assert laser.power == 0.0
+    finally:
+        nidaqmx.Task = original  # type: ignore[attr-defined]
