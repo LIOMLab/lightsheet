@@ -792,8 +792,31 @@ class AcquisitionTableManager(QWidget):
                 # would block the event loop + freeze the GUI, contradicting
                 # the responsive-GUI goal + the E-stop responsiveness
                 # invariant.
+                #
+                # Race guard: _spawn_stack_worker() starts the worker
+                # thread before returning, so the worker can emit
+                # ``finished`` before this connect runs — a missed signal
+                # would leave loop.exec() spinning forever (the observed
+                # intermittent xdist shutdown hang). The polling watchdog
+                # observes thread.isRunning() and quits the loop when the
+                # thread stops, so a missed finished signal cannot freeze
+                # the GUI. The signal path remains the fast path (quits
+                # immediately on finish); the watchdog is the backstop.
+                from PySide6.QtCore import QTimer
+
                 loop = QEventLoop()
+                thread = self._shell._stack_thread
                 worker.finished.connect(loop.quit)
+
+                def _watchdog(
+                    _loop: QEventLoop = loop, _thread: object = thread
+                ) -> None:
+                    if not _thread.isRunning():
+                        _loop.quit()
+                        return
+                    QTimer.singleShot(50, _watchdog)
+
+                QTimer.singleShot(50, _watchdog)
                 loop.exec()
         finally:
             # Reset the stack-mode flag so a subsequent single-stack

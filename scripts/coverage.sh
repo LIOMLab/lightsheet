@@ -83,12 +83,12 @@ cd "${REPO_ROOT}"
 # workers that have already died). The segfault (exit 139) is already
 # tolerated below because .coverage is written before atexit; a hang is
 # different — the process never exits, so the gate would stall forever. We
-# wrap the xdist run in a hard timeout (5 min — xdist normally finishes in
-# ~45s, so this is generous headroom). On timeout (exit 124) we fall back to
+# wrap the xdist run in a hard timeout (90s — xdist normally finishes in
+# ~30s, so this is 3x headroom). On timeout (exit 124) we fall back to
 # single-process collection (~4 min, reliable: no xdist shutdown race). If
 # `timeout` is unavailable (non-GNU environment), we run xdist unguarded —
 # the hang is intermittent, not deterministic.
-_XDIST_TIMEOUT=300
+_XDIST_TIMEOUT=90
 _run_cov_xdist() {
   uv run pytest test/ -q --cov=lightsheet --cov-branch \
     -o "addopts=--strict-markers -n auto --maxprocesses=6"
