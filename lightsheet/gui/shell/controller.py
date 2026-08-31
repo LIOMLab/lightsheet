@@ -1640,6 +1640,13 @@ class Controller_MainWindow(QMainWindow):
 
         # Connection for camera settings changes
         self.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.connect(self._acq.updateUi_camera_shutter_mode)
+        # The adaptive exposure-bound spinbox units track the camera
+        # shutter mode (ms in Rolling / lines in Lightsheet). Hook the
+        # same currentTextChanged signal so the adaptive group swaps
+        # units in lockstep with the camera shutter-mode slot.
+        self.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.connect(
+            self.stack_panel._update_adaptive_shutter_units
+        )
         self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.valueChanged.connect(self._acq.updateUi_camera_exposure_time)
         self.acquisition_panel.ui.doubleSpinBox_cameraLineTime.valueChanged.connect(self._acq.updateUi_camera_line_time)
         self.acquisition_panel.ui.doubleSpinBox_cameraExposedLines.valueChanged.connect(self._acq.updateUi_camera_exposed_lines)

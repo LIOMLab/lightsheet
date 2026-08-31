@@ -427,10 +427,18 @@ class AcquisitionPanelWidget(QWidget):
         # pattern). A new worker per row is fine — it's a Python object
         # whose C++ side is just QObject, torn down by deleteLater on
         # thread.finished without racing another QThread destructor.
+        # Pre-sample the adaptive config on the GUI thread (the
+        # constructor runs here on the GUI thread) so the worker thread
+        # never reaches into the stack panel's ui.* (the cross-thread
+        # widget-access prohibition). build_adaptive_config returns a
+        # frozen AdaptiveConfig (or None when the toggle is unchecked or
+        # the fixed-fallback latch is set).
+        adaptive_cfg = self._shell.stack_panel.build_adaptive_config()
         self._shell._stack_worker = StackWorker(
             self._shell._bundle, self._shell._hw, self._shell,
             save_desc, save_blend, save_all_crop, save_all_full,
             multi_channel,
+            adaptive_cfg=adaptive_cfg,
         )
         self._shell._stack_worker.moveToThread(self._shell._stack_thread)
         # When reusing the thread (2nd+ queue row), disconnect the prior

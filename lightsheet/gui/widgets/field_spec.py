@@ -73,6 +73,25 @@ FIELD_SPECS: dict[str, FieldSpec] = {
     # Lasers panel — amplitudes (%, 0–100)
     "doubleSpinBox_laserOneAmplitude": FieldSpec("%", 1, 1.0, 10.0, 0.0, 100.0),
     "doubleSpinBox_laserTwoAmplitude": FieldSpec("%", 1, 1.0, 10.0, 0.0, 100.0),
+    # Stack panel — adaptive config group (13 enumerated spinboxes). The
+    # exposure bound unit is shutter-mode-dependent (ms in Rolling / lines
+    # in Lightsheet) and swapped at runtime by _update_adaptive_shutter_units;
+    # the FieldSpec carries the Rolling-mode (ms) defaults. The power bound
+    # maximum (150.0) is narrowed at runtime to min(150.0, live laser
+    # max_power). The HAL two-layer clamp is the safety backstop.
+    "doubleSpinBox_adaptiveMinExposure": FieldSpec("ms", 0, 1, 10, 1, 1000),
+    "doubleSpinBox_adaptiveMaxExposure": FieldSpec("ms", 0, 1, 10, 1, 1000),
+    "doubleSpinBox_adaptiveLaser1MinPower": FieldSpec("mW", 1, 0.5, 5.0, 0.0, 150.0),
+    "doubleSpinBox_adaptiveLaser1MaxPower": FieldSpec("mW", 1, 0.5, 5.0, 0.0, 150.0),
+    "doubleSpinBox_adaptiveLaser2MinPower": FieldSpec("mW", 1, 0.5, 5.0, 0.0, 150.0),
+    "doubleSpinBox_adaptiveLaser2MaxPower": FieldSpec("mW", 1, 0.5, 5.0, 0.0, 150.0),
+    "doubleSpinBox_adaptiveTargetBandLo": FieldSpec("%", 0, 1, 5, 0, 100),
+    "doubleSpinBox_adaptiveTargetBandHi": FieldSpec("%", 0, 1, 5, 0, 100),
+    "doubleSpinBox_adaptiveReacquireThreshold": FieldSpec("%", 1, 0.5, 5, 0, 50),
+    "doubleSpinBox_adaptiveBlockSizeN": FieldSpec("", 0, 1, 5, 1, 100),
+    "doubleSpinBox_adaptiveKp": FieldSpec("", 3, 0.05, 0.5, 0.0, 5.0),
+    "doubleSpinBox_adaptiveKi": FieldSpec("", 3, 0.01, 0.1, 0.0, 1.0),
+    "doubleSpinBox_adaptivePilotCount": FieldSpec("", 0, 1, 5, 0, 50),
 }
 
 # Author-supplied one-line purpose per field, used by FieldSpecSpinBox
@@ -111,4 +130,18 @@ FIELD_PURPOSES: dict[str, str] = {
     # Lasers panel
     "doubleSpinBox_laserOneAmplitude": "Laser 1 power",
     "doubleSpinBox_laserTwoAmplitude": "Laser 2 power",
+    # Stack panel — adaptive config group
+    "doubleSpinBox_adaptiveMinExposure": "Adaptive min exposure bound",
+    "doubleSpinBox_adaptiveMaxExposure": "Adaptive max exposure bound",
+    "doubleSpinBox_adaptiveLaser1MinPower": "Adaptive laser 1 min power bound",
+    "doubleSpinBox_adaptiveLaser1MaxPower": "Adaptive laser 1 max power bound",
+    "doubleSpinBox_adaptiveLaser2MinPower": "Adaptive laser 2 min power bound",
+    "doubleSpinBox_adaptiveLaser2MaxPower": "Adaptive laser 2 max power bound",
+    "doubleSpinBox_adaptiveTargetBandLo": "Target intensity band lower bound",
+    "doubleSpinBox_adaptiveTargetBandHi": "Target intensity band upper bound",
+    "doubleSpinBox_adaptiveReacquireThreshold": "Re-acquire deviation threshold",
+    "doubleSpinBox_adaptiveBlockSizeN": "L2 power-trim block size",
+    "doubleSpinBox_adaptiveKp": "PI proportional gain",
+    "doubleSpinBox_adaptiveKi": "PI integral gain",
+    "doubleSpinBox_adaptivePilotCount": "Pilot frame count for feedforward",
 }

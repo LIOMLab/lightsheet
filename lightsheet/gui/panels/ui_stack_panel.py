@@ -15,9 +15,9 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QFrame, QGroupBox, QHBoxLayout,
-    QLabel, QPushButton, QSizePolicy, QSpacerItem,
-    QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QFrame,
+    QGroupBox, QHBoxLayout, QLabel, QPushButton,
+    QSizePolicy, QSpacerItem, QVBoxLayout, QWidget)
 
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
@@ -184,6 +184,227 @@ class Ui_StackPanel(object):
 
         self.verticalLayout_panel.addWidget(self.groupBox_18)
 
+        self.groupBox_adaptiveControl = QGroupBox(stackPanel)
+        self.groupBox_adaptiveControl.setObjectName(u"groupBox_adaptiveControl")
+        self.verticalLayout_adaptiveControl = QVBoxLayout(self.groupBox_adaptiveControl)
+        self.verticalLayout_adaptiveControl.setObjectName(u"verticalLayout_adaptiveControl")
+        self.checkBox_adaptiveEnable = QCheckBox(self.groupBox_adaptiveControl)
+        self.checkBox_adaptiveEnable.setObjectName(u"checkBox_adaptiveEnable")
+
+        self.verticalLayout_adaptiveControl.addWidget(self.checkBox_adaptiveEnable)
+
+        self.widget_adaptiveFields = QWidget(self.groupBox_adaptiveControl)
+        self.widget_adaptiveFields.setObjectName(u"widget_adaptiveFields")
+        self.formLayout_adaptiveFields = QFormLayout(self.widget_adaptiveFields)
+        self.formLayout_adaptiveFields.setObjectName(u"formLayout_adaptiveFields")
+        self.formLayout_adaptiveFields.setContentsMargins(0, 0, 0, 0)
+        self.label_adaptiveMinExposure = QLabel(self.widget_adaptiveFields)
+        self.label_adaptiveMinExposure.setObjectName(u"label_adaptiveMinExposure")
+
+        self.formLayout_adaptiveFields.setWidget(0, QFormLayout.ItemRole.LabelRole, self.label_adaptiveMinExposure)
+
+        self.doubleSpinBox_adaptiveMinExposure = FieldSpecSpinBox(self.widget_adaptiveFields)
+        self.doubleSpinBox_adaptiveMinExposure.setObjectName(u"doubleSpinBox_adaptiveMinExposure")
+        self.doubleSpinBox_adaptiveMinExposure.setDecimals(0)
+        self.doubleSpinBox_adaptiveMinExposure.setMinimum(1.000000000000000)
+        self.doubleSpinBox_adaptiveMinExposure.setMaximum(1000.000000000000000)
+        self.doubleSpinBox_adaptiveMinExposure.setSingleStep(1.000000000000000)
+        self.doubleSpinBox_adaptiveMinExposure.setValue(1.000000000000000)
+
+        self.formLayout_adaptiveFields.setWidget(0, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_adaptiveMinExposure)
+
+        self.label_adaptiveMaxExposure = QLabel(self.widget_adaptiveFields)
+        self.label_adaptiveMaxExposure.setObjectName(u"label_adaptiveMaxExposure")
+
+        self.formLayout_adaptiveFields.setWidget(1, QFormLayout.ItemRole.LabelRole, self.label_adaptiveMaxExposure)
+
+        self.doubleSpinBox_adaptiveMaxExposure = FieldSpecSpinBox(self.widget_adaptiveFields)
+        self.doubleSpinBox_adaptiveMaxExposure.setObjectName(u"doubleSpinBox_adaptiveMaxExposure")
+        self.doubleSpinBox_adaptiveMaxExposure.setDecimals(0)
+        self.doubleSpinBox_adaptiveMaxExposure.setMinimum(1.000000000000000)
+        self.doubleSpinBox_adaptiveMaxExposure.setMaximum(1000.000000000000000)
+        self.doubleSpinBox_adaptiveMaxExposure.setSingleStep(1.000000000000000)
+        self.doubleSpinBox_adaptiveMaxExposure.setValue(1000.000000000000000)
+
+        self.formLayout_adaptiveFields.setWidget(1, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_adaptiveMaxExposure)
+
+        self.label_adaptiveLaser1MinPower = QLabel(self.widget_adaptiveFields)
+        self.label_adaptiveLaser1MinPower.setObjectName(u"label_adaptiveLaser1MinPower")
+
+        self.formLayout_adaptiveFields.setWidget(2, QFormLayout.ItemRole.LabelRole, self.label_adaptiveLaser1MinPower)
+
+        self.doubleSpinBox_adaptiveLaser1MinPower = FieldSpecSpinBox(self.widget_adaptiveFields)
+        self.doubleSpinBox_adaptiveLaser1MinPower.setObjectName(u"doubleSpinBox_adaptiveLaser1MinPower")
+        self.doubleSpinBox_adaptiveLaser1MinPower.setDecimals(1)
+        self.doubleSpinBox_adaptiveLaser1MinPower.setMinimum(0.000000000000000)
+        self.doubleSpinBox_adaptiveLaser1MinPower.setMaximum(150.000000000000000)
+        self.doubleSpinBox_adaptiveLaser1MinPower.setSingleStep(0.500000000000000)
+        self.doubleSpinBox_adaptiveLaser1MinPower.setValue(0.000000000000000)
+
+        self.formLayout_adaptiveFields.setWidget(2, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_adaptiveLaser1MinPower)
+
+        self.label_adaptiveLaser1MaxPower = QLabel(self.widget_adaptiveFields)
+        self.label_adaptiveLaser1MaxPower.setObjectName(u"label_adaptiveLaser1MaxPower")
+
+        self.formLayout_adaptiveFields.setWidget(3, QFormLayout.ItemRole.LabelRole, self.label_adaptiveLaser1MaxPower)
+
+        self.doubleSpinBox_adaptiveLaser1MaxPower = FieldSpecSpinBox(self.widget_adaptiveFields)
+        self.doubleSpinBox_adaptiveLaser1MaxPower.setObjectName(u"doubleSpinBox_adaptiveLaser1MaxPower")
+        self.doubleSpinBox_adaptiveLaser1MaxPower.setDecimals(1)
+        self.doubleSpinBox_adaptiveLaser1MaxPower.setMinimum(0.000000000000000)
+        self.doubleSpinBox_adaptiveLaser1MaxPower.setMaximum(150.000000000000000)
+        self.doubleSpinBox_adaptiveLaser1MaxPower.setSingleStep(0.500000000000000)
+        self.doubleSpinBox_adaptiveLaser1MaxPower.setValue(5.000000000000000)
+
+        self.formLayout_adaptiveFields.setWidget(3, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_adaptiveLaser1MaxPower)
+
+        self.label_adaptiveLaser2MinPower = QLabel(self.widget_adaptiveFields)
+        self.label_adaptiveLaser2MinPower.setObjectName(u"label_adaptiveLaser2MinPower")
+
+        self.formLayout_adaptiveFields.setWidget(4, QFormLayout.ItemRole.LabelRole, self.label_adaptiveLaser2MinPower)
+
+        self.doubleSpinBox_adaptiveLaser2MinPower = FieldSpecSpinBox(self.widget_adaptiveFields)
+        self.doubleSpinBox_adaptiveLaser2MinPower.setObjectName(u"doubleSpinBox_adaptiveLaser2MinPower")
+        self.doubleSpinBox_adaptiveLaser2MinPower.setDecimals(1)
+        self.doubleSpinBox_adaptiveLaser2MinPower.setMinimum(0.000000000000000)
+        self.doubleSpinBox_adaptiveLaser2MinPower.setMaximum(150.000000000000000)
+        self.doubleSpinBox_adaptiveLaser2MinPower.setSingleStep(0.500000000000000)
+        self.doubleSpinBox_adaptiveLaser2MinPower.setValue(0.000000000000000)
+
+        self.formLayout_adaptiveFields.setWidget(4, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_adaptiveLaser2MinPower)
+
+        self.label_adaptiveLaser2MaxPower = QLabel(self.widget_adaptiveFields)
+        self.label_adaptiveLaser2MaxPower.setObjectName(u"label_adaptiveLaser2MaxPower")
+
+        self.formLayout_adaptiveFields.setWidget(5, QFormLayout.ItemRole.LabelRole, self.label_adaptiveLaser2MaxPower)
+
+        self.doubleSpinBox_adaptiveLaser2MaxPower = FieldSpecSpinBox(self.widget_adaptiveFields)
+        self.doubleSpinBox_adaptiveLaser2MaxPower.setObjectName(u"doubleSpinBox_adaptiveLaser2MaxPower")
+        self.doubleSpinBox_adaptiveLaser2MaxPower.setDecimals(1)
+        self.doubleSpinBox_adaptiveLaser2MaxPower.setMinimum(0.000000000000000)
+        self.doubleSpinBox_adaptiveLaser2MaxPower.setMaximum(150.000000000000000)
+        self.doubleSpinBox_adaptiveLaser2MaxPower.setSingleStep(0.500000000000000)
+        self.doubleSpinBox_adaptiveLaser2MaxPower.setValue(150.000000000000000)
+
+        self.formLayout_adaptiveFields.setWidget(5, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_adaptiveLaser2MaxPower)
+
+        self.label_adaptiveTargetBandLo = QLabel(self.widget_adaptiveFields)
+        self.label_adaptiveTargetBandLo.setObjectName(u"label_adaptiveTargetBandLo")
+
+        self.formLayout_adaptiveFields.setWidget(6, QFormLayout.ItemRole.LabelRole, self.label_adaptiveTargetBandLo)
+
+        self.doubleSpinBox_adaptiveTargetBandLo = FieldSpecSpinBox(self.widget_adaptiveFields)
+        self.doubleSpinBox_adaptiveTargetBandLo.setObjectName(u"doubleSpinBox_adaptiveTargetBandLo")
+        self.doubleSpinBox_adaptiveTargetBandLo.setDecimals(0)
+        self.doubleSpinBox_adaptiveTargetBandLo.setMinimum(0.000000000000000)
+        self.doubleSpinBox_adaptiveTargetBandLo.setMaximum(100.000000000000000)
+        self.doubleSpinBox_adaptiveTargetBandLo.setSingleStep(1.000000000000000)
+        self.doubleSpinBox_adaptiveTargetBandLo.setValue(90.000000000000000)
+
+        self.formLayout_adaptiveFields.setWidget(6, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_adaptiveTargetBandLo)
+
+        self.label_adaptiveTargetBandHi = QLabel(self.widget_adaptiveFields)
+        self.label_adaptiveTargetBandHi.setObjectName(u"label_adaptiveTargetBandHi")
+
+        self.formLayout_adaptiveFields.setWidget(7, QFormLayout.ItemRole.LabelRole, self.label_adaptiveTargetBandHi)
+
+        self.doubleSpinBox_adaptiveTargetBandHi = FieldSpecSpinBox(self.widget_adaptiveFields)
+        self.doubleSpinBox_adaptiveTargetBandHi.setObjectName(u"doubleSpinBox_adaptiveTargetBandHi")
+        self.doubleSpinBox_adaptiveTargetBandHi.setDecimals(0)
+        self.doubleSpinBox_adaptiveTargetBandHi.setMinimum(0.000000000000000)
+        self.doubleSpinBox_adaptiveTargetBandHi.setMaximum(100.000000000000000)
+        self.doubleSpinBox_adaptiveTargetBandHi.setSingleStep(1.000000000000000)
+        self.doubleSpinBox_adaptiveTargetBandHi.setValue(95.000000000000000)
+
+        self.formLayout_adaptiveFields.setWidget(7, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_adaptiveTargetBandHi)
+
+        self.label_adaptiveReacquireThreshold = QLabel(self.widget_adaptiveFields)
+        self.label_adaptiveReacquireThreshold.setObjectName(u"label_adaptiveReacquireThreshold")
+
+        self.formLayout_adaptiveFields.setWidget(8, QFormLayout.ItemRole.LabelRole, self.label_adaptiveReacquireThreshold)
+
+        self.doubleSpinBox_adaptiveReacquireThreshold = FieldSpecSpinBox(self.widget_adaptiveFields)
+        self.doubleSpinBox_adaptiveReacquireThreshold.setObjectName(u"doubleSpinBox_adaptiveReacquireThreshold")
+        self.doubleSpinBox_adaptiveReacquireThreshold.setDecimals(1)
+        self.doubleSpinBox_adaptiveReacquireThreshold.setMinimum(0.000000000000000)
+        self.doubleSpinBox_adaptiveReacquireThreshold.setMaximum(50.000000000000000)
+        self.doubleSpinBox_adaptiveReacquireThreshold.setSingleStep(0.500000000000000)
+        self.doubleSpinBox_adaptiveReacquireThreshold.setValue(8.000000000000000)
+
+        self.formLayout_adaptiveFields.setWidget(8, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_adaptiveReacquireThreshold)
+
+        self.label_adaptiveBlockSizeN = QLabel(self.widget_adaptiveFields)
+        self.label_adaptiveBlockSizeN.setObjectName(u"label_adaptiveBlockSizeN")
+
+        self.formLayout_adaptiveFields.setWidget(9, QFormLayout.ItemRole.LabelRole, self.label_adaptiveBlockSizeN)
+
+        self.doubleSpinBox_adaptiveBlockSizeN = FieldSpecSpinBox(self.widget_adaptiveFields)
+        self.doubleSpinBox_adaptiveBlockSizeN.setObjectName(u"doubleSpinBox_adaptiveBlockSizeN")
+        self.doubleSpinBox_adaptiveBlockSizeN.setDecimals(0)
+        self.doubleSpinBox_adaptiveBlockSizeN.setMinimum(1.000000000000000)
+        self.doubleSpinBox_adaptiveBlockSizeN.setMaximum(100.000000000000000)
+        self.doubleSpinBox_adaptiveBlockSizeN.setSingleStep(1.000000000000000)
+        self.doubleSpinBox_adaptiveBlockSizeN.setValue(8.000000000000000)
+
+        self.formLayout_adaptiveFields.setWidget(9, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_adaptiveBlockSizeN)
+
+        self.label_adaptiveKp = QLabel(self.widget_adaptiveFields)
+        self.label_adaptiveKp.setObjectName(u"label_adaptiveKp")
+
+        self.formLayout_adaptiveFields.setWidget(10, QFormLayout.ItemRole.LabelRole, self.label_adaptiveKp)
+
+        self.doubleSpinBox_adaptiveKp = FieldSpecSpinBox(self.widget_adaptiveFields)
+        self.doubleSpinBox_adaptiveKp.setObjectName(u"doubleSpinBox_adaptiveKp")
+        self.doubleSpinBox_adaptiveKp.setDecimals(3)
+        self.doubleSpinBox_adaptiveKp.setMinimum(0.000000000000000)
+        self.doubleSpinBox_adaptiveKp.setMaximum(5.000000000000000)
+        self.doubleSpinBox_adaptiveKp.setSingleStep(0.050000000000000)
+        self.doubleSpinBox_adaptiveKp.setValue(0.400000000000000)
+
+        self.formLayout_adaptiveFields.setWidget(10, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_adaptiveKp)
+
+        self.label_adaptiveKi = QLabel(self.widget_adaptiveFields)
+        self.label_adaptiveKi.setObjectName(u"label_adaptiveKi")
+
+        self.formLayout_adaptiveFields.setWidget(11, QFormLayout.ItemRole.LabelRole, self.label_adaptiveKi)
+
+        self.doubleSpinBox_adaptiveKi = FieldSpecSpinBox(self.widget_adaptiveFields)
+        self.doubleSpinBox_adaptiveKi.setObjectName(u"doubleSpinBox_adaptiveKi")
+        self.doubleSpinBox_adaptiveKi.setDecimals(3)
+        self.doubleSpinBox_adaptiveKi.setMinimum(0.000000000000000)
+        self.doubleSpinBox_adaptiveKi.setMaximum(1.000000000000000)
+        self.doubleSpinBox_adaptiveKi.setSingleStep(0.010000000000000)
+        self.doubleSpinBox_adaptiveKi.setValue(0.050000000000000)
+
+        self.formLayout_adaptiveFields.setWidget(11, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_adaptiveKi)
+
+        self.label_adaptivePilotCount = QLabel(self.widget_adaptiveFields)
+        self.label_adaptivePilotCount.setObjectName(u"label_adaptivePilotCount")
+
+        self.formLayout_adaptiveFields.setWidget(12, QFormLayout.ItemRole.LabelRole, self.label_adaptivePilotCount)
+
+        self.doubleSpinBox_adaptivePilotCount = FieldSpecSpinBox(self.widget_adaptiveFields)
+        self.doubleSpinBox_adaptivePilotCount.setObjectName(u"doubleSpinBox_adaptivePilotCount")
+        self.doubleSpinBox_adaptivePilotCount.setDecimals(0)
+        self.doubleSpinBox_adaptivePilotCount.setMinimum(0.000000000000000)
+        self.doubleSpinBox_adaptivePilotCount.setMaximum(50.000000000000000)
+        self.doubleSpinBox_adaptivePilotCount.setSingleStep(1.000000000000000)
+        self.doubleSpinBox_adaptivePilotCount.setValue(5.000000000000000)
+
+        self.formLayout_adaptiveFields.setWidget(12, QFormLayout.ItemRole.FieldRole, self.doubleSpinBox_adaptivePilotCount)
+
+        self.label_adaptiveShutterModeHint = QLabel(self.widget_adaptiveFields)
+        self.label_adaptiveShutterModeHint.setObjectName(u"label_adaptiveShutterModeHint")
+        self.label_adaptiveShutterModeHint.setWordWrap(True)
+
+        self.formLayout_adaptiveFields.setWidget(13, QFormLayout.ItemRole.SpanningRole, self.label_adaptiveShutterModeHint)
+
+
+        self.verticalLayout_adaptiveControl.addWidget(self.widget_adaptiveFields)
+
+
+        self.verticalLayout_panel.addWidget(self.groupBox_adaptiveControl)
+
         self.groupBox_acquisitionQueue = QGroupBox(stackPanel)
         self.groupBox_acquisitionQueue.setObjectName(u"groupBox_acquisitionQueue")
         self.verticalLayout_acquisitionQueue = QVBoxLayout(self.groupBox_acquisitionQueue)
@@ -236,6 +457,25 @@ class Ui_StackPanel(object):
 #endif // QT_CONFIG(tooltip)
         self.doubleSpinBox_acqLastPlane.setSuffix(QCoreApplication.translate("StackPanel", u" \u03bcm", None))
         self.label_stackPlanSummary.setText(QCoreApplication.translate("StackPanel", u"No stack configured. Drive the stage to the start position and press Set, or type start/end positions and a step.", None))
+        self.groupBox_adaptiveControl.setTitle(QCoreApplication.translate("StackPanel", u"Adaptive Control", None))
+#if QT_CONFIG(tooltip)
+        self.checkBox_adaptiveEnable.setToolTip(QCoreApplication.translate("StackPanel", u"Enable per-plane adaptive exposure + laser power control. When unchecked the stack runs with fixed exposure/power; when checked the controller adjusts per plane from observed intensity within the configured bounds.", None))
+#endif // QT_CONFIG(tooltip)
+        self.checkBox_adaptiveEnable.setText(QCoreApplication.translate("StackPanel", u"Adaptive exposure & power control", None))
+        self.label_adaptiveMinExposure.setText(QCoreApplication.translate("StackPanel", u"Min Exposure:", None))
+        self.label_adaptiveMaxExposure.setText(QCoreApplication.translate("StackPanel", u"Max Exposure:", None))
+        self.label_adaptiveLaser1MinPower.setText(QCoreApplication.translate("StackPanel", u"Laser1 Min Power:", None))
+        self.label_adaptiveLaser1MaxPower.setText(QCoreApplication.translate("StackPanel", u"Laser1 Max Power:", None))
+        self.label_adaptiveLaser2MinPower.setText(QCoreApplication.translate("StackPanel", u"Laser2 Min Power:", None))
+        self.label_adaptiveLaser2MaxPower.setText(QCoreApplication.translate("StackPanel", u"Laser2 Max Power:", None))
+        self.label_adaptiveTargetBandLo.setText(QCoreApplication.translate("StackPanel", u"Target Band Lo:", None))
+        self.label_adaptiveTargetBandHi.setText(QCoreApplication.translate("StackPanel", u"Target Band Hi:", None))
+        self.label_adaptiveReacquireThreshold.setText(QCoreApplication.translate("StackPanel", u"Reacquire Threshold:", None))
+        self.label_adaptiveBlockSizeN.setText(QCoreApplication.translate("StackPanel", u"Block Size N:", None))
+        self.label_adaptiveKp.setText(QCoreApplication.translate("StackPanel", u"Kp:", None))
+        self.label_adaptiveKi.setText(QCoreApplication.translate("StackPanel", u"Ki:", None))
+        self.label_adaptivePilotCount.setText(QCoreApplication.translate("StackPanel", u"Pilot Count:", None))
+        self.label_adaptiveShutterModeHint.setText(QCoreApplication.translate("StackPanel", u"Rolling shutter \u2014 exposure bound in milliseconds.", None))
         self.groupBox_acquisitionQueue.setTitle(QCoreApplication.translate("StackPanel", u"Acquisition Queue", None))
         pass
     # retranslateUi

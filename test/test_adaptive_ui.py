@@ -126,7 +126,10 @@ def test_adaptive_invalid_pair_beeps_messages_reverts(qtbot, request) -> None:
     ctrl.sig_beep.connect(lambda: beeps.append(None))
     ctrl.sig_message.connect(lambda m: messages.append(m))
     ui.checkBox_adaptiveEnable.setChecked(True)
-    # Set Min Exposure above Max Exposure (both within the soft range).
+    # Lower Max Exposure first so a Min Exposure of 500 is invalid.
+    ui.doubleSpinBox_adaptiveMaxExposure.setValue(100.0)
+    ui.doubleSpinBox_adaptiveMaxExposure.editingFinished.emit()
+    # Now set Min Exposure above Max Exposure (both within the soft range).
     ui.doubleSpinBox_adaptiveMinExposure.setValue(500.0)
     ui.doubleSpinBox_adaptiveMinExposure.editingFinished.emit()
     assert len(beeps) == 1, "invalid pair must beep"
@@ -144,6 +147,9 @@ def test_adaptive_invalid_pair_reverts_offending_spinbox(qtbot, request) -> None
     ctrl, _ = make_controller(qtbot, request)
     ui = _adaptive_ui(ctrl)
     ui.checkBox_adaptiveEnable.setChecked(True)
+    # Lower Max Exposure first so a Min Exposure of 500 is invalid.
+    ui.doubleSpinBox_adaptiveMaxExposure.setValue(100.0)
+    ui.doubleSpinBox_adaptiveMaxExposure.editingFinished.emit()
     prior = ui.doubleSpinBox_adaptiveMinExposure.value()
     ui.doubleSpinBox_adaptiveMinExposure.setValue(500.0)
     ui.doubleSpinBox_adaptiveMinExposure.editingFinished.emit()
@@ -156,6 +162,9 @@ def test_adaptive_later_valid_edit_clears_latch(qtbot, request) -> None:
     ctrl, _ = make_controller(qtbot, request)
     ui = _adaptive_ui(ctrl)
     ui.checkBox_adaptiveEnable.setChecked(True)
+    # Lower Max Exposure first so a Min Exposure of 500 is invalid.
+    ui.doubleSpinBox_adaptiveMaxExposure.setValue(100.0)
+    ui.doubleSpinBox_adaptiveMaxExposure.editingFinished.emit()
     # Trigger an invalid pair.
     ui.doubleSpinBox_adaptiveMinExposure.setValue(500.0)
     ui.doubleSpinBox_adaptiveMinExposure.editingFinished.emit()
