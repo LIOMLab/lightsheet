@@ -34,6 +34,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from PySide6.QtCore import QEventLoop, QTimer
 from PySide6.QtWidgets import QApplication
 
 from lightsheet.hal import (
@@ -233,21 +234,95 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
             _quit_thread_draining(getattr(controller, attr, None))
 
     def _teardown() -> None:
-        # Stop the hardware_init timers so no pending callback fires
-        # after the test returns (the 100ms imageview timer + the L2
-        # status poll). Guard with getattr — a test that tore these down
-        # itself should not fail teardown.
-        for timer_attr in ("timer_hardware_init", "timer_imageview", "timer_laser2_status"):
+        # Deterministic teardown so no controller-owned widget tree
+        # survives between tests. Cyclic GC is disabled for the whole
+        # session (a Qt widget destructor segfault guard), so the C++
+        # QWidget objects are NOT collected by refcount-on-zero alone —
+        # the Python wrappers reach refcount zero (the signal-lambda
+        # cycle is broken at the connection layer via bare bound-method
+        # connections in wire_collaborators), but the underlying C++
+        # widgets only get destroyed when Qt's DeferredDelete events are
+        # actually delivered. processEvents() does NOT drain
+        # DeferredDelete; only a real QEventLoop.exec() spin does.
+        #
+        # Order matters: timers and worker threads MUST stop before any
+        # deleteLater() call, otherwise a queued timer callback (the
+        # 100ms imageview poll / the ~1s laser2 status poll) fires into
+        # the controller's signals while the C++ tree is being torn
+        # down, raising "RuntimeError: Signal source has been deleted".
+
+        # (a) Stop every shell-owned timer. The two recurring timers
+        # (timer_imageview 100ms, timer_laser2_status ~1s) drive
+        # HardwareManager._poll_laser_status / _refresh_laser_readback
+        # / _poll_laser2_status_gated, which emit on shell signals —
+        # they must be stopped before deletion. The three single-shot
+        # timers (timer_hardware_init, _laser1_amplitude_timer,
+        # _laser2_amplitude_timer) are stopped for hygiene so a
+        # pending one-shot cannot fire during the deletion spin.
+        # Guard with getattr — a test that tore a timer down itself
+        # should not fail teardown.
+        for timer_attr in (
+            "timer_hardware_init",
+            "timer_imageview",
+            "timer_laser2_status",
+            "_laser1_amplitude_timer",
+            "_laser2_amplitude_timer",
+        ):
             timer = getattr(controller, timer_attr, None)
             if timer is not None:
                 timer.stop()
-        # Quit+wait every worker QThread before the patch stops so no
-        # worker outlives the test. The signal-lambda reference cycle is
-        # broken at the connection layer (wire_collaborators uses bare
-        # bound-method connections, so the Python wrapper reaches
-        # refcount zero naturally on teardown), so sip.delete is no
-        # longer required to force deterministic C++ destruction.
+
+        # (b) Drain every worker QThread (frame saver, laser readback,
+        # acquisition preview/live/single/stack) before any QObject is
+        # scheduled for deletion, mirroring closeEvent's quit()+wait()
+        # shutdown so no worker outlives the test.
         _stop_worker_threads()
+
+        # (c) Snapshot the controller-owned top-level widgets while the
+        # controller is still valid. Only reap the controller itself and
+        # top-level widgets for which controller.isAncestorOf(widget) is
+        # True — never sweep unrelated QApplication top-levels (other
+        # tests' widgets, qtbot's own scaffolding, etc.).
+        app = QApplication.instance()
+        owned_toplevels: list = []
+        if app is not None:
+            for widget in app.topLevelWidgets():
+                if widget is controller:
+                    continue
+                try:
+                    if controller.isAncestorOf(widget):
+                        owned_toplevels.append(widget)
+                except RuntimeError:
+                    # widget already invalidated — nothing to reap.
+                    pass
+
+        # (d) Schedule deferred deletion of owned top-levels first, then
+        # the controller itself so child deletion cascades. Keep the
+        # message-box patch active through this phase so a closeEvent
+        # triggered during the spin does not pop a modal exit dialog
+        # that blocks the test runner.
+        for widget in owned_toplevels:
+            try:
+                widget.deleteLater()
+            except RuntimeError:
+                pass
+        controller.deleteLater()
+
+        # (e) Drain DeferredDelete events via a bounded REAL
+        # QEventLoop.exec() spin. QApplication.processEvents() does
+        # NOT deliver DeferredDelete events (proven by probe), so it
+        # cannot substitute for this. The single-shot quit is the hard
+        # upper bound. The ~60ms per-controller teardown cost is the
+        # accepted tradeoff (~3s/worker across ~50 tests) for removing
+        # the observed up-to-28s stylesheet restyle spike and the
+        # intermittent deleted-signal failures that accumulated when
+        # controller-owned widget trees persisted across tests.
+        loop = QEventLoop()
+        QTimer.singleShot(60, loop.quit)
+        loop.exec()
+
+        # (f) Stop the message-box patch only after the bounded loop
+        # returns, so closeEvent during deletion stays non-modal.
         qm_patch.stop()
 
     request.addfinalizer(_teardown)
