@@ -46,6 +46,12 @@ logger = logging.getLogger(__name__)
 # is the recorded capture/detection wavelength.
 _IBEAM_MAX_MW: int = 150000  # uW
 
+# L2 DAQLaser ceiling: 150 mW full-scale at 30.0 mW/V = 5.0 V on /Dev7/ao1.
+# The schema rejects a Laser2 Max Power above this ceiling and a nonpositive
+# mW per Volt conversion factor in both tiers — these are safety-critical
+# config values that bound the two-layer runtime clamp.
+_LASER2_MAX_POWER_MW: float = 150.0
+
 # Zaber T-LS mechanical travel limits. A stage driven past mechanical limits
 # damages hardware.
 _MOTORS_VERTICAL_LIMIT_HIGH_MM: float = 41.0
@@ -121,6 +127,23 @@ def _validate_camera_limit_high(v: float) -> float:
         raise ValueError(
             f"Camera Limit High {v} mm exceeds mechanical travel limit "
             f"{_MOTORS_CAMERA_LIMIT_HIGH_MM} mm"
+        )
+    return v
+
+
+def _validate_laser2_max_power(v: float) -> float:
+    if v > _LASER2_MAX_POWER_MW:
+        raise ValueError(
+            f"Laser2 Max Power {v} mW exceeds the L2 ceiling "
+            f"{_LASER2_MAX_POWER_MW} mW (150 mW iBeam full-scale)"
+        )
+    return v
+
+
+def _validate_laser2_mw_per_volt(v: float) -> float:
+    if v <= 0:
+        raise ValueError(
+            f"Laser2 mW per Volt {v} must be positive (nonzero conversion factor)"
         )
     return v
 
@@ -294,6 +317,22 @@ class LasersSettings(_NoEnvBaseSettings):
     # Optional V->mW calibration curve (display-only). Semicolon-separated
     # "V,mW" pairs. Empty/absent -> linear-through-origin estimate.
     laser1_calibration_curve: str = Field(alias="Laser1 Calibration Curve", default="")
+    # L2 DAQLaser on /Dev7/ao1 — 0-5 V analog modulation, camera-aligned.
+    # The retained iBeam serial backend is composed as readback_backend.
+    laser2_wavelength: int = Field(alias="Laser2 Wavelength")
+    laser2_power: float = Field(alias="Laser2 Power")
+    laser2_max_power: float = Field(alias="Laser2 Max Power")
+    laser2_mw_per_volt: float = Field(alias="Laser2 mW per Volt")
+
+    @field_validator("laser2_max_power")
+    @classmethod
+    def _hard_laser2_max_power(cls, v: float) -> float:
+        return _validate_laser2_max_power(v)
+
+    @field_validator("laser2_mw_per_volt")
+    @classmethod
+    def _hard_laser2_mw_per_volt(cls, v: float) -> float:
+        return _validate_laser2_mw_per_volt(v)
 
 
 class LasersSettingsOverlay(_NoEnvBaseSettings):
@@ -306,6 +345,20 @@ class LasersSettingsOverlay(_NoEnvBaseSettings):
     laser1_max_power: float = Field(alias="Laser1 Max Power")
     laser1_mw_per_volt: float = Field(alias="Laser1 mW per Volt")
     laser1_calibration_curve: str = Field(alias="Laser1 Calibration Curve", default="")
+    laser2_wavelength: int = Field(alias="Laser2 Wavelength")
+    laser2_power: float = Field(alias="Laser2 Power")
+    laser2_max_power: float = Field(alias="Laser2 Max Power")
+    laser2_mw_per_volt: float = Field(alias="Laser2 mW per Volt")
+
+    @field_validator("laser2_max_power")
+    @classmethod
+    def _hard_laser2_max_power(cls, v: float) -> float:
+        return _validate_laser2_max_power(v)
+
+    @field_validator("laser2_mw_per_volt")
+    @classmethod
+    def _hard_laser2_mw_per_volt(cls, v: float) -> float:
+        return _validate_laser2_mw_per_volt(v)
 
 
 class IBeamSettings(_NoEnvBaseSettings):

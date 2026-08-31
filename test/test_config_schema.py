@@ -122,6 +122,10 @@ def _lasers_valid() -> dict:
         "Laser1 Power": 2,
         "Laser1 Max Power": 5,
         "Laser1 mW per Volt": 60,
+        "Laser2 Wavelength": 647,
+        "Laser2 Power": 0,
+        "Laser2 Max Power": 150,
+        "Laser2 mW per Volt": 30.0,
     }
 
 
@@ -498,3 +502,73 @@ def test_collect_config_errors_missing_adaptive_section_uses_defaults() -> None:
     assert result.errors == [], (
         f"expected no errors for missing [Adaptive], got {result.errors}"
     )
+
+
+# --- Laser2 config validation (both tiers) ---
+
+
+def test_laser2_config_strict_and_overlay_accept_valid() -> None:
+    """Both LasersSettings tiers accept the exact Laser2 Wavelength/Power/
+    Max Power/mW per Volt keys with the tracked values (647/0/150/30.0)."""
+    from lightsheet.config_schema import LasersSettings, LasersSettingsOverlay
+
+    for cls in (LasersSettings, LasersSettingsOverlay):
+        s = cls(**_lasers_valid())
+        assert s.laser2_wavelength == 647
+        assert s.laser2_power == 0
+        assert s.laser2_max_power == 150.0
+        assert s.laser2_mw_per_volt == 30.0
+
+
+def test_laser2_config_rejects_ceiling_above_150_both_tiers() -> None:
+    """Laser2 Max Power above 150 mW is rejected in both tiers (safety
+    ceiling — the iBeam diode limit)."""
+    from lightsheet.config_schema import LasersSettings, LasersSettingsOverlay
+
+    for cls in (LasersSettings, LasersSettingsOverlay):
+        with pytest.raises(ValidationError) as exc_info:
+            cls(**{**_lasers_valid(), "Laser2 Max Power": 200.0})
+        msgs = " ".join(str(e["msg"]) for e in exc_info.value.errors())
+        assert "150" in msgs
+
+
+def test_laser2_config_rejects_nonpositive_mw_per_volt_both_tiers() -> None:
+    """Laser2 mW per Volt <= 0 is rejected in both tiers (a nonpositive
+    conversion factor would cause ZeroDivisionError or invert the mW->V
+    mapping)."""
+    from lightsheet.config_schema import LasersSettings, LasersSettingsOverlay
+
+    for cls in (LasersSettings, LasersSettingsOverlay):
+        with pytest.raises(ValidationError):
+            cls(**{**_lasers_valid(), "Laser2 mW per Volt": 0.0})
+        with pytest.raises(ValidationError):
+            cls(**{**_lasers_valid(), "Laser2 mW per Volt": -30.0})
+
+
+def test_laser2_config_ibeam_max_power_validator_unchanged() -> None:
+    """The existing iBeam 150000 uW validator remains independently enforced
+    — adding Laser2 fields to LasersSettings does not weaken the iBeam
+    rejection."""
+    for cls in (IBeamSettings, IBeamSettingsOverlay):
+        with pytest.raises(ValidationError) as exc_info:
+            cls(**{**_ibeam_valid(), "Max Power": 200000})
+        msgs = " ".join(str(e["msg"]) for e in exc_info.value.errors())
+        assert "150000" in msgs
+
+
+def test_laser2_config_strict_rejects_missing_laser2_keys() -> None:
+    """The strict tier rejects a config missing the Laser2 keys (required
+    fields, no defaults)."""
+    from lightsheet.config_schema import LasersSettings
+
+    data = {
+        "Lasers Terminals": "/Dev7/ao0:1",
+        "Laser1 Wavelength": 555,
+        "Laser1 Power": 2,
+        "Laser1 Max Power": 5,
+        "Laser1 mW per Volt": 60,
+    }
+    with pytest.raises(ValidationError) as exc_info:
+        LasersSettings(**data)
+    err_types = [e["type"] for e in exc_info.value.errors()]
+    assert any("missing" in t for t in err_types)

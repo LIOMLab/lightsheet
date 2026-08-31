@@ -457,3 +457,136 @@ def test_mock_siggen_set_laser2_gate_parity():
     msg.compute_scan_waveforms()
     assert msg.waveform_laser2_window is not None
     assert msg.waveform_laser2_window.shape == msg.waveform_camera.shape
+
+
+# --------------------------------------------------------------------------- #
+# Task 2: Registry composition — config-driven L2 DAQLaser with retained
+# serial readback. These tests patch hardware-bound constructors/enumeration
+# and inspect runtime objects/call arguments only — no real SDK calls.
+# --------------------------------------------------------------------------- #
+def _parse_terminals_helper():
+    """Expose the registry's terminal parser for direct unit testing."""
+    from lightsheet.hal.registry import _parse_laser_terminals
+    return _parse_laser_terminals
+
+
+def test_terminal_pair_parses_two_channel_range():
+    """_parse_laser_terminals expands /Dev7/ao0:1 into (/Dev7/ao0,
+    /Dev7/ao1)."""
+    parse = _parse_terminals_helper()
+    l1, l2 = parse("/Dev7/ao0:1")
+    assert l1 == "/Dev7/ao0"
+    assert l2 == "/Dev7/ao1"
+
+
+def test_terminal_pair_rejects_malformed_range():
+    """Malformed or non-two-channel ranges raise ValueError before HAL
+    construction."""
+    parse = _parse_terminals_helper()
+    for bad in ["/Dev7/ao0", "/Dev7/ao0:2", "/Dev7/ao0:1:2", "garbage", "/Dev7/ao"]:
+        with pytest.raises(ValueError):
+            parse(bad)
+
+
+def test_registry_composes_l2_daq_with_readback_and_siggen(monkeypatch):
+    """DeviceRegistry.resolve() constructs lasers[1] as a DAQLaser on
+    /Dev7/ao1 with wavelength 647, max_power 150.0 mW, mw_per_volt 30.0,
+    a 5.0 V ceiling, and a retained IBeamSmartLaser as readback_backend.
+    The same DAQLaser is injected into SigGen for gate-task ownership."""
+    from lightsheet.hal import registry as registry_module
+
+    # Patch hardware-bound constructors and enumeration so no real SDK
+    # calls happen. We inspect the constructed objects and call arguments.
+    constructed: dict[str, object] = {}
+
+    def fake_resolve_ports(self):
+        # Return a minimal resolved-port map so resolve() proceeds.
+        return {"motors": "COM7", "etl_left": "COM5", "etl_right": "COM6"}
+
+    monkeypatch.setattr(
+        registry_module.DeviceRegistry, "_resolve_ports", fake_resolve_ports
+    )
+
+    # Patch Camera, Motors, ETLs, IBeamSmartLaser constructors to no-ops.
+    monkeypatch.setattr(registry_module, "Camera", lambda **kw: object())
+    monkeypatch.setattr(registry_module, "Motors", lambda **kw: object())
+    monkeypatch.setattr(registry_module, "ETLs", lambda **kw: object())
+
+    # Capture the IBeamSmartLaser readback instance.
+    class _FakeIBeam:
+        def __init__(self, label=""):
+            self.label = label
+            constructed["readback"] = self
+
+    monkeypatch.setattr(registry_module, "IBeamSmartLaser", _FakeIBeam)
+
+    # Capture the DAQLaser instances and the SigGen constructor call.
+    real_daqlaser = registry_module.DAQLaser
+
+    class _CapturingDAQLaser(real_daqlaser):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            if "ao1" in kwargs.get("terminal", ""):
+                constructed["l2"] = self
+            else:
+                constructed["l1"] = self
+
+    monkeypatch.setattr(registry_module, "DAQLaser", _CapturingDAQLaser)
+
+    siggen_calls: list[dict] = {}
+
+    class _CapturingSigGen:
+        def __init__(self, camera, laser2_daq=None):
+            self.camera = camera
+            self.laser2_daq = laser2_daq
+            siggen_calls["camera"] = camera
+            siggen_calls["laser2_daq"] = laser2_daq
+
+    monkeypatch.setattr(registry_module, "SigGen", _CapturingSigGen)
+
+    # Use the real config.ini so cfg_read returns the tracked values.
+    reg = registry_module.DeviceRegistry(
+        inventory_path="hardware_inventory.yaml",
+        config_path="config.ini",
+    )
+    bundle = reg.resolve()
+
+    # L2 is a DAQLaser on /Dev7/ao1 with the tracked config.
+    l2 = constructed["l2"]
+    assert l2.terminal == "/Dev7/ao1"
+    assert l2.wavelength == 647
+    assert l2.max_power == 150.0
+    assert l2.mw_per_volt == 30.0
+    assert l2._max_volts == pytest.approx(5.0)
+    # Retained iBeam serial backend attached as readback_backend.
+    assert l2.readback_backend is constructed["readback"]
+    # The same DAQLaser was injected into SigGen.
+    assert siggen_calls["laser2_daq"] is l2
+    # Bundle lasers is a tuple of two elements, L1 on ao0, L2 on ao1.
+    assert isinstance(bundle.lasers, tuple)
+    assert len(bundle.lasers) == 2
+    assert bundle.lasers[1] is l2
+    # L1 stays on ao0.
+    assert constructed["l1"].terminal == "/Dev7/ao0"
+    # DeviceBundle is frozen.
+    import dataclasses
+    assert dataclasses.is_dataclass(bundle) and getattr(
+        bundle.__class__, "__dataclass_params__"
+    ).frozen
+
+
+def test_demo_bundle_remains_all_mock_and_frozen():
+    """_build_demo_bundle() remains all-Mock, constructs successfully without
+    pyserial/nidaqmx hardware, and keeps DeviceBundle frozen with lasers as a
+    tuple."""
+    from lightsheet.__main__ import _build_demo_bundle
+    import dataclasses
+
+    bundle = _build_demo_bundle()
+    assert dataclasses.is_dataclass(bundle)
+    assert getattr(bundle.__class__, "__dataclass_params__").frozen
+    assert isinstance(bundle.lasers, tuple)
+    assert len(bundle.lasers) == 2
+    # L2 in demo is a MockLaser, not a DAQLaser.
+    from lightsheet.hal import MockLaser
+    assert isinstance(bundle.lasers[1], MockLaser)

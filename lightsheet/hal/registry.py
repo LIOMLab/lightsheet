@@ -179,13 +179,11 @@ class DeviceRegistry:
         logger.debug("DeviceRegistry resolved ports: %s", resolved)
 
         camera = Camera(verbose=True)
-        siggen = SigGen(camera)
         motors = Motors()
         etls = ETLs()
 
-        # Laser 1 (DAQ AO /Dev7/ao0, 555 nm) -- mW-native constructor
-        # args from config.ini [Lasers].
-        _l1_cfg = cfg_read(
+        # Laser config from config.ini [Lasers].
+        _l_cfg = cfg_read(
             self._config_path,
             "Lasers",
             {
@@ -194,24 +192,57 @@ class DeviceRegistry:
                 "Laser1 Max Power": 5.0,
                 "Laser1 mW per Volt": 60.0,
                 "Laser1 Calibration Curve": "",
+                "Lasers Terminals": "/Dev7/ao0:1",
+                "Laser2 Wavelength": 647,
+                "Laser2 Power": 0.0,
+                "Laser2 Max Power": 150.0,
+                "Laser2 mW per Volt": 30.0,
             },
         )
+
+        # Parse the two-channel Lasers Terminals range (e.g. /Dev7/ao0:1)
+        # into individual AO channel terminals. Fail clearly on a malformed
+        # or non-two-channel range before HAL construction.
+        l1_terminal, l2_terminal = _parse_laser_terminals(
+            str(_l_cfg["Lasers Terminals"])
+        )
+
+        # Laser 1 (DAQ AO /Dev7/ao0, 555 nm) -- mW-native constructor
+        # args from config.ini [Lasers].
         # Optional V->mW calibration curve (display-only). Empty/absent -> None.
         # DAQLaser validates strictly-increasing V + non-negative mW on construct.
-        _curve_raw = str(_l1_cfg.get("Laser1 Calibration Curve", "")).strip()
+        _curve_raw = str(_l_cfg.get("Laser1 Calibration Curve", "")).strip()
         _calibration_curve = _parse_calibration_curve(_curve_raw)
-        lasers = (
-            DAQLaser(
-                terminal="/Dev7/ao0",
-                wavelength=int(_l1_cfg["Laser1 Wavelength"]),
-                mw_per_volt=float(_l1_cfg["Laser1 mW per Volt"]),
-                max_power_mw=float(_l1_cfg["Laser1 Max Power"])
-                * float(_l1_cfg["Laser1 mW per Volt"]),
-                label="Laser 1 (555 nm)",
-                calibration_curve=_calibration_curve,
-            ),
-            IBeamSmartLaser(label="Laser 2 (647 nm)"),
+        l1 = DAQLaser(
+            terminal=l1_terminal,
+            wavelength=int(_l_cfg["Laser1 Wavelength"]),
+            mw_per_volt=float(_l_cfg["Laser1 mW per Volt"]),
+            max_power_mw=float(_l_cfg["Laser1 Max Power"])
+            * float(_l_cfg["Laser1 mW per Volt"]),
+            label="Laser 1 (555 nm)",
+            calibration_curve=_calibration_curve,
         )
+
+        # Laser 2: DAQ-primary on /Dev7/ao1 (0-5 V analog modulation,
+        # camera-aligned). The retained iBeam serial backend is attached as
+        # the readback_backend — used for channel enable at open and
+        # power/status readback only, never for on/off or power writes.
+        # The analog-mode-enable prerequisite (TOPAS GUI, one-time manual)
+        # is documented in config.ini; there is no serial command for it.
+        l2_readback = IBeamSmartLaser(label="Laser 2 (647 nm)")
+        l2 = DAQLaser(
+            terminal=l2_terminal,
+            wavelength=int(_l_cfg["Laser2 Wavelength"]),
+            mw_per_volt=float(_l_cfg["Laser2 mW per Volt"]),
+            max_power_mw=float(_l_cfg["Laser2 Max Power"]),
+            label="Laser 2 (647 nm)",
+            readback_backend=l2_readback,
+        )
+
+        # Inject the L2 DAQLaser into SigGen for gate-task ownership.
+        siggen = SigGen(camera, laser2_daq=l2)
+
+        lasers = (l1, l2)
 
         return DeviceBundle(
             camera=camera,
@@ -220,3 +251,42 @@ class DeviceRegistry:
             etls=etls,
             lasers=lasers,
         )
+
+
+def _parse_laser_terminals(terminals: str) -> tuple[str, str]:
+    """Parse a two-channel Lasers Terminals range into individual terminals.
+
+    ``/Dev7/ao0:1`` -> ``(/Dev7/ao0, /Dev7/ao1)``. Raises ``ValueError`` on a
+    malformed or non-two-channel range so the operator gets a clear error
+    before HAL construction rather than a cryptic DAQ channel failure.
+    """
+    try:
+        device, channel_range = terminals.rsplit("/", 1)
+    except ValueError:
+        raise ValueError(
+            f"Lasers Terminals {terminals!r} is malformed — expected "
+            f"'/Dev7/ao0:1' (device + two-channel range)"
+        )
+    if not channel_range.startswith("ao"):
+        raise ValueError(
+            f"Lasers Terminals {terminals!r} channel part does not start "
+            f"with 'ao' — expected '/Dev7/ao0:1'"
+        )
+    parts = channel_range[2:].split(":")
+    if len(parts) != 2:
+        raise ValueError(
+            f"Lasers Terminals {terminals!r} is not a two-channel range — "
+            f"expected '/Dev7/ao0:1'"
+        )
+    try:
+        ch_start, ch_end = int(parts[0]), int(parts[1])
+    except ValueError:
+        raise ValueError(
+            f"Lasers Terminals {terminals!r} channel indices are not integers"
+        )
+    if ch_end - ch_start != 1:
+        raise ValueError(
+            f"Lasers Terminals {terminals!r} is not a two-channel range — "
+            f"expected exactly two consecutive channels (e.g. ao0:1)"
+        )
+    return f"{device}/ao{ch_start}", f"{device}/ao{ch_end}"
