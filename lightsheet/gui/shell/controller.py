@@ -23,6 +23,7 @@ laser_panel.py (lock-free E-stop contract).
 @authors: Pierre Girard-Collins & flesage
 """
 
+import contextlib
 import copy
 import logging
 import os
@@ -30,9 +31,10 @@ import threading
 import typing
 import webbrowser
 from functools import partial
+from typing import ClassVar
 
 import numpy as np
-from PySide6.QtCore import QRect, QSize, Qt, QTimer, Signal, Slot
+from PySide6.QtCore import QEvent, QRect, QSize, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import (
     QActionGroup,
     QCloseEvent,
@@ -52,6 +54,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QStyle,
     QStyleOptionToolButton,
+    QToolButton,
 )
 
 from lightsheet.config import cfg_read, cfg_write
@@ -75,7 +78,7 @@ from lightsheet.wavelength_color import wavelength_to_hex
 logger = logging.getLogger(__name__)
 
 
-def _center_toolbutton_paint(btn) -> None:
+def _center_toolbutton_paint(btn: QToolButton) -> None:
     """Override ``paintEvent`` so the icon and text are horizontally
     centered within the full button width.
 
@@ -91,7 +94,7 @@ def _center_toolbutton_paint(btn) -> None:
     text = btn.text()
     style = btn.style()
 
-    def _paint(_event):
+    def _paint(_event: QEvent) -> None:
         p = QPainter(btn)
         opt = QStyleOptionToolButton()
         opt.initFrom(btn)
@@ -199,7 +202,10 @@ class Controller_MainWindow(QMainWindow):
 
     # Default configurable settings. Used as the base for the per-instance
     # cfg_settings dict (deep-copied in __init__ before merging config.ini).
-    _cfg_defaults: dict[str, str] = {"Units": "mm", "Image File Format": "HDF5"}
+    _cfg_defaults: ClassVar[dict[str, str]] = {
+        "Units": "mm",
+        "Image File Format": "HDF5",
+    }
 
     # Signals
     sig_beep = Signal()
@@ -347,9 +353,9 @@ class Controller_MainWindow(QMainWindow):
         # vertical-scroll only). The page order matches the left-rail
         # button order: Motion(0), Acquire(1), Stack(2), Scan(3),
         # Lasers(4), Files(5), Past(6), Calibrate(7).
-        from PySide6.QtWidgets import QScrollArea
+        from PySide6.QtWidgets import QScrollArea, QWidget
 
-        def _wrap(panel) -> QScrollArea:
+        def _wrap(panel: QWidget) -> QScrollArea:
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
             scroll.setFrameShape(QScrollArea.Shape.NoFrame)
@@ -386,7 +392,7 @@ class Controller_MainWindow(QMainWindow):
         # read-only past table, the Planned/Past toggle, and the Refresh
         # button. Wrapped in a QScrollArea per the uniform convention.
         self.ui.stackedPanels.addWidget(_wrap(self.past_panel))             # 6 Past
-        self.ui.stackedPanels.addWidget(_wrap(self.calibration_panel))      # 7 Calibrate
+        self.ui.stackedPanels.addWidget(_wrap(self.calibration_panel))  # 7 Calibrate
 
         # --- Left-rail navigation wiring ---
         # An exclusive QButtonGroup maps each of the 8 left-rail
@@ -463,7 +469,10 @@ class Controller_MainWindow(QMainWindow):
             self.calibration_panel,
         ):
             for attr_name in vars(panel.ui):
-                if not attr_name.startswith("_") and attr_name in SHELL_OWNED_OBJECTNAMES:
+                if (
+                    not attr_name.startswith("_")
+                    and attr_name in SHELL_OWNED_OBJECTNAMES
+                ):
                     setattr(self.ui, attr_name, getattr(panel.ui, attr_name))
 
         # Per-laser status/readback labels + the L2 Refresh Power button are
@@ -564,9 +573,13 @@ class Controller_MainWindow(QMainWindow):
             self.save_panel.ui.lineEdit_saveDescription.setEnabled(True)
         else:
             self.save_panel.ui.lineEdit_saveDirectory.setText("")
-            self.save_panel.ui.lineEdit_saveFilename.setPlaceholderText("Filename - Select Save Directory First")
+            self.save_panel.ui.lineEdit_saveFilename.setPlaceholderText(
+                "Filename - Select Save Directory First"
+            )
             self.save_panel.ui.lineEdit_saveFilename.setEnabled(False)
-            self.save_panel.ui.lineEdit_saveDescription.setPlaceholderText("Description - Select Save Directory First")
+            self.save_panel.ui.lineEdit_saveDescription.setPlaceholderText(
+                "Description - Select Save Directory First"
+            )
             self.save_panel.ui.lineEdit_saveDescription.setEnabled(False)
 
         # Flags
@@ -862,7 +875,7 @@ class Controller_MainWindow(QMainWindow):
             f"window: {lb.window_min}-{lb.window_max}"
         )
 
-    def _update_levels_readout(self, frame) -> None:
+    def _update_levels_readout(self, frame: np.ndarray) -> None:
         """Update the live min/max QLabel readout with the actual pixel
         range of the supplied frame (not the display window), and push the
         data-following range to the LevelsBar so its RANGE handles track
@@ -957,10 +970,10 @@ class Controller_MainWindow(QMainWindow):
             except ValueError:
                 pass
         if step_s:
-            try:
-                self.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(float(step_s))
-            except ValueError:
-                pass
+            with contextlib.suppress(ValueError):
+                self.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(
+                    float(step_s)
+                )
 
     def hardware_init(self) -> None:
         """Completes initialisation of hardware and image consumers.
@@ -1002,8 +1015,16 @@ class Controller_MainWindow(QMainWindow):
         # is shown/hidden. This prevents the show/hide reflow that
         # displaced the ImageView on every visibility toggle: the layout
         # slot is reserved regardless of the radio's visibility.
-        wl1 = getattr(self.lasers[0], "wavelength", None) if len(self.lasers) > 0 else None
-        wl2 = getattr(self.lasers[1], "wavelength", None) if len(self.lasers) > 1 else None
+        wl1 = (
+            getattr(self.lasers[0], "wavelength", None)
+            if len(self.lasers) > 0
+            else None
+        )
+        wl2 = (
+            getattr(self.lasers[1], "wavelength", None)
+            if len(self.lasers) > 1
+            else None
+        )
         self.channel_radio = ChannelRadio(
             parent=self.ui.imagesPane, wl1=wl1, wl2=wl2,
         )
@@ -1059,7 +1080,9 @@ class Controller_MainWindow(QMainWindow):
         # self._hw -> self._shell -> controller). This matches the
         # bound-method pattern documented in wire_collaborators.
         self.timer_imageview.timeout.connect(partial(self._hw._poll_laser_status, [0]))
-        self.timer_imageview.timeout.connect(partial(self._hw._refresh_laser_readback, 0))
+        self.timer_imageview.timeout.connect(
+            partial(self._hw._refresh_laser_readback, 0)
+        )
         self.timer_imageview.start(100)
 
         # L2 (iBeam) status poll — a separate gated QTimer
@@ -1169,7 +1192,12 @@ class Controller_MainWindow(QMainWindow):
             # after close_modes() cleared its mode-started flag. The 4 laser
             # daemon threads stay threading.Thread and are NOT in this loop
             # (lock-free E-stop, AGENTS.md §2).
-            for attr in ("_preview_thread", "_live_thread", "_single_thread", "_stack_thread"):
+            for attr in (
+                "_preview_thread",
+                "_live_thread",
+                "_single_thread",
+                "_stack_thread",
+            ):
                 worker_thread = getattr(self, attr, None)
                 if worker_thread is not None and worker_thread.isRunning():
                     worker_thread.quit()
@@ -1439,7 +1467,9 @@ class Controller_MainWindow(QMainWindow):
         # default text color + bold weight — NO green accent (the green
         # token is reserved exclusively for laser ● ON status, the
         # one-laser-energized invariant's visual corollary).
-        if getattr(self, "_auto_laser1", False) and getattr(self, "_auto_laser2", False):
+        if getattr(self, "_auto_laser1", False) and getattr(
+            self, "_auto_laser2", False
+        ):
             text = text + " · MULTI-CH"
         self.ui.label_modeBadge.setText(text)
 
@@ -1483,7 +1513,9 @@ class Controller_MainWindow(QMainWindow):
         # auto-laser box. Guarded with hasattr for early-init safety
         # (stack_panel may not be wired yet during two-phase construction).
         stack_panel = getattr(self, "stack_panel", None)
-        if stack_panel is not None and hasattr(stack_panel, "_render_stack_plan_summary"):
+        if stack_panel is not None and hasattr(
+            stack_panel, "_render_stack_plan_summary"
+        ):
             stack_panel._render_stack_plan_summary()
         # Keep the channel-radio visibility in sync with the checkbox-pair
         # state (the radio is shown only when both auto-lasers are checked).
@@ -1759,10 +1791,8 @@ class Controller_MainWindow(QMainWindow):
         settings = QSettings("lightsheet", "shell")
         state = settings.value(self._adaptive_dock_state_key)
         if state is not None:
-            try:
-                self.restoreState(state)
-            except (TypeError, RuntimeError):
-                pass  # stale/corrupt state — ignore, dock keeps defaults
+            with contextlib.suppress(TypeError, RuntimeError):
+                self.restoreState(state)  # stale/corrupt → dock keeps defaults
 
     def _save_adaptive_dock_state(self) -> None:
         """Persist the dock geometry + dock-widget-area to QSettings.
@@ -1931,7 +1961,8 @@ class Controller_MainWindow(QMainWindow):
 
         State machine (audit #6 — made explicit on screen):
 
-            ARMED --(E-stop)--> ACTUATED --(1st press)--> DISARMED --(2nd press)--> ARMED
+            ARMED --(E-stop)--> ACTUATED
+                --(1st press)--> DISARMED --(2nd press)--> ARMED
 
         First press (while ACTUATED, button labeled "Clear E-stop"):
         clears the E-stop Event and transitions to DISARMED (gray
@@ -2020,7 +2051,9 @@ class Controller_MainWindow(QMainWindow):
             self.camera.lightsheet_delay_lines
         )
         # Set camera shutter mode comboBox options (default: Rolling)
-        self.acquisition_panel.ui.comboBox_cameraShutterMode.insertItems(0, ["Rolling", "Lightsheet"])
+        self.acquisition_panel.ui.comboBox_cameraShutterMode.insertItems(
+            0, ["Rolling", "Lightsheet"]
+        )
         if self.camera.shutter_mode == "Lightsheet":
             self.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentIndex(1)
         else:

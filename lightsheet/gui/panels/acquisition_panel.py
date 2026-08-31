@@ -13,6 +13,7 @@ them via ``self._shell.ui.<widget>``.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import typing
 import warnings
@@ -47,7 +48,7 @@ class AcquisitionPanelWidget(QWidget):
                 w.applySpec(spec)
 
     def updateUi_modes_buttons(self, buttons_to_enable: list[QPushButton]) -> None:
-        """Update mode buttons status : disable buttons, except for those specified to be enabled"""
+        """Update mode buttons: disable buttons except those specified enabled."""
         aquisition_buttons = [
             self.ui.pushButton_acqStartPreviewMode,
             self.ui.pushButton_acqStartLiveMode,
@@ -139,7 +140,9 @@ class AcquisitionPanelWidget(QWidget):
             self._shell._cache_auto_laser_flags()
 
             # Spawn the preview worker on a QThread (moveToThread pattern).
-            self._shell._preview_worker = PreviewWorker(self._shell._bundle, self._shell._hw, self._shell)
+            self._shell._preview_worker = PreviewWorker(
+                self._shell._bundle, self._shell._hw, self._shell
+            )
             self._shell._preview_thread = QThread()
             self._shell._preview_worker.moveToThread(self._shell._preview_thread)
             self._shell._preview_thread.started.connect(self._shell._preview_worker.run)
@@ -185,7 +188,9 @@ class AcquisitionPanelWidget(QWidget):
             self._shell._cache_auto_laser_flags()
 
             # Spawn the live worker on a QThread (moveToThread pattern).
-            self._shell._live_worker = LiveWorker(self._shell._bundle, self._shell._hw, self._shell)
+            self._shell._live_worker = LiveWorker(
+                self._shell._bundle, self._shell._hw, self._shell
+            )
             self._shell._live_thread = QThread()
             self._shell._live_worker.moveToThread(self._shell._live_thread)
             self._shell._live_thread.started.connect(self._shell._live_worker.run)
@@ -232,11 +237,22 @@ class AcquisitionPanelWidget(QWidget):
 
             # B-03: pre-sample the save-option widgets on the GUI thread
             # BEFORE constructing the worker (AGENTS.md §11).
-            save_desc = str(self._shell.save_panel.ui.lineEdit_saveDescription.text())
-            save_blend = self._shell.save_panel.ui.radioButton_saveStitchBlend.isChecked()
+            save_desc = str(
+                self._shell.save_panel.ui.lineEdit_saveDescription.text()
+            )
+            save_blend = (
+                self._shell.save_panel.ui.radioButton_saveStitchBlend.isChecked()
+            )
 
             # Spawn the single-image worker on a QThread (moveToThread pattern).
-            self._shell._single_worker = SingleWorker(self._shell._bundle, self._shell._hw, self._shell, save_desc, save_blend, multi_channel)
+            self._shell._single_worker = SingleWorker(
+                self._shell._bundle,
+                self._shell._hw,
+                self._shell,
+                save_desc,
+                save_blend,
+                multi_channel,
+            )
             self._shell._single_thread = QThread()
             self._shell._single_worker.moveToThread(self._shell._single_thread)
             self._shell._single_thread.started.connect(self._shell._single_worker.run)
@@ -277,30 +293,28 @@ class AcquisitionPanelWidget(QWidget):
         else:
             self._shell.close_modes()
             # Making sure the limits of the volume are set
+            step_spin = self._shell.stack_panel.ui.doubleSpinBox_acqPlaneStepSize
             if (
                 (not self._shell.stack_first_plane_set)
                 or (not self._shell.stack_last_plane_set)
-                or (self._shell.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.value() == 0)
+                or (step_spin.value() == 0)
             ):
-                self._shell.sig_message.emit(
-                    "Set starting and ending points and select a non-zero plane step value"
-                )
+                msg = "Set starting and ending points and a non-zero plane step"
+                self._shell.sig_message.emit(msg)
                 self._shell.sig_beep.emit()
                 QMessageBox.warning(
                     self._shell,
                     "Stack Acquisition Warning",
-                    "Set starting and ending points and select a non-zero plane step value",
+                    msg,
                     QMessageBox.StandardButton.Ok,
                     QMessageBox.StandardButton.Ok,
                 )
             else:
-                # Setting stack step size sign (taking into account the direction of acquisition)
+                # Set stack step sign (taking into account the direction of acquisition)
                 if self._shell.stack_starting_plane > self._shell.stack_ending_plane:
-                    self._shell.stack_step = (
-                        -1 * self._shell.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.value()
-                    )
+                    self._shell.stack_step = -1 * step_spin.value()
                 else:
-                    self._shell.stack_step = self._shell.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.value()
+                    self._shell.stack_step = step_spin.value()
 
                 # Check that filename is valid and saving is allowed
                 self._shell.save_panel.validate_file_name()
@@ -317,9 +331,13 @@ class AcquisitionPanelWidget(QWidget):
                     )
 
                 if self._shell.saving_allowed or nosave_answer:
-                    self._shell.stack_panel.ui.pushButton_acqStartStackMode.setText("Stop Stack Mode")
-                    self._shell.ui.statusBar_label.setText("Current Acquisition Mode: Stack ")
-                    self._shell.ui.statusBar_progress.setValue(0)  # To reset progress bar
+                    self._shell.stack_panel.ui.pushButton_acqStartStackMode.setText(
+                        "Stop Stack Mode"
+                    )
+                    self._shell.ui.statusBar_label.setText(
+                        "Current Acquisition Mode: Stack "
+                    )
+                    self._shell.ui.statusBar_progress.setValue(0)  # reset progress bar
                     self._shell.ui.statusBar_progress.show()
                     self._shell.stack_mode_started = True
 
@@ -342,7 +360,7 @@ class AcquisitionPanelWidget(QWidget):
                     # Spawn the stack worker (shared with the queue loop).
                     self._spawn_stack_worker()
 
-    def _spawn_stack_worker(self):
+    def _spawn_stack_worker(self) -> None:
         """Spawn the stack worker on its QThread (moveToThread pattern),
         wire its finished signal to the post-stack UI cleanup, and start
         it. Shared by the single-stack Start button and the Acquisition
@@ -418,10 +436,8 @@ class AcquisitionPanelWidget(QWidget):
                     message='.*Failed to disconnect .* from signal "finished\\(\\)"',
                     category=RuntimeWarning,
                 )
-                try:
+                with contextlib.suppress(TypeError, RuntimeError):
                     prev_worker.finished.disconnect()
-                except (TypeError, RuntimeError):
-                    pass
 
         # Spawn the stack worker on the (reused) QThread (moveToThread
         # pattern). A new worker per row is fine — it's a Python object
@@ -451,13 +467,14 @@ class AcquisitionPanelWidget(QWidget):
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",
-                message='.*Failed to disconnect .* from signal "sig_adaptive_trajectory\\(\\)"',
+                message=(
+                    '.*Failed to disconnect .* from signal '
+                    '"sig_adaptive_trajectory\\(\\)"'
+                ),
                 category=RuntimeWarning,
             )
-            try:
+            with contextlib.suppress(TypeError, RuntimeError):
                 self._shell._stack_worker.sig_adaptive_trajectory.disconnect()
-            except (TypeError, RuntimeError):
-                pass
         self._shell._stack_worker.sig_adaptive_trajectory.connect(
             self._shell._on_adaptive_trajectory
         )
@@ -472,10 +489,8 @@ class AcquisitionPanelWidget(QWidget):
                     message='.*Failed to disconnect .* from signal "started\\(\\)"',
                     category=RuntimeWarning,
                 )
-                try:
+                with contextlib.suppress(TypeError, RuntimeError):
                     self._shell._stack_thread.started.disconnect()
-                except (TypeError, RuntimeError):
-                    pass
         self._shell._stack_thread.started.connect(self._shell._stack_worker.run)
         self._shell._stack_worker.finished.connect(self.updateUi_post_stack_mode)
         self._shell._stack_worker.finished.connect(self._shell._stack_thread.quit)
@@ -496,10 +511,8 @@ class AcquisitionPanelWidget(QWidget):
                     message='.*Failed to disconnect .* from signal "finished\\(\\)"',
                     category=RuntimeWarning,
                 )
-                try:
+                with contextlib.suppress(TypeError, RuntimeError):
                     self._shell._stack_thread.finished.disconnect()
-                except (TypeError, RuntimeError):
-                    pass
         self._shell._stack_thread.finished.connect(self._shell._stack_worker.deleteLater)
         self._shell._stack_thread.start()
         return self._shell._stack_worker
@@ -507,7 +520,9 @@ class AcquisitionPanelWidget(QWidget):
     @Slot()
     def updateUi_post_stack_mode(self) -> None:
         """Enabling modes after stack mode"""
-        self._shell.stack_panel.ui.pushButton_acqStartStackMode.setText("Start Stack Mode")
+        self._shell.stack_panel.ui.pushButton_acqStartStackMode.setText(
+            "Start Stack Mode"
+        )
         self.updateUi_modes_buttons(self._shell.default_buttons)
         self._shell.motor_panel.updateUi_motor_buttons(disable_button=False)
 

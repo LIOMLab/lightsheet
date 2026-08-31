@@ -86,20 +86,6 @@ ignore = ["ANN401"]
 
 [tool.ruff.lint.per-file-ignores]
 "lightsheet/__main__.py" = ["E402"]
-# Test files use untyped pytest fixtures (qtbot, request) and lazy
-# imports inside test functions (the RED/importorskip pattern), so the
-# ANN and E402 rules are noise here.
-"test/test_adaptive_ui.py" = ["ANN001", "ANN002", "ANN003", "ANN202", "E402"]
-# The shell controller and acquisition panel pre-date the ruff ANN/SIM
-# rules. The try/except/pass inside warnings.catch_warnings() blocks
-# (SIM105) is intentional — contextlib.suppress does not compose with
-# the warnings filter context, and the libpyside disconnect warnings
-# must be scoped. Long comment lines (E501) and missing annotations
-# (ANN001/ANN202) are pre-existing style; churning them is out of scope
-# for the adaptive telemetry plan. RUF012 on the controller's class-
-# level mutable default is a pre-existing intentional pattern.
-"lightsheet/gui/shell/controller.py" = ["E501", "SIM105", "ANN001", "ANN202", "RUF012"]
-"lightsheet/gui/panels/acquisition_panel.py" = ["E501", "SIM105", "ANN001", "ANN202"]
 
 [tool.ruff.format]
 # defaults
