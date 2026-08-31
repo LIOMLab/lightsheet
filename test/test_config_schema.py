@@ -25,23 +25,11 @@ from pydantic import ValidationError
 from lightsheet.config_schema import (
     AdaptiveSettings,
     AdaptiveSettingsOverlay,
-    CameraSettings,
-    CameraSettingsOverlay,
     ConfigValidationResult,
-    ControllerSettings,
-    ControllerSettingsOverlay,
-    ETLsSettings,
-    ETLsSettingsOverlay,
     IBeamSettings,
     IBeamSettingsOverlay,
-    LasersSettings,
-    LasersSettingsOverlay,
-    LoggingSettings,
-    LoggingSettingsOverlay,
     MotorsSettings,
     MotorsSettingsOverlay,
-    SigGenSettings,
-    SigGenSettingsOverlay,
     collect_config_errors,
 )
 
@@ -351,7 +339,7 @@ def test_adaptive_overlay_matches_strict_defaults() -> None:
     a default mismatch."""
     strict = AdaptiveSettings(**_adaptive_valid())
     overlay = AdaptiveSettingsOverlay(**_adaptive_valid())
-    for fname in strict.model_fields:
+    for fname in type(strict).model_fields:
         assert getattr(strict, fname) == getattr(overlay, fname), (
             f"adaptive default mismatch on {fname}: "
             f"{getattr(strict, fname)} != {getattr(overlay, fname)}"
@@ -395,9 +383,17 @@ def test_adaptive_rejects_reversed_power_pair_both_tiers() -> None:
     """Laser1 Min Power > Laser1 Max Power is rejected on both tiers."""
     for cls in (AdaptiveSettings, AdaptiveSettingsOverlay):
         with pytest.raises(ValidationError):
-            cls(**{**_adaptive_valid(), "Laser1 Min Power": 10.0, "Laser1 Max Power": 5.0})
+            cls(**{
+                **_adaptive_valid(),
+                "Laser1 Min Power": 10.0,
+                "Laser1 Max Power": 5.0,
+            })
         with pytest.raises(ValidationError):
-            cls(**{**_adaptive_valid(), "Laser2 Min Power": 200.0, "Laser2 Max Power": 150.0})
+            cls(**{
+                **_adaptive_valid(),
+                "Laser2 Min Power": 200.0,
+                "Laser2 Max Power": 150.0,
+            })
 
 
 def test_adaptive_rejects_power_above_150_both_tiers() -> None:
@@ -448,15 +444,20 @@ def test_collect_config_errors_adaptive_cross_section_l1_and_l2() -> None:
     """collect_config_errors surfaces BOTH cross-section errors in one
     pass when Adaptive L1 Max > [Lasers] Laser1 Max Power AND Adaptive
     L2 Max > [iBeam] Max Power / 1000. The tracked config has
-    Laser1 Max Power = 5 mW and iBeam Max Power = 150000 uW (150 mW),
-    so 5.1 mW and 150.1 mW are rejected cross-sectionally."""
+    Laser1 Max Power = 5 mW and iBeam Max Power = 150000 uW (150 mW).
+    To prove the cross-section check (not the per-section 0..150 range)
+    bites, the test lowers iBeam Max Power to 100000 uW (100 mW) and
+    sets Adaptive L2 Max = 150.0 mW (within the per-section 0..150 range
+    but above the configured 100 mW). Adaptive L1 Max = 5.1 mW is within
+    the per-section range but above the configured 5 mW. Both are
+    rejected cross-sectionally in one pass."""
     sections = {
         "Lasers": _lasers_valid(),
-        "iBeam": _ibeam_valid(),
+        "iBeam": {**_ibeam_valid(), "Max Power": 100000},
         "Adaptive": {
             **_adaptive_valid(),
             "Laser1 Max Power": 5.1,
-            "Laser2 Max Power": 150.1,
+            "Laser2 Max Power": 150.0,
         },
     }
     result = collect_config_errors(sections)

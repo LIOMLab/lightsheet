@@ -496,6 +496,312 @@ class LoggingSettingsOverlay(_NoEnvBaseSettings):
     log_dir: str = Field(alias="Log Dir", default="")
 
 
+# --- Adaptive section (operator-configurable bounds + gains) ---------------
+#
+# The [Adaptive] section is an OPTIONAL baseline section: a config.ini
+# without it must validate using the model defaults (load_sections_from_ini
+# supplies {} for an absent optional section so the pydantic defaults
+# apply, never an empty-string parse failure). Both tiers carry identical
+# aliases/defaults and the same range/pair validators so a tampered overlay
+# cannot bypass the same check that guards the tracked baseline.
+#
+# Field ranges (rejected, not clamped, in BOTH tiers):
+# - Exposure: 1..1000 (ms in Rolling / lines in Lightsheet — the unit is
+#   shutter-mode-dependent and resolved by the GUI; the schema validates
+#   the raw numeric range).
+# - Each laser power: 0..150 mW (150 mirrors the [iBeam] Max Power ceiling;
+#   the cross-section check below further narrows to each configured
+#   laser's maximum).
+# - Target band: 0..100 %, lo <= hi.
+# - Reacquire threshold: 0..50 %.
+# - Block size N: 1..100 planes.
+# - Kp: 0..5; Ki: 0..1.
+# - Pilot count: 0..50 frames.
+#
+# Cross-section rejection (collect-all, after per-section validation):
+# Adaptive Laser1 Max Power > [Lasers] Laser1 Max Power (mW) and
+# Adaptive Laser2 Max Power > [iBeam] Max Power / 1000 (uW -> mW) are
+# rejected in one pass — never silently clamped. The two-layer runtime
+# clamp is the defense during a session; the schema is the defense at
+# startup.
+
+
+class AdaptiveSettings(_NoEnvBaseSettings):
+    model_config = SettingsConfigDict(
+        extra="forbid", case_sensitive=True, populate_by_name=True
+    )
+    enabled: bool = Field(alias="Enabled", default=False)
+    min_exposure: float = Field(alias="Min Exposure", default=1)
+    max_exposure: float = Field(alias="Max Exposure", default=1000)
+    laser1_min_power: float = Field(alias="Laser1 Min Power", default=0.0)
+    laser1_max_power: float = Field(alias="Laser1 Max Power", default=5.0)
+    laser2_min_power: float = Field(alias="Laser2 Min Power", default=0.0)
+    laser2_max_power: float = Field(alias="Laser2 Max Power", default=150.0)
+    target_band_lo: float = Field(alias="Target Band Lo", default=90.0)
+    target_band_hi: float = Field(alias="Target Band Hi", default=95.0)
+    reacquire_threshold: float = Field(alias="Reacquire Threshold", default=8.0)
+    block_size_n: int = Field(alias="Block Size N", default=8)
+    kp: float = Field(alias="Kp", default=0.4)
+    ki: float = Field(alias="Ki", default=0.05)
+    pilot_count: int = Field(alias="Pilot Count", default=5)
+
+    @field_validator("min_exposure", "max_exposure")
+    @classmethod
+    def _exposure_range(cls, v: float) -> float:
+        if v < 1 or v > 1000:
+            raise ValueError(
+                f"exposure {v} is outside the valid range 1..1000"
+            )
+        return v
+
+    @field_validator(
+        "laser1_min_power", "laser1_max_power",
+        "laser2_min_power", "laser2_max_power",
+    )
+    @classmethod
+    def _power_range(cls, v: float) -> float:
+        if v < 0 or v > 150:
+            raise ValueError(
+                f"power {v} mW is outside the valid range 0..150 mW"
+            )
+        return v
+
+    @field_validator("target_band_lo", "target_band_hi")
+    @classmethod
+    def _target_range(cls, v: float) -> float:
+        if v < 0 or v > 100:
+            raise ValueError(
+                f"target band {v} % is outside the valid range 0..100 %"
+            )
+        return v
+
+    @field_validator("reacquire_threshold")
+    @classmethod
+    def _reacquire_range(cls, v: float) -> float:
+        if v < 0 or v > 50:
+            raise ValueError(
+                f"reacquire threshold {v} % is outside the valid range 0..50 %"
+            )
+        return v
+
+    @field_validator("block_size_n")
+    @classmethod
+    def _block_range(cls, v: int) -> int:
+        if v < 1 or v > 100:
+            raise ValueError(
+                f"block size N {v} is outside the valid range 1..100"
+            )
+        return v
+
+    @field_validator("kp")
+    @classmethod
+    def _kp_range(cls, v: float) -> float:
+        if v < 0 or v > 5:
+            raise ValueError(
+                f"Kp {v} is outside the valid range 0..5"
+            )
+        return v
+
+    @field_validator("ki")
+    @classmethod
+    def _ki_range(cls, v: float) -> float:
+        if v < 0 or v > 1:
+            raise ValueError(
+                f"Ki {v} is outside the valid range 0..1"
+            )
+        return v
+
+    @field_validator("pilot_count")
+    @classmethod
+    def _pilot_range(cls, v: int) -> int:
+        if v < 0 or v > 50:
+            raise ValueError(
+                f"pilot count {v} is outside the valid range 0..50"
+            )
+        return v
+
+    @field_validator("max_exposure")
+    @classmethod
+    def _exposure_pair(cls, v: float, info) -> float:
+        # Validate min <= max after both fields are parsed. The
+        # values-by-name path is available via info.data.
+        min_v = info.data.get("min_exposure")
+        if min_v is not None and min_v > v:
+            raise ValueError(
+                f"Min Exposure ({min_v}) is greater than Max Exposure ({v})"
+            )
+        return v
+
+    @field_validator("laser1_max_power")
+    @classmethod
+    def _laser1_pair(cls, v: float, info) -> float:
+        min_v = info.data.get("laser1_min_power")
+        if min_v is not None and min_v > v:
+            raise ValueError(
+                f"Laser1 Min Power ({min_v}) is greater than "
+                f"Laser1 Max Power ({v})"
+            )
+        return v
+
+    @field_validator("laser2_max_power")
+    @classmethod
+    def _laser2_pair(cls, v: float, info) -> float:
+        min_v = info.data.get("laser2_min_power")
+        if min_v is not None and min_v > v:
+            raise ValueError(
+                f"Laser2 Min Power ({min_v}) is greater than "
+                f"Laser2 Max Power ({v})"
+            )
+        return v
+
+    @field_validator("target_band_hi")
+    @classmethod
+    def _target_pair(cls, v: float, info) -> float:
+        lo = info.data.get("target_band_lo")
+        if lo is not None and lo > v:
+            raise ValueError(
+                f"Target Band Lo ({lo}) is greater than Target Band Hi ({v})"
+            )
+        return v
+
+
+class AdaptiveSettingsOverlay(_NoEnvBaseSettings):
+    model_config = SettingsConfigDict(
+        extra="ignore", case_sensitive=True, populate_by_name=True
+    )
+    enabled: bool = Field(alias="Enabled", default=False)
+    min_exposure: float = Field(alias="Min Exposure", default=1)
+    max_exposure: float = Field(alias="Max Exposure", default=1000)
+    laser1_min_power: float = Field(alias="Laser1 Min Power", default=0.0)
+    laser1_max_power: float = Field(alias="Laser1 Max Power", default=5.0)
+    laser2_min_power: float = Field(alias="Laser2 Min Power", default=0.0)
+    laser2_max_power: float = Field(alias="Laser2 Max Power", default=150.0)
+    target_band_lo: float = Field(alias="Target Band Lo", default=90.0)
+    target_band_hi: float = Field(alias="Target Band Hi", default=95.0)
+    reacquire_threshold: float = Field(alias="Reacquire Threshold", default=8.0)
+    block_size_n: int = Field(alias="Block Size N", default=8)
+    kp: float = Field(alias="Kp", default=0.4)
+    ki: float = Field(alias="Ki", default=0.05)
+    pilot_count: int = Field(alias="Pilot Count", default=5)
+
+    @field_validator("min_exposure", "max_exposure")
+    @classmethod
+    def _exposure_range(cls, v: float) -> float:
+        if v < 1 or v > 1000:
+            raise ValueError(
+                f"exposure {v} is outside the valid range 1..1000"
+            )
+        return v
+
+    @field_validator(
+        "laser1_min_power", "laser1_max_power",
+        "laser2_min_power", "laser2_max_power",
+    )
+    @classmethod
+    def _power_range(cls, v: float) -> float:
+        if v < 0 or v > 150:
+            raise ValueError(
+                f"power {v} mW is outside the valid range 0..150 mW"
+            )
+        return v
+
+    @field_validator("target_band_lo", "target_band_hi")
+    @classmethod
+    def _target_range(cls, v: float) -> float:
+        if v < 0 or v > 100:
+            raise ValueError(
+                f"target band {v} % is outside the valid range 0..100 %"
+            )
+        return v
+
+    @field_validator("reacquire_threshold")
+    @classmethod
+    def _reacquire_range(cls, v: float) -> float:
+        if v < 0 or v > 50:
+            raise ValueError(
+                f"reacquire threshold {v} % is outside the valid range 0..50 %"
+            )
+        return v
+
+    @field_validator("block_size_n")
+    @classmethod
+    def _block_range(cls, v: int) -> int:
+        if v < 1 or v > 100:
+            raise ValueError(
+                f"block size N {v} is outside the valid range 1..100"
+            )
+        return v
+
+    @field_validator("kp")
+    @classmethod
+    def _kp_range(cls, v: float) -> float:
+        if v < 0 or v > 5:
+            raise ValueError(
+                f"Kp {v} is outside the valid range 0..5"
+            )
+        return v
+
+    @field_validator("ki")
+    @classmethod
+    def _ki_range(cls, v: float) -> float:
+        if v < 0 or v > 1:
+            raise ValueError(
+                f"Ki {v} is outside the valid range 0..1"
+            )
+        return v
+
+    @field_validator("pilot_count")
+    @classmethod
+    def _pilot_range(cls, v: int) -> int:
+        if v < 0 or v > 50:
+            raise ValueError(
+                f"pilot count {v} is outside the valid range 0..50"
+            )
+        return v
+
+    @field_validator("max_exposure")
+    @classmethod
+    def _exposure_pair(cls, v: float, info) -> float:
+        min_v = info.data.get("min_exposure")
+        if min_v is not None and min_v > v:
+            raise ValueError(
+                f"Min Exposure ({min_v}) is greater than Max Exposure ({v})"
+            )
+        return v
+
+    @field_validator("laser1_max_power")
+    @classmethod
+    def _laser1_pair(cls, v: float, info) -> float:
+        min_v = info.data.get("laser1_min_power")
+        if min_v is not None and min_v > v:
+            raise ValueError(
+                f"Laser1 Min Power ({min_v}) is greater than "
+                f"Laser1 Max Power ({v})"
+            )
+        return v
+
+    @field_validator("laser2_max_power")
+    @classmethod
+    def _laser2_pair(cls, v: float, info) -> float:
+        min_v = info.data.get("laser2_min_power")
+        if min_v is not None and min_v > v:
+            raise ValueError(
+                f"Laser2 Min Power ({min_v}) is greater than "
+                f"Laser2 Max Power ({v})"
+            )
+        return v
+
+    @field_validator("target_band_hi")
+    @classmethod
+    def _target_pair(cls, v: float, info) -> float:
+        lo = info.data.get("target_band_lo")
+        if lo is not None and lo > v:
+            raise ValueError(
+                f"Target Band Lo ({lo}) is greater than Target Band Hi ({v})"
+            )
+        return v
+
+
 # ---------------------------------------------------------------------------
 # Collect-all entry point — iterate ALL sections, collect every error +
 # warning into two lists BEFORE any dialog is shown (UI-SPEC collect-all).
@@ -526,7 +832,14 @@ _SECTION_MODELS: dict[str, tuple[type[BaseSettings], type[BaseSettings]]] = {
     "ETLs": (ETLsSettings, ETLsSettingsOverlay),
     "Motors": (MotorsSettings, MotorsSettingsOverlay),
     "Logging": (LoggingSettings, LoggingSettingsOverlay),
+    "Adaptive": (AdaptiveSettings, AdaptiveSettingsOverlay),
 }
+
+# Optional baseline sections — a config.ini without one of these sections
+# validates using the model defaults (load_sections_from_ini supplies {}
+# for an absent section in this set so the pydantic defaults apply, never
+# an empty-string parse failure). Sections NOT in this set are required.
+_OPTIONAL_SECTIONS: frozenset[str] = frozenset({"Adaptive"})
 
 
 # Non-safety recommended-range WARN checks. Each entry maps a section name
@@ -602,6 +915,9 @@ def collect_config_errors(
     out-of-range) -> warnings, surfaced only when the section constructed
     successfully."""
     result = ConfigValidationResult()
+    # Track the constructed settings objects so cross-section checks can
+    # compare fields across sections after every section validated.
+    constructed: dict[str, BaseSettings] = {}
     for section_name, data in sections.items():
         models = _SECTION_MODELS.get(section_name)
         if models is None:
@@ -616,6 +932,7 @@ def collect_config_errors(
         except ValidationError as exc:
             result.errors.extend(_format_pydantic_errors(section_name, exc))
             continue
+        constructed[section_name] = settings
         # Section constructed successfully — run non-safety WARN checks.
         warn_checks = _WARN_CHECKS.get(section_name, [])
         for field_name, check, violation in warn_checks:
@@ -627,7 +944,56 @@ def collect_config_errors(
                 result.warnings.append(
                     f"[{section_name}] {key} = {value}: {violation}."
                 )
+    # Cross-section safety checks — reject (never clamp) adaptive laser
+    # maxima above the configured laser maxima. Runs after every section
+    # validated so both errors surface in one collect-all pass.
+    _cross_section_adaptive_power(result, constructed)
     return result
+
+
+def _cross_section_adaptive_power(
+    result: ConfigValidationResult,
+    constructed: dict[str, BaseSettings],
+) -> None:
+    """Reject adaptive laser maxima above the configured laser maxima.
+
+    - Adaptive Laser1 Max Power is compared against [Lasers] Laser1 Max
+      Power (mW). Reject if Adaptive L1 Max > [Lasers] Laser1 Max Power.
+    - Adaptive Laser2 Max Power is compared against [iBeam] Max Power
+      / 1000 (uW -> mW). Reject if Adaptive L2 Max > [iBeam] Max Power
+      / 1000.
+
+    Both checks are collect-all: a config violating both surfaces two
+    errors in one pass. The comparison is strict (>) so a value sitting
+    exactly at the configured maximum is accepted.
+    """
+    adaptive = constructed.get("Adaptive")
+    if adaptive is None:
+        # [Adaptive] absent or failed per-section validation — nothing
+        # to compare. A per-section failure is already in result.errors.
+        return
+    lasers = constructed.get("Lasers")
+    if lasers is not None:
+        l1_max = float(lasers.laser1_max_power)
+        adaptive_l1_max = float(adaptive.laser1_max_power)
+        if adaptive_l1_max > l1_max:
+            result.errors.append(
+                f"[Adaptive] Laser1 Max Power = {adaptive_l1_max} mW exceeds "
+                f"[Lasers] Laser1 Max Power = {l1_max} mW. Lower the "
+                f"adaptive bound or raise the configured laser maximum."
+            )
+    ibeam = constructed.get("iBeam")
+    if ibeam is not None:
+        # [iBeam] Max Power is in uW; convert to mW for the comparison.
+        l2_max_mw = float(ibeam.max_power) / 1000.0
+        adaptive_l2_max = float(adaptive.laser2_max_power)
+        if adaptive_l2_max > l2_max_mw:
+            result.errors.append(
+                f"[Adaptive] Laser2 Max Power = {adaptive_l2_max} mW exceeds "
+                f"[iBeam] Max Power = {l2_max_mw:.1f} mW (150000 uW / 1000). "
+                f"Lower the adaptive bound or raise the configured laser "
+                f"maximum."
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -652,7 +1018,23 @@ def load_sections_from_ini(
     update). Returns a ``dict[section_name, dict[key, raw_string_value]]``.
     """
     sections: dict[str, dict[str, str]] = {}
+    # Detect which sections the baseline file actually contains so an
+    # absent OPTIONAL section (e.g. [Adaptive]) is supplied as {} and the
+    # pydantic model defaults apply — never an empty-string parse failure.
+    _base_cfg = configparser.ConfigParser()
+    _base_cfg.optionxform = str  # preserve case (AGENTS.md §9)
+    _base_cfg.read(baseline_path)
     for section_name, (strict_cls, _overlay_cls) in _SECTION_MODELS.items():
+        # An optional section absent from the baseline file is supplied
+        # as {} so the pydantic model defaults apply (no empty-string
+        # parse failure on int/float/bool fields). Required sections
+        # still go through cfg_read which fills every alias key.
+        if (
+            section_name in _OPTIONAL_SECTIONS
+            and not _base_cfg.has_section(section_name)
+        ):
+            sections[section_name] = {}
+            continue
         # Build the defaults dict from the strict model's Field aliases so
         # cfg_read captures every file key (cfg_read only returns keys
         # present in the defaults dict — passing {} would yield {}).
