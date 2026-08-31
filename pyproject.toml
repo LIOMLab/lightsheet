@@ -85,6 +85,10 @@ ignore = ["ANN401"]
 
 [tool.ruff.lint.per-file-ignores]
 "lightsheet/__main__.py" = ["E402"]
+# Test files use untyped pytest fixtures (qtbot, request) and lazy
+# imports inside test functions (the RED/importorskip pattern), so the
+# ANN and E402 rules are noise here.
+"test/test_adaptive_ui.py" = ["ANN001", "ANN002", "ANN003", "ANN202", "E402"]
 
 [tool.ruff.format]
 # defaults
