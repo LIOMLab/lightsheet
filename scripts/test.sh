@@ -21,5 +21,5 @@ cd "$(git rev-parse --show-toplevel)"
 if [ $# -gt 0 ]; then
   exec uv run pytest "$@" -q
 else
-  exec uv run pytest test/ -q
+  exec uv run pytest -q
 fi

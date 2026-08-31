@@ -137,7 +137,7 @@ markers = [
 
 # Coverage gate machinery (D-01/D-05). The gate is an explicit, separate
 # invocation (scripts/coverage.sh), NOT always-on in addopts above — the fast
-# `uv run pytest test/ -q` iteration path stays snappy and free of --cov
+# `uv run pytest -q` iteration path stays snappy and free of --cov
 # overhead. Branch coverage (D-05) subsumes line; coverage.py folds branch
 # into the single reported % so --cov-fail-under gates both in one number.
 [tool.coverage.run]

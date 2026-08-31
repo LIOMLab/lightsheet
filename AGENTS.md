@@ -131,8 +131,8 @@ rig repo path from `AGENTS.local.md`):
 ```bash
 # On the rig (over SSH, however you connect):
 uv sync
-uv run pytest test/ -q                       # mock path (conftest stubs the SDKs)
-LIGHTSHEET_HW=1 uv run pytest test/ -q       # real-path conformance + rig-only tests
+uv run pytest -q                       # mock path (conftest stubs the SDKs)
+LIGHTSHEET_HW=1 uv run pytest -q       # real-path conformance + rig-only tests
 ```
 
 Rules for rig use:
@@ -155,7 +155,7 @@ uv sync
 
 Then run the suite:
 ```bash
-uv run pytest test/ -q
+uv run pytest -q
 ```
 
 **Use the convenience scripts instead of constructing pytest flags by hand**
@@ -174,7 +174,7 @@ invisible on a single test but catastrophic on the full suite. The trap:
 
 | Command | xdist? | Why |
 |---|---|---|
-| `uv run pytest test/ -q` | ✓ on | addopts untouched |
+| `uv run pytest -q` | ✓ on | addopts untouched |
 | `-o addopts="-ra --strict-markers"` | ✗ **off** | overrides addopts, strips xdist |
 | `--override-ini="addopts="` | ✗ **off** | same |
 | `-p no:xdist` (alone) | **ERRORS** | addopts still has `-n auto` → unrecognized arg |
@@ -183,11 +183,11 @@ If you genuinely need single-process (debugging a hang, reading `--durations`
 without xdist scheduling noise, `-p no:xdist` for a traceback), use
 `scripts/test-serial.sh` or pass **both** flags together:
 ```bash
-uv run pytest test/ -q -p no:xdist -o addopts="-ra --strict-markers"
+uv run pytest -q -p no:xdist -o addopts="-ra --strict-markers"
 ```
 The `-p no:xdist` disables the plugin; the `-o addopts=...` clears the flags
 that reference it. Either alone breaks. When done debugging, go back to the
-bare `uv run pytest test/ -q` (or `scripts/test.sh`).
+bare `uv run pytest -q` (or `scripts/test.sh`).
 
 - `test/conftest.py` auto-stubs `nidaqmx`, `pco`, and (as fallback) `serial`
   into `sys.modules` before collection, gated by `find_spec` + a smoke check
@@ -297,7 +297,7 @@ bare `uv run pytest test/ -q` (or `scripts/test.sh`).
 - **Coverage-gate invocation** (`bash scripts/coverage.sh`) runs the explicit
   3-step gate: `pytest --cov=lightsheet --cov-branch --cov-fail-under=70` →
   `coverage json` → `coverage-threshold`. It is NOT part of the fast
-  `uv run pytest test/ -q` iteration path (that stays snappy, no `--cov`).
+  `uv run pytest -q` iteration path (that stays snappy, no `--cov`).
   Run it before committing a change that touches a safety-critical module
   (see §2), and before any high-risk refactor — the gate exists to protect
   safety-critical modules and high-risk structural work. The completed Phase 6
@@ -1103,12 +1103,12 @@ startup. Re-export both backends + `IPowerMeter` through the
 
 ## 14. Before you finish a task
 
-1. Run `uv run pytest test/ -q` on a dev machine. Fix failures you caused. If you
+1. Run `uv run pytest -q` on a dev machine. Fix failures you caused. If you
    touched style-sensitive code, also run `uv run ruff check` and
    `uv run ruff format`, and `uv run ty check` if you touched types.
 2. If the change touches hardware behavior and is verifiable on the rig, say so
    and (if asked) verify on the rig (per §4) with read-only queries first
-   (`uv sync` then `LIGHTSHEET_HW=1 uv run pytest test/ -q` on the rig).
+   (`uv sync` then `LIGHTSHEET_HW=1 uv run pytest -q` on the rig).
 3. Re-read §2 — confirm no safety control was weakened (motor limits, two-layer
    laser clamp, synchronous E-stop `off()`, lock-free kill path, frozen
    `DeviceBundle`, config-schema rejection of out-of-range safety keys).

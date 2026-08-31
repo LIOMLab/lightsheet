@@ -90,11 +90,11 @@ cd "${REPO_ROOT}"
 # the hang is intermittent, not deterministic.
 _XDIST_TIMEOUT=90
 _run_cov_xdist() {
-  uv run pytest test/ -q --cov=lightsheet --cov-branch \
+  uv run pytest -q --cov=lightsheet --cov-branch \
     -o "addopts=--strict-markers -n auto --maxprocesses=6"
 }
 _run_cov_serial() {
-  uv run pytest test/ -q --cov=lightsheet --cov-branch \
+  uv run pytest -q --cov=lightsheet --cov-branch \
     -o "addopts=--strict-markers" -p no:xdist
 }
 # Export so `timeout` (which execs, not a shell builtin) can invoke them

@@ -22,5 +22,5 @@ cd "$(git rev-parse --show-toplevel)"
 if [ $# -gt 0 ]; then
   exec uv run pytest "$@" -q -p no:xdist -o addopts="-ra --strict-markers"
 else
-  exec uv run pytest test/ -q -p no:xdist -o addopts="-ra --strict-markers"
+  exec uv run pytest -q -p no:xdist -o addopts="-ra --strict-markers"
 fi
