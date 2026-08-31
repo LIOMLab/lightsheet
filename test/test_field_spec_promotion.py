@@ -56,6 +56,20 @@ _OBJNAME_TO_PANEL = {
     # laser_panel
     "doubleSpinBox_laserOneAmplitude": "laser_panel",
     "doubleSpinBox_laserTwoAmplitude": "laser_panel",
+    # stack_panel — adaptive config group (13 enumerated spinboxes)
+    "doubleSpinBox_adaptiveMinExposure": "stack_panel",
+    "doubleSpinBox_adaptiveMaxExposure": "stack_panel",
+    "doubleSpinBox_adaptiveLaser1MinPower": "stack_panel",
+    "doubleSpinBox_adaptiveLaser1MaxPower": "stack_panel",
+    "doubleSpinBox_adaptiveLaser2MinPower": "stack_panel",
+    "doubleSpinBox_adaptiveLaser2MaxPower": "stack_panel",
+    "doubleSpinBox_adaptiveTargetBandLo": "stack_panel",
+    "doubleSpinBox_adaptiveTargetBandHi": "stack_panel",
+    "doubleSpinBox_adaptiveReacquireThreshold": "stack_panel",
+    "doubleSpinBox_adaptiveBlockSizeN": "stack_panel",
+    "doubleSpinBox_adaptiveKp": "stack_panel",
+    "doubleSpinBox_adaptiveKi": "stack_panel",
+    "doubleSpinBox_adaptivePilotCount": "stack_panel",
 }
 
 # The fields that previously had QSlider siblings. The sliders were
