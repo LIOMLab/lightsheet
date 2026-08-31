@@ -6,8 +6,9 @@ shell's save/enqueue calls through to them. The ``FrameSaver`` and
 from ``lightsheet/gui/controller.py`` — a behavior-preserving mechanical
 relocation). The shell delegates through ``self._fs``.
 
-This is a plain-Python object (NOT a ``QObject``) per the plain-Python collaborator pattern
-1: collaborators emit through a shell reference, never declare their own
+This is a plain-Python object (NOT a ``QObject``) per the plain-Python
+collaborator pattern 1: collaborators emit through a shell reference,
+never declare their own
 ``Signal``, and never call ``.connect()``. The one exception is the
 ``FrameSaver.sig_status_message`` → ``shell.updateUi_message_printer``
 connection, which is preserved verbatim from the pre-extraction
@@ -1820,7 +1821,7 @@ class ZarrSaver:
             self._vertical_positions.append(float(ver_pos))
             self._camera_positions.append(float(cam_pos))
 
-    def _build_omero_channels(self, lasers) -> list[dict]:
+    def _build_omero_channels(self, lasers: tuple) -> list[dict]:
         """Build the omero.channels list from the lasers that were
         actually used in this acquisition.
 
