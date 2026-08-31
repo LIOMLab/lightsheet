@@ -662,6 +662,14 @@ class StackWorker(QObject, _AcquireScanMixin):
     """
 
     finished = Signal()
+    # Adaptive trajectory signal: plane_idx, intensity, exposure_s,
+    # power1_mw, control_variable_active, reacquired, power_fallback.
+    # Emitted per main plane for the GUI-thread trajectory plot (the
+    # worker NEVER calls pyqtgraph directly — AGENTS.md §11). The
+    # full power tuple (L1, L2) is recorded in the HDF5 trajectory
+    # group via AdaptiveSample; the signal carries L1 power for the
+    # live plot.
+    sig_adaptive_trajectory = Signal(int, float, float, float, str, bool, bool)
 
     def __init__(
         self,
@@ -673,6 +681,7 @@ class StackWorker(QObject, _AcquireScanMixin):
         save_all_crop: bool,
         save_all_full: bool,
         multi_channel: bool = False,
+        adaptive_cfg: object | None = None,
     ) -> None:
         super().__init__()
         self.camera = bundle.camera
@@ -727,6 +736,13 @@ class StackWorker(QObject, _AcquireScanMixin):
             # written. The wavelength is a trusted value from the live
             # ILaser instance set at startup from config.ini.
             self._wavelengths = [int(self._shell.lasers[0].wavelength)]
+
+        # Adaptive control config (None → adaptive off, fixed stack).
+        # Stored as an instance attribute so the run() method can
+        # construct the AdaptiveController and the helper methods can
+        # read it. The frozen dataclass is safe to share across threads
+        # (immutable).
+        self._adaptive_cfg = adaptive_cfg
 
     @Slot()
     def run(self) -> None:
@@ -801,6 +817,16 @@ class StackWorker(QObject, _AcquireScanMixin):
                     )
                 # Starting frame saver
                 self._shell._fs.start_saving()
+                # Configure the adaptive trajectory recorder on the save
+                # side. When adaptive is enabled, the per-plane loop
+                # records one AdaptiveSample per main plane and the HDF5
+                # writer writes the /adaptive_trajectory group before file
+                # close. When disabled, no trajectory is recorded.
+                adaptive_enabled = (
+                    self._adaptive_cfg is not None
+                    and self._adaptive_cfg.enabled
+                )
+                self._shell._fs.configure_adaptive(adaptive_enabled)
 
             # Setting the camera for scan acquisition
             self.camera.arm_scan()
@@ -846,6 +872,49 @@ class StackWorker(QObject, _AcquireScanMixin):
             # Compute scan waveforms only once before we start the stack acquisition
             # Changes to settings won't be effective until we stop/restart mode
             self.siggen.compute_scan_waveforms()
+
+            # Adaptive control setup: construct the controller and prime
+            # it with a flat pilot trajectory at the current exposure. The
+            # PI residual correction handles the per-depth profile; the
+            # feedforward baseline is the current exposure. When adaptive
+            # is off (cfg is None or disabled), no controller is
+            # constructed and the per-plane loop runs the existing fixed
+            # stack path unchanged.
+            self._adaptive_controller = None
+            self._adaptive_current_cmd = None
+            if self._adaptive_cfg is not None and self._adaptive_cfg.enabled:
+                from lightsheet.adaptive.controller import AdaptiveController
+
+                self._adaptive_controller = AdaptiveController(
+                    self._adaptive_cfg, n_planes
+                )
+                # Prime with a flat trajectory at the current exposure.
+                # The PI correction handles the per-depth profile; the
+                # feedforward baseline is the current camera exposure.
+                pilot_indices = list(range(self._adaptive_cfg.pilot_count))
+                pilot_exposures = [
+                    self.camera.exposure_time
+                ] * self._adaptive_cfg.pilot_count
+                self._adaptive_controller.prime(
+                    pilot_indices, pilot_exposures
+                )
+                # The initial command for plane 0 is the feedforward
+                # baseline (current exposure + current staged powers).
+                # The controller's update() will refine it from plane 0's
+                # observed intensity for plane 1 onwards.
+                current_powers = (
+                    self._shell.laser1_power_pct / 100.0
+                    * self._shell.lasers[0].max_power,
+                    self._shell.laser2_power_pct / 100.0
+                    * self._shell.lasers[1].max_power,
+                )
+                from lightsheet.adaptive.types import AdaptiveCommand
+
+                self._adaptive_current_cmd = AdaptiveCommand.fixed(
+                    exposure_s=self.camera.exposure_time,
+                    laser1_mw=current_powers[0],
+                    laser2_mw=current_powers[1],
+                )
 
             for plane in range(n_planes):
                 if not self._shell.stack_mode_started:
@@ -904,6 +973,21 @@ class StackWorker(QObject, _AcquireScanMixin):
                         or self._shell.estop_event.is_set()
                     ):
                         break
+
+                    # Adaptive: apply the current adaptive command (exposure
+                    # + power) before acquiring this plane's frame. The
+                    # command was computed from the previous plane's
+                    # intensity (or the feedforward baseline for plane 0).
+                    # E-stop is re-checked inside _write_laser1_power
+                    # (cooperative-skip) — a mid-write E-stop zeroes the
+                    # power and the loop-top poll on the next iteration
+                    # breaks. When adaptive is off, no hardware changes
+                    # are applied — the existing fixed stack path runs
+                    # unchanged.
+                    if self._adaptive_controller is not None:
+                        self._apply_adaptive_command(
+                            self._adaptive_current_cmd
+                        )
 
                     if self._multi_channel:
                         # Multi-channel per-plane sequential cycle:
@@ -985,13 +1069,23 @@ class StackWorker(QObject, _AcquireScanMixin):
                         # branches on the tag to pick the per-channel
                         # filename list. Only enqueue when saving is
                         # allowed and both frames were captured.
+                        #
+                        # Adaptive sample recording happens BEFORE the
+                        # enqueue so the sample is recorded before the
+                        # frame enters the save queue — the save worker
+                        # writes the /adaptive_trajectory group after
+                        # processing all frames, and recording before
+                        # enqueue guarantees the sample is present.
                         if (
                             self._shell.saving_allowed
                             and frame1 is not None
                             and frame2 is not None
                         ):
+                            self._record_adaptive_step(plane)
                             self._shell._fs.enqueue_buffer((0, frame1))
                             self._shell._fs.enqueue_buffer((1, frame2))
+                        else:
+                            self._record_adaptive_step(plane)
                     else:
                         # Single-channel path (unchanged — back-compat).
 
@@ -1014,7 +1108,13 @@ class StackWorker(QObject, _AcquireScanMixin):
                         if self.siggen.error:
                             break
 
-                        # Saving frame
+                        # Saving frame — adaptive sample recording happens
+                        # BEFORE the enqueue so the sample is recorded
+                        # before the frame enters the save queue (the save
+                        # worker writes /adaptive_trajectory after
+                        # processing all frames; recording before enqueue
+                        # guarantees the sample is present).
+                        self._record_adaptive_step(plane)
                         if self._shell.saving_allowed:
                             if self._save_all_crop:
                                 cropped_buffer = self._shell._fs.crop_buffer(self._shell.buffer)
@@ -1069,3 +1169,137 @@ class StackWorker(QObject, _AcquireScanMixin):
             # mid-cleanup leaves the UI stuck on "Stop Stack Mode" with no
             # slot to re-enable it.
             self.finished.emit()
+
+    # ------------------------------------------------------------------ #
+    # Adaptive helper methods (worker-thread).
+    # ------------------------------------------------------------------ #
+
+    def _apply_adaptive_command(self, cmd: object) -> None:
+        """Apply an AdaptiveCommand to the hardware before acquiring.
+
+        Sets the camera exposure and writes the laser power through the
+        existing safe HAL paths. The E-stop check lives inside
+        ``_write_laser1_power`` (cooperative-skip) — a mid-write E-stop
+        zeroes the power and the loop-top poll on the next iteration
+        breaks.
+
+        The staged power percent is also written back to
+        ``self._shell.laser1_power_pct`` / ``laser2_power_pct`` so the
+        mock camera's scripted-intensity hook (which reads the staged
+        percent) sees the updated power — mirroring real physics where
+        more laser power produces more fluorescence.
+        """
+        # Set camera exposure (convert seconds to ms for the HAL).
+        self.camera.set_exposure_time(int(cmd.exposure_s * 1000))
+        # Write laser powers through the safe HAL paths. The percent is
+        # computed from the command's mW value and the laser's max_power.
+        if self._shell.lasers[0].max_power > 0:
+            pct1 = cmd.laser1_mw / self._shell.lasers[0].max_power * 100.0
+            self._shell.laser1_power_pct = pct1
+            self._hw._write_laser1_power(pct1)
+        if self._multi_channel and self._shell.lasers[1].max_power > 0:
+            pct2 = cmd.laser2_mw / self._shell.lasers[1].max_power * 100.0
+            self._shell.laser2_power_pct = pct2
+            self._hw._write_laser2_power(pct2)
+
+    def _record_adaptive_step(self, plane_idx: int) -> None:
+        """Measure this plane's intensity, record the trajectory sample,
+        emit the signal, and compute the next plane's command.
+
+        Called once per main plane after the frame(s) are acquired and
+        enqueued. When adaptive is off (no controller), a fixed command
+        is emitted with the current exposure/power — no measurement, no
+        computation, no hardware changes. When adaptive is on, both
+        channels' intensities are measured; the brighter channel drives
+        the shared exposure.
+        """
+        from lightsheet.adaptive.intensity import frame_intensity_pct
+        from lightsheet.adaptive.types import AdaptiveCommand, AdaptiveSample
+
+        # Adaptive-off: emit a fixed command with the current exposure
+        # and staged powers. No measurement, no computation, no extra
+        # hardware writes. The signal still fires so the GUI trajectory
+        # plot shows one row per plane.
+        if self._adaptive_controller is None:
+            current_exposure = self.camera.exposure_time
+            current_l1 = (
+                self._shell.laser1_power_pct / 100.0
+                * self._shell.lasers[0].max_power
+            )
+            current_l2 = (
+                self._shell.laser2_power_pct / 100.0
+                * self._shell.lasers[1].max_power
+            )
+            cmd = AdaptiveCommand.fixed(
+                exposure_s=current_exposure,
+                laser1_mw=current_l1,
+                laser2_mw=current_l2,
+            )
+            self.sig_adaptive_trajectory.emit(
+                plane_idx,
+                0.0,  # no intensity measurement in fixed mode
+                cmd.exposure_s,
+                cmd.laser1_mw,
+                cmd.control_variable_active,
+                cmd.reacquire,
+                cmd.power_fallback,
+            )
+            return
+
+        cfg = self._adaptive_cfg
+        cmd = self._adaptive_current_cmd
+
+        # Measure intensity from the acquired frame(s).
+        if self._multi_channel:
+            frames = self._shell.reconstructed_frames
+            intensities = []
+            for wl in [
+                int(laser.wavelength) for laser in self._shell.lasers
+            ]:
+                frame = frames.get(wl) if frames else None
+                intensities.append(
+                    frame_intensity_pct(frame, cfg.sensor_max)
+                )
+            # The brighter channel drives the shared exposure.
+            brighter_idx = max(
+                range(len(intensities)),
+                key=lambda i: intensities[i],
+            )
+        else:
+            frame = self._shell.reconstructed_frame
+            intensities = [frame_intensity_pct(frame, cfg.sensor_max)]
+            brighter_idx = 0
+
+        # Record the trajectory sample (schema-a).
+        sample = AdaptiveSample(
+            plane_index=plane_idx,
+            intensity_fraction=intensities,
+            exposure_s=cmd.exposure_s,
+            laser_power_mw=(cmd.laser1_mw, cmd.laser2_mw),
+            control_variable_active=cmd.control_variable_active,
+            reacquired=cmd.reacquire,
+            power_fallback=cmd.power_fallback,
+        )
+        if self._shell.saving_allowed:
+            self._shell._fs.record_adaptive_sample(sample)
+
+        # Emit the trajectory signal for the GUI-thread plot.
+        self.sig_adaptive_trajectory.emit(
+            plane_idx,
+            intensities[brighter_idx],
+            cmd.exposure_s,
+            cmd.laser1_mw,
+            cmd.control_variable_active,
+            cmd.reacquire,
+            cmd.power_fallback,
+        )
+
+        # Compute the next plane's command from this plane's intensity.
+        current_powers = (cmd.laser1_mw, cmd.laser2_mw)
+        self._adaptive_current_cmd = self._adaptive_controller.update(
+            intensities=intensities,
+            brighter_idx=brighter_idx,
+            current_exposure_s=cmd.exposure_s,
+            current_powers_mw=current_powers,
+            plane_idx=plane_idx,
+        )

@@ -219,6 +219,13 @@ class FrameSaver(QObject):
         # change takes effect without controller reconstruction.
         self._zarr_saver = ZarrSaver(parent)
 
+        # Adaptive trajectory samples (schema-a). Cleared in reinit.
+        # Populated by record_adaptive_sample() during the per-plane
+        # loop; written to HDF5 /adaptive_trajectory by
+        # _write_adaptive_hdf5() before file close.
+        self.adaptive_trajectory: list = []
+        self._adaptive_enabled: bool = False
+
     def reinit(self, block_size: int) -> None:
         if self.saving_started:
             self.saving_started = False
@@ -244,6 +251,10 @@ class FrameSaver(QObject):
         self.horizontal_positions_list = []
         self.vertical_positions_list = []
         self.camera_positions_list = []
+        # Clear adaptive trajectory state so a re-run does not carry
+        # over the previous run's samples.
+        self.adaptive_trajectory = []
+        self._adaptive_enabled = False
 
     def add_sample_name(self, sample_name: str) -> None:
         """Add to a list the different motor positions"""
@@ -469,6 +480,92 @@ class FrameSaver(QObject):
         outfile.attrs["X Size"] = cam.xsize
         outfile.attrs["Y Size"] = cam.ysize
 
+    def configure_adaptive(self, enabled: bool) -> None:
+        """Configure the adaptive trajectory recorder for this acquisition.
+
+        When ``enabled`` is True, the per-plane loop calls
+        ``record_adaptive_sample`` once per main plane, and the HDF5
+        writer writes the ``/adaptive_trajectory`` group before file
+        close. When False, no trajectory is recorded or written.
+        """
+        self._adaptive_enabled = bool(enabled)
+        self.adaptive_trajectory = []
+
+    def record_adaptive_sample(self, sample: object) -> None:
+        """Append a frozen AdaptiveSample to the trajectory list.
+
+        Called by the StackWorker per main plane, before the frame is
+        enqueued for saving. The sample is logged and held for the
+        HDF5 writer (``_write_adaptive_hdf5``) which serializes the
+        full trajectory before file close.
+        """
+        if not self._adaptive_enabled:
+            return
+        self.adaptive_trajectory.append(sample)
+        logger.info(
+            "adaptive sample: plane=%d exposure=%.4fs power=(%.1f,%.1f) "
+            "cva=%s reacquired=%s fallback=%s",
+            sample.plane_index,
+            sample.exposure_s,
+            sample.laser_power_mw[0],
+            sample.laser_power_mw[1],
+            sample.control_variable_active,
+            sample.reacquired,
+            sample.power_fallback,
+        )
+
+    def _write_adaptive_hdf5(self, outfile: h5py.File) -> None:
+        """Write the /adaptive_trajectory group (schema-a) to an open
+        HDF5 file. Called before file close in the single-channel
+        stitch save path.
+
+        The group carries one row per main plane with the approved
+        field names: plane_index, intensity_fraction, exposure_s,
+        laser_power_mw, control_variable_active, reacquired,
+        power_fallback. Inactive-channel intensity entries are NaN
+        (schema-a convention).
+        """
+        if not self._adaptive_enabled or not self.adaptive_trajectory:
+            return
+        traj = self.adaptive_trajectory
+        grp = outfile.create_group("adaptive_trajectory")
+        grp.attrs["enabled"] = True
+        grp.create_dataset(
+            "plane_index",
+            data=np.array([s.plane_index for s in traj], dtype=int),
+        )
+        grp.create_dataset(
+            "intensity_fraction",
+            data=np.array(
+                [list(s.intensity_fraction) for s in traj], dtype=float
+            ),
+        )
+        grp.create_dataset(
+            "exposure_s",
+            data=np.array([s.exposure_s for s in traj], dtype=float),
+        )
+        grp.create_dataset(
+            "laser_power_mw",
+            data=np.array(
+                [list(s.laser_power_mw) for s in traj], dtype=float
+            ),
+        )
+        grp.create_dataset(
+            "control_variable_active",
+            data=np.array(
+                [s.control_variable_active.encode("utf-8") for s in traj],
+                dtype=h5py.string_dtype(encoding="utf-8"),
+            ),
+        )
+        grp.create_dataset(
+            "reacquired",
+            data=np.array([s.reacquired for s in traj], dtype=bool),
+        )
+        grp.create_dataset(
+            "power_fallback",
+            data=np.array([s.power_fallback for s in traj], dtype=bool),
+        )
+
     def frame_saver_worker(self) -> None:
         """Thread for saving 3D arrays (or 2D arrays).
         The number of datasets per file is the number of 2D arrays.
@@ -595,6 +692,10 @@ class FrameSaver(QObject):
                         break
                 if aborted:
                     break
+            # Write the adaptive trajectory group before file close
+            # (schema-a). Only writes when adaptive was enabled and
+            # samples were recorded.
+            self._write_adaptive_hdf5(outfile)
             outfile.close()
             self.sig_status_message.emit("File " + self.filenames_list[idx] + " saved")
             if aborted:
@@ -1806,6 +1907,12 @@ class FrameSaverController:
 
     def stop_saving(self) -> None:
         self.frame_saver.stop_saving()
+
+    def configure_adaptive(self, enabled: bool) -> None:
+        self.frame_saver.configure_adaptive(enabled)
+
+    def record_adaptive_sample(self, sample: object) -> None:
+        self.frame_saver.record_adaptive_sample(sample)
 
     # -- pass-through to the wrapped FrameViewer ---------------------------
 

@@ -78,6 +78,15 @@ class MockCamera(ICamera):
     # limits). Set to True only by _build_demo_bundle in
     # lightsheet/__main__.py.
     simulate_timing: bool = False
+    # Scripted-intensity hook for the adaptive-loop mock-path tracer.
+    # When set to a callable(acquisition_index, exposure_s) -> int,
+    # copy_recorder_images fills each frame with that uint16 value
+    # instead of zeros, so the 99th-percentile intensity tracks a
+    # synthetic profile (bright→dim brainstem→centre). Default None
+    # preserves the existing zero-fill behavior (back-compat). The
+    # hook is set by the test/worker, never by production code.
+    scripted_intensity_fn: Any = None
+    scripted_frame_index: int = 0
 
     def __init__(self, verbose: bool = False) -> None:
         self.verbose = verbose
@@ -208,12 +217,36 @@ class MockCamera(ICamera):
         return img
 
     def copy_recorder_images(self, number_of_images: int) -> Any:
-        """Return ``number_of_images`` synthetic uint16 frames."""
+        """Return ``number_of_images`` synthetic uint16 frames.
+
+        When ``scripted_intensity_fn`` is set, each frame is filled
+        with the uint16 value returned by the hook
+        ``scripted_intensity_fn(scripted_frame_index, exposure_s)``,
+        so the 99th-percentile intensity tracks a synthetic profile
+        (the adaptive-loop mock-path tracer). The frame index
+        increments per call so a multi-plane stack sees a per-plane
+        profile. When the hook is None (the default), frames are
+        zero-filled — the existing back-compat behavior.
+        """
         assert self.xsize is not None and self.ysize is not None
         if self.new_data_ready:
-            images = np.zeros(
-                (number_of_images, self.ysize, self.xsize), dtype=np.uint16
-            )
+            if self.scripted_intensity_fn is not None:
+                fill = int(
+                    self.scripted_intensity_fn(
+                        self.scripted_frame_index, self.exposure_time
+                    )
+                )
+                fill = max(0, min(fill, 65535))
+                images = np.full(
+                    (number_of_images, self.ysize, self.xsize),
+                    fill,
+                    dtype=np.uint16,
+                )
+                self.scripted_frame_index += 1
+            else:
+                images = np.zeros(
+                    (number_of_images, self.ysize, self.xsize), dtype=np.uint16
+                )
             self.new_data_ready = False
         else:
             # Mirror the real Camera's silent-data-loss fallback (the
@@ -242,6 +275,19 @@ class MockCamera(ICamera):
 
     def set_exposure_time(self, exposure_time_ms: int) -> None:
         self.exposure_time = float(exposure_time_ms) * 1e-3
+        return None
+
+    def set_scripted_intensity_fn(self, fn: Any) -> None:
+        """Set the scripted-intensity callback and reset the frame index.
+
+        The callback signature is ``fn(acquisition_index: int,
+        exposure_s: float) -> int`` returning a uint16 fill value.
+        Pass ``None`` to clear the hook and restore zero-fill behavior.
+        The frame index is reset to 0 so each acquisition run starts
+        at the first plane of the profile.
+        """
+        self.scripted_intensity_fn = fn
+        self.scripted_frame_index = 0
         return None
 
     def set_trigger_mode(self, trigger_mode: str) -> None:
