@@ -55,6 +55,8 @@ def _make_motor(
     m.origin_microsteps = 0
     m.port = port
     m.device_number = device_number
+    # Shared serial handle — tests inject a Mock and never open a real port.
+    m._serial = Mock()
     return m
 
 
@@ -74,11 +76,8 @@ def test_motorio_valid_reply_positive_data() -> None:
     m = _make_motor()
     # reply: device=1, cmd=50, data=100 (bytes: 0x64, 0x00, 0x00, 0x00)
     reply = bytes([1, 50, 100, 0, 0, 0])
-    with patch(
-        "lightsheet.hal.real.motors.serial.Serial",
-        return_value=_make_serial_mock(reply),
-    ):
-        result = m._motorIO(50, 0)
+    m._serial = _make_serial_mock(reply)
+    result = m._motorIO(50, 0)
     assert result == 100
     assert m.error == 0
 
@@ -90,11 +89,8 @@ def test_motorio_valid_reply_negative_data() -> None:
     # reply: device=1, cmd=21, data=-1 in 4-byte two's complement
     # -1 = 0xFFFFFFFF = bytes [0xFF, 0xFF, 0xFF, 0xFF]
     reply = bytes([1, 21, 0xFF, 0xFF, 0xFF, 0xFF])
-    with patch(
-        "lightsheet.hal.real.motors.serial.Serial",
-        return_value=_make_serial_mock(reply),
-    ):
-        result = m._motorIO(21, 0)
+    m._serial = _make_serial_mock(reply)
+    result = m._motorIO(21, 0)
     assert result == -1
     assert m.error == 0
 
@@ -103,11 +99,8 @@ def test_motorio_error_reply_cmd_255() -> None:
     """A reply with cmd=255 (motor error) sets error=1 (line 243-245)."""
     m = _make_motor()
     reply = bytes([1, 255, 0, 0, 0, 0])
-    with patch(
-        "lightsheet.hal.real.motors.serial.Serial",
-        return_value=_make_serial_mock(reply),
-    ):
-        m._motorIO(50, 0)
+    m._serial = _make_serial_mock(reply)
+    m._motorIO(50, 0)
     assert m.error == 1
     assert "error" in m.error_message.lower()
 
@@ -118,11 +111,8 @@ def test_motorio_invalid_format_reply() -> None:
     m = _make_motor(device_number=1)
     # Reply from device 2, cmd 99 — doesn't match.
     reply = bytes([2, 99, 0, 0, 0, 0])
-    with patch(
-        "lightsheet.hal.real.motors.serial.Serial",
-        return_value=_make_serial_mock(reply),
-    ):
-        m._motorIO(50, 0)
+    m._serial = _make_serial_mock(reply)
+    m._motorIO(50, 0)
     assert m.error == 1
     assert "format" in m.error_message.lower()
 
@@ -131,11 +121,8 @@ def test_motorio_short_reply_sets_error() -> None:
     """A reply shorter than 6 bytes sets error=1 (line 249-251)."""
     m = _make_motor()
     reply = b"\x01\x32"  # only 2 bytes
-    with patch(
-        "lightsheet.hal.real.motors.serial.Serial",
-        return_value=_make_serial_mock(reply),
-    ):
-        m._motorIO(50, 0)
+    m._serial = _make_serial_mock(reply)
+    m._motorIO(50, 0)
     assert m.error == 1
     assert "No valid reply" in m.error_message
 
@@ -144,11 +131,8 @@ def test_motorio_serial_exception_sets_error() -> None:
     """If serial.Serial raises, _motorIO catches it and sets error=1
     (line 214-217)."""
     m = _make_motor()
-    with patch(
-        "lightsheet.hal.real.motors.serial.Serial",
-        side_effect=OSError("port not found"),
-    ):
-        m._motorIO(50, 0)
+    m._serial.reset_input_buffer.side_effect = OSError("port not found")
+    m._motorIO(50, 0)
     assert m.error == 1
     assert "Serial port error" in m.error_message
 
@@ -158,12 +142,11 @@ def test_motorio_negative_cmd_param() -> None:
     Verify the instruction bytes are correct by capturing the serial write."""
     m = _make_motor()
     reply = bytes([1, 21, 0, 0, 0, 0])
-    serial_mock = _make_serial_mock(reply)
-    with patch("lightsheet.hal.real.motors.serial.Serial", return_value=serial_mock):
-        m._motorIO(21, -1)
+    m._serial = _make_serial_mock(reply)
+    m._motorIO(21, -1)
     # The write was called with 6 bytes — verify the instruction encodes
     # -1 as 0xFFFFFFFF (bytes 3-6).
-    written = serial_mock.write.call_args[0][0]
+    written = m._serial.write.call_args[0][0]
     assert len(written) == 6
     assert written[0] == m.device_number  # device number
     assert written[1] == 21  # cmd_no
@@ -197,11 +180,8 @@ def test_ask_id_vertical_motor_6210() -> None:
     m.device_number = 1
     # reply_data = 6210
     reply = bytes([1, 50, 0x42, 0x18, 0, 0])  # 6210 = 0x1842
-    with patch(
-        "lightsheet.hal.real.motors.serial.Serial",
-        return_value=_make_serial_mock(reply),
-    ):
-        m.ask_id()
+    m._serial = _make_serial_mock(reply)
+    m.ask_id()
     assert m.is_supported is True
     assert m.id == 6210
     assert m.name == "T-LSM050A"
@@ -228,11 +208,8 @@ def test_ask_id_horizontal_motor_6320() -> None:
     m.device_number = 2
     # reply_data = 6320 = 0x18B0
     reply = bytes([2, 50, 0xB0, 0x18, 0, 0])
-    with patch(
-        "lightsheet.hal.real.motors.serial.Serial",
-        return_value=_make_serial_mock(reply),
-    ):
-        m.ask_id()
+    m._serial = _make_serial_mock(reply)
+    m.ask_id()
     assert m.is_supported is True
     assert m.id == 6320
     assert m.name == "T-LSM100B"
@@ -258,11 +235,8 @@ def test_ask_id_camera_motor_4152() -> None:
     m.device_number = 3
     # reply_data = 4152 = 0x1038
     reply = bytes([3, 50, 0x38, 0x10, 0, 0])
-    with patch(
-        "lightsheet.hal.real.motors.serial.Serial",
-        return_value=_make_serial_mock(reply),
-    ):
-        m.ask_id()
+    m._serial = _make_serial_mock(reply)
+    m.ask_id()
     assert m.is_supported is True
     assert m.id == 4152
     assert m.name == "T-LSR150B"
@@ -288,11 +262,8 @@ def test_ask_id_unsupported_device() -> None:
     m.device_number = 1
     # reply_data = 9999 (unsupported)
     reply = bytes([1, 50, 0x0F, 0x27, 0, 0])  # 9999 = 0x270F
-    with patch(
-        "lightsheet.hal.real.motors.serial.Serial",
-        return_value=_make_serial_mock(reply),
-    ):
-        m.ask_id()
+    m._serial = _make_serial_mock(reply)
+    m.ask_id()
     assert m.is_supported is False
     assert m.error == 1
     assert m.name == "Unsupported device"
@@ -317,11 +288,9 @@ def test_ask_id_serial_error_sets_device_not_found() -> None:
     m.origin_microsteps = 0
     m.port = "COM3"
     m.device_number = 1
-    with patch(
-        "lightsheet.hal.real.motors.serial.Serial",
-        side_effect=OSError("no port"),
-    ):
-        m.ask_id()
+    m._serial = Mock()
+    m._serial.reset_input_buffer.side_effect = OSError("no port")
+    m.ask_id()
     assert m.id == 0
     assert m.name == "Device not found"
 
@@ -383,11 +352,8 @@ def test_get_position_id_nonzero_queries_serial() -> None:
     """get_position with id!=0 queries the serial port (line 342-346)."""
     m = _make_motor()
     reply = bytes([1, 60, 0x64, 0x00, 0x00, 0x00])  # 100 microsteps
-    with patch(
-        "lightsheet.hal.real.motors.serial.Serial",
-        return_value=_make_serial_mock(reply),
-    ):
-        pos = m.get_position("mm")
+    m._serial = _make_serial_mock(reply)
+    pos = m.get_position("mm")
     assert pos > 0  # 100 microsteps converted to mm
 
 
@@ -402,11 +368,8 @@ def test_move_home_id_nonzero_sends_command() -> None:
     """move_home with id!=0 sends cmd 1 (line 360-362)."""
     m = _make_motor()
     reply = bytes([1, 1, 0, 0, 0, 0])
-    with patch(
-        "lightsheet.hal.real.motors.serial.Serial",
-        return_value=_make_serial_mock(reply),
-    ):
-        m.move_home()
+    m._serial = _make_serial_mock(reply)
+    m.move_home()
 
 
 # -- move_absolute / move_relative id==0 branches ---------------------------
@@ -638,9 +601,7 @@ def test_zaber_motor_init_with_mocked_serial_unsupported_device() -> None:
     the Motors.__init__ if-branches (lines 55-80) are skipped."""
     # reply with unsupported device ID (9999)
     reply = bytes([1, 50, 0x0F, 0x27, 0, 0])  # 9999 = 0x270F
-    serial_mock = _make_serial_mock(reply)
-    with patch("lightsheet.hal.real.motors.serial.Serial", return_value=serial_mock):
-        m = ZaberMotor("COM3", 1)
+    m = ZaberMotor(_make_serial_mock(reply), 1)
     assert m.is_supported is False
     assert m.error == 1
     assert m.name == "Unsupported device"
@@ -650,9 +611,7 @@ def test_zaber_motor_init_with_mocked_serial_vertical_motor() -> None:
     """ZaberMotor.__init__ with a 6210 reply sets the vertical motor attrs
     and is_supported=True (lines 148-168 + 268-271)."""
     reply = bytes([1, 50, 0x42, 0x18, 0, 0])  # 6210 = 0x1842
-    serial_mock = _make_serial_mock(reply)
-    with patch("lightsheet.hal.real.motors.serial.Serial", return_value=serial_mock):
-        m = ZaberMotor("COM3", 1)
+    m = ZaberMotor(_make_serial_mock(reply), 1)
     assert m.is_supported is True
     assert m.id == 6210
     assert m.name == "T-LSM050A"
@@ -697,10 +656,11 @@ def test_motors_init_with_mocked_serial_all_supported(tmp_path: Path) -> None:
             bytes([2, 50, 0xB0, 0x18, 0, 0]),  # 6320
             bytes([3, 50, 0x38, 0x10, 0, 0]),  # 4152
         ]
-        serial_mocks = [_make_serial_mock(r) for r in replies]
+        shared_serial = _make_serial_mock()
+        shared_serial.read.side_effect = replies
         with patch(
             "lightsheet.hal.real.motors.serial.Serial",
-            side_effect=serial_mocks,
+            return_value=shared_serial,
         ):
             motors = Motors()
     finally:
@@ -749,10 +709,11 @@ def test_motors_init_with_mocked_serial_none_supported(tmp_path: Path) -> None:
             bytes([2, 50, 0x0F, 0x27, 0, 0]),  # 9999
             bytes([3, 50, 0x0F, 0x27, 0, 0]),  # 9999
         ]
-        serial_mocks = [_make_serial_mock(r) for r in replies]
+        shared_serial = _make_serial_mock()
+        shared_serial.read.side_effect = replies
         with patch(
             "lightsheet.hal.real.motors.serial.Serial",
-            side_effect=serial_mocks,
+            return_value=shared_serial,
         ):
             motors = Motors()
     finally:
@@ -807,21 +768,23 @@ def _make_motors_container() -> Motors:
 
 
 @pytest.mark.parametrize(
-    "moves",
+    "moves,match_text",
     [
-        [("horizontal", 9999.0, "mm"), ("camera", 5.0, "mm")],
-        [("horizontal", 5.0, "mm"), ("camera", 999.0, "mm")],
+        ([("horizontal", 9999.0, "mm"), ("camera", 5.0, "mm")], "exceeds the high travel limit"),
+        ([("horizontal", 5.0, "mm"), ("camera", 999.0, "mm")], "exceeds the high travel limit"),
+        ([("horizontal", -1.0, "mm"), ("camera", 5.0, "mm")], "below the low travel limit"),
+        ([("horizontal", 5.0, "mm"), ("camera", -1.0, "mm")], "below the low travel limit"),
     ],
 )
 def test_move_axes_parallel_validates_both_before_any_bytes(
-    moves: list[tuple[str, float, str]],
+    moves: list[tuple[str, float, str]], match_text: str,
 ) -> None:
     """Over-travel on ANY axis raises ValueError BEFORE any serial bytes are
     written, regardless of which axis in the list is out of range."""
     motors = _make_motors_container()
     motors.horizontal = _make_motor_for_parallel(2, 0.19050, 533333)
     motors.camera = _make_motor_for_parallel(3, 0.49609, 258015)
-    with pytest.raises(ValueError, match="exceeds the high travel limit"):
+    with pytest.raises(ValueError, match=match_text):
         motors.move_axes_parallel(moves)
     assert motors._serial.write.call_count == 0
 

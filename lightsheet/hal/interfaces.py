@@ -336,6 +336,16 @@ class IMotors(IMotorsCore):
     @abstractmethod
     def get_positions(self) -> dict[str, float]: ...
 
+    @abstractmethod
+    def move_axes_parallel(self, moves: list[tuple[str, float, str]]) -> None:
+        """Move multiple axes on the shared serial bus.
+
+        Validates ALL targets against travel limits BEFORE any serial bytes
+        are written. Raises ``ValueError`` if ANY axis is over-travel. Commands
+        are sent back-to-back, then one 6-byte reply is read per command in
+        send order.
+        """
+
     # Extended config surface — the controller does not call these.
     @abstractmethod
     def cfg_load_ini(self) -> None: ...

@@ -233,6 +233,32 @@ class MockMotors(IMotors):
             "camera position": self.camera.get_position("mm"),  # ty: ignore[unresolved-attribute]
         }
 
+    def move_axes_parallel(self, moves: list[tuple[str, float, str]]) -> None:
+        """Move multiple axes in memory with the same validate-then-mutate
+        safety contract as the real HAL. Raises ``ValueError`` on over-travel
+        BEFORE any state change."""
+        # Pass 1: validate ALL targets before mutating any motor state.
+        validated: list[tuple[MockMotor, int]] = []
+        for axis_name, position, units in moves:
+            motor = getattr(self, axis_name)
+            target_microsteps = motor.position_to_microsteps(position, units)
+            if target_microsteps < motor.limit_low_microsteps:
+                raise ValueError(
+                    f"{axis_name} target {position} {units}"
+                    " is below the low travel limit"
+                )
+            if target_microsteps > motor.limit_high_microsteps:
+                raise ValueError(
+                    f"{axis_name} target {position} {units}"
+                    " exceeds the high travel limit"
+                )
+            validated.append((motor, target_microsteps))
+
+        # Pass 2: mutate all motors in the order given.
+        for motor, target_microsteps in validated:
+            motor.position_microsteps = target_microsteps
+            motor.position = float(target_microsteps)
+
     def cfg_load_ini(self) -> None:
         return None
 

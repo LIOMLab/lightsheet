@@ -49,9 +49,21 @@ class Motors(IMotors):
         self._cfg_section = "Motors"
         self.cfg_load_ini()
 
+        # Open ONE shared serial handle for the lifetime of the bundle.
+        # The real Zaber T-LSR chain on COM7 is shared across all 3 devices.
+        # serial-open is unreachable on Mac (no Zaber stage).
+        self._serial = serial.Serial(  # pragma: no branch
+            port=self.port,
+            baudrate=9600,
+            bytesize=serial.EIGHTBITS,
+            parity=serial.PARITY_NONE,
+            stopbits=serial.STOPBITS_ONE,
+            timeout=2,
+        )
+
         # check existance of vertical, horizontal and camera motors
         # and apply initial configuration
-        self.vertical = ZaberMotor(self.port, self.device_no_vertical)
+        self.vertical = ZaberMotor(self._serial, self.device_no_vertical)
         if self.vertical.is_supported:
             self.vertical.set_inverted(self.vertical_inverted)
             self.vertical.set_units(self.vertical_units)
@@ -59,7 +71,7 @@ class Motors(IMotors):
             self.vertical.set_limit_low(self.vertical_limit_low, self.vertical_units)
             self.vertical.set_limit_high(self.vertical_limit_high, self.vertical_units)
 
-        self.horizontal = ZaberMotor(self.port, self.device_no_horizontal)
+        self.horizontal = ZaberMotor(self._serial, self.device_no_horizontal)
         if self.horizontal.is_supported:
             self.horizontal.set_inverted(self.horizontal_inverted)
             self.horizontal.set_units(self.horizontal_units)
@@ -71,7 +83,7 @@ class Motors(IMotors):
                 self.horizontal_limit_high, self.horizontal_units
             )
 
-        self.camera = ZaberMotor(self.port, self.device_no_camera)
+        self.camera = ZaberMotor(self._serial, self.device_no_camera)
         if self.camera.is_supported:
             self.camera.set_inverted(self.camera_inverted)
             self.camera.set_units(self.camera_units)
@@ -142,11 +154,53 @@ class Motors(IMotors):
         motors_positions.update({"camera position": self.camera.get_position("mm")})  # ty: ignore[unresolved-attribute]
         return motors_positions  # ty: ignore[unsound-return-statement]
 
+    def close(self) -> None:
+        """Close the shared serial handle. Called on app shutdown."""
+        if self._serial is not None and self._serial.is_open:
+            self._serial.close()
+
+    def move_axes_parallel(self, moves: list[tuple[str, float, str]]) -> None:
+        """Move multiple axes on the shared serial bus.
+
+        Validates ALL targets against travel limits BEFORE any serial bytes
+        are written. Raises ``ValueError`` if ANY axis is over-travel. Commands
+        are sent back-to-back, then one 6-byte reply is read per command in
+        send order.
+        """
+        # Pass 1: validate ALL targets before any serial byte is written.
+        validated: list[tuple[ZaberMotor, int]] = []
+        for axis_name, position, units in moves:
+            motor = getattr(self, axis_name)
+            target_microsteps = motor.position_to_microsteps(position, units)
+            if target_microsteps < motor.limit_low_microsteps:
+                raise ValueError(
+                    f"{axis_name} target {position} {units}"
+                    " is below the low travel limit"
+                )
+            if target_microsteps > motor.limit_high_microsteps:
+                raise ValueError(
+                    f"{axis_name} target {position} {units}"
+                    " exceeds the high travel limit"
+                )
+            validated.append((motor, target_microsteps))
+
+        # Pass 2: send all commands back-to-back on the shared handle.
+        self._serial.reset_input_buffer()
+        self._serial.reset_output_buffer()
+        for motor, target_microsteps in validated:
+            instruction = motor._encode_instruction(20, target_microsteps)
+            self._serial.write(bytes(instruction))
+
+        # Pass 3: read one 6-byte reply per command, in send order.
+        for motor, _ in validated:
+            reply = self._serial.read(6)
+            motor._parse_reply(reply, 20)
+
 
 class ZaberMotor(IMotor):
     """Class for Zaber's T-LS series linear stage motor control"""
 
-    def __init__(self, port: str, device_number: int) -> None:
+    def __init__(self, shared_serial: serial.Serial, device_number: int) -> None:
         # Error status
         self.error = 0
         self.error_message = ""
@@ -166,19 +220,19 @@ class ZaberMotor(IMotor):
         self.limit_low_microsteps = 0
         self.origin_microsteps = 0
 
-        self.port = port
+        # Shared serial handle for the lifetime of the Zaber chain.
+        # In production this is the Motors bundle handle; in isolated
+        # unit tests the __new__ bypass may leave this None and the
+        # legacy per-call open fallback is used.
+        self._serial = shared_serial
+        self.port = ""
         self.device_number = device_number
         self.ask_id()
 
-    def _motorIO(self, cmd_no: int, cmd_param: int) -> int:
-        # Default return
-        reply_data = 0
-
-        # Generate 6-byte instruction from cmd_no and cmd_param
-        # Taking into account negative data (such as a relative motion)
+    def _encode_instruction(self, cmd_no: int, cmd_param: int) -> list[int]:
+        """Build the 6-byte Zaber binary instruction from cmd_no and cmd_param."""
         if cmd_param < 0:
             cmd_param = pow(256, 4) + cmd_param
-        # Generates bytes 3 to 6
         byte_6 = int(cmd_param // pow(256, 3))
         cmd_param = cmd_param % pow(256, 3)
         byte_5 = int(cmd_param // pow(256, 2))
@@ -186,76 +240,76 @@ class ZaberMotor(IMotor):
         byte_4 = int(cmd_param // pow(256, 1))
         cmd_param = cmd_param % pow(256, 1)
         byte_3 = int(cmd_param // pow(256, 0))
-        # Assemble instruction
-        instruction = []
-        instruction.append(int(self.device_number))
-        instruction.append(int(cmd_no))
-        instruction.append(byte_3)
-        instruction.append(byte_4)
-        instruction.append(byte_5)
-        instruction.append(byte_6)
+        return [
+            int(self.device_number),
+            int(cmd_no),
+            byte_3,
+            byte_4,
+            byte_5,
+            byte_6,
+        ]
+
+    def _parse_reply(self, reply_bytes: bytes, cmd_no: int) -> int:
+        """Parse a 6-byte Zaber reply and update error state."""
+        reply_data = 0
+        if len(reply_bytes) == 6:
+            if reply_bytes[0] == self.device_number and reply_bytes[1] == cmd_no:
+                # Reply has a valid length and fits expected format.
+                # Clear any previous error so a transient serial glitch
+                # does not permanently block relative moves (which query
+                # position and check self.error before moving).
+                self.error = 0
+                self.error_message = ""
+                # Convert returned bytes into data value (handling negative values)
+                if reply_bytes[5] > 127:
+                    reply_data = (
+                        pow(256, 3) * reply_bytes[5]
+                        + pow(256, 2) * reply_bytes[4]
+                        + pow(256, 1) * reply_bytes[3]
+                        + pow(256, 0) * reply_bytes[2]
+                    ) - pow(256, 4)
+                else:
+                    reply_data = (
+                        pow(256, 3) * reply_bytes[5]
+                        + pow(256, 2) * reply_bytes[4]
+                        + pow(256, 1) * reply_bytes[3]
+                        + pow(256, 0) * reply_bytes[2]
+                    )
+            elif reply_bytes[0] == self.device_number and reply_bytes[1] == 255:
+                self.error = 1
+                self.error_message = "Motor reports an error as occured"
+            else:
+                self.error = 1
+                self.error_message = "Reply does not fit expected format"
+        else:
+            self.error = 1
+            self.error_message = "No valid reply received"
+        return reply_data
+
+    def _motorIO(self, cmd_no: int, cmd_param: int) -> int:
+        # Default return
+        reply_data = 0
+
+        instruction = self._encode_instruction(cmd_no, cmd_param)
 
         try:
-            # Try to open a serial connection
-            # serial-open unreachable on Mac (no Zaber stage);
-            # move_*_position ValueError arcs are Mac-tested via __new__ bypass
-            motor = serial.Serial(  # pragma: no branch
-                port=self.port,
-                baudrate=9600,
-                bytesize=serial.EIGHTBITS,
-                parity=serial.PARITY_NONE,
-                stopbits=serial.STOPBITS_ONE,
-                timeout=2,
-            )
-            # Clear I/O buffers
-            motor.reset_input_buffer()
-            motor.reset_output_buffer()
+            # All real Zaber I/O uses the shared serial handle injected by
+            # Motors.__init__. Mac tests inject a Mock serial via the __new__
+            # bypass to exercise every branch without hardware.
+            self._serial.reset_input_buffer()
+            self._serial.reset_output_buffer()
             # Write instruction bytes to motor
-            motor.write(bytes(instruction))
+            self._serial.write(bytes(instruction))
             # Read 6-bytes reply
-            reply_bytes = motor.read(6)
-            # Close serial connection to motor
-            motor.close()
+            reply_bytes = self._serial.read(6)
         except Exception:  # pragma: no branch
-            # serial-open unreachable on Mac (no Zaber stage);
-            # move_*_position ValueError arcs are Mac-tested via __new__ bypass
+            # Mac tests run with a Mock serial; this except path is exercised
+            # when the injected serial raises (transient error simulation).
             self.error = 1
             self.error_message = "Serial port error"
             logger.exception("Serial port error!")
         else:
-            # Checks if reply is valid length
-            if len(reply_bytes) == 6:
-                if reply_bytes[0] == self.device_number and reply_bytes[1] == cmd_no:
-                    # Reply has a valid length and fits expected format.
-                    # Clear any previous error so a transient serial glitch
-                    # does not permanently block relative moves (which query
-                    # position and check self.error before moving).
-                    self.error = 0
-                    self.error_message = ""
-                    # Convert returned bytes into data value (handling negative values)
-                    if reply_bytes[5] > 127:
-                        reply_data = (
-                            pow(256, 3) * reply_bytes[5]
-                            + pow(256, 2) * reply_bytes[4]
-                            + pow(256, 1) * reply_bytes[3]
-                            + pow(256, 0) * reply_bytes[2]
-                        ) - pow(256, 4)
-                    else:
-                        reply_data = (
-                            pow(256, 3) * reply_bytes[5]
-                            + pow(256, 2) * reply_bytes[4]
-                            + pow(256, 1) * reply_bytes[3]
-                            + pow(256, 0) * reply_bytes[2]
-                        )
-                elif reply_bytes[0] == self.device_number and reply_bytes[1] == 255:
-                    self.error = 1
-                    self.error_message = "Motor reports an error as occured"
-                else:
-                    self.error = 1
-                    self.error_message = "Reply does not fit expected format"
-            else:
-                self.error = 1
-                self.error_message = "No valid reply received"
+            reply_data = self._parse_reply(reply_bytes, cmd_no)
         return reply_data
 
     def ask_id(self) -> int:

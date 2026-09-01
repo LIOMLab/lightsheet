@@ -1246,6 +1246,8 @@ class Controller_MainWindow(QMainWindow):
             self.etls.close()
             # Laser 2 (iBeam) lifecycle close
             self.lasers[1].close()
+            # Shared serial handle for Zaber motor chain
+            self.motors.close()
             # Stop the display/status timers. Guard each with getattr
             # because a partial hardware_init failure (e.g. self.etls.open()
             # raising after self.lasers is set but before the timers are
