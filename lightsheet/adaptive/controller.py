@@ -189,29 +189,58 @@ class AdaptiveController:
                 new_l1 = current_powers_mw[0]
             new_l2 = current_powers_mw[1]
         else:
-            # Multi-channel: dimmer channel's power trims toward balance.
-            dimmer_idx = 1 - brighter_idx
+            # Multi-channel: the BRIGHTER channel drives the shared
+            # exposure, so on power fallback its power is the one to
+            # trim (trimming the dimmer channel would not bring the
+            # brighter one into the target band). The dimmer channel
+            # trims toward balance at block boundaries only.
+            brighter_max = cfg.max_power_mw[brighter_idx]
+            if power_fallback:
+                brighter_error = brighter_intensity - cfg.target_midpoint
+                brighter_delta = -brighter_error * brighter_max * 0.5
+                new_brighter_power = current_powers_mw[brighter_idx] + brighter_delta
+            else:
+                new_brighter_power = current_powers_mw[brighter_idx]
+
+            # The dimmer channel is the other active channel. For the
+            # current 2-channel system it is ``1 - brighter_idx``; the
+            # guard below picks the dimmest remaining channel if a
+            # third channel is ever added (latent-bug guard, WR-03).
+            if n_channels == 2:
+                dimmer_idx = 1 - brighter_idx
+            else:
+                dimmer_idx = min(
+                    (
+                        i
+                        for i in range(n_channels)
+                        if i != brighter_idx
+                    ),
+                    key=lambda i: intensities[i] if i < len(intensities) else 0.0,
+                    default=brighter_idx,
+                )
             dimmer_intensity = (
                 intensities[dimmer_idx] if dimmer_idx < len(intensities) else 0.0
             )
             if isinstance(dimmer_intensity, float) and math.isnan(dimmer_intensity):
                 dimmer_intensity = 0.0
 
-            # L1 (brighter channel) power: trim only on power fallback.
-            if power_fallback:
-                brighter_error = brighter_intensity - cfg.target_midpoint
-                l1_delta = -brighter_error * cfg.max_power_mw[0] * 0.5
-                new_l1 = current_powers_mw[0] + l1_delta
-            else:
-                new_l1 = current_powers_mw[0]
-
-            # L2 (dimmer channel) power: trim toward balance at block boundaries only.
+            # Dimmer channel power: trim toward balance at block
+            # boundaries only.
             if is_block_boundary:
                 dimmer_error = dimmer_intensity - cfg.target_midpoint
-                l2_delta = -dimmer_error * cfg.max_power_mw[1] * 0.5
-                new_l2 = current_powers_mw[1] + l2_delta
+                dimmer_delta = -dimmer_error * cfg.max_power_mw[dimmer_idx] * 0.5
+                new_dimmer_power = current_powers_mw[dimmer_idx] + dimmer_delta
             else:
-                new_l2 = current_powers_mw[1]
+                new_dimmer_power = current_powers_mw[dimmer_idx]
+
+            # Assign the computed powers back to the correct laser
+            # slots (L1 = index 0, L2 = index 1).
+            if brighter_idx == 0:
+                new_l1 = new_brighter_power
+                new_l2 = new_dimmer_power
+            else:
+                new_l1 = new_dimmer_power
+                new_l2 = new_brighter_power
 
         # Clamp powers to configured bounds.
         clamped_powers = cfg.clamp_power((new_l1, new_l2))
