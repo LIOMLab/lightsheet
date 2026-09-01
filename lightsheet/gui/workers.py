@@ -1179,6 +1179,24 @@ class StackWorker(QObject, _AcquireScanMixin):
         mock camera's scripted-intensity hook (which reads the staged
         percent) sees the updated power — mirroring real physics where
         more laser power produces more fluorescence.
+
+        Cross-thread attribute sharing (intentional): these shell
+        attributes are read by the GUI-thread laser readback refresh
+        and by ``_toggle_laser*`` (which re-applies the staged percent
+        when toggling a laser on). The worker also READS them at
+        adaptive-prime time (the initial command's power is derived
+        from the staged percent). Python float assignment is GIL-atomic
+        so there is no torn-read corruption; the GUI readback may
+        transiently show a value that is one refresh cycle behind the
+        hardware state, which is acceptable for a best-effort readback.
+        This mirrors the existing non-adaptive stack path, which also
+        reads shell attributes from the worker. The E-stop kill path
+        does NOT read these attributes — it calls ``laser.off()``
+        directly on the GUI thread — so this sharing does not affect
+        the lock-free kill path. Routing the write through a queued
+        signal would defer the staged-percent update past the next
+        plane's mock-camera intensity measurement and break the
+        scripted-intensity hook's timing, so the direct write is kept.
         """
         # Set camera exposure (convert seconds to ms for the HAL).
         self.camera.set_exposure_time(int(cmd.exposure_s * 1000))
