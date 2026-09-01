@@ -422,8 +422,13 @@ class FrameSaver(QObject):
             "enabled": bool(cfg.enabled),
             "min_exposure_s": float(cfg.min_exposure_s),
             "max_exposure_s": float(cfg.max_exposure_s),
-            "min_power_mw": np.array(cfg.min_power_mw, dtype=float),
-            "max_power_mw": np.array(cfg.max_power_mw, dtype=float),
+            # Store as a Python list (not np.array) so the HDF5 attrs
+            # match the Zarr attrs type (Zarr v3 attrs are JSON-serialised
+            # and cannot store np.array). The schema-a contract requires
+            # identical field names AND types across both formats; a
+            # downstream tool reading both gets a list in either case.
+            "min_power_mw": list(cfg.min_power_mw),
+            "max_power_mw": list(cfg.max_power_mw),
             "target_band_lo": float(cfg.target_band_lo),
             "target_band_hi": float(cfg.target_band_hi),
             "reacquire_threshold": float(cfg.reacquire_threshold),
