@@ -21,7 +21,7 @@ def test_barrel_getattr_lazy_loads_deviceregistry() -> None:
     for name in ("DeviceRegistry", "UnresolvedDeviceError"):
         if name in hal.__dict__:
             del hal.__dict__[name]
-    hal = importlib.reload(hal)
+    hal = importlib.reload(hal)  # ty: ignore[invalid-assignment]
     dr = hal.DeviceRegistry
     from lightsheet.hal.registry import DeviceRegistry as RealDR
 
@@ -33,7 +33,7 @@ def test_barrel_getattr_lazy_loads_unresolved_device_error() -> None:
 
     if "UnresolvedDeviceError" in hal.__dict__:
         del hal.__dict__["UnresolvedDeviceError"]
-    hal = importlib.reload(hal)
+    hal = importlib.reload(hal)  # ty: ignore[invalid-assignment]
     ude = hal.UnresolvedDeviceError
     from lightsheet.hal.registry import UnresolvedDeviceError as RealUDE
 

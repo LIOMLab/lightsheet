@@ -45,7 +45,7 @@ def _last_write_text(mock_ser: MagicMock) -> str:
     """Return the most recent bytes written to the mocked serial as a str."""
     assert mock_ser.write.called, "serial.Serial.write was never called"
     written = mock_ser.write.call_args_list[-1].args[0]
-    return written.decode("ascii")
+    return written.decode("ascii")  # ty: ignore[unsound-return-statement]
 
 
 def _write_sequence(mock_ser: MagicMock) -> list[str]:

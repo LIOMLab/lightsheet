@@ -28,13 +28,10 @@ never a static-source grep.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import Mock
 
 import numpy as np
-import pytest
 from _helpers.controller_fixture import make_controller
 from pytestqt.qtbot import QtBot
-
 
 # -- _update_levels_readout branches (902-931) -------------------------------
 
@@ -336,10 +333,11 @@ def test_close_event_before_hardware_init_accepts(
 def test_close_event_rejected_ignores_event(qtbot: QtBot, request: Any) -> None:
     """When the close confirmation dialog is rejected, closeEvent ignores the
     event (line 1262)."""
+    from _helpers.controller_fixture import (
+        patch_qmessage_question,
+    )
     from PySide6.QtCore import QEvent
     from PySide6.QtWidgets import QMessageBox
-
-    from _helpers.controller_fixture import patch_qmessage_question
 
     ctrl, _ = make_controller(qtbot, request)
     event = QEvent(QEvent.Type.Close)
@@ -438,7 +436,7 @@ def test_estop_warns_when_laser_off_fails(
     # Make the first laser's off() set the error flag.
     original_off = ctrl.lasers[0].off
 
-    def _bad_off():
+    def _bad_off() -> None:
         ctrl.lasers[0].error = 1
         ctrl.lasers[0].error_message = "simulated off failure"
 

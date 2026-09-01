@@ -336,7 +336,7 @@ class PastAcquisitionsBrowser(QObject):
                 if sample.lower().endswith(suffix):
                     sample = sample[: -len(suffix)]
                     break
-            return sample
+            return sample  # ty: ignore[unsound-return-statement]
         # No wavelength token in the filename (e.g. "test5_stack_plane_
         # 00001.hdf5") — strip the _stack_plane_NNNNN suffix to get the
         # sample name. Without this the full filename shows in the
@@ -346,7 +346,7 @@ class PastAcquisitionsBrowser(QObject):
             stem = stem[: -len(".hdf5")]
         m2 = re.match(r"^(.+?)_stack_plane_\d+$", stem, re.IGNORECASE)
         if m2 and m2.group(1):
-            return m2.group(1)
+            return m2.group(1)  # ty: ignore[unsound-return-statement]
         return sample_hint
 
     # -- Zarr ---------------------------------------------------------- #
@@ -519,7 +519,7 @@ class PastAcquisitionsBrowser(QObject):
         self._thread.finished.connect(self._clear_thread_refs)
         self._thread.start()
 
-    def _on_worker_finished(self, entries: list) -> None:
+    def _on_worker_finished(self, entries: list) -> None:  # ty: ignore[missing-type-argument]
         self.sig_scan_finished.emit(entries)
 
     def _clear_thread_refs(self) -> None:
@@ -598,7 +598,7 @@ class _NumericTableWidgetItem(QTableWidgetItem):
                 return float(sv) < float(ov)
             except (TypeError, ValueError):
                 pass
-        return super().__lt__(other)
+        return super().__lt__(other)  # ty: ignore[invalid-argument-type]
 
 
 class PastAcquisitionsPanel(QWidget):
@@ -650,7 +650,7 @@ class PastAcquisitionsPanel(QWidget):
         past_header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         past_header.setStretchLastSection(True)
         self.ui.tableWidget_pastAcquisitions.setWordWrap(False)
-        self.ui.tableWidget_pastAcquisitions.textElideMode = Qt.TextElideMode.ElideRight
+        self.ui.tableWidget_pastAcquisitions.textElideMode = Qt.TextElideMode.ElideRight  # ty: ignore[invalid-assignment]
         self.ui.tableWidget_pastAcquisitions.setSortingEnabled(True)
 
         # Status label styling (empty/scanning/error copy).
@@ -727,7 +727,7 @@ class PastAcquisitionsPanel(QWidget):
         self.ui.tableWidget_pastAcquisitions.setRowCount(0)
         self._browser.start_scan_async()
 
-    def _on_scan_finished(self, entries: list) -> None:
+    def _on_scan_finished(self, entries: list) -> None:  # ty: ignore[missing-type-argument]
         """Populate the past-acquisitions table in one batch (called on
         the GUI thread via the browser's sig_scan_finished signal)."""
         self.ui.tableWidget_pastAcquisitions.setSortingEnabled(False)

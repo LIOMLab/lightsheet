@@ -85,7 +85,7 @@ def test_move_relative_rejects_resulting_position_over_limit() -> None:
             "limit check rejected the over-travel resulting position"
         )
 
-    motor._motorIO = fake_motorIO
+    motor._motorIO = fake_motorIO  # ty: ignore[invalid-assignment]
     # A +5 mm delta from near the top would push the resulting position
     # well past limit_high_microsteps.
     with pytest.raises(ValueError):
@@ -111,7 +111,7 @@ def test_move_relative_raises_when_position_query_errors() -> None:
             "the self.error check rejected the unreadable position"
         )
 
-    motor._motorIO = fake_motorIO
+    motor._motorIO = fake_motorIO  # ty: ignore[invalid-assignment]
     with pytest.raises(ValueError, match="Cannot read current position"):
         motor.move_relative_position(5, "mm")
 
@@ -133,7 +133,7 @@ def test_move_relative_rejects_resulting_position_below_low_limit() -> None:
             "the limit check rejected the below-low-limit resulting position"
         )
 
-    motor._motorIO = fake_motorIO
+    motor._motorIO = fake_motorIO  # ty: ignore[invalid-assignment]
     # A -5 mm delta from near the bottom would push the resulting position
     # well below limit_low_microsteps.
     with pytest.raises(ValueError):
@@ -155,7 +155,7 @@ def test_move_relative_accepts_within_limits() -> None:
         # cmd 21 = move relative — the happy path sends this.
         return 0
 
-    motor._motorIO = fake_motorIO
+    motor._motorIO = fake_motorIO  # ty: ignore[invalid-assignment]
     # A small +1 mm delta from mid-position stays within limits.
     motor.move_relative_position(1, "mm")
     # Both the position query (60) and the move command (21) were sent.

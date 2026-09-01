@@ -26,7 +26,6 @@ pytest.importorskip("PySide6")
 from _helpers.controller_fixture import make_controller
 
 if TYPE_CHECKING:
-    from lightsheet.gui.panels.stack_panel import StackPanelWidget
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
@@ -230,7 +229,9 @@ def test_estimate_stack_size_mb_falls_back_on_bad_camera(
     sp = ctrl.stack_panel
     real_camera = ctrl.camera
     mock_camera = MagicMock()
-    type(mock_camera).rows = property(lambda self: (_ for _ in ()).throw(TypeError("bad")))
+    type(mock_camera).rows = property(
+        lambda self: (_ for _ in ()).throw(TypeError("bad"))
+    )
     ctrl.camera = mock_camera  # type: ignore[assignment]
     try:
         size_mb = sp._estimate_stack_size_mb(10)
@@ -273,7 +274,7 @@ def test_load_adaptive_config_handles_cfg_read_exception(
     def _boom(*a: Any, **k: Any) -> Any:
         raise RuntimeError("config unreadable")
 
-    monkeypatch.setattr(panels_mod.stack_panel, "cfg_read", _boom, raising=False)
+    monkeypatch.setattr(panels_mod.stack_panel, "cfg_read", _boom, raising=False)  # ty: ignore[possibly-missing-submodule]
     # The import inside _load_adaptive_config is `from lightsheet.config
     # import cfg_read`, so patch the source module.
     from lightsheet import config as cfg_mod
@@ -292,7 +293,7 @@ def test_load_adaptive_config_skips_empty_and_invalid_values(
     ctrl, _ = make_controller(qtbot, request)
     sp = ctrl.stack_panel
 
-    def _fake_cfg_read(path: str, section: str, defaults: dict) -> dict:
+    def _fake_cfg_read(path: str, section: str, defaults: dict) -> dict:  # ty: ignore[missing-type-argument]
         # Return a mix: an empty value, an invalid float, a valid bool,
         # and a valid float.
         return {
@@ -620,7 +621,7 @@ def test_narrow_adaptive_power_maxima_bad_live_max_skips(
     533-534)."""
     from dataclasses import replace
 
-    from lightsheet.hal import DeviceBundle, MockLaser
+    from lightsheet.hal import MockLaser
 
     ctrl, _ = make_controller(qtbot, request)
     sp = ctrl.stack_panel
@@ -628,7 +629,7 @@ def test_narrow_adaptive_power_maxima_bad_live_max_skips(
     # Build a laser whose max_power property raises TypeError.
     bad_laser = MockLaser(wavelength=555, max_power_mw=300.0, label="bad")
     # Replace max_power with a property that raises.
-    type(bad_laser).max_power = property(  # type: ignore[attr-defined]
+    type(bad_laser).max_power = property(  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
         lambda self: (_ for _ in ()).throw(TypeError("bad"))
     )
     bad_bundle = replace(

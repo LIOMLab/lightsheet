@@ -48,9 +48,9 @@ class ConformanceContract:
             )
         # Exercise only the safe idempotent lifecycle verbs.
         if hasattr(dev, "open"):
-            dev.open()
+            dev.open()  # ty: ignore[call-non-callable]
         if hasattr(dev, "close"):
-            dev.close()
+            dev.close()  # ty: ignore[call-non-callable]
 
     def assert_error_surface(self, dev: object) -> None:
         """Assert the cross-cutting HAL error surface is present — ``error``

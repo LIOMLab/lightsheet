@@ -74,7 +74,7 @@ def test_converted_connection_fires_collaborator_slot(
 
     # Click the sample step-up button — wired via wire_collaborators()
     # to self._mc.updateUi_move_sample_up (a bare bound method, no lambda).
-    qtbot.mouseClick(ctrl.motor_panel.ui.pushButton_sampleStepUp, Qt.LeftButton)
+    qtbot.mouseClick(ctrl.motor_panel.ui.pushButton_sampleStepUp, Qt.LeftButton)  # ty: ignore[unresolved-attribute]
 
     # updateUi_move_sample_up always calls updateUi_message_printer with
     # either "Sample stepping up" (move succeeded) or "Out of boundaries"

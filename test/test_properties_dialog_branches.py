@@ -67,7 +67,7 @@ def _make_dialog(parent: Mock) -> Mock:
     dlg.ui = Mock()
     # Mock the signal — emit just calls connected slots.
     dlg.sig_status_message = Mock()
-    return dlg
+    return dlg  # ty: ignore[invalid-return-type]
 
 
 def test_properties_dialog_get_properties_recorder_mode() -> None:

@@ -36,7 +36,7 @@ def test_mock_camera_open_is_idempotent_and_sets_sentinel() -> None:
     assert cam.camera == "mock"
 
 
-def test_mock_camera_verbose_open_prints(capsys: pytest.CaptureFixture) -> None:
+def test_mock_camera_verbose_open_prints(capsys: pytest.CaptureFixture) -> None:  # ty: ignore[missing-type-argument]
     """The verbose=True branch in open() prints the opening messages."""
     MockCamera(verbose=True)
     out = capsys.readouterr().out
@@ -45,7 +45,7 @@ def test_mock_camera_verbose_open_prints(capsys: pytest.CaptureFixture) -> None:
 
 
 def test_mock_camera_close_clears_sentinel_and_verbose_prints(
-    capsys: pytest.CaptureFixture,
+    capsys: pytest.CaptureFixture,  # ty: ignore[missing-type-argument]
 ) -> None:
     """close() clears the camera sentinel; the verbose branch prints."""
     cam = MockCamera(verbose=True)
@@ -116,7 +116,7 @@ def test_mock_camera_grab_image_returns_correct_shape() -> None:
 
 
 def test_mock_camera_grab_image_verbose_prints(
-    capsys: pytest.CaptureFixture,
+    capsys: pytest.CaptureFixture,  # ty: ignore[missing-type-argument]
 ) -> None:
     cam = MockCamera(verbose=True)
     capsys.readouterr()
@@ -247,7 +247,7 @@ def test_mock_optotune_unimplemented_methods_raise(method_name: str) -> None:
     ],
 )
 def test_mock_optotune_unimplemented_arg_methods_raise(
-    method_name: str, args: tuple
+    method_name: str, args: tuple  # ty: ignore[missing-type-argument]
 ) -> None:
     lens = MockOptotune()
     method = getattr(lens, method_name)
@@ -281,8 +281,8 @@ def test_mock_etls_set_analog_mode_with_none_lens_skips_body() -> None:
     lens is None the mode() call is skipped. Construct then null out the
     lenses to exercise the guard."""
     etls = MockETLs()
-    etls.etl_left = None
-    etls.etl_right = None
+    etls.etl_left = None  # ty: ignore[invalid-assignment]
+    etls.etl_right = None  # ty: ignore[invalid-assignment]
     # Must not raise — both guards skip the body.
     etls.set_analog_mode()
     etls.set_current_mode()

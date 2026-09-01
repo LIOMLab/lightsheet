@@ -214,7 +214,7 @@ class SigGen(ISigGen):
         # waveform_left) so swap=False preserves today's stack order. Array
         # clamps (galvo ±10V, ETL non-negative) are unconditional.
         galvo_first, galvo_second = self.channel_map.order_galvos(
-            self.waveform_galvo_right, self.waveform_galvo_left
+            self.waveform_galvo_right, self.waveform_galvo_left  # ty: ignore[invalid-argument-type]
         )
         galvo_first = np.clip(
             galvo_first,
@@ -228,10 +228,10 @@ class SigGen(ISigGen):
         )
         etl_left_clipped = np.clip(
             self.waveform_etl_left, 0.0, self.channel_map.etl_voltage_limit
-        )
+        )  # ty: ignore[no-matching-overload]
         etl_right_clipped = np.clip(
             self.waveform_etl_right, 0.0, self.channel_map.etl_voltage_limit
-        )
+        )  # ty: ignore[no-matching-overload]
         galvo_etl_waveforms = np.stack(
             (
                 galvo_first,
@@ -331,12 +331,12 @@ class SigGen(ISigGen):
             # galvo line speed must match camera line speed
             # TODO Add correction for potential galvo overscan
             # (will require voltage to optical displacement conversion)
-            self.galvo_scan_time = self.camera.line_time * self.camera.ysize
+            self.galvo_scan_time = self.camera.line_time * self.camera.ysize  # ty: ignore[unsupported-operator]
             # In Lightsheet mode, exposure time is overriden by line time
             camera_active_time = (
-                self.camera.line_time * self.camera.lightsheet_exposed_lines
+                self.camera.line_time * self.camera.lightsheet_exposed_lines  # ty: ignore[unsupported-operator]
             )
-            camera_delay_time = 3 * self.camera.line_time
+            camera_delay_time = 3 * self.camera.line_time  # ty: ignore[unsupported-operator]
             camera_delay_samples = int(np.ceil(camera_delay_time * self.sample_rate))
 
         elif self.camera.shutter_mode == "Rolling":
@@ -345,7 +345,7 @@ class SigGen(ISigGen):
                 # In Rolling mode, adjust galvo_scan_time to camera exposure
                 self.galvo_scan_time = self.camera.exposure_time
                 camera_data_readout_time = (
-                    0.5 * self.camera.ysize * self.camera.line_time
+                    0.5 * self.camera.ysize * self.camera.line_time  # ty: ignore[unsupported-operator]
                 )
                 camera_active_time = self.galvo_scan_time + camera_data_readout_time
                 camera_delay_time = camera_data_readout_time
@@ -363,20 +363,20 @@ class SigGen(ISigGen):
             else:
                 # In Rolling mode, adjust galvo_scan_time to camera exposure
                 self.galvo_scan_time = self.camera.exposure_time + (
-                    self.camera.line_time * 0.5 * self.camera.ysize
+                    self.camera.line_time * 0.5 * self.camera.ysize  # ty: ignore[unsupported-operator]
                 )
                 # FIXME clean things up with galvo_scan_time
                 camera_active_time = self.galvo_scan_time - (
-                    self.camera.line_time * 0.5 * self.camera.ysize
+                    self.camera.line_time * 0.5 * self.camera.ysize  # ty: ignore[unsupported-operator]
                 )
-                camera_delay_time = 3 * self.camera.line_time + (
-                    self.camera.line_time * 0.5 * self.camera.ysize
+                camera_delay_time = 3 * self.camera.line_time + (  # ty: ignore[unsupported-operator]
+                    self.camera.line_time * 0.5 * self.camera.ysize  # ty: ignore[unsupported-operator]
                 )
                 camera_delay_samples = int(
                     np.ceil(camera_delay_time * self.sample_rate)
                 )
                 camera_data_readout_time = (
-                    0.5 * self.camera.ysize + 1
+                    0.5 * self.camera.ysize + 1  # ty: ignore[unsupported-operator]
                 ) * self.camera.line_time
                 assert (
                     self.galvo_pre_time + self.galvo_reset_time + self.galvo_post_time
@@ -390,10 +390,10 @@ class SigGen(ISigGen):
         elif self.camera.shutter_mode == "Global":
             self.galvo_scan_time = self.camera.exposure_time
             camera_active_time = self.galvo_scan_time
-            camera_delay_time = (0.5 * self.camera.ysize + 1) * self.camera.line_time
+            camera_delay_time = (0.5 * self.camera.ysize + 1) * self.camera.line_time  # ty: ignore[unsupported-operator]
             camera_delay_samples = int(np.ceil(camera_delay_time * self.sample_rate))
             camera_data_readout_time = (
-                0.5 * self.camera.ysize + 1
+                0.5 * self.camera.ysize + 1  # ty: ignore[unsupported-operator]
             ) * self.camera.line_time
             assert (
                 self.galvo_pre_time + self.galvo_reset_time + self.galvo_post_time
@@ -544,10 +544,10 @@ if __name__ == "__main__":
     test_scanner.compute_scan_waveforms()
     print(test_scanner.waveform_metadata)
 
-    time_axis = np.arange(0, test_scanner.waveform_camera.size)
-    plt.plot(time_axis, test_scanner.waveform_camera)
-    plt.plot(time_axis, test_scanner.waveform_galvo_left)
-    plt.plot(time_axis, test_scanner.waveform_galvo_right)
-    plt.plot(time_axis, test_scanner.waveform_etl_left)
-    plt.plot(time_axis, test_scanner.waveform_etl_right)
+    time_axis = np.arange(0, test_scanner.waveform_camera.size)  # ty: ignore[unresolved-attribute]
+    plt.plot(time_axis, test_scanner.waveform_camera)  # ty: ignore[invalid-argument-type]
+    plt.plot(time_axis, test_scanner.waveform_galvo_left)  # ty: ignore[invalid-argument-type]
+    plt.plot(time_axis, test_scanner.waveform_galvo_right)  # ty: ignore[invalid-argument-type]
+    plt.plot(time_axis, test_scanner.waveform_etl_left)  # ty: ignore[invalid-argument-type]
+    plt.plot(time_axis, test_scanner.waveform_etl_right)  # ty: ignore[invalid-argument-type]
     plt.show()

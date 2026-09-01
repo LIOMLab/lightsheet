@@ -64,9 +64,9 @@ def test_device_bundle_is_frozen_dataclass() -> None:
         lasers=(Mock(),),
     )
     with pytest.raises(dataclasses.FrozenInstanceError):
-        bundle.lasers = (Mock(),)  # type: ignore[misc]
+        bundle.lasers = (Mock(),)  # type: ignore[misc]  # ty: ignore[invalid-assignment]
     with pytest.raises(dataclasses.FrozenInstanceError):
-        bundle.camera = Mock()  # type: ignore[misc]
+        bundle.camera = Mock()  # type: ignore[misc]  # ty: ignore[invalid-assignment]
 
 
 def test_device_bundle_barrel_reexport() -> None:

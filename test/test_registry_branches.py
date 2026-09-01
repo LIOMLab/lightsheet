@@ -93,7 +93,7 @@ def _make_port(
     return p
 
 
-def _make_registry(inventory: dict, tmp_path: Path) -> DeviceRegistry:
+def _make_registry(inventory: dict, tmp_path: Path) -> DeviceRegistry:  # ty: ignore[missing-type-argument]
     """Build a DeviceRegistry with a mock inventory YAML."""
     import yaml
 

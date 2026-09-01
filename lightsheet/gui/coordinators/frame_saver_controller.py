@@ -65,7 +65,7 @@ class FrameSaverWorker(QObject):
     def start_saving(self) -> None:
         """Run the save loop on the worker thread, then signal completion."""
         try:
-            fmt = self._saver.parent.save_format
+            fmt = self._saver.parent.save_format  # ty: ignore[unresolved-attribute]
             if fmt == "hdf5":
                 self._saver.frame_saver_worker()
             elif fmt == "zarr":
@@ -84,7 +84,7 @@ class FrameViewer(QObject):
 
     def __init__(self, parent: Controller_MainWindow, rows: int, columns: int) -> None:
         QObject.__init__(self, parent)
-        self.parent = parent
+        self.parent = parent  # ty: ignore[invalid-assignment]
         self.queue = queue.Queue(3)
 
         # Default frame size is 2000x2000 if no valid size provided
@@ -124,7 +124,7 @@ class FrameViewer(QObject):
         else:
             # setImage is column-major
             frame = np.transpose(frame)
-            self.parent.ui.imageView.setImage(
+            self.parent.ui.imageView.setImage(  # ty: ignore[unresolved-attribute]
                 frame, autoRange=False, autoLevels=False, autoHistogramRange=False
             )
             # Live min/max readout (actual pixel range, not the display window).
@@ -141,7 +141,7 @@ class FrameSaver(QObject):
 
     def __init__(self, parent: Controller_MainWindow, block_size: int = 1) -> None:
         QObject.__init__(self, parent)
-        self.parent = parent
+        self.parent = parent  # ty: ignore[invalid-assignment]
         self.sig_status_message.connect(self.parent.updateUi_message_printer)
         self.file_format = self.parent.save_format
 
@@ -164,7 +164,7 @@ class FrameSaver(QObject):
         self._zarr_saver = ZarrSaver(parent)
 
         # Adaptive trajectory samples. Cleared in reinit.
-        self.adaptive_trajectory: list = []
+        self.adaptive_trajectory: list = []  # ty: ignore[missing-type-argument]
         self._adaptive_enabled: bool = False
         # Frozen AdaptiveConfig (bounds + gains). Stored when
         # configure_adaptive is called so the writers can publish config
@@ -176,9 +176,9 @@ class FrameSaver(QObject):
             self.saving_started = False
 
         # Re-read save_format so a per-acquisition format change takes effect.
-        self.file_format = self.parent.save_format
+        self.file_format = self.parent.save_format  # ty: ignore[unresolved-attribute]
         # Reset the ZarrSaver for the next acquisition.
-        self._zarr_saver = ZarrSaver(self.parent)
+        self._zarr_saver = ZarrSaver(self.parent)  # ty: ignore[invalid-argument-type]
 
         self.block_size = block_size
         self.queue = queue.Queue(
@@ -313,7 +313,7 @@ class FrameSaver(QObject):
         at save time (fixes the config-drift metadata bug). Uniform mW
         units mean no per-laser unit attr is needed.
         """
-        for i, laser in enumerate(self.parent.lasers):
+        for i, laser in enumerate(self.parent.lasers):  # ty: ignore[unresolved-attribute]
             outfile.attrs[f"Laser{i + 1} Wavelength"] = laser.wavelength
             outfile.attrs[f"Laser{i + 1} Power"] = laser.power
             outfile.attrs[f"Laser{i + 1} Max Power"] = laser.max_power
@@ -339,12 +339,12 @@ class FrameSaver(QObject):
         as dataset attrs in ``frame_saver_worker`` — this adds the
         root-level snapshot, not per-plane.
         """
-        motors = self.parent.motors
-        outfile.attrs["Horizontal Position"] = motors.horizontal.get_position("mm")
-        outfile.attrs["Vertical Position"] = motors.vertical.get_position("mm")
-        outfile.attrs["Camera Position"] = motors.camera.get_position("mm")
+        motors = self.parent.motors  # ty: ignore[unresolved-attribute]
+        outfile.attrs["Horizontal Position"] = motors.horizontal.get_position("mm")  # ty: ignore[unresolved-attribute]
+        outfile.attrs["Vertical Position"] = motors.vertical.get_position("mm")  # ty: ignore[unresolved-attribute]
+        outfile.attrs["Camera Position"] = motors.camera.get_position("mm")  # ty: ignore[unresolved-attribute]
 
-        sg = self.parent.siggen
+        sg = self.parent.siggen  # ty: ignore[unresolved-attribute]
         outfile.attrs["Galvo Left Amplitude"] = sg.galvo_left_amplitude
         outfile.attrs["Galvo Right Amplitude"] = sg.galvo_right_amplitude
         outfile.attrs["Galvo Left Offset"] = sg.galvo_left_offset
@@ -356,9 +356,9 @@ class FrameSaver(QObject):
         # sample_rate is a live instance attribute on the SigGen (the mock
         # sets it at construct time; the real SigGen reads it from config
         # at construct time).
-        outfile.attrs["Sample Rate"] = sg.sample_rate
+        outfile.attrs["Sample Rate"] = sg.sample_rate  # ty: ignore[unresolved-attribute]
 
-        cam = self.parent.camera
+        cam = self.parent.camera  # ty: ignore[unresolved-attribute]
         outfile.attrs["Exposure Time (s)"] = cam.exposure_time
         outfile.attrs["Shutter Mode"] = cam.shutter_mode
         outfile.attrs["Binning X"] = cam.binning_x
@@ -400,16 +400,16 @@ class FrameSaver(QObject):
         logger.info(
             "adaptive sample: plane=%d exposure=%.4fs power=(%.1f,%.1f) "
             "cva=%s reacquired=%s fallback=%s",
-            sample.plane_index,
-            sample.exposure_s,
-            sample.laser_power_mw[0],
-            sample.laser_power_mw[1],
-            sample.control_variable_active,
-            sample.reacquired,
-            sample.power_fallback,
+            sample.plane_index,  # ty: ignore[unresolved-attribute]
+            sample.exposure_s,  # ty: ignore[unresolved-attribute]
+            sample.laser_power_mw[0],  # ty: ignore[unresolved-attribute]
+            sample.laser_power_mw[1],  # ty: ignore[unresolved-attribute]
+            sample.control_variable_active,  # ty: ignore[unresolved-attribute]
+            sample.reacquired,  # ty: ignore[unresolved-attribute]
+            sample.power_fallback,  # ty: ignore[unresolved-attribute]
         )
 
-    def _adaptive_config_attrs(self) -> dict:
+    def _adaptive_config_attrs(self) -> dict:  # ty: ignore[missing-type-argument]
         """Build the AdaptiveConfig attrs dict from the frozen
         ``self._adaptive_config``. Returns an empty dict when no config
         is set (fixed mode) so the caller can decide whether to write
@@ -419,31 +419,31 @@ class FrameSaver(QObject):
         if cfg is None:
             return {}
         return {
-            "enabled": bool(cfg.enabled),
-            "min_exposure_s": float(cfg.min_exposure_s),
-            "max_exposure_s": float(cfg.max_exposure_s),
+            "enabled": bool(cfg.enabled),  # ty: ignore[unresolved-attribute]
+            "min_exposure_s": float(cfg.min_exposure_s),  # ty: ignore[unresolved-attribute]
+            "max_exposure_s": float(cfg.max_exposure_s),  # ty: ignore[unresolved-attribute]
             # Store as a Python list (not np.array) so the HDF5 attrs
             # match the Zarr attrs type (Zarr v3 attrs are JSON-serialised
             # and cannot store np.array). The schema-a contract requires
             # identical field names AND types across both formats; a
             # downstream tool reading both gets a list in either case.
-            "min_power_mw": list(cfg.min_power_mw),
-            "max_power_mw": list(cfg.max_power_mw),
-            "target_band_lo": float(cfg.target_band_lo),
-            "target_band_hi": float(cfg.target_band_hi),
-            "reacquire_threshold": float(cfg.reacquire_threshold),
-            "block_size_n": int(cfg.block_size_n),
-            "kp": float(cfg.kp),
-            "ki": float(cfg.ki),
-            "pilot_count": int(cfg.pilot_count),
-            "sensor_max": int(cfg.sensor_max),
-            "max_reacquire_attempts": int(cfg.max_reacquire_attempts),
+            "min_power_mw": list(cfg.min_power_mw),  # ty: ignore[unresolved-attribute]
+            "max_power_mw": list(cfg.max_power_mw),  # ty: ignore[unresolved-attribute]
+            "target_band_lo": float(cfg.target_band_lo),  # ty: ignore[unresolved-attribute]
+            "target_band_hi": float(cfg.target_band_hi),  # ty: ignore[unresolved-attribute]
+            "reacquire_threshold": float(cfg.reacquire_threshold),  # ty: ignore[unresolved-attribute]
+            "block_size_n": int(cfg.block_size_n),  # ty: ignore[unresolved-attribute]
+            "kp": float(cfg.kp),  # ty: ignore[unresolved-attribute]
+            "ki": float(cfg.ki),  # ty: ignore[unresolved-attribute]
+            "pilot_count": int(cfg.pilot_count),  # ty: ignore[unresolved-attribute]
+            "sensor_max": int(cfg.sensor_max),  # ty: ignore[unresolved-attribute]
+            "max_reacquire_attempts": int(cfg.max_reacquire_attempts),  # ty: ignore[unresolved-attribute]
         }
 
     def _write_adaptive_hdf5(
         self,
         outfile: h5py.File,
-        samples: list | None = None,
+        samples: list | None = None,  # ty: ignore[missing-type-argument]
     ) -> None:
         """Write the /adaptive_trajectory group  to an open
         HDF5 file. Called before file close in every HDF5 save path
@@ -763,7 +763,7 @@ class FrameSaver(QObject):
         # dataset counter (1-based for naming), and the open file handle.
         file_idx = [0] * n_channels
         ds_counter = [1] * n_channels
-        outfiles: list = [None] * n_channels
+        outfiles: list = [None] * n_channels  # ty: ignore[missing-type-argument]
         frames_written = 0
 
         try:
@@ -966,7 +966,7 @@ class FrameSaver(QObject):
         """
         n_planes = self.number_of_files * int(self.number_of_datasets)
         store_path = str(
-            Path(self.parent.save_directory) / (self.files_name + ".ome.zarr")
+            Path(self.parent.save_directory) / (self.files_name + ".ome.zarr")  # ty: ignore[unresolved-attribute]
         )
         # Derive the channel count from the per-channel filename lists
         # built by set_files(wavelengths=...). When set_files was called
@@ -1167,7 +1167,7 @@ class FrameSaver(QObject):
 
         n_planes = self.number_of_files * int(self.number_of_datasets)
         store_path = str(
-            Path(self.parent.save_directory) / (self.files_name + ".ome.zarr")
+            Path(self.parent.save_directory) / (self.files_name + ".ome.zarr")  # ty: ignore[unresolved-attribute]
         )
         try:
             self._zarr_saver.start_stack(store_path, n_planes)
@@ -1380,7 +1380,7 @@ class FrameSaver(QObject):
         """
         n_planes = self.number_of_files * int(self.number_of_datasets)
         store_path = str(
-            Path(self.parent.save_directory) / (self.files_name + ".ome.zarr")
+            Path(self.parent.save_directory) / (self.files_name + ".ome.zarr")  # ty: ignore[unresolved-attribute]
         )
         # Compute the channel count BEFORE start_stack so the Zarr writer
         # is shaped (n_channels, n_planes, y, x) — a channel-1 write_plane
@@ -1402,7 +1402,7 @@ class FrameSaver(QObject):
         # dataset counter (1-based for naming), and the open file handle.
         file_idx = [0] * n_channels
         ds_counter = [1] * n_channels
-        outfiles: list = [None] * n_channels
+        outfiles: list = [None] * n_channels  # ty: ignore[missing-type-argument]
         frames_written = 0
         z_idx_per_channel: dict[int, int] = {}
 
@@ -1688,7 +1688,7 @@ class ZarrSaver:
         # before finalize so _write_adaptive_group can publish the
         # /acquisition/adaptive group. Empty list + None config = fixed
         # mode (no adaptive group written).
-        self._adaptive_trajectory: list = []
+        self._adaptive_trajectory: list = []  # ty: ignore[missing-type-argument]
         self._adaptive_config: object | None = None
         # ``write_empty_chunks`` global-config override state. Set in
         # start_stack, restored in finalize. Defaults to False here so
@@ -1726,8 +1726,8 @@ class ZarrSaver:
 
         cam = self.parent.camera
         n_channels = int(n_channels)
-        shape = (n_channels, int(n_planes), int(cam.ysize), int(cam.xsize))
-        chunk_shape = (1, 1, int(cam.ysize), int(cam.xsize))
+        shape = (n_channels, int(n_planes), int(cam.ysize), int(cam.xsize))  # ty: ignore[invalid-argument-type]
+        chunk_shape = (1, 1, int(cam.ysize), int(cam.xsize))  # ty: ignore[invalid-argument-type]
 
         # Force zarr v3 to persist all-zero chunks (write_empty_chunks=True).
         # zarr v3 defaults ``write_empty_chunks`` to False, so all-zero chunks
@@ -1786,7 +1786,7 @@ class ZarrSaver:
             self._vertical_positions.append(float(ver_pos))
             self._camera_positions.append(float(cam_pos))
 
-    def _build_omero_channels(self, lasers: tuple) -> list[dict]:
+    def _build_omero_channels(self, lasers: tuple) -> list[dict]:  # ty: ignore[missing-type-argument]
         """Build the omero.channels list from the lasers that were
         actually used in this acquisition.
 
@@ -1803,7 +1803,7 @@ class ZarrSaver:
         ``wavelength`` — the color is a 6-char hex string with no ``#``
         prefix.
         """
-        channels: list[dict] = []
+        channels: list[dict] = []  # ty: ignore[missing-type-argument]
         for idx, laser in enumerate(lasers):
             # idx 0 -> _auto_laser1, idx 1 -> _auto_laser2
             flag_attr = f"_auto_laser{idx + 1}"
@@ -1861,13 +1861,13 @@ class ZarrSaver:
         # sample_rate is a live instance attribute on the SigGen (the
         # mock sets it at construct time; the real SigGen reads it from
         # config at construct time).
-        grp.attrs["sample_rate"] = siggen.sample_rate
+        grp.attrs["sample_rate"] = siggen.sample_rate  # ty: ignore[unresolved-attribute]
         grp.attrs["binning_x"] = cam.binning_x
         grp.attrs["binning_y"] = cam.binning_y
 
     def set_adaptive_trajectory(
         self,
-        trajectory: list,
+        trajectory: list,  # ty: ignore[missing-type-argument]
         config: object | None,
     ) -> None:
         """Provide the adaptive trajectory samples + frozen config so
@@ -1899,7 +1899,7 @@ class ZarrSaver:
             raise RuntimeError("ZarrSaver._write_adaptive_group called with no writer")
         root = self._writer.root
         acq = root["acquisition"]
-        grp = acq.create_group("adaptive")
+        grp = acq.create_group("adaptive")  # ty: ignore[unresolved-attribute]
         traj = self._adaptive_trajectory
         cfg = self._adaptive_config
 
@@ -1907,20 +1907,20 @@ class ZarrSaver:
         # zarr v3 attrs are JSON-serialised, so tuple fields are stored
         # as lists (not np.array, which is not JSON serialisable).
         if cfg is not None:
-            grp.attrs["enabled"] = bool(cfg.enabled)
-            grp.attrs["min_exposure_s"] = float(cfg.min_exposure_s)
-            grp.attrs["max_exposure_s"] = float(cfg.max_exposure_s)
-            grp.attrs["min_power_mw"] = list(cfg.min_power_mw)
-            grp.attrs["max_power_mw"] = list(cfg.max_power_mw)
-            grp.attrs["target_band_lo"] = float(cfg.target_band_lo)
-            grp.attrs["target_band_hi"] = float(cfg.target_band_hi)
-            grp.attrs["reacquire_threshold"] = float(cfg.reacquire_threshold)
-            grp.attrs["block_size_n"] = int(cfg.block_size_n)
-            grp.attrs["kp"] = float(cfg.kp)
-            grp.attrs["ki"] = float(cfg.ki)
-            grp.attrs["pilot_count"] = int(cfg.pilot_count)
-            grp.attrs["sensor_max"] = int(cfg.sensor_max)
-            grp.attrs["max_reacquire_attempts"] = int(cfg.max_reacquire_attempts)
+            grp.attrs["enabled"] = bool(cfg.enabled)  # ty: ignore[unresolved-attribute]
+            grp.attrs["min_exposure_s"] = float(cfg.min_exposure_s)  # ty: ignore[unresolved-attribute]
+            grp.attrs["max_exposure_s"] = float(cfg.max_exposure_s)  # ty: ignore[unresolved-attribute]
+            grp.attrs["min_power_mw"] = list(cfg.min_power_mw)  # ty: ignore[unresolved-attribute]
+            grp.attrs["max_power_mw"] = list(cfg.max_power_mw)  # ty: ignore[unresolved-attribute]
+            grp.attrs["target_band_lo"] = float(cfg.target_band_lo)  # ty: ignore[unresolved-attribute]
+            grp.attrs["target_band_hi"] = float(cfg.target_band_hi)  # ty: ignore[unresolved-attribute]
+            grp.attrs["reacquire_threshold"] = float(cfg.reacquire_threshold)  # ty: ignore[unresolved-attribute]
+            grp.attrs["block_size_n"] = int(cfg.block_size_n)  # ty: ignore[unresolved-attribute]
+            grp.attrs["kp"] = float(cfg.kp)  # ty: ignore[unresolved-attribute]
+            grp.attrs["ki"] = float(cfg.ki)  # ty: ignore[unresolved-attribute]
+            grp.attrs["pilot_count"] = int(cfg.pilot_count)  # ty: ignore[unresolved-attribute]
+            grp.attrs["sensor_max"] = int(cfg.sensor_max)  # ty: ignore[unresolved-attribute]
+            grp.attrs["max_reacquire_attempts"] = int(cfg.max_reacquire_attempts)  # ty: ignore[unresolved-attribute]
 
         grp.create_array(
             "plane_index",
@@ -2000,7 +2000,7 @@ class ZarrSaver:
         binning_y = int(cam.binning_y)
         base_res = (abs(self.parent.stack_step), 6.5 * binning_x, 6.5 * binning_y)
         logger.info("ZarrSaver.finalize base_res=%s", base_res)
-        omero_channels = self._build_omero_channels(self.parent.lasers)
+        omero_channels = self._build_omero_channels(self.parent.lasers)  # ty: ignore[invalid-argument-type]
 
         # Caller-sync guard: the writer's L0 channel axis was sized by
         # start_stack's n_channels, and omero_channels is built from the
@@ -2030,7 +2030,7 @@ class ZarrSaver:
             )
 
         t0 = time.time()
-        self._writer.finalize_with_resolutions(
+        self._writer.finalize_with_resolutions(  # ty: ignore[unresolved-attribute]
             base_res=base_res,
             target_resolutions_um=(10, 25, 50, 100),
             make_isotropic=True,
@@ -2060,7 +2060,7 @@ class FrameSaverController:
         # FrameViewer is sized from the bundle's camera dimensions — the
         # same rows/columns the pre-extraction hardware_init passed.
         self.frame_viewer = FrameViewer(
-            shell, rows=bundle.camera.ysize, columns=bundle.camera.xsize
+            shell, rows=bundle.camera.ysize, columns=bundle.camera.xsize  # ty: ignore[invalid-argument-type]
         )
         # FrameSaver is parented to the shell. Its sig_status_message
         # signal is wired to shell.updateUi_message_printer inside

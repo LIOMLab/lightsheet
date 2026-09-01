@@ -89,7 +89,7 @@ def _make_axis_range_drag(ax: pg.AxisItem, vb: pg.ViewBox) -> None:
             new_x1 = new_span
             vb.setRange(xRange=(new_x0, new_x1), padding=0.0)
 
-    ax.mouseDragEvent = _range_drag
+    ax.mouseDragEvent = _range_drag  # ty: ignore[invalid-assignment]
 
 
 def _clamp_view_range(

@@ -25,7 +25,9 @@ def test_past_panel_at_stacked_index_6(
 ) -> None:
     """The dedicated PastAcquisitionsPanel is at stackedPanels index 6,
     wrapped in a QScrollArea(widgetResizable=True)."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     sp = ctrl.ui.stackedPanels
@@ -50,7 +52,9 @@ def test_past_panel_has_browser_table_toggle_refresh(
 ) -> None:
     """The dedicated Past panel owns the past table, the Planned/Past
     toggle, and the Refresh button (moved from the Stack panel)."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     panel = ctrl.past_panel
@@ -72,7 +76,9 @@ def test_past_panel_toggle_and_refresh_not_in_stack_panel(
     """The Planned/Past toggle + Refresh button + past table are NOT in
     the Stack panel's AcquisitionTableManager (they moved to the
     dedicated Past panel)."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     stack_panel = ctrl.stack_panel
@@ -102,7 +108,9 @@ def test_planned_queue_stays_in_stack_panel(
 ) -> None:
     """The Planned queue QTableWidget + add/edit/remove/start-queue
     controls stay in the Stack panel's AcquisitionTableManager."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     table_manager = ctrl.stack_panel.table_manager
@@ -124,7 +132,9 @@ def test_past_panel_owns_async_scan_worker(
     async-scan pattern intact (QThread + moveToThread + _ScanWorker).
     The browser's start_scan_async + _clear_thread_refs teardown are
     present."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     from lightsheet.gui.panels.past_acquisitions_browser import (
         PastAcquisitionsBrowser,
@@ -151,7 +161,9 @@ def test_refresh_button_triggers_start_scan_async(
     GUI thread + E-stop kill path stay responsive)."""
     from unittest.mock import patch
 
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     panel = ctrl.past_panel
@@ -172,7 +184,9 @@ def test_past_panel_scan_finished_populates_table(
 ) -> None:
     """When the browser emits sig_scan_finished, the panel populates the
     past table in one batch and emits past_acquisitions_scan_finished."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     from lightsheet.gui.panels.past_acquisitions_browser import (
         PastAcquisitionEntry,
@@ -202,7 +216,7 @@ def test_past_panel_scan_finished_populates_table(
         ),
     ]
 
-    received: list = []
+    received: list = []  # ty: ignore[missing-type-argument]
     panel.past_acquisitions_scan_finished.connect(received.extend)
 
     # Emit sig_scan_finished directly (simulates the async worker
@@ -232,7 +246,9 @@ def test_past_panel_empty_scan_shows_empty_copy(
 ) -> None:
     """When the browser emits sig_scan_finished with no entries, the
     panel shows the empty-state copy and hides the table."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     panel = ctrl.past_panel
@@ -255,7 +271,9 @@ def test_past_panel_wavelength_normalization(
 ) -> None:
     """The past table normalizes 640 -> 647 in the Channel column
     (display only — the underlying file is unchanged)."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     from lightsheet.gui.panels.past_acquisitions_browser import (
         PastAcquisitionEntry,

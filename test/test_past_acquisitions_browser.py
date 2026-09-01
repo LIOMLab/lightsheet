@@ -41,7 +41,7 @@ def test_past_acquisitions_browser_parses_hdf5_and_zarr(
     # 640nm token too — both sources agree on 640, the display shows 647.
     # Laser2 is the active laser (640nm iBeam) — Laser1 (555nm) is inactive.
     h5_path = data_dir / "S01_640nm_stack_plane_00001.hdf5"
-    with h5py.File(h5_path, "w") as f:
+    with h5py.File(h5_path, "w") as f:  # ty: ignore[invalid-argument-type]
         f.attrs["Laser1 Wavelength"] = 555
         f.attrs["Laser1 Active"] = False
         f.attrs["Laser2 Wavelength"] = 640
@@ -106,7 +106,7 @@ def test_past_acquisitions_hdf5_picks_active_laser_wavelength(
 
     # Laser1 (555nm) inactive, Laser2 (647nm) active.
     h5_path = data_dir / "test_active_laser.hdf5"
-    with h5py.File(h5_path, "w") as f:
+    with h5py.File(h5_path, "w") as f:  # ty: ignore[invalid-argument-type]
         f.attrs["Laser1 Wavelength"] = 555
         f.attrs["Laser1 Active"] = False
         f.attrs["Laser2 Wavelength"] = 647
@@ -138,7 +138,7 @@ def test_past_acquisitions_browser_degrades_on_missing_attrs(
     data_dir.mkdir()
     # No root attrs; the wavelength must come from the _647nm_ filename token.
     h5_path = data_dir / "S10_647nm_stack_plane_00001.hdf5"
-    with h5py.File(h5_path, "w") as f:
+    with h5py.File(h5_path, "w") as f:  # ty: ignore[invalid-argument-type]
         f.create_dataset(
             "reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16)
         )
@@ -177,12 +177,12 @@ def test_past_acquisitions_browser_parses_compact_naming(
     data_dir.mkdir()
     # No root attrs — wavelength must come from the filename token.
     h5_path1 = data_dir / "tes1_555nm.hdf5"
-    with h5py.File(h5_path1, "w") as f:
+    with h5py.File(h5_path1, "w") as f:  # ty: ignore[invalid-argument-type]
         f.create_dataset(
             "reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16)
         )
     h5_path2 = data_dir / "tes1_647nm_01.hdf5"
-    with h5py.File(h5_path2, "w") as f:
+    with h5py.File(h5_path2, "w") as f:  # ty: ignore[invalid-argument-type]
         f.create_dataset(
             "reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16)
         )

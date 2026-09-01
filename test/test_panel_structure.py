@@ -160,7 +160,9 @@ def test_calibration_panel_instantiates(qtbot: QtBot) -> None:
 
 def test_shell_composes_panels(qtbot: QtBot, request: FixtureRequest) -> None:
     """The shell instantiates and exposes all per-panel widgets."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
 
@@ -184,7 +186,9 @@ def test_stacked_panels_has_eight_pages(qtbot: QtBot, request: FixtureRequest) -
     placeholder page shipped by the .ui is removed; the Past page hosts
     the dedicated PastAcquisitionsPanel (browser + read-only table).
     """
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     assert ctrl.ui.stackedPanels.count() == 8
@@ -194,7 +198,9 @@ def test_stacked_page_order(qtbot: QtBot, request: FixtureRequest) -> None:
     """Each stacked page hosts the panel for its left-rail index:
     Motion(0), Acquire(1), Stack(2), Scan(3), Lasers(4), Files(5),
     Past(6), Calibrate(7)."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     sp = ctrl.ui.stackedPanels
@@ -227,7 +233,9 @@ def test_all_panels_wrapped_in_scroll_area(
     (UI-SPEC QScrollArea Wrapping Rules) so the panel overflows
     gracefully on small screens. The uniform convention applies to all
     8 pages including the dedicated Past Acquisitions panel."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
     from PySide6.QtWidgets import QScrollArea
 
     ctrl, _ = make_controller(qtbot, request)
@@ -253,7 +261,9 @@ def test_estop_button_in_shell(qtbot: QtBot, request: FixtureRequest) -> None:
     panel, the kill path would lose its single owner and the safety
     invariant would be broken.
     """
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
 
@@ -282,7 +292,9 @@ def test_estop_button_in_shell(qtbot: QtBot, request: FixtureRequest) -> None:
 
 def test_image_view_in_shell(qtbot: QtBot, request: FixtureRequest) -> None:
     """The ImageView lives in the shell (not in any panel)."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
 

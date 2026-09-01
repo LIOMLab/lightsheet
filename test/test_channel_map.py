@@ -93,7 +93,7 @@ def test_channel_map_frozen() -> None:
     assert new_cm.galvo_left_right_swap is True
     assert cm.galvo_left_right_swap is False  # original unchanged
     with pytest.raises(dataclasses.FrozenInstanceError):
-        cm.galvo_left_right_swap = True  # type: ignore[misc]
+        cm.galvo_left_right_swap = True  # type: ignore[misc]  # ty: ignore[invalid-assignment]
 
 
 # --------------------------------------------------------------------------- #

@@ -56,7 +56,7 @@ def _patch_worker_run(record: list[float]) -> Any:
     from lightsheet.gui.workers import StackWorker
 
     def _fake_run(self: StackWorker) -> None:
-        record.append(self._shell.stack_starting_plane)
+        record.append(self._shell.stack_starting_plane)  # ty: ignore[invalid-argument-type]
         self.finished.emit()
 
     return patch.object(StackWorker, "run", _fake_run)
@@ -68,7 +68,7 @@ def _patch_worker_run_slow(record: list[float], delay_s: float = 0.1) -> Any:
     from lightsheet.gui.workers import StackWorker
 
     def _fake_run(self: StackWorker) -> None:
-        record.append(self._shell.stack_starting_plane)
+        record.append(self._shell.stack_starting_plane)  # ty: ignore[invalid-argument-type]
         time.sleep(delay_s)
         self.finished.emit()
 
@@ -104,7 +104,7 @@ def test_queue_configures_stack_params_per_row(
     _add_valid_row(mgr, 500, 600, 10, "A")  # 11 planes
     _add_valid_row(mgr, 700, 702, 1, "B")   # 3 planes
 
-    seen: list[tuple] = []
+    seen: list[tuple] = []  # ty: ignore[missing-type-argument]
     from lightsheet.gui.workers import StackWorker
 
     def _fake_run(self: StackWorker) -> None:
@@ -190,7 +190,7 @@ def test_estop_aborts_queue(qtbot: QtBot, request: pytest.FixtureRequest) -> Non
     from lightsheet.gui.workers import StackWorker
 
     def _fake_run(self: StackWorker) -> None:
-        executed.append(self._shell.stack_starting_plane)
+        executed.append(self._shell.stack_starting_plane)  # ty: ignore[invalid-argument-type]
         # Trigger E-stop after the first row completes.
         if len(executed) == 1:
             ctrl.estop_event.set()
@@ -220,7 +220,7 @@ def test_no_auto_resume_after_estop(
     from lightsheet.gui.workers import StackWorker
 
     def _fake_run(self: StackWorker) -> None:
-        executed.append(self._shell.stack_starting_plane)
+        executed.append(self._shell.stack_starting_plane)  # ty: ignore[invalid-argument-type]
         if len(executed) == 1:
             ctrl.estop_event.set()
         self.finished.emit()

@@ -26,7 +26,7 @@ pytest.importorskip("PySide6")
 def _write_hdf5(path: Path, datasets: dict[str, np.ndarray]) -> None:
     import h5py
 
-    with h5py.File(path, "w") as f:
+    with h5py.File(path, "w") as f:  # ty: ignore[invalid-argument-type]
         for name, arr in datasets.items():
             f.create_dataset(name, data=arr)
 
@@ -55,7 +55,9 @@ def test_list_hdf5_datasets(
     qtbot: QtBot, request: FixtureRequest, tmp_path: Path
 ) -> None:
     """_list_hdf5_datasets returns the top-level dataset names."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     h5_path = tmp_path / "sample_555nm.hdf5"
@@ -75,7 +77,9 @@ def test_list_zarr_datasets_single_channel(
 ) -> None:
     """_list_zarr_datasets for a (1, z, y, x) store returns plane_NNNN
     labels (one per plane), matching the HDF5 reconstructed_frameNNN UX."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     zarr_path = tmp_path / "sample_555nm.ome.zarr"
@@ -93,7 +97,9 @@ def test_list_zarr_datasets_multi_channel(
 ) -> None:
     """_list_zarr_datasets for a (2, z, y, x) store returns
     chN_plane_NNNN labels so the operator can view any (channel, plane)."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     zarr_path = tmp_path / "sample.ome.zarr"
@@ -113,7 +119,9 @@ def test_read_hdf5_dataset_returns_data_and_attrs(
     qtbot: QtBot, request: FixtureRequest, tmp_path: Path
 ) -> None:
     """_read_hdf5_dataset returns (data, attrs) for the named dataset."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     h5_path = tmp_path / "sample_555nm.hdf5"
@@ -132,7 +140,9 @@ def test_read_zarr_dataset_single_channel(
 ) -> None:
     """_read_zarr_dataset returns the (y, x) slice for plane_NNNN from
     the L0 (1, z, y, x) array, with the correct pixel values."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     zarr_path = tmp_path / "sample_555nm.ome.zarr"
@@ -155,7 +165,9 @@ def test_read_zarr_dataset_multi_channel(
 ) -> None:
     """_read_zarr_dataset returns the (y, x) slice for chN_plane_NNNN
     from the L0 (2, z, y, x) array, indexing the correct channel."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     zarr_path = tmp_path / "sample.ome.zarr"
@@ -177,7 +189,9 @@ def test_list_zarr_datasets_rejects_no_l0_array(
     """_list_zarr_datasets raises ValueError for a store with no L0
     '0' array so the caller's except path surfaces a clear message."""
     import zarr
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     zarr_path = tmp_path / "empty.ome.zarr"

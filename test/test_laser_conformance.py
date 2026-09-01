@@ -120,7 +120,7 @@ def test_laser_conformance(device_factory: object) -> None:
     the test skips rather than failing — the conformance smoke is not a
     rig integration test, and a port-in-use condition is not a code
     regression."""
-    dev = device_factory()
+    dev = device_factory()  # ty: ignore[call-non-callable]
     # The ibeam_real path's assert_lifecycle calls dev.open() which opens
     # COM4. If the port is held, skip rather than fail — this is a
     # hardware-availability condition, not a conformance regression.
@@ -159,7 +159,7 @@ def test_laser_off_is_synchronous(device_factory: object) -> None:
     ``power = 0.0``. The serial-port-closed path is the safe path: the
     laser is treated as off, which is the correct E-stop semantics.
     """
-    dev = device_factory()
+    dev = device_factory()  # ty: ignore[call-non-callable]
     result = dev.off()
     assert result is None
     assert dev.active is False, (
@@ -198,7 +198,7 @@ def test_laser_set_power_clamps_to_max(device_factory: object) -> None:
     legs (``daq_mock`` / ``ibeam_mock``) where ``dev.power`` does update
     to ``max_power``.
     """
-    dev = device_factory()
+    dev = device_factory()  # ty: ignore[call-non-callable]
     dev.set_power(999.0)
     # On the mock legs the clamp is observable on dev.power. On the real
     # legs (skipped on Mac) the clamp is verified by the dedicated

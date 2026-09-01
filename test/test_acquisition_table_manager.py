@@ -34,7 +34,7 @@ def _mgr(
     qtbot: QtBot, request: pytest.FixtureRequest
 ) -> tuple[Controller_MainWindow, AcquisitionTableManager]:
     ctrl, _ = make_controller(qtbot, request)
-    return ctrl, ctrl.stack_panel.table_manager
+    return ctrl, ctrl.stack_panel.table_manager  # ty: ignore[unsound-return-statement]
 
 
 def test_table_manager_exists(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
@@ -48,7 +48,7 @@ def test_table_columns(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     Est. Time, Est. Size. Start/End display in mm; Step stays µm."""
     _ctrl, mgr = _mgr(qtbot, request)
     headers = [
-        mgr.table.horizontalHeaderItem(i).text()
+        mgr.table.horizontalHeaderItem(i).text()  # ty: ignore[unresolved-attribute]
         for i in range(mgr.table.columnCount())
     ]
     assert headers == ["Name", "Start (mm)", "End (mm)",
@@ -221,7 +221,7 @@ def test_long_name_truncates_with_tooltip(
     mgr.add_stack()
     mgr.set_cell(0, 0, long_name)
     item = mgr.table.item(0, 0)
-    assert item.toolTip() == long_name
+    assert item.toolTip() == long_name  # ty: ignore[unresolved-attribute]
 
 
 def test_table_scrollable(qtbot: QtBot, request: pytest.FixtureRequest) -> None:

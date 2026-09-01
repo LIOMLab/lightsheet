@@ -431,10 +431,10 @@ class HardwareManager:
         self._readback_worker = LaserReadbackWorker(self)
         self._readback_worker.moveToThread(self._readback_thread)
         self._readback_thread.started.connect(
-            self._readback_worker.start_readback, Qt.DirectConnection
+            self._readback_worker.start_readback, Qt.DirectConnection  # ty: ignore[unresolved-attribute]
         )
         self._readback_worker.sig_finished.connect(
-            self._readback_thread.quit, Qt.DirectConnection
+            self._readback_thread.quit, Qt.DirectConnection  # ty: ignore[unresolved-attribute]
         )
         self._readback_thread.finished.connect(self._readback_worker.deleteLater)
         self._readback_thread.start()

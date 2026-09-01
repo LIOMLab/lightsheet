@@ -52,7 +52,7 @@ def _small_config(**overrides: Any) -> AdaptiveConfig:
         max_reacquire_attempts=1,
     )
     defaults.update(overrides)
-    return AdaptiveConfig(**defaults)
+    return AdaptiveConfig(**defaults)  # ty: ignore[invalid-argument-type]
 
 
 def _make_samples(n_planes: int, n_channels: int = 1) -> list[AdaptiveSample]:
@@ -83,7 +83,7 @@ def _make_samples(n_planes: int, n_channels: int = 1) -> list[AdaptiveSample]:
 
 def _setup_ctrl(
     qtbot: Any, request: Any, tmp_path: Path, *, n_channels: int = 1
-) -> tuple:
+) -> tuple:  # ty: ignore[missing-type-argument]
     """Create a real controller with 8x8 camera and tmp_path save dir.
 
     Returns ``(ctrl, saver)`` where ``saver`` is ``ctrl._fs.frame_saver``.
@@ -373,7 +373,7 @@ def test_hdf5_multi_file_multi_dataset_writes_aligned_plane_rows(
                 grp = f["adaptive_trajectory"]
                 # The group must carry M rows (one per plane in this
                 # file), not 1 — the pre-fix bug wrote one row.
-                pi = np.asarray(grp["plane_index"])
+                pi = np.asarray(grp["plane_index"])  # ty: ignore[invalid-argument-type, not-subscriptable]
                 assert pi.shape == (n_datasets_per_file,), (
                     f"file {file_idx} plane_index shape {pi.shape} "
                     f"!= ({n_datasets_per_file},) — expected one row "
@@ -386,7 +386,7 @@ def test_hdf5_multi_file_multi_dataset_writes_aligned_plane_rows(
         all_rows: list[int] = []
         for fname in saver.filenames_list:
             with h5py.File(fname, "r") as f:
-                all_rows.extend(np.asarray(f["adaptive_trajectory"]["plane_index"]).tolist())
+                all_rows.extend(np.asarray(f["adaptive_trajectory"]["plane_index"]).tolist())  # ty: ignore[invalid-argument-type, not-subscriptable]
         assert all_rows == list(range(n_planes)), (
             f"concatenated per-file plane_index {all_rows} != "
             f"{list(range(n_planes))} — trajectory not reconstructable"
@@ -482,7 +482,7 @@ def test_hdf5_multi_channel_multi_file_multi_dataset_writes_aligned_rows(
                         f"channel {ch} file {file_idx} missing /adaptive_trajectory"
                     )
                     grp = f["adaptive_trajectory"]
-                    pi = np.asarray(grp["plane_index"])
+                    pi = np.asarray(grp["plane_index"])  # ty: ignore[invalid-argument-type, not-subscriptable]
                     assert pi.shape == (n_datasets_per_file,), (
                         f"channel {ch} file {file_idx} plane_index shape "
                         f"{pi.shape} != ({n_datasets_per_file},) — expected "
@@ -525,9 +525,9 @@ def test_zarr_writes_adaptive_group(qtbot: Any, request: Any, tmp_path: Path) ->
         store_path = str(tmp_path / "scan.ome.zarr")
         root = zarr.open(store_path, mode="r")
         assert "acquisition" in root
-        acq = root["acquisition"]
-        assert "adaptive" in acq, "/acquisition/adaptive group missing"
-        _assert_adaptive_group(acq["adaptive"], saver.adaptive_trajectory, config)
+        acq = root["acquisition"]  # ty: ignore[invalid-argument-type]
+        assert "adaptive" in acq, "/acquisition/adaptive group missing"  # ty: ignore[unsupported-operator]
+        _assert_adaptive_group(acq["adaptive"], saver.adaptive_trajectory, config)  # ty: ignore[invalid-argument-type, not-subscriptable]
 
 
 # ---------------------------------------------------------------------------
@@ -574,9 +574,9 @@ def test_both_writes_adaptive_in_both_formats(
         store_path = str(tmp_path / "scan.ome.zarr")
         root = zarr.open(store_path, mode="r")
         assert "acquisition" in root
-        assert "adaptive" in root["acquisition"]
+        assert "adaptive" in root["acquisition"]  # ty: ignore[invalid-argument-type, unsupported-operator]
         _assert_adaptive_group(
-            root["acquisition"]["adaptive"], saver.adaptive_trajectory, config
+            root["acquisition"]["adaptive"], saver.adaptive_trajectory, config  # ty: ignore[invalid-argument-type, not-subscriptable]
         )
 
 
@@ -641,7 +641,7 @@ def test_fixed_mode_omits_adaptive_group_zarr(
         store_path = str(tmp_path / "scan.ome.zarr")
         root = zarr.open(store_path, mode="r")
         assert "acquisition" in root
-        assert "adaptive" not in root["acquisition"], (
+        assert "adaptive" not in root["acquisition"], (  # ty: ignore[invalid-argument-type, unsupported-operator]
             "fixed-mode Zarr must not contain /acquisition/adaptive"
         )
 

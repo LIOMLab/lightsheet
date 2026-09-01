@@ -76,7 +76,7 @@ def test_siggen_conformance(device_factory: object) -> None:
     factory builds a real Camera (skipped on Mac, and skips gracefully on
     the rig when the camera is absent), the mock builds a
     MockSigGen(MockCamera())."""
-    dev = device_factory()
+    dev = device_factory()  # ty: ignore[call-non-callable]
     SIGGEN_CONTRACT.assert_lifecycle(dev)
     SIGGEN_CONTRACT.assert_error_surface(dev)
     SIGGEN_CONTRACT.assert_read_attrs(dev)

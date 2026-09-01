@@ -28,7 +28,7 @@ class MockSigGen(ISigGen):
     etl_left_offset: float = 0.0
     etl_right_offset: float = 0.0
     waveform_cycles: int | None = None
-    waveform_metadata: dict | None = None
+    waveform_metadata: dict | None = None  # ty: ignore[missing-type-argument]
 
     def __init__(self, camera: ICameraCore) -> None:
         self.camera = camera
@@ -93,27 +93,27 @@ class MockSigGen(ISigGen):
     def compute_scan_waveforms(self) -> None:
         """Compute Galvo + ETL scan ramps and Camera Exposure waveforms."""
         if self.camera.shutter_mode == "Lightsheet":
-            self.galvo_scan_time = self.camera.line_time * self.camera.ysize
+            self.galvo_scan_time = self.camera.line_time * self.camera.ysize  # ty: ignore[unsupported-operator]
             camera_active_time = (
-                self.camera.line_time * self.camera.lightsheet_exposed_lines
+                self.camera.line_time * self.camera.lightsheet_exposed_lines  # ty: ignore[unsupported-operator]
             )
-            camera_delay_time = 3 * self.camera.line_time
+            camera_delay_time = 3 * self.camera.line_time  # ty: ignore[unsupported-operator]
             camera_delay_samples = int(np.ceil(camera_delay_time * self.sample_rate))
         elif self.camera.shutter_mode == "Rolling":
             self.galvo_scan_time = self.camera.exposure_time + (
-                self.camera.line_time * 0.5 * self.camera.ysize
+                self.camera.line_time * 0.5 * self.camera.ysize  # ty: ignore[unsupported-operator]
             )
             camera_active_time = self.galvo_scan_time - (
-                self.camera.line_time * 0.5 * self.camera.ysize
+                self.camera.line_time * 0.5 * self.camera.ysize  # ty: ignore[unsupported-operator]
             )
-            camera_delay_time = 3 * self.camera.line_time + (
-                self.camera.line_time * 0.5 * self.camera.ysize
+            camera_delay_time = 3 * self.camera.line_time + (  # ty: ignore[unsupported-operator]
+                self.camera.line_time * 0.5 * self.camera.ysize  # ty: ignore[unsupported-operator]
             )
             camera_delay_samples = int(np.ceil(camera_delay_time * self.sample_rate))
         elif self.camera.shutter_mode == "Global":
             self.galvo_scan_time = self.camera.exposure_time
             camera_active_time = self.galvo_scan_time
-            camera_delay_time = (0.5 * self.camera.ysize + 1) * self.camera.line_time
+            camera_delay_time = (0.5 * self.camera.ysize + 1) * self.camera.line_time  # ty: ignore[unsupported-operator]
             camera_delay_samples = int(np.ceil(camera_delay_time * self.sample_rate))
         else:
             raise Exception("camera shutter mode not supported")

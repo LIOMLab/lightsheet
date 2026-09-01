@@ -45,7 +45,7 @@ def test_camera_conformance(device_factory: object) -> None:
     """One assertion body behind both [real, mock] — the structural
     divergence catch (D-15). The real path is skipped on Mac; the mock
     path runs and exercises the contract."""
-    dev = device_factory()
+    dev = device_factory()  # ty: ignore[call-non-callable]
     CAMERA_CONTRACT.assert_lifecycle(dev)
     CAMERA_CONTRACT.assert_error_surface(dev)
     CAMERA_CONTRACT.assert_read_attrs(dev)

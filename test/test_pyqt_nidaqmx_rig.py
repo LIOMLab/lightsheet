@@ -56,7 +56,7 @@ def _laser_terminals() -> str:
     import configparser
 
     cfg = configparser.ConfigParser()
-    cfg.optionxform = str
+    cfg.optionxform = str  # ty: ignore[invalid-assignment]
     cfg.read("config.ini")
     return cfg["Lasers"]["Lasers Terminals"]
 
@@ -204,12 +204,12 @@ def test_laser_task_with_full_hal_under_qapp() -> None:
     with contextlib.suppress(Exception):
         ibeam.open()
     laser1 = DAQLaser(
-        channel="/Dev7/ao0",
+        channel="/Dev7/ao0",  # ty: ignore[unknown-argument]
         wavelength=555,
         mw_per_volt=60.0,
         max_power_mw=300.0,
         label="Laser 1 (555 nm)",
-    )
+    )  # ty: ignore[missing-argument]
     etls = ETLs()
     etls.open()
     etls.set_analog_mode()

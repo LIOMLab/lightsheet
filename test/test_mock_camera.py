@@ -99,7 +99,7 @@ def test_make_bundle_does_not_set_simulate_timing() -> None:
 
     bundle = make_bundle()
     camera = bundle.camera
-    assert camera.simulate_timing is False, (
+    assert camera.simulate_timing is False, (  # ty: ignore[unresolved-attribute]
         "make_bundle must NOT set simulate_timing — the test suite "
         "must not be slowed by the demo-only timing delay"
     )

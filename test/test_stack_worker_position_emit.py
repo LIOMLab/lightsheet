@@ -107,7 +107,7 @@ class _PositionEmitShell:
         # auto-laser flag is set) so set_files always receives wavelengths.
         self._auto_laser1 = False
         self._auto_laser2 = False
-        self.lasers: tuple = ()
+        self.lasers: tuple = ()  # ty: ignore[missing-type-argument]
 
 
 def test_stack_worker_position_emit_uses_signal_not_direct_call(qtbot: QtBot) -> None:
@@ -120,7 +120,7 @@ def test_stack_worker_position_emit_uses_signal_not_direct_call(qtbot: QtBot) ->
     shell.lasers = bundle.lasers
     hw = Mock()
     worker = StackWorker(
-        bundle, hw, shell,
+        bundle, hw, shell,  # ty: ignore[invalid-argument-type]
         save_description="test sample",
         save_stitch_blend=False,
         save_all_crop=False,

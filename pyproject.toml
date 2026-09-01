@@ -237,6 +237,15 @@ file_branch_coverage_min = 50
 missing-type-argument = "error"
 unsound-return-statement = "error"
 
+[tool.ty.environment]
+root = [".", "test"]
+
+[tool.ty.src]
+exclude = [
+    # Vendored breeze stylesheets — upstream code, not ours to type-check.
+    "lightsheet/gui/_vendor",
+]
+
 [tool.ty.terminal]
 error-on-warning = true
 

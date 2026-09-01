@@ -31,6 +31,7 @@ import os
 import threading
 
 import pytest
+from conftest import _nidaqmx_is_stub
 
 from lightsheet.hal.real.daqlaser import DAQLaser
 
@@ -44,7 +45,6 @@ _has_hardware: bool = os.environ.get("LIGHTSHEET_HW", "0") == "1"
 # they must skip when the real nidaqmx is active (the real write succeeds).
 # On the rig the real nidaqmx is active even for the mock-suite run (without
 # LIGHTSHEET_HW=1), so gating on the stub — not the env var — is correct.
-from conftest import _nidaqmx_is_stub  # noqa: E402 — pythonpath includes test/
 
 
 def _make_l1() -> DAQLaser:
@@ -368,7 +368,7 @@ def test_native_unit_volts_clamp_in_write_volts() -> None:
             self.ao_channels = _CapturingChannels()
             self._volts = None
 
-        def write(self, data, auto_start: bool = True) -> None:  # noqa: ANN001
+        def write(self, data: object, auto_start: bool = True) -> None:
             self._volts = data
             captured["volts"] = data
 
@@ -383,22 +383,22 @@ def test_native_unit_volts_clamp_in_write_volts() -> None:
             captured["terminal"] = terminal
 
     original_task = nidaqmx.Task
-    nidaqmx.Task = _CapturingTask  # type: ignore[attr-defined]
+    nidaqmx.Task = _CapturingTask  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
     try:
         # 999 V is far above max_power/mw_per_volt = 300/60 = 5.0 V.
         laser._write_volts(999.0)
         written = captured["volts"]
         # _write_volts writes np.array([volts]); the single element is the
         # clamped value.
-        assert float(written[0]) == pytest.approx(5.0)
+        assert float(written[0]) == pytest.approx(5.0)  # ty: ignore[not-subscriptable]
         # Floor clamp: -10 V -> 0 V.
         laser._write_volts(-10.0)
         written = captured["volts"]
-        assert float(written[0]) == pytest.approx(0.0)
+        assert float(written[0]) == pytest.approx(0.0)  # ty: ignore[not-subscriptable]
         # In-range value passes through unchanged.
         laser._write_volts(2.5)
         written = captured["volts"]
-        assert float(written[0]) == pytest.approx(2.5)
+        assert float(written[0]) == pytest.approx(2.5)  # ty: ignore[not-subscriptable]
         # Terminal passed through to add_ao_voltage_chan unchanged.
         assert captured["terminal"] == "/Dev7/ao0"
     finally:

@@ -140,15 +140,15 @@ class AcquisitionTableManager(QWidget):
             | QTableWidget.EditTrigger.EditKeyPressed
         )
         # Scroll when content exceeds the viewport (E8 overflow).
-        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)  # ty: ignore[unresolved-attribute]
+        self.table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)  # ty: ignore[unresolved-attribute]
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         header.setStretchLastSection(True)
         # Long names truncate with ellipsis; the full name is in the tooltip
         # (set per-item in _set_name_cell).
         self.table.setWordWrap(False)
-        self.table.textElideMode = Qt.TextElideMode.ElideRight
+        self.table.textElideMode = Qt.TextElideMode.ElideRight  # ty: ignore[invalid-assignment]
 
         # --- Empty-state label (shown when the table has no rows) ---
         self._empty_label = QLabel(_EMPTY_COPY, self)
@@ -726,7 +726,7 @@ class AcquisitionTableManager(QWidget):
                 self._shell.stack_ending_plane = row.end
                 # stack_step carries the direction sign (negative when
                 # end < start), matching updateUi_stack_mode_button.
-                self._shell.stack_step = (
+                self._shell.stack_step = (  # ty: ignore[invalid-assignment]
                     row.step if row.end >= row.start else -row.step
                 )
                 self._shell.number_of_planes = row.n_planes
@@ -823,13 +823,13 @@ class AcquisitionTableManager(QWidget):
                 from PySide6.QtCore import QTimer
 
                 loop = QEventLoop()
-                thread = self._shell._stack_thread
-                worker.finished.connect(loop.quit)
+                thread = self._shell._stack_thread  # ty: ignore[unresolved-attribute]
+                worker.finished.connect(loop.quit)  # ty: ignore[unresolved-attribute]
 
                 def _watchdog(
                     _loop: QEventLoop = loop, _thread: object = thread
                 ) -> None:
-                    if not _thread.isRunning():
+                    if not _thread.isRunning():  # ty: ignore[unresolved-attribute]
                         _loop.quit()
                         return
                     QTimer.singleShot(50, _watchdog)

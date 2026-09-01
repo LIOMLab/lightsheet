@@ -128,19 +128,19 @@ class Motors(IMotors):
 
     def get_properties(self) -> dict[str, str]:
         motors_properties = {}
-        motors_properties.update({"vertical name": self.vertical.get_name()})
-        motors_properties.update({"horizontal name": self.horizontal.get_name()})
-        motors_properties.update({"camera name": self.camera.get_name()})
-        return motors_properties
+        motors_properties.update({"vertical name": self.vertical.get_name()})  # ty: ignore[unresolved-attribute]
+        motors_properties.update({"horizontal name": self.horizontal.get_name()})  # ty: ignore[unresolved-attribute]
+        motors_properties.update({"camera name": self.camera.get_name()})  # ty: ignore[unresolved-attribute]
+        return motors_properties  # ty: ignore[unsound-return-statement]
 
     def get_positions(self) -> dict[str, float]:
         motors_positions = {}
-        motors_positions.update({"vertical position": self.vertical.get_position("mm")})
+        motors_positions.update({"vertical position": self.vertical.get_position("mm")})  # ty: ignore[unresolved-attribute]
         motors_positions.update(
-            {"horizontal position": self.horizontal.get_position("mm")}
+            {"horizontal position": self.horizontal.get_position("mm")}  # ty: ignore[unresolved-attribute]
         )
-        motors_positions.update({"camera position": self.camera.get_position("mm")})
-        return motors_positions
+        motors_positions.update({"camera position": self.camera.get_position("mm")})  # ty: ignore[unresolved-attribute]
+        return motors_positions  # ty: ignore[unsound-return-statement]
 
 
 class ZaberMotor(IMotor):

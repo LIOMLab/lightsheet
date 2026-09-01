@@ -223,7 +223,7 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
         controller.close_modes()
         # Stop the frame_saver QThread (quit()+wait with the h5py quiesce
         # timeout) — no-op if no save was started.
-        controller._fs.frame_saver.stop_saving()
+        controller._fs.frame_saver.stop_saving()  # ty: ignore[unresolved-attribute]
         # Stop the laser2 readback QThread if one is in flight. The
         # readback worker self-quits via sig_finished→thread.quit
         # (DirectConnection, fires on the worker thread), so the thread
@@ -296,9 +296,9 @@ def make_controller(qtbot: Any, request: Any) -> tuple[Any, DeviceBundle]:
         # True — never sweep unrelated QApplication top-levels (other
         # tests' widgets, qtbot's own scaffolding, etc.).
         app = QApplication.instance()
-        owned_toplevels: list = []
+        owned_toplevels: list = []  # ty: ignore[missing-type-argument]
         if app is not None:
-            for widget in app.topLevelWidgets():
+            for widget in app.topLevelWidgets():  # ty: ignore[unresolved-attribute]
                 if widget is controller:
                     continue
                 try:

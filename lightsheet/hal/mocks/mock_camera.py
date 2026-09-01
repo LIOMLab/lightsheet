@@ -228,7 +228,7 @@ class MockCamera(ICamera):
     def get_delay_timebase(self) -> str | None:
         return None
 
-    def get_pixel_rates(self) -> dict[str, object] | list:
+    def get_pixel_rates(self) -> dict[str, object] | list:  # ty: ignore[missing-type-argument]
         return {}
 
     def get_pixel_rate(self) -> str | None:

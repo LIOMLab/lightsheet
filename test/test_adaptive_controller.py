@@ -60,7 +60,7 @@ def _cfg(**overrides: object) -> AdaptiveConfig:
         max_reacquire_attempts=1,
     )
     defaults.update(overrides)
-    return AdaptiveConfig(**defaults)  # type: ignore[arg-type]
+    return AdaptiveConfig(**defaults)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 
 
 # --------------------------------------------------------------------- #
@@ -71,7 +71,7 @@ def _cfg(**overrides: object) -> AdaptiveConfig:
 def test_config_frozen() -> None:
     cfg = _cfg()
     with pytest.raises(AttributeError):
-        cfg.enabled = False  # type: ignore[misc]
+        cfg.enabled = False  # type: ignore[misc]  # ty: ignore[invalid-assignment]
 
 
 def test_config_rejects_min_exposure_above_max() -> None:
@@ -559,4 +559,4 @@ def test_adaptive_sample_frozen() -> None:
         power_fallback=False,
     )
     with pytest.raises(AttributeError):
-        sample.plane_index = 99  # type: ignore[misc]
+        sample.plane_index = 99  # type: ignore[misc]  # ty: ignore[invalid-assignment]

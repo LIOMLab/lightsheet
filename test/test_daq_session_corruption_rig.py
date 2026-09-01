@@ -61,7 +61,7 @@ def _laser_terminals() -> str:
     import configparser
 
     cfg = configparser.ConfigParser()
-    cfg.optionxform = str
+    cfg.optionxform = str  # ty: ignore[invalid-assignment]
     cfg.read("config.ini")
     return cfg["Lasers"]["Lasers Terminals"]
 
@@ -70,7 +70,7 @@ def _siggen_terminals() -> tuple[str, str]:
     import configparser
 
     cfg = configparser.ConfigParser()
-    cfg.optionxform = str
+    cfg.optionxform = str  # ty: ignore[invalid-assignment]
     cfg.read("config.ini")
     return cfg["SigGen"]["AO Terminals"], cfg["SigGen"]["DO Terminals"]
 

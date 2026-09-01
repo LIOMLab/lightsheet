@@ -198,7 +198,7 @@ class DeviceRegistry:
                 "Laser2 Power": 0.0,
                 "Laser2 Max Power": 150.0,
                 "Laser2 mW per Volt": 30.0,
-            },
+            },  # ty: ignore[invalid-argument-type]
         )
 
         # Parse the two-channel Lasers Terminals range (e.g. /Dev7/ao0:1)

@@ -154,7 +154,7 @@ class StackPanelWidget(QWidget):
         # stack_starting_plane stays in µm (the worker + motor HAL unit).
         # The spinbox displays in mm (FieldSpec unit), so convert µm→mm
         # for setValue only.
-        pos_um = self._shell.motors.horizontal.get_position("\u03bcm")
+        pos_um = self._shell.motors.horizontal.get_position("\u03bcm")  # ty: ignore[unresolved-attribute]
         self._shell.stack_starting_plane = pos_um
         self.ui.doubleSpinBox_acqFirstPlane.setValue(pos_um / 1000.0)
         self._shell.stack_first_plane_set = True
@@ -162,7 +162,7 @@ class StackPanelWidget(QWidget):
 
     def updateUi_set_stack_mode_ending_point(self) -> None:
         """Defines the ending point of the recorded stack volume"""
-        pos_um = self._shell.motors.horizontal.get_position("\u03bcm")
+        pos_um = self._shell.motors.horizontal.get_position("\u03bcm")  # ty: ignore[unresolved-attribute]
         self._shell.stack_ending_plane = pos_um
         self.ui.doubleSpinBox_acqLastPlane.setValue(pos_um / 1000.0)
         self._shell.stack_last_plane_set = True
@@ -555,14 +555,14 @@ class StackPanelWidget(QWidget):
         if pair is not None:
             max_name, field_label = pair
             max_sb = getattr(self.ui, max_name, None)
-            if max_sb is not None and sb.value() > max_sb.value():
+            if max_sb is not None and sb.value() > max_sb.value():  # ty: ignore[unresolved-attribute]
                 # Invalid pair — beep + message + revert + latch.
                 self._shell.sig_beep.emit()
                 self._shell.sig_message.emit(
                     _ADAPTIVE_BOUND_INVALID_MSG.format(field=field_label)
                 )
                 revert = self._adaptive_prior_values.get(name, max_sb.value())
-                sb.setValue(revert)
+                sb.setValue(revert)  # ty: ignore[unresolved-attribute]
                 self._adaptive_latched = True
                 return
         # Also check whether this spinbox is the max of a bound pair
@@ -570,17 +570,17 @@ class StackPanelWidget(QWidget):
         for min_name, (max_name, field_label) in self._ADAPTIVE_BOUND_PAIRS.items():
             if name == max_name:
                 min_sb = getattr(self.ui, min_name, None)
-                if min_sb is not None and min_sb.value() > sb.value():
+                if min_sb is not None and min_sb.value() > sb.value():  # ty: ignore[unresolved-attribute]
                     self._shell.sig_beep.emit()
                     self._shell.sig_message.emit(
                         _ADAPTIVE_BOUND_INVALID_MSG.format(field=field_label)
                     )
                     revert = self._adaptive_prior_values.get(name, min_sb.value())
-                    sb.setValue(revert)
+                    sb.setValue(revert)  # ty: ignore[unresolved-attribute]
                     self._adaptive_latched = True
                     return
         # Valid edit — track the new prior value and clear the latch.
-        self._adaptive_prior_values[name] = sb.value()
+        self._adaptive_prior_values[name] = sb.value()  # ty: ignore[unresolved-attribute]
         self._adaptive_latched = False
 
     def _update_adaptive_shutter_units(self) -> None:

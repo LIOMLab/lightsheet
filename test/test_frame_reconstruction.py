@@ -73,7 +73,7 @@ def _make_bundle() -> DeviceBundle:
 
 
 def _make_fs() -> FrameSaverController:
-    return FrameSaverController(_make_bundle(), _ShellStandin())
+    return FrameSaverController(_make_bundle(), _ShellStandin())  # ty: ignore[invalid-argument-type]
 
 
 # -- crop_buffer -----------------------------------------------------------

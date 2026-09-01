@@ -47,7 +47,7 @@ def test_motors_conformance(device_factory: object) -> None:
     divergence catch (D-15). Covers the Motors container surface
     (open/close + error attrs). Per-axis travel-limit enforcement is
     covered by test_mock_abc_conformance + test_motor_limits."""
-    dev = device_factory()
+    dev = device_factory()  # ty: ignore[call-non-callable]
     MOTORS_CONTRACT.assert_lifecycle(dev)
     MOTORS_CONTRACT.assert_error_surface(dev)
     MOTORS_CONTRACT.assert_read_attrs(dev)
@@ -71,6 +71,6 @@ def test_motors_conformance_boundary_state_flagged_unverified() -> None:
     dev = MockMotors()
     axis = dev.vertical
     # The mock starts at the low limit — an exact-boundary state.
-    assert axis.position_microsteps == axis.limit_low_microsteps
-    assert axis.error == 0
+    assert axis.position_microsteps == axis.limit_low_microsteps  # ty: ignore[unresolved-attribute]
+    assert axis.error == 0  # ty: ignore[unresolved-attribute]
     # Real-path at-limit behavior is deferred to rig UAT (HW2-01).

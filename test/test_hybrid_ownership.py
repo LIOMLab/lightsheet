@@ -31,9 +31,11 @@ pytest.importorskip("PySide6")
 def _make(
     qtbot: QtBot, request: FixtureRequest
 ) -> tuple[Controller_MainWindow, DeviceBundle]:
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
-    return make_controller(qtbot, request)
+    return make_controller(qtbot, request)  # ty: ignore[unsound-return-statement]
 
 
 def test_shell_owned_widgets_stay_on_ui(

@@ -22,11 +22,12 @@ import contextlib
 import logging
 import logging.handlers
 from pathlib import Path
+from typing import Any, Never
 
 import pytest
 
-from lightsheet.logging_setup import configure
 from lightsheet import logging_setup as logging_setup_mod
+from lightsheet.logging_setup import configure
 
 
 @pytest.fixture(autouse=True)
@@ -131,7 +132,7 @@ def test_configure_stream_only_when_all_dirs_unwritable(
         encoding="utf-8",
     )
 
-    def _always_fail(self, *args, **kwargs):
+    def _always_fail(self: Path, *args: Any, **kwargs: Any) -> Never:
         raise OSError("read-only filesystem (test fixture)")
 
     monkeypatch.setattr(Path, "mkdir", _always_fail)

@@ -705,12 +705,12 @@ def test_motors_init_with_mocked_serial_all_supported(tmp_path: Path) -> None:
             motors = Motors()
     finally:
         os.chdir(cwd)
-    assert motors.vertical.is_supported is True
-    assert motors.horizontal.is_supported is True
-    assert motors.camera.is_supported is True
-    assert motors.vertical.id == 6210
-    assert motors.horizontal.id == 6320
-    assert motors.camera.id == 4152
+    assert motors.vertical.is_supported is True  # ty: ignore[unresolved-attribute]
+    assert motors.horizontal.is_supported is True  # ty: ignore[unresolved-attribute]
+    assert motors.camera.is_supported is True  # ty: ignore[unresolved-attribute]
+    assert motors.vertical.id == 6210  # ty: ignore[unresolved-attribute]
+    assert motors.horizontal.id == 6320  # ty: ignore[unresolved-attribute]
+    assert motors.camera.id == 4152  # ty: ignore[unresolved-attribute]
 
 
 def test_motors_init_with_mocked_serial_none_supported(tmp_path: Path) -> None:
@@ -757,6 +757,6 @@ def test_motors_init_with_mocked_serial_none_supported(tmp_path: Path) -> None:
             motors = Motors()
     finally:
         os.chdir(cwd)
-    assert motors.vertical.is_supported is False
-    assert motors.horizontal.is_supported is False
-    assert motors.camera.is_supported is False
+    assert motors.vertical.is_supported is False  # ty: ignore[unresolved-attribute]
+    assert motors.horizontal.is_supported is False  # ty: ignore[unresolved-attribute]
+    assert motors.camera.is_supported is False  # ty: ignore[unresolved-attribute]

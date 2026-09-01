@@ -51,7 +51,7 @@ def _cfg(**overrides: object) -> AdaptiveConfig:
         max_reacquire_attempts=1,
     )
     defaults.update(overrides)
-    return AdaptiveConfig(**defaults)  # type: ignore[arg-type]
+    return AdaptiveConfig(**defaults)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 
 
 # --------------------------------------------------------------------- #
@@ -212,7 +212,7 @@ def test_update_three_channels_picks_dimmest_remaining_as_dimmer() -> None:
         intensities=[0.92, 0.40, 0.30],
         brighter_idx=0,
         current_exposure_s=50e-3,
-        current_powers_mw=(20.0, 20.0, 20.0),
+        current_powers_mw=(20.0, 20.0, 20.0),  # ty: ignore[invalid-argument-type]
         plane_idx=7,
     )
     # The command only carries L1/L2 (2-tuple). The dimmer trim for the

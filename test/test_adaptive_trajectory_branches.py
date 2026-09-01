@@ -35,12 +35,10 @@ from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
-from lightsheet.gui.widgets.adaptive_trajectory import (  # noqa: E402
+from lightsheet.gui.widgets.adaptive_trajectory import (
+    AdaptiveTrajectoryWidget,
     _clamp_view_range,
     _make_axis_range_drag,
-)
-from lightsheet.gui.widgets.adaptive_trajectory import (  # noqa: E402
-    AdaptiveTrajectoryWidget,
 )
 
 
@@ -60,7 +58,7 @@ def test_clamp_view_range_x_below_zero(qtbot: QtBot) -> None:
     vb = pg.ViewBox()
     vb.setRange(xRange=(-5, 10), yRange=(0, 100), padding=0.0)
     _clamp_view_range(vb)
-    (x0, x1), (_y0, _y1) = vb.viewRange()
+    (x0, _x1), (_y0, _y1) = vb.viewRange()
     assert x0 >= 0.0
 
 
@@ -69,7 +67,7 @@ def test_clamp_view_range_y_below_zero(qtbot: QtBot) -> None:
     vb = pg.ViewBox()
     vb.setRange(xRange=(0, 100), yRange=(-10, 50), padding=0.0)
     _clamp_view_range(vb)
-    (_x0, _x1), (y0, y1) = vb.viewRange()
+    (_x0, _x1), (y0, _y1) = vb.viewRange()
     assert y0 >= 0.0
 
 
@@ -126,7 +124,7 @@ def test_clamp_view_range_y_max_beyond_cap(qtbot: QtBot) -> None:
     vb = pg.ViewBox()
     vb.setRange(xRange=(0, 100), yRange=(0, 200), padding=0.0)
     _clamp_view_range(vb, y_max=120.0)
-    (_x0, _x1), (y0, y1) = vb.viewRange()
+    (_x0, _x1), (_y0, y1) = vb.viewRange()
     assert y1 <= 120.0 + 1e-6
 
 
@@ -135,7 +133,7 @@ def test_clamp_view_range_y_max_ok(qtbot: QtBot) -> None:
     vb = pg.ViewBox()
     vb.setRange(xRange=(0, 100), yRange=(0, 100), padding=0.0)
     _clamp_view_range(vb, y_max=120.0)  # y1=100 <= 120
-    (_x0, _x1), (y0, y1) = vb.viewRange()
+    (_x0, _x1), (_y0, y1) = vb.viewRange()
     assert y1 <= 120.0 + 1e-6
 
 
@@ -157,7 +155,7 @@ def test_clamp_view_range_already_valid_noop(qtbot: QtBot) -> None:
     vb.setRange(xRange=(0, 50), yRange=(0, 50), padding=0.0)
     _clamp_view_range(vb, data_x_max=100.0, data_x_span=50.0, y_max=100.0)
     # If we get here without error, the early return path executed.
-    (x0, x1), (y0, y1) = vb.viewRange()
+    (x0, _x1), (y0, _y1) = vb.viewRange()
     assert x0 >= 0.0 and y0 >= 0.0
 
 
@@ -317,7 +315,7 @@ def test_append_sample_with_right_vb_none(qtbot: QtBot) -> None:
         power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
         reacquired=False, power_fallback=False,
     )
-    xs, _ys = w._intensity_curve.getData()
+    xs, _ys = w._intensity_curve.getData()  # ty: ignore[unresolved-attribute]
     assert len(xs) == 1
 
 
@@ -333,7 +331,7 @@ def test_append_sample_power_fallback_scatter_none(qtbot: QtBot) -> None:
         reacquired=False, power_fallback=True,
     )
     # No exception; intensity curve still got the sample.
-    xs, _ys = w._intensity_curve.getData()
+    xs, _ys = w._intensity_curve.getData()  # ty: ignore[unresolved-attribute]
     assert len(xs) == 1
 
 
@@ -370,13 +368,13 @@ def test_rebuild_legend_with_all_curves_none(qtbot: QtBot) -> None:
     """_rebuild_legend() with all curve/scatter/samples None skips them
     (branches [647,651] etc. — the None guards before addItem)."""
     w = _make_widget(qtbot)
-    w._target_band_legend_sample = None
+    w._target_band_legend_sample = None  # ty: ignore[invalid-assignment]
     w._intensity_curve = None
     w._exposure_curve = None
     w._power_fallback_scatter = None
     w._power_curve = None
     w._power2_curve = None
-    w._reacquire_legend_sample = None
+    w._reacquire_legend_sample = None  # ty: ignore[invalid-assignment]
     w._rebuild_legend()  # must not raise
 
 
@@ -513,7 +511,7 @@ def test_range_drag_ignores_drag_starting_inside_viewbox(qtbot: QtBot) -> None:
     _make_axis_range_drag(left_ax, main_vb)
     ev = _FakeDragEvent(
         button_inside=True,
-        button=__import__("PySide6").QtCore.Qt.MouseButton.LeftButton,
+        button=__import__("PySide6").QtCore.Qt.MouseButton.LeftButton,  # ty: ignore[unresolved-attribute]
         inside_rect=main_vb.sceneBoundingRect(),
     )
     left_ax.mouseDragEvent(ev)
@@ -567,6 +565,7 @@ def test_range_drag_y_axis_zero_span_returns(qtbot: QtBot) -> None:
     a genuine zero-span Y range so ``span = y1 - y0 == 0`` and the
     ``if span <= 0: return`` guard fires."""
     from unittest.mock import patch
+
     from PySide6.QtCore import Qt
 
     w = _make_widget(qtbot)
@@ -620,6 +619,7 @@ def test_range_drag_x_axis_zero_span_returns(qtbot: QtBot) -> None:
     auto-expands to ``[-0.5, 0.5]``, so we patch ``viewRange`` to return a
     genuine zero-span X range."""
     from unittest.mock import patch
+
     from PySide6.QtCore import Qt
 
     w = _make_widget(qtbot)

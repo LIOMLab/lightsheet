@@ -20,7 +20,7 @@ from __future__ import annotations
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Never
 from unittest.mock import Mock
 
 import h5py
@@ -30,11 +30,11 @@ from PySide6.QtCore import QObject
 
 pytest.importorskip("PySide6")
 
+
 from lightsheet.adaptive.types import AdaptiveConfig, AdaptiveSample
 from lightsheet.gui.coordinators.frame_saver_controller import (
     FrameSaver,
     FrameSaverController,
-    FrameViewer,
     ZarrSaver,
 )
 from lightsheet.hal import (
@@ -87,13 +87,13 @@ def _make_bundle() -> DeviceBundle:
 def _make_fs() -> tuple[FrameSaverController, _ShellStandin]:
     bundle = _make_bundle()
     shell = _ShellStandin()
-    fs = FrameSaverController(bundle, shell)
+    fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
     return fs, shell
 
 
 def _make_saver(shell: _ShellStandin | None = None) -> tuple[FrameSaver, _ShellStandin]:
     shell = shell or _ShellStandin()
-    return FrameSaver(shell), shell
+    return FrameSaver(shell), shell  # ty: ignore[invalid-argument-type]
 
 
 def _adaptive_sample(plane: int, cva: str = "exposure") -> AdaptiveSample:
@@ -133,7 +133,7 @@ def _adaptive_config() -> AdaptiveConfig:
 def test_record_adaptive_sample_noop_when_disabled() -> None:
     """record_adaptive_sample returns early when adaptive is disabled (line 397-398)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.configure_adaptive(enabled=False)
     saver.record_adaptive_sample(_adaptive_sample(0))
     assert saver.adaptive_trajectory == []
@@ -142,7 +142,7 @@ def test_record_adaptive_sample_noop_when_disabled() -> None:
 def test_record_adaptive_sample_appends_when_enabled() -> None:
     """record_adaptive_sample appends + logs when adaptive is enabled (line 399-410)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.configure_adaptive(enabled=True, config=_adaptive_config())
     sample = _adaptive_sample(3)
     saver.record_adaptive_sample(sample)
@@ -152,15 +152,16 @@ def test_record_adaptive_sample_appends_when_enabled() -> None:
 def test_adaptive_config_attrs_empty_when_no_config() -> None:
     """_adaptive_config_attrs returns {} when no config set (line 418-420)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.configure_adaptive(enabled=False)
     assert saver._adaptive_config_attrs() == {}
 
 
 def test_adaptive_config_attrs_full_when_config_set() -> None:
-    """_adaptive_config_attrs returns the full attr dict when config is set (line 421-441)."""
+    """_adaptive_config_attrs returns the full attr dict when config is set
+    (line 421-441)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     cfg = _adaptive_config()
     saver.configure_adaptive(enabled=True, config=cfg)
     attrs = saver._adaptive_config_attrs()
@@ -178,7 +179,7 @@ def test_adaptive_config_attrs_full_when_config_set() -> None:
 def test_write_adaptive_hdf5_noop_when_disabled(tmp_path: Path) -> None:
     """_write_adaptive_hdf5 returns early when adaptive disabled (line 467-468)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.configure_adaptive(enabled=False)
     filepath = str(tmp_path / "f.hdf5")
     with h5py.File(filepath, "w") as f:
@@ -189,7 +190,7 @@ def test_write_adaptive_hdf5_noop_when_disabled(tmp_path: Path) -> None:
 def test_write_adaptive_hdf5_noop_when_empty_trajectory(tmp_path: Path) -> None:
     """_write_adaptive_hdf5 returns early when trajectory is empty (line 470-471)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.configure_adaptive(enabled=True, config=_adaptive_config())
     filepath = str(tmp_path / "f.hdf5")
     with h5py.File(filepath, "w") as f:
@@ -198,9 +199,10 @@ def test_write_adaptive_hdf5_noop_when_empty_trajectory(tmp_path: Path) -> None:
 
 
 def test_write_adaptive_hdf5_writes_full_group(tmp_path: Path) -> None:
-    """_write_adaptive_hdf5 writes the /adaptive_trajectory group + datasets (467-505)."""
+    """_write_adaptive_hdf5 writes the /adaptive_trajectory group + datasets
+    (467-505)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.configure_adaptive(enabled=True, config=_adaptive_config())
     saver.record_adaptive_sample(_adaptive_sample(0))
     saver.record_adaptive_sample(_adaptive_sample(1))
@@ -210,20 +212,21 @@ def test_write_adaptive_hdf5_writes_full_group(tmp_path: Path) -> None:
         assert "adaptive_trajectory" in f
         grp = f["adaptive_trajectory"]
         assert bool(grp.attrs["enabled"]) is True
-        assert "plane_index" in grp
-        assert "intensity_fraction" in grp
-        assert "exposure_s" in grp
-        assert "laser_power_mw" in grp
-        assert "control_variable_active" in grp
-        assert "reacquired" in grp
-        assert "power_fallback" in grp
-        assert list(grp["plane_index"][:]) == [0, 1]
+        assert "plane_index" in grp  # ty: ignore[unsupported-operator]
+        assert "intensity_fraction" in grp  # ty: ignore[unsupported-operator]
+        assert "exposure_s" in grp  # ty: ignore[unsupported-operator]
+        assert "laser_power_mw" in grp  # ty: ignore[unsupported-operator]
+        assert "control_variable_active" in grp  # ty: ignore[unsupported-operator]
+        assert "reacquired" in grp  # ty: ignore[unsupported-operator]
+        assert "power_fallback" in grp  # ty: ignore[unsupported-operator]
+        assert list(grp["plane_index"][:]) == [0, 1]  # ty: ignore[invalid-argument-type, not-subscriptable]
 
 
 def test_write_adaptive_hdf5_for_file_stitch_writes_full(tmp_path: Path) -> None:
-    """_write_adaptive_hdf5_for_file with n_files==1 writes full trajectory (542-543)."""
+    """_write_adaptive_hdf5_for_file with n_files==1 writes full trajectory
+    (542-543)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.configure_adaptive(enabled=True, config=_adaptive_config())
     saver.record_adaptive_sample(_adaptive_sample(0))
     saver.record_adaptive_sample(_adaptive_sample(1))
@@ -231,13 +234,14 @@ def test_write_adaptive_hdf5_for_file_stitch_writes_full(tmp_path: Path) -> None
     with h5py.File(filepath, "w") as f:
         saver._write_adaptive_hdf5_for_file(f, file_idx=0, n_files=1)
         assert "adaptive_trajectory" in f
-        assert list(f["adaptive_trajectory"]["plane_index"][:]) == [0, 1]
+        assert list(f["adaptive_trajectory"]["plane_index"][:]) == [0, 1]  # ty: ignore[invalid-argument-type, not-subscriptable]
 
 
 def test_write_adaptive_hdf5_for_file_per_plane_writes_subset(tmp_path: Path) -> None:
-    """_write_adaptive_hdf5_for_file with n_files>1 writes the file's plane rows (534-541)."""
+    """_write_adaptive_hdf5_for_file with n_files>1 writes the file's plane
+    rows (534-541)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.configure_adaptive(enabled=True, config=_adaptive_config())
     for i in range(4):
         saver.record_adaptive_sample(_adaptive_sample(i))
@@ -246,13 +250,16 @@ def test_write_adaptive_hdf5_for_file_per_plane_writes_subset(tmp_path: Path) ->
     with h5py.File(filepath, "w") as f:
         saver._write_adaptive_hdf5_for_file(f, file_idx=1, n_files=4)
         assert "adaptive_trajectory" in f
-        assert list(f["adaptive_trajectory"]["plane_index"][:]) == [1]
+        assert list(f["adaptive_trajectory"]["plane_index"][:]) == [1]  # ty: ignore[invalid-argument-type, not-subscriptable]
 
 
-def test_write_adaptive_hdf5_for_file_per_plane_out_of_range_skips(tmp_path: Path) -> None:
-    """_write_adaptive_hdf5_for_file skips when start index past trajectory end (537->exit)."""
+def test_write_adaptive_hdf5_for_file_per_plane_out_of_range_skips(
+    tmp_path: Path,
+) -> None:
+    """_write_adaptive_hdf5_for_file skips when start index
+    past trajectory end (537->exit)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.configure_adaptive(enabled=True, config=_adaptive_config())
     saver.record_adaptive_sample(_adaptive_sample(0))
     filepath = str(tmp_path / "f.hdf5")
@@ -265,7 +272,7 @@ def test_write_adaptive_hdf5_for_file_per_plane_out_of_range_skips(tmp_path: Pat
 def test_write_adaptive_hdf5_for_file_noop_when_disabled(tmp_path: Path) -> None:
     """_write_adaptive_hdf5_for_file is a no-op when adaptive disabled (532-533)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.configure_adaptive(enabled=False)
     filepath = str(tmp_path / "f.hdf5")
     with h5py.File(filepath, "w") as f:
@@ -279,8 +286,9 @@ def test_write_adaptive_hdf5_for_file_noop_when_disabled(tmp_path: Path) -> None
 def _setup_multichannel_saver(
     shell: _ShellStandin, tmp_path: Path, n_planes: int = 2
 ) -> FrameSaver:
-    """Build a FrameSaver configured for 2-channel stitch (1 file/channel, N datasets)."""
-    saver = FrameSaver(shell)
+    """Build a FrameSaver configured for 2-channel stitch (1 file/channel,
+    N datasets)."""
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     # Reinit with a larger block_size so the queue (maxsize = 2*block_size)
     # can hold all the interleaved frames the test pre-loads.
     saver.reinit(8)
@@ -310,7 +318,7 @@ def test_multichannel_hdf5_worker_writes_per_channel_files(tmp_path: Path) -> No
     saver = _setup_multichannel_saver(shell, tmp_path, n_planes=n_planes)
     frame = np.ones((4, 4), dtype=np.uint16)
     # Interleaved: (ch0, plane0), (ch1, plane0), (ch0, plane1), (ch1, plane1).
-    for z in range(n_planes):
+    for _z in range(n_planes):
         saver.enqueue_buffer((0, frame))
         saver.enqueue_buffer((1, frame))
     saver._frame_saver_worker_multi_channel()
@@ -359,7 +367,7 @@ def test_multichannel_hdf5_worker_drains_after_stop_saving(tmp_path: Path) -> No
     saver = _setup_multichannel_saver(shell, tmp_path, n_planes=n_planes)
     frame = np.ones((4, 4), dtype=np.uint16)
     # Pre-load all frames.
-    for z in range(n_planes):
+    for _z in range(n_planes):
         saver.enqueue_buffer((0, frame))
         saver.enqueue_buffer((1, frame))
     # Flip saving_started False BEFORE running — drains via get_nowait path.
@@ -377,7 +385,7 @@ def test_multichannel_hdf5_worker_per_plane_layout_advances_files(
     fills (lines 838-867)."""
     shell = _ShellStandin()
     shell.save_directory = str(tmp_path)
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.reinit(8)
     n_planes = 3
     saver.set_files(
@@ -395,7 +403,7 @@ def test_multichannel_hdf5_worker_per_plane_layout_advances_files(
     saver.camera_positions_list = [f"{i}.0" for i in range(n_planes)]
     saver.saving_started = True
     frame = np.ones((4, 4), dtype=np.uint16)
-    for z in range(n_planes):
+    for _z in range(n_planes):
         saver.enqueue_buffer((0, frame))
         saver.enqueue_buffer((1, frame))
     saver._frame_saver_worker_multi_channel()
@@ -485,7 +493,7 @@ def test_frame_saver_worker_continue_on_empty_queue_while_saving(
     """When the queue is empty but saving_started is still True, the inner
     loop continues (re-tries the get) instead of breaking (line 661)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.reinit(8)
     filepath = str(tmp_path / "plane.hdf5")
     saver.filenames_list = [filepath]
@@ -514,7 +522,7 @@ def test_frame_saver_worker_per_dataset_exception_aborts(tmp_path: Path) -> None
     """A non-timeout exception during dataset write surfaces via
     sig_status_message + flips saving_started (lines 662-675)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.reinit(8)
     filepath = str(tmp_path / "plane.hdf5")
     saver.filenames_list = [filepath]
@@ -529,7 +537,7 @@ def test_frame_saver_worker_per_dataset_exception_aborts(tmp_path: Path) -> None
     # Patch outfile.create_dataset to raise — simulates a write error.
     original = h5py.File.create_dataset
 
-    def _raise(self, *a, **k):
+    def _raise(self: Any, *a: Any, **k: Any) -> Never:
         raise RuntimeError("simulated write error")
 
     h5py.File.create_dataset = _raise  # type: ignore[method-assign]
@@ -546,7 +554,7 @@ def test_frame_saver_worker_adaptive_write_error_aborts(tmp_path: Path) -> None:
     """An exception from _write_adaptive_hdf5_for_file surfaces + flips
     saving_started (lines 690-694)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.reinit(8)
     filepath = str(tmp_path / "plane.hdf5")
     saver.filenames_list = [filepath]
@@ -560,10 +568,10 @@ def test_frame_saver_worker_adaptive_write_error_aborts(tmp_path: Path) -> None:
     saver.configure_adaptive(enabled=True, config=_adaptive_config())
     saver.record_adaptive_sample(_adaptive_sample(0))
 
-    def _bad_write(*a, **k):
+    def _bad_write(*a: Any, **k: Any) -> Never:
         raise RuntimeError("adaptive write boom")
 
-    saver._write_adaptive_hdf5_for_file = _bad_write  # type: ignore[method-assign]
+    saver._write_adaptive_hdf5_for_file = _bad_write  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     saver.enqueue_buffer(np.ones((4, 4), dtype=np.uint16))
     saver.frame_saver_worker()
     assert saver.saving_started is False
@@ -580,7 +588,7 @@ def _setup_zarr_saver(
     shell.save_format = "zarr"
     shell.camera.xsize = 32
     shell.camera.ysize = 32
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.reinit(8)
     saver.set_files(
         number_of_files=n_planes,
@@ -604,7 +612,7 @@ def test_zarr_save_worker_start_stack_error_aborts(tmp_path: Path) -> None:
     # Point save_directory at a non-existent dir so start_stack's path guard
     # raises ValueError.
     shell.save_directory = str(tmp_path / "no_such_dir")
-    saver.parent.save_directory = shell.save_directory
+    saver.parent.save_directory = shell.save_directory  # ty: ignore[invalid-assignment]
     saver.enqueue_buffer(np.zeros((32, 32), dtype=np.uint16))
     saver.zarr_save_worker()
     assert saver.saving_started is False
@@ -623,24 +631,24 @@ def test_zarr_save_worker_skips_finalize_on_partial_store(tmp_path: Path) -> Non
     saver.saving_started = True
 
     class _StopAfterFirst:
-        def __init__(self, real):
+        def __init__(self: Any, real: Any) -> None:
             self._real = real
             self._n = 0
 
-        def get(self, block=True, timeout=None):
+        def get(self: Any, block: bool = True, timeout: Any | None = None) -> Any:
             buf = self._real.get(block=block, timeout=timeout)
             self._n += 1
             if self._n >= 1:
                 saver.saving_started = False
             return buf
 
-        def get_nowait(self):
+        def get_nowait(self) -> Any:
             return self._real.get_nowait()
 
-        def __getattr__(self, name):
+        def __getattr__(self: Any, name: Any) -> Any:
             return getattr(self._real, name)
 
-    saver.queue = _StopAfterFirst(saver.queue)
+    saver.queue = _StopAfterFirst(saver.queue)  # ty: ignore[invalid-assignment]
     saver.zarr_save_worker()
     # No finalize -> no /acquisition group.
     root = zarr.open(str(tmp_path / "stack.ome.zarr"), mode="r")
@@ -655,10 +663,10 @@ def test_zarr_save_worker_finalize_error_flips_saving(tmp_path: Path) -> None:
     for _ in range(n_planes):
         saver.enqueue_buffer(np.zeros((32, 32), dtype=np.uint16))
 
-    def _bad_finalize():
+    def _bad_finalize() -> Never:
         raise RuntimeError("finalize boom")
 
-    saver._zarr_saver.finalize = _bad_finalize  # type: ignore[method-assign]
+    saver._zarr_saver.finalize = _bad_finalize  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     saver.zarr_save_worker()
     assert saver.saving_started is False
     assert any("finalize boom" in m for m in shell.message_printer_calls)
@@ -689,7 +697,7 @@ def test_zarr_save_worker_3d_buffer_expands(tmp_path: Path) -> None:
     saver.enqueue_buffer(buf)
     saver.zarr_save_worker()
     root = zarr.open(str(tmp_path / "stack.ome.zarr"), mode="r")
-    assert root["0"].shape[1] == n_planes
+    assert root["0"].shape[1] == n_planes  # ty: ignore[invalid-argument-type, unresolved-attribute]
 
 
 def test_zarr_save_worker_channel_full_drops_extra(tmp_path: Path) -> None:
@@ -706,27 +714,27 @@ def test_zarr_save_worker_channel_full_drops_extra(tmp_path: Path) -> None:
     saver.saving_started = True
 
     class _StopAfterFirst:
-        def __init__(self, real):
+        def __init__(self: Any, real: Any) -> None:
             self._real = real
             self._n = 0
 
-        def get(self, block=True, timeout=None):
+        def get(self: Any, block: bool = True, timeout: Any | None = None) -> Any:
             buf = self._real.get(block=block, timeout=timeout)
             self._n += 1
             if self._n >= 1:
                 saver.saving_started = False
             return buf
 
-        def get_nowait(self):
+        def get_nowait(self) -> Any:
             return self._real.get_nowait()
 
-        def __getattr__(self, name):
+        def __getattr__(self: Any, name: Any) -> Any:
             return getattr(self._real, name)
 
-    saver.queue = _StopAfterFirst(saver.queue)
+    saver.queue = _StopAfterFirst(saver.queue)  # ty: ignore[invalid-assignment]
     saver.zarr_save_worker()
     root = zarr.open(str(tmp_path / "stack.ome.zarr"), mode="r")
-    assert root["0"].shape[1] == n_planes
+    assert root["0"].shape[1] == n_planes  # ty: ignore[invalid-argument-type, unresolved-attribute]
 
 
 def test_zarr_save_worker_short_position_list_uses_zero(tmp_path: Path) -> None:
@@ -745,9 +753,9 @@ def test_zarr_save_worker_short_position_list_uses_zero(tmp_path: Path) -> None:
         saver.enqueue_buffer(np.zeros((32, 32), dtype=np.uint16))
     saver.zarr_save_worker()
     root = zarr.open(str(tmp_path / "stack.ome.zarr"), mode="r")
-    acq = root["acquisition"]
+    acq = root["acquisition"]  # ty: ignore[invalid-argument-type]
     # All motor positions are 0.0 (the fallback).
-    assert np.all(acq["motor"]["horizontal"][:] == 0.0)
+    assert np.all(acq["motor"]["horizontal"][:] == 0.0)  # ty: ignore[invalid-argument-type, not-subscriptable]
 
 
 # -- both_save_worker single-channel (1119-1302) ------------------------------
@@ -760,7 +768,7 @@ def _setup_both_saver(
     shell.save_format = "both"
     shell.camera.xsize = 32
     shell.camera.ysize = 32
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.reinit(8)
     saver.set_files(
         number_of_files=n_planes,
@@ -782,7 +790,7 @@ def test_both_save_worker_start_stack_error_aborts(tmp_path: Path) -> None:
     shell = _ShellStandin()
     saver = _setup_both_saver(shell, tmp_path)
     shell.save_directory = str(tmp_path / "no_such_dir")
-    saver.parent.save_directory = shell.save_directory
+    saver.parent.save_directory = shell.save_directory  # ty: ignore[invalid-assignment]
     saver.enqueue_buffer(np.zeros((32, 32), dtype=np.uint16))
     saver.both_save_worker()
     assert saver.saving_started is False
@@ -806,7 +814,7 @@ def test_both_save_worker_per_dataset_write_error_aborts(tmp_path: Path) -> None
     saver = _setup_both_saver(shell, tmp_path, n_planes=1)
     original = h5py.File.create_dataset
 
-    def _raise(self, *a, **k):
+    def _raise(self: Any, *a: Any, **k: Any) -> Never:
         raise RuntimeError("both write boom")
 
     h5py.File.create_dataset = _raise  # type: ignore[method-assign]
@@ -820,16 +828,17 @@ def test_both_save_worker_per_dataset_write_error_aborts(tmp_path: Path) -> None
 
 
 def test_both_save_worker_adaptive_write_error_aborts(tmp_path: Path) -> None:
-    """An adaptive write error in both_save_worker surfaces + flips saving (1263-1268)."""
+    """An adaptive write error in both_save_worker surfaces + flips
+    saving (1263-1268)."""
     shell = _ShellStandin()
     saver = _setup_both_saver(shell, tmp_path, n_planes=1)
     saver.configure_adaptive(enabled=True, config=_adaptive_config())
     saver.record_adaptive_sample(_adaptive_sample(0))
 
-    def _bad(*a, **k):
+    def _bad(*a: Any, **k: Any) -> Never:
         raise RuntimeError("both adaptive boom")
 
-    saver._write_adaptive_hdf5_for_file = _bad  # type: ignore[method-assign]
+    saver._write_adaptive_hdf5_for_file = _bad  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     saver.enqueue_buffer(np.zeros((32, 32), dtype=np.uint16))
     saver.both_save_worker()
     assert saver.saving_started is False
@@ -847,24 +856,24 @@ def test_both_save_worker_skips_finalize_on_partial_store(tmp_path: Path) -> Non
     saver.enqueue_buffer(np.zeros((32, 32), dtype=np.uint16))
 
     class _StopAfterFirst:
-        def __init__(self, real):
+        def __init__(self: Any, real: Any) -> None:
             self._real = real
             self._n = 0
 
-        def get(self, block=True, timeout=None):
+        def get(self: Any, block: bool = True, timeout: Any | None = None) -> Any:
             buf = self._real.get(block=block, timeout=timeout)
             self._n += 1
             if self._n >= 1:
                 saver.saving_started = False
             return buf
 
-        def get_nowait(self):
+        def get_nowait(self) -> Any:
             return self._real.get_nowait()
 
-        def __getattr__(self, name):
+        def __getattr__(self: Any, name: Any) -> Any:
             return getattr(self._real, name)
 
-    saver.queue = _StopAfterFirst(saver.queue)
+    saver.queue = _StopAfterFirst(saver.queue)  # ty: ignore[invalid-assignment]
     saver.both_save_worker()
     root = zarr.open(str(tmp_path / "stack.ome.zarr"), mode="r")
     assert "acquisition" not in root
@@ -878,10 +887,10 @@ def test_both_save_worker_finalize_error_flips_saving(tmp_path: Path) -> None:
     for _ in range(n_planes):
         saver.enqueue_buffer(np.zeros((32, 32), dtype=np.uint16))
 
-    def _bad():
+    def _bad() -> Never:
         raise RuntimeError("both finalize boom")
 
-    saver._zarr_saver.finalize = _bad  # type: ignore[method-assign]
+    saver._zarr_saver.finalize = _bad  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     saver.both_save_worker()
     assert saver.saving_started is False
     assert any("both finalize boom" in m for m in shell.message_printer_calls)
@@ -916,7 +925,7 @@ def test_both_save_worker_short_position_list_uses_zero(tmp_path: Path) -> None:
     saver.enqueue_buffer(np.zeros((32, 32), dtype=np.uint16))
     saver.both_save_worker()
     with h5py.File(saver.filenames_list[0], "r") as f:
-        ds = f[list(f.keys())[0]]
+        ds = f[next(iter(f.keys()))]
         # Horizontal Position attr is absent (pos list was empty).
         assert "Horizontal Position" not in ds.attrs
 
@@ -936,14 +945,14 @@ def test_both_save_worker_multichannel_writes_both_formats(tmp_path: Path) -> No
     shell._auto_laser1 = True
     shell._auto_laser2 = True
     frame = np.zeros((32, 32), dtype=np.uint16)
-    for z in range(n_planes):
+    for _z in range(n_planes):
         saver.enqueue_buffer((0, frame))
         saver.enqueue_buffer((1, frame))
     saver._both_save_worker_multi_channel()
     # Zarr store finalized with 2 channels.
     root = zarr.open(str(tmp_path / "stack.ome.zarr"), mode="r")
     assert "acquisition" in root
-    assert root["0"].shape[0] == 2
+    assert root["0"].shape[0] == 2  # ty: ignore[invalid-argument-type, unresolved-attribute]
     # Both channel HDF5 files written — per-plane layout (n_files=n_planes,
     # 1 dataset/file), so each file holds exactly 1 dataset.
     for ch in range(2):
@@ -1009,7 +1018,7 @@ def test_both_save_worker_multichannel_per_dataset_error_aborts(
     saver = _setup_both_saver(shell, tmp_path, n_planes=n_planes, n_channels=2)
     original = h5py.File.create_dataset
 
-    def _raise(self, *a, **k):
+    def _raise(self: Any, *a: Any, **k: Any) -> Never:
         raise RuntimeError("mc both write boom")
 
     h5py.File.create_dataset = _raise  # type: ignore[method-assign]
@@ -1037,24 +1046,24 @@ def test_both_save_worker_multichannel_skips_finalize_on_partial(
     saver.enqueue_buffer((0, np.zeros((32, 32), dtype=np.uint16)))
 
     class _StopAfterFirst:
-        def __init__(self, real):
+        def __init__(self: Any, real: Any) -> None:
             self._real = real
             self._n = 0
 
-        def get(self, block=True, timeout=None):
+        def get(self: Any, block: bool = True, timeout: Any | None = None) -> Any:
             buf = self._real.get(block=block, timeout=timeout)
             self._n += 1
             if self._n >= 1:
                 saver.saving_started = False
             return buf
 
-        def get_nowait(self):
+        def get_nowait(self) -> Any:
             return self._real.get_nowait()
 
-        def __getattr__(self, name):
+        def __getattr__(self: Any, name: Any) -> Any:
             return getattr(self._real, name)
 
-    saver.queue = _StopAfterFirst(saver.queue)
+    saver.queue = _StopAfterFirst(saver.queue)  # ty: ignore[invalid-assignment]
     saver._both_save_worker_multi_channel()
     root = zarr.open(str(tmp_path / "stack.ome.zarr"), mode="r")
     assert "acquisition" not in root
@@ -1091,7 +1100,7 @@ def test_both_save_worker_multichannel_start_stack_error_aborts(
     saver = _setup_both_saver(shell, tmp_path, n_planes=n_planes, n_channels=2)
     # Point save_directory at a non-existent dir so start_stack raises.
     shell.save_directory = str(tmp_path / "no_such_dir")
-    saver.parent.save_directory = shell.save_directory
+    saver.parent.save_directory = shell.save_directory  # ty: ignore[invalid-assignment]
     saver.enqueue_buffer((0, np.zeros((32, 32), dtype=np.uint16)))
     saver._both_save_worker_multi_channel()
     assert saver.saving_started is False
@@ -1134,7 +1143,7 @@ def test_both_save_worker_multichannel_short_pos_list_skips_attrs(
     saver.enqueue_buffer((1, np.zeros((32, 32), dtype=np.uint16)))
     saver._both_save_worker_multi_channel()
     with h5py.File(saver.filenames_lists[0][0], "r") as f:
-        ds = f[list(f.keys())[0]]
+        ds = f[next(iter(f.keys()))]
         assert "Horizontal Position" not in ds.attrs
 
 
@@ -1184,17 +1193,18 @@ def test_both_save_worker_multichannel_finally_close_exception_suppressed(
 def test_both_save_worker_multichannel_finalize_error_flips_saving(
     tmp_path: Path,
 ) -> None:
-    """A finalize failure in multi-channel both-save flips saving_started (1545-1550)."""
+    """A finalize failure in multi-channel both-save flips
+    saving_started (1545-1550)."""
     shell = _ShellStandin()
     n_planes = 1
     saver = _setup_both_saver(shell, tmp_path, n_planes=n_planes, n_channels=2)
     shell._auto_laser1 = True
     shell._auto_laser2 = True
 
-    def _bad():
+    def _bad() -> Never:
         raise RuntimeError("mc both finalize boom")
 
-    saver._zarr_saver.finalize = _bad  # type: ignore[method-assign]
+    saver._zarr_saver.finalize = _bad  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     saver.enqueue_buffer((0, np.zeros((32, 32), dtype=np.uint16)))
     saver.enqueue_buffer((1, np.zeros((32, 32), dtype=np.uint16)))
     saver._both_save_worker_multi_channel()
@@ -1211,7 +1221,7 @@ def test_zarr_saver_start_stack_rejects_path_outside_save_dir(tmp_path: Path) ->
     shell = _ShellStandin()
     shell.save_directory = str(tmp_path / "save")
     (tmp_path / "save").mkdir()
-    saver = ZarrSaver(shell)
+    saver = ZarrSaver(shell)  # ty: ignore[invalid-argument-type]
     bad_path = str(tmp_path / "outside.ome.zarr")
     with pytest.raises(ValueError, match="outside save directory"):
         saver.start_stack(bad_path, 1)
@@ -1223,7 +1233,7 @@ def test_zarr_saver_write_plane_before_start_raises(tmp_path: Path) -> None:
     """write_plane before start_stack raises RuntimeError (line 1714)."""
     shell = _ShellStandin()
     shell.save_directory = str(tmp_path)
-    saver = ZarrSaver(shell)
+    saver = ZarrSaver(shell)  # ty: ignore[invalid-argument-type]
     with pytest.raises(RuntimeError, match="before start_stack"):
         saver.write_plane(0, 0, np.zeros((4, 4), dtype=np.uint16), 0.0, 0.0, 0.0)
 
@@ -1232,7 +1242,7 @@ def test_zarr_saver_write_acquisition_group_no_writer_raises(tmp_path: Path) -> 
     """_write_acquisition_group with no writer raises RuntimeError (line 1767)."""
     shell = _ShellStandin()
     shell.save_directory = str(tmp_path)
-    saver = ZarrSaver(shell)
+    saver = ZarrSaver(shell)  # ty: ignore[invalid-argument-type]
     with pytest.raises(RuntimeError, match="no writer"):
         saver._write_acquisition_group()
 
@@ -1241,7 +1251,7 @@ def test_zarr_saver_finalize_before_start_raises(tmp_path: Path) -> None:
     """finalize before start_stack raises RuntimeError (line 1899)."""
     shell = _ShellStandin()
     shell.save_directory = str(tmp_path)
-    saver = ZarrSaver(shell)
+    saver = ZarrSaver(shell)  # ty: ignore[invalid-argument-type]
     with pytest.raises(RuntimeError, match="before start_stack"):
         saver.finalize()
 
@@ -1253,7 +1263,7 @@ def test_zarr_saver_finalize_twice_raises(tmp_path: Path) -> None:
     shell.camera.xsize = 32
     shell.camera.ysize = 32
     shell.stack_step = 1.0
-    saver = ZarrSaver(shell)
+    saver = ZarrSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.start_stack(str(tmp_path / "s.ome.zarr"), 1)
     saver.write_plane(0, 0, np.zeros((32, 32), dtype=np.uint16), 0.0, 0.0, 0.0)
     saver.finalize()
@@ -1268,7 +1278,7 @@ def test_zarr_saver_restore_write_empty_chunks_noop_when_not_overridden(
     (line 1920)."""
     shell = _ShellStandin()
     shell.save_directory = str(tmp_path)
-    saver = ZarrSaver(shell)
+    saver = ZarrSaver(shell)  # ty: ignore[invalid-argument-type]
     # Never called start_stack -> _write_empty_chunks_overridden is False.
     saver._restore_write_empty_chunks()  # must not raise.
 
@@ -1283,7 +1293,7 @@ def test_zarr_saver_writes_adaptive_group(tmp_path: Path) -> None:
     shell.camera.xsize = 32
     shell.camera.ysize = 32
     shell.stack_step = 1.0
-    saver = ZarrSaver(shell)
+    saver = ZarrSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.start_stack(str(tmp_path / "s.ome.zarr"), 1)
     saver.write_plane(0, 0, np.zeros((32, 32), dtype=np.uint16), 0.0, 0.0, 0.0)
     cfg = _adaptive_config()
@@ -1292,16 +1302,16 @@ def test_zarr_saver_writes_adaptive_group(tmp_path: Path) -> None:
     saver.finalize()
     root = zarr.open(str(tmp_path / "s.ome.zarr"), mode="r")
     assert "acquisition" in root
-    acq = root["acquisition"]
-    assert "adaptive" in acq
-    adp = acq["adaptive"]
-    assert bool(adp.attrs["enabled"]) is True
-    assert adp.attrs["kp"] == 0.4
-    assert list(adp["plane_index"][:]) == [0, 1]
-    assert "laser_power_mw" in adp
-    assert "control_variable_active" in adp
-    assert "reacquired" in adp
-    assert "power_fallback" in adp
+    acq = root["acquisition"]  # ty: ignore[invalid-argument-type]
+    assert "adaptive" in acq  # ty: ignore[unsupported-operator]
+    adp = acq["adaptive"]  # ty: ignore[invalid-argument-type, not-subscriptable]
+    assert bool(adp.attrs["enabled"]) is True  # ty: ignore[unresolved-attribute]
+    assert adp.attrs["kp"] == 0.4  # ty: ignore[unresolved-attribute]
+    assert list(adp["plane_index"][:]) == [0, 1]  # ty: ignore[invalid-argument-type, not-subscriptable]
+    assert "laser_power_mw" in adp  # ty: ignore[unsupported-operator]
+    assert "control_variable_active" in adp  # ty: ignore[unsupported-operator]
+    assert "reacquired" in adp  # ty: ignore[unsupported-operator]
+    assert "power_fallback" in adp  # ty: ignore[unsupported-operator]
 
 
 def test_zarr_saver_adaptive_group_noop_when_empty_trajectory(tmp_path: Path) -> None:
@@ -1313,21 +1323,22 @@ def test_zarr_saver_adaptive_group_noop_when_empty_trajectory(tmp_path: Path) ->
     shell.camera.xsize = 32
     shell.camera.ysize = 32
     shell.stack_step = 1.0
-    saver = ZarrSaver(shell)
+    saver = ZarrSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.start_stack(str(tmp_path / "s.ome.zarr"), 1)
     saver.write_plane(0, 0, np.zeros((32, 32), dtype=np.uint16), 0.0, 0.0, 0.0)
     # Empty trajectory -> no adaptive group.
     saver.set_adaptive_trajectory([], None)
     saver.finalize()
     root = zarr.open(str(tmp_path / "s.ome.zarr"), mode="r")
-    assert "adaptive" not in root["acquisition"]
+    assert "adaptive" not in root["acquisition"]  # ty: ignore[invalid-argument-type, unsupported-operator]
 
 
 def test_zarr_saver_adaptive_group_no_writer_raises(tmp_path: Path) -> None:
-    """_write_adaptive_group with no writer but non-empty trajectory raises (1830-1831)."""
+    """_write_adaptive_group with no writer but non-empty trajectory
+    raises (1830-1831)."""
     shell = _ShellStandin()
     shell.save_directory = str(tmp_path)
-    saver = ZarrSaver(shell)
+    saver = ZarrSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.set_adaptive_trajectory([_adaptive_sample(0)], _adaptive_config())
     with pytest.raises(RuntimeError, match="no writer"):
         saver._write_adaptive_group()
@@ -1340,7 +1351,7 @@ def test_stop_saving_warns_on_thread_timeout(tmp_path: Path) -> None:
     """stop_saving logs a warning when the worker thread does not exit within
     the 10s wait (line 1587)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.reinit(8)
 
     # Build a fake worker thread whose wait() always returns False (timed out).
@@ -1354,7 +1365,7 @@ def test_stop_saving_warns_on_thread_timeout(tmp_path: Path) -> None:
         def wait(self, ms: int) -> bool:
             return False  # never reaps
 
-    saver._saver_thread = _FakeThread()
+    saver._saver_thread = _FakeThread()  # ty: ignore[invalid-assignment]
     # Should not raise; the warning is logged.
     saver.stop_saving()
     assert saver.saving_started is False

@@ -22,13 +22,18 @@ Covers branches not exercised by the existing drag/hit-test/paint tests:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
+if TYPE_CHECKING:
+    from lightsheet.gui.panels.levels_bar import LevelsBar
 
-def _make_bar(qtbot: QtBot):
+
+def _make_bar(qtbot: QtBot) -> LevelsBar:
     from lightsheet.gui.panels.levels_bar import LevelsBar
 
     bar = LevelsBar()
@@ -39,7 +44,7 @@ def _make_bar(qtbot: QtBot):
     return bar
 
 
-def _press_at(bar, x: int, y: int = 32) -> None:
+def _press_at(bar: LevelsBar, x: int, y: int = 32) -> None:
     from PySide6.QtCore import QPointF, Qt
     from PySide6.QtGui import QMouseEvent
     from PySide6.QtWidgets import QApplication
@@ -56,7 +61,7 @@ def _press_at(bar, x: int, y: int = 32) -> None:
     QApplication.sendEvent(bar, evt)
 
 
-def _move_to(bar, x: int, y: int = 32) -> None:
+def _move_to(bar: LevelsBar, x: int, y: int = 32) -> None:
     from PySide6.QtCore import QPointF, Qt
     from PySide6.QtGui import QMouseEvent
     from PySide6.QtWidgets import QApplication
@@ -73,7 +78,7 @@ def _move_to(bar, x: int, y: int = 32) -> None:
     QApplication.sendEvent(bar, evt)
 
 
-def _release(bar) -> None:
+def _release(bar: LevelsBar) -> None:
     from PySide6.QtCore import QPointF, Qt
     from PySide6.QtGui import QMouseEvent
     from PySide6.QtWidgets import QApplication
@@ -90,12 +95,12 @@ def _release(bar) -> None:
     QApplication.sendEvent(bar, evt)
 
 
-def _range_row_y(bar) -> int:
+def _range_row_y(bar: LevelsBar) -> int:
     range_y, _window_y = bar._row_y()
     return range_y
 
 
-def _window_row_y(bar) -> int:
+def _window_row_y(bar: LevelsBar) -> int:
     _range_y, window_y = bar._row_y()
     return window_y
 

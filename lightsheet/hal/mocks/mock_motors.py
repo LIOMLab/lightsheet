@@ -221,16 +221,16 @@ class MockMotors(IMotors):
 
     def get_properties(self) -> dict[str, str]:
         return {
-            "vertical name": self.vertical.get_name(),
-            "horizontal name": self.horizontal.get_name(),
-            "camera name": self.camera.get_name(),
+            "vertical name": self.vertical.get_name(),  # ty: ignore[unresolved-attribute]
+            "horizontal name": self.horizontal.get_name(),  # ty: ignore[unresolved-attribute]
+            "camera name": self.camera.get_name(),  # ty: ignore[unresolved-attribute]
         }
 
     def get_positions(self) -> dict[str, float]:
         return {
-            "vertical position": self.vertical.get_position("mm"),
-            "horizontal position": self.horizontal.get_position("mm"),
-            "camera position": self.camera.get_position("mm"),
+            "vertical position": self.vertical.get_position("mm"),  # ty: ignore[unresolved-attribute]
+            "horizontal position": self.horizontal.get_position("mm"),  # ty: ignore[unresolved-attribute]
+            "camera position": self.camera.get_position("mm"),  # ty: ignore[unresolved-attribute]
         }
 
     def cfg_load_ini(self) -> None:

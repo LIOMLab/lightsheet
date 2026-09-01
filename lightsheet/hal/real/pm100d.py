@@ -138,7 +138,7 @@ class PM100D(IPowerMeter):
         )
         if status != 0:
             raise PM100DError(f"TLPMX_getRsrcName failed: status={status}")
-        return buf.value.decode("ascii")
+        return buf.value.decode("ascii")  # ty: ignore[unsound-return-statement]
 
     def open(self) -> None:
         """Load the DLL, find the resource, open a session, set wavelength.

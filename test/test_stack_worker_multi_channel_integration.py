@@ -48,7 +48,9 @@ def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
     """StackWorker.run in multi-channel mode calls set_files with
     wavelengths and the real save worker writes one HDF5 file per
     channel per plane."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     from lightsheet.gui.workers import StackWorker
 
@@ -99,7 +101,7 @@ def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
     # the tagged tuples.
     def _fake_acquire_scan() -> None:
         ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 
@@ -186,7 +188,9 @@ def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
     frames consumed (n_channels * n_planes) — not files written.
     """
     import h5py
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     from lightsheet.gui.workers import StackWorker
 
@@ -239,7 +243,7 @@ def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
     # the tagged tuples.
     def _fake_acquire_scan() -> None:
         ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 
@@ -321,7 +325,7 @@ def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
     # reconstructed_frame001, reconstructed_frame002 (per-channel
     # counter, 1-based).
     for ch, p in enumerate(per_channel_files):
-        with h5py.File(p, "r") as f:
+        with h5py.File(p, "r") as f:  # ty: ignore[invalid-argument-type]
             ds_keys = [
                 k for k in f
                 if k.startswith("reconstructed_frame")

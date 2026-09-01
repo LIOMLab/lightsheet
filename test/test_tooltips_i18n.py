@@ -87,7 +87,7 @@ def _panel_classes() -> dict[str, str]:
 
 def _import(path: str) -> type:
     mod, _, cls = path.rpartition(".")
-    return getattr(__import__(mod, fromlist=[cls]), cls)
+    return getattr(__import__(mod, fromlist=[cls]), cls)  # ty: ignore[unsound-return-statement]
 
 
 def _assert_spinboxes_have_tooltips(panel: QWidget) -> list[str]:
@@ -133,7 +133,9 @@ def test_all_panels_spinboxes_have_tooltips(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
     """Every QDoubleSpinBox across all 7 panels has a non-empty tooltip."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     missing: list[str] = []
@@ -150,7 +152,9 @@ def test_all_panels_checkboxes_have_tooltips(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
     """Every QCheckBox across all 7 panels has a non-empty tooltip."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     missing: list[str] = []
@@ -166,7 +170,9 @@ def test_all_panels_checkable_pushbuttons_have_tooltips(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
     """Every checkable QPushButton across all 7 panels has a non-empty tooltip."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     missing: list[str] = []
@@ -184,7 +190,9 @@ def test_estop_button_tooltip_preserved(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
     """The E-stop button tooltip is preserved verbatim (UI-SPEC Copywriting)."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     estop = ctrl.findChild(QPushButton, "pushButton_estop")
@@ -199,7 +207,9 @@ def test_arm_reset_button_has_tooltip(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
     """The Arm/Reset button carries a tooltip documenting the two-press sequence."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     arm = ctrl.findChild(QPushButton, "pushButton_armReset")
@@ -239,7 +249,9 @@ def test_help_menu_links_guide_pdf(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
     """The Help menu contains an action that opens Guide.pdf, wired to open_help."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     # The Help menu action that opens the documentation (Guide.pdf).

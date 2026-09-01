@@ -242,7 +242,7 @@ class SavePanelWidget(QWidget):
                             )
                         self.ui.tableWidget_fileAttributes.resizeColumnsToContents()
                         self.ui.tableWidget_fileAttributes.setEditTriggers(
-                            QAbstractItemView.NoEditTriggers
+                            QAbstractItemView.NoEditTriggers  # ty: ignore[unresolved-attribute]
                         )  # No editing possible
 
                     # Display image
@@ -266,16 +266,16 @@ class SavePanelWidget(QWidget):
                     + " displayed"
                 )
 
-    def _read_hdf5_dataset(self, path: str, name: str) -> tuple[typing.Any, dict]:
+    def _read_hdf5_dataset(self, path: str, name: str) -> tuple[typing.Any, dict]:  # ty: ignore[missing-type-argument]
         """Open an HDF5 file, return ``(data, attrs)`` for the named
         top-level dataset."""
         import h5py
 
         with h5py.File(path, "r") as f:
             dataset = f[name]
-            return dataset[()], dict(dataset.attrs)
+            return dataset[()], dict(dataset.attrs)  # ty: ignore[not-subscriptable]
 
-    def _read_zarr_dataset(self, path: str, label: str) -> tuple[typing.Any, dict]:
+    def _read_zarr_dataset(self, path: str, label: str) -> tuple[typing.Any, dict]:  # ty: ignore[missing-type-argument]
         """Open an OME-Zarr store, return ``(data, attrs)`` for the
         plane identified by ``label`` (``plane_NNNN`` or
         ``chN_plane_NNNN`` as produced by ``_list_zarr_datasets``).
@@ -300,13 +300,13 @@ class SavePanelWidget(QWidget):
         z = int(m.group(2)) - 1  # label is 1-based; array index is 0-based
         root = zarr.open_group(path, mode="r")
         arr = root["0"]
-        shape = arr.shape
-        data = arr[ch, z, :, :] if len(shape) == 4 else arr[z, :, :]
+        shape = arr.shape  # ty: ignore[unresolved-attribute]
+        data = arr[ch, z, :, :] if len(shape) == 4 else arr[z, :, :]  # ty: ignore[invalid-argument-type]
         # Metadata: prefer the /acquisition group's attrs (the Zarr
         # analog of the HDF5 dataset attrs). Fall back to the root attrs
         # (OME-NGFF metadata) if no acquisition group exists (e.g. a
         # store written by a different tool).
-        attrs: dict = {}
+        attrs: dict = {}  # ty: ignore[missing-type-argument]
         acq = root.get("acquisition")
         if acq is not None:
             attrs.update(dict(acq.attrs))
@@ -395,9 +395,9 @@ class SavePanelWidget(QWidget):
             self._shell.save_description = str(self.ui.lineEdit_saveDescription.text())
 
             """Setting up frame saver"""
-            self._shell._fs.reinit(1)
-            self._shell._fs.add_sample_name(self._shell.save_description)
-            self._shell._fs.add_motor_parameters(
+            self._shell._fs.reinit(1)  # ty: ignore[unresolved-attribute]
+            self._shell._fs.add_sample_name(self._shell.save_description)  # ty: ignore[unresolved-attribute]
+            self._shell._fs.add_motor_parameters(  # ty: ignore[unresolved-attribute]
                 self._shell.image_hor_pos_text,
                 self._shell.image_ver_pos_text,
                 self._shell.image_cam_pos_text,
@@ -405,21 +405,21 @@ class SavePanelWidget(QWidget):
 
             """Saving frame"""
             if self.ui.radioButton_saveAllCrop.isChecked():
-                self._shell._fs.set_files(
+                self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
                     1, self._shell.save_filepath, "singleImage", 1, "ETLscan",
                     wavelengths=[self._active_single_channel_wavelength()],
                 )
-                cropped_buffer = self._shell._fs.crop_buffer(self._shell.buffer)
-                self._shell._fs.enqueue_buffer(cropped_buffer)
+                cropped_buffer = self._shell._fs.crop_buffer(self._shell.buffer)  # ty: ignore[invalid-argument-type, unresolved-attribute]
+                self._shell._fs.enqueue_buffer(cropped_buffer)  # ty: ignore[unresolved-attribute]
                 self._shell.updateUi_message_printer(
                     "Saving Images (one for each ETL scan, cropped)"
                 )
             elif self.ui.radioButton_saveAllFull.isChecked():
-                self._shell._fs.set_files(
+                self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
                     1, self._shell.save_filepath, "singleImage", 1, "FullETLscan",
                     wavelengths=[self._active_single_channel_wavelength()],
                 )
-                self._shell._fs.enqueue_buffer(self._shell.buffer)
+                self._shell._fs.enqueue_buffer(self._shell.buffer)  # ty: ignore[invalid-argument-type, unresolved-attribute]
                 self._shell.updateUi_message_printer(
                     "Saving Images (one for each ETL scan, full)"
                 )
@@ -467,26 +467,26 @@ class SavePanelWidget(QWidget):
                             "missing. Re-run the acquisition."
                         )
                         return
-                    self._shell._fs.set_files(
+                    self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
                         1, self._shell.save_filepath, "singleImage", 1,
                         "reconstructed_frame", wavelengths=[wl1, wl2],
                     )
-                    self._shell._fs.enqueue_buffer((0, frame1))
-                    self._shell._fs.enqueue_buffer((1, frame2))
+                    self._shell._fs.enqueue_buffer((0, frame1))  # ty: ignore[unresolved-attribute]
+                    self._shell._fs.enqueue_buffer((1, frame2))  # ty: ignore[unresolved-attribute]
                     self._shell.updateUi_message_printer(
                         "Saving Reconstructed Images (multi-channel)"
                     )
                 else:
-                    self._shell._fs.set_files(
+                    self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
                         1, self._shell.save_filepath, "singleImage", 1,
                         "reconstructed_frame",
                         wavelengths=[self._active_single_channel_wavelength()],
                     )
-                    self._shell._fs.enqueue_buffer(self._shell.reconstructed_frame)
+                    self._shell._fs.enqueue_buffer(self._shell.reconstructed_frame)  # ty: ignore[invalid-argument-type, unresolved-attribute]
                     self._shell.updateUi_message_printer("Saving Reconstructed Image")
 
-            self._shell._fs.start_saving()
-            self._shell._fs.stop_saving()
+            self._shell._fs.start_saving()  # ty: ignore[unresolved-attribute]
+            self._shell._fs.stop_saving()  # ty: ignore[unresolved-attribute]
         else:
             self._shell.sig_beep.emit()
             QMessageBox.warning(

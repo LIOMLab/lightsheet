@@ -12,9 +12,9 @@ with h5py.File(inFilename, "r") as inFile:
         print(key)
 
         group = inFile[key]
-        data = group[()]
+        data = group[()]  # ty: ignore[not-subscriptable]
         
-        plt.imshow(data, cmap='gray')
+        plt.imshow(data, cmap='gray')  # ty: ignore[invalid-argument-type]
         plt.show()
 
     print('Lecture terminée')

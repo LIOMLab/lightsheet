@@ -12,14 +12,14 @@ Behavior test (AGENTS.md §5) — runs the real widget under
 
 import os
 
-import pytest
-
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from pytestqt.qtbot import QtBot
 
 from lightsheet.gui.widgets.channel_radio import ChannelRadio
 
 
-def test_click_button_with_invalid_idx_is_noop(qtbot) -> None:  # noqa: ANN001
+def test_click_button_with_invalid_idx_is_noop(qtbot: QtBot) -> None:
     """click_button(idx) where idx is out of range -> btn is None -> the
     ``if btn is not None:`` guard is False -> no click, no signal, no
     exception (branch 129->exit).

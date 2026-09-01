@@ -98,7 +98,7 @@ def _get_spinbox(ctrl: Controller_MainWindow, obj_name: str) -> FieldSpecSpinBox
     panel-qualified hybrid-ownership path."""
     panel_attr = _OBJNAME_TO_PANEL[obj_name]
     panel = getattr(ctrl, panel_attr)
-    return getattr(panel.ui, obj_name)
+    return getattr(panel.ui, obj_name)  # ty: ignore[unsound-return-statement]
 
 
 def test_every_canonical_spinbox_is_field_spec_subclass(

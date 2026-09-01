@@ -43,75 +43,75 @@ class MockOptotune(IOptotune):
         # Return the ready sentinel so the container's close() flow runs under demo.
         return b"Ready\r\n"
 
-    def firmwaretype(self) -> int:
+    def firmwaretype(self) -> int:  # ty: ignore[invalid-return-type]
         self._not_implemented("firmwaretype")
 
-    def firmwarebranch(self) -> int:
+    def firmwarebranch(self) -> int:  # ty: ignore[invalid-return-type]
         self._not_implemented("firmwarebranch")
 
-    def partnumber(self) -> bytes:
+    def partnumber(self) -> bytes:  # ty: ignore[invalid-return-type]
         self._not_implemented("partnumber")
 
-    def current_upper(self, value: float | None = None) -> float:
+    def current_upper(self, value: float | None = None) -> float:  # ty: ignore[invalid-return-type]
         self._not_implemented("current_upper", value)
 
-    def current_lower(self, value: float | None = None) -> float:
+    def current_lower(self, value: float | None = None) -> float:  # ty: ignore[invalid-return-type]
         self._not_implemented("current_lower", value)
 
-    def firmwareversion(self) -> str:
+    def firmwareversion(self) -> str:  # ty: ignore[invalid-return-type]
         self._not_implemented("firmwareversion")
 
-    def deviceid(self) -> bytes:
+    def deviceid(self) -> bytes:  # ty: ignore[invalid-return-type]
         self._not_implemented("deviceid")
 
-    def gain(self, value: float | None = None) -> float | tuple[int, float, float]:
+    def gain(self, value: float | None = None) -> float | tuple[int, float, float]:  # ty: ignore[invalid-return-type]
         self._not_implemented("gain", value)
 
-    def serialnumber(self) -> bytes:
+    def serialnumber(self) -> bytes:  # ty: ignore[invalid-return-type]
         self._not_implemented("serialnumber")
 
-    def current(self, value: float | None = None) -> float:
+    def current(self, value: float | None = None) -> float:  # ty: ignore[invalid-return-type]
         self._not_implemented("current", value)
 
-    def siggen_upper(self, value: float | None = None) -> float:
+    def siggen_upper(self, value: float | None = None) -> float:  # ty: ignore[invalid-return-type]
         self._not_implemented("siggen_upper", value)
 
-    def siggen_lower(self, value: float | None = None) -> float:
+    def siggen_lower(self, value: float | None = None) -> float:  # ty: ignore[invalid-return-type]
         self._not_implemented("siggen_lower", value)
 
-    def siggen_freq(self, value: float | None = None) -> float:
+    def siggen_freq(self, value: float | None = None) -> float:  # ty: ignore[invalid-return-type]
         self._not_implemented("siggen_freq", value)
 
     def temp_limits(
         self, value: tuple[float, float] | None = None
-    ) -> tuple[float, float]:
+    ) -> tuple[float, float]:  # ty: ignore[invalid-return-type]
         self._not_implemented("temp_limits", value)
 
-    def focalpower(self, value: float | None = None) -> float:
+    def focalpower(self, value: float | None = None) -> float:  # ty: ignore[invalid-return-type]
         self._not_implemented("focalpower", value)
 
-    def current_max(self, value: float | None = None) -> float:
+    def current_max(self, value: float | None = None) -> float:  # ty: ignore[invalid-return-type]
         self._not_implemented("current_max", value)
 
-    def temp_reading(self) -> float:
+    def temp_reading(self) -> float:  # ty: ignore[invalid-return-type]
         self._not_implemented("temp_reading")
 
-    def get_status(self) -> bytes:
+    def get_status(self) -> bytes:  # ty: ignore[invalid-return-type]
         self._not_implemented("get_status")
 
-    def eeprom_read(self, value: int) -> int:
+    def eeprom_read(self, value: int) -> int:  # ty: ignore[invalid-return-type]
         self._not_implemented("eeprom_read", value)
 
-    def analog_input(self) -> int:
+    def analog_input(self) -> int:  # ty: ignore[invalid-return-type]
         self._not_implemented("analog_input")
 
-    def eeprom_write(self, address: int, value: int) -> int:
+    def eeprom_write(self, address: int, value: int) -> int:  # ty: ignore[invalid-return-type]
         self._not_implemented("eeprom_write", address, value)
 
-    def eeprom_contents(self) -> bytes:
+    def eeprom_contents(self) -> bytes:  # ty: ignore[invalid-return-type]
         self._not_implemented("eeprom_contents")
 
-    def mode(self, mode_str: str | None = None) -> str:
+    def mode(self, mode_str: str | None = None) -> str:  # ty: ignore[invalid-return-type]
         # "analog" set case is a no-op so the container's flow runs under demo.
         # Get-case (mode_str is None) raises NotImplementedError.
         if mode_str is not None:

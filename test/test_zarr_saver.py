@@ -87,7 +87,7 @@ def test_zarr_saver_streams_and_finalizes(
     root = zarr.open(store_path, mode="r")
     assert "0" in root  # L0 dataset / group
     assert "acquisition" in root  # D-04 acquisition group
-    assert root["0"].shape == (1, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)
+    assert root["0"].shape == (1, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)  # ty: ignore[invalid-argument-type, unresolved-attribute]
 
 
 def test_omero_channels(
@@ -117,7 +117,7 @@ def test_omero_channels(
 
     root = zarr.open(store_path, mode="r")
     ome = root.attrs["ome"]
-    channels = ome["omero"]["channels"]
+    channels = ome["omero"]["channels"]  # ty: ignore[invalid-argument-type, not-subscriptable]
     # Only the active laser (647 nm) should be in the channels list.
     assert len(channels) == 1, (
         f"expected 1 channel (only laser 2 was active), got {len(channels)}"
@@ -164,7 +164,7 @@ def test_omero_from_live_lasers(
         saver.finalize()
 
         root = zarr.open(store_path, mode="r")
-        channels = root.attrs["ome"]["omero"]["channels"]
+        channels = root.attrs["ome"]["omero"]["channels"]  # ty: ignore[invalid-argument-type, not-subscriptable]
         assert len(channels) == 1, (
             f"expected 1 channel (only laser 1 was active), got {len(channels)}"
         )
@@ -194,8 +194,8 @@ def test_ngff_metadata(
 
     root = zarr.open(store_path, mode="r")
     ome = root.attrs["ome"]
-    assert ome["version"] == "0.5"
-    multiscales = ome["multiscales"]
+    assert ome["version"] == "0.5"  # ty: ignore[invalid-argument-type, not-subscriptable]
+    multiscales = ome["multiscales"]  # ty: ignore[invalid-argument-type, not-subscriptable]
     assert len(multiscales) >= 1
     datasets = multiscales[0]["datasets"]
     assert len(datasets) >= 1
@@ -225,17 +225,17 @@ def test_acquisition_group(
     saver.finalize()
 
     root = zarr.open(store_path, mode="r")
-    acq = root["acquisition"]
-    motor = acq["motor"]
-    assert motor["horizontal"].shape == (n_planes,)
-    assert motor["vertical"].shape == (n_planes,)
-    assert motor["camera"].shape == (n_planes,)
+    acq = root["acquisition"]  # ty: ignore[invalid-argument-type]
+    motor = acq["motor"]  # ty: ignore[invalid-argument-type, not-subscriptable]
+    assert motor["horizontal"].shape == (n_planes,)  # ty: ignore[invalid-argument-type, not-subscriptable, unresolved-attribute]
+    assert motor["vertical"].shape == (n_planes,)  # ty: ignore[invalid-argument-type, not-subscriptable, unresolved-attribute]
+    assert motor["camera"].shape == (n_planes,)  # ty: ignore[invalid-argument-type, not-subscriptable, unresolved-attribute]
     # Scan-parameter group attrs read from the live HAL instances.
-    assert acq.attrs["galvo_left_amplitude"] == ctrl.siggen.galvo_left_amplitude
-    assert acq.attrs["etl_left_amplitude"] == ctrl.siggen.etl_left_amplitude
-    assert acq.attrs["exposure_time_s"] == ctrl.camera.exposure_time
-    assert acq.attrs["shutter_mode"] == ctrl.camera.shutter_mode
-    assert acq.attrs["sample_rate"] == ctrl.siggen.sample_rate
+    assert acq.attrs["galvo_left_amplitude"] == ctrl.siggen.galvo_left_amplitude  # ty: ignore[unresolved-attribute]
+    assert acq.attrs["etl_left_amplitude"] == ctrl.siggen.etl_left_amplitude  # ty: ignore[unresolved-attribute]
+    assert acq.attrs["exposure_time_s"] == ctrl.camera.exposure_time  # ty: ignore[unresolved-attribute]
+    assert acq.attrs["shutter_mode"] == ctrl.camera.shutter_mode  # ty: ignore[unresolved-attribute]
+    assert acq.attrs["sample_rate"] == ctrl.siggen.sample_rate  # ty: ignore[unresolved-attribute]
 
 
 # --- Task 2 tests (format branch + close ordering) ---------------------
@@ -274,7 +274,7 @@ def test_format_branch(
         worker.sig_finished.connect(lambda: finished.append(1))
         # Call the slot directly (on the calling thread) — no QThread.
         worker.start_saving()
-        return finished
+        return finished  # ty: ignore[invalid-return-type]
 
     # zarr -> zarr_save_worker only.
     saver.zarr_save_worker.reset_mock()
@@ -371,7 +371,7 @@ def test_close_ordering(
 
     root = zarr.open(str(tmp_path / "stack.ome.zarr"), mode="r")
     assert "acquisition" in root
-    assert root["0"].shape == (1, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)
+    assert root["0"].shape == (1, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)  # ty: ignore[invalid-argument-type, unresolved-attribute]
 
 
 def test_zarr_save_finalizes_after_stop_saving_on_normal_completion(
@@ -573,9 +573,9 @@ def test_zarr_drains_queue_after_stop_saving(
         "the store without the ome root attrs"
     )
     # L0 should have all 5 planes.
-    arr = root["0"]
-    assert arr.shape[1] == n_planes, (
-        f"L0 has {arr.shape[1]} planes but expected {n_planes} — "
+    arr = root["0"]  # ty: ignore[invalid-argument-type]
+    assert arr.shape[1] == n_planes, (  # ty: ignore[unresolved-attribute]
+        f"L0 has {arr.shape[1]} planes but expected {n_planes} — "  # ty: ignore[unresolved-attribute]
         f"the worker did not drain the queue after stop_saving()"
     )
 
@@ -649,11 +649,11 @@ def test_both_mode_writes_both_formats(
     # --- Zarr store has the full image data + acquisition group ---
     root = zarr.open(str(tmp_path / "stack.ome.zarr"), mode="r")
     assert "acquisition" in root
-    assert root["0"].shape == (1, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)
-    arr = root["0"]
+    assert root["0"].shape == (1, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)  # ty: ignore[invalid-argument-type, unresolved-attribute]
+    arr = root["0"]  # ty: ignore[invalid-argument-type]
     for z in range(n_planes):
         # The single-channel axis is 0; plane z is axis 1.
-        assert np.all(arr[0, z, :, :] == (z + 1) * 100)
+        assert np.all(arr[0, z, :, :] == (z + 1) * 100)  # ty: ignore[invalid-argument-type, not-subscriptable]
 
     # --- HDF5 files have image datasets (NOT metadata-only) ---
     # set_files builds the per-channel filenames_list; read the actual
@@ -671,9 +671,9 @@ def test_both_mode_writes_both_formats(
                 f"expected 1"
             )
             ds = f[keys[0]]
-            assert ds.shape == (ctrl.camera.ysize, ctrl.camera.xsize)
-            assert np.all(ds[()] == (z + 1) * 100), (
-                f"HDF5 plane {z} data mismatch: got max {ds[()].max()}, "
+            assert ds.shape == (ctrl.camera.ysize, ctrl.camera.xsize)  # ty: ignore[unresolved-attribute]
+            assert np.all(ds[()] == (z + 1) * 100), (  # ty: ignore[not-subscriptable]
+                f"HDF5 plane {z} data mismatch: got max {ds[()].max()}, "  # ty: ignore[not-subscriptable, unresolved-attribute]
                 f"expected {(z + 1) * 100}"
             )
 
@@ -823,8 +823,8 @@ def test_zarr_non_zero_frames_still_produce_chunks(
     import zarr
 
     root = zarr.open(store_path, mode="r")
-    arr = root["0"]
+    arr = root["0"]  # ty: ignore[invalid-argument-type]
     for z in range(n_planes):
-        assert np.all(arr[0, z, :, :] == (z + 1) * 100), (
+        assert np.all(arr[0, z, :, :] == (z + 1) * 100), (  # ty: ignore[invalid-argument-type, not-subscriptable]
             f"plane {z} data mismatch after round-trip"
         )

@@ -493,7 +493,7 @@ def test_refresh_laser2_readback_async_starts_thread_when_none(qtbot: QtBot) -> 
     # previously here could race ahead of the thread's exec()
     # (quit-before-exec is a no-op) and strand the thread under xdist.
     assert hw._readback_thread is not None
-    qtbot.waitUntil(lambda: not hw._readback_thread.isRunning(), timeout=2000)
+    qtbot.waitUntil(lambda: not hw._readback_thread.isRunning(), timeout=2000)  # ty: ignore[unresolved-attribute]
     # A readback emit happened (the thread ran _refresh_laser_readback(1)).
     shell.sig_laser_readback.emit.assert_called()
 

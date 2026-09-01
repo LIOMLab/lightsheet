@@ -32,7 +32,9 @@ def test_active_single_channel_wavelength_laser1(
 ) -> None:
     """When _auto_laser1 is True (and _auto_laser2 is False), the
     active single-channel wavelength is lasers[0].wavelength."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     ctrl._auto_laser1 = True
@@ -47,7 +49,9 @@ def test_active_single_channel_wavelength_laser2_only(
 ) -> None:
     """When only _auto_laser2 is True, the active single-channel
     wavelength is lasers[1].wavelength."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     ctrl._auto_laser1 = False
@@ -63,7 +67,9 @@ def test_active_single_channel_wavelength_neither_fallback(
     """When neither _auto_laser1 nor _auto_laser2 is True (manual mode
     or edge case), the active wavelength falls back to lasers[0].wavelength
     — not None, not an error."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     ctrl._auto_laser1 = False
@@ -81,7 +87,9 @@ def test_save_panel_single_channel_passes_wavelength_suffix(
     saved filename carries the _{wavelength}nm suffix. This is the
     G-09-10 gap: the suffix must ALWAYS be present, including
     single-channel."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     ctrl._auto_laser1 = True
@@ -139,7 +147,9 @@ def test_stack_worker_single_channel_presamples_wavelength(
     self._wavelengths = [lasers[0].wavelength] (not None). The set_files
     call in run() passes wavelengths=[wl] so the saved filenames carry
     the suffix."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     from lightsheet.gui.workers import StackWorker
 
@@ -189,7 +199,7 @@ def test_stack_worker_single_channel_presamples_wavelength(
     # touching hardware.
     def _fake_acquire_scan() -> None:
         ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 
@@ -233,7 +243,9 @@ def test_stack_worker_single_channel_neither_auto_laser_fallback(
     """When neither _auto_laser1 nor _auto_laser2 is True, StackWorker
     single-channel pre-samples lasers[0].wavelength as the fallback
     (not None, not an error)."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     from lightsheet.gui.workers import StackWorker
 

@@ -70,7 +70,7 @@ def test_preview_worker_finished_emits_exactly_once_normal(qtbot: QtBot) -> None
     bundle = _make_bundle()
     shell = _PreviewShell()
     hw = Mock()
-    worker = PreviewWorker(bundle, hw, shell)
+    worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
 
     finished_count: list[int] = []
     worker.finished.connect(lambda: finished_count.append(1))
@@ -88,7 +88,7 @@ def test_preview_worker_finished_emits_exactly_once_estop(qtbot: QtBot) -> None:
     shell.preview_mode_started = True
     shell.estop_event.set()
     hw = Mock()
-    worker = PreviewWorker(bundle, hw, shell)
+    worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
 
     finished_count: list[int] = []
     worker.finished.connect(lambda: finished_count.append(1))
@@ -104,7 +104,7 @@ def test_preview_worker_finished_emits_exactly_once_exception(qtbot: QtBot) -> N
     bundle = _make_bundle()
     shell = _PreviewShell()
     hw = Mock()
-    worker = PreviewWorker(bundle, hw, shell)
+    worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
     worker.camera.arm = Mock(side_effect=RuntimeError("camera fault"))
 
     finished_count: list[int] = []
@@ -130,7 +130,7 @@ def test_preview_worker_never_accesses_ui_widgets(qtbot: QtBot) -> None:
     bundle = _make_bundle()
     shell = _PreviewShell()
     hw = Mock()
-    worker = PreviewWorker(bundle, hw, shell)
+    worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
 
     worker.run()
 

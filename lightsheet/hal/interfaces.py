@@ -133,7 +133,7 @@ class ICamera(ICameraCore):
     def get_delay_timebase(self) -> str | None: ...
 
     @abstractmethod
-    def get_pixel_rates(self) -> dict[str, object] | list: ...
+    def get_pixel_rates(self) -> dict[str, object] | list: ...  # ty: ignore[missing-type-argument]
 
     @abstractmethod
     def get_pixel_rate(self) -> str | None: ...
@@ -174,7 +174,7 @@ class ISigGenCore(ABC):
     etl_left_offset: float
     etl_right_offset: float
     waveform_cycles: int | None
-    waveform_metadata: dict | None
+    waveform_metadata: dict | None  # ty: ignore[missing-type-argument]
 
     # open/close are NOT declared — the real SigGen class does not expose them.
     @abstractmethod

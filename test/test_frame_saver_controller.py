@@ -110,7 +110,7 @@ def test_init_creates_frame_saver_parented_to_shell() -> None:
     parented to shell (the QObject parent)."""
     bundle = _make_bundle()
     shell = _make_shell()
-    fs = FrameSaverController(bundle, shell)
+    fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
     assert isinstance(fs.frame_saver, FrameSaver), (
         "FrameSaverController must own a FrameSaver instance"
     )
@@ -128,17 +128,17 @@ def test_init_creates_frame_viewer_sized_from_bundle_camera() -> None:
     parented to shell, sized from bundle.camera.ysize / xsize."""
     bundle = _make_bundle()
     shell = _make_shell()
-    fs = FrameSaverController(bundle, shell)
+    fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
     assert isinstance(fs.frame_viewer, FrameViewer), (
         "FrameSaverController must own a FrameViewer instance"
     )
     assert fs.frame_viewer.parent is shell, (
         "FrameViewer must be parented to the shell (QObject parent)"
     )
-    assert fs.frame_viewer.rows == int(bundle.camera.ysize), (
+    assert fs.frame_viewer.rows == int(bundle.camera.ysize), (  # ty: ignore[invalid-argument-type]
         "FrameViewer rows must come from bundle.camera.ysize"
     )
-    assert fs.frame_viewer.columns == int(bundle.camera.xsize), (
+    assert fs.frame_viewer.columns == int(bundle.camera.xsize), (  # ty: ignore[invalid-argument-type]
         "FrameViewer columns must come from bundle.camera.xsize"
     )
 
@@ -150,7 +150,7 @@ def test_enqueue_frame_delegates_to_frame_viewer() -> None:
     lands on it with the same frame argument."""
     bundle = _make_bundle()
     shell = _make_shell()
-    fs = FrameSaverController(bundle, shell)
+    fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
     # Substitute a Mock frame_viewer so the delegation is observable
     # without relying on the real queue.Queue internals.
     fs.frame_viewer = Mock()
@@ -172,7 +172,7 @@ def test_frame_saver_sig_status_message_connected_to_shell_slot() -> None:
     """
     bundle = _make_bundle()
     shell = _make_shell()
-    fs = FrameSaverController(bundle, shell)
+    fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
     fs.frame_saver.sig_status_message.emit("test message")
     assert shell.message_printer_calls == ["test message"], (
         "sig_status_message.emit must route to shell.updateUi_message_printer"
@@ -186,7 +186,7 @@ def test_pass_through_methods_route_to_frame_saver() -> None:
     substituting a Mock frame_saver and confirming each call lands."""
     bundle = _make_bundle()
     shell = _make_shell()
-    fs = FrameSaverController(bundle, shell)
+    fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
     fs.frame_saver = Mock()
 
     fs.reinit(3)
@@ -226,7 +226,7 @@ def test_frame_saver_worker_surfaces_h5py_error_and_stops(tmp_path: Path) -> Non
     """
     bundle = _make_bundle()
     shell = _make_shell()
-    fs = FrameSaverController(bundle, shell)
+    fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
     saver = fs.frame_saver
 
     # Read-only directory so h5py.File(path, "a") raises OSError/PermissionError.
@@ -281,7 +281,7 @@ def test_set_files_sequential_plane_numbers(tmp_path: Path) -> None:
     """
     bundle = _make_bundle()
     shell = _make_shell()
-    fs = FrameSaverController(bundle, shell)
+    fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
     saver = fs.frame_saver
     saver.filenames_list = []
     saver.filenames_lists = []
@@ -319,7 +319,7 @@ def test_set_files_collision_suffix(tmp_path: Path) -> None:
     """
     bundle = _make_bundle()
     shell = _make_shell()
-    fs = FrameSaverController(bundle, shell)
+    fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
     saver = fs.frame_saver
     saver.filenames_list = []
     saver.filenames_lists = []
@@ -357,7 +357,7 @@ def test_set_files_collision_suffix_increments(tmp_path: Path) -> None:
     """
     bundle = _make_bundle()
     shell = _make_shell()
-    fs = FrameSaverController(bundle, shell)
+    fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
     saver = fs.frame_saver
     saver.filenames_list = []
     saver.filenames_lists = []
@@ -401,7 +401,7 @@ def test_set_files_multi_channel_wavelength_suffix(tmp_path: Path) -> None:
     """
     bundle = _make_bundle()
     shell = _make_shell()
-    fs = FrameSaverController(bundle, shell)
+    fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
     saver = fs.frame_saver
     saver.filenames_list = []
     saver.filenames_lists = []
@@ -460,7 +460,7 @@ def test_set_files_single_channel_has_suffix(tmp_path: Path) -> None:
 
     bundle = _make_bundle()
     shell = _make_shell()
-    fs = FrameSaverController(bundle, shell)
+    fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
     saver = fs.frame_saver
     saver.filenames_list = []
     saver.filenames_lists = []
@@ -510,7 +510,7 @@ def test_set_files_rejects_wavelengths_none(tmp_path: Path) -> None:
 
     bundle = _make_bundle()
     shell = _make_shell()
-    fs = FrameSaverController(bundle, shell)
+    fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
     saver = fs.frame_saver
     saver.filenames_list = []
     saver.filenames_lists = []
@@ -536,7 +536,7 @@ def test_set_files_collision_avoidance_per_channel(tmp_path: Path) -> None:
 
     bundle = _make_bundle()
     shell = _make_shell()
-    fs = FrameSaverController(bundle, shell)
+    fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
     saver = fs.frame_saver
     saver.filenames_list = []
     saver.filenames_lists = []
@@ -579,12 +579,12 @@ def _make_mock_h5py() -> tuple[type, dict[str, list[tuple[str, np.ndarray]]]]:
         def __init__(self, name: str, data: np.ndarray) -> None:
             self.name = name
             self.data = data
-            self.attrs: dict = {}
+            self.attrs: dict = {}  # ty: ignore[missing-type-argument]
 
     class _MockFile:
         def __init__(self, path: str, mode: str = "a") -> None:
             self.path = path
-            self.attrs: dict = {}
+            self.attrs: dict = {}  # ty: ignore[missing-type-argument]
             written_files.setdefault(path, [])
 
         def create_dataset(
@@ -610,7 +610,7 @@ def test_frame_saver_worker_branches_on_channel_tag(tmp_path: Path) -> None:
 
     bundle = _make_bundle()
     shell = _make_shell()
-    fs = FrameSaverController(bundle, shell)
+    fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
     saver = fs.frame_saver
 
     # Set up multi-channel filenames_lists (2 channels x 2 planes each)
@@ -690,7 +690,7 @@ def test_frame_saver_worker_single_channel_bare_ndarray(tmp_path: Path) -> None:
 
     bundle = _make_bundle()
     shell = _make_shell()
-    fs = FrameSaverController(bundle, shell)
+    fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
     saver = fs.frame_saver
 
     saver.filenames_list = [str(tmp_path / "plane_00001.hdf5")]
@@ -752,7 +752,9 @@ def test_save_single_image_multi_channel_writes_two_files(
     channel. The single-consumer queue contract is preserved (the two
     tagged frames go through the same enqueue_buffer → single queue).
     """
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.saving_allowed = True
@@ -817,7 +819,9 @@ def test_save_single_image_single_channel_unchanged(
     channel save worker reads filenames_list (populated from
     filenames_lists[0]).
     """
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.saving_allowed = True
@@ -887,7 +891,9 @@ def test_zarr_saver_start_stack_n_channels(
     chunk_shape (1, 1, ysize, xsize). The channel axis is the leading
     axis so each channel's planes write to a distinct channel-axis
     index (NGFF v0.5 channel dimension)."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
 
@@ -916,7 +922,9 @@ def test_zarr_saver_start_stack_single_channel_back_compat(
     """MCA-04 back-compat: start_stack with n_channels=1 (and with
     n_channels omitted — default=1) produces shape (1, n_planes, y, x) —
     byte-identical to the Phase 8 single-channel writer shape."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
 
@@ -928,7 +936,7 @@ def test_zarr_saver_start_stack_single_channel_back_compat(
     store_path = str(tmp_path / "stack_a.ome.zarr")
     saver = ZarrSaver(ctrl)
     saver.start_stack(store_path, n_planes=3, n_channels=1)
-    arr = saver._writer._level0_array()
+    arr = saver._writer._level0_array()  # ty: ignore[unresolved-attribute]
     assert arr.shape == (1, 3, ctrl.camera.ysize, ctrl.camera.xsize), (
         f"n_channels=1 writer shape must be (1, 3, y, x); got {arr.shape}"
     )
@@ -937,7 +945,7 @@ def test_zarr_saver_start_stack_single_channel_back_compat(
     store_path_b = str(tmp_path / "stack_b.ome.zarr")
     saver_b = ZarrSaver(ctrl)
     saver_b.start_stack(store_path_b, n_planes=3)
-    arr_b = saver_b._writer._level0_array()
+    arr_b = saver_b._writer._level0_array()  # ty: ignore[unresolved-attribute]
     assert arr_b.shape == (1, 3, ctrl.camera.ysize, ctrl.camera.xsize), (
         f"default n_channels writer shape must be (1, 3, y, x); got {arr_b.shape}"
     )
@@ -952,7 +960,9 @@ def test_zarr_saver_write_plane_channel_idx(
     write_plane(channel_idx=1, z_idx=1, frame=B, ...) writes B to
     writer[1, 1, :, :]. Each channel's planes write to a distinct
     channel-axis index — they do not merge or collide."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
 
@@ -975,10 +985,10 @@ def test_zarr_saver_write_plane_channel_idx(
     saver.write_plane(1, 1, frameB, 0.0, 0.0, 0.0)
 
     np.testing.assert_array_equal(
-        np.asarray(saver._writer[0, 1, :, :]), frameA
+        np.asarray(saver._writer[0, 1, :, :]), frameA  # ty: ignore[not-subscriptable]
     )
     np.testing.assert_array_equal(
-        np.asarray(saver._writer[1, 1, :, :]), frameB
+        np.asarray(saver._writer[1, 1, :, :]), frameB  # ty: ignore[not-subscriptable]
     )
 
 
@@ -991,7 +1001,9 @@ def test_zarr_saver_write_plane_motor_positions_once_per_plane(
     mapping. Calling write_plane(0, z_idx=0, ...) and write_plane(1,
     z_idx=0, ...) for the same plane must leave each position list at
     length 1, not 2."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
 
@@ -1037,7 +1049,9 @@ def test_zarr_saver_finalize_omero_channels_length(
     over the writer's non-validating API) and raises RuntimeError on
     mismatch."""
     import zarr
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
 
@@ -1060,7 +1074,7 @@ def test_zarr_saver_finalize_omero_channels_length(
     saver.finalize()
 
     root = zarr.open(store_path, mode="r")
-    channels = root.attrs["ome"]["omero"]["channels"]
+    channels = root.attrs["ome"]["omero"]["channels"]  # ty: ignore[invalid-argument-type, not-subscriptable]
     assert len(channels) == 2, (
         f"n_channels=2 with both flags must produce 2 omero channels; "
         f"got {len(channels)}"
@@ -1076,7 +1090,7 @@ def test_zarr_saver_finalize_omero_channels_length(
     saver_b.finalize()
 
     root_b = zarr.open(store_path_b, mode="r")
-    channels_b = root_b.attrs["ome"]["omero"]["channels"]
+    channels_b = root_b.attrs["ome"]["omero"]["channels"]  # ty: ignore[invalid-argument-type, not-subscriptable]
     assert len(channels_b) == 1, (
         f"n_channels=1 with one flag must produce 1 omero channel; "
         f"got {len(channels_b)}"
@@ -1091,7 +1105,9 @@ def test_zarr_saver_finalize_raises_on_channel_count_mismatch(
     defense-in-depth over the writer's non-validating API. The caller
     MUST derive n_channels from the same auto-laser flags as
     _build_omero_channels."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
 
@@ -1125,7 +1141,9 @@ def test_zarr_save_worker_branches_on_channel_tag(
     frame, ...). The single-consumer queue contract is preserved."""
     from unittest.mock import MagicMock
 
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     from lightsheet.gui.coordinators.frame_saver_controller import (
         FrameSaverWorker,
@@ -1220,7 +1238,9 @@ def test_zarr_save_worker_single_channel_bare_ndarray_calls_write_plane_channel0
     0, the single-channel back-compat path."""
     from unittest.mock import MagicMock
 
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     from lightsheet.gui.coordinators.frame_saver_controller import (
         FrameSaverWorker,
@@ -1284,7 +1304,7 @@ def test_save_path_round_trips_channel_axis(
     for n_channels in (1, 2):
         bundle = _make_bundle()
         shell = _make_shell()
-        fs = FrameSaverController(bundle, shell)
+        fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
         saver = fs.frame_saver
 
         # Build per-channel filenames_lists (set_files with wavelengths).

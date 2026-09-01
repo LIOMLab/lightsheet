@@ -11,6 +11,8 @@ that imports ``make_controller``.
 
 
 def test_helpers_importable() -> None:
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     assert callable(make_controller)

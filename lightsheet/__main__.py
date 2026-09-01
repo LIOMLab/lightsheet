@@ -37,7 +37,7 @@ def _load_breeze_stylesheet(theme: str) -> str:
             f"Breeze stylesheet resource not found: {path} "
             f"(open error: {f.errorString()})"
         )
-    return bytes(f.readAll()).decode("utf-8")
+    return bytes(f.readAll()).decode("utf-8")  # ty: ignore[invalid-argument-type]
 
 
 def _color_scheme_to_theme(scheme: object) -> str:
@@ -78,7 +78,7 @@ def _on_color_scheme_changed(app: object) -> None:
     if _persisted_theme_holder["theme"] != "system":
         return
     resolved = _system_theme()
-    app.setStyleSheet(_load_breeze_stylesheet(resolved))
+    app.setStyleSheet(_load_breeze_stylesheet(resolved))  # ty: ignore[unresolved-attribute]
 
 
 def set_app_stylesheet(
@@ -101,7 +101,7 @@ def set_app_stylesheet(
 
     if stylesheet_code == "system":
         resolved = _system_theme()
-        app.setStyleSheet(_load_breeze_stylesheet(resolved))
+        app.setStyleSheet(_load_breeze_stylesheet(resolved))  # ty: ignore[unresolved-attribute]
         # Follow mid-session OS theme changes only while persisted choice is "system".
         hints = QGuiApplication.styleHints()
         # Disconnect any prior follower to avoid stacking handlers.
@@ -115,7 +115,7 @@ def set_app_stylesheet(
     else:
         # Explicit light/dark — load directly and stop following the OS.
         theme = stylesheet_code if stylesheet_code in ("light", "dark") else "dark"
-        app.setStyleSheet(_load_breeze_stylesheet(theme))
+        app.setStyleSheet(_load_breeze_stylesheet(theme))  # ty: ignore[unresolved-attribute]
         hints = QGuiApplication.styleHints()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
@@ -282,7 +282,7 @@ def main() -> int:
     def exception_hook(exctype: type, value: BaseException, traceback: object) -> None:
         """Permits messages display of errors occurring in all the files."""
         print(exctype, value, traceback)
-        _original_excepthook(exctype, value, traceback)
+        _original_excepthook(exctype, value, traceback)  # ty: ignore[invalid-argument-type]
         sys.exit(1)
 
     sys.excepthook = exception_hook

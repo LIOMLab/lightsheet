@@ -212,7 +212,7 @@ class MotorController:
     def updateUi_move_sample_backward(self) -> None:
         """Sample motor backward horizontal motion"""
         if (
-            self.motors.horizontal.get_position("mm")
+            self.motors.horizontal.get_position("mm")  # ty: ignore[unresolved-attribute]
             - self._shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value()
             >= self.motors.horizontal.get_limit_low("mm")
         ):
@@ -237,7 +237,7 @@ class MotorController:
     def updateUi_move_sample_forward(self) -> None:
         """Sample motor forward horizontal motion"""
         if (
-            self.motors.horizontal.get_position("mm")
+            self.motors.horizontal.get_position("mm")  # ty: ignore[unresolved-attribute]
             + self._shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value()
             <= self.motors.horizontal.get_limit_high("mm")
         ):
@@ -262,7 +262,7 @@ class MotorController:
     def updateUi_move_sample_up(self) -> None:
         """Sample motor upward vertical motion"""
         if (
-            self.motors.vertical.get_position("mm")
+            self.motors.vertical.get_position("mm")  # ty: ignore[unresolved-attribute]
             - self._shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value()
             >= self.motors.vertical.get_limit_low("mm")
         ):
@@ -287,7 +287,7 @@ class MotorController:
     def updateUi_move_sample_down(self) -> None:
         """Sample motor downward vertical motion"""
         if (
-            self.motors.vertical.get_position("mm")
+            self.motors.vertical.get_position("mm")  # ty: ignore[unresolved-attribute]
             + self._shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value()
             <= self.motors.vertical.get_limit_high("mm")
         ):
@@ -312,7 +312,7 @@ class MotorController:
     def updateUi_move_camera_backward(self) -> None:
         """Camera motor backward horizontal motion"""
         if (
-            self.motors.camera.get_position("mm")
+            self.motors.camera.get_position("mm")  # ty: ignore[unresolved-attribute]
             - self._shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value()
             >= self.motors.camera.get_limit_low("mm")
         ):
@@ -337,7 +337,7 @@ class MotorController:
     def updateUi_move_camera_forward(self) -> None:
         """Camera motor forward horizontal motion"""
         if (
-            self.motors.camera.get_position("mm")
+            self.motors.camera.get_position("mm")  # ty: ignore[unresolved-attribute]
             + self._shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value()
             <= self.motors.camera.get_limit_high("mm")
         ):
@@ -373,14 +373,14 @@ class MotorController:
         self._shell.calibration_panel.ui.label_calibrateRange.setText(
             "Move Horizontal Position"
         )
-        self.motors.horizontal.set_limit_low(0, "mm")
-        self.motors.horizontal.set_limit_high(0, "mm")
+        self.motors.horizontal.set_limit_low(0, "mm")  # ty: ignore[unresolved-attribute]
+        self.motors.horizontal.set_limit_high(0, "mm")  # ty: ignore[unresolved-attribute]
         self._shell.motor_panel.updateUi_position_indicators()
 
     def updateUi_set_horizontal_backward_boundary(self) -> None:
         """Set lower limit of sample's horizontal motion"""
-        self.motors.horizontal.set_limit_low(
-            self.motors.horizontal.get_position("mm"), "mm"
+        self.motors.horizontal.set_limit_low(  # ty: ignore[unresolved-attribute]
+            self.motors.horizontal.get_position("mm"), "mm"  # ty: ignore[unresolved-attribute]
         )
         self._shell.motor_panel.updateUi_position_indicators()
         self._shell.horizontal_backward_boundary_selected = True
@@ -391,8 +391,8 @@ class MotorController:
 
     def updateUi_set_horizontal_forward_boundary(self) -> None:
         """Set upper limit of sample's horizontal motion"""
-        self.motors.horizontal.set_limit_high(
-            self.motors.horizontal.get_position("mm"), "mm"
+        self.motors.horizontal.set_limit_high(  # ty: ignore[unresolved-attribute]
+            self.motors.horizontal.get_position("mm"), "mm"  # ty: ignore[unresolved-attribute]
         )
         self._shell.motor_panel.updateUi_position_indicators()
         self._shell.horizontal_forward_boundary_selected = True
@@ -403,11 +403,11 @@ class MotorController:
 
     def updateUi_set_sample_origin(self) -> None:
         """Modifies the sample origin position"""
-        self.motors.horizontal.set_origin(
-            self.motors.horizontal.get_position("mm"), "mm"
+        self.motors.horizontal.set_origin(  # ty: ignore[unresolved-attribute]
+            self.motors.horizontal.get_position("mm"), "mm"  # ty: ignore[unresolved-attribute]
         )
-        self.motors.vertical.set_origin(
-            self.motors.vertical.get_position("mm"), "mm"
+        self.motors.vertical.set_origin(  # ty: ignore[unresolved-attribute]
+            self.motors.vertical.get_position("mm"), "mm"  # ty: ignore[unresolved-attribute]
         )
         origin_text = f"Sample origin set at ({self.motors.horizontal.get_origin("mm")}, {self.motors.vertical.get_origin("mm")}) {"mm"}"  # noqa: E501
         self._shell.updateUi_message_printer(origin_text)
@@ -415,8 +415,8 @@ class MotorController:
     def updateUi_set_camera_focus(self) -> None:
         """Modifies manually the camera focus position"""
         self._shell.focus_selected = True
-        self.motors.camera.set_origin(
-            self.motors.camera.get_position("mm"), "mm"
+        self.motors.camera.set_origin(  # ty: ignore[unresolved-attribute]
+            self.motors.camera.get_position("mm"), "mm"  # ty: ignore[unresolved-attribute]
         )
         focus_text = f"Camera focus manually set at {self.motors.camera.get_origin("mm")} {"mm"}"  # noqa: E501
         self._shell.updateUi_message_printer(focus_text)
@@ -427,39 +427,39 @@ class MotorController:
 
     def calculate_camera_focus(self) -> None:
         """Interpolates the camera focus position"""
-        current_position = self.motors.horizontal.get_position("mm")
+        current_position = self.motors.horizontal.get_position("mm")  # ty: ignore[unresolved-attribute]
         focus_regression = (
-            self._shell.slope_camera * current_position + self._shell.intercept_camera
+            self._shell.slope_camera * current_position + self._shell.intercept_camera  # ty: ignore[unresolved-attribute]
         )
-        self.motors.camera.set_origin(focus_regression, "mm")
+        self.motors.camera.set_origin(focus_regression, "mm")  # ty: ignore[unresolved-attribute]
         logger.debug("focus_regression: %s", focus_regression)
         self._shell.focus_selected = True
         self._shell.updateUi_message_printer("Focus automatically set")
 
     def show_camera_interpolation(self) -> None:
         """Shows the camera focus interpolation"""
-        x = self._shell.camera_focus_relation[:, 0]
-        y = self._shell.camera_focus_relation[:, 1]
+        x = self._shell.camera_focus_relation[:, 0]  # ty: ignore[unresolved-attribute]
+        y = self._shell.camera_focus_relation[:, 1]  # ty: ignore[unresolved-attribute]
 
         xnew = np.linspace(
-            self._shell.camera_focus_relation[0, 0],
-            self._shell.camera_focus_relation[-1, 0],
+            self._shell.camera_focus_relation[0, 0],  # ty: ignore[unresolved-attribute]
+            self._shell.camera_focus_relation[-1, 0],  # ty: ignore[unresolved-attribute]
             1000,
         )
-        self._shell.slope_camera, self._shell.intercept_camera, r_value, p_value, std_err = (  # noqa: E501
+        self._shell.slope_camera, self._shell.intercept_camera, r_value, p_value, std_err = (  # noqa: E501  # ty: ignore[unresolved-attribute]
             stats.linregress(x, y)
         )
         logger.debug("r_value: %s", r_value)
         logger.debug("p_value: %s", p_value)
         logger.debug("std_err: %s", std_err)
-        yreg = self._shell.slope_camera * xnew + self._shell.intercept_camera
+        yreg = self._shell.slope_camera * xnew + self._shell.intercept_camera  # ty: ignore[unresolved-attribute]
 
         xstart = self.motors.horizontal.get_limit_low("mm")
         xend = self.motors.horizontal.get_limit_high("mm")
-        ystart = self._shell.focus_forward_boundary
-        yend = self._shell.focus_backward_boundary
-        transp = copy.deepcopy(self._shell.donnees)
-        for q in range(int(self._shell.number_of_calibration_planes)):
+        ystart = self._shell.focus_forward_boundary  # ty: ignore[unresolved-attribute]
+        yend = self._shell.focus_backward_boundary  # ty: ignore[unresolved-attribute]
+        transp = copy.deepcopy(self._shell.donnees)  # ty: ignore[unresolved-attribute]
+        for q in range(int(self._shell.number_of_calibration_planes)):  # ty: ignore[unresolved-attribute]
             transp[q, :] = np.flip(transp[q, :])
         transp = np.transpose(transp)
 
@@ -467,7 +467,7 @@ class MotorController:
         plt.title("Camera Focus Regression")
         plt.xlabel(f"Sample Horizontal Position ({"mm"})")
         plt.ylabel(f"Camera Position ({"mm"})")
-        plt.imshow(transp, cmap="gray", extent=[xstart, xend, ystart, yend])
+        plt.imshow(transp, cmap="gray", extent=[xstart, xend, ystart, yend])  # ty: ignore[invalid-argument-type]
         plt.plot(x, y, "o")
         plt.plot(xnew, yreg)
         plt.show(
@@ -475,20 +475,20 @@ class MotorController:
         )
 
         # debugging
-        n = int(self._shell.number_of_camera_positions)
+        n = int(self._shell.number_of_camera_positions)  # ty: ignore[unresolved-attribute]
         x = np.arange(n)
-        for g in range(int(self._shell.number_of_calibration_planes)):
+        for g in range(int(self._shell.number_of_calibration_planes)):  # ty: ignore[unresolved-attribute]
             plt.figure(g + 2)
-            plt.plot(self._shell.donnees[g, :])
-            plt.plot(x, gaussian(x, *self._shell.popt[g]), "ro:", label="fit")
+            plt.plot(self._shell.donnees[g, :])  # ty: ignore[unresolved-attribute]
+            plt.plot(x, gaussian(x, *self._shell.popt[g]), "ro:", label="fit")  # ty: ignore[unresolved-attribute]
             plt.show(block=False)
 
     def show_etl_interpolation(self) -> None:
         """Shows the etl focus interpolation"""
-        xl = self._shell.etl_l_relation[:, 0]
-        yl = self._shell.etl_l_relation[:, 1]
+        xl = self._shell.etl_l_relation[:, 0]  # ty: ignore[unresolved-attribute]
+        yl = self._shell.etl_l_relation[:, 1]  # ty: ignore[unresolved-attribute]
         xlnew = np.linspace(
-            self._shell.etl_l_relation[0, 0], self._shell.etl_l_relation[-1, 0], 1000
+            self._shell.etl_l_relation[0, 0], self._shell.etl_l_relation[-1, 0], 1000  # ty: ignore[unresolved-attribute]
         )
         lslope, lintercept, r_value, p_value, std_err = stats.linregress(xl, yl)
         logger.debug("r_value: %s", r_value)
@@ -496,10 +496,10 @@ class MotorController:
         logger.debug("std_err: %s", std_err)
         ylnew = lslope * xlnew + lintercept
 
-        xr = self._shell.etl_r_relation[:, 0]
-        yr = self._shell.etl_r_relation[:, 1]
+        xr = self._shell.etl_r_relation[:, 0]  # ty: ignore[unresolved-attribute]
+        yr = self._shell.etl_r_relation[:, 1]  # ty: ignore[unresolved-attribute]
         xrnew = np.linspace(
-            self._shell.etl_r_relation[0, 0], self._shell.etl_r_relation[-1, 0], 1000
+            self._shell.etl_r_relation[0, 0], self._shell.etl_r_relation[-1, 0], 1000  # ty: ignore[unresolved-attribute]
         )
         rslope, rintercept, r_value, p_value, std_err = stats.linregress(xr, yr)
         logger.debug("r_value: %s", r_value)
@@ -521,8 +521,8 @@ class MotorController:
         )
 
         # debugging
-        for g in range(int(self._shell.number_of_etls_points)):
+        for g in range(int(self._shell.number_of_etls_points)):  # ty: ignore[unresolved-attribute]
             plt.figure(g + 2)
-            plt.plot(self._shell.xdata[g], self._shell.ydata[g], ".")
-            plt.plot(self._shell.xdata[g], func(self._shell.xdata[g], *self._shell.popt[g]), "r-")  # noqa: E501
+            plt.plot(self._shell.xdata[g], self._shell.ydata[g], ".")  # ty: ignore[unresolved-attribute]
+            plt.plot(self._shell.xdata[g], func(self._shell.xdata[g], *self._shell.popt[g]), "r-")  # noqa: E501  # ty: ignore[unresolved-attribute]
             plt.show(block=False)

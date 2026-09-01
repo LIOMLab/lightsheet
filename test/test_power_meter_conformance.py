@@ -60,7 +60,7 @@ def test_power_meter_conformance(device_factory: object) -> None:
     divergence catch. Covers the IPowerMeter surface (open/close/zero +
     read getters + error attrs). The real id is skipped unless a physical
     PM100D is connected (the device is optional on the rig)."""
-    dev = device_factory()
+    dev = device_factory()  # ty: ignore[call-non-callable]
     POWER_METER_CONTRACT.assert_lifecycle(dev)
     POWER_METER_CONTRACT.assert_error_surface(dev)
     POWER_METER_CONTRACT.assert_read_attrs(dev)

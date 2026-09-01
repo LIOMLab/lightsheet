@@ -297,7 +297,7 @@ class Camera(ICamera):
     def _compute_per_image_time(self) -> float:
         """Estimate per-image acquisition time (seconds), shutter-mode dependent."""
         if self.shutter_mode == "Lightsheet":
-            return self.line_time * self.lightsheet_exposed_lines
+            return self.line_time * self.lightsheet_exposed_lines  # ty: ignore[unsound-return-statement, unsupported-operator]
         else:  # Rolling or Global
             return self.exposure_time
 
@@ -321,7 +321,7 @@ class Camera(ICamera):
                 print("Timeout interval is " + str(timeout_s) + "s")
             wait_until = datetime.now() + timedelta(seconds=timeout_s)
             while True:
-                images_in_buffer = self.camera.rec.get_status()["dwProcImgCount"]
+                images_in_buffer = self.camera.rec.get_status()["dwProcImgCount"]  # ty: ignore[unresolved-attribute]
                 if images_in_buffer >= number_of_images:
                     self.new_data_ready = True
                     if self.verbose:
@@ -349,19 +349,19 @@ class Camera(ICamera):
     def stop_recorder(self) -> None:
         """docstring"""
         if self.is_recording:
-            self.camera.stop()
+            self.camera.stop()  # ty: ignore[unresolved-attribute]
             self.is_recording = False
         return None
 
     def copy_recorder_images(self, number_of_images: int) -> np.ndarray:
         """docstring"""
         if self.new_data_ready:
-            images, _metadatas = self.camera.images(blocksize=number_of_images)
+            images, _metadatas = self.camera.images(blocksize=number_of_images)  # ty: ignore[unresolved-attribute]
             self.new_data_ready = False
         else:
             images = np.zeros(
                 (number_of_images, self.ysize, self.xsize), dtype=np.uint16
-            )
+            )  # ty: ignore[no-matching-overload]
         return images
 
     def delete_recorder(self) -> None:
@@ -603,7 +603,7 @@ class Camera(ICamera):
             delay_timebase = None
         return delay_timebase
 
-    def get_pixel_rates(self) -> dict[str, object] | list:
+    def get_pixel_rates(self) -> dict[str, object] | list:  # ty: ignore[missing-type-argument]
         """Returns available pixel rates"""
         if self.camera is not None:
             cam_description = {}
@@ -684,7 +684,7 @@ class Camera(ICamera):
             cam_properties = {}
             if self.verbose:
                 print("Camera not open - Cannot retrieve properties")
-        return cam_properties
+        return cam_properties  # ty: ignore[unsound-return-statement]
 
     def grab_image(self, exposure_time_ms: int = 100) -> np.ndarray:
         """

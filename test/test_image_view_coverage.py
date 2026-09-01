@@ -14,11 +14,16 @@ Covers branches not exercised by the existing tint/render/resize tests:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pytest
 from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
+
+if TYPE_CHECKING:
+    from PySide6.QtCore import QPoint
 
 
 def test_set_levels_with_no_frame_is_noop(qtbot: QtBot) -> None:
@@ -114,7 +119,7 @@ def test_wheel_event_zooms_and_marks_user_transformed(qtbot: QtBot) -> None:
     )
 
 
-def QPoint_for_wheel(x: int, y: int):
+def QPoint_for_wheel(x: int, y: int) -> QPoint:
     """Helper to construct a QPoint without importing it at module level
     (keeps the import list clean for the non-wheel tests)."""
     from PySide6.QtCore import QPoint

@@ -61,7 +61,8 @@ def _read_config_terminals() -> tuple[str, str, str]:
     import configparser
 
     cfg = configparser.ConfigParser()
-    cfg.optionxform = str  # case-sensitive keys, like src/config.py
+    # case-sensitive keys, like src/config.py
+    cfg.optionxform = str  # ty: ignore[invalid-assignment]
     cfg.read("config.ini")
     lasers_terminals = cfg["Lasers"]["Lasers Terminals"]
     ao_terminals = cfg["SigGen"]["AO Terminals"]

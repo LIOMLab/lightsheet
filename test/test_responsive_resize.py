@@ -320,7 +320,7 @@ def test_estop_button_visible_at_all_target_sizes(
     for width, height in ((1366, 768), (1920, 1080), (1280, 800)):
         _resize_and_settle(controller, width, height, qtbot)
         estop = controller.findChild(
-            __import__("PySide6").QtCore.QObject, "pushButton_estop"
+            __import__("PySide6").QtCore.QObject, "pushButton_estop"  # ty: ignore[unresolved-attribute]
         )
         assert estop is not None, "pushButton_estop not found in shell"
         assert estop.isVisible(), (

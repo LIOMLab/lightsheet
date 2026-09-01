@@ -90,7 +90,7 @@ def test_field_spec_is_frozen_dataclass() -> None:
     )
     assert spec.unit == "mm"
     with pytest.raises(dataclasses.FrozenInstanceError):
-        spec.unit = "um"  # type: ignore[misc]
+        spec.unit = "um"  # type: ignore[misc]  # ty: ignore[invalid-assignment]
 
 
 # ---------------------------------------------------------------------------

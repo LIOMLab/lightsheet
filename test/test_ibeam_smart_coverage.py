@@ -29,7 +29,6 @@ import serial
 
 import lightsheet.hal.real.ibeam_smart as ibeam_mod
 
-
 # The seven commands open_for_analog_setup sends, in order. Each
 # parametrized case rejects one of them (except CH2, already covered by
 # test_ibeam.py) and asserts the sequence aborted before the NEXT
@@ -60,7 +59,7 @@ def _rejection_at_step(reject_step: int) -> list[bytes]:
     ``reject_step`` (0-indexed), a %SYS-E rejection for step
     ``reject_step``, then an [OK] terminator."""
     side_effect: list[bytes] = []
-    for i in range(reject_step):
+    for _i in range(reject_step):
         side_effect.append(b"[OK]\r\n")
     side_effect.append(b"%SYS-E-00025, parameter error\r\n")
     side_effect.append(b"[OK]\r\n")  # terminator after the rejection line

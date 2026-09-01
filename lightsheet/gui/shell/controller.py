@@ -78,13 +78,13 @@ def _center_toolbutton_paint(btn: QToolButton) -> None:
         p = QPainter(btn)
         opt = QStyleOptionToolButton()
         opt.initFrom(btn)
-        opt.features = QStyleOptionToolButton.None_
+        opt.features = QStyleOptionToolButton.None_  # ty: ignore[unresolved-attribute]
         # Draw only button chrome; we paint the centered icon+text below.
         opt.toolButtonStyle = Qt.ToolButtonStyle.ToolButtonIconOnly
         opt.text = ""
         opt.icon = QIcon()
         opt.iconSize = icon_size
-        style.drawComplexControl(QStyle.CC_ToolButton, opt, p, btn)
+        style.drawComplexControl(QStyle.CC_ToolButton, opt, p, btn)  # ty: ignore[unresolved-attribute]
         cr = btn.rect()
         icon_h = icon_size.height()
         text_h = QFontMetrics(btn.font()).height()
@@ -104,7 +104,7 @@ def _center_toolbutton_paint(btn: QToolButton) -> None:
             text,
         )
 
-    btn.paintEvent = _paint
+    btn.paintEvent = _paint  # ty: ignore[invalid-assignment]
 
 
 # Shell-owned widget objectNames. Only these are surfaced onto self.ui via
@@ -297,7 +297,7 @@ class Controller_MainWindow(QMainWindow):
             # Zero the panel's top-level layout margins so content aligns
             # edge-to-edge with the message log sibling in the splitter.
             if panel.layout() is not None:
-                panel.layout().setContentsMargins(0, 0, 0, 0)
+                panel.layout().setContentsMargins(0, 0, 0, 0)  # ty: ignore[unresolved-attribute]
             scroll.setWidget(panel)
             return scroll
 
@@ -342,42 +342,42 @@ class Controller_MainWindow(QMainWindow):
         _rail_icon_specs = (
             (
                 self.ui.toolButton_railMotion,
-                QStyle.SP_MediaSkipForward,
+                QStyle.SP_MediaSkipForward,  # ty: ignore[unresolved-attribute]
                 "Motion: Jog the stage and set positions.",
             ),
             (
                 self.ui.toolButton_railAcquire,
-                QStyle.SP_MediaPlay,
+                QStyle.SP_MediaPlay,  # ty: ignore[unresolved-attribute]
                 "Acquire: Start preview, live, or single-frame acquisition.",
             ),
             (
                 self.ui.toolButton_railStack,
-                QStyle.SP_ToolBarHorizontalExtensionButton,
+                QStyle.SP_ToolBarHorizontalExtensionButton,  # ty: ignore[unresolved-attribute]
                 "Stack: Configure and run a z-stack.",
             ),
             (
                 self.ui.toolButton_railScan,
-                QStyle.SP_MediaSeekForward,
+                QStyle.SP_MediaSeekForward,  # ty: ignore[unresolved-attribute]
                 "Scan: Set galvo/ETL scan parameters.",
             ),
             (
                 self.ui.toolButton_railLasers,
-                QStyle.SP_DialogYesButton,
+                QStyle.SP_DialogYesButton,  # ty: ignore[unresolved-attribute]
                 "Lasers: Toggle and set laser power; per-laser status.",
             ),
             (
                 self.ui.toolButton_railFiles,
-                QStyle.SP_DialogSaveButton,
+                QStyle.SP_DialogSaveButton,  # ty: ignore[unresolved-attribute]
                 "Files: Set save directory, filename, and format.",
             ),
             (
                 self.ui.toolButton_railPast,
-                QStyle.SP_DirOpenIcon,
+                QStyle.SP_DirOpenIcon,  # ty: ignore[unresolved-attribute]
                 "Past: Browse previously saved acquisitions.",
             ),
             (
                 self.ui.toolButton_railCalibrate,
-                QStyle.SP_DialogResetButton,
+                QStyle.SP_DialogResetButton,  # ty: ignore[unresolved-attribute]
                 "Calibrate: Camera/ETL calibration (advanced).",
             ),
         )
@@ -394,7 +394,7 @@ class Controller_MainWindow(QMainWindow):
         # having to toggle the adaptive checkbox off and on. Checked
         # state mirrors dock visibility.
         self.ui.toolButton_railAdaptive.setIcon(
-            _style.standardIcon(QStyle.SP_MediaVolume)
+            _style.standardIcon(QStyle.SP_MediaVolume)  # ty: ignore[unresolved-attribute]
         )
         self.ui.toolButton_railAdaptive.setIconSize(QSize(24, 24))
         self.ui.toolButton_railAdaptive.setToolTip(
@@ -439,12 +439,12 @@ class Controller_MainWindow(QMainWindow):
         self.sig_laser_readback.connect(self.laser_panel.updateUi_laser_readback)
 
         # Add label and progress bar to status bar
-        self.ui.statusBar_label = QLabel(self.ui.statusbar)
-        self.ui.statusBar_progress = QProgressBar(self.ui.statusbar)
-        self.ui.statusbar.addPermanentWidget(self.ui.statusBar_label)
-        self.ui.statusbar.addPermanentWidget(self.ui.statusBar_progress)
-        self.ui.statusBar_progress.setFixedWidth(250)
-        self.ui.statusBar_progress.hide()
+        self.ui.statusBar_label = QLabel(self.ui.statusbar)  # ty: ignore[unresolved-attribute]
+        self.ui.statusBar_progress = QProgressBar(self.ui.statusbar)  # ty: ignore[unresolved-attribute]
+        self.ui.statusbar.addPermanentWidget(self.ui.statusBar_label)  # ty: ignore[unresolved-attribute]
+        self.ui.statusbar.addPermanentWidget(self.ui.statusBar_progress)  # ty: ignore[unresolved-attribute]
+        self.ui.statusBar_progress.setFixedWidth(250)  # ty: ignore[unresolved-attribute]
+        self.ui.statusBar_progress.hide()  # ty: ignore[unresolved-attribute]
 
         # Add first entry to message log
         self.ui.plainTextEdit_messageLog.appendPlainText("-- message log --")
@@ -620,7 +620,7 @@ class Controller_MainWindow(QMainWindow):
         # ---
         # Signal connections for progress bar and command log
         # ---
-        self.sig_progress_update.connect(self.ui.statusBar_progress.setValue)
+        self.sig_progress_update.connect(self.ui.statusBar_progress.setValue)  # ty: ignore[unresolved-attribute]
         self.sig_progress_update.connect(self._on_progress_update)
         self.sig_message.connect(self.updateUi_message_printer)
 
@@ -1019,7 +1019,7 @@ class Controller_MainWindow(QMainWindow):
         # Open the Toptica iBeam serial laser (COM4 / self.lasers[1]).
         # Called here (not from HardwareManager.__init__) to preserve the
         # pre-extraction post-show timing.
-        self._hw.open_laser2()
+        self._hw.open_laser2()  # ty: ignore[unresolved-attribute]
 
         # Update Ui with initial hardware state
         self.updateUi_initial_hardware_state()
@@ -1064,7 +1064,7 @@ class Controller_MainWindow(QMainWindow):
         # and the LevelsBar layout).
         images_layout = self.ui.imagesPane.layout()
         if images_layout is not None:
-            images_layout.insertWidget(1, self.channel_radio_container)
+            images_layout.insertWidget(1, self.channel_radio_container)  # ty: ignore[unresolved-attribute]
         # Switch the ImageView + reset the LevelsBar when the operator
         # clicks L1/L2. Reads reconstructed_frames[wavelength] (no RGB
         # overlay; no per-channel levels state stored — the LevelsBar
@@ -1095,23 +1095,23 @@ class Controller_MainWindow(QMainWindow):
         # FrameSaverController display-port refresh timer
         self.timer_imageview = QTimer()
         self.timer_imageview.timeout.connect(
-            self._fs.frame_viewer.updateUi_refresh_view
+            self._fs.frame_viewer.updateUi_refresh_view  # ty: ignore[unresolved-attribute]
         )
         # Use functools.partial (bound callables) instead of lambdas so
         # the connection does not capture self._hw in a closure cell and
         # create a reference cycle (controller -> timer -> lambda ->
         # self._hw -> self._shell -> controller). This matches the
         # bound-method pattern documented in wire_collaborators.
-        self.timer_imageview.timeout.connect(partial(self._hw._poll_laser_status, [0]))
+        self.timer_imageview.timeout.connect(partial(self._hw._poll_laser_status, [0]))  # ty: ignore[unresolved-attribute]
         self.timer_imageview.timeout.connect(
-            partial(self._hw._refresh_laser_readback, 0)
+            partial(self._hw._refresh_laser_readback, 0)  # ty: ignore[unresolved-attribute]
         )
         self.timer_imageview.start(100)
 
         # L2 (iBeam) status poll — a separate gated QTimer
-        _ibeam_cfg = cfg_read("config.ini", "iBeam", {"Status Poll Interval": 1.0})
+        _ibeam_cfg = cfg_read("config.ini", "iBeam", {"Status Poll Interval": 1.0})  # ty: ignore[invalid-argument-type]
         self.timer_laser2_status = QTimer()
-        self.timer_laser2_status.timeout.connect(self._hw._poll_laser2_status_gated)
+        self.timer_laser2_status.timeout.connect(self._hw._poll_laser2_status_gated)  # ty: ignore[unresolved-attribute]
         self.timer_laser2_status.start(
             int(float(_ibeam_cfg["Status Poll Interval"]) * 1000)
         )
@@ -1139,7 +1139,7 @@ class Controller_MainWindow(QMainWindow):
                 _img = QImage(str(_demo_img_path))
                 if not _img.isNull():
                     # Convert to grayscale numpy array for ImageView.
-                    _ptr = _img.convertToFormat(QImage.Format_Grayscale8)
+                    _ptr = _img.convertToFormat(QImage.Format_Grayscale8)  # ty: ignore[unresolved-attribute]
                     _arr_u8 = (
                         _np.frombuffer(_ptr.bits(), dtype=_np.uint8)
                         .reshape(_ptr.height(), _ptr.width())
@@ -1219,7 +1219,7 @@ class Controller_MainWindow(QMainWindow):
             self.past_panel.stop_scan()
             # Stop the frame_saver QThread BEFORE the acquisition threads so
             # h5py.File.close() completes before the camera/etls close.
-            self._fs.frame_saver.stop_saving()
+            self._fs.frame_saver.stop_saving()  # ty: ignore[unresolved-attribute]
             # Shut down all four acquisition worker QThreads via a single
             # uniform quit() + wait(5000) loop. The cooperative poll model
             # means each worker exits on its own at the next loop iteration
@@ -1696,7 +1696,7 @@ class Controller_MainWindow(QMainWindow):
         if self.stack_mode_started:
             self.stack_mode_started = False
         if self.lasers[0].active or self.lasers[1].active:
-            self._hw.stop_lasers()
+            self._hw.stop_lasers()  # ty: ignore[unresolved-attribute]
 
     def wire_collaborators(self) -> None:
         """Wire the collaborator-dependent signal connections.
@@ -1713,42 +1713,42 @@ class Controller_MainWindow(QMainWindow):
         # Connections for the 'Motion' tab controls (MotorController)
         # ---
         self.motor_panel.ui.pushButton_sampleStepUp.clicked.connect(
-            self._mc.updateUi_move_sample_up
+            self._mc.updateUi_move_sample_up  # ty: ignore[unresolved-attribute]
         )
         self.motor_panel.ui.pushButton_sampleStepDown.clicked.connect(
-            self._mc.updateUi_move_sample_down
+            self._mc.updateUi_move_sample_down  # ty: ignore[unresolved-attribute]
         )
         self.motor_panel.ui.pushButton_sampleStepForward.clicked.connect(
-            self._mc.updateUi_move_sample_forward
+            self._mc.updateUi_move_sample_forward  # ty: ignore[unresolved-attribute]
         )
         self.motor_panel.ui.pushButton_sampleStepBackward.clicked.connect(
-            self._mc.updateUi_move_sample_backward
+            self._mc.updateUi_move_sample_backward  # ty: ignore[unresolved-attribute]
         )
         self.motor_panel.ui.pushButton_sampleGotoOrigin.clicked.connect(
-            self._mc.updateUi_move_sample_to_origin
+            self._mc.updateUi_move_sample_to_origin  # ty: ignore[unresolved-attribute]
         )
         self.motor_panel.ui.pushButton_sampleSetOrigin.clicked.connect(
-            self._mc.updateUi_set_sample_origin
+            self._mc.updateUi_set_sample_origin  # ty: ignore[unresolved-attribute]
         )
         self.motor_panel.ui.pushButton_sampleGotoHPosition.clicked.connect(
-            self._mc.updateUi_move_to_horizontal_position
+            self._mc.updateUi_move_to_horizontal_position  # ty: ignore[unresolved-attribute]
         )
         self.motor_panel.ui.pushButton_sampleGotoVPosition.clicked.connect(
-            self._mc.updateUi_move_to_vertical_position
+            self._mc.updateUi_move_to_vertical_position  # ty: ignore[unresolved-attribute]
         )
 
         # Connections for the camera motion buttons
         self.motor_panel.ui.pushButton_cameraGotoPosition.clicked.connect(
-            self._mc.updateUi_move_camera_to_position
+            self._mc.updateUi_move_camera_to_position  # ty: ignore[unresolved-attribute]
         )
         self.motor_panel.ui.pushButton_cameraSetFocus.clicked.connect(
-            self._mc.updateUi_set_camera_focus
+            self._mc.updateUi_set_camera_focus  # ty: ignore[unresolved-attribute]
         )
         self.motor_panel.ui.pushButton_cameraStepForward.clicked.connect(
-            self._mc.updateUi_move_camera_forward
+            self._mc.updateUi_move_camera_forward  # ty: ignore[unresolved-attribute]
         )
         self.motor_panel.ui.pushButton_cameraStepBackward.clicked.connect(
-            self._mc.updateUi_move_camera_backward
+            self._mc.updateUi_move_camera_backward  # ty: ignore[unresolved-attribute]
         )
 
         # ---
@@ -1756,53 +1756,53 @@ class Controller_MainWindow(QMainWindow):
         # (AcquisitionCoordinator)
         # ---
         self.scan_panel.ui.doubleSpinBox_etlLeftAmplitude.valueChanged.connect(
-            self._acq.updateUi_etl_left_amplitude
+            self._acq.updateUi_etl_left_amplitude  # ty: ignore[unresolved-attribute]
         )
         self.scan_panel.ui.doubleSpinBox_etlRightAmplitude.valueChanged.connect(
-            self._acq.updateUi_etl_right_amplitude
+            self._acq.updateUi_etl_right_amplitude  # ty: ignore[unresolved-attribute]
         )
         self.scan_panel.ui.doubleSpinBox_etlLeftOffset.valueChanged.connect(
-            self._acq.updateUi_etl_left_offset
+            self._acq.updateUi_etl_left_offset  # ty: ignore[unresolved-attribute]
         )
         self.scan_panel.ui.doubleSpinBox_etlRightOffset.valueChanged.connect(
-            self._acq.updateUi_etl_right_offset
+            self._acq.updateUi_etl_right_offset  # ty: ignore[unresolved-attribute]
         )
         self.scan_panel.ui.checkBox_etlSync.stateChanged.connect(
-            self._acq.updateUi_etl_sync
+            self._acq.updateUi_etl_sync  # ty: ignore[unresolved-attribute]
         )
         self.scan_panel.ui.checkBox_etlActivate.stateChanged.connect(
-            self._acq.updateUi_etl_activate
+            self._acq.updateUi_etl_activate  # ty: ignore[unresolved-attribute]
         )
         self.scan_panel.ui.doubleSpinBox_etlSteps.valueChanged.connect(
-            self._acq.updateUi_etl_steps
+            self._acq.updateUi_etl_steps  # ty: ignore[unresolved-attribute]
         )
 
         # Connection for galvo settings changes
         self.scan_panel.ui.doubleSpinBox_galvoLeftAmplitude.valueChanged.connect(
-            self._acq.updateUi_galvo_left_amplitude
+            self._acq.updateUi_galvo_left_amplitude  # ty: ignore[unresolved-attribute]
         )
         self.scan_panel.ui.doubleSpinBox_galvoRightAmplitude.valueChanged.connect(
-            self._acq.updateUi_galvo_right_amplitude
+            self._acq.updateUi_galvo_right_amplitude  # ty: ignore[unresolved-attribute]
         )
         self.scan_panel.ui.doubleSpinBox_galvoLeftOffset.valueChanged.connect(
-            self._acq.updateUi_galvo_left_offset
+            self._acq.updateUi_galvo_left_offset  # ty: ignore[unresolved-attribute]
         )
         self.scan_panel.ui.doubleSpinBox_galvoRightOffset.valueChanged.connect(
-            self._acq.updateUi_galvo_right_offset
+            self._acq.updateUi_galvo_right_offset  # ty: ignore[unresolved-attribute]
         )
         self.scan_panel.ui.checkBox_galvoSync.stateChanged.connect(
-            self._acq.updateUi_galvo_sync
+            self._acq.updateUi_galvo_sync  # ty: ignore[unresolved-attribute]
         )
         self.scan_panel.ui.checkBox_galvoActivate.stateChanged.connect(
-            self._acq.updateUi_galvo_activate
+            self._acq.updateUi_galvo_activate  # ty: ignore[unresolved-attribute]
         )
         self.scan_panel.ui.checkBox_galvoInvert.stateChanged.connect(
-            self._acq.updateUi_galvo_invert
+            self._acq.updateUi_galvo_invert  # ty: ignore[unresolved-attribute]
         )
 
         # Connection for camera settings changes
         self.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.connect(
-            self._acq.updateUi_camera_shutter_mode
+            self._acq.updateUi_camera_shutter_mode  # ty: ignore[unresolved-attribute]
         )
         # The adaptive exposure-bound spinbox units track the camera
         # shutter mode (ms in Rolling / lines in Lightsheet). Hook the
@@ -1812,38 +1812,38 @@ class Controller_MainWindow(QMainWindow):
             self.stack_panel._update_adaptive_shutter_units
         )
         self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.valueChanged.connect(
-            self._acq.updateUi_camera_exposure_time
+            self._acq.updateUi_camera_exposure_time  # ty: ignore[unresolved-attribute]
         )
         self.acquisition_panel.ui.doubleSpinBox_cameraLineTime.valueChanged.connect(
-            self._acq.updateUi_camera_line_time
+            self._acq.updateUi_camera_line_time  # ty: ignore[unresolved-attribute]
         )
         self.acquisition_panel.ui.doubleSpinBox_cameraExposedLines.valueChanged.connect(
-            self._acq.updateUi_camera_exposed_lines
+            self._acq.updateUi_camera_exposed_lines  # ty: ignore[unresolved-attribute]
         )
         self.acquisition_panel.ui.doubleSpinBox_cameraDelayLines.valueChanged.connect(
-            self._acq.updateUi_camera_delay_lines
+            self._acq.updateUi_camera_delay_lines  # ty: ignore[unresolved-attribute]
         )
 
         # ---
         # Connections for the 'Calibration' tab controls (MotorController)
         # ---
         self.calibration_panel.ui.pushButton_calCameraComputeFocus.clicked.connect(
-            self._mc.calculate_camera_focus
+            self._mc.calculate_camera_focus  # ty: ignore[unresolved-attribute]
         )
         self.calibration_panel.ui.pushButton_calCameraShowInterpolation.clicked.connect(
-            self._mc.show_camera_interpolation
+            self._mc.show_camera_interpolation  # ty: ignore[unresolved-attribute]
         )
         self.calibration_panel.ui.pushButton_calEtlShowInterpolation.clicked.connect(
-            self._mc.show_etl_interpolation
+            self._mc.show_etl_interpolation  # ty: ignore[unresolved-attribute]
         )
         self.calibration_panel.ui.pushButton_calHorizontalStartRangeSelection.clicked.connect(
-            self._mc.updateUi_reset_boundaries
+            self._mc.updateUi_reset_boundaries  # ty: ignore[unresolved-attribute]
         )
         self.calibration_panel.ui.pushButton_calHorizontalSetForwardLimit.clicked.connect(
-            self._mc.updateUi_set_horizontal_forward_boundary
+            self._mc.updateUi_set_horizontal_forward_boundary  # ty: ignore[unresolved-attribute]
         )
         self.calibration_panel.ui.pushButton_calHorizontalSetBackwardLimit.clicked.connect(
-            self._mc.updateUi_set_horizontal_backward_boundary
+            self._mc.updateUi_set_horizontal_backward_boundary  # ty: ignore[unresolved-attribute]
         )
 
     # --- adaptive trajectory dock lifecycle ---
@@ -2138,9 +2138,9 @@ class Controller_MainWindow(QMainWindow):
         # The kill loop itself (laser.off() above) stays in the shell,
         # direct on self.lasers, lock-free — only the post-kill *refresh*
         # is deferred (the kill path is never offloaded).
-        QTimer.singleShot(0, lambda: self._hw._poll_laser_status([0, 1]))
-        QTimer.singleShot(0, lambda: self._hw._refresh_laser_readback(0))
-        QTimer.singleShot(0, self._hw._refresh_laser2_readback_async)
+        QTimer.singleShot(0, lambda: self._hw._poll_laser_status([0, 1]))  # ty: ignore[unresolved-attribute]
+        QTimer.singleShot(0, lambda: self._hw._refresh_laser_readback(0))  # ty: ignore[unresolved-attribute]
+        QTimer.singleShot(0, self._hw._refresh_laser2_readback_async)  # ty: ignore[unresolved-attribute]
 
         # 4. Latch the UI into ACTUATED: red indicator, yellow 4px border
         #    on the E-stop button. The Arm/Reset button label reflects the
@@ -2230,9 +2230,9 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_initial_hardware_state(self) -> None:
         # SigGen
         self.scan_panel.ui.checkBox_galvoActivate.setChecked(
-            self.siggen.galvo_activated
+            self.siggen.galvo_activated  # ty: ignore[unresolved-attribute]
         )
-        self.scan_panel.ui.checkBox_galvoInvert.setChecked(self.siggen.galvo_inverted)
+        self.scan_panel.ui.checkBox_galvoInvert.setChecked(self.siggen.galvo_inverted)  # ty: ignore[unresolved-attribute]
         self.scan_panel.ui.doubleSpinBox_galvoLeftAmplitude.setValue(
             self.siggen.galvo_left_amplitude
         )
@@ -2246,7 +2246,7 @@ class Controller_MainWindow(QMainWindow):
             self.siggen.galvo_right_offset
         )
 
-        self.scan_panel.ui.checkBox_etlActivate.setChecked(self.siggen.etl_activated)
+        self.scan_panel.ui.checkBox_etlActivate.setChecked(self.siggen.etl_activated)  # ty: ignore[unresolved-attribute]
         self.scan_panel.ui.doubleSpinBox_etlLeftAmplitude.setValue(
             self.siggen.etl_left_amplitude
         )
@@ -2259,14 +2259,14 @@ class Controller_MainWindow(QMainWindow):
         self.scan_panel.ui.doubleSpinBox_etlRightOffset.setValue(
             self.siggen.etl_right_offset
         )
-        self.scan_panel.ui.doubleSpinBox_etlSteps.setValue(self.siggen.etl_steps)
+        self.scan_panel.ui.doubleSpinBox_etlSteps.setValue(self.siggen.etl_steps)  # ty: ignore[unresolved-attribute]
 
         # Camera
         self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.setValue(
             self.camera.exposure_time * 1e3
         )  # camera(s) to ui(ms)
         self.acquisition_panel.ui.doubleSpinBox_cameraLineTime.setValue(
-            self.camera.lightsheet_line_time * 1e6
+            self.camera.lightsheet_line_time * 1e6  # ty: ignore[unresolved-attribute]
         )  # camera(s) to ui(us)
         self.acquisition_panel.ui.doubleSpinBox_cameraExposedLines.setValue(
             self.camera.lightsheet_exposed_lines
@@ -2282,7 +2282,7 @@ class Controller_MainWindow(QMainWindow):
             self.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentIndex(1)
         else:
             self.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentIndex(0)
-        self._acq.updateUi_camera_shutter_mode()
+        self._acq.updateUi_camera_shutter_mode()  # ty: ignore[unresolved-attribute]
 
         # Lasers — both spinboxes are 0-100 % staged setpoints. Seed from
         # the persistent controller-side percentage, not the live HAL state,

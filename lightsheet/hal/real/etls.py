@@ -220,7 +220,7 @@ class Optotune(IOptotune):
         for d in data:
             tmp = crc ^ d
             crc = (crc >> 8) ^ self.crc_table[(tmp & 0x00FF)]
-        return crc.to_bytes(2, byteorder="little")
+        return crc.to_bytes(2, byteorder="little")  # ty: ignore[unsound-return-statement]
 
     def _init_crc_table(self, polynomial: int | None = None) -> list[int]:
         """
@@ -510,7 +510,7 @@ class Optotune(IOptotune):
         else:
             if value[0] > value[1]:
                 raise (ValueError)
-            data = (value[1] * 16).to_bytes(2, byteorder="big", signed=True) + (
+            data = (value[1] * 16).to_bytes(2, byteorder="big", signed=True) + (  # ty: ignore[unresolved-attribute]
                 value[0] * 16
             ).to_bytes(2, byteorder="big", signed=True)
             r = self._send_cmd_resp(b"PwTA" + data)

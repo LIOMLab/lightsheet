@@ -40,10 +40,10 @@ def test_write_laser_metadata_writes_all_five_attrs_per_laser(
     ctrl.lasers[0].power = 150.0
 
     outfile_path = tmp_path / "test_meta.hdf5"
-    with h5py.File(outfile_path, "a") as outfile:
+    with h5py.File(outfile_path, "a") as outfile:  # ty: ignore[invalid-argument-type]
         ctrl._fs.frame_saver._write_laser_metadata(outfile)
 
-    with h5py.File(outfile_path, "r") as f:
+    with h5py.File(outfile_path, "r") as f:  # ty: ignore[invalid-argument-type]
         # Laser 1 (active, 150 mW staged, 555 nm, 300 mW max)
         assert f.attrs["Laser1 Wavelength"] == 555
         assert f.attrs["Laser1 Power"] == 150.0
@@ -74,10 +74,10 @@ def test_write_laser_metadata_includes_inactive_laser(
     ctrl.lasers[1].active = False
 
     outfile_path = tmp_path / "test_inactive.hdf5"
-    with h5py.File(outfile_path, "a") as outfile:
+    with h5py.File(outfile_path, "a") as outfile:  # ty: ignore[invalid-argument-type]
         ctrl._fs.frame_saver._write_laser_metadata(outfile)
 
-    with h5py.File(outfile_path, "r") as f:
+    with h5py.File(outfile_path, "r") as f:  # ty: ignore[invalid-argument-type]
         # Both lasers present in the metadata even though neither fired.
         assert "Laser1 Wavelength" in f.attrs
         assert "Laser2 Wavelength" in f.attrs
@@ -113,10 +113,10 @@ def test_write_laser_metadata_reads_live_instance_not_config(
         ctrl.lasers = [single_laser]
 
         outfile_path = tmp_path / "test_live.hdf5"
-        with h5py.File(outfile_path, "a") as outfile:
+        with h5py.File(outfile_path, "a") as outfile:  # ty: ignore[invalid-argument-type]
             ctrl._fs.frame_saver._write_laser_metadata(outfile)
 
-        with h5py.File(outfile_path, "r") as f:
+        with h5py.File(outfile_path, "r") as f:  # ty: ignore[invalid-argument-type]
             assert f.attrs["Laser1 Power"] == 42.0
             assert f.attrs["Laser1 Active"]
     finally:
@@ -146,11 +146,11 @@ def test_motor_and_scan_params_in_hdf5_metadata(
     ctrl, _ = make_controller(qtbot, request)
 
     outfile_path = tmp_path / "test_motor_meta.hdf5"
-    with h5py.File(outfile_path, "a") as outfile:
+    with h5py.File(outfile_path, "a") as outfile:  # ty: ignore[invalid-argument-type]
         ctrl._fs.frame_saver._write_laser_metadata(outfile)
         ctrl._fs.frame_saver._write_acquisition_metadata(outfile)
 
-    with h5py.File(outfile_path, "r") as f:
+    with h5py.File(outfile_path, "r") as f:  # ty: ignore[invalid-argument-type]
         # Motor position root attrs — current snapshot from live motors.
         assert f.attrs["Horizontal Position"] == ctrl.motors.horizontal.get_position(
             "mm"
@@ -192,11 +192,11 @@ def test_no_config_reparse(
     try:
         ctrl.siggen.galvo_left_amplitude = original + 0.123
         outfile_path = tmp_path / "test_no_reparse.hdf5"
-        with h5py.File(outfile_path, "a") as outfile:
+        with h5py.File(outfile_path, "a") as outfile:  # ty: ignore[invalid-argument-type]
             ctrl._fs.frame_saver._write_laser_metadata(outfile)
             ctrl._fs.frame_saver._write_acquisition_metadata(outfile)
 
-        with h5py.File(outfile_path, "r") as f:
+        with h5py.File(outfile_path, "r") as f:  # ty: ignore[invalid-argument-type]
             assert f.attrs["Galvo Left Amplitude"] == original + 0.123
     finally:
         ctrl.siggen.galvo_left_amplitude = original

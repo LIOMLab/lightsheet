@@ -205,7 +205,7 @@ def test_invalid_curve_non_numeric_falls_back_to_linear() -> None:
     """A curve with non-numeric entries is invalid -> error=1,
     calibrated=False, linear fallback. Never raises."""
     laser = _make_l1(
-        calibration_curve=[(0.0, 0.0), ("not", "numeric"), (5.0, 236.6)]  # type: ignore[list-item]
+        calibration_curve=[(0.0, 0.0), ("not", "numeric"), (5.0, 236.6)]  # type: ignore[list-item]  # ty: ignore[invalid-argument-type]
     )
     assert laser.calibrated is False
     assert laser.error == 1

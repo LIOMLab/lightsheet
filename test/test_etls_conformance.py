@@ -46,7 +46,7 @@ def test_etls_conformance(device_factory: object) -> None:
     divergence catch (D-15). Covers the ETLs container surface
     (open/close/set_analog_mode + error attrs). Per-lens Optotune CRC
     commands are rig-verified at HW2-01 (D-06)."""
-    dev = device_factory()
+    dev = device_factory()  # ty: ignore[call-non-callable]
     ETLS_CONTRACT.assert_lifecycle(dev)
     ETLS_CONTRACT.assert_error_surface(dev)
     ETLS_CONTRACT.assert_read_attrs(dev)

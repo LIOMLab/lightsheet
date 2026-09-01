@@ -891,7 +891,7 @@ def _format_pydantic_errors(section: str, err: ValidationError) -> list[str]:
 
 
 def collect_config_errors(
-    sections: dict[str, dict],
+    sections: dict[str, dict],  # ty: ignore[missing-type-argument]
 ) -> ConfigValidationResult:
     """Validate all sections collect-all: every error and warning surfaces
     in one pass, not fail-fast on the first."""
@@ -948,8 +948,8 @@ def _cross_section_adaptive_power(
         return
     lasers = constructed.get("Lasers")
     if lasers is not None:
-        l1_max = float(lasers.laser1_max_power)
-        adaptive_l1_max = float(adaptive.laser1_max_power)
+        l1_max = float(lasers.laser1_max_power)  # ty: ignore[unresolved-attribute]
+        adaptive_l1_max = float(adaptive.laser1_max_power)  # ty: ignore[unresolved-attribute]
         if adaptive_l1_max > l1_max:
             result.errors.append(
                 f"[Adaptive] Laser1 Max Power = {adaptive_l1_max} mW exceeds "
@@ -959,8 +959,8 @@ def _cross_section_adaptive_power(
     ibeam = constructed.get("iBeam")
     if ibeam is not None:
         # [iBeam] Max Power is in uW; convert to mW for the comparison.
-        l2_max_mw = float(ibeam.max_power) / 1000.0
-        adaptive_l2_max = float(adaptive.laser2_max_power)
+        l2_max_mw = float(ibeam.max_power) / 1000.0  # ty: ignore[unresolved-attribute]
+        adaptive_l2_max = float(adaptive.laser2_max_power)  # ty: ignore[unresolved-attribute]
         if adaptive_l2_max > l2_max_mw:
             result.errors.append(
                 f"[Adaptive] Laser2 Max Power = {adaptive_l2_max} mW exceeds "
@@ -989,7 +989,7 @@ def load_sections_from_ini(
     # absent OPTIONAL section (e.g. [Adaptive]) is supplied as {} and the
     # pydantic model defaults apply — never an empty-string parse failure.
     _base_cfg = configparser.ConfigParser()
-    _base_cfg.optionxform = str  # preserve case
+    _base_cfg.optionxform = str  # preserve case  # ty: ignore[invalid-assignment]
     _base_cfg.read(baseline_path)
     for section_name, (strict_cls, _overlay_cls) in _SECTION_MODELS.items():
         # An optional section absent from the baseline file is supplied
@@ -1017,7 +1017,7 @@ def load_sections_from_ini(
             # overlay section actually contains via configparser and merge
             # only those — an explicitly-empty value propagates as "".
             _ov_cfg = configparser.ConfigParser()
-            _ov_cfg.optionxform = str  # preserve case
+            _ov_cfg.optionxform = str  # preserve case  # ty: ignore[invalid-assignment]
             _ov_cfg.read(overlay_path)
             present_keys = (
                 set(_ov_cfg[section_name].keys())

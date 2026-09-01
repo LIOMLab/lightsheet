@@ -59,14 +59,14 @@ def test_build_demo_bundle_laser_wavelengths() -> None:
 def test_build_demo_bundle_siggen_has_camera_reference() -> None:
     """SigGen is constructed with the camera reference (dependency ordering)."""
     bundle = _build_demo_bundle()
-    assert bundle.siggen.camera is bundle.camera
+    assert bundle.siggen.camera is bundle.camera  # ty: ignore[unresolved-attribute]
 
 
 # -- _show_missing_device_dialog (offscreen Qt) -----------------------------
 
 
 def test_show_missing_device_dialog_renders_under_offscreen(
-    qtbot: pytest.QtBot,
+    qtbot: pytest.QtBot,  # ty: ignore[unresolved-attribute]
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """_show_missing_device_dialog renders the QDialog with the message
@@ -92,7 +92,7 @@ def test_show_missing_device_dialog_renders_under_offscreen(
 
 
 def test_main_demo_mode_returns_app_exec_exit_code(
-    qtbot: pytest.QtBot,
+    qtbot: pytest.QtBot,  # ty: ignore[unresolved-attribute]
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """main() under --demo constructs the demo bundle, validates config,
@@ -171,7 +171,7 @@ def test_main_demo_mode_returns_app_exec_exit_code(
             pass
 
     mock_controller_mod = types.ModuleType("lightsheet.gui.shell.controller")
-    mock_controller_mod.Controller_MainWindow = _MockController
+    mock_controller_mod.Controller_MainWindow = _MockController  # ty: ignore[unresolved-attribute]
     monkeypatch.setitem(
         sys.modules, "lightsheet.gui.shell.controller", mock_controller_mod
     )
@@ -281,7 +281,7 @@ def test_main_demo_mode_returns_app_exec_exit_code(
 
 
 def test_main_rig_path_unresolved_device_shows_dialog_and_exits(
-    qtbot: pytest.QtBot,
+    qtbot: pytest.QtBot,  # ty: ignore[unresolved-attribute]
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """main() on the rig path (not --demo) with an UnresolvedDeviceError
@@ -304,8 +304,8 @@ def test_main_rig_path_unresolved_device_shows_dialog_and_exits(
         def resolve(self) -> Never:
             raise UnresolvedDeviceError("✕ Device X not found\n✕ Device Y not found")
 
-    mock_registry_mod.DeviceRegistry = DeviceRegistry
-    mock_registry_mod.UnresolvedDeviceError = UnresolvedDeviceError
+    mock_registry_mod.DeviceRegistry = DeviceRegistry  # ty: ignore[unresolved-attribute]
+    mock_registry_mod.UnresolvedDeviceError = UnresolvedDeviceError  # ty: ignore[unresolved-attribute]
     monkeypatch.setitem(sys.modules, "lightsheet.hal.registry", mock_registry_mod)
 
     # Mock _show_missing_device_dialog to avoid rendering.

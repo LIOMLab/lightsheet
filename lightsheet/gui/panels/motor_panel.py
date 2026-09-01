@@ -85,25 +85,25 @@ class MotorPanelWidget(QWidget):
 
     def updateUi_position_horizontal(self) -> None:
         """Updates the current horizontal sample position displayed"""
-        self._shell.current_horizontal_position_text = self._MOTOR_FORMAT.format(
-            self._shell.motors.horizontal.get_position(self._MOTOR_UNIT)
+        self._shell.current_horizontal_position_text = self._MOTOR_FORMAT.format(  # ty: ignore[unresolved-attribute]
+            self._shell.motors.horizontal.get_position(self._MOTOR_UNIT)  # ty: ignore[unresolved-attribute]
         )
         self.ui.label_sampleCurrentHPosition.setText(
-            self._shell.current_horizontal_position_text
+            self._shell.current_horizontal_position_text  # ty: ignore[unresolved-attribute]
         )
 
     def updateUi_position_vertical(self) -> None:
         """Updates the current vertical sample position displayed"""
-        self._shell.current_vertical_position_text = self._MOTOR_FORMAT.format(
-            self._shell.motors.vertical.get_position(self._MOTOR_UNIT)
+        self._shell.current_vertical_position_text = self._MOTOR_FORMAT.format(  # ty: ignore[unresolved-attribute]
+            self._shell.motors.vertical.get_position(self._MOTOR_UNIT)  # ty: ignore[unresolved-attribute]
         )
         self.ui.label_sampleCurrentVPosition.setText(
-            self._shell.current_vertical_position_text
+            self._shell.current_vertical_position_text  # ty: ignore[unresolved-attribute]
         )
 
     def updateUi_position_camera(self) -> None:
         """Updates the current camera position displayed"""
-        self._shell.current_camera_position_text = self._MOTOR_FORMAT.format(
-            self._shell.motors.camera.get_position(self._MOTOR_UNIT)
+        self._shell.current_camera_position_text = self._MOTOR_FORMAT.format(  # ty: ignore[unresolved-attribute]
+            self._shell.motors.camera.get_position(self._MOTOR_UNIT)  # ty: ignore[unresolved-attribute]
         )
-        self.ui.label_cameraCurrentPosition.setText(self._shell.current_camera_position_text)
+        self.ui.label_cameraCurrentPosition.setText(self._shell.current_camera_position_text)  # ty: ignore[unresolved-attribute]

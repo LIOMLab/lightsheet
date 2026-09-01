@@ -30,16 +30,14 @@ Covers branches not exercised by the existing HDF5/Zarr parse tests:
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-import pytest
+from _helpers.controller_fixture import make_controller
 from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
 
-from _helpers.controller_fixture import make_controller
 from lightsheet.gui.panels.past_acquisitions_browser import (
     PastAcquisitionEntry,
     PastAcquisitionsBrowser,
@@ -47,7 +45,6 @@ from lightsheet.gui.panels.past_acquisitions_browser import (
     _NumericTableWidgetItem,
     normalize_wavelength,
 )
-
 
 # -- pure helpers ---------------------------------------------------------
 
@@ -169,8 +166,9 @@ def test_scan_directory_nested_folder_recursion(
     child_dir = sample_dir / "channel1"
     child_dir.mkdir()
     h5_path = child_dir / "frame_555nm.hdf5"
-    with h5py.File(h5_path, "w") as f:
-        f.create_dataset("reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16))
+    with h5py.File(h5_path, "w") as f:  # ty: ignore[invalid-argument-type]
+        data = np.zeros((2, 4, 4), dtype=np.uint16)
+        f.create_dataset("reconstructed_frame001", data=data)
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
     entries = browser.list_acquisitions()
     assert len(entries) == 1
@@ -182,7 +180,6 @@ def test_scan_directory_top_level_zarr_dir(
 ) -> None:
     """A .ome.zarr directory at the top level is parsed as one Zarr
     acquisition (not recursed into as a folder)."""
-    import numpy as np
     import numpy as np
     import zarr
 
@@ -207,7 +204,6 @@ def test_scan_folder_oserror_returns_empty(
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
-    orig_iterdir = Path.iterdir
 
     def _raise_iterdir(self: Path) -> Any:
         raise OSError("permission denied")
@@ -233,8 +229,9 @@ def test_scan_directory_child_oserror_continues(
     # Good child with an HDF5 file.
     good_child = sample_dir / "good"
     good_child.mkdir()
-    with h5py.File(good_child / "frame_555nm.hdf5", "w") as f:
-        f.create_dataset("reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16))
+    with h5py.File(good_child / "frame_555nm.hdf5", "w") as f:  # ty: ignore[invalid-argument-type]
+        data = np.zeros((2, 4, 4), dtype=np.uint16)
+        f.create_dataset("reconstructed_frame001", data=data)
     # Bad child whose iterdir will raise.
     bad_child = sample_dir / "bad"
     bad_child.mkdir()
@@ -320,10 +317,11 @@ def test_hdf5_wavelength_no_active_laser_falls_back_to_attrs(
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     h5_path = data_dir / "test_555nm.hdf5"
-    with h5py.File(h5_path, "w") as f:
+    with h5py.File(h5_path, "w") as f:  # ty: ignore[invalid-argument-type]
         # No Laser Active attrs — fallback to Wavelength attrs.
         f.attrs["Laser1 Wavelength"] = 555
-        f.create_dataset("reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16))
+        data = np.zeros((2, 4, 4), dtype=np.uint16)
+        f.create_dataset("reconstructed_frame001", data=data)
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
     entries = browser.list_acquisitions()
     assert len(entries) == 1
@@ -342,12 +340,13 @@ def test_hdf5_wavelength_bad_attr_int_falls_back(
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     h5_path = data_dir / "test_555nm.hdf5"
-    with h5py.File(h5_path, "w") as f:
+    with h5py.File(h5_path, "w") as f:  # ty: ignore[invalid-argument-type]
         # Active laser but Wavelength attr is a non-numeric string.
         f.attrs["Laser1 Active"] = True
         f.attrs["Laser1 Wavelength"] = "bad"
         f.attrs["Laser2 Wavelength"] = "also_bad"
-        f.create_dataset("reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16))
+        data = np.zeros((2, 4, 4), dtype=np.uint16)
+        f.create_dataset("reconstructed_frame001", data=data)
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
     entries = browser.list_acquisitions()
     assert len(entries) == 1
@@ -367,8 +366,9 @@ def test_hdf5_wavelength_filename_fallback(
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     h5_path = data_dir / "sample_647nm.hdf5"
-    with h5py.File(h5_path, "w") as f:
-        f.create_dataset("reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16))
+    with h5py.File(h5_path, "w") as f:  # ty: ignore[invalid-argument-type]
+        data = np.zeros((2, 4, 4), dtype=np.uint16)
+        f.create_dataset("reconstructed_frame001", data=data)
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
     entries = browser.list_acquisitions()
     assert len(entries) == 1
@@ -392,8 +392,9 @@ def test_hdf5_sample_strips_scan_type_suffix(
     # compact naming: tes1_stack_555nm.hdf5 → sample group "tes1_stack"
     # → strip "_stack" → "tes1".
     h5_path = data_dir / "tes1_stack_555nm.hdf5"
-    with h5py.File(h5_path, "w") as f:
-        f.create_dataset("reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16))
+    with h5py.File(h5_path, "w") as f:  # ty: ignore[invalid-argument-type]
+        data = np.zeros((2, 4, 4), dtype=np.uint16)
+        f.create_dataset("reconstructed_frame001", data=data)
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
     entries = browser.list_acquisitions()
     assert len(entries) == 1
@@ -414,8 +415,9 @@ def test_hdf5_sample_z_suffix(
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     h5_path = data_dir / "exp1_z_555nm.hdf5"
-    with h5py.File(h5_path, "w") as f:
-        f.create_dataset("reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16))
+    with h5py.File(h5_path, "w") as f:  # ty: ignore[invalid-argument-type]
+        data = np.zeros((2, 4, 4), dtype=np.uint16)
+        f.create_dataset("reconstructed_frame001", data=data)
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
     entries = browser.list_acquisitions()
     assert len(entries) == 1
@@ -435,8 +437,9 @@ def test_hdf5_sample_no_wavelength_token_stack_plane_suffix(
     data_dir.mkdir()
     # No _<wl>nm token; old-style _stack_plane_NNNNN suffix.
     h5_path = data_dir / "mysample_stack_plane_00001.hdf5"
-    with h5py.File(h5_path, "w") as f:
-        f.create_dataset("reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16))
+    with h5py.File(h5_path, "w") as f:  # ty: ignore[invalid-argument-type]
+        data = np.zeros((2, 4, 4), dtype=np.uint16)
+        f.create_dataset("reconstructed_frame001", data=data)
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
     entries = browser.list_acquisitions()
     assert len(entries) == 1
@@ -460,8 +463,9 @@ def test_hdf5_sample_falls_back_to_hint(
     # A filename that matches neither the wavelength regex nor the
     # stack_plane suffix — just a plain .hdf5 file.
     h5_path = data_dir / "plain.hdf5"
-    with h5py.File(h5_path, "w") as f:
-        f.create_dataset("reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16))
+    with h5py.File(h5_path, "w") as f:  # ty: ignore[invalid-argument-type]
+        data = np.zeros((2, 4, 4), dtype=np.uint16)
+        f.create_dataset("reconstructed_frame001", data=data)
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
     entries = browser.list_acquisitions()
     assert len(entries) == 1
@@ -478,7 +482,6 @@ def test_zarr_n_planes_no_level0_returns_zero(
     qtbot: QtBot, request: FixtureRequest, tmp_path: Path
 ) -> None:
     """_zarr_n_planes returns 0 when the Zarr group has no "0" array."""
-    import numpy as np
     import zarr
 
     ctrl, _ = make_controller(qtbot, request)
@@ -655,7 +658,7 @@ def test_file_size_oserror_returns_zero(
 ) -> None:
     """_file_size returns 0 when stat() raises OSError."""
     ctrl, _ = make_controller(qtbot, request)
-    browser = PastAcquisitionsBrowser(ctrl, data_dir="/unused")
+    PastAcquisitionsBrowser(ctrl, data_dir="/unused")
     with patch.object(Path, "stat", side_effect=OSError("nope")):
         assert PastAcquisitionsBrowser._file_size("/nonexistent") == 0
 
@@ -665,7 +668,7 @@ def test_dir_size_oserror_suppressed(
 ) -> None:
     """_dir_size suppresses OSError on individual files (contextlib.suppress)
     and returns the total of the readable files."""
-    ctrl, _ = make_controller(qtbot, request)
+    _ctrl, _ = make_controller(qtbot, request)
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     (data_dir / "a.txt").write_text("hello")
@@ -699,8 +702,9 @@ def test_start_scan_async_emits_finished(
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     h5_path = data_dir / "S01_555nm.hdf5"
-    with h5py.File(h5_path, "w") as f:
-        f.create_dataset("reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16))
+    with h5py.File(h5_path, "w") as f:  # ty: ignore[invalid-argument-type]
+        data = np.zeros((2, 4, 4), dtype=np.uint16)
+        f.create_dataset("reconstructed_frame001", data=data)
     ctrl.save_directory = str(data_dir)
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
     spy = QSignalSpy(browser.sig_scan_finished)
@@ -770,7 +774,7 @@ def test_scan_worker_run_empty_data_dir_emits_empty(
     from lightsheet.gui.panels.past_acquisitions_browser import _ScanWorker
 
     worker = _ScanWorker(browser, "/nonexistent")
-    received: list[list] = []
+    received: list[list] = []  # ty: ignore[missing-type-argument]
     worker.finished.connect(lambda entries: received.append(entries))
     worker.run()
     assert len(received) == 1
@@ -789,7 +793,7 @@ def test_scan_worker_run_exception_emits_empty(
     from lightsheet.gui.panels.past_acquisitions_browser import _ScanWorker
 
     worker = _ScanWorker(browser, str(data_dir))
-    received: list[list] = []
+    received: list[list] = []  # ty: ignore[missing-type-argument]
     worker.finished.connect(lambda entries: received.append(entries))
     # Patch _scan_directory to raise.
     with patch.object(
@@ -928,7 +932,7 @@ def test_panel_on_scan_finished_with_entries_populates_table(
     emits past_acquisitions_scan_finished."""
     ctrl, _ = make_controller(qtbot, request)
     panel = ctrl.past_panel
-    received: list[list] = []
+    received: list[list] = []  # ty: ignore[missing-type-argument]
     panel.past_acquisitions_scan_finished.connect(
         lambda entries: received.append(entries)
     )
@@ -997,8 +1001,9 @@ def test_panel_refresh_triggers_async_scan(
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     h5_path = data_dir / "S01_555nm.hdf5"
-    with h5py.File(h5_path, "w") as f:
-        f.create_dataset("reconstructed_frame001", data=np.zeros((2, 4, 4), dtype=np.uint16))
+    with h5py.File(h5_path, "w") as f:  # ty: ignore[invalid-argument-type]
+        data = np.zeros((2, 4, 4), dtype=np.uint16)
+        f.create_dataset("reconstructed_frame001", data=data)
     ctrl.save_directory = str(data_dir)
     panel = ctrl.past_panel
     spy = QSignalSpy(panel.past_acquisitions_scan_finished)

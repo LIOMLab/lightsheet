@@ -80,7 +80,7 @@ def _make_bundle() -> DeviceBundle:
 def _make_fs() -> tuple[FrameSaverController, _ShellStandin]:
     bundle = _make_bundle()
     shell = _ShellStandin()
-    fs = FrameSaverController(bundle, shell)
+    fs = FrameSaverController(bundle, shell)  # ty: ignore[invalid-argument-type]
     return fs, shell
 
 
@@ -90,14 +90,14 @@ def _make_fs() -> tuple[FrameSaverController, _ShellStandin]:
 def test_frame_viewer_none_rows_falls_back_to_2000() -> None:
     """FrameViewer with rows=None falls back to 2000 (the else branch)."""
     shell = _ShellStandin()
-    fv = FrameViewer(shell, rows=None, columns=10)
+    fv = FrameViewer(shell, rows=None, columns=10)  # ty: ignore[invalid-argument-type]
     assert fv.rows == 2000
 
 
 def test_frame_viewer_none_columns_falls_back_to_2000() -> None:
     """FrameViewer with columns=None falls back to 2000 (the else branch)."""
     shell = _ShellStandin()
-    fv = FrameViewer(shell, rows=10, columns=None)
+    fv = FrameViewer(shell, rows=10, columns=None)  # ty: ignore[invalid-argument-type]
     assert fv.columns == 2000
 
 
@@ -107,7 +107,7 @@ def test_frame_viewer_none_columns_falls_back_to_2000() -> None:
 def test_frame_viewer_enqueue_frame_suppresses_queue_full() -> None:
     """When the queue is full, enqueue_frame suppresses queue.Full (no raise)."""
     shell = _ShellStandin()
-    fv = FrameViewer(shell, rows=4, columns=4)
+    fv = FrameViewer(shell, rows=4, columns=4)  # ty: ignore[invalid-argument-type]
     # Fill the queue (maxsize=3).
     for _i in range(3):
         fv.enqueue_frame(np.zeros((4, 4), dtype=np.uint16))
@@ -118,7 +118,7 @@ def test_frame_viewer_enqueue_frame_suppresses_queue_full() -> None:
 def test_frame_viewer_refresh_view_empty_queue_is_noop() -> None:
     """updateUi_refresh_view with an empty queue is a no-op (queue.Empty branch)."""
     shell = _ShellStandin()
-    fv = FrameViewer(shell, rows=4, columns=4)
+    fv = FrameViewer(shell, rows=4, columns=4)  # ty: ignore[invalid-argument-type]
     # Queue is empty — must not raise.
     fv.updateUi_refresh_view()
 
@@ -126,7 +126,7 @@ def test_frame_viewer_refresh_view_empty_queue_is_noop() -> None:
 def test_frame_viewer_refresh_view_with_frame_sets_image() -> None:
     """updateUi_refresh_view with a frame in the queue transposes + sets image."""
     shell = _ShellStandin()
-    fv = FrameViewer(shell, rows=4, columns=4)
+    fv = FrameViewer(shell, rows=4, columns=4)  # ty: ignore[invalid-argument-type]
     frame = np.ones((4, 4), dtype=np.uint16)
     fv.enqueue_frame(frame)
     fv.updateUi_refresh_view()
@@ -140,7 +140,7 @@ def test_frame_viewer_refresh_view_with_frame_sets_image() -> None:
 def test_frame_saver_reinit_resets_saving_started_when_true() -> None:
     """reinit with saving_started=True flips it to False first (the if-branch)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.saving_started = True
     saver.reinit(5)
     assert saver.saving_started is False
@@ -150,7 +150,7 @@ def test_frame_saver_reinit_resets_saving_started_when_true() -> None:
 def test_frame_saver_reinit_when_not_saving_is_direct() -> None:
     """reinit with saving_started=False skips the if-branch (the else-path)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.saving_started = False
     saver.reinit(2)
     assert saver.block_size == 2
@@ -161,14 +161,14 @@ def test_frame_saver_reinit_when_not_saving_is_direct() -> None:
 
 def test_frame_saver_add_sample_name_sets_attribute() -> None:
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.add_sample_name("my_sample")
     assert saver.sample_name == "my_sample"
 
 
 def test_frame_saver_add_motor_parameters_appends_to_lists() -> None:
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.add_motor_parameters("1.0mm", "2.0mm", "3.0mm")
     assert saver.horizontal_positions_list == ["1.0mm"]
     assert saver.vertical_positions_list == ["2.0mm"]
@@ -180,7 +180,7 @@ def test_frame_saver_add_motor_parameters_appends_to_lists() -> None:
 
 def test_frame_saver_start_saving_starts_thread() -> None:
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     saver.filenames_list = []  # empty so worker exits immediately
     saver.start_saving()
     assert saver.saving_started is True
@@ -200,7 +200,7 @@ def test_frame_saver_write_laser_metadata_writes_per_laser_attrs(
 ) -> None:
     """_write_laser_metadata writes Laser{i+1} attrs for each laser on the shell."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     filepath = str(tmp_path / "test_laser_meta.hdf5")
     with h5py.File(filepath, "w") as outfile:
         saver._write_laser_metadata(outfile)
@@ -220,7 +220,7 @@ def test_frame_saver_worker_writes_dataset_and_emits_saved_message(
     """The happy path: frame_saver_worker creates a file, writes a dataset,
     closes the file, and emits a 'File ... saved' message."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     filepath = str(tmp_path / "plane_00001.hdf5")
     saver.filenames_list = [filepath]
     saver.number_of_datasets = 1
@@ -252,7 +252,7 @@ def test_frame_saver_worker_writes_dataset_and_emits_saved_message(
 def test_frame_saver_worker_3d_buffer_uses_idx_for_pos_index(tmp_path: Path) -> None:
     """When buffer.ndim == 3 (multiple frames), pos_index uses idx (not dataset+idx)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     filepath = str(tmp_path / "plane_00001.hdf5")
     saver.filenames_list = [filepath]
     saver.number_of_datasets = 1
@@ -278,7 +278,7 @@ def test_frame_saver_worker_timeout_exits_inner_loop(tmp_path: Path) -> None:
     """When the queue is empty and saving_started is False, the inner loop
     breaks on queue.Empty + the not-saving_started check (line 294-295)."""
     shell = _ShellStandin()
-    saver = FrameSaver(shell)
+    saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
     filepath = str(tmp_path / "plane_00001.hdf5")
     saver.filenames_list = [filepath]
     saver.number_of_datasets = 1

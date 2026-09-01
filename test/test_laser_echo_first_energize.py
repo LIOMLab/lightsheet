@@ -200,7 +200,7 @@ def test_first_energize_dialog_appears_first_time(
          patch.object(real_thread, "Thread", _fake_thread):
         btn.click()
 
-    title, text = captured["text"]
+    title, text = captured["text"]  # ty: ignore[not-iterable]
     assert title is not None, "first-energize dialog must appear on first energize"
     # Heading: "Energize {label}?"
     assert "Energize" in title

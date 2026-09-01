@@ -32,7 +32,7 @@ def test_hdf5_manifest_dtype_and_attrs(tmp_path: Path) -> None:
     ver_pos = "1.250"
     cam_pos = "5.500"
 
-    with h5py.File(path, "a") as outfile:
+    with h5py.File(path, "a") as outfile:  # ty: ignore[invalid-argument-type]
         dataset = outfile.create_dataset("001", data=frame)
         dataset.attrs["Sample Name"] = sample_name
         dataset.attrs["Date"] = str(datetime.date.today())
@@ -41,10 +41,10 @@ def test_hdf5_manifest_dtype_and_attrs(tmp_path: Path) -> None:
         dataset.attrs["Camera Position"] = cam_pos
 
     # Re-open and assert the structural manifest.
-    with h5py.File(path, "r") as infile:
+    with h5py.File(path, "r") as infile:  # ty: ignore[invalid-argument-type]
         ds = infile["001"]
-        assert ds.dtype == np.uint16
-        assert ds.shape == (ysize, xsize)
+        assert ds.dtype == np.uint16  # ty: ignore[unresolved-attribute]
+        assert ds.shape == (ysize, xsize)  # ty: ignore[unresolved-attribute]
         expected_attrs = [
             "Sample Name",
             "Date",
@@ -67,7 +67,7 @@ def test_hdf5_manifest_multiple_datasets(tmp_path: Path) -> None:
     ysize, xsize = 8, 8
     frames = np.zeros((3, ysize, xsize), dtype=np.uint16)
 
-    with h5py.File(path, "a") as outfile:
+    with h5py.File(path, "a") as outfile:  # ty: ignore[invalid-argument-type]
         for i in range(frames.shape[0]):
             ds = outfile.create_dataset(f"{i + 1:03d}", data=frames[i])
             ds.attrs["Sample Name"] = "sample"
@@ -76,12 +76,12 @@ def test_hdf5_manifest_multiple_datasets(tmp_path: Path) -> None:
             ds.attrs["Vertical Position"] = str(i * 2)
             ds.attrs["Camera Position"] = str(i * 3)
 
-    with h5py.File(path, "r") as infile:
+    with h5py.File(path, "r") as infile:  # ty: ignore[invalid-argument-type]
         assert len(infile.keys()) == 3
         for i in range(3):
             ds = infile[f"{i + 1:03d}"]
-            assert ds.dtype == np.uint16
-            assert ds.shape == (ysize, xsize)
+            assert ds.dtype == np.uint16  # ty: ignore[unresolved-attribute]
+            assert ds.shape == (ysize, xsize)  # ty: ignore[unresolved-attribute]
             assert ds.attrs["Horizontal Position"] == str(i)
             assert ds.attrs["Vertical Position"] == str(i * 2)
             assert ds.attrs["Camera Position"] == str(i * 3)

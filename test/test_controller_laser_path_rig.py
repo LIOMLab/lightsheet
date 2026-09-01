@@ -215,12 +215,12 @@ def test_real_daqlaser_on_nonzero_voltage_no_crash() -> None:
     # mw_per_volt=60 (300 mW max / 5V).
     mw = voltage / 5.0 * 300.0
     laser = DAQLaser(
-        channel="/Dev7/ao0",
+        channel="/Dev7/ao0",  # ty: ignore[unknown-argument]
         wavelength=555,
         mw_per_volt=60.0,
         max_power_mw=300.0,
         label="Laser 1 (555 nm)",
-    )
+    )  # ty: ignore[missing-argument]
     laser.set_power(mw)
     laser.on()
     assert laser.error == 0, f"DAQLaser.on({voltage}V) failed: {laser.error_message}"
@@ -245,12 +245,12 @@ def test_real_daqlaser_on_daemon_thread_nonzero() -> None:
 
     mw = voltage / 5.0 * 300.0
     laser = DAQLaser(
-        channel="/Dev7/ao0",
+        channel="/Dev7/ao0",  # ty: ignore[unknown-argument]
         wavelength=555,
         mw_per_volt=60.0,
         max_power_mw=300.0,
         label="Laser 1 (555 nm)",
-    )
+    )  # ty: ignore[missing-argument]
     laser.set_power(mw)
     errors = []
     done = threading.Event()

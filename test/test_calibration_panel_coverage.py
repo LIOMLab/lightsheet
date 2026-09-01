@@ -19,9 +19,9 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
+from _helpers.controller_fixture import make_controller
 from pytestqt.qtbot import QtBot
 
-from _helpers.controller_fixture import make_controller
 from lightsheet.gui.widgets.field_spec import FieldSpec
 
 

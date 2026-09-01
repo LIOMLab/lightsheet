@@ -117,7 +117,7 @@ def _make_siggen() -> SigGen:
     import (``from nidaqmx.constants import ...``) without the driver
     runtime; ``Task()`` is never called during construction.
     """
-    return SigGen(MockCamera())
+    return SigGen(MockCamera())  # ty: ignore[invalid-argument-type]
 
 
 def test_default_swap_flag_is_false() -> None:
@@ -147,14 +147,14 @@ def test_update_galvos_default_order_is_right_then_left() -> None:
     class _CaptureTask(_RecordingTask):
         def __init__(self, *a: object, **k: object) -> None:
             super().__init__(*a, **k)
-            captured.append(self)
+            captured.append(self)  # ty: ignore[invalid-argument-type]
 
     with patch.object(siggen_module, "nidaqmx") as fake_nidaqmx2:
         fake_nidaqmx2.Task = _CaptureTask
         sg.update_galvos(left_galvo=1.0, right_galvo=2.0)
     assert len(captured) == 1
     expected = np.stack((np.array([2.0]), np.array([1.0])))
-    np.testing.assert_array_equal(captured[0].written, expected)
+    np.testing.assert_array_equal(captured[0].written, expected)  # ty: ignore[unresolved-attribute]
 
 
 def test_update_galvos_swapped_order_when_swap_true() -> None:
@@ -173,14 +173,14 @@ def test_update_galvos_swapped_order_when_swap_true() -> None:
     class _CaptureTask(_RecordingTask):
         def __init__(self, *a: object, **k: object) -> None:
             super().__init__(*a, **k)
-            captured.append(self)
+            captured.append(self)  # ty: ignore[invalid-argument-type]
 
     with patch.object(siggen_module, "nidaqmx") as fake_nidaqmx:
         fake_nidaqmx.Task = _CaptureTask
         sg.update_galvos(left_galvo=1.0, right_galvo=2.0)
     assert len(captured) == 1
     expected = np.stack((np.array([1.0]), np.array([2.0])))
-    np.testing.assert_array_equal(captured[0].written, expected)
+    np.testing.assert_array_equal(captured[0].written, expected)  # ty: ignore[unresolved-attribute]
 
 
 @pytest.mark.parametrize("swap", [False, True])
@@ -198,13 +198,13 @@ def test_update_galvos_clamps_out_of_range_regardless_of_swap(swap: bool) -> Non
     class _CaptureTask(_RecordingTask):
         def __init__(self, *a: object, **k: object) -> None:
             super().__init__(*a, **k)
-            captured.append(self)
+            captured.append(self)  # ty: ignore[invalid-argument-type]
 
     with patch.object(siggen_module, "nidaqmx") as fake_nidaqmx:
         fake_nidaqmx.Task = _CaptureTask
         sg.update_galvos(left_galvo=15.0, right_galvo=-15.0)
     assert len(captured) == 1
-    written = captured[0].written
+    written = captured[0].written  # ty: ignore[unresolved-attribute]
     # Both channels must be within [-10.0, 10.0] regardless of order.
     flat = written.flatten()
     assert flat.min() >= -10.0
@@ -261,8 +261,8 @@ def test_scanner_lifecycle_delegates_when_tasks_present() -> None:
     additionally nulls the handles."""
     sg = _make_siggen()
     calls: list[str] = []
-    sg.task_galvo_etl = _StubTask("galvo_etl", calls)
-    sg.task_camera = _StubTask("camera", calls)
+    sg.task_galvo_etl = _StubTask("galvo_etl", calls)  # ty: ignore[invalid-assignment]
+    sg.task_camera = _StubTask("camera", calls)  # ty: ignore[invalid-assignment]
 
     sg.start_scanner()
     sg.monitor_scanner()
@@ -316,16 +316,16 @@ def test_compute_scan_waveforms_lightsheet_mode() -> None:
     the right sample length."""
     sg = _make_siggen_small_camera("Lightsheet")
     sg.compute_scan_waveforms()
-    expected_scan_time = sg.camera.line_time * sg.camera.ysize
+    expected_scan_time = sg.camera.line_time * sg.camera.ysize  # ty: ignore[unsupported-operator]
     assert sg.galvo_scan_time == pytest.approx(expected_scan_time)
     # All four waveforms are 1-D numpy arrays of equal length.
-    assert sg.waveform_camera.ndim == 1
-    assert sg.waveform_galvo_left.shape == sg.waveform_camera.shape
-    assert sg.waveform_galvo_right.shape == sg.waveform_camera.shape
-    assert sg.waveform_etl_left.shape == sg.waveform_camera.shape
-    assert sg.waveform_etl_right.shape == sg.waveform_camera.shape
+    assert sg.waveform_camera.ndim == 1  # ty: ignore[unresolved-attribute]
+    assert sg.waveform_galvo_left.shape == sg.waveform_camera.shape  # ty: ignore[unresolved-attribute]
+    assert sg.waveform_galvo_right.shape == sg.waveform_camera.shape  # ty: ignore[unresolved-attribute]
+    assert sg.waveform_etl_left.shape == sg.waveform_camera.shape  # ty: ignore[unresolved-attribute]
+    assert sg.waveform_etl_right.shape == sg.waveform_camera.shape  # ty: ignore[unresolved-attribute]
     # Metadata records the shutter mode actually used.
-    assert sg.waveform_metadata["Camera Shutter Mode"] == "Lightsheet"
+    assert sg.waveform_metadata["Camera Shutter Mode"] == "Lightsheet"  # ty: ignore[not-subscriptable]
 
 
 def test_compute_scan_waveforms_rolling_diag_on() -> None:
@@ -336,8 +336,8 @@ def test_compute_scan_waveforms_rolling_diag_on() -> None:
     sg.diag = True
     sg.compute_scan_waveforms()
     assert sg.galvo_scan_time == pytest.approx(sg.camera.exposure_time)
-    assert sg.waveform_metadata["Camera Shutter Mode"] == "Rolling"
-    assert sg.waveform_camera.ndim == 1
+    assert sg.waveform_metadata["Camera Shutter Mode"] == "Rolling"  # ty: ignore[not-subscriptable]
+    assert sg.waveform_camera.ndim == 1  # ty: ignore[unresolved-attribute]
 
 
 def test_compute_scan_waveforms_rolling_diag_off() -> None:
@@ -347,9 +347,9 @@ def test_compute_scan_waveforms_rolling_diag_off() -> None:
     sg = _make_siggen_small_camera("Rolling")
     sg.diag = False
     sg.compute_scan_waveforms()
-    expected = sg.camera.exposure_time + (sg.camera.line_time * 0.5 * sg.camera.ysize)
+    expected = sg.camera.exposure_time + (sg.camera.line_time * 0.5 * sg.camera.ysize)  # ty: ignore[unsupported-operator]
     assert sg.galvo_scan_time == pytest.approx(expected)
-    assert sg.waveform_metadata["Camera Shutter Mode"] == "Rolling"
+    assert sg.waveform_metadata["Camera Shutter Mode"] == "Rolling"  # ty: ignore[not-subscriptable]
 
 
 def test_compute_scan_waveforms_global_mode() -> None:
@@ -358,8 +358,8 @@ def test_compute_scan_waveforms_global_mode() -> None:
     sg = _make_siggen_small_camera("Global")
     sg.compute_scan_waveforms()
     assert sg.galvo_scan_time == pytest.approx(sg.camera.exposure_time)
-    assert sg.waveform_metadata["Camera Shutter Mode"] == "Global"
-    assert sg.waveform_camera.ndim == 1
+    assert sg.waveform_metadata["Camera Shutter Mode"] == "Global"  # ty: ignore[not-subscriptable]
+    assert sg.waveform_camera.ndim == 1  # ty: ignore[unresolved-attribute]
 
 
 def test_compute_scan_waveforms_unsupported_mode_raises() -> None:
@@ -387,13 +387,13 @@ def test_update_all_writes_clamped_swapped_stack() -> None:
     class _CaptureTask(_RecordingTask):
         def __init__(self, *a: object, **k: object) -> None:
             super().__init__(*a, **k)
-            captured.append(self)
+            captured.append(self)  # ty: ignore[invalid-argument-type]
 
     with patch.object(siggen_module, "nidaqmx") as fake_nidaqmx:
         fake_nidaqmx.Task = _CaptureTask
         sg.update_all(left_galvo=15.0, right_galvo=-15.0, left_etl=7.0, right_etl=-1.0)
     assert len(captured) == 1
-    written = captured[0].written.flatten()
+    written = captured[0].written.flatten()  # ty: ignore[unresolved-attribute]
     # galvo channels clamped to ±10, etl channels clamped to [0, 5].
     # With swap=False: order_galvos(right=-15, left=15) → (-15, 15).
     # galvo_first=-15 → clamp → -10; galvo_second=15 → clamp → 10.
@@ -410,13 +410,13 @@ def test_update_etls_writes_clamped_pair() -> None:
     class _CaptureTask(_RecordingTask):
         def __init__(self, *a: object, **k: object) -> None:
             super().__init__(*a, **k)
-            captured.append(self)
+            captured.append(self)  # ty: ignore[invalid-argument-type]
 
     with patch.object(siggen_module, "nidaqmx") as fake_nidaqmx:
         fake_nidaqmx.Task = _CaptureTask
         sg.update_etls(left_etl=7.0, right_etl=-1.0)
     assert len(captured) == 1
-    written = captured[0].written.flatten()
+    written = captured[0].written.flatten()  # ty: ignore[unresolved-attribute]
     # etl_left=7 → clamp to 5; etl_right=-1 → clamp to 0.
     assert written.tolist() == [5.0, 0.0]
 
@@ -480,7 +480,7 @@ def test_create_scanner_wiring_clamps_and_orders_waveforms() -> None:
             self.do_channels = _AoChannels()
             self.timing = _Timing()
             self.triggers = _Triggers()
-            captured.append(self)
+            captured.append(self)  # ty: ignore[invalid-argument-type]
 
         def __enter__(self) -> _CaptureTask:
             return self
@@ -497,7 +497,7 @@ def test_create_scanner_wiring_clamps_and_orders_waveforms() -> None:
 
     with patch.object(siggen_module, "nidaqmx") as fake_nidaqmx:
         fake_nidaqmx.Task = _CaptureTask
-        fake_nidaqmx.constants = siggen_module.nidaqmx.constants
+        fake_nidaqmx.constants = siggen_module.nidaqmx.constants  # ty: ignore[possibly-missing-submodule]
         sg.create_scanner()
     # Two Task instances created (galvo_etl + camera); the galvo_etl
     # waveform is the one written with the 4-channel stack.
@@ -505,13 +505,13 @@ def test_create_scanner_wiring_clamps_and_orders_waveforms() -> None:
     assert len(galvo_writes) >= 1
     stacked = galvo_writes[0].written
     # Shape is (4, 10): 4 channels, 10 samples each.
-    assert stacked.shape == (4, 10)
+    assert stacked.shape == (4, 10)  # ty: ignore[unresolved-attribute]
     # Galvo channels (rows 0,1) clamped to ±10.
-    assert stacked[0].min() >= -10.0 and stacked[0].max() <= 10.0
-    assert stacked[1].min() >= -10.0 and stacked[1].max() <= 10.0
+    assert stacked[0].min() >= -10.0 and stacked[0].max() <= 10.0  # ty: ignore[not-subscriptable]
+    assert stacked[1].min() >= -10.0 and stacked[1].max() <= 10.0  # ty: ignore[not-subscriptable]
     # ETL channels (rows 2,3) clamped to [0, 5].
-    assert stacked[2].min() >= 0.0 and stacked[2].max() <= 5.0
-    assert stacked[3].min() >= 0.0 and stacked[3].max() <= 5.0
+    assert stacked[2].min() >= 0.0 and stacked[2].max() <= 5.0  # ty: ignore[not-subscriptable]
+    assert stacked[3].min() >= 0.0 and stacked[3].max() <= 5.0  # ty: ignore[not-subscriptable]
 
 
 def test_create_scanner_error_path_nulls_tasks() -> None:
@@ -532,7 +532,7 @@ def test_create_scanner_error_path_nulls_tasks() -> None:
 
     # Capture the real submodules BEFORE patching (see
     # test_update_galvos_sets_error_surface_on_task_failure for why).
-    real_constants = siggen_module.nidaqmx.constants
+    real_constants = siggen_module.nidaqmx.constants  # ty: ignore[possibly-missing-submodule]
     real_errors = siggen_module.nidaqmx.errors
     with patch.object(siggen_module, "nidaqmx") as fake_nidaqmx:
         fake_nidaqmx.Task = _FailingTask

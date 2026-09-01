@@ -35,12 +35,12 @@ with h5py.File(nomFichier, "r") as f:
     for i in range(len(list(f.keys()))):
         key = list(f.keys())[i]
         group = f[key]
-        data=group[()]
+        data=group[()]  # ty: ignore[not-subscriptable]
         #if i == 0 or i == 50 or i == 100:
         #    plt.imshow(np.log(np.abs(data)+1),cmap='gray')
         #    plt.show()
-        img[:,i]=data[:,colonne]
-        y.append(data[rangee,colonne])
+        img[:,i]=data[:,colonne]  # ty: ignore[invalid-argument-type, invalid-assignment, not-subscriptable]
+        y.append(data[rangee,colonne])  # ty: ignore[invalid-argument-type, not-subscriptable]
     plt.imshow(img,cmap='gray')
     plt.show()
     y=np.array(y)

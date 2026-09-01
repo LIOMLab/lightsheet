@@ -117,7 +117,7 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy(
         _real_monitor(n)
         worker.camera.recorder_timeout_status = True
 
-    worker.camera.monitor_recorder = _timeout_monitor
+    worker.camera.monitor_recorder = _timeout_monitor  # ty: ignore[invalid-assignment]
 
     # Track whether copy_recorder_images is reached.
     copy_called: list[int] = []
@@ -127,7 +127,7 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy(
         copy_called.append(n)
         return _real_copy(n)
 
-    worker.camera.copy_recorder_images = _tracking_copy
+    worker.camera.copy_recorder_images = _tracking_copy  # ty: ignore[invalid-assignment]
 
     # Track teardown calls.
     delete_recorder_called: list[bool] = []
@@ -137,7 +137,7 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy(
         delete_recorder_called.append(True)
         _real_delete_recorder()
 
-    worker.camera.delete_recorder = _tracking_delete_recorder
+    worker.camera.delete_recorder = _tracking_delete_recorder  # ty: ignore[invalid-assignment]
 
     delete_scanner_called: list[bool] = []
     _real_delete_scanner = worker.siggen.delete_scanner
@@ -146,7 +146,7 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy(
         delete_scanner_called.append(True)
         _real_delete_scanner()
 
-    worker.siggen.delete_scanner = _tracking_delete_scanner
+    worker.siggen.delete_scanner = _tracking_delete_scanner  # ty: ignore[invalid-assignment]
 
     disarm_called: list[bool] = []
     _real_disarm = worker.camera.disarm
@@ -155,7 +155,7 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy(
         disarm_called.append(True)
         _real_disarm()
 
-    worker.camera.disarm = _tracking_disarm
+    worker.camera.disarm = _tracking_disarm  # ty: ignore[invalid-assignment]
 
     messages: list[str] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
@@ -204,7 +204,7 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder(
         worker.siggen.error = 1
         worker.siggen.error_message = "create_scan error"
 
-    worker.siggen.create_scanner = _fail_create_scanner
+    worker.siggen.create_scanner = _fail_create_scanner  # ty: ignore[invalid-assignment]
 
     # Track whether start_recorder is reached.
     start_recorder_called: list[int] = []
@@ -214,7 +214,7 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder(
         start_recorder_called.append(n)
         _real_start_recorder(n)
 
-    worker.camera.start_recorder = _tracking_start_recorder
+    worker.camera.start_recorder = _tracking_start_recorder  # ty: ignore[invalid-assignment]
 
     delete_scanner_called: list[bool] = []
     _real_delete_scanner = worker.siggen.delete_scanner
@@ -223,7 +223,7 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder(
         delete_scanner_called.append(True)
         _real_delete_scanner()
 
-    worker.siggen.delete_scanner = _tracking_delete_scanner
+    worker.siggen.delete_scanner = _tracking_delete_scanner  # ty: ignore[invalid-assignment]
 
     disarm_called: list[bool] = []
     _real_disarm = worker.camera.disarm
@@ -232,7 +232,7 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder(
         disarm_called.append(True)
         _real_disarm()
 
-    worker.camera.disarm = _tracking_disarm
+    worker.camera.disarm = _tracking_disarm  # ty: ignore[invalid-assignment]
 
     messages: list[str] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))

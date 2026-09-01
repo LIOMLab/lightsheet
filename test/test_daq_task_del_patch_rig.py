@@ -66,7 +66,7 @@ def _laser_terminals() -> str:
     import configparser
 
     cfg = configparser.ConfigParser()
-    cfg.optionxform = str
+    cfg.optionxform = str  # ty: ignore[invalid-assignment]
     cfg.read("config.ini")
     return cfg["Lasers"]["Lasers Terminals"]
 

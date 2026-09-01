@@ -49,7 +49,7 @@ def test_camera_binning_in_conformance_read_attrs(device_factory: object) -> Non
     read_attrs. The contract is the structural drift catch — adding the
     binning attrs here means a mock that drops them fails the same
     assertion the real path fails."""
-    dev = device_factory()
+    dev = device_factory()  # ty: ignore[call-non-callable]
     CAMERA_CONTRACT.assert_read_attrs(dev)
     # Explicit binning presence check (the contract extension will add
     # these to read_attrs; assert directly as well for clarity).

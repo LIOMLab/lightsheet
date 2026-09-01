@@ -198,7 +198,7 @@ def test_levels_driven_clamp(qtbot: QtBot) -> None:
     # below 1000) clamps to 0 (black); pixel 4 (value 4000, above 3000)
     # clamps to 255 (white); pixel 2 (value 2000, midpoint of 1000-3000)
     # renders ~127.
-    qimage = view._pixmap_item.pixmap().toImage()
+    qimage = view._pixmap_item.pixmap().toImage()  # ty: ignore[unresolved-attribute]
     # Column-major transposition aside, this 1-row frame maps directly.
     v0 = qimage.pixelColor(0, 0).value()
     v4 = qimage.pixelColor(4, 0).value()
@@ -211,7 +211,9 @@ def test_levels_driven_clamp(qtbot: QtBot) -> None:
 def test_levels_readout_updates(qtbot: QtBot, request: FixtureRequest) -> None:
     """After setImage, the live min/max QLabel readout shows the frame's
     actual pixel range (not the display window)."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     import numpy as np
@@ -232,7 +234,9 @@ def test_levels_bar_wired_to_image_view(
 ) -> None:
     """Dragging the LevelsBar handles updates the ImageView display
     window via the shell's sig_levelsChanged → set_levels wiring."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
     import numpy as np

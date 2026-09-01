@@ -157,7 +157,7 @@ def _make_acq() -> tuple[AcquisitionCoordinator, _WorkerShell, Mock]:
     bundle = _make_bundle()
     shell = _WorkerShell()
     hw = Mock()
-    acq = AcquisitionCoordinator(bundle, hw, shell)
+    acq = AcquisitionCoordinator(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
     return acq, shell, hw
 
 
@@ -167,7 +167,7 @@ def _make_preview_worker(qtbot: QtBot) -> tuple[PreviewWorker, _WorkerShell, Moc
     bundle = _make_bundle()
     shell = _WorkerShell()
     hw = Mock()
-    worker = PreviewWorker(bundle, hw, shell)
+    worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
     return worker, shell, hw
 
 
@@ -177,7 +177,7 @@ def _make_live_worker(qtbot: QtBot) -> tuple[LiveWorker, _WorkerShell, Mock]:
     bundle = _make_bundle()
     shell = _WorkerShell()
     hw = Mock()
-    worker = LiveWorker(bundle, hw, shell)
+    worker = LiveWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
     return worker, shell, hw
 
 
@@ -188,7 +188,7 @@ def _make_single_worker(qtbot: QtBot) -> tuple[SingleWorker, _WorkerShell, Mock]
     shell = _WorkerShell()
     hw = Mock()
     worker = SingleWorker(
-        bundle, hw, shell, save_description="test sample", save_stitch_blend=False
+        bundle, hw, shell, save_description="test sample", save_stitch_blend=False  # ty: ignore[invalid-argument-type]
     )
     return worker, shell, hw
 
@@ -206,7 +206,7 @@ def _make_single_worker_multi(
     worker = SingleWorker(
         bundle,
         hw,
-        shell,
+        shell,  # ty: ignore[invalid-argument-type]
         save_description="test sample",
         save_stitch_blend=False,
         multi_channel=multi_channel,
@@ -228,7 +228,7 @@ def _make_stack_worker(
     worker = StackWorker(
         bundle,
         hw,
-        shell,
+        shell,  # ty: ignore[invalid-argument-type]
         save_description="test sample",
         save_stitch_blend=False,
         save_all_crop=False,
@@ -327,7 +327,7 @@ def test_live_mode_worker_acquire_scan_does_not_skip_cleanup(qtbot: QtBot) -> No
         original_acquire()
         shell.live_mode_started = False
 
-    worker.acquire_scan = _acquire_then_stop  # type: ignore[method-assign]
+    worker.acquire_scan = _acquire_then_stop  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     # Spy on camera.disarm (MockCamera is a real instance, not a Mock).
     disarm_spy = Mock(wraps=worker.camera.disarm)
     worker.camera.disarm = disarm_spy  # type: ignore[method-assign]
@@ -393,7 +393,7 @@ def test_acquire_scan_siggen_error_aborts(qtbot: QtBot) -> None:
     def _fake_create_scanner() -> None:
         worker.siggen.error = 1
         worker.siggen.error_message = "DAQ error"
-    worker.siggen.create_scanner = _fake_create_scanner
+    worker.siggen.create_scanner = _fake_create_scanner  # ty: ignore[invalid-assignment]
     worker.acquire_scan()
     shell.sig_message.emit.assert_called_once()
     assert "Scan task creation failed" in shell.sig_message.emit.call_args[0][0]
@@ -406,7 +406,7 @@ def test_acquire_scan_camera_timeout_aborts(qtbot: QtBot) -> None:
     # Make monitor_recorder set recorder_timeout_status.
     def _fake_monitor(n: object) -> None:
         worker.camera.recorder_timeout_status = True
-    worker.camera.monitor_recorder = _fake_monitor
+    worker.camera.monitor_recorder = _fake_monitor  # ty: ignore[invalid-assignment]
     worker.acquire_scan()
     shell.sig_message.emit.assert_called_once()
     assert "Camera timeout" in shell.sig_message.emit.call_args[0][0]
@@ -639,7 +639,7 @@ def test_single_worker_multi_channel_both_frames(qtbot: QtBot) -> None:
         # Each call produces a distinct frame.
         shell.reconstructed_frame = np.full((4, 4), call_count["n"], dtype=np.uint16)
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
     finished_emits: list[None] = []
@@ -683,7 +683,7 @@ def test_single_worker_single_channel_unchanged(qtbot: QtBot) -> None:
         acquire_count["n"] += 1
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
     finished_emits: list[None] = []
@@ -717,7 +717,7 @@ def test_single_worker_multi_channel_estop_after_first_channel(qtbot: QtBot) -> 
         # channel's acquire_scan is skipped.
         shell.estop_event.is_set.return_value = True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
     finished_emits: list[None] = []
@@ -742,7 +742,9 @@ def test_enqueue_buffer_accepts_tagged_tuple(
     existing single-channel behavior unchanged. This plan only makes
     enqueue_buffer accept the tagged form without raising — the
     single-consumer workers branch on the tag in a later plan."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _bundle = make_controller(qtbot, request)
     fs = ctrl._fs.frame_saver
@@ -765,7 +767,9 @@ def test_single_mode_button_presamples_multi_channel(
     constructor. Pre-sampling happens on the GUI thread after
     _cache_auto_laser_flags() — the worker never reads the checkboxes
     (AGENTS.md §11)."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     from lightsheet.gui import panels as panels_module
 
@@ -798,10 +802,10 @@ def test_single_mode_button_presamples_multi_channel(
 
     with (
         patch.object(
-            panels_module.acquisition_panel, "SingleWorker", side_effect=_capture_worker
+            panels_module.acquisition_panel, "SingleWorker", side_effect=_capture_worker  # ty: ignore[possibly-missing-submodule]
         ),
         patch.object(
-            panels_module.acquisition_panel, "QThread", return_value=fake_thread
+            panels_module.acquisition_panel, "QThread", return_value=fake_thread  # ty: ignore[possibly-missing-submodule]
         ),
     ):
         ctrl.acquisition_panel.updateUi_single_mode_button()
@@ -821,10 +825,10 @@ def test_single_mode_button_presamples_multi_channel(
 
     with (
         patch.object(
-            panels_module.acquisition_panel, "SingleWorker", side_effect=_capture_worker
+            panels_module.acquisition_panel, "SingleWorker", side_effect=_capture_worker  # ty: ignore[possibly-missing-submodule]
         ),
         patch.object(
-            panels_module.acquisition_panel, "QThread", return_value=fake_thread2
+            panels_module.acquisition_panel, "QThread", return_value=fake_thread2  # ty: ignore[possibly-missing-submodule]
         ),
     ):
         ctrl.acquisition_panel.updateUi_single_mode_button()
@@ -863,7 +867,7 @@ def test_stack_worker_multi_channel_per_plane_cycle(qtbot: QtBot) -> None:
             (4, 4), call_count["n"], dtype=np.uint16
         )
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
     finished_emits: list[None] = []
@@ -912,7 +916,7 @@ def test_stack_worker_single_channel_unchanged(qtbot: QtBot) -> None:
         acquire_count["n"] += 1
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
     finished_emits: list[None] = []
@@ -999,7 +1003,7 @@ def test_stack_worker_multi_channel_timeout_after_channel0(qtbot: QtBot) -> None
         # Set timeout after the first acquire_scan (channel 0 of plane 0).
         worker.camera.recorder_timeout_status = True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
     finished_emits: list[None] = []
@@ -1032,7 +1036,7 @@ def test_stack_worker_multi_channel_siggen_error_after_channel1(qtbot: QtBot) ->
             # Set siggen error after channel 1 of plane 0.
             worker.siggen.error = 1
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
     finished_emits: list[None] = []
@@ -1073,7 +1077,7 @@ def test_stack_worker_multi_channel_estop_after_select_laser1(qtbot: QtBot) -> N
         acquire_count["n"] += 1
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
     finished_emits: list[None] = []
@@ -1103,7 +1107,7 @@ def test_stack_worker_multi_channel_none_frames_skips_enqueue(qtbot: QtBot) -> N
         # Leave reconstructed_frame as None (failed scan path).
         shell.reconstructed_frame = None
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
     finished_emits: list[None] = []
@@ -1128,7 +1132,9 @@ def test_spawn_stack_worker_presamples_multi_channel(
     Verified by spying on the StackWorker constructor. Pre-sampling
     happens on the GUI thread after _cache_auto_laser_flags() — the
     worker never reads the checkboxes (AGENTS.md §11)."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     from lightsheet.gui import panels as panels_module
 
@@ -1150,7 +1156,7 @@ def test_spawn_stack_worker_presamples_multi_channel(
     ctrl.saving_allowed = False
     # Patch QMessageBox.question to auto-answer Yes (proceed without saving).
     with patch.object(
-        panels_module.acquisition_panel, "QMessageBox"
+        panels_module.acquisition_panel, "QMessageBox"  # ty: ignore[possibly-missing-submodule]
     ) as msg_box_mod:
         msg_box_mod.question.return_value = msg_box_mod.StandardButton.Yes
         msg_box_mod.warning = Mock()
@@ -1179,12 +1185,12 @@ def test_spawn_stack_worker_presamples_multi_channel(
         fake_thread = Mock()
         with (
             patch.object(
-                panels_module.acquisition_panel,
+                panels_module.acquisition_panel,  # ty: ignore[possibly-missing-submodule]
                 "StackWorker",
                 side_effect=_capture_worker,
             ),
             patch.object(
-                panels_module.acquisition_panel, "QThread", return_value=fake_thread
+                panels_module.acquisition_panel, "QThread", return_value=fake_thread  # ty: ignore[possibly-missing-submodule]
             ),
         ):
             ctrl.acquisition_panel.updateUi_stack_mode_button()
@@ -1203,18 +1209,18 @@ def test_spawn_stack_worker_presamples_multi_channel(
     fake_thread2 = Mock()
 
     with patch.object(
-        panels_module.acquisition_panel, "QMessageBox"
+        panels_module.acquisition_panel, "QMessageBox"  # ty: ignore[possibly-missing-submodule]
     ) as msg_box_mod2:
         msg_box_mod2.question.return_value = msg_box_mod2.StandardButton.Yes
         msg_box_mod2.warning = Mock()
         with (
             patch.object(
-                panels_module.acquisition_panel,
+                panels_module.acquisition_panel,  # ty: ignore[possibly-missing-submodule]
                 "StackWorker",
                 side_effect=_capture_worker,
             ),
             patch.object(
-                panels_module.acquisition_panel, "QThread", return_value=fake_thread2
+                panels_module.acquisition_panel, "QThread", return_value=fake_thread2  # ty: ignore[possibly-missing-submodule]
             ),
         ):
             ctrl.acquisition_panel.updateUi_stack_mode_button()
@@ -1254,7 +1260,7 @@ def _make_d04_shell(
     # these via start_lasers).
     shell._auto_laser1 = auto_laser1
     shell._auto_laser2 = auto_laser2
-    hw = HardwareManager(bundle, shell)
+    hw = HardwareManager(bundle, shell)  # ty: ignore[invalid-argument-type]
     # Spy on the real MockLaser.on / .off so we can assert call counts
     # without changing the real HAL state mutation.
     laser0_on_spy = Mock(wraps=bundle.lasers[0].on)
@@ -1283,7 +1289,7 @@ def test_preview_worker_both_checked_energizes_only_l1(qtbot: QtBot) -> None:
         auto_laser1=True, auto_laser2=True
     )
     shell.preview_mode_started = False  # loop doesn't execute
-    worker = PreviewWorker(bundle, hw, shell)
+    worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -1310,7 +1316,7 @@ def test_live_worker_both_checked_energizes_only_l1(qtbot: QtBot) -> None:
         auto_laser1=True, auto_laser2=True
     )
     shell.live_mode_started = False  # loop doesn't execute
-    worker = LiveWorker(bundle, hw, shell)
+    worker = LiveWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -1330,7 +1336,7 @@ def test_preview_worker_single_laser_unchanged(qtbot: QtBot) -> None:
         auto_laser1=True, auto_laser2=False
     )
     shell.preview_mode_started = False
-    worker = PreviewWorker(bundle, hw, shell)
+    worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()

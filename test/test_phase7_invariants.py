@@ -152,7 +152,9 @@ def test_controller_estop_event_is_threading_event(
     stays ``threading.Event`` under the QThread migration (NOT replaced by
     the QThread interruption API). Uses the real-construction fixture (same
     pattern as ``test_panel_structure.py::test_shell_composes_panels``)."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _ = make_controller(qtbot, request)
 

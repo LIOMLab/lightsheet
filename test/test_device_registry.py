@@ -60,7 +60,7 @@ def _fake_port(
     return p
 
 
-def _resolve_ports(ports: list[tuple]) -> dict[str, str]:
+def _resolve_ports(ports: list[tuple]) -> dict[str, str]:  # ty: ignore[missing-type-argument]
     """Build a DeviceRegistry against a mocked comports() list and run
     ``_resolve_ports()`` while the patch is active.
 
@@ -78,7 +78,7 @@ def _resolve_ports(ports: list[tuple]) -> dict[str, str]:
         return registry._resolve_ports()
 
 
-def _expect_unresolved(ports: list[tuple]) -> UnresolvedDeviceError:
+def _expect_unresolved(ports: list[tuple]) -> UnresolvedDeviceError:  # ty: ignore[missing-type-argument]
     """Run ``_resolve_ports()`` against ``ports`` and return the raised
     ``UnresolvedDeviceError`` (fails the test if no exception is raised)."""
     with pytest.raises(UnresolvedDeviceError) as exc_info:

@@ -85,34 +85,34 @@ def test_load_breeze_stylesheet_dark_non_empty(qtbot: QtBot) -> None:
 def test_set_app_stylesheet_dark_applied(qtbot: QtBot) -> None:
     m = _import_theme_module()
     app = QApplication.instance()
-    _reset_app_stylesheet(app)
+    _reset_app_stylesheet(app)  # ty: ignore[invalid-argument-type]
     m.set_app_stylesheet("dark", app=app)
-    assert app.styleSheet() != "", "dark stylesheet was not applied"
+    assert app.styleSheet() != "", "dark stylesheet was not applied"  # ty: ignore[unresolved-attribute]
     # Sanity: the applied sheet is the Breeze dark sheet, not qdarkstyle.
-    assert "Breeze" in app.styleSheet() or "breeze" in app.styleSheet().lower()
+    assert "Breeze" in app.styleSheet() or "breeze" in app.styleSheet().lower()  # ty: ignore[unresolved-attribute]
 
 
 def test_set_app_stylesheet_light_applied(qtbot: QtBot) -> None:
     m = _import_theme_module()
     app = QApplication.instance()
-    _reset_app_stylesheet(app)
+    _reset_app_stylesheet(app)  # ty: ignore[invalid-argument-type]
     m.set_app_stylesheet("light", app=app)
-    assert app.styleSheet() != "", "light stylesheet was not applied"
+    assert app.styleSheet() != "", "light stylesheet was not applied"  # ty: ignore[unresolved-attribute]
 
 
 def test_set_app_stylesheet_light_distinct_from_dark(qtbot: QtBot) -> None:
     m = _import_theme_module()
     app = QApplication.instance()
-    _reset_app_stylesheet(app)
+    _reset_app_stylesheet(app)  # ty: ignore[invalid-argument-type]
     m.set_app_stylesheet("dark", app=app)
-    dark_sheet = app.styleSheet()
+    dark_sheet = app.styleSheet()  # ty: ignore[unresolved-attribute]
     # Sanity: the applied dark sheet is non-empty and a Breeze sheet (carried
     # over from the deleted test_load_breeze_stylesheet_light_distinct_from_dark
     # so the non-empty + Breeze marker assertion is not lost).
     assert dark_sheet != "", "dark stylesheet was not applied"
     assert "Breeze" in dark_sheet or "breeze" in dark_sheet.lower()
     m.set_app_stylesheet("light", app=app)
-    light_sheet = app.styleSheet()
+    light_sheet = app.styleSheet()  # ty: ignore[unresolved-attribute]
     assert dark_sheet != light_sheet, "light/dark must produce different app sheets"
 
 
@@ -157,12 +157,12 @@ def test_set_app_stylesheet_system_follows_dark(
 ) -> None:
     m = _import_theme_module()
     app = QApplication.instance()
-    _reset_app_stylesheet(app)
+    _reset_app_stylesheet(app)  # ty: ignore[invalid-argument-type]
     monkeypatch.setattr(m, "_system_theme", lambda: "dark")
     m.set_app_stylesheet("system", app=app, persisted_theme="system")
-    assert app.styleSheet() != ""
+    assert app.styleSheet() != ""  # ty: ignore[unresolved-attribute]
     # The applied sheet must be the Breeze dark sheet.
-    assert app.styleSheet() == m._load_breeze_stylesheet("dark")
+    assert app.styleSheet() == m._load_breeze_stylesheet("dark")  # ty: ignore[unresolved-attribute]
 
 
 def test_set_app_stylesheet_system_follows_light(
@@ -170,10 +170,10 @@ def test_set_app_stylesheet_system_follows_light(
 ) -> None:
     m = _import_theme_module()
     app = QApplication.instance()
-    _reset_app_stylesheet(app)
+    _reset_app_stylesheet(app)  # ty: ignore[invalid-argument-type]
     monkeypatch.setattr(m, "_system_theme", lambda: "light")
     m.set_app_stylesheet("system", app=app, persisted_theme="system")
-    assert app.styleSheet() == m._load_breeze_stylesheet("light")
+    assert app.styleSheet() == m._load_breeze_stylesheet("light")  # ty: ignore[unresolved-attribute]
 
 
 # ---------------------------------------------------------------------------
@@ -239,17 +239,17 @@ def test_colorSchemeChanged_follows_when_system(
     redundant resource re-opens that just compare against the applied sheet."""
     m = _import_theme_module()
     app = QApplication.instance()
-    _reset_app_stylesheet(app)
+    _reset_app_stylesheet(app)  # ty: ignore[invalid-argument-type]
     monkeypatch.setattr(m, "_system_theme", lambda: "dark")
     m.set_app_stylesheet("system", app=app, persisted_theme="system")
-    dark_sheet = app.styleSheet()
+    dark_sheet = app.styleSheet()  # ty: ignore[unresolved-attribute]
     assert dark_sheet != "", "dark sheet was not applied"
     assert "Breeze" in dark_sheet or "breeze" in dark_sheet.lower()
     # Simulate the OS switching to Light mid-session — the connected handler
     # re-resolves via _system_theme.
     monkeypatch.setattr(m, "_system_theme", lambda: "light")
     m._on_color_scheme_changed(app)
-    light_sheet = app.styleSheet()
+    light_sheet = app.styleSheet()  # ty: ignore[unresolved-attribute]
     assert light_sheet != "", "light sheet was not applied after the switch"
     assert light_sheet != dark_sheet, (
         "the follow-semantics did not reload the sheet on OS theme switch"
@@ -263,16 +263,16 @@ def test_colorSchemeChanged_ignored_when_explicit(
     mid-session OS theme switch must NOT reload the stylesheet."""
     m = _import_theme_module()
     app = QApplication.instance()
-    _reset_app_stylesheet(app)
+    _reset_app_stylesheet(app)  # ty: ignore[invalid-argument-type]
     monkeypatch.setattr(m, "_system_theme", lambda: "dark")
     m.set_app_stylesheet("dark", app=app, persisted_theme="dark")
-    dark_sheet = app.styleSheet()
+    dark_sheet = app.styleSheet()  # ty: ignore[unresolved-attribute]
     # OS switches to Light — the explicit "dark" choice must hold. The
     # handler short-circuits because the persisted choice is "dark", not
     # "system".
     monkeypatch.setattr(m, "_system_theme", lambda: "light")
     m._on_color_scheme_changed(app)
-    assert app.styleSheet() == dark_sheet, (
+    assert app.styleSheet() == dark_sheet, (  # ty: ignore[unresolved-attribute]
         "explicit dark choice was overridden by an OS theme switch"
     )
 
@@ -287,14 +287,14 @@ def test_controller_settings_theme_default_system() -> None:
 
     # The "Theme" alias is optional with default "system"; the other
     # required Controller keys (Units, Image File Format) are supplied.
-    s = ControllerSettings(Units="mm", **{"Image File Format": "hdf5"})
+    s = ControllerSettings(Units="mm", **{"Image File Format": "hdf5"})  # ty: ignore[invalid-argument-type]
     assert s.theme == "system"
 
 
 def test_controller_settings_theme_explicit_dark() -> None:
     from lightsheet.config_schema import ControllerSettings
 
-    s = ControllerSettings(Units="mm", **{"Image File Format": "hdf5"}, Theme="dark")
+    s = ControllerSettings(Units="mm", **{"Image File Format": "hdf5"}, Theme="dark")  # ty: ignore[invalid-argument-type]
     assert s.theme == "dark"
 
 
@@ -305,7 +305,7 @@ def test_controller_settings_theme_rejects_unknown() -> None:
 
     with pytest.raises(ValidationError):
         ControllerSettings(
-            Units="mm", **{"Image File Format": "hdf5"}, Theme="purple"
+            Units="mm", **{"Image File Format": "hdf5"}, Theme="purple"  # ty: ignore[invalid-argument-type]
         )
 
 
@@ -315,7 +315,7 @@ def test_controller_settings_theme_empty_string_maps_to_system() -> None:
     # before-validator must map "" -> "system".
     from lightsheet.config_schema import ControllerSettings
 
-    s = ControllerSettings(Units="mm", **{"Image File Format": "hdf5"}, Theme="")
+    s = ControllerSettings(Units="mm", **{"Image File Format": "hdf5"}, Theme="")  # ty: ignore[invalid-argument-type]
     assert s.theme == "system"
 
 
@@ -325,7 +325,7 @@ def test_controller_settings_theme_case_insensitive() -> None:
     from lightsheet.config_schema import ControllerSettings
 
     s = ControllerSettings(
-        Units="mm", **{"Image File Format": "hdf5"}, Theme="Dark"
+        Units="mm", **{"Image File Format": "hdf5"}, Theme="Dark"  # ty: ignore[invalid-argument-type]
     )
     assert s.theme == "dark"
 
@@ -333,7 +333,7 @@ def test_controller_settings_theme_case_insensitive() -> None:
 def test_controller_overlay_theme_default_system() -> None:
     from lightsheet.config_schema import ControllerSettingsOverlay
 
-    s = ControllerSettingsOverlay(Units="mm", **{"Image File Format": "hdf5"})
+    s = ControllerSettingsOverlay(Units="mm", **{"Image File Format": "hdf5"})  # ty: ignore[invalid-argument-type]
     assert s.theme == "system"
 
 
@@ -341,7 +341,7 @@ def test_controller_overlay_theme_empty_string_maps_to_system() -> None:
     from lightsheet.config_schema import ControllerSettingsOverlay
 
     s = ControllerSettingsOverlay(
-        Units="mm", **{"Image File Format": "hdf5"}, Theme=""
+        Units="mm", **{"Image File Format": "hdf5"}, Theme=""  # ty: ignore[invalid-argument-type]
     )
     assert s.theme == "system"
 
@@ -353,7 +353,7 @@ def test_controller_overlay_theme_rejects_unknown() -> None:
 
     with pytest.raises(ValidationError):
         ControllerSettingsOverlay(
-            Units="mm", **{"Image File Format": "hdf5"}, Theme="purple"
+            Units="mm", **{"Image File Format": "hdf5"}, Theme="purple"  # ty: ignore[invalid-argument-type]
         )
 
 
@@ -445,10 +445,12 @@ def test_light_theme_slot_persists_to_config(
     persistence, so they flip _demo_mode off (with cfg_write monkeypatched,
     no real file is touched).
     """
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _bundle = make_controller(qtbot, request)
-    captured: list[tuple] = []
+    captured: list[tuple] = []  # ty: ignore[missing-type-argument]
     import lightsheet.gui.shell.controller as ctrl_mod
 
     monkeypatch.setattr(
@@ -467,10 +469,12 @@ def test_light_theme_slot_persists_to_config(
 def test_dark_theme_slot_persists_to_config(
     qtbot: QtBot, request: FixtureRequest, monkeypatch: MonkeyPatch
 ) -> None:
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _bundle = make_controller(qtbot, request)
-    captured: list[tuple] = []
+    captured: list[tuple] = []  # ty: ignore[missing-type-argument]
     import lightsheet.gui.shell.controller as ctrl_mod
 
     monkeypatch.setattr(
@@ -489,10 +493,12 @@ def test_dark_theme_slot_persists_to_config(
 def test_follow_system_theme_slot_persists_to_config(
     qtbot: QtBot, request: FixtureRequest, monkeypatch: MonkeyPatch
 ) -> None:
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _bundle = make_controller(qtbot, request)
-    captured: list[tuple] = []
+    captured: list[tuple] = []  # ty: ignore[missing-type-argument]
     import lightsheet.gui.shell.controller as ctrl_mod
 
     monkeypatch.setattr(
@@ -512,7 +518,9 @@ def test_theme_action_group_is_exclusive_with_three_checkable_actions(
     qtbot: QtBot, request: FixtureRequest,
 ) -> None:
     """ctrl._theme_action_group is exclusive with 3 actions, all checkable."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
     from PySide6.QtGui import QActionGroup
 
     ctrl, _bundle = make_controller(qtbot, request)
@@ -533,7 +541,9 @@ def test_startup_theme_reflected_on_checked_action(
     """The persisted [Controller] Theme is reflected onto the checked
     action of the exclusive group on startup. With the default config.ini
     (no Theme key → 'system'), action_followSystemTheme is checked."""
-    from _helpers.controller_fixture import make_controller
+    from _helpers.controller_fixture import (
+        make_controller,
+    )
 
     ctrl, _bundle = make_controller(qtbot, request)
     # config.ini has no [Controller] Theme key → default 'system'.

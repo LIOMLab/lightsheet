@@ -244,7 +244,7 @@ def _build_preview_standin() -> Mock:
     return standin
 
 
-def capture_acquisition_sequence(scenario: str) -> list[dict]:
+def capture_acquisition_sequence(scenario: str) -> list[dict]:  # ty: ignore[missing-type-argument]
     """Run the real acquire_scan body against a Mock stand-in and return
     the ordered ``sig_message`` / ``sig_progress_update`` emit sequence.
 
@@ -288,9 +288,9 @@ def capture_acquisition_sequence(scenario: str) -> list[dict]:
 
     if scenario == "preview_auto_laser":
         standin = _build_preview_standin()
-        worker = _load_method("run(self) -> None", src_path=_WORKERS_SRC)
+        worker = _load_method("run(self) -> None", src_path=_WORKERS_SRC)  # ty: ignore[invalid-argument-type]
         worker(standin)
-        sequence: list[dict] = []
+        sequence: list[dict] = []  # ty: ignore[missing-type-argument]
         for call in standin._shell.sig_message.emit.call_args_list:
             sequence.append({"type": "sig_message", "value": call.args[0]})
         for call in standin._shell.sig_progress_update.emit.call_args_list:
@@ -308,7 +308,7 @@ def capture_acquisition_sequence(scenario: str) -> list[dict]:
             standin.siggen.error_message = "create_scan error"
 
         standin.siggen.create_scanner = _fail_create_scanner
-    acquire_scan = _load_method("acquire_scan(self) -> None", src_path=_WORKERS_SRC)
+    acquire_scan = _load_method("acquire_scan(self) -> None", src_path=_WORKERS_SRC)  # ty: ignore[invalid-argument-type]
     acquire_scan(standin)
 
     sequence = []

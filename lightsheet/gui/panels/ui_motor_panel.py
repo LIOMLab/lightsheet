@@ -76,7 +76,7 @@ class Ui_MotorPanel(object):
         sizePolicy1.setHeightForWidth(self.label_22.sizePolicy().hasHeightForWidth())
         self.label_22.setSizePolicy(sizePolicy1)
         self.label_22.setMinimumSize(QSize(170, 0))
-        self.label_22.setAlignment(Qt.AlignLeading|Qt.AlignLeft|Qt.AlignVCenter)
+        self.label_22.setAlignment(Qt.AlignLeading|Qt.AlignLeft|Qt.AlignVCenter)  # ty: ignore[unresolved-attribute]
 
         self.gridLayout_5.addWidget(self.label_22, 1, 0, 1, 1)
 

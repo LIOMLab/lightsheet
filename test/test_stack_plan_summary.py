@@ -112,7 +112,7 @@ def test_controller_persists_stack_params_on_close(
     ctrl._demo_mode = False
 
     # Patch cfg_write to capture the written dict.
-    written: list[tuple] = []
+    written: list[tuple] = []  # ty: ignore[missing-type-argument]
     with patch("lightsheet.gui.shell.controller.cfg_write",
                lambda *a, **k: written.append((a, k))):
         ctrl._save_stack_params()

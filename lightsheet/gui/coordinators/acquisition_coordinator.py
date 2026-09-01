@@ -173,12 +173,12 @@ class AcquisitionCoordinator(_AcquireScanMixin):
             )
 
     def updateUi_galvo_activate(self) -> None:
-        self.siggen.galvo_activated = (
+        self.siggen.galvo_activated = (  # ty: ignore[unresolved-attribute]
             self._shell.scan_panel.ui.checkBox_galvoActivate.isChecked()
         )
 
     def updateUi_galvo_invert(self) -> None:
-        self.siggen.galvo_inverted = (
+        self.siggen.galvo_inverted = (  # ty: ignore[unresolved-attribute]
             self._shell.scan_panel.ui.checkBox_galvoInvert.isChecked()
         )
 
@@ -312,12 +312,12 @@ class AcquisitionCoordinator(_AcquireScanMixin):
             )
 
     def updateUi_etl_steps(self) -> None:
-        self.siggen.etl_steps = int(
+        self.siggen.etl_steps = int(  # ty: ignore[unresolved-attribute]
             self._shell.scan_panel.ui.doubleSpinBox_etlSteps.value()
         )
 
     def updateUi_etl_activate(self) -> None:
-        self.siggen.etl_activated = (
+        self.siggen.etl_activated = (  # ty: ignore[unresolved-attribute]
             self._shell.scan_panel.ui.checkBox_etlActivate.isChecked()
         )
 
@@ -360,7 +360,7 @@ class AcquisitionCoordinator(_AcquireScanMixin):
         )  # ui(ms) to camera(s)
 
     def updateUi_camera_line_time(self) -> None:
-        self.camera.lightsheet_line_time = (
+        self.camera.lightsheet_line_time = (  # ty: ignore[unresolved-attribute]
             self._shell.acquisition_panel.ui.doubleSpinBox_cameraLineTime.value() * 1e-6
         )  # ui(us) to camera(s)
 

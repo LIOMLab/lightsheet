@@ -105,7 +105,7 @@ class Ui_SavePanel(object):
 
         self.line_5 = QFrame(self.groupBox_5)
         self.line_5.setObjectName(u"line_5")
-        self.line_5.setFrameShadow(QFrame.Raised)
+        self.line_5.setFrameShadow(QFrame.Raised)  # ty: ignore[unresolved-attribute]
         self.line_5.setFrameShape(QFrame.Shape.VLine)
 
         self.horizontalLayout_8.addWidget(self.line_5)
@@ -217,7 +217,7 @@ class Ui_SavePanel(object):
 
         self.splitter_3 = QSplitter(self.groupBox_16)
         self.splitter_3.setObjectName(u"splitter_3")
-        self.splitter_3.setOrientation(Qt.Horizontal)
+        self.splitter_3.setOrientation(Qt.Horizontal)  # ty: ignore[unresolved-attribute]
         self.splitter_3.setChildrenCollapsible(False)
         self.layoutWidget = QWidget(self.splitter_3)
         self.layoutWidget.setObjectName(u"layoutWidget")
@@ -238,7 +238,7 @@ class Ui_SavePanel(object):
         sizePolicy4.setVerticalStretch(0)
         sizePolicy4.setHeightForWidth(self.listWidget_fileDatasets.sizePolicy().hasHeightForWidth())
         self.listWidget_fileDatasets.setSizePolicy(sizePolicy4)
-        self.listWidget_fileDatasets.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.listWidget_fileDatasets.setSelectionMode(QAbstractItemView.ExtendedSelection)  # ty: ignore[unresolved-attribute]
 
         self.verticalLayout_50.addWidget(self.listWidget_fileDatasets)
 

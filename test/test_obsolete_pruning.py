@@ -100,7 +100,7 @@ def test_live_calibration_buttons_have_tooltips(qtbot: QtBot) -> None:
     for name in live_buttons:
         btn = panel.findChild(QObject, name)
         assert btn is not None, f"{name} is live and must remain in the .ui"
-        tip = btn.toolTip()
+        tip = btn.toolTip()  # ty: ignore[unresolved-attribute]
         assert tip and tip.strip(), (
             f"{name} is live-but-undocumented and must carry a non-empty "
             "tooltip explaining its current function."
@@ -122,7 +122,7 @@ def test_live_calibration_spinboxes_have_tooltips(qtbot: QtBot) -> None:
     for name in live_spinboxes:
         sb = panel.findChild(QObject, name)
         assert sb is not None, f"{name} is live and must remain in the .ui"
-        tip = sb.toolTip()
+        tip = sb.toolTip()  # ty: ignore[unresolved-attribute]
         assert tip and tip.strip(), (
             f"{name} must carry a non-empty tooltip (unit + range + effect)."
         )

@@ -131,9 +131,9 @@ def test_image_file_format_enum(tmp_path: Path) -> None:
             encoding="utf-8",
         )
         data = cfg_read(str(ini), "Controller", dict(defaults))
-        settings = ControllerSettings(**data)
+        settings = ControllerSettings(**data)  # ty: ignore[invalid-argument-type]
         assert settings.image_file_format == fmt
-        overlay = ControllerSettingsOverlay(**data)
+        overlay = ControllerSettingsOverlay(**data)  # ty: ignore[invalid-argument-type]
         assert overlay.image_file_format == fmt
 
     # Case-insensitivity: the rig's Title-Case "HDF5" stays valid.
@@ -143,7 +143,7 @@ def test_image_file_format_enum(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     data = cfg_read(str(ini_hdf5), "Controller", dict(defaults))
-    assert ControllerSettings(**data).image_file_format == "hdf5"
+    assert ControllerSettings(**data).image_file_format == "hdf5"  # ty: ignore[invalid-argument-type]
 
     # Unknown value is rejected with a validation error (both tiers).
     bad_ini = tmp_path / "test_bad.ini"
@@ -153,9 +153,9 @@ def test_image_file_format_enum(tmp_path: Path) -> None:
     )
     data = cfg_read(str(bad_ini), "Controller", dict(defaults))
     with pytest.raises(ValidationError):
-        ControllerSettings(**data)
+        ControllerSettings(**data)  # ty: ignore[invalid-argument-type]
     with pytest.raises(ValidationError):
-        ControllerSettingsOverlay(**data)
+        ControllerSettingsOverlay(**data)  # ty: ignore[invalid-argument-type]
 
 
 def test_image_file_format_missing_key_defaults_to_hdf5(tmp_path: Path) -> None:
@@ -185,8 +185,8 @@ def test_image_file_format_missing_key_defaults_to_hdf5(tmp_path: Path) -> None:
     assert data["Image File Format"] == ""  # sentinel, not a real value
 
     # Both tiers resolve the empty sentinel to "hdf5" — no ValidationError.
-    assert ControllerSettings(**data).image_file_format == "hdf5"
-    assert ControllerSettingsOverlay(**data).image_file_format == "hdf5"
+    assert ControllerSettings(**data).image_file_format == "hdf5"  # ty: ignore[invalid-argument-type]
+    assert ControllerSettingsOverlay(**data).image_file_format == "hdf5"  # ty: ignore[invalid-argument-type]
 
     # End-to-end: the real startup gate path must not surface an error.
     from lightsheet.config_schema import collect_config_errors

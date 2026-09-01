@@ -648,6 +648,6 @@ def test_send_cmd_resp_raises_on_none_response() -> None:
     # Force _send_cmd to return None by using wait_for_resp=False internally
     # — but _send_cmd_resp always passes wait_for_resp=True. Instead, patch
     # _send_cmd to return None directly.
-    o._send_cmd = lambda *a, **k: None
+    o._send_cmd = lambda *a, **k: None  # ty: ignore[invalid-assignment]
     with pytest.raises(etls_mod.serial.SerialException, match="no response"):
         o._send_cmd_resp(b"test")

@@ -28,7 +28,7 @@ class Properties_Dialog(QDialog):
 
     def __init__(self, parent: Controller_MainWindow) -> None:
         QDialog.__init__(self, parent)
-        self.parent = parent
+        self.parent = parent  # ty: ignore[invalid-assignment]
         self.camera = self.parent.camera
         self.motors = self.parent.motors
 

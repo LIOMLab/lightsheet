@@ -112,11 +112,11 @@ def test_adaptive_toggle_off_hides_fields_container(
     from PySide6.QtWidgets import QApplication
     QApplication.processEvents()
     assert not ui.widget_adaptiveFields.isVisibleTo(
-        ui.widget_adaptiveFields.parentWidget()
+        ui.widget_adaptiveFields.parentWidget()  # ty: ignore[invalid-argument-type]
     )
     # The group box itself stays visible (the affordance remains).
     assert ui.groupBox_adaptiveControl.isVisibleTo(
-        ui.groupBox_adaptiveControl.parentWidget()
+        ui.groupBox_adaptiveControl.parentWidget()  # ty: ignore[invalid-argument-type]
     )
 
 
@@ -130,7 +130,7 @@ def test_adaptive_toggle_on_shows_fields_container(
     ui.checkBox_adaptiveEnable.toggled.emit(True)
     from PySide6.QtWidgets import QApplication
     QApplication.processEvents()
-    assert ui.widget_adaptiveFields.isVisibleTo(ui.widget_adaptiveFields.parentWidget())
+    assert ui.widget_adaptiveFields.isVisibleTo(ui.widget_adaptiveFields.parentWidget())  # ty: ignore[invalid-argument-type]
 
 
 def test_adaptive_invalid_pair_beeps_messages_reverts(
@@ -334,7 +334,7 @@ def test_spawn_stack_worker_passes_frozen_adaptive_cfg(
     ctrl.stack_ending_plane = 100.0
     ctrl.number_of_planes = 2
     ctrl.saving_allowed = True
-    captured: dict = {}
+    captured: dict = {}  # ty: ignore[missing-type-argument]
 
     # Patch StackWorker.__init__ to capture the adaptive_cfg kwarg
     # without actually constructing the worker (the real constructor
@@ -380,7 +380,7 @@ def test_spawn_stack_worker_unchecked_passes_none(
     ctrl.stack_ending_plane = 100.0
     ctrl.number_of_planes = 2
     ctrl.saving_allowed = True
-    captured: dict = {}
+    captured: dict = {}  # ty: ignore[missing-type-argument]
     import lightsheet.gui.workers as workers_mod
 
     orig_init = workers_mod.StackWorker.__init__
@@ -561,7 +561,7 @@ def test_trajectory_widget_one_plane_shows_point_and_band(qtbot: QtBot) -> None:
     assert w.label_adaptiveTrajectoryEmpty.isHidden()
     # The intensity curve has exactly one point.
     intensity_curve = w._intensity_curve
-    xs, ys = intensity_curve.getData()
+    xs, ys = intensity_curve.getData()  # ty: ignore[unresolved-attribute]
     assert len(xs) == 1 and len(ys) == 1
     assert ys[0] == pytest.approx(92.0, abs=0.01)  # 0.92 -> 92%
     # The target band region exists and spans 90..95 %.
@@ -582,7 +582,7 @@ def test_trajectory_widget_many_planes_appends(qtbot: QtBot) -> None:
             power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
             reacquired=False, power_fallback=False,
         )
-    xs, _ys = w._intensity_curve.getData()
+    xs, _ys = w._intensity_curve.getData()  # ty: ignore[unresolved-attribute]
     assert len(xs) == 10
 
 
@@ -599,7 +599,7 @@ def test_trajectory_widget_201_planes_retains_full_data(qtbot: QtBot) -> None:
             power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
             reacquired=False, power_fallback=False,
         )
-    xs, _ys = w._intensity_curve.getData()
+    xs, _ys = w._intensity_curve.getData()  # ty: ignore[unresolved-attribute]
     assert len(xs) == 201, "full in-memory data must be retained"
     # The X view spans the last 200 planes (auto-scroll window).
     vb = w.plotWidget_adaptiveTrajectory.getPlotItem().getViewBox()
@@ -635,7 +635,7 @@ def test_trajectory_widget_power_fallback_marker(qtbot: QtBot) -> None:
     )
     # The power-fallback scatter has one point at x=2.
     scatter = w._power_fallback_scatter
-    spots = scatter.getData()
+    spots = scatter.getData()  # ty: ignore[unresolved-attribute]
     assert len(spots[0]) == 1
     assert spots[0][0] == pytest.approx(2.0)
 
@@ -676,7 +676,7 @@ def test_trajectory_widget_freeze_blocks_appends(qtbot: QtBot) -> None:
         power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
         reacquired=False, power_fallback=False,
     )
-    xs, _ys = w._intensity_curve.getData()
+    xs, _ys = w._intensity_curve.getData()  # ty: ignore[unresolved-attribute]
     assert len(xs) == 1, "post-freeze append must be ignored"
 
 
@@ -807,7 +807,7 @@ def test_worker_signal_connected_to_gui_slot_queued(
     ctrl.stack_ending_plane = 100.0
     ctrl.number_of_planes = 2
     ctrl.saving_allowed = True
-    captured: dict = {}
+    captured: dict = {}  # ty: ignore[missing-type-argument]
     import lightsheet.gui.workers as workers_mod
 
     orig_init = workers_mod.StackWorker.__init__
@@ -826,7 +826,7 @@ def test_worker_signal_connected_to_gui_slot_queued(
             assert slot is not None
             # Emit and confirm the slot is reached (queued delivery on
             # the GUI thread; processEvents drains the queue).
-            received: list[tuple] = []
+            received: list[tuple] = []  # ty: ignore[missing-type-argument]
             ctrl._on_adaptive_trajectory = lambda *a: received.append(a)
             # Re-connect to the patched slot to verify the connection
             # path: the spawn wired sig_adaptive_trajectory -> slot.
@@ -1014,7 +1014,7 @@ def test_no_adaptive_curve_or_marker_is_green(qtbot: QtBot) -> None:
             continue
         pen = item.opts.get("pen")
         if pen is not None:
-            color = pen.color()
+            color = pen.color()  # ty: ignore[unresolved-attribute]
             # Green dominant: green channel strictly greater than both
             # red and blue by a clear margin.
             assert not (color.green() > color.red() + 20
@@ -1024,7 +1024,7 @@ def test_no_adaptive_curve_or_marker_is_green(qtbot: QtBot) -> None:
             )
         brush = item.opts.get("brush")
         if brush is not None:
-            color = brush.color()
+            color = brush.color()  # ty: ignore[unresolved-attribute]
             assert not (color.green() > color.red() + 20
                         and color.green() > color.blue() + 20), (
                 f"adaptive plot primitive brush uses green: "
@@ -1037,7 +1037,7 @@ def test_widget_layout_margins_are_16(qtbot: QtBot) -> None:
     (the md spacing token from the 4/8/16 scale)."""
     w = _make_trajectory_widget(qtbot)
     layout = w.layout()
-    margins = layout.contentsMargins()
+    margins = layout.contentsMargins()  # ty: ignore[unresolved-attribute]
     assert (margins.left(), margins.top(),
             margins.right(), margins.bottom()) == (16, 16, 16, 16)
 

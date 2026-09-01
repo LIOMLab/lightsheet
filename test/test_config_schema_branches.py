@@ -227,7 +227,7 @@ def test_validate_or_abort_errors_calls_sys_exit(
     assert exit_called == [1], "validate_or_abort must call sys.exit(1) on errors"
 
 
-def _make_siggen_sections_with_warning() -> dict:
+def _make_siggen_sections_with_warning() -> dict:  # ty: ignore[missing-type-argument]
     """Build a SigGen section with galvo_left_amplitude=15.0 (> 10.0 V
     limit -> warning, not error). All other fields are valid."""
     return {

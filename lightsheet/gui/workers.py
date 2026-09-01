@@ -161,7 +161,7 @@ class PreviewWorker(QObject):
 
                 # Sending first (and should be only) image to display port
                 frame = cam_images[0]
-                self._shell._fs.enqueue_frame(frame)
+                self._shell._fs.enqueue_frame(frame)  # ty: ignore[unresolved-attribute]
 
             # Stop the lasers before camera.disarm(), mirroring
             # live_mode_worker's cleanup shape. The lasers were started after
@@ -205,25 +205,25 @@ class _AcquireScanMixin:
         """
 
         # Store metadata about buffer to be acquired
-        self._shell.buffer_metadata_general = {}
-        self._shell.buffer_metadata_general["Date"] = str(datetime.date.today())
-        self._shell.buffer_metadata_general["Sample Name"] = str(self._save_description)
+        self._shell.buffer_metadata_general = {}  # ty: ignore[unresolved-attribute]
+        self._shell.buffer_metadata_general["Date"] = str(datetime.date.today())  # ty: ignore[unresolved-attribute]
+        self._shell.buffer_metadata_general["Sample Name"] = str(self._save_description)  # ty: ignore[unresolved-attribute]
 
-        self._shell.buffer_metadata_waveforms = {}
-        self._shell.buffer_metadata_waveforms = self.siggen.waveform_metadata
+        self._shell.buffer_metadata_waveforms = {}  # ty: ignore[unresolved-attribute]
+        self._shell.buffer_metadata_waveforms = self.siggen.waveform_metadata  # ty: ignore[unresolved-attribute]
 
-        self._shell.buffer_metadata_motors = {}
-        self._shell.buffer_metadata_lasers = {}
-        self._shell.buffer_metadata_camera = {}
+        self._shell.buffer_metadata_motors = {}  # ty: ignore[unresolved-attribute]
+        self._shell.buffer_metadata_lasers = {}  # ty: ignore[unresolved-attribute]
+        self._shell.buffer_metadata_camera = {}  # ty: ignore[unresolved-attribute]
 
         # Number of images to be acquired from the camera
-        number_of_images = self.siggen.waveform_cycles
+        number_of_images = self.siggen.waveform_cycles  # ty: ignore[unresolved-attribute]
 
         # Creating acquisition tasks
         # Clear any error left over from a previous acquisition so the check
         # below reflects this create_scanner() call only.
-        self.siggen.error = 0
-        self.siggen.create_scanner()
+        self.siggen.error = 0  # ty: ignore[unresolved-attribute]
+        self.siggen.create_scanner()  # ty: ignore[unresolved-attribute]
         # create_scanner() wraps its DAQ task creation in a bare except that
         # sets self.siggen.error = 1 + a generic 'create_scan error' message
         # but never raises. Without this check a failed create_scanner()
@@ -239,7 +239,7 @@ class _AcquireScanMixin:
         # here — the stack worker inspects it to decide whether to abort the
         # remaining planes, and the reset above clears it at the start of
         # the next acquisition.
-        if self.siggen.error:
+        if self.siggen.error:  # ty: ignore[unresolved-attribute]
             self._shell.sig_message.emit(
                 f"Scan task creation failed — the acquisition was aborted before the camera was triggered. Check the NI DAQ connection (Dev1). Cause: {self.siggen.error_message}"  # noqa: E501
             )
@@ -249,35 +249,35 @@ class _AcquireScanMixin:
             return
 
         # Prime the camera recorder before we start the acquisition taks
-        self.camera.start_recorder(number_of_images)
-        self.siggen.start_scanner()
+        self.camera.start_recorder(number_of_images)  # ty: ignore[unresolved-attribute]
+        self.siggen.start_scanner()  # ty: ignore[unresolved-attribute]
 
         # Monitor completion of acquisition tasks and camera recorder
-        self.camera.monitor_recorder(number_of_images)
-        self.siggen.monitor_scanner()
+        self.camera.monitor_recorder(number_of_images)  # ty: ignore[unresolved-attribute]
+        self.siggen.monitor_scanner()  # ty: ignore[unresolved-attribute]
 
         # Stop tasks and recorder
-        self.camera.stop_recorder()
-        self.siggen.stop_scanner()
+        self.camera.stop_recorder()  # ty: ignore[unresolved-attribute]
+        self.siggen.stop_scanner()  # ty: ignore[unresolved-attribute]
 
         # Abort on recorder timeout — never copy zero-filled frames to disk.
         # The recorder timeout flag is set by monitor_recorder when the camera
         # did not return the expected frames in time. Returning here before
         # copy_recorder_images ensures a timed-out plane is not mistaken for
         # a real (dark) frame on disk.
-        if self.camera.recorder_timeout_status:
-            self._shell.sig_message.emit(
+        if self.camera.recorder_timeout_status:  # ty: ignore[unresolved-attribute]
+            self._shell.sig_message.emit(  # ty: ignore[unresolved-attribute]
                 "Camera timeout — plane was not recorded (camera did not return frames in time). "  # noqa: E501
                 "The acquisition was aborted. Reduce the number of images per plane or check the camera USB connection, then restart the run."  # noqa: E501
             )
             logger.warning("Camera recorder timeout during acquire_scan")
-            self.camera.delete_recorder()
+            self.camera.delete_recorder()  # ty: ignore[unresolved-attribute]
             # Delete the DAQ scanner task. The scanner was already stopped
             # above (before the timeout check) — NI-DAQmx Task.stop() is
             # idempotent, so a second stop_scanner() here was redundant and
             # is omitted. delete_scanner() tears down the task so the DAQ
             # hardware is left in a consistent state.
-            self.siggen.delete_scanner()
+            self.siggen.delete_scanner()  # ty: ignore[unresolved-attribute]
             # Disarm the camera before returning. Camera.disarm() is
             # idempotent (it only issues the SDK stop-recording call when
             # the camera reports recording state == 'on'), so calling it
@@ -285,30 +285,30 @@ class _AcquireScanMixin:
             # is safe. This ensures a camera left mid-timeout is always
             # disarmed before any worker that might die afterward gets a
             # chance to skip its own cleanup.
-            self.camera.disarm()
+            self.camera.disarm()  # ty: ignore[unresolved-attribute]
             return
 
         # Recover images from the recorder
         # Note: Images must be recovered before deleting the recorder
-        recorded_images = self.camera.copy_recorder_images(number_of_images)
-        self._shell.buffer = np.asarray(recorded_images)
+        recorded_images = self.camera.copy_recorder_images(number_of_images)  # ty: ignore[unresolved-attribute]
+        self._shell.buffer = np.asarray(recorded_images)  # ty: ignore[unresolved-attribute]
 
         # Delete tasks and recorder
-        self.camera.delete_recorder()
-        self.siggen.delete_scanner()
+        self.camera.delete_recorder()  # ty: ignore[unresolved-attribute]
+        self.siggen.delete_scanner()  # ty: ignore[unresolved-attribute]
 
         # Frame reconstruction options
-        if self._save_stitch_blend:
-            self._shell.reconstructed_frame = (
-                self._shell._fs.reconstruct_frame_linear_blend(self._shell.buffer)
+        if self._save_stitch_blend:  # ty: ignore[unresolved-attribute]
+            self._shell.reconstructed_frame = (  # ty: ignore[unresolved-attribute]
+                self._shell._fs.reconstruct_frame_linear_blend(self._shell.buffer)  # ty: ignore[unresolved-attribute]
             )
         else:
-            self._shell.reconstructed_frame = self._shell._fs.reconstruct_frame(
-                self._shell.buffer
+            self._shell.reconstructed_frame = self._shell._fs.reconstruct_frame(  # ty: ignore[unresolved-attribute]
+                self._shell.buffer  # ty: ignore[unresolved-attribute]
             )
 
         # Send reconstructed frame to display port
-        self._shell._fs.enqueue_frame(self._shell.reconstructed_frame)
+        self._shell._fs.enqueue_frame(self._shell.reconstructed_frame)  # ty: ignore[unresolved-attribute]
 
 
 class LiveWorker(QObject, _AcquireScanMixin):
@@ -477,10 +477,10 @@ class SingleWorker(QObject, _AcquireScanMixin):
 
             # Getting positions for the image
             self._shell.image_hor_pos_text = (
-                self._shell.current_horizontal_position_text
+                self._shell.current_horizontal_position_text  # ty: ignore[unresolved-attribute]
             )
-            self._shell.image_ver_pos_text = self._shell.current_vertical_position_text
-            self._shell.image_cam_pos_text = self._shell.current_camera_position_text
+            self._shell.image_ver_pos_text = self._shell.current_vertical_position_text  # ty: ignore[unresolved-attribute]
+            self._shell.image_cam_pos_text = self._shell.current_camera_position_text  # ty: ignore[unresolved-attribute]
 
             # Setting the camera for scan acquisition
             self.camera.arm_scan()
@@ -737,8 +737,8 @@ class StackWorker(QObject, _AcquireScanMixin):
                 self._shell.save_description = str(self._save_description)
 
                 # Setting frame saver
-                self._shell._fs.reinit(3)
-                self._shell._fs.add_sample_name(self._shell.save_description)
+                self._shell._fs.reinit(3)  # ty: ignore[unresolved-attribute]
+                self._shell._fs.add_sample_name(self._shell.save_description)  # ty: ignore[unresolved-attribute]
                 # In multi-channel mode, pass the pre-sampled wavelengths
                 # to set_files so the save side builds one per-channel
                 # filename list (HDF5) and the Zarr writer allocates a
@@ -754,7 +754,7 @@ class StackWorker(QObject, _AcquireScanMixin):
                 else:
                     set_files_kwargs = {}
                 if self._save_all_crop:
-                    self._shell._fs.set_files(
+                    self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
                         self._shell.number_of_planes,
                         self._shell.save_filepath,
                         "stack",
@@ -763,7 +763,7 @@ class StackWorker(QObject, _AcquireScanMixin):
                         **set_files_kwargs,
                     )
                 elif self._save_all_full:
-                    self._shell._fs.set_files(
+                    self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
                         self._shell.number_of_planes,
                         self._shell.save_filepath,
                         "stack",
@@ -788,7 +788,7 @@ class StackWorker(QObject, _AcquireScanMixin):
                     # number_of_planes datasets into each, terminating
                     # on frames consumed (n_channels * n_planes) — not
                     # files written.
-                    self._shell._fs.set_files(
+                    self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
                         1,
                         self._shell.save_filepath,
                         "stack",
@@ -797,7 +797,7 @@ class StackWorker(QObject, _AcquireScanMixin):
                         **set_files_kwargs,
                     )
                 # Starting frame saver
-                self._shell._fs.start_saving()
+                self._shell._fs.start_saving()  # ty: ignore[unresolved-attribute]
                 # Configure the adaptive trajectory recorder on the save
                 # side. When adaptive is enabled, the per-plane loop
                 # records one AdaptiveSample per main plane and the HDF5
@@ -808,9 +808,9 @@ class StackWorker(QObject, _AcquireScanMixin):
                 # as group attrs (reproducibility contract).
                 # When disabled, no trajectory is recorded or written.
                 adaptive_enabled = (
-                    self._adaptive_cfg is not None and self._adaptive_cfg.enabled
+                    self._adaptive_cfg is not None and self._adaptive_cfg.enabled  # ty: ignore[unresolved-attribute]
                 )
-                self._shell._fs.configure_adaptive(
+                self._shell._fs.configure_adaptive(  # ty: ignore[unresolved-attribute]
                     adaptive_enabled,
                     config=self._adaptive_cfg if adaptive_enabled else None,
                 )
@@ -869,19 +869,19 @@ class StackWorker(QObject, _AcquireScanMixin):
             # stack path unchanged.
             self._adaptive_controller = None
             self._adaptive_current_cmd = None
-            if self._adaptive_cfg is not None and self._adaptive_cfg.enabled:
+            if self._adaptive_cfg is not None and self._adaptive_cfg.enabled:  # ty: ignore[unresolved-attribute]
                 from lightsheet.adaptive.controller import AdaptiveController
 
                 self._adaptive_controller = AdaptiveController(
-                    self._adaptive_cfg, n_planes
+                    self._adaptive_cfg, n_planes  # ty: ignore[invalid-argument-type]
                 )
                 # Prime with a flat trajectory at the current exposure.
                 # The PI correction handles the per-depth profile; the
                 # feedforward baseline is the current camera exposure.
-                pilot_indices = list(range(self._adaptive_cfg.pilot_count))
+                pilot_indices = list(range(self._adaptive_cfg.pilot_count))  # ty: ignore[unresolved-attribute]
                 pilot_exposures = [
                     self.camera.exposure_time
-                ] * self._adaptive_cfg.pilot_count
+                ] * self._adaptive_cfg.pilot_count  # ty: ignore[unresolved-attribute]
                 self._adaptive_controller.prime(pilot_indices, pilot_exposures)
                 # The initial command for plane 0 is the feedforward
                 # baseline (current exposure + current staged powers).
@@ -927,7 +927,7 @@ class StackWorker(QObject, _AcquireScanMixin):
                     # Moving sample position
                     position = self._shell.stack_starting_plane + (
                         plane * self._shell.stack_step
-                    )
+                    )  # ty: ignore[unsupported-operator]
                     try:
                         self.motors.horizontal.move_absolute_position(
                             position, "\u03bcm"
@@ -946,10 +946,10 @@ class StackWorker(QObject, _AcquireScanMixin):
                     self._shell.sig_refresh_position_horizontal.emit()
 
                     if self._shell.saving_allowed:
-                        self._shell._fs.add_motor_parameters(
-                            self._shell.current_horizontal_position_text,
-                            self._shell.current_vertical_position_text,
-                            self._shell.current_camera_position_text,
+                        self._shell._fs.add_motor_parameters(  # ty: ignore[unresolved-attribute]
+                            self._shell.current_horizontal_position_text,  # ty: ignore[unresolved-attribute]
+                            self._shell.current_vertical_position_text,  # ty: ignore[unresolved-attribute]
+                            self._shell.current_camera_position_text,  # ty: ignore[unresolved-attribute]
                         )
 
                     # Pre-acquire guard: a Stop or E-stop requested while the worker
@@ -1070,8 +1070,8 @@ class StackWorker(QObject, _AcquireScanMixin):
                             and frame1 is not None
                             and frame2 is not None
                         ):
-                            self._shell._fs.enqueue_buffer((0, frame1))
-                            self._shell._fs.enqueue_buffer((1, frame2))
+                            self._shell._fs.enqueue_buffer((0, frame1))  # ty: ignore[unresolved-attribute]
+                            self._shell._fs.enqueue_buffer((1, frame2))  # ty: ignore[unresolved-attribute]
                     else:
                         # Single-channel path (unchanged — back-compat).
 
@@ -1103,21 +1103,21 @@ class StackWorker(QObject, _AcquireScanMixin):
                         self._record_adaptive_step(plane)
                         if self._shell.saving_allowed:
                             if self._save_all_crop:
-                                cropped_buffer = self._shell._fs.crop_buffer(
-                                    self._shell.buffer
+                                cropped_buffer = self._shell._fs.crop_buffer(  # ty: ignore[unresolved-attribute]
+                                    self._shell.buffer  # ty: ignore[invalid-argument-type]
                                 )
-                                self._shell._fs.enqueue_buffer(cropped_buffer)
+                                self._shell._fs.enqueue_buffer(cropped_buffer)  # ty: ignore[unresolved-attribute]
                                 self._shell.sig_message.emit(
                                     "Saving All Images (one for each ETL step, cropped)"
                                 )
                             elif self._save_all_full:
-                                self._shell._fs.enqueue_buffer(self._shell.buffer)
+                                self._shell._fs.enqueue_buffer(self._shell.buffer)  # ty: ignore[invalid-argument-type, unresolved-attribute]
                                 self._shell.sig_message.emit(
                                     "Saving All Images (one for each ETL step, full)"
                                 )
                             else:
-                                self._shell._fs.enqueue_buffer(
-                                    self._shell.reconstructed_frame
+                                self._shell._fs.enqueue_buffer(  # ty: ignore[unresolved-attribute]
+                                    self._shell.reconstructed_frame  # ty: ignore[invalid-argument-type]
                                 )
                                 self._shell.sig_message.emit(
                                     "Saving Reconstructed Image"
@@ -1133,7 +1133,7 @@ class StackWorker(QObject, _AcquireScanMixin):
                 )  # In case the number of planes is not a multiple of 100
 
             if self._shell.saving_allowed:
-                self._shell._fs.stop_saving()
+                self._shell._fs.stop_saving()  # ty: ignore[unresolved-attribute]
 
             # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)  # noqa: E501
             self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
@@ -1215,9 +1215,9 @@ class StackWorker(QObject, _AcquireScanMixin):
         # (exposures are 1-1000 ms, all >= 1 after truncation).
         shutter_mode = getattr(self.camera, "shutter_mode", "Rolling")
         if shutter_mode == "Lightsheet":
-            self.camera.set_exposure_time(max(1, round(cmd.exposure_s * 1000)))
+            self.camera.set_exposure_time(max(1, round(cmd.exposure_s * 1000)))  # ty: ignore[unresolved-attribute]
         else:
-            self.camera.set_exposure_time(int(cmd.exposure_s * 1000))
+            self.camera.set_exposure_time(int(cmd.exposure_s * 1000))  # ty: ignore[unresolved-attribute]
         # Write laser powers through the safe HAL paths. The percent is
         # computed from the command's mW value and the laser's max_power.
         # Each laser write is wrapped in its own except handler so a
@@ -1228,7 +1228,7 @@ class StackWorker(QObject, _AcquireScanMixin):
         # NOT abort (the outer StackWorker.run failure handler is
         # bypassed). The operator can press E-stop (F12) to abort.
         if self._shell.lasers[0].max_power > 0:
-            pct1 = cmd.laser1_mw / self._shell.lasers[0].max_power * 100.0
+            pct1 = cmd.laser1_mw / self._shell.lasers[0].max_power * 100.0  # ty: ignore[unresolved-attribute]
             self._shell.laser1_power_pct = pct1
             try:
                 self._hw._write_laser1_power(pct1)
@@ -1240,7 +1240,7 @@ class StackWorker(QObject, _AcquireScanMixin):
                     f"on the next plane; press E-stop (F12) to abort."
                 )
         if self._multi_channel and self._shell.lasers[1].max_power > 0:
-            pct2 = cmd.laser2_mw / self._shell.lasers[1].max_power * 100.0
+            pct2 = cmd.laser2_mw / self._shell.lasers[1].max_power * 100.0  # ty: ignore[unresolved-attribute]
             self._shell.laser2_power_pct = pct2
             try:
                 self._hw._write_laser2_power(pct2)
@@ -1282,7 +1282,7 @@ class StackWorker(QObject, _AcquireScanMixin):
             intensities = []
             for wl in [int(laser.wavelength) for laser in self._shell.lasers]:
                 frame = frames.get(wl) if frames else None
-                intensities.append(frame_intensity_pct(frame, cfg.sensor_max))
+                intensities.append(frame_intensity_pct(frame, cfg.sensor_max))  # ty: ignore[unresolved-attribute]
             # The brighter channel drives the shared exposure.
             brighter_idx = max(
                 range(len(intensities)),
@@ -1290,40 +1290,40 @@ class StackWorker(QObject, _AcquireScanMixin):
             )
         else:
             frame = self._shell.reconstructed_frame
-            intensities = [frame_intensity_pct(frame, cfg.sensor_max)]
+            intensities = [frame_intensity_pct(frame, cfg.sensor_max)]  # ty: ignore[unresolved-attribute]
             brighter_idx = 0
 
         # Record the trajectory sample .
         sample = AdaptiveSample(
             plane_index=plane_idx,
             intensity_fraction=intensities,
-            exposure_s=cmd.exposure_s,
-            laser_power_mw=(cmd.laser1_mw, cmd.laser2_mw),
-            control_variable_active=cmd.control_variable_active,
-            reacquired=cmd.reacquire,
-            power_fallback=cmd.power_fallback,
+            exposure_s=cmd.exposure_s,  # ty: ignore[unresolved-attribute]
+            laser_power_mw=(cmd.laser1_mw, cmd.laser2_mw),  # ty: ignore[unresolved-attribute]
+            control_variable_active=cmd.control_variable_active,  # ty: ignore[unresolved-attribute]
+            reacquired=cmd.reacquire,  # ty: ignore[unresolved-attribute]
+            power_fallback=cmd.power_fallback,  # ty: ignore[unresolved-attribute]
         )
         if self._shell.saving_allowed:
-            self._shell._fs.record_adaptive_sample(sample)
+            self._shell._fs.record_adaptive_sample(sample)  # ty: ignore[unresolved-attribute]
 
         # Emit the trajectory signal for the GUI-thread plot.
         self.sig_adaptive_trajectory.emit(
             plane_idx,
             intensities[brighter_idx],
-            cmd.exposure_s,
-            cmd.laser1_mw,
-            cmd.laser2_mw,
-            cmd.control_variable_active,
-            cmd.reacquire,
-            cmd.power_fallback,
+            cmd.exposure_s,  # ty: ignore[unresolved-attribute]
+            cmd.laser1_mw,  # ty: ignore[unresolved-attribute]
+            cmd.laser2_mw,  # ty: ignore[unresolved-attribute]
+            cmd.control_variable_active,  # ty: ignore[unresolved-attribute]
+            cmd.reacquire,  # ty: ignore[unresolved-attribute]
+            cmd.power_fallback,  # ty: ignore[unresolved-attribute]
         )
 
         # Compute the next plane's command from this plane's intensity.
-        current_powers = (cmd.laser1_mw, cmd.laser2_mw)
+        current_powers = (cmd.laser1_mw, cmd.laser2_mw)  # ty: ignore[unresolved-attribute]
         self._adaptive_current_cmd = self._adaptive_controller.update(
             intensities=intensities,
             brighter_idx=brighter_idx,
-            current_exposure_s=cmd.exposure_s,
+            current_exposure_s=cmd.exposure_s,  # ty: ignore[unresolved-attribute]
             current_powers_mw=current_powers,
             plane_idx=plane_idx,
         )
@@ -1342,7 +1342,7 @@ class StackWorker(QObject, _AcquireScanMixin):
         # signal (exhaustion is not a saved decision).
         if getattr(self._adaptive_current_cmd, "reacquire_exhausted", False):
             dev_pct = abs(
-                intensities[brighter_idx] - cfg.target_midpoint
+                intensities[brighter_idx] - cfg.target_midpoint  # ty: ignore[unresolved-attribute]
             ) * 100.0
             self._shell.sig_message.emit(
                 f"Re-acquire fallback exhausted at plane {plane_idx}: "

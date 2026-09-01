@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 def _make(
     qtbot: QtBot, request: FixtureRequest
 ) -> tuple[Controller_MainWindow, DeviceBundle]:
-    return make_controller(qtbot, request)
+    return make_controller(qtbot, request)  # ty: ignore[unsound-return-statement]
 
 
 def _badge_is_in_toolbar(badge: QLabel, toolbar: QToolBar) -> bool:

@@ -153,7 +153,7 @@ def test_mock_siggen_waveforms_match_waveforms_module() -> None:
         active_samples=siggen._camera_active_samples,
         post_samples=siggen._camera_post_samples,
         shift=0,
-        repeat=siggen.waveform_cycles,
+        repeat=siggen.waveform_cycles,  # ty: ignore[invalid-argument-type]
         inverted=False,
     )
     np.testing.assert_array_equal(siggen.waveform_camera, expected_camera)
@@ -165,7 +165,7 @@ def test_mock_siggen_waveforms_match_waveforms_module() -> None:
         retrace_samples=siggen._galvo_reset_samples,
         post_samples=siggen._galvo_post_samples,
         shift=siggen._galvo_shift,
-        repeat=siggen.waveform_cycles,
+        repeat=siggen.waveform_cycles,  # ty: ignore[invalid-argument-type]
         amplitude=siggen.galvo_left_amplitude,
         offset=siggen.galvo_left_offset,
         inverted=siggen.galvo_inverted,
@@ -180,7 +180,7 @@ def test_mock_siggen_waveforms_match_waveforms_module() -> None:
         retrace_samples=siggen._galvo_reset_samples,
         post_samples=siggen._galvo_post_samples,
         shift=siggen._galvo_shift,
-        repeat=siggen.waveform_cycles,
+        repeat=siggen.waveform_cycles,  # ty: ignore[invalid-argument-type]
         amplitude=siggen.galvo_right_amplitude,
         offset=siggen.galvo_right_offset,
         inverted=siggen.galvo_inverted,
@@ -191,7 +191,7 @@ def test_mock_siggen_waveforms_match_waveforms_module() -> None:
     expected_etl_left = staircase(
         activated=siggen.etl_activated,
         step_samples=siggen._etl_step_samples,
-        nbr_steps=siggen.waveform_cycles,
+        nbr_steps=siggen.waveform_cycles,  # ty: ignore[invalid-argument-type]
         shift=siggen._etl_shift,
         amplitude=siggen.etl_left_amplitude,
         offset=siggen.etl_left_offset,
@@ -203,7 +203,7 @@ def test_mock_siggen_waveforms_match_waveforms_module() -> None:
     expected_etl_right = staircase(
         activated=siggen.etl_activated,
         step_samples=siggen._etl_step_samples,
-        nbr_steps=siggen.waveform_cycles,
+        nbr_steps=siggen.waveform_cycles,  # ty: ignore[invalid-argument-type]
         shift=siggen._etl_shift,
         amplitude=siggen.etl_right_amplitude,
         offset=siggen.etl_right_offset,
@@ -270,7 +270,7 @@ def test_mock_motors_enforces_travel_limits() -> None:
     axis = motors.vertical
     # 9999 mm is far beyond any T-LS stage travel.
     with __import__("pytest").raises(ValueError):
-        axis.move_absolute_position(9999, "mm")
+        axis.move_absolute_position(9999, "mm")  # ty: ignore[unresolved-attribute]
 
 
 def test_mock_motors_relative_move_enforces_travel_limits() -> None:
@@ -284,9 +284,9 @@ def test_mock_motors_relative_move_enforces_travel_limits() -> None:
     # Move near the top, then attempt a +large relative move past the limit.
     # The mock tracks position in software (position_microsteps); place it
     # near the high limit so a +50 mm delta would push past it.
-    axis.position_microsteps = axis.limit_high_microsteps - 1
+    axis.position_microsteps = axis.limit_high_microsteps - 1  # ty: ignore[invalid-assignment, unresolved-attribute]
     with pytest.raises(ValueError):
-        axis.move_relative_position(50, "mm")
+        axis.move_relative_position(50, "mm")  # ty: ignore[unresolved-attribute]
 
 
 # --------------------------------------------------------------------------- #
