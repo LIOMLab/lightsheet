@@ -31,6 +31,7 @@ from pytestqt.qtbot import QtBot
 pytest.importorskip("PySide6")
 
 from _helpers.controller_fixture import make_controller
+
 from lightsheet.focus.types import FocusConfig, FocusCurve
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
@@ -181,8 +182,8 @@ def test_load_calibration_invalid_file_shows_error_copy(
     ctrl.sig_beep.connect(lambda: beeps.append(None))
     ctrl.sig_message.connect(messages.append)
     path = tmp_path / "bad.json"
-    # Camera position 100 mm is outside the mock 0-35 mm camera limits.
-    path.write_text('{"points": [[0.0, 100.0], [1.0, 101.0]]}')
+    # Camera position 200 mm is outside the mock camera travel limits.
+    path.write_text('{"points": [[0.0, 200.0], [1.0, 201.0]]}')
     ui.checkBox_focusEnable.setChecked(True)
     ui.lineEdit_focusCurvePath.setText(str(path))
     ui.pushButton_focusLoad.click()

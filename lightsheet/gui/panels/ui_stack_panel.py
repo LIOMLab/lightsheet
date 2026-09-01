@@ -15,9 +15,10 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QCheckBox, QFrame, QGridLayout,
-    QGroupBox, QHBoxLayout, QLabel, QPushButton,
-    QSizePolicy, QSpacerItem, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame,
+    QGridLayout, QGroupBox, QHBoxLayout, QLabel,
+    QLineEdit, QPushButton, QSizePolicy, QSpacerItem,
+    QVBoxLayout, QWidget)
 
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
@@ -84,7 +85,7 @@ class Ui_StackPanel(object):
 
         self.line_6 = QFrame(self.groupBox_18)
         self.line_6.setObjectName(u"line_6")
-        self.line_6.setFrameShadow(QFrame.Raised)  # ty: ignore[unresolved-attribute]
+        self.line_6.setFrameShadow(QFrame.Raised)
         self.line_6.setFrameShape(QFrame.Shape.VLine)
 
         self.horizontalLayout_9.addWidget(self.line_6)
@@ -300,6 +301,81 @@ class Ui_StackPanel(object):
 
         self.verticalLayout_panel.addWidget(self.groupBox_adaptiveControl)
 
+        self.groupBox_focusControl = QGroupBox(stackPanel)
+        self.groupBox_focusControl.setObjectName(u"groupBox_focusControl")
+        self.verticalLayout_focusControl = QVBoxLayout(self.groupBox_focusControl)
+        self.verticalLayout_focusControl.setObjectName(u"verticalLayout_focusControl")
+        self.checkBox_focusEnable = QCheckBox(self.groupBox_focusControl)
+        self.checkBox_focusEnable.setObjectName(u"checkBox_focusEnable")
+
+        self.verticalLayout_focusControl.addWidget(self.checkBox_focusEnable)
+
+        self.widget_focusFields = QWidget(self.groupBox_focusControl)
+        self.widget_focusFields.setObjectName(u"widget_focusFields")
+        self.widget_focusFields.setVisible(False)
+        self.gridLayout_focusFields = QGridLayout(self.widget_focusFields)
+        self.gridLayout_focusFields.setObjectName(u"gridLayout_focusFields")
+        self.gridLayout_focusFields.setContentsMargins(0, 0, 0, 0)
+        self.lineEdit_focusCurvePath = QLineEdit(self.widget_focusFields)
+        self.lineEdit_focusCurvePath.setObjectName(u"lineEdit_focusCurvePath")
+
+        self.gridLayout_focusFields.addWidget(self.lineEdit_focusCurvePath, 0, 0, 1, 2)
+
+        self.pushButton_focusBrowse = QPushButton(self.widget_focusFields)
+        self.pushButton_focusBrowse.setObjectName(u"pushButton_focusBrowse")
+
+        self.gridLayout_focusFields.addWidget(self.pushButton_focusBrowse, 0, 2, 1, 1)
+
+        self.pushButton_focusLoad = QPushButton(self.widget_focusFields)
+        self.pushButton_focusLoad.setObjectName(u"pushButton_focusLoad")
+
+        self.gridLayout_focusFields.addWidget(self.pushButton_focusLoad, 0, 3, 1, 1)
+
+        self.doubleSpinBox_focusBlockSize = FieldSpecSpinBox(self.widget_focusFields)
+        self.doubleSpinBox_focusBlockSize.setObjectName(u"doubleSpinBox_focusBlockSize")
+        self.doubleSpinBox_focusBlockSize.setDecimals(0)
+        self.doubleSpinBox_focusBlockSize.setMinimum(1.000000000000000)
+        self.doubleSpinBox_focusBlockSize.setMaximum(100.000000000000000)
+        self.doubleSpinBox_focusBlockSize.setSingleStep(1.000000000000000)
+        self.doubleSpinBox_focusBlockSize.setValue(8.000000000000000)
+
+        self.gridLayout_focusFields.addWidget(self.doubleSpinBox_focusBlockSize, 1, 0, 1, 4)
+
+        self.checkBox_focusAutofocusResidual = QCheckBox(self.widget_focusFields)
+        self.checkBox_focusAutofocusResidual.setObjectName(u"checkBox_focusAutofocusResidual")
+        self.checkBox_focusAutofocusResidual.setChecked(True)
+
+        self.gridLayout_focusFields.addWidget(self.checkBox_focusAutofocusResidual, 2, 0, 1, 4)
+
+        self.label_focusXAxisVariable = QLabel(self.widget_focusFields)
+        self.label_focusXAxisVariable.setObjectName(u"label_focusXAxisVariable")
+
+        self.gridLayout_focusFields.addWidget(self.label_focusXAxisVariable, 3, 0, 1, 1)
+
+        self.comboBox_focusXAxisVariable = QComboBox(self.widget_focusFields)
+        self.comboBox_focusXAxisVariable.addItem("")
+        self.comboBox_focusXAxisVariable.addItem("")
+        self.comboBox_focusXAxisVariable.setObjectName(u"comboBox_focusXAxisVariable")
+
+        self.gridLayout_focusFields.addWidget(self.comboBox_focusXAxisVariable, 3, 1, 1, 3)
+
+        self.label_focusStatus = QLabel(self.widget_focusFields)
+        self.label_focusStatus.setObjectName(u"label_focusStatus")
+
+        self.gridLayout_focusFields.addWidget(self.label_focusStatus, 4, 0, 1, 4)
+
+        self.label_focusBlockHint = QLabel(self.widget_focusFields)
+        self.label_focusBlockHint.setObjectName(u"label_focusBlockHint")
+        self.label_focusBlockHint.setWordWrap(True)
+
+        self.gridLayout_focusFields.addWidget(self.label_focusBlockHint, 5, 0, 1, 4)
+
+
+        self.verticalLayout_focusControl.addWidget(self.widget_focusFields)
+
+
+        self.verticalLayout_panel.addWidget(self.groupBox_focusControl)
+
         self.groupBox_acquisitionQueue = QGroupBox(stackPanel)
         self.groupBox_acquisitionQueue.setObjectName(u"groupBox_acquisitionQueue")
         self.verticalLayout_acquisitionQueue = QVBoxLayout(self.groupBox_acquisitionQueue)
@@ -364,6 +440,29 @@ class Ui_StackPanel(object):
         self.label_adaptiveLaser2MinPower.setText(QCoreApplication.translate("StackPanel", u"L2 Min Power:", None))
         self.label_adaptiveLaser2MaxPower.setText(QCoreApplication.translate("StackPanel", u"L2 Max Power:", None))
         self.label_adaptiveShutterModeHint.setText(QCoreApplication.translate("StackPanel", u"Rolling shutter \u2014 exposure bound in milliseconds.", None))
+        self.groupBox_focusControl.setTitle(QCoreApplication.translate("StackPanel", u"Focus Control", None))
+#if QT_CONFIG(tooltip)
+        self.checkBox_focusEnable.setToolTip(QCoreApplication.translate("StackPanel", u"Enable camera focus compensation during the stack. When unchecked the stack runs with fixed camera position.", None))
+#endif // QT_CONFIG(tooltip)
+        self.checkBox_focusEnable.setText(QCoreApplication.translate("StackPanel", u"Camera focus compensation", None))
+#if QT_CONFIG(tooltip)
+        self.lineEdit_focusCurvePath.setToolTip(QCoreApplication.translate("StackPanel", u"Absolute or relative path to the JSON focus calibration file.", None))
+#endif // QT_CONFIG(tooltip)
+        self.pushButton_focusBrowse.setText(QCoreApplication.translate("StackPanel", u"Browse...", None))
+        self.pushButton_focusLoad.setText(QCoreApplication.translate("StackPanel", u"Load Calibration", None))
+#if QT_CONFIG(tooltip)
+        self.doubleSpinBox_focusBlockSize.setToolTip(QCoreApplication.translate("StackPanel", u"Number of planes between camera focus updates. The last applied position is held between blocks.", None))
+#endif // QT_CONFIG(tooltip)
+#if QT_CONFIG(tooltip)
+        self.checkBox_focusAutofocusResidual.setToolTip(QCoreApplication.translate("StackPanel", u"Enable per-block sharpness-based residual correction on top of the feedforward calibration curve.", None))
+#endif // QT_CONFIG(tooltip)
+        self.checkBox_focusAutofocusResidual.setText(QCoreApplication.translate("StackPanel", u"Enable autofocus residual", None))
+        self.label_focusXAxisVariable.setText(QCoreApplication.translate("StackPanel", u"X axis:", None))
+        self.comboBox_focusXAxisVariable.setItemText(0, QCoreApplication.translate("StackPanel", u"Plane", None))
+        self.comboBox_focusXAxisVariable.setItemText(1, QCoreApplication.translate("StackPanel", u"Stage position (mm)", None))
+
+        self.label_focusStatus.setText(QCoreApplication.translate("StackPanel", u"Not armed \u2014 no file loaded", None))
+        self.label_focusBlockHint.setText(QCoreApplication.translate("StackPanel", u"Camera focus is updated once every 8 planes. The last applied position is held between blocks.", None))
         self.groupBox_acquisitionQueue.setTitle(QCoreApplication.translate("StackPanel", u"Acquisition Queue", None))
         pass
     # retranslateUi

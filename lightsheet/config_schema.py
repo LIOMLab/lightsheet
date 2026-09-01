@@ -780,6 +780,97 @@ class AdaptiveSettingsOverlay(_NoEnvBaseSettings):
         return v
 
 
+# --- Focus section (operator-configurable focus compensation) ---------------
+#
+# The [Focus] section is an OPTIONAL baseline section: a config.ini without
+# it must validate using the model defaults. Both tiers carry identical
+# aliases/defaults and the same range validators so a tampered overlay cannot
+# bypass the strict checks.
+#
+# Field ranges (rejected, not clamped, in BOTH tiers):
+# - Enabled: bool.
+# - Block Size N: 1..100 planes.
+# - Autofocus Residual Enabled: bool.
+# - Residual Gain Mm: 0..1.
+# - Max Residual Mm: 0..5.
+
+
+class FocusSettings(_NoEnvBaseSettings):
+    model_config = SettingsConfigDict(
+        extra="forbid", case_sensitive=True, populate_by_name=True
+    )
+    enabled: bool = Field(alias="Enabled", default=False)
+    block_size_n: int = Field(alias="Block Size N", default=8)
+    autofocus_residual: bool = Field(
+        alias="Autofocus Residual Enabled", default=True
+    )
+    residual_gain_mm: float = Field(alias="Residual Gain Mm", default=0.05)
+    max_residual_mm: float = Field(alias="Max Residual Mm", default=0.5)
+
+    @field_validator("block_size_n")
+    @classmethod
+    def _block_range(cls, v: int) -> int:
+        if v < 1 or v > 100:
+            raise ValueError(f"block size N {v} is outside the valid range 1..100")
+        return v
+
+    @field_validator("residual_gain_mm")
+    @classmethod
+    def _residual_gain_range(cls, v: float) -> float:
+        if v < 0 or v > 1:
+            raise ValueError(
+                f"residual gain {v} mm is outside the valid range 0..1"
+            )
+        return v
+
+    @field_validator("max_residual_mm")
+    @classmethod
+    def _max_residual_range(cls, v: float) -> float:
+        if v < 0 or v > 5:
+            raise ValueError(
+                f"max residual {v} mm is outside the valid range 0..5"
+            )
+        return v
+
+
+class FocusSettingsOverlay(_NoEnvBaseSettings):
+    model_config = SettingsConfigDict(
+        extra="ignore", case_sensitive=True, populate_by_name=True
+    )
+    enabled: bool = Field(alias="Enabled", default=False)
+    block_size_n: int = Field(alias="Block Size N", default=8)
+    autofocus_residual: bool = Field(
+        alias="Autofocus Residual Enabled", default=True
+    )
+    residual_gain_mm: float = Field(alias="Residual Gain Mm", default=0.05)
+    max_residual_mm: float = Field(alias="Max Residual Mm", default=0.5)
+
+    @field_validator("block_size_n")
+    @classmethod
+    def _block_range(cls, v: int) -> int:
+        if v < 1 or v > 100:
+            raise ValueError(f"block size N {v} is outside the valid range 1..100")
+        return v
+
+    @field_validator("residual_gain_mm")
+    @classmethod
+    def _residual_gain_range(cls, v: float) -> float:
+        if v < 0 or v > 1:
+            raise ValueError(
+                f"residual gain {v} mm is outside the valid range 0..1"
+            )
+        return v
+
+    @field_validator("max_residual_mm")
+    @classmethod
+    def _max_residual_range(cls, v: float) -> float:
+        if v < 0 or v > 5:
+            raise ValueError(
+                f"max residual {v} mm is outside the valid range 0..5"
+            )
+        return v
+
+
 # ---------------------------------------------------------------------------
 # Collect-all entry point — iterate ALL sections, collect every error +
 # warning into two lists BEFORE any dialog is shown. REJECT (safety
@@ -809,11 +900,12 @@ _SECTION_MODELS: dict[str, tuple[type[BaseSettings], type[BaseSettings]]] = {
     "Motors": (MotorsSettings, MotorsSettingsOverlay),
     "Logging": (LoggingSettings, LoggingSettingsOverlay),
     "Adaptive": (AdaptiveSettings, AdaptiveSettingsOverlay),
+    "Focus": (FocusSettings, FocusSettingsOverlay),
 }
 
 # Optional baseline sections — a config.ini without one of these sections
 # validates using the model defaults. Sections NOT in this set are required.
-_OPTIONAL_SECTIONS: frozenset[str] = frozenset({"Adaptive"})
+_OPTIONAL_SECTIONS: frozenset[str] = frozenset({"Adaptive", "Focus"})
 
 
 # Non-safety recommended-range WARN checks. Each entry maps a section name
