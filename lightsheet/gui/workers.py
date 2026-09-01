@@ -660,6 +660,11 @@ class StackWorker(QObject, _AcquireScanMixin):
     # group via AdaptiveSample; the signal carries L1 power for the
     # live plot.
     sig_adaptive_trajectory = Signal(int, float, float, float, float, str, bool, bool)
+    # Focus trajectory signal: block_index, stage_pos_mm,
+    # feedforward_camera_pos_mm, residual_mm, applied_camera_pos_mm.
+    # Emitted once per focus block boundary for the GUI-thread trajectory
+    # plot (the worker NEVER calls pyqtgraph directly).
+    sig_focus_trajectory = Signal(int, float, float, float, float)
 
     def __init__(
         self,
@@ -672,6 +677,8 @@ class StackWorker(QObject, _AcquireScanMixin):
         save_all_full: bool,
         multi_channel: bool = False,
         adaptive_cfg: object | None = None,
+        focus_cfg: object | None = None,
+        focus_curve: object | None = None,
     ) -> None:
         super().__init__()
         self.camera = bundle.camera
@@ -726,6 +733,20 @@ class StackWorker(QObject, _AcquireScanMixin):
         # read it. The frozen dataclass is safe to share across threads
         # (immutable).
         self._adaptive_cfg = adaptive_cfg
+        # Focus compensation config and pre-validated calibration curve.
+        # Both are pre-sampled on the GUI thread and passed as constructor
+        # args so the worker thread never reads ui.* or loads the
+        # calibration file from disk (AGENTS.md §11).
+        self._focus_cfg = focus_cfg
+        self._focus_curve = focus_curve
+        if (
+            self._focus_cfg is not None
+            and getattr(self._focus_cfg, "enabled", False)
+            and self._focus_curve is None
+        ):
+            raise ValueError(
+                "Focus compensation enabled but no calibration curve was loaded"
+            )
 
     @Slot()
     def run(self) -> None:
@@ -813,6 +834,21 @@ class StackWorker(QObject, _AcquireScanMixin):
                 self._shell._fs.configure_adaptive(  # ty: ignore[unresolved-attribute]
                     adaptive_enabled,
                     config=self._adaptive_cfg if adaptive_enabled else None,
+                )
+                # Configure the focus trajectory recorder on the save side.
+                # When focus is enabled, the per-plane loop records one
+                # FocusSample per block boundary and the HDF5 writer writes
+                # the /focus_trajectory group before file close (and the
+                # Zarr writer writes /acquisition/focus during finalize).
+                # The frozen FocusConfig is passed through so the writers
+                # publish the block size and residual settings as group attrs.
+                # When disabled, no focus trajectory is recorded or written.
+                focus_enabled = (
+                    self._focus_cfg is not None and self._focus_cfg.enabled  # ty: ignore[unresolved-attribute]
+                )
+                self._shell._fs.configure_focus(  # ty: ignore[unresolved-attribute]
+                    focus_enabled,
+                    config=self._focus_cfg if focus_enabled else None,
                 )
 
             # Setting the camera for scan acquisition
@@ -903,6 +939,31 @@ class StackWorker(QObject, _AcquireScanMixin):
                     laser2_mw=current_powers[1],
                 )
 
+            # Focus control setup: construct the controller from the
+            # pre-sampled frozen FocusConfig and FocusCurve, reading the
+            # camera travel limits from the HAL (not the UI). When focus is
+            # off (cfg is None or disabled), no controller is constructed
+            # and the per-plane loop runs the existing fixed stack path
+            # unchanged.
+            self._focus_controller = None
+            self._focus_block_count = 0
+            if self._focus_cfg is not None and self._focus_cfg.enabled:  # ty: ignore[unresolved-attribute]
+                if self._focus_curve is None:
+                    raise ValueError(
+                        "Focus compensation enabled but no calibration curve was loaded"
+                    )
+                from lightsheet.focus.controller import FocusController
+
+                cam_lo_mm = self.motors.camera.get_limit_low("mm")
+                cam_hi_mm = self.motors.camera.get_limit_high("mm")
+                self._focus_controller = FocusController(
+                    self._focus_cfg,  # type: ignore[arg-type]
+                    self._focus_curve,  # type: ignore[arg-type]
+                    n_planes,
+                    cam_lo_mm,
+                    cam_hi_mm,
+                )
+
             for plane in range(n_planes):
                 if not self._shell.stack_mode_started:
                     self._shell.sig_message.emit("Stack Acquisition Interrupted")
@@ -924,33 +985,126 @@ class StackWorker(QObject, _AcquireScanMixin):
                     ):
                         break
 
-                    # Moving sample position
+                    # Moving sample position. Position is in micrometres;
+                    # stage_pos_mm is the sample (horizontal) stage position
+                    # used for the focus feedforward curve.
                     position = self._shell.stack_starting_plane + (
                         plane * self._shell.stack_step
                     )  # ty: ignore[unsupported-operator]
-                    try:
-                        self.motors.horizontal.move_absolute_position(
-                            position, "\u03bcm"
-                        )  # Position in micro-meters
-                    except ValueError:
-                        self._shell.sig_message.emit(
-                            "Move rejected — horizontal would exceed travel limits. Stack acquisition aborted."  # noqa: E501
-                        )
-                        self._shell.sig_beep.emit()
-                        break
-                    # Per-plane position update reaches the GUI thread via the
-                    # queued sig_refresh_position_horizontal signal (already
-                    # declared on the shell and connected to
-                    # updateUi_position_horizontal) instead of a direct
-                    # cross-thread widget mutation.
-                    self._shell.sig_refresh_position_horizontal.emit()
+                    stage_pos_mm = position / 1000.0  # um -> mm
 
-                    if self._shell.saving_allowed:
-                        self._shell._fs.add_motor_parameters(  # ty: ignore[unresolved-attribute]
-                            self._shell.current_horizontal_position_text,  # ty: ignore[unresolved-attribute]
-                            self._shell.current_vertical_position_text,  # ty: ignore[unresolved-attribute]
-                            self._shell.current_camera_position_text,  # ty: ignore[unresolved-attribute]
+                    focus_boundary = (
+                        self._focus_controller is not None
+                        and (plane % self._focus_cfg.block_size_n) == 0  # ty: ignore[unresolved-attribute]
+                    )
+
+                    if focus_boundary:
+                        # Compute the previous block's sharpness before
+                        # updating the residual. The first block boundary
+                        # has no prior frame, so update_residual is skipped.
+                        sharpness_metric: float | None = None
+                        if (
+                            self._focus_cfg.autofocus_residual  # ty: ignore[unresolved-attribute]
+                            and self._focus_block_count > 0
+                        ):
+                            from lightsheet.focus.sharpness import (
+                                frame_sharpness_variance,
+                            )
+
+                            sharpness_metric = frame_sharpness_variance(
+                                self._shell.reconstructed_frame
+                            )
+                            self._focus_controller.update_residual(  # type: ignore[union-attr]
+                                sharpness_metric
+                            )
+
+                        feedforward_camera_pos_mm = float(
+                            np.interp(
+                                stage_pos_mm,
+                                self._focus_curve.stage_pos,  # type: ignore[union-attr]
+                                self._focus_curve.camera_pos,  # type: ignore[union-attr]
+                            )
                         )
+                        focus_pos_mm = self._focus_controller.target(  # type: ignore[union-attr]
+                            plane, stage_pos_mm
+                        )
+                        residual_mm = self._focus_controller.residual_mm  # type: ignore[union-attr]
+
+                        try:
+                            self.motors.move_axes_parallel(
+                                [
+                                    ("horizontal", position, "\u03bcm"),
+                                    ("camera", focus_pos_mm, "mm"),
+                                ]
+                            )
+                        except ValueError:
+                            self._shell.sig_message.emit(
+                                "Focus compensation move rejected — target outside travel limits. Stack acquisition aborted."  # noqa: E501
+                            )
+                            self._shell.sig_beep.emit()
+                            break
+
+                        # Dual-axis position refresh reaches the GUI thread
+                        # through the queued refresh signals so the motor
+                        # panel updates current_*_position_text for honest
+                        # add_motor_parameters logging.
+                        self._shell.sig_refresh_position_horizontal.emit()
+                        self._shell.sig_refresh_position_camera.emit()
+
+                        if self._shell.saving_allowed:
+                            self._shell._fs.add_motor_parameters(  # ty: ignore[unresolved-attribute]
+                                self._shell.current_horizontal_position_text,  # ty: ignore[unresolved-attribute]
+                                self._shell.current_vertical_position_text,  # ty: ignore[unresolved-attribute]
+                                self._shell.current_camera_position_text,  # ty: ignore[unresolved-attribute]
+                            )
+                            from lightsheet.focus.types import FocusSample
+
+                            focus_sample = FocusSample(
+                                block_index=self._focus_block_count,
+                                stage_pos_mm=stage_pos_mm,
+                                feedforward_camera_pos_mm=feedforward_camera_pos_mm,
+                                residual_mm=residual_mm,
+                                applied_camera_pos_mm=focus_pos_mm,
+                                sharpness_metric=sharpness_metric
+                                if self._focus_block_count > 0
+                                else None,
+                            )
+                            self._shell._fs.record_focus_sample(  # ty: ignore[unresolved-attribute]
+                                focus_sample
+                            )
+
+                        self.sig_focus_trajectory.emit(
+                            self._focus_block_count,
+                            stage_pos_mm,
+                            feedforward_camera_pos_mm,
+                            residual_mm,
+                            focus_pos_mm,
+                        )
+                        self._focus_block_count += 1
+                    else:
+                        try:
+                            self.motors.horizontal.move_absolute_position(
+                                position, "\u03bcm"
+                            )  # Position in micro-meters
+                        except ValueError:
+                            self._shell.sig_message.emit(
+                                "Move rejected — horizontal would exceed travel limits. Stack acquisition aborted."  # noqa: E501
+                            )
+                            self._shell.sig_beep.emit()
+                            break
+                        # Per-plane position update reaches the GUI thread via the
+                        # queued sig_refresh_position_horizontal signal (already
+                        # declared on the shell and connected to
+                        # updateUi_position_horizontal) instead of a direct
+                        # cross-thread widget mutation.
+                        self._shell.sig_refresh_position_horizontal.emit()
+
+                        if self._shell.saving_allowed:
+                            self._shell._fs.add_motor_parameters(  # ty: ignore[unresolved-attribute]
+                                self._shell.current_horizontal_position_text,  # ty: ignore[unresolved-attribute]
+                                self._shell.current_vertical_position_text,  # ty: ignore[unresolved-attribute]
+                                self._shell.current_camera_position_text,  # ty: ignore[unresolved-attribute]
+                            )
 
                     # Pre-acquire guard: a Stop or E-stop requested while the worker
                     # was between the motor move and this acquisition must not start

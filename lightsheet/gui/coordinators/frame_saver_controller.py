@@ -171,6 +171,14 @@ class FrameSaver(QObject):
         # attrs alongside the trajectory. None in fixed mode.
         self._adaptive_config: object | None = None
 
+        # Focus trajectory samples. Cleared in reinit.
+        self.focus_trajectory: list = []  # ty: ignore[missing-type-argument]
+        self._focus_enabled: bool = False
+        # Frozen FocusConfig. Stored when configure_focus is called so the
+        # writers can publish config attrs alongside the trajectory. None
+        # in fixed mode.
+        self._focus_config: object | None = None
+
     def reinit(self, block_size: int) -> None:
         if self.saving_started:
             self.saving_started = False
@@ -196,6 +204,11 @@ class FrameSaver(QObject):
         self.adaptive_trajectory = []
         self._adaptive_enabled = False
         self._adaptive_config = None
+
+        # Clear focus trajectory state so a re-run does not carry over.
+        self.focus_trajectory = []
+        self._focus_enabled = False
+        self._focus_config = None
 
     def add_sample_name(self, sample_name: str) -> None:
         """Add to a list the different motor positions"""
@@ -407,6 +420,48 @@ class FrameSaver(QObject):
             sample.control_variable_active,  # ty: ignore[unresolved-attribute]
             sample.reacquired,  # ty: ignore[unresolved-attribute]
             sample.power_fallback,  # ty: ignore[unresolved-attribute]
+        )
+
+    def configure_focus(self, enabled: bool, config: object | None = None) -> None:
+        """Configure the focus trajectory recorder for this acquisition.
+
+        When ``enabled`` is True, the per-plane loop calls
+        ``record_focus_sample`` once per focus block boundary, and the
+        HDF5 writer writes the ``/focus_trajectory`` group before file
+        close while the Zarr writer writes ``/acquisition/focus`` during
+        finalize. When False, no trajectory is recorded or written and
+        no focus group is created in either format.
+
+        ``config`` is the frozen ``FocusConfig`` whose block size and
+        residual settings are published as group attrs alongside the
+        per-block trajectory. It may be omitted in fixed mode
+        (``enabled=False``); when ``enabled=True`` the config attrs are
+        required so the saved trajectory is self-describing.
+        """
+        self._focus_enabled = bool(enabled)
+        self.focus_trajectory = []
+        self._focus_config = config if enabled else None
+
+    def record_focus_sample(self, sample: object) -> None:
+        """Append a frozen FocusSample to the focus trajectory list.
+
+        Called by the StackWorker once per focus block boundary, before
+        the block's frames are enqueued for saving. The sample is logged
+        and held for the HDF5 writer (``_write_focus_hdf5``) which
+        serializes the full trajectory before file close.
+        """
+        if not self._focus_enabled:
+            return
+        self.focus_trajectory.append(sample)
+        logger.info(
+            "focus sample: block=%d stage=%.4fmm feedforward=%.4fmm "
+            "residual=%.4fmm applied=%.4fmm sharpness=%s",
+            sample.block_index,  # ty: ignore[unresolved-attribute]
+            sample.stage_pos_mm,  # ty: ignore[unresolved-attribute]
+            sample.feedforward_camera_pos_mm,  # ty: ignore[unresolved-attribute]
+            sample.residual_mm,  # ty: ignore[unresolved-attribute]
+            sample.applied_camera_pos_mm,  # ty: ignore[unresolved-attribute]
+            sample.sharpness_metric,  # ty: ignore[unresolved-attribute]
         )
 
     def _adaptive_config_attrs(self) -> dict:  # ty: ignore[missing-type-argument]
@@ -2126,6 +2181,19 @@ class FrameSaverController:
 
     def record_adaptive_sample(self, sample: object) -> None:
         self.frame_saver.record_adaptive_sample(sample)
+
+    # Focus trajectory recorder — outer delegation to the inner FrameSaver.
+
+    @property
+    def focus_trajectory(self) -> list:  # ty: ignore[missing-type-argument]
+        """Read-only view of the inner FrameSaver's focus trajectory."""
+        return self.frame_saver.focus_trajectory
+
+    def configure_focus(self, enabled: bool, config: object | None = None) -> None:
+        self.frame_saver.configure_focus(enabled, config=config)
+
+    def record_focus_sample(self, sample: object) -> None:
+        self.frame_saver.record_focus_sample(sample)
 
     # -- pass-through to the wrapped FrameViewer ---------------------------
 

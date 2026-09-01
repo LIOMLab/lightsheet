@@ -144,7 +144,7 @@ def test_move_axes_parallel_called_only_at_block_boundaries(
     dual-axis ``move_axes_parallel`` calls (planes 0 and 8) and 14
     horizontal-only ``move_absolute_position`` calls."""
     from _helpers.controller_fixture import make_controller
-    from lightsheet.gui.workers import StackWorker
+
 
     ctrl, _bundle = make_controller(qtbot, request)
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)
@@ -189,9 +189,15 @@ def test_move_axes_parallel_called_only_at_block_boundaries(
     worker.run()
 
     assert len(finished_emits) == 1
-    assert len(parallel_calls) == 2, f"expected 2 parallel calls; got {len(parallel_calls)}"
-    assert len(horizontal_calls) == 14, f"expected 14 horizontal-only calls; got {len(horizontal_calls)}"
-    assert len(camera_calls) == 0, f"expected 0 per-plane camera calls; got {len(camera_calls)}"
+    assert len(parallel_calls) == 2, (
+        f"expected 2 parallel calls; got {len(parallel_calls)}"
+    )
+    assert len(horizontal_calls) == 14, (
+        f"expected 14 horizontal-only calls; got {len(horizontal_calls)}"
+    )
+    assert len(camera_calls) == 0, (
+        f"expected 0 per-plane camera calls; got {len(camera_calls)}"
+    )
 
     # Both parallel calls include horizontal and camera axes.
     for moves in parallel_calls:
@@ -207,7 +213,7 @@ def test_add_motor_parameters_logs_held_camera_position_within_block(
     position is the actually-applied (held) position, not the
     feedforward target for planes 1-7."""
     from _helpers.controller_fixture import make_controller
-    from lightsheet.gui.workers import StackWorker
+
 
     ctrl, _bundle = make_controller(qtbot, request)
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)
@@ -226,7 +232,9 @@ def test_add_motor_parameters_logs_held_camera_position_within_block(
     assert len(finished_emits) == 1
     fs = ctrl._fs.frame_saver
     camera_texts = fs.camera_positions_list
-    assert len(camera_texts) == 16, f"expected 16 camera entries; got {len(camera_texts)}"
+    assert len(camera_texts) == 16, (
+        f"expected 16 camera entries; got {len(camera_texts)}"
+    )
 
     # All planes in each block share the same camera position text.
     assert len(set(camera_texts[:8])) == 1, (
@@ -240,7 +248,8 @@ def test_add_motor_parameters_logs_held_camera_position_within_block(
     held_camera_mm = worker.motors.camera.get_position("mm")
     held_text = f"{held_camera_mm:.5f} mm"
     assert camera_texts[-1] == held_text, (
-        f"last camera text {camera_texts[-1]!r} does not match held position {held_text!r}"
+        f"last camera text {camera_texts[-1]!r} does not match "
+        f"held position {held_text!r}"
     )
 
 
@@ -251,7 +260,7 @@ def test_focus_trajectory_records_one_sample_per_block(
     focus block boundary, and each sample's applied camera position
     matches the move_axes_parallel camera target."""
     from _helpers.controller_fixture import make_controller
-    from lightsheet.gui.workers import StackWorker
+
 
     ctrl, _bundle = make_controller(qtbot, request)
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)
@@ -278,11 +287,16 @@ def test_focus_trajectory_records_one_sample_per_block(
 
     assert len(finished_emits) == 1
     traj = ctrl._fs.focus_trajectory
-    assert len(traj) == 2, f"expected 2 focus samples; got {len(traj)}"
+    assert len(traj) == 2, (
+        f"expected 2 focus samples; got {len(traj)}"
+    )
 
     for i, sample in enumerate(traj):
         assert sample.block_index == i
-        camera_target = [m for m in parallel_calls[i] if m[0] == "camera"][0][1]
+        camera_move = next(
+            m for m in parallel_calls[i] if m[0] == "camera"
+        )
+        camera_target = camera_move[1]
         assert sample.applied_camera_pos_mm == pytest.approx(camera_target)
 
 
@@ -294,9 +308,9 @@ def test_update_residual_called_from_second_block_boundary_onward(
     block's frame. The first FocusSample.sharpness_metric is None; the
     second equals the computed value."""
     from _helpers.controller_fixture import make_controller
+
     from lightsheet.focus.controller import FocusController
     from lightsheet.focus.sharpness import frame_sharpness_variance
-    from lightsheet.gui.workers import StackWorker
 
     ctrl, _bundle = make_controller(qtbot, request)
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)
@@ -309,9 +323,12 @@ def test_update_residual_called_from_second_block_boundary_onward(
     worker.siggen.error = 0
 
     residual_calls: list[float] = []
+    captured_frames: list[np.ndarray] = []
     real_update = FocusController.update_residual
 
     def _track_residual(self: FocusController, sharpness: float) -> None:
+        # Capture the frame that the sharpness metric was computed from.
+        captured_frames.append(worker._shell.reconstructed_frame.copy())
         residual_calls.append(sharpness)
         real_update(self, sharpness)
 
@@ -321,15 +338,21 @@ def test_update_residual_called_from_second_block_boundary_onward(
         worker.run()
 
     assert len(finished_emits) == 1
-    assert len(residual_calls) == 1, f"expected 1 residual update; got {len(residual_calls)}"
+    assert len(residual_calls) == 1, (
+        f"expected 1 residual update; got {len(residual_calls)}"
+    )
 
     # The sharpness stored in the second sample equals the value passed.
     traj = ctrl._fs.focus_trajectory
     assert len(traj) == 2
     assert traj[0].sharpness_metric is None
     assert traj[1].sharpness_metric == pytest.approx(residual_calls[0])
+
+    # The sharpness value must equal the value computed from the
+    # actual frame that was held at the second block boundary.
+    assert len(captured_frames) == 1
     assert residual_calls[0] == pytest.approx(
-        frame_sharpness_variance(worker._shell.reconstructed_frame)
+        frame_sharpness_variance(captured_frames[0])
     )
 
 
@@ -360,7 +383,7 @@ def test_focus_over_travel_aborts_stack_with_beep(
     on the ``move_axes_parallel`` call is exercised.
     """
     from _helpers.controller_fixture import make_controller
-    from lightsheet.gui.workers import StackWorker
+
 
     ctrl, _bundle = make_controller(qtbot, request)
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)
@@ -398,6 +421,7 @@ def test_focus_disabled_matches_fixed_stack_behavior(
     runs the existing fixed-camera path: zero dual-axis moves, zero
     focus samples, and zero focus trajectory emissions."""
     from _helpers.controller_fixture import make_controller
+
     from lightsheet.gui.workers import StackWorker
 
     ctrl, _bundle = make_controller(qtbot, request)
@@ -437,7 +461,9 @@ def test_focus_disabled_matches_fixed_stack_behavior(
     worker.run()
 
     assert len(finished_emits) == 1
-    assert len(parallel_calls) == 0, f"expected 0 parallel moves; got {len(parallel_calls)}"
+    assert len(parallel_calls) == 0, (
+        f"expected 0 parallel moves; got {len(parallel_calls)}"
+    )
     assert len(ctrl._fs.focus_trajectory) == 0
     assert len(focus_emissions) == 0
 
@@ -448,7 +474,7 @@ def test_estop_prevents_next_block_boundary_focus_move(
     """Setting estop_event after the first block aborts before the second
     block-boundary focus move is attempted."""
     from _helpers.controller_fixture import make_controller
-    from lightsheet.gui.workers import StackWorker
+
 
     ctrl, _bundle = make_controller(qtbot, request)
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)

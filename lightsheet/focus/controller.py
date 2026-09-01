@@ -36,6 +36,11 @@ class FocusController:
         self._residual_mm = 0.0
         self._reference_sharpness: float | None = None
 
+    @property
+    def residual_mm(self) -> float:
+        """Current residual correction in millimetres (read-only)."""
+        return self._residual_mm
+
     def target(self, plane_idx: int, stage_pos_mm: float) -> float:
         """Return the clamped camera focus position for ``stage_pos_mm``."""
         ff = float(
