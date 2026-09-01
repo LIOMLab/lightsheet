@@ -31,6 +31,7 @@ lightsheet = "lightsheet.__main__:main"
 packages = [
     "lightsheet",
     "lightsheet.adaptive",
+    "lightsheet.focus",
     "lightsheet.gui",
     "lightsheet.hal",
     "lightsheet.hal.real",

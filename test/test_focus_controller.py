@@ -6,7 +6,6 @@ assert, no Qt, no HAL, no hardware.
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 from lightsheet.focus import (
@@ -98,18 +97,22 @@ def test_target_returns_feedforward_interpolation() -> None:
 
 
 def test_target_clamps_to_camera_travel_limits() -> None:
-    curve = FocusCurve(stage_pos=(0.0, 10.0), camera_pos=(30.0, 32.0))
-    cfg = _cfg(max_residual_mm=10.0, residual_gain_mm=10.0)
-    ctrl = FocusController(
+    curve = FocusCurve(stage_pos=(0.0, 10.0), camera_pos=(5.0, 7.0))
+    cfg = _cfg(max_residual_mm=100.0, residual_gain_mm=100.0)
+    # A large positive residual pushes the feedforward target above the limit.
+    ctrl_hi = FocusController(
         cfg, curve, n_planes=20, cam_lo_mm=0.0, cam_hi_mm=35.0
     )
-    # Extrapolation above and below the curve range is clamped.
-    assert ctrl.target(0, 100.0) == pytest.approx(35.0)
-    assert ctrl.target(0, -100.0) == pytest.approx(0.0)
-    # A residual that would push the target out of bounds is clamped.
-    ctrl.update_residual(1.0)
-    ctrl.update_residual(0.0)
-    assert ctrl.target(0, 0.0) == pytest.approx(35.0)
+    ctrl_hi.update_residual(1.0)
+    ctrl_hi.update_residual(0.0)
+    assert ctrl_hi.target(0, 0.0) == pytest.approx(35.0)
+    # A large negative residual pushes the feedforward target below the limit.
+    ctrl_lo = FocusController(
+        cfg, curve, n_planes=20, cam_lo_mm=0.0, cam_hi_mm=35.0
+    )
+    ctrl_lo.update_residual(1.0)
+    ctrl_lo.update_residual(2.0)
+    assert ctrl_lo.target(0, 0.0) == pytest.approx(0.0)
 
 
 def test_update_residual_clamps_to_max_residual_mm() -> None:

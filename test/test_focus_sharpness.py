@@ -7,7 +7,6 @@ assert, no Qt, no hardware.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from lightsheet.focus import frame_sharpness_variance
 
