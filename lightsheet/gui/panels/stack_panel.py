@@ -36,7 +36,7 @@ _ADAPTIVE_BOUND_INVALID_MSG = (
 
 # The shutter-mode hint copy.
 _HINT_ROLLING = "Rolling shutter — exposure bound in milliseconds."
-_HINT_LIGHTSHEET = "Lightsheet shutter — exposure bound in exposed lines x line time."
+_HINT_LIGHTSHEET = "Lightsheet shutter — exposure bound in microseconds (line time)."
 
 
 class StackPanelWidget(QWidget):
@@ -387,9 +387,10 @@ class StackPanelWidget(QWidget):
 
     # --- Adaptive configuration group (opt-in overlay on the fixed stack) ---
 
-    # The 13 enumerated adaptive spinbox objectNames, in the order they
-    # appear in the form layout. Used to wire editingFinished + track
-    # prior values uniformly.
+    # The 6 operator-adjustable adaptive spinbox objectNames (the fixed
+    # controller-tuning settings — target band, reacquire threshold,
+    # block size, Kp, Ki, pilot count — moved to config.ini only).
+    # Used to wire editingFinished + track prior values uniformly.
     _ADAPTIVE_SPINBOX_NAMES: ClassVar[tuple[str, ...]] = (
         "doubleSpinBox_adaptiveMinExposure",
         "doubleSpinBox_adaptiveMaxExposure",
@@ -397,18 +398,11 @@ class StackPanelWidget(QWidget):
         "doubleSpinBox_adaptiveLaser1MaxPower",
         "doubleSpinBox_adaptiveLaser2MinPower",
         "doubleSpinBox_adaptiveLaser2MaxPower",
-        "doubleSpinBox_adaptiveTargetBandLo",
-        "doubleSpinBox_adaptiveTargetBandHi",
-        "doubleSpinBox_adaptiveReacquireThreshold",
-        "doubleSpinBox_adaptiveBlockSizeN",
-        "doubleSpinBox_adaptiveKp",
-        "doubleSpinBox_adaptiveKi",
-        "doubleSpinBox_adaptivePilotCount",
     )
 
-    # The four min/max bound pairs validated on editingFinished. Each
+    # The three min/max bound pairs validated on editingFinished. Each
     # entry maps the min spinbox name to (max spinbox name, field label
-    # for the error message).
+    # for the error message). Target band is config-only now.
     _ADAPTIVE_BOUND_PAIRS: ClassVar[dict[str, tuple[str, str]]] = {
         "doubleSpinBox_adaptiveMinExposure": (
             "doubleSpinBox_adaptiveMaxExposure",
@@ -422,10 +416,6 @@ class StackPanelWidget(QWidget):
             "doubleSpinBox_adaptiveLaser2MaxPower",
             "Laser2 power",
         ),
-        "doubleSpinBox_adaptiveTargetBandLo": (
-            "doubleSpinBox_adaptiveTargetBandHi",
-            "target band",
-        ),
     }
 
     # The two exposure-bound spinboxes whose unit swaps with shutter mode.
@@ -438,9 +428,13 @@ class StackPanelWidget(QWidget):
         """Load the validated [Adaptive] defaults from config.ini into the
         spinboxes. The schema already rejected out-of-range values at
         startup, so the loaded values are safe. A missing [Adaptive]
-        section leaves the spinboxes at their FieldSpec defaults."""
+        section leaves the spinboxes at their FieldSpec defaults. Records
+        which keys were loaded so _narrow_adaptive_power_maxima can set
+        the laser max-power defaults to the calibrated max_power only
+        when the operator did not save an explicit value."""
         from lightsheet.config import cfg_read
 
+        self._adaptive_loaded_keys: set[str] = set()
         defaults = {
             "Enabled": "",
             "Min Exposure": "",
@@ -449,13 +443,6 @@ class StackPanelWidget(QWidget):
             "Laser1 Max Power": "",
             "Laser2 Min Power": "",
             "Laser2 Max Power": "",
-            "Target Band Lo": "",
-            "Target Band Hi": "",
-            "Reacquire Threshold": "",
-            "Block Size N": "",
-            "Kp": "",
-            "Ki": "",
-            "Pilot Count": "",
         }
         try:
             cfg = cfg_read("config.ini", "Adaptive", defaults)
@@ -471,21 +458,12 @@ class StackPanelWidget(QWidget):
             "Laser1 Max Power": ("doubleSpinBox_adaptiveLaser1MaxPower", "float"),
             "Laser2 Min Power": ("doubleSpinBox_adaptiveLaser2MinPower", "float"),
             "Laser2 Max Power": ("doubleSpinBox_adaptiveLaser2MaxPower", "float"),
-            "Target Band Lo": ("doubleSpinBox_adaptiveTargetBandLo", "float"),
-            "Target Band Hi": ("doubleSpinBox_adaptiveTargetBandHi", "float"),
-            "Reacquire Threshold": (
-                "doubleSpinBox_adaptiveReacquireThreshold",
-                "float",
-            ),
-            "Block Size N": ("doubleSpinBox_adaptiveBlockSizeN", "float"),
-            "Kp": ("doubleSpinBox_adaptiveKp", "float"),
-            "Ki": ("doubleSpinBox_adaptiveKi", "float"),
-            "Pilot Count": ("doubleSpinBox_adaptivePilotCount", "float"),
         }
         for key, (widget_name, kind) in _set.items():
             raw = str(cfg.get(key, "")).strip()
             if not raw:
                 continue
+            self._adaptive_loaded_keys.add(key)
             w = getattr(self.ui, widget_name, None)
             if w is None:
                 continue
@@ -502,13 +480,18 @@ class StackPanelWidget(QWidget):
         ``min(150.0, shell._bundle.lasers[i].max_power)``. The HAL
         two-layer clamp is the safety backstop; the widget soft-block is
         a defense-in-depth so the operator cannot enter a bound above
-        the live laser's maximum."""
+        the live laser's maximum. When the operator did not save an
+        explicit max-power value in config.ini, the spinbox default is
+        set to the laser's calibrated max_power (rather than the stale
+        FieldSpec placeholder) so the bound reflects the real hardware."""
         bundle = getattr(self._shell, "_bundle", None)
         lasers = getattr(bundle, "lasers", None) if bundle is not None else None
         # Guard against a Mock shell (structural tests) or a bundle
         # without a lasers tuple yet — skip narrowing in that case.
         if not isinstance(lasers, (tuple, list)) or len(lasers) < 2:
             return
+        loaded = getattr(self, "_adaptive_loaded_keys", set())
+        config_keys = ("Laser1 Max Power", "Laser2 Max Power")
         for i, sb_name in enumerate(
             (
                 "doubleSpinBox_adaptiveLaser1MaxPower",
@@ -523,11 +506,15 @@ class StackPanelWidget(QWidget):
             except (TypeError, ValueError, AttributeError):
                 continue
             narrowed = min(150.0, live_max)
-            # Preserve the current value if it is still within the
-            # narrowed range; otherwise clamp it down.
-            cur = sb.value()
             sb.setMaximum(narrowed)
-            if cur > narrowed:
+            # If config.ini did not provide an explicit max-power value,
+            # default the bound to the laser's calibrated max_power so
+            # the operator sees the real hardware ceiling, not the
+            # FieldSpec placeholder (5.0 mW).
+            if config_keys[i] not in loaded:
+                sb.setValue(narrowed)
+            elif sb.value() > narrowed:
+                # Operator saved a value above the live max — clamp down.
                 sb.setValue(narrowed)
         # Also narrow the min-power spinboxes so a min cannot exceed the
         # narrowed max (the pair validator catches it, but the soft
@@ -615,7 +602,7 @@ class StackPanelWidget(QWidget):
             for name in self._ADAPTIVE_EXPOSURE_SPINBOXES:
                 sb = getattr(self.ui, name, None)
                 if sb is not None:
-                    sb.setSuffix(" lines")
+                    sb.setSuffix(" µs")
                     sb.setDecimals(0)
             self.ui.label_adaptiveShutterModeHint.setText(_HINT_LIGHTSHEET)
         else:
@@ -627,17 +614,53 @@ class StackPanelWidget(QWidget):
                     sb.setDecimals(0)
             self.ui.label_adaptiveShutterModeHint.setText(_HINT_ROLLING)
 
+    def _read_adaptive_fixed_config(
+        self,
+    ) -> tuple[float, float, float, int, float, float, int]:
+        """Read the fixed controller-tuning settings from config.ini
+        (target band lo/hi %, reacquire threshold %, block size N, Kp,
+        Ki, pilot count). These were removed from the GUI — they are
+        config-only because they rarely change per experiment. Falls
+        back to the schema defaults if the [Adaptive] section or
+        individual keys are absent.
+        """
+        from lightsheet.config import cfg_read
+
+        defaults = {
+            "Target Band Lo": "90.0",
+            "Target Band Hi": "95.0",
+            "Reacquire Threshold": "8.0",
+            "Block Size N": "8",
+            "Kp": "0.4",
+            "Ki": "0.05",
+            "Pilot Count": "5",
+        }
+        try:
+            cfg = cfg_read("config.ini", "Adaptive", defaults)
+        except Exception:
+            cfg = defaults
+        target_lo = float(cfg.get("Target Band Lo", "90.0")) / 100.0
+        target_hi = float(cfg.get("Target Band Hi", "95.0")) / 100.0
+        reacquire = float(cfg.get("Reacquire Threshold", "8.0")) / 100.0
+        block_n = int(float(cfg.get("Block Size N", "8")))
+        kp = float(cfg.get("Kp", "0.4"))
+        ki = float(cfg.get("Ki", "0.05"))
+        pilot = int(float(cfg.get("Pilot Count", "5")))
+        return target_lo, target_hi, reacquire, block_n, kp, ki, pilot
+
     def build_adaptive_config(self) -> AdaptiveConfig | None:
         """Pre-sample the adaptive configuration on the GUI thread and
         return a frozen ``AdaptiveConfig`` (or ``None`` when the toggle
         is unchecked or the fixed-fallback latch is set).
 
         Normalizes the GUI values to the worker's canonical units:
-        - Exposure: ms → seconds (x1e-3) in Rolling; lines x line_time
-          (µs x 1e-6) → seconds in Lightsheet.
+        - Exposure: ms → seconds (x1e-3) in Rolling; µs x 1e-6 →
+          seconds in Lightsheet.
         - Power: mW, narrowed to the live laser maxima.
-        - Target band / reacquire threshold: % → fraction (x1e-2).
-        - Block size N, Kp, Ki, Pilot Count: pass-through.
+        - Target band / reacquire threshold: % → fraction (x1e-2),
+          read from config.ini (config-only, not in the GUI).
+        - Block size N, Kp, Ki, Pilot Count: pass-through, read from
+          config.ini (config-only, not in the GUI).
 
         The frozen dataclass is safe to share across threads (immutable)
         — the worker thread receives one snapshot and never reads
@@ -647,29 +670,23 @@ class StackPanelWidget(QWidget):
             return None
         if self._adaptive_latched:
             return None
-        # Resolve the shutter mode + line time for the exposure
-        # normalization.
+        # Resolve the shutter mode for the exposure normalization. In
+        # Lightsheet mode the bound is already in µs (line time); in
+        # Rolling it is in ms.
         acq_ui = getattr(self._shell, "acquisition_panel", None)
         acq_ui = getattr(acq_ui, "ui", None) if acq_ui is not None else None
         mode = ""
-        line_time_us = 100.0
         if acq_ui is not None:
             combo = getattr(acq_ui, "comboBox_cameraShutterMode", None)
             if combo is not None:
                 mode = str(combo.currentText()).strip()
-            lt = getattr(acq_ui, "doubleSpinBox_cameraLineTime", None)
-            if lt is not None:
-                try:
-                    line_time_us = float(lt.value())
-                except (ValueError, TypeError):
-                    line_time_us = 100.0
 
         def _exposure_to_seconds(sb_name: str) -> float:
             sb = getattr(self.ui, sb_name)
             v = float(sb.value())
             if mode == "Lightsheet":
-                # lines x line_time(µs) x 1e-6 = seconds
-                return v * line_time_us * 1e-6
+                # µs x 1e-6 = seconds (the bound is already in line time µs)
+                return v * 1e-6
             # Rolling — ms x 1e-3 = seconds
             return v * 1e-3
 
@@ -679,14 +696,13 @@ class StackPanelWidget(QWidget):
         l1_max = float(self.ui.doubleSpinBox_adaptiveLaser1MaxPower.value())
         l2_min = float(self.ui.doubleSpinBox_adaptiveLaser2MinPower.value())
         l2_max = float(self.ui.doubleSpinBox_adaptiveLaser2MaxPower.value())
-        target_lo = float(self.ui.doubleSpinBox_adaptiveTargetBandLo.value()) / 100.0
-        target_hi = float(self.ui.doubleSpinBox_adaptiveTargetBandHi.value()) / 100.0
-        reacquire_sb = self.ui.doubleSpinBox_adaptiveReacquireThreshold
-        reacquire = float(reacquire_sb.value()) / 100.0
-        block_n = int(self.ui.doubleSpinBox_adaptiveBlockSizeN.value())
-        kp = float(self.ui.doubleSpinBox_adaptiveKp.value())
-        ki = float(self.ui.doubleSpinBox_adaptiveKi.value())
-        pilot = int(self.ui.doubleSpinBox_adaptivePilotCount.value())
+        # The fixed controller-tuning settings (target band, reacquire
+        # threshold, block size, Kp, Ki, pilot count) are config-only —
+        # read from config.ini, not from the UI (they were removed from
+        # the GUI to reduce clutter; they rarely change per experiment).
+        target_lo, target_hi, reacquire, block_n, kp, ki, pilot = (
+            self._read_adaptive_fixed_config()
+        )
         return AdaptiveConfig(
             enabled=True,
             min_exposure_s=min_exp_s,

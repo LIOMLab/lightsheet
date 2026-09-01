@@ -659,7 +659,7 @@ class StackWorker(QObject, _AcquireScanMixin):
     # full power tuple (L1, L2) is recorded in the HDF5 trajectory
     # group via AdaptiveSample; the signal carries L1 power for the
     # live plot.
-    sig_adaptive_trajectory = Signal(int, float, float, float, str, bool, bool)
+    sig_adaptive_trajectory = Signal(int, float, float, float, float, str, bool, bool)
 
     def __init__(
         self,
@@ -1198,41 +1198,20 @@ class StackWorker(QObject, _AcquireScanMixin):
         emit the signal, and compute the next plane's command.
 
         Called once per main plane after the frame(s) are acquired and
-        enqueued. When adaptive is off (no controller), a fixed command
-        is emitted with the current exposure/power — no measurement, no
-        computation, no hardware changes. When adaptive is on, both
-        channels' intensities are measured; the brighter channel drives
-        the shared exposure.
+        enqueued. When adaptive is off (no controller), nothing is
+        emitted — the trajectory dock stays empty for fixed stacks (a
+        fixed run is not adaptive and plotting computed power for lasers
+        that are not under automatic control would be misleading). When
+        adaptive is on, both channels' intensities are measured; the
+        brighter channel drives the shared exposure.
         """
         from lightsheet.adaptive.intensity import frame_intensity_pct
-        from lightsheet.adaptive.types import AdaptiveCommand, AdaptiveSample
+        from lightsheet.adaptive.types import AdaptiveSample
 
-        # Adaptive-off: emit a fixed command with the current exposure
-        # and staged powers. No measurement, no computation, no extra
-        # hardware writes. The signal still fires so the GUI trajectory
-        # plot shows one row per plane.
+        # Adaptive-off: no trajectory emission — the fixed stack path
+        # runs unchanged (no measurement, no computation, no hardware
+        # writes) and the GUI trajectory dock stays empty.
         if self._adaptive_controller is None:
-            current_exposure = self.camera.exposure_time
-            current_l1 = (
-                self._shell.laser1_power_pct / 100.0 * self._shell.lasers[0].max_power
-            )
-            current_l2 = (
-                self._shell.laser2_power_pct / 100.0 * self._shell.lasers[1].max_power
-            )
-            cmd = AdaptiveCommand.fixed(
-                exposure_s=current_exposure,
-                laser1_mw=current_l1,
-                laser2_mw=current_l2,
-            )
-            self.sig_adaptive_trajectory.emit(
-                plane_idx,
-                0.0,  # no intensity measurement in fixed mode
-                cmd.exposure_s,
-                cmd.laser1_mw,
-                cmd.control_variable_active,
-                cmd.reacquire,
-                cmd.power_fallback,
-            )
             return
 
         cfg = self._adaptive_cfg
@@ -1274,6 +1253,7 @@ class StackWorker(QObject, _AcquireScanMixin):
             intensities[brighter_idx],
             cmd.exposure_s,
             cmd.laser1_mw,
+            cmd.laser2_mw,
             cmd.control_variable_active,
             cmd.reacquire,
             cmd.power_fallback,

@@ -13,9 +13,9 @@ Covers the operator-facing contracts:
   row stays visible as the affordance).
 - An invalid min/max pair emits the documented message + beep, reverts
   the edit, and latches fixed-fallback until a later valid edit.
-- Rolling shows ms; Lightsheet shows lines and the bound converts to
-  seconds via exposed_lines x line_time.
-- ``build_adaptive_config`` normalizes ms/lines to seconds, percentages
+- Rolling shows ms; Lightsheet shows µs (line time) and the bound
+  converts to seconds via µs x 1e-6.
+- ``build_adaptive_config`` normalizes ms/µs to seconds, percentages
   to fractions, narrows power to live maxima, and returns a frozen
   ``AdaptiveConfig`` (or ``None`` when unchecked).
 - ``_spawn_stack_worker`` pre-samples the adaptive config on the GUI
@@ -49,8 +49,9 @@ if TYPE_CHECKING:
 
 # The 13 enumerated adaptive spinbox objectNames (UI-SPEC §Component
 # Inventory). The prose count of 14 in the FieldSpec policy table is an
-# audit typo — there are exactly 13 widgets (the 14th row is the shutter
-# hint label, not a spinbox).
+# The 6 operator-adjustable adaptive spinboxes (the fixed controller-
+# tuning settings — target band, reacquire threshold, block size, Kp,
+# Ki, pilot count — moved to config.ini only, no longer in the GUI).
 ADAPTIVE_SPINBOX_OBJNAMES = (
     "doubleSpinBox_adaptiveMinExposure",
     "doubleSpinBox_adaptiveMaxExposure",
@@ -58,13 +59,6 @@ ADAPTIVE_SPINBOX_OBJNAMES = (
     "doubleSpinBox_adaptiveLaser1MaxPower",
     "doubleSpinBox_adaptiveLaser2MinPower",
     "doubleSpinBox_adaptiveLaser2MaxPower",
-    "doubleSpinBox_adaptiveTargetBandLo",
-    "doubleSpinBox_adaptiveTargetBandHi",
-    "doubleSpinBox_adaptiveReacquireThreshold",
-    "doubleSpinBox_adaptiveBlockSizeN",
-    "doubleSpinBox_adaptiveKp",
-    "doubleSpinBox_adaptiveKi",
-    "doubleSpinBox_adaptivePilotCount",
 )
 
 
@@ -76,7 +70,7 @@ def _adaptive_ui(ctrl: Controller_MainWindow) -> Ui_StackPanel:
 def test_adaptive_group_widgets_exist(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
-    """The adaptive config group + toggle + 13 spinboxes + shutter hint
+    """The adaptive config group + toggle + 6 spinboxes + shutter hint
     exist on the stack panel with the exact UI-SPEC objectNames."""
     ctrl, _ = make_controller(qtbot, request)
     ui = _adaptive_ui(ctrl)
@@ -91,7 +85,7 @@ def test_adaptive_group_widgets_exist(
 def test_adaptive_spinboxes_are_field_spec_subclass(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
-    """Each of the 13 adaptive spinboxes is a promoted FieldSpecSpinBox."""
+    """Each of the 6 adaptive spinboxes is a promoted FieldSpecSpinBox."""
     ctrl, _ = make_controller(qtbot, request)
     ui = _adaptive_ui(ctrl)
     for name in ADAPTIVE_SPINBOX_OBJNAMES:
@@ -251,11 +245,11 @@ def test_adaptive_rolling_shutter_shows_ms(
     assert "millisecond" in hint
 
 
-def test_adaptive_lightsheet_shutter_shows_lines(
+def test_adaptive_lightsheet_shutter_shows_us(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
     """In Lightsheet shutter mode the exposure bound spinboxes show the
-    lines suffix and the hint reads the Lightsheet copy."""
+    µs suffix and the hint reads the Lightsheet copy."""
     ctrl, _ = make_controller(qtbot, request)
     ui = _adaptive_ui(ctrl)
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentText("Lightsheet")
@@ -263,30 +257,30 @@ def test_adaptive_lightsheet_shutter_shows_lines(
     from PySide6.QtWidgets import QApplication
     QApplication.processEvents()
     suffix = ui.doubleSpinBox_adaptiveMinExposure.suffix().strip().lower()
-    assert suffix == "lines"
+    assert suffix == "µs"
     hint = ui.label_adaptiveShutterModeHint.text().lower()
     assert "lightsheet" in hint
-    assert "exposed lines" in hint
+    assert "microseconds" in hint
 
 
 def test_adaptive_lightsheet_bound_converts_to_seconds(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
-    """In Lightsheet shutter mode the exposure bound converts to seconds
-    as exposed_lines x line_time. Set Min Exposure = 25 lines with
-    line_time = 100 µs → 25 x 100e-6 = 2.5e-3 s."""
+    """In Lightsheet shutter mode the exposure bound is in µs (line time)
+    and converts to seconds as µs x 1e-6. Set Min Exposure = 2500 µs
+    → 2500e-6 = 2.5e-3 s."""
     ctrl, _ = make_controller(qtbot, request)
     ui = _adaptive_ui(ctrl)
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentText("Lightsheet")
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.emit("Lightsheet")
-    ctrl.acquisition_panel.ui.doubleSpinBox_cameraLineTime.setValue(100.0)  # µs
-    ctrl.acquisition_panel.ui.doubleSpinBox_cameraExposedLines.setValue(25)
     ui.checkBox_adaptiveEnable.setChecked(True)
-    ui.doubleSpinBox_adaptiveMinExposure.setValue(25.0)  # 25 lines
+    ui.doubleSpinBox_adaptiveMaxExposure.setValue(5000.0)  # 5000 µs
+    ui.doubleSpinBox_adaptiveMaxExposure.editingFinished.emit()
+    ui.doubleSpinBox_adaptiveMinExposure.setValue(2500.0)  # 2500 µs
     ui.doubleSpinBox_adaptiveMinExposure.editingFinished.emit()
     cfg = ctrl.stack_panel.build_adaptive_config()
     assert cfg is not None
-    assert cfg.min_exposure_s == pytest.approx(25 * 100e-6, rel=1e-6)
+    assert cfg.min_exposure_s == pytest.approx(2500e-6, rel=1e-6)
 
 
 def test_adaptive_rolling_bound_converts_ms_to_seconds(
@@ -460,29 +454,54 @@ def _make_trajectory_widget(qtbot: QtBot) -> AdaptiveTrajectoryWidget:
 def test_dock_exists_and_hidden_initially(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
-    """The trajectory dock is created in the RightDockWidgetArea and is
-    hidden until adaptive is enabled (D-04)."""
+    """The trajectory dock is created and is hidden until the operator
+    opens it via the rail button. It does NOT auto-open when adaptive
+    is enabled. It can never re-dock into the main GUI."""
     ctrl, _ = make_controller(qtbot, request)
     dock = getattr(ctrl, "dockWidget_adaptiveTrajectory", None)
     assert dock is not None, "dockWidget_adaptiveTrajectory must exist on the shell"
     from PySide6.QtWidgets import QDockWidget
-
-    assert isinstance(dock, QDockWidget)
-    # The dock lives in the right dock area (D-04).
-    area = ctrl.dockWidgetArea(dock)
     from PySide6.QtCore import Qt
 
-    assert area == Qt.DockWidgetArea.RightDockWidgetArea
-    # Hidden initially (adaptive is off by default).
+    assert isinstance(dock, QDockWidget)
+    # No dock areas allowed — it can never re-dock into the main GUI.
+    assert dock.allowedAreas() == Qt.DockWidgetArea.NoDockWidgetArea
+    # Hidden initially (adaptive is off; the dock is opt-in via the
+    # rail button even when adaptive is on).
     assert not dock.isVisible()
 
 
-def test_enabling_adaptive_shows_dock_empty_state(
+def test_enabling_adaptive_shows_rail_button_not_dock(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
-    """With adaptive enabled but no stack started, the dock becomes
-    visible and shows the empty-state label with the plot hidden until
-    the first sample (must_have truth #1, #2)."""
+    """With adaptive enabled, the conditional rail button becomes
+    visible so the operator can open the trajectory dock on demand.
+    The dock itself does NOT open automatically — the trajectory plot
+    is opt-in even when adaptive mode is on."""
+    ctrl, _ = make_controller(qtbot, request)
+    ui = _adaptive_ui(ctrl)
+    ui.checkBox_adaptiveEnable.setChecked(True)
+    ui.checkBox_adaptiveEnable.toggled.emit(True)
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.processEvents()
+    # The rail button is not hidden (the affordance to open the dock).
+    assert not ctrl.ui.toolButton_railAdaptive.isHidden(), (
+        "rail button must be visible when adaptive is enabled"
+    )
+    # The dock is still hidden — opening it is the operator's choice.
+    dock = ctrl.dockWidget_adaptiveTrajectory
+    assert dock.isHidden(), (
+        "dock must NOT auto-open when adaptive is enabled; "
+        "the operator opens it via the rail button"
+    )
+
+
+def test_rail_button_opens_dock_floating(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """Toggling the rail button opens the trajectory dock as a
+    standalone floating window (never docked into the main GUI)."""
     ctrl, _ = make_controller(qtbot, request)
     ui = _adaptive_ui(ctrl)
     ui.checkBox_adaptiveEnable.setChecked(True)
@@ -491,18 +510,15 @@ def test_enabling_adaptive_shows_dock_empty_state(
 
     QApplication.processEvents()
     dock = ctrl.dockWidget_adaptiveTrajectory
-    assert not dock.isHidden(), (
-        "dock must be shown (not hidden) when adaptive is enabled"
+    assert dock.isHidden()
+    # Open via the rail button.
+    ctrl.ui.toolButton_railAdaptive.setChecked(True)
+    ctrl.ui.toolButton_railAdaptive.toggled.emit(True)
+    QApplication.processEvents()
+    assert not dock.isHidden(), "dock must open when rail button is checked"
+    assert dock.isFloating(), (
+        "dock must be a floating window, not docked into the main GUI"
     )
-    # The empty-state label is visible and shows the exact copy.
-    label = getattr(ctrl, "label_adaptiveTrajectoryEmpty", None)
-    assert label is not None
-    assert not label.isHidden()
-    assert label.text() == EMPTY_COPY
-    # The plot widget is hidden until the first sample.
-    plot = getattr(ctrl, "plotWidget_adaptiveTrajectory", None)
-    assert plot is not None
-    assert plot.isHidden()
 
 
 def test_empty_state_label_word_wraps(
@@ -534,7 +550,7 @@ def test_trajectory_widget_one_plane_shows_point_and_band(qtbot: QtBot) -> None:
     w.reset(target_band_lo=0.90, target_band_hi=0.95)
     w.append_sample(
         plane_idx=0, intensity=0.92, exposure_s=0.005,
-        power1_mw=10.0, control_variable_active="exposure",
+        power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
         reacquired=False, power_fallback=False,
     )
     assert not w.plotWidget_adaptiveTrajectory.isHidden()
@@ -559,7 +575,7 @@ def test_trajectory_widget_many_planes_appends(qtbot: QtBot) -> None:
     for i in range(10):
         w.append_sample(
             plane_idx=i, intensity=0.90 + 0.001 * i, exposure_s=0.005,
-            power1_mw=10.0, control_variable_active="exposure",
+            power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
             reacquired=False, power_fallback=False,
         )
     xs, _ys = w._intensity_curve.getData()
@@ -576,7 +592,7 @@ def test_trajectory_widget_201_planes_retains_full_data(qtbot: QtBot) -> None:
     for i in range(201):
         w.append_sample(
             plane_idx=i, intensity=0.90, exposure_s=0.005,
-            power1_mw=10.0, control_variable_active="exposure",
+            power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
             reacquired=False, power_fallback=False,
         )
     xs, _ys = w._intensity_curve.getData()
@@ -594,7 +610,7 @@ def test_trajectory_widget_reacquire_marker(qtbot: QtBot) -> None:
     w.reset(target_band_lo=0.90, target_band_hi=0.95)
     w.append_sample(
         plane_idx=3, intensity=0.50, exposure_s=0.005,
-        power1_mw=10.0, control_variable_active="exposure",
+        power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
         reacquired=True, power_fallback=False,
     )
     # A re-acquire InfiniteLine was added at x=3.
@@ -610,7 +626,7 @@ def test_trajectory_widget_power_fallback_marker(qtbot: QtBot) -> None:
     w.reset(target_band_lo=0.90, target_band_hi=0.95)
     w.append_sample(
         plane_idx=2, intensity=0.85, exposure_s=0.005,
-        power1_mw=20.0, control_variable_active="power",
+        power1_mw=20.0, power2_mw=0.0, control_variable_active="power",
         reacquired=False, power_fallback=True,
     )
     # The power-fallback scatter has one point at x=2.
@@ -621,21 +637,23 @@ def test_trajectory_widget_power_fallback_marker(qtbot: QtBot) -> None:
 
 
 def test_trajectory_widget_twin_axis_exposure_power(qtbot: QtBot) -> None:
-    """Exposure and L1 power render on a linked right ViewBox (twin-axis,
-    must_have truth #3). The right axis exists and the exposure curve
-    uses it."""
+    """Exposure renders on the right-1 ViewBox and power on the right-2
+    ViewBox (three Y axes: intensity, exposure, power). Each axis exists
+    and the curves use their respective ViewBoxes."""
     w = _make_trajectory_widget(qtbot)
     w.reset(target_band_lo=0.90, target_band_hi=0.95)
     w.append_sample(
         plane_idx=0, intensity=0.92, exposure_s=0.005,
-        power1_mw=10.0, control_variable_active="exposure",
+        power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
         reacquired=False, power_fallback=False,
     )
-    # The exposure curve has data on the right axis.
+    # The exposure + power curves have data.
     assert w._exposure_curve is not None
     assert w._power_curve is not None
-    # The right-axis ViewBox exists and is linked to the left ViewBox's X.
+    # The exposure ViewBox (right-1) and power ViewBox (right-2) both
+    # exist and are linked to the left ViewBox's X.
     assert w._right_vb is not None
+    assert w._power_vb is not None
 
 
 def test_trajectory_widget_freeze_blocks_appends(qtbot: QtBot) -> None:
@@ -645,13 +663,13 @@ def test_trajectory_widget_freeze_blocks_appends(qtbot: QtBot) -> None:
     w.reset(target_band_lo=0.90, target_band_hi=0.95)
     w.append_sample(
         plane_idx=0, intensity=0.92, exposure_s=0.005,
-        power1_mw=10.0, control_variable_active="exposure",
+        power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
         reacquired=False, power_fallback=False,
     )
     w.freeze()
     w.append_sample(
         plane_idx=1, intensity=0.93, exposure_s=0.005,
-        power1_mw=10.0, control_variable_active="exposure",
+        power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
         reacquired=False, power_fallback=False,
     )
     xs, _ys = w._intensity_curve.getData()
@@ -723,19 +741,23 @@ def test_estop_freezes_trajectory_after_laser_off(
     trajectory plot and sets the badge to ABORTED (must_have truth #4,
     threat T-10-02). The kill path precedes the GUI freeze/badge work."""
     ctrl, _ = make_controller(qtbot, request)
-    # Enable adaptive so the dock + widget exist.
+    # Enable adaptive so the rail button + widget exist, then open the
+    # dock via the rail button (it does not auto-open on enable).
     ui = _adaptive_ui(ctrl)
     ui.checkBox_adaptiveEnable.setChecked(True)
     ui.checkBox_adaptiveEnable.toggled.emit(True)
     from PySide6.QtWidgets import QApplication
 
     QApplication.processEvents()
+    ctrl.ui.toolButton_railAdaptive.setChecked(True)
+    ctrl.ui.toolButton_railAdaptive.toggled.emit(True)
+    QApplication.processEvents()
     widget = ctrl.adaptiveTrajectoryWidget
     # Append one sample so freeze has something to freeze.
     widget.reset(target_band_lo=0.90, target_band_hi=0.95)
     widget.append_sample(
         plane_idx=0, intensity=0.92, exposure_s=0.005,
-        power1_mw=10.0, control_variable_active="exposure",
+        power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
         reacquired=False, power_fallback=False,
     )
     # Track laser.off() call order vs the freeze.
@@ -805,7 +827,7 @@ def test_worker_signal_connected_to_gui_slot_queued(
             # Re-connect to the patched slot to verify the connection
             # path: the spawn wired sig_adaptive_trajectory -> slot.
             worker.sig_adaptive_trajectory.emit(
-                0, 0.92, 0.005, 10.0, "exposure", False, False
+                0, 0.92, 0.005, 10.0, 5.0, "exposure", False, False
             )
             from PySide6.QtWidgets import QApplication
 
@@ -875,16 +897,31 @@ def test_dock_state_persistence(
     assert len(bytes(state)) > 0
 
 
-def test_dock_is_floatable_and_movable(
+def test_dock_is_floating_only_closable(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
-    """The dock is floatable + movable so the operator can drag it to a
-    2nd monitor (D-04)."""
+    """The dock is a standalone floating window: closable but NOT
+    movable, NOT floatable, and cannot re-dock into the main GUI
+    (NoDockWidgetArea). This avoids re-dock overlay indicators on every
+    drag near the main window during acquisition monitoring. When
+    opened via the rail button it floats as a standalone window."""
     ctrl, _ = make_controller(qtbot, request)
     dock = ctrl.dockWidget_adaptiveTrajectory
-    assert dock.isFloating() is False  # docked by default
     features = dock.features()
     from PySide6.QtWidgets import QDockWidget
+    from PySide6.QtCore import Qt
 
-    assert features & QDockWidget.DockWidgetFeature.DockWidgetFloatable
-    assert features & QDockWidget.DockWidgetFeature.DockWidgetMovable
+    # Closable (operator can dismiss it), but NOT movable/floatable.
+    assert features & QDockWidget.DockWidgetFeature.DockWidgetClosable
+    assert not (features & QDockWidget.DockWidgetFeature.DockWidgetMovable)
+    assert not (features & QDockWidget.DockWidgetFeature.DockWidgetFloatable)
+    # No dock areas allowed — it can never re-dock into the main GUI.
+    assert dock.allowedAreas() == Qt.DockWidgetArea.NoDockWidgetArea
+    # When opened via the rail button, it floats as a standalone window.
+    ctrl.ui.toolButton_railAdaptive.setVisible(True)
+    ctrl.ui.toolButton_railAdaptive.setChecked(True)
+    ctrl.ui.toolButton_railAdaptive.toggled.emit(True)
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.processEvents()
+    assert dock.isFloating() is True

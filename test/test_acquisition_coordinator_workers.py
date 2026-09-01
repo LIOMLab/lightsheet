@@ -1171,6 +1171,9 @@ def test_spawn_stack_worker_presamples_multi_channel(
             worker_mock.finished = Mock()
             worker_mock.moveToThread = Mock()
             worker_mock.deleteLater = Mock()
+            # _spawn_stack_worker guards disconnects with receivers() > 0;
+            # return 0 so the disconnect path is skipped on a fresh mock.
+            worker_mock.receivers.return_value = 0
             return worker_mock
 
         fake_thread = Mock()

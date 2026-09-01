@@ -271,6 +271,18 @@ class Ui_Shell(object):
 
         self.verticalLayout_leftRail.addWidget(self.toolButton_railCalibrate)
 
+        self.toolButton_railAdaptive = QToolButton(self.leftRail)
+        self.toolButton_railAdaptive.setObjectName(u"toolButton_railAdaptive")
+        sizePolicy1.setHeightForWidth(self.toolButton_railAdaptive.sizePolicy().hasHeightForWidth())
+        self.toolButton_railAdaptive.setSizePolicy(sizePolicy1)
+        self.toolButton_railAdaptive.setMinimumSize(QSize(72, 64))
+        self.toolButton_railAdaptive.setMaximumSize(QSize(72, 64))
+        self.toolButton_railAdaptive.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        self.toolButton_railAdaptive.setCheckable(True)
+        self.toolButton_railAdaptive.setVisible(False)
+
+        self.verticalLayout_leftRail.addWidget(self.toolButton_railAdaptive)
+
         self.verticalSpacer_leftRail = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.verticalLayout_leftRail.addItem(self.verticalSpacer_leftRail)
@@ -380,6 +392,7 @@ class Ui_Shell(object):
         self.toolButton_railFiles.setText(QCoreApplication.translate("Shell", u"Files", None))
         self.toolButton_railPast.setText(QCoreApplication.translate("Shell", u"Past", None))
         self.toolButton_railCalibrate.setText(QCoreApplication.translate("Shell", u"Calib", None))
+        self.toolButton_railAdaptive.setText(QCoreApplication.translate("Shell", u"Adapt", None))
         self.toolBar_estop.setWindowTitle(QCoreApplication.translate("Shell", u"Safety", None))
         self.label_estopStatus.setText(QCoreApplication.translate("Shell", u"\u25cf ARMED", None))
 #if QT_CONFIG(tooltip)

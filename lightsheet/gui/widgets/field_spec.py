@@ -43,7 +43,7 @@ FIELD_SPECS: dict[str, FieldSpec] = {
     # µm precision (2 decimals in µm = 0.01 µm) for thin-section stacks.
     "doubleSpinBox_acqFirstPlane": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 41.0),
     "doubleSpinBox_acqLastPlane": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 41.0),
-    "doubleSpinBox_acqPlaneStepSize": FieldSpec("µm", 2, 0.5, 5.0, 0.0, 25000.0),
+    "doubleSpinBox_acqPlaneStepSize": FieldSpec("µm", 2, 0.5, 6.5, 0.0, 25000.0),
     # Scan panel — ETL amplitudes/offsets (V, 0-5V) + ETL steps (dimensionless)
     "doubleSpinBox_etlLeftAmplitude": FieldSpec("V", 2, 0.05, 0.5, 0.0, 5.0),
     "doubleSpinBox_etlRightAmplitude": FieldSpec("V", 2, 0.05, 0.5, 0.0, 5.0),
@@ -67,19 +67,12 @@ FIELD_SPECS: dict[str, FieldSpec] = {
     # exposure bound unit is shutter-mode-dependent (ms in Rolling / lines
     # in Lightsheet) and swapped at runtime. The power bound maximum is
     # narrowed at runtime to min(150.0, live laser max_power).
-    "doubleSpinBox_adaptiveMinExposure": FieldSpec("ms", 0, 1, 10, 1, 1000),
-    "doubleSpinBox_adaptiveMaxExposure": FieldSpec("ms", 0, 1, 10, 1, 1000),
+    "doubleSpinBox_adaptiveMinExposure": FieldSpec("ms", 0, 1, 10, 1, 10000),
+    "doubleSpinBox_adaptiveMaxExposure": FieldSpec("ms", 0, 1, 100, 1, 10000),
     "doubleSpinBox_adaptiveLaser1MinPower": FieldSpec("mW", 1, 0.5, 5.0, 0.0, 150.0),
     "doubleSpinBox_adaptiveLaser1MaxPower": FieldSpec("mW", 1, 0.5, 5.0, 0.0, 150.0),
     "doubleSpinBox_adaptiveLaser2MinPower": FieldSpec("mW", 1, 0.5, 5.0, 0.0, 150.0),
     "doubleSpinBox_adaptiveLaser2MaxPower": FieldSpec("mW", 1, 0.5, 5.0, 0.0, 150.0),
-    "doubleSpinBox_adaptiveTargetBandLo": FieldSpec("%", 0, 1, 5, 0, 100),
-    "doubleSpinBox_adaptiveTargetBandHi": FieldSpec("%", 0, 1, 5, 0, 100),
-    "doubleSpinBox_adaptiveReacquireThreshold": FieldSpec("%", 1, 0.5, 5, 0, 50),
-    "doubleSpinBox_adaptiveBlockSizeN": FieldSpec("", 0, 1, 5, 1, 100),
-    "doubleSpinBox_adaptiveKp": FieldSpec("", 3, 0.05, 0.5, 0.0, 5.0),
-    "doubleSpinBox_adaptiveKi": FieldSpec("", 3, 0.01, 0.1, 0.0, 1.0),
-    "doubleSpinBox_adaptivePilotCount": FieldSpec("", 0, 1, 5, 0, 50),
 }
 
 # Author-supplied one-line purpose per field, used by FieldSpecSpinBox
@@ -122,11 +115,4 @@ FIELD_PURPOSES: dict[str, str] = {
     "doubleSpinBox_adaptiveLaser1MaxPower": "Adaptive laser 1 max power bound",
     "doubleSpinBox_adaptiveLaser2MinPower": "Adaptive laser 2 min power bound",
     "doubleSpinBox_adaptiveLaser2MaxPower": "Adaptive laser 2 max power bound",
-    "doubleSpinBox_adaptiveTargetBandLo": "Target intensity band lower bound",
-    "doubleSpinBox_adaptiveTargetBandHi": "Target intensity band upper bound",
-    "doubleSpinBox_adaptiveReacquireThreshold": "Re-acquire deviation threshold",
-    "doubleSpinBox_adaptiveBlockSizeN": "L2 power-trim block size",
-    "doubleSpinBox_adaptiveKp": "PI proportional gain",
-    "doubleSpinBox_adaptiveKi": "PI integral gain",
-    "doubleSpinBox_adaptivePilotCount": "Pilot frame count for feedforward",
 }

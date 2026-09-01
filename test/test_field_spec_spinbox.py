@@ -48,20 +48,15 @@ EXPECTED_FIELD_SPEC_KEYS = [
     "doubleSpinBox_cameraDelayLines",
     "doubleSpinBox_laserOneAmplitude",
     "doubleSpinBox_laserTwoAmplitude",
-    # Stack panel — adaptive config group (13 enumerated spinboxes)
+    # Stack panel — adaptive config group (6 operator-adjustable
+    # spinboxes; the fixed controller-tuning settings moved to
+    # config.ini only).
     "doubleSpinBox_adaptiveMinExposure",
     "doubleSpinBox_adaptiveMaxExposure",
     "doubleSpinBox_adaptiveLaser1MinPower",
     "doubleSpinBox_adaptiveLaser1MaxPower",
     "doubleSpinBox_adaptiveLaser2MinPower",
     "doubleSpinBox_adaptiveLaser2MaxPower",
-    "doubleSpinBox_adaptiveTargetBandLo",
-    "doubleSpinBox_adaptiveTargetBandHi",
-    "doubleSpinBox_adaptiveReacquireThreshold",
-    "doubleSpinBox_adaptiveBlockSizeN",
-    "doubleSpinBox_adaptiveKp",
-    "doubleSpinBox_adaptiveKi",
-    "doubleSpinBox_adaptivePilotCount",
 ]
 
 
@@ -379,7 +374,7 @@ def test_step_by_negative_with_modifier_decrements(
 def test_field_specs_has_all_canonical_keys() -> None:
     from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 
-    assert len(FIELD_SPECS) == 37
+    assert len(FIELD_SPECS) == 30
     for key in EXPECTED_FIELD_SPEC_KEYS:
         assert key in FIELD_SPECS, f"missing key: {key}"
 
@@ -422,4 +417,4 @@ def test_field_spec_reexported_from_spinbox_module() -> None:
     from lightsheet.gui.widgets.field_spec_spinbox import FIELD_SPECS, FieldSpec
 
     assert FieldSpec is not None
-    assert len(FIELD_SPECS) == 37
+    assert len(FIELD_SPECS) == 30

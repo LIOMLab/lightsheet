@@ -205,6 +205,14 @@ def test_main_demo_mode_returns_app_exec_exit_code(
             return 0
 
         @staticmethod
+        def setOverrideCursor(*args: object, **kwargs: object) -> None:
+            pass
+
+        @staticmethod
+        def restoreOverrideCursor(*args: object, **kwargs: object) -> None:
+            pass
+
+        @staticmethod
         def instance() -> object:
             return _RealQApp.instance()
 
@@ -339,6 +347,14 @@ def test_main_rig_path_unresolved_device_shows_dialog_and_exits(
 
         def exec(self) -> int:
             return 0
+
+        @staticmethod
+        def setOverrideCursor(*args: object, **kwargs: object) -> None:
+            pass
+
+        @staticmethod
+        def restoreOverrideCursor(*args: object, **kwargs: object) -> None:
+            pass
 
         @staticmethod
         def instance() -> object:

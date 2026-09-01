@@ -114,6 +114,9 @@
       <string>Camera Settings</string>
      </property>
      <layout class="QFormLayout" name="formLayout">
+      <property name="fieldGrowthPolicy">
+       <enum>QFormLayout::ExpandingFieldsGrow</enum>
+      </property>
       <item row="1" column="0">
        <widget class="QLabel" name="label_9">
         <property name="text">
@@ -122,7 +125,14 @@
        </widget>
       </item>
       <item row="1" column="1">
-       <widget class="QComboBox" name="comboBox_cameraShutterMode"/>
+       <widget class="QComboBox" name="comboBox_cameraShutterMode">
+        <property name="sizeAdjustPolicy">
+         <enum>QComboBox::AdjustToContents</enum>
+        </property>
+        <property name="minimumContentsLength">
+         <number>12</number>
+        </property>
+       </widget>
       </item>
       <item row="2" column="0">
        <widget class="QLabel" name="label_doubleSpinBox_cameraExposureTime">

@@ -159,7 +159,7 @@
              <double>0.250000000000000</double>
             </property>
             <property name="value">
-             <double>5.000000000000000</double>
+             <double>6.500000000000000</double>
             </property>
            </widget>
           </item>
@@ -340,7 +340,7 @@
       </item>
       <item>
        <widget class="QWidget" name="widget_adaptiveFields">
-        <layout class="QFormLayout" name="formLayout_adaptiveFields">
+        <layout class="QGridLayout" name="gridLayout_adaptiveFields">
          <item row="0" column="0">
           <widget class="QLabel" name="label_adaptiveMinExposure">
            <property name="text">
@@ -357,7 +357,7 @@
             <double>1.000000000000000</double>
            </property>
            <property name="maximum">
-            <double>1000.000000000000000</double>
+            <double>10000.000000000000000</double>
            </property>
            <property name="singleStep">
             <double>1.000000000000000</double>
@@ -367,14 +367,14 @@
            </property>
           </widget>
          </item>
-         <item row="1" column="0">
+         <item row="0" column="2">
           <widget class="QLabel" name="label_adaptiveMaxExposure">
            <property name="text">
             <string>Max Exposure:</string>
            </property>
           </widget>
          </item>
-         <item row="1" column="1">
+         <item row="0" column="3">
           <widget class="FieldSpecSpinBox" name="doubleSpinBox_adaptiveMaxExposure">
            <property name="decimals">
             <number>0</number>
@@ -383,24 +383,24 @@
             <double>1.000000000000000</double>
            </property>
            <property name="maximum">
-            <double>1000.000000000000000</double>
+            <double>10000.000000000000000</double>
            </property>
            <property name="singleStep">
             <double>1.000000000000000</double>
            </property>
            <property name="value">
-            <double>1000.000000000000000</double>
+            <double>100.000000000000000</double>
            </property>
           </widget>
          </item>
-         <item row="2" column="0">
+         <item row="1" column="0">
           <widget class="QLabel" name="label_adaptiveLaser1MinPower">
            <property name="text">
-            <string>Laser1 Min Power:</string>
+            <string>L1 Min Power:</string>
            </property>
           </widget>
          </item>
-         <item row="2" column="1">
+         <item row="1" column="1">
           <widget class="FieldSpecSpinBox" name="doubleSpinBox_adaptiveLaser1MinPower">
            <property name="decimals">
             <number>1</number>
@@ -419,14 +419,14 @@
            </property>
           </widget>
          </item>
-         <item row="3" column="0">
+         <item row="1" column="2">
           <widget class="QLabel" name="label_adaptiveLaser1MaxPower">
            <property name="text">
-            <string>Laser1 Max Power:</string>
+            <string>L1 Max Power:</string>
            </property>
           </widget>
          </item>
-         <item row="3" column="1">
+         <item row="1" column="3">
           <widget class="FieldSpecSpinBox" name="doubleSpinBox_adaptiveLaser1MaxPower">
            <property name="decimals">
             <number>1</number>
@@ -445,14 +445,14 @@
            </property>
           </widget>
          </item>
-         <item row="4" column="0">
+         <item row="2" column="0">
           <widget class="QLabel" name="label_adaptiveLaser2MinPower">
            <property name="text">
-            <string>Laser2 Min Power:</string>
+            <string>L2 Min Power:</string>
            </property>
           </widget>
          </item>
-         <item row="4" column="1">
+         <item row="2" column="1">
           <widget class="FieldSpecSpinBox" name="doubleSpinBox_adaptiveLaser2MinPower">
            <property name="decimals">
             <number>1</number>
@@ -471,14 +471,14 @@
            </property>
           </widget>
          </item>
-         <item row="5" column="0">
+         <item row="2" column="2">
           <widget class="QLabel" name="label_adaptiveLaser2MaxPower">
            <property name="text">
-            <string>Laser2 Max Power:</string>
+            <string>L2 Max Power:</string>
            </property>
           </widget>
          </item>
-         <item row="5" column="1">
+         <item row="2" column="3">
           <widget class="FieldSpecSpinBox" name="doubleSpinBox_adaptiveLaser2MaxPower">
            <property name="decimals">
             <number>1</number>
@@ -497,189 +497,7 @@
            </property>
           </widget>
          </item>
-         <item row="6" column="0">
-          <widget class="QLabel" name="label_adaptiveTargetBandLo">
-           <property name="text">
-            <string>Target Band Lo:</string>
-           </property>
-          </widget>
-         </item>
-         <item row="6" column="1">
-          <widget class="FieldSpecSpinBox" name="doubleSpinBox_adaptiveTargetBandLo">
-           <property name="decimals">
-            <number>0</number>
-           </property>
-           <property name="minimum">
-            <double>0.000000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>100.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>1.000000000000000</double>
-           </property>
-           <property name="value">
-            <double>90.000000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="7" column="0">
-          <widget class="QLabel" name="label_adaptiveTargetBandHi">
-           <property name="text">
-            <string>Target Band Hi:</string>
-           </property>
-          </widget>
-         </item>
-         <item row="7" column="1">
-          <widget class="FieldSpecSpinBox" name="doubleSpinBox_adaptiveTargetBandHi">
-           <property name="decimals">
-            <number>0</number>
-           </property>
-           <property name="minimum">
-            <double>0.000000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>100.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>1.000000000000000</double>
-           </property>
-           <property name="value">
-            <double>95.000000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="8" column="0">
-          <widget class="QLabel" name="label_adaptiveReacquireThreshold">
-           <property name="text">
-            <string>Reacquire Threshold:</string>
-           </property>
-          </widget>
-         </item>
-         <item row="8" column="1">
-          <widget class="FieldSpecSpinBox" name="doubleSpinBox_adaptiveReacquireThreshold">
-           <property name="decimals">
-            <number>1</number>
-           </property>
-           <property name="minimum">
-            <double>0.000000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>50.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>0.500000000000000</double>
-           </property>
-           <property name="value">
-            <double>8.000000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="9" column="0">
-          <widget class="QLabel" name="label_adaptiveBlockSizeN">
-           <property name="text">
-            <string>Block Size N:</string>
-           </property>
-          </widget>
-         </item>
-         <item row="9" column="1">
-          <widget class="FieldSpecSpinBox" name="doubleSpinBox_adaptiveBlockSizeN">
-           <property name="decimals">
-            <number>0</number>
-           </property>
-           <property name="minimum">
-            <double>1.000000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>100.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>1.000000000000000</double>
-           </property>
-           <property name="value">
-            <double>8.000000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="10" column="0">
-          <widget class="QLabel" name="label_adaptiveKp">
-           <property name="text">
-            <string>Kp:</string>
-           </property>
-          </widget>
-         </item>
-         <item row="10" column="1">
-          <widget class="FieldSpecSpinBox" name="doubleSpinBox_adaptiveKp">
-           <property name="decimals">
-            <number>3</number>
-           </property>
-           <property name="minimum">
-            <double>0.000000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>5.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>0.050000000000000</double>
-           </property>
-           <property name="value">
-            <double>0.400000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="11" column="0">
-          <widget class="QLabel" name="label_adaptiveKi">
-           <property name="text">
-            <string>Ki:</string>
-           </property>
-          </widget>
-         </item>
-         <item row="11" column="1">
-          <widget class="FieldSpecSpinBox" name="doubleSpinBox_adaptiveKi">
-           <property name="decimals">
-            <number>3</number>
-           </property>
-           <property name="minimum">
-            <double>0.000000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>1.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>0.010000000000000</double>
-           </property>
-           <property name="value">
-            <double>0.050000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="12" column="0">
-          <widget class="QLabel" name="label_adaptivePilotCount">
-           <property name="text">
-            <string>Pilot Count:</string>
-           </property>
-          </widget>
-         </item>
-         <item row="12" column="1">
-          <widget class="FieldSpecSpinBox" name="doubleSpinBox_adaptivePilotCount">
-           <property name="decimals">
-            <number>0</number>
-           </property>
-           <property name="minimum">
-            <double>0.000000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>50.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>1.000000000000000</double>
-           </property>
-           <property name="value">
-            <double>5.000000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="13" column="0" colspan="2">
+         <item row="3" column="0" colspan="4">
           <widget class="QLabel" name="label_adaptiveShutterModeHint">
            <property name="text">
             <string>Rolling shutter — exposure bound in milliseconds.</string>

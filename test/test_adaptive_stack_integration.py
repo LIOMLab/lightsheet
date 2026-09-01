@@ -371,10 +371,10 @@ def test_adaptive_off_preserves_fixed_stack(
     qtbot: Any, request: Any, tmp_path: Path
 ) -> None:
     """When adaptive is disabled (adaptive_cfg=None), the StackWorker
-    produces a constant AdaptiveCommand per plane (control_variable_active
-    = 'fixed', no reacquire, no power_fallback), the existing fixed
-    stack call sequence is preserved, and zero extra per-plane actuator
-    writes occur beyond the existing select_laser/acquire cycle."""
+    emits no trajectory samples (the dock stays empty for fixed
+    stacks), the existing fixed stack call sequence is preserved, and
+    zero extra per-plane actuator writes occur beyond the existing
+    select_laser/acquire cycle."""
     from _helpers.controller_fixture import make_controller
 
     from lightsheet.gui.workers import StackWorker
@@ -435,28 +435,14 @@ def test_adaptive_off_preserves_fixed_stack(
             worker.run()
 
         assert len(finished_emits) == 1
-        # One fixed AdaptiveCommand per plane.
-        assert len(trajectory) == n_planes, (
-            f"adaptive-off must still emit one fixed command per plane "
-            f"({n_planes}); got {len(trajectory)}"
+        # Adaptive-off: NO trajectory emission — the trajectory dock stays
+        # empty for fixed stacks (a fixed run is not adaptive; plotting
+        # computed power for lasers not under automatic control would be
+        # misleading).
+        assert len(trajectory) == 0, (
+            f"adaptive-off must not emit trajectory samples; "
+            f"got {len(trajectory)}"
         )
-        # All commands are fixed (control_variable_active == 'fixed',
-        # no reacquire, no power_fallback). control_variable_active is
-        # arg 5 of the signal; reacquired is arg 6; power_fallback is
-        # arg 7.
-        for row in trajectory:
-            cva = row[4]
-            reacquired = row[5]
-            power_fallback = row[6]
-            assert cva == "fixed", (
-                f"adaptive-off command must be 'fixed'; got {cva!r}"
-            )
-            assert reacquired is False, (
-                f"adaptive-off must not reacquire; got {reacquired}"
-            )
-            assert power_fallback is False, (
-                f"adaptive-off must not power-fallback; got {power_fallback}"
-            )
         # Zero extra per-plane power writes (the fixed stack energizes
         # L1 once at top via start_lasers; the per-plane loop does not
         # call _write_laser1_power).
@@ -632,8 +618,8 @@ def test_one_sharp_excursion_requests_one_reacquire(
 
     assert len(finished_emits) == 1
     # At least one plane must be flagged for re-acquire (the sharp
-    # excursion at plane 5). reacquired is arg 6 of the signal.
-    reacquired_count = sum(1 for row in trajectory if row[5] is True)
+    # excursion at plane 5). reacquired is arg 7 of the signal.
+    reacquired_count = sum(1 for row in trajectory if row[6] is True)
     assert reacquired_count >= 1, (
         f"sharp excursion must trigger at least one re-acquire; "
         f"got {reacquired_count}"

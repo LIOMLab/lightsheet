@@ -10,9 +10,8 @@ from __future__ import annotations
 import contextlib
 import logging
 import typing
-import warnings
 
-from PySide6.QtCore import QThread, Slot
+from PySide6.QtCore import SIGNAL, QThread, Slot
 from PySide6.QtWidgets import QMessageBox, QPushButton, QWidget
 
 from lightsheet.gui.panels.ui_acquisition_panel import Ui_AcquisitionPanel
@@ -379,19 +378,14 @@ class AcquisitionPanelWidget(QWidget):
         multi_channel = self._shell._auto_laser1 and self._shell._auto_laser2
 
         # Disconnect the previous worker's signals so its finished→quit
-        # can't fire the reused thread a second time.
+        # can't fire the reused thread a second time. Only disconnect if
+        # there is an existing connection — disconnecting with none
+        # emits a libpyside RuntimeWarning that masks real signal-wiring
+        # bugs.
         prev_worker = getattr(self._shell, "_stack_worker", None)
         if prev_worker is not None:
-            # libpyside emits a RuntimeWarning via warnings.warn when the
-            # signal has no connections to disconnect. Suppress it scoped to
-            # this call so -W error::RuntimeWarning does not promote it.
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore",
-                    message='.*Failed to disconnect .* from signal "finished\\(\\)"',
-                    category=RuntimeWarning,
-                )
-                with contextlib.suppress(TypeError, RuntimeError):
+            with contextlib.suppress(TypeError, RuntimeError):
+                if prev_worker.receivers(SIGNAL("finished()")) > 0:
                     prev_worker.finished.disconnect()
 
         # Spawn the stack worker on the (reused) QThread (moveToThread
@@ -415,17 +409,14 @@ class AcquisitionPanelWidget(QWidget):
         # Connect the per-plane adaptive trajectory signal to the shell's
         # GUI-thread slot. The connection is queued so the worker never
         # calls pyqtgraph directly. Disconnect any prior connection from a
-        # previous queue row first so the slot does not fire twice.
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore",
-                message=(
-                    ".*Failed to disconnect .* from signal "
-                    '"sig_adaptive_trajectory\\(\\)"'
-                ),
-                category=RuntimeWarning,
-            )
-            with contextlib.suppress(TypeError, RuntimeError):
+        # previous queue row first so the slot does not fire twice. Only
+        # disconnect if there is an existing connection — disconnecting
+        # with none emits a libpyside RuntimeWarning that masks real
+        # signal-wiring bugs.
+        with contextlib.suppress(TypeError, RuntimeError):
+            if self._shell._stack_worker.receivers(
+                SIGNAL("sig_adaptive_trajectory(int,double,double,double,double,QString,bool,bool)")
+            ) > 0:
                 self._shell._stack_worker.sig_adaptive_trajectory.disconnect()
         self._shell._stack_worker.sig_adaptive_trajectory.connect(
             self._shell._on_adaptive_trajectory
@@ -433,15 +424,11 @@ class AcquisitionPanelWidget(QWidget):
         # When reusing the thread (2nd+ queue row), disconnect the prior
         # started→run so the reused thread's started only invokes this
         # row's run. Skip on the first spawn — no prior connection exists
-        # and disconnect() would warn.
+        # and disconnecting with none emits a libpyside RuntimeWarning
+        # that masks real signal-wiring bugs.
         if prev_thread is not None:
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore",
-                    message='.*Failed to disconnect .* from signal "started\\(\\)"',
-                    category=RuntimeWarning,
-                )
-                with contextlib.suppress(TypeError, RuntimeError):
+            with contextlib.suppress(TypeError, RuntimeError):
+                if self._shell._stack_thread.receivers(SIGNAL("started()")) > 0:
                     self._shell._stack_thread.started.disconnect()
         self._shell._stack_thread.started.connect(self._shell._stack_worker.run)
         self._shell._stack_worker.finished.connect(self.updateUi_post_stack_mode)
@@ -457,17 +444,40 @@ class AcquisitionPanelWidget(QWidget):
         # disconnect above only clears the worker's own signals, not the
         # thread's finished signal.
         if prev_thread is not None:
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore",
-                    message='.*Failed to disconnect .* from signal "finished\\(\\)"',
-                    category=RuntimeWarning,
-                )
-                with contextlib.suppress(TypeError, RuntimeError):
+            with contextlib.suppress(TypeError, RuntimeError):
+                if self._shell._stack_thread.receivers(SIGNAL("finished()")) > 0:
                     self._shell._stack_thread.finished.disconnect()
         self._shell._stack_thread.finished.connect(
             self._shell._stack_worker.deleteLater
         )
+        # Reset the adaptive trajectory plot at the start of each run so
+        # per-plane samples do not accumulate across runs (historical
+        # data from a previous run is cleared when the operator starts a
+        # new stack). The widget's curves are reused (created once);
+        # reset() clears their data and updates the target band. Always
+        # clear the data; only show the plot if the dock is currently
+        # visible so a hidden dock does not spin up the plot. The
+        # per-laser power curves are shown only for lasers under
+        # automatic control — plotting a non-auto laser's computed power
+        # would be misleading (the loop does not drive it).
+        if adaptive_cfg is not None:
+            self._shell.adaptiveTrajectoryWidget.reset(
+                target_band_lo=adaptive_cfg.target_band_lo,
+                target_band_hi=adaptive_cfg.target_band_hi,
+            )
+        else:
+            self._shell.adaptiveTrajectoryWidget.reset()
+        self._shell.adaptiveTrajectoryWidget.set_power_visible(
+            bool(self._shell._auto_laser1),
+            bool(self._shell._auto_laser2),
+        )
+        # If the dock is hidden, hide the plot again (reset() shows it).
+        # The data is cleared and ready; the plot will be shown when the
+        # operator reopens the dock via the rail button.
+        if not self._shell.dockWidget_adaptiveTrajectory.isVisible():
+            self._shell.adaptiveTrajectoryWidget.plotWidget_adaptiveTrajectory.hide()
+            if self._shell.adaptiveTrajectoryWidget._legend is not None:
+                self._shell.adaptiveTrajectoryWidget._legend.hide()
         self._shell._stack_thread.start()
         return self._shell._stack_worker
 

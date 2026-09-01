@@ -190,7 +190,7 @@ class DeviceRegistry:
             {
                 "Laser1 Wavelength": 555,
                 "Laser1 Power": 0.0,
-                "Laser1 Max Power": 5.0,
+                "Laser1 Max Power": 107.5,
                 "Laser1 mW per Volt": 60.0,
                 "Laser1 Calibration Curve": "",
                 "Lasers Terminals": "/Dev7/ao0:1",

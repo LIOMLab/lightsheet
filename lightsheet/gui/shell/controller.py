@@ -387,6 +387,24 @@ class Controller_MainWindow(QMainWindow):
             _btn.setToolTip(_tooltip)
             _center_toolbutton_paint(_btn)
 
+        # Adaptive trajectory dock rail button — NOT part of the
+        # exclusive page-switching QButtonGroup. It is a conditional
+        # toggle: hidden until adaptive mode is enabled, then visible
+        # so the operator can re-open the dock after closing it without
+        # having to toggle the adaptive checkbox off and on. Checked
+        # state mirrors dock visibility.
+        self.ui.toolButton_railAdaptive.setIcon(
+            _style.standardIcon(QStyle.SP_MediaVolume)
+        )
+        self.ui.toolButton_railAdaptive.setIconSize(QSize(24, 24))
+        self.ui.toolButton_railAdaptive.setToolTip(
+            "Adaptive: Toggle the trajectory dock visibility."
+        )
+        _center_toolbutton_paint(self.ui.toolButton_railAdaptive)
+        self.ui.toolButton_railAdaptive.toggled.connect(
+            self._on_rail_adaptive_toggled
+        )
+
         # Merge each panel's SHELL-OWNED widget attributes onto self.ui so
         # the shell + E-stop kill path keep a single owner for the
         # safety-critical surface.
@@ -1837,20 +1855,74 @@ class Controller_MainWindow(QMainWindow):
         adaptive is enabled. The plot widget is GUI-thread-only."""
         from PySide6.QtWidgets import QDockWidget
 
-        self.dockWidget_adaptiveTrajectory = QDockWidget("Adaptive Trajectory", self)
+        class _FloatingOnlyDock(QDockWidget):
+            """QDockWidget subclass that is always floating —
+            setFloating() is a no-op so double-clicking the title bar
+            (which Qt wires to setFloating(False)) cannot un-float or
+            re-dock the window. isFloating() always reports True. A
+            custom title bar widget swallows double-clicks at the
+            widget level so the native title-bar handler never fires."""
+
+            def setFloating(self, _floating: bool) -> None:
+                # Ignore all setFloating calls — the dock stays a
+                # standalone floating window for its entire lifetime.
+                pass
+
+            def isFloating(self) -> bool:
+                return True
+
+        self.dockWidget_adaptiveTrajectory = _FloatingOnlyDock(
+            "Adaptive Trajectory", self
+        )
         self.dockWidget_adaptiveTrajectory.setObjectName(
             "dockWidget_adaptiveTrajectory"
         )
-        self.dockWidget_adaptiveTrajectory.setAllowedAreas(
-            Qt.DockWidgetArea.LeftDockWidgetArea
-            | Qt.DockWidgetArea.RightDockWidgetArea
-            | Qt.DockWidgetArea.TopDockWidgetArea
-            | Qt.DockWidgetArea.BottomDockWidgetArea
+        # Custom title bar: a frame with the title label + a close
+        # button, whose mouseDoubleClickEvent is a no-op. This replaces
+        # Qt's native title bar so double-click never reaches the
+        # setFloating(False) wiring. The close button calls the dock's
+        # close (which fires visibilityChanged → rail button unchecks).
+        from PySide6.QtWidgets import (
+            QFrame,
+            QHBoxLayout,
+            QLabel,
+            QPushButton,
         )
+
+        class _NoDblClickFrame(QFrame):
+            def mouseDoubleClickEvent(self, _ev: object) -> None:
+                return  # swallow — no re-dock on double-click
+
+        title_bar = _NoDblClickFrame(self.dockWidget_adaptiveTrajectory)
+        title_bar.setFrameShape(QFrame.Shape.NoFrame)
+        title_bar.setObjectName("adaptiveTrajectoryTitleBar")
+        tb_layout = QHBoxLayout(title_bar)
+        tb_layout.setContentsMargins(6, 2, 6, 2)
+        tb_layout.setSpacing(4)
+        title_label = QLabel("Adaptive Trajectory", title_bar)
+        title_label.setStyleSheet("font-weight: bold;")
+        tb_layout.addWidget(title_label)
+        tb_layout.addStretch(1)
+        close_btn = QPushButton("x", title_bar)
+        close_btn.setFixedSize(20, 20)
+        close_btn.setStyleSheet(
+            "QPushButton { border: none; font-size: 16px; }"
+            "QPushButton:hover { background: #444; }"
+        )
+        close_btn.clicked.connect(self.dockWidget_adaptiveTrajectory.close)
+        tb_layout.addWidget(close_btn)
+        self.dockWidget_adaptiveTrajectory.setTitleBarWidget(title_bar)
+        # No allowed dock areas — the trajectory plot opens as a
+        # standalone floating window, never docked into the main GUI.
+        self.dockWidget_adaptiveTrajectory.setAllowedAreas(
+            Qt.DockWidgetArea.NoDockWidgetArea
+        )
+        # DockWidgetMovable + DockWidgetFloatable omitted: the dock is a
+        # standalone floating window only (no re-dock overlay indicators,
+        # no snapping back into the main GUI). Closable so the operator
+        # can dismiss it and re-open via the rail button.
         self.dockWidget_adaptiveTrajectory.setFeatures(
-            QDockWidget.DockWidgetFeature.DockWidgetMovable
-            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
-            | QDockWidget.DockWidgetFeature.DockWidgetClosable
+            QDockWidget.DockWidgetFeature.DockWidgetClosable
         )
         self.adaptiveTrajectoryWidget = AdaptiveTrajectoryWidget(
             self.dockWidget_adaptiveTrajectory
@@ -1863,12 +1935,27 @@ class Controller_MainWindow(QMainWindow):
         self.label_adaptiveTrajectoryEmpty = (
             self.adaptiveTrajectoryWidget.label_adaptiveTrajectoryEmpty
         )
+        # Register as a dock widget, then float it once via the base
+        # class (the subclass's setFloating is a no-op to prevent
+        # double-click un-floating). NoDockWidgetArea means it can
+        # never re-dock.
         self.addDockWidget(
             Qt.DockWidgetArea.RightDockWidgetArea,
             self.dockWidget_adaptiveTrajectory,
         )
-        # Hidden until adaptive is enabled.
+        QDockWidget.setFloating(self.dockWidget_adaptiveTrajectory, True)
+        # Sensible default size for the floating trajectory window so it
+        # is usable on first spawn (the dock defaults to a tiny size).
+        # The operator can resize afterwards; Qt persists the size.
+        self.dockWidget_adaptiveTrajectory.resize(720, 480)
+        # Hidden until the operator opens it via the rail button. It
+        # does NOT open automatically when adaptive is enabled.
         self.dockWidget_adaptiveTrajectory.hide()
+        # Keep the rail toggle in sync with dock visibility so closing
+        # the dock via its close button unchecks the rail button.
+        self.dockWidget_adaptiveTrajectory.visibilityChanged.connect(
+            self._on_adaptive_dock_visibility_changed
+        )
 
     def _restore_adaptive_dock_state(self) -> None:
         """Restore the persisted dock geometry + dock-widget-area from
@@ -1898,24 +1985,68 @@ class Controller_MainWindow(QMainWindow):
 
     @Slot(bool)
     def _on_adaptive_enabled_toggled(self, enabled: bool) -> None:
-        """Show/hide the trajectory dock when the adaptive enable
-        checkbox is toggled. When enabled, the dock shows the
-        empty-state label (plot hidden until the first sample). When
-        disabled, the dock is hidden entirely (the default
-        fixed-exposure stack behavior is unchanged)."""
-        if enabled:
+        """Show/hide the conditional rail button when the adaptive
+        enable checkbox is toggled. The dock itself does NOT open
+        automatically — the operator opens it via the rail button so
+        the trajectory plot is opt-in even when adaptive mode is on.
+        When disabled, the dock + rail button are hidden entirely (the
+        default fixed-exposure stack behavior is unchanged)."""
+        self.ui.toolButton_railAdaptive.setVisible(enabled)
+        if not enabled:
+            self.dockWidget_adaptiveTrajectory.hide()
+            self.ui.toolButton_railAdaptive.setChecked(False)
+
+    @Slot(bool)
+    def _on_rail_adaptive_toggled(self, checked: bool) -> None:
+        """Toggle the trajectory dock visibility from the conditional
+        rail button. The dock opens as a standalone floating window
+        (never docked into the main GUI). Historical plot data is
+        preserved across close/reopen so the operator can review a
+        finished acquisition after closing the dock; data is only
+        cleared when a new stack acquisition starts. Only shows the
+        empty state if there is no existing data to restore."""
+        if checked:
+            # Show first, then float via the base class (the subclass's
+            # setFloating is a no-op to prevent double-click un-floating).
+            # setFloating(True) on a visible dock reliably opens it as a
+            # standalone floating window; on a hidden dock Qt may keep it
+            # docked until the next show.
+            from PySide6.QtWidgets import QDockWidget as _QDW
+
             self.dockWidget_adaptiveTrajectory.show()
-            self.adaptiveTrajectoryWidget.set_empty()
+            _QDW.setFloating(self.dockWidget_adaptiveTrajectory, True)
+            # Only show the empty state if there's no existing data
+            # to restore (first open, or after a reset). If the widget
+            # already has data (a finished or in-progress acquisition),
+            # keep it visible so the operator can review it.
+            if not self.adaptiveTrajectoryWidget.has_data():
+                self.adaptiveTrajectoryWidget.set_empty()
+            else:
+                self.adaptiveTrajectoryWidget.show_plot()
         else:
             self.dockWidget_adaptiveTrajectory.hide()
 
-    @Slot(int, float, float, float, str, bool, bool)
+    @Slot(bool)
+    def _on_adaptive_dock_visibility_changed(self, visible: bool) -> None:
+        """Keep the rail toggle's checked state in sync with the dock's
+        actual visibility. Fires when the user closes the dock via its
+        own close button — the rail button unchecks so the two stay
+        consistent. Guarded against feedback loops with
+        blockSignals."""
+        btn = self.ui.toolButton_railAdaptive
+        if btn.isChecked() != visible:
+            btn.blockSignals(True)
+            btn.setChecked(visible)
+            btn.blockSignals(False)
+
+    @Slot(int, float, float, float, float, str, bool, bool)
     def _on_adaptive_trajectory(
         self,
         plane_idx: int,
         intensity: float,
         exposure_s: float,
         power1_mw: float,
+        power2_mw: float,
         control_variable_active: str,
         reacquired: bool,
         power_fallback: bool,
@@ -1924,30 +2055,21 @@ class Controller_MainWindow(QMainWindow):
 
         The worker emits ``sig_adaptive_trajectory`` (a queued
         ``Signal``); this slot appends one sample to the plot. The
-        worker NEVER calls pyqtgraph directly. On the
-        first sample of a run, the plot initializes with the current
-        target band from the stack panel's build_adaptive_config."""
-        if not self.dockWidget_adaptiveTrajectory.isVisible():
-            return
+        worker NEVER calls pyqtgraph directly. Samples are always
+        appended so the plot has the full history when the operator
+        opens the dock mid-run — the widget handles its own visibility
+        (the plot widget stays hidden until the dock is shown)."""
         # Track the last plane index for the ADAPTIVE ABORTED badge
         # (set by _freeze_adaptive_trajectory on E-stop).
         self._adaptive_last_plane = plane_idx
-        # On the first sample, reset the plot with the current target
-        # band so the LinearRegionItem spans the operator's bounds.
-        if not self.adaptiveTrajectoryWidget.plotWidget_adaptiveTrajectory.isVisible():
-            cfg = self.stack_panel.build_adaptive_config()
-            if cfg is not None:
-                self.adaptiveTrajectoryWidget.reset(
-                    target_band_lo=cfg.target_band_lo,
-                    target_band_hi=cfg.target_band_hi,
-                )
-            else:
-                self.adaptiveTrajectoryWidget.reset()
+        # The plot is reset at the start of each run in _spawn_stack_worker
+        # (not here) so per-plane samples do not accumulate across runs.
         self.adaptiveTrajectoryWidget.append_sample(
             plane_idx=plane_idx,
             intensity=intensity,
             exposure_s=exposure_s,
             power1_mw=power1_mw,
+            power2_mw=power2_mw,
             control_variable_active=control_variable_active,
             reacquired=reacquired,
             power_fallback=power_fallback,
