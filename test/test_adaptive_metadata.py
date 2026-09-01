@@ -323,6 +323,76 @@ def test_hdf5_per_plane_writes_exact_plane_row(
                 _assert_adaptive_group(grp, [samples[i]], config)
 
 
+def test_hdf5_multi_file_multi_dataset_writes_aligned_plane_rows(
+    qtbot: Any, request: Any, tmp_path: Path
+) -> None:
+    """Multi-file multi-dataset (``number_of_files > 1`` AND
+    ``number_of_datasets > 1``) writes the correct plane-range slice per
+    file — one trajectory row per plane in the file, aligned with the
+    image data — not a single row indexed by the file index.
+
+    This is the CR-02 regression guard: before the fix, file 0 got
+    ``trajectory[0]`` but held planes ``0..M-1``; file 1 got
+    ``trajectory[1]`` but held planes ``M..2M-1``. The metadata was
+    misaligned with the image data and the other ``M-1`` rows per file
+    were missing.
+    """
+    _ctrl, saver = _setup_ctrl(qtbot, request, tmp_path)
+    config = _small_config()
+    n_files = 2
+    n_datasets_per_file = 2
+    n_planes = n_files * n_datasets_per_file  # 4
+
+    with _chdir(tmp_path):
+        saver.set_files(
+            n_files,
+            "scan",
+            "stack",
+            n_datasets_per_file,
+            "reconstructed_frame",
+            wavelengths=[555],
+        )
+        saver.configure_adaptive(True, config=config)
+        samples = _make_samples(n_planes)
+        for s in samples:
+            saver.record_adaptive_sample(s)
+        saver.saving_started = True
+        _enqueue_planes(saver, n_planes)
+        saver.frame_saver_worker()
+
+        # Each file carries its own plane-range slice, not a single row
+        # indexed by the file index.
+        for file_idx, fname in enumerate(saver.filenames_list):
+            start = file_idx * n_datasets_per_file
+            end = start + n_datasets_per_file
+            expected_rows = samples[start:end]
+            with h5py.File(fname, "r") as f:
+                assert "adaptive_trajectory" in f, (
+                    f"file {file_idx} missing /adaptive_trajectory"
+                )
+                grp = f["adaptive_trajectory"]
+                # The group must carry M rows (one per plane in this
+                # file), not 1 — the pre-fix bug wrote one row.
+                pi = np.asarray(grp["plane_index"])
+                assert pi.shape == (n_datasets_per_file,), (
+                    f"file {file_idx} plane_index shape {pi.shape} "
+                    f"!= ({n_datasets_per_file},) — expected one row "
+                    f"per plane in the file"
+                )
+                _assert_adaptive_group(grp, expected_rows, config)
+
+        # The full trajectory is reconstructable by concatenating per-file
+        # rows in file order.
+        all_rows: list[int] = []
+        for fname in saver.filenames_list:
+            with h5py.File(fname, "r") as f:
+                all_rows.extend(np.asarray(f["adaptive_trajectory"]["plane_index"]).tolist())
+        assert all_rows == list(range(n_planes)), (
+            f"concatenated per-file plane_index {all_rows} != "
+            f"{list(range(n_planes))} — trajectory not reconstructable"
+        )
+
+
 # ---------------------------------------------------------------------------
 # HDF5 multi-channel
 # ---------------------------------------------------------------------------
@@ -363,6 +433,62 @@ def test_hdf5_multi_channel_writes_same_trajectory_per_channel(
                     f"channel {ch} file missing /adaptive_trajectory"
                 )
                 _assert_adaptive_group(f["adaptive_trajectory"], samples, config)
+
+
+def test_hdf5_multi_channel_multi_file_multi_dataset_writes_aligned_rows(
+    qtbot: Any, request: Any, tmp_path: Path
+) -> None:
+    """Multi-channel + multi-file + multi-dataset: each channel's file
+    carries its own plane-range slice (one trajectory row per plane in
+    the file), aligned with the image data — the multi-channel CR-02
+    regression guard.
+
+    Before the fix, the multi-channel per-plane close path called
+    ``_write_adaptive_hdf5_for_file`` without ``n_datasets_per_file``,
+    so each file got a single row indexed by the file index instead of
+    the correct ``M``-row slice.
+    """
+    _ctrl, saver = _setup_ctrl(qtbot, request, tmp_path, n_channels=2)
+    config = _small_config()
+    n_files = 2
+    n_datasets_per_file = 2
+    n_planes = n_files * n_datasets_per_file  # 4 planes, shared across channels
+
+    with _chdir(tmp_path):
+        saver.set_files(
+            n_files,
+            "scan",
+            "stack",
+            n_datasets_per_file,
+            "reconstructed_frame",
+            wavelengths=[555, 647],
+        )
+        saver.configure_adaptive(True, config=config)
+        samples = _make_samples(n_planes, n_channels=2)
+        for s in samples:
+            saver.record_adaptive_sample(s)
+        saver.saving_started = True
+        _enqueue_planes(saver, n_planes, n_channels=2)
+        saver._frame_saver_worker_multi_channel()
+
+        # Each channel's files carry the correct plane-range slice.
+        for ch in range(2):
+            for file_idx, fname in enumerate(saver.filenames_lists[ch]):
+                start = file_idx * n_datasets_per_file
+                end = start + n_datasets_per_file
+                expected_rows = samples[start:end]
+                with h5py.File(fname, "r") as f:
+                    assert "adaptive_trajectory" in f, (
+                        f"channel {ch} file {file_idx} missing /adaptive_trajectory"
+                    )
+                    grp = f["adaptive_trajectory"]
+                    pi = np.asarray(grp["plane_index"])
+                    assert pi.shape == (n_datasets_per_file,), (
+                        f"channel {ch} file {file_idx} plane_index shape "
+                        f"{pi.shape} != ({n_datasets_per_file},) — expected "
+                        f"one row per plane in the file"
+                    )
+                    _assert_adaptive_group(grp, expected_rows, config)
 
 
 # ---------------------------------------------------------------------------
