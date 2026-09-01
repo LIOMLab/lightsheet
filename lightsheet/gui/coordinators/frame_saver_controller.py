@@ -616,6 +616,117 @@ class FrameSaver(QObject):
         else:
             self._write_adaptive_hdf5(outfile)
 
+    def _focus_config_attrs(self) -> dict:  # ty: ignore[missing-type-argument]
+        """Build the FocusConfig attrs dict from the frozen
+        ``self._focus_config``. Returns an empty dict when no config is set
+        (fixed mode) so the caller can decide whether to write the group at
+        all.
+        """
+        cfg = self._focus_config
+        if cfg is None:
+            return {}
+        return {
+            "enabled": bool(cfg.enabled),  # ty: ignore[unresolved-attribute]
+            "block_size_n": int(cfg.block_size_n),  # ty: ignore[unresolved-attribute]
+            "autofocus_residual": bool(cfg.autofocus_residual),  # ty: ignore[unresolved-attribute]
+            "curve_path": str(cfg.curve_path),  # ty: ignore[unresolved-attribute]
+            "residual_gain_mm": float(cfg.residual_gain_mm),  # ty: ignore[unresolved-attribute]
+            "max_residual_mm": float(cfg.max_residual_mm),  # ty: ignore[unresolved-attribute]
+        }
+
+    def _write_focus_hdf5(
+        self,
+        outfile: h5py.File,
+        samples: list | None = None,  # ty: ignore[missing-type-argument]
+    ) -> None:
+        """Write the ``/focus_trajectory`` group to an open HDF5 file.
+
+        ``samples`` defaults to the full ``self.focus_trajectory``. Per-file
+        layouts pass a subset so the file carries only its own block rows.
+
+        The group carries one row per focus block with the approved field
+        names: block_index, stage_pos_mm, feedforward_camera_pos_mm,
+        residual_mm, applied_camera_pos_mm, sharpness_metric. The frozen
+        FocusConfig block size + residual settings are published as group
+        attrs.
+        """
+        if not self._focus_enabled:
+            return
+        traj = samples if samples is not None else self.focus_trajectory
+        if not traj:
+            return
+        grp = outfile.create_group("focus_trajectory")
+        for k, v in self._focus_config_attrs().items():
+            grp.attrs[k] = v
+        grp.create_dataset(
+            "block_index",
+            data=np.array([s.block_index for s in traj], dtype=int),
+        )
+        grp.create_dataset(
+            "stage_pos_mm",
+            data=np.array([s.stage_pos_mm for s in traj], dtype=float),
+        )
+        grp.create_dataset(
+            "feedforward_camera_pos_mm",
+            data=np.array([s.feedforward_camera_pos_mm for s in traj], dtype=float),
+        )
+        grp.create_dataset(
+            "residual_mm",
+            data=np.array([s.residual_mm for s in traj], dtype=float),
+        )
+        grp.create_dataset(
+            "applied_camera_pos_mm",
+            data=np.array([s.applied_camera_pos_mm for s in traj], dtype=float),
+        )
+        # sharpness_metric is None for the first block (no prior frame) and
+        # a float thereafter. Store None as NaN so the dataset stays numeric.
+        sharpness = [
+            s.sharpness_metric if s.sharpness_metric is not None else float("nan")
+            for s in traj
+        ]
+        grp.create_dataset(
+            "sharpness_metric",
+            data=np.array(sharpness, dtype=float),
+        )
+
+    def _write_focus_hdf5_for_file(
+        self,
+        outfile: h5py.File,
+        file_idx: int,
+        n_files: int,
+        n_datasets_per_file: int = 1,
+        actual_n_datasets: int | None = None,
+    ) -> None:
+        """Write the focus trajectory group for a specific file's plane
+        range.
+
+        One ``FocusSample`` is recorded per focus block. The block's row is
+        included in every file that contains planes within that block. For
+        stitch (``n_files == 1``) the full trajectory is written. For
+        per-plane/multi-dataset layouts, a row is included when the block
+        overlaps the file's plane span, using ``block_size_n`` from the
+        frozen FocusConfig. Fixed mode is a no-op.
+        """
+        if not self._focus_enabled or not self.focus_trajectory:
+            return
+        if n_files == 1:
+            self._write_focus_hdf5(outfile)
+            return
+        cfg = self._focus_config
+        block_size = int(getattr(cfg, "block_size_n", 1)) if cfg is not None else 1
+        file_start = file_idx * n_datasets_per_file
+        row_count = n_datasets_per_file
+        if actual_n_datasets is not None:
+            row_count = min(actual_n_datasets, n_datasets_per_file)
+        file_end = file_start + row_count
+        rows = [
+            s
+            for s in self.focus_trajectory
+            if file_start <= s.block_index * block_size < file_end
+        ]
+        if rows:
+            self._write_focus_hdf5(outfile, samples=rows)
+
     def frame_saver_worker(self) -> None:
         """Thread for saving 3D arrays (or 2D arrays).
         The number of datasets per file is the number of 2D arrays.
@@ -759,6 +870,13 @@ class FrameSaver(QObject):
             # with more trajectory rows than image datasets.
             try:
                 self._write_adaptive_hdf5_for_file(
+                    outfile,
+                    idx,
+                    len(self.filenames_list),
+                    int(self.number_of_datasets),
+                    actual_n_datasets=counter - 1,
+                )
+                self._write_focus_hdf5_for_file(
                     outfile,
                     idx,
                     len(self.filenames_list),
@@ -930,6 +1048,12 @@ class FrameSaver(QObject):
                             n_files_per_channel,
                             n_datasets_per_file,
                         )
+                        self._write_focus_hdf5_for_file(
+                            outfile,
+                            file_idx[channel_idx],
+                            n_files_per_channel,
+                            n_datasets_per_file,
+                        )
                     except Exception as e:
                         self.sig_status_message.emit(f"Save error: {e}")
                         self.saving_started = False
@@ -976,6 +1100,13 @@ class FrameSaver(QObject):
                         # `except Exception: pass` hid adaptive-write
                         # failures from the operator).
                         self._write_adaptive_hdf5_for_file(
+                            outfile,
+                            file_idx[ch],
+                            n_files_per_channel,
+                            n_datasets_per_file,
+                            actual_n_datasets=ds_counter[ch] - 1,
+                        )
+                        self._write_focus_hdf5_for_file(
                             outfile,
                             file_idx[ch],
                             n_files_per_channel,
@@ -1167,6 +1298,9 @@ class FrameSaver(QObject):
                 try:
                     self._zarr_saver.set_adaptive_trajectory(
                         self.adaptive_trajectory, self._adaptive_config
+                    )
+                    self._zarr_saver.set_focus_trajectory(
+                        self.focus_trajectory, self._focus_config
                     )
                     self._zarr_saver.finalize()
                     self.sig_status_message.emit("Zarr store " + store_path + " saved")
@@ -1364,6 +1498,13 @@ class FrameSaver(QObject):
                         int(self.number_of_datasets),
                         actual_n_datasets=counter - 1,
                     )
+                    self._write_focus_hdf5_for_file(
+                        outfile,
+                        idx,
+                        len(self.filenames_list),
+                        int(self.number_of_datasets),
+                        actual_n_datasets=counter - 1,
+                    )
                 except Exception as e:
                     self.sig_status_message.emit(f"Save error: {e}")
                     self.saving_started = False
@@ -1394,6 +1535,9 @@ class FrameSaver(QObject):
                 try:
                     self._zarr_saver.set_adaptive_trajectory(
                         self.adaptive_trajectory, self._adaptive_config
+                    )
+                    self._zarr_saver.set_focus_trajectory(
+                        self.focus_trajectory, self._focus_config
                     )
                     self._zarr_saver.finalize()
                     self.sig_status_message.emit("Zarr store " + store_path + " saved")
@@ -1597,6 +1741,12 @@ class FrameSaver(QObject):
                             n_files_per_channel,
                             n_datasets_per_file,
                         )
+                        self._write_focus_hdf5_for_file(
+                            outfile,
+                            file_idx[channel_idx],
+                            n_files_per_channel,
+                            n_datasets_per_file,
+                        )
                     except Exception as e:
                         self.sig_status_message.emit(f"Save error: {e}")
                         self.saving_started = False
@@ -1641,6 +1791,13 @@ class FrameSaver(QObject):
                             n_datasets_per_file,
                             actual_n_datasets=ds_counter[ch] - 1,
                         )
+                        self._write_focus_hdf5_for_file(
+                            outfiles[ch],
+                            file_idx[ch],
+                            n_files_per_channel,
+                            n_datasets_per_file,
+                            actual_n_datasets=ds_counter[ch] - 1,
+                        )
                         outfiles[ch].close()
                     except Exception as e:
                         self.sig_status_message.emit(f"Save error: {e}")
@@ -1662,6 +1819,9 @@ class FrameSaver(QObject):
                 try:
                     self._zarr_saver.set_adaptive_trajectory(
                         self.adaptive_trajectory, self._adaptive_config
+                    )
+                    self._zarr_saver.set_focus_trajectory(
+                        self.focus_trajectory, self._focus_config
                     )
                     self._zarr_saver.finalize()
                     self.sig_status_message.emit("Zarr store " + store_path + " saved")
@@ -1745,6 +1905,11 @@ class ZarrSaver:
         # mode (no adaptive group written).
         self._adaptive_trajectory: list = []  # ty: ignore[missing-type-argument]
         self._adaptive_config: object | None = None
+
+        # Focus trajectory . Set by set_focus_trajectory before finalize
+        # so _write_focus_group can publish the /acquisition/focus group.
+        self._focus_trajectory: list = []  # ty: ignore[missing-type-argument]
+        self._focus_config: object | None = None
         # ``write_empty_chunks`` global-config override state. Set in
         # start_stack, restored in finalize. Defaults to False here so
         # _restore_write_empty_chunks is a no-op if start_stack never ran
@@ -2006,6 +2171,80 @@ class ZarrSaver:
             data=np.array([s.power_fallback for s in traj], dtype=bool),
         )
 
+    def set_focus_trajectory(
+        self,
+        trajectory: list,  # ty: ignore[missing-type-argument]
+        config: object | None,
+    ) -> None:
+        """Provide the focus trajectory samples + frozen config so
+        ``finalize`` can publish the ``/acquisition/focus`` group. Called
+        by the save worker before finalize when focus is enabled. An empty
+        trajectory or None config means fixed mode — no focus group is
+        written.
+        """
+        self._focus_trajectory = list(trajectory) if trajectory else []
+        self._focus_config = config
+
+    def _write_focus_group(self) -> None:
+        """Write the ``/acquisition/focus`` group via the writer's public
+        ``root`` handle.
+
+        Called AFTER ``finalize_with_resolutions`` and after
+        ``_write_adaptive_group`` so the focus group is a sibling under
+        ``/acquisition``. The group carries one row per focus block with
+        the same field names as the HDF5 ``/focus_trajectory`` group:
+        block_index, stage_pos_mm, feedforward_camera_pos_mm,
+        residual_mm, applied_camera_pos_mm, sharpness_metric. The frozen
+        FocusConfig block size + residual settings are published as group
+        attrs. No-op when the trajectory is empty (fixed mode).
+        """
+        if not self._focus_trajectory:
+            return
+        if self._writer is None:
+            raise RuntimeError("ZarrSaver._write_focus_group called with no writer")
+        root = self._writer.root
+        acq = root["acquisition"]
+        grp = acq.create_group("focus")  # ty: ignore[unresolved-attribute]
+        traj = self._focus_trajectory
+        cfg = self._focus_config
+
+        if cfg is not None:
+            grp.attrs["enabled"] = bool(cfg.enabled)  # ty: ignore[unresolved-attribute]
+            grp.attrs["block_size_n"] = int(cfg.block_size_n)  # ty: ignore[unresolved-attribute]
+            grp.attrs["autofocus_residual"] = bool(cfg.autofocus_residual)  # ty: ignore[unresolved-attribute]
+            grp.attrs["curve_path"] = str(cfg.curve_path)  # ty: ignore[unresolved-attribute]
+            grp.attrs["residual_gain_mm"] = float(cfg.residual_gain_mm)  # ty: ignore[unresolved-attribute]
+            grp.attrs["max_residual_mm"] = float(cfg.max_residual_mm)  # ty: ignore[unresolved-attribute]
+
+        grp.create_array(
+            "block_index",
+            data=np.array([s.block_index for s in traj], dtype=int),
+        )
+        grp.create_array(
+            "stage_pos_mm",
+            data=np.array([s.stage_pos_mm for s in traj], dtype=float),
+        )
+        grp.create_array(
+            "feedforward_camera_pos_mm",
+            data=np.array([s.feedforward_camera_pos_mm for s in traj], dtype=float),
+        )
+        grp.create_array(
+            "residual_mm",
+            data=np.array([s.residual_mm for s in traj], dtype=float),
+        )
+        grp.create_array(
+            "applied_camera_pos_mm",
+            data=np.array([s.applied_camera_pos_mm for s in traj], dtype=float),
+        )
+        sharpness = [
+            s.sharpness_metric if s.sharpness_metric is not None else float("nan")
+            for s in traj
+        ]
+        grp.create_array(
+            "sharpness_metric",
+            data=np.array(sharpness, dtype=float),
+        )
+
     def finalize(self) -> None:
         """Build the analysis pyramid + NGFF metadata, then the
         ``/acquisition`` group.
@@ -2097,6 +2336,10 @@ class ZarrSaver:
         # is a sibling under /acquisition/adaptive . No-op
         # when the trajectory is empty (fixed mode).
         self._write_adaptive_group()
+        # Write the focus trajectory group after /acquisition/adaptive so
+        # it is a sibling under /acquisition/focus . No-op when the
+        # trajectory is empty (fixed mode).
+        self._write_focus_group()
         self._finalized = True
         self.saving_started = False
 

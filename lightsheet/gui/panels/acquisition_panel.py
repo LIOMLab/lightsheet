@@ -396,6 +396,8 @@ class AcquisitionPanelWidget(QWidget):
         # returns a frozen AdaptiveConfig (or None when the toggle is
         # unchecked or the fixed-fallback latch is set).
         adaptive_cfg = self._shell.stack_panel.build_adaptive_config()
+        focus_cfg = self._shell.stack_panel.build_focus_config()
+        focus_curve = self._shell.stack_panel.build_focus_curve()
         self._shell._stack_worker = StackWorker(  # ty: ignore[unresolved-attribute]
             self._shell._bundle,
             self._shell._hw,  # ty: ignore[invalid-argument-type]
@@ -406,6 +408,8 @@ class AcquisitionPanelWidget(QWidget):
             save_all_full,
             multi_channel,
             adaptive_cfg=adaptive_cfg,
+            focus_cfg=focus_cfg,
+            focus_curve=focus_curve,
         )
         self._shell._stack_worker.moveToThread(self._shell._stack_thread)  # ty: ignore[unresolved-attribute]
         # Connect the per-plane adaptive trajectory signal to the shell's
@@ -422,6 +426,17 @@ class AcquisitionPanelWidget(QWidget):
                 self._shell._stack_worker.sig_adaptive_trajectory.disconnect()  # ty: ignore[unresolved-attribute]
         self._shell._stack_worker.sig_adaptive_trajectory.connect(  # ty: ignore[unresolved-attribute]
             self._shell._on_adaptive_trajectory
+        )
+        # Connect the per-block focus trajectory signal to the shell's
+        # GUI-thread slot. Queued connection so the worker never touches
+        # pyqtgraph. Disconnect any prior connection first.
+        with contextlib.suppress(TypeError, RuntimeError):
+            if self._shell._stack_worker.receivers(  # ty: ignore[unresolved-attribute]
+                SIGNAL("sig_focus_trajectory(int,double,double,double,double)")
+            ) > 0:
+                self._shell._stack_worker.sig_focus_trajectory.disconnect()  # ty: ignore[unresolved-attribute]
+        self._shell._stack_worker.sig_focus_trajectory.connect(  # ty: ignore[unresolved-attribute]
+            self._shell._on_focus_trajectory
         )
         # When reusing the thread (2nd+ queue row), disconnect the prior
         # started→run so the reused thread's started only invokes this
@@ -480,6 +495,17 @@ class AcquisitionPanelWidget(QWidget):
             self._shell.adaptiveTrajectoryWidget.plotWidget_adaptiveTrajectory.hide()
             if self._shell.adaptiveTrajectoryWidget._legend is not None:
                 self._shell.adaptiveTrajectoryWidget._legend.hide()
+
+        # Reset the focus trajectory plot at the start of each run so
+        # per-block samples do not accumulate across runs. Use the
+        # operator's selected X-axis variable.
+        x_axis = self._shell.stack_panel.ui.comboBox_focusXAxisVariable.currentText()
+        self._shell.focusTrajectoryWidget.reset(x_axis_variable=x_axis)
+        if not self._shell.dockWidget_focusTrajectory.isVisible():
+            self._shell.focusTrajectoryWidget.plotWidget_focusTrajectory.hide()
+            if self._shell.focusTrajectoryWidget._legend is not None:
+                self._shell.focusTrajectoryWidget._legend.hide()
+
         self._shell._stack_thread.start()  # ty: ignore[unresolved-attribute]
         return self._shell._stack_worker  # ty: ignore[invalid-return-type, unresolved-attribute]
 

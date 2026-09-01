@@ -21,6 +21,7 @@ Covers the operator-facing contracts:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
@@ -274,3 +275,278 @@ def test_build_focus_curve_returns_loaded_curve_object(
     # Unchecked returns None even though a curve is still armed.
     ui.checkBox_focusEnable.setChecked(False)
     assert ctrl.stack_panel.build_focus_curve() is None
+
+
+# ================================================================= #
+# D-11.6 telemetry UI: focus trajectory dock, badge, worker wiring,
+# E-stop freeze, and pre-sampling. RED tests for the Task 3 contract.
+# ================================================================= #
+
+EMPTY_FOCUS_COPY = (
+    "No focus run yet. Enable Camera focus compensation in the Stack panel, "
+    "load a calibration file, and start a stack to see the focus trajectory."
+)
+
+
+def _focus_trajectory_widget(qtbot: QtBot) -> Any:
+    """Construct a FocusTrajectoryWidget headless for unit testing.
+
+    Imported lazily so collection succeeds in the RED state.
+    """
+    try:
+        from lightsheet.gui.widgets.focus_trajectory import FocusTrajectoryWidget
+    except ImportError as exc:
+        pytest.fail(f"FocusTrajectoryWidget not importable: {exc}")
+    widget = FocusTrajectoryWidget()
+    qtbot.addWidget(widget)
+    return widget
+
+
+def test_focus_dock_exists_and_hidden_initially(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """The focus trajectory dock is created and hidden until the
+    operator enables focus compensation."""
+    ctrl, _ = make_controller(qtbot, request)
+    dock = getattr(ctrl, "dockWidget_focusTrajectory", None)
+    assert dock is not None, "dockWidget_focusTrajectory must exist on the shell"
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QDockWidget
+
+    assert isinstance(dock, QDockWidget)
+    assert dock.allowedAreas() == Qt.DockWidgetArea.NoDockWidgetArea
+    assert not dock.isVisible()
+
+
+def test_enabling_focus_shows_dock_and_empty_state(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """Checking focus enable shows the trajectory dock and the empty-state
+    copy; the plot is hidden until a run starts."""
+    ctrl, _ = make_controller(qtbot, request)
+    ui = _focus_ui(ctrl)
+    ui.checkBox_focusEnable.setChecked(True)
+    ui.checkBox_focusEnable.toggled.emit(True)
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.processEvents()
+    dock = ctrl.dockWidget_focusTrajectory
+    assert not dock.isHidden()
+    assert dock.isFloating()
+    widget = ctrl.focusTrajectoryWidget
+    assert not widget.label_focusTrajectoryEmpty.isHidden()
+    assert widget.plotWidget_focusTrajectory.isHidden()
+
+
+def test_empty_state_label_has_exact_copy(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """The empty-state label carries the exact UI-SPEC copy and is
+    word-wrapped."""
+    ctrl, _ = make_controller(qtbot, request)
+    label = getattr(ctrl, "label_focusTrajectoryEmpty", None)
+    assert label is not None, "label_focusTrajectoryEmpty must exist on the shell"
+    assert label.wordWrap() is True
+    assert EMPTY_FOCUS_COPY in label.text() or "No focus run yet" in label.text()
+
+
+def test_focus_trajectory_widget_empty_state(qtbot: QtBot) -> None:
+    """set_empty shows the empty-state label and hides the plot."""
+    w = _focus_trajectory_widget(qtbot)
+    w.set_empty()
+    assert not w.label_focusTrajectoryEmpty.isHidden()
+    assert w.plotWidget_focusTrajectory.isHidden()
+
+
+def test_focus_trajectory_widget_appends_block(qtbot: QtBot) -> None:
+    """append_sample with one block swaps to the plot and draws the
+    camera-position curve."""
+    w = _focus_trajectory_widget(qtbot)
+    w.reset(x_axis_variable="Plane")
+    w.append_sample(
+        block_idx=0,
+        stage_pos_mm=0.01,
+        camera_pos_mm=20.0,
+        residual_mm=0.0,
+        x_axis_value=0.0,
+    )
+    assert not w.plotWidget_focusTrajectory.isHidden()
+    assert w.label_focusTrajectoryEmpty.isHidden()
+    curve = w._camera_curve
+    xs, ys = curve.getData()  # type: ignore[unresolved-attribute]
+    assert len(xs) == 1 and len(ys) == 1
+    assert ys[0] == pytest.approx(20.0)
+
+
+def test_focus_trajectory_widget_x_axis_switch(qtbot: QtBot) -> None:
+    """set_x_axis_variable switches the X axis between block index and
+    stage position."""
+    w = _focus_trajectory_widget(qtbot)
+    w.reset(x_axis_variable="Plane")
+    w.append_sample(
+        block_idx=2,
+        stage_pos_mm=0.05,
+        camera_pos_mm=22.0,
+        residual_mm=0.0,
+        x_axis_value=0.0,
+    )
+    w.set_x_axis_variable("Stage position (mm)")
+    # After the switch the camera curve should be replotted with X = stage pos.
+    xs, _ys = w._camera_curve.getData()  # type: ignore[unresolved-attribute]
+    assert xs[0] == pytest.approx(0.05)
+
+
+def test_focus_trajectory_widget_residual_marker(qtbot: QtBot) -> None:
+    """A non-zero residual at a block renders a warning-olive diamond
+    marker on that block."""
+    w = _focus_trajectory_widget(qtbot)
+    w.reset(x_axis_variable="Plane")
+    w.append_sample(
+        block_idx=1,
+        stage_pos_mm=0.02,
+        camera_pos_mm=21.0,
+        residual_mm=0.05,
+        x_axis_value=0.0,
+    )
+    scatter = w._residual_scatter
+    spots = scatter.getData()  # type: ignore[unresolved-attribute]
+    assert len(spots[0]) == 1
+
+
+def test_focus_trajectory_widget_freeze_blocks_appends(qtbot: QtBot) -> None:
+    """After freeze() (E-stop), further append_sample calls are ignored."""
+    w = _focus_trajectory_widget(qtbot)
+    w.reset(x_axis_variable="Plane")
+    w.append_sample(
+        block_idx=0,
+        stage_pos_mm=0.0,
+        camera_pos_mm=20.0,
+        residual_mm=0.0,
+        x_axis_value=0.0,
+    )
+    w.freeze()
+    w.append_sample(
+        block_idx=1,
+        stage_pos_mm=0.01,
+        camera_pos_mm=20.5,
+        residual_mm=0.0,
+        x_axis_value=0.0,
+    )
+    xs, _ys = w._camera_curve.getData()  # type: ignore[unresolved-attribute]
+    assert len(xs) == 1, "post-freeze append must be ignored"
+
+
+def test_badge_focus_running_string(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """The badge renders 'FOCUS RUNNING — plane {n}/{N}' with the em-dash."""
+    ctrl, _ = make_controller(qtbot, request)
+    ctrl.number_of_planes = 50
+    ctrl._update_mode_badge("FOCUS", "RUNNING", plane=12, total=50)
+    text = ctrl.ui.label_modeBadge.text()
+    assert "FOCUS RUNNING" in text
+    assert "\u2014" in text
+    assert "plane 12/50" in text
+
+
+def test_badge_focus_aborted_string(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """E-stop mid-focus-run transitions the badge to 'FOCUS ABORTED'."""
+    ctrl, _ = make_controller(qtbot, request)
+    ctrl.number_of_planes = 50
+    ctrl._update_mode_badge("FOCUS", "ABORTED", plane=12, total=50)
+    text = ctrl.ui.label_modeBadge.text()
+    assert "FOCUS ABORTED" in text
+    assert "plane 12/50" in text
+
+
+def test_spawn_stack_worker_passes_frozen_focus_cfg_and_curve(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Any
+) -> None:
+    """`_spawn_stack_worker` pre-samples focus config and curve on the GUI
+    thread and passes them as StackWorker constructor args."""
+    ctrl, _ = make_controller(qtbot, request)
+    ui = _focus_ui(ctrl)
+    path = tmp_path / "curve.json"
+    path.write_text('{"points": [[0.0, 20.0], [10.0, 22.0], [20.0, 24.0]]}')
+    ui.checkBox_focusEnable.setChecked(True)
+    ui.lineEdit_focusCurvePath.setText(str(path))
+    ui.pushButton_focusLoad.click()
+    ctrl.stack_first_plane_set = True
+    ctrl.stack_last_plane_set = True
+    ctrl.stack_starting_plane = 0.0
+    ctrl.stack_ending_plane = 100.0
+    ctrl.number_of_planes = 2
+    ctrl.saving_allowed = True
+    captured: dict = {}  # type: ignore[missing-type-argument]
+    import lightsheet.gui.workers as workers_mod
+
+    orig_init = workers_mod.StackWorker.__init__
+
+    def capture_init(self: Any, *args: Any, **kwargs: Any) -> None:
+        captured["focus_cfg"] = kwargs.get("focus_cfg")
+        captured["focus_curve"] = kwargs.get("focus_curve")
+        orig_init(self, *args, **kwargs)
+
+    with patch.object(workers_mod.StackWorker, "__init__", capture_init):
+        try:
+            ctrl.acquisition_panel._spawn_stack_worker()
+        finally:
+            thread = getattr(ctrl, "_stack_thread", None)
+            if thread is not None and thread.isRunning():
+                thread.quit()
+                thread.wait(2000)
+
+    assert captured.get("focus_cfg") is not None
+    assert captured.get("focus_curve") is not None
+    assert isinstance(captured["focus_cfg"], FocusConfig)
+    assert captured["focus_curve"] == ctrl.stack_panel.build_focus_curve()
+
+
+def test_estop_freezes_focus_trajectory_and_sets_badge(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """E-stop performs synchronous laser.off() first, then freezes the
+    focus trajectory plot and sets the badge to FOCUS ABORTED."""
+    ctrl, _ = make_controller(qtbot, request)
+    ui = _focus_ui(ctrl)
+    # Arm a valid focus curve and enable focus.
+    path = Path(str(getattr(ctrl, "save_directory", "/tmp"))) / "focus_curve.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"points": [[0.0, 20.0], [10.0, 22.0], [20.0, 24.0]]}')
+    ui.checkBox_focusEnable.setChecked(True)
+    ui.checkBox_focusEnable.toggled.emit(True)
+    ui.lineEdit_focusCurvePath.setText(str(path))
+    ui.pushButton_focusLoad.click()
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.processEvents()
+    widget = ctrl.focusTrajectoryWidget
+    widget.reset(x_axis_variable="Plane")
+    widget.append_sample(
+        block_idx=0,
+        stage_pos_mm=0.0,
+        camera_pos_mm=20.0,
+        residual_mm=0.0,
+        x_axis_value=0.0,
+    )
+    off_calls: list[int] = []
+    real_off = [laser.off for laser in ctrl.lasers]
+
+    def _tracking_off(idx: int) -> Any:
+        def _off() -> None:
+            if widget._frozen:
+                off_calls.append(-1)
+            off_calls.append(idx)
+            real_off[idx]()
+        return _off
+
+    for idx, laser in enumerate(ctrl.lasers):
+        laser.off = _tracking_off(idx)
+    ctrl.updateUi_estop_pressed()
+    QApplication.processEvents()
+    assert 0 in off_calls and 1 in off_calls
+    assert -1 not in off_calls, "freeze must happen after laser.off()"
+    assert widget._frozen is True
+    assert "FOCUS ABORTED" in ctrl.ui.label_modeBadge.text()

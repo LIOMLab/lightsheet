@@ -15,7 +15,7 @@ import typing
 import webbrowser
 from functools import partial
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import numpy as np
 from PySide6.QtCore import QEvent, QRect, QSize, Qt, QTimer, Signal, Slot
@@ -56,6 +56,7 @@ from lightsheet.gui.panels.stack_panel import StackPanelWidget
 from lightsheet.gui.shell.ui_shell import Ui_Shell
 from lightsheet.gui.widgets.adaptive_trajectory import AdaptiveTrajectoryWidget
 from lightsheet.gui.widgets.channel_radio import ChannelRadio
+from lightsheet.gui.widgets.focus_trajectory import FocusTrajectoryWidget
 from lightsheet.hal.bundle import DeviceBundle
 from lightsheet.wavelength_color import wavelength_to_hex
 
@@ -845,17 +846,29 @@ class Controller_MainWindow(QMainWindow):
         # slot calls append_sample).
         self._adaptive_dock_state_key = "ui/adaptiveTrajectoryDockState"
         self._build_adaptive_trajectory_dock()
+
+        # --- focus trajectory dock ---
+        # Same pattern as the adaptive dock: a QDockWidget hosting the live
+        # per-block focus trajectory plot. Hidden until focus compensation
+        # is enabled.
+        self._focus_dock_state_key = "ui/focusTrajectoryDockState"
+        self._build_focus_trajectory_dock()
+
         # Restore the persisted dock state (geometry + dock-widget-area)
         # from QSettings. This is the dock-state persistence reversibility
         # concern noted in — QSettings, not config.ini, so demo
         # tests do not write config.ini.
         self._restore_adaptive_dock_state()
+        self._restore_focus_dock_state()
 
-        # Wire the adaptive enable toggle on the stack panel to show/hide
-        # the dock. The toggle handler lives on the shell so the dock
-        # lifecycle stays with the QMainWindow owner.
+        # Wire the adaptive + focus enable toggles on the stack panel to
+        # show/hide their trajectory docks. The toggle handlers live on
+        # the shell so the dock lifecycle stays with the QMainWindow owner.
         self.stack_panel.ui.checkBox_adaptiveEnable.toggled.connect(
             self._on_adaptive_enabled_toggled
+        )
+        self.stack_panel.ui.checkBox_focusEnable.toggled.connect(
+            self._on_focus_enabled_toggled
         )
         # The mode badge min width accommodates the longest single-line
         # adaptive string: "ADAPTIVE RUNNING — plane 999/999 (row 3/5)
@@ -1190,10 +1203,11 @@ class Controller_MainWindow(QMainWindow):
             # Persist the last stack's start/end/step so a re-run does not
             # require re-driving the stage.
             self._save_stack_params()
-            # Persist the adaptive trajectory dock state to QSettings.
+            # Persist the adaptive + focus trajectory dock state to QSettings.
             # After the synchronous shutdown decision so a "No" does not
             # persist. Skipped in demo mode.
             self._save_adaptive_dock_state()
+            self._save_focus_dock_state()
             # Guard: hardware_init may not have run yet (100ms single-shot
             # timer). If the window is closed before it fires, self.lasers /
             # self.camera / self.etls / self.timer_imageview /
@@ -1492,6 +1506,12 @@ class Controller_MainWindow(QMainWindow):
             n = plane if plane > 0 else 1
             n_total = total if total > 0 else int(getattr(self, "number_of_planes", 0))
             text = f"ADAPTIVE {state} \u2014 plane {n}/{n_total}"
+            if queue_row and queue_total:
+                text += f" (row {queue_row}/{queue_total})"
+        elif mode == "FOCUS":
+            n = plane if plane > 0 else 1
+            n_total = total if total > 0 else int(getattr(self, "number_of_planes", 0))
+            text = f"FOCUS {state} \u2014 plane {n}/{n_total}"
             if queue_row and queue_total:
                 text += f" (row {queue_row}/{queue_total})"
         else:
@@ -2091,6 +2111,183 @@ class Controller_MainWindow(QMainWindow):
         total = int(getattr(self, "number_of_planes", 0))
         self._update_mode_badge("ADAPTIVE", "ABORTED", plane=plane, total=total)
 
+    # --- focus trajectory dock lifecycle ---
+
+    def _build_focus_trajectory_dock(self) -> None:
+        """Create the focus trajectory QDockWidget in the
+        RightDockWidgetArea. Mirrors the adaptive dock pattern: floating
+        standalone window, hidden at construction, shown when focus
+        compensation is enabled."""
+        from PySide6.QtWidgets import QDockWidget
+
+        class _FloatingOnlyDock(QDockWidget):
+            """QDockWidget subclass that is always floating."""
+
+            def setFloating(self, _: bool) -> None:
+                pass
+
+            def isFloating(self) -> bool:
+                return True
+
+        self.dockWidget_focusTrajectory = _FloatingOnlyDock(
+            "Focus Trajectory", self
+        )
+        self.dockWidget_focusTrajectory.setObjectName(
+            "dockWidget_focusTrajectory"
+        )
+
+        title_bar = self._build_no_dbl_click_title_bar(
+            "Focus Trajectory",
+            "Close focus trajectory dock",
+            self.dockWidget_focusTrajectory,
+        )
+        self.dockWidget_focusTrajectory.setTitleBarWidget(title_bar)
+        self.dockWidget_focusTrajectory.setAllowedAreas(
+            Qt.DockWidgetArea.NoDockWidgetArea
+        )
+        self.dockWidget_focusTrajectory.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetClosable
+        )
+        self.focusTrajectoryWidget = FocusTrajectoryWidget(
+            self.dockWidget_focusTrajectory
+        )
+        self.dockWidget_focusTrajectory.setWidget(self.focusTrajectoryWidget)
+        self.plotWidget_focusTrajectory = (
+            self.focusTrajectoryWidget.plotWidget_focusTrajectory
+        )
+        self.label_focusTrajectoryEmpty = (
+            self.focusTrajectoryWidget.label_focusTrajectoryEmpty
+        )
+        self.addDockWidget(
+            Qt.DockWidgetArea.RightDockWidgetArea,
+            self.dockWidget_focusTrajectory,
+        )
+        QDockWidget.setFloating(self.dockWidget_focusTrajectory, True)
+        self.dockWidget_focusTrajectory.resize(720, 480)
+        self.dockWidget_focusTrajectory.hide()
+        self.dockWidget_focusTrajectory.visibilityChanged.connect(
+            self._on_focus_dock_visibility_changed
+        )
+
+    def _build_no_dbl_click_title_bar(
+        self,
+        title: str,
+        tooltip: str,
+        dock: Any,
+    ) -> Any:
+        """Build a custom title bar with a close button whose
+        mouseDoubleClickEvent is a no-op."""
+        from PySide6.QtWidgets import (
+            QFrame,
+            QHBoxLayout,
+            QLabel,
+            QPushButton,
+        )
+
+        class _NoDblClickFrame(QFrame):
+            def mouseDoubleClickEvent(self, _ev: object) -> None:
+                return
+
+        title_bar = _NoDblClickFrame(dock)
+        title_bar.setFrameShape(QFrame.Shape.NoFrame)
+        tb_layout = QHBoxLayout(title_bar)
+        tb_layout.setContentsMargins(8, 4, 8, 4)
+        tb_layout.setSpacing(4)
+        title_label = QLabel(title, title_bar)
+        tb_layout.addWidget(title_label)
+        tb_layout.addStretch(1)
+        close_btn = QPushButton("x", title_bar)
+        close_btn.setFixedSize(20, 20)
+        close_btn.setStyleSheet(
+            "QPushButton { border: none; }"
+            "QPushButton:hover { background: #444; }"
+        )
+        close_btn.setToolTip(tooltip)
+        close_btn.clicked.connect(dock.close)
+        tb_layout.addWidget(close_btn)
+        return title_bar
+
+    def _restore_focus_dock_state(self) -> None:
+        """Restore the persisted focus dock geometry from QSettings."""
+        from PySide6.QtCore import QSettings
+
+        settings = QSettings("lightsheet", "shell")
+        state = settings.value(self._focus_dock_state_key)
+        if state is not None:
+            with contextlib.suppress(TypeError, RuntimeError):
+                self.restoreState(state)
+
+    def _save_focus_dock_state(self) -> None:
+        """Persist the focus dock geometry to QSettings."""
+        if getattr(self, "_demo_mode", False):
+            return
+        from PySide6.QtCore import QSettings
+
+        settings = QSettings("lightsheet", "shell")
+        settings.setValue(self._focus_dock_state_key, self.saveState())
+
+    @Slot(bool)
+    def _on_focus_enabled_toggled(self, enabled: bool) -> None:
+        """Show/hide the focus trajectory dock when the focus enable
+        checkbox is toggled. The dock opens automatically on enable and
+        closes/hides on disable, showing the empty state when no run is
+        active."""
+        from PySide6.QtWidgets import QDockWidget as _QDW
+
+        if enabled:
+            self.dockWidget_focusTrajectory.show()
+            _QDW.setFloating(self.dockWidget_focusTrajectory, True)
+            if not self.focusTrajectoryWidget.has_data():
+                self.focusTrajectoryWidget.set_empty()
+            else:
+                self.focusTrajectoryWidget.show_plot()
+        else:
+            self.dockWidget_focusTrajectory.hide()
+
+    @Slot(bool)
+    def _on_focus_dock_visibility_changed(self, visible: bool) -> None:
+        """No-op rail toggle for focus (no rail button in this phase);
+        kept for symmetry and to satisfy QDockWidget visibility events."""
+        pass
+
+    @Slot(int, float, float, float, float)
+    def _on_focus_trajectory(
+        self,
+        block_idx: int,
+        stage_pos_mm: float,
+        feedforward_camera_pos_mm: float,
+        residual_mm: float,
+        applied_camera_pos_mm: float,
+    ) -> None:
+        """GUI-thread slot for the per-block focus trajectory signal.
+
+        The worker emits ``sig_focus_trajectory`` (a queued ``Signal``);
+        this slot appends one sample to the plot. The worker NEVER calls
+        pyqtgraph directly.
+        """
+        self._focus_last_block = block_idx
+        x_is_stage = (
+            self.stack_panel.ui.comboBox_focusXAxisVariable.currentText()
+            == "Stage position (mm)"
+        )
+        x_axis_value = stage_pos_mm if x_is_stage else float(block_idx)
+        self.focusTrajectoryWidget.append_sample(
+            block_idx=block_idx,
+            stage_pos_mm=stage_pos_mm,
+            camera_pos_mm=applied_camera_pos_mm,
+            residual_mm=residual_mm,
+            x_axis_value=x_axis_value,
+        )
+
+    def _freeze_focus_trajectory(self) -> None:
+        """Freeze the focus trajectory plot and set the badge to
+        FOCUS ABORTED. Called from the E-stop handler AFTER the
+        synchronous laser-off kill path completes."""
+        self.focusTrajectoryWidget.freeze()
+        block = int(getattr(self, "_focus_last_block", 0))
+        total = int(getattr(self, "number_of_planes", 0))
+        self._update_mode_badge("FOCUS", "ABORTED", plane=block, total=total)
+
     @Slot()
     def updateUi_estop_pressed(self) -> None:
         """E-stop button / F12 hotkey handler.
@@ -2126,11 +2323,14 @@ class Controller_MainWindow(QMainWindow):
                     f"microscope. Cause: {laser.error_message}"
                 )
                 laser.error = 0
-        # Freeze the adaptive trajectory plot AFTER the synchronous laser-off
-        # kill path completes. The dock stays visible so the operator can
-        # review the partial trajectory. No-op if no adaptive run in progress.
+        # Freeze the adaptive + focus trajectory plots AFTER the synchronous
+        # laser-off kill path completes. The docks stay visible so the
+        # operator can review the partial trajectory. No-op if the respective
+        # trajectory widget does not exist.
         if hasattr(self, "adaptiveTrajectoryWidget"):
             self._freeze_adaptive_trajectory()
+        if hasattr(self, "focusTrajectoryWidget"):
+            self._freeze_focus_trajectory()
         # Refresh-after-action: both status labels reflect the post-E-stop
         # state. Deferred via QTimer.singleShot(0, ...) so the GUI thread
         # releases within ~1 ms of the press — the synchronous kill loop
