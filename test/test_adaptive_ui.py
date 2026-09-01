@@ -12,8 +12,7 @@ Covers the operator-facing contracts:
   instances with the exact objectNames from the UI-SPEC. The seven
   fixed controller-tuning settings (target band lo/hi, re-acquire
   threshold, block size N, Kp, Ki, pilot count) are config.ini only —
-  they are not surfaced as GUI widgets (approved deviation, recorded
-  in 10-UI-SPEC.md).
+  they are not surfaced as GUI widgets (approved deviation).
 - The enable toggle hides only the fields container (the group box title
   row stays visible as the affordance).
 - An invalid min/max pair emits the documented message + beep, reverts
@@ -55,8 +54,8 @@ if TYPE_CHECKING:
 # The 6 operator-adjustable adaptive spinbox objectNames (UI-SPEC §Component
 # Inventory). The seven fixed controller-tuning settings (target band lo/hi,
 # re-acquire threshold, block size N, Kp, Ki, pilot count) moved to
-# config.ini only per the approved deviation recorded in 10-UI-SPEC.md —
-# they are no longer GUI widgets.
+# config.ini only per the approved deviation — they are no longer GUI
+# widgets.
 ADAPTIVE_SPINBOX_OBJNAMES = (
     "doubleSpinBox_adaptiveMinExposure",
     "doubleSpinBox_adaptiveMaxExposure",
@@ -981,8 +980,7 @@ def test_reacquire_legend_sample_is_warning_olive(qtbot: QtBot) -> None:
 
 def test_power_l1_curve_pen_is_amber(qtbot: QtBot) -> None:
     """The L1 power curve pen resolves to amber #E0A030 (the
-    operator-approved power-family color, recorded as an approved
-    deviation in 10-UI-SPEC.md)."""
+    operator-approved power-family color)."""
     w = _make_trajectory_widget(qtbot)
     assert w._power_curve is not None
     hex_color = _pen_color_hex(w._power_curve.opts["pen"])

@@ -285,9 +285,10 @@ class AdaptiveTrajectoryWidget(QWidget):
         # further right (column 5). Column 4 is a fixed-width gap (20px)
         # so the two right axes have visible padding between them.
         # L1 (amber) + L2 (lighter amber) share this axis. Amber is the
-        # operator-approved power-family color (recorded as an approved
-        # deviation in 10-UI-SPEC.md — information blue clashed with the
-        # accent-blue intensity curve).
+        # operator-approved power-family color — information blue clashed
+        # with the accent-blue intensity curve, so amber groups the
+        # entire power family (axis + L1 + L2 + fallback triangles)
+        # under one visually distinct color.
         self._power_vb = pg.ViewBox()
         item.scene().addItem(self._power_vb)
         power_ax = pg.AxisItem("right")
