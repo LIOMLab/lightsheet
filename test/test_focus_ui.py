@@ -78,6 +78,18 @@ def test_focus_group_widgets_exist(
         assert hasattr(ui, name), f"missing focus widget {name}"
 
 
+def test_focus_x_axis_combo_has_only_plane(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """The focus X-axis combo contains only "Plane"; the
+    "Stage position (mm)" option has been removed."""
+    ctrl, _ = make_controller(qtbot, request)
+    ui = _focus_ui(ctrl)
+    combo = ui.comboBox_focusXAxisVariable
+    assert combo.count() == 1, f"expected one X-axis option, got {combo.count()}"
+    assert combo.currentText() == "Plane"
+
+
 def test_focus_block_size_is_field_spec_subclass(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
@@ -318,11 +330,34 @@ def test_focus_dock_exists_and_hidden_initially(
     assert not dock.isVisible()
 
 
-def test_enabling_focus_shows_dock_and_empty_state(
+def test_enabling_focus_shows_rail_button_not_dock(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
-    """Checking focus enable shows the trajectory dock and the empty-state
-    copy; the plot is hidden until a run starts."""
+    """Checking focus enable shows the conditional rail button so the
+    operator can open the trajectory dock on demand. The dock itself does
+    NOT open automatically."""
+    ctrl, _ = make_controller(qtbot, request)
+    ui = _focus_ui(ctrl)
+    ui.checkBox_focusEnable.setChecked(True)
+    ui.checkBox_focusEnable.toggled.emit(True)
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.processEvents()
+    assert not ctrl.ui.toolButton_railFocus.isHidden(), (
+        "rail button must be visible when focus is enabled"
+    )
+    dock = ctrl.dockWidget_focusTrajectory
+    assert dock.isHidden(), (
+        "dock must NOT auto-open when focus is enabled; "
+        "the operator opens it via the rail button"
+    )
+
+
+def test_focus_rail_button_opens_dock_floating(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """Toggling the focus rail button opens the trajectory dock as a
+    standalone floating window (never docked into the main GUI)."""
     ctrl, _ = make_controller(qtbot, request)
     ui = _focus_ui(ctrl)
     ui.checkBox_focusEnable.setChecked(True)
@@ -331,11 +366,58 @@ def test_enabling_focus_shows_dock_and_empty_state(
 
     QApplication.processEvents()
     dock = ctrl.dockWidget_focusTrajectory
-    assert not dock.isHidden()
-    assert dock.isFloating()
+    assert dock.isHidden()
+    ctrl.ui.toolButton_railFocus.setChecked(True)
+    ctrl.ui.toolButton_railFocus.toggled.emit(True)
+    QApplication.processEvents()
+    assert not dock.isHidden(), "dock must open when rail button is checked"
+    assert dock.isFloating(), (
+        "dock must be a floating window, not docked into the main GUI"
+    )
     widget = ctrl.focusTrajectoryWidget
     assert not widget.label_focusTrajectoryEmpty.isHidden()
     assert widget.plotWidget_focusTrajectory.isHidden()
+
+
+def test_focus_rail_button_closes_dock(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """Unchecking the focus rail button hides the trajectory dock."""
+    ctrl, _ = make_controller(qtbot, request)
+    ui = _focus_ui(ctrl)
+    ui.checkBox_focusEnable.setChecked(True)
+    ui.checkBox_focusEnable.toggled.emit(True)
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.processEvents()
+    ctrl.ui.toolButton_railFocus.setChecked(True)
+    ctrl.ui.toolButton_railFocus.toggled.emit(True)
+    QApplication.processEvents()
+    assert not ctrl.dockWidget_focusTrajectory.isHidden()
+    ctrl.ui.toolButton_railFocus.setChecked(False)
+    ctrl.ui.toolButton_railFocus.toggled.emit(False)
+    QApplication.processEvents()
+    assert ctrl.dockWidget_focusTrajectory.isHidden()
+
+
+def test_focus_dock_visibility_syncs_rail_button(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """Closing the dock via its close button unchecks the rail button."""
+    ctrl, _ = make_controller(qtbot, request)
+    ui = _focus_ui(ctrl)
+    ui.checkBox_focusEnable.setChecked(True)
+    ui.checkBox_focusEnable.toggled.emit(True)
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.processEvents()
+    ctrl.ui.toolButton_railFocus.setChecked(True)
+    ctrl.ui.toolButton_railFocus.toggled.emit(True)
+    QApplication.processEvents()
+    assert ctrl.ui.toolButton_railFocus.isChecked()
+    ctrl.dockWidget_focusTrajectory.close()
+    QApplication.processEvents()
+    assert not ctrl.ui.toolButton_railFocus.isChecked()
 
 
 def test_empty_state_label_has_exact_copy(
@@ -502,6 +584,46 @@ def test_spawn_stack_worker_passes_frozen_focus_cfg_and_curve(
     assert captured.get("focus_curve") is not None
     assert isinstance(captured["focus_cfg"], FocusConfig)
     assert captured["focus_curve"] == ctrl.stack_panel.build_focus_curve()
+
+
+def test_spawn_stack_worker_keeps_plot_visible_when_focus_dock_open(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Any
+) -> None:
+    """When the focus trajectory dock is already open, _spawn_stack_worker
+    does not re-hide the plot/legend."""
+    ctrl, _ = make_controller(qtbot, request)
+    ui = _focus_ui(ctrl)
+    path = tmp_path / "curve.json"
+    path.write_text('{"points": [[0.0, 20.0], [10.0, 22.0], [20.0, 24.0]]}')
+    ui.checkBox_focusEnable.setChecked(True)
+    ui.checkBox_focusEnable.toggled.emit(True)
+    ui.lineEdit_focusCurvePath.setText(str(path))
+    ui.pushButton_focusLoad.click()
+    ctrl.stack_first_plane_set = True
+    ctrl.stack_last_plane_set = True
+    ctrl.stack_starting_plane = 0.0
+    ctrl.stack_ending_plane = 100.0
+    ctrl.number_of_planes = 2
+    ctrl.saving_allowed = True
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.processEvents()
+    # Open the focus dock via the rail button so the visible branch is taken.
+    ctrl.ui.toolButton_railFocus.setChecked(True)
+    ctrl.ui.toolButton_railFocus.toggled.emit(True)
+    QApplication.processEvents()
+    assert not ctrl.dockWidget_focusTrajectory.isHidden()
+
+    try:
+        ctrl.acquisition_panel._spawn_stack_worker()
+    finally:
+        thread = getattr(ctrl, "_stack_thread", None)
+        if thread is not None and thread.isRunning():
+            thread.quit()
+            thread.wait(2000)
+
+    # The plot should still be visible because the dock was already open.
+    assert not ctrl.focusTrajectoryWidget.plotWidget_focusTrajectory.isHidden()
 
 
 def test_estop_freezes_focus_trajectory_and_sets_badge(

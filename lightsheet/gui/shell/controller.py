@@ -406,6 +406,22 @@ class Controller_MainWindow(QMainWindow):
             self._on_rail_adaptive_toggled
         )
 
+        # Focus trajectory dock rail button — same conditional pattern as
+        # the adaptive rail button: hidden until focus is enabled, then
+        # visible so the operator can open the focus trajectory dock on
+        # demand. Checked state mirrors the dock's visibility.
+        self.ui.toolButton_railFocus.setIcon(
+            _style.standardIcon(QStyle.SP_MediaPause)  # ty: ignore[unresolved-attribute]
+        )
+        self.ui.toolButton_railFocus.setIconSize(QSize(24, 24))
+        self.ui.toolButton_railFocus.setToolTip(
+            "Focus: Toggle the focus trajectory dock visibility."
+        )
+        _center_toolbutton_paint(self.ui.toolButton_railFocus)
+        self.ui.toolButton_railFocus.toggled.connect(
+            self._on_rail_focus_toggled
+        )
+
         # Merge each panel's SHELL-OWNED widget attributes onto self.ui so
         # the shell + E-stop kill path keep a single owner for the
         # safety-critical surface.
@@ -869,6 +885,12 @@ class Controller_MainWindow(QMainWindow):
         )
         self.stack_panel.ui.checkBox_focusEnable.toggled.connect(
             self._on_focus_enabled_toggled
+        )
+        # Sync the conditional rail button visibility with the initial
+        # focus-enabled state (e.g. when restored from config.ini). The
+        # dock stays hidden until the operator explicitly opens it.
+        self._on_focus_enabled_toggled(
+            self.stack_panel.ui.checkBox_focusEnable.isChecked()
         )
         # The mode badge min width accommodates the longest single-line
         # adaptive string: "ADAPTIVE RUNNING — plane 999/999 (row 3/5)
@@ -2115,9 +2137,9 @@ class Controller_MainWindow(QMainWindow):
 
     def _build_focus_trajectory_dock(self) -> None:
         """Create the focus trajectory QDockWidget in the
-        RightDockWidgetArea. Mirrors the adaptive dock pattern: floating
-        standalone window, hidden at construction, shown when focus
-        compensation is enabled."""
+        RightDockWidgetArea. Mirrors the adaptive dock pattern: a floating
+        standalone window, hidden at construction, opened by the operator
+        via the conditional left-rail focus button."""
         from PySide6.QtWidgets import QDockWidget
 
         class _FloatingOnlyDock(QDockWidget):
@@ -2228,13 +2250,27 @@ class Controller_MainWindow(QMainWindow):
 
     @Slot(bool)
     def _on_focus_enabled_toggled(self, enabled: bool) -> None:
-        """Show/hide the focus trajectory dock when the focus enable
-        checkbox is toggled. The dock opens automatically on enable and
-        closes/hides on disable, showing the empty state when no run is
-        active."""
-        from PySide6.QtWidgets import QDockWidget as _QDW
+        """Show/hide the conditional focus rail button when the focus
+        enable checkbox is toggled. The dock itself does NOT open
+        automatically — the operator opens it via the rail button so the
+        focus trajectory plot is opt-in even when focus compensation is
+        on. When disabled, the dock + rail button are hidden entirely."""
+        self.ui.toolButton_railFocus.setVisible(enabled)
+        if not enabled:
+            self.dockWidget_focusTrajectory.hide()
+            self.ui.toolButton_railFocus.setChecked(False)
 
-        if enabled:
+    @Slot(bool)
+    def _on_rail_focus_toggled(self, checked: bool) -> None:
+        """Toggle the focus trajectory dock visibility from the
+        conditional rail button. The dock opens as a standalone floating
+        window (never docked into the main GUI). Historical plot data is
+        preserved across close/reopen so the operator can review a
+        finished acquisition after closing the dock; data is only
+        cleared when a new stack acquisition starts."""
+        if checked:
+            from PySide6.QtWidgets import QDockWidget as _QDW
+
             self.dockWidget_focusTrajectory.show()
             _QDW.setFloating(self.dockWidget_focusTrajectory, True)
             if not self.focusTrajectoryWidget.has_data():
@@ -2246,9 +2282,16 @@ class Controller_MainWindow(QMainWindow):
 
     @Slot(bool)
     def _on_focus_dock_visibility_changed(self, visible: bool) -> None:
-        """No-op rail toggle for focus (no rail button in this phase);
-        kept for symmetry and to satisfy QDockWidget visibility events."""
-        pass
+        """Keep the rail toggle's checked state in sync with the dock's
+        actual visibility. Fires when the user closes the dock via its
+        own close button — the rail button unchecks so the two stay
+        consistent. Guarded against feedback loops with
+        blockSignals."""
+        btn = self.ui.toolButton_railFocus
+        if btn.isChecked() != visible:
+            btn.blockSignals(True)
+            btn.setChecked(visible)
+            btn.blockSignals(False)
 
     @Slot(int, float, float, float, float)
     def _on_focus_trajectory(
@@ -2264,13 +2307,12 @@ class Controller_MainWindow(QMainWindow):
         The worker emits ``sig_focus_trajectory`` (a queued ``Signal``);
         this slot appends one sample to the plot. The worker NEVER calls
         pyqtgraph directly.
+
+        The X-axis is hardcoded to the block index ("Plane") in this
+        phase; the Stage position (mm) X-axis option has been removed.
         """
         self._focus_last_block = block_idx
-        x_is_stage = (
-            self.stack_panel.ui.comboBox_focusXAxisVariable.currentText()
-            == "Stage position (mm)"
-        )
-        x_axis_value = stage_pos_mm if x_is_stage else float(block_idx)
+        x_axis_value = float(block_idx)
         self.focusTrajectoryWidget.append_sample(
             block_idx=block_idx,
             stage_pos_mm=stage_pos_mm,
