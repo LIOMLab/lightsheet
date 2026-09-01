@@ -46,11 +46,15 @@ def test_focus_config_rejects_out_of_range_block_size() -> None:
         FocusConfig(block_size_n=101)
 
 
-def test_focus_config_rejects_negative_residual_bounds() -> None:
+def test_focus_config_rejects_out_of_range_residual_bounds() -> None:
     with pytest.raises(ValueError):
         FocusConfig(residual_gain_mm=-0.1)
     with pytest.raises(ValueError):
         FocusConfig(max_residual_mm=-0.1)
+    with pytest.raises(ValueError):
+        FocusConfig(residual_gain_mm=1.1)
+    with pytest.raises(ValueError):
+        FocusConfig(max_residual_mm=5.1)
 
 
 def test_focus_curve_rejects_unequal_length() -> None:
@@ -97,18 +101,19 @@ def test_target_returns_feedforward_interpolation() -> None:
 
 
 def test_target_clamps_to_camera_travel_limits() -> None:
-    curve = FocusCurve(stage_pos=(0.0, 10.0), camera_pos=(5.0, 7.0))
-    cfg = _cfg(max_residual_mm=100.0, residual_gain_mm=100.0)
-    # A large positive residual pushes the feedforward target above the limit.
+    # High-side curve: a +1 mm residual pushes the feedforward target over 35 mm.
+    curve_hi = FocusCurve(stage_pos=(0.0, 10.0), camera_pos=(34.0, 35.0))
+    cfg = _cfg(max_residual_mm=5.0, residual_gain_mm=1.0)
     ctrl_hi = FocusController(
-        cfg, curve, n_planes=20, cam_lo_mm=0.0, cam_hi_mm=35.0
+        cfg, curve_hi, n_planes=20, cam_lo_mm=0.0, cam_hi_mm=35.0
     )
     ctrl_hi.update_residual(1.0)
     ctrl_hi.update_residual(0.0)
     assert ctrl_hi.target(0, 0.0) == pytest.approx(35.0)
-    # A large negative residual pushes the feedforward target below the limit.
+    # Low-side curve: a -1 mm residual pushes the feedforward target under 0 mm.
+    curve_lo = FocusCurve(stage_pos=(0.0, 10.0), camera_pos=(1.0, 0.0))
     ctrl_lo = FocusController(
-        cfg, curve, n_planes=20, cam_lo_mm=0.0, cam_hi_mm=35.0
+        cfg, curve_lo, n_planes=20, cam_lo_mm=0.0, cam_hi_mm=35.0
     )
     ctrl_lo.update_residual(1.0)
     ctrl_lo.update_residual(2.0)
@@ -118,7 +123,7 @@ def test_target_clamps_to_camera_travel_limits() -> None:
 def test_update_residual_clamps_to_max_residual_mm() -> None:
     curve = FocusCurve(stage_pos=(0.0, 10.0), camera_pos=(0.0, 0.0))
     cfg = _cfg(
-        residual_gain_mm=10.0, max_residual_mm=0.5, autofocus_residual=True
+        residual_gain_mm=1.0, max_residual_mm=0.5, autofocus_residual=True
     )
     ctrl = FocusController(
         cfg, curve, n_planes=20, cam_lo_mm=0.0, cam_hi_mm=35.0

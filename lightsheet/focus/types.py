@@ -36,13 +36,13 @@ class FocusConfig:
             raise ValueError(
                 f"block_size_n must be between 1 and 100; got {self.block_size_n}"
             )
-        if self.residual_gain_mm < 0:
+        if self.residual_gain_mm < 0 or self.residual_gain_mm > 1:
             raise ValueError(
-                f"residual_gain_mm must be >= 0; got {self.residual_gain_mm}"
+                f"residual_gain_mm must be in [0, 1]; got {self.residual_gain_mm}"
             )
-        if self.max_residual_mm < 0:
+        if self.max_residual_mm < 0 or self.max_residual_mm > 5:
             raise ValueError(
-                f"max_residual_mm must be >= 0; got {self.max_residual_mm}"
+                f"max_residual_mm must be in [0, 5]; got {self.max_residual_mm}"
             )
 
 
