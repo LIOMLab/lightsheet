@@ -117,6 +117,16 @@ class AdaptiveCommand:
       passthrough of the current exposure/power.
     - ``"exposure"``: exposure is the active actuator (within bounds).
     - ``"power"``: power fallback is active (exposure hit a bound).
+
+    ``reacquire_exhausted`` is a derived operator-notification flag: it
+    is True when a sharp deviation PERSISTS past the configured
+    ``max_reacquire_attempts`` cap (the controller has already spent
+    its re-acquire budget and the latest observation still deviates).
+    It is NOT a request to re-acquire (``reacquire`` is the request
+    flag) and it is NOT saved in ``AdaptiveSample`` — exhaustion is a
+    transient operator message, not a schema-A stored decision. The
+    worker reads it via ``getattr`` so legacy command-like objects
+    constructed before the field existed remain accepted.
     """
 
     exposure_s: float
@@ -125,6 +135,7 @@ class AdaptiveCommand:
     reacquire: bool
     control_variable_active: str
     power_fallback: bool
+    reacquire_exhausted: bool = False
 
     @staticmethod
     def fixed(exposure_s: float, laser1_mw: float, laser2_mw: float) -> AdaptiveCommand:
@@ -132,7 +143,8 @@ class AdaptiveCommand:
 
         The caller applies the same fixed command every plane — zero
         extra per-plane actuator writes beyond the existing stack
-        cycle. ``reacquire`` and ``power_fallback`` are both False.
+        cycle. ``reacquire``, ``power_fallback``, and
+        ``reacquire_exhausted`` are all False.
         """
         return AdaptiveCommand(
             exposure_s=exposure_s,
@@ -141,6 +153,7 @@ class AdaptiveCommand:
             reacquire=False,
             control_variable_active="fixed",
             power_fallback=False,
+            reacquire_exhausted=False,
         )
 
 

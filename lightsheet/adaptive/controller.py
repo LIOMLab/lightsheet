@@ -71,7 +71,7 @@ def pi_residual(
     (``scaled_delta = delta * current_exposure_s``) so the proportional
     correction is proportional to the exposure level. The integral is
     NOT scaled by exposure at the subtraction site — it accumulates
-    ``ki * error`` (dimensionless fraction × gain) and is subtracted
+    ``ki * error`` (dimensionless fraction x gain) and is subtracted
     directly from exposure in seconds. The anti-windup limit
     (``max_exposure_s - min_exposure_s``) treats the integral as having
     units of seconds, so ``ki`` is tuned so that ``ki * error`` lands in
@@ -267,22 +267,35 @@ class AdaptiveController:
 
         # Re-acquire decision: expected intensity is gain * current_exposure
         # where gain = target / feedforward_exposure. A sharp deviation
-        # from this expectation (not from target) flags re-acquire.
+        # from this expectation (not from target) flags re-acquire. The
+        # expected value is computed and the deviation tested even after
+        # the attempt cap is reached so a CONTINUING sharp deviation
+        # surfaces reacquire_exhausted=True (the controller has spent its
+        # re-acquire budget and the latest observation still deviates).
         reacquire = False
-        if self._reacquire_count < cfg.max_reacquire_attempts:
-            if self._pilot_traj is not None:
-                ff_exp = self._pilot_traj(plane_idx)
-                if ff_exp > 1e-9:
-                    expected = cfg.target_midpoint * (current_exposure_s / ff_exp)
-                else:
-                    expected = cfg.target_midpoint
+        reacquire_exhausted = False
+        if self._pilot_traj is not None:
+            ff_exp = self._pilot_traj(plane_idx)
+            if ff_exp > 1e-9:
+                expected = cfg.target_midpoint * (current_exposure_s / ff_exp)
             else:
                 expected = cfg.target_midpoint
-            # Clamp expected to [0, 1] — it's a fraction of sensor max.
-            expected = max(0.0, min(1.0, expected))
-            if should_reacquire(brighter_intensity, expected, cfg):
+        else:
+            expected = cfg.target_midpoint
+        # Clamp expected to [0, 1] — it's a fraction of sensor max.
+        expected = max(0.0, min(1.0, expected))
+        if should_reacquire(brighter_intensity, expected, cfg):
+            if self._reacquire_count < cfg.max_reacquire_attempts:
+                # Under the cap: request a re-acquire and consume one
+                # attempt.
                 reacquire = True
                 self._reacquire_count += 1
+            else:
+                # Cap reached but the deviation persists: surface
+                # exhaustion so the worker emits the operator message.
+                # Do NOT request another re-acquire (the budget is
+                # spent).
+                reacquire_exhausted = True
 
         return AdaptiveCommand(
             exposure_s=clamped_exposure,
@@ -291,4 +304,5 @@ class AdaptiveController:
             reacquire=reacquire,
             control_variable_active=control_variable_active,
             power_fallback=power_fallback,
+            reacquire_exhausted=reacquire_exhausted,
         )

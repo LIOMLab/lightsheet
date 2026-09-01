@@ -1199,18 +1199,44 @@ class StackWorker(QObject, _AcquireScanMixin):
         plane's mock-camera intensity measurement and break the
         scripted-intensity hook's timing, so the direct write is kept.
         """
-        # Set camera exposure (convert seconds to ms for the HAL).
+        # Set camera exposure (convert seconds to ms for the HAL). This
+        # lives OUTSIDE the per-laser exception handlers below — a laser
+        # write failure must not skip the camera exposure for this plane
+        # (the next plane's loop-top E-stop poll is the abort point).
         self.camera.set_exposure_time(int(cmd.exposure_s * 1000))
         # Write laser powers through the safe HAL paths. The percent is
         # computed from the command's mW value and the laser's max_power.
+        # Each laser write is wrapped in its own except handler so a
+        # single HAL write failure emits the mandated per-laser safety
+        # copy and returns control to the stack loop — the next plane
+        # retries. The two-layer HAL clamp (ILaser.set_power + backend
+        # native clamp) held the power at the safe limit; the loop does
+        # NOT abort (the outer StackWorker.run failure handler is
+        # bypassed). The operator can press E-stop (F12) to abort.
         if self._shell.lasers[0].max_power > 0:
             pct1 = cmd.laser1_mw / self._shell.lasers[0].max_power * 100.0
             self._shell.laser1_power_pct = pct1
-            self._hw._write_laser1_power(pct1)
+            try:
+                self._hw._write_laser1_power(pct1)
+            except Exception as e:
+                self._shell.sig_message.emit(
+                    f"Adaptive power write failed for L1: {e}. The "
+                    f"two-layer clamp held — laser power was NOT "
+                    f"changed past the safe limit. The loop will retry "
+                    f"on the next plane; press E-stop (F12) to abort."
+                )
         if self._multi_channel and self._shell.lasers[1].max_power > 0:
             pct2 = cmd.laser2_mw / self._shell.lasers[1].max_power * 100.0
             self._shell.laser2_power_pct = pct2
-            self._hw._write_laser2_power(pct2)
+            try:
+                self._hw._write_laser2_power(pct2)
+            except Exception as e:
+                self._shell.sig_message.emit(
+                    f"Adaptive power write failed for L2: {e}. The "
+                    f"two-layer clamp held — laser power was NOT "
+                    f"changed past the safe limit. The loop will retry "
+                    f"on the next plane; press E-stop (F12) to abort."
+                )
 
     def _record_adaptive_step(self, plane_idx: int) -> None:
         """Measure this plane's intensity, record the trajectory sample,
@@ -1287,3 +1313,26 @@ class StackWorker(QObject, _AcquireScanMixin):
             current_powers_mw=current_powers,
             plane_idx=plane_idx,
         )
+        # Re-acquire exhaustion: when the next command carries
+        # reacquire_exhausted=True, the controller has spent its
+        # re-acquire budget and the latest observation still deviates
+        # from the feedforward expectation. Emit the mandated
+        # plane/deviation operator message so the operator knows the
+        # re-shot still deviates without watching the trajectory plot
+        # mid-run. The defensive getattr accepts legacy command-like
+        # objects constructed before the field was added. The deviation
+        # is the absolute difference between the brighter channel's
+        # observed intensity fraction and the target midpoint, as a
+        # rounded percentage. This is a derived notification — it does
+        # NOT change AdaptiveSample storage schema or the trajectory
+        # signal (exhaustion is not a saved decision).
+        if getattr(self._adaptive_current_cmd, "reacquire_exhausted", False):
+            dev_pct = abs(
+                intensities[brighter_idx] - cfg.target_midpoint
+            ) * 100.0
+            self._shell.sig_message.emit(
+                f"Re-acquire fallback exhausted at plane {plane_idx}: "
+                f"intensity still deviates {dev_pct:.0f}% from target "
+                f"after re-shot. The loop will continue with the "
+                f"re-shot frame; review the trajectory after the run."
+            )

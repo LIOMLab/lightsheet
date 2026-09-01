@@ -433,9 +433,11 @@ def test_reacquire_exhausted_false_when_deviation_resolves() -> None:
         current_powers_mw=(20.0, 0.0),
         plane_idx=5,
     )
-    # Next plane: deviation resolved (intensity back near expected).
+    # Next plane: deviation resolved (intensity back near the feedforward
+    # expectation ~0.925 — the pilot trajectory is flat at 50 ms and
+    # current_exposure is 50 ms, so expected = target_midpoint = 0.925).
     cmd_resolved = ctrl.update(
-        intensities=[0.65],  # near the feedforward expectation
+        intensities=[0.92],  # near the feedforward expectation 0.925
         brighter_idx=0,
         current_exposure_s=50e-3,
         current_powers_mw=(20.0, 0.0),

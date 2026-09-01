@@ -682,6 +682,27 @@ def _make_adaptive_worker(
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
+
+    # The adaptive controller + initial command are normally constructed
+    # inside StackWorker.run(). For direct _apply_adaptive_command /
+    # _record_adaptive_step calls, set them up here (mirroring run()'s
+    # prime step) so the worker is in the post-prime state.
+    from lightsheet.adaptive.controller import AdaptiveController
+    from lightsheet.adaptive.types import AdaptiveCommand
+
+    worker._adaptive_controller = AdaptiveController(cfg, n_planes)
+    pilot_indices = list(range(cfg.pilot_count))
+    pilot_exposures = [worker.camera.exposure_time] * cfg.pilot_count
+    worker._adaptive_controller.prime(pilot_indices, pilot_exposures)
+    current_powers = (
+        ctrl.laser1_power_pct / 100.0 * ctrl.lasers[0].max_power,
+        ctrl.laser2_power_pct / 100.0 * ctrl.lasers[1].max_power,
+    )
+    worker._adaptive_current_cmd = AdaptiveCommand.fixed(
+        exposure_s=worker.camera.exposure_time / 1000.0,
+        laser1_mw=current_powers[0],
+        laser2_mw=current_powers[1],
+    )
     return ctrl, worker
 
 
@@ -702,7 +723,6 @@ def test_apply_adaptive_command_l1_write_failure_emits_copy_and_continues(
     and a subsequent _apply_adaptive_command call retries (the worker
     is not in a broken state)."""
     ctrl, worker = _make_adaptive_worker(qtbot, request, tmp_path)
-    cfg = worker._adaptive_cfg
 
     from lightsheet.adaptive.types import AdaptiveCommand
 
@@ -759,7 +779,6 @@ def test_apply_adaptive_command_l2_write_failure_emits_copy_and_continues(
     ctrl, worker = _make_adaptive_worker(
         qtbot, request, tmp_path, multi_channel=True
     )
-    cfg = worker._adaptive_cfg
 
     from lightsheet.adaptive.types import AdaptiveCommand
 
@@ -826,8 +845,9 @@ def test_apply_adaptive_command_camera_write_outside_laser_handlers(
     finally:
         ctrl._hw._write_laser1_power = real_write  # type: ignore
 
-    # Camera exposure was set (ms = exposure_s * 1000).
-    assert ctrl.camera.exposure_time == 42
+    # Camera exposure was set. The HAL call passes ms
+    # (int(0.042 * 1000) = 42); MockCamera stores it in seconds (0.042).
+    assert ctrl.camera.exposure_time == pytest.approx(0.042, rel=1e-6)
 
 
 # --------------------------------------------------------------------- #
@@ -867,6 +887,16 @@ def test_record_adaptive_step_emits_exhaustion_message(
     fill = round(frame_frac * cfg.sensor_max)
     ctrl.reconstructed_frame = np.full((64, 64), fill, dtype=np.uint16)
 
+    # Compute the exact deviation percentage the worker will emit, using
+    # the same frame_intensity_pct the worker uses, so the assertion is
+    # robust to p99 rounding.
+    from lightsheet.adaptive.intensity import frame_intensity_pct
+
+    observed = frame_intensity_pct(
+        ctrl.reconstructed_frame, cfg.sensor_max
+    )
+    expected_dev_pct = round(abs(observed - target_mid) * 100.0)
+
     messages: list[str] = []
     ctrl.sig_message.connect(lambda m: messages.append(m))
 
@@ -903,10 +933,8 @@ def test_record_adaptive_step_emits_exhaustion_message(
     msg = exh_msgs[0]
     assert "plane 5" in msg
     assert "review the trajectory after the run" in msg
-    # Deviation percentage: abs(0.20 - 0.925) * 100 = 72.5 -> rounded
-    # to 72% (format spec :.0f).
-    assert "deviates 72% from target" in msg, (
-        f"expected deviation 72%; got {msg!r}"
+    assert f"deviates {expected_dev_pct}% from target" in msg, (
+        f"expected deviation {expected_dev_pct}%; got {msg!r}"
     )
 
 
