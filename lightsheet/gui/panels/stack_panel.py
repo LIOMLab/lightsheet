@@ -122,10 +122,10 @@ class StackPanelWidget(QWidget):
         # values. The schema already rejected out-of-range values at
         # startup, so the loaded values are safe.
         self._load_focus_config()
-        # The focus trajectory X-axis is fixed to "Plane" in this phase;
+        # The focus trajectory X-axis is fixed to "Block" in this phase;
         # the "Stage position (mm)" option has been removed from the UI.
         self.ui.comboBox_focusXAxisVariable.clear()
-        self.ui.comboBox_focusXAxisVariable.addItem("Plane")
+        self.ui.comboBox_focusXAxisVariable.addItem("Block")
         self.ui.comboBox_focusXAxisVariable.setCurrentIndex(0)
         # Wire the enable toggle → fields-container visibility. The group
         # box title row stays visible (the affordance) while only the

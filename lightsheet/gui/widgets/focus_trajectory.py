@@ -11,7 +11,7 @@ Plot layout:
 - Left Y axis: camera position (mm) — accent blue.
 - Right Y axis (linked ViewBox): horizontal stage position (mm) —
   Breeze midtone grey.
-- X axis: block index ("Plane") by default, or horizontal stage position
+- X axis: block index ("Block") by default, or horizontal stage position
   ("Stage position (mm)") when the operator switches the combo box.
 - Residual markers: warning-olive diamonds at blocks where a non-zero
   residual was applied.
@@ -121,7 +121,7 @@ class FocusTrajectoryWidget(QWidget):
         bottom_ax = item.getAxis("bottom")
         bottom_ax.setPen(_FG)
         bottom_ax.setTextPen(_FG)
-        item.setLabel("bottom", "Plane")
+        item.setLabel("bottom", "Block")
 
         # Right axis (stage position) — grey ViewBox + axis.
         self._right_vb = pg.ViewBox()
@@ -250,7 +250,7 @@ class FocusTrajectoryWidget(QWidget):
             bottom_label = "Stage position (mm)"
         else:
             self._xs = [float(v) for v in self._block_indices]
-            bottom_label = "Plane"
+            bottom_label = "Block"
 
         item = self.plotWidget_focusTrajectory.getPlotItem()
         item.setLabel("bottom", bottom_label, color=_FG)
@@ -272,7 +272,7 @@ class FocusTrajectoryWidget(QWidget):
         if self._residual_scatter is not None:
             self._residual_scatter.setData(residual_x, residual_y)
 
-    def reset(self, x_axis_variable: str = "Plane") -> None:
+    def reset(self, x_axis_variable: str = "Block") -> None:
         """Reset the plot for a new run with the given X-axis variable.
 
         Clears all curve/scatter data and removes stale markers; the
@@ -327,7 +327,7 @@ class FocusTrajectoryWidget(QWidget):
         self.label_focusTrajectoryEmpty.hide()
 
     def set_x_axis_variable(self, variable: str) -> None:
-        """Switch the X axis between "Plane" and "Stage position (mm)"
+        """Switch the X axis between "Block" and "Stage position (mm)"
         and replot existing data."""
         self._x_is_stage = variable == "Stage position (mm)"
         self._rebuild_x_values()

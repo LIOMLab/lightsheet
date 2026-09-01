@@ -33,7 +33,7 @@ def test_reset_with_none_curves_and_legend(qtbot: QtBot) -> None:
     w._stage_curve = None
     w._residual_scatter = None
     w._legend = None
-    w.reset(x_axis_variable="Plane")
+    w.reset(x_axis_variable="Block")
     assert w._run_started is True
     assert w.plotWidget_focusTrajectory.isVisibleTo(w.plotWidget_focusTrajectory.parentWidget())  # type: ignore[unresolved-attribute]
     assert w.label_focusTrajectoryEmpty.isHidden()
@@ -71,7 +71,7 @@ def test_set_x_axis_stage_and_residual_loop(qtbot: QtBot) -> None:
     """set_x_axis_variable('Stage position (mm)') exercises the stage branch
     and the residual loop with both zero and non-zero residuals."""
     w = _make_widget(qtbot)
-    w.reset(x_axis_variable="Plane")
+    w.reset(x_axis_variable="Block")
     w.append_sample(
         block_idx=0,
         stage_pos_mm=0.0,
@@ -99,7 +99,7 @@ def test_none_guards_in_rebuild_and_append(qtbot: QtBot) -> None:
     w._camera_curve = None
     w._stage_curve = None
     w._residual_scatter = None
-    w.reset(x_axis_variable="Plane")
+    w.reset(x_axis_variable="Block")
     w.append_sample(
         block_idx=0,
         stage_pos_mm=0.01,
@@ -140,7 +140,7 @@ def test_append_auto_reset_and_sliding_window(qtbot: QtBot) -> None:
 def test_freeze_blocks_appends(qtbot: QtBot) -> None:
     """freeze() makes subsequent append_sample calls no-ops."""
     w = _make_widget(qtbot)
-    w.reset(x_axis_variable="Plane")
+    w.reset(x_axis_variable="Block")
     w.append_sample(
         block_idx=0,
         stage_pos_mm=0.0,

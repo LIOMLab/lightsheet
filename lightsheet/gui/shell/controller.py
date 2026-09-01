@@ -2308,7 +2308,7 @@ class Controller_MainWindow(QMainWindow):
         this slot appends one sample to the plot. The worker NEVER calls
         pyqtgraph directly.
 
-        The X-axis is hardcoded to the block index ("Plane") in this
+        The X-axis is hardcoded to the block index ("Block") in this
         phase; the Stage position (mm) X-axis option has been removed.
         """
         self._focus_last_block = block_idx

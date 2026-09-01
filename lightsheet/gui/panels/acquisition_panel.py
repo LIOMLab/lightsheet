@@ -498,9 +498,9 @@ class AcquisitionPanelWidget(QWidget):
 
         # Reset the focus trajectory plot at the start of each run so
         # per-block samples do not accumulate across runs. The X-axis is
-        # fixed to "Plane" in this phase; the "Stage position (mm)" option
+        # fixed to "Block" in this phase; the "Stage position (mm)" option
         # has been removed from the UI.
-        self._shell.focusTrajectoryWidget.reset(x_axis_variable="Plane")
+        self._shell.focusTrajectoryWidget.reset(x_axis_variable="Block")
         if not self._shell.dockWidget_focusTrajectory.isVisible():
             self._shell.focusTrajectoryWidget.plotWidget_focusTrajectory.hide()
             if self._shell.focusTrajectoryWidget._legend is not None:

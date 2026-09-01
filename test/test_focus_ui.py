@@ -78,16 +78,16 @@ def test_focus_group_widgets_exist(
         assert hasattr(ui, name), f"missing focus widget {name}"
 
 
-def test_focus_x_axis_combo_has_only_plane(
+def test_focus_x_axis_combo_has_only_block(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
-    """The focus X-axis combo contains only "Plane"; the
+    """The focus X-axis combo contains only "Block"; the
     "Stage position (mm)" option has been removed."""
     ctrl, _ = make_controller(qtbot, request)
     ui = _focus_ui(ctrl)
     combo = ui.comboBox_focusXAxisVariable
     assert combo.count() == 1, f"expected one X-axis option, got {combo.count()}"
-    assert combo.currentText() == "Plane"
+    assert combo.currentText() == "Block"
 
 
 def test_focus_block_size_is_field_spec_subclass(
@@ -444,7 +444,7 @@ def test_focus_trajectory_widget_appends_block(qtbot: QtBot) -> None:
     """append_sample with one block swaps to the plot and draws the
     camera-position curve."""
     w = _focus_trajectory_widget(qtbot)
-    w.reset(x_axis_variable="Plane")
+    w.reset(x_axis_variable="Block")
     w.append_sample(
         block_idx=0,
         stage_pos_mm=0.01,
@@ -464,7 +464,7 @@ def test_focus_trajectory_widget_x_axis_switch(qtbot: QtBot) -> None:
     """set_x_axis_variable switches the X axis between block index and
     stage position."""
     w = _focus_trajectory_widget(qtbot)
-    w.reset(x_axis_variable="Plane")
+    w.reset(x_axis_variable="Block")
     w.append_sample(
         block_idx=2,
         stage_pos_mm=0.05,
@@ -482,7 +482,7 @@ def test_focus_trajectory_widget_residual_marker(qtbot: QtBot) -> None:
     """A non-zero residual at a block renders a warning-olive diamond
     marker on that block."""
     w = _focus_trajectory_widget(qtbot)
-    w.reset(x_axis_variable="Plane")
+    w.reset(x_axis_variable="Block")
     w.append_sample(
         block_idx=1,
         stage_pos_mm=0.02,
@@ -498,7 +498,7 @@ def test_focus_trajectory_widget_residual_marker(qtbot: QtBot) -> None:
 def test_focus_trajectory_widget_freeze_blocks_appends(qtbot: QtBot) -> None:
     """After freeze() (E-stop), further append_sample calls are ignored."""
     w = _focus_trajectory_widget(qtbot)
-    w.reset(x_axis_variable="Plane")
+    w.reset(x_axis_variable="Block")
     w.append_sample(
         block_idx=0,
         stage_pos_mm=0.0,
@@ -645,7 +645,7 @@ def test_estop_freezes_focus_trajectory_and_sets_badge(
 
     QApplication.processEvents()
     widget = ctrl.focusTrajectoryWidget
-    widget.reset(x_axis_variable="Plane")
+    widget.reset(x_axis_variable="Block")
     widget.append_sample(
         block_idx=0,
         stage_pos_mm=0.0,
