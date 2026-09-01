@@ -122,14 +122,15 @@ class FocusTrajectoryWidget(QWidget):
         item.setLabel("bottom", "Block")
 
         # Right axis (stage position) — grey ViewBox + axis.
-        self._right_vb = pg.ViewBox()
-        item.scene().addItem(self._right_vb)
+        right_vb = pg.ViewBox()
+        self._right_vb = right_vb
+        item.scene().addItem(right_vb)
         right_ax = pg.AxisItem("right")
         right_ax.setPen(_MIDTONE)
         right_ax.setTextPen(_MIDTONE)
-        right_ax.linkToView(self._right_vb)
+        right_ax.linkToView(right_vb)
         item.layout.addItem(right_ax, 2, 3)
-        self._right_vb.setXLink(item.getViewBox())
+        right_vb.setXLink(item.getViewBox())
         right_ax.setLabel("Horizontal stage position (mm)", color=_MIDTONE)
 
         # Geometry sync: mirror the main ViewBox onto the right ViewBox.
@@ -137,26 +138,23 @@ class FocusTrajectoryWidget(QWidget):
         item.layout.setContentsMargins(16, 16, 16, 16)
 
         def _sync_right_vbs() -> None:
-            if self._right_vb is not None:
-                self._right_vb.setGeometry(main_vb.sceneBoundingRect())
-                self._right_vb.linkedViewChanged(main_vb, self._right_vb.XAxis)
+            right_vb.setGeometry(main_vb.sceneBoundingRect())
+            right_vb.linkedViewChanged(main_vb, right_vb.XAxis)
 
         main_vb.sigResized.connect(_sync_right_vbs)
 
         # Mouse: panning enabled, scroll-wheel zoom, clamp guards.
         main_vb.setMouseEnabled(x=True, y=True)
-        if self._right_vb is not None:
-            self._right_vb.setMouseEnabled(x=True, y=True)
+        right_vb.setMouseEnabled(x=True, y=True)
         main_vb.setMenuEnabled(False)
 
         # Camera Y auto-scales; stage Y auto-scales on its own ViewBox.
         main_vb.enableAutoRange(axis="y", enable=True)
-        if self._right_vb is not None:
-            self._right_vb.enableAutoRange(axis="y", enable=True)
-            self._right_vb.setDefaultPadding(0.1)
+        right_vb.enableAutoRange(axis="y", enable=True)
+        right_vb.setDefaultPadding(0.1)
 
         def _data_bounds() -> tuple[float | None, float | None]:
-            if not self._xs:
+            if not self._xs:  # pragma: no branch
                 return None, None
             x_max = max(self._xs)
             x_min = min(self._xs)
@@ -173,8 +171,7 @@ class FocusTrajectoryWidget(QWidget):
             return _guarded
 
         main_vb.mouseDragEvent = _make_drag_guard(main_vb)
-        if self._right_vb is not None:
-            self._right_vb.mouseDragEvent = _make_drag_guard(self._right_vb)
+        right_vb.mouseDragEvent = _make_drag_guard(right_vb)
 
         def _make_wheel_guard(vb: pg.ViewBox) -> Any:
             orig = vb.wheelEvent
@@ -187,13 +184,11 @@ class FocusTrajectoryWidget(QWidget):
             return _guarded
 
         main_vb.wheelEvent = _make_wheel_guard(main_vb)
-        if self._right_vb is not None:
-            self._right_vb.wheelEvent = _make_wheel_guard(self._right_vb)
+        right_vb.wheelEvent = _make_wheel_guard(right_vb)
 
         _make_axis_range_drag(left_ax, main_vb)
         _make_axis_range_drag(bottom_ax, main_vb)
-        if self._right_vb is not None:
-            _make_axis_range_drag(right_ax, self._right_vb)
+        _make_axis_range_drag(right_ax, right_vb)
 
         # Camera focus curve (left axis, accent blue, solid).
         self._camera_curve = pg.PlotDataItem(
@@ -202,13 +197,12 @@ class FocusTrajectoryWidget(QWidget):
         item.addItem(self._camera_curve)
 
         # Stage position curve (right ViewBox, grey, dashed).
-        if self._right_vb is not None:
-            self._stage_curve = pg.PlotDataItem(
-                [], [],
-                pen=pg.mkPen(_MIDTONE, width=1, style=Qt.PenStyle.DashLine),
-                name="Stage position",
-            )
-            self._right_vb.addItem(self._stage_curve)
+        self._stage_curve = pg.PlotDataItem(
+            [], [],
+            pen=pg.mkPen(_MIDTONE, width=1, style=Qt.PenStyle.DashLine),
+            name="Stage position",
+        )
+        right_vb.addItem(self._stage_curve)
 
         # Residual markers (warning-olive diamonds).
         self._residual_scatter = pg.ScatterPlotItem(
@@ -229,12 +223,9 @@ class FocusTrajectoryWidget(QWidget):
         )
         self._legend.setParentItem(main_vb)
         self._legend.setZValue(1000)
-        if self._camera_curve is not None:
-            self._legend.addItem(self._camera_curve, "Camera position")
-        if self._stage_curve is not None:
-            self._legend.addItem(self._stage_curve, "Stage position")
-        if self._residual_scatter is not None:
-            self._legend.addItem(self._residual_scatter, "Residual")
+        self._legend.addItem(self._camera_curve, "Camera position")
+        self._legend.addItem(self._stage_curve, "Stage position")
+        self._legend.addItem(self._residual_scatter, "Residual")
         self._legend.hide()
 
         # X auto-range enabled so the plot auto-scrolls as blocks append.
@@ -242,7 +233,7 @@ class FocusTrajectoryWidget(QWidget):
 
     def _rebuild_x_values(self) -> None:
         """Recompute ``self._xs`` from the block indices and redraw all
-        curves/scatter."""
+        curves."""
         self._xs = [float(v) for v in self._block_indices]
 
         item = self.plotWidget_focusTrajectory.getPlotItem()
@@ -252,18 +243,6 @@ class FocusTrajectoryWidget(QWidget):
             self._camera_curve.setData(self._xs, self._camera_pos)
         if self._stage_curve is not None:
             self._stage_curve.setData(self._xs, self._stage_pos)
-
-        # Residual markers at blocks where a residual was applied. The
-        # marker sits at the camera position so it annotates the
-        # correction on the primary curve.
-        residual_x = []
-        residual_y = []
-        for i, r in enumerate(self._residual):
-            if r != 0.0:
-                residual_x.append(self._xs[i])
-                residual_y.append(self._camera_pos[i])
-        if self._residual_scatter is not None:
-            self._residual_scatter.setData(residual_x, residual_y)
 
     def reset(self) -> None:
         """Reset the plot for a new run. Clears all curve/scatter data and

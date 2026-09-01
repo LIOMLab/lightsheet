@@ -668,3 +668,64 @@ def test_estop_freezes_focus_trajectory_and_sets_badge(
     assert -1 not in off_calls, "freeze must happen after laser.off()"
     assert widget._frozen is True
     assert "FOCUS ABORTED" in ctrl.ui.label_modeBadge.text()
+
+
+def test_spawn_stack_worker_sets_focus_mode_flag_when_enabled(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Any
+) -> None:
+    """When focus is enabled and armed, _spawn_stack_worker sets
+    focus_mode_started so the badge shows FOCUS RUNNING."""
+    ctrl, _ = make_controller(qtbot, request)
+    ui = _focus_ui(ctrl)
+    path = tmp_path / "curve.json"
+    path.write_text('{"points": [[0.0, 20.0], [10.0, 22.0], [20.0, 24.0]]}')
+    ui.checkBox_focusEnable.setChecked(True)
+    ui.checkBox_focusEnable.toggled.emit(True)
+    ui.lineEdit_focusCurvePath.setText(str(path))
+    ui.pushButton_focusLoad.click()
+    ctrl.stack_first_plane_set = True
+    ctrl.stack_last_plane_set = True
+    ctrl.stack_starting_plane = 0.0
+    ctrl.stack_ending_plane = 100.0
+    ctrl.number_of_planes = 5
+    ctrl.saving_allowed = True
+    ctrl.acquisition_panel._spawn_stack_worker()
+    thread = getattr(ctrl, "_stack_thread", None)
+    if thread is not None and thread.isRunning():
+        thread.quit()
+        thread.wait(2000)
+    assert ctrl.focus_mode_started is True
+
+
+def test_spawn_stack_worker_clears_focus_mode_flag_when_disabled(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """When focus is disabled, _spawn_stack_worker leaves focus_mode_started
+    False so the badge stays STACK RUNNING."""
+    ctrl, _ = make_controller(qtbot, request)
+    _focus_ui(ctrl)
+    ctrl.stack_first_plane_set = True
+    ctrl.stack_last_plane_set = True
+    ctrl.stack_starting_plane = 0.0
+    ctrl.stack_ending_plane = 100.0
+    ctrl.number_of_planes = 5
+    ctrl.saving_allowed = True
+    ctrl.acquisition_panel._spawn_stack_worker()
+    thread = getattr(ctrl, "_stack_thread", None)
+    if thread is not None and thread.isRunning():
+        thread.quit()
+        thread.wait(2000)
+    assert ctrl.focus_mode_started is False
+
+
+def test_progress_update_shows_focus_running_badge(qtbot: QtBot, request: FixtureRequest) -> None:
+    """_on_progress_update uses FOCUS mode when focus_mode_started is True."""
+    ctrl, _ = make_controller(qtbot, request)
+    _focus_ui(ctrl)
+    ctrl.stack_mode_started = True
+    ctrl.focus_mode_started = True
+    ctrl.number_of_planes = 5
+    ctrl._on_progress_update(2)
+    text = ctrl.ui.label_modeBadge.text()
+    assert "FOCUS RUNNING" in text
+    assert "2/5" in text

@@ -553,6 +553,7 @@ class Controller_MainWindow(QMainWindow):
         self.preview_mode_started = False
         self.live_mode_started = False
         self.stack_mode_started = False
+        self.focus_mode_started = False
 
         # Operator-facing staged laser power setpoints in percent (0-100).
         self.laser1_power_pct = 0.0
@@ -1573,9 +1574,10 @@ class Controller_MainWindow(QMainWindow):
             qm = getattr(mgr, "table_manager", None) if mgr else None
             q_row = int(getattr(qm, "_queue_row_index", 0)) + 1 if qm else 0
             q_total = int(getattr(qm, "_queue_rows_total", 0)) if qm else 0
+            mode = "FOCUS" if getattr(self, "focus_mode_started", False) else "STACK"
             if qm is not None and getattr(qm, "_queue_active", False):
                 self._update_mode_badge(
-                    "STACK",
+                    mode,
                     "RUNNING",
                     plane=value,
                     total=total,
@@ -1583,7 +1585,7 @@ class Controller_MainWindow(QMainWindow):
                     queue_total=q_total,
                 )
             else:
-                self._update_mode_badge("STACK", "RUNNING", plane=value, total=total)
+                self._update_mode_badge(mode, "RUNNING", plane=value, total=total)
 
     def _cache_auto_laser_flags(self) -> None:
         """Sample the auto-laser checkboxes. GUI thread only.
@@ -1744,6 +1746,8 @@ class Controller_MainWindow(QMainWindow):
             self.live_mode_started = False
         if self.stack_mode_started:
             self.stack_mode_started = False
+        if self.focus_mode_started:
+            self.focus_mode_started = False
         if self.lasers[0].active or self.lasers[1].active:
             self._hw.stop_lasers()  # ty: ignore[unresolved-attribute]
 
@@ -2333,6 +2337,7 @@ class Controller_MainWindow(QMainWindow):
         self.focusTrajectoryWidget.freeze()
         block = int(getattr(self, "_focus_last_block", 0))
         total = int(getattr(self, "number_of_planes", 0))
+        self.focus_mode_started = False
         self._update_mode_badge("FOCUS", "ABORTED", plane=block, total=total)
 
     @Slot()

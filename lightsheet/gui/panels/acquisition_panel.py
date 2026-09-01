@@ -259,6 +259,7 @@ class AcquisitionPanelWidget(QWidget):
         """Start or stop stack mode, depending on the button status"""
         if self._shell.stack_mode_started:
             self._shell.stack_mode_started = False
+            self._shell.focus_mode_started = False
             # Disable until the worker finishes to prevent a restart race
             # that would spawn a second worker accessing the camera concurrently.
             self._shell.stack_panel.ui.pushButton_acqStartStackMode.setEnabled(False)
@@ -493,8 +494,7 @@ class AcquisitionPanelWidget(QWidget):
         # operator reopens the dock via the rail button.
         if not self._shell.dockWidget_adaptiveTrajectory.isVisible():
             self._shell.adaptiveTrajectoryWidget.plotWidget_adaptiveTrajectory.hide()
-            if self._shell.adaptiveTrajectoryWidget._legend is not None:
-                self._shell.adaptiveTrajectoryWidget._legend.hide()
+            self._shell.adaptiveTrajectoryWidget._legend.hide()
 
         # Reset the focus trajectory plot at the start of each run so
         # per-block samples do not accumulate across runs. The X-axis is
@@ -503,8 +503,11 @@ class AcquisitionPanelWidget(QWidget):
         self._shell.focusTrajectoryWidget.reset()
         if not self._shell.dockWidget_focusTrajectory.isVisible():
             self._shell.focusTrajectoryWidget.plotWidget_focusTrajectory.hide()
-            if self._shell.focusTrajectoryWidget._legend is not None:
-                self._shell.focusTrajectoryWidget._legend.hide()
+            self._shell.focusTrajectoryWidget._legend.hide()
+
+        # The mode badge switches to FOCUS RUNNING for the duration of the
+        # stack when focus compensation is enabled.
+        self._shell.focus_mode_started = focus_cfg is not None
 
         self._shell._stack_thread.start()  # ty: ignore[unresolved-attribute]
         return self._shell._stack_worker  # ty: ignore[invalid-return-type, unresolved-attribute]
@@ -519,6 +522,7 @@ class AcquisitionPanelWidget(QWidget):
         self._shell.motor_panel.updateUi_motor_buttons(disable_button=False)
 
         self._shell.stack_mode_started = False
+        self._shell.focus_mode_started = False
         self._shell.updateUi_message_printer("->Stack Mode Acquisition Done")
         self._shell.ui.statusBar_label.setText("")  # ty: ignore[unresolved-attribute]
         self._shell.ui.statusBar_progress.hide()  # ty: ignore[unresolved-attribute]
