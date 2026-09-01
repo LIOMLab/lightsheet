@@ -639,13 +639,31 @@ class StackPanelWidget(QWidget):
             cfg = cfg_read("config.ini", "Adaptive", defaults)
         except Exception:
             cfg = defaults
-        target_lo = float(cfg.get("Target Band Lo", "90.0")) / 100.0
-        target_hi = float(cfg.get("Target Band Hi", "95.0")) / 100.0
-        reacquire = float(cfg.get("Reacquire Threshold", "8.0")) / 100.0
-        block_n = int(float(cfg.get("Block Size N", "8")))
-        kp = float(cfg.get("Kp", "0.4"))
-        ki = float(cfg.get("Ki", "0.05"))
-        pilot = int(float(cfg.get("Pilot Count", "5")))
+        # The schema validator rejects malformed [Adaptive] values at
+        # startup, but this method re-reads config.ini at stack-start
+        # time (every call to build_adaptive_config). If config.ini is
+        # edited between startup and stack-start, a malformed value
+        # (e.g. "Kp = abc") would raise ValueError out of float()/int()
+        # and propagate up through the Qt slot handler, crashing the GUI
+        # thread. Wrap the conversions and fall back to the defaults
+        # dict on any conversion error so a bad edit degrades gracefully
+        # instead of crashing the Start button.
+        try:
+            target_lo = float(cfg.get("Target Band Lo", "90.0")) / 100.0
+            target_hi = float(cfg.get("Target Band Hi", "95.0")) / 100.0
+            reacquire = float(cfg.get("Reacquire Threshold", "8.0")) / 100.0
+            block_n = int(float(cfg.get("Block Size N", "8")))
+            kp = float(cfg.get("Kp", "0.4"))
+            ki = float(cfg.get("Ki", "0.05"))
+            pilot = int(float(cfg.get("Pilot Count", "5")))
+        except (ValueError, TypeError):
+            target_lo = float(defaults["Target Band Lo"]) / 100.0
+            target_hi = float(defaults["Target Band Hi"]) / 100.0
+            reacquire = float(defaults["Reacquire Threshold"]) / 100.0
+            block_n = int(float(defaults["Block Size N"]))
+            kp = float(defaults["Kp"])
+            ki = float(defaults["Ki"])
+            pilot = int(float(defaults["Pilot Count"]))
         return target_lo, target_hi, reacquire, block_n, kp, ki, pilot
 
     def build_adaptive_config(self) -> AdaptiveConfig | None:
