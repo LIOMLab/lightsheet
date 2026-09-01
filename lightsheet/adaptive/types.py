@@ -20,7 +20,6 @@ Schema-a (the approved one-way storage contract):
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 
 
@@ -199,8 +198,3 @@ class AdaptiveSample:
 # should treat a True value as "the controller requested a re-acquire",
 # not as proof that a re-acquired frame is present. Renaming the stored
 # field would break the schema-a contract and existing saved data.
-
-
-def is_nan(value: float) -> bool:
-    """NaN check that works on Python 3.12 (math.isnan)."""
-    return isinstance(value, float) and math.isnan(value)
