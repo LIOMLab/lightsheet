@@ -1061,16 +1061,17 @@ class StackWorker(QObject, _AcquireScanMixin):
                         # writes the /adaptive_trajectory group after
                         # processing all frames, and recording before
                         # enqueue guarantees the sample is present.
+                        # Called once here for both the saving and
+                        # non-saving branches (hoisted out of the if/else
+                        # to avoid the duplicated call).
+                        self._record_adaptive_step(plane)
                         if (
                             self._shell.saving_allowed
                             and frame1 is not None
                             and frame2 is not None
                         ):
-                            self._record_adaptive_step(plane)
                             self._shell._fs.enqueue_buffer((0, frame1))
                             self._shell._fs.enqueue_buffer((1, frame2))
-                        else:
-                            self._record_adaptive_step(plane)
                     else:
                         # Single-channel path (unchanged — back-compat).
 
