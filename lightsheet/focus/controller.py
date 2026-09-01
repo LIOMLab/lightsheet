@@ -13,9 +13,9 @@ from lightsheet.focus.types import FocusConfig, FocusCurve
 class FocusController:
     """Feedforward interpolation + clamped residual focus controller.
 
-    Constructed with a frozen ``FocusConfig``, a frozen ``FocusCurve``, the
-    total plane count, and the camera travel limits. ``target()`` returns the
-    clamped camera focus position for a given stage position;
+    Constructed with a frozen ``FocusConfig``, a frozen ``FocusCurve``, and
+    the camera travel limits. ``target()`` returns the clamped camera focus
+    position for a given stage position;
     ``update_residual()`` adjusts the residual based on the per-block sharpness
     metric.
     """
@@ -24,13 +24,11 @@ class FocusController:
         self,
         cfg: FocusConfig,
         curve: FocusCurve,
-        n_planes: int,
         cam_lo_mm: float,
         cam_hi_mm: float,
     ) -> None:
         self._cfg = cfg
         self._curve = curve
-        self._n_planes = n_planes
         self._cam_lo = cam_lo_mm
         self._cam_hi = cam_hi_mm
         self._residual_mm = 0.0
@@ -41,7 +39,7 @@ class FocusController:
         """Current residual correction in millimetres (read-only)."""
         return self._residual_mm
 
-    def target(self, plane_idx: int, stage_pos_mm: float) -> float:
+    def target(self, stage_pos_mm: float) -> float:
         """Return the clamped camera focus position for ``stage_pos_mm``."""
         ff = float(
             np.interp(

@@ -959,7 +959,6 @@ class StackWorker(QObject, _AcquireScanMixin):
                 self._focus_controller = FocusController(
                     self._focus_cfg,  # type: ignore[arg-type]
                     self._focus_curve,  # type: ignore[arg-type]
-                    n_planes,
                     cam_lo_mm,
                     cam_hi_mm,
                 )
@@ -1026,7 +1025,7 @@ class StackWorker(QObject, _AcquireScanMixin):
                             )
                         )
                         focus_pos_mm = self._focus_controller.target(  # type: ignore[union-attr]
-                            plane, stage_pos_mm
+                            stage_pos_mm
                         )
                         residual_mm = self._focus_controller.residual_mm  # type: ignore[union-attr]
 
