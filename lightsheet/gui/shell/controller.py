@@ -1897,18 +1897,23 @@ class Controller_MainWindow(QMainWindow):
         title_bar.setFrameShape(QFrame.Shape.NoFrame)
         title_bar.setObjectName("adaptiveTrajectoryTitleBar")
         tb_layout = QHBoxLayout(title_bar)
-        tb_layout.setContentsMargins(6, 2, 6, 2)
+        tb_layout.setContentsMargins(8, 4, 8, 4)
         tb_layout.setSpacing(4)
         title_label = QLabel("Adaptive Trajectory", title_bar)
-        title_label.setStyleSheet("font-weight: bold;")
+        # No bold override — the mode badge is the only bold text in
+        # the app (UI-SPEC Typography). The dock title inherits the
+        # regular-weight app font.
         tb_layout.addWidget(title_label)
         tb_layout.addStretch(1)
         close_btn = QPushButton("x", title_bar)
         close_btn.setFixedSize(20, 20)
+        # Border-only base rule (no font-size override — the button
+        # inherits the app font) + hover styling retained.
         close_btn.setStyleSheet(
-            "QPushButton { border: none; font-size: 16px; }"
+            "QPushButton { border: none; }"
             "QPushButton:hover { background: #444; }"
         )
+        close_btn.setToolTip("Close adaptive trajectory dock")
         close_btn.clicked.connect(self.dockWidget_adaptiveTrajectory.close)
         tb_layout.addWidget(close_btn)
         self.dockWidget_adaptiveTrajectory.setTitleBarWidget(title_bar)

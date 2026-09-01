@@ -10,10 +10,13 @@ directly.
 Plot layout:
 - Left Y axis: intensity (% of max) + a target-band LinearRegionItem
   (accent blue at ~25% alpha, fixed — does not scroll).
-- Right Y axis (linked ViewBox): exposure (ms) and L1 power (mW).
+- Right Y axis (linked ViewBox): exposure (ms) — Breeze midtone grey.
+- Right-2 Y axis (linked ViewBox): L1/L2 power (mW) — amber.
 - X axis: plane index. Beyond 200 planes the X view auto-scrolls.
-- Re-acquire events: vertical dashed warning lines.
-- Power-fallback events: small information-blue triangles.
+- Re-acquire events: vertical dashed warning-olive lines.
+- Power-fallback events: small amber triangles (power-family color;
+  positioned on the exposure axis because their y-value is exposure,
+  but their event semantics are power).
 
 States: empty (label visible, plot hidden), populated (plot visible,
 label hidden), frozen (further appends ignored).
@@ -159,10 +162,10 @@ def _clamp_view_range(
 _BG = "#1d2023"  # view:background — plot background
 _FG = "#eff0f1"  # foreground — axis pens / text
 _ACCENT = "#3daee9"  # intensity curve + left axis — blue
-_EXPOSURE = "#21A652"  # exposure curve + right-1 axis — green
+_EXPOSURE = "#76797c"  # exposure curve + right-1 axis — Breeze midtone grey
 _INFORMATION = "#E0A030"  # power axis + L1 power curve (right-2) — amber
 _POWER2 = "#F0C060"  # L2 power curve (right-2 axis) — lighter amber
-_WARNING = "#9A9A9A"  # re-acquire marker — neutral grey
+_WARNING = "#99995C"  # re-acquire marker — Breeze warning olive
 _TARGET = "#3daee9"  # target band — blue (intensity family)
 
 # The exact empty-state copy.
@@ -191,7 +194,7 @@ class AdaptiveTrajectoryWidget(QWidget):
         self._run_started = False  # reset() called for current run
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(8)
 
         # Empty-state label: word-wrapped so the fixed English sentence
@@ -265,9 +268,10 @@ class AdaptiveTrajectoryWidget(QWidget):
         bottom_ax.setTextPen(_FG)
         item.setLabel("left", "Intensity (% of max)", color=_ACCENT)
         item.setLabel("bottom", "Plane")
-        # Right-1 axis (exposure) — green ViewBox + axis. Exposure is
-        # the acquisition path; it is physically decoupled from power
-        # (illumination), so it gets its own axis.
+        # Right-1 axis (exposure) — grey ViewBox + axis (Breeze midtone
+        # grey, not green — green is reserved for laser ● ON status).
+        # Exposure is the acquisition path; it is physically decoupled
+        # from power (illumination), so it gets its own axis.
         self._right_vb = pg.ViewBox()
         item.scene().addItem(self._right_vb)
         right_ax = pg.AxisItem("right")
@@ -277,10 +281,13 @@ class AdaptiveTrajectoryWidget(QWidget):
         item.layout.addItem(right_ax, 2, 3)
         self._right_vb.setXLink(item.getViewBox())
         right_ax.setLabel("Exposure (ms)", color=_EXPOSURE)
-        # Right-2 axis (power) — teal ViewBox + axis, two columns further
-        # right (column 5). Column 4 is a fixed-width gap (20px) so the
-        # two right axes have visible padding between them. L1 (teal) +
-        # L2 (lighter teal) share this axis.
+        # Right-2 axis (power) — amber ViewBox + axis, two columns
+        # further right (column 5). Column 4 is a fixed-width gap (20px)
+        # so the two right axes have visible padding between them.
+        # L1 (amber) + L2 (lighter amber) share this axis. Amber is the
+        # operator-approved power-family color (recorded as an approved
+        # deviation in 10-UI-SPEC.md — information blue clashed with the
+        # accent-blue intensity curve).
         self._power_vb = pg.ViewBox()
         item.scene().addItem(self._power_vb)
         power_ax = pg.AxisItem("right")
@@ -299,8 +306,8 @@ class AdaptiveTrajectoryWidget(QWidget):
         main_vb = item.getViewBox()
         # Inset the whole PlotItem layout (axes + ViewBox) from the
         # widget edges so the dark widget background shows as padding
-        # around the axes/labels on all sides.
-        item.layout.setContentsMargins(12, 12, 12, 12)
+        # around the axes/labels on all sides (16 px = md spacing token).
+        item.layout.setContentsMargins(16, 16, 16, 16)
 
         def _sync_right_vbs() -> None:
             if self._right_vb is not None:
@@ -444,7 +451,7 @@ class AdaptiveTrajectoryWidget(QWidget):
             [], [], pen=pg.mkPen(_ACCENT, width=2), name="Intensity"
         )
         item.addItem(self._intensity_curve)
-        # Exposure curve on the right-1 ViewBox (green, dashed) — the
+        # Exposure curve on the right-1 ViewBox (grey, dashed) — the
         # acquisition path, decoupled from power (illumination).
         if self._right_vb is not None:
             self._exposure_curve = pg.PlotDataItem(
@@ -454,7 +461,7 @@ class AdaptiveTrajectoryWidget(QWidget):
             )
             self._right_vb.addItem(self._exposure_curve)
         # L1/L2 power curves on the right-2 ViewBox (power axis).
-        # L1 = teal, L2 = pink, matching the power axis pen (teal).
+        # L1 = amber, L2 = lighter amber, matching the power axis pen.
         if self._power_vb is not None:
             self._power_curve = pg.PlotDataItem(
                 [], [], pen=pg.mkPen(_INFORMATION, width=1), name="Power L1"
@@ -466,12 +473,15 @@ class AdaptiveTrajectoryWidget(QWidget):
             self._power_vb.addItem(self._power2_curve)
         # Power-fallback scatter on the exposure ViewBox — its y-value
         # is exposure in ms, so it shares the exposure axis, not the
-        # power or intensity axis.
+        # power or intensity axis. Its pen/brush use the amber
+        # power-family color (not grey) because the event semantics are
+        # power, even though the marker is positioned on the exposure
+        # axis.
         self._power_fallback_scatter = pg.ScatterPlotItem(
             symbol="t",
             size=10,
-            pen=pg.mkPen(_EXPOSURE),
-            brush=pg.mkBrush(_EXPOSURE),
+            pen=pg.mkPen(_INFORMATION),
+            brush=pg.mkBrush(_INFORMATION),
             name="Power fallback",
         )
         if self._right_vb is not None:
@@ -622,11 +632,12 @@ class AdaptiveTrajectoryWidget(QWidget):
 
     def _rebuild_legend(self) -> None:
         """Clear and re-add all legend entries in the canonical
-        colour-grouped order: blue (Target band, Intensity), green
-        (Exposure, Power fallback), amber (Power L1, Power L2), grey
-        (Re-acquire). Power L1/L2 are only added when their laser is
-        under automatic control. LegendItem renders the first-added
-        item at the top, so add in visual top-to-bottom order."""
+        colour-grouped order: blue (Target band, Intensity), grey
+        (Exposure), amber (Power fallback, Power L1, Power L2),
+        warning-olive (Re-acquire). Power L1/L2 are only added when
+        their laser is under automatic control. LegendItem renders the
+        first-added item at the top, so add in visual top-to-bottom
+        order."""
         if self._legend is None:
             return
         # Remove all existing entries. removeItem takes the original
@@ -709,7 +720,7 @@ class AdaptiveTrajectoryWidget(QWidget):
             )
             self.plotWidget_adaptiveTrajectory.getPlotItem().addItem(line)
             self._reacquire_lines.append(line)
-        # Power-fallback marker: information-blue triangle.
+        # Power-fallback marker: amber triangle (power-family color).
         if power_fallback and self._power_fallback_scatter is not None:
             spots = self._power_fallback_scatter.getData()
             existing_x = list(spots[0]) if spots is not None else []

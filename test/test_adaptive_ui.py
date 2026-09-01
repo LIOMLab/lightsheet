@@ -465,8 +465,8 @@ def test_dock_exists_and_hidden_initially(
     ctrl, _ = make_controller(qtbot, request)
     dock = getattr(ctrl, "dockWidget_adaptiveTrajectory", None)
     assert dock is not None, "dockWidget_adaptiveTrajectory must exist on the shell"
-    from PySide6.QtWidgets import QDockWidget
     from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QDockWidget
 
     assert isinstance(dock, QDockWidget)
     # No dock areas allowed — it can never re-dock into the main GUI.
@@ -913,8 +913,8 @@ def test_dock_is_floating_only_closable(
     ctrl, _ = make_controller(qtbot, request)
     dock = ctrl.dockWidget_adaptiveTrajectory
     features = dock.features()
-    from PySide6.QtWidgets import QDockWidget
     from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QDockWidget
 
     # Closable (operator can dismiss it), but NOT movable/floatable.
     assert features & QDockWidget.DockWidgetFeature.DockWidgetClosable
@@ -1039,8 +1039,6 @@ def test_widget_layout_margins_are_16(qtbot: QtBot) -> None:
     (the md spacing token from the 4/8/16 scale)."""
     w = _make_trajectory_widget(qtbot)
     layout = w.layout()
-    from PySide6.QtCore import QMargins
-
     margins = layout.contentsMargins()
     assert (margins.left(), margins.top(),
             margins.right(), margins.bottom()) == (16, 16, 16, 16)
