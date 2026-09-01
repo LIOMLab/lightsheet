@@ -362,8 +362,8 @@ class FocusTrajectoryWidget(QWidget):
             self._stage_curve.setData(self._xs, self._stage_pos)
         if self._residual_scatter is not None and residual_mm != 0.0:
             spots = self._residual_scatter.getData()
-            existing_x = list(spots[0]) if spots is not None else []
-            existing_y = list(spots[1]) if spots is not None else []
+            existing_x = list(spots[0]) if spots[0] is not None else []
+            existing_y = list(spots[1]) if spots[1] is not None else []
             existing_x.append(float(x_axis_value))
             existing_y.append(float(camera_pos_mm))
             self._residual_scatter.setData(existing_x, existing_y)
