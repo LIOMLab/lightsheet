@@ -641,6 +641,11 @@ class Controller_MainWindow(QMainWindow):
         self.sig_progress_update.connect(self._on_progress_update)
         self.sig_message.connect(self.updateUi_message_printer)
 
+        # In demo mode, pre-load the bundled sample focus curve now that
+        # the message signal is wired so a load failure is visible.
+        if self._demo_mode:
+            self.stack_panel._load_demo_focus_curve()
+
         # ---
         # Connections for menu actions
         # ---

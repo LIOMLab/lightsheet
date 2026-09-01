@@ -135,11 +135,6 @@ class StackPanelWidget(QWidget):
         self.ui.widget_focusFields.setVisible(
             self.ui.checkBox_focusEnable.isChecked()
         )
-        # In demo mode pre-load the bundled sample calibration curve so the
-        # focus feature is ready without a file dialog. The checkbox still
-        # has to be enabled by the operator; this only arms the curve.
-        if getattr(self._shell, "_demo_mode", False):
-            self._load_demo_focus_curve()
         # Wire Browse to a JSON-only file chooser, Load to the validating
         # curve loader, and the block-size spinbox to the hard 1..100 guard.
         self.ui.pushButton_focusBrowse.clicked.connect(self._on_focus_browse)
