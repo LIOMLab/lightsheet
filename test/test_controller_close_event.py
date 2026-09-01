@@ -124,3 +124,17 @@ def test_close_event_preview_timeout_logs_warning(
     ctrl.preview_mode_started = False
     ctrl._preview_thread.quit()
     ctrl._preview_thread.wait(2000)
+
+
+def test_close_event_closes_motors_handle(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """closeEvent calls self.motors.close() exactly once alongside the existing
+    camera/etls/laser close calls."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    with patch.object(ctrl.motors, "close") as mock_close:
+        from PySide6.QtGui import QCloseEvent
+        event = QCloseEvent()
+        ctrl.closeEvent(event)
+        assert event.isAccepted()
+        assert mock_close.call_count == 1

@@ -760,3 +760,109 @@ def test_motors_init_with_mocked_serial_none_supported(tmp_path: Path) -> None:
     assert motors.vertical.is_supported is False  # ty: ignore[unresolved-attribute]
     assert motors.horizontal.is_supported is False  # ty: ignore[unresolved-attribute]
     assert motors.camera.is_supported is False  # ty: ignore[unresolved-attribute]
+
+
+# -- move_axes_parallel safety contract -------------------------------------
+
+
+def _make_motor_for_parallel(
+    device_number: int,
+    microstep_size: float,
+    limit_high_microsteps: int,
+    limit_low_microsteps: int = 0,
+) -> ZaberMotor:
+    """Build a ZaberMotor via __new__ bypass for move_axes_parallel tests."""
+    m = ZaberMotor.__new__(ZaberMotor)
+    m.error = 0
+    m.error_message = ""
+    m.is_supported = True
+    m.id = 6210 if device_number == 1 else 6320 if device_number == 2 else 4152
+    m.name = (
+        "T-LSM050A"
+        if device_number == 1
+        else "T-LSM100B"
+        if device_number == 2
+        else "T-LSR150B"
+    )
+    m.inverted = False
+    m.homed = False
+    m.microstep_size = microstep_size
+    m.microsteps_max = limit_high_microsteps
+    m.units = "mm"
+    m.limit_high_microsteps = limit_high_microsteps
+    m.limit_low_microsteps = limit_low_microsteps
+    m.origin_microsteps = 0
+    m.port = "COM7"
+    m.device_number = device_number
+    return m
+
+
+def _make_motors_container() -> Motors:
+    """Build a Motors container via __new__ bypass with a Mock shared serial."""
+    motors = Motors.__new__(Motors)
+    motors.error = 0
+    motors.error_message = ""
+    motors._serial = Mock()
+    return motors
+
+
+@pytest.mark.parametrize(
+    "moves",
+    [
+        [("horizontal", 9999.0, "mm"), ("camera", 5.0, "mm")],
+        [("horizontal", 5.0, "mm"), ("camera", 999.0, "mm")],
+    ],
+)
+def test_move_axes_parallel_validates_both_before_any_bytes(
+    moves: list[tuple[str, float, str]],
+) -> None:
+    """Over-travel on ANY axis raises ValueError BEFORE any serial bytes are
+    written, regardless of which axis in the list is out of range."""
+    motors = _make_motors_container()
+    motors.horizontal = _make_motor_for_parallel(2, 0.19050, 533333)
+    motors.camera = _make_motor_for_parallel(3, 0.49609, 258015)
+    with pytest.raises(ValueError, match="exceeds the high travel limit"):
+        motors.move_axes_parallel(moves)
+    assert motors._serial.write.call_count == 0
+
+
+def test_move_axes_parallel_reads_one_reply_per_command() -> None:
+    """With all targets in range, move_axes_parallel writes one command per
+    motor and reads exactly one 6-byte reply per command (never 12 at once)."""
+    motors = _make_motors_container()
+    motors._serial.read.side_effect = [
+        b"\x02\x14\x00\x00\x00\x00",
+        b"\x03\x14\x00\x00\x00\x00",
+    ]
+    motors.horizontal = _make_motor_for_parallel(2, 0.19050, 533333)
+    motors.camera = _make_motor_for_parallel(3, 0.49609, 258015)
+    motors.move_axes_parallel([("horizontal", 5.0, "mm"), ("camera", 5.0, "mm")])
+    assert motors._serial.write.call_count == 2
+    assert motors._serial.read.call_count == 2
+    for call in motors._serial.read.call_args_list:
+        assert call[0][0] == 6
+
+
+def test_zaber_motor_uses_injected_shared_serial() -> None:
+    """_motorIO uses the injected shared serial handle; it does NOT construct a
+    new serial.Serial instance per call."""
+    m = _make_motor_for_parallel(2, 0.19050, 533333)
+    m._serial = Mock()
+    m._serial.read.return_value = b"\x02\x14\x00\x00\x00\x00"
+    with patch("lightsheet.hal.real.motors.serial.Serial") as serial_cls:
+        m._motorIO(20, 26246)
+    assert serial_cls.call_count == 0
+    assert m._serial.write.called
+    assert m._serial.read.called
+
+
+def test_motors_close_closes_shared_handle() -> None:
+    """Motors.close() closes the shared serial handle once and is a no-op if
+    the handle is already closed."""
+    motors = _make_motors_container()
+    motors._serial.is_open = True
+    motors.close()
+    assert motors._serial.close.call_count == 1
+    motors._serial.is_open = False
+    motors.close()
+    assert motors._serial.close.call_count == 1
