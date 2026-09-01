@@ -504,21 +504,36 @@ class FrameSaver(QObject):
         outfile: h5py.File,
         file_idx: int,
         n_files: int,
+        n_datasets_per_file: int = 1,
     ) -> None:
         """Write the adaptive trajectory group for a specific file's
         plane subset. Stitch (``n_files == 1``) writes the full
-        trajectory; per-plane (``n_files > 1``) writes only the row at
-        ``file_idx`` (the file's global plane index). No-op when
-        adaptive is disabled or the plane index is out of range.
-        Raises on write failure — the caller's try/except surfaces it.
+        trajectory; per-plane (``n_files > 1``) writes the rows for the
+        planes this file contains. No-op when adaptive is disabled or
+        the plane range is out of range. Raises on write failure — the
+        caller's try/except surfaces it.
+
+        ``n_datasets_per_file`` is the number of datasets (planes) each
+        file holds. For the per-plane layout (``n_files > 1``,
+        ``n_datasets_per_file == 1``) each file holds one plane and the
+        row written is ``trajectory[file_idx]`` — the historical
+        behaviour. For the multi-file multi-dataset layout
+        (``n_files > 1``, ``n_datasets_per_file > 1``) each file holds
+        ``n_datasets_per_file`` planes and the rows written are
+        ``trajectory[file_idx * n_datasets_per_file :
+        (file_idx + 1) * n_datasets_per_file]`` — one trajectory row
+        per plane in the file, aligned with the image data.
         """
         if not self._adaptive_enabled or not self.adaptive_trajectory:
             return
         if n_files > 1:
-            if file_idx < len(self.adaptive_trajectory):
-                self._write_adaptive_hdf5(
-                    outfile, samples=[self.adaptive_trajectory[file_idx]]
-                )
+            start = file_idx * n_datasets_per_file
+            end = start + n_datasets_per_file
+            if start < len(self.adaptive_trajectory):
+                rows = self.adaptive_trajectory[
+                    start:min(end, len(self.adaptive_trajectory))
+                ]
+                self._write_adaptive_hdf5(outfile, samples=rows)
         else:
             self._write_adaptive_hdf5(outfile)
 
@@ -658,14 +673,15 @@ class FrameSaver(QObject):
             # Write the adaptive trajectory group before file close.
             # Only writes when adaptive was enabled and samples were
             # recorded. Stitch (1 file) writes the full trajectory;
-            # per-plane (N files) writes only this file's plane row.
+            # per-plane (N files) writes this file's plane rows
+            # (file_idx * n_datasets .. file_idx * n_datasets + n_datasets).
             try:
-                if len(self.filenames_list) > 1 and idx < len(self.adaptive_trajectory):
-                    self._write_adaptive_hdf5(
-                        outfile, samples=[self.adaptive_trajectory[idx]]
-                    )
-                else:
-                    self._write_adaptive_hdf5(outfile)
+                self._write_adaptive_hdf5_for_file(
+                    outfile,
+                    idx,
+                    len(self.filenames_list),
+                    int(self.number_of_datasets),
+                )
             except Exception as e:
                 self.sig_status_message.emit(f"Save error: {e}")
                 self.saving_started = False
@@ -817,9 +833,12 @@ class FrameSaver(QObject):
                 if ds_counter[channel_idx] > n_datasets_per_file:
                     # Write the adaptive trajectory group before close.
                     # Stitch (1 file/channel) writes the full trajectory;
-                    # per-plane (N files/channel) writes only this file's row.
+                    # per-plane (N files/channel) writes this file's rows.
                     self._write_adaptive_hdf5_for_file(
-                        outfile, file_idx[channel_idx], n_files_per_channel
+                        outfile,
+                        file_idx[channel_idx],
+                        n_files_per_channel,
+                        n_datasets_per_file,
                     )
                     outfile.close()
                     self.sig_status_message.emit(
@@ -855,7 +874,10 @@ class FrameSaver(QObject):
                         # the loop exited (stitch: 0; per-plane: the
                         # file that was being filled).
                         self._write_adaptive_hdf5_for_file(
-                            outfile, file_idx[ch], n_files_per_channel
+                            outfile,
+                            file_idx[ch],
+                            n_files_per_channel,
+                            n_datasets_per_file,
                         )
                         outfile.close()
                     except Exception:
@@ -1225,16 +1247,14 @@ class FrameSaver(QObject):
                         break
                 # Write the adaptive trajectory group before close.
                 # Stitch (1 file) writes the full trajectory; per-plane
-                # (N files) writes only this file's plane row.
+                # (N files) writes this file's plane rows.
                 try:
-                    if len(self.filenames_list) > 1 and idx < len(
-                        self.adaptive_trajectory
-                    ):
-                        self._write_adaptive_hdf5(
-                            outfile, samples=[self.adaptive_trajectory[idx]]
-                        )
-                    else:
-                        self._write_adaptive_hdf5(outfile)
+                    self._write_adaptive_hdf5_for_file(
+                        outfile,
+                        idx,
+                        len(self.filenames_list),
+                        int(self.number_of_datasets),
+                    )
                 except Exception as e:
                     self.sig_status_message.emit(f"Save error: {e}")
                     self.saving_started = False
@@ -1456,7 +1476,10 @@ class FrameSaver(QObject):
                 # next file for this channel (if any).
                 if ds_counter[channel_idx] > n_datasets_per_file:
                     self._write_adaptive_hdf5_for_file(
-                        outfile, file_idx[channel_idx], n_files_per_channel
+                        outfile,
+                        file_idx[channel_idx],
+                        n_files_per_channel,
+                        n_datasets_per_file,
                     )
                     outfile.close()
                     self.sig_status_message.emit(
@@ -1487,7 +1510,10 @@ class FrameSaver(QObject):
                 if outfiles[ch] is not None:
                     try:
                         self._write_adaptive_hdf5_for_file(
-                            outfiles[ch], file_idx[ch], n_files_per_channel
+                            outfiles[ch],
+                            file_idx[ch],
+                            n_files_per_channel,
+                            n_datasets_per_file,
                         )
                         outfiles[ch].close()
                     except Exception:
