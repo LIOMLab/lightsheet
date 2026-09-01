@@ -585,9 +585,9 @@ class StackPanelWidget(QWidget):
 
     def _update_adaptive_shutter_units(self) -> None:
         """Swap the exposure-bound spinbox suffix/decimals/range between
-        Rolling (ms) and Lightsheet (lines) shutter modes, and update
+        Rolling (ms) and Lightsheet (µs, line time) shutter modes, and update
         the shutter-mode hint label. The physical value is preserved
-        across the swap (a 5 ms bound stays 5 when switching to lines);
+        across the swap (a 5 ms bound stays 5 when switching to µs);
         the build_adaptive_config normalization handles the unit
         conversion to seconds."""
         acq_ui = getattr(self._shell, "acquisition_panel", None)
