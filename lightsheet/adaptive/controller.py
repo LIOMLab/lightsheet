@@ -245,13 +245,29 @@ class AdaptiveController:
                 dimmer_intensity = 0.0
 
             # Dimmer channel power: trim toward balance at block
-            # boundaries only.
+            # boundaries only. Guard the max_power_mw / current_powers_mw
+            # lookups against dimmer_idx >= len(...) — the system is
+            # currently 2-channel only (max_power_mw is a 2-tuple), but
+            # the dimmer_idx fallback above can pick index >= 2 if a
+            # third channel is ever added without also extending
+            # max_power_mw. Fall back to channel 0's bounds in that case
+            # rather than raising IndexError mid-loop.
+            dimmer_max = (
+                cfg.max_power_mw[dimmer_idx]
+                if dimmer_idx < len(cfg.max_power_mw)
+                else cfg.max_power_mw[0]
+            )
+            dimmer_current = (
+                current_powers_mw[dimmer_idx]
+                if dimmer_idx < len(current_powers_mw)
+                else current_powers_mw[0]
+            )
             if is_block_boundary:
                 dimmer_error = dimmer_intensity - cfg.target_midpoint
-                dimmer_delta = -dimmer_error * cfg.max_power_mw[dimmer_idx] * 0.5
-                new_dimmer_power = current_powers_mw[dimmer_idx] + dimmer_delta
+                dimmer_delta = -dimmer_error * dimmer_max * 0.5
+                new_dimmer_power = dimmer_current + dimmer_delta
             else:
-                new_dimmer_power = current_powers_mw[dimmer_idx]
+                new_dimmer_power = dimmer_current
 
             # Assign the computed powers back to the correct laser
             # slots (L1 = index 0, L2 = index 1).
