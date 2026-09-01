@@ -930,10 +930,8 @@ class FrameSaver(QObject):
                         outfile.close()
                     except Exception as e:
                         self.sig_status_message.emit(f"Save error: {e}")
-                        try:
+                        with contextlib.suppress(Exception):
                             outfile.close()
-                        except Exception:
-                            pass
 
         logger.info(
             "frame_saver_worker (multi-channel) exited "
@@ -1591,10 +1589,8 @@ class FrameSaver(QObject):
                         outfiles[ch].close()
                     except Exception as e:
                         self.sig_status_message.emit(f"Save error: {e}")
-                        try:
+                        with contextlib.suppress(Exception):
                             outfiles[ch].close()
-                        except Exception:
-                            pass
 
             # Finalize the Zarr store after all HDF5 files are closed.
             # Gate on channel 0's plane count (canonical recorder): if it

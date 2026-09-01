@@ -1212,7 +1212,7 @@ class StackWorker(QObject, _AcquireScanMixin):
         # effectively disable the exposure actuator. Round to the nearest
         # ms and clamp to a minimum of 1 ms so a sub-ms Lightsheet exposure
         # is never silently dropped to zero. The Rolling path is unchanged
-        # (exposures are 1–1000 ms, all >= 1 after truncation).
+        # (exposures are 1-1000 ms, all >= 1 after truncation).
         shutter_mode = getattr(self.camera, "shutter_mode", "Rolling")
         if shutter_mode == "Lightsheet":
             self.camera.set_exposure_time(max(1, round(cmd.exposure_s * 1000)))
