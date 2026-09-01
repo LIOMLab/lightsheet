@@ -188,15 +188,6 @@ class AdaptiveSample:
 # field would break the schema-a contract and existing saved data.
 
 
-def nan_inactive(intensities: list[float], active_mask: list[bool]) -> list[float]:
-    """Return a copy of ``intensities`` with inactive channels replaced
-    by NaN (convention for the saved trajectory)."""
-    return [
-        v if active else float("nan")
-        for v, active in zip(intensities, active_mask, strict=False)
-    ]
-
-
 def is_nan(value: float) -> bool:
     """NaN check that works on Python 3.12 (math.isnan)."""
     return isinstance(value, float) and math.isnan(value)
