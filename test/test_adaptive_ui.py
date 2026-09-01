@@ -7,8 +7,13 @@ applySpec loops + the adaptive group wiring run against the real widget
 tree. Headless via ``QT_QPA_PLATFORM=offscreen`` (set by conftest).
 
 Covers the operator-facing contracts:
-- The 13 enumerated adaptive spinboxes exist as ``FieldSpecSpinBox``
-  instances with the exact objectNames from the UI-SPEC.
+- The 6 operator-adjustable adaptive spinboxes (the runtime min/max
+  exposure + per-laser power bounds) exist as ``FieldSpecSpinBox``
+  instances with the exact objectNames from the UI-SPEC. The seven
+  fixed controller-tuning settings (target band lo/hi, re-acquire
+  threshold, block size N, Kp, Ki, pilot count) are config.ini only —
+  they are not surfaced as GUI widgets (approved deviation, recorded
+  in 10-UI-SPEC.md).
 - The enable toggle hides only the fields container (the group box title
   row stays visible as the affordance).
 - An invalid min/max pair emits the documented message + beep, reverts
@@ -47,11 +52,11 @@ if TYPE_CHECKING:
     from lightsheet.gui.widgets.adaptive_trajectory import AdaptiveTrajectoryWidget
     from lightsheet.gui.workers import StackWorker
 
-# The 13 enumerated adaptive spinbox objectNames (UI-SPEC §Component
-# Inventory). The prose count of 14 in the FieldSpec policy table is an
-# The 6 operator-adjustable adaptive spinboxes (the fixed controller-
-# tuning settings — target band, reacquire threshold, block size, Kp,
-# Ki, pilot count — moved to config.ini only, no longer in the GUI).
+# The 6 operator-adjustable adaptive spinbox objectNames (UI-SPEC §Component
+# Inventory). The seven fixed controller-tuning settings (target band lo/hi,
+# re-acquire threshold, block size N, Kp, Ki, pilot count) moved to
+# config.ini only per the approved deviation recorded in 10-UI-SPEC.md —
+# they are no longer GUI widgets.
 ADAPTIVE_SPINBOX_OBJNAMES = (
     "doubleSpinBox_adaptiveMinExposure",
     "doubleSpinBox_adaptiveMaxExposure",
@@ -925,3 +930,183 @@ def test_dock_is_floating_only_closable(
 
     QApplication.processEvents()
     assert dock.isFloating() is True
+
+
+# ===================================================================== #
+# UI-REVIEW fix verification: runtime curve/scatter/marker pen colors,
+# on-scale margins (16 px widget + PlotItem, 8/4/8/4 title bar with 4 px
+# spacing), regular-weight dock title, inherited close-button font, and
+# the exact close-button tooltip. These tests inspect the live Qt /
+# pyqtgraph objects rather than reading source text.
+# ===================================================================== #
+
+
+def _pen_color_hex(pen: Any) -> str:
+    """Return a pen's color as a normalized #RRGGBB hex string."""
+    color = pen.color()
+    return f"#{color.red():02x}{color.green():02x}{color.blue():02x}".lower()
+
+
+def test_exposure_curve_pen_is_grey_midtone(qtbot: QtBot) -> None:
+    """The exposure curve pen resolves to Breeze midtone grey #76797c
+    (not green, not accent blue) — the safety-semantic color boundary
+    requires green to stay reserved for laser ● ON status."""
+    w = _make_trajectory_widget(qtbot)
+    assert w._exposure_curve is not None
+    hex_color = _pen_color_hex(w._exposure_curve.opts["pen"])
+    assert hex_color == "#76797c"
+
+
+def test_power_fallback_scatter_pen_is_amber(qtbot: QtBot) -> None:
+    """The power-fallback scatter pen + brush resolve to amber
+    #E0A030 (the power-family color), not green — its y-value is
+    exposure but its event semantics are power."""
+    w = _make_trajectory_widget(qtbot)
+    assert w._power_fallback_scatter is not None
+    pen = w._power_fallback_scatter.opts["pen"]
+    brush = w._power_fallback_scatter.opts["brush"]
+    assert _pen_color_hex(pen) == "#e0a030"
+    assert _pen_color_hex(brush) == "#e0a030"
+
+
+def test_reacquire_legend_sample_is_warning_olive(qtbot: QtBot) -> None:
+    """The re-acquire legend sample pen resolves to Breeze warning
+    olive #99995C (not neutral grey) so the operator reads the
+    semantic 'this plane was re-shot'."""
+    w = _make_trajectory_widget(qtbot)
+    assert w._reacquire_legend_sample is not None
+    hex_color = _pen_color_hex(w._reacquire_legend_sample.opts["pen"])
+    assert hex_color == "#99995c"
+
+
+def test_power_l1_curve_pen_is_amber(qtbot: QtBot) -> None:
+    """The L1 power curve pen resolves to amber #E0A030 (the
+    operator-approved power-family color, recorded as an approved
+    deviation in 10-UI-SPEC.md)."""
+    w = _make_trajectory_widget(qtbot)
+    assert w._power_curve is not None
+    hex_color = _pen_color_hex(w._power_curve.opts["pen"])
+    assert hex_color == "#e0a030"
+
+
+def test_power_l2_curve_pen_is_lighter_amber(qtbot: QtBot) -> None:
+    """The L2 power curve pen resolves to lighter amber #F0C060."""
+    w = _make_trajectory_widget(qtbot)
+    assert w._power2_curve is not None
+    hex_color = _pen_color_hex(w._power2_curve.opts["pen"])
+    assert hex_color == "#f0c060"
+
+
+def test_no_adaptive_curve_or_marker_is_green(qtbot: QtBot) -> None:
+    """No adaptive plot primitive resolves to a green pen/brush —
+    green is reserved exclusively for laser ● ON status. Inspects
+    every curve, scatter, and legend sample pen/brush color."""
+    w = _make_trajectory_widget(qtbot)
+    items = [
+        w._intensity_curve,
+        w._exposure_curve,
+        w._power_curve,
+        w._power2_curve,
+        w._power_fallback_scatter,
+        w._target_band_legend_sample,
+        w._reacquire_legend_sample,
+    ]
+    for item in items:
+        if item is None:
+            continue
+        pen = item.opts.get("pen")
+        if pen is not None:
+            color = pen.color()
+            # Green dominant: green channel strictly greater than both
+            # red and blue by a clear margin.
+            assert not (color.green() > color.red() + 20
+                        and color.green() > color.blue() + 20), (
+                f"adaptive plot primitive uses green: "
+                f"#{color.red():02x}{color.green():02x}{color.blue():02x}"
+            )
+        brush = item.opts.get("brush")
+        if brush is not None:
+            color = brush.color()
+            assert not (color.green() > color.red() + 20
+                        and color.green() > color.blue() + 20), (
+                f"adaptive plot primitive brush uses green: "
+                f"#{color.red():02x}{color.green():02x}{color.blue():02x}"
+            )
+
+
+def test_widget_layout_margins_are_16(qtbot: QtBot) -> None:
+    """The outer QVBoxLayout contents margins are 16 px on every side
+    (the md spacing token from the 4/8/16 scale)."""
+    w = _make_trajectory_widget(qtbot)
+    layout = w.layout()
+    from PySide6.QtCore import QMargins
+
+    margins = layout.contentsMargins()
+    assert (margins.left(), margins.top(),
+            margins.right(), margins.bottom()) == (16, 16, 16, 16)
+
+
+def test_plotitem_layout_margins_are_16(qtbot: QtBot) -> None:
+    """The inner PlotItem.layout contents margins are 16 px on every
+    side so the dark widget background shows as padding around the
+    axes/labels on all sides."""
+    w = _make_trajectory_widget(qtbot)
+    item = w.plotWidget_adaptiveTrajectory.getPlotItem()
+    # QGraphicsGridLayout exposes getContentsMargins (left, top, right,
+    # bottom) rather than a QMargins object.
+    left, top, right, bottom = item.layout.getContentsMargins()
+    assert (left, top, right, bottom) == (16, 16, 16, 16)
+
+
+def test_dock_title_bar_margins_and_spacing(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """The adaptive dock title bar margins are 8/4/8/4 (sm horizontal,
+    xs vertical) with 4 px spacing — all on the 4/8/16 scale."""
+    ctrl, _ = make_controller(qtbot, request)
+    title_bar = ctrl.dockWidget_adaptiveTrajectory.titleBarWidget()
+    layout = title_bar.layout()
+    margins = layout.contentsMargins()
+    assert (margins.left(), margins.top(),
+            margins.right(), margins.bottom()) == (8, 4, 8, 4)
+    assert layout.spacing() == 4
+
+
+def test_dock_title_label_is_regular_weight(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """The adaptive dock title label has no bold override — the mode
+    badge is the only bold text in the app (UI-SPEC Typography)."""
+    ctrl, _ = make_controller(qtbot, request)
+    title_bar = ctrl.dockWidget_adaptiveTrajectory.titleBarWidget()
+    from PySide6.QtWidgets import QLabel
+
+    labels = title_bar.findChildren(QLabel)
+    assert len(labels) >= 1
+    title_label = labels[0]
+    ss = title_label.styleSheet()
+    assert "bold" not in ss.lower(), (
+        f"dock title label must not be bold; styleSheet={ss!r}"
+    )
+
+
+def test_dock_close_button_inherits_font_and_has_tooltip(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """The dock close button has no 16 px font override (it inherits
+    the app font), keeps border/hover styling, and exposes the exact
+    tooltip 'Close adaptive trajectory dock'."""
+    ctrl, _ = make_controller(qtbot, request)
+    title_bar = ctrl.dockWidget_adaptiveTrajectory.titleBarWidget()
+    from PySide6.QtWidgets import QPushButton
+
+    buttons = title_bar.findChildren(QPushButton)
+    assert len(buttons) == 1
+    close_btn = buttons[0]
+    ss = close_btn.styleSheet()
+    assert "font-size" not in ss.lower(), (
+        f"close button must not override font-size; styleSheet={ss!r}"
+    )
+    assert "border" in ss.lower(), "close button keeps border styling"
+    assert "hover" in ss.lower(), "close button keeps hover styling"
+    assert close_btn.toolTip() == "Close adaptive trajectory dock"
