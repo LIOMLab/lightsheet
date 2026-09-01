@@ -182,6 +182,18 @@ def test_load_calibration_arms_status_label(
     )
 
 
+def test_demo_mode_preloads_sample_focus_curve(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """Demo mode auto-arms the bundled sample focus calibration so the
+    feature is ready without a file dialog."""
+    ctrl, _ = make_controller(qtbot, request)
+    ui = _focus_ui(ctrl)
+    assert ctrl.stack_panel._armed_focus_curve is not None
+    assert "focus_sample_calibration.json" in ui.lineEdit_focusCurvePath.text()
+    assert "Armed: 3 points" in ui.label_focusStatus.text()
+
+
 def test_load_calibration_invalid_file_shows_error_copy(
     qtbot: QtBot, request: FixtureRequest, tmp_path: Any
 ) -> None:
@@ -243,8 +255,10 @@ def test_build_focus_config_returns_none_when_unarmed(
     # Unchecked -> None.
     ui.checkBox_focusEnable.setChecked(False)
     assert ctrl.stack_panel.build_focus_config() is None
-    # Checked but no file loaded -> None.
+    # Checked but no file loaded -> None (clear any demo auto-loaded curve).
     ui.checkBox_focusEnable.setChecked(True)
+    ui.lineEdit_focusCurvePath.setText("")
+    ui.pushButton_focusLoad.click()
     assert ctrl.stack_panel.build_focus_config() is None
     # Load a valid file.
     path = tmp_path / "curve.json"

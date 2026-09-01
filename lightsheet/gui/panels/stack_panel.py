@@ -11,6 +11,7 @@ StackWorker constructor — the worker thread never reads ``ui.*``.
 from __future__ import annotations
 
 import typing
+from pathlib import Path
 from typing import ClassVar
 
 import numpy as np
@@ -134,6 +135,11 @@ class StackPanelWidget(QWidget):
         self.ui.widget_focusFields.setVisible(
             self.ui.checkBox_focusEnable.isChecked()
         )
+        # In demo mode pre-load the bundled sample calibration curve so the
+        # focus feature is ready without a file dialog. The checkbox still
+        # has to be enabled by the operator; this only arms the curve.
+        if getattr(self._shell, "_demo_mode", False):
+            self._load_demo_focus_curve()
         # Wire Browse to a JSON-only file chooser, Load to the validating
         # curve loader, and the block-size spinbox to the hard 1..100 guard.
         self.ui.pushButton_focusBrowse.clicked.connect(self._on_focus_browse)
@@ -898,6 +904,24 @@ class StackPanelWidget(QWidget):
         self._armed_focus_curve = curve
         self._armed_focus_curve_path = path
         self._update_focus_status_label()
+
+    def _load_demo_focus_curve(self) -> None:
+        """Arm the bundled sample focus curve when running in demo mode.
+
+        The sample lives in ``lightsheet/resources/`` next to the demo
+        image so it is packaged and present on any checkout. A missing
+        sample is silently ignored; the operator can still browse for a
+        custom file.
+        """
+        sample = (
+            Path(__file__).resolve().parents[2]
+            / "resources"
+            / "focus_sample_calibration.json"
+        )
+        if not sample.exists():
+            return
+        self.ui.lineEdit_focusCurvePath.setText(str(sample))
+        self._on_focus_load()
 
     def _clear_focus_armed(self) -> None:
         """Disarm the focus curve. build_focus_config/build_focus_curve
