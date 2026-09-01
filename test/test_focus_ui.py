@@ -458,7 +458,7 @@ def test_focus_trajectory_widget_appends_block(qtbot: QtBot) -> None:
     """append_sample with one block swaps to the plot and draws the
     camera-position curve."""
     w = _focus_trajectory_widget(qtbot)
-    w.reset(x_axis_variable="Block")
+    w.reset()
     w.append_sample(
         block_idx=0,
         stage_pos_mm=0.01,
@@ -474,29 +474,11 @@ def test_focus_trajectory_widget_appends_block(qtbot: QtBot) -> None:
     assert ys[0] == pytest.approx(20.0)
 
 
-def test_focus_trajectory_widget_x_axis_switch(qtbot: QtBot) -> None:
-    """set_x_axis_variable switches the X axis between block index and
-    stage position."""
-    w = _focus_trajectory_widget(qtbot)
-    w.reset(x_axis_variable="Block")
-    w.append_sample(
-        block_idx=2,
-        stage_pos_mm=0.05,
-        camera_pos_mm=22.0,
-        residual_mm=0.0,
-        x_axis_value=0.0,
-    )
-    w.set_x_axis_variable("Stage position (mm)")
-    # After the switch the camera curve should be replotted with X = stage pos.
-    xs, _ys = w._camera_curve.getData()  # type: ignore[unresolved-attribute]
-    assert xs[0] == pytest.approx(0.05)
-
-
 def test_focus_trajectory_widget_residual_marker(qtbot: QtBot) -> None:
     """A non-zero residual at a block renders a warning-olive diamond
     marker on that block."""
     w = _focus_trajectory_widget(qtbot)
-    w.reset(x_axis_variable="Block")
+    w.reset()
     w.append_sample(
         block_idx=1,
         stage_pos_mm=0.02,
@@ -512,7 +494,7 @@ def test_focus_trajectory_widget_residual_marker(qtbot: QtBot) -> None:
 def test_focus_trajectory_widget_freeze_blocks_appends(qtbot: QtBot) -> None:
     """After freeze() (E-stop), further append_sample calls are ignored."""
     w = _focus_trajectory_widget(qtbot)
-    w.reset(x_axis_variable="Block")
+    w.reset()
     w.append_sample(
         block_idx=0,
         stage_pos_mm=0.0,
@@ -659,7 +641,7 @@ def test_estop_freezes_focus_trajectory_and_sets_badge(
 
     QApplication.processEvents()
     widget = ctrl.focusTrajectoryWidget
-    widget.reset(x_axis_variable="Block")
+    widget.reset()
     widget.append_sample(
         block_idx=0,
         stage_pos_mm=0.0,

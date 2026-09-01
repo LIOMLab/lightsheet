@@ -11,8 +11,7 @@ Plot layout:
 - Left Y axis: camera position (mm) — accent blue.
 - Right Y axis (linked ViewBox): horizontal stage position (mm) —
   Breeze midtone grey.
-- X axis: block index ("Block") by default, or horizontal stage position
-  ("Stage position (mm)") when the operator switches the combo box.
+- X axis: block index ("Block").
 - Residual markers: warning-olive diamonds at blocks where a non-zero
   residual was applied.
 
@@ -62,7 +61,6 @@ class FocusTrajectoryWidget(QWidget):
         super().__init__(parent)
         self._frozen = False
         self._run_started = False
-        self._x_is_stage = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -243,17 +241,12 @@ class FocusTrajectoryWidget(QWidget):
         item.getViewBox().enableAutoRange(axis="x", enable=True)
 
     def _rebuild_x_values(self) -> None:
-        """Recompute ``self._xs`` from the current X-axis variable and
-        redraw all curves/scatter."""
-        if self._x_is_stage:
-            self._xs = [float(v) for v in self._stage_pos]
-            bottom_label = "Stage position (mm)"
-        else:
-            self._xs = [float(v) for v in self._block_indices]
-            bottom_label = "Block"
+        """Recompute ``self._xs`` from the block indices and redraw all
+        curves/scatter."""
+        self._xs = [float(v) for v in self._block_indices]
 
         item = self.plotWidget_focusTrajectory.getPlotItem()
-        item.setLabel("bottom", bottom_label, color=_FG)
+        item.setLabel("bottom", "Block", color=_FG)
 
         if self._camera_curve is not None:
             self._camera_curve.setData(self._xs, self._camera_pos)
@@ -272,15 +265,11 @@ class FocusTrajectoryWidget(QWidget):
         if self._residual_scatter is not None:
             self._residual_scatter.setData(residual_x, residual_y)
 
-    def reset(self, x_axis_variable: str = "Block") -> None:
-        """Reset the plot for a new run with the given X-axis variable.
-
-        Clears all curve/scatter data and removes stale markers; the
-        curve objects themselves are reused.
-        """
+    def reset(self) -> None:
+        """Reset the plot for a new run. Clears all curve/scatter data and
+        removes stale markers; the curve objects themselves are reused."""
         self._frozen = False
         self._run_started = True
-        self._x_is_stage = x_axis_variable == "Stage position (mm)"
         self._block_indices = []
         self._stage_pos = []
         self._camera_pos = []
@@ -325,12 +314,6 @@ class FocusTrajectoryWidget(QWidget):
         if self._legend is not None:
             self._legend.show()
         self.label_focusTrajectoryEmpty.hide()
-
-    def set_x_axis_variable(self, variable: str) -> None:
-        """Switch the X axis between "Block" and "Stage position (mm)"
-        and replot existing data."""
-        self._x_is_stage = variable == "Stage position (mm)"
-        self._rebuild_x_values()
 
     def append_sample(
         self,

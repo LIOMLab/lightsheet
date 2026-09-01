@@ -500,7 +500,7 @@ class AcquisitionPanelWidget(QWidget):
         # per-block samples do not accumulate across runs. The X-axis is
         # fixed to "Block" in this phase; the "Stage position (mm)" option
         # has been removed from the UI.
-        self._shell.focusTrajectoryWidget.reset(x_axis_variable="Block")
+        self._shell.focusTrajectoryWidget.reset()
         if not self._shell.dockWidget_focusTrajectory.isVisible():
             self._shell.focusTrajectoryWidget.plotWidget_focusTrajectory.hide()
             if self._shell.focusTrajectoryWidget._legend is not None:
