@@ -113,6 +113,32 @@ def test_fixed_command_marks_fixed_no_fallback_no_reacquire() -> None:
     assert cmd.laser2_mw == pytest.approx(15.0)
 
 
+def test_fixed_command_reacquire_exhausted_defaults_false() -> None:
+    """AdaptiveCommand.fixed() exposes reacquire_exhausted=False without
+    changing the existing keyword constructor — backward compatible."""
+    cmd = AdaptiveCommand.fixed(
+        exposure_s=50e-3,
+        laser1_mw=20.0,
+        laser2_mw=15.0,
+    )
+    assert cmd.reacquire_exhausted is False
+
+
+def test_command_keyword_construction_reacquire_exhausted_defaults_false() -> None:
+    """Ordinary keyword construction of AdaptiveCommand (without passing
+    reacquire_exhausted) defaults the flag to False — existing callers
+    stay compatible."""
+    cmd = AdaptiveCommand(
+        exposure_s=50e-3,
+        laser1_mw=20.0,
+        laser2_mw=15.0,
+        reacquire=False,
+        control_variable_active="exposure",
+        power_fallback=False,
+    )
+    assert cmd.reacquire_exhausted is False
+
+
 # --------------------------------------------------------------------- #
 # Pilot feedforward fit
 # --------------------------------------------------------------------- #
@@ -355,6 +381,68 @@ def test_one_sharp_excursion_requests_one_reacquire() -> None:
         plane_idx=6,
     )
     assert cmd_next.reacquire is False
+
+
+def test_reacquire_exhausted_after_cap_with_continuing_deviation() -> None:
+    """A sharp deviation below the re-acquire cap returns
+    reacquire=True, reacquire_exhausted=False. A CONTINUING sharp
+    deviation after the cap returns reacquire=False,
+    reacquire_exhausted=True — the controller surfaces that the
+    re-shot still deviates without requesting another re-acquire."""
+    cfg = _cfg(reacquire_threshold=0.08, max_reacquire_attempts=1)
+    ctrl = AdaptiveController(cfg, n_planes=20)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    # First sharp excursion (under the cap) → reacquire=True,
+    # reacquire_exhausted=False.
+    cmd_exc = ctrl.update(
+        intensities=[0.20],  # sharp drop vs the ~0.65 expected
+        brighter_idx=0,
+        current_exposure_s=50e-3,
+        current_powers_mw=(20.0, 0.0),
+        plane_idx=5,
+    )
+    assert cmd_exc.reacquire is True
+    assert cmd_exc.reacquire_exhausted is False
+    # Continuing sharp deviation (cap reached) → reacquire=False,
+    # reacquire_exhausted=True. The observed-vs-feedforward deviation
+    # stays above threshold on the post-cap update.
+    cmd_post = ctrl.update(
+        intensities=[0.20],  # still sharply deviating
+        brighter_idx=0,
+        current_exposure_s=50e-3,
+        current_powers_mw=(20.0, 0.0),
+        plane_idx=6,
+    )
+    assert cmd_post.reacquire is False
+    assert cmd_post.reacquire_exhausted is True
+
+
+def test_reacquire_exhausted_false_when_deviation_resolves() -> None:
+    """After the cap is reached, a plane whose deviation resolves (no
+    longer a sharp excursion) returns reacquire=False AND
+    reacquire_exhausted=False — the exhaustion flag only fires when the
+    deviation persists past the cap."""
+    cfg = _cfg(reacquire_threshold=0.08, max_reacquire_attempts=1)
+    ctrl = AdaptiveController(cfg, n_planes=20)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    # Consume the cap with a sharp excursion.
+    ctrl.update(
+        intensities=[0.20],
+        brighter_idx=0,
+        current_exposure_s=50e-3,
+        current_powers_mw=(20.0, 0.0),
+        plane_idx=5,
+    )
+    # Next plane: deviation resolved (intensity back near expected).
+    cmd_resolved = ctrl.update(
+        intensities=[0.65],  # near the feedforward expectation
+        brighter_idx=0,
+        current_exposure_s=50e-3,
+        current_powers_mw=(20.0, 0.0),
+        plane_idx=6,
+    )
+    assert cmd_resolved.reacquire is False
+    assert cmd_resolved.reacquire_exhausted is False
 
 
 def test_gradual_profile_does_not_reacquire() -> None:

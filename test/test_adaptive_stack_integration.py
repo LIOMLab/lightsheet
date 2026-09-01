@@ -629,3 +629,434 @@ def test_one_sharp_excursion_requests_one_reacquire(
         f"re-acquire count must not exceed max_reacquire_attempts "
         f"({cfg.max_reacquire_attempts}); got {reacquired_count}"
     )
+
+
+# --------------------------------------------------------------------- #
+# T-Q10-01: L1/L2 write failures are caught separately, emit the exact
+# mandated copy, and return control to the stack loop so the next plane
+# can retry. No exception escapes; HardwareManager clamps are unchanged.
+# --------------------------------------------------------------------- #
+
+
+def _make_adaptive_worker(
+    qtbot: Any, request: Any, tmp_path: Path, *, multi_channel: bool = False,
+    cfg: Any = None,
+) -> tuple[Any, Any]:
+    """Construct a real controller + StackWorker with an enabled adaptive
+    config and a stubbed acquire_scan, ready for direct
+    _apply_adaptive_command / _record_adaptive_step calls. Returns
+    (ctrl, worker)."""
+    from _helpers.controller_fixture import make_controller
+
+    from lightsheet.gui.workers import StackWorker
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = multi_channel
+
+    n_planes = 20
+    _configure_stack_plan(ctrl, tmp_path, n_planes=n_planes)
+
+    if cfg is None:
+        cfg = _adaptive_cfg()
+    worker = StackWorker(
+        ctrl._bundle, ctrl._hw, ctrl,
+        save_description="adaptive write-failure sample",
+        save_stitch_blend=False,
+        save_all_crop=False,
+        save_all_full=False,
+        multi_channel=multi_channel,
+        adaptive_cfg=cfg,
+    )
+
+    def scripted_fn(acquisition_index: int, exposure_s: float) -> int:
+        return round(0.92 * cfg.sensor_max)
+
+    ctrl.camera.set_scripted_intensity_fn(scripted_fn)
+
+    def _fake_acquire_scan() -> None:
+        n_imgs = worker.siggen.waveform_cycles or 1
+        imgs = ctrl.camera.copy_recorder_images(n_imgs)
+        ctrl.reconstructed_frame = np.asarray(imgs[0])
+
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+    return ctrl, worker
+
+
+def _make_failing_write(real_write: Callable[[float], None],
+                        exc: Exception) -> Callable[[float], None]:
+    """Wrap a real _write_laserN_power so it raises ``exc`` instead of
+    writing, leaving the HAL clamp path intact for the next call."""
+    def _fail(pct: float) -> None:
+        raise exc
+    return _fail
+
+
+def test_apply_adaptive_command_l1_write_failure_emits_copy_and_continues(
+    qtbot: Any, request: Any, tmp_path: Path
+) -> None:
+    """An L1 power-write exception is caught, emits the exact mandated
+    per-laser safety copy via sig_message, does not abort the stack,
+    and a subsequent _apply_adaptive_command call retries (the worker
+    is not in a broken state)."""
+    ctrl, worker = _make_adaptive_worker(qtbot, request, tmp_path)
+    cfg = worker._adaptive_cfg
+
+    from lightsheet.adaptive.types import AdaptiveCommand
+
+    cmd = AdaptiveCommand(
+        exposure_s=50e-3,
+        laser1_mw=20.0,
+        laser2_mw=0.0,
+        reacquire=False,
+        control_variable_active="exposure",
+        power_fallback=False,
+    )
+
+    messages: list[str] = []
+    ctrl.sig_message.connect(lambda m: messages.append(m))
+
+    real_write = ctrl._hw._write_laser1_power
+    try:
+        ctrl._hw._write_laser1_power = _make_failing_write(  # type: ignore
+            real_write, RuntimeError("DAQ timeout")
+        )
+        # Must not raise.
+        worker._apply_adaptive_command(cmd)
+    finally:
+        ctrl._hw._write_laser1_power = real_write  # type: ignore
+
+    # The exact mandated L1 copy was emitted.
+    l1_msgs = [m for m in messages if "Adaptive power write failed for L1" in m]
+    assert len(l1_msgs) == 1, f"expected one L1 failure message; got {messages}"
+    msg = l1_msgs[0]
+    assert "DAQ timeout" in msg
+    assert "two-layer clamp held" in msg
+    assert "laser power was NOT changed past the safe limit" in msg
+    assert "retry on the next plane" in msg
+    assert "E-stop (F12)" in msg
+    # L2 copy must NOT have been emitted (L2 was not written — single
+    # channel, laser2_mw=0 / max_power guard).
+    assert not any("for L2" in m for m in messages)
+
+    # A subsequent call with the real write restored retries cleanly
+    # (no exception escapes, no broken state).
+    messages.clear()
+    worker._apply_adaptive_command(cmd)
+    assert messages == [], (
+        f"retry after restored write must not emit; got {messages}"
+    )
+
+
+def test_apply_adaptive_command_l2_write_failure_emits_copy_and_continues(
+    qtbot: Any, request: Any, tmp_path: Path
+) -> None:
+    """An L2 power-write exception (multi-channel) is caught separately,
+    emits the exact mandated L2 copy, and does not abort. L1 is written
+    successfully before L2 fails."""
+    ctrl, worker = _make_adaptive_worker(
+        qtbot, request, tmp_path, multi_channel=True
+    )
+    cfg = worker._adaptive_cfg
+
+    from lightsheet.adaptive.types import AdaptiveCommand
+
+    cmd = AdaptiveCommand(
+        exposure_s=50e-3,
+        laser1_mw=20.0,
+        laser2_mw=15.0,
+        reacquire=False,
+        control_variable_active="exposure",
+        power_fallback=False,
+    )
+
+    messages: list[str] = []
+    ctrl.sig_message.connect(lambda m: messages.append(m))
+
+    real_write = ctrl._hw._write_laser2_power
+    try:
+        ctrl._hw._write_laser2_power = _make_failing_write(  # type: ignore
+            real_write, ValueError("L2 DAC overflow")
+        )
+        # Must not raise even though L1 wrote successfully first.
+        worker._apply_adaptive_command(cmd)
+    finally:
+        ctrl._hw._write_laser2_power = real_write  # type: ignore
+
+    l2_msgs = [m for m in messages if "Adaptive power write failed for L2" in m]
+    assert len(l2_msgs) == 1, f"expected one L2 failure message; got {messages}"
+    msg = l2_msgs[0]
+    assert "L2 DAC overflow" in msg
+    assert "two-layer clamp held" in msg
+    assert "laser power was NOT changed past the safe limit" in msg
+    assert "retry on the next plane" in msg
+    assert "E-stop (F12)" in msg
+    # L1 copy must NOT have been emitted (L1 wrote successfully).
+    assert not any("for L1" in m for m in messages)
+
+
+def test_apply_adaptive_command_camera_write_outside_laser_handlers(
+    qtbot: Any, request: Any, tmp_path: Path
+) -> None:
+    """camera.set_exposure_time is called even when a laser write fails
+    — it lives outside the new per-laser exception handlers. Verified
+    by failing L1 and confirming the camera exposure was still set."""
+    ctrl, worker = _make_adaptive_worker(qtbot, request, tmp_path)
+
+    from lightsheet.adaptive.types import AdaptiveCommand
+
+    cmd = AdaptiveCommand(
+        exposure_s=42e-3,
+        laser1_mw=20.0,
+        laser2_mw=0.0,
+        reacquire=False,
+        control_variable_active="exposure",
+        power_fallback=False,
+    )
+
+    ctrl.sig_message.connect(lambda m: None)
+    real_write = ctrl._hw._write_laser1_power
+    try:
+        ctrl._hw._write_laser1_power = _make_failing_write(  # type: ignore
+            real_write, RuntimeError("L1 fail")
+        )
+        worker._apply_adaptive_command(cmd)
+    finally:
+        ctrl._hw._write_laser1_power = real_write  # type: ignore
+
+    # Camera exposure was set (ms = exposure_s * 1000).
+    assert ctrl.camera.exposure_time == 42
+
+
+# --------------------------------------------------------------------- #
+# T-Q10-03: re-acquire exhaustion message — the worker emits the exact
+# plane/deviation copy from the next command's reacquire_exhausted flag.
+# --------------------------------------------------------------------- #
+
+
+def test_record_adaptive_step_emits_exhaustion_message(
+    qtbot: Any, request: Any, tmp_path: Path
+) -> None:
+    """When the next adaptive command carries reacquire_exhausted=True,
+    _record_adaptive_step emits the exact mandated plane/deviation
+    message via sig_message. Uses a deterministic frame intensity and
+    target midpoint so the deviation percentage is predictable."""
+    ctrl, worker = _make_adaptive_worker(qtbot, request, tmp_path)
+    cfg = worker._adaptive_cfg
+
+    from lightsheet.adaptive.types import AdaptiveCommand
+
+    # Prime the worker's current command (the one whose exposure/power
+    # is recorded for this plane).
+    worker._adaptive_current_cmd = AdaptiveCommand(
+        exposure_s=50e-3,
+        laser1_mw=20.0,
+        laser2_mw=0.0,
+        reacquire=True,
+        control_variable_active="exposure",
+        power_fallback=False,
+    )
+
+    # Deterministic frame: a flat frame whose intensity fraction is
+    # 0.20 (well below the target midpoint 0.925). frame_intensity_pct
+    # returns the p99 / sensor_max fraction.
+    target_mid = cfg.target_midpoint  # 0.925
+    frame_frac = 0.20
+    fill = round(frame_frac * cfg.sensor_max)
+    ctrl.reconstructed_frame = np.full((64, 64), fill, dtype=np.uint16)
+
+    messages: list[str] = []
+    ctrl.sig_message.connect(lambda m: messages.append(m))
+
+    # Patch the controller.update to return a command with
+    # reacquire_exhausted=True so _record_adaptive_step's check fires.
+    real_update = worker._adaptive_controller.update
+
+    def _exhausting_update(*args: Any, **kwargs: Any) -> AdaptiveCommand:
+        # Call the real update to preserve side effects, then override
+        # the returned command's exhaustion flag. AdaptiveCommand is
+        # frozen, so rebuild it.
+        real_cmd = real_update(*args, **kwargs)
+        return AdaptiveCommand(
+            exposure_s=real_cmd.exposure_s,
+            laser1_mw=real_cmd.laser1_mw,
+            laser2_mw=real_cmd.laser2_mw,
+            reacquire=real_cmd.reacquire,
+            control_variable_active=real_cmd.control_variable_active,
+            power_fallback=real_cmd.power_fallback,
+            reacquire_exhausted=True,
+        )
+
+    worker._adaptive_controller.update = _exhausting_update  # type: ignore
+
+    try:
+        worker._record_adaptive_step(plane_idx=5)
+    finally:
+        worker._adaptive_controller.update = real_update  # type: ignore
+
+    exh_msgs = [m for m in messages if "Re-acquire fallback exhausted" in m]
+    assert len(exh_msgs) == 1, (
+        f"expected one exhaustion message; got {messages}"
+    )
+    msg = exh_msgs[0]
+    assert "plane 5" in msg
+    assert "review the trajectory after the run" in msg
+    # Deviation percentage: abs(0.20 - 0.925) * 100 = 72.5 -> rounded
+    # to 72% (format spec :.0f).
+    assert "deviates 72% from target" in msg, (
+        f"expected deviation 72%; got {msg!r}"
+    )
+
+
+def test_record_adaptive_step_no_exhaustion_message_when_flag_false(
+    qtbot: Any, request: Any, tmp_path: Path
+) -> None:
+    """When the next command's reacquire_exhausted is False (the common
+    case), _record_adaptive_step emits no exhaustion message — the
+    defensive getattr check returns False and the copy is suppressed."""
+    ctrl, worker = _make_adaptive_worker(qtbot, request, tmp_path)
+
+    from lightsheet.adaptive.types import AdaptiveCommand
+
+    worker._adaptive_current_cmd = AdaptiveCommand(
+        exposure_s=50e-3,
+        laser1_mw=20.0,
+        laser2_mw=0.0,
+        reacquire=False,
+        control_variable_active="exposure",
+        power_fallback=False,
+    )
+
+    fill = round(0.92 * worker._adaptive_cfg.sensor_max)
+    ctrl.reconstructed_frame = np.full((64, 64), fill, dtype=np.uint16)
+
+    messages: list[str] = []
+    ctrl.sig_message.connect(lambda m: messages.append(m))
+
+    worker._record_adaptive_step(plane_idx=0)
+
+    assert not any("Re-acquire fallback exhausted" in m for m in messages), (
+        f"no exhaustion message expected; got {messages}"
+    )
+
+
+def test_record_adaptive_step_legacy_command_without_flag_accepted(
+    qtbot: Any, request: Any, tmp_path: Path
+) -> None:
+    """A legacy command-like object lacking the reacquire_exhausted
+    attribute is accepted (defensive getattr returns False) — no
+    AttributeError, no exhaustion message."""
+    ctrl, worker = _make_adaptive_worker(qtbot, request, tmp_path)
+
+    class _LegacyCmd:
+        """A minimal command-like object without reacquire_exhausted,
+        mirroring a previously-constructed AdaptiveCommand shape."""
+        exposure_s = 50e-3
+        laser1_mw = 20.0
+        laser2_mw = 0.0
+        reacquire = False
+        control_variable_active = "exposure"
+        power_fallback = False
+
+    worker._adaptive_current_cmd = _LegacyCmd()
+
+    fill = round(0.92 * worker._adaptive_cfg.sensor_max)
+    ctrl.reconstructed_frame = np.full((64, 64), fill, dtype=np.uint16)
+
+    messages: list[str] = []
+    ctrl.sig_message.connect(lambda m: messages.append(m))
+
+    # Must not raise AttributeError.
+    worker._record_adaptive_step(plane_idx=0)
+    assert not any("Re-acquire fallback exhausted" in m for m in messages)
+
+
+# --------------------------------------------------------------------- #
+# SC-3 regression: E-stop after a successful write still stops later
+# writes (the new per-laser handlers do not bypass the E-stop path).
+# --------------------------------------------------------------------- #
+
+
+def test_estop_after_successful_write_stops_later_writes(
+    qtbot: Any, request: Any, tmp_path: Path
+) -> None:
+    """The existing E-stop-after-successful-write regression still holds
+    after the new per-laser exception handlers are added: setting
+    estop_event after the first L1 write breaks the loop before the
+    next plane's write. The new handlers swallow write exceptions, not
+    E-stop."""
+    from _helpers.controller_fixture import make_controller
+
+    from lightsheet.gui.workers import StackWorker
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = False
+
+    n_planes = 20
+    _configure_stack_plan(ctrl, tmp_path, n_planes=n_planes)
+
+    cfg = _adaptive_cfg()
+    worker = StackWorker(
+        ctrl._bundle, ctrl._hw, ctrl,
+        save_description="estop regression sample",
+        save_stitch_blend=False,
+        save_all_crop=False,
+        save_all_full=False,
+        multi_channel=False,
+        adaptive_cfg=cfg,
+    )
+
+    def scripted_fn(acquisition_index: int, exposure_s: float) -> int:
+        staged_pct = getattr(ctrl, "laser1_power_pct", 0.0)
+        staged_mw = staged_pct / 100.0 * ctrl.lasers[0].max_power
+        return _bright_to_dim_fill(
+            acquisition_index, exposure_s, staged_mw,
+            sensor_max=cfg.sensor_max, n_planes=n_planes,
+        )
+
+    ctrl.camera.set_scripted_intensity_fn(scripted_fn)
+
+    write_count = {"n": 0}
+
+    def _fake_acquire_scan() -> None:
+        n_imgs = worker.siggen.waveform_cycles or 1
+        imgs = ctrl.camera.copy_recorder_images(n_imgs)
+        ctrl.reconstructed_frame = np.asarray(imgs[0])
+
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    real_write = ctrl._hw._write_laser1_power
+
+    def _write_then_estop(pct: float) -> None:
+        write_count["n"] += 1
+        real_write(pct)
+        ctrl.estop_event.set()
+
+    ctrl._hw._write_laser1_power = _write_then_estop  # type: ignore
+
+    trajectory: list[tuple] = []
+    worker.sig_adaptive_trajectory.connect(
+        lambda *args: trajectory.append(args)
+    )
+
+    try:
+        with patch.object(worker.motors.horizontal, "move_absolute_position"):
+            finished_emits: list[None] = []
+            worker.finished.connect(lambda: finished_emits.append(None))
+            worker.run()
+
+        assert len(finished_emits) == 1
+        assert len(trajectory) < n_planes, (
+            f"E-stop must abort before all {n_planes} planes; "
+            f"got {len(trajectory)} trajectory rows"
+        )
+        assert ctrl.lasers[0].active is False
+        assert ctrl.lasers[1].active is False
+    finally:
+        ctrl.estop_event.clear()
+        ctrl._hw._write_laser1_power = real_write  # type: ignore
