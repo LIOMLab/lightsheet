@@ -14,6 +14,8 @@ Schema-a (the approved one-way storage contract):
   control_variable_active, reacquired, power_fallback.
 - HDF5 /adaptive_trajectory and Zarr /acquisition/adaptive share the
   identical field names and units.
+- ``reacquired`` records the controller's re-acquire *decision* (not
+  whether the plane was actually re-acquired — see the field note).
 """
 
 from __future__ import annotations
@@ -103,6 +105,13 @@ class AdaptiveCommand:
     existing HAL paths (camera.set_exposure_time / HardwareManager
     percent adapters → ILaser.set_power). The worker never mutates it.
 
+    ``reacquire`` is the controller's *decision* to re-acquire this
+    plane — a request flag, NOT a record that re-acquisition happened.
+    The current worker does not implement re-grab logic, so a True
+    value means the controller decided a re-acquire would be warranted,
+    not that the plane was actually re-acquired. ``AdaptiveSample.
+    reacquired`` mirrors this decision flag for the saved trajectory.
+
     ``control_variable_active`` is one of:
     - ``"fixed"``: adaptive is off; the command is a constant
       passthrough of the current exposure/power.
@@ -166,6 +175,17 @@ class AdaptiveSample:
             v if v is not None else float("nan") for v in self.intensity_fraction
         ]
         object.__setattr__(self, "intensity_fraction", normalized)
+
+
+# NOTE on the ``reacquired`` field name: it is kept for schema-a
+# (identical field names across HDF5 /adaptive_trajectory and Zarr
+# /acquisition/adaptive). Despite the name, it records the
+# controller's *decision* to re-acquire (mirroring AdaptiveCommand.
+# reacquire), NOT whether the plane was actually re-acquired — the
+# current worker does not implement re-grab logic. Downstream tools
+# should treat a True value as "the controller requested a re-acquire",
+# not as proof that a re-acquired frame is present. Renaming the stored
+# field would break the schema-a contract and existing saved data.
 
 
 def nan_inactive(intensities: list[float], active_mask: list[bool]) -> list[float]:
