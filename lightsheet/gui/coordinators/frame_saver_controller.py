@@ -719,11 +719,12 @@ class FrameSaver(QObject):
         if actual_n_datasets is not None:
             row_count = min(actual_n_datasets, n_datasets_per_file)
         file_end = file_start + row_count
-        rows = [
-            s
-            for s in self.focus_trajectory
-            if file_start <= s.block_index * block_size < file_end
-        ]
+        rows = []
+        for s in self.focus_trajectory:
+            block_start = s.block_index * block_size
+            block_end = block_start + block_size
+            if block_start < file_end and block_end > file_start:
+                rows.append(s)
         if rows:
             self._write_focus_hdf5(outfile, samples=rows)
 
