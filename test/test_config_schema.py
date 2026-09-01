@@ -507,6 +507,96 @@ def test_collect_config_errors_missing_adaptive_section_uses_defaults() -> None:
     )
 
 
+# --- [Focus] section (operator-configurable focus compensation) ------------
+
+
+def _focus_valid() -> dict[str, Any]:
+    """A valid [Focus] dict built from the tracked defaults."""
+    return {
+        "Enabled": False,
+        "Block Size N": 8,
+        "Autofocus Residual Enabled": True,
+        "Residual Gain Mm": 0.05,
+        "Max Residual Mm": 0.5,
+    }
+
+
+def test_focus_settings_rejects_out_of_range_block_size() -> None:
+    """Block Size N outside 1..100 is rejected on both strict and overlay
+    tiers."""
+    from lightsheet.config_schema import FocusSettings, FocusSettingsOverlay
+
+    for cls in (FocusSettings, FocusSettingsOverlay):
+        with pytest.raises(ValidationError):
+            cls(**{**_focus_valid(), "Block Size N": 0})  # ty: ignore[invalid-argument-type]
+        with pytest.raises(ValidationError):
+            cls(**{**_focus_valid(), "Block Size N": 200})  # ty: ignore[invalid-argument-type]
+
+
+def test_focus_settings_rejects_negative_residual_values() -> None:
+    """Negative Residual Gain Mm or Max Residual Mm is rejected on both
+    tiers."""
+    from lightsheet.config_schema import FocusSettings, FocusSettingsOverlay
+
+    for cls in (FocusSettings, FocusSettingsOverlay):
+        with pytest.raises(ValidationError):
+            cls(**{**_focus_valid(), "Residual Gain Mm": -0.1})  # ty: ignore[invalid-argument-type]
+        with pytest.raises(ValidationError):
+            cls(**{**_focus_valid(), "Max Residual Mm": -0.1})  # ty: ignore[invalid-argument-type]
+
+
+def test_focus_settings_rejects_residual_gain_above_ceiling() -> None:
+    """Residual Gain Mm above 1.0 is rejected on both tiers."""
+    from lightsheet.config_schema import FocusSettings, FocusSettingsOverlay
+
+    for cls in (FocusSettings, FocusSettingsOverlay):
+        with pytest.raises(ValidationError):
+            cls(**{**_focus_valid(), "Residual Gain Mm": 1.5})  # ty: ignore[invalid-argument-type]
+
+
+def test_focus_settings_rejects_max_residual_above_ceiling() -> None:
+    """Max Residual Mm above 5.0 is rejected on both tiers."""
+    from lightsheet.config_schema import FocusSettings, FocusSettingsOverlay
+
+    for cls in (FocusSettings, FocusSettingsOverlay):
+        with pytest.raises(ValidationError):
+            cls(**{**_focus_valid(), "Max Residual Mm": 6.0})  # ty: ignore[invalid-argument-type]
+
+
+def test_focus_strict_rejects_unknown_key() -> None:
+    """A typo'd key is rejected by the strict tier (extra='forbid')."""
+    from lightsheet.config_schema import FocusSettings
+
+    data = {**_focus_valid(), "Focus Extra": "typo"}
+    with pytest.raises(ValidationError) as exc_info:
+        FocusSettings(**data)  # ty: ignore[invalid-argument-type]
+    err_types = [e["type"] for e in exc_info.value.errors()]
+    assert any("extra" in t or "forbidden" in t for t in err_types)
+
+
+def test_focus_overlay_tolerates_extra_key() -> None:
+    """The overlay tier (extra='ignore') silently ignores an extra key."""
+    from lightsheet.config_schema import FocusSettingsOverlay
+
+    data = {**_focus_valid(), "Calibration Note": "rig tweak"}
+    s = FocusSettingsOverlay(**data)  # ty: ignore[invalid-argument-type]
+    assert s.block_size_n == 8
+    assert s.residual_gain_mm == 0.05
+
+
+def test_focus_missing_section_uses_defaults() -> None:
+    """A baseline config without a [Focus] section validates using the
+    model defaults -- the section is optional."""
+    sections = {
+        "Lasers": _lasers_valid(),
+        "iBeam": _ibeam_valid(),
+    }
+    result = collect_config_errors(sections)
+    assert result.errors == [], (
+        f"expected no errors for missing [Focus], got {result.errors}"
+    )
+
+
 # --- Laser2 config validation (both tiers) ---
 
 
