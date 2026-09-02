@@ -136,8 +136,6 @@ class DeviceRegistry:
                 candidates = by_vid_pid.get((vid, pid), [])
                 if cfg_port in candidates:
                     resolved[role] = cfg_port
-                elif len(candidates) == 1:
-                    resolved[role] = candidates[0]
                 elif len(candidates) == 0:
                     unresolved.append(
                         f"✕ {role} (VID {vid:04X} PID {pid:04X}, no serial "
