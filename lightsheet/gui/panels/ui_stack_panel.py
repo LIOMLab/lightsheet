@@ -224,7 +224,7 @@ class Ui_StackPanel(object):
         self.doubleSpinBox_adaptiveMaxExposure.setObjectName(u"doubleSpinBox_adaptiveMaxExposure")
         self.doubleSpinBox_adaptiveMaxExposure.setDecimals(0)
         self.doubleSpinBox_adaptiveMaxExposure.setMinimum(1.000000000000000)
-        self.doubleSpinBox_adaptiveMaxExposure.setMaximum(10000.000000000000000)
+        self.doubleSpinBox_adaptiveMaxExposure.setMaximum(1000.000000000000000)
         self.doubleSpinBox_adaptiveMaxExposure.setSingleStep(1.000000000000000)
         self.doubleSpinBox_adaptiveMaxExposure.setValue(100.000000000000000)
 
