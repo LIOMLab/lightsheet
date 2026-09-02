@@ -31,31 +31,25 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, ValidationError, field_validator
+from pydantic import ValidationError
 from pydantic.fields import FieldInfo
-from pydantic_core.core_schema import ValidationInfo
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings
 
 from lightsheet.config import cfg_read
 
+from .sections.adaptive import AdaptiveSettings, AdaptiveSettingsOverlay
 from .sections.camera import CameraSettings, CameraSettingsOverlay
 from .sections.controller import ControllerSettings, ControllerSettingsOverlay
 from .sections.etls import ETLsSettings, ETLsSettingsOverlay
+from .sections.focus import FocusSettings, FocusSettingsOverlay
 from .sections.ibeam import IBeamSettings, IBeamSettingsOverlay
 from .sections.lasers import LasersSettings, LasersSettingsOverlay
 from .sections.logging import LoggingSettings, LoggingSettingsOverlay
 from .sections.motors import MotorsSettings, MotorsSettingsOverlay
 from .sections.siggen import SigGenSettings, SigGenSettingsOverlay
-from .shared import (
-    _make_overlay,
-    _NoEnvBaseSettings,
-)
-from .shared import (
-    _validate_camera_limit_high as _validate_camera_limit_high,
-)
-from .shared import (
-    _validate_horizontal_limit_high as _validate_horizontal_limit_high,
-)
+from .shared import _make_overlay as _make_overlay
+from .shared import _validate_camera_limit_high as _validate_camera_limit_high
+from .shared import _validate_horizontal_limit_high as _validate_horizontal_limit_high
 
 logger = logging.getLogger(__name__)
 
@@ -78,207 +72,6 @@ _ETL_VOLTAGE_LIMIT: float = 5.0  # 0-5 V Optotune EL-10-30 analog input
 # section.
 # Controller and Camera live under lightsheet.config_schema.sections.
 # ---------------------------------------------------------------------------
-
-
-# --- Adaptive section (operator-configurable bounds + gains) ---------------
-#
-# The [Adaptive] section is an OPTIONAL baseline section: a config.ini
-# without it must validate using the model defaults. Both tiers carry
-# identical aliases/defaults and the same range/pair validators so a
-# tampered overlay cannot bypass the same check that guards the tracked
-# baseline.
-#
-# Field ranges (rejected, not clamped, in BOTH tiers):
-# - Exposure: 1..1000 (ms in Rolling / lines in Lightsheet).
-# - Each laser power: 0..150 mW.
-# - Target band: 0..100 %, lo <= hi.
-# - Reacquire threshold: 0..50 %.
-# - Block size N: 1..100 planes.
-# - Kp: 0..5; Ki: 0..1.
-# - Pilot count: 0..50 frames.
-#
-# Cross-section rejection (collect-all, after per-section validation):
-# Adaptive Laser1 Max Power > [Lasers] Laser1 Max Power (mW) and
-# Adaptive Laser2 Max Power > [iBeam] Max Power / 1000 (uW -> mW) are
-# rejected in one pass — never silently clamped.
-
-
-class AdaptiveSettings(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="forbid", case_sensitive=True, populate_by_name=True
-    )
-    enabled: bool = Field(alias="Enabled", default=False)
-    min_exposure: float = Field(alias="Min Exposure", default=1)
-    max_exposure: float = Field(alias="Max Exposure", default=1000)
-    laser1_min_power: float = Field(alias="Laser1 Min Power", default=0.0)
-    laser1_max_power: float = Field(alias="Laser1 Max Power", default=5.0)
-    laser2_min_power: float = Field(alias="Laser2 Min Power", default=0.0)
-    laser2_max_power: float = Field(alias="Laser2 Max Power", default=150.0)
-    target_band_lo: float = Field(alias="Target Band Lo", default=90.0)
-    target_band_hi: float = Field(alias="Target Band Hi", default=95.0)
-    reacquire_threshold: float = Field(alias="Reacquire Threshold", default=8.0)
-    block_size_n: int = Field(alias="Block Size N", default=8)
-    kp: float = Field(alias="Kp", default=0.4)
-    ki: float = Field(alias="Ki", default=0.05)
-    pilot_count: int = Field(alias="Pilot Count", default=5)
-
-    @field_validator("min_exposure", "max_exposure")
-    @classmethod
-    def _exposure_range(cls, v: float) -> float:
-        if v < 1 or v > 1000:
-            raise ValueError(f"exposure {v} is outside the valid range 1..1000")
-        return v
-
-    @field_validator(
-        "laser1_min_power",
-        "laser1_max_power",
-        "laser2_min_power",
-        "laser2_max_power",
-    )
-    @classmethod
-    def _power_range(cls, v: float) -> float:
-        if v < 0 or v > 150:
-            raise ValueError(f"power {v} mW is outside the valid range 0..150 mW")
-        return v
-
-    @field_validator("target_band_lo", "target_band_hi")
-    @classmethod
-    def _target_range(cls, v: float) -> float:
-        if v < 0 or v > 100:
-            raise ValueError(f"target band {v} % is outside the valid range 0..100 %")
-        return v
-
-    @field_validator("reacquire_threshold")
-    @classmethod
-    def _reacquire_range(cls, v: float) -> float:
-        if v < 0 or v > 50:
-            raise ValueError(
-                f"reacquire threshold {v} % is outside the valid range 0..50 %"
-            )
-        return v
-
-    @field_validator("block_size_n")
-    @classmethod
-    def _block_range(cls, v: int) -> int:
-        if v < 1 or v > 100:
-            raise ValueError(f"block size N {v} is outside the valid range 1..100")
-        return v
-
-    @field_validator("kp")
-    @classmethod
-    def _kp_range(cls, v: float) -> float:
-        if v < 0 or v > 5:
-            raise ValueError(f"Kp {v} is outside the valid range 0..5")
-        return v
-
-    @field_validator("ki")
-    @classmethod
-    def _ki_range(cls, v: float) -> float:
-        if v < 0 or v > 1:
-            raise ValueError(f"Ki {v} is outside the valid range 0..1")
-        return v
-
-    @field_validator("pilot_count")
-    @classmethod
-    def _pilot_range(cls, v: int) -> int:
-        if v < 0 or v > 50:
-            raise ValueError(f"pilot count {v} is outside the valid range 0..50")
-        return v
-
-    @field_validator("max_exposure")
-    @classmethod
-    def _exposure_pair(cls, v: float, info: ValidationInfo) -> float:
-        # Validate min <= max after both fields are parsed. The
-        # values-by-name path is available via info.data.
-        min_v = info.data.get("min_exposure")
-        if min_v is not None and min_v > v:
-            raise ValueError(
-                f"Min Exposure ({min_v}) is greater than Max Exposure ({v})"
-            )
-        return v
-
-    @field_validator("laser1_max_power")
-    @classmethod
-    def _laser1_pair(cls, v: float, info: ValidationInfo) -> float:
-        min_v = info.data.get("laser1_min_power")
-        if min_v is not None and min_v > v:
-            raise ValueError(
-                f"Laser1 Min Power ({min_v}) is greater than Laser1 Max Power ({v})"
-            )
-        return v
-
-    @field_validator("laser2_max_power")
-    @classmethod
-    def _laser2_pair(cls, v: float, info: ValidationInfo) -> float:
-        min_v = info.data.get("laser2_min_power")
-        if min_v is not None and min_v > v:
-            raise ValueError(
-                f"Laser2 Min Power ({min_v}) is greater than Laser2 Max Power ({v})"
-            )
-        return v
-
-    @field_validator("target_band_hi")
-    @classmethod
-    def _target_pair(cls, v: float, info: ValidationInfo) -> float:
-        lo = info.data.get("target_band_lo")
-        if lo is not None and lo > v:
-            raise ValueError(
-                f"Target Band Lo ({lo}) is greater than Target Band Hi ({v})"
-            )
-        return v
-
-
-AdaptiveSettingsOverlay = _make_overlay(AdaptiveSettings)
-
-
-# --- Focus section (operator-configurable focus compensation) ---------------
-#
-# The [Focus] section is an OPTIONAL baseline section: a config.ini without
-# it must validate using the model defaults. Both tiers carry identical
-# aliases/defaults and the same range validators so a tampered overlay cannot
-# bypass the strict checks.
-#
-# Field ranges (rejected, not clamped, in BOTH tiers):
-# - Enabled: bool.
-# - Block Size N: 1..100 planes.
-# - Autofocus Residual Enabled: bool.
-# - Residual Gain Mm: 0..1.
-# - Max Residual Mm: 0..5.
-
-
-class FocusSettings(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="forbid", case_sensitive=True, populate_by_name=True
-    )
-    enabled: bool = Field(alias="Enabled", default=False)
-    block_size_n: int = Field(alias="Block Size N", default=8)
-    autofocus_residual: bool = Field(alias="Autofocus Residual Enabled", default=True)
-    residual_gain_mm: float = Field(alias="Residual Gain Mm", default=0.05)
-    max_residual_mm: float = Field(alias="Max Residual Mm", default=0.5)
-
-    @field_validator("block_size_n")
-    @classmethod
-    def _block_range(cls, v: int) -> int:
-        if v < 1 or v > 100:
-            raise ValueError(f"block size N {v} is outside the valid range 1..100")
-        return v
-
-    @field_validator("residual_gain_mm")
-    @classmethod
-    def _residual_gain_range(cls, v: float) -> float:
-        if v < 0 or v > 1:
-            raise ValueError(f"residual gain {v} mm is outside the valid range 0..1")
-        return v
-
-    @field_validator("max_residual_mm")
-    @classmethod
-    def _max_residual_range(cls, v: float) -> float:
-        if v < 0 or v > 5:
-            raise ValueError(f"max residual {v} mm is outside the valid range 0..5")
-        return v
-
-
-FocusSettingsOverlay = _make_overlay(FocusSettings)
 
 
 # ---------------------------------------------------------------------------

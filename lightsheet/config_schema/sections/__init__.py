@@ -1,5 +1,9 @@
 """lightsheet.config_schema.sections package — per-section models."""
 
+from lightsheet.config_schema.sections.adaptive import (
+    AdaptiveSettings,
+    AdaptiveSettingsOverlay,
+)
 from lightsheet.config_schema.sections.camera import (
     CameraSettings,
     CameraSettingsOverlay,
@@ -9,6 +13,10 @@ from lightsheet.config_schema.sections.controller import (
     ControllerSettingsOverlay,
 )
 from lightsheet.config_schema.sections.etls import ETLsSettings, ETLsSettingsOverlay
+from lightsheet.config_schema.sections.focus import (
+    FocusSettings,
+    FocusSettingsOverlay,
+)
 from lightsheet.config_schema.sections.ibeam import IBeamSettings, IBeamSettingsOverlay
 from lightsheet.config_schema.sections.lasers import (
     LasersSettings,
@@ -28,12 +36,16 @@ from lightsheet.config_schema.sections.siggen import (
 )
 
 __all__ = [
+    "AdaptiveSettings",
+    "AdaptiveSettingsOverlay",
     "CameraSettings",
     "CameraSettingsOverlay",
     "ControllerSettings",
     "ControllerSettingsOverlay",
     "ETLsSettings",
     "ETLsSettingsOverlay",
+    "FocusSettings",
+    "FocusSettingsOverlay",
     "IBeamSettings",
     "IBeamSettingsOverlay",
     "LasersSettings",
