@@ -351,7 +351,7 @@ class Ui_SavePanel(object):
 #endif // QT_CONFIG(tooltip)
         self.pushButton_selectFile.setText(QCoreApplication.translate("SavePanel", u"Select File", None))
         self.label_37.setText(QCoreApplication.translate("SavePanel", u"Current File:", None))
-        self.label_currentFileDirectory.setText(QCoreApplication.translate("SavePanel", u"None Specified", None))
+        self.label_currentFileDirectory.setText(QCoreApplication.translate("SavePanel", u"No file selected", None))
         self.label_38.setText(QCoreApplication.translate("SavePanel", u"File Datasets:", None))
 #if QT_CONFIG(tooltip)
         self.pushButton_selectDataset.setToolTip(QCoreApplication.translate("SavePanel", u"Select and show the dataset(s) of the opened file", None))
@@ -359,7 +359,7 @@ class Ui_SavePanel(object):
         self.pushButton_selectDataset.setText(QCoreApplication.translate("SavePanel", u"Select and Show Dataset(s)", None))
         self.label_39.setText(QCoreApplication.translate("SavePanel", u"Dataset Attributes:", None))
         self.label_40.setText(QCoreApplication.translate("SavePanel", u"Current Dataset:", None))
-        self.label_currentDataset.setText(QCoreApplication.translate("SavePanel", u"None Specified", None))
+        self.label_currentDataset.setText(QCoreApplication.translate("SavePanel", u"No dataset selected", None))
         pass
     # retranslateUi
 

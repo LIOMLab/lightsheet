@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
     QHeaderView,
+    QProgressDialog,
     QTableWidget,
     QTableWidgetItem,
     QWidget,
@@ -51,6 +52,7 @@ from PySide6.QtWidgets import (
 from lightsheet.gui.panels.ui_past_acquisitions_panel import (
     Ui_PastAcquisitionsPanel,
 )
+from lightsheet.gui.styles import colors as _c
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -508,8 +510,6 @@ class PastAcquisitionsBrowser(QObject):
         # the QThread and worker QObject persist (held by self._thread /
         # self._worker) until Python GC drops them, which can warn or
         # crash on some Qt versions.
-        self._thread.finished.connect(self._worker.deleteLater)
-        self._thread.finished.connect(self._thread.deleteLater)
         # Clear the Python references AFTER the thread has actually
         # exited (thread.finished fires after the event loop stops, not
         # when quit() is posted). Clearing them in _on_worker_finished
@@ -517,7 +517,12 @@ class PastAcquisitionsBrowser(QObject):
         # processed the quit event) lets Python GC collect the QThread
         # wrapper while the C++ QThread is still running — causing
         # "QThread: Destroyed while thread is still running" crash.
-        self._thread.finished.connect(self._clear_thread_refs)
+        # The connection is queued so the references are dropped from the
+        # main thread, after the thread's finished signal is fully emitted,
+        # avoiding any re-entrant delete during the signal itself.
+        self._thread.finished.connect(
+            self._clear_thread_refs, Qt.QueuedConnection  # ty: ignore[unresolved-attribute]
+        )
         self._thread.start()
 
     def _on_worker_finished(self, entries: list) -> None:  # ty: ignore[missing-type-argument]
@@ -666,7 +671,7 @@ class PastAcquisitionsPanel(QWidget):
         self.ui.tableWidget_pastAcquisitions.setSortingEnabled(True)
 
         # Status label styling (empty/scanning/error copy).
-        self.ui.label_pastStatus.setStyleSheet("color: gray; padding: 12px;")
+        self.ui.label_pastStatus.setStyleSheet(f"color: {_c.MUTED_TEXT}; padding: 12px;")
         self.ui.label_pastStatus.setVisible(False)
 
         # Planned/Past toggle — exclusive group. "Planned" switches the
@@ -722,7 +727,7 @@ class PastAcquisitionsPanel(QWidget):
 
     def _on_refresh(self) -> None:
         """Trigger an async re-scan of the save directory for past
-        acquisitions. Shows the 'Scanning ...' label while the worker
+        acquisitions. Shows a modal progress dialog while the worker
         runs; the table is populated in one batch on completion.
 
         If a scan is already in flight, the table/label are NOT reset —
@@ -737,11 +742,24 @@ class PastAcquisitionsPanel(QWidget):
         self.ui.label_pastStatus.setVisible(True)
         self.ui.tableWidget_pastAcquisitions.setVisible(False)
         self.ui.tableWidget_pastAcquisitions.setRowCount(0)
+        self._past_scan_progress = QProgressDialog(
+            _PAST_SCANNING_COPY.format(save_directory=folder),
+            None,
+            0,
+            0,
+            self,
+        )
+        self._past_scan_progress.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self._past_scan_progress.setMinimumDuration(0)
+        self._past_scan_progress.show()
         self._browser.start_scan_async()
 
     def _on_scan_finished(self, entries: list) -> None:  # ty: ignore[missing-type-argument]
         """Populate the past-acquisitions table in one batch (called on
         the GUI thread via the browser's sig_scan_finished signal)."""
+        if getattr(self, "_past_scan_progress", None) is not None:
+            self._past_scan_progress.close()
+            self._past_scan_progress = None
         self.ui.tableWidget_pastAcquisitions.setSortingEnabled(False)
         self.ui.tableWidget_pastAcquisitions.setRowCount(0)
         for entry in entries:

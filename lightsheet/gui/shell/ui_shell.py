@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QMainWindow,
 
 from lightsheet.gui.panels.image_view import ImageView
 from lightsheet.gui.panels.levels_bar import LevelsBar
+from lightsheet.gui.styles import colors as _c
 
 class Ui_Shell(object):
     def setupUi(self, Shell):
@@ -310,12 +311,15 @@ class Ui_Shell(object):
         self.label_estopStatus = QLabel(self.toolBar_estop)
         self.label_estopStatus.setObjectName(u"label_estopStatus")
         self.label_estopStatus.setMinimumSize(QSize(140, 0))
-        self.label_estopStatus.setStyleSheet(u"color: #34C759; font-weight: bold;")
+        self.label_estopStatus.setStyleSheet(f"color: {_c.SUCCESS}; font-weight: bold;")
         self.toolBar_estop.addWidget(self.label_estopStatus)
         self.pushButton_estop = QPushButton(self.toolBar_estop)
         self.pushButton_estop.setObjectName(u"pushButton_estop")
         self.pushButton_estop.setMinimumSize(QSize(96, 48))
-        self.pushButton_estop.setStyleSheet(u"QPushButton { background-color: #FF3B30; color: white; font-size: 18px; font-weight: bold; border: 2px solid black; }")
+        self.pushButton_estop.setStyleSheet(
+            f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "
+            f"font-size: 18px; font-weight: bold; border: 2px solid {_c.BREEZE_BG}; }}"
+        )
         self.pushButton_estop.setCheckable(True)
         self.shortcut_estop = QShortcut(self.pushButton_estop)
         self.shortcut_estop.setObjectName(u"shortcut_estop")

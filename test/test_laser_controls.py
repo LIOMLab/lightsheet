@@ -704,4 +704,4 @@ def test_updateUi_laser_readback_l1_routes_to_l1_label(
 
     assert ctrl.laser_panel.ui.label_laserOneReadback.text() == "12.5 mW"
     # L2 label was not touched.
-    assert ctrl.laser_panel.ui.label_laserTwoReadback.text() == "N/A"
+    assert ctrl.laser_panel.ui.label_laserTwoReadback.text() == "\u2014"

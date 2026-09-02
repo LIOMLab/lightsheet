@@ -33,7 +33,8 @@ import math
 import typing
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+
+from lightsheet.gui.styles import colors as _c
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
@@ -79,7 +80,7 @@ _ERROR_COPY = (
     "travel limits, or no save path is set). Fix the flagged row and retry."
 )
 
-_FLAG_COLOR = QColor(255, 200, 200)
+_FLAG_COLOR = _c.Q_FLAG_ERROR
 
 
 class _Row:
@@ -154,7 +155,7 @@ class AcquisitionTableManager(QWidget):
         self._empty_label = QLabel(_EMPTY_COPY, self)
         self._empty_label.setWordWrap(True)
         self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._empty_label.setStyleSheet("color: gray; padding: 12px;")
+        self._empty_label.setStyleSheet(f"color: {_c.MUTED_TEXT}; padding: 12px;")
 
         # --- Buttons ---
         btn_row = QHBoxLayout()
@@ -565,7 +566,7 @@ class AcquisitionTableManager(QWidget):
             self._flagged_cells.discard((row, col))
             item = self.table.item(row, col)
             if item is not None:
-                item.setBackground(QColor(255, 255, 255))
+                item.setBackground(_c.Q_FLAG_NORMAL)
         self.table.blockSignals(False)
 
         flagged = False

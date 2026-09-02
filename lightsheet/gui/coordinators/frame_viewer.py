@@ -34,18 +34,8 @@ class FrameViewer(QObject):
         else:
             self.columns = 2000
 
-        # Empty frame
-        frame_init = np.zeros((self.rows, self.columns), dtype=np.uint16)
-        # Set one pixel to trick histogram initial range (0-20000)
-        frame_init[0, 0] = 20000
-        # Set initial view
-        self.parent.ui.imageView.setImage(frame_init)
-        # Live min/max readout (actual pixel range, not the display window).
-        # Guarded so a minimal shell standin without the helper does not
-        # break FrameViewer construction.
-        _readout = getattr(self.parent, "_update_levels_readout", None)
-        if _readout is not None:
-            _readout(frame_init)
+        # Leave the image viewer on its placeholder text until the first
+        # real frame is acquired — no synthetic black/hot-pixel frame.
 
     def enqueue_frame(self, frame: np.ndarray) -> None:
         with contextlib.suppress(queue.Full):

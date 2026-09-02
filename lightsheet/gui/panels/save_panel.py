@@ -102,11 +102,11 @@ class SavePanelWidget(QWidget):
             "OME-Zarr (*.ome.zarr *.zarr)",
         ])
         if not dlg.exec():
-            self.ui.label_currentFileDirectory.setText("None Specified")
+            self.ui.label_currentFileDirectory.setText("No file selected")
             return
         selected = dlg.selectedFiles()
         if not selected:
-            self.ui.label_currentFileDirectory.setText("None Specified")
+            self.ui.label_currentFileDirectory.setText("No file selected")
             return
         path = selected[0]
 
@@ -124,7 +124,7 @@ class SavePanelWidget(QWidget):
             self._shell.sig_message.emit(
                 f"Could not open {path}: {exc}"
             )
-            self.ui.label_currentFileDirectory.setText("None Specified")
+            self.ui.label_currentFileDirectory.setText("No file selected")
             return
 
         for item in range(len(dataset_names)):

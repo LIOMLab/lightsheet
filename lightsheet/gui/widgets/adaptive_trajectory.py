@@ -31,6 +31,8 @@ from pyqtgraph.GraphicsScene.mouseEvents import MouseDragEvent
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QSizePolicy, QVBoxLayout, QWidget
 
+from lightsheet.gui.styles import colors as _c
+
 
 def _make_axis_range_drag(ax: pg.AxisItem, vb: pg.ViewBox) -> None:
     """Override an AxisItem's mouseDragEvent so dragging the axis bar
@@ -158,15 +160,15 @@ def _clamp_view_range(
         return  # range already valid — don't touch auto-range
     vb.setRange(xRange=(x0, x1), yRange=(y0, y1), padding=0.0)
 
-# Breeze dark theme tokens.
-_BG = "#1d2023"  # view:background — plot background
-_FG = "#eff0f1"  # foreground — axis pens / text
-_ACCENT = "#3daee9"  # intensity curve + left axis — blue
-_EXPOSURE = "#76797c"  # exposure curve + right-1 axis — Breeze midtone grey
-_INFORMATION = "#E0A030"  # power axis + L1 power curve (right-2) — amber
-_POWER2 = "#F0C060"  # L2 power curve (right-2 axis) — lighter amber
-_WARNING = "#99995C"  # re-acquire marker — Breeze warning olive
-_TARGET = "#3daee9"  # target band — blue (intensity family)
+# Breeze dark theme tokens imported from the shared color palette.
+_BG = _c.BREEZE_BG
+_FG = _c.BREEZE_FG
+_ACCENT = _c.BREEZE_ACCENT
+_EXPOSURE = _c.BREEZE_MIDTONE
+_INFORMATION = _c.BREEZE_INFORMATION
+_POWER2 = _c.BREEZE_POWER2
+_WARNING = _c.BREEZE_WARNING
+_TARGET = _c.BREEZE_ACCENT
 
 # The exact empty-state copy.
 EMPTY_COPY = (
@@ -441,7 +443,7 @@ class AdaptiveTrajectoryWidget(QWidget):
         self._target_band = pg.LinearRegionItem(
             [90.0, 95.0],
             orientation="horizontal",
-            brush=pg.mkBrush(61, 174, 233, 50),  # #3DAEE9 @ ~20% alpha
+            brush=pg.mkBrush(*_c.BREEZE_ACCENT_RGBA),
             movable=False,
         )
         self._target_band.lines[0].setPen(pg.mkPen(_TARGET, width=1))

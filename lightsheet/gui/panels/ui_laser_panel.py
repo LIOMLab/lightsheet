@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QFrame,
     QGroupBox, QHBoxLayout, QLabel, QPushButton,
     QSizePolicy, QSpacerItem, QVBoxLayout, QWidget)
 
+from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
 class Ui_LaserPanel(object):
@@ -88,7 +89,7 @@ class Ui_LaserPanel(object):
         self.label_laserOneStatus = QLabel(self.groupBox_15)
         self.label_laserOneStatus.setObjectName(u"label_laserOneStatus")
         self.label_laserOneStatus.setMinimumSize(QSize(140, 0))
-        self.label_laserOneStatus.setStyleSheet(u"color: #8E8E93; font-weight: bold;")
+        self.label_laserOneStatus.setStyleSheet(f"color: {_c.DISABLED}; font-weight: bold;")
 
         self.verticalLayout_43.addWidget(self.label_laserOneStatus)
 
@@ -158,7 +159,7 @@ class Ui_LaserPanel(object):
         self.label_laserTwoStatus = QLabel(self.groupBox_15)
         self.label_laserTwoStatus.setObjectName(u"label_laserTwoStatus")
         self.label_laserTwoStatus.setMinimumSize(QSize(140, 0))
-        self.label_laserTwoStatus.setStyleSheet(u"color: #8E8E93; font-weight: bold;")
+        self.label_laserTwoStatus.setStyleSheet(f"color: {_c.DISABLED}; font-weight: bold;")
 
         self.verticalLayout_44.addWidget(self.label_laserTwoStatus)
 
@@ -261,7 +262,7 @@ class Ui_LaserPanel(object):
 #if QT_CONFIG(tooltip)
         self.label_laserTwoReadback.setToolTip(QCoreApplication.translate("LaserPanel", u"iBeam power readback \u2014 click Refresh Power to re-query", None))
 #endif // QT_CONFIG(tooltip)
-        self.label_laserTwoReadback.setText(QCoreApplication.translate("LaserPanel", u"N/A", None))
+        self.label_laserTwoReadback.setText(QCoreApplication.translate("LaserPanel", u"\u2014", None))
 #if QT_CONFIG(tooltip)
         self.pushButton_laserTwoRefresh.setToolTip(QCoreApplication.translate("LaserPanel", u"Re-query iBeam status and power readback now (skipped while a power write is in progress)", None))
 #endif // QT_CONFIG(tooltip)

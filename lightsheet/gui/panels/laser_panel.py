@@ -23,6 +23,7 @@ from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QLabel, QMessageBox, QWidget
 
 from lightsheet.gui.panels.ui_laser_panel import Ui_LaserPanel
+from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 
 if typing.TYPE_CHECKING:
@@ -103,19 +104,19 @@ class LaserPanelWidget(QWidget):
         if status == "active":
             labels[idx].setText("● ON")
             labels[idx].setStyleSheet(
-                "color: #34C759; font-weight: bold;"
+                f"color: {_c.SUCCESS}; font-weight: bold;"
             )
             buttons[idx].setChecked(True)
         elif status == "inactive":
             labels[idx].setText("● OFF")
             labels[idx].setStyleSheet(
-                "color: #8E8E93; font-weight: bold;"
+                f"color: {_c.DISABLED}; font-weight: bold;"
             )
             buttons[idx].setChecked(False)
         else:  # "error"
             labels[idx].setText("● FAULT")
             labels[idx].setStyleSheet(
-                "color: #FF3B30; font-weight: bold;"
+                f"color: {_c.DANGER}; font-weight: bold;"
             )
             buttons[idx].setChecked(False)
 
@@ -237,10 +238,10 @@ class LaserPanelWidget(QWidget):
         corrects it if the HAL state differs."""
         if turning_on:
             label.setText("● ON")
-            label.setStyleSheet("color: #34C759; font-weight: bold;")
+            label.setStyleSheet(f"color: {_c.SUCCESS}; font-weight: bold;")
         else:
             label.setText("● OFF")
-            label.setStyleSheet("color: #8E8E93; font-weight: bold;")
+            label.setStyleSheet(f"color: {_c.DISABLED}; font-weight: bold;")
 
     def _show_first_energize_dialog(self, idx: int) -> str:
         """Show the Class IIIB first-energize confirmation dialog and return

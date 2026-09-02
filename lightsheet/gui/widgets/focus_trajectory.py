@@ -28,17 +28,18 @@ from pyqtgraph.GraphicsScene.mouseEvents import MouseDragEvent
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QSizePolicy, QVBoxLayout, QWidget
 
+from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.widgets.adaptive_trajectory import (
     _clamp_view_range,
     _make_axis_range_drag,
 )
 
-# Breeze dark theme tokens.
-_BG = "#1d2023"  # view:background — plot background
-_FG = "#eff0f1"  # foreground — axis pens / text
-_ACCENT = "#3daee9"  # camera focus curve + left axis — blue
-_MIDTONE = "#76797c"  # horizontal stage curve + right Y — Breeze midtone grey
-_WARNING = "#99995C"  # residual markers — Breeze warning olive
+# Breeze dark theme tokens imported from the shared color palette.
+_BG = _c.BREEZE_BG
+_FG = _c.BREEZE_FG
+_ACCENT = _c.BREEZE_ACCENT
+_MIDTONE = _c.BREEZE_MIDTONE
+_WARNING = _c.BREEZE_WARNING
 
 # The exact empty-state copy.
 EMPTY_COPY = (

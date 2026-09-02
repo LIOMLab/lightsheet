@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QProgressBar,
+    QProgressDialog,
     QStyle,
     QStyleOptionToolButton,
     QToolButton,
@@ -58,6 +59,7 @@ from lightsheet.gui.panels.past_acquisitions_browser import (
 from lightsheet.gui.panels.properties_dialog import Properties_Dialog
 from lightsheet.gui.panels.save_panel import SavePanelWidget
 from lightsheet.gui.panels.scan_panel import ScanPanelWidget
+from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.panels.stack_panel import StackPanelWidget
 from lightsheet.gui.shell.ui_shell import Ui_Shell
 from lightsheet.gui.widgets.channel_radio import ChannelRadio
@@ -237,6 +239,16 @@ class Controller_MainWindow(QMainWindow):
         self.label_estopStatus = self.ui.label_estopStatus
         self.pushButton_estop = self.ui.pushButton_estop
         self.pushButton_armReset = self.ui.pushButton_armReset
+
+        # Apply semantic color tokens to the E-stop toolbar; the .ui defaults
+        # are overridden so the single source of truth lives in colors.py.
+        self.label_estopStatus.setStyleSheet(
+            f"color: {_c.SUCCESS}; font-weight: bold;"
+        )
+        self.pushButton_estop.setStyleSheet(
+            f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "
+            f"font-size: 18px; font-weight: bold; border: 2px solid {_c.BREEZE_BG}; }}"
+        )
         self.shortcut_estop = self.ui.shortcut_estop
         # Safety: E-stop toolbar is fixed (non-movable, non-floatable) so the
         # kill button stays in a predictable location.
@@ -386,10 +398,17 @@ class Controller_MainWindow(QMainWindow):
                 "Calibrate: Camera/ETL calibration (advanced).",
             ),
         )
+        _RAIL_ACTIVE_STYLE = (
+            f"QToolButton:checked {{ background-color: {_c.BREEZE_ACCENT}; "
+            f"color: {_c.BREEZE_FG}; border: 1px solid {_c.BREEZE_BG}; }}"
+            f"QToolButton:hover {{ background-color: {_c.HOVER}; }}"
+        )
         for _btn, _sp_icon, _tooltip in _rail_icon_specs:
             _btn.setIcon(_style.standardIcon(_sp_icon))
             _btn.setIconSize(QSize(24, 24))
             _btn.setToolTip(_tooltip)
+            _btn.setStatusTip(_tooltip)
+            _btn.setStyleSheet(_RAIL_ACTIVE_STYLE)
             _center_toolbutton_paint(_btn)
 
         # Adaptive trajectory dock rail button — NOT part of the
@@ -405,6 +424,10 @@ class Controller_MainWindow(QMainWindow):
         self.ui.toolButton_railAdaptive.setToolTip(
             "Adaptive: Toggle the trajectory dock visibility."
         )
+        self.ui.toolButton_railAdaptive.setStatusTip(
+            "Adaptive: Toggle the trajectory dock visibility."
+        )
+        self.ui.toolButton_railAdaptive.setStyleSheet(_RAIL_ACTIVE_STYLE)
         _center_toolbutton_paint(self.ui.toolButton_railAdaptive)
         # The toggled connection is wired after the adaptive dock
         # controller is constructed later in __init__.
@@ -420,6 +443,10 @@ class Controller_MainWindow(QMainWindow):
         self.ui.toolButton_railFocus.setToolTip(
             "Focus: Toggle the focus trajectory dock visibility."
         )
+        self.ui.toolButton_railFocus.setStatusTip(
+            "Focus: Toggle the focus trajectory dock visibility."
+        )
+        self.ui.toolButton_railFocus.setStyleSheet(_RAIL_ACTIVE_STYLE)
         _center_toolbutton_paint(self.ui.toolButton_railFocus)
         # The toggled connection is wired after the focus dock
         # controller is constructed later in __init__.
@@ -1060,6 +1087,17 @@ class Controller_MainWindow(QMainWindow):
         Launches timer to periodically refresh image display port (imageView).
         """
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        self._hw_progress = QProgressDialog(
+            "Initializing hardware, please wait...",
+            None,
+            0,
+            0,
+            self,
+        )
+        self._hw_progress.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self._hw_progress.setMinimumDuration(0)
+        self._hw_progress.show()
+        QApplication.processEvents()
         self.ui.statusbar.showMessage("Initializing hardware, please wait...")
         self.ui.statusbar.repaint()
 
@@ -1184,7 +1222,8 @@ class Controller_MainWindow(QMainWindow):
             int(float(_ibeam_cfg["Status Poll Interval"]) * 1000)
         )
 
-        # Init done, restore normal cursor.
+        # Init done, restore normal cursor and close the progress dialog.
+        self._hw_progress.close()
         QApplication.restoreOverrideCursor()
         if self._demo_mode:
             self.setWindowTitle(self.windowTitle() + " [DEMO]")
@@ -2049,10 +2088,12 @@ class Controller_MainWindow(QMainWindow):
         #    NEXT action available — "Clear E-stop" (the first press of the
         #    two-press re-arm sequence, audit #6).
         self.label_estopStatus.setText("● E-STOP ACTUATED")
-        self.label_estopStatus.setStyleSheet("color: #FF3B30; font-weight: bold;")
+        self.label_estopStatus.setStyleSheet(
+            f"color: {_c.DANGER}; font-weight: bold;"
+        )
         self.pushButton_estop.setStyleSheet(
-            "QPushButton { background-color: #FF3B30; color: white; "
-            "font-size: 18px; font-weight: bold; border: 4px solid #FFC107; }"
+            f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "
+            f"font-size: 18px; font-weight: bold; border: 4px solid {_c.WARNING}; }}"
         )
         self.pushButton_armReset.setText("Clear E-stop")
 
@@ -2100,10 +2141,12 @@ class Controller_MainWindow(QMainWindow):
             # run.
             self._estop_disarmed = False
             self.label_estopStatus.setText("● ARMED")
-            self.label_estopStatus.setStyleSheet("color: #34C759; font-weight: bold;")
+            self.label_estopStatus.setStyleSheet(
+                f"color: {_c.SUCCESS}; font-weight: bold;"
+            )
             self.pushButton_estop.setStyleSheet(
-                "QPushButton { background-color: #FF3B30; color: white; "
-                "font-size: 18px; font-weight: bold; border: 2px solid black; }"
+                f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "
+                f"font-size: 18px; font-weight: bold; border: 2px solid {_c.BREEZE_BG}; }}"
             )
             self.pushButton_armReset.setText("Arm/Reset")
             self.sig_message.emit(
@@ -2117,14 +2160,16 @@ class Controller_MainWindow(QMainWindow):
             self.estop_event.clear()
             self._estop_disarmed = True
             self.label_estopStatus.setText("● DISARMED")
-            self.label_estopStatus.setStyleSheet("color: #8E8E93; font-weight: bold;")
+            self.label_estopStatus.setStyleSheet(
+                f"color: {_c.DISABLED}; font-weight: bold;"
+            )
             # The E-stop button background stays safety-red in ALL states
             # (ARMED, DISARMED, ACTUATED) — only the border changes. The
             # DISARMED state is communicated by the gray status label above,
             # NOT by graying out the button.
             self.pushButton_estop.setStyleSheet(
-                "QPushButton { background-color: #FF3B30; color: white; "
-                "font-size: 18px; font-weight: bold; border: 2px solid black; }"
+                f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "
+                f"font-size: 18px; font-weight: bold; border: 2px solid {_c.BREEZE_BG}; }}"
             )
             self.pushButton_armReset.setText("Arm Lasers")
             self.sig_message.emit("E-stop cleared. Press Arm Lasers to re-arm.")

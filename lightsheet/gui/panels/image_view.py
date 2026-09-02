@@ -24,8 +24,11 @@ from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
     QGraphicsScene,
     QGraphicsView,
+    QLabel,
     QWidget,
 )
+
+from lightsheet.gui.styles import colors as _c
 
 
 class _KeepLastTint:
@@ -84,6 +87,22 @@ class ImageView(QGraphicsView):
         # square until setImage populates the scene). 320x240 matches
         # the pane floor.
         self._scene.setSceneRect(0, 0, 320, 240)
+
+        # Placeholder overlay shown before the first real frame. It is a
+        # child QLabel so it paints on top of the QGraphicsView without
+        # needing scene coordinates, and it is hidden once setImage runs.
+        self._placeholder = QLabel(self)
+        self._placeholder.setWordWrap(True)
+        self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._placeholder.setText(
+            "No image — start Preview, Live, or Single mode to acquire."
+        )
+        self._placeholder.setStyleSheet(
+            f"color: {_c.MUTED_TEXT}; background: transparent; "
+            f"font-size: 16px; padding: 16px;"
+        )
+        self._placeholder.setGeometry(self.rect())
+
         # The most recent frame (raw uint16), kept so set_levels can
         # re-render with a new display window without the caller having
         # to re-supply the frame. The clamp is applied to a COPY for
@@ -156,6 +175,7 @@ class ImageView(QGraphicsView):
         operator has not zoomed/panned. Once they have, their transform
         is preserved across resizes (fitInView would discard it)."""
         super().resizeEvent(event)
+        self._placeholder.setGeometry(self.rect())
         if self._pixmap_item is not None and not self._user_transformed:
             self.fitInView(
                 self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio
@@ -233,6 +253,7 @@ class ImageView(QGraphicsView):
         # np.clip + linear scaling; values outside the window saturate.
         # The raw frame is retained for set_levels re-render and for the
         # save path (which receives the unclamped frame separately).
+        self._placeholder.hide()
         self._last_frame = frame
         self._last_tint = tint
         frame_clamped = np.clip(frame, self._levels_min, self._levels_max)

@@ -30,13 +30,14 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import (
-    QColor,
     QLinearGradient,
     QMouseEvent,
     QPainter,
     QPaintEvent,
 )
 from PySide6.QtWidgets import QSizePolicy, QWidget
+
+from lightsheet.gui.styles import colors as _c
 
 # Hit radius for every handle (px). A press within this many pixels of a
 # handle's x position grabs that handle.
@@ -287,8 +288,8 @@ class LevelsBar(QWidget):
         # visually attached to the bar.
         g_top, g_bottom = self._gradient_bounds()
         gradient = QLinearGradient(0, 0, width, 0)
-        gradient.setColorAt(0.0, QColor(0, 0, 0))
-        gradient.setColorAt(1.0, QColor(255, 255, 255))
+        gradient.setColorAt(0.0, _c.Q_GRADIENT_START)
+        gradient.setColorAt(1.0, _c.Q_GRADIENT_END)
         painter.fillRect(0, g_top, width, g_bottom - g_top, gradient)
 
         _y_range, y_window = self._row_y()
@@ -305,8 +306,8 @@ class LevelsBar(QWidget):
         # RANGE handles: dark gray downward-pointing triangles above the
         # gradient. Apex at (x, g_top) touches the gradient; base at
         # y = g_top - tri_h.
-        painter.setBrush(QColor(80, 80, 80))
-        painter.setPen(QColor(20, 20, 20))
+        painter.setBrush(_c.Q_RANGE_BRUSH)
+        painter.setPen(_c.Q_RANGE_PEN)
         for x in (x_rmin, x_rmax):
             tri = QPolygonF([
                 QPointF(x - tri_half, g_top - tri_h),
@@ -318,8 +319,8 @@ class LevelsBar(QWidget):
         # WINDOW handles: lighter gray upward-pointing triangles below the
         # gradient. Apex at (x, g_bottom) touches the gradient; base at
         # y = g_bottom + tri_h.
-        painter.setBrush(QColor(180, 180, 180))
-        painter.setPen(QColor(40, 40, 40))
+        painter.setBrush(_c.Q_WINDOW_BRUSH)
+        painter.setPen(_c.Q_WINDOW_PEN)
         for x in (x_wmin, x_wmax):
             tri = QPolygonF([
                 QPointF(x - tri_half, g_bottom + tri_h),
@@ -332,8 +333,8 @@ class LevelsBar(QWidget):
         # handles on the lower row. Uses a lighter neutral gray so it
         # reads as a distinct affordance without introducing a new accent
         # color.
-        painter.setBrush(QColor(120, 120, 120))
-        painter.setPen(QColor(60, 60, 60))
+        painter.setBrush(_c.Q_CENTER_BRUSH)
+        painter.setPen(_c.Q_CENTER_PEN)
         half = tri_half - 1
         painter.drawRect(x_center - half, y_window - half, half * 2, half * 2)
 

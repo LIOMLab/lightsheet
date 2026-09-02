@@ -9,13 +9,18 @@ from __future__ import annotations
 
 import logging
 
+from PySide6.QtCore import QSize
 from PySide6.QtWidgets import (
+    QApplication,
     QDockWidget,
     QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QStyle,
 )
+
+from lightsheet.gui.styles import colors as _c
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +68,18 @@ def build_no_dbl_click_title_bar(
     title_label = QLabel(title, title_bar)
     tb_layout.addWidget(title_label)
     tb_layout.addStretch(1)
-    close_btn = QPushButton("x", title_bar)
+    close_btn = QPushButton("\u00d7", title_bar)
     close_btn.setFixedSize(20, 20)
-    close_btn.setStyleSheet(
-        "QPushButton { border: none; }"
-        "QPushButton:hover { background: #444; }"
-    )
+    close_btn.setFlat(True)
+    close_btn.setIcon(QApplication.style().standardIcon(QStyle.SP_DialogCloseButton))
+    close_btn.setIconSize(QSize(16, 16))
+    close_btn.setAccessibleName("Close")
     close_btn.setToolTip(close_tooltip)
+    close_btn.setStyleSheet(
+        f"QPushButton {{ border: none; color: {_c.BREEZE_FG}; }}"
+        f"QPushButton:hover {{ background: {_c.HOVER}; }}"
+        f"QPushButton:pressed {{ background: {_c.PRESSED}; }}"
+    )
     close_btn.clicked.connect(dock.close)
     tb_layout.addWidget(close_btn)
     return title_bar

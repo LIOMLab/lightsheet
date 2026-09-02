@@ -402,7 +402,7 @@ class Ui_StackPanel(object):
         self.label_41.setToolTip(QCoreApplication.translate("StackPanel", u"Number of planes of stack acquisition", None))
 #endif // QT_CONFIG(tooltip)
         self.label_41.setText(QCoreApplication.translate("StackPanel", u"Number Of Planes:", None))
-        self.label_acqNumberOfPlanes.setText(QCoreApplication.translate("StackPanel", u"N/A", None))
+        self.label_acqNumberOfPlanes.setText(QCoreApplication.translate("StackPanel", u"\u2014", None))
 #if QT_CONFIG(tooltip)
         self.label_84.setToolTip(QCoreApplication.translate("StackPanel", u"The plane step for stack acquisition", None))
 #endif // QT_CONFIG(tooltip)
