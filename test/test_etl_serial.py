@@ -12,7 +12,7 @@ polynomial 0xA001, `E`-prefixed firmware error replies) follow the Optotune
 EL-10-30 serial protocol.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -651,3 +651,51 @@ def test_send_cmd_resp_raises_on_none_response() -> None:
     o._send_cmd = lambda *a, **k: None  # ty: ignore[invalid-assignment]
     with pytest.raises(etls_mod.serial.SerialException, match="no response"):
         o._send_cmd_resp(b"test")
+
+
+# --------------------------------------------------------------------------- #
+# ETLs container: optional resolved ports and narrowed open() exceptions.
+# --------------------------------------------------------------------------- #
+
+def test_etls_init_uses_resolved_port_overrides() -> None:
+    """ETLs.__init__ accepts optional left/right ports and overrides the
+    configured [ETLs] Port ETL * values."""
+    etls = etls_mod.ETLs(port_etl_left="COM10", port_etl_right="COM11")
+    assert etls.port_etl_left == "COM10"
+    assert etls.port_etl_right == "COM11"
+
+
+def test_etls_init_no_port_uses_config() -> None:
+    """ETLs.__init__ without port arguments falls back to config.ini."""
+    etls = etls_mod.ETLs()
+    assert etls.port_etl_left == "COM5"
+    assert etls.port_etl_right == "COM6"
+
+
+@pytest.mark.parametrize(
+    "exc_class",
+    [
+        etls_mod.serial.SerialException,
+        OSError,
+        RuntimeError,
+    ],
+)
+def test_etls_open_catches_expected_transport_exceptions(exc_class: type[BaseException]) -> None:
+    """ETLs.open() catches serial.SerialException, OSError, and RuntimeError,
+    sets the HAL error surface, and leaves etl_left/etl_right as None."""
+    etls = etls_mod.ETLs()
+    with patch.object(etls_mod, "Optotune", side_effect=exc_class("no device")):
+        etls.open()
+    assert etls.etl_left is None
+    assert etls.etl_right is None
+    assert etls.error == 1
+    assert "ETL" in etls.error_message
+
+
+def test_etls_open_propagates_programming_errors() -> None:
+    """ETLs.open() does NOT swallow AttributeError (a programming bug) —
+    it propagates so the test suite catches defects, not silent data loss."""
+    etls = etls_mod.ETLs()
+    with patch.object(etls_mod, "Optotune", side_effect=AttributeError("missing attr")):
+        with pytest.raises(AttributeError, match="missing attr"):
+            etls.open()
