@@ -12,6 +12,9 @@ HAL motor travel-limit validator is the safety boundary.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+
+from lightsheet.config import cfg_read
 
 
 @dataclass(frozen=True)
@@ -26,15 +29,44 @@ class FieldSpec:
     maximum: float  # soft widget-layer block
 
 
+# Load motor travel limits from config.ini so the soft widget ranges match
+# the rig's physical boundaries. Fallback values are the nominal limits.
+_MOTOR_DEFAULTS = {
+    "Vertical Limit Low": "0.0",
+    "Vertical Limit High": "41.0",
+    "Horizontal Limit Low": "0.0",
+    "Horizontal Limit High": "18.8",
+    "Camera Limit Low": "0.0",
+    "Camera Limit High": "35.0",
+}
+_motor_cfg = cfg_read(
+    str(Path(__file__).resolve().parents[3] / "config.ini"),
+    "Motors",
+    _MOTOR_DEFAULTS,
+)
+_MOTOR_H_MIN = float(_motor_cfg["Horizontal Limit Low"])
+_MOTOR_H_MAX = float(_motor_cfg["Horizontal Limit High"])
+_MOTOR_V_MIN = float(_motor_cfg["Vertical Limit Low"])
+_MOTOR_V_MAX = float(_motor_cfg["Vertical Limit High"])
+_MOTOR_CAM_MIN = float(_motor_cfg["Camera Limit Low"])
+_MOTOR_CAM_MAX = float(_motor_cfg["Camera Limit High"])
+
+
 # Canonical FieldSpec entries — per-field fixed units. Do NOT change
 # unit/min/max here without re-affirming against the rig's physical ranges.
 FIELD_SPECS: dict[str, FieldSpec] = {
     # Motion panel — motor positions (mm) + step sizes (mm). 2 decimals
     # (0.01 mm = 10 µm) is enough for manual control; the µm precision
     # matters only for the automatic stack plane step, not for jogging.
-    "doubleSpinBox_sampleSetHPosition": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 18.8),
-    "doubleSpinBox_sampleSetVPosition": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 41.0),
-    "doubleSpinBox_cameraSetPosition": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 35.0),
+    "doubleSpinBox_sampleSetHPosition": FieldSpec(
+        "mm", 2, 0.1, 1.0, _MOTOR_H_MIN, _MOTOR_H_MAX
+    ),
+    "doubleSpinBox_sampleSetVPosition": FieldSpec(
+        "mm", 2, 0.1, 1.0, _MOTOR_V_MIN, _MOTOR_V_MAX
+    ),
+    "doubleSpinBox_cameraSetPosition": FieldSpec(
+        "mm", 2, 0.1, 1.0, _MOTOR_CAM_MIN, _MOTOR_CAM_MAX
+    ),
     "doubleSpinBox_sampleHStepSize": FieldSpec("mm", 2, 0.01, 0.1, 0.0, 5.0),
     "doubleSpinBox_sampleVStepSize": FieldSpec("mm", 2, 0.01, 0.1, 0.0, 5.0),
     "doubleSpinBox_cameraStepSize": FieldSpec("mm", 2, 0.01, 0.1, 0.0, 5.0),

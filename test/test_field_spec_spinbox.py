@@ -394,13 +394,36 @@ def test_field_specs_units() -> None:
 
 
 def test_field_specs_motor_max_matches_hal() -> None:
-    """FieldSpec motor max values are soft blocks aligned to rig physical
-    ranges (mm). A regression in the table must be caught."""
+    """FieldSpec motor max values are soft blocks aligned to the limits in
+    config.ini. A regression in the table must be caught."""
+    from pathlib import Path
+
+    from lightsheet.config import cfg_read
     from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 
-    assert FIELD_SPECS["doubleSpinBox_sampleSetHPosition"].maximum == 18.8
-    assert FIELD_SPECS["doubleSpinBox_sampleSetVPosition"].maximum == 41.0
-    assert FIELD_SPECS["doubleSpinBox_cameraSetPosition"].maximum == 35.0
+    motor_defaults = {
+        "Vertical Limit Low": "0.0",
+        "Vertical Limit High": "41.0",
+        "Horizontal Limit Low": "0.0",
+        "Horizontal Limit High": "18.8",
+        "Camera Limit Low": "0.0",
+        "Camera Limit High": "35.0",
+    }
+    motor_cfg = cfg_read(
+        str(Path(__file__).resolve().parents[1] / "config.ini"),
+        "Motors",
+        motor_defaults,
+    )
+
+    assert FIELD_SPECS["doubleSpinBox_sampleSetHPosition"].maximum == float(
+        motor_cfg["Horizontal Limit High"]
+    )
+    assert FIELD_SPECS["doubleSpinBox_sampleSetVPosition"].maximum == float(
+        motor_cfg["Vertical Limit High"]
+    )
+    assert FIELD_SPECS["doubleSpinBox_cameraSetPosition"].maximum == float(
+        motor_cfg["Camera Limit High"]
+    )
 
 
 def test_field_specs_galvo_offset_signed_range() -> None:
