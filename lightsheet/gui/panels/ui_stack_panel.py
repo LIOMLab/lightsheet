@@ -209,7 +209,7 @@ class Ui_StackPanel(object):
         self.doubleSpinBox_adaptiveMinExposure.setObjectName(u"doubleSpinBox_adaptiveMinExposure")
         self.doubleSpinBox_adaptiveMinExposure.setDecimals(0)
         self.doubleSpinBox_adaptiveMinExposure.setMinimum(1.000000000000000)
-        self.doubleSpinBox_adaptiveMinExposure.setMaximum(10000.000000000000000)
+        self.doubleSpinBox_adaptiveMinExposure.setMaximum(1000.000000000000000)
         self.doubleSpinBox_adaptiveMinExposure.setSingleStep(1.000000000000000)
         self.doubleSpinBox_adaptiveMinExposure.setValue(1.000000000000000)
 
