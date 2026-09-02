@@ -786,3 +786,50 @@ def test_adaptive_trajectory_slot_is_shell_bound_method(
     slot(0, 0.92, 0.005, 10.0, 5.0, "exposure", False, False)
     xs, _ys = ctrl.adaptiveTrajectoryWidget._intensity_curve.getData()  # type: ignore[unresolved-attribute]
     assert len(xs) == 1
+
+
+def test_adaptive_dock_restore_state_noop_when_no_saved_state(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """restore_state is a no-op when QSettings has no saved dock state."""
+    from unittest.mock import MagicMock, patch
+
+    ctrl, _ = make_controller(qtbot, request)
+    with patch("PySide6.QtCore.QSettings") as mock_settings_cls:
+        instance = MagicMock()
+        instance.value.return_value = None
+        mock_settings_cls.return_value = instance
+        ctrl._adaptive_dock_controller.restore_state()
+        instance.value.assert_called_once_with(
+            ctrl._adaptive_dock_controller._state_key
+        )
+
+
+def test_adaptive_rail_toggled_hides_dock(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """Unchecking the rail button hides the adaptive dock."""
+    ctrl, _ = make_controller(qtbot, request)
+    ctrl._adaptive_dock_controller.on_rail_adaptive_toggled(True)
+    assert ctrl._adaptive_dock_controller.dock.isFloating()
+    ctrl._adaptive_dock_controller.on_rail_adaptive_toggled(False)
+    assert ctrl._adaptive_dock_controller.dock.isHidden()
+
+
+def test_adaptive_rail_toggled_show_plot_when_data_present(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """Checking the rail button while the widget already has data shows the
+    existing plot instead of the empty-state label."""
+    from PySide6.QtWidgets import QApplication
+
+    ctrl, _ = make_controller(qtbot, request)
+    ctrl.adaptiveTrajectoryWidget.reset(target_band_lo=0.90, target_band_hi=0.95)
+    ctrl._on_adaptive_trajectory(
+        0, 0.92, 0.005, 10.0, 5.0, "exposure", False, False
+    )
+    assert ctrl.adaptiveTrajectoryWidget.has_data()
+    ctrl._adaptive_dock_controller.on_rail_adaptive_toggled(True)
+    QApplication.processEvents()
+    assert ctrl._adaptive_dock_controller.dock.isFloating()
+    assert not ctrl.adaptiveTrajectoryWidget.plotWidget_adaptiveTrajectory.isHidden()

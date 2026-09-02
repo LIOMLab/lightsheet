@@ -392,12 +392,12 @@ def test_adaptive_dock_visibility_noop_when_already_in_sync(
     qtbot: QtBot, request: Any
 ) -> None:
     """When the rail button's checked state already matches visibility, the
-    handler does not re-set it (line 2037->exit / 2042 false branch)."""
+    handler does not re-set it."""
     ctrl, _ = make_controller(qtbot, request)
     btn = ctrl.ui.toolButton_railAdaptive
     btn.setChecked(False)
     # visible=False matches checked=False -> no-op branch.
-    ctrl._on_adaptive_dock_visibility_changed(False)
+    ctrl._adaptive_dock_controller._on_dock_visibility_changed(False)
     assert btn.isChecked() is False
 
 
