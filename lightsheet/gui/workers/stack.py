@@ -709,6 +709,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 f"Stack acquisition failed — the run was aborted. Cause: {e}"
             )
             logger.exception("Stack mode worker failed")
+            raise
         finally:
             # The finished signal must fire exactly once whether the method
             # completes normally, breaks out of the per-plane loop, or an
