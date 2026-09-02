@@ -32,3 +32,20 @@ def test_preview_worker_not_in_top_level_module() -> None:
     from lightsheet.gui.workers import PreviewWorker
 
     assert PreviewWorker.__module__ != "lightsheet.gui.workers"
+
+
+def test_mixin_and_preview_workers_have_focused_modules() -> None:
+    """The shared scan mixin and preview/live/single workers must each live in
+    a focused submodule.
+    """
+    from lightsheet.gui.workers import (
+        LiveWorker,
+        PreviewWorker,
+        SingleWorker,
+        _AcquireScanMixin,
+    )
+
+    assert _AcquireScanMixin.__module__.endswith("scan_mixin")
+    assert PreviewWorker.__module__.endswith("preview_live_single")
+    assert LiveWorker.__module__.endswith("preview_live_single")
+    assert SingleWorker.__module__.endswith("preview_live_single")
