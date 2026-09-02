@@ -83,9 +83,11 @@ class ZarrSaver:
         byte-identical to the ``(1, n_planes, y, x)`` shape.
         """
         # Path-traversal guard: the resolved store_path must be inside
-        # the operator-selected save directory.
-        save_dir = os.path.normpath(self.parent.save_directory)
-        resolved = os.path.normpath(store_path)
+        # the operator-selected save directory. realpath() is applied to both
+        # so a symlink that points outside the save directory cannot bypass
+        # the check.
+        save_dir = os.path.realpath(os.path.normpath(self.parent.save_directory))
+        resolved = os.path.realpath(os.path.normpath(store_path))
         try:
             common = os.path.commonpath([save_dir, str(Path(resolved).parent)])
         except ValueError:
