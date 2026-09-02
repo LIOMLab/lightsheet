@@ -657,6 +657,7 @@ def test_send_cmd_resp_raises_on_none_response() -> None:
 # ETLs container: optional resolved ports and narrowed open() exceptions.
 # --------------------------------------------------------------------------- #
 
+
 def test_etls_init_uses_resolved_port_overrides() -> None:
     """ETLs.__init__ accepts optional left/right ports and overrides the
     configured [ETLs] Port ETL * values."""
@@ -680,7 +681,9 @@ def test_etls_init_no_port_uses_config() -> None:
         RuntimeError,
     ],
 )
-def test_etls_open_catches_expected_transport_exceptions(exc_class: type[BaseException]) -> None:
+def test_etls_open_catches_expected_transport_exceptions(
+    exc_class: type[BaseException],
+) -> None:
     """ETLs.open() catches serial.SerialException, OSError, and RuntimeError,
     sets the HAL error surface, and leaves etl_left/etl_right as None."""
     etls = etls_mod.ETLs()

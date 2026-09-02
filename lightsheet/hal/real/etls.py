@@ -21,7 +21,11 @@ class ETLs(IETLs):
     _cfg_settings["Port ETL Left"] = "COM5"
     _cfg_settings["Port ETL Right"] = "COM6"
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        port_etl_left: str | None = None,
+        port_etl_right: str | None = None,
+    ) -> None:
         # Error status
         self.error = 0
         self.error_message = ""
@@ -35,14 +39,22 @@ class ETLs(IETLs):
         # Assign configurable initial settings to instance variables
         self.etl_left = None
         self.etl_right = None
-        self.port_etl_left = str(self.cfg_settings["Port ETL Left"])
-        self.port_etl_right = str(self.cfg_settings["Port ETL Right"])
+        self.port_etl_left = (
+            port_etl_left
+            if port_etl_left is not None
+            else str(self.cfg_settings["Port ETL Left"])
+        )
+        self.port_etl_right = (
+            port_etl_right
+            if port_etl_right is not None
+            else str(self.cfg_settings["Port ETL Right"])
+        )
 
     def open(self) -> None:
         try:
             self.etl_left = Optotune(self.port_etl_left)
             self.etl_left.connect()
-        except Exception:
+        except (serial.SerialException, OSError, RuntimeError):
             self.etl_left = None
             self.error = 1
             self.error_message = "Left ETL open failed"
@@ -53,7 +65,7 @@ class ETLs(IETLs):
         try:
             self.etl_right = Optotune(self.port_etl_right)
             self.etl_right.connect()
-        except Exception:
+        except (serial.SerialException, OSError, RuntimeError):
             self.etl_right = None
             self.error = 1
             self.error_message = "Right ETL open failed"
