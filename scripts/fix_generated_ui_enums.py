@@ -121,10 +121,14 @@ _TOKEN_MAP: dict[str, str] = {
 
 
 # Pre-compile a single regex that matches any known unscoped token. The pattern
-# uses look-around word boundaries so it only replaces whole tokens and never a
+# uses word-boundary anchors so it only replaces whole tokens and never a
 # substring of a larger, already-scoped name.
 _TOKEN_PATTERN = re.compile(
-    "|".join(re.escape(token) for token in sorted(_TOKEN_MAP, key=len, reverse=True))
+    r"\b("
+    + "|".join(
+        re.escape(token) for token in sorted(_TOKEN_MAP, key=len, reverse=True)
+    )
+    + r")\b"
 )
 
 
