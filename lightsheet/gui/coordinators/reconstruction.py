@@ -147,8 +147,9 @@ def reconstruct_frame_linear_blend(buffer: np.ndarray) -> np.ndarray:
             )
 
         # Initializing empty cropped buffer
+        target_width = tile_width + (2 * tile_width_overlap)
         cropped_buffer = np.zeros(
-            (tile_count, image_ysize, tile_width + (2 * tile_width_overlap)),
+            (tile_count, image_ysize, target_width),
             np.uint16,
         )
 
@@ -165,9 +166,9 @@ def reconstruct_frame_linear_blend(buffer: np.ndarray) -> np.ndarray:
             elif (
                 frame == tile_count - 1
             ):  # For the last column step (may be different than the others...)
-                last_column_step = int(image_xsize - first_column)
+                last_column_step = min(int(image_xsize - first_column), target_width)
                 cropped_buffer[frame, :, 0:last_column_step] = buffer[
-                    frame, :, first_column:
+                    frame, :, first_column : first_column + last_column_step
                 ]
             else:
                 cropped_buffer[frame, :, :] = buffer[
@@ -202,8 +203,12 @@ def reconstruct_frame_linear_blend(buffer: np.ndarray) -> np.ndarray:
                 if (
                     frame == tile_count - 1
                 ):  # For the last column step (may be different than the others...)
-                    last_column_step = int(image_xsize - first_center_column)
-                    reconstructed_frame[:, first_center_column:] = cropped_buffer[
+                    last_column_step = min(
+                        int(image_xsize - first_center_column), tile_width
+                    )
+                    reconstructed_frame[
+                        :, first_center_column : first_center_column + last_column_step
+                    ] = cropped_buffer[
                         frame,
                         :,
                         (2 * tile_width_overlap) : (2 * tile_width_overlap)
