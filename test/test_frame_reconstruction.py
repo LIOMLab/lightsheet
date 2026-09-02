@@ -233,3 +233,35 @@ def test_reconstruct_frame_linear_blend_overlap_is_weighted_combination() -> Non
     assert np.all(out[0, tile_width + overlap :] == B), (
         "tile 1 right non-overlap band must be pure B"
     )
+
+
+# -- module split identity ---------------------------------------------------
+
+
+def test_reconstruction_functions_and_frame_viewer_have_focused_modules() -> None:
+    """After D-12.2.1, the pure-numpy reconstruction helpers and the
+    FrameViewer QObject live in focused modules while legacy imports from
+    ``frame_saver_controller`` remain object-identical."""
+    from lightsheet.gui.coordinators.frame_viewer import FrameViewer as new_fv
+    from lightsheet.gui.coordinators.frame_saver_controller import FrameViewer as old_fv
+    from lightsheet.gui.coordinators.reconstruction import (
+        _position_to_float as new_pos,
+        crop_buffer as new_crop,
+        reconstruct_frame as new_recon,
+        reconstruct_frame_linear_blend as new_blend,
+    )
+    from lightsheet.gui.coordinators.frame_saver_controller import (
+        _position_to_float as old_pos,
+        crop_buffer as old_crop,
+        reconstruct_frame as old_recon,
+        reconstruct_frame_linear_blend as old_blend,
+    )
+
+    assert new_fv is old_fv
+    assert new_crop is old_crop
+    assert new_recon is old_recon
+    assert new_blend is old_blend
+    assert new_pos is old_pos
+    assert new_fv.__module__.endswith("frame_viewer")
+    assert new_crop.__module__.endswith("reconstruction")
+    assert new_pos.__module__.endswith("reconstruction")
