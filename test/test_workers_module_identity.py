@@ -49,3 +49,20 @@ def test_mixin_and_preview_workers_have_focused_modules() -> None:
     assert PreviewWorker.__module__.endswith("preview_live_single")
     assert LiveWorker.__module__.endswith("preview_live_single")
     assert SingleWorker.__module__.endswith("preview_live_single")
+
+
+def test_stack_worker_in_stack_module() -> None:
+    """StackWorker must live in its own focused submodule."""
+    from lightsheet.gui.workers import StackWorker
+
+    assert StackWorker.__module__.endswith("stack")
+
+
+def test_legacy_monolith_removed() -> None:
+    """The transitional legacy.py monolith must be removed."""
+    import os
+
+    from lightsheet.gui.workers import __path__ as workers_paths
+
+    for path in workers_paths:
+        assert not os.path.exists(os.path.join(path, "legacy.py"))
