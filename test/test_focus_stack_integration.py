@@ -102,7 +102,7 @@ def _make_worker(
 
 def _fake_acquire_scan_factory(
     worker: Any, state: dict[str, Any]
-) -> Callable[[], None]:
+) -> Callable[[], bool]:
     """Return an ``acquire_scan`` stub that fills ``reconstructed_frame``
     with a deterministic pattern.
 
@@ -112,7 +112,7 @@ def _fake_acquire_scan_factory(
     computation. Frames in the second block are flat.
     """
 
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = worker.camera.copy_recorder_images(n_imgs)
         idx = state["acq_index"]
@@ -128,6 +128,7 @@ def _fake_acquire_scan_factory(
             frame[:] = 30000
         worker._shell.reconstructed_frame = frame
         state["acq_index"] += 1
+        return True
 
     return _fake_acquire_scan
 
@@ -152,7 +153,7 @@ def test_move_axes_parallel_called_only_at_block_boundaries(
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
 
     state = {"acq_index": 0}
-    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)
+    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)  # type: ignore[method-assign]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 
@@ -221,7 +222,7 @@ def test_add_motor_parameters_logs_held_camera_position_within_block(
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
 
     state = {"acq_index": 0}
-    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)
+    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)  # type: ignore[method-assign]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 
@@ -268,7 +269,7 @@ def test_focus_trajectory_records_one_sample_per_block(
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
 
     state = {"acq_index": 0}
-    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)
+    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)  # type: ignore[method-assign]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 
@@ -318,7 +319,7 @@ def test_update_residual_called_from_second_block_boundary_onward(
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
 
     state = {"acq_index": 0}
-    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)
+    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)  # type: ignore[method-assign]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 
@@ -395,7 +396,7 @@ def test_focus_over_travel_aborts_stack_with_beep(
     worker.motors.horizontal.set_limit_high(0.075, "mm")
 
     state = {"acq_index": 0}
-    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)
+    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)  # type: ignore[method-assign]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 
@@ -440,7 +441,7 @@ def test_focus_disabled_matches_fixed_stack_behavior(
     )
 
     state = {"acq_index": 0}
-    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)
+    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 
@@ -483,7 +484,7 @@ def test_estop_prevents_next_block_boundary_focus_move(
 
     state = {"acq_index": 0, "plane": 0}
 
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = worker.camera.copy_recorder_images(n_imgs)
         worker._shell.reconstructed_frame = np.asarray(imgs[0])
@@ -492,8 +493,9 @@ def test_estop_prevents_next_block_boundary_focus_move(
         if state["plane"] == 8:
             ctrl.estop_event.set()
         state["acq_index"] += 1
+        return True
 
-    worker.acquire_scan = _fake_acquire_scan
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 

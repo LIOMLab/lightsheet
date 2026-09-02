@@ -190,11 +190,12 @@ def test_adaptive_loop_tracks_bright_to_dim_profile(
 
     # Stub acquire_scan: run the real copy_recorder_images path so the
     # scripted hook fires, then store the frame on reconstructed_frame.
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
         ctrl.reconstructed_frame = np.asarray(imgs[0])
         state["acq_index"] += 1
+        return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
@@ -313,10 +314,11 @@ def test_estop_aborts_before_adaptive_write(
 
     write_count = {"n": 0}
 
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
         ctrl.reconstructed_frame = np.asarray(imgs[0])
+        return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
@@ -408,10 +410,11 @@ def test_adaptive_off_preserves_fixed_stack(
 
     ctrl.camera.set_scripted_intensity_fn(scripted_fn)
 
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
         ctrl.reconstructed_frame = np.asarray(imgs[0])
+        return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
@@ -523,10 +526,11 @@ def test_brighter_channel_drives_shared_exposure_in_multi_channel(
 
     ctrl.camera.set_scripted_intensity_fn(scripted_fn)
 
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
         ctrl.reconstructed_frame = np.asarray(imgs[0])
+        return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
@@ -607,10 +611,11 @@ def test_one_sharp_excursion_requests_one_reacquire(
 
     ctrl.camera.set_scripted_intensity_fn(scripted_fn)
 
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
         ctrl.reconstructed_frame = np.asarray(imgs[0])
+        return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
@@ -686,10 +691,11 @@ def _make_adaptive_worker(
 
     ctrl.camera.set_scripted_intensity_fn(scripted_fn)
 
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
         ctrl.reconstructed_frame = np.asarray(imgs[0])
+        return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
@@ -1063,10 +1069,11 @@ def test_estop_after_successful_write_stops_later_writes(
 
     write_count = {"n": 0}
 
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
         ctrl.reconstructed_frame = np.asarray(imgs[0])
+        return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False

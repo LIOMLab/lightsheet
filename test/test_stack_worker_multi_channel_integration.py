@@ -99,8 +99,9 @@ def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
     # logic — just set reconstructed_frame to a small frame so the
     # multi-channel capture+enqueue path runs. The real _fs receives
     # the tagged tuples.
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
+        return True
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
@@ -241,8 +242,9 @@ def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
     # logic — just set reconstructed_frame to a small frame so the
     # multi-channel capture+enqueue path runs. The real _fs receives
     # the tagged tuples.
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
+        return True
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0

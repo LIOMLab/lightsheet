@@ -690,13 +690,14 @@ def test_stack_mode_worker_motor_value_error_aborts(qtbot: QtBot) -> None:
 
 
 def test_stack_mode_worker_camera_timeout_breaks(qtbot: QtBot) -> None:
-    """StackWorker.run where camera times out on a plane -> break."""
+    """StackWorker.run where acquire_scan returns False (e.g. recorder
+    timeout or no data) on a plane -> break."""
     worker, shell, _hw = _make_stack_worker(qtbot)
     shell.stack_mode_started = True
     shell.saving_allowed = False
     shell.number_of_planes = 1
-    worker.acquire_scan = Mock()
-    worker.camera.recorder_timeout_status = True  # timeout after acquire_scan
+    worker.acquire_scan = Mock(return_value=False)
+    worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
@@ -706,14 +707,15 @@ def test_stack_mode_worker_camera_timeout_breaks(qtbot: QtBot) -> None:
 
 
 def test_stack_mode_worker_siggen_error_breaks(qtbot: QtBot) -> None:
-    """StackWorker.run where siggen.error is set after acquire_scan -> break."""
+    """StackWorker.run where acquire_scan returns False (e.g. DAQ scan-task
+    error) on a plane -> break."""
     worker, shell, _hw = _make_stack_worker(qtbot)
     shell.stack_mode_started = True
     shell.saving_allowed = False
     shell.number_of_planes = 2
-    worker.acquire_scan = Mock()
+    worker.acquire_scan = Mock(return_value=False)
     worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 1  # error set
+    worker.siggen.error = 0
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -1139,8 +1141,11 @@ def test_stack_worker_multi_channel_timeout_after_channel0(qtbot: QtBot) -> None
     def _fake_acquire_scan() -> bool:
         acquire_count["n"] += 1
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
-        # Set timeout after the first acquire_scan (channel 0 of plane 0).
-        worker.camera.recorder_timeout_status = True
+        # Simulate a recorder timeout after the first acquire_scan
+        # (channel 0 of plane 0).
+        if acquire_count["n"] == 1:
+            worker.camera.recorder_timeout_status = True
+            return False
         return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
@@ -1173,8 +1178,9 @@ def test_stack_worker_multi_channel_siggen_error_after_channel1(qtbot: QtBot) ->
         acquire_count["n"] += 1
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
         if acquire_count["n"] == 2:
-            # Set siggen error after channel 1 of plane 0.
+            # Simulate a siggen error on channel 1 of plane 0.
             worker.siggen.error = 1
+            return False
         return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
