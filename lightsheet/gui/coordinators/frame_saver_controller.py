@@ -688,6 +688,7 @@ class FrameSaver(QObject):
         aborted = False
         for idx in range(len(self.filenames_list)):
             logger.info("File created: %s", self.filenames_list[idx])
+            outfile: h5py.File | None = None
             try:
                 # Create file
                 outfile = h5py.File(self.filenames_list[idx], "a")
@@ -710,6 +711,11 @@ class FrameSaver(QObject):
                 # failure to open the file would propagate out of the worker
                 # thread as an unhandled exception and the operator would
                 # see no message, just a silently-dead save worker.
+                # Close the partially opened file before leaving so the
+                # descriptor is not leaked.
+                if outfile is not None:
+                    with contextlib.suppress(Exception):
+                        outfile.close()
                 self.sig_status_message.emit(f"Save error: {e}")
                 self.saving_started = False
                 break
