@@ -7,13 +7,13 @@ call keeps working.
 
 from __future__ import annotations
 
-from lightsheet.gui.workers.legacy import StackWorker
 from lightsheet.gui.workers.preview_live_single import (
     LiveWorker,
     PreviewWorker,
     SingleWorker,
 )
 from lightsheet.gui.workers.scan_mixin import _AcquireScanMixin
+from lightsheet.gui.workers.stack import StackWorker
 
 __all__ = [
     "LiveWorker",
