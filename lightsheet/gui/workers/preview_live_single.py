@@ -100,6 +100,15 @@ class PreviewWorker(QObject):
                 energize_lasers = (True, False)
             else:
                 energize_lasers = None
+
+            # E-stop guard before energizing. If the operator pressed E-stop
+            # between the worker spawn and this point, short-circuit to the
+            # normal cleanup path without turning any laser on.
+            if self._shell.estop_event.is_set():
+                self._hw.stop_lasers()
+                self.camera.disarm()
+                return
+
             self._hw.start_lasers(energize_lasers=energize_lasers)
 
             while self._shell.preview_mode_started:
@@ -226,6 +235,16 @@ class LiveWorker(QObject, _AcquireScanMixin):
                 energize_lasers = (True, False)
             else:
                 energize_lasers = None
+
+            # E-stop guard before energizing. If the operator pressed E-stop
+            # between the worker spawn and this point, short-circuit to the
+            # normal cleanup path without turning any laser on.
+            if self._shell.estop_event.is_set():
+                self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+                self._hw.stop_lasers()
+                self.camera.disarm()
+                return
+
             self._hw.start_lasers(energize_lasers=energize_lasers)
 
             while self._shell.live_mode_started:
@@ -427,6 +446,15 @@ class SingleWorker(QObject, _AcquireScanMixin):
                     self._shell._fs.enqueue_buffer((1, frame2))
             else:
                 # Single-channel path (unchanged — back-compat).
+
+                # E-stop guard before energizing. If the operator pressed E-stop
+                # between the worker spawn and this point, short-circuit to the
+                # normal cleanup path without turning any laser on.
+                if self._shell.estop_event.is_set():
+                    self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+                    self._hw.stop_lasers()
+                    self.camera.disarm()
+                    return
 
                 # Start lasers
                 self._hw.start_lasers()

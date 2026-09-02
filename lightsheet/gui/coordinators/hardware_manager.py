@@ -256,6 +256,10 @@ class HardwareManager:
         call only — used by continuous-mode workers to suppress L2 when both
         checkboxes are checked. When None, the cached flags are read.
         """
+        # E-stop guard: do not energize if the kill path has already fired.
+        if self._shell.estop_event.is_set():
+            return
+
         if energize_lasers is not None:
             energize_l1, energize_l2 = energize_lasers
         else:
@@ -264,6 +268,8 @@ class HardwareManager:
         if energize_l1:
             mw = self._shell.laser1_power_pct / 100.0 * self.lasers[0].max_power
             self.lasers[0].set_power(mw)
+            if self._shell.estop_event.is_set():
+                return
             self.lasers[0].on()
             # Surface a HAL write failure (backend sets .error, does not raise).
             if self.lasers[0].error:
@@ -276,6 +282,8 @@ class HardwareManager:
         if energize_l2:
             mw = self._shell.laser2_power_pct / 100.0 * self.lasers[1].max_power
             self.lasers[1].set_power(mw)
+            if self._shell.estop_event.is_set():
+                return
             self.lasers[1].on()
             if self.lasers[1].error:
                 self._shell.sig_message.emit(
