@@ -873,7 +873,7 @@ def test_no_imageview_reintroduction(
     production code (UI-SPEC §Registry Safety, threat T-10-SC)."""
     import lightsheet.gui.widgets.adaptive_trajectory as mod
 
-    with Path(mod.__file__).open() as f:
+    with Path(mod.__file__).open(encoding="utf-8") as f:
         src = f.read()
     assert "ImageView" not in src
     assert "imageview" not in src.lower()

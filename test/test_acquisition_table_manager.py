@@ -169,7 +169,11 @@ def test_incomplete_row_disables_start_queue(
     """Test 7: a row with start == end or step == 0 is flagged; Start Queue
     disabled while any row is incomplete."""
     _ctrl, mgr = _mgr(qtbot, request)
-    mgr.add_stack()  # default start=end=0, step=1 → incomplete (start==end)
+    mgr.add_stack()
+    # Force start == end so the row is incomplete (on the rig, config.ini
+    # may have non-zero spinbox values that make the default row valid).
+    mgr.set_cell(0, 1, "5")
+    mgr.set_cell(0, 2, "5")
     assert not mgr.start_queue_enabled()
     # Make it complete (10 mm / 20 mm / 10 µm — within mock motor limits).
     mgr.set_cell(0, 1, "10")
@@ -188,7 +192,10 @@ def test_incomplete_row_flagged_visually(
     offending cell."""
     _ctrl, mgr = _mgr(qtbot, request)
     mgr.add_stack()
-    # default start==end → incomplete; the row should be flagged.
+    # Force start == end so the row is incomplete (on the rig, config.ini
+    # may have non-zero spinbox values that make the default row valid).
+    mgr.set_cell(0, 1, "5")
+    mgr.set_cell(0, 2, "5")
     assert mgr.is_row_flagged(0)
     mgr.set_cell(0, 1, "10")
     mgr.set_cell(0, 2, "20")

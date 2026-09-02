@@ -200,6 +200,15 @@ class AcquisitionTableManager(QWidget):
         # which can re-trigger cellChanged. The guard breaks the loop.
         self._recomputing = False
 
+        # Flagged-cell tracking set. On Windows/PySide6, QTableWidgetItem
+        # .setBackground() can silently fail after certain widget operations
+        # (e.g. QDoubleSpinBox.setValue clamping triggers a palette refresh
+        # that resets item backgrounds to the default). The visual
+        # setBackground is still called for the operator's benefit, but
+        # is_row_flagged / start_queue_enabled read this set instead of
+        # trusting the unreliable background() comparison.
+        self._flagged_cells: set[tuple[int, int]] = set()
+
     # ------------------------------------------------------------------ #
     # Public API (used by tests + the queue loop)
     # ------------------------------------------------------------------ #
@@ -257,6 +266,13 @@ class AcquisitionTableManager(QWidget):
         )
         if answer == QMessageBox.StandardButton.Yes:
             self.table.removeRow(row)
+            # Re-index flagged_cells: drop the removed row, shift rows
+            # below it up by one.
+            self._flagged_cells = {
+                (r - 1 if r > row else r, c)
+                for r, c in self._flagged_cells
+                if r != row
+            }
             self._update_empty_state()
             self._update_start_queue_state()
 
@@ -340,8 +356,7 @@ class AcquisitionTableManager(QWidget):
     def is_row_flagged(self, row: int) -> bool:
         """True if the row has any flagged (red-background) cell."""
         for col in range(self.table.columnCount()):
-            item = self.table.item(row, col)
-            if item is not None and item.background() == _FLAG_COLOR:
+            if (row, col) in self._flagged_cells:
                 return True
         return False
 
@@ -545,10 +560,13 @@ class AcquisitionTableManager(QWidget):
         self.table.blockSignals(False)
 
         # Clear flags then re-validate.
+        self.table.blockSignals(True)
         for col in range(self.table.columnCount()):
+            self._flagged_cells.discard((row, col))
             item = self.table.item(row, col)
             if item is not None:
                 item.setBackground(QColor(255, 255, 255))
+        self.table.blockSignals(False)
 
         flagged = False
         # Incomplete: start == end or step == 0.
@@ -582,9 +600,15 @@ class AcquisitionTableManager(QWidget):
             )
 
     def _flag(self, row: int, col: int) -> None:
+        self._flagged_cells.add((row, col))
         item = self.table.item(row, col)
         if item is not None:
+            # Block signals: on Windows/PySide6, setBackground can trigger
+            # cellChanged, which would re-enter _recompute_row and clear
+            # the flag we just set.
+            self.table.blockSignals(True)
             item.setBackground(_FLAG_COLOR)
+            self.table.blockSignals(False)
 
     def _on_cell_changed(self, row: int, col: int) -> None:
         """Recompute + validate on any editable-cell edit. Skip the
@@ -606,6 +630,16 @@ class AcquisitionTableManager(QWidget):
             self.table.setItem(a, col, ib)
             self.table.setItem(b, col, ia)
         self.table.blockSignals(False)
+        # Swap flagged-cell row indices to match the row swap.
+        new_flagged: set[tuple[int, int]] = set()
+        for r, c in self._flagged_cells:
+            if r == a:
+                new_flagged.add((b, c))
+            elif r == b:
+                new_flagged.add((a, c))
+            else:
+                new_flagged.add((r, c))
+        self._flagged_cells = new_flagged
         self._update_start_queue_state()
 
     def _update_empty_state(self) -> None:

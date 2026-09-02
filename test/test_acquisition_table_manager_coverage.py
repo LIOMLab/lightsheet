@@ -151,15 +151,11 @@ def test_parse_or_flag_non_numeric_flags_cell(
 ) -> None:
     """_parse_or_flag on non-numeric text flags the cell red and returns
     0.0."""
-    from lightsheet.gui.panels.acquisition_table_manager import _FLAG_COLOR
-
     _ctrl, mgr = _mgr(qtbot, request)
     mgr.add_stack()
     result = mgr._parse_or_flag(0, 1, "xyz")
     assert result == 0.0
-    item = mgr.table.item(0, 1)
-    assert item is not None
-    assert item.background() == _FLAG_COLOR
+    assert mgr.is_row_flagged(0)
 
 
 # -- estimate helpers exception fallbacks ---------------------------------
@@ -348,7 +344,11 @@ def test_recompute_flagged_row_emits_sig_message(
     ctrl, mgr = _mgr(qtbot, request)
     messages: list[str] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
-    mgr.add_stack()  # default start==end → incomplete → flagged
+    mgr.add_stack()
+    # Force start == end so the row is incomplete (on the rig, config.ini
+    # may have non-zero spinbox values that make the default row valid).
+    mgr.set_cell(0, 1, "5")
+    mgr.set_cell(0, 2, "5")
     assert any("incomplete or out of range" in m for m in messages), (
         f"sig_message not emitted for flagged row: {messages}"
     )
@@ -404,7 +404,11 @@ def test_start_queue_incomplete_row(
     """_start_queue with an incomplete row (n_planes==0) emits an error
     and beeps."""
     ctrl, mgr = _mgr(qtbot, request)
-    mgr.add_stack()  # default start==end → 0 planes
+    mgr.add_stack()
+    # Force start == end so n_planes==0 (on the rig, config.ini may have
+    # non-zero spinbox values that make the default row valid).
+    mgr.set_cell(0, 1, "5")
+    mgr.set_cell(0, 2, "5")
     messages: list[str] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
     beeps: list[None] = []
