@@ -11,7 +11,6 @@ loops run against the real widget tree. Headless via
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -288,18 +287,59 @@ def test_wheel_gate_focused_spinbox_responds(qtbot: QtBot) -> None:
 
 def test_hal_validators_untouched() -> None:
     """Threat-model T-08.1-14 mitigation: the promotion does not relax
-    the HAL motor travel-limit validator or the config_schema startup
-    gate. Assert the safety-critical files are unchanged from HEAD."""
-    import subprocess
+    the config_schema startup gate or the HAL motor travel-limit validator.
+    The motor high-limit validators and ZaberMotor reject-and-beep still
+    raise on over-travel (AGENTS.md forbids static-source grep tests)."""
+    from pydantic import ValidationError
 
-    repo_root = subprocess.check_output(
-        ["git", "rev-parse", "--show-toplevel"], text=True
-    ).strip()
-    # config_schema package motor limit validators + ZaberMotor reject-and-beep
-    # must still be present (grep, not a diff — this is a presence check).
-    with Path(f"{repo_root}/lightsheet/config_schema/__init__.py").open() as f:
-        schema = f.read()
-    assert "Limit High" in schema, "config_schema motor limit validator missing"
-    with Path(f"{repo_root}/lightsheet/hal/real/motors.py").open() as f:
-        motors = f.read()
-    assert "ValueError" in motors, "ZaberMotor reject-and-beep missing"
+    from lightsheet.config_schema import MotorsSettings
+    from lightsheet.hal.real.motors import ZaberMotor
+
+    base = {
+        "Port": "COM7",
+        "Device Number Vertical": 1,
+        "Device Number Horizontal": 2,
+        "Device Number Camera": 3,
+        "Vertical Inverted": False,
+        "Vertical Units": "mm",
+        "Vertical Origin": 48.5,
+        "Vertical Limit Low": 0.0,
+        "Vertical Limit High": 41.0,
+        "Horizontal Inverted": False,
+        "Horizontal Units": "mm",
+        "Horizontal Origin": 0.0,
+        "Horizontal Limit Low": 0.0,
+        "Horizontal Limit High": 18.8,
+        "Camera Inverted": False,
+        "Camera Units": "mm",
+        "Camera Origin": 20.0,
+        "Camera Limit Low": 0.0,
+        "Camera Limit High": 35.0,
+    }
+    for axis, bad_value in (
+        ("Vertical Limit High", 50.0),
+        ("Horizontal Limit High", 30.0),
+        ("Camera Limit High", 40.0),
+    ):
+        bad = dict(base)
+        bad[axis] = bad_value
+        with pytest.raises(ValidationError, match="Limit High"):
+            MotorsSettings(**bad)  # ty: ignore[invalid-argument-type]
+
+    motor = ZaberMotor.__new__(ZaberMotor)
+    motor.id = 6210
+    motor.name = "T-LSM050A"
+    motor.microstep_size = 0.047625
+    motor.microsteps_max = 1066666
+    motor.units = "mm"
+    motor.inverted = False
+    motor.homed = False
+    motor.limit_low_microsteps = 0
+    motor.limit_high_microsteps = 1066666
+    motor.origin_microsteps = 0
+    motor.error = 0
+    motor.error_message = ""
+    motor.port = "COM3"
+    motor.device_number = 1
+    with pytest.raises(ValueError, match="limit"):
+        motor.move_absolute_position(999, "mm")

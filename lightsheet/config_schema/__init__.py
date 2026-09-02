@@ -40,15 +40,21 @@ from lightsheet.config import cfg_read
 
 from .sections.camera import CameraSettings, CameraSettingsOverlay
 from .sections.controller import ControllerSettings, ControllerSettingsOverlay
+from .sections.etls import ETLsSettings, ETLsSettingsOverlay
+from .sections.ibeam import IBeamSettings, IBeamSettingsOverlay
 from .sections.lasers import LasersSettings, LasersSettingsOverlay
+from .sections.logging import LoggingSettings, LoggingSettingsOverlay
+from .sections.motors import MotorsSettings, MotorsSettingsOverlay
 from .sections.siggen import SigGenSettings, SigGenSettingsOverlay
 from .shared import (
     _make_overlay,
     _NoEnvBaseSettings,
-    _validate_camera_limit_high,
-    _validate_horizontal_limit_high,
-    _validate_ibeam_max_power,
-    _validate_vertical_limit_high,
+)
+from .shared import (
+    _validate_camera_limit_high as _validate_camera_limit_high,
+)
+from .shared import (
+    _validate_horizontal_limit_high as _validate_horizontal_limit_high,
 )
 
 logger = logging.getLogger(__name__)
@@ -72,95 +78,6 @@ _ETL_VOLTAGE_LIMIT: float = 5.0  # 0-5 V Optotune EL-10-30 analog input
 # section.
 # Controller and Camera live under lightsheet.config_schema.sections.
 # ---------------------------------------------------------------------------
-
-
-
-
-
-class IBeamSettings(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="forbid", case_sensitive=True, populate_by_name=True
-    )
-    port: str = Field(alias="Port")
-    baud_rate: int = Field(alias="Baud Rate")
-    channel: int = Field(alias="Channel")
-    wavelength: int = Field(alias="Wavelength")
-    power: int = Field(alias="Power")
-    max_power: int = Field(alias="Max Power")  # uW in config.ini
-    status_poll_interval: float = Field(alias="Status Poll Interval")
-
-    @field_validator("max_power")
-    @classmethod
-    def _hard_max_power(cls, v: int) -> int:
-        return _validate_ibeam_max_power(v)
-
-
-IBeamSettingsOverlay = _make_overlay(IBeamSettings)
-
-
-class ETLsSettings(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="forbid", case_sensitive=True, populate_by_name=True
-    )
-    port_etl_left: str = Field(alias="Port ETL Left")
-    port_etl_right: str = Field(alias="Port ETL Right")
-
-
-ETLsSettingsOverlay = _make_overlay(ETLsSettings)
-
-
-class MotorsSettings(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="forbid", case_sensitive=True, populate_by_name=True
-    )
-    port: str = Field(alias="Port")
-    device_number_vertical: int = Field(alias="Device Number Vertical")
-    device_number_horizontal: int = Field(alias="Device Number Horizontal")
-    device_number_camera: int = Field(alias="Device Number Camera")
-    vertical_inverted: bool = Field(alias="Vertical Inverted")
-    vertical_units: str = Field(alias="Vertical Units")
-    vertical_origin: float = Field(alias="Vertical Origin")
-    vertical_limit_low: float = Field(alias="Vertical Limit Low")
-    vertical_limit_high: float = Field(alias="Vertical Limit High")
-    horizontal_inverted: bool = Field(alias="Horizontal Inverted")
-    horizontal_units: str = Field(alias="Horizontal Units")
-    horizontal_origin: float = Field(alias="Horizontal Origin")
-    horizontal_limit_low: float = Field(alias="Horizontal Limit Low")
-    horizontal_limit_high: float = Field(alias="Horizontal Limit High")
-    camera_inverted: bool = Field(alias="Camera Inverted")
-    camera_units: str = Field(alias="Camera Units")
-    camera_origin: float = Field(alias="Camera Origin")
-    camera_limit_low: float = Field(alias="Camera Limit Low")
-    camera_limit_high: float = Field(alias="Camera Limit High")
-
-    @field_validator("vertical_limit_high")
-    @classmethod
-    def _hard_vertical_limit_high(cls, v: float) -> float:
-        return _validate_vertical_limit_high(v)
-
-    @field_validator("horizontal_limit_high")
-    @classmethod
-    def _hard_horizontal_limit_high(cls, v: float) -> float:
-        return _validate_horizontal_limit_high(v)
-
-    @field_validator("camera_limit_high")
-    @classmethod
-    def _hard_camera_limit_high(cls, v: float) -> float:
-        return _validate_camera_limit_high(v)
-
-
-MotorsSettingsOverlay = _make_overlay(MotorsSettings)
-
-
-class LoggingSettings(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="forbid", case_sensitive=True, populate_by_name=True
-    )
-    level: str = Field(alias="Level")
-    log_dir: str = Field(alias="Log Dir", default="")
-
-
-LoggingSettingsOverlay = _make_overlay(LoggingSettings)
 
 
 # --- Adaptive section (operator-configurable bounds + gains) ---------------
@@ -335,9 +252,7 @@ class FocusSettings(_NoEnvBaseSettings):
     )
     enabled: bool = Field(alias="Enabled", default=False)
     block_size_n: int = Field(alias="Block Size N", default=8)
-    autofocus_residual: bool = Field(
-        alias="Autofocus Residual Enabled", default=True
-    )
+    autofocus_residual: bool = Field(alias="Autofocus Residual Enabled", default=True)
     residual_gain_mm: float = Field(alias="Residual Gain Mm", default=0.05)
     max_residual_mm: float = Field(alias="Max Residual Mm", default=0.5)
 
@@ -352,18 +267,14 @@ class FocusSettings(_NoEnvBaseSettings):
     @classmethod
     def _residual_gain_range(cls, v: float) -> float:
         if v < 0 or v > 1:
-            raise ValueError(
-                f"residual gain {v} mm is outside the valid range 0..1"
-            )
+            raise ValueError(f"residual gain {v} mm is outside the valid range 0..1")
         return v
 
     @field_validator("max_residual_mm")
     @classmethod
     def _max_residual_range(cls, v: float) -> float:
         if v < 0 or v > 5:
-            raise ValueError(
-                f"max residual {v} mm is outside the valid range 0..5"
-            )
+            raise ValueError(f"max residual {v} mm is outside the valid range 0..5")
         return v
 
 
