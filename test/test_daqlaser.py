@@ -59,6 +59,23 @@ def _make_l1() -> DAQLaser:
     )
 
 
+class _ToggleEvent(threading.Event):
+    """threading.Event that returns a canned is_set() sequence for tests.
+
+    Each call to ``is_set()`` pops the next value from the reversed list.
+    After the sequence is exhausted it returns ``False``.
+    """
+
+    def __init__(self, values: list[bool]) -> None:
+        super().__init__()
+        self._values = list(reversed(values))
+
+    def is_set(self) -> bool:
+        if not self._values:
+            return False
+        return self._values.pop()
+
+
 def test_construction_defaults() -> None:
     """DAQLaser constructs with power=0.0, active=False, error=0, label set
     verbatim, and a per-instance threading.RLock bound to self._lock."""
@@ -433,3 +450,48 @@ def test_mw_to_volts_zero_mw_per_volt_guard_returns_zero() -> None:
     # The guard must not raise on negative mw_per_volt either.
     laser.mw_per_volt = -60.0
     assert laser._mw_to_volts(50.0) == 0.0
+
+
+# --------------------------------------------------------------------------- #
+# E-stop re-check: on() and set_power() must not re-energize past the kill.
+# --------------------------------------------------------------------------- #
+def test_on_returns_immediately_when_estop_set() -> None:
+    """If _estop_event is already set when on() is called, on() must not
+    acquire the lock, not attempt a DAQ write, and leave active=False."""
+    laser = _make_l1()
+    laser._estop_event = _ToggleEvent([True])
+    laser.on()
+    assert laser.active is False
+    assert laser.power == 0.0
+
+
+def test_on_drives_off_volts_when_estop_set_inside_lock() -> None:
+    """If E-stop fires between the pre-lock check and the active=True write,
+    on() must drive the channel to off_volts and leave active=False."""
+    laser = _make_l1()
+    laser.power = 150.0
+    laser._estop_event = _ToggleEvent([False, True])
+    laser.on()
+    assert laser.active is False
+    assert laser.power == 0.0
+
+
+def test_on_drives_off_volts_after_power_write_when_estop_fires() -> None:
+    """If E-stop fires after the power write has already been issued, on()
+    must still drive the channel back to off_volts and set active=False."""
+    laser = _make_l1()
+    laser.power = 150.0
+    laser._estop_event = _ToggleEvent([False, False, True])
+    laser.on()
+    assert laser.active is False
+    assert laser.power == 0.0
+
+
+def test_set_power_returns_immediately_when_estop_set() -> None:
+    """If _estop_event is already set, set_power() must not update self.power
+    or attempt a DAQ write."""
+    laser = _make_l1()
+    laser._estop_event = _ToggleEvent([True])
+    laser.set_power(150.0)
+    assert laser.power == 0.0
+    assert laser.active is False

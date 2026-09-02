@@ -278,6 +278,11 @@ class DAQLaser(ILaser):
         # paths can re-acquire without deadlocking.
         self._lock = threading.RLock()
 
+        # Optional reference to the shell's E-stop event. on() re-checks this
+        # before writing so a kill that fires between the worker's estop poll
+        # and the HAL write cannot re-energize the laser.
+        self._estop_event: threading.Event | None = None
+
         # Optional serial readback backend (e.g. retained IBeamSmartLaser).
         # Used for channel enable at open, power/status readback, and
         # disconnect — NEVER for on/off/set_power emission control. The DAQ
@@ -315,11 +320,26 @@ class DAQLaser(ILaser):
     def on(self) -> None:
         """Energize the laser -- write staged mW power to DAQ AO channel.
 
-        Write failure reverts active=False.
+        Re-checks the optional E-stop event before acquiring the lock, right
+        before the DAQ write, and again after the write. If E-stop fires in
+        any of those windows the channel is driven back to ``off_volts`` and
+        ``active`` stays ``False``; off() itself remains lock-free as the
+        kill contract requires.
         """
+        if self._estop_event is not None and self._estop_event.is_set():
+            return
         with self._lock:
+            if self._estop_event is not None and self._estop_event.is_set():
+                self._write_volts(self._volt_map.off_volts)
+                self.active = False
+                self.power = 0.0
+                return
             self.active = True
             self._write_volts(self._mw_to_volts(self.power))
+            if self._estop_event is not None and self._estop_event.is_set():
+                self._write_volts(self._volt_map.off_volts)
+                self.active = False
+                self.power = 0.0
 
     def off(self) -> None:
         """Synchronous E-stop kill path.
@@ -327,10 +347,14 @@ class DAQLaser(ILaser):
         Writes ``volt_map.off_volts`` to the DAQ AO channel (0 V for linear
         L1, 5 V for inverted L2 — true-off in both cases), sets
         active=False, power=0.0, and returns None immediately — no
-        thread/queue offload. Offloading would break the synchronous-off
-        safety contract for a Class IIIB laser. Lock-free: the per-write
-        nidaqmx.Task is independent of any concurrent write, so a daemon
-        set_power holding the lock never delays the kill path.
+        thread/queue offload and no RLock acquisition. Offloading or
+        blocking on a daemon write would break the lock-free E-stop kill
+        contract for a Class IIIB laser.
+
+        The on() / set_power() critical sections re-check the optional
+        ``_estop_event`` before the actual DAQ write and again after it; if
+        E-stop fired in flight they drive the channel back to off_volts,
+        so the final channel state is always the true-off voltage.
 
         For inverted L2, writing 0 V would mean MAXIMUM power — off_volts
         is 5 V so E-stop drives the laser to true-off, not to max emission.
@@ -419,9 +443,13 @@ class DAQLaser(ILaser):
         Clamps mw to [0.0, max_power] (mW) as the first safety layer — do not
         remove this clamp. If active, also writes converted V to the DAQ AO
         channel (_write_volts applies the second, native-unit V clamp).
+        Re-checks the E-stop event so a kill cannot be overwritten by a
+        queued power update.
         """
         mw = max(0.0, min(mw, self.max_power))
         with self._lock:
+            if self._estop_event is not None and self._estop_event.is_set():
+                return
             self.power = mw
             if self.active:
                 self._write_volts(self._mw_to_volts(mw))

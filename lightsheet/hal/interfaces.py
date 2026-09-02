@@ -533,6 +533,10 @@ class ILaser(ABC):
     # IBeamSmartLaser aliases the inner IBeam._lock for lock identity.
     _lock: threading.RLock
 
+    # Optional back-reference to the shell's E-stop event. on() and set_power()
+    # re-check it before the HAL write so a kill cannot be re-energized.
+    _estop_event: threading.Event | None = None
+
     @abstractmethod
     def open(self) -> None:
         """Open the device connection. No-op for backends with no persistent

@@ -1073,6 +1073,13 @@ class Controller_MainWindow(QMainWindow):
         self.etls = self._bundle.etls
         self.lasers = list(self._bundle.lasers)
 
+        # Give every laser a back-reference to the E-stop event so on() can
+        # re-check it immediately before the HAL energization write. The kill
+        # path (laser.off()) remains synchronous and lock-free in its contract
+        # with the shell; this is an extra guard inside the laser itself.
+        for laser in self.lasers:
+            laser._estop_event = self.estop_event
+
         # Making sure ETLs are in analog mode
         self.etls.open()
         self.etls.set_analog_mode()

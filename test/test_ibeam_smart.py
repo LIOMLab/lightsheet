@@ -25,6 +25,7 @@ call.
 This is a BEHAVIOR test (AGENTS.md §5) — no static-source grep.
 """
 
+import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -70,6 +71,23 @@ def _last_write_text(mock_ser: MagicMock) -> str:
     assert mock_ser.write.called, "serial.Serial.write was never called"
     written = mock_ser.write.call_args_list[-1].args[0]
     return written.decode("ascii")  # ty: ignore[unsound-return-statement]
+
+
+class _ToggleEvent(threading.Event):
+    """threading.Event that returns a canned is_set() sequence for tests.
+
+    Each call to ``is_set()`` pops the next value from the reversed list.
+    After the sequence is exhausted it returns ``False``.
+    """
+
+    def __init__(self, values: list[bool]) -> None:
+        super().__init__()
+        self._values = list(reversed(values))
+
+    def is_set(self) -> bool:
+        if not self._values:
+            return False
+        return self._values.pop()
 
 
 # --------------------------------------------------------------------------- #
@@ -528,3 +546,38 @@ def test_ibeam_smart_no_analog_ceiling_uses_default_open() -> None:
     assert "enable 1" in decoded
     assert "channel 1 power 0 micro" not in decoded
     assert "en ext" not in decoded
+
+
+# --------------------------------------------------------------------------- #
+# E-stop re-check: on() and set_power() must not re-energize past the kill.
+# --------------------------------------------------------------------------- #
+def test_ibeam_smart_on_returns_immediately_when_estop_set() -> None:
+    """If _estop_event is already set when on() is called, on() must not
+    send any serial command and must leave active=False."""
+    adapter, _ = _make_open_ibeam_smart(readline_side_effect=[b"[OK]\r\n"])
+    adapter._estop_event = _ToggleEvent([True])
+    adapter.on()
+    assert adapter.active is False
+    assert adapter._ibeam._is_on is False
+
+
+def test_ibeam_smart_on_turns_off_if_estop_set_during_on() -> None:
+    """If E-stop fires after the 'laser on' sequence completes, on() must
+    immediately turn the laser back off. The final active state must be False."""
+    adapter, _ = _make_open_ibeam_smart(
+        readline_side_effect=[b"[OK]\r\n", b"[OK]\r\n", b"[OK]\r\n"]
+    )
+    adapter._estop_event = _ToggleEvent([False, True])
+    adapter.on()
+    assert adapter.active is False
+    assert adapter._ibeam._is_on is False
+
+
+def test_ibeam_smart_set_power_returns_immediately_when_estop_set() -> None:
+    """If _estop_event is already set, set_power() must not issue a serial
+    command or update self.power."""
+    adapter, _ = _make_open_ibeam_smart(readline_side_effect=[b"[OK]\r\n"])
+    adapter._estop_event = _ToggleEvent([True])
+    adapter.set_power(75.0)
+    assert adapter.power == 0.0
+    assert adapter._ibeam._power == 0

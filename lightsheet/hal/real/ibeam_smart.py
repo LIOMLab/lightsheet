@@ -477,11 +477,25 @@ class IBeamSmartLaser(ILaser):
         # _send_cmd round-trips on the same engine.
         self._lock = self._ibeam._lock
 
+        # Optional reference to the shell's E-stop event. on() re-checks this
+        # before and during the lock-held critical section so a kill that fires
+        # between the worker's estop poll and the HAL write cannot re-energize.
+        self._estop_event: threading.Event | None = None
+
     def on(self) -> None:
         """Energize the laser — delegates to ``IBeam.on()``, then mirrors
         ``active`` and ``error`` / ``error_message`` from the inner engine.
-        If the inner ``laser on`` was rejected, ``active`` stays ``False``."""
+        If the inner ``laser on`` was rejected, ``active`` stays ``False``.
+
+        Re-checks the E-stop event before and after the serial on() sequence.
+        If E-stop fired while the sequence was in flight, the laser is turned
+        back off and ``active`` is forced ``False``; off() remains lock-free
+        as the E-stop kill contract requires."""
+        if self._estop_event is not None and self._estop_event.is_set():
+            return
         self._ibeam.on()
+        if self._estop_event is not None and self._estop_event.is_set():
+            self._ibeam.off()
         self.active = self._ibeam._is_on
         self.error = self._ibeam.error
         self.error_message = self._ibeam.error_message
@@ -521,9 +535,13 @@ class IBeamSmartLaser(ILaser):
         """Synchronous E-stop kill path.
 
         Sets ``active = False`` and ``power = 0.0``, returns ``None``
-        immediately — no thread/queue offload. Offloading would break the
-        synchronous-off safety contract for a Class IIIB laser.
-        """
+        immediately — no thread/queue offload and no RLock acquisition.
+        Offloading or blocking on a daemon write would break the lock-free
+        E-stop kill contract for a Class IIIB laser.
+
+        The on() critical section re-checks ``_estop_event`` after the serial
+        on() sequence and issues an off() if the kill fired in flight, so the
+        final state reflects the E-stop."""
         self._ibeam.off()
         self.active = False
         self.power = 0.0
@@ -535,7 +553,11 @@ class IBeamSmartLaser(ILaser):
         safety layer), converts to µW, and delegates to ``IBeam.set_power``
         which clamps µW independently (second safety layer). On a firmware
         rejection the adapter does NOT update ``self.power``.
+        Re-checks the E-stop event so a kill cannot be overwritten by a
+        queued power update.
         """
+        if self._estop_event is not None and self._estop_event.is_set():
+            return
         mw = max(0.0, min(mw, self.max_power))
         # mW -> uW. round() rather than int() so 149.9999 mW converts to
         # 150000 uW (not 149999). The inner IBeam.set_power clamp still applies.

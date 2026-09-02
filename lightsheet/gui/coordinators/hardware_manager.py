@@ -299,9 +299,12 @@ class HardwareManager:
 
     def stop_lasers(self) -> None:
         """Stop the lasers. Called from acquisition worker threads. Drives
-        both lasers via .off(), reading only the cached auto-laser flags.
+        any currently-active laser off(), reading the live ``laser.active``
+        state instead of the cached auto-laser flags. This guarantees that
+        multi-channel ``select_laser`` sequences and mid-run checkbox changes
+        cannot leave a Class IIIB laser energized after Stop or E-stop.
         """
-        if self._shell._auto_laser1:
+        if self.lasers[0].active:
             self.lasers[0].off()
             if self.lasers[0].error:
                 self._shell.sig_message.emit(
@@ -310,7 +313,7 @@ class HardwareManager:
                     f"microscope. Cause: {self.lasers[0].error_message}"
                 )
                 self.lasers[0].error = 0
-        if self._shell._auto_laser2:
+        if self.lasers[1].active:
             self.lasers[1].off()
             if self.lasers[1].error:
                 self._shell.sig_message.emit(
