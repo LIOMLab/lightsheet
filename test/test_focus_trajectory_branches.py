@@ -13,9 +13,12 @@ from typing import Any
 
 import pyqtgraph as pg
 import pytest
+from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
+
+from _helpers.controller_fixture import make_controller
 
 from lightsheet.gui.widgets.focus_trajectory import FocusTrajectoryWidget
 
@@ -141,3 +144,107 @@ def test_sync_right_vb_none(qtbot: QtBot) -> None:
     w._right_vb = None
     main_vb = w.plotWidget_focusTrajectory.getPlotItem().getViewBox()
     main_vb.sigResized.emit(main_vb)
+
+
+# --------------------------------------------------------------------- #
+# D-12.2.2: focus dock controller owns presentation logic
+# --------------------------------------------------------------------- #
+
+
+def test_focus_dock_controller_module(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """FocusDockController lives in its own focused module."""
+    from lightsheet.gui.coordinators.focus_dock_controller import (
+        FocusDockController,
+    )
+
+    assert FocusDockController.__module__ == (
+        "lightsheet.gui.coordinators.focus_dock_controller"
+    )
+    ctrl, _ = make_controller(qtbot, request)
+    assert hasattr(ctrl, "_focus_dock_controller")
+    assert ctrl._focus_dock_controller.__class__ is FocusDockController
+
+
+def test_focus_dock_controller_is_presentation_only(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """The focus dock controller does not hold HAL state."""
+    from lightsheet.gui.coordinators.focus_dock_controller import (
+        FocusDockController,
+    )
+
+    ctrl, _ = make_controller(qtbot, request)
+    fdc = ctrl._focus_dock_controller
+    assert isinstance(fdc, FocusDockController)
+    for attr in ("lasers", "camera", "motors", "etls", "siggen"):
+        assert not hasattr(fdc, attr), (
+            f"FocusDockController must not own {attr} (HAL state)"
+        )
+    assert not hasattr(fdc, "estop_event")
+
+
+def test_focus_shell_aliases_reachable(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """The shell still exposes focus dock/widget/plot/label attributes."""
+    ctrl, _ = make_controller(qtbot, request)
+    assert ctrl.dockWidget_focusTrajectory is ctrl._focus_dock_controller.dock
+    assert ctrl.focusTrajectoryWidget is ctrl._focus_dock_controller.widget
+    assert (
+        ctrl.plotWidget_focusTrajectory
+        is ctrl._focus_dock_controller.plotWidget_focusTrajectory
+    )
+    assert (
+        ctrl.label_focusTrajectoryEmpty
+        is ctrl._focus_dock_controller.label_focusTrajectoryEmpty
+    )
+
+
+def test_focus_trajectory_slot_is_shell_bound_method(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """_on_focus_trajectory remains a shell-bound callable that
+    delegates to the presentation controller."""
+    from lightsheet.gui.coordinators.focus_dock_controller import (
+        FocusDockController,
+    )
+
+    ctrl, _ = make_controller(qtbot, request)
+    slot = getattr(ctrl, "_on_focus_trajectory", None)
+    assert slot is not None
+    assert slot.__self__ is ctrl or isinstance(slot.__self__, FocusDockController)
+    ctrl.focusTrajectoryWidget.reset()
+    slot(
+        0,
+        0.01,
+        20.0,
+        0.0,
+        20.0,
+    )
+    xs, _ys = ctrl.focusTrajectoryWidget._camera_curve.getData()  # type: ignore[unresolved-attribute]
+    assert len(xs) == 1
+
+
+def test_adaptive_and_focus_share_title_bar_helper(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """Both docks use the build_no_dbl_click_title_bar helper from
+    dock_utils."""
+    from lightsheet.gui.coordinators.dock_utils import (
+        build_no_dbl_click_title_bar,
+    )
+
+    ctrl, _ = make_controller(qtbot, request)
+    assert (
+        ctrl.dockWidget_adaptiveTrajectory.titleBarWidget().__class__.__name__
+        == "_NoDblClickTitleBar"
+    )
+    assert (
+        ctrl.dockWidget_focusTrajectory.titleBarWidget().__class__.__name__
+        == "_NoDblClickTitleBar"
+    )
+    assert build_no_dbl_click_title_bar.__module__ == (
+        "lightsheet.gui.coordinators.dock_utils"
+    )
