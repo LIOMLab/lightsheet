@@ -31,9 +31,12 @@ from typing import Any
 
 import pyqtgraph as pg
 import pytest
+from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
+
+from _helpers.controller_fixture import make_controller
 
 from lightsheet.gui.widgets.adaptive_trajectory import (
     AdaptiveTrajectoryWidget,
@@ -690,3 +693,94 @@ def test_append_sample_with_optional_curves_none(qtbot: QtBot) -> None:
     assert w._exposure == [5.0]
     assert w._power == [10.0]
     assert w._power2 == [0.0]
+
+
+# --------------------------------------------------------------------- #
+# D-12.2.2: adaptive dock controller owns presentation logic
+# --------------------------------------------------------------------- #
+
+
+def test_adaptive_dock_controller_module(qtbot: QtBot, request: FixtureRequest) -> None:
+    """AdaptiveDockController lives in its own focused module."""
+    from lightsheet.gui.coordinators.adaptive_dock_controller import (
+        AdaptiveDockController,
+    )
+
+    assert AdaptiveDockController.__module__ == (
+        "lightsheet.gui.coordinators.adaptive_dock_controller"
+    )
+    ctrl, _ = make_controller(qtbot, request)
+    assert hasattr(ctrl, "_adaptive_dock_controller")
+    assert ctrl._adaptive_dock_controller.__class__ is AdaptiveDockController
+
+
+def test_adaptive_dock_utils_module(qtbot: QtBot) -> None:
+    """FloatingOnlyDock and build_no_dbl_click_title_bar live in
+    dock_utils.py."""
+    from lightsheet.gui.coordinators.dock_utils import (
+        FloatingOnlyDock,
+        build_no_dbl_click_title_bar,
+    )
+
+    assert FloatingOnlyDock.__module__ == "lightsheet.gui.coordinators.dock_utils"
+    assert build_no_dbl_click_title_bar.__module__ == (
+        "lightsheet.gui.coordinators.dock_utils"
+    )
+
+
+def test_adaptive_dock_controller_is_presentation_only(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """The dock controller does not hold HAL state."""
+    from lightsheet.gui.coordinators.adaptive_dock_controller import (
+        AdaptiveDockController,
+    )
+
+    ctrl, _ = make_controller(qtbot, request)
+    adc = ctrl._adaptive_dock_controller
+    assert isinstance(adc, AdaptiveDockController)
+    for attr in ("lasers", "camera", "motors", "etls", "siggen"):
+        assert not hasattr(adc, attr), (
+            f"AdaptiveDockController must not own {attr} (HAL state)"
+        )
+    assert not hasattr(adc, "estop_event")
+
+
+def test_adaptive_shell_aliases_reachable(qtbot: QtBot, request: FixtureRequest) -> None:
+    """The shell still exposes dock, widget, plot, and label attributes
+    so tests and AcquisitionPanelWidget keep working."""
+    ctrl, _ = make_controller(qtbot, request)
+    assert ctrl.dockWidget_adaptiveTrajectory is ctrl._adaptive_dock_controller.dock
+    assert (
+        ctrl.adaptiveTrajectoryWidget is ctrl._adaptive_dock_controller.widget
+    )
+    assert (
+        ctrl.plotWidget_adaptiveTrajectory
+        is ctrl._adaptive_dock_controller.plotWidget_adaptiveTrajectory
+    )
+    assert (
+        ctrl.label_adaptiveTrajectoryEmpty
+        is ctrl._adaptive_dock_controller.label_adaptiveTrajectoryEmpty
+    )
+
+
+def test_adaptive_trajectory_slot_is_shell_bound_method(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """_on_adaptive_trajectory remains a shell-bound callable that
+    delegates to the presentation controller."""
+    from lightsheet.gui.coordinators.adaptive_dock_controller import (
+        AdaptiveDockController,
+    )
+
+    ctrl, _ = make_controller(qtbot, request)
+    slot = getattr(ctrl, "_on_adaptive_trajectory", None)
+    assert slot is not None
+    assert slot.__self__ is ctrl or isinstance(
+        slot.__self__, AdaptiveDockController
+    )
+    # Calling the slot appends to the widget.
+    ctrl.adaptiveTrajectoryWidget.reset(target_band_lo=0.90, target_band_hi=0.95)
+    slot(0, 0.92, 0.005, 10.0, 5.0, "exposure", False, False)
+    xs, _ys = ctrl.adaptiveTrajectoryWidget._intensity_curve.getData()  # type: ignore[unresolved-attribute]
+    assert len(xs) == 1
