@@ -798,3 +798,29 @@ def test_image_file_format_empty_defaults_to_hdf5_both_tiers() -> None:
             **{"Units": "mm", "Image File Format": ""}
         )  # ty: ignore[invalid-argument-type]
         assert settings.image_file_format == "hdf5"
+
+
+def test_image_file_format_non_string_rejected_both_tiers() -> None:
+    """A non-string value reaches the Literal check and is rejected, exercising
+    the ``isinstance(v, str)`` false branch of the before-validator."""
+    from lightsheet.config_schema import (
+        ControllerSettings,
+        ControllerSettingsOverlay,
+    )
+
+    for cls in (ControllerSettings, ControllerSettingsOverlay):
+        with pytest.raises(ValidationError):
+            cls(**{"Units": "mm", "Image File Format": 123})  # ty: ignore[invalid-argument-type]
+
+
+def test_controller_theme_non_string_rejected_both_tiers() -> None:
+    """A non-string ``Theme`` value is rejected after the before-validator's
+    ``isinstance(v, str)`` false branch."""
+    from lightsheet.config_schema import (
+        ControllerSettings,
+        ControllerSettingsOverlay,
+    )
+
+    for cls in (ControllerSettings, ControllerSettingsOverlay):
+        with pytest.raises(ValidationError):
+            cls(**{"Units": "mm", "Image File Format": "hdf5", "Theme": 123})  # ty: ignore[invalid-argument-type]
