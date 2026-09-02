@@ -25,6 +25,13 @@ import zarr
 from liom_toolkit.utils.zarr_writer import AnalysisOmeZarrWriter
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
+from lightsheet.gui.coordinators.frame_viewer import FrameViewer
+from lightsheet.gui.coordinators.reconstruction import (
+    _position_to_float,
+    crop_buffer,
+    reconstruct_frame,
+    reconstruct_frame_linear_blend,
+)
 from lightsheet.hal.bundle import DeviceBundle
 from lightsheet.wavelength_color import wavelength_to_hex
 
@@ -32,17 +39,6 @@ if TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
 logger = logging.getLogger(__name__)
-
-
-def _position_to_float(value: str | float) -> float:
-    """Coerce a motor-position entry to ``float``. Strips trailing unit
-    suffix from formatted display strings (e.g. ``"99.82 μm"``). Raises
-    ``ValueError`` if the leading token is not numeric.
-    """
-    if isinstance(value, (int, float)):
-        return float(value)
-    token = str(value).strip().split()[0]
-    return float(token)
 
 
 class FrameSaverWorker(QObject):
@@ -77,60 +73,6 @@ class FrameSaverWorker(QObject):
                 self._saver.frame_saver_worker()
         finally:
             self.sig_finished.emit()
-
-
-class FrameViewer(QObject):
-    """Class for queueing and displaying images"""
-
-    def __init__(self, parent: Controller_MainWindow, rows: int, columns: int) -> None:
-        QObject.__init__(self, parent)
-        self.parent = parent  # ty: ignore[invalid-assignment]
-        self.queue = queue.Queue(3)
-
-        # Default frame size is 2000x2000 if no valid size provided
-        if rows is not None:
-            self.rows = int(rows)
-        else:
-            self.rows = 2000
-        if columns is not None:
-            self.columns = int(columns)
-        else:
-            self.columns = 2000
-
-        # Empty frame
-        frame_init = np.zeros((self.rows, self.columns), dtype=np.uint16)
-        # Set one pixel to trick histogram initial range (0-20000)
-        frame_init[0, 0] = 20000
-        # Transpose since setImage is column-major
-        frame_init = np.transpose(frame_init)
-        # Set initial view
-        self.parent.ui.imageView.setImage(frame_init)
-        # Live min/max readout (actual pixel range, not the display window).
-        # Guarded so a minimal shell stand-in without the helper does not
-        # break FrameViewer construction.
-        _readout = getattr(self.parent, "_update_levels_readout", None)
-        if _readout is not None:
-            _readout(frame_init)
-
-    def enqueue_frame(self, frame: np.ndarray) -> None:
-        with contextlib.suppress(queue.Full):
-            self.queue.put(frame, block=False)
-
-    def updateUi_refresh_view(self) -> None:
-        try:
-            frame = self.queue.get(block=False)
-        except queue.Empty:
-            pass
-        else:
-            # setImage is column-major
-            frame = np.transpose(frame)
-            self.parent.ui.imageView.setImage(  # ty: ignore[unresolved-attribute]
-                frame, autoRange=False, autoLevels=False, autoHistogramRange=False
-            )
-            # Live min/max readout (actual pixel range, not the display window).
-            _readout = getattr(self.parent, "_update_levels_readout", None)
-            if _readout is not None:
-                _readout(frame)
 
 
 class FrameSaver(QObject):
@@ -2445,188 +2387,13 @@ class FrameSaverController:
         self.frame_viewer.enqueue_frame(frame)
 
     # -- pure-numpy image reconstruction -----------------------------------
-    # Moved verbatim from Controller_MainWindow. These are pure functions
-    # of the buffer array (they read only buffer.shape, no shell/HAL/Qt
-    # state), so they need no shell reference. Kept as instance methods
-    # to match the pre-extraction call shape (self._fs.crop_buffer(buf)).
+    # Delegates to focused helpers in ``lightsheet.gui.coordinators.reconstruction``.
 
     def crop_buffer(self, buffer: np.ndarray) -> np.ndarray:
-        """Crops each frame of a buffer with 20% frame-to-frame overlap"""
-
-        image_xsize = buffer.shape[2]
-        image_ysize = buffer.shape[1]
-        tile_count = buffer.shape[0]
-
-        if tile_count == 1:
-            cropped_buffer = buffer
-        else:
-            tile_width = int(image_xsize / tile_count)
-            tile_width_overlap = int(tile_width * 0.2)
-
-            # Initializing empty cropped buffer
-            cropped_buffer = np.zeros(
-                (tile_count, image_ysize, tile_width + (2 * tile_width_overlap)),
-                np.uint16,
-            )
-
-            # Crop with overlap
-            for frame in range(tile_count):
-                # NOTE - disabled intensity normalization
-                # # Uniformize frame intensities
-                # average = np.average(buffer[frame,0:100,:]) #Average the  first rows
-                # if frame == 0:
-                #     reference_average = average
-                # else:
-                #     average_ratio = reference_average/average
-                #     # buffer[frame,:,:] = buffer[frame,:,:] * average_ratio
-
-                first_column = int(frame * tile_width - tile_width_overlap)
-                next_first_column = int(
-                    first_column + tile_width + (2 * tile_width_overlap)
-                )
-                if frame == 0:  # For the first column step
-                    cropped_buffer[frame, :, tile_width_overlap:] = buffer[
-                        frame, :, 0 : tile_width + tile_width_overlap
-                    ]
-                elif (
-                    frame == tile_count - 1
-                ):  # For the last column step (may be different than the others...)
-                    last_column_step = int(image_xsize - first_column)
-                    cropped_buffer[frame, :, 0:last_column_step] = buffer[
-                        frame, :, first_column:
-                    ]
-                else:
-                    cropped_buffer[frame, :, :] = buffer[
-                        frame, :, first_column:next_first_column
-                    ]
-        return cropped_buffer
+        return crop_buffer(buffer)
 
     def reconstruct_frame(self, buffer: np.ndarray) -> np.ndarray:
-        """Reconstructs frame from buffer"""
-
-        image_xsize = buffer.shape[2]
-        image_ysize = buffer.shape[1]
-        tile_count = buffer.shape[0]
-
-        # Initializing empty frame
-        reconstructed_frame = np.zeros((image_ysize, image_xsize), np.uint16)
-
-        # Crops each frame of a buffer with no overlap and merge
-        if tile_count == 1:
-            reconstructed_frame = buffer[0, :, :]
-        else:
-            tile_width = int(image_xsize / tile_count)
-
-            for frame in range(tile_count):
-                # NOTE - disabled intensity normalization
-                # # Uniformize frame intensities
-                # average = np.average(buffer[frame,0:100,:]) #Average the  first rows
-                # if frame == 0:
-                #     reference_average = average
-                # else:
-                #     average_ratio = reference_average/average
-                #     #print('average_ratio:'+str(average_ratio))
-                #     # buffer[frame,:,:] = buffer[frame,:,:] * average_ratio
-
-                # Reconstruct frame
-                first_column = frame * tile_width
-                next_first_column = first_column + tile_width
-                if (
-                    frame == tile_count - 1
-                ):  # For the last column step (may be different than the others...)
-                    reconstructed_frame[:, first_column:] = buffer[
-                        frame, :, first_column:
-                    ]
-                else:
-                    reconstructed_frame[:, first_column:next_first_column] = buffer[
-                        frame, :, first_column:next_first_column
-                    ]
-        return reconstructed_frame
+        return reconstruct_frame(buffer)
 
     def reconstruct_frame_linear_blend(self, buffer: np.ndarray) -> np.ndarray:
-        """Reconstructs frame from buffer using linear blend over 20% overlap"""
-
-        image_xsize = buffer.shape[2]
-        image_ysize = buffer.shape[1]
-        tile_count = buffer.shape[0]
-
-        # Initializing empty output frame
-        reconstructed_frame = np.zeros((image_ysize, image_xsize), np.uint16)
-
-        if tile_count == 1:
-            reconstructed_frame = buffer[0, :, :]
-        else:
-            # Crops each frame of a buffer with 20% overlap for futher frame reconstruction  # noqa: E501
-            tile_width = int(image_xsize / tile_count)
-            tile_width_overlap = int(tile_width * 0.2)
-
-            # Initializing empty cropped buffer
-            cropped_buffer = np.zeros(
-                (tile_count, image_ysize, tile_width + (2 * tile_width_overlap)),
-                np.uint16,
-            )
-
-            # Crop with overlap
-            for frame in range(tile_count):
-                first_column = int(frame * tile_width - tile_width_overlap)
-                next_first_column = int(
-                    first_column + tile_width + (2 * tile_width_overlap)
-                )
-                if frame == 0:  # For the first column step
-                    cropped_buffer[frame, :, tile_width_overlap:] = buffer[
-                        frame, :, 0 : tile_width + tile_width_overlap
-                    ]
-                elif (
-                    frame == tile_count - 1
-                ):  # For the last column step (may be different than the others...)
-                    last_column_step = int(image_xsize - first_column)
-                    cropped_buffer[frame, :, 0:last_column_step] = buffer[
-                        frame, :, first_column:
-                    ]
-                else:
-                    cropped_buffer[frame, :, :] = buffer[
-                        frame, :, first_column:next_first_column
-                    ]
-
-            # Reconstruct frame with linear blend for overlapping region
-            weight_step = 1 / (2 * tile_width_overlap)
-
-            for frame in range(tile_count):
-                first_center_column = int(frame * tile_width + tile_width_overlap)
-                last_center_column = int((frame + 1) * tile_width - tile_width_overlap)
-                previous_last_center_column = int(
-                    frame * tile_width - tile_width_overlap
-                )
-
-                if frame == 0:  # For the first column step
-                    reconstructed_frame[:, 0:last_center_column] = cropped_buffer[
-                        frame, :, tile_width_overlap:tile_width
-                    ]
-                else:
-                    for column in range(2 * tile_width_overlap):
-                        frame_column = column + previous_last_center_column
-                        last_buffer_column = column + tile_width
-                        buffer_weight = column * weight_step
-                        last_buffer_weight = 1 - column * weight_step
-                        reconstructed_frame[:, frame_column] = (
-                            buffer_weight * cropped_buffer[frame, :, column]
-                            + last_buffer_weight
-                            * cropped_buffer[(frame - 1), :, last_buffer_column]
-                        )
-                    if (
-                        frame == tile_count - 1
-                    ):  # For the last column step (may be different than the others...)
-                        last_column_step = int(image_xsize - first_center_column)
-                        reconstructed_frame[:, first_center_column:] = cropped_buffer[
-                            frame,
-                            :,
-                            (2 * tile_width_overlap) : (2 * tile_width_overlap)
-                            + last_column_step,
-                        ]
-                    else:
-                        reconstructed_frame[
-                            :, first_center_column:last_center_column
-                        ] = cropped_buffer[
-                            frame, :, (2 * tile_width_overlap) : tile_width
-                        ]
-        return reconstructed_frame
+        return reconstruct_frame_linear_blend(buffer)
