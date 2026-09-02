@@ -12,6 +12,9 @@ tests 6-7 cover the legacy-interval floor regression and the
 arm_scan() unconditional reset.
 """
 
+from unittest.mock import Mock
+
+import numpy as np
 import pytest
 
 from lightsheet.hal import Camera
@@ -142,3 +145,40 @@ def test_recorder_timeout_status_blocks_copy() -> None:
         "stack_mode_worker post-acquire abort check depends on the flag "
         "surviving delete_recorder."
     )
+
+
+def test_copy_recorder_images_returns_none_when_no_data_ready() -> None:
+    """When new_data_ready is False, copy_recorder_images returns None
+    instead of a synthetic zero-filled array — the no-data state is explicit."""
+    cam = _make_camera()
+    cam.xsize = 100
+    cam.ysize = 100
+    cam.new_data_ready = False
+    result = cam.copy_recorder_images(1)
+    assert result is None, (
+        "copy_recorder_images must return None when new_data_ready is False, "
+        "not a synthetic dark frame"
+    )
+
+
+def test_copy_recorder_images_returns_array_and_clears_flag_when_ready() -> None:
+    """When new_data_ready is True, copy_recorder_images returns the
+    recorded images and clears new_data_ready so the next call cannot
+    return stale data."""
+    cam = _make_camera()
+    cam.xsize = 100
+    cam.ysize = 100
+    cam.new_data_ready = True
+    cam.camera = Mock()
+    cam.camera.images = Mock(
+        return_value=(np.zeros((1, 100, 100), dtype=np.uint16), None)
+    )
+    result = cam.copy_recorder_images(1)
+    assert isinstance(result, np.ndarray), (
+        "copy_recorder_images must return an ndarray when data is ready"
+    )
+    assert result.shape == (1, 100, 100)
+    assert cam.new_data_ready is False, (
+        "copy_recorder_images must clear new_data_ready after a successful copy"
+    )
+    cam.camera.images.assert_called_once_with(blocksize=1)

@@ -17,6 +17,7 @@ it, keeping tests fast.
 
 from __future__ import annotations
 
+import numpy as np
 import time
 
 import pytest
@@ -103,3 +104,18 @@ def test_make_bundle_does_not_set_simulate_timing() -> None:
         "make_bundle must NOT set simulate_timing — the test suite "
         "must not be slowed by the demo-only timing delay"
     )
+
+
+def test_copy_recorder_images_returns_intentional_array_when_ready() -> None:
+    """MockCamera continues returning deliberate synthetic image arrays when
+    data is ready and clears new_data_ready, preserving the mock's explicit
+    synthetic path."""
+    from lightsheet.hal.mocks.mock_camera import MockCamera
+
+    camera = MockCamera(verbose=False)
+    camera.new_data_ready = True
+    result = camera.copy_recorder_images(1)
+    assert isinstance(result, np.ndarray)
+    assert result.shape == (1, camera.ysize, camera.xsize)
+    assert result.dtype == np.uint16
+    assert camera.new_data_ready is False
