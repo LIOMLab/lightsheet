@@ -15,7 +15,7 @@ import typing
 import webbrowser
 from functools import partial
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import numpy as np
 from PySide6.QtCore import QEvent, QRect, QSize, Qt, QTimer, Signal, Slot
@@ -45,6 +45,9 @@ from lightsheet.config import cfg_read, cfg_write
 from lightsheet.gui.coordinators.adaptive_dock_controller import (
     AdaptiveDockController,
 )
+from lightsheet.gui.coordinators.focus_dock_controller import (
+    FocusDockController,
+)
 from lightsheet.gui.panels.acquisition_panel import AcquisitionPanelWidget
 from lightsheet.gui.panels.calibration_panel import CalibrationPanelWidget
 from lightsheet.gui.panels.laser_panel import LaserPanelWidget
@@ -58,7 +61,6 @@ from lightsheet.gui.panels.scan_panel import ScanPanelWidget
 from lightsheet.gui.panels.stack_panel import StackPanelWidget
 from lightsheet.gui.shell.ui_shell import Ui_Shell
 from lightsheet.gui.widgets.channel_radio import ChannelRadio
-from lightsheet.gui.widgets.focus_trajectory import FocusTrajectoryWidget
 from lightsheet.hal.bundle import DeviceBundle
 from lightsheet.wavelength_color import wavelength_to_hex
 
@@ -419,9 +421,8 @@ class Controller_MainWindow(QMainWindow):
             "Focus: Toggle the focus trajectory dock visibility."
         )
         _center_toolbutton_paint(self.ui.toolButton_railFocus)
-        self.ui.toolButton_railFocus.toggled.connect(
-            self._on_rail_focus_toggled
-        )
+        # The toggled connection is wired after the focus dock
+        # controller is constructed later in __init__.
 
         # Merge each panel's SHELL-OWNED widget attributes onto self.ui so
         # the shell + E-stop kill path keep a single owner for the
@@ -880,33 +881,43 @@ class Controller_MainWindow(QMainWindow):
         )
 
         # --- focus trajectory dock ---
-        # Same pattern as the adaptive dock: a QDockWidget hosting the live
-        # per-block focus trajectory plot. Hidden until focus compensation
-        # is enabled.
+        # Presentation-only controller builds/owns the focus floating dock
+        # and the per-block trajectory plot.
         self._focus_dock_state_key = "ui/focusTrajectoryDockState"
-        self._build_focus_trajectory_dock()
+        self._focus_dock_controller = FocusDockController(self)
+        self.dockWidget_focusTrajectory = self._focus_dock_controller.dock
+        self.focusTrajectoryWidget = self._focus_dock_controller.widget
+        self.plotWidget_focusTrajectory = (
+            self._focus_dock_controller.plotWidget_focusTrajectory
+        )
+        self.label_focusTrajectoryEmpty = (
+            self._focus_dock_controller.label_focusTrajectoryEmpty
+        )
+        # Rail toggle was deferred until the controller existed.
+        self.ui.toolButton_railFocus.toggled.connect(
+            self._focus_dock_controller.on_rail_focus_toggled
+        )
 
         # Restore the persisted dock state (geometry + dock-widget-area)
         # from QSettings. This is the dock-state persistence reversibility
         # concern noted in — QSettings, not config.ini, so demo
         # tests do not write config.ini.
         self._adaptive_dock_controller.restore_state()
-        self._restore_focus_dock_state()
+        self._focus_dock_controller.restore_state()
 
         # Wire the adaptive + focus enable toggles on the stack panel to
-        # show/hide their trajectory docks. The adaptive handlers are now
-        # on the dock controller; the focus handlers still live on the
-        # shell until the focus controller is extracted.
+        # show/hide their trajectory docks. Both handlers now live on their
+        # respective dock controllers.
         self.stack_panel.ui.checkBox_adaptiveEnable.toggled.connect(
             self._adaptive_dock_controller.on_adaptive_enabled_toggled
         )
         self.stack_panel.ui.checkBox_focusEnable.toggled.connect(
-            self._on_focus_enabled_toggled
+            self._focus_dock_controller.on_focus_enabled_toggled
         )
         # Sync the conditional rail button visibility with the initial
         # focus-enabled state (e.g. when restored from config.ini). The
         # dock stays hidden until the operator explicitly opens it.
-        self._on_focus_enabled_toggled(
+        self._focus_dock_controller.on_focus_enabled_toggled(
             self.stack_panel.ui.checkBox_focusEnable.isChecked()
         )
         # The mode badge min width accommodates the longest single-line
@@ -1246,7 +1257,7 @@ class Controller_MainWindow(QMainWindow):
             # After the synchronous shutdown decision so a "No" does not
             # persist. Skipped in demo mode.
             self._adaptive_dock_controller.save_state()
-            self._save_focus_dock_state()
+            self._focus_dock_controller.save_state()
             # Guard: hardware_init may not have run yet (100ms single-shot
             # timer). If the window is closed before it fires, self.lasers /
             # self.camera / self.etls / self.timer_imageview /
@@ -1943,164 +1954,6 @@ class Controller_MainWindow(QMainWindow):
 
     # --- focus trajectory dock lifecycle ---
 
-    def _build_focus_trajectory_dock(self) -> None:
-        """Create the focus trajectory QDockWidget in the
-        RightDockWidgetArea. Mirrors the adaptive dock pattern: a floating
-        standalone window, hidden at construction, opened by the operator
-        via the conditional left-rail focus button."""
-        from PySide6.QtWidgets import QDockWidget
-
-        class _FloatingOnlyDock(QDockWidget):
-            """QDockWidget subclass that is always floating."""
-
-            def setFloating(self, _: bool) -> None:
-                pass
-
-            def isFloating(self) -> bool:
-                return True
-
-        self.dockWidget_focusTrajectory = _FloatingOnlyDock(
-            "Focus Trajectory", self
-        )
-        self.dockWidget_focusTrajectory.setObjectName(
-            "dockWidget_focusTrajectory"
-        )
-
-        title_bar = self._build_no_dbl_click_title_bar(
-            "Focus Trajectory",
-            "Close focus trajectory dock",
-            self.dockWidget_focusTrajectory,
-        )
-        self.dockWidget_focusTrajectory.setTitleBarWidget(title_bar)
-        self.dockWidget_focusTrajectory.setAllowedAreas(
-            Qt.DockWidgetArea.NoDockWidgetArea
-        )
-        self.dockWidget_focusTrajectory.setFeatures(
-            QDockWidget.DockWidgetFeature.DockWidgetClosable
-        )
-        self.focusTrajectoryWidget = FocusTrajectoryWidget(
-            self.dockWidget_focusTrajectory
-        )
-        self.dockWidget_focusTrajectory.setWidget(self.focusTrajectoryWidget)
-        self.plotWidget_focusTrajectory = (
-            self.focusTrajectoryWidget.plotWidget_focusTrajectory
-        )
-        self.label_focusTrajectoryEmpty = (
-            self.focusTrajectoryWidget.label_focusTrajectoryEmpty
-        )
-        self.addDockWidget(
-            Qt.DockWidgetArea.RightDockWidgetArea,
-            self.dockWidget_focusTrajectory,
-        )
-        QDockWidget.setFloating(self.dockWidget_focusTrajectory, True)
-        self.dockWidget_focusTrajectory.resize(720, 480)
-        self.dockWidget_focusTrajectory.hide()
-        self.dockWidget_focusTrajectory.visibilityChanged.connect(
-            self._on_focus_dock_visibility_changed
-        )
-
-    def _build_no_dbl_click_title_bar(
-        self,
-        title: str,
-        tooltip: str,
-        dock: Any,
-    ) -> Any:
-        """Build a custom title bar with a close button whose
-        mouseDoubleClickEvent is a no-op."""
-        from PySide6.QtWidgets import (
-            QFrame,
-            QHBoxLayout,
-            QLabel,
-            QPushButton,
-        )
-
-        class _NoDblClickFrame(QFrame):
-            def mouseDoubleClickEvent(self, _ev: object) -> None:
-                return
-
-        title_bar = _NoDblClickFrame(dock)
-        title_bar.setFrameShape(QFrame.Shape.NoFrame)
-        tb_layout = QHBoxLayout(title_bar)
-        tb_layout.setContentsMargins(8, 4, 8, 4)
-        tb_layout.setSpacing(4)
-        title_label = QLabel(title, title_bar)
-        tb_layout.addWidget(title_label)
-        tb_layout.addStretch(1)
-        close_btn = QPushButton("x", title_bar)
-        close_btn.setFixedSize(20, 20)
-        close_btn.setStyleSheet(
-            "QPushButton { border: none; }"
-            "QPushButton:hover { background: #444; }"
-        )
-        close_btn.setToolTip(tooltip)
-        close_btn.clicked.connect(dock.close)
-        tb_layout.addWidget(close_btn)
-        return title_bar
-
-    def _restore_focus_dock_state(self) -> None:
-        """Restore the persisted focus dock geometry from QSettings."""
-        from PySide6.QtCore import QSettings
-
-        settings = QSettings("lightsheet", "shell")
-        state = settings.value(self._focus_dock_state_key)
-        if state is not None:
-            with contextlib.suppress(TypeError, RuntimeError):
-                self.restoreState(state)
-
-    def _save_focus_dock_state(self) -> None:
-        """Persist the focus dock geometry to QSettings."""
-        if getattr(self, "_demo_mode", False):
-            return
-        from PySide6.QtCore import QSettings
-
-        settings = QSettings("lightsheet", "shell")
-        settings.setValue(self._focus_dock_state_key, self.saveState())
-
-    @Slot(bool)
-    def _on_focus_enabled_toggled(self, enabled: bool) -> None:
-        """Show/hide the conditional focus rail button when the focus
-        enable checkbox is toggled. The dock itself does NOT open
-        automatically — the operator opens it via the rail button so the
-        focus trajectory plot is opt-in even when focus compensation is
-        on. When disabled, the dock + rail button are hidden entirely."""
-        self.ui.toolButton_railFocus.setVisible(enabled)
-        if not enabled:
-            self.dockWidget_focusTrajectory.hide()
-            self.ui.toolButton_railFocus.setChecked(False)
-
-    @Slot(bool)
-    def _on_rail_focus_toggled(self, checked: bool) -> None:
-        """Toggle the focus trajectory dock visibility from the
-        conditional rail button. The dock opens as a standalone floating
-        window (never docked into the main GUI). Historical plot data is
-        preserved across close/reopen so the operator can review a
-        finished acquisition after closing the dock; data is only
-        cleared when a new stack acquisition starts."""
-        if checked:
-            from PySide6.QtWidgets import QDockWidget as _QDW
-
-            self.dockWidget_focusTrajectory.show()
-            _QDW.setFloating(self.dockWidget_focusTrajectory, True)
-            if not self.focusTrajectoryWidget.has_data():
-                self.focusTrajectoryWidget.set_empty()
-            else:
-                self.focusTrajectoryWidget.show_plot()
-        else:
-            self.dockWidget_focusTrajectory.hide()
-
-    @Slot(bool)
-    def _on_focus_dock_visibility_changed(self, visible: bool) -> None:
-        """Keep the rail toggle's checked state in sync with the dock's
-        actual visibility. Fires when the user closes the dock via its
-        own close button — the rail button unchecks so the two stay
-        consistent. Guarded against feedback loops with
-        blockSignals."""
-        btn = self.ui.toolButton_railFocus
-        if btn.isChecked() != visible:
-            btn.blockSignals(True)
-            btn.setChecked(visible)
-            btn.blockSignals(False)
-
     @Slot(int, float, float, float, float)
     def _on_focus_trajectory(
         self,
@@ -2113,31 +1966,20 @@ class Controller_MainWindow(QMainWindow):
         """GUI-thread slot for the per-block focus trajectory signal.
 
         The worker emits ``sig_focus_trajectory`` (a queued ``Signal``);
-        this slot appends one sample to the plot. The worker NEVER calls
-        pyqtgraph directly.
+        this shell slot delegates to the presentation controller. The
+        worker NEVER calls pyqtgraph directly.
 
         The X-axis is hardcoded to the block index ("Block") in this
         phase; the Stage position (mm) X-axis option has been removed.
         """
         self._focus_last_block = block_idx
-        x_axis_value = float(block_idx)
-        self.focusTrajectoryWidget.append_sample(
+        self._focus_dock_controller.append_sample(
             block_idx=block_idx,
             stage_pos_mm=stage_pos_mm,
-            camera_pos_mm=applied_camera_pos_mm,
+            feedforward_camera_pos_mm=feedforward_camera_pos_mm,
             residual_mm=residual_mm,
-            x_axis_value=x_axis_value,
+            applied_camera_pos_mm=applied_camera_pos_mm,
         )
-
-    def _freeze_focus_trajectory(self) -> None:
-        """Freeze the focus trajectory plot and set the badge to
-        FOCUS ABORTED. Called from the E-stop handler AFTER the
-        synchronous laser-off kill path completes."""
-        self.focusTrajectoryWidget.freeze()
-        block = int(getattr(self, "_focus_last_block", 0))
-        total = int(getattr(self, "number_of_planes", 0))
-        self.focus_mode_started = False
-        self._update_mode_badge("FOCUS", "ABORTED", plane=block, total=total)
 
     @Slot()
     def updateUi_estop_pressed(self) -> None:
@@ -2181,7 +2023,7 @@ class Controller_MainWindow(QMainWindow):
         if hasattr(self, "adaptiveTrajectoryWidget"):
             self._adaptive_dock_controller.freeze()
         if hasattr(self, "focusTrajectoryWidget"):
-            self._freeze_focus_trajectory()
+            self._focus_dock_controller.freeze()
         # Refresh-after-action: both status labels reflect the post-E-stop
         # state. Deferred via QTimer.singleShot(0, ...) so the GUI thread
         # releases within ~1 ms of the press — the synchronous kill loop

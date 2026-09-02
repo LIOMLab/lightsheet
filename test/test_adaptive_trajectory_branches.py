@@ -696,7 +696,7 @@ def test_append_sample_with_optional_curves_none(qtbot: QtBot) -> None:
 
 
 # --------------------------------------------------------------------- #
-# D-12.2.2: adaptive dock controller owns presentation logic
+# Dock controller extraction: adaptive
 # --------------------------------------------------------------------- #
 
 

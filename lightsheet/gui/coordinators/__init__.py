@@ -13,6 +13,9 @@ from lightsheet.gui.coordinators.dock_utils import (
     FloatingOnlyDock,
     build_no_dbl_click_title_bar,
 )
+from lightsheet.gui.coordinators.focus_dock_controller import (
+    FocusDockController,
+)
 from lightsheet.gui.coordinators.frame_saver_controller import (
     FrameSaver,
     FrameSaverController,
@@ -30,6 +33,7 @@ from lightsheet.gui.coordinators.reconstruction import (
 __all__ = [
     "AdaptiveDockController",
     "FloatingOnlyDock",
+    "FocusDockController",
     "FrameSaver",
     "FrameSaverController",
     "FrameSaverWorker",

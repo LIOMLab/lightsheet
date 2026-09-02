@@ -9,9 +9,6 @@ curve/scatter/legend guards and the state-machine branches
 
 from __future__ import annotations
 
-from typing import Any
-
-import pyqtgraph as pg
 import pytest
 from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
@@ -38,7 +35,8 @@ def test_reset_with_none_curves_and_legend(qtbot: QtBot) -> None:
     w._legend = None
     w.reset()
     assert w._run_started is True
-    assert w.plotWidget_focusTrajectory.isVisibleTo(w.plotWidget_focusTrajectory.parentWidget())  # type: ignore[unresolved-attribute]
+    parent = w.plotWidget_focusTrajectory.parentWidget()
+    assert w.plotWidget_focusTrajectory.isVisibleTo(parent)  # type: ignore[unresolved-attribute]
     assert w.label_focusTrajectoryEmpty.isHidden()
 
 
@@ -147,7 +145,7 @@ def test_sync_right_vb_none(qtbot: QtBot) -> None:
 
 
 # --------------------------------------------------------------------- #
-# D-12.2.2: focus dock controller owns presentation logic
+# Dock controller extraction: focus
 # --------------------------------------------------------------------- #
 
 
