@@ -40,6 +40,7 @@ from typing import Any
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal
 from PySide6.QtWidgets import (
+    QApplication,
     QButtonGroup,
     QHeaderView,
     QTableWidget,
@@ -533,13 +534,24 @@ class PastAcquisitionsBrowser(QObject):
     def stop_scan(self) -> None:
         """Best-effort teardown for shutdown / teardown. The worker is
         allowed to finish its current file; the thread quits and is
-        waited on briefly."""
+        drained non-blockingly. A blocking QThread.wait() here stalls
+        the calling event loop and, under xdist on Windows, can trigger
+        heap corruption (0xc0000374) when the quit() races ahead of the
+        thread's exec(). The non-blocking poll pumps events so the
+        queued quit reaches the thread's event loop deterministically."""
         if self._worker is not None:
             with contextlib.suppress(TypeError, RuntimeError):
                 self._worker.finished.disconnect()
         if self._thread is not None and self._thread.isRunning():
             self._thread.quit()
-            self._thread.wait(2000)
+            app = QApplication.instance()
+            deadline = 2000
+            step_ms = 20
+            while self._thread.isRunning() and deadline > 0:
+                if app is not None:
+                    app.processEvents()
+                self._thread.wait(step_ms)
+                deadline -= step_ms
         self._thread = None
         self._worker = None
 

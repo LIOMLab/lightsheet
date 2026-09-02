@@ -14,6 +14,7 @@ call sites depend on.
 This is a BEHAVIOR test (AGENTS.md §5).
 """
 
+import contextlib
 import os
 
 import pytest
@@ -48,10 +49,21 @@ def test_motors_conformance(device_factory: object) -> None:
     (open/close + error attrs). Per-axis travel-limit enforcement is
     covered by test_mock_abc_conformance + test_motor_limits."""
     dev = device_factory()  # ty: ignore[call-non-callable]
-    MOTORS_CONTRACT.assert_lifecycle(dev)
-    MOTORS_CONTRACT.assert_error_surface(dev)
-    MOTORS_CONTRACT.assert_read_attrs(dev)
-    MOTORS_CONTRACT.assert_setter_methods(dev)
+    try:
+        MOTORS_CONTRACT.assert_lifecycle(dev)
+        MOTORS_CONTRACT.assert_error_surface(dev)
+        MOTORS_CONTRACT.assert_read_attrs(dev)
+        MOTORS_CONTRACT.assert_setter_methods(dev)
+    finally:
+        # The real Motors() opens a shared serial handle in __init__;
+        # the contract's lifecycle_methods=() means assert_lifecycle
+        # never calls close(). Close it here so the COM port is released
+        # for subsequent tests (otherwise xdist workers hold the port
+        # open and block the process from exiting).
+        close = getattr(dev, "close", None)
+        if close is not None:
+            with contextlib.suppress(Exception):
+                close()
 
 
 def test_motors_conformance_boundary_state_flagged_unverified() -> None:
