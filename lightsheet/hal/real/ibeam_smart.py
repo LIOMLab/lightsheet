@@ -575,6 +575,8 @@ class IBeamSmartLaser(ILaser):
         uw = self._ibeam.get_output_power()
         if uw is None or self._ibeam.error:
             return None
+        if self._analog_ceiling_mw is not None and uw == 0:
+            return None
         return uw / 1000.0
 
 
