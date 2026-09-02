@@ -580,9 +580,4 @@ class IBeamSmartLaser(ILaser):
         return uw / 1000.0
 
 
-# ------------------------------------------------------------------------------------
-if __name__ == "__main__":
-    ib = IBeam()
-    ib.open()
-    print("serial:", ib.ser)
-    ib.close()
+
