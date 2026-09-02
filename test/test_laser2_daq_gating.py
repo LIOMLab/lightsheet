@@ -358,6 +358,7 @@ def test_registry_composes_l2_daq_with_readback(
     assert len(bundle.lasers) == 2
     assert bundle.lasers[1] is l2
     import dataclasses
+
     assert dataclasses.is_dataclass(bundle)
     assert bundle.__class__.__dataclass_params__.frozen
 
@@ -399,7 +400,8 @@ def test_registry_l1_retains_linear_volt_map(
     class _CapturingDAQLaser(real_daqlaser):
         def __init__(self, **kwargs: object) -> None:
             super().__init__(**kwargs)  # ty: ignore[invalid-argument-type]
-            if kwargs.get("terminal", "").endswith("ao0"):  # ty: ignore[unsupported-operator]
+            terminal = str(kwargs.get("terminal", ""))
+            if terminal.endswith("ao0"):
                 constructed["l1"] = self
 
     monkeypatch.setattr(registry_module, "DAQLaser", _CapturingDAQLaser)

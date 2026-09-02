@@ -84,7 +84,9 @@ class Motors(IMotors):
             self.vertical.set_limit_low(self.vertical_limit_low, self.vertical_units)
             self.vertical.set_limit_high(self.vertical_limit_high, self.vertical_units)
 
-        self.horizontal = ZaberMotor(self._serial, self.device_no_horizontal, self._io_lock)
+        self.horizontal = ZaberMotor(
+            self._serial, self.device_no_horizontal, self._io_lock
+        )
         if self.horizontal.is_supported:
             self.horizontal.set_inverted(self.horizontal_inverted)
             self.horizontal.set_units(self.horizontal_units)
@@ -232,7 +234,7 @@ class ZaberMotor(IMotor):
         self,
         shared_serial: serial.Serial,
         device_number: int,
-        io_lock = None,
+        io_lock: "threading.RLock | None" = None,
     ) -> None:
         # Error status
         self.error = 0

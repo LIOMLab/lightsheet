@@ -402,8 +402,7 @@ def test_ibeam_get_output_power_returns_value_on_matching_line() -> None:
     )
     result = ib.get_output_power()
     assert result == 75000, (
-        f"get_output_power must return 75000 uW from the CH1 line; "
-        f"got {result!r}"
+        f"get_output_power must return 75000 uW from the CH1 line; got {result!r}"
     )
 
 
@@ -569,14 +568,12 @@ def test_ibeam_smart_laser_forwards_resolved_port() -> None:
         # Mock the attributes IBeamSmartLaser reads from the inner engine.
         mock_engine.wavelength = 647
         mock_engine.max_power = 150000
-        adapter = ibeam_mod.IBeamSmartLaser(
-            label="Laser 2 (647 nm)", port="COM9"
-        )
+        adapter = ibeam_mod.IBeamSmartLaser(label="Laser 2 (647 nm)", port="COM9")
         assert MockIBeam.call_args.kwargs.get("port") == "COM9"
         assert adapter._ibeam is mock_engine
 
 
-
+def test_ibeam_set_channel_power_delegates_to_send_cmd() -> None:
     """set_channel_power(channel=2, power_uw=150000) issues
     'channel 2 power 150000 micro' via _send_cmd and clamps to max_power.
     set_power delegates to set_channel_power without changing standalone

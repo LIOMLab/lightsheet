@@ -507,6 +507,7 @@ def test_motors_cfg_load_ini_reads_config(tmp_path: Path) -> None:
         "Camera Limit High = 50.0\n"
     )
     import os
+
     cwd = Path.cwd()
     os.chdir(tmp_path)
     try:
@@ -528,6 +529,7 @@ def test_motors_cfg_load_ini_reads_config(tmp_path: Path) -> None:
 def test_motors_cfg_save_ini_writes_config(tmp_path: Path) -> None:
     """Motors.cfg_save_ini packs instance vars and writes config.ini."""
     import os
+
     cwd = Path.cwd()
     os.chdir(tmp_path)
     try:
@@ -622,6 +624,7 @@ def test_motors_init_with_mocked_serial_all_supported(tmp_path: Path) -> None:
     calls set_inverted/set_units/set_origin/set_limit_low/set_limit_high
     on each (lines 54-80)."""
     import os
+
     config_path = tmp_path / "config.ini"
     config_path.write_text(
         "[Motors]\n"
@@ -677,6 +680,7 @@ def test_motors_init_with_mocked_serial_none_supported(tmp_path: Path) -> None:
     """Motors.__init__ where all 3 motors are unsupported -> the if-branches
     (lines 55, 63, 75) are all False -> no set_* calls (the False branch)."""
     import os
+
     config_path = tmp_path / "config.ini"
     config_path.write_text(
         "[Motors]\n"
