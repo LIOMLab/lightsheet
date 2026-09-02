@@ -6,12 +6,15 @@ through inheritance so callers still invoke them on the worker instance.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, cast
 
 from lightsheet.adaptive.types import AdaptiveCommand, AdaptiveConfig
 
 if TYPE_CHECKING:
     from lightsheet.gui.workers.stack import StackWorker
+
+logger = logging.getLogger(__name__)
 
 
 class _StackAdaptiveMixin:
@@ -88,6 +91,9 @@ class _StackAdaptiveMixin:
             try:
                 self._hw._write_laser1_power(pct1)
             except Exception as e:
+                logger.exception(
+                    "Adaptive power write for L1 failed: cmd=%s error=%s", cmd, e
+                )
                 self._shell.sig_message.emit(
                     f"Adaptive power write failed for L1: {e}. The "
                     f"two-layer clamp held — laser power was NOT "
@@ -100,6 +106,9 @@ class _StackAdaptiveMixin:
             try:
                 self._hw._write_laser2_power(pct2)
             except Exception as e:
+                logger.exception(
+                    "Adaptive power write for L2 failed: cmd=%s error=%s", cmd, e
+                )
                 self._shell.sig_message.emit(
                     f"Adaptive power write failed for L2: {e}. The "
                     f"two-layer clamp held — laser power was NOT "
