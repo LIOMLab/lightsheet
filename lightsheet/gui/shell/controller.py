@@ -420,7 +420,7 @@ class Controller_MainWindow(QMainWindow):
         )
         for _btn, _sp_icon, _tooltip in _rail_icon_specs:
             _btn.setIcon(_style.standardIcon(_sp_icon))
-            _btn.setIconSize(QSize(24, 24))
+            _btn.setIconSize(QSize(_s.XL, _s.XL))
             _btn.setToolTip(_tooltip)
             _btn.setStatusTip(_tooltip)
             _btn.setStyleSheet(_RAIL_ACTIVE_STYLE)
@@ -435,7 +435,7 @@ class Controller_MainWindow(QMainWindow):
         self.ui.toolButton_railAdaptive.setIcon(
             _style.standardIcon(QStyle.SP_MediaVolume)  # ty: ignore[unresolved-attribute]
         )
-        self.ui.toolButton_railAdaptive.setIconSize(QSize(24, 24))
+        self.ui.toolButton_railAdaptive.setIconSize(QSize(_s.XL, _s.XL))
         self.ui.toolButton_railAdaptive.setToolTip(
             "Adaptive: Toggle the trajectory dock visibility."
         )
@@ -454,7 +454,7 @@ class Controller_MainWindow(QMainWindow):
         self.ui.toolButton_railFocus.setIcon(
             _style.standardIcon(QStyle.SP_MediaPause)  # ty: ignore[unresolved-attribute]
         )
-        self.ui.toolButton_railFocus.setIconSize(QSize(24, 24))
+        self.ui.toolButton_railFocus.setIconSize(QSize(_s.XL, _s.XL))
         self.ui.toolButton_railFocus.setToolTip(
             "Focus: Toggle the focus trajectory dock visibility."
         )
@@ -1176,7 +1176,7 @@ class Controller_MainWindow(QMainWindow):
         from PySide6.QtWidgets import QVBoxLayout, QWidget
 
         self.channel_radio_container = QWidget(self.ui.imagesPane)
-        self.channel_radio_container.setFixedHeight(32)
+        self.channel_radio_container.setFixedHeight(_s.XXL)
         container_layout = QVBoxLayout(self.channel_radio_container)
         container_layout.setContentsMargins(_s.ZERO, _s.ZERO, _s.ZERO, _s.ZERO)
         container_layout.setSpacing(_s.ZERO)

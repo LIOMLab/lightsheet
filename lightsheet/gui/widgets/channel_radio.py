@@ -56,7 +56,7 @@ class ChannelRadio(QWidget):
         # ImageView-area container layout).
         layout = QHBoxLayout(self)
         layout.setContentsMargins(_s.ZERO, _s.ZERO, _s.ZERO, _s.ZERO)
-        layout.setSpacing(8)
+        layout.setSpacing(_s.SM)
 
         self._group = QButtonGroup(self)
         self._group.setExclusive(True)

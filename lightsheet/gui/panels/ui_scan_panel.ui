@@ -16,7 +16,7 @@
           <item>
            <widget class="QLabel" name="label_76">
             <property name="text">
-             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Left ETL&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+             <string>Left ETL</string>
             </property>
            </widget>
           </item>
@@ -145,7 +145,7 @@
           <item>
            <widget class="QLabel" name="label_80">
             <property name="text">
-             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Right ETL&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+             <string>Right ETL</string>
             </property>
            </widget>
           </item>
@@ -342,7 +342,7 @@
           <item>
            <widget class="QLabel" name="label_69">
             <property name="text">
-             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Left Galvo&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+             <string>Left Galvo</string>
             </property>
            </widget>
           </item>
@@ -462,7 +462,7 @@
           <item>
            <widget class="QLabel" name="label_70">
             <property name="text">
-             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Right Galvo&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+             <string>Right Galvo</string>
             </property>
            </widget>
           </item>

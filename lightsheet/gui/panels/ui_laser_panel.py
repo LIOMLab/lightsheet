@@ -191,7 +191,7 @@ class Ui_LaserPanel(object):
         self.groupBox_4.setObjectName(u"groupBox_4")
         sizePolicy2.setHeightForWidth(self.groupBox_4.sizePolicy().hasHeightForWidth())
         self.groupBox_4.setSizePolicy(sizePolicy2)
-        self.groupBox_4.setMinimumSize(QSize(140, 126))
+        self.groupBox_4.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL + _s.LG + _s.XS, 126))  # 126 not a clean token sum
         self.verticalLayout_7 = QVBoxLayout(self.groupBox_4)
         self.verticalLayout_7.setObjectName(u"verticalLayout_7")
         self.verticalLayout_17 = QVBoxLayout()
@@ -212,7 +212,7 @@ class Ui_LaserPanel(object):
 
         self.verticalLayout_17.addWidget(self.pushButton_laserTwoToggle)
 
-        self.verticalSpacer_12 = QSpacerItem(20, 1, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        self.verticalSpacer_12 = QSpacerItem(_s.LG + _s.XS, _s.XS, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.verticalLayout_17.addItem(self.verticalSpacer_12)
 

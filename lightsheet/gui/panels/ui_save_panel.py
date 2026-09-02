@@ -47,7 +47,7 @@ class Ui_SavePanel(object):
 
         self.horizontalLayout_92.addWidget(self.pushButton_saveSelectDirectory)
 
-        self.horizontalSpacer_2 = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.horizontalSpacer_2 = QSpacerItem(_s.XL + _s.LG, _s.LG + _s.XS, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.horizontalLayout_92.addItem(self.horizontalSpacer_2)
 

@@ -678,9 +678,7 @@
       <height>0</height>
      </size>
     </property>
-    <property name="styleSheet">
-     <string notr="true">font-weight: bold;</string>
-    </property>
+    
     <property name="text">
      <string>IDLE</string>
     </property>

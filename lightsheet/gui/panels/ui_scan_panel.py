@@ -19,6 +19,8 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QFrame,
     QGroupBox, QHBoxLayout, QLabel, QSizePolicy,
     QVBoxLayout, QWidget)
 
+from lightsheet.gui.styles import spacing as _s
+from lightsheet.gui.styles import typography as _t
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
 class Ui_ScanPanel(object):
@@ -177,7 +179,7 @@ class Ui_ScanPanel(object):
         self.checkBox_etlSync.setObjectName(u"checkBox_etlSync")
         sizePolicy.setHeightForWidth(self.checkBox_etlSync.sizePolicy().hasHeightForWidth())
         self.checkBox_etlSync.setSizePolicy(sizePolicy)
-        self.checkBox_etlSync.setMinimumSize(QSize(0, 20))
+        self.checkBox_etlSync.setMinimumSize(QSize(0, _s.LG + _s.XS))
         self.checkBox_etlSync.setLayoutDirection(Qt.LeftToRight)  # ty: ignore[unresolved-attribute]
 
         self.verticalLayout_45.addWidget(self.checkBox_etlSync)
@@ -352,7 +354,7 @@ class Ui_ScanPanel(object):
         self.checkBox_galvoSync.setObjectName(u"checkBox_galvoSync")
         sizePolicy.setHeightForWidth(self.checkBox_galvoSync.sizePolicy().hasHeightForWidth())
         self.checkBox_galvoSync.setSizePolicy(sizePolicy)
-        self.checkBox_galvoSync.setMinimumSize(QSize(0, 20))
+        self.checkBox_galvoSync.setMinimumSize(QSize(0, _s.LG + _s.XS))
         self.checkBox_galvoSync.setLayoutDirection(Qt.LeftToRight)  # ty: ignore[unresolved-attribute]
 
         self.verticalLayout_39.addWidget(self.checkBox_galvoSync)
@@ -388,7 +390,7 @@ class Ui_ScanPanel(object):
 
     def retranslateUi(self, scanPanel):
         self.groupBox_13.setTitle(QCoreApplication.translate("ScanPanel", u"ETLs Settings", None))
-        self.label_76.setText(QCoreApplication.translate("ScanPanel", u"<html><head/><body><p><span style=\" font-weight:600;\">Left ETL</span></p></body></html>", None))
+        self.label_76.setText(QCoreApplication.translate("ScanPanel", f'<html><head/><body><p><span style="{_t.POWER}">Left ETL</span></p></body></html>', None))
         self.label_78.setText(QCoreApplication.translate("ScanPanel", u"Amplitude:", None))
 #if QT_CONFIG(tooltip)
         self.doubleSpinBox_etlLeftAmplitude.setToolTip(QCoreApplication.translate("ScanPanel", u"Left ETL sweep amplitude. Unit: V. Valid range: 0\u20135 (clamped by the channel map). Effect: larger amplitude = wider tunable-lens sweep; co-adapt with the laser power when switching wavelength or zoom.", None))
@@ -399,7 +401,7 @@ class Ui_ScanPanel(object):
         self.doubleSpinBox_etlLeftOffset.setToolTip(QCoreApplication.translate("ScanPanel", u"Left ETL DC offset. Unit: V. Valid range: 0\u20135. Effect: shifts the sweep center; co-adapt with amplitude for the current wavelength/zoom.", None))
 #endif // QT_CONFIG(tooltip)
         self.doubleSpinBox_etlLeftOffset.setSuffix(QCoreApplication.translate("ScanPanel", u" V", None))
-        self.label_80.setText(QCoreApplication.translate("ScanPanel", u"<html><head/><body><p><span style=\" font-weight:600;\">Right ETL</span></p></body></html>", None))
+        self.label_80.setText(QCoreApplication.translate("ScanPanel", f'<html><head/><body><p><span style="{_t.POWER}">Right ETL</span></p></body></html>', None))
         self.label_81.setText(QCoreApplication.translate("ScanPanel", u"Amplitude:", None))
 #if QT_CONFIG(tooltip)
         self.doubleSpinBox_etlRightAmplitude.setToolTip(QCoreApplication.translate("ScanPanel", u"Right ETL sweep amplitude. Unit: V. Valid range: 0\u20135 (clamped by the channel map). Effect: larger amplitude = wider tunable-lens sweep; co-adapt with the laser power.", None))
@@ -423,7 +425,7 @@ class Ui_ScanPanel(object):
         self.doubleSpinBox_etlSteps.setToolTip(QCoreApplication.translate("ScanPanel", u"Number of ETL voltage steps per sweep. Unit: steps. Valid range: >0. Effect: more steps = smoother sweep but higher DAQ update rate.", None))
 #endif // QT_CONFIG(tooltip)
         self.groupBox_11.setTitle(QCoreApplication.translate("ScanPanel", u"Galvanometers Settings", None))
-        self.label_69.setText(QCoreApplication.translate("ScanPanel", u"<html><head/><body><p><span style=\" font-weight:600;\">Left Galvo</span></p></body></html>", None))
+        self.label_69.setText(QCoreApplication.translate("ScanPanel", f'<html><head/><body><p><span style="{_t.POWER}">Left Galvo</span></p></body></html>', None))
         self.label_61.setText(QCoreApplication.translate("ScanPanel", u"Amplitude:", None))
 #if QT_CONFIG(tooltip)
         self.doubleSpinBox_galvoLeftAmplitude.setToolTip(QCoreApplication.translate("ScanPanel", u"Left galvo scan amplitude. Unit: V. Valid range: \u00b110 (clamped by the channel map). Effect: larger amplitude = wider scan; co-adapt with the ETL amplitude for the current zoom.", None))
@@ -434,7 +436,7 @@ class Ui_ScanPanel(object):
         self.doubleSpinBox_galvoLeftOffset.setToolTip(QCoreApplication.translate("ScanPanel", u"Left galvo DC offset. Unit: V. Valid range: \u00b110. Effect: shifts the scan center.", None))
 #endif // QT_CONFIG(tooltip)
         self.doubleSpinBox_galvoLeftOffset.setSuffix(QCoreApplication.translate("ScanPanel", u" V", None))
-        self.label_70.setText(QCoreApplication.translate("ScanPanel", u"<html><head/><body><p><span style=\" font-weight:600;\">Right Galvo</span></p></body></html>", None))
+        self.label_70.setText(QCoreApplication.translate("ScanPanel", f'<html><head/><body><p><span style="{_t.POWER}">Right Galvo</span></p></body></html>', None))
         self.label_65.setText(QCoreApplication.translate("ScanPanel", u"Amplitude:", None))
 #if QT_CONFIG(tooltip)
         self.doubleSpinBox_galvoRightAmplitude.setToolTip(QCoreApplication.translate("ScanPanel", u"Right galvo scan amplitude. Unit: V. Valid range: \u00b110 (clamped by the channel map). Effect: larger amplitude = wider scan.", None))

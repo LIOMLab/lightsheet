@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (QApplication, QFormLayout, QGroupBox, QLabel,
     QPushButton, QSizePolicy, QSpacerItem, QVBoxLayout,
     QWidget)
 
+from lightsheet.gui.styles import spacing as _s
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
 class Ui_CalibrationPanel(object):
@@ -78,7 +79,7 @@ class Ui_CalibrationPanel(object):
 
         self.verticalLayout_5.addLayout(self.formLayout_2)
 
-        self.verticalSpacer_3 = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        self.verticalSpacer_3 = QSpacerItem(_s.LG + _s.XS, _s.XL + _s.LG, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.verticalLayout_5.addItem(self.verticalSpacer_3)
 
@@ -126,7 +127,7 @@ class Ui_CalibrationPanel(object):
 
         self.verticalLayout_6.addLayout(self.formLayout_3)
 
-        self.verticalSpacer_5 = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        self.verticalSpacer_5 = QSpacerItem(_s.LG + _s.XS, _s.XL + _s.LG, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.verticalLayout_6.addItem(self.verticalSpacer_5)
 

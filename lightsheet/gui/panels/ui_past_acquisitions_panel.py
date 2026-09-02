@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QHBoxLayout, QHe
     QSpacerItem, QTableWidget, QTableWidgetItem, QVBoxLayout,
     QWidget)
 
+from lightsheet.gui.styles import spacing as _s
+
 class Ui_PastAcquisitionsPanel(object):
     def setupUi(self, pastAcquisitionsPanel):
         if not pastAcquisitionsPanel.objectName():
@@ -54,7 +56,7 @@ class Ui_PastAcquisitionsPanel(object):
 
         self.horizontalLayout_pastViewRow.addWidget(self.pushButton_refreshPast)
 
-        self.horizontalSpacer_pastView = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.horizontalSpacer_pastView = QSpacerItem(_s.XL + _s.LG, _s.LG + _s.XS, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.horizontalLayout_pastViewRow.addItem(self.horizontalSpacer_pastView)
 

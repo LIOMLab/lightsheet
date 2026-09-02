@@ -14,7 +14,7 @@
         <item>
          <widget class="QLabel" name="label_72">
           <property name="text">
-           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Laser1&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           <string>Laser1</string>
           </property>
          </widget>
         </item>
@@ -148,7 +148,7 @@
         <item>
          <widget class="QLabel" name="label_73">
           <property name="text">
-           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Laser2&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           <string>Laser2</string>
           </property>
          </widget>
         </item>

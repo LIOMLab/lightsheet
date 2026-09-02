@@ -35,7 +35,7 @@ class Ui_MotorPanel(object):
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.groupBox_SampleMovement.sizePolicy().hasHeightForWidth())
         self.groupBox_SampleMovement.setSizePolicy(sizePolicy)
-        self.groupBox_SampleMovement.setMinimumSize(QSize(300, 0))
+        self.groupBox_SampleMovement.setMinimumSize(QSize(_s.RAIL * 6 + _s.MD, 0))
         self.gridLayout_7 = QGridLayout(self.groupBox_SampleMovement)
         self.gridLayout_7.setObjectName(u"gridLayout_7")
         self.verticalLayout_32 = QVBoxLayout()
@@ -56,7 +56,7 @@ class Ui_MotorPanel(object):
 
         self.label_sampleCurrentHPosition = QLabel(self.groupBox_SampleMovement)
         self.label_sampleCurrentHPosition.setObjectName(u"label_sampleCurrentHPosition")
-        self.label_sampleCurrentHPosition.setMinimumSize(QSize(80, 0))
+        self.label_sampleCurrentHPosition.setMinimumSize(QSize(_s.RAIL + _s.XXL, 0))
 
         self.gridLayout_5.addWidget(self.label_sampleCurrentHPosition, 0, 1, 1, 1)
 
@@ -68,7 +68,7 @@ class Ui_MotorPanel(object):
         sizePolicy2.setVerticalStretch(0)
         sizePolicy2.setHeightForWidth(self.pushButton_sampleSetOrigin.sizePolicy().hasHeightForWidth())
         self.pushButton_sampleSetOrigin.setSizePolicy(sizePolicy2)
-        self.pushButton_sampleSetOrigin.setMinimumSize(QSize(100, 0))
+        self.pushButton_sampleSetOrigin.setMinimumSize(QSize(_s.RAIL * 2 + _s.XS, 0))
 
         self.gridLayout_5.addWidget(self.pushButton_sampleSetOrigin, 0, 2, 2, 1)
 
@@ -83,7 +83,7 @@ class Ui_MotorPanel(object):
 
         self.label_sampleCurrentVPosition = QLabel(self.groupBox_SampleMovement)
         self.label_sampleCurrentVPosition.setObjectName(u"label_sampleCurrentVPosition")
-        self.label_sampleCurrentVPosition.setMinimumSize(QSize(80, 0))
+        self.label_sampleCurrentVPosition.setMinimumSize(QSize(_s.RAIL + _s.XXL, 0))
 
         self.gridLayout_5.addWidget(self.label_sampleCurrentVPosition, 1, 1, 1, 1)
 
@@ -267,7 +267,7 @@ class Ui_MotorPanel(object):
         self.groupBox_CameraMovement.setObjectName(u"groupBox_CameraMovement")
         sizePolicy.setHeightForWidth(self.groupBox_CameraMovement.sizePolicy().hasHeightForWidth())
         self.groupBox_CameraMovement.setSizePolicy(sizePolicy)
-        self.groupBox_CameraMovement.setMinimumSize(QSize(300, 0))
+        self.groupBox_CameraMovement.setMinimumSize(QSize(_s.RAIL * 6 + _s.MD, 0))
         self.verticalLayout_34 = QVBoxLayout(self.groupBox_CameraMovement)
         self.verticalLayout_34.setSpacing(_s.MD)
         self.verticalLayout_34.setObjectName(u"verticalLayout_34")
@@ -283,7 +283,7 @@ class Ui_MotorPanel(object):
 
         self.label_cameraCurrentPosition = QLabel(self.groupBox_CameraMovement)
         self.label_cameraCurrentPosition.setObjectName(u"label_cameraCurrentPosition")
-        self.label_cameraCurrentPosition.setMinimumSize(QSize(80, 0))
+        self.label_cameraCurrentPosition.setMinimumSize(QSize(_s.RAIL + _s.XXL, 0))
 
         self.horizontalLayout_58.addWidget(self.label_cameraCurrentPosition)
 
@@ -291,7 +291,7 @@ class Ui_MotorPanel(object):
         self.pushButton_cameraSetFocus.setObjectName(u"pushButton_cameraSetFocus")
         sizePolicy2.setHeightForWidth(self.pushButton_cameraSetFocus.sizePolicy().hasHeightForWidth())
         self.pushButton_cameraSetFocus.setSizePolicy(sizePolicy2)
-        self.pushButton_cameraSetFocus.setMinimumSize(QSize(100, 0))
+        self.pushButton_cameraSetFocus.setMinimumSize(QSize(_s.RAIL * 2 + _s.XS, 0))
 
         self.horizontalLayout_58.addWidget(self.pushButton_cameraSetFocus)
 
@@ -307,7 +307,7 @@ class Ui_MotorPanel(object):
 
         self.gridLayout_8 = QHBoxLayout()
         self.gridLayout_8.setObjectName(u"gridLayout_8")
-        self.horizontalSpacer_4 = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.horizontalSpacer_4 = QSpacerItem(_s.XL + _s.LG, _s.LG + _s.XS, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.gridLayout_8.addItem(self.horizontalSpacer_4)
 
@@ -318,7 +318,7 @@ class Ui_MotorPanel(object):
         sizePolicy3.setVerticalStretch(0)
         sizePolicy3.setHeightForWidth(self.pushButton_cameraStepBackward.sizePolicy().hasHeightForWidth())
         self.pushButton_cameraStepBackward.setSizePolicy(sizePolicy3)
-        self.pushButton_cameraStepBackward.setMinimumSize(QSize(70, 32))
+        self.pushButton_cameraStepBackward.setMinimumSize(QSize(70, _s.XXL))
 
         self.gridLayout_8.addWidget(self.pushButton_cameraStepBackward)
 
@@ -326,7 +326,7 @@ class Ui_MotorPanel(object):
         self.pushButton_cameraGotoFocus.setObjectName(u"pushButton_cameraGotoFocus")
         sizePolicy3.setHeightForWidth(self.pushButton_cameraGotoFocus.sizePolicy().hasHeightForWidth())
         self.pushButton_cameraGotoFocus.setSizePolicy(sizePolicy3)
-        self.pushButton_cameraGotoFocus.setMinimumSize(QSize(70, 32))
+        self.pushButton_cameraGotoFocus.setMinimumSize(QSize(70, _s.XXL))
 
         self.gridLayout_8.addWidget(self.pushButton_cameraGotoFocus)
 
@@ -334,11 +334,11 @@ class Ui_MotorPanel(object):
         self.pushButton_cameraStepForward.setObjectName(u"pushButton_cameraStepForward")
         sizePolicy3.setHeightForWidth(self.pushButton_cameraStepForward.sizePolicy().hasHeightForWidth())
         self.pushButton_cameraStepForward.setSizePolicy(sizePolicy3)
-        self.pushButton_cameraStepForward.setMinimumSize(QSize(70, 32))
+        self.pushButton_cameraStepForward.setMinimumSize(QSize(70, _s.XXL))
 
         self.gridLayout_8.addWidget(self.pushButton_cameraStepForward)
 
-        self.horizontalSpacer_5 = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.horizontalSpacer_5 = QSpacerItem(_s.XL + _s.LG, _s.LG + _s.XS, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.gridLayout_8.addItem(self.horizontalSpacer_5)
 
