@@ -504,7 +504,7 @@ class Controller_MainWindow(QMainWindow):
         self.ui.statusBar_progress = QProgressBar(self.ui.statusbar)  # ty: ignore[unresolved-attribute]
         self.ui.statusbar.addPermanentWidget(self.ui.statusBar_label)  # ty: ignore[unresolved-attribute]
         self.ui.statusbar.addPermanentWidget(self.ui.statusBar_progress)  # ty: ignore[unresolved-attribute]
-        self.ui.statusBar_progress.setFixedWidth(250)  # ty: ignore[unresolved-attribute]
+        # Let the status bar size the progress bar with its default size policy.
         self.ui.statusBar_progress.hide()  # ty: ignore[unresolved-attribute]
 
         # Add first entry to message log

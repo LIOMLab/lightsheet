@@ -50,7 +50,7 @@ class Ui_MotorPanel(object):
         sizePolicy1.setVerticalStretch(0)
         sizePolicy1.setHeightForWidth(self.label_21.sizePolicy().hasHeightForWidth())
         self.label_21.setSizePolicy(sizePolicy1)
-        self.label_21.setMinimumSize(QSize(170, 0))
+        self.label_21.setMinimumSize(QSize(_s.ZERO, _s.ZERO))
 
         self.gridLayout_5.addWidget(self.label_21, 0, 0, 1, 1)
 
@@ -76,7 +76,7 @@ class Ui_MotorPanel(object):
         self.label_22.setObjectName(u"label_22")
         sizePolicy1.setHeightForWidth(self.label_22.sizePolicy().hasHeightForWidth())
         self.label_22.setSizePolicy(sizePolicy1)
-        self.label_22.setMinimumSize(QSize(170, 0))
+        self.label_22.setMinimumSize(QSize(_s.ZERO, _s.ZERO))
         self.label_22.setAlignment(Qt.AlignLeading|Qt.AlignLeft|Qt.AlignVCenter)  # ty: ignore[unresolved-attribute]
 
         self.gridLayout_5.addWidget(self.label_22, 1, 0, 1, 1)
@@ -164,8 +164,8 @@ class Ui_MotorPanel(object):
         self.doubleSpinBox_sampleHStepSize.setObjectName(u"doubleSpinBox_sampleHStepSize")
         sizePolicy2.setHeightForWidth(self.doubleSpinBox_sampleHStepSize.sizePolicy().hasHeightForWidth())
         self.doubleSpinBox_sampleHStepSize.setSizePolicy(sizePolicy2)
-        self.doubleSpinBox_sampleHStepSize.setMinimumSize(QSize(110, 0))
-        self.doubleSpinBox_sampleHStepSize.setMaximumSize(QSize(110, 16777215))
+        self.doubleSpinBox_sampleHStepSize.setMinimumSize(QSize(_s.ZERO, _s.ZERO))
+        self.doubleSpinBox_sampleHStepSize.setMaximumSize(QSize(16777215, 16777215))
         self.doubleSpinBox_sampleHStepSize.setDecimals(3)
 
         self.horizontalLayout_55.addWidget(self.doubleSpinBox_sampleHStepSize, 0, 1, 1, 1)
@@ -181,8 +181,8 @@ class Ui_MotorPanel(object):
         self.doubleSpinBox_sampleVStepSize.setObjectName(u"doubleSpinBox_sampleVStepSize")
         sizePolicy2.setHeightForWidth(self.doubleSpinBox_sampleVStepSize.sizePolicy().hasHeightForWidth())
         self.doubleSpinBox_sampleVStepSize.setSizePolicy(sizePolicy2)
-        self.doubleSpinBox_sampleVStepSize.setMinimumSize(QSize(110, 0))
-        self.doubleSpinBox_sampleVStepSize.setMaximumSize(QSize(110, 16777215))
+        self.doubleSpinBox_sampleVStepSize.setMinimumSize(QSize(_s.ZERO, _s.ZERO))
+        self.doubleSpinBox_sampleVStepSize.setMaximumSize(QSize(16777215, 16777215))
         self.doubleSpinBox_sampleVStepSize.setDecimals(3)
 
         self.horizontalLayout_55.addWidget(self.doubleSpinBox_sampleVStepSize, 1, 1, 1, 1)
@@ -206,7 +206,7 @@ class Ui_MotorPanel(object):
         self.label_23.setObjectName(u"label_23")
         sizePolicy1.setHeightForWidth(self.label_23.sizePolicy().hasHeightForWidth())
         self.label_23.setSizePolicy(sizePolicy1)
-        self.label_23.setMinimumSize(QSize(170, 0))
+        self.label_23.setMinimumSize(QSize(_s.ZERO, _s.ZERO))
 
         self.horizontalLayout_53.addWidget(self.label_23, 0, 0, 1, 1)
 
@@ -214,8 +214,8 @@ class Ui_MotorPanel(object):
         self.doubleSpinBox_sampleSetHPosition.setObjectName(u"doubleSpinBox_sampleSetHPosition")
         sizePolicy2.setHeightForWidth(self.doubleSpinBox_sampleSetHPosition.sizePolicy().hasHeightForWidth())
         self.doubleSpinBox_sampleSetHPosition.setSizePolicy(sizePolicy2)
-        self.doubleSpinBox_sampleSetHPosition.setMinimumSize(QSize(110, 0))
-        self.doubleSpinBox_sampleSetHPosition.setMaximumSize(QSize(110, 16777215))
+        self.doubleSpinBox_sampleSetHPosition.setMinimumSize(QSize(_s.ZERO, _s.ZERO))
+        self.doubleSpinBox_sampleSetHPosition.setMaximumSize(QSize(16777215, 16777215))
         self.doubleSpinBox_sampleSetHPosition.setDecimals(3)
 
         self.horizontalLayout_53.addWidget(self.doubleSpinBox_sampleSetHPosition, 0, 1, 1, 1)
@@ -224,7 +224,7 @@ class Ui_MotorPanel(object):
         self.pushButton_sampleGotoHPosition.setObjectName(u"pushButton_sampleGotoHPosition")
         sizePolicy2.setHeightForWidth(self.pushButton_sampleGotoHPosition.sizePolicy().hasHeightForWidth())
         self.pushButton_sampleGotoHPosition.setSizePolicy(sizePolicy2)
-        self.pushButton_sampleGotoHPosition.setMinimumSize(QSize(110, 0))
+        self.pushButton_sampleGotoHPosition.setMinimumSize(QSize(_s.ZERO, _s.ZERO))
 
         self.horizontalLayout_53.addWidget(self.pushButton_sampleGotoHPosition, 0, 2, 1, 1)
 
@@ -232,7 +232,7 @@ class Ui_MotorPanel(object):
         self.label_24.setObjectName(u"label_24")
         sizePolicy1.setHeightForWidth(self.label_24.sizePolicy().hasHeightForWidth())
         self.label_24.setSizePolicy(sizePolicy1)
-        self.label_24.setMinimumSize(QSize(170, 0))
+        self.label_24.setMinimumSize(QSize(_s.ZERO, _s.ZERO))
 
         self.horizontalLayout_53.addWidget(self.label_24, 1, 0, 1, 1)
 
@@ -240,8 +240,8 @@ class Ui_MotorPanel(object):
         self.doubleSpinBox_sampleSetVPosition.setObjectName(u"doubleSpinBox_sampleSetVPosition")
         sizePolicy2.setHeightForWidth(self.doubleSpinBox_sampleSetVPosition.sizePolicy().hasHeightForWidth())
         self.doubleSpinBox_sampleSetVPosition.setSizePolicy(sizePolicy2)
-        self.doubleSpinBox_sampleSetVPosition.setMinimumSize(QSize(110, 0))
-        self.doubleSpinBox_sampleSetVPosition.setMaximumSize(QSize(110, 16777215))
+        self.doubleSpinBox_sampleSetVPosition.setMinimumSize(QSize(_s.ZERO, _s.ZERO))
+        self.doubleSpinBox_sampleSetVPosition.setMaximumSize(QSize(16777215, 16777215))
         self.doubleSpinBox_sampleSetVPosition.setDecimals(3)
 
         self.horizontalLayout_53.addWidget(self.doubleSpinBox_sampleSetVPosition, 1, 1, 1, 1)
@@ -250,7 +250,7 @@ class Ui_MotorPanel(object):
         self.pushButton_sampleGotoVPosition.setObjectName(u"pushButton_sampleGotoVPosition")
         sizePolicy2.setHeightForWidth(self.pushButton_sampleGotoVPosition.sizePolicy().hasHeightForWidth())
         self.pushButton_sampleGotoVPosition.setSizePolicy(sizePolicy2)
-        self.pushButton_sampleGotoVPosition.setMinimumSize(QSize(110, 0))
+        self.pushButton_sampleGotoVPosition.setMinimumSize(QSize(_s.ZERO, _s.ZERO))
 
         self.horizontalLayout_53.addWidget(self.pushButton_sampleGotoVPosition, 1, 2, 1, 1)
 
@@ -277,7 +277,7 @@ class Ui_MotorPanel(object):
         self.label_31.setObjectName(u"label_31")
         sizePolicy1.setHeightForWidth(self.label_31.sizePolicy().hasHeightForWidth())
         self.label_31.setSizePolicy(sizePolicy1)
-        self.label_31.setMinimumSize(QSize(170, 0))
+        self.label_31.setMinimumSize(QSize(_s.ZERO, _s.ZERO))
 
         self.horizontalLayout_58.addWidget(self.label_31)
 
@@ -318,7 +318,7 @@ class Ui_MotorPanel(object):
         sizePolicy3.setVerticalStretch(0)
         sizePolicy3.setHeightForWidth(self.pushButton_cameraStepBackward.sizePolicy().hasHeightForWidth())
         self.pushButton_cameraStepBackward.setSizePolicy(sizePolicy3)
-        self.pushButton_cameraStepBackward.setMinimumSize(QSize(70, _s.XXL))
+        self.pushButton_cameraStepBackward.setMinimumSize(QSize(_s.ZERO, _s.XXL))
 
         self.gridLayout_8.addWidget(self.pushButton_cameraStepBackward)
 
@@ -326,7 +326,7 @@ class Ui_MotorPanel(object):
         self.pushButton_cameraGotoFocus.setObjectName(u"pushButton_cameraGotoFocus")
         sizePolicy3.setHeightForWidth(self.pushButton_cameraGotoFocus.sizePolicy().hasHeightForWidth())
         self.pushButton_cameraGotoFocus.setSizePolicy(sizePolicy3)
-        self.pushButton_cameraGotoFocus.setMinimumSize(QSize(70, _s.XXL))
+        self.pushButton_cameraGotoFocus.setMinimumSize(QSize(_s.ZERO, _s.XXL))
 
         self.gridLayout_8.addWidget(self.pushButton_cameraGotoFocus)
 
@@ -334,7 +334,7 @@ class Ui_MotorPanel(object):
         self.pushButton_cameraStepForward.setObjectName(u"pushButton_cameraStepForward")
         sizePolicy3.setHeightForWidth(self.pushButton_cameraStepForward.sizePolicy().hasHeightForWidth())
         self.pushButton_cameraStepForward.setSizePolicy(sizePolicy3)
-        self.pushButton_cameraStepForward.setMinimumSize(QSize(70, _s.XXL))
+        self.pushButton_cameraStepForward.setMinimumSize(QSize(_s.ZERO, _s.XXL))
 
         self.gridLayout_8.addWidget(self.pushButton_cameraStepForward)
 
@@ -358,7 +358,7 @@ class Ui_MotorPanel(object):
         self.label_33.setObjectName(u"label_33")
         sizePolicy1.setHeightForWidth(self.label_33.sizePolicy().hasHeightForWidth())
         self.label_33.setSizePolicy(sizePolicy1)
-        self.label_33.setMinimumSize(QSize(170, 0))
+        self.label_33.setMinimumSize(QSize(_s.ZERO, _s.ZERO))
 
         self.horizontalLayout_59.addWidget(self.label_33, 0, 0, 1, 1)
 
@@ -366,8 +366,8 @@ class Ui_MotorPanel(object):
         self.doubleSpinBox_cameraStepSize.setObjectName(u"doubleSpinBox_cameraStepSize")
         sizePolicy2.setHeightForWidth(self.doubleSpinBox_cameraStepSize.sizePolicy().hasHeightForWidth())
         self.doubleSpinBox_cameraStepSize.setSizePolicy(sizePolicy2)
-        self.doubleSpinBox_cameraStepSize.setMinimumSize(QSize(110, 0))
-        self.doubleSpinBox_cameraStepSize.setMaximumSize(QSize(110, 16777215))
+        self.doubleSpinBox_cameraStepSize.setMinimumSize(QSize(_s.ZERO, _s.ZERO))
+        self.doubleSpinBox_cameraStepSize.setMaximumSize(QSize(16777215, 16777215))
         self.doubleSpinBox_cameraStepSize.setDecimals(3)
 
         self.horizontalLayout_59.addWidget(self.doubleSpinBox_cameraStepSize, 0, 1, 1, 1)
@@ -376,7 +376,7 @@ class Ui_MotorPanel(object):
         self.label_32.setObjectName(u"label_32")
         sizePolicy1.setHeightForWidth(self.label_32.sizePolicy().hasHeightForWidth())
         self.label_32.setSizePolicy(sizePolicy1)
-        self.label_32.setMinimumSize(QSize(170, 0))
+        self.label_32.setMinimumSize(QSize(_s.ZERO, _s.ZERO))
 
         self.horizontalLayout_59.addWidget(self.label_32, 1, 0, 1, 1)
 
@@ -384,8 +384,8 @@ class Ui_MotorPanel(object):
         self.doubleSpinBox_cameraSetPosition.setObjectName(u"doubleSpinBox_cameraSetPosition")
         sizePolicy2.setHeightForWidth(self.doubleSpinBox_cameraSetPosition.sizePolicy().hasHeightForWidth())
         self.doubleSpinBox_cameraSetPosition.setSizePolicy(sizePolicy2)
-        self.doubleSpinBox_cameraSetPosition.setMinimumSize(QSize(110, 0))
-        self.doubleSpinBox_cameraSetPosition.setMaximumSize(QSize(110, 16777215))
+        self.doubleSpinBox_cameraSetPosition.setMinimumSize(QSize(_s.ZERO, _s.ZERO))
+        self.doubleSpinBox_cameraSetPosition.setMaximumSize(QSize(16777215, 16777215))
         self.doubleSpinBox_cameraSetPosition.setDecimals(3)
 
         self.horizontalLayout_59.addWidget(self.doubleSpinBox_cameraSetPosition, 1, 1, 1, 1)
@@ -394,7 +394,7 @@ class Ui_MotorPanel(object):
         self.pushButton_cameraGotoPosition.setObjectName(u"pushButton_cameraGotoPosition")
         sizePolicy2.setHeightForWidth(self.pushButton_cameraGotoPosition.sizePolicy().hasHeightForWidth())
         self.pushButton_cameraGotoPosition.setSizePolicy(sizePolicy2)
-        self.pushButton_cameraGotoPosition.setMinimumSize(QSize(110, 0))
+        self.pushButton_cameraGotoPosition.setMinimumSize(QSize(_s.ZERO, _s.ZERO))
 
         self.horizontalLayout_59.addWidget(self.pushButton_cameraGotoPosition, 1, 2, 1, 1)
 

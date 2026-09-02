@@ -36,7 +36,7 @@ class Ui_StackPanel(object):
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.groupBox_18.sizePolicy().hasHeightForWidth())
         self.groupBox_18.setSizePolicy(sizePolicy)
-        self.groupBox_18.setMinimumSize(QSize(0, 126))  # 126 not a clean token sum
+        self.groupBox_18.setMinimumSize(QSize(_s.ZERO, _s.PANEL_FLOOR))
         self.horizontalLayout_9 = QHBoxLayout(self.groupBox_18)
         self.horizontalLayout_9.setObjectName(u"horizontalLayout_9")
         self.verticalLayout_13 = QVBoxLayout()

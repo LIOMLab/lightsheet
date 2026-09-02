@@ -15,3 +15,4 @@ LG = 16   # panel padding
 XL = 24   # toolbar/section spacing
 XXL = 32  # large gaps
 RAIL = 48 # rail icon/button floor
+PANEL_FLOOR = 126  # shared minimum height for compact laser/stack panels

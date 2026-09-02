@@ -191,7 +191,7 @@ class Ui_LaserPanel(object):
         self.groupBox_4.setObjectName(u"groupBox_4")
         sizePolicy2.setHeightForWidth(self.groupBox_4.sizePolicy().hasHeightForWidth())
         self.groupBox_4.setSizePolicy(sizePolicy2)
-        self.groupBox_4.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL + _s.LG + _s.XS, 126))  # 126 not a clean token sum
+        self.groupBox_4.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL + _s.LG + _s.XS, _s.PANEL_FLOOR))
         self.verticalLayout_7 = QVBoxLayout(self.groupBox_4)
         self.verticalLayout_7.setObjectName(u"verticalLayout_7")
         self.verticalLayout_17 = QVBoxLayout()
