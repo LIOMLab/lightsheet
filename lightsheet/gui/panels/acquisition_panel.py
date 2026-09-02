@@ -517,11 +517,15 @@ class AcquisitionPanelWidget(QWidget):
     @Slot()
     def updateUi_post_stack_mode(self) -> None:
         """Enabling modes after stack mode"""
-        self._shell.stack_panel.ui.pushButton_acqStartStackMode.setText(
-            "Start Stack Mode"
+        queue_active = getattr(
+            self._shell.stack_panel.table_manager, "_queue_active", False
         )
-        self.updateUi_modes_buttons(self._shell.default_buttons)
-        self._shell.motor_panel.updateUi_motor_buttons(disable_button=False)
+        if not queue_active:
+            self._shell.stack_panel.ui.pushButton_acqStartStackMode.setText(
+                "Start Stack Mode"
+            )
+            self.updateUi_modes_buttons(self._shell.default_buttons)
+            self._shell.motor_panel.updateUi_motor_buttons(disable_button=False)
 
         self._shell.stack_mode_started = False
         self._shell.focus_mode_started = False

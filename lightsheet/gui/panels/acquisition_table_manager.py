@@ -747,6 +747,10 @@ class AcquisitionTableManager(QWidget):
         self._queue_rows_total = len(rows)
         # Disable the table buttons while the queue runs.
         self._set_queue_running(True)
+        # Also disable the main acquisition mode buttons so the operator
+        # cannot start preview/live/single/stack while a queue is active.
+        # They are re-enabled in the finally block below.
+        self._shell.acquisition_panel.updateUi_modes_buttons([])
         # Snapshot the operator's single-stack state so it can be
         # restored after the queue completes or aborts (the queue
         # overwrites these per row). Captured BEFORE the loop touches them.
@@ -908,6 +912,11 @@ class AcquisitionTableManager(QWidget):
             ) = saved_single_stack
             self._queue_active = False
             self._set_queue_running(False)
+            # Re-enable the main acquisition mode buttons now that the
+            # queue is idle.
+            self._shell.acquisition_panel.updateUi_modes_buttons(
+                self._shell.default_buttons
+            )
             self._update_start_queue_state()
 
     def _set_queue_running(self, running: bool) -> None:
