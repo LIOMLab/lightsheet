@@ -353,16 +353,20 @@ class Camera(ICamera):
             self.is_recording = False
         return None
 
-    def copy_recorder_images(self, number_of_images: int) -> np.ndarray:
-        """docstring"""
+    def copy_recorder_images(self, number_of_images: int) -> np.ndarray | None:
+        """Return recorded images from the camera recorder.
+
+        Returns ``number_of_images`` as a uint16 ndarray when
+        ``new_data_ready`` is set, then clears the ready flag so the next
+        call cannot return stale data. Returns ``None`` when no data is
+        ready, making a missing recorder explicit instead of returning a
+        synthetic dark frame.
+        """
         if self.new_data_ready:
             images, _metadatas = self.camera.images(blocksize=number_of_images)  # ty: ignore[unresolved-attribute]
             self.new_data_ready = False
-        else:
-            images = np.zeros(
-                (number_of_images, self.ysize, self.xsize), dtype=np.uint16
-            )  # ty: ignore[no-matching-overload]
-        return images
+            return images
+        return None
 
     def delete_recorder(self) -> None:
         """Delete the camera recorder session.
@@ -686,7 +690,7 @@ class Camera(ICamera):
                 print("Camera not open - Cannot retrieve properties")
         return cam_properties  # ty: ignore[unsound-return-statement]
 
-    def grab_image(self, exposure_time_ms: int = 100) -> np.ndarray:
+    def grab_image(self, exposure_time_ms: int = 100) -> np.ndarray | None:
         """
         All-in-one function to grab a single image from the camera
         """
@@ -696,7 +700,7 @@ class Camera(ICamera):
         if self.verbose:
             print("Attempting to grab an image...")
 
-        img_buffer = np.zeros((1, 1, 1), dtype=np.uint16)
+        img_buffer: np.ndarray | None = None
         if self.camera is not None:
             if self.is_recording:
                 if self.verbose:
@@ -715,13 +719,16 @@ class Camera(ICamera):
                 self.stop_recorder()  # Stop recording before image is copied to memory
                 img_buffer = self.copy_recorder_images(
                     1
-                )  # Returns a list of images of length 'number_of_images'
+                )  # Returns recorded images or None when no data is ready
 
                 if (
                     self.recorder_timeout_status
                 ):  # Check if we had a timeout before deleting the recorder
                     if self.verbose:
                         print(" Timeout while acquiring image.")
+                elif img_buffer is None:
+                    if self.verbose:
+                        print(" No image data available.")
                 else:
                     if self.verbose:
                         print(" Image successfully obtained.")
@@ -730,9 +737,9 @@ class Camera(ICamera):
         else:
             if self.verbose:
                 print(" Camera not open. Aborted")
-        return img_buffer[
-            0
-        ]  # Returning first (and in this case only) image from the buffer
+        if img_buffer is not None:
+            return img_buffer[0]  # Returning first (and in this case only) image from the buffer
+        return None
 
 
 if __name__ == "__main__":
