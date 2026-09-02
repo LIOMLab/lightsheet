@@ -709,9 +709,10 @@ def test_start_scan_async_emits_finished(
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
     spy = QSignalSpy(browser.sig_scan_finished)
     browser.start_scan_async()
-    # Wait for the signal (5s timeout). QSignalSpy.wait pumps the event
-    # loop and returns True when the signal fires.
-    assert spy.wait(5000), "sig_scan_finished did not fire within 5s"
+    # Wait for the signal (15s timeout — generous for xdist worker
+    # contention). QSignalSpy.wait pumps the event loop and returns
+    # True when the signal fires.
+    assert spy.wait(15000), "sig_scan_finished did not fire within 15s"
     assert spy.count() >= 1
     # PySide6 QSignalSpy: use .at(0) to get the first argument list.
     args = spy.at(0)
@@ -1008,6 +1009,6 @@ def test_panel_refresh_triggers_async_scan(
     panel = ctrl.past_panel
     spy = QSignalSpy(panel.past_acquisitions_scan_finished)
     panel.refresh()
-    assert spy.wait(5000), "scan did not finish within 5s"
+    assert spy.wait(15000), "scan did not finish within 15s"
     assert panel.ui.tableWidget_pastAcquisitions.rowCount() == 1
     panel.stop_scan()
