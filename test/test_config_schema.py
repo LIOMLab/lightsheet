@@ -36,6 +36,11 @@ from lightsheet.config_schema import (
 )
 
 
+def _construct_model(model_cls: Any, **kwargs: Any) -> Any:
+    """Construct a pydantic-settings model, bypassing ty's strict alias checks."""
+    return model_cls(**kwargs)
+
+
 def _ibeam_valid() -> dict[str, Any]:
     """A valid [iBeam] dict built from config.ini's actual values."""
     return {
@@ -162,7 +167,7 @@ def test_strict_baseline_rejects_typo_key() -> None:
     data = _ibeam_valid()
     data["Max power"] = 100  # typo'd extra key
     with pytest.raises(ValidationError) as exc_info:
-        IBeamSettings(**data)
+        _construct_model(IBeamSettings, **data)
     # The error list must contain an extra-forbidden type for the typo'd key.
     err_types = [e["type"] for e in exc_info.value.errors()]
     assert any("extra" in t or "forbidden" in t for t in err_types), (
@@ -178,7 +183,7 @@ def test_lax_overlay_tolerates_extra_key() -> None:
     so rig calibration freedom is preserved in config.rig-specific.ini."""
     data = {**_ibeam_valid(), "Calibration Note": "rig-specific tweak"}
     # Should construct without error — the extra key is ignored.
-    settings = IBeamSettingsOverlay(**data)  # ty: ignore[invalid-argument-type]
+    settings = IBeamSettingsOverlay(**data)
     assert settings.max_power == 150000
 
 
@@ -192,9 +197,9 @@ def test_max_power_rejected_in_both_tiers() -> None:
     strict_data = {**_ibeam_valid(), "Max Power": 200000}
     overlay_data = {**_ibeam_valid(), "Max Power": 200000}
     with pytest.raises(ValidationError):
-        IBeamSettings(**strict_data)  # ty: ignore[invalid-argument-type]
+        _construct_model(IBeamSettings, **strict_data)
     with pytest.raises(ValidationError):
-        IBeamSettingsOverlay(**overlay_data)  # ty: ignore[invalid-argument-type]
+        IBeamSettingsOverlay(**overlay_data)
 
 
 # --- Test 4: safety-key (Vertical Limit High) rejected in BOTH tiers ---
@@ -206,9 +211,9 @@ def test_vertical_limit_high_rejected_in_both_tiers() -> None:
     strict_data = {**_motors_valid(), "Vertical Limit High": 50.0}
     overlay_data = {**_motors_valid(), "Vertical Limit High": 50.0}
     with pytest.raises(ValidationError):
-        MotorsSettings(**strict_data)  # ty: ignore[invalid-argument-type]
+        _construct_model(MotorsSettings, **strict_data)
     with pytest.raises(ValidationError):
-        MotorsSettingsOverlay(**overlay_data)  # ty: ignore[invalid-argument-type]
+        MotorsSettingsOverlay(**overlay_data)
 
 
 # --- Test 5: valid [iBeam] dict constructs without error ---
@@ -217,7 +222,7 @@ def test_vertical_limit_high_rejected_in_both_tiers() -> None:
 def test_valid_ibeam_constructs_without_error() -> None:
     """A valid [iBeam] dict built from config.ini's actual values
     (Max Power = 150000) constructs without error on the strict tier."""
-    settings = IBeamSettings(**_ibeam_valid())
+    settings = _construct_model(IBeamSettings, **_ibeam_valid())
     assert settings.max_power == 150000
     assert settings.port == "COM4"
 
@@ -236,8 +241,7 @@ def test_collect_config_errors_surfaces_both_errors() -> None:
     result = collect_config_errors(sections)
     assert isinstance(result, ConfigValidationResult)
     assert len(result.errors) == 2, (
-        f"expected 2 errors (collect-all), got {len(result.errors)}: "
-        f"{result.errors}"
+        f"expected 2 errors (collect-all), got {len(result.errors)}: {result.errors}"
     )
     assert result.warnings == []
 
@@ -288,7 +292,7 @@ def test_motors_aliases_are_case_sensitive() -> None:
     del data["Vertical Limit High"]
     data["vertical limit high"] = 50.0
     with pytest.raises(ValidationError):
-        MotorsSettings(**data)  # ty: ignore[invalid-argument-type]
+        _construct_model(MotorsSettings, **data)
 
 
 # --- Adaptive section (operator-configurable bounds + gains) ---------------
@@ -326,7 +330,7 @@ def _adaptive_valid() -> dict[str, Any]:
 def test_adaptive_strict_constructs_with_defaults() -> None:
     """A valid [Adaptive] dict constructs on the strict tier and exposes
     the operator-facing aliases via the snake_case attribute names."""
-    s = AdaptiveSettings(**_adaptive_valid())
+    s = _construct_model(AdaptiveSettings, **_adaptive_valid())
     assert s.enabled is False
     assert s.min_exposure == 1
     assert s.max_exposure == 1000
@@ -344,7 +348,7 @@ def test_adaptive_overlay_matches_strict_defaults() -> None:
     """The overlay tier carries the same aliases/defaults as the strict
     tier — a tampered overlay cannot bypass the strict check by exploiting
     a default mismatch."""
-    strict = AdaptiveSettings(**_adaptive_valid())
+    strict = _construct_model(AdaptiveSettings, **_adaptive_valid())
     overlay = AdaptiveSettingsOverlay(**_adaptive_valid())
     for fname in type(strict).model_fields:
         assert getattr(strict, fname) == getattr(overlay, fname), (
@@ -357,7 +361,7 @@ def test_adaptive_strict_rejects_unknown_key() -> None:
     """A typo'd key is rejected by the strict tier (extra='forbid')."""
     data = {**_adaptive_valid(), "Max Exposure ": 1000}  # typo'd extra key
     with pytest.raises(ValidationError) as exc_info:
-        AdaptiveSettings(**data)  # ty: ignore[invalid-argument-type]
+        _construct_model(AdaptiveSettings, **data)
     err_types = [e["type"] for e in exc_info.value.errors()]
     assert any("extra" in t or "forbidden" in t for t in err_types)
 
@@ -365,7 +369,7 @@ def test_adaptive_strict_rejects_unknown_key() -> None:
 def test_adaptive_overlay_tolerates_extra_key() -> None:
     """The overlay tier (extra='ignore') silently ignores an extra key."""
     data = {**_adaptive_valid(), "Calibration Note": "rig tweak"}
-    s = AdaptiveSettingsOverlay(**data)  # ty: ignore[invalid-argument-type]
+    s = AdaptiveSettingsOverlay(**data)
     assert s.laser1_max_power == 5.0
 
 
@@ -374,33 +378,41 @@ def test_adaptive_rejects_exposure_out_of_range_both_tiers() -> None:
     tiers (range 1..1000)."""
     for cls in (AdaptiveSettings, AdaptiveSettingsOverlay):
         with pytest.raises(ValidationError):
-            cls(**{**_adaptive_valid(), "Min Exposure": 0})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_adaptive_valid(), "Min Exposure": 0})
         with pytest.raises(ValidationError):
-            cls(**{**_adaptive_valid(), "Max Exposure": 1001})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_adaptive_valid(), "Max Exposure": 1001})
 
 
 def test_adaptive_rejects_reversed_exposure_pair_both_tiers() -> None:
     """Min Exposure > Max Exposure is rejected on both tiers (min<=max)."""
     for cls in (AdaptiveSettings, AdaptiveSettingsOverlay):
         with pytest.raises(ValidationError):
-            cls(**{**_adaptive_valid(), "Min Exposure": 500, "Max Exposure": 100})  # ty: ignore[invalid-argument-type]
+            _construct_model(
+                cls, **{**_adaptive_valid(), "Min Exposure": 500, "Max Exposure": 100}
+            )
 
 
 def test_adaptive_rejects_reversed_power_pair_both_tiers() -> None:
     """Laser1 Min Power > Laser1 Max Power is rejected on both tiers."""
     for cls in (AdaptiveSettings, AdaptiveSettingsOverlay):
         with pytest.raises(ValidationError):
-            cls(**{
-                **_adaptive_valid(),
-                "Laser1 Min Power": 10.0,
-                "Laser1 Max Power": 5.0,
-            })  # ty: ignore[invalid-argument-type]
+            _construct_model(
+                cls,
+                **{
+                    **_adaptive_valid(),
+                    "Laser1 Min Power": 10.0,
+                    "Laser1 Max Power": 5.0,
+                },
+            )
         with pytest.raises(ValidationError):
-            cls(**{
-                **_adaptive_valid(),
-                "Laser2 Min Power": 200.0,
-                "Laser2 Max Power": 150.0,
-            })  # ty: ignore[invalid-argument-type]
+            _construct_model(
+                cls,
+                **{
+                    **_adaptive_valid(),
+                    "Laser2 Min Power": 200.0,
+                    "Laser2 Max Power": 150.0,
+                },
+            )
 
 
 def test_adaptive_rejects_power_above_150_both_tiers() -> None:
@@ -408,25 +420,28 @@ def test_adaptive_rejects_power_above_150_both_tiers() -> None:
     that mirrors the [iBeam] Max Power hard limit)."""
     for cls in (AdaptiveSettings, AdaptiveSettingsOverlay):
         with pytest.raises(ValidationError):
-            cls(**{**_adaptive_valid(), "Laser1 Max Power": 200.0})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_adaptive_valid(), "Laser1 Max Power": 200.0})
         with pytest.raises(ValidationError):
-            cls(**{**_adaptive_valid(), "Laser2 Max Power": 200.0})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_adaptive_valid(), "Laser2 Max Power": 200.0})
 
 
 def test_adaptive_rejects_reversed_target_band_both_tiers() -> None:
     """Target Band Lo > Target Band Hi is rejected on both tiers."""
     for cls in (AdaptiveSettings, AdaptiveSettingsOverlay):
         with pytest.raises(ValidationError):
-            cls(**{**_adaptive_valid(), "Target Band Lo": 95.0, "Target Band Hi": 90.0})  # ty: ignore[invalid-argument-type]
+            _construct_model(
+                cls,
+                **{**_adaptive_valid(), "Target Band Lo": 95.0, "Target Band Hi": 90.0},
+            )
 
 
 def test_adaptive_rejects_target_out_of_range_both_tiers() -> None:
     """Target Band Lo/Hi outside 0..100 are rejected on both tiers."""
     for cls in (AdaptiveSettings, AdaptiveSettingsOverlay):
         with pytest.raises(ValidationError):
-            cls(**{**_adaptive_valid(), "Target Band Lo": -1.0})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_adaptive_valid(), "Target Band Lo": -1.0})
         with pytest.raises(ValidationError):
-            cls(**{**_adaptive_valid(), "Target Band Hi": 101.0})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_adaptive_valid(), "Target Band Hi": 101.0})
 
 
 def test_adaptive_rejects_bad_gains_and_counts_both_tiers() -> None:
@@ -434,17 +449,17 @@ def test_adaptive_rejects_bad_gains_and_counts_both_tiers() -> None:
     Ki outside 0..1, Pilot Count outside 0..50 are all rejected."""
     for cls in (AdaptiveSettings, AdaptiveSettingsOverlay):
         with pytest.raises(ValidationError):
-            cls(**{**_adaptive_valid(), "Reacquire Threshold": 60.0})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_adaptive_valid(), "Reacquire Threshold": 60.0})
         with pytest.raises(ValidationError):
-            cls(**{**_adaptive_valid(), "Block Size N": 0})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_adaptive_valid(), "Block Size N": 0})
         with pytest.raises(ValidationError):
-            cls(**{**_adaptive_valid(), "Block Size N": 200})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_adaptive_valid(), "Block Size N": 200})
         with pytest.raises(ValidationError):
-            cls(**{**_adaptive_valid(), "Kp": 6.0})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_adaptive_valid(), "Kp": 6.0})
         with pytest.raises(ValidationError):
-            cls(**{**_adaptive_valid(), "Ki": 2.0})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_adaptive_valid(), "Ki": 2.0})
         with pytest.raises(ValidationError):
-            cls(**{**_adaptive_valid(), "Pilot Count": 60})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_adaptive_valid(), "Pilot Count": 60})
 
 
 def test_collect_config_errors_adaptive_cross_section_l1_and_l2() -> None:
@@ -469,8 +484,7 @@ def test_collect_config_errors_adaptive_cross_section_l1_and_l2() -> None:
     }
     result = collect_config_errors(sections)
     assert len(result.errors) == 2, (
-        f"expected 2 cross-section errors, got {len(result.errors)}: "
-        f"{result.errors}"
+        f"expected 2 cross-section errors, got {len(result.errors)}: {result.errors}"
     )
     joined = " ".join(result.errors)
     assert "Laser1" in joined
@@ -528,9 +542,9 @@ def test_focus_settings_rejects_out_of_range_block_size() -> None:
 
     for cls in (FocusSettings, FocusSettingsOverlay):
         with pytest.raises(ValidationError):
-            cls(**{**_focus_valid(), "Block Size N": 0})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_focus_valid(), "Block Size N": 0})
         with pytest.raises(ValidationError):
-            cls(**{**_focus_valid(), "Block Size N": 200})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_focus_valid(), "Block Size N": 200})
 
 
 def test_focus_settings_rejects_negative_residual_values() -> None:
@@ -540,9 +554,9 @@ def test_focus_settings_rejects_negative_residual_values() -> None:
 
     for cls in (FocusSettings, FocusSettingsOverlay):
         with pytest.raises(ValidationError):
-            cls(**{**_focus_valid(), "Residual Gain Mm": -0.1})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_focus_valid(), "Residual Gain Mm": -0.1})
         with pytest.raises(ValidationError):
-            cls(**{**_focus_valid(), "Max Residual Mm": -0.1})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_focus_valid(), "Max Residual Mm": -0.1})
 
 
 def test_focus_settings_rejects_residual_gain_above_ceiling() -> None:
@@ -551,7 +565,7 @@ def test_focus_settings_rejects_residual_gain_above_ceiling() -> None:
 
     for cls in (FocusSettings, FocusSettingsOverlay):
         with pytest.raises(ValidationError):
-            cls(**{**_focus_valid(), "Residual Gain Mm": 1.5})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_focus_valid(), "Residual Gain Mm": 1.5})
 
 
 def test_focus_settings_rejects_max_residual_above_ceiling() -> None:
@@ -560,7 +574,7 @@ def test_focus_settings_rejects_max_residual_above_ceiling() -> None:
 
     for cls in (FocusSettings, FocusSettingsOverlay):
         with pytest.raises(ValidationError):
-            cls(**{**_focus_valid(), "Max Residual Mm": 6.0})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_focus_valid(), "Max Residual Mm": 6.0})
 
 
 def test_focus_strict_rejects_unknown_key() -> None:
@@ -569,7 +583,7 @@ def test_focus_strict_rejects_unknown_key() -> None:
 
     data = {**_focus_valid(), "Focus Extra": "typo"}
     with pytest.raises(ValidationError) as exc_info:
-        FocusSettings(**data)  # ty: ignore[invalid-argument-type]
+        _construct_model(FocusSettings, **data)
     err_types = [e["type"] for e in exc_info.value.errors()]
     assert any("extra" in t or "forbidden" in t for t in err_types)
 
@@ -579,7 +593,7 @@ def test_focus_overlay_tolerates_extra_key() -> None:
     from lightsheet.config_schema import FocusSettingsOverlay
 
     data = {**_focus_valid(), "Calibration Note": "rig tweak"}
-    s = FocusSettingsOverlay(**data)  # ty: ignore[invalid-argument-type]
+    s = FocusSettingsOverlay(**data)
     assert s.block_size_n == 8
     assert s.residual_gain_mm == 0.05
 
@@ -606,7 +620,7 @@ def test_laser2_config_strict_and_overlay_accept_valid() -> None:
     from lightsheet.config_schema import LasersSettings, LasersSettingsOverlay
 
     for cls in (LasersSettings, LasersSettingsOverlay):
-        s = cls(**_lasers_valid())
+        s = _construct_model(cls, **_lasers_valid())
         assert s.laser2_wavelength == 647
         assert s.laser2_power == 0
         assert s.laser2_max_power == 150.0
@@ -620,7 +634,7 @@ def test_laser2_config_rejects_ceiling_above_150_both_tiers() -> None:
 
     for cls in (LasersSettings, LasersSettingsOverlay):
         with pytest.raises(ValidationError) as exc_info:
-            cls(**{**_lasers_valid(), "Laser2 Max Power": 200.0})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_lasers_valid(), "Laser2 Max Power": 200.0})
         msgs = " ".join(str(e["msg"]) for e in exc_info.value.errors())
         assert "150" in msgs
 
@@ -633,9 +647,9 @@ def test_laser2_config_rejects_nonpositive_mw_per_volt_both_tiers() -> None:
 
     for cls in (LasersSettings, LasersSettingsOverlay):
         with pytest.raises(ValidationError):
-            cls(**{**_lasers_valid(), "Laser2 mW per Volt": 0.0})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_lasers_valid(), "Laser2 mW per Volt": 0.0})
         with pytest.raises(ValidationError):
-            cls(**{**_lasers_valid(), "Laser2 mW per Volt": -30.0})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_lasers_valid(), "Laser2 mW per Volt": -30.0})
 
 
 def test_laser2_config_ibeam_max_power_validator_unchanged() -> None:
@@ -644,7 +658,7 @@ def test_laser2_config_ibeam_max_power_validator_unchanged() -> None:
     rejection."""
     for cls in (IBeamSettings, IBeamSettingsOverlay):
         with pytest.raises(ValidationError) as exc_info:
-            cls(**{**_ibeam_valid(), "Max Power": 200000})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{**_ibeam_valid(), "Max Power": 200000})
         msgs = " ".join(str(e["msg"]) for e in exc_info.value.errors())
         assert "150000" in msgs
 
@@ -662,7 +676,7 @@ def test_laser2_config_strict_rejects_missing_laser2_keys() -> None:
         "Laser1 mW per Volt": 60,
     }
     with pytest.raises(ValidationError) as exc_info:
-        LasersSettings(**data)  # ty: ignore[invalid-argument-type]
+        _construct_model(LasersSettings, **data)
     err_types = [e["type"] for e in exc_info.value.errors()]
     assert any("missing" in t for t in err_types)
 
@@ -716,7 +730,7 @@ def test_generated_overlay_ignores_unknown_key() -> None:
         Units="mm",
         **{"Image File Format": "hdf5"},
         LegacyExtra="ignored",
-    )  # ty: ignore[invalid-argument-type]
+    )
     assert settings.image_file_format == "hdf5"
     assert settings.units == "mm"
 
@@ -728,7 +742,7 @@ def test_generated_overlay_preserves_safety_validators() -> None:
 
     data = {**_motors_valid(), "Vertical Limit High": 50.0}
     with pytest.raises(ValidationError):
-        MotorsSettingsOverlay(**data)  # ty: ignore[invalid-argument-type]
+        MotorsSettingsOverlay(**data)
 
 
 def test_generated_overlay_ignores_env_source() -> None:
@@ -743,7 +757,7 @@ def test_generated_overlay_ignores_env_source() -> None:
     try:
         # The env source is not registered, so the valid init value stays
         # in force and the out-of-range env value is ignored.
-        settings = IBeamSettingsOverlay(**_ibeam_valid())  # ty: ignore[invalid-argument-type]
+        settings = IBeamSettingsOverlay(**_ibeam_valid())
         assert settings.max_power == 150000
     finally:
         if env_backup is None:
@@ -765,9 +779,8 @@ def test_image_file_format_accepts_three_formats_both_tiers() -> None:
 
     for fmt in ("hdf5", "zarr", "both", "HDF5", "Zarr"):
         for cls in (ControllerSettings, ControllerSettingsOverlay):
-            settings = cls(  # ty: ignore[operator]
-                **{"Units": "mm", "Image File Format": fmt}
-            )  # ty: ignore[invalid-argument-type]
+            any_cls: Any = cls
+            settings = any_cls(**{"Units": "mm", "Image File Format": fmt})
             assert settings.image_file_format == fmt.lower()
 
 
@@ -781,9 +794,10 @@ def test_image_file_format_rejects_tiff_both_tiers() -> None:
 
     for cls in (ControllerSettings, ControllerSettingsOverlay):
         with pytest.raises(ValidationError):
-            cls(  # ty: ignore[operator]
-                **{"Units": "mm", "Image File Format": "tiff"}
-            )  # ty: ignore[invalid-argument-type]
+            _construct_model(
+                cls,
+                **{"Units": "mm", "Image File Format": "tiff"},
+            )
 
 
 def test_image_file_format_empty_defaults_to_hdf5_both_tiers() -> None:
@@ -794,9 +808,7 @@ def test_image_file_format_empty_defaults_to_hdf5_both_tiers() -> None:
     )
 
     for cls in (ControllerSettings, ControllerSettingsOverlay):
-        settings = cls(  # ty: ignore[operator]
-            **{"Units": "mm", "Image File Format": ""}
-        )  # ty: ignore[invalid-argument-type]
+        settings = _construct_model(cls, **{"Units": "mm", "Image File Format": ""})
         assert settings.image_file_format == "hdf5"
 
 
@@ -810,7 +822,7 @@ def test_image_file_format_non_string_rejected_both_tiers() -> None:
 
     for cls in (ControllerSettings, ControllerSettingsOverlay):
         with pytest.raises(ValidationError):
-            cls(**{"Units": "mm", "Image File Format": 123})  # ty: ignore[invalid-argument-type]
+            _construct_model(cls, **{"Units": "mm", "Image File Format": 123})
 
 
 def test_controller_theme_non_string_rejected_both_tiers() -> None:
@@ -823,4 +835,6 @@ def test_controller_theme_non_string_rejected_both_tiers() -> None:
 
     for cls in (ControllerSettings, ControllerSettingsOverlay):
         with pytest.raises(ValidationError):
-            cls(**{"Units": "mm", "Image File Format": "hdf5", "Theme": 123})  # ty: ignore[invalid-argument-type]
+            _construct_model(
+                cls, **{"Units": "mm", "Image File Format": "hdf5", "Theme": 123}
+            )

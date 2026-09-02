@@ -45,13 +45,17 @@ class _NoEnvBaseSettings(BaseSettings):
         return (init_settings,)
 
 
-def _make_overlay(strict_cls: type[_NoEnvBaseSettings]) -> type[_NoEnvBaseSettings]:
+def _make_overlay(strict_cls: type[_NoEnvBaseSettings]) -> type[Any]:
     """Return a named overlay subclass of ``strict_cls`` that changes only
     ``extra`` to ``'ignore'``.
 
     The overlay inherits every field alias, default, and validator from the
     strict model, so there is a single source of safety truth per section.
     It remains init-only via the inherited ``settings_customise_sources``.
+
+    The return type is ``type[Any]`` because ``ty`` cannot infer fields on a
+    class created dynamically with ``types.new_class``; this keeps the overlay
+    classes type-checkable at the call sites without losing runtime behavior.
     """
     overlay_name = f"{strict_cls.__name__}Overlay"
 
@@ -64,7 +68,7 @@ def _make_overlay(strict_cls: type[_NoEnvBaseSettings]) -> type[_NoEnvBaseSettin
         ns["model_config"] = overlay_config
 
     return cast(
-        type[_NoEnvBaseSettings],
+        type[Any],
         new_class(overlay_name, (strict_cls,), exec_body=_exec_body),
     )
 

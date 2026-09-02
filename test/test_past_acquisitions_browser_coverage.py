@@ -677,9 +677,7 @@ def test_dir_size_oserror_suppressed(
     assert size >= 12  # "hello" (5) + "world!!" (7) = 12
 
 
-def test_date_str_oserror_returns_empty(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_date_str_oserror_returns_empty(qtbot: QtBot, request: FixtureRequest) -> None:
     """_date_str returns "" when stat() raises OSError."""
     with patch.object(Path, "stat", side_effect=OSError("nope")):
         assert PastAcquisitionsBrowser._date_str("/nonexistent") == ""
@@ -706,7 +704,7 @@ def test_start_scan_async_emits_finished(
         f.create_dataset("reconstructed_frame001", data=data)
     ctrl.save_directory = str(data_dir)
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
-    received: list[list] = []
+    received: list[list[Any]] = []
     browser.sig_scan_finished.connect(lambda entries: received.append(entries))
     browser.start_scan_async()
     # Wait for the worker thread to finish by polling is_scanning() with
@@ -776,7 +774,7 @@ def test_scan_worker_run_empty_data_dir_emits_empty(
     from lightsheet.gui.panels.past_acquisitions_browser import _ScanWorker
 
     worker = _ScanWorker(browser, "/nonexistent")
-    received: list[list] = []  # ty: ignore[missing-type-argument]
+    received: list[list[Any]] = []
     worker.finished.connect(lambda entries: received.append(entries))
     worker.run()
     assert len(received) == 1
@@ -795,7 +793,7 @@ def test_scan_worker_run_exception_emits_empty(
     from lightsheet.gui.panels.past_acquisitions_browser import _ScanWorker
 
     worker = _ScanWorker(browser, str(data_dir))
-    received: list[list] = []  # ty: ignore[missing-type-argument]
+    received: list[list[Any]] = []
     worker.finished.connect(lambda entries: received.append(entries))
     # Patch _scan_directory to raise.
     with patch.object(
@@ -882,9 +880,7 @@ def test_panel_on_view_changed_past_is_noop(
     assert stacked.currentIndex() != 2 or stacked.currentIndex() == 6
 
 
-def test_panel_on_refresh_scanning_guard(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_panel_on_refresh_scanning_guard(qtbot: QtBot, request: FixtureRequest) -> None:
     """_on_refresh is a no-op when a scan is already in flight."""
     ctrl, _ = make_controller(qtbot, request)
     panel = ctrl.past_panel
@@ -934,7 +930,7 @@ def test_panel_on_scan_finished_with_entries_populates_table(
     emits past_acquisitions_scan_finished."""
     ctrl, _ = make_controller(qtbot, request)
     panel = ctrl.past_panel
-    received: list[list] = []  # ty: ignore[missing-type-argument]
+    received: list[list[Any]] = []
     panel.past_acquisitions_scan_finished.connect(
         lambda entries: received.append(entries)
     )
@@ -1007,7 +1003,7 @@ def test_panel_refresh_triggers_async_scan(
         f.create_dataset("reconstructed_frame001", data=data)
     ctrl.save_directory = str(data_dir)
     panel = ctrl.past_panel
-    received: list[list] = []
+    received: list[list[Any]] = []
     panel.past_acquisitions_scan_finished.connect(
         lambda entries: received.append(entries)
     )

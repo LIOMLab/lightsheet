@@ -56,8 +56,9 @@ These are physical-safety constraints, not style preferences:
   or amplitude write must check `estop_event` before energizing and re-check
   before the HAL write — a Class IIIB laser must not be re-energized past the
   kill path.
-- **Config-schema rejection tier (startup gate):** `lightsheet/config_schema.py`
-  (pydantic-settings, two tiers: 8 strict `extra='forbid'` + 8 overlay
+- **Config-schema rejection tier (startup gate):** `lightsheet.config_schema`
+  (pydantic-settings package, `lightsheet/config_schema/validation.py`; ten strict
+  `extra='forbid'` + ten overlay
   `extra='ignore'`) runs in `__main__.py` on BOTH the demo and rig paths
   before the controller is constructed. Safety-critical keys are **rejected**,
   not clamped, at this tier: `[iBeam] Max Power` > 150000 and `[Motors]`
@@ -466,11 +467,12 @@ lightsheet/                    importable package (importable as `lightsheet`)
                                Breeze stylesheet + nicaiu preload + logging + excepthook.
                                (exposed as lightsheet.__main__:main; launched via the `lightsheet` console script)
   config.py                    cfg_read / cfg_write / cfg_str2bool (case-sensitive configparser helpers)
-  config_schema.py             pydantic-settings two-tier schema (8 strict + 8 overlay
-                               BaseSettings models) + collect_config_errors + ConfigValidator
-                               modal dialog. Startup validation gate (see §2, §9). Also
-                               carries the Image File Format / save-format keys
-                               (hdf5/zarr/both/tiff) that drive the FrameSaver save path.
+  config_schema/               pydantic-settings config schema package (see §9)
+    __init__.py                compatibility barrel re-exporting all public names
+    validation.py              collect_config_errors + ConfigValidator modal startup gate
+    sections/*.py              ten strict + ten overlay BaseSettings section models
+    shared.py                  _NoEnvBaseSettings, _make_overlay overlay factory,
+                               hard-limit validators, and safety constants
   channel_map.py               frozen ChannelMap value object: galvo_left_right_swap flag
                                (default False), order_galvos, clamp_galvo (±10V),
                                clamp_etl (0-5V). Pure stdlib. The channel-reversal
@@ -504,16 +506,18 @@ lightsheet/                    importable package (importable as `lightsheet`)
                                _power/_poll_laser*_status/_refresh_laser_readback) and
                                open_laser2 (iBeam serial-open lifecycle). Owns NO estop/kill
                                method — the kill path stays in the shell (see §2).
-      frame_saver_controller.py FrameSaverController + FrameSaver(QObject) + FrameViewer(QObject)
-                               + FrameSaverWorker(QObject) + the pure image-reconstruction
-                               functions (crop_buffer, reconstruct_frame,
-                               reconstruct_frame_linear_blend). The QObjects live here, not in
-                               the shell controller. Writes per-laser HDF5 metadata from the
-                               live `self.parent.lasers` (no cfg_read at save time). NOW also
-                               owns the Zarr save path: ZarrSaver uses
+      frame_saver_controller.py FrameSaverController + FrameSaver(QObject) +
+                               FrameSaverWorker(QObject). Facade that delegates the pure
+                               image-reconstruction functions to reconstruction.py, the
+                               Zarr streaming path to zarr_saver.py, and the live display
+                               queue to frame_viewer.py. Writes per-laser HDF5 metadata from
+                               the live `self.parent.lasers` (no cfg_read at save time).
+      reconstruction.py        Pure-numpy helpers: _position_to_float, crop_buffer,
+                               reconstruct_frame, reconstruct_frame_linear_blend.
+      frame_viewer.py          FrameViewer QObject — queues/displays frames through ImageView.
+      zarr_saver.py            ZarrSaver plain-Python OME-Zarr streaming collaborator. Uses
                                liom_toolkit.utils.zarr_writer.AnalysisOmeZarrWriter to write
-                               OME-Zarr alongside the existing HDF5 (h5py) path; the active
-                               format is driven by config (hdf5/zarr/both/tiff — see §9).
+                               OME-Zarr alongside the existing HDF5 (h5py) path.
       motor_controller.py      MotorController — plain-Python. Owns the 20 motor move/jog/stop
                                slots + camera-focus / ETL-interpolation helpers. Motor
                                travel-limit ValueError → sig_message + sig_beep abort preserved
@@ -545,13 +549,13 @@ lightsheet/                    importable package (importable as `lightsheet`)
       __init__.py              empty (package marker)
       field_spec.py            declarative FieldSpec policy table for promoted spinboxes
       field_spec_spinbox.py    FieldSpecSpinBox — promoted Qt Designer custom widget
-    workers.py                 Per-mode acquisition worker QObjects (PreviewWorker / LiveWorker
-                               / SingleWorker / StackWorker, each QObject + QThread +
-                               moveToThread) + _AcquireScanMixin. Workers emit
-                               sig_refresh_position_horizontal / sig_*_mode_finished for UI
-                               updates and read pre-sampled save args (see §11). The
-                               cooperative cancellation model (*_mode_started flag +
-                               estop_event) is preserved verbatim from the threading migration.
+    workers/                   acquisition-worker package (see §11)
+      __init__.py              compatibility barrel re-exporting the public names
+      scan_mixin.py            _AcquireScanMixin with the shared acquire_scan() body
+      preview_live_single.py   PreviewWorker, LiveWorker, SingleWorker
+      stack.py                 StackWorker core volume-acquisition loop
+      stack_adaptive.py        _StackAdaptiveMixin (adaptive/focus stack helpers)
+
     _vendor/breezestylesheets/ vendored BreezeStyleSheets source (NOT on PyPI) — compiled into
                                breeze_pyside6.py via scripts/build-breeze.sh. Do not hand-edit
                                the compiled module.
@@ -576,9 +580,10 @@ lightsheet/                    importable package (importable as `lightsheet`)
     registry.py                DeviceRegistry + UnresolvedDeviceError — USB-serial device role
                                resolver for the RIG path only. Resolves COM ports by
                                VID/PID + serial_number against hardware_inventory.yaml
-                               (RFR-02). PRESENCE-ONLY design: resolved ports validate device
-                               identity but are NOT wired into HAL constructors — HAL classes
-                               read their own config.ini ports (see §10, §13).
+                               (RFR-02). Resolved serial ports are now passed into the real
+                               HAL constructors (Motors, ETLs, IBeamSmartLaser); config.ini
+                               ports remain as fallbacks for direct construction and tests
+                               (see §10, §13).
     real/                      vendor-bound concrete implementations (rig path)
       camera.py                Camera (PCO)
       siggen.py                SigGen (NI-DAQmx galvo/ETL AO + camera trigger DO). Uses
@@ -613,6 +618,9 @@ scripts/
                                lightsheet/gui/_vendor/breezestylesheets/. Do NOT hand-edit
                                breeze_pyside6.py.
   coverage.sh                  the 3-step coverage gate (see §5)
+  fix_generated_ui_enums.py    idempotent post-processor for pyside6-uic output. Run after
+                               pyside6-uic to normalize unscoped Qt/QFrame enum tokens to
+                               scoped PySide6 equivalents (see §8).
   snapshot-rig-config.sh       rig config snapshot helper
 docs/
   gui-layout-convention.md     authoritative GUI layout convention (264 lines) — QScrollArea
@@ -697,35 +705,38 @@ touching the vendored Breeze source; do NOT hand-edit `breeze_pyside6.py`
   `Laser1 mW per Volt` → `self.mw_per_volt`.
 - Treat `Max Power` and `* Limit High` keys as safety-critical — review every
   change to them. They are the only way to raise the software clamp ceiling.
-- **Startup schema validation (phase 05):** `lightsheet/config_schema.py`
-  defines a pydantic-settings model per INI section — 8 strict
-  (`extra='forbid'`, rejects unknown keys) for sections the operator must not
-  typo into, and 8 overlay (`extra='ignore'`, tolerates extra keys) for the
-  gitignored rig overlay. `settings_customise_sources` returns only the init
-  source (no env-var source) so a stray env var can't override a safety key.
-  `collect_config_errors` is collect-all — it gathers every section's errors
-  in one pass, and `ConfigValidator.validate_or_abort` shows them in a single
-  modal QDialog (Exit button default) before the controller is constructed.
-  Safety-critical out-of-range values (`[iBeam] Max Power` > 150000, `[Motors]`
-  `* Limit High` beyond 41.0/18.8/35.0 mm) are **rejected** at both tiers, not
-  clamped. When adding a config key, add it to the matching schema model so it
-  is validated; do not let a new key slip through unvalidated. The runtime
-  `cfg_read`/`cfg_write` helpers in `config.py` remain the read/write mechanism
-  the HAL classes use at construction time — the schema is the gate, not a
-  replacement for them.
-- **Image File Format / save-format keys:** the schema also carries the
+- **Startup schema validation (phases 05/12):** `lightsheet.config_schema` is a
+  package. `lightsheet/config_schema/validation.py` provides the collect-all
+  `ConfigValidator.validate_or_abort()` entry point; `lightsheet/config_schema/sections/*.py`
+  define a pydantic-settings model per INI section — 10 strict
+  (`extra='forbid'`, rejects unknown keys) and 10 overlay (`extra='ignore'`,
+  generated by `_make_overlay` in `lightsheet/config_schema/shared.py`) — for
+  the baseline and the gitignored rig overlay. `settings_customise_sources`
+  returns only the init source (no env-var source) so a stray env var can't
+  override a safety key. `collect_config_errors` is collect-all — it gathers
+  every section's errors in one pass, and `ConfigValidator.validate_or_abort`
+  shows them in a single modal QDialog (Exit button default) before the
+  controller is constructed. Safety-critical out-of-range values
+  (`[iBeam] Max Power > 150000`, `[Motors] * Limit High` beyond
+  41.0/18.8/35.0 mm) are **rejected** at both tiers, not clamped. When adding a
+  config key, add it to the matching section module so it is validated; do not
+  let a new key slip through unvalidated. The runtime `cfg_read`/`cfg_write`
+  helpers in `config.py` remain the read/write mechanism the HAL classes use at
+  construction time — the schema is the gate, not a replacement for them.
+- **Image File Format / save-format keys:** the schema carries the
   `Image File Format` key (field `image_file_format`,
-  `Literal["hdf5", "zarr", "both", "tiff"]`, default `"both"`) on both the
-  strict and overlay tiers, with a `field_validator` that lower-cases the
-  value (so `"HDF5"` in `config.ini` normalizes to `"hdf5"`). This key is the
-  persisted default save format loaded at startup into `self.save_format` and
-  drives the FrameSaver save path: `"hdf5"` → the existing `frame_saver_worker`
-  (byte-identical HDF5 via h5py); `"zarr"` → `zarr_save_worker` (OME-Zarr via
-  `liom_toolkit.utils.zarr_writer.AnalysisOmeZarrWriter`); `"both"` →
-  `both_save_worker` (single consume loop writing each frame to both formats);
-  `"tiff"` → falls back to the HDF5 path (legacy). The save-panel radio group
-  overrides it per-acquisition. When touching the save path, keep the schema
-  validator and the FrameSaver format dispatch in sync.
+  `Literal["hdf5", "zarr", "both"]`, default `"both"`) on both the strict and
+  overlay tiers, with a `field_validator` that lower-cases the value (so
+  `"HDF5"` in `config.ini` normalizes to `"hdf5"`). The legacy `"tiff"` value
+  is **rejected at startup**. This key is the persisted default save format
+  loaded at startup into `self.save_format` and drives the FrameSaver save path:
+  `"hdf5"` → the existing `frame_saver_worker` (byte-identical HDF5 via h5py);
+  `"zarr"` → `zarr_save_worker` (`lightsheet/gui/coordinators/zarr_saver.py`,
+  OME-Zarr via `liom_toolkit.utils.zarr_writer.AnalysisOmeZarrWriter`);
+  `"both"` → `both_save_worker` (single consume loop writing each frame to both
+  formats). The save-panel radio group overrides it per-acquisition. When
+  touching the save path, keep the schema validator and the FrameSaver format
+  dispatch in sync.
 
 ## 10. HAL architecture — follow it for new device classes
 
@@ -749,9 +760,13 @@ The controller stores `self._bundle` and `self.lasers = list(self._bundle.lasers
 once in `hardware_init`, then delegates. Collaborators hold a `self._shell`
 back-reference (typed under `TYPE_CHECKING` to avoid an import cycle) and read
 `self._shell.<sig>` / `self._shell.ui.*` / `self._shell.lasers` — they do NOT
-own HAL instances. Three collaborators are plain-Python (NOT QObject);
+own HAL instances. Three core collaborators are plain-Python (NOT QObject);
 `FrameSaver`/`FrameViewer`/`FrameSaverWorker` are QObjects and live in
-`frame_saver_controller.py`. **No collaborator owns an `estop`/`kill` method**
+`lightsheet/gui/coordinators/frame_saver_controller.py`,
+`lightsheet/gui/coordinators/frame_viewer.py`, and
+`lightsheet/gui/coordinators/zarr_saver.py` (ZarrSaver is plain-Python). The
+adaptive/focus `DockController`s are presentation-only and also do not own HAL
+or `estop`. **No collaborator owns an `estop`/`kill` method**
 — the E-stop kill path stays in the shell (see §2). When adding logic, put it
 in the collaborator that owns the concern (lasers → HardwareManager,
 acquisition workers/slots → AcquisitionCoordinator, save/reconstruction →
@@ -823,6 +838,11 @@ One class per device family. To add a device:
 - **Getters**: `get_<property>()` returning the value, or `None` when the device
   is not open — use the `if self.device is not None: ... else: return None`
   guard.
+- **Camera recorder data**: `ICamera.copy_recorder_images` returns `Any | None`
+  (`None` means no new data / recorder timeout; never a synthetic frame). The
+  real `Camera` in `lightsheet/hal/real/camera.py` returns `None` when
+  `new_data_ready` is False and clears the recorder state; callers in
+  `lightsheet/gui/workers/scan_mixin.py` propagate `None` as a failed scan.
 - **Return values**: lifecycle/setter methods end with explicit `return None`.
 - **Verbose flag**: prefer a `verbose=False` arg gating `print(...)` (as
   `Camera` does) over bare prints in new modules.
@@ -923,7 +943,8 @@ startup. Re-export both backends + `IPowerMeter` through the
   passes them to the worker constructor as `self._save_description` /
   `self._save_stitch_blend` / `self._save_all_crop` / `self._save_all_full`,
   which the worker reads instead of reaching into `self._shell.ui.*`. The
-  `workers.py` module docstring enumerates the pre-sampled args. Do not add
+  `lightsheet/gui/workers/` package module docstrings enumerate the pre-sampled
+  args. Do not add
   more cross-tier widget reads; pre-sample on the GUI thread and pass in.
 - **One worker thread per acquisition mode**: `updateUi_*_mode_button` toggles
   a `*_mode_started` flag, samples any GUI-thread-only state the worker will
@@ -931,10 +952,13 @@ startup. Re-export both backends + `IPowerMeter` through the
   the save-description / save-checkbox values), then constructs a worker
   `QObject` + a `QThread`, calls `worker.moveToThread(thread)`, connects
   `thread.started` → `worker.run`, `worker.sig_*_mode_finished` → re-enable
-  UI, and starts the thread. The worker bodies live in
-  `lightsheet/gui/workers.py` (`PreviewWorker` / `LiveWorker` /
-  `SingleWorker` / `StackWorker`, each `QObject` + `QThread` +
-  `moveToThread`, plus the shared `_AcquireScanMixin`). Do NOT join the worker
+  UI, and starts the thread. The worker bodies live in the
+  `lightsheet/gui/workers/` package: `lightsheet/gui/workers/preview_live_single.py`
+  (`PreviewWorker` / `LiveWorker` / `SingleWorker`),
+  `lightsheet/gui/workers/stack.py` (`StackWorker`),
+  `lightsheet/gui/workers/stack_adaptive.py` (`_StackAdaptiveMixin`), and
+  `lightsheet/gui/workers/scan_mixin.py` (`_AcquireScanMixin`). Each worker is a
+  `QObject` + `QThread` + `moveToThread`. Do NOT join the worker
   from the toggle slot — just clear the flag; the worker polls it and exits on
   its own. The worker polls the flag for cancellation and `estop_event.is_set()`
   for E-stop at the top of each iteration, and is wrapped in
@@ -1032,13 +1056,13 @@ startup. Re-export both backends + `IPowerMeter` through the
   exception-separation rule applies to its save loop.)
 - **`sys.path.append(".")` in every module** — legacy; don't add to new modules
   unless they're meant to be run as scripts from repo root.
-- **`Camera.copy_recorder_images` returns a zero-filled array when
-  `new_data_ready` is False** (`lightsheet/hal/real/camera.py`) — silent data
-  loss. The acquisition path guards against reaching it on timeout
-  (`acquire_scan` checks `camera.recorder_timeout_status` before copying), but
-  the function itself still falls back to `np.zeros`. If you touch the
-  timeout/copy path, make failure explicit (raise or return `None`) rather than
-  returning zeros.
+- **`Camera.copy_recorder_images` returns `None` when `new_data_ready` is
+  False** (`lightsheet/hal/real/camera.py`) — resolved in Phase 12 Plan 08.
+  The real `Camera` no longer synthesizes a zero-filled frame; it returns
+  `None`, deletes the recorder, and clears `new_data_ready`. The acquisition
+  path in `lightsheet/gui/workers/scan_mixin.py` propagates `None` as a failed
+  `acquire_scan` result. MockCamera may still return deliberate synthetic data
+  for offline tests.
 - **`closeEvent` blocking shutdown with a fixed `time.sleep`** — fixed; the
   current code uses `thread.quit()` + `thread.wait(5000)` per worker QThread.
   Do not reintroduce a fixed sleep; keep shutdown bounded.
@@ -1082,11 +1106,12 @@ startup. Re-export both backends + `IPowerMeter` through the
   to sweep Laser 1 V→mW and record a calibration curve. That is a laser power
   calibration, not the deleted camera/ETL calibration — do not conflate them.
 - **`Lasers Terminals` is a live two-channel DAQ wiring key** —
-  `config.ini` declares it, `config_schema.py` validates it, and
-  `DeviceRegistry.resolve()` parses it with `_parse_laser_terminals` into two
-  consecutive AO channel terminals (e.g. `/Dev7/ao0:1` -> `/Dev7/ao0`,
-  `/Dev7/ao1`). The two terminals are passed to the `DAQLaser` constructors.
-  Do not remove the key or hardcode laser terminals in the registry.
+  `config.ini` declares it, `lightsheet/config_schema/sections/lasers.py`
+  validates it, and `DeviceRegistry.resolve()` parses it with
+  `_parse_laser_terminals` into two consecutive AO channel terminals
+  (e.g. `/Dev7/ao0:1` -> `/Dev7/ao0`, `/Dev7/ao1`). The two terminals are
+  passed to the `DAQLaser` constructors. Do not remove the key or hardcode
+  laser terminals in the registry.
 - **DeviceRegistry resolves and forwards COM ports** — the registry resolves
   USB-serial devices by VID/PID+serial and passes the resolved ports into the
   HAL constructors (`Motors`, `ETLs`, `IBeamSmartLaser`). A COM-port reorder

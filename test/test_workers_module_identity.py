@@ -23,7 +23,9 @@ import lightsheet.gui.workers as workers_module
 
 def test_workers_is_package() -> None:
     """``lightsheet.gui.workers`` must be a package, not a single module."""
-    assert hasattr(workers_module, "__path__"), "lightsheet.gui.workers must be a package"
+    assert hasattr(workers_module, "__path__"), (
+        "lightsheet.gui.workers must be a package"
+    )
     assert workers_module.__name__ == "lightsheet.gui.workers"
 
 
@@ -60,9 +62,9 @@ def test_stack_worker_in_stack_module() -> None:
 
 def test_legacy_monolith_removed() -> None:
     """The transitional legacy.py monolith must be removed."""
-    import os
+    from pathlib import Path
 
     from lightsheet.gui.workers import __path__ as workers_paths
 
     for path in workers_paths:
-        assert not os.path.exists(os.path.join(path, "legacy.py"))
+        assert not Path(path, "legacy.py").exists()

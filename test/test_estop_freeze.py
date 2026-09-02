@@ -133,9 +133,11 @@ def test_estop_handler_defers_post_kill_refresh(
     # The deferred refresh calls must eventually fire (after the event
     # loop pumps). Wait up to 500 ms for all three to land.
     qtbot.waitUntil(
-        lambda: len(deferred_poll) >= 1
-        and len(deferred_readback_l1) >= 1
-        and len(deferred_readback_l2) >= 1,
+        lambda: (
+            len(deferred_poll) >= 1
+            and len(deferred_readback_l1) >= 1
+            and len(deferred_readback_l2) >= 1
+        ),
         timeout=500,
     )
     assert len(deferred_poll) >= 1
@@ -262,9 +264,7 @@ def test_estop_laser_off_precedes_dock_freeze(
     # Every laser must appear before every freeze.
     off_positions = [i for i, v in enumerate(order) if v == "laser.off"]
     freeze_positions = [
-        i
-        for i, v in enumerate(order)
-        if v in ("adaptive.freeze", "focus.freeze")
+        i for i, v in enumerate(order) if v in ("adaptive.freeze", "focus.freeze")
     ]
     assert off_positions, "laser.off was never called"
     assert freeze_positions, "dock freeze was never called"
@@ -292,7 +292,7 @@ def test_estop_warning_emitted_and_freeze_still_runs(
     messages: list[str] = []
     ctrl.sig_message.connect(messages.append)
 
-    def _failing_off(laser: Any) -> None:
+    def _failing_off(laser: Any) -> Callable[[], None]:
         def _off() -> None:
             # Simulate a backend that reports the off() command failed.
             laser.error = True
@@ -306,9 +306,9 @@ def test_estop_warning_emitted_and_freeze_still_runs(
     ctrl.updateUi_estop_pressed()
 
     # The warning for the first failing laser appears in sig_message.
-    assert any(
-        "off command failed" in m for m in messages
-    ), f"Expected laser-off warning in sig_message, got {messages}"
+    assert any("off command failed" in m for m in messages), (
+        f"Expected laser-off warning in sig_message, got {messages}"
+    )
     # Both dock widgets are frozen even when a laser off fails.
     assert ctrl._adaptive_dock_controller.widget._frozen is True
     assert ctrl._focus_dock_controller.widget._frozen is True

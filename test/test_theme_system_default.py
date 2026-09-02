@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 from pytest import FixtureRequest, MonkeyPatch
@@ -30,6 +31,12 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
+
+
+def _construct_model(model_cls: Any, **kwargs: Any) -> Any:
+    """Construct a pydantic-settings model, bypassing ty's strict alias checks."""
+    return model_cls(**kwargs)
+
 
 # ---------------------------------------------------------------------------
 # Helpers — import the theme resolution + stylesheet loading helpers from
@@ -304,8 +311,11 @@ def test_controller_settings_theme_rejects_unknown() -> None:
     from lightsheet.config_schema import ControllerSettings
 
     with pytest.raises(ValidationError):
-        ControllerSettings(
-            Units="mm", **{"Image File Format": "hdf5"}, Theme="purple"  # ty: ignore[invalid-argument-type]
+        _construct_model(
+            ControllerSettings,
+            units="mm",
+            image_file_format="hdf5",
+            theme="purple",
         )
 
 
@@ -315,7 +325,12 @@ def test_controller_settings_theme_empty_string_maps_to_system() -> None:
     # before-validator must map "" -> "system".
     from lightsheet.config_schema import ControllerSettings
 
-    s = ControllerSettings(Units="mm", **{"Image File Format": "hdf5"}, Theme="")  # ty: ignore[invalid-argument-type]
+    s = _construct_model(
+        ControllerSettings,
+        units="mm",
+        image_file_format="hdf5",
+        theme="",
+    )
     assert s.theme == "system"
 
 
@@ -324,8 +339,11 @@ def test_controller_settings_theme_case_insensitive() -> None:
     # accepted via the before-validator lowercasing.
     from lightsheet.config_schema import ControllerSettings
 
-    s = ControllerSettings(
-        Units="mm", **{"Image File Format": "hdf5"}, Theme="Dark"  # ty: ignore[invalid-argument-type]
+    s = _construct_model(
+        ControllerSettings,
+        units="mm",
+        image_file_format="hdf5",
+        theme="Dark",
     )
     assert s.theme == "dark"
 
@@ -333,15 +351,22 @@ def test_controller_settings_theme_case_insensitive() -> None:
 def test_controller_overlay_theme_default_system() -> None:
     from lightsheet.config_schema import ControllerSettingsOverlay
 
-    s = ControllerSettingsOverlay(Units="mm", **{"Image File Format": "hdf5"})  # ty: ignore[invalid-argument-type]
+    s = _construct_model(
+        ControllerSettingsOverlay,
+        units="mm",
+        image_file_format="hdf5",
+    )
     assert s.theme == "system"
 
 
 def test_controller_overlay_theme_empty_string_maps_to_system() -> None:
     from lightsheet.config_schema import ControllerSettingsOverlay
 
-    s = ControllerSettingsOverlay(
-        Units="mm", **{"Image File Format": "hdf5"}, Theme=""  # ty: ignore[invalid-argument-type]
+    s = _construct_model(
+        ControllerSettingsOverlay,
+        units="mm",
+        image_file_format="hdf5",
+        theme="",
     )
     assert s.theme == "system"
 
@@ -352,8 +377,11 @@ def test_controller_overlay_theme_rejects_unknown() -> None:
     from lightsheet.config_schema import ControllerSettingsOverlay
 
     with pytest.raises(ValidationError):
-        ControllerSettingsOverlay(
-            Units="mm", **{"Image File Format": "hdf5"}, Theme="purple"  # ty: ignore[invalid-argument-type]
+        _construct_model(
+            ControllerSettingsOverlay,
+            units="mm",
+            image_file_format="hdf5",
+            theme="purple",
         )
 
 
@@ -454,16 +482,17 @@ def test_light_theme_slot_persists_to_config(
     import lightsheet.gui.shell.controller as ctrl_mod
 
     monkeypatch.setattr(
-        ctrl_mod, "cfg_write",
+        ctrl_mod,
+        "cfg_write",
         lambda filename, section, data: captured.append(
             (filename, section, dict(data))
         ),
     )
     ctrl._demo_mode = False
     ctrl.updateUi_light_theme()
-    assert any(
-        d.get("Theme") == "light" for _, _, d in captured
-    ), f"Expected cfg_write Theme=light, got: {captured}"
+    assert any(d.get("Theme") == "light" for _, _, d in captured), (
+        f"Expected cfg_write Theme=light, got: {captured}"
+    )
 
 
 def test_dark_theme_slot_persists_to_config(
@@ -478,16 +507,17 @@ def test_dark_theme_slot_persists_to_config(
     import lightsheet.gui.shell.controller as ctrl_mod
 
     monkeypatch.setattr(
-        ctrl_mod, "cfg_write",
+        ctrl_mod,
+        "cfg_write",
         lambda filename, section, data: captured.append(
             (filename, section, dict(data))
         ),
     )
     ctrl._demo_mode = False
     ctrl.updateUi_dark_theme()
-    assert any(
-        d.get("Theme") == "dark" for _, _, d in captured
-    ), f"Expected cfg_write Theme=dark, got: {captured}"
+    assert any(d.get("Theme") == "dark" for _, _, d in captured), (
+        f"Expected cfg_write Theme=dark, got: {captured}"
+    )
 
 
 def test_follow_system_theme_slot_persists_to_config(
@@ -502,20 +532,22 @@ def test_follow_system_theme_slot_persists_to_config(
     import lightsheet.gui.shell.controller as ctrl_mod
 
     monkeypatch.setattr(
-        ctrl_mod, "cfg_write",
+        ctrl_mod,
+        "cfg_write",
         lambda filename, section, data: captured.append(
             (filename, section, dict(data))
         ),
     )
     ctrl._demo_mode = False
     ctrl.updateUi_follow_system_theme()
-    assert any(
-        d.get("Theme") == "system" for _, _, d in captured
-    ), f"Expected cfg_write Theme=system, got: {captured}"
+    assert any(d.get("Theme") == "system" for _, _, d in captured), (
+        f"Expected cfg_write Theme=system, got: {captured}"
+    )
 
 
 def test_theme_action_group_is_exclusive_with_three_checkable_actions(
-    qtbot: QtBot, request: FixtureRequest,
+    qtbot: QtBot,
+    request: FixtureRequest,
 ) -> None:
     """ctrl._theme_action_group is exclusive with 3 actions, all checkable."""
     from _helpers.controller_fixture import (
