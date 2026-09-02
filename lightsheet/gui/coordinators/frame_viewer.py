@@ -38,8 +38,6 @@ class FrameViewer(QObject):
         frame_init = np.zeros((self.rows, self.columns), dtype=np.uint16)
         # Set one pixel to trick histogram initial range (0-20000)
         frame_init[0, 0] = 20000
-        # Transpose since setImage is column-major
-        frame_init = np.transpose(frame_init)
         # Set initial view
         self.parent.ui.imageView.setImage(frame_init)
         # Live min/max readout (actual pixel range, not the display window).
@@ -59,8 +57,6 @@ class FrameViewer(QObject):
         except queue.Empty:
             pass
         else:
-            # setImage is column-major
-            frame = np.transpose(frame)
             self.parent.ui.imageView.setImage(  # ty: ignore[unresolved-attribute]
                 frame, autoRange=False, autoLevels=False, autoHistogramRange=False
             )

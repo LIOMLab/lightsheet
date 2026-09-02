@@ -28,6 +28,13 @@ from PySide6.QtWidgets import (
 )
 
 
+class _KeepLastTint:
+    pass
+
+
+_KEEP_TINT = _KeepLastTint()
+
+
 class ImageView(QGraphicsView):
     """Native Qt6 grayscale image display widget for uint16 numpy arrays.
 
@@ -186,7 +193,7 @@ class ImageView(QGraphicsView):
         autoRange: bool = False,
         autoLevels: bool = False,
         autoHistogramRange: bool = False,
-        tint: str | None = None,
+        tint: str | None | _KeepLastTint = _KEEP_TINT,
     ) -> None:
         """Display a uint16 numpy array as a grayscale image, optionally
         tinted with a per-channel color.
@@ -194,8 +201,8 @@ class ImageView(QGraphicsView):
         The ``auto*`` kwargs are accepted for call-signature
         compatibility with the historical call sites in
         ``frame_saver_controller.py`` but are ignored — this widget has
-        no auto-range, auto-levels, or histogram. The frame is expected
-        to be already-transposed (column-major) by the caller.
+        no auto-range, auto-levels, or histogram. The frame must be a
+        C-contiguous (row-major) uint16 array in ``(H, W)`` order.
 
         The frame is clamped to the display levels window
         ``[levels_min, levels_max]`` (the LevelsBar WINDOW set) and scaled
@@ -206,18 +213,22 @@ class ImageView(QGraphicsView):
         range, which is the visible effect on the display.
 
         ``tint`` is an optional 6-char hex color string (no ``#`` prefix,
-        e.g. ``"00FF00"`` for the 555 nm channel). When provided, the
+        e.g. ``"00FF00"`` for the 555 nm channel), or ``None`` for
+        grayscale, or omitted to keep the last tint. When provided, the
         scaled grayscale is modulated per-channel
         (``channel_c = (frame_scaled * color_c) // 255``) and the QImage
         is built as ``Format_RGB888`` so the operator can visually
         distinguish L1 from L2 in demo mode where the frames are
-        otherwise identical. When ``tint`` is None, the existing
+        otherwise identical. When ``tint`` is ``None``, the existing
         ``Format_Grayscale8`` path runs unchanged (single-channel
         back-compat — byte-identical display). The tint is stored on
         ``self._last_tint`` so ``set_levels`` / ``set_colormap_range``
         re-render WITH the tint (the channel color cue survives level
-        adjustments).
+        adjustments) and new frames inherit the current channel color.
         """
+        if isinstance(tint, _KeepLastTint):
+            tint = self._last_tint
+
         # Scale uint16 [levels_min, levels_max] to uint8 [0, 255].
         # np.clip + linear scaling; values outside the window saturate.
         # The raw frame is retained for set_levels re-render and for the
