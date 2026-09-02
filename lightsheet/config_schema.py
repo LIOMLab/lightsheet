@@ -29,6 +29,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import new_class
 from typing import Any, Literal
 
 from pydantic import Field, ValidationError, field_validator
@@ -88,6 +89,27 @@ class _NoEnvBaseSettings(BaseSettings):
         file_secret_settings: Any,
     ) -> tuple[Any, ...]:
         return (init_settings,)
+
+
+def _make_overlay(strict_cls: type[_NoEnvBaseSettings]) -> type[_NoEnvBaseSettings]:
+    """Return a named overlay subclass of ``strict_cls`` that changes only
+    ``extra`` to ``'ignore'``.
+
+    The overlay inherits every field alias, default, and validator from the
+    strict model, so there is a single source of safety truth per section.
+    It remains init-only via the inherited ``settings_customise_sources``.
+    """
+    overlay_name = f"{strict_cls.__name__}Overlay"
+
+    def _exec_body(ns: dict[str, Any]) -> None:
+        ns["__module__"] = strict_cls.__module__
+        ns["__qualname__"] = overlay_name
+        # Copy the strict model's config and relax only the extra-key policy.
+        overlay_config = dict(strict_cls.model_config)
+        overlay_config["extra"] = "ignore"
+        ns["model_config"] = overlay_config
+
+    return new_class(overlay_name, (strict_cls,), exec_body=_exec_body)
 
 
 # ---------------------------------------------------------------------------
@@ -191,33 +213,7 @@ class ControllerSettings(_NoEnvBaseSettings):
         return v
 
 
-class ControllerSettingsOverlay(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="ignore", case_sensitive=True, populate_by_name=True
-    )
-    units: str = Field(alias="Units")
-    image_file_format: Literal["hdf5", "zarr", "both", "tiff"] = Field(
-        alias="Image File Format", default="both"
-    )
-    theme: Literal["light", "dark", "system"] = Field(alias="Theme", default="system")
-
-    @field_validator("image_file_format", mode="before")
-    @classmethod
-    def _lowercase_image_file_format(cls, v: Any) -> Any:
-        if isinstance(v, str):
-            if v == "":
-                return "hdf5"
-            return v.lower()
-        return v
-
-    @field_validator("theme", mode="before")
-    @classmethod
-    def _lowercase_theme(cls, v: Any) -> Any:
-        if isinstance(v, str):
-            if v == "":
-                return "system"
-            return v.lower()
-        return v
+ControllerSettingsOverlay = _make_overlay(ControllerSettings)
 
 
 class CameraSettings(_NoEnvBaseSettings):
@@ -236,20 +232,7 @@ class CameraSettings(_NoEnvBaseSettings):
     )
 
 
-class CameraSettingsOverlay(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="ignore", case_sensitive=True, populate_by_name=True
-    )
-    shutter_mode: str = Field(alias="Shutter Mode")
-    exposure_time: float = Field(alias="Exposure Time")
-    lightsheet_line_time: float = Field(alias="Lightsheet Line Time")
-    lightsheet_exposed_lines: int = Field(alias="Lightsheet Exposed Lines")
-    lightsheet_delay_lines: int = Field(alias="Lightsheet Delay Lines")
-    recorder_timeout: float = Field(alias="Recorder Timeout")
-    recorder_timeout_floor: float = Field(alias="Recorder Timeout Floor")
-    recorder_timeout_safety_factor: float = Field(
-        alias="Recorder Timeout Safety Factor"
-    )
+CameraSettingsOverlay = _make_overlay(CameraSettings)
 
 
 class SigGenSettings(_NoEnvBaseSettings):
@@ -279,30 +262,7 @@ class SigGenSettings(_NoEnvBaseSettings):
     galvo_left_right_swap: bool = Field(alias="Galvo Left Right Swap", default=False)
 
 
-class SigGenSettingsOverlay(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="ignore", case_sensitive=True, populate_by_name=True
-    )
-    ao_terminals: str = Field(alias="AO Terminals")
-    do_terminals: str = Field(alias="DO Terminals")
-    sample_rate: int = Field(alias="Sample Rate")
-    galvo_pre_time: float = Field(alias="Galvo Pre Time")
-    galvo_scan_time: float = Field(alias="Galvo Scan Time")
-    galvo_reset_time: float = Field(alias="Galvo Reset Time")
-    galvo_post_time: float = Field(alias="Galvo Post Time")
-    galvo_activated: bool = Field(alias="Galvo Activated")
-    galvo_inverted: bool = Field(alias="Galvo Inverted")
-    galvo_left_amplitude: float = Field(alias="Galvo Left Amplitude")
-    galvo_left_offset: float = Field(alias="Galvo Left Offset")
-    galvo_right_amplitude: float = Field(alias="Galvo Right Amplitude")
-    galvo_right_offset: float = Field(alias="Galvo Right Offset")
-    etl_activated: bool = Field(alias="ETL Activated")
-    etl_steps: int = Field(alias="ETL Steps")
-    etl_left_amplitude: float = Field(alias="ETL Left Amplitude")
-    etl_left_offset: float = Field(alias="ETL Left Offset")
-    etl_right_amplitude: float = Field(alias="ETL Right Amplitude")
-    etl_right_offset: float = Field(alias="ETL Right Offset")
-    galvo_left_right_swap: bool = Field(alias="Galvo Left Right Swap", default=False)
+SigGenSettingsOverlay = _make_overlay(SigGenSettings)
 
 
 class LasersSettings(_NoEnvBaseSettings):
@@ -335,30 +295,7 @@ class LasersSettings(_NoEnvBaseSettings):
         return _validate_laser2_mw_per_volt(v)
 
 
-class LasersSettingsOverlay(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="ignore", case_sensitive=True, populate_by_name=True
-    )
-    lasers_terminals: str = Field(alias="Lasers Terminals")
-    laser1_wavelength: int = Field(alias="Laser1 Wavelength")
-    laser1_power: float = Field(alias="Laser1 Power")
-    laser1_max_power: float = Field(alias="Laser1 Max Power")
-    laser1_mw_per_volt: float = Field(alias="Laser1 mW per Volt")
-    laser1_calibration_curve: str = Field(alias="Laser1 Calibration Curve", default="")
-    laser2_wavelength: int = Field(alias="Laser2 Wavelength")
-    laser2_power: float = Field(alias="Laser2 Power")
-    laser2_max_power: float = Field(alias="Laser2 Max Power")
-    laser2_mw_per_volt: float = Field(alias="Laser2 mW per Volt")
-
-    @field_validator("laser2_max_power")
-    @classmethod
-    def _hard_laser2_max_power(cls, v: float) -> float:
-        return _validate_laser2_max_power(v)
-
-    @field_validator("laser2_mw_per_volt")
-    @classmethod
-    def _hard_laser2_mw_per_volt(cls, v: float) -> float:
-        return _validate_laser2_mw_per_volt(v)
+LasersSettingsOverlay = _make_overlay(LasersSettings)
 
 
 class IBeamSettings(_NoEnvBaseSettings):
@@ -379,22 +316,7 @@ class IBeamSettings(_NoEnvBaseSettings):
         return _validate_ibeam_max_power(v)
 
 
-class IBeamSettingsOverlay(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="ignore", case_sensitive=True, populate_by_name=True
-    )
-    port: str = Field(alias="Port")
-    baud_rate: int = Field(alias="Baud Rate")
-    channel: int = Field(alias="Channel")
-    wavelength: int = Field(alias="Wavelength")
-    power: int = Field(alias="Power")
-    max_power: int = Field(alias="Max Power")
-    status_poll_interval: float = Field(alias="Status Poll Interval")
-
-    @field_validator("max_power")
-    @classmethod
-    def _hard_max_power(cls, v: int) -> int:
-        return _validate_ibeam_max_power(v)
+IBeamSettingsOverlay = _make_overlay(IBeamSettings)
 
 
 class ETLsSettings(_NoEnvBaseSettings):
@@ -405,12 +327,7 @@ class ETLsSettings(_NoEnvBaseSettings):
     port_etl_right: str = Field(alias="Port ETL Right")
 
 
-class ETLsSettingsOverlay(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="ignore", case_sensitive=True, populate_by_name=True
-    )
-    port_etl_left: str = Field(alias="Port ETL Left")
-    port_etl_right: str = Field(alias="Port ETL Right")
+ETLsSettingsOverlay = _make_overlay(ETLsSettings)
 
 
 class MotorsSettings(_NoEnvBaseSettings):
@@ -453,44 +370,7 @@ class MotorsSettings(_NoEnvBaseSettings):
         return _validate_camera_limit_high(v)
 
 
-class MotorsSettingsOverlay(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="ignore", case_sensitive=True, populate_by_name=True
-    )
-    port: str = Field(alias="Port")
-    device_number_vertical: int = Field(alias="Device Number Vertical")
-    device_number_horizontal: int = Field(alias="Device Number Horizontal")
-    device_number_camera: int = Field(alias="Device Number Camera")
-    vertical_inverted: bool = Field(alias="Vertical Inverted")
-    vertical_units: str = Field(alias="Vertical Units")
-    vertical_origin: float = Field(alias="Vertical Origin")
-    vertical_limit_low: float = Field(alias="Vertical Limit Low")
-    vertical_limit_high: float = Field(alias="Vertical Limit High")
-    horizontal_inverted: bool = Field(alias="Horizontal Inverted")
-    horizontal_units: str = Field(alias="Horizontal Units")
-    horizontal_origin: float = Field(alias="Horizontal Origin")
-    horizontal_limit_low: float = Field(alias="Horizontal Limit Low")
-    horizontal_limit_high: float = Field(alias="Horizontal Limit High")
-    camera_inverted: bool = Field(alias="Camera Inverted")
-    camera_units: str = Field(alias="Camera Units")
-    camera_origin: float = Field(alias="Camera Origin")
-    camera_limit_low: float = Field(alias="Camera Limit Low")
-    camera_limit_high: float = Field(alias="Camera Limit High")
-
-    @field_validator("vertical_limit_high")
-    @classmethod
-    def _hard_vertical_limit_high(cls, v: float) -> float:
-        return _validate_vertical_limit_high(v)
-
-    @field_validator("horizontal_limit_high")
-    @classmethod
-    def _hard_horizontal_limit_high(cls, v: float) -> float:
-        return _validate_horizontal_limit_high(v)
-
-    @field_validator("camera_limit_high")
-    @classmethod
-    def _hard_camera_limit_high(cls, v: float) -> float:
-        return _validate_camera_limit_high(v)
+MotorsSettingsOverlay = _make_overlay(MotorsSettings)
 
 
 class LoggingSettings(_NoEnvBaseSettings):
@@ -501,12 +381,7 @@ class LoggingSettings(_NoEnvBaseSettings):
     log_dir: str = Field(alias="Log Dir", default="")
 
 
-class LoggingSettingsOverlay(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="ignore", case_sensitive=True, populate_by_name=True
-    )
-    level: str = Field(alias="Level")
-    log_dir: str = Field(alias="Log Dir", default="")
+LoggingSettingsOverlay = _make_overlay(LoggingSettings)
 
 
 # --- Adaptive section (operator-configurable bounds + gains) ---------------
@@ -657,127 +532,7 @@ class AdaptiveSettings(_NoEnvBaseSettings):
         return v
 
 
-class AdaptiveSettingsOverlay(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="ignore", case_sensitive=True, populate_by_name=True
-    )
-    enabled: bool = Field(alias="Enabled", default=False)
-    min_exposure: float = Field(alias="Min Exposure", default=1)
-    max_exposure: float = Field(alias="Max Exposure", default=1000)
-    laser1_min_power: float = Field(alias="Laser1 Min Power", default=0.0)
-    laser1_max_power: float = Field(alias="Laser1 Max Power", default=5.0)
-    laser2_min_power: float = Field(alias="Laser2 Min Power", default=0.0)
-    laser2_max_power: float = Field(alias="Laser2 Max Power", default=150.0)
-    target_band_lo: float = Field(alias="Target Band Lo", default=90.0)
-    target_band_hi: float = Field(alias="Target Band Hi", default=95.0)
-    reacquire_threshold: float = Field(alias="Reacquire Threshold", default=8.0)
-    block_size_n: int = Field(alias="Block Size N", default=8)
-    kp: float = Field(alias="Kp", default=0.4)
-    ki: float = Field(alias="Ki", default=0.05)
-    pilot_count: int = Field(alias="Pilot Count", default=5)
-
-    @field_validator("min_exposure", "max_exposure")
-    @classmethod
-    def _exposure_range(cls, v: float) -> float:
-        if v < 1 or v > 1000:
-            raise ValueError(f"exposure {v} is outside the valid range 1..1000")
-        return v
-
-    @field_validator(
-        "laser1_min_power",
-        "laser1_max_power",
-        "laser2_min_power",
-        "laser2_max_power",
-    )
-    @classmethod
-    def _power_range(cls, v: float) -> float:
-        if v < 0 or v > 150:
-            raise ValueError(f"power {v} mW is outside the valid range 0..150 mW")
-        return v
-
-    @field_validator("target_band_lo", "target_band_hi")
-    @classmethod
-    def _target_range(cls, v: float) -> float:
-        if v < 0 or v > 100:
-            raise ValueError(f"target band {v} % is outside the valid range 0..100 %")
-        return v
-
-    @field_validator("reacquire_threshold")
-    @classmethod
-    def _reacquire_range(cls, v: float) -> float:
-        if v < 0 or v > 50:
-            raise ValueError(
-                f"reacquire threshold {v} % is outside the valid range 0..50 %"
-            )
-        return v
-
-    @field_validator("block_size_n")
-    @classmethod
-    def _block_range(cls, v: int) -> int:
-        if v < 1 or v > 100:
-            raise ValueError(f"block size N {v} is outside the valid range 1..100")
-        return v
-
-    @field_validator("kp")
-    @classmethod
-    def _kp_range(cls, v: float) -> float:
-        if v < 0 or v > 5:
-            raise ValueError(f"Kp {v} is outside the valid range 0..5")
-        return v
-
-    @field_validator("ki")
-    @classmethod
-    def _ki_range(cls, v: float) -> float:
-        if v < 0 or v > 1:
-            raise ValueError(f"Ki {v} is outside the valid range 0..1")
-        return v
-
-    @field_validator("pilot_count")
-    @classmethod
-    def _pilot_range(cls, v: int) -> int:
-        if v < 0 or v > 50:
-            raise ValueError(f"pilot count {v} is outside the valid range 0..50")
-        return v
-
-    @field_validator("max_exposure")
-    @classmethod
-    def _exposure_pair(cls, v: float, info: ValidationInfo) -> float:
-        min_v = info.data.get("min_exposure")
-        if min_v is not None and min_v > v:
-            raise ValueError(
-                f"Min Exposure ({min_v}) is greater than Max Exposure ({v})"
-            )
-        return v
-
-    @field_validator("laser1_max_power")
-    @classmethod
-    def _laser1_pair(cls, v: float, info: ValidationInfo) -> float:
-        min_v = info.data.get("laser1_min_power")
-        if min_v is not None and min_v > v:
-            raise ValueError(
-                f"Laser1 Min Power ({min_v}) is greater than Laser1 Max Power ({v})"
-            )
-        return v
-
-    @field_validator("laser2_max_power")
-    @classmethod
-    def _laser2_pair(cls, v: float, info: ValidationInfo) -> float:
-        min_v = info.data.get("laser2_min_power")
-        if min_v is not None and min_v > v:
-            raise ValueError(
-                f"Laser2 Min Power ({min_v}) is greater than Laser2 Max Power ({v})"
-            )
-        return v
-
-    @field_validator("target_band_hi")
-    @classmethod
-    def _target_pair(cls, v: float, info: ValidationInfo) -> float:
-        lo = info.data.get("target_band_lo")
-        if lo is not None and lo > v:
-            raise ValueError(
-                f"Target Band Lo ({lo}) is greater than Target Band Hi ({v})"
-            )
-        return v
+AdaptiveSettingsOverlay = _make_overlay(AdaptiveSettings)
 
 
 # --- Focus section (operator-configurable focus compensation) ---------------
@@ -833,42 +588,7 @@ class FocusSettings(_NoEnvBaseSettings):
         return v
 
 
-class FocusSettingsOverlay(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="ignore", case_sensitive=True, populate_by_name=True
-    )
-    enabled: bool = Field(alias="Enabled", default=False)
-    block_size_n: int = Field(alias="Block Size N", default=8)
-    autofocus_residual: bool = Field(
-        alias="Autofocus Residual Enabled", default=True
-    )
-    residual_gain_mm: float = Field(alias="Residual Gain Mm", default=0.05)
-    max_residual_mm: float = Field(alias="Max Residual Mm", default=0.5)
-
-    @field_validator("block_size_n")
-    @classmethod
-    def _block_range(cls, v: int) -> int:
-        if v < 1 or v > 100:
-            raise ValueError(f"block size N {v} is outside the valid range 1..100")
-        return v
-
-    @field_validator("residual_gain_mm")
-    @classmethod
-    def _residual_gain_range(cls, v: float) -> float:
-        if v < 0 or v > 1:
-            raise ValueError(
-                f"residual gain {v} mm is outside the valid range 0..1"
-            )
-        return v
-
-    @field_validator("max_residual_mm")
-    @classmethod
-    def _max_residual_range(cls, v: float) -> float:
-        if v < 0 or v > 5:
-            raise ValueError(
-                f"max residual {v} mm is outside the valid range 0..5"
-            )
-        return v
+FocusSettingsOverlay = _make_overlay(FocusSettings)
 
 
 # ---------------------------------------------------------------------------

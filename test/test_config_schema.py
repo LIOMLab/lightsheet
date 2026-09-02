@@ -673,7 +673,7 @@ def test_laser2_config_strict_rejects_missing_laser2_keys() -> None:
 def test_overlay_factory_exists_and_names_class() -> None:
     """``_make_overlay`` returns a named subclass whose name ends with
     ``SettingsOverlay`` and whose ``model_config['extra']`` is ``'ignore'``."""
-    from lightsheet.config_schema import _make_overlay, ControllerSettings
+    from lightsheet.config_schema import ControllerSettings, _make_overlay
 
     overlay = _make_overlay(ControllerSettings)
     assert overlay.__name__ == "ControllerSettingsOverlay"
@@ -738,8 +738,8 @@ def test_generated_overlay_ignores_env_source() -> None:
 
     from lightsheet.config_schema import IBeamSettingsOverlay
 
-    env_backup = os.environ.get("IBeam__Max_Power")
-    os.environ["IBeam__Max_Power"] = "200000"
+    env_backup = os.environ.get("IBEAM__MAX_POWER")
+    os.environ["IBEAM__MAX_POWER"] = "200000"
     try:
         # The env source is not registered, so the valid init value stays
         # in force and the out-of-range env value is ignored.
@@ -747,6 +747,6 @@ def test_generated_overlay_ignores_env_source() -> None:
         assert settings.max_power == 150000
     finally:
         if env_backup is None:
-            os.environ.pop("IBeam__Max_Power", None)
+            os.environ.pop("IBEAM__MAX_POWER", None)
         else:
-            os.environ["IBeam__Max_Power"] = env_backup
+            os.environ["IBEAM__MAX_POWER"] = env_backup
