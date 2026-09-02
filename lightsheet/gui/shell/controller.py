@@ -1116,130 +1116,131 @@ class Controller_MainWindow(QMainWindow):
         self.ui.statusbar.showMessage("Initializing hardware, please wait...")
         self.ui.statusbar.repaint()
 
-        # Instantiating hardware components from the pre-built DeviceBundle.
-        # self.lasers is a mutable list copy so the E-stop kill path has a
-        # stable reference, while the frozen bundle's tuple cannot be
-        # re-bound after construction.
-        self.camera = self._bundle.camera
-        self.siggen = self._bundle.siggen
-        self.motors = self._bundle.motors
-        self.etls = self._bundle.etls
-        self.lasers = list(self._bundle.lasers)
+        try:
+            # Instantiating hardware components from the pre-built DeviceBundle.
+            # self.lasers is a mutable list copy so the E-stop kill path has a
+            # stable reference, while the frozen bundle's tuple cannot be
+            # re-bound after construction.
+            self.camera = self._bundle.camera
+            self.siggen = self._bundle.siggen
+            self.motors = self._bundle.motors
+            self.etls = self._bundle.etls
+            self.lasers = list(self._bundle.lasers)
 
-        # Give every laser a back-reference to the E-stop event so on() can
-        # re-check it immediately before the HAL energization write. The kill
-        # path (laser.off()) remains synchronous and lock-free in its contract
-        # with the shell; this is an extra guard inside the laser itself.
-        for laser in self.lasers:
-            laser._estop_event = self.estop_event
+            # Give every laser a back-reference to the E-stop event so on() can
+            # re-check it immediately before the HAL energization write. The kill
+            # path (laser.off()) remains synchronous and lock-free in its contract
+            # with the shell; this is an extra guard inside the laser itself.
+            for laser in self.lasers:
+                laser._estop_event = self.estop_event
 
-        # Making sure ETLs are in analog mode
-        self.etls.open()
-        self.etls.set_analog_mode()
+            # Making sure ETLs are in analog mode
+            self.etls.open()
+            self.etls.set_analog_mode()
 
-        # Open the Toptica iBeam serial laser (COM4 / self.lasers[1]).
-        # Called here (not from HardwareManager.__init__) to preserve the
-        # pre-extraction post-show timing.
-        self._hw.open_laser2()  # ty: ignore[unresolved-attribute]
+            # Open the Toptica iBeam serial laser (COM4 / self.lasers[1]).
+            # Called here (not from HardwareManager.__init__) to preserve the
+            # pre-extraction post-show timing.
+            self._hw.open_laser2()  # ty: ignore[unresolved-attribute]
 
-        # Update Ui with initial hardware state
-        self.updateUi_initial_hardware_state()
-        # Channel-radio (L1/L2 display selector) for the ImageView area.
-        # Constructed here (after self.lasers is populated) so the button
-        # labels read the live ILaser.wavelength values. The radio lives
-        # inside a fixed-height container that is inserted at layout
-        # index 1 — BETWEEN the ImageView (index 0) and the LevelsBar
-        # layout — so the radio sits below the ImageView viewport, not
-        # above it. The container is always visible (it always reserves
-        # its fixed height in the layout); only the inner ChannelRadio
-        # is shown/hidden. This prevents the show/hide reflow that
-        # displaced the ImageView on every visibility toggle: the layout
-        # slot is reserved regardless of the radio's visibility.
-        wl1 = (
-            getattr(self.lasers[0], "wavelength", None)
-            if len(self.lasers) > 0
-            else None
-        )
-        wl2 = (
-            getattr(self.lasers[1], "wavelength", None)
-            if len(self.lasers) > 1
-            else None
-        )
-        self.channel_radio = ChannelRadio(
-            parent=self.ui.imagesPane,
-            wl1=wl1,
-            wl2=wl2,
-        )
-        # Fixed-height container wrapping the ChannelRadio. The container
-        # reserves the layout slot; the inner radio shows/hides without
-        # reflowing the ImageView or LevelsBar.
-        from PySide6.QtWidgets import QVBoxLayout, QWidget
+            # Update Ui with initial hardware state
+            self.updateUi_initial_hardware_state()
+            # Channel-radio (L1/L2 display selector) for the ImageView area.
+            # Constructed here (after self.lasers is populated) so the button
+            # labels read the live ILaser.wavelength values. The radio lives
+            # inside a fixed-height container that is inserted at layout
+            # index 1 — BETWEEN the ImageView (index 0) and the LevelsBar
+            # layout — so the radio sits below the ImageView viewport, not
+            # above it. The container is always visible (it always reserves
+            # its fixed height in the layout); only the inner ChannelRadio
+            # is shown/hidden. This prevents the show/hide reflow that
+            # displaced the ImageView on every visibility toggle: the layout
+            # slot is reserved regardless of the radio's visibility.
+            wl1 = (
+                getattr(self.lasers[0], "wavelength", None)
+                if len(self.lasers) > 0
+                else None
+            )
+            wl2 = (
+                getattr(self.lasers[1], "wavelength", None)
+                if len(self.lasers) > 1
+                else None
+            )
+            self.channel_radio = ChannelRadio(
+                parent=self.ui.imagesPane,
+                wl1=wl1,
+                wl2=wl2,
+            )
+            # Fixed-height container wrapping the ChannelRadio. The container
+            # reserves the layout slot; the inner radio shows/hides without
+            # reflowing the ImageView or LevelsBar.
+            from PySide6.QtWidgets import QVBoxLayout, QWidget
 
-        self.channel_radio_container = QWidget(self.ui.imagesPane)
-        self.channel_radio_container.setFixedHeight(_s.XXL)
-        container_layout = QVBoxLayout(self.channel_radio_container)
-        container_layout.setContentsMargins(_s.ZERO, _s.ZERO, _s.ZERO, _s.ZERO)
-        container_layout.setSpacing(_s.ZERO)
-        container_layout.addWidget(self.channel_radio)
-        # Insert the container at index 1 (between the ImageView at 0
-        # and the LevelsBar layout).
-        images_layout = self.ui.imagesPane.layout()
-        if images_layout is not None:
-            images_layout.insertWidget(1, self.channel_radio_container)  # ty: ignore[unresolved-attribute]
-        # Switch the ImageView + reset the LevelsBar when the operator
-        # clicks L1/L2. Reads reconstructed_frames[wavelength] (no RGB
-        # overlay; no per-channel levels state stored — the LevelsBar
-        # reads the displayed frame's min/max on switch).
-        self.channel_radio.idClicked.connect(self._on_channel_radio_clicked)
-        # Wire the auto-laser checkbox stateChanged signals so the radio
-        # visibility tracks the checkbox-pair state synchronously. The
-        # slot re-caches the flags (harmless on the GUI thread) and
-        # updates the radio visibility.
-        self.laser_panel.ui.checkBox_laserOneAutomatic.stateChanged.connect(
-            self._on_auto_laser_checkbox_changed
-        )
-        self.laser_panel.ui.checkBox_laserTwoAutomatic.stateChanged.connect(
-            self._on_auto_laser_checkbox_changed
-        )
-        # Apply the initial visibility (hidden — checkboxes default
-        # unchecked).
-        self._update_channel_radio_visibility()
-        # Now that motors are assigned, seed the stack plane spinbox ranges
-        # from the motor travel limits (the soft widget-layer block).
-        self.stack_panel._seed_spinbox_ranges()
-        # Restore the last stack's start/end/step from config.ini so a
-        # re-run does not require re-driving the stage.
-        self._load_stack_params()
-        # Render the summary for the restored state.
-        self.stack_panel._render_stack_plan_summary()
+            self.channel_radio_container = QWidget(self.ui.imagesPane)
+            self.channel_radio_container.setFixedHeight(_s.XXL)
+            container_layout = QVBoxLayout(self.channel_radio_container)
+            container_layout.setContentsMargins(_s.ZERO, _s.ZERO, _s.ZERO, _s.ZERO)
+            container_layout.setSpacing(_s.ZERO)
+            container_layout.addWidget(self.channel_radio)
+            # Insert the container at index 1 (between the ImageView at 0
+            # and the LevelsBar layout).
+            images_layout = self.ui.imagesPane.layout()
+            if images_layout is not None:
+                images_layout.insertWidget(1, self.channel_radio_container)  # ty: ignore[unresolved-attribute]
+            # Switch the ImageView + reset the LevelsBar when the operator
+            # clicks L1/L2. Reads reconstructed_frames[wavelength] (no RGB
+            # overlay; no per-channel levels state stored — the LevelsBar
+            # reads the displayed frame's min/max on switch).
+            self.channel_radio.idClicked.connect(self._on_channel_radio_clicked)
+            # Wire the auto-laser checkbox stateChanged signals so the radio
+            # visibility tracks the checkbox-pair state synchronously. The
+            # slot re-caches the flags (harmless on the GUI thread) and
+            # updates the radio visibility.
+            self.laser_panel.ui.checkBox_laserOneAutomatic.stateChanged.connect(
+                self._on_auto_laser_checkbox_changed
+            )
+            self.laser_panel.ui.checkBox_laserTwoAutomatic.stateChanged.connect(
+                self._on_auto_laser_checkbox_changed
+            )
+            # Apply the initial visibility (hidden — checkboxes default
+            # unchecked).
+            self._update_channel_radio_visibility()
+            # Now that motors are assigned, seed the stack plane spinbox ranges
+            # from the motor travel limits (the soft widget-layer block).
+            self.stack_panel._seed_spinbox_ranges()
+            # Restore the last stack's start/end/step from config.ini so a
+            # re-run does not require re-driving the stage.
+            self._load_stack_params()
+            # Render the summary for the restored state.
+            self.stack_panel._render_stack_plan_summary()
 
-        # FrameSaverController display-port refresh timer
-        self.timer_imageview = QTimer()
-        self.timer_imageview.timeout.connect(
-            self._fs.frame_viewer.updateUi_refresh_view  # ty: ignore[unresolved-attribute]
-        )
-        # Use functools.partial (bound callables) instead of lambdas so
-        # the connection does not capture self._hw in a closure cell and
-        # create a reference cycle (controller -> timer -> lambda ->
-        # self._hw -> self._shell -> controller). This matches the
-        # bound-method pattern documented in wire_collaborators.
-        self.timer_imageview.timeout.connect(partial(self._hw._poll_laser_status, [0]))  # ty: ignore[unresolved-attribute]
-        self.timer_imageview.timeout.connect(
-            partial(self._hw._refresh_laser_readback, 0)  # ty: ignore[unresolved-attribute]
-        )
-        self.timer_imageview.start(100)
+            # FrameSaverController display-port refresh timer
+            self.timer_imageview = QTimer()
+            self.timer_imageview.timeout.connect(
+                self._fs.frame_viewer.updateUi_refresh_view  # ty: ignore[unresolved-attribute]
+            )
+            # Use functools.partial (bound callables) instead of lambdas so
+            # the connection does not capture self._hw in a closure cell and
+            # create a reference cycle (controller -> timer -> lambda ->
+            # self._hw -> self._shell -> controller). This matches the
+            # bound-method pattern documented in wire_collaborators.
+            self.timer_imageview.timeout.connect(partial(self._hw._poll_laser_status, [0]))  # ty: ignore[unresolved-attribute]
+            self.timer_imageview.timeout.connect(
+                partial(self._hw._refresh_laser_readback, 0)  # ty: ignore[unresolved-attribute]
+            )
+            self.timer_imageview.start(100)
 
-        # L2 (iBeam) status poll — a separate gated QTimer
-        _ibeam_cfg = cfg_read("config.ini", "iBeam", {"Status Poll Interval": 1.0})  # ty: ignore[invalid-argument-type]
-        self.timer_laser2_status = QTimer()
-        self.timer_laser2_status.timeout.connect(self._hw._poll_laser2_status_gated)  # ty: ignore[unresolved-attribute]
-        self.timer_laser2_status.start(
-            int(float(_ibeam_cfg["Status Poll Interval"]) * 1000)
-        )
+            # L2 (iBeam) status poll — a separate gated QTimer
+            _ibeam_cfg = cfg_read("config.ini", "iBeam", {"Status Poll Interval": 1.0})  # ty: ignore[invalid-argument-type]
+            self.timer_laser2_status = QTimer()
+            self.timer_laser2_status.timeout.connect(self._hw._poll_laser2_status_gated)  # ty: ignore[unresolved-attribute]
+            self.timer_laser2_status.start(
+                int(float(_ibeam_cfg["Status Poll Interval"]) * 1000)
+            )
 
-        # Init done, restore normal cursor and close the progress dialog.
-        self._hw_progress.close()
-        QApplication.restoreOverrideCursor()
+        finally:
+            self._hw_progress.close()
+            QApplication.restoreOverrideCursor()
         if self._demo_mode:
             self.setWindowTitle(self.windowTitle() + " [DEMO]")
             self.ui.statusbar.showMessage(
