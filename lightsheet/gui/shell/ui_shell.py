@@ -26,6 +26,7 @@ from lightsheet.gui.styles import spacing as _s
 from lightsheet.gui.panels.image_view import ImageView
 from lightsheet.gui.panels.levels_bar import LevelsBar
 from lightsheet.gui.styles import colors as _c
+from lightsheet.gui.styles import typography as _t
 
 class Ui_Shell(object):
     def setupUi(self, Shell):
@@ -312,14 +313,14 @@ class Ui_Shell(object):
         self.label_estopStatus = QLabel(self.toolBar_estop)
         self.label_estopStatus.setObjectName(u"label_estopStatus")
         self.label_estopStatus.setMinimumSize(QSize(140, 0))
-        self.label_estopStatus.setStyleSheet(f"color: {_c.SUCCESS}; font-weight: bold;")
+        self.label_estopStatus.setStyleSheet(f"color: {_c.SUCCESS}; {_t.BOLD}")
         self.toolBar_estop.addWidget(self.label_estopStatus)
         self.pushButton_estop = QPushButton(self.toolBar_estop)
         self.pushButton_estop.setObjectName(u"pushButton_estop")
         self.pushButton_estop.setMinimumSize(QSize(_s.RAIL * 2, _s.RAIL))
         self.pushButton_estop.setStyleSheet(
             f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "
-            f"font-size: 18px; font-weight: bold; border: 2px solid {_c.BREEZE_BG}; }}"
+            f"{_t.HEADING} border: 2px solid {_c.BREEZE_BG}; }}"
         )
         self.pushButton_estop.setCheckable(True)
         self.shortcut_estop = QShortcut(self.pushButton_estop)
@@ -333,7 +334,7 @@ class Ui_Shell(object):
         self.label_modeBadge = QLabel(self.toolBar_estop)
         self.label_modeBadge.setObjectName(u"label_modeBadge")
         self.label_modeBadge.setMinimumSize(QSize(140, 0))
-        self.label_modeBadge.setStyleSheet(u"font-weight: bold;")
+        self.label_modeBadge.setStyleSheet(f"{_t.BOLD}")
         self.toolBar_estop.addWidget(self.label_modeBadge)
         Shell.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolBar_estop)
         self.menubar = QMenuBar(Shell)

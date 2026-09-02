@@ -32,6 +32,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from lightsheet.gui.styles import spacing as _s
+
 
 class ChannelRadio(QWidget):
     """L1/L2 channel display selector (two checkable QToolButtons in an
@@ -53,7 +55,7 @@ class ChannelRadio(QWidget):
         # no outer margins (the widget sits inside the existing
         # ImageView-area container layout).
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(_s.ZERO, _s.ZERO, _s.ZERO, _s.ZERO)
         layout.setSpacing(8)
 
         self._group = QButtonGroup(self)

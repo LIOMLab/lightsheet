@@ -309,7 +309,7 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>No file selected</string>
+           <string>Select a file…</string>
           </property>
          </widget>
         </item>
@@ -402,7 +402,7 @@
                </sizepolicy>
               </property>
               <property name="text">
-               <string>No dataset selected</string>
+               <string>Select a dataset…</string>
               </property>
              </widget>
             </item>

@@ -21,6 +21,8 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QFrame,
 
 from lightsheet.gui.styles import spacing as _s
 from lightsheet.gui.styles import colors as _c
+from lightsheet.gui.styles import symbols as _sym
+from lightsheet.gui.styles import typography as _t
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
 class Ui_LaserPanel(object):
@@ -89,18 +91,18 @@ class Ui_LaserPanel(object):
 
         self.label_laserOneStatus = QLabel(self.groupBox_15)
         self.label_laserOneStatus.setObjectName(u"label_laserOneStatus")
-        self.label_laserOneStatus.setMinimumSize(QSize(140, 0))
-        self.label_laserOneStatus.setStyleSheet(f"color: {_c.DISABLED}; font-weight: bold;")
+        self.label_laserOneStatus.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL + _s.LG + _s.XS, 0))
+        self.label_laserOneStatus.setStyleSheet(f"color: {_c.DISABLED}; {_t.BOLD}")
 
         self.verticalLayout_43.addWidget(self.label_laserOneStatus)
 
         self.label_laserOneReadback = QLabel(self.groupBox_15)
         self.label_laserOneReadback.setObjectName(u"label_laserOneReadback")
-        self.label_laserOneReadback.setMinimumSize(QSize(80, 0))
+        self.label_laserOneReadback.setMinimumSize(QSize(_s.RAIL + _s.XXL, 0))
 
         self.verticalLayout_43.addWidget(self.label_laserOneReadback)
 
-        self.verticalSpacer_8 = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        self.verticalSpacer_8 = QSpacerItem(_s.LG + _s.XS, _s.XXL + _s.SM, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.verticalLayout_43.addItem(self.verticalSpacer_8)
 
@@ -159,14 +161,14 @@ class Ui_LaserPanel(object):
 
         self.label_laserTwoStatus = QLabel(self.groupBox_15)
         self.label_laserTwoStatus.setObjectName(u"label_laserTwoStatus")
-        self.label_laserTwoStatus.setMinimumSize(QSize(140, 0))
-        self.label_laserTwoStatus.setStyleSheet(f"color: {_c.DISABLED}; font-weight: bold;")
+        self.label_laserTwoStatus.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL + _s.LG + _s.XS, 0))
+        self.label_laserTwoStatus.setStyleSheet(f"color: {_c.DISABLED}; {_t.BOLD}")
 
         self.verticalLayout_44.addWidget(self.label_laserTwoStatus)
 
         self.label_laserTwoReadback = QLabel(self.groupBox_15)
         self.label_laserTwoReadback.setObjectName(u"label_laserTwoReadback")
-        self.label_laserTwoReadback.setMinimumSize(QSize(80, 0))
+        self.label_laserTwoReadback.setMinimumSize(QSize(_s.RAIL + _s.XXL, 0))
 
         self.verticalLayout_44.addWidget(self.label_laserTwoReadback)
 
@@ -175,7 +177,7 @@ class Ui_LaserPanel(object):
 
         self.verticalLayout_44.addWidget(self.pushButton_laserTwoRefresh)
 
-        self.verticalSpacer_15 = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        self.verticalSpacer_15 = QSpacerItem(_s.LG + _s.XS, _s.XXL + _s.SM, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.verticalLayout_44.addItem(self.verticalSpacer_15)
 
@@ -228,7 +230,7 @@ class Ui_LaserPanel(object):
 
     def retranslateUi(self, laserPanel):
         self.groupBox_15.setTitle(QCoreApplication.translate("LaserPanel", u"Lasers Settings", None))
-        self.label_72.setText(QCoreApplication.translate("LaserPanel", u"<html><head/><body><p><span style=\" font-weight:600;\">Laser1</span></p></body></html>", None))
+        self.label_72.setText(QCoreApplication.translate("LaserPanel", f"<html><head/><body><p><span style=\"{_t.POWER}\">Laser1</span></p></body></html>", None))
         self.label_50.setText(QCoreApplication.translate("LaserPanel", u"Power:", None))
 #if QT_CONFIG(tooltip)
         self.doubleSpinBox_laserOneAmplitude.setToolTip(QCoreApplication.translate("LaserPanel", u"Laser 1 power as a percentage of max power. Unit: %. Valid range: 0\u2013100. Effect: applied via a debounced DAQ write; the E-stop drives it to 0 immediately.", None))
@@ -241,12 +243,12 @@ class Ui_LaserPanel(object):
 #if QT_CONFIG(tooltip)
         self.label_laserOneStatus.setToolTip(QCoreApplication.translate("LaserPanel", u"Laser 1 emission state (ON / OFF / FAULT)", None))
 #endif // QT_CONFIG(tooltip)
-        self.label_laserOneStatus.setText(QCoreApplication.translate("LaserPanel", u"\u25cf OFF", None))
+        self.label_laserOneStatus.setText(QCoreApplication.translate("LaserPanel", f"{_sym.LASER_OFF} OFF", None))
 #if QT_CONFIG(tooltip)
         self.label_laserOneReadback.setToolTip(QCoreApplication.translate("LaserPanel", u"Linear-through-origin estimate (mW = V * mW_per_volt). Unverified \u2014 the linear model predicts 300 mW at 5V, but the rig-measured output is ~107.5 mW at 5V (DPSS threshold knee + free-space measurement geometry). Run the rig calibration sweep to load a measured V->mW curve.", None))
 #endif // QT_CONFIG(tooltip)
         self.label_laserOneReadback.setText(QCoreApplication.translate("LaserPanel", u"0.0 mW (est.)", None))
-        self.label_73.setText(QCoreApplication.translate("LaserPanel", u"<html><head/><body><p><span style=\" font-weight:600;\">Laser2</span></p></body></html>", None))
+        self.label_73.setText(QCoreApplication.translate("LaserPanel", f"<html><head/><body><p><span style=\"{_t.POWER}\">Laser2</span></p></body></html>", None))
         self.label_74.setText(QCoreApplication.translate("LaserPanel", u"Power:", None))
 #if QT_CONFIG(tooltip)
         self.doubleSpinBox_laserTwoAmplitude.setToolTip(QCoreApplication.translate("LaserPanel", u"Laser 2 power as a percentage of max power. Unit: %. Valid range: 0\u2013100. Effect: applied via the iBeam serial write; the E-stop drives it to 0 immediately.", None))
@@ -259,7 +261,7 @@ class Ui_LaserPanel(object):
 #if QT_CONFIG(tooltip)
         self.label_laserTwoStatus.setToolTip(QCoreApplication.translate("LaserPanel", u"Laser 2 emission state (ON / OFF / FAULT)", None))
 #endif // QT_CONFIG(tooltip)
-        self.label_laserTwoStatus.setText(QCoreApplication.translate("LaserPanel", u"\u25cf OFF", None))
+        self.label_laserTwoStatus.setText(QCoreApplication.translate("LaserPanel", f"{_sym.LASER_OFF} OFF", None))
 #if QT_CONFIG(tooltip)
         self.label_laserTwoReadback.setToolTip(QCoreApplication.translate("LaserPanel", u"iBeam power readback \u2014 click Refresh Power to re-query", None))
 #endif // QT_CONFIG(tooltip)

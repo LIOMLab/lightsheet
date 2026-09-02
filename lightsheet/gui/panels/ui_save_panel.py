@@ -21,6 +21,8 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QFrame, QGridLay
     QRadioButton, QSizePolicy, QSpacerItem, QSplitter,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
+from lightsheet.gui.styles import spacing as _s
+
 class Ui_SavePanel(object):
     def setupUi(self, savePanel):
         if not savePanel.objectName():
@@ -223,7 +225,7 @@ class Ui_SavePanel(object):
         self.layoutWidget.setObjectName(u"layoutWidget")
         self.verticalLayout_50 = QVBoxLayout(self.layoutWidget)
         self.verticalLayout_50.setObjectName(u"verticalLayout_50")
-        self.verticalLayout_50.setContentsMargins(0, 0, 0, 0)
+        self.verticalLayout_50.setContentsMargins(_s.ZERO, _s.ZERO, _s.ZERO, _s.ZERO)
         self.label_38 = QLabel(self.layoutWidget)
         self.label_38.setObjectName(u"label_38")
         sizePolicy3.setHeightForWidth(self.label_38.sizePolicy().hasHeightForWidth())
@@ -254,7 +256,7 @@ class Ui_SavePanel(object):
         self.layoutWidget1.setObjectName(u"layoutWidget1")
         self.verticalLayout_51 = QVBoxLayout(self.layoutWidget1)
         self.verticalLayout_51.setObjectName(u"verticalLayout_51")
-        self.verticalLayout_51.setContentsMargins(0, 0, 0, 0)
+        self.verticalLayout_51.setContentsMargins(_s.ZERO, _s.ZERO, _s.ZERO, _s.ZERO)
         self.horizontalLayout_76 = QHBoxLayout()
         self.horizontalLayout_76.setObjectName(u"horizontalLayout_76")
         self.label_39 = QLabel(self.layoutWidget1)
@@ -351,7 +353,7 @@ class Ui_SavePanel(object):
 #endif // QT_CONFIG(tooltip)
         self.pushButton_selectFile.setText(QCoreApplication.translate("SavePanel", u"Select File", None))
         self.label_37.setText(QCoreApplication.translate("SavePanel", u"Current File:", None))
-        self.label_currentFileDirectory.setText(QCoreApplication.translate("SavePanel", u"No file selected", None))
+        self.label_currentFileDirectory.setText(QCoreApplication.translate("SavePanel", u"Select a file…", None))
         self.label_38.setText(QCoreApplication.translate("SavePanel", u"File Datasets:", None))
 #if QT_CONFIG(tooltip)
         self.pushButton_selectDataset.setToolTip(QCoreApplication.translate("SavePanel", u"Select and show the dataset(s) of the opened file", None))
@@ -359,7 +361,7 @@ class Ui_SavePanel(object):
         self.pushButton_selectDataset.setText(QCoreApplication.translate("SavePanel", u"Select and Show Dataset(s)", None))
         self.label_39.setText(QCoreApplication.translate("SavePanel", u"Dataset Attributes:", None))
         self.label_40.setText(QCoreApplication.translate("SavePanel", u"Current Dataset:", None))
-        self.label_currentDataset.setText(QCoreApplication.translate("SavePanel", u"No dataset selected", None))
+        self.label_currentDataset.setText(QCoreApplication.translate("SavePanel", u"Select a dataset…", None))
         pass
     # retranslateUi
 

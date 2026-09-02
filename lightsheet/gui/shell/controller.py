@@ -62,6 +62,7 @@ from lightsheet.gui.panels.scan_panel import ScanPanelWidget
 from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.styles import spacing as _s
 from lightsheet.gui.styles import symbols as _sym
+from lightsheet.gui.styles import typography as _t
 
 
 from lightsheet.gui.panels.stack_panel import StackPanelWidget
@@ -249,14 +250,17 @@ class Controller_MainWindow(QMainWindow):
         # source of truth lives in the styles modules.
         self.label_estopStatus.setText(f"{_sym.ESTOP_ARMED} ARMED")
         self.label_estopStatus.setStyleSheet(
-            f"color: {_c.SUCCESS}; font-weight: bold;"
+            f"color: {_c.SUCCESS}; {_t.BOLD}"
         )
         self.pushButton_estop.setText("E-STOP")
         # pushButton_estop toolTip is set in ui_shell.ui and must stay
         # verbatim with the UI-SPEC copywriting contract.
         self.pushButton_estop.setStyleSheet(
             f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "
-            f"font-size: 18px; font-weight: bold; border: 2px solid {_c.BREEZE_BG}; }}"
+            f"{_t.HEADING} border: 2px solid {_c.BREEZE_BG}; }}"
+        )
+        self.pushButton_estop.setIcon(
+            QApplication.style().standardIcon(QStyle.SP_MessageBoxWarning)
         )
         self.shortcut_estop = self.ui.shortcut_estop
         # Safety: E-stop toolbar is fixed (non-movable, non-floatable) so the
@@ -325,7 +329,7 @@ class Controller_MainWindow(QMainWindow):
             # Zero the panel's top-level layout margins so content aligns
             # edge-to-edge with the message log sibling in the splitter.
             if panel.layout() is not None:
-                panel.layout().setContentsMargins(0, 0, 0, 0)  # ty: ignore[unresolved-attribute]
+                panel.layout().setContentsMargins(_s.ZERO, _s.ZERO, _s.ZERO, _s.ZERO)  # ty: ignore[unresolved-attribute]
             scroll.setWidget(panel)
             return scroll
 
@@ -1174,8 +1178,8 @@ class Controller_MainWindow(QMainWindow):
         self.channel_radio_container = QWidget(self.ui.imagesPane)
         self.channel_radio_container.setFixedHeight(32)
         container_layout = QVBoxLayout(self.channel_radio_container)
-        container_layout.setContentsMargins(0, 0, 0, 0)
-        container_layout.setSpacing(0)
+        container_layout.setContentsMargins(_s.ZERO, _s.ZERO, _s.ZERO, _s.ZERO)
+        container_layout.setSpacing(_s.ZERO)
         container_layout.addWidget(self.channel_radio)
         # Insert the container at index 1 (between the ImageView at 0
         # and the LevelsBar layout).
@@ -2102,11 +2106,11 @@ class Controller_MainWindow(QMainWindow):
             f"{_sym.ESTOP_ACTUATED} E-STOP ACTUATED"
         )
         self.label_estopStatus.setStyleSheet(
-            f"color: {_c.DANGER}; font-weight: bold;"
+            f"color: {_c.DANGER}; {_t.BOLD}"
         )
         self.pushButton_estop.setStyleSheet(
             f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "
-            f"font-size: 18px; font-weight: bold; border: 4px solid {_c.WARNING}; }}"
+            f"{_t.HEADING} border: 4px solid {_c.WARNING}; }}"
         )
         self.pushButton_armReset.setText("Clear E-stop")
 
@@ -2155,11 +2159,11 @@ class Controller_MainWindow(QMainWindow):
             self._estop_disarmed = False
             self.label_estopStatus.setText(f"{_sym.ESTOP_ARMED} ARMED")
             self.label_estopStatus.setStyleSheet(
-                f"color: {_c.SUCCESS}; font-weight: bold;"
+                f"color: {_c.SUCCESS}; {_t.BOLD}"
             )
             self.pushButton_estop.setStyleSheet(
                 f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "
-                f"font-size: 18px; font-weight: bold; border: 2px solid {_c.BREEZE_BG}; }}"
+                f"{_t.HEADING} border: 2px solid {_c.BREEZE_BG}; }}"
             )
             self.pushButton_armReset.setText("Arm/Reset")
             self.sig_message.emit(
@@ -2174,7 +2178,7 @@ class Controller_MainWindow(QMainWindow):
             self._estop_disarmed = True
             self.label_estopStatus.setText(f"{_sym.ESTOP_DISARMED} DISARMED")
             self.label_estopStatus.setStyleSheet(
-                f"color: {_c.DISABLED}; font-weight: bold;"
+                f"color: {_c.DISABLED}; {_t.BOLD}"
             )
             # The E-stop button background stays safety-red in ALL states
             # (ARMED, DISARMED, ACTUATED) — only the border changes. The
@@ -2182,7 +2186,7 @@ class Controller_MainWindow(QMainWindow):
             # NOT by graying out the button.
             self.pushButton_estop.setStyleSheet(
                 f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "
-                f"font-size: 18px; font-weight: bold; border: 2px solid {_c.BREEZE_BG}; }}"
+                f"{_t.HEADING} border: 2px solid {_c.BREEZE_BG}; }}"
             )
             self.pushButton_armReset.setText("Arm Lasers")
             self.sig_message.emit("E-stop cleared. Press Arm Lasers to re-arm.")
@@ -2257,11 +2261,11 @@ class Controller_MainWindow(QMainWindow):
 
         # Wavelength labels — read from the live list[ILaser] instances.
         self.laser_panel.ui.label_72.setText(
-            f'<html><head/><body><p><span style=" font-weight:600; font-size:18px;">'
+            f'<html><head/><body><p><span style="{_t.POWER}">'
             f"{self.lasers[0].wavelength} nm</span></p></body></html>"
         )
         self.laser_panel.ui.label_73.setText(
-            f'<html><head/><body><p><span style=" font-weight:600; font-size:18px;">'
+            f'<html><head/><body><p><span style="{_t.POWER}">'
             f"{self.lasers[1].wavelength} nm</span></p></body></html>"
         )
 

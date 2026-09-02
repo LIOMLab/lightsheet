@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 
 from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.styles import spacing as _s
+from lightsheet.gui.styles import typography as _t
 
 
 class _KeepLastTint:
@@ -102,7 +103,7 @@ class ImageView(QGraphicsView):
         )
         self._placeholder.setStyleSheet(
             f"color: {_c.MUTED_TEXT}; background: transparent; "
-            f"font-size: {_s.LG}px; padding: {_s.LG}px;"
+            f"{_t.PLACEHOLDER} padding: {_s.LG}px;"
         )
         self._placeholder.setGeometry(self.rect())
 
