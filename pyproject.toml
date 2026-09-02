@@ -31,6 +31,8 @@ lightsheet = "lightsheet.__main__:main"
 packages = [
     "lightsheet",
     "lightsheet.adaptive",
+    "lightsheet.config_schema",
+    "lightsheet.config_schema.sections",
     "lightsheet.focus",
     "lightsheet.gui",
     "lightsheet.gui.workers",

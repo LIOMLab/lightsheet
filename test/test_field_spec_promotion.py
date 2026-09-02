@@ -295,11 +295,11 @@ def test_hal_validators_untouched() -> None:
     repo_root = subprocess.check_output(
         ["git", "rev-parse", "--show-toplevel"], text=True
     ).strip()
-    # config_schema.py motor limit validators + ZaberMotor reject-and-beep
+    # config_schema package motor limit validators + ZaberMotor reject-and-beep
     # must still be present (grep, not a diff — this is a presence check).
-    with Path(f"{repo_root}/lightsheet/config_schema.py").open() as f:
+    with Path(f"{repo_root}/lightsheet/config_schema/__init__.py").open() as f:
         schema = f.read()
-    assert "Limit High" in schema, "config_schema.py motor limit validator missing"
+    assert "Limit High" in schema, "config_schema motor limit validator missing"
     with Path(f"{repo_root}/lightsheet/hal/real/motors.py").open() as f:
         motors = f.read()
     assert "ValueError" in motors, "ZaberMotor reject-and-beep missing"
