@@ -1216,8 +1216,10 @@ class Controller_MainWindow(QMainWindow):
                     # Push the demo frame's data range to the LevelsBar
                     # and update the live min/max readout.
                     self._update_levels_readout(_arr)
+            except (FileNotFoundError, OSError, ValueError) as exc:
+                logger.warning("Demo preview image could not be loaded: %s", exc)
             except Exception:
-                pass  # Missing image file is non-fatal — just no preview
+                logger.exception("Unexpected error loading demo preview image")
         else:
             self.ui.statusbar.showMessage("Ready", 2000)
 
