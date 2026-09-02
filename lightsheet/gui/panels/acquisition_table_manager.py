@@ -29,6 +29,7 @@ responsiveness invariant).
 
 from __future__ import annotations
 
+import logging
 import math
 import typing
 
@@ -82,6 +83,8 @@ _ERROR_COPY = (
 )
 
 _FLAG_COLOR = _c.Q_FLAG_ERROR
+
+logger = logging.getLogger(__name__)
 
 
 class _Row:
@@ -406,7 +409,10 @@ class AcquisitionTableManager(QWidget):
             exposure = float(self._shell.acquisition_panel.ui
                              .doubleSpinBox_cameraExposureTime.value())
             return exposure / 1000.0 * 1.5
-        except (AttributeError, ValueError, TypeError):
+        except (AttributeError, ValueError, TypeError) as e:
+            logger.warning(
+                "Failed to read camera exposure time; using default 0.5 s/plane: %s", e
+            )
             return 0.5
 
     def _estimate_stack_size_mb(self, n_planes: int) -> float:
@@ -433,7 +439,11 @@ class AcquisitionTableManager(QWidget):
             # making the estimate wrong for any non-2000x2000 camera.
             rows = int(getattr(self._shell.camera, "ysize", 2000) or 2000)
             cols = int(getattr(self._shell.camera, "xsize", 2000) or 2000)
-        except (AttributeError, TypeError, ValueError):
+        except (AttributeError, TypeError, ValueError) as e:
+            logger.warning(
+                "Failed to read camera ysize/xsize; falling back to 2000x2000 for size estimate: %s",
+                e,
+            )
             rows, cols = 2000, 2000
         bytes_per_frame = rows * cols * 2
         l0_bytes = n_planes * bytes_per_frame
@@ -460,7 +470,10 @@ class AcquisitionTableManager(QWidget):
         """
         try:
             stack_step = float(getattr(self._shell, "stack_step", 0.0))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError) as e:
+            logger.warning(
+                "Failed to parse stack_step; disabling Zarr pyramid overhead estimate: %s", e
+            )
             stack_step = 0.0
         cam = getattr(self._shell, "camera", None)
         binning_x = int(getattr(cam, "binning_x", 1) or 1)
@@ -585,7 +598,10 @@ class AcquisitionTableManager(QWidget):
             try:
                 low = float(motors.horizontal.get_limit_low("\u03bcm"))
                 high = float(motors.horizontal.get_limit_high("\u03bcm"))
-            except (TypeError, ValueError, AttributeError):
+            except (TypeError, ValueError, AttributeError) as e:
+                logger.warning(
+                    "Failed to read horizontal motor limits; disabling travel-limit check: %s", e
+                )
                 low, high = None, None
             if low is not None and high is not None:
                 # start/end are mm cell values; limits are µm — compare in µm.
