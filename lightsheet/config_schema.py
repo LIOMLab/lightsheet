@@ -30,7 +30,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import new_class
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import Field, ValidationError, field_validator
 from pydantic.fields import FieldInfo
@@ -109,7 +109,10 @@ def _make_overlay(strict_cls: type[_NoEnvBaseSettings]) -> type[_NoEnvBaseSettin
         overlay_config["extra"] = "ignore"
         ns["model_config"] = overlay_config
 
-    return new_class(overlay_name, (strict_cls,), exec_body=_exec_body)
+    return cast(
+        type[_NoEnvBaseSettings],
+        new_class(overlay_name, (strict_cls,), exec_body=_exec_body),
+    )
 
 
 # ---------------------------------------------------------------------------
