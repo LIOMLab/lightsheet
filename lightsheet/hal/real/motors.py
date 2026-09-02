@@ -40,7 +40,7 @@ class Motors(IMotors):
     _cfg_defaults["Camera Limit Low"] = "0.0"
     _cfg_defaults["Camera Limit High"] = "50.0"
 
-    def __init__(self) -> None:
+    def __init__(self, port: str | None = None) -> None:
         # Error status
         self.error = 0
         self.error_message = ""
@@ -49,6 +49,12 @@ class Motors(IMotors):
         self._cfg_filename = "config.ini"
         self._cfg_section = "Motors"
         self.cfg_load_ini()
+
+        # Allow the composition root (DeviceRegistry) to override the
+        # configured Port with a live USB-serial resolved value. If no port
+        # is supplied, the config.ini value loaded above is used.
+        if port is not None:
+            self.port = port
 
         # Serialize all traffic on the shared Zaber serial bus. The worker,
         # GUI position refresh, and configuration commands must not interleave
