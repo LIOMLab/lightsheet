@@ -665,6 +665,10 @@ touching the vendored Breeze source; do NOT hand-edit `breeze_pyside6.py`
   widgets programmatically in `lightsheet/gui/shell/controller.py` (the
   established approach for toolbars and the laser status labels — see the
   E-stop toolbar button wired in `wire_collaborators`).
+- After running `pyside6-uic`, run `uv run python scripts/fix_generated_ui_enums.py
+  <generated.py> ...` to normalize unscoped Qt/QFrame enum tokens to their
+  scoped PySide6 equivalents. The script is idempotent, validates the generated
+  header, and refuses to touch non-generated or non-Python files.
 - Never edit the generated `.py` files directly.
 
 ## 9. Config pattern (config.ini)
