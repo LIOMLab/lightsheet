@@ -6,14 +6,12 @@ through inheritance so callers still invoke them on the worker instance.
 
 from __future__ import annotations
 
-import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
+
+from lightsheet.adaptive.types import AdaptiveCommand, AdaptiveConfig
 
 if TYPE_CHECKING:
-    from lightsheet.gui.coordinators.hardware_manager import HardwareManager
-    from lightsheet.gui.shell.controller import Controller_MainWindow
-
-logger = logging.getLogger(__name__)
+    from lightsheet.gui.workers.stack import StackWorker
 
 
 class _StackAdaptiveMixin:
@@ -23,9 +21,7 @@ class _StackAdaptiveMixin:
     invoke ``self._apply_adaptive_command`` and ``self._record_adaptive_step``.
     """
 
-
-
-    def _apply_adaptive_command(self, cmd: object) -> None:
+    def _apply_adaptive_command(self: StackWorker, cmd: AdaptiveCommand) -> None:
         """Apply an AdaptiveCommand to the hardware before acquiring.
 
         Sets the camera exposure and writes the laser power through the
@@ -74,9 +70,9 @@ class _StackAdaptiveMixin:
         # (exposures are 1-1000 ms, all >= 1 after truncation).
         shutter_mode = getattr(self.camera, "shutter_mode", "Rolling")
         if shutter_mode == "Lightsheet":
-            self.camera.set_exposure_time(max(1, round(cmd.exposure_s * 1000)))  # ty: ignore[unresolved-attribute]
+            self.camera.set_exposure_time(max(1, round(cmd.exposure_s * 1000)))
         else:
-            self.camera.set_exposure_time(int(cmd.exposure_s * 1000))  # ty: ignore[unresolved-attribute]
+            self.camera.set_exposure_time(int(cmd.exposure_s * 1000))
         # Write laser powers through the safe HAL paths. The percent is
         # computed from the command's mW value and the laser's max_power.
         # Each laser write is wrapped in its own except handler so a
@@ -87,7 +83,7 @@ class _StackAdaptiveMixin:
         # NOT abort (the outer StackWorker.run failure handler is
         # bypassed). The operator can press E-stop (F12) to abort.
         if self._shell.lasers[0].max_power > 0:
-            pct1 = cmd.laser1_mw / self._shell.lasers[0].max_power * 100.0  # ty: ignore[unresolved-attribute]
+            pct1 = cmd.laser1_mw / self._shell.lasers[0].max_power * 100.0
             self._shell.laser1_power_pct = pct1
             try:
                 self._hw._write_laser1_power(pct1)
@@ -99,7 +95,7 @@ class _StackAdaptiveMixin:
                     f"on the next plane; press E-stop (F12) to abort."
                 )
         if self._multi_channel and self._shell.lasers[1].max_power > 0:
-            pct2 = cmd.laser2_mw / self._shell.lasers[1].max_power * 100.0  # ty: ignore[unresolved-attribute]
+            pct2 = cmd.laser2_mw / self._shell.lasers[1].max_power * 100.0
             self._shell.laser2_power_pct = pct2
             try:
                 self._hw._write_laser2_power(pct2)
@@ -111,7 +107,7 @@ class _StackAdaptiveMixin:
                     f"on the next plane; press E-stop (F12) to abort."
                 )
 
-    def _record_adaptive_step(self, plane_idx: int) -> None:
+    def _record_adaptive_step(self: StackWorker, plane_idx: int) -> None:
         """Measure this plane's intensity, record the trajectory sample,
         emit the signal, and compute the next plane's command.
 
@@ -132,16 +128,19 @@ class _StackAdaptiveMixin:
         if self._adaptive_controller is None:
             return
 
-        cfg = self._adaptive_cfg
-        cmd = self._adaptive_current_cmd
+        # The controller is only constructed when both the config and the
+        # current command are non-None; the casts assert that invariant to
+        # the type checker without adding runtime branches.
+        cfg = cast(AdaptiveConfig, self._adaptive_cfg)
+        cmd = cast(AdaptiveCommand, self._adaptive_current_cmd)
 
         # Measure intensity from the acquired frame(s).
         if self._multi_channel:
             frames = self._shell.reconstructed_frames
             intensities = []
-            for wl in [int(laser.wavelength) for laser in self._shell.lasers]:
-                frame = frames.get(wl) if frames else None
-                intensities.append(frame_intensity_pct(frame, cfg.sensor_max))  # ty: ignore[unresolved-attribute]
+            for laser in self._shell.lasers:
+                frame = frames.get(int(laser.wavelength)) if frames else None
+                intensities.append(frame_intensity_pct(frame, cfg.sensor_max))
             # The brighter channel drives the shared exposure.
             brighter_idx = max(
                 range(len(intensities)),
@@ -149,40 +148,45 @@ class _StackAdaptiveMixin:
             )
         else:
             frame = self._shell.reconstructed_frame
-            intensities = [frame_intensity_pct(frame, cfg.sensor_max)]  # ty: ignore[unresolved-attribute]
+            intensities = [frame_intensity_pct(frame, cfg.sensor_max)]
             brighter_idx = 0
 
-        # Record the trajectory sample .
+        # Record the trajectory sample.
         sample = AdaptiveSample(
             plane_index=plane_idx,
             intensity_fraction=intensities,
-            exposure_s=cmd.exposure_s,  # ty: ignore[unresolved-attribute]
-            laser_power_mw=(cmd.laser1_mw, cmd.laser2_mw),  # ty: ignore[unresolved-attribute]
-            control_variable_active=cmd.control_variable_active,  # ty: ignore[unresolved-attribute]
-            reacquired=cmd.reacquire,  # ty: ignore[unresolved-attribute]
-            power_fallback=cmd.power_fallback,  # ty: ignore[unresolved-attribute]
+            exposure_s=cmd.exposure_s,
+            laser_power_mw=(cmd.laser1_mw, cmd.laser2_mw),
+            control_variable_active=cmd.control_variable_active,
+            reacquired=cmd.reacquire,
+            power_fallback=cmd.power_fallback,
         )
         if self._shell.saving_allowed:
-            self._shell._fs.record_adaptive_sample(sample)  # ty: ignore[unresolved-attribute]
+            from lightsheet.gui.coordinators.frame_saver_controller import (
+                FrameSaverController,
+            )
+
+            fs = cast(FrameSaverController, self._shell._fs)
+            fs.record_adaptive_sample(sample)
 
         # Emit the trajectory signal for the GUI-thread plot.
         self.sig_adaptive_trajectory.emit(
             plane_idx,
             intensities[brighter_idx],
-            cmd.exposure_s,  # ty: ignore[unresolved-attribute]
-            cmd.laser1_mw,  # ty: ignore[unresolved-attribute]
-            cmd.laser2_mw,  # ty: ignore[unresolved-attribute]
-            cmd.control_variable_active,  # ty: ignore[unresolved-attribute]
-            cmd.reacquire,  # ty: ignore[unresolved-attribute]
-            cmd.power_fallback,  # ty: ignore[unresolved-attribute]
+            cmd.exposure_s,
+            cmd.laser1_mw,
+            cmd.laser2_mw,
+            cmd.control_variable_active,
+            cmd.reacquire,
+            cmd.power_fallback,
         )
 
         # Compute the next plane's command from this plane's intensity.
-        current_powers = (cmd.laser1_mw, cmd.laser2_mw)  # ty: ignore[unresolved-attribute]
+        current_powers = (cmd.laser1_mw, cmd.laser2_mw)
         self._adaptive_current_cmd = self._adaptive_controller.update(
             intensities=intensities,
             brighter_idx=brighter_idx,
-            current_exposure_s=cmd.exposure_s,  # ty: ignore[unresolved-attribute]
+            current_exposure_s=cmd.exposure_s,
             current_powers_mw=current_powers,
             plane_idx=plane_idx,
         )
@@ -201,7 +205,7 @@ class _StackAdaptiveMixin:
         # signal (exhaustion is not a saved decision).
         if getattr(self._adaptive_current_cmd, "reacquire_exhausted", False):
             dev_pct = abs(
-                intensities[brighter_idx] - cfg.target_midpoint  # ty: ignore[unresolved-attribute]
+                intensities[brighter_idx] - cfg.target_midpoint
             ) * 100.0
             self._shell.sig_message.emit(
                 f"Re-acquire fallback exhausted at plane {plane_idx}: "

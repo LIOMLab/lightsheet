@@ -337,6 +337,11 @@ class IMotors(IMotorsCore):
     def get_positions(self) -> dict[str, float]: ...
 
     @abstractmethod
+    def close(self) -> None:
+        """Close the shared serial handle. Called on app shutdown."""
+        ...
+
+    @abstractmethod
     def move_axes_parallel(self, moves: list[tuple[str, float, str]]) -> None:
         """Move multiple axes on the shared serial bus.
 

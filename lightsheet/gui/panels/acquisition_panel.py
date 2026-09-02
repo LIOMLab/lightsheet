@@ -494,7 +494,8 @@ class AcquisitionPanelWidget(QWidget):
         # operator reopens the dock via the rail button.
         if not self._shell.dockWidget_adaptiveTrajectory.isVisible():
             self._shell.adaptiveTrajectoryWidget.plotWidget_adaptiveTrajectory.hide()
-            self._shell.adaptiveTrajectoryWidget._legend.hide()
+            if self._shell.adaptiveTrajectoryWidget._legend is not None:
+                self._shell.adaptiveTrajectoryWidget._legend.hide()
 
         # Reset the focus trajectory plot at the start of each run so
         # per-block samples do not accumulate across runs. The X-axis is
@@ -503,7 +504,8 @@ class AcquisitionPanelWidget(QWidget):
         self._shell.focusTrajectoryWidget.reset()
         if not self._shell.dockWidget_focusTrajectory.isVisible():
             self._shell.focusTrajectoryWidget.plotWidget_focusTrajectory.hide()
-            self._shell.focusTrajectoryWidget._legend.hide()
+            if self._shell.focusTrajectoryWidget._legend is not None:
+                self._shell.focusTrajectoryWidget._legend.hide()
 
         # The mode badge switches to FOCUS RUNNING for the duration of the
         # stack when focus compensation is enabled.

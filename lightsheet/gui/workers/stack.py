@@ -18,6 +18,10 @@ from lightsheet.gui.workers.stack_adaptive import _StackAdaptiveMixin
 from lightsheet.hal.bundle import DeviceBundle
 
 if TYPE_CHECKING:
+    from lightsheet.adaptive.controller import AdaptiveController
+    from lightsheet.adaptive.types import AdaptiveCommand, AdaptiveConfig
+    from lightsheet.focus.controller import FocusController
+    from lightsheet.focus.types import FocusConfig, FocusCurve
     from lightsheet.gui.coordinators.hardware_manager import HardwareManager
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
@@ -81,9 +85,9 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         save_all_crop: bool,
         save_all_full: bool,
         multi_channel: bool = False,
-        adaptive_cfg: object | None = None,
-        focus_cfg: object | None = None,
-        focus_curve: object | None = None,
+        adaptive_cfg: AdaptiveConfig | None = None,
+        focus_cfg: FocusConfig | None = None,
+        focus_curve: FocusCurve | None = None,
     ) -> None:
         super().__init__()
         self.camera = bundle.camera
@@ -137,16 +141,19 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         # construct the AdaptiveController and the helper methods can
         # read it. The frozen dataclass is safe to share across threads
         # (immutable).
-        self._adaptive_cfg = adaptive_cfg
+        self._adaptive_cfg: AdaptiveConfig | None = adaptive_cfg
+        self._adaptive_controller: AdaptiveController | None = None
+        self._adaptive_current_cmd: AdaptiveCommand | None = None
         # Focus compensation config and pre-validated calibration curve.
         # Both are pre-sampled on the GUI thread and passed as constructor
         # args so the worker thread never reads ui.* or loads the
         # calibration file from disk (AGENTS.md §11).
-        self._focus_cfg = focus_cfg
-        self._focus_curve = focus_curve
+        self._focus_cfg: FocusConfig | None = focus_cfg
+        self._focus_curve: FocusCurve | None = focus_curve
+        self._focus_controller: FocusController | None = None
         if (
             self._focus_cfg is not None
-            and getattr(self._focus_cfg, "enabled", False)
+            and self._focus_cfg.enabled
             and self._focus_curve is None
         ):
             raise ValueError(
@@ -234,7 +241,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 # as group attrs (reproducibility contract).
                 # When disabled, no trajectory is recorded or written.
                 adaptive_enabled = (
-                    self._adaptive_cfg is not None and self._adaptive_cfg.enabled  # ty: ignore[unresolved-attribute]
+                    self._adaptive_cfg is not None and self._adaptive_cfg.enabled
                 )
                 self._shell._fs.configure_adaptive(  # ty: ignore[unresolved-attribute]
                     adaptive_enabled,
@@ -249,7 +256,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 # publish the block size and residual settings as group attrs.
                 # When disabled, no focus trajectory is recorded or written.
                 focus_enabled = (
-                    self._focus_cfg is not None and self._focus_cfg.enabled  # ty: ignore[unresolved-attribute]
+                    self._focus_cfg is not None and self._focus_cfg.enabled
                 )
                 self._shell._fs.configure_focus(  # ty: ignore[unresolved-attribute]
                     focus_enabled,
@@ -310,19 +317,19 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             # stack path unchanged.
             self._adaptive_controller = None
             self._adaptive_current_cmd = None
-            if self._adaptive_cfg is not None and self._adaptive_cfg.enabled:  # ty: ignore[unresolved-attribute]
+            if self._adaptive_cfg is not None and self._adaptive_cfg.enabled:
                 from lightsheet.adaptive.controller import AdaptiveController
 
                 self._adaptive_controller = AdaptiveController(
-                    self._adaptive_cfg, n_planes  # ty: ignore[invalid-argument-type]
+                    self._adaptive_cfg, n_planes
                 )
                 # Prime with a flat trajectory at the current exposure.
                 # The PI correction handles the per-depth profile; the
                 # feedforward baseline is the current camera exposure.
-                pilot_indices = list(range(self._adaptive_cfg.pilot_count))  # ty: ignore[unresolved-attribute]
+                pilot_indices = list(range(self._adaptive_cfg.pilot_count))
                 pilot_exposures = [
                     self.camera.exposure_time
-                ] * self._adaptive_cfg.pilot_count  # ty: ignore[unresolved-attribute]
+                ] * self._adaptive_cfg.pilot_count
                 self._adaptive_controller.prime(pilot_indices, pilot_exposures)
                 # The initial command for plane 0 is the feedforward
                 # baseline (current exposure + current staged powers).
@@ -352,7 +359,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             # unchanged.
             self._focus_controller = None
             self._focus_block_count = 0
-            if self._focus_cfg is not None and self._focus_cfg.enabled:  # ty: ignore[unresolved-attribute]
+            if self._focus_cfg is not None and self._focus_cfg.enabled:
                 if self._focus_curve is None:
                     raise ValueError(
                         "Focus compensation enabled but no calibration curve was loaded"
@@ -362,8 +369,8 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 cam_lo_mm = self.motors.camera.get_limit_low("mm")
                 cam_hi_mm = self.motors.camera.get_limit_high("mm")
                 self._focus_controller = FocusController(
-                    self._focus_cfg,  # type: ignore[arg-type]
-                    self._focus_curve,  # type: ignore[arg-type]
+                    self._focus_cfg,
+                    self._focus_curve,
                     cam_lo_mm,
                     cam_hi_mm,
                 )
@@ -397,18 +404,18 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     )  # ty: ignore[unsupported-operator]
                     stage_pos_mm = position / 1000.0  # um -> mm
 
-                    focus_boundary = (
+                    if (
                         self._focus_controller is not None
-                        and (plane % self._focus_cfg.block_size_n) == 0  # ty: ignore[unresolved-attribute]
-                    )
-
-                    if focus_boundary:
+                        and self._focus_cfg is not None
+                        and self._focus_curve is not None
+                        and (plane % self._focus_cfg.block_size_n) == 0
+                    ):
                         # Compute the previous block's sharpness before
                         # updating the residual. The first block boundary
                         # has no prior frame, so update_residual is skipped.
                         sharpness_metric: float | None = None
                         if (
-                            self._focus_cfg.autofocus_residual  # ty: ignore[unresolved-attribute]
+                            self._focus_cfg.autofocus_residual
                             and self._focus_block_count > 0
                         ):
                             from lightsheet.focus.sharpness import (
@@ -418,21 +425,21 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                             sharpness_metric = frame_sharpness_variance(
                                 self._shell.reconstructed_frame
                             )
-                            self._focus_controller.update_residual(  # type: ignore[union-attr]
+                            self._focus_controller.update_residual(
                                 sharpness_metric
                             )
 
                         feedforward_camera_pos_mm = float(
                             np.interp(
                                 stage_pos_mm,
-                                self._focus_curve.stage_pos,  # type: ignore[union-attr]
-                                self._focus_curve.camera_pos,  # type: ignore[union-attr]
+                                self._focus_curve.stage_pos,
+                                self._focus_curve.camera_pos,
                             )
                         )
-                        focus_pos_mm = self._focus_controller.target(  # type: ignore[union-attr]
+                        focus_pos_mm = self._focus_controller.target(
                             stage_pos_mm
                         )
-                        residual_mm = self._focus_controller.residual_mm  # type: ignore[union-attr]
+                        residual_mm = self._focus_controller.residual_mm
 
                         try:
                             self.motors.move_axes_parallel(
@@ -529,7 +536,10 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     # breaks. When adaptive is off, no hardware changes
                     # are applied — the existing fixed stack path runs
                     # unchanged.
-                    if self._adaptive_controller is not None:
+                    if (
+                        self._adaptive_controller is not None
+                        and self._adaptive_current_cmd is not None
+                    ):
                         self._apply_adaptive_command(self._adaptive_current_cmd)
 
                     if self._multi_channel:
