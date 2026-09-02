@@ -60,7 +60,7 @@ class ETLs(IETLs):
             self.error_message = "Left ETL open failed"
             logger.exception("Left ETL error")
         else:
-            print("Left ETL detected")
+            logger.info("Left ETL detected")
 
         try:
             self.etl_right = Optotune(self.port_etl_right)
@@ -71,7 +71,7 @@ class ETLs(IETLs):
             self.error_message = "Right ETL open failed"
             logger.exception("Right ETL error")
         else:
-            print("Right ETL detected")
+            logger.info("Right ETL detected")
 
     def set_analog_mode(self) -> None:
         if self.etl_left is not None:
@@ -87,23 +87,23 @@ class ETLs(IETLs):
 
     def get_mode(self) -> None:
         if self.etl_left is not None:
-            print(f"Left ETL mode is {self.etl_left.mode()}")
+            logger.info(f"Left ETL mode is {self.etl_left.mode()}")
         if self.etl_right is not None:
-            print(f"Right ETL mode is {self.etl_right.mode()}")
+            logger.info(f"Right ETL mode is {self.etl_right.mode()}")
 
     def get_temperature(self) -> None:
         if self.etl_left is not None:
-            print(f"Left ETL temperature: {self.etl_left.temp_reading()}")
+            logger.info(f"Left ETL temperature: {self.etl_left.temp_reading()}")
         if self.etl_right is not None:
-            print(f"Right ETL temperature: {self.etl_right.temp_reading()}")
+            logger.info(f"Right ETL temperature: {self.etl_right.temp_reading()}")
 
     def close(self) -> None:
         if self.etl_left is not None:
-            print("Resetting and closing Left ETL")
+            logger.info("Resetting and closing Left ETL")
             self.etl_left.handshake()
             self.etl_left.close()
         if self.etl_right is not None:
-            print("Resetting and closing Right ETL")
+            logger.info("Resetting and closing Right ETL")
             self.etl_right.handshake()
             self.etl_right.close()
 
