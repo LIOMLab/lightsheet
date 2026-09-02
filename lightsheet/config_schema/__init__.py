@@ -40,14 +40,14 @@ from lightsheet.config import cfg_read
 
 from .sections.camera import CameraSettings, CameraSettingsOverlay
 from .sections.controller import ControllerSettings, ControllerSettingsOverlay
+from .sections.lasers import LasersSettings, LasersSettingsOverlay
+from .sections.siggen import SigGenSettings, SigGenSettingsOverlay
 from .shared import (
     _make_overlay,
     _NoEnvBaseSettings,
     _validate_camera_limit_high,
     _validate_horizontal_limit_high,
     _validate_ibeam_max_power,
-    _validate_laser2_max_power,
-    _validate_laser2_mw_per_volt,
     _validate_vertical_limit_high,
 )
 
@@ -74,67 +74,7 @@ _ETL_VOLTAGE_LIMIT: float = 5.0  # 0-5 V Optotune EL-10-30 analog input
 # ---------------------------------------------------------------------------
 
 
-class SigGenSettings(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="forbid", case_sensitive=True, populate_by_name=True
-    )
-    ao_terminals: str = Field(alias="AO Terminals")
-    do_terminals: str = Field(alias="DO Terminals")
-    sample_rate: int = Field(alias="Sample Rate")
-    galvo_pre_time: float = Field(alias="Galvo Pre Time")
-    galvo_scan_time: float = Field(alias="Galvo Scan Time")
-    galvo_reset_time: float = Field(alias="Galvo Reset Time")
-    galvo_post_time: float = Field(alias="Galvo Post Time")
-    galvo_activated: bool = Field(alias="Galvo Activated")
-    galvo_inverted: bool = Field(alias="Galvo Inverted")
-    galvo_left_amplitude: float = Field(alias="Galvo Left Amplitude")
-    galvo_left_offset: float = Field(alias="Galvo Left Offset")
-    galvo_right_amplitude: float = Field(alias="Galvo Right Amplitude")
-    galvo_right_offset: float = Field(alias="Galvo Right Offset")
-    etl_activated: bool = Field(alias="ETL Activated")
-    etl_steps: int = Field(alias="ETL Steps")
-    etl_left_amplitude: float = Field(alias="ETL Left Amplitude")
-    etl_left_offset: float = Field(alias="ETL Left Offset")
-    etl_right_amplitude: float = Field(alias="ETL Right Amplitude")
-    etl_right_offset: float = Field(alias="ETL Right Offset")
-    # Default False so a missing key does not break existing configs.
-    galvo_left_right_swap: bool = Field(alias="Galvo Left Right Swap", default=False)
 
-
-SigGenSettingsOverlay = _make_overlay(SigGenSettings)
-
-
-class LasersSettings(_NoEnvBaseSettings):
-    model_config = SettingsConfigDict(
-        extra="forbid", case_sensitive=True, populate_by_name=True
-    )
-    lasers_terminals: str = Field(alias="Lasers Terminals")
-    laser1_wavelength: int = Field(alias="Laser1 Wavelength")
-    laser1_power: float = Field(alias="Laser1 Power")
-    laser1_max_power: float = Field(alias="Laser1 Max Power")
-    laser1_mw_per_volt: float = Field(alias="Laser1 mW per Volt")
-    # Optional V->mW calibration curve (display-only). Semicolon-separated
-    # "V,mW" pairs. Empty/absent -> linear-through-origin estimate.
-    laser1_calibration_curve: str = Field(alias="Laser1 Calibration Curve", default="")
-    # L2 DAQLaser on /Dev7/ao1 — 0-5 V analog modulation, camera-aligned.
-    # The retained iBeam serial backend is composed as readback_backend.
-    laser2_wavelength: int = Field(alias="Laser2 Wavelength")
-    laser2_power: float = Field(alias="Laser2 Power")
-    laser2_max_power: float = Field(alias="Laser2 Max Power")
-    laser2_mw_per_volt: float = Field(alias="Laser2 mW per Volt")
-
-    @field_validator("laser2_max_power")
-    @classmethod
-    def _hard_laser2_max_power(cls, v: float) -> float:
-        return _validate_laser2_max_power(v)
-
-    @field_validator("laser2_mw_per_volt")
-    @classmethod
-    def _hard_laser2_mw_per_volt(cls, v: float) -> float:
-        return _validate_laser2_mw_per_volt(v)
-
-
-LasersSettingsOverlay = _make_overlay(LasersSettings)
 
 
 class IBeamSettings(_NoEnvBaseSettings):
