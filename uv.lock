@@ -631,7 +631,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "h5py", specifier = ">=3.11" },
-    { name = "liom-toolkit", extras = ["io"], specifier = ">=1.1" },
+    { name = "liom-toolkit", extras = ["io"], specifier = ">=1.1.1" },
     { name = "matplotlib", specifier = ">=3.5.1" },
     { name = "nidaqmx", specifier = ">=0.6.0" },
     { name = "numpy", specifier = ">=2.0" },
@@ -663,7 +663,7 @@ dev = [
 
 [[package]]
 name = "liom-toolkit"
-version = "1.1.0"
+version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bokeh" },
@@ -679,9 +679,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "zarr" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/87/a6/121590c6554359397d6a69024b8b3bf19a7e7073f7b93abe21f37c5bdfb2/liom_toolkit-1.1.0.tar.gz", hash = "sha256:89d0ba90eeaa414702f16f3907ae680a23d5ca6893d623f7229686febca94660", size = 13205009, upload-time = "2026-08-29T00:37:41.094Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4d/d6/03daebf9a0153e31fab2c6b1607c158e91ecca5071e6cc0ee058f14548bc/liom_toolkit-1.1.1.tar.gz", hash = "sha256:76db3624c38034f697cc02d5bfc64f552fd793b6efbab1697d109a315ddb339f", size = 13205093, upload-time = "2026-09-02T15:53:02.158Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6f/70/02685fdd90fb47ecb8f2aa1d436ba83d88d2df81c1c99f206930d968f901/liom_toolkit-1.1.0-py3-none-any.whl", hash = "sha256:0deb0e0cbe9123defa792db7c070dbdc50bde512536929faefcc1c9e3cbdcd73", size = 128746, upload-time = "2026-08-29T00:37:39.122Z" },
+    { url = "https://files.pythonhosted.org/packages/da/a2/77ba1b31f4b22ba7014a4532c6337e70bd3aa244759f53d313e0becd34a4/liom_toolkit-1.1.1-py3-none-any.whl", hash = "sha256:71f97e07bb1c3bc08da656a74e9fb0604410b36b59531ab27d7ae5e1782c193f", size = 128874, upload-time = "2026-09-02T15:53:00.705Z" },
 ]
 
 [[package]]
