@@ -163,7 +163,7 @@ class Optotune(IOptotune):
                     time.sleep(0.100)
                 self.current(0)
             self.ser.close()
-            del self.ser
+            self.ser = None
 
     def _send_cmd(
         self,
