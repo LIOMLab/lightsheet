@@ -443,10 +443,13 @@ class IBeamSmartLaser(ILaser):
         self,
         label: str = "Laser 2 (647 nm)",
         analog_ceiling_mw: float | None = None,
+        port: str | None = None,
     ) -> None:
         # The inner serial engine. __init__ does NOT open the serial port —
         # the controller's hardware_init is responsible for calling open().
-        self._ibeam = IBeam()
+        # The optional `port` lets DeviceRegistry pass a live USB-serial
+        # resolved value, overriding config.ini [iBeam] Port.
+        self._ibeam = IBeam(port=port)
 
         # mW-canonical ILaser surface. The inner IBeam reports wavelength in
         # nm and max_power in µW; the adapter converts max_power to mW.

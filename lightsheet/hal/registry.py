@@ -180,8 +180,11 @@ class DeviceRegistry:
         logger.debug("DeviceRegistry resolved ports: %s", resolved)
 
         camera = Camera(verbose=True)
-        motors = Motors()
-        etls = ETLs()
+        motors = Motors(port=resolved["Zaber motor stages"])
+        etls = ETLs(
+            port_etl_left=resolved["ETL left"],
+            port_etl_right=resolved["ETL right"],
+        )
 
         # Laser config from config.ini [Lasers].
         _l_cfg = cfg_read(
@@ -248,6 +251,7 @@ class DeviceRegistry:
         l2_readback = IBeamSmartLaser(
             label="Laser 2 (647 nm)",
             analog_ceiling_mw=_l2_max_power_mw,
+            port=resolved["Toptica iBeam Smart 640nm laser"],
         )
         l2 = DAQLaser(
             terminal=l2_terminal,

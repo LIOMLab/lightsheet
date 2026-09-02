@@ -755,21 +755,18 @@ FrameSaverController, motors → MotorController), and keep the shell method a
 thin `self._<collaborator>.<method>()` delegate. Do not reintroduce god-object
 logic into the shell controller.
 
-**DeviceRegistry (rig path only, presence-only design).** `registry.py`
-resolves USB-serial devices by `(vid, pid, serial_number)` against
-`hardware_inventory.yaml`: serial-numbered adapters (iBeam COM4, ETLs
-COM5/COM6) match on the serial alone; the null-serial Zaber adapter (COM7)
-falls back to `config.ini [Motors] Port` as the sole second factor, with
-strict abort on ambiguity. It raises `UnresolvedDeviceError` (collect-all) if
-any device is missing. **The resolved ports are NOT wired into the HAL
-constructors** — the HAL classes read their own `config.ini` ports. This is a
-deliberate presence-only design: the registry validates that the right
-physical adapter is on the bus, but on a correctly-wired rig the config.ini
-ports already match the resolved ports. The "COM ports reorder on replug" bug
-(RFR-02) is therefore only PARTIALLY fixed — a replug that reorders COM ports
-will still make the HAL fail to open the old config.ini port. Wiring resolved
-ports into the HAL constructors is a deferred follow-up; do not assume the
-registry redirects the HAL today.
+**DeviceRegistry (rig path only).** `registry.py` resolves USB-serial
+devices by `(vid, pid, serial_number)` against `hardware_inventory.yaml`:
+serial-numbered adapters (iBeam COM4, ETLs COM5/COM6) match on the serial
+alone; the null-serial Zaber adapter (COM7) falls back to `config.ini [Motors]
+Port` as the sole second factor, with strict abort on ambiguity. It raises
+`UnresolvedDeviceError` (collect-all) if any device is missing. **Resolved
+ports are now passed into the HAL constructors** (`Motors(port=...)`,
+`ETLs(port_etl_left=..., port_etl_right=...)`, and
+`IBeamSmartLaser(port=...)`), so a COM-port reorder on replug is handled
+without manually editing `config.ini`. `Lasers Terminals` from `config.ini`
+also drives the two `DAQLaser` terminal arguments — the key is live and
+parsed into a consecutive two-channel range.
 
 **ChannelMap (galvo/ETL channel-reversal mechanism).** `channel_map.py` is a
 frozen value object with a `galvo_left_right_swap` flag (default `False`,
@@ -1080,19 +1077,17 @@ startup. Re-export both backends + `IPowerMeter` through the
   power meter + S245C thermal sensor (via the `IPowerMeter` HAL ABC — see §10)
   to sweep Laser 1 V→mW and record a calibration curve. That is a laser power
   calibration, not the deleted camera/ETL calibration — do not conflate them.
-- **`Lasers Terminals` config key is still dead (location moved)** —
-  `config.ini` declares `Lasers Terminals` and `config_schema.py` validates it,
-  but `DeviceRegistry.resolve()` hardcodes `terminal="/Dev7/ao0"` when
-  constructing `DAQLaser` (`lightsheet/hal/registry.py`). Production and
-  the rig-only tests diverge. If you touch the laser DAQ terminal wiring, read
-  it from config and align production with what the rig tests assume.
-- **DeviceRegistry presence-only design (RFR-02 partial)** — the registry
-  resolves USB-serial devices by VID/PID+serial but does NOT pass the resolved
-  ports into the HAL constructors (HAL classes read their own `config.ini`
-  ports). A COM-port reorder on replug will still make the HAL fail to open the
-  old config.ini port. This is deliberate for this phase; wiring resolved ports
-  into HAL constructors is a deferred follow-up. Do not assume the registry
-  redirects the HAL today (see §10).
+- **`Lasers Terminals` is a live two-channel DAQ wiring key** —
+  `config.ini` declares it, `config_schema.py` validates it, and
+  `DeviceRegistry.resolve()` parses it with `_parse_laser_terminals` into two
+  consecutive AO channel terminals (e.g. `/Dev7/ao0:1` -> `/Dev7/ao0`,
+  `/Dev7/ao1`). The two terminals are passed to the `DAQLaser` constructors.
+  Do not remove the key or hardcode laser terminals in the registry.
+- **DeviceRegistry resolves and forwards COM ports** — the registry resolves
+  USB-serial devices by VID/PID+serial and passes the resolved ports into the
+  HAL constructors (`Motors`, `ETLs`, `IBeamSmartLaser`). A COM-port reorder
+  on replug is now self-recovering; do not fall back to `config.ini` port
+  values inside the HAL constructors.
 - **`frame_saver_worker` non-timeout exceptions** — the inner save loop now
   separates `queue.Empty` (timeout) from other exceptions (phase 05 IN-04 fix):
   an h5py write error emits `sig_status_message` and stops the worker instead
