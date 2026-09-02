@@ -21,8 +21,8 @@ from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QMainWindow,
     QSizePolicy, QSpacerItem, QSplitter, QStackedWidget,
     QStatusBar, QToolBar, QToolButton, QVBoxLayout,
     QWidget)
-
 from lightsheet.gui.styles import spacing as _s
+
 from lightsheet.gui.panels.image_view import ImageView
 from lightsheet.gui.panels.levels_bar import LevelsBar
 from lightsheet.gui.styles import colors as _c
@@ -33,7 +33,7 @@ class Ui_Shell(object):
         if not Shell.objectName():
             Shell.setObjectName(u"Shell")
         Shell.resize(1479, 899)
-        Shell.setMinimumSize(QSize(_s.RAIL * 26 + _s.XXL, _s.RAIL * 16 + _s.XXL))
+        Shell.setMinimumSize(QSize(1280, 800))
         self.actionGuidePdf = QAction(Shell)
         self.actionGuidePdf.setObjectName(u"actionGuidePdf")
         self.action_ShowHideMessageLog = QAction(Shell)
@@ -79,7 +79,7 @@ class Ui_Shell(object):
         sizePolicy.setVerticalStretch(1)
         sizePolicy.setHeightForWidth(self.imagesPane.sizePolicy().hasHeightForWidth())
         self.imagesPane.setSizePolicy(sizePolicy)
-        self.imagesPane.setMinimumSize(QSize(_s.RAIL * 6 + _s.XL + _s.SM, _s.RAIL * 5))
+        self.imagesPane.setMinimumSize(QSize(320, 240))
         self.verticalLayout = QVBoxLayout(self.imagesPane)
         self.verticalLayout.setObjectName(u"verticalLayout")
         self.verticalLayout.setContentsMargins(_s.ZERO, _s.ZERO, _s.XS, _s.SM)
@@ -87,7 +87,7 @@ class Ui_Shell(object):
         self.imageView.setObjectName(u"imageView")
         sizePolicy.setHeightForWidth(self.imageView.sizePolicy().hasHeightForWidth())
         self.imageView.setSizePolicy(sizePolicy)
-        self.imageView.setMinimumSize(QSize(_s.RAIL * 6 + _s.XL + _s.SM, _s.RAIL * 5))
+        self.imageView.setMinimumSize(QSize(320, 240))
 
         self.verticalLayout.addWidget(self.imageView)
 
@@ -102,8 +102,8 @@ class Ui_Shell(object):
         sizePolicy1.setVerticalStretch(0)
         sizePolicy1.setHeightForWidth(self.levelsBar.sizePolicy().hasHeightForWidth())
         self.levelsBar.setSizePolicy(sizePolicy1)
-        self.levelsBar.setMinimumSize(QSize(_s.RAIL * 10, _s.XXL * 2))
-        self.levelsBar.setMaximumSize(QSize(_s.RAIL * 15, _s.XXL * 2))
+        self.levelsBar.setMinimumSize(QSize(480, _s.RAIL + _s.LG))
+        self.levelsBar.setMaximumSize(QSize(720, _s.RAIL + _s.LG))
 
         self.horizontalLayout_levels.addWidget(self.levelsBar)
 
@@ -117,7 +117,7 @@ class Ui_Shell(object):
         sizePolicy2.setVerticalStretch(0)
         sizePolicy2.setHeightForWidth(self.label_levelsReadout.sizePolicy().hasHeightForWidth())
         self.label_levelsReadout.setSizePolicy(sizePolicy2)
-        self.label_levelsReadout.setMinimumSize(QSize(0, 0))
+        self.label_levelsReadout.setMinimumSize(QSize(_s.ZERO, _s.ZERO))
         self.label_levelsReadout.setAlignment(Qt.AlignmentFlag.AlignHCenter|Qt.AlignmentFlag.AlignVCenter)
 
         self.verticalLayout.addWidget(self.label_levelsReadout)
@@ -130,7 +130,7 @@ class Ui_Shell(object):
         sizePolicy3.setVerticalStretch(1)
         sizePolicy3.setHeightForWidth(self.controlsPane.sizePolicy().hasHeightForWidth())
         self.controlsPane.setSizePolicy(sizePolicy3)
-        self.controlsPane.setMinimumSize(QSize(_s.RAIL * 7 + _s.XL, 0))
+        self.controlsPane.setMinimumSize(QSize(360, _s.ZERO))
         self.verticalLayout_3 = QVBoxLayout(self.controlsPane)
         self.verticalLayout_3.setObjectName(u"verticalLayout_3")
         self.verticalLayout_3.setContentsMargins(_s.XS, _s.ZERO, _s.ZERO, _s.ZERO)
@@ -157,7 +157,7 @@ class Ui_Shell(object):
         sizePolicy5.setVerticalStretch(0)
         sizePolicy5.setHeightForWidth(self.plainTextEdit_messageLog.sizePolicy().hasHeightForWidth())
         self.plainTextEdit_messageLog.setSizePolicy(sizePolicy5)
-        self.plainTextEdit_messageLog.setMinimumSize(QSize(0, _s.RAIL * 2))
+        self.plainTextEdit_messageLog.setMinimumSize(QSize(_s.ZERO, _s.RAIL * 2))
         self.plainTextEdit_messageLog.setMaximumSize(QSize(16777215, 16777215))
         self.plainTextEdit_messageLog.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.plainTextEdit_messageLog.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -178,13 +178,13 @@ class Ui_Shell(object):
         sizePolicy6.setVerticalStretch(1)
         sizePolicy6.setHeightForWidth(self.leftRail.sizePolicy().hasHeightForWidth())
         self.leftRail.setSizePolicy(sizePolicy6)
-        self.leftRail.setMinimumSize(QSize(_s.RAIL + _s.XL + _s.XS, 0))
+        self.leftRail.setMinimumSize(QSize(_s.RAIL + _s.XL + _s.XS, _s.ZERO))
         self.leftRail.setMaximumSize(QSize(_s.RAIL + _s.XL + _s.XS, 16777215))
         self.verticalLayout_leftRail = QVBoxLayout(self.leftRail)
         self.verticalLayout_leftRail.setSpacing(_s.XS)
         self.verticalLayout_leftRail.setObjectName(u"verticalLayout_leftRail")
         self.verticalLayout_leftRail.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        self.verticalLayout_leftRail.setContentsMargins(_s.XS, _s.XS, _s.XS, _s.SM)
+        self.verticalLayout_leftRail.setContentsMargins(2, _s.XS, 2, _s.SM)
         self.toolButton_railMotion = QToolButton(self.leftRail)
         self.toolButton_railMotion.setObjectName(u"toolButton_railMotion")
         sizePolicy1.setHeightForWidth(self.toolButton_railMotion.sizePolicy().hasHeightForWidth())
@@ -298,7 +298,7 @@ class Ui_Shell(object):
 
         self.verticalLayout_leftRail.addWidget(self.toolButton_railFocus)
 
-        self.verticalSpacer_leftRail = QSpacerItem(_s.LG + _s.XS, _s.XL + _s.LG, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        self.verticalSpacer_leftRail = QSpacerItem(_s.LG + _s.XS, _s.XXL + _s.SM, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.verticalLayout_leftRail.addItem(self.verticalSpacer_leftRail)
 
@@ -312,7 +312,7 @@ class Ui_Shell(object):
         self.toolBar_estop.setFloatable(False)
         self.label_estopStatus = QLabel(self.toolBar_estop)
         self.label_estopStatus.setObjectName(u"label_estopStatus")
-        self.label_estopStatus.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL + _s.LG + _s.XS, 0))
+        self.label_estopStatus.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL + _s.LG + _s.XS, _s.ZERO))
         self.label_estopStatus.setStyleSheet(f"color: {_c.SUCCESS}; {_t.BOLD}")
         self.toolBar_estop.addWidget(self.label_estopStatus)
         self.pushButton_estop = QPushButton(self.toolBar_estop)
@@ -329,11 +329,11 @@ class Ui_Shell(object):
         self.toolBar_estop.addWidget(self.pushButton_estop)
         self.pushButton_armReset = QPushButton(self.toolBar_estop)
         self.pushButton_armReset.setObjectName(u"pushButton_armReset")
-        self.pushButton_armReset.setMinimumSize(QSize(_s.RAIL + _s.XL + _s.LG, _s.XXL))
+        self.pushButton_armReset.setMinimumSize(QSize(88, _s.XXL))
         self.toolBar_estop.addWidget(self.pushButton_armReset)
         self.label_modeBadge = QLabel(self.toolBar_estop)
         self.label_modeBadge.setObjectName(u"label_modeBadge")
-        self.label_modeBadge.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL + _s.LG + _s.XS, 0))
+        self.label_modeBadge.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL + _s.LG + _s.XS, _s.ZERO))
         self.label_modeBadge.setStyleSheet(f"{_t.BOLD}")
         self.toolBar_estop.addWidget(self.label_modeBadge)
         Shell.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolBar_estop)

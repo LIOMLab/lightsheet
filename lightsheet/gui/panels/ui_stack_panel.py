@@ -19,8 +19,8 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame,
     QGridLayout, QGroupBox, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QSizePolicy, QSpacerItem,
     QVBoxLayout, QWidget)
-
 from lightsheet.gui.styles import spacing as _s
+
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
 class Ui_StackPanel(object):
@@ -77,7 +77,7 @@ class Ui_StackPanel(object):
 
         self.verticalLayout_13.addLayout(self.horizontalLayout_89)
 
-        self.verticalSpacer_7 = QSpacerItem(_s.LG + _s.XS, _s.XS, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        self.verticalSpacer_7 = QSpacerItem(_s.LG + _s.XS, 1, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.verticalLayout_13.addItem(self.verticalSpacer_7)
 
@@ -124,7 +124,7 @@ class Ui_StackPanel(object):
         self.pushButton_acqSetFirstPlane.setObjectName(u"pushButton_acqSetFirstPlane")
         sizePolicy3.setHeightForWidth(self.pushButton_acqSetFirstPlane.sizePolicy().hasHeightForWidth())
         self.pushButton_acqSetFirstPlane.setSizePolicy(sizePolicy3)
-        self.pushButton_acqSetFirstPlane.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL + _s.LG + _s.XS, 0))
+        self.pushButton_acqSetFirstPlane.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL + _s.LG + _s.XS, _s.ZERO))
 
         self.horizontalLayout_90.addWidget(self.pushButton_acqSetFirstPlane)
 
@@ -132,7 +132,7 @@ class Ui_StackPanel(object):
         self.doubleSpinBox_acqFirstPlane.setObjectName(u"doubleSpinBox_acqFirstPlane")
         sizePolicy1.setHeightForWidth(self.doubleSpinBox_acqFirstPlane.sizePolicy().hasHeightForWidth())
         self.doubleSpinBox_acqFirstPlane.setSizePolicy(sizePolicy1)
-        self.doubleSpinBox_acqFirstPlane.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL, 0))
+        self.doubleSpinBox_acqFirstPlane.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL, _s.ZERO))
         self.doubleSpinBox_acqFirstPlane.setDecimals(2)
         self.doubleSpinBox_acqFirstPlane.setMinimum(-100000.000000000000000)
         self.doubleSpinBox_acqFirstPlane.setMaximum(100000.000000000000000)
@@ -149,7 +149,7 @@ class Ui_StackPanel(object):
         self.pushButton_acqSetLastPlane.setObjectName(u"pushButton_acqSetLastPlane")
         sizePolicy3.setHeightForWidth(self.pushButton_acqSetLastPlane.sizePolicy().hasHeightForWidth())
         self.pushButton_acqSetLastPlane.setSizePolicy(sizePolicy3)
-        self.pushButton_acqSetLastPlane.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL + _s.LG + _s.XS, 0))
+        self.pushButton_acqSetLastPlane.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL + _s.LG + _s.XS, _s.ZERO))
 
         self.horizontalLayout_91.addWidget(self.pushButton_acqSetLastPlane)
 
@@ -157,7 +157,7 @@ class Ui_StackPanel(object):
         self.doubleSpinBox_acqLastPlane.setObjectName(u"doubleSpinBox_acqLastPlane")
         sizePolicy1.setHeightForWidth(self.doubleSpinBox_acqLastPlane.sizePolicy().hasHeightForWidth())
         self.doubleSpinBox_acqLastPlane.setSizePolicy(sizePolicy1)
-        self.doubleSpinBox_acqLastPlane.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL, 0))
+        self.doubleSpinBox_acqLastPlane.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL, _s.ZERO))
         self.doubleSpinBox_acqLastPlane.setDecimals(2)
         self.doubleSpinBox_acqLastPlane.setMinimum(-100000.000000000000000)
         self.doubleSpinBox_acqLastPlane.setMaximum(100000.000000000000000)
@@ -171,12 +171,12 @@ class Ui_StackPanel(object):
         self.label_stackPlanSummary.setObjectName(u"label_stackPlanSummary")
         sizePolicy3.setHeightForWidth(self.label_stackPlanSummary.sizePolicy().hasHeightForWidth())
         self.label_stackPlanSummary.setSizePolicy(sizePolicy3)
-        self.label_stackPlanSummary.setMinimumSize(QSize(0, _s.RAIL + _s.MD))
+        self.label_stackPlanSummary.setMinimumSize(QSize(_s.ZERO, _s.RAIL + _s.LG))
         self.label_stackPlanSummary.setWordWrap(True)
 
         self.verticalLayout_14.addWidget(self.label_stackPlanSummary)
 
-        self.verticalSpacer_9 = QSpacerItem(_s.LG + _s.XS, _s.XS, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        self.verticalSpacer_9 = QSpacerItem(_s.LG + _s.XS, 1, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.verticalLayout_14.addItem(self.verticalSpacer_9)
 

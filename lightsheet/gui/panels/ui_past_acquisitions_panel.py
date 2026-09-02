@@ -19,7 +19,6 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QHBoxLayout, QHe
     QLabel, QPushButton, QRadioButton, QSizePolicy,
     QSpacerItem, QTableWidget, QTableWidgetItem, QVBoxLayout,
     QWidget)
-
 from lightsheet.gui.styles import spacing as _s
 
 class Ui_PastAcquisitionsPanel(object):
@@ -56,7 +55,7 @@ class Ui_PastAcquisitionsPanel(object):
 
         self.horizontalLayout_pastViewRow.addWidget(self.pushButton_refreshPast)
 
-        self.horizontalSpacer_pastView = QSpacerItem(_s.XL + _s.LG, _s.LG + _s.XS, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.horizontalSpacer_pastView = QSpacerItem(_s.XXL + _s.SM, _s.LG + _s.XS, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.horizontalLayout_pastViewRow.addItem(self.horizontalSpacer_pastView)
 
@@ -65,7 +64,7 @@ class Ui_PastAcquisitionsPanel(object):
 
         self.label_pastStatus = QLabel(pastAcquisitionsPanel)
         self.label_pastStatus.setObjectName(u"label_pastStatus")
-        self.label_pastStatus.setAlignment(Qt.AlignCenter)  # ty: ignore[unresolved-attribute]
+        self.label_pastStatus.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label_pastStatus.setWordWrap(True)
 
         self.verticalLayout_pastPanel.addWidget(self.label_pastStatus)
@@ -86,9 +85,9 @@ class Ui_PastAcquisitionsPanel(object):
         __qtablewidgetitem5 = QTableWidgetItem()
         self.tableWidget_pastAcquisitions.setHorizontalHeaderItem(5, __qtablewidgetitem5)
         self.tableWidget_pastAcquisitions.setObjectName(u"tableWidget_pastAcquisitions")
-        self.tableWidget_pastAcquisitions.setEditTriggers(QAbstractItemView.NoEditTriggers)  # ty: ignore[unresolved-attribute]
-        self.tableWidget_pastAcquisitions.setSelectionBehavior(QAbstractItemView.SelectRows)  # ty: ignore[unresolved-attribute]
-        self.tableWidget_pastAcquisitions.setSelectionMode(QAbstractItemView.SingleSelection)  # ty: ignore[unresolved-attribute]
+        self.tableWidget_pastAcquisitions.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.tableWidget_pastAcquisitions.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.tableWidget_pastAcquisitions.setSelectionMode(QAbstractItemView.SingleSelection)
         self.tableWidget_pastAcquisitions.setWordWrap(False)
         self.tableWidget_pastAcquisitions.horizontalHeader().setStretchLastSection(True)
 
@@ -116,17 +115,17 @@ class Ui_PastAcquisitionsPanel(object):
 #endif // QT_CONFIG(tooltip)
         self.label_pastStatus.setText("")
         ___qtablewidgetitem = self.tableWidget_pastAcquisitions.horizontalHeaderItem(0)
-        ___qtablewidgetitem.setText(QCoreApplication.translate("PastAcquisitionsPanel", u"Sample", None))  # ty: ignore[unresolved-attribute]
+        ___qtablewidgetitem.setText(QCoreApplication.translate("PastAcquisitionsPanel", u"Sample", None))
         ___qtablewidgetitem1 = self.tableWidget_pastAcquisitions.horizontalHeaderItem(1)
-        ___qtablewidgetitem1.setText(QCoreApplication.translate("PastAcquisitionsPanel", u"Channel", None))  # ty: ignore[unresolved-attribute]
+        ___qtablewidgetitem1.setText(QCoreApplication.translate("PastAcquisitionsPanel", u"Channel", None))
         ___qtablewidgetitem2 = self.tableWidget_pastAcquisitions.horizontalHeaderItem(2)
-        ___qtablewidgetitem2.setText(QCoreApplication.translate("PastAcquisitionsPanel", u"#Planes", None))  # ty: ignore[unresolved-attribute]
+        ___qtablewidgetitem2.setText(QCoreApplication.translate("PastAcquisitionsPanel", u"#Planes", None))
         ___qtablewidgetitem3 = self.tableWidget_pastAcquisitions.horizontalHeaderItem(3)
-        ___qtablewidgetitem3.setText(QCoreApplication.translate("PastAcquisitionsPanel", u"Size", None))  # ty: ignore[unresolved-attribute]
+        ___qtablewidgetitem3.setText(QCoreApplication.translate("PastAcquisitionsPanel", u"Size", None))
         ___qtablewidgetitem4 = self.tableWidget_pastAcquisitions.horizontalHeaderItem(4)
-        ___qtablewidgetitem4.setText(QCoreApplication.translate("PastAcquisitionsPanel", u"Date", None))  # ty: ignore[unresolved-attribute]
+        ___qtablewidgetitem4.setText(QCoreApplication.translate("PastAcquisitionsPanel", u"Date", None))
         ___qtablewidgetitem5 = self.tableWidget_pastAcquisitions.horizontalHeaderItem(5)
-        ___qtablewidgetitem5.setText(QCoreApplication.translate("PastAcquisitionsPanel", u"Format", None))  # ty: ignore[unresolved-attribute]
+        ___qtablewidgetitem5.setText(QCoreApplication.translate("PastAcquisitionsPanel", u"Format", None))
         pass
     # retranslateUi
 

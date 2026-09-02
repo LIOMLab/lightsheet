@@ -18,11 +18,11 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
 from PySide6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QFrame,
     QGroupBox, QHBoxLayout, QLabel, QPushButton,
     QSizePolicy, QSpacerItem, QVBoxLayout, QWidget)
-
 from lightsheet.gui.styles import spacing as _s
 from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.styles import symbols as _sym
 from lightsheet.gui.styles import typography as _t
+
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
 class Ui_LaserPanel(object):
@@ -91,14 +91,14 @@ class Ui_LaserPanel(object):
 
         self.label_laserOneStatus = QLabel(self.groupBox_15)
         self.label_laserOneStatus.setObjectName(u"label_laserOneStatus")
-        self.label_laserOneStatus.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL + _s.LG + _s.XS, 0))
+        self.label_laserOneStatus.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL + _s.LG + _s.XS, _s.ZERO))
         self.label_laserOneStatus.setStyleSheet(f"color: {_c.DISABLED}; {_t.BOLD}")
 
         self.verticalLayout_43.addWidget(self.label_laserOneStatus)
 
         self.label_laserOneReadback = QLabel(self.groupBox_15)
         self.label_laserOneReadback.setObjectName(u"label_laserOneReadback")
-        self.label_laserOneReadback.setMinimumSize(QSize(_s.RAIL + _s.XXL, 0))
+        self.label_laserOneReadback.setMinimumSize(QSize(_s.RAIL + _s.XXL, _s.ZERO))
 
         self.verticalLayout_43.addWidget(self.label_laserOneReadback)
 
@@ -161,14 +161,14 @@ class Ui_LaserPanel(object):
 
         self.label_laserTwoStatus = QLabel(self.groupBox_15)
         self.label_laserTwoStatus.setObjectName(u"label_laserTwoStatus")
-        self.label_laserTwoStatus.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL + _s.LG + _s.XS, 0))
+        self.label_laserTwoStatus.setMinimumSize(QSize(_s.RAIL * 2 + _s.XL + _s.LG + _s.XS, _s.ZERO))
         self.label_laserTwoStatus.setStyleSheet(f"color: {_c.DISABLED}; {_t.BOLD}")
 
         self.verticalLayout_44.addWidget(self.label_laserTwoStatus)
 
         self.label_laserTwoReadback = QLabel(self.groupBox_15)
         self.label_laserTwoReadback.setObjectName(u"label_laserTwoReadback")
-        self.label_laserTwoReadback.setMinimumSize(QSize(_s.RAIL + _s.XXL, 0))
+        self.label_laserTwoReadback.setMinimumSize(QSize(_s.RAIL + _s.XXL, _s.ZERO))
 
         self.verticalLayout_44.addWidget(self.label_laserTwoReadback)
 
@@ -212,7 +212,7 @@ class Ui_LaserPanel(object):
 
         self.verticalLayout_17.addWidget(self.pushButton_laserTwoToggle)
 
-        self.verticalSpacer_12 = QSpacerItem(_s.LG + _s.XS, _s.XS, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        self.verticalSpacer_12 = QSpacerItem(_s.LG + _s.XS, 1, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.verticalLayout_17.addItem(self.verticalSpacer_12)
 
@@ -237,7 +237,7 @@ class Ui_LaserPanel(object):
 #endif // QT_CONFIG(tooltip)
         self.doubleSpinBox_laserOneAmplitude.setSuffix(QCoreApplication.translate("LaserPanel", u" %", None))
 #if QT_CONFIG(tooltip)
-        self.checkBox_laserOneAutomatic.setToolTip(QCoreApplication.translate("LaserPanel", u"When checked, this laser turns on/off automatically during acquisition. When BOTH auto-laser boxes are checked, stack and single modes run a sequential multi-channel cycle (laser 1 then laser 2 per plane) and the badge shows MULTI-CH; live and preview energize only the first-checked laser for the session. Safety: uncheck to keep the laser under manual toggle control.", None))
+        self.checkBox_laserOneAutomatic.setToolTip(QCoreApplication.translate("LaserPanel", u"When checked, this laser turns on/off automatically during acquisition. When BOTH auto-laser boxes are checked, stack and single modes run a sequential multi-channel cycle (laser 1 then laser 2 per plane) and the badge shows MULTI-CH; live and preview energize only the first-checked laser for the session.", None))
 #endif // QT_CONFIG(tooltip)
         self.checkBox_laserOneAutomatic.setText(QCoreApplication.translate("LaserPanel", u"Auto On/Off", None))
 #if QT_CONFIG(tooltip)
@@ -255,7 +255,7 @@ class Ui_LaserPanel(object):
 #endif // QT_CONFIG(tooltip)
         self.doubleSpinBox_laserTwoAmplitude.setSuffix(QCoreApplication.translate("LaserPanel", u" %", None))
 #if QT_CONFIG(tooltip)
-        self.checkBox_laserTwoAutomatic.setToolTip(QCoreApplication.translate("LaserPanel", u"When checked, this laser turns on/off automatically during acquisition. When BOTH auto-laser boxes are checked, stack and single modes run a sequential multi-channel cycle (laser 1 then laser 2 per plane) and the badge shows MULTI-CH; live and preview energize only the first-checked laser for the session. Safety: uncheck to keep the laser under manual toggle control.", None))
+        self.checkBox_laserTwoAutomatic.setToolTip(QCoreApplication.translate("LaserPanel", u"When checked, this laser turns on/off automatically during acquisition. When BOTH auto-laser boxes are checked, stack and single modes run a sequential multi-channel cycle (laser 1 then laser 2 per plane) and the badge shows MULTI-CH; live and preview energize only the first-checked laser for the session.", None))
 #endif // QT_CONFIG(tooltip)
         self.checkBox_laserTwoAutomatic.setText(QCoreApplication.translate("LaserPanel", u"Auto On/Off", None))
 #if QT_CONFIG(tooltip)

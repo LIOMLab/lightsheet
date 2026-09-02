@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QFrame, QGridLay
     QLineEdit, QListWidget, QListWidgetItem, QPushButton,
     QRadioButton, QSizePolicy, QSpacerItem, QSplitter,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
-
 from lightsheet.gui.styles import spacing as _s
 
 class Ui_SavePanel(object):
@@ -47,7 +46,7 @@ class Ui_SavePanel(object):
 
         self.horizontalLayout_92.addWidget(self.pushButton_saveSelectDirectory)
 
-        self.horizontalSpacer_2 = QSpacerItem(_s.XL + _s.LG, _s.LG + _s.XS, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.horizontalSpacer_2 = QSpacerItem(_s.XXL + _s.SM, _s.LG + _s.XS, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.horizontalLayout_92.addItem(self.horizontalSpacer_2)
 
@@ -107,7 +106,7 @@ class Ui_SavePanel(object):
 
         self.line_5 = QFrame(self.groupBox_5)
         self.line_5.setObjectName(u"line_5")
-        self.line_5.setFrameShadow(QFrame.Raised)  # ty: ignore[unresolved-attribute]
+        self.line_5.setFrameShadow(QFrame.Shadow.Raised)
         self.line_5.setFrameShape(QFrame.Shape.VLine)
 
         self.horizontalLayout_8.addWidget(self.line_5)
@@ -219,7 +218,7 @@ class Ui_SavePanel(object):
 
         self.splitter_3 = QSplitter(self.groupBox_16)
         self.splitter_3.setObjectName(u"splitter_3")
-        self.splitter_3.setOrientation(Qt.Horizontal)  # ty: ignore[unresolved-attribute]
+        self.splitter_3.setOrientation(Qt.Orientation.Horizontal)
         self.splitter_3.setChildrenCollapsible(False)
         self.layoutWidget = QWidget(self.splitter_3)
         self.layoutWidget.setObjectName(u"layoutWidget")
@@ -240,7 +239,7 @@ class Ui_SavePanel(object):
         sizePolicy4.setVerticalStretch(0)
         sizePolicy4.setHeightForWidth(self.listWidget_fileDatasets.sizePolicy().hasHeightForWidth())
         self.listWidget_fileDatasets.setSizePolicy(sizePolicy4)
-        self.listWidget_fileDatasets.setSelectionMode(QAbstractItemView.ExtendedSelection)  # ty: ignore[unresolved-attribute]
+        self.listWidget_fileDatasets.setSelectionMode(QAbstractItemView.ExtendedSelection)
 
         self.verticalLayout_50.addWidget(self.listWidget_fileDatasets)
 
@@ -353,7 +352,7 @@ class Ui_SavePanel(object):
 #endif // QT_CONFIG(tooltip)
         self.pushButton_selectFile.setText(QCoreApplication.translate("SavePanel", u"Select File", None))
         self.label_37.setText(QCoreApplication.translate("SavePanel", u"Current File:", None))
-        self.label_currentFileDirectory.setText(QCoreApplication.translate("SavePanel", u"Select a file…", None))
+        self.label_currentFileDirectory.setText(QCoreApplication.translate("SavePanel", u"Select a file\u2026", None))
         self.label_38.setText(QCoreApplication.translate("SavePanel", u"File Datasets:", None))
 #if QT_CONFIG(tooltip)
         self.pushButton_selectDataset.setToolTip(QCoreApplication.translate("SavePanel", u"Select and show the dataset(s) of the opened file", None))
@@ -361,7 +360,7 @@ class Ui_SavePanel(object):
         self.pushButton_selectDataset.setText(QCoreApplication.translate("SavePanel", u"Select and Show Dataset(s)", None))
         self.label_39.setText(QCoreApplication.translate("SavePanel", u"Dataset Attributes:", None))
         self.label_40.setText(QCoreApplication.translate("SavePanel", u"Current Dataset:", None))
-        self.label_currentDataset.setText(QCoreApplication.translate("SavePanel", u"Select a dataset…", None))
+        self.label_currentDataset.setText(QCoreApplication.translate("SavePanel", u"Select a dataset\u2026", None))
         pass
     # retranslateUi
 

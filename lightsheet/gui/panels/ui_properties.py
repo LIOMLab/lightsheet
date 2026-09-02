@@ -18,7 +18,6 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
 from PySide6.QtWidgets import (QApplication, QDialog, QFormLayout, QGroupBox,
     QLabel, QPushButton, QSizePolicy, QSpacerItem,
     QVBoxLayout, QWidget)
-
 from lightsheet.gui.styles import spacing as _s
 
 class Ui_Properties(object):
@@ -77,11 +76,11 @@ class Ui_Properties(object):
 
         self.formLayout.setWidget(8, QFormLayout.ItemRole.FieldRole, self.label_triggerMode)
 
-        self.verticalSpacer = QSpacerItem(_s.LG + _s.XS, _s.XL + _s.LG, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        self.verticalSpacer = QSpacerItem(_s.LG + _s.XS, _s.XXL + _s.SM, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.formLayout.setItem(3, QFormLayout.ItemRole.LabelRole, self.verticalSpacer)
 
-        self.verticalSpacer_2 = QSpacerItem(_s.LG + _s.XS, _s.XL + _s.LG, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        self.verticalSpacer_2 = QSpacerItem(_s.LG + _s.XS, _s.XXL + _s.SM, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.formLayout.setItem(7, QFormLayout.ItemRole.LabelRole, self.verticalSpacer_2)
 
@@ -115,7 +114,7 @@ class Ui_Properties(object):
 
         self.formLayout.setWidget(10, QFormLayout.ItemRole.FieldRole, self.label_exposureTime)
 
-        self.verticalSpacer_3 = QSpacerItem(_s.LG + _s.XS, _s.XL + _s.LG, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        self.verticalSpacer_3 = QSpacerItem(_s.LG + _s.XS, _s.XXL + _s.SM, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.formLayout.setItem(11, QFormLayout.ItemRole.LabelRole, self.verticalSpacer_3)
 

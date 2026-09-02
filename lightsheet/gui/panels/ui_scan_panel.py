@@ -18,9 +18,9 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
 from PySide6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QFrame,
     QGroupBox, QHBoxLayout, QLabel, QSizePolicy,
     QVBoxLayout, QWidget)
-
 from lightsheet.gui.styles import spacing as _s
 from lightsheet.gui.styles import typography as _t
+
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
 class Ui_ScanPanel(object):
@@ -106,7 +106,7 @@ class Ui_ScanPanel(object):
         self.line_24.setObjectName(u"line_24")
         sizePolicy.setHeightForWidth(self.line_24.sizePolicy().hasHeightForWidth())
         self.line_24.setSizePolicy(sizePolicy)
-        self.line_24.setMinimumSize(QSize(3, 0))
+        self.line_24.setMinimumSize(QSize(3, _s.ZERO))
         self.line_24.setMaximumSize(QSize(3, 16777215))
         self.line_24.setFrameShape(QFrame.Shape.VLine)
         self.line_24.setFrameShadow(QFrame.Shadow.Sunken)
@@ -179,8 +179,8 @@ class Ui_ScanPanel(object):
         self.checkBox_etlSync.setObjectName(u"checkBox_etlSync")
         sizePolicy.setHeightForWidth(self.checkBox_etlSync.sizePolicy().hasHeightForWidth())
         self.checkBox_etlSync.setSizePolicy(sizePolicy)
-        self.checkBox_etlSync.setMinimumSize(QSize(0, _s.LG + _s.XS))
-        self.checkBox_etlSync.setLayoutDirection(Qt.LeftToRight)  # ty: ignore[unresolved-attribute]
+        self.checkBox_etlSync.setMinimumSize(QSize(_s.ZERO, _s.LG + _s.XS))
+        self.checkBox_etlSync.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
 
         self.verticalLayout_45.addWidget(self.checkBox_etlSync)
 
@@ -283,7 +283,7 @@ class Ui_ScanPanel(object):
 
         self.line_9 = QFrame(self.groupBox_11)
         self.line_9.setObjectName(u"line_9")
-        self.line_9.setMinimumSize(QSize(3, 0))
+        self.line_9.setMinimumSize(QSize(3, _s.ZERO))
         self.line_9.setMaximumSize(QSize(3, 16777215))
         self.line_9.setFrameShape(QFrame.Shape.VLine)
         self.line_9.setFrameShadow(QFrame.Shadow.Sunken)
@@ -354,8 +354,8 @@ class Ui_ScanPanel(object):
         self.checkBox_galvoSync.setObjectName(u"checkBox_galvoSync")
         sizePolicy.setHeightForWidth(self.checkBox_galvoSync.sizePolicy().hasHeightForWidth())
         self.checkBox_galvoSync.setSizePolicy(sizePolicy)
-        self.checkBox_galvoSync.setMinimumSize(QSize(0, _s.LG + _s.XS))
-        self.checkBox_galvoSync.setLayoutDirection(Qt.LeftToRight)  # ty: ignore[unresolved-attribute]
+        self.checkBox_galvoSync.setMinimumSize(QSize(_s.ZERO, _s.LG + _s.XS))
+        self.checkBox_galvoSync.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
 
         self.verticalLayout_39.addWidget(self.checkBox_galvoSync)
 

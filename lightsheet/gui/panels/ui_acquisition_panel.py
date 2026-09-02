@@ -18,8 +18,8 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
 from PySide6.QtWidgets import (QApplication, QComboBox, QFormLayout, QFrame,
     QGroupBox, QLabel, QPushButton, QSizePolicy,
     QSpacerItem, QVBoxLayout, QWidget)
-
 from lightsheet.gui.styles import spacing as _s
+
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
 class Ui_AcquisitionPanel(object):
@@ -57,7 +57,7 @@ class Ui_AcquisitionPanel(object):
 
         self.verticalLayout_15.addWidget(self.pushButton_acqStartLiveMode)
 
-        self.verticalSpacer_13 = QSpacerItem(_s.LG + _s.XS, _s.XS, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        self.verticalSpacer_13 = QSpacerItem(_s.LG + _s.XS, 1, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.verticalLayout_15.addItem(self.verticalSpacer_13)
 
@@ -85,7 +85,7 @@ class Ui_AcquisitionPanel(object):
         self.groupBox_12.setObjectName(u"groupBox_12")
         self.formLayout = QFormLayout(self.groupBox_12)
         self.formLayout.setObjectName(u"formLayout")
-        self.formLayout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)  # ty: ignore[unresolved-attribute]
+        self.formLayout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
         self.label_9 = QLabel(self.groupBox_12)
         self.label_9.setObjectName(u"label_9")
 
@@ -93,7 +93,7 @@ class Ui_AcquisitionPanel(object):
 
         self.comboBox_cameraShutterMode = QComboBox(self.groupBox_12)
         self.comboBox_cameraShutterMode.setObjectName(u"comboBox_cameraShutterMode")
-        self.comboBox_cameraShutterMode.setSizeAdjustPolicy(QComboBox.AdjustToContents)  # ty: ignore[unresolved-attribute]
+        self.comboBox_cameraShutterMode.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.comboBox_cameraShutterMode.setMinimumContentsLength(12)
 
         self.formLayout.setWidget(1, QFormLayout.ItemRole.FieldRole, self.comboBox_cameraShutterMode)

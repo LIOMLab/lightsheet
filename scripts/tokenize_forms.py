@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Idempotent post-processor that converts pyside6-uic spacing literals to tokens."""
+"""Idempotent post-processor that converts pyside6-uic output to design tokens."""
 
 import argparse
 import difflib
@@ -46,6 +46,31 @@ _SET_CONTENTS_RE = re.compile(
 _SET_FIXED_RE = re.compile(r"\.setFixed(Height|Width)\((\d+)\)")
 _QSIZE_RE = re.compile(r"QSize\((-?\d+),\s*(-?\d+)\)")
 _SPACER_RE = re.compile(r"QSpacerItem\((\d+),\s*(\d+)")
+
+# Style-sheet insertion regexes: these are only meant to run on pyside6-uic output
+# for files that lack the tokenized style calls.  If the calls are already present,
+# the "setMinimumSize ... setStyleSheet" pattern no longer matches and the patch is
+# a no-op.
+_SHELL_ESTOP_STATUS_RE = re.compile(
+    r"(        self\.label_estopStatus\.setMinimumSize\(QSize\([^)]+\)\))\n"
+    r"(        self\.toolBar_estop\.addWidget\(self\.label_estopStatus\))"
+)
+_SHELL_ESTOP_BTN_RE = re.compile(
+    r"(        self\.pushButton_estop\.setMinimumSize\(QSize\([^)]+\)\))\n"
+    r"(        self\.pushButton_estop\.setCheckable\(True\))"
+)
+_SHELL_MODE_BADGE_RE = re.compile(
+    r"(        self\.label_modeBadge\.setMinimumSize\(QSize\([^)]+\)\))\n"
+    r"(        self\.toolBar_estop\.addWidget\(self\.label_modeBadge\))"
+)
+_LASER1_STATUS_STYLE_RE = re.compile(
+    r"(        self\.label_laserOneStatus\.setMinimumSize\(QSize\([^)]+\)\))\n\n"
+    r"(        self\.verticalLayout_43\.addWidget\(self\.label_laserOneStatus\))"
+)
+_LASER2_STATUS_STYLE_RE = re.compile(
+    r"(        self\.label_laserTwoStatus\.setMinimumSize\(QSize\([^)]+\)\))\n\n"
+    r"(        self\.verticalLayout_44\.addWidget\(self\.label_laserTwoStatus\))"
+)
 
 
 def _token(value: str) -> str:
@@ -96,14 +121,157 @@ def _transform(text: str) -> str:
     return text
 
 
+def _ensure_imports(text: str, imports: list[tuple[str, str]], anchor: str) -> str:
+    """Insert missing lightsheet.gui.styles imports after the anchor line."""
+    missing = [
+        (module, alias)
+        for module, alias in imports
+        if f"from lightsheet.gui.styles import {module} as {alias}" not in text
+    ]
+    if not missing:
+        return text
+
+    if anchor in text:
+        lines = text.splitlines(keepends=True)
+        for i, line in enumerate(lines):
+            if line.rstrip("\n") == anchor:
+                inserted = [
+                    f"from lightsheet.gui.styles import {module} as {alias}\n"
+                    for module, alias in missing
+                ]
+                return "".join(lines[: i + 1] + inserted + lines[i + 1 :])
+
+    # Fallback to end of the PySide6 import block.
+    match = _PYSIDE_BLOCK_RE.search(text)
+    if match:
+        end = match.end()
+        inserted = "".join(
+            f"from lightsheet.gui.styles import {module} as {alias}\n"
+            for module, alias in missing
+        )
+        return text[:end] + inserted + text[end:]
+
+    return text
+
+
+def _replace_shell_estop_status(m: re.Match[str]) -> str:
+    return (
+        m[1]
+        + '\n        self.label_estopStatus.setStyleSheet(f"color: {_c.SUCCESS}; {_t.BOLD}")\n'
+        + m[2]
+    )
+
+
+def _replace_shell_estop_btn(m: re.Match[str]) -> str:
+    return m[1] + "\n" + (
+        "        self.pushButton_estop.setStyleSheet(\n"
+        '            f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "\n'
+        '            f"{_t.HEADING} border: 2px solid {_c.BREEZE_BG}; }}"\n'
+        "        )"
+    ) + "\n" + m[2]
+
+
+def _replace_shell_mode_badge(m: re.Match[str]) -> str:
+    return (
+        m[1]
+        + '\n        self.label_modeBadge.setStyleSheet(f"{_t.BOLD}")\n'
+        + m[2]
+    )
+
+
+def _replace_laser1_status_style(m: re.Match[str]) -> str:
+    return (
+        m[1]
+        + '\n        self.label_laserOneStatus.setStyleSheet(f"color: {_c.DISABLED}; {_t.BOLD}")\n\n'
+        + m[2]
+    )
+
+
+def _replace_laser2_status_style(m: re.Match[str]) -> str:
+    return (
+        m[1]
+        + '\n        self.label_laserTwoStatus.setStyleSheet(f"color: {_c.DISABLED}; {_t.BOLD}")\n\n'
+        + m[2]
+    )
+
+
+def _patch_shell(text: str) -> str:
+    text = _ensure_imports(
+        text,
+        [("colors", "_c"), ("typography", "_t")],
+        "from lightsheet.gui.panels.levels_bar import LevelsBar",
+    )
+    text = _SHELL_ESTOP_STATUS_RE.sub(_replace_shell_estop_status, text)
+    text = _SHELL_ESTOP_BTN_RE.sub(_replace_shell_estop_btn, text)
+    text = _SHELL_MODE_BADGE_RE.sub(_replace_shell_mode_badge, text)
+    return text
+
+
+def _patch_laser(text: str) -> str:
+    text = _ensure_imports(
+        text,
+        [("colors", "_c"), ("symbols", "_sym"), ("typography", "_t")],
+        "from lightsheet.gui.styles import spacing as _s",
+    )
+    text = _LASER1_STATUS_STYLE_RE.sub(_replace_laser1_status_style, text)
+    text = _LASER2_STATUS_STYLE_RE.sub(_replace_laser2_status_style, text)
+    text = text.replace(
+        r'self.label_72.setText(QCoreApplication.translate("LaserPanel", u"Laser1", None))',
+        r'self.label_72.setText(QCoreApplication.translate("LaserPanel", f"<html><head/><body><p><span style=\"{_t.POWER}\">Laser1</span></p></body></html>", None))',
+    )
+    text = text.replace(
+        r'self.label_73.setText(QCoreApplication.translate("LaserPanel", u"Laser2", None))',
+        r'self.label_73.setText(QCoreApplication.translate("LaserPanel", f"<html><head/><body><p><span style=\"{_t.POWER}\">Laser2</span></p></body></html>", None))',
+    )
+    text = text.replace(
+        r'self.label_laserOneStatus.setText(QCoreApplication.translate("LaserPanel", u"\u25cb OFF", None))',
+        r'self.label_laserOneStatus.setText(QCoreApplication.translate("LaserPanel", f"{_sym.LASER_OFF} OFF", None))',
+    )
+    text = text.replace(
+        r'self.label_laserTwoStatus.setText(QCoreApplication.translate("LaserPanel", u"\u25cb OFF", None))',
+        r'self.label_laserTwoStatus.setText(QCoreApplication.translate("LaserPanel", f"{_sym.LASER_OFF} OFF", None))',
+    )
+    return text
+
+
+def _patch_scan(text: str) -> str:
+    text = _ensure_imports(
+        text,
+        [("typography", "_t")],
+        "from lightsheet.gui.styles import spacing as _s",
+    )
+    for label, inner in [
+        ("label_76", "Left ETL"),
+        ("label_80", "Right ETL"),
+        ("label_69", "Left Galvo"),
+        ("label_70", "Right Galvo"),
+    ]:
+        old = f'self.{label}.setText(QCoreApplication.translate("ScanPanel", u"{inner}", None))'
+        new = f'self.{label}.setText(QCoreApplication.translate("ScanPanel", f\'<html><head/><body><p><span style="{{_t.POWER}}">{inner}</span></p></body></html>\', None))'
+        text = text.replace(old, new)
+    return text
+
+
+def _style_patches(text: str, path: Path) -> str:
+    name = path.name
+    if name == "ui_shell.py":
+        return _patch_shell(text)
+    if name == "ui_laser_panel.py":
+        return _patch_laser(text)
+    if name == "ui_scan_panel.py":
+        return _patch_scan(text)
+    return text
+
+
 def _process(path: Path, dry_run: bool, show_diff: bool) -> bool:
     original = path.read_text(encoding="utf-8")
     if _is_tokenized(original):
         return False
     transformed = _transform(original)
+    transformed = _add_import(transformed)
+    transformed = _style_patches(transformed, path)
     if transformed == original:
         return False
-    transformed = _add_import(transformed)
     if dry_run or show_diff:
         if dry_run:
             print(f"would change: {path}")
@@ -139,7 +307,7 @@ def _target_files(repo_root: Path) -> list[Path]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Map pyside6-uic spacing literals to _s tokens in generated forms."
+        description="Map pyside6-uic output to _s/_c/_t/_sym design tokens."
     )
     parser.add_argument(
         "--repo-root",
