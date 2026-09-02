@@ -397,7 +397,7 @@ class AcquisitionTableManager(QWidget):
         """Compute (#planes, est. time s, est. size MB) for a row."""
         if step == 0 or start == end:
             return 0, 0.0, 0.0
-        n_planes = math.ceil(abs((end - start) / step)) + 1
+        n_planes = math.floor(abs((end - start) / step)) + 1
         per_plane_s = self._estimate_per_plane_time()
         est_time_s = n_planes * per_plane_s
         est_size_mb = self._estimate_stack_size_mb(n_planes)
