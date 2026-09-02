@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING
 import numpy as np
 from PySide6.QtCore import QObject, Signal, Slot
 
-from lightsheet.hal.bundle import DeviceBundle
 from lightsheet.gui.workers.scan_mixin import _AcquireScanMixin
 from lightsheet.gui.workers.stack_adaptive import _StackAdaptiveMixin
+from lightsheet.hal.bundle import DeviceBundle
 
 if TYPE_CHECKING:
     from lightsheet.gui.coordinators.hardware_manager import HardwareManager
@@ -562,13 +562,11 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         # break stops the per-plane cycle.
                         if self._shell.estop_event.is_set():
                             break
-                        self.acquire_scan()
-                        # Abort the stack if the camera timed out or the DAQ
-                        # scan task failed on this channel — acquire_scan
-                        # already emitted the warning and cleaned up the
-                        # recorder/scanner; do not attempt channel 2 or the
-                        # next plane.
-                        if self.camera.recorder_timeout_status or self.siggen.error:
+                        if not self.acquire_scan():
+                            # Failed scan on channel 0 — acquire_scan already
+                            # emitted a warning and cleaned up the
+                            # recorder/scanner. Do not attempt channel 1 or
+                            # the next plane.
                             break
                         # Capture frame1 immediately — the next acquire_scan
                         # overwrites reconstructed_frame (pitfall #3).
@@ -583,8 +581,9 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         # and before the channel-1 acquire_scan.
                         if self._shell.estop_event.is_set():
                             break
-                        self.acquire_scan()
-                        if self.camera.recorder_timeout_status or self.siggen.error:
+                        if not self.acquire_scan():
+                            # Failed scan on channel 1 — do not enqueue
+                            # partial frames or attempt the next plane.
                             break
                         frame2 = (
                             None
@@ -634,22 +633,11 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         # Single-channel path (unchanged — back-compat).
 
                         # Getting image
-                        self.acquire_scan()
-
-                        # Abort the stack if the camera timed out on this plane —
-                        # acquire_scan already emitted the timeout warning and cleaned
-                        # up the recorder/scanner; do not enqueue a (nonexistent)
-                        # frame for this plane or attempt the next one.
-                        if self.camera.recorder_timeout_status:
-                            break
-
-                        # A DAQ scan-task failure would recur on every remaining
-                        # plane — abort the stack instead of emitting the same
-                        # message N times. acquire_scan already emitted the
-                        # operator message and cleaned up the scanner/camera for
-                        # this plane; the post-loop stop_lasers/disarm cleanup
-                        # runs unchanged.
-                        if self.siggen.error:
+                        if not self.acquire_scan():
+                            # Failed scan on this plane — acquire_scan already
+                            # emitted a warning and cleaned up the
+                            # recorder/scanner. Do not enqueue a nonexistent
+                            # frame or attempt the next plane.
                             break
 
                         # Saving frame — adaptive sample recording happens
