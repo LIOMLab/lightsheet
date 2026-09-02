@@ -36,7 +36,8 @@ def test_reset_with_none_curves_and_legend(qtbot: QtBot) -> None:
     w.reset()
     assert w._run_started is True
     parent = w.plotWidget_focusTrajectory.parentWidget()
-    assert w.plotWidget_focusTrajectory.isVisibleTo(parent)  # type: ignore[unresolved-attribute]
+    assert parent is not None
+    assert w.plotWidget_focusTrajectory.isVisibleTo(parent)
     assert w.label_focusTrajectoryEmpty.isHidden()
 
 
@@ -132,7 +133,8 @@ def test_freeze_blocks_appends(qtbot: QtBot) -> None:
         residual_mm=0.0,
         x_axis_value=1.0,
     )
-    xs, _ys = w._camera_curve.getData()  # type: ignore[unresolved-attribute]
+    assert w._camera_curve is not None
+    xs, _ys = w._camera_curve.getData()
     assert len(xs) == 1
 
 
@@ -221,7 +223,8 @@ def test_focus_trajectory_slot_is_shell_bound_method(
         0.0,
         20.0,
     )
-    xs, _ys = ctrl.focusTrajectoryWidget._camera_curve.getData()  # type: ignore[unresolved-attribute]
+    assert ctrl.focusTrajectoryWidget._camera_curve is not None
+    xs, _ys = ctrl.focusTrajectoryWidget._camera_curve.getData()
     assert len(xs) == 1
 
 

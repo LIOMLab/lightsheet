@@ -6,6 +6,8 @@ assert, no Qt, no HAL, no hardware.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from lightsheet.focus import (
@@ -16,8 +18,8 @@ from lightsheet.focus import (
 )
 
 
-def _cfg(**overrides: object) -> FocusConfig:
-    defaults: dict[str, object] = dict(
+def _cfg(**overrides: Any) -> FocusConfig:
+    defaults: dict[str, Any] = dict(
         enabled=True,
         block_size_n=8,
         autofocus_residual=True,
@@ -26,7 +28,7 @@ def _cfg(**overrides: object) -> FocusConfig:
         max_residual_mm=0.5,
     )
     defaults.update(overrides)
-    return FocusConfig(**defaults)  # type: ignore[arg-type]
+    return FocusConfig(**defaults)
 
 
 def test_focus_config_defaults() -> None:
@@ -83,7 +85,7 @@ def test_focus_sample_is_frozen() -> None:
     )
     assert sample.sharpness_metric is None
     with pytest.raises(AttributeError):
-        sample.residual_mm = 1.0  # type: ignore[misc]
+        setattr(sample, "residual_mm", 1.0)  # noqa: B010
 
 
 def test_target_returns_feedforward_interpolation() -> None:

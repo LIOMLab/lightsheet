@@ -12,7 +12,7 @@ import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import h5py
 import numpy as np
@@ -26,7 +26,7 @@ _FRAME_SIZE = 8
 
 def _small_config(**overrides: Any) -> FocusConfig:
     """Build a frozen FocusConfig with small bounds for fast tests."""
-    defaults = dict(
+    defaults: dict[str, Any] = dict(
         enabled=True,
         block_size_n=8,
         autofocus_residual=True,
@@ -35,7 +35,7 @@ def _small_config(**overrides: Any) -> FocusConfig:
         max_residual_mm=0.5,
     )
     defaults.update(overrides)
-    return FocusConfig(**defaults)  # type: ignore[arg-type]
+    return FocusConfig(**defaults)
 
 
 def _make_samples(n_blocks: int) -> list[FocusSample]:
@@ -58,7 +58,7 @@ def _make_samples(n_blocks: int) -> list[FocusSample]:
 
 def _setup_ctrl(
     qtbot: Any, request: Any, tmp_path: Path, *, n_channels: int = 1
-) -> tuple:
+) -> tuple[Any, Any]:
     """Create a real controller with 8x8 camera and tmp_path save dir."""
     ctrl, _ = make_controller(qtbot, request)
     ctrl.save_directory = str(tmp_path)
@@ -312,12 +312,12 @@ def test_zarr_focus_group_sibling_of_adaptive(
         saver.zarr_save_worker()
 
         store_path = str(tmp_path / "scan.ome.zarr")
-        root = zarr.open(store_path, mode="r")
+        root = cast(zarr.Group, zarr.open(store_path, mode="r"))
         assert "acquisition" in root
-        acq = root["acquisition"]  # type: ignore[invalid-argument-type]
-        assert "adaptive" in acq, "/acquisition/adaptive group missing"  # type: ignore[unsupported-operator]
-        assert "focus" in acq, "/acquisition/focus group missing"  # type: ignore[unsupported-operator]
-        _assert_focus_group(acq["focus"], saver.focus_trajectory, focus_config)  # type: ignore[invalid-argument-type, not-subscriptable]
+        acq = cast(zarr.Group, root["acquisition"])
+        assert "adaptive" in acq, "/acquisition/adaptive group missing"
+        assert "focus" in acq, "/acquisition/focus group missing"
+        _assert_focus_group(acq["focus"], saver.focus_trajectory, focus_config)
 
 
 def test_fixed_mode_omits_focus_group_zarr(
@@ -345,10 +345,10 @@ def test_fixed_mode_omits_focus_group_zarr(
         saver.zarr_save_worker()
 
         store_path = str(tmp_path / "scan.ome.zarr")
-        root = zarr.open(store_path, mode="r")
+        root = cast(zarr.Group, zarr.open(store_path, mode="r"))
         assert "acquisition" in root
-        acq = root["acquisition"]  # type: ignore[invalid-argument-type]
-        assert "focus" not in acq, "fixed-mode Zarr must not contain /acquisition/focus"  # type: ignore[unsupported-operator]
+        acq = cast(zarr.Group, root["acquisition"])
+        assert "focus" not in acq, "fixed-mode Zarr must not contain /acquisition/focus"
 
 
 # ---------------------------------------------------------------------------
@@ -393,9 +393,10 @@ def test_both_writes_focus_in_both_formats(
 
         # Zarr
         store_path = str(tmp_path / "scan.ome.zarr")
-        root = zarr.open(store_path, mode="r")
+        root = cast(zarr.Group, zarr.open(store_path, mode="r"))
         assert "acquisition" in root
-        assert "focus" in root["acquisition"]  # type: ignore[invalid-argument-type, unsupported-operator]
+        acq = cast(zarr.Group, root["acquisition"])
+        assert "focus" in acq
         _assert_focus_group(
-            root["acquisition"]["focus"], saver.focus_trajectory, config  # type: ignore[invalid-argument-type, not-subscriptable]
+            acq["focus"], saver.focus_trajectory, config
         )

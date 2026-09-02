@@ -115,12 +115,12 @@ def test_focus_toggle_off_hides_only_fields_container(
     from PySide6.QtWidgets import QApplication
 
     QApplication.processEvents()
-    assert not ui.widget_focusFields.isVisibleTo(
-        ui.widget_focusFields.parentWidget()  # ty: ignore[invalid-argument-type]
-    )
-    assert ui.groupBox_focusControl.isVisibleTo(
-        ui.groupBox_focusControl.parentWidget()  # ty: ignore[invalid-argument-type]
-    )
+    fields_parent = ui.widget_focusFields.parentWidget()
+    group_parent = ui.groupBox_focusControl.parentWidget()
+    assert fields_parent is not None
+    assert group_parent is not None
+    assert not ui.widget_focusFields.isVisibleTo(fields_parent)
+    assert ui.groupBox_focusControl.isVisibleTo(group_parent)
 
 
 def test_focus_toggle_on_shows_fields_container(
@@ -134,9 +134,9 @@ def test_focus_toggle_on_shows_fields_container(
     from PySide6.QtWidgets import QApplication
 
     QApplication.processEvents()
-    assert ui.widget_focusFields.isVisibleTo(
-        ui.widget_focusFields.parentWidget()  # ty: ignore[invalid-argument-type]
-    )
+    fields_parent = ui.widget_focusFields.parentWidget()
+    assert fields_parent is not None
+    assert ui.widget_focusFields.isVisibleTo(fields_parent)
 
 
 def test_focus_browse_filter_is_json_only(
@@ -274,7 +274,7 @@ def test_build_focus_config_returns_none_when_unarmed(
     assert cfg.curve_path == str(path)
     # FocusConfig is frozen.
     with pytest.raises(AttributeError):
-        cfg.block_size_n = 99  # type: ignore[misc]
+        setattr(cfg, "block_size_n", 99)  # noqa: B010
 
 
 def test_build_focus_curve_returns_loaded_curve_object(
@@ -469,7 +469,8 @@ def test_focus_trajectory_widget_appends_block(qtbot: QtBot) -> None:
     assert not w.plotWidget_focusTrajectory.isHidden()
     assert w.label_focusTrajectoryEmpty.isHidden()
     curve = w._camera_curve
-    xs, ys = curve.getData()  # type: ignore[unresolved-attribute]
+    assert curve is not None
+    xs, ys = curve.getData()
     assert len(xs) == 1 and len(ys) == 1
     assert ys[0] == pytest.approx(20.0)
 
@@ -487,7 +488,8 @@ def test_focus_trajectory_widget_residual_marker(qtbot: QtBot) -> None:
         x_axis_value=0.0,
     )
     scatter = w._residual_scatter
-    spots = scatter.getData()  # type: ignore[unresolved-attribute]
+    assert scatter is not None
+    spots = scatter.getData()
     assert len(spots[0]) == 1
 
 
@@ -510,7 +512,8 @@ def test_focus_trajectory_widget_freeze_blocks_appends(qtbot: QtBot) -> None:
         residual_mm=0.0,
         x_axis_value=0.0,
     )
-    xs, _ys = w._camera_curve.getData()  # type: ignore[unresolved-attribute]
+    assert w._camera_curve is not None
+    xs, _ys = w._camera_curve.getData()
     assert len(xs) == 1, "post-freeze append must be ignored"
 
 
@@ -557,7 +560,7 @@ def test_spawn_stack_worker_passes_frozen_focus_cfg_and_curve(
     ctrl.stack_ending_plane = 100.0
     ctrl.number_of_planes = 2
     ctrl.saving_allowed = True
-    captured: dict = {}  # type: ignore[missing-type-argument]
+    captured: dict[str, Any] = {}
     import lightsheet.gui.workers as workers_mod
 
     orig_init = workers_mod.StackWorker.__init__
@@ -718,7 +721,9 @@ def test_spawn_stack_worker_clears_focus_mode_flag_when_disabled(
     assert ctrl.focus_mode_started is False
 
 
-def test_progress_update_shows_focus_running_badge(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_progress_update_shows_focus_running_badge(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """_on_progress_update uses FOCUS mode when focus_mode_started is True."""
     ctrl, _ = make_controller(qtbot, request)
     _focus_ui(ctrl)

@@ -27,11 +27,11 @@ pytest.importorskip("PySide6")
 # --------------------------------------------------------------------- #
 
 
-def _focus_cfg(**overrides: object) -> Any:
+def _focus_cfg(**overrides: Any) -> Any:
     """A standard 16-plane focus config with block size 8 and residual on."""
     from lightsheet.focus.types import FocusConfig
 
-    defaults: dict[str, object] = dict(
+    defaults: dict[str, Any] = dict(
         enabled=True,
         block_size_n=8,
         autofocus_residual=True,
@@ -40,7 +40,7 @@ def _focus_cfg(**overrides: object) -> Any:
         max_residual_mm=0.5,
     )
     defaults.update(overrides)
-    return FocusConfig(**defaults)  # type: ignore[arg-type]
+    return FocusConfig(**defaults)
 
 
 def _focus_curve() -> Any:
@@ -153,7 +153,6 @@ def test_move_axes_parallel_called_only_at_block_boundaries(
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
 
     state = {"acq_index": 0}
-    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)  # type: ignore[method-assign]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 
@@ -167,15 +166,13 @@ def test_move_axes_parallel_called_only_at_block_boundaries(
         parallel_calls.append(list(moves))
         real_parallel(moves)
 
-    worker.motors.move_axes_parallel = _track_parallel
-
+    assert worker.motors.horizontal is not None
+    assert worker.motors.camera is not None
     real_horizontal = worker.motors.horizontal.move_absolute_position
 
     def _track_horizontal(pos: float, units: str) -> None:
         horizontal_calls.append((pos, units))
         real_horizontal(pos, units)
-
-    worker.motors.horizontal.move_absolute_position = _track_horizontal
 
     real_camera = worker.motors.camera.move_absolute_position
 
@@ -183,11 +180,20 @@ def test_move_axes_parallel_called_only_at_block_boundaries(
         camera_calls.append((pos, units))
         real_camera(pos, units)
 
-    worker.motors.camera.move_absolute_position = _track_camera
-
+    fake_acquire_scan = _fake_acquire_scan_factory(worker, state)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
-    worker.run()
+    with (
+        patch.object(worker, "acquire_scan", fake_acquire_scan),
+        patch.object(worker.motors, "move_axes_parallel", _track_parallel),
+        patch.object(
+            worker.motors.horizontal, "move_absolute_position", _track_horizontal
+        ),
+        patch.object(
+            worker.motors.camera, "move_absolute_position", _track_camera
+        ),
+    ):
+        worker.run()
 
     assert len(finished_emits) == 1
     assert len(parallel_calls) == 2, (
@@ -222,13 +228,15 @@ def test_add_motor_parameters_logs_held_camera_position_within_block(
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
 
     state = {"acq_index": 0}
-    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)  # type: ignore[method-assign]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
-    worker.run()
+    with patch.object(
+        worker, "acquire_scan", _fake_acquire_scan_factory(worker, state)
+    ):
+        worker.run()
 
     assert len(finished_emits) == 1
     fs = ctrl._fs.frame_saver
@@ -269,7 +277,6 @@ def test_focus_trajectory_records_one_sample_per_block(
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
 
     state = {"acq_index": 0}
-    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)  # type: ignore[method-assign]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 
@@ -280,11 +287,13 @@ def test_focus_trajectory_records_one_sample_per_block(
         parallel_calls.append(list(moves))
         real_parallel(moves)
 
-    worker.motors.move_axes_parallel = _track_parallel
-
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
-    worker.run()
+    with (
+        patch.object(worker, "acquire_scan", _fake_acquire_scan_factory(worker, state)),
+        patch.object(worker.motors, "move_axes_parallel", _track_parallel),
+    ):
+        worker.run()
 
     assert len(finished_emits) == 1
     traj = ctrl._fs.focus_trajectory
@@ -319,7 +328,6 @@ def test_update_residual_called_from_second_block_boundary_onward(
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
 
     state = {"acq_index": 0}
-    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)  # type: ignore[method-assign]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 
@@ -333,7 +341,10 @@ def test_update_residual_called_from_second_block_boundary_onward(
         residual_calls.append(sharpness)
         real_update(self, sharpness)
 
-    with patch.object(FocusController, "update_residual", _track_residual):
+    with (
+        patch.object(worker, "acquire_scan", _fake_acquire_scan_factory(worker, state)),
+        patch.object(FocusController, "update_residual", _track_residual),
+    ):
         finished_emits: list[None] = []
         worker.finished.connect(lambda: finished_emits.append(None))
         worker.run()
@@ -393,10 +404,10 @@ def test_focus_over_travel_aborts_stack_with_beep(
 
     # Force the horizontal axis to over-travel at the second block boundary.
     # Plane 8 is at 80 um; limit it to 75 um so the first boundary passes.
+    assert worker.motors.horizontal is not None
     worker.motors.horizontal.set_limit_high(0.075, "mm")
 
     state = {"acq_index": 0}
-    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)  # type: ignore[method-assign]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 
@@ -407,7 +418,10 @@ def test_focus_over_travel_aborts_stack_with_beep(
 
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
-    worker.run()
+    with patch.object(
+        worker, "acquire_scan", _fake_acquire_scan_factory(worker, state)
+    ):
+        worker.run()
 
     assert len(finished_emits) == 1
     assert len(beeps) >= 1, "expected at least one beep on over-travel abort"
@@ -441,7 +455,6 @@ def test_focus_disabled_matches_fixed_stack_behavior(
     )
 
     state = {"acq_index": 0}
-    worker.acquire_scan = _fake_acquire_scan_factory(worker, state)  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 
@@ -452,14 +465,16 @@ def test_focus_disabled_matches_fixed_stack_behavior(
         parallel_calls.append(list(moves))
         real_parallel(moves)
 
-    worker.motors.move_axes_parallel = _track_parallel
-
-    focus_emissions: list[tuple] = []
+    focus_emissions: list[tuple[Any, ...]] = []
     worker.sig_focus_trajectory.connect(lambda *args: focus_emissions.append(args))
 
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
-    worker.run()
+    with (
+        patch.object(worker, "acquire_scan", _fake_acquire_scan_factory(worker, state)),
+        patch.object(worker.motors, "move_axes_parallel", _track_parallel),
+    ):
+        worker.run()
 
     assert len(finished_emits) == 1
     assert len(parallel_calls) == 0, (
@@ -495,7 +510,6 @@ def test_estop_prevents_next_block_boundary_focus_move(
         state["acq_index"] += 1
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 
@@ -506,12 +520,14 @@ def test_estop_prevents_next_block_boundary_focus_move(
         parallel_calls.append(list(moves))
         real_parallel(moves)
 
-    worker.motors.move_axes_parallel = _track_parallel
-
     try:
         finished_emits: list[None] = []
         worker.finished.connect(lambda: finished_emits.append(None))
-        worker.run()
+        with (
+            patch.object(worker, "acquire_scan", _fake_acquire_scan),
+            patch.object(worker.motors, "move_axes_parallel", _track_parallel),
+        ):
+            worker.run()
 
         assert len(finished_emits) == 1
         assert len(parallel_calls) == 1, (
