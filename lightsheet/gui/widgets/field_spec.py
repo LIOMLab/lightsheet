@@ -32,8 +32,8 @@ FIELD_SPECS: dict[str, FieldSpec] = {
     # Motion panel — motor positions (mm) + step sizes (mm). 2 decimals
     # (0.01 mm = 10 µm) is enough for manual control; the µm precision
     # matters only for the automatic stack plane step, not for jogging.
-    "doubleSpinBox_sampleSetHPosition": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 41.0),
-    "doubleSpinBox_sampleSetVPosition": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 18.8),
+    "doubleSpinBox_sampleSetHPosition": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 18.8),
+    "doubleSpinBox_sampleSetVPosition": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 41.0),
     "doubleSpinBox_cameraSetPosition": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 35.0),
     "doubleSpinBox_sampleHStepSize": FieldSpec("mm", 2, 0.01, 0.1, 0.0, 5.0),
     "doubleSpinBox_sampleVStepSize": FieldSpec("mm", 2, 0.01, 0.1, 0.0, 5.0),

@@ -398,8 +398,8 @@ def test_field_specs_motor_max_matches_hal() -> None:
     ranges (mm). A regression in the table must be caught."""
     from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 
-    assert FIELD_SPECS["doubleSpinBox_sampleSetHPosition"].maximum == 41.0
-    assert FIELD_SPECS["doubleSpinBox_sampleSetVPosition"].maximum == 18.8
+    assert FIELD_SPECS["doubleSpinBox_sampleSetHPosition"].maximum == 18.8
+    assert FIELD_SPECS["doubleSpinBox_sampleSetVPosition"].maximum == 41.0
     assert FIELD_SPECS["doubleSpinBox_cameraSetPosition"].maximum == 35.0
 
 
