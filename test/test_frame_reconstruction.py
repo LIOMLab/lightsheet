@@ -242,19 +242,31 @@ def test_reconstruction_functions_and_frame_viewer_have_focused_modules() -> Non
     """After D-12.2.1, the pure-numpy reconstruction helpers and the
     FrameViewer QObject live in focused modules while legacy imports from
     ``frame_saver_controller`` remain object-identical."""
-    from lightsheet.gui.coordinators.frame_viewer import FrameViewer as new_fv
     from lightsheet.gui.coordinators.frame_saver_controller import FrameViewer as old_fv
-    from lightsheet.gui.coordinators.reconstruction import (
-        _position_to_float as new_pos,
-        crop_buffer as new_crop,
-        reconstruct_frame as new_recon,
-        reconstruct_frame_linear_blend as new_blend,
-    )
     from lightsheet.gui.coordinators.frame_saver_controller import (
         _position_to_float as old_pos,
+    )
+    from lightsheet.gui.coordinators.frame_saver_controller import (
         crop_buffer as old_crop,
+    )
+    from lightsheet.gui.coordinators.frame_saver_controller import (
         reconstruct_frame as old_recon,
+    )
+    from lightsheet.gui.coordinators.frame_saver_controller import (
         reconstruct_frame_linear_blend as old_blend,
+    )
+    from lightsheet.gui.coordinators.frame_viewer import FrameViewer as new_fv
+    from lightsheet.gui.coordinators.reconstruction import (
+        _position_to_float as new_pos,
+    )
+    from lightsheet.gui.coordinators.reconstruction import (
+        crop_buffer as new_crop,
+    )
+    from lightsheet.gui.coordinators.reconstruction import (
+        reconstruct_frame as new_recon,
+    )
+    from lightsheet.gui.coordinators.reconstruction import (
+        reconstruct_frame_linear_blend as new_blend,
     )
 
     assert new_fv is old_fv
