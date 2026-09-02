@@ -4,6 +4,7 @@ Created on February 10, 2022
 """
 
 import logging
+import threading
 
 import serial
 
@@ -49,6 +50,12 @@ class Motors(IMotors):
         self._cfg_section = "Motors"
         self.cfg_load_ini()
 
+        # Serialize all traffic on the shared Zaber serial bus. The worker,
+        # GUI position refresh, and configuration commands must not interleave
+        # on the same COM port; otherwise a reset_input_buffer() from one caller
+        # can cancel an in-flight read() from another and wedge the port.
+        self._io_lock = threading.RLock()
+
         # Open ONE shared serial handle for the lifetime of the bundle.
         # The real Zaber T-LSR chain on COM7 is shared across all 3 devices.
         # serial-open is unreachable on Mac (no Zaber stage).
@@ -63,7 +70,7 @@ class Motors(IMotors):
 
         # check existance of vertical, horizontal and camera motors
         # and apply initial configuration
-        self.vertical = ZaberMotor(self._serial, self.device_no_vertical)
+        self.vertical = ZaberMotor(self._serial, self.device_no_vertical, self._io_lock)
         if self.vertical.is_supported:
             self.vertical.set_inverted(self.vertical_inverted)
             self.vertical.set_units(self.vertical_units)
@@ -71,7 +78,7 @@ class Motors(IMotors):
             self.vertical.set_limit_low(self.vertical_limit_low, self.vertical_units)
             self.vertical.set_limit_high(self.vertical_limit_high, self.vertical_units)
 
-        self.horizontal = ZaberMotor(self._serial, self.device_no_horizontal)
+        self.horizontal = ZaberMotor(self._serial, self.device_no_horizontal, self._io_lock)
         if self.horizontal.is_supported:
             self.horizontal.set_inverted(self.horizontal_inverted)
             self.horizontal.set_units(self.horizontal_units)
@@ -83,7 +90,7 @@ class Motors(IMotors):
                 self.horizontal_limit_high, self.horizontal_units
             )
 
-        self.camera = ZaberMotor(self._serial, self.device_no_camera)
+        self.camera = ZaberMotor(self._serial, self.device_no_camera, self._io_lock)
         if self.camera.is_supported:
             self.camera.set_inverted(self.camera_inverted)
             self.camera.set_units(self.camera_units)
@@ -184,23 +191,43 @@ class Motors(IMotors):
                 )
             validated.append((motor, target_microsteps))
 
-        # Pass 2: send all commands back-to-back on the shared handle.
-        self._serial.reset_input_buffer()
-        self._serial.reset_output_buffer()
-        for motor, target_microsteps in validated:
-            instruction = motor._encode_instruction(20, target_microsteps)
-            self._serial.write(bytes(instruction))
+        # The shared serial handle is locked for the whole command/response
+        # sequence. Move commands only reply once each stage reaches the
+        # target, so the read timeout is extended to 60 s.
+        io_lock = getattr(self, "_io_lock", None)
+        if io_lock is None:
+            io_lock = threading.RLock()
+            self._io_lock = io_lock
 
-        # Pass 3: read one 6-byte reply per command, in send order.
-        for motor, _ in validated:
-            reply = self._serial.read(6)
-            motor._parse_reply(reply, 20)
+        original_timeout = self._serial.timeout
+        with io_lock:
+            try:
+                self._serial.timeout = 60.0
+                # Pass 2: send all commands back-to-back on the shared handle.
+                self._serial.reset_input_buffer()
+                self._serial.reset_output_buffer()
+                for motor, target_microsteps in validated:
+                    instruction = motor._encode_instruction(20, target_microsteps)
+                    self._serial.write(bytes(instruction))
+
+                # Pass 3: read one 6-byte reply per command, in send order.
+                for motor, _ in validated:
+                    reply = self._serial.read(6)
+                    motor._parse_reply(reply, 20)
+            finally:
+                if original_timeout is not None:
+                    self._serial.timeout = original_timeout
 
 
 class ZaberMotor(IMotor):
     """Class for Zaber's T-LS series linear stage motor control"""
 
-    def __init__(self, shared_serial: serial.Serial, device_number: int) -> None:
+    def __init__(
+        self,
+        shared_serial: serial.Serial,
+        device_number: int,
+        io_lock = None,
+    ) -> None:
         # Error status
         self.error = 0
         self.error_message = ""
@@ -225,6 +252,9 @@ class ZaberMotor(IMotor):
         # unit tests the __new__ bypass may leave this None and the
         # legacy per-call open fallback is used.
         self._serial = shared_serial
+        # Tests that bypass __init__ will fall back to a private RLock;
+        # production uses the shared Motors bundle lock.
+        self._io_lock = io_lock if io_lock is not None else threading.RLock()
         self.port = ""
         self.device_number = device_number
         self.ask_id()
@@ -292,24 +322,47 @@ class ZaberMotor(IMotor):
 
         instruction = self._encode_instruction(cmd_no, cmd_param)
 
-        try:
-            # All real Zaber I/O uses the shared serial handle injected by
-            # Motors.__init__. Mac tests inject a Mock serial via the __new__
-            # bypass to exercise every branch without hardware.
-            self._serial.reset_input_buffer()
-            self._serial.reset_output_buffer()
-            # Write instruction bytes to motor
-            self._serial.write(bytes(instruction))
-            # Read 6-bytes reply
-            reply_bytes = self._serial.read(6)
-        except Exception:  # pragma: no branch
-            # Mac tests run with a Mock serial; this except path is exercised
-            # when the injected serial raises (transient error simulation).
-            self.error = 1
-            self.error_message = "Serial port error"
-            logger.exception("Serial port error!")
-        else:
-            reply_data = self._parse_reply(reply_bytes, cmd_no)
+        # Move commands (home, move-to-stored, absolute/relative/constant, stop)
+        # do not reply until the physical stage has finished moving. The real
+        # serial timeout must be long enough to wait for that reply.
+        _MOVE_COMMANDS = frozenset({1, 18, 20, 21, 22, 23})
+        is_move = cmd_no in _MOVE_COMMANDS
+        original_timeout = None
+
+        # Tests may create a ZaberMotor directly via __new__ without a shared
+        # Motors lock. Fallback to a private RLock in that case.
+        io_lock = getattr(self, "_io_lock", None)
+        if io_lock is None:
+            io_lock = threading.RLock()
+            self._io_lock = io_lock
+
+        with io_lock:
+            try:
+                if is_move:
+                    # Save and extend pyserial read timeout for the duration of
+                    # the motion. Restored in the finally block.
+                    original_timeout = self._serial.timeout
+                    self._serial.timeout = 60.0
+                # All real Zaber I/O uses the shared serial handle injected by
+                # Motors.__init__. Mac tests inject a Mock serial via the __new__
+                # bypass to exercise every branch without hardware.
+                self._serial.reset_input_buffer()
+                self._serial.reset_output_buffer()
+                # Write instruction bytes to motor
+                self._serial.write(bytes(instruction))
+                # Read 6-bytes reply
+                reply_bytes = self._serial.read(6)
+            except Exception:  # pragma: no branch
+                # Mac tests run with a Mock serial; this except path is exercised
+                # when the injected serial raises (transient error simulation).
+                self.error = 1
+                self.error_message = "Serial port error"
+                logger.exception("Serial port error!")
+            else:
+                reply_data = self._parse_reply(reply_bytes, cmd_no)
+            finally:
+                if is_move and original_timeout is not None:
+                    self._serial.timeout = original_timeout
         return reply_data
 
     def ask_id(self) -> int:
