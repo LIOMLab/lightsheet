@@ -6,6 +6,8 @@ from pydantic_settings import SettingsConfigDict
 from lightsheet.config_schema.shared import (
     _make_overlay,
     _NoEnvBaseSettings,
+    _validate_laser1_max_power,
+    _validate_laser1_mw_per_volt,
     _validate_laser2_max_power,
     _validate_laser2_mw_per_volt,
 )
@@ -29,6 +31,16 @@ class LasersSettings(_NoEnvBaseSettings):
     laser2_power: float = Field(alias="Laser2 Power")
     laser2_max_power: float = Field(alias="Laser2 Max Power")
     laser2_mw_per_volt: float = Field(alias="Laser2 mW per Volt")
+
+    @field_validator("laser1_max_power")
+    @classmethod
+    def _hard_laser1_max_power(cls, v: float) -> float:
+        return _validate_laser1_max_power(v)
+
+    @field_validator("laser1_mw_per_volt")
+    @classmethod
+    def _hard_laser1_mw_per_volt(cls, v: float) -> float:
+        return _validate_laser1_mw_per_volt(v)
 
     @field_validator("laser2_max_power")
     @classmethod

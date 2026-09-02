@@ -22,6 +22,11 @@ _IBEAM_MAX_MW: int = 150000  # uW
 # config values that bound the two-layer runtime clamp.
 _LASER2_MAX_POWER_MW: float = 150.0
 
+# L1 DAQLaser ceiling: 300 mW full-scale at 60.0 mW/V = 5.0 V on /Dev7/ao0.
+# The schema rejects a Laser1 Max Power above this ceiling and a nonpositive
+# mW per Volt conversion factor, matching the L2 safety gate.
+_LASER1_MAX_POWER_MW: float = 300.0
+
 # Zaber T-LS mechanical travel limits. A stage driven past mechanical limits
 # damages hardware.
 _MOTORS_VERTICAL_LIMIT_HIGH_MM: float = 41.0
@@ -121,5 +126,22 @@ def _validate_laser2_mw_per_volt(v: float) -> float:
     if v <= 0:
         raise ValueError(
             f"Laser2 mW per Volt {v} must be positive (nonzero conversion factor)"
+        )
+    return v
+
+
+def _validate_laser1_max_power(v: float) -> float:
+    if v > _LASER1_MAX_POWER_MW:
+        raise ValueError(
+            f"Laser1 Max Power {v} mW exceeds the L1 ceiling "
+            f"{_LASER1_MAX_POWER_MW} mW (300 mW full-scale)"
+        )
+    return v
+
+
+def _validate_laser1_mw_per_volt(v: float) -> float:
+    if v <= 0:
+        raise ValueError(
+            f"Laser1 mW per Volt {v} must be positive (nonzero conversion factor)"
         )
     return v
