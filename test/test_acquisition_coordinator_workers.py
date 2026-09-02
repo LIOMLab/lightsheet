@@ -280,6 +280,30 @@ def test_preview_worker_exception_emits_message(qtbot: QtBot) -> None:
     assert len(finished_emits) == 1
 
 
+def test_preview_worker_no_data_breaks_and_cleans(qtbot: QtBot) -> None:
+    """PreviewWorker.run with copy_recorder_images returning None breaks
+    the loop, emits a no-data message, stops the lasers, disarms the
+    camera, and emits finished exactly once without enqueuing a frame."""
+    worker, shell, hw = _make_preview_worker(qtbot)
+    shell.preview_mode_started = True
+    shell.estop_event.is_set.return_value = False
+    worker.camera.copy_recorder_images = Mock(return_value=None)
+
+    disarm_spy = Mock(wraps=worker.camera.disarm)
+    worker.camera.disarm = disarm_spy  # type: ignore[method-assign]
+
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+
+    shell.sig_message.emit.assert_called_once()
+    assert "Preview camera returned no data" in shell.sig_message.emit.call_args[0][0]
+    hw.stop_lasers.assert_called_once()
+    disarm_spy.assert_called_once()
+    shell._fs.enqueue_frame.assert_not_called()
+    assert len(finished_emits) == 1
+
+
 # -- LiveWorker.run ---------------------------------------------------------
 
 
@@ -323,9 +347,10 @@ def test_live_mode_worker_acquire_scan_does_not_skip_cleanup(qtbot: QtBot) -> No
     # loop runs exactly one iteration then exits normally.
     original_acquire = worker.acquire_scan
 
-    def _acquire_then_stop() -> None:
-        original_acquire()
+    def _acquire_then_stop() -> bool:
+        result = original_acquire()
         shell.live_mode_started = False
+        return result
 
     worker.acquire_scan = _acquire_then_stop  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     # Spy on camera.disarm (MockCamera is a real instance, not a Mock).
@@ -339,6 +364,28 @@ def test_live_mode_worker_acquire_scan_does_not_skip_cleanup(qtbot: QtBot) -> No
     disarm_spy.assert_called_once()
     assert len(finished_emits) == 1
 
+
+def test_live_worker_no_data_breaks_and_cleans(qtbot: QtBot) -> None:
+    """LiveWorker.run with acquire_scan returning False breaks after the
+    first iteration, stops the lasers, disarms the camera, and emits
+    finished exactly once without enqueuing a frame."""
+    worker, shell, hw = _make_live_worker(qtbot)
+    shell.live_mode_started = True
+    shell.estop_event.is_set.return_value = False
+    worker.acquire_scan = Mock(return_value=False)
+
+    disarm_spy = Mock(wraps=worker.camera.disarm)
+    worker.camera.disarm = disarm_spy  # type: ignore[method-assign]
+
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+
+    worker.acquire_scan.assert_called_once()
+    hw.stop_lasers.assert_called_once()
+    disarm_spy.assert_called_once()
+    shell._fs.enqueue_frame.assert_not_called()
+    assert len(finished_emits) == 1
 
 
 # -- SingleWorker.run -------------------------------------------------------
@@ -382,6 +429,61 @@ def test_single_mode_worker_exception_emits_message(qtbot: QtBot) -> None:
     assert len(finished_emits) == 1
 
 
+def test_single_mode_worker_no_data_returns_and_cleans(qtbot: QtBot) -> None:
+    """SingleWorker.run with acquire_scan returning False stops the lasers,
+    disarms the camera, and emits finished exactly once. No frame is
+    enqueued."""
+    worker, shell, hw = _make_single_worker(qtbot)
+    worker.acquire_scan = Mock(return_value=False)
+
+    disarm_spy = Mock(wraps=worker.camera.disarm)
+    worker.camera.disarm = disarm_spy  # type: ignore[method-assign]
+
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+
+    worker.acquire_scan.assert_called_once()
+    hw.stop_lasers.assert_called_once()
+    disarm_spy.assert_called_once()
+    shell._fs.enqueue_frame.assert_not_called()
+    assert len(finished_emits) == 1
+
+
+def test_single_worker_multi_channel_no_data_breaks_and_cleans(
+    qtbot: QtBot,
+) -> None:
+    """SingleWorker.run multi-channel: if the first channel's acquire_scan
+    returns False, the second channel is skipped, both lasers are stopped,
+    the camera is disarmed, and finished emits once."""
+    worker, shell, hw = _make_single_worker_multi(qtbot, multi_channel=True)
+    call_count = {"n": 0}
+
+    def _fake_acquire_scan() -> bool:
+        call_count["n"] += 1
+        return False
+
+    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    disarm_spy = Mock(wraps=worker.camera.disarm)
+    worker.camera.disarm = disarm_spy  # type: ignore[method-assign]
+
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+
+    assert call_count["n"] == 1, (
+        "acquire_scan must be called once for channel 0 and then break"
+    )
+    hw.stop_lasers.assert_called_once()
+    disarm_spy.assert_called_once()
+    shell._fs.enqueue_frame.assert_not_called()
+    assert shell.reconstructed_frames == {}
+    assert len(finished_emits) == 1
+
+
 # -- acquire_scan (via SingleWorker / _AcquireScanMixin) --------------------
 
 
@@ -394,7 +496,8 @@ def test_acquire_scan_siggen_error_aborts(qtbot: QtBot) -> None:
         worker.siggen.error = 1
         worker.siggen.error_message = "DAQ error"
     worker.siggen.create_scanner = _fake_create_scanner  # ty: ignore[invalid-assignment]
-    worker.acquire_scan()
+    result = worker.acquire_scan()
+    assert result is False, "acquire_scan must return False after a siggen error"
     shell.sig_message.emit.assert_called_once()
     assert "Scan task creation failed" in shell.sig_message.emit.call_args[0][0]
 
@@ -407,7 +510,8 @@ def test_acquire_scan_camera_timeout_aborts(qtbot: QtBot) -> None:
     def _fake_monitor(n: object) -> None:
         worker.camera.recorder_timeout_status = True
     worker.camera.monitor_recorder = _fake_monitor  # ty: ignore[invalid-assignment]
-    worker.acquire_scan()
+    result = worker.acquire_scan()
+    assert result is False, "acquire_scan must return False after a recorder timeout"
     shell.sig_message.emit.assert_called_once()
     assert "Camera timeout" in shell.sig_message.emit.call_args[0][0]
 
@@ -421,7 +525,8 @@ def test_acquire_scan_normal_path_no_stitch(qtbot: QtBot) -> None:
     worker.camera.copy_recorder_images = Mock(return_value=np.zeros((1, 100, 100)))
     worker.camera.recorder_timeout_status = False
     shell._fs.reconstruct_frame.return_value = np.zeros((100, 100))
-    worker.acquire_scan()
+    result = worker.acquire_scan()
+    assert result is True, "acquire_scan must return True on a successful scan"
     shell._fs.reconstruct_frame.assert_called_once()
     shell._fs.enqueue_frame.assert_called_once()
 
@@ -435,9 +540,38 @@ def test_acquire_scan_normal_path_with_stitch(qtbot: QtBot) -> None:
     worker.camera.copy_recorder_images = Mock(return_value=np.zeros((1, 100, 100)))
     worker.camera.recorder_timeout_status = False
     shell._fs.reconstruct_frame_linear_blend.return_value = np.zeros((100, 100))
-    worker.acquire_scan()
+    result = worker.acquire_scan()
+    assert result is True, "acquire_scan must return True on a successful scan"
     shell._fs.reconstruct_frame_linear_blend.assert_called_once()
     shell._fs.enqueue_frame.assert_called_once()
+
+
+def test_acquire_scan_no_data_aborts_and_cleans_up(qtbot: QtBot) -> None:
+    """acquire_scan returns False and deletes recorder/scanner + disarms
+    the camera when copy_recorder_images returns None, without enqueuing
+    a frame."""
+    worker, shell, _hw = _make_single_worker(qtbot)
+    worker.siggen.waveform_cycles = 1
+    worker.camera.recorder_timeout_status = False
+
+    delete_recorder_spy = Mock(wraps=worker.camera.delete_recorder)
+    worker.camera.delete_recorder = delete_recorder_spy  # type: ignore[method-assign]
+    delete_scanner_spy = Mock(wraps=worker.siggen.delete_scanner)
+    worker.siggen.delete_scanner = delete_scanner_spy  # type: ignore[method-assign]
+    disarm_spy = Mock(wraps=worker.camera.disarm)
+    worker.camera.disarm = disarm_spy  # type: ignore[method-assign]
+
+    worker.camera.copy_recorder_images = Mock(return_value=None)
+
+    result = worker.acquire_scan()
+
+    assert result is False, (
+        "acquire_scan must return False when the recorder has no data"
+    )
+    delete_recorder_spy.assert_called_once()
+    delete_scanner_spy.assert_called_once()
+    disarm_spy.assert_called_once()
+    shell._fs.enqueue_frame.assert_not_called()
 
 
 # -- StackWorker.run --------------------------------------------------------
@@ -634,10 +768,11 @@ def test_single_worker_multi_channel_both_frames(qtbot: QtBot) -> None:
     # array per channel so we can verify both are captured.
     call_count = {"n": 0}
 
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         call_count["n"] += 1
         # Each call produces a distinct frame.
         shell.reconstructed_frame = np.full((4, 4), call_count["n"], dtype=np.uint16)
+        return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
@@ -679,9 +814,10 @@ def test_single_worker_single_channel_unchanged(qtbot: QtBot) -> None:
     worker, shell, hw = _make_single_worker_multi(qtbot, multi_channel=False)
     acquire_count = {"n": 0}
 
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         acquire_count["n"] += 1
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
+        return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
@@ -710,12 +846,13 @@ def test_single_worker_multi_channel_estop_after_first_channel(qtbot: QtBot) -> 
     shell.estop_event.is_set.return_value = False
     acquire_count = {"n": 0}
 
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         acquire_count["n"] += 1
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
         # Set estop after the first channel's acquire_scan so the second
         # channel's acquire_scan is skipped.
         shell.estop_event.is_set.return_value = True
+        return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
@@ -861,11 +998,12 @@ def test_stack_worker_multi_channel_per_plane_cycle(qtbot: QtBot) -> None:
     # Distinct frames per acquire_scan so we can verify both channels captured.
     call_count = {"n": 0}
 
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         call_count["n"] += 1
         shell.reconstructed_frame = np.full(
             (4, 4), call_count["n"], dtype=np.uint16
         )
+        return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
@@ -912,9 +1050,10 @@ def test_stack_worker_single_channel_unchanged(qtbot: QtBot) -> None:
     shell.number_of_planes = 2
     acquire_count = {"n": 0}
 
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         acquire_count["n"] += 1
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
+        return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
@@ -997,11 +1136,12 @@ def test_stack_worker_multi_channel_timeout_after_channel0(qtbot: QtBot) -> None
     hw.select_laser.side_effect = lambda idx: select_calls.append(idx)
     acquire_count = {"n": 0}
 
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         acquire_count["n"] += 1
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
         # Set timeout after the first acquire_scan (channel 0 of plane 0).
         worker.camera.recorder_timeout_status = True
+        return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
@@ -1029,12 +1169,13 @@ def test_stack_worker_multi_channel_siggen_error_after_channel1(qtbot: QtBot) ->
     hw.select_laser = Mock()
     acquire_count = {"n": 0}
 
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         acquire_count["n"] += 1
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
         if acquire_count["n"] == 2:
             # Set siggen error after channel 1 of plane 0.
             worker.siggen.error = 1
+        return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
@@ -1073,9 +1214,10 @@ def test_stack_worker_multi_channel_estop_after_select_laser1(qtbot: QtBot) -> N
     hw.select_laser.side_effect = _fake_select_laser
     acquire_count = {"n": 0}
 
-    def _fake_acquire_scan() -> None:
+    def _fake_acquire_scan() -> bool:
         acquire_count["n"] += 1
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
+        return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
@@ -1092,9 +1234,8 @@ def test_stack_worker_multi_channel_estop_after_select_laser1(qtbot: QtBot) -> N
 
 
 def test_stack_worker_multi_channel_none_frames_skips_enqueue(qtbot: QtBot) -> None:
-    """StackWorker.run multi-channel: when acquire_scan leaves
-    reconstructed_frame as None (a failed scan that did not populate the
-    frame), frame1/frame2 are captured as None and the enqueue is
+    """StackWorker.run multi-channel: when acquire_scan fails, the
+    per-plane cycle is aborted, no frames are captured, and the enqueue is
     skipped (the `frame1 is not None and frame2 is not None` guard).
     The reconstructed_frames dict stays empty. finished.emit fires once."""
     worker, shell, hw = _make_stack_worker(qtbot, multi_channel=True)
@@ -1103,9 +1244,10 @@ def test_stack_worker_multi_channel_none_frames_skips_enqueue(qtbot: QtBot) -> N
     shell.number_of_planes = 1
     hw.select_laser = Mock()
 
-    def _fake_acquire_scan() -> None:
-        # Leave reconstructed_frame as None (failed scan path).
+    def _fake_acquire_scan() -> bool:
+        # Failed scan path: no frame data.
         shell.reconstructed_frame = None
+        return False
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
@@ -1372,7 +1514,7 @@ def test_preview_worker_runs_one_frame_then_exits(qtbot: QtBot) -> None:
         shell.preview_mode_started = False
         return np.zeros((number_of_images, 4, 4), dtype=np.uint16)
 
-    worker.camera.copy_recorder_images = _copy_one_frame  # type: ignore[method-assign]
+    worker.camera.copy_recorder_images = _copy_one_frame  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()

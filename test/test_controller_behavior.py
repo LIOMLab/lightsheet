@@ -160,8 +160,9 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy(
     messages: list[str] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
 
-    worker.acquire_scan()
+    result = worker.acquire_scan()
 
+    assert result is False, "acquire_scan must return False on recorder timeout"
     # The defining assertion: copy_recorder_images must NOT be called.
     assert not copy_called, (
         "acquire_scan must not call copy_recorder_images on recorder timeout"
@@ -237,8 +238,9 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder(
     messages: list[str] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
 
-    worker.acquire_scan()
+    result = worker.acquire_scan()
 
+    assert result is False, "acquire_scan must return False on siggen error"
     # The recorder was never primed — the failure surfaced before it.
     assert not start_recorder_called, (
         "acquire_scan must not call start_recorder when create_scanner fails"
