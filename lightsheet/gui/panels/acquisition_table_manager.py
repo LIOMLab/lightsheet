@@ -410,9 +410,9 @@ class AcquisitionTableManager(QWidget):
     def _estimate_stack_size_mb(self, n_planes: int) -> float:
         """Advisory stack size in MB, format-aware.
 
-        - ``hdf5`` (and the tiff/legacy fallback): raw bytes —
-          ``rows * cols * 2 * n_planes`` (uint16), unchanged from the
-          pre-format-aware behavior.
+        - ``hdf5``: raw bytes — ``rows * cols * 2 * n_planes`` (uint16),
+          unchanged from the pre-format-aware behavior. Any unknown format
+          value also falls back to this estimate.
         - ``zarr``: raw L0 bytes plus the multiscale pyramid overhead.
           The pyramid level count is stack_step-dependent: count the
           targets in ``(10, 25, 50, 100)`` µm that are ``>= max(base_res)``
@@ -442,7 +442,7 @@ class AcquisitionTableManager(QWidget):
             return l0_mb * self._zarr_pyramid_multiplier()
         if fmt == "both":
             return l0_mb + l0_mb * self._zarr_pyramid_multiplier()
-        # hdf5 / tiff / unknown -> raw bytes.
+        # hdf5 / unknown -> raw bytes.
         return l0_mb
 
     def _zarr_pyramid_multiplier(self) -> float:

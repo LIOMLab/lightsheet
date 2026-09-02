@@ -510,9 +510,7 @@ class Controller_MainWindow(QMainWindow):
         _ = units_cfg  # read so cfg_settings stays consistent; no attr set
 
         fmt_cfg = str(self.cfg_settings["Image File Format"]).lower()
-        if fmt_cfg == "tiff":
-            self.save_format = "tiff"
-        elif fmt_cfg == "zarr":
+        if fmt_cfg == "zarr":
             self.save_format = "zarr"
         elif fmt_cfg == "both":
             self.save_format = "both"
@@ -800,15 +798,15 @@ class Controller_MainWindow(QMainWindow):
         )
 
         # Reflect the config-driven save_format default onto the checked
-        # format radio. "tiff" (legacy) maps to the HDF5 radio as the
-        # closest equivalent — tiff is not in the radio group.
+        # format radio. Only hdf5, zarr, and both are supported; the
+        # catch-all else maps any non-zarr/non-both value to the HDF5 radio.
         fmt = getattr(self, "_pending_save_format_reflection", "hdf5")
         if fmt == "zarr":
             self.save_panel.ui.radioButton_saveFormat_zarr.setChecked(True)
         elif fmt == "both":
             self.save_panel.ui.radioButton_saveFormat_both.setChecked(True)
         else:
-            # hdf5 or tiff (legacy) → HDF5 radio
+            # hdf5 (or any unexpected value) → HDF5 radio
             self.save_panel.ui.radioButton_saveFormat_hdf5.setChecked(True)
 
         # ---
