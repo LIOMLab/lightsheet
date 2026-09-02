@@ -14,7 +14,7 @@
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>126</height>
+       <height>0</height>
       </size>
      </property>
      <property name="title">
@@ -71,8 +71,8 @@
           </property>
           <property name="sizeHint" stdset="0">
            <size>
-            <width>20</width>
-            <height>1</height>
+            <width>0</width>
+            <height>0</height>
            </size>
           </property>
          </spacer>

@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (QApplication, QComboBox, QFormLayout, QFrame,
     QGroupBox, QLabel, QPushButton, QSizePolicy,
     QSpacerItem, QVBoxLayout, QWidget)
 
+from lightsheet.gui.styles import spacing as _s
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
 class Ui_AcquisitionPanel(object):
@@ -34,7 +35,7 @@ class Ui_AcquisitionPanel(object):
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.groupBox_17.sizePolicy().hasHeightForWidth())
         self.groupBox_17.setSizePolicy(sizePolicy)
-        self.groupBox_17.setMinimumSize(QSize(0, 126))
+        self.groupBox_17.setMinimumSize(QSize(_s.ZERO, _s.PANEL_FLOOR))
         self.verticalLayout_53 = QVBoxLayout(self.groupBox_17)
         self.verticalLayout_53.setObjectName(u"verticalLayout_53")
         self.verticalLayout_15 = QVBoxLayout()
@@ -56,7 +57,7 @@ class Ui_AcquisitionPanel(object):
 
         self.verticalLayout_15.addWidget(self.pushButton_acqStartLiveMode)
 
-        self.verticalSpacer_13 = QSpacerItem(20, 1, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        self.verticalSpacer_13 = QSpacerItem(_s.LG + _s.XS, _s.XS, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
         self.verticalLayout_15.addItem(self.verticalSpacer_13)
 
