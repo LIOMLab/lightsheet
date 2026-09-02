@@ -27,11 +27,21 @@ def crop_buffer(buffer: np.ndarray) -> np.ndarray:
     image_ysize = buffer.shape[1]
     tile_count = buffer.shape[0]
 
+    if tile_count == 0:
+        raise ValueError("buffer contains no tiles")
     if tile_count == 1:
         cropped_buffer = buffer
     else:
         tile_width = int(image_xsize / tile_count)
+        if tile_width == 0:
+            raise ValueError(
+                f"image x-size {image_xsize} is too small for {tile_count} tiles"
+            )
         tile_width_overlap = int(tile_width * 0.2)
+        if tile_width_overlap == 0:
+            raise ValueError(
+                f"tile width {tile_width} is too small for 20% overlap"
+            )
 
         # Initializing empty cropped buffer
         cropped_buffer = np.zeros(
@@ -79,6 +89,9 @@ def reconstruct_frame(buffer: np.ndarray) -> np.ndarray:
     image_ysize = buffer.shape[1]
     tile_count = buffer.shape[0]
 
+    if tile_count == 0:
+        raise ValueError("buffer contains no tiles")
+
     # Initializing empty frame
     reconstructed_frame = np.zeros((image_ysize, image_xsize), np.uint16)
 
@@ -87,6 +100,10 @@ def reconstruct_frame(buffer: np.ndarray) -> np.ndarray:
         reconstructed_frame = buffer[0, :, :]
     else:
         tile_width = int(image_xsize / tile_count)
+        if tile_width == 0:
+            raise ValueError(
+                f"image x-size {image_xsize} is too small for {tile_count} tiles"
+            )
 
         for frame in range(tile_count):
             # NOTE - disabled intensity normalization
@@ -122,6 +139,9 @@ def reconstruct_frame_linear_blend(buffer: np.ndarray) -> np.ndarray:
     image_ysize = buffer.shape[1]
     tile_count = buffer.shape[0]
 
+    if tile_count == 0:
+        raise ValueError("buffer contains no tiles")
+
     # Initializing empty output frame
     reconstructed_frame = np.zeros((image_ysize, image_xsize), np.uint16)
 
@@ -130,7 +150,15 @@ def reconstruct_frame_linear_blend(buffer: np.ndarray) -> np.ndarray:
     else:
         # Crops each frame of a buffer with 20% overlap for futher frame reconstruction  # noqa: E501
         tile_width = int(image_xsize / tile_count)
+        if tile_width == 0:
+            raise ValueError(
+                f"image x-size {image_xsize} is too small for {tile_count} tiles"
+            )
         tile_width_overlap = int(tile_width * 0.2)
+        if tile_width_overlap == 0:
+            raise ValueError(
+                f"tile width {tile_width} is too small for 20% overlap blending"
+            )
 
         # Initializing empty cropped buffer
         cropped_buffer = np.zeros(
