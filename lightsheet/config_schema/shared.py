@@ -79,6 +79,8 @@ def _make_overlay(strict_cls: type[_NoEnvBaseSettings]) -> type[Any]:
 
 
 def _validate_ibeam_max_power(v: int) -> int:
+    if v <= 0:
+        raise ValueError(f"Max Power {v} uW must be a positive power value")
     if v > _IBEAM_MAX_MW:
         raise ValueError(
             f"Max Power {v} uW exceeds iBeam hard limit {_IBEAM_MAX_MW} uW (150 mW)"
@@ -131,6 +133,10 @@ def _validate_laser2_mw_per_volt(v: float) -> float:
 
 
 def _validate_laser1_max_power(v: float) -> float:
+    if v <= 0:
+        raise ValueError(
+            f"Laser1 Max Power must be a positive power value, got {v} mW"
+        )
     if v > _LASER1_MAX_POWER_MW:
         raise ValueError(
             f"Laser1 Max Power {v} mW exceeds the L1 ceiling "
