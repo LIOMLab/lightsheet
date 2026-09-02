@@ -16,12 +16,12 @@ class ControllerSettings(_NoEnvBaseSettings):
     # Image File Format — the persisted default save format loaded at
     # startup. The before-validator lowercases so the rig's Title-Case
     # config.ini values are accepted, and maps the "" sentinel (a key
-    # absent from config.ini arrives as "" via load_sections_from_ini)
-    # to "hdf5" (the operator-facing default). Only the three implemented
-    # save paths (hdf5, zarr, both) are accepted; the legacy "tiff" literal
-    # is rejected at startup.
+    # absent or empty in config.ini) to "hdf5" (the operator-facing default).
+    # The Field default is also "hdf5" so an absent key and an empty key are
+    # consistent. Only the three implemented save paths (hdf5, zarr, both) are
+    # accepted; the legacy "tiff" literal is rejected at startup.
     image_file_format: Literal["hdf5", "zarr", "both"] = Field(
-        alias="Image File Format", default="both"
+        alias="Image File Format", default="hdf5"
     )
     # Theme — the persisted UI theme override. The before-validator
     # lowercases and maps "" to "system".
