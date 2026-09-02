@@ -750,3 +750,51 @@ def test_generated_overlay_ignores_env_source() -> None:
             os.environ.pop("IBEAM__MAX_POWER", None)
         else:
             os.environ["IBEAM__MAX_POWER"] = env_backup
+
+
+# --- Image File Format (three-format contract) -----------------------------
+
+
+def test_image_file_format_accepts_three_formats_both_tiers() -> None:
+    """``Image File Format`` accepts hdf5 / zarr / both (case-insensitive)
+    on the strict and generated overlay tiers."""
+    from lightsheet.config_schema import (
+        ControllerSettings,
+        ControllerSettingsOverlay,
+    )
+
+    for fmt in ("hdf5", "zarr", "both", "HDF5", "Zarr"):
+        for cls in (ControllerSettings, ControllerSettingsOverlay):
+            settings = cls(  # ty: ignore[operator]
+                **{"Units": "mm", "Image File Format": fmt}
+            )  # ty: ignore[invalid-argument-type]
+            assert settings.image_file_format == fmt.lower()
+
+
+def test_image_file_format_rejects_tiff_both_tiers() -> None:
+    """The unsupported ``tiff`` literal is rejected by the strict baseline
+    and the generated overlay, not silently normalized to HDF5."""
+    from lightsheet.config_schema import (
+        ControllerSettings,
+        ControllerSettingsOverlay,
+    )
+
+    for cls in (ControllerSettings, ControllerSettingsOverlay):
+        with pytest.raises(ValidationError):
+            cls(  # ty: ignore[operator]
+                **{"Units": "mm", "Image File Format": "tiff"}
+            )  # ty: ignore[invalid-argument-type]
+
+
+def test_image_file_format_empty_defaults_to_hdf5_both_tiers() -> None:
+    """An empty value still normalizes to ``hdf5`` before the Literal check."""
+    from lightsheet.config_schema import (
+        ControllerSettings,
+        ControllerSettingsOverlay,
+    )
+
+    for cls in (ControllerSettings, ControllerSettingsOverlay):
+        settings = cls(  # ty: ignore[operator]
+            **{"Units": "mm", "Image File Format": ""}
+        )  # ty: ignore[invalid-argument-type]
+        assert settings.image_file_format == "hdf5"

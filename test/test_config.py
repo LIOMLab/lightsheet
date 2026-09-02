@@ -102,15 +102,16 @@ def test_cfg_str2bool_false_cases(value: str) -> None:
 
 # --------------------------------------------------------------------------- #
 # D-03: Image File Format enum. ``Image File Format`` is an enum accepting
-# hdf5 / zarr / both / tiff (case-insensitive) and rejecting unknown values
-# with a validation error at startup (the PKG-04 collect-all gate).
+# hdf5 / zarr / both (case-insensitive) and rejecting unknown values with a
+# validation error at startup (the PKG-04 collect-all gate). The legacy
+# ``tiff`` literal is not a real save implementation and is rejected.
 # --------------------------------------------------------------------------- #
 
 
 def test_image_file_format_enum(tmp_path: Path) -> None:
-    """D-03: ``Image File Format`` accepts the four documented values
-    (hdf5 / zarr / both / tiff, case-insensitive) and rejects unknown
-    values with a ValidationError. The rig's current "HDF5" stays valid."""
+    """D-03: ``Image File Format`` accepts the three implemented values
+    (hdf5 / zarr / both, case-insensitive) and rejects unknown values with a
+    ValidationError. The legacy ``tiff`` literal is also rejected."""
     from pydantic import ValidationError
 
     from lightsheet.config import cfg_read
@@ -124,7 +125,7 @@ def test_image_file_format_enum(tmp_path: Path) -> None:
     defaults = {"Image File Format": "both", "Units": "mm"}
 
     # Valid values — accepted by BOTH tiers (strict + overlay in sync).
-    for fmt in ("hdf5", "zarr", "both", "tiff"):
+    for fmt in ("hdf5", "zarr", "both"):
         ini = tmp_path / f"test_{fmt}.ini"
         ini.write_text(
             f"[Controller]\nImage File Format = {fmt}\nUnits = mm\n",
@@ -152,6 +153,18 @@ def test_image_file_format_enum(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     data = cfg_read(str(bad_ini), "Controller", dict(defaults))
+    with pytest.raises(ValidationError):
+        ControllerSettings(**data)  # ty: ignore[invalid-argument-type]
+    with pytest.raises(ValidationError):
+        ControllerSettingsOverlay(**data)  # ty: ignore[invalid-argument-type]
+
+    # Legacy ``tiff`` literal is rejected by BOTH tiers.
+    tiff_ini = tmp_path / "test_tiff.ini"
+    tiff_ini.write_text(
+        "[Controller]\nImage File Format = tiff\nUnits = mm\n",
+        encoding="utf-8",
+    )
+    data = cfg_read(str(tiff_ini), "Controller", dict(defaults))
     with pytest.raises(ValidationError):
         ControllerSettings(**data)  # ty: ignore[invalid-argument-type]
     with pytest.raises(ValidationError):
