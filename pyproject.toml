@@ -33,6 +33,7 @@ packages = [
     "lightsheet.adaptive",
     "lightsheet.focus",
     "lightsheet.gui",
+    "lightsheet.gui.workers",
     "lightsheet.hal",
     "lightsheet.hal.real",
     "lightsheet.hal.mocks",
