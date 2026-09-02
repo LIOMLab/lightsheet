@@ -85,7 +85,7 @@ class Ui_StackPanel(object):
 
         self.line_6 = QFrame(self.groupBox_18)
         self.line_6.setObjectName(u"line_6")
-        self.line_6.setFrameShadow(QFrame.Raised)
+        self.line_6.setFrameShadow(QFrame.Shadow.Raised)
         self.line_6.setFrameShape(QFrame.Shape.VLine)
 
         self.horizontalLayout_9.addWidget(self.line_6)
