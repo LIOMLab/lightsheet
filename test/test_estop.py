@@ -132,3 +132,39 @@ def test_motor_controller_has_no_estop_method() -> None:
     assert not hasattr(MotorController, "e_stop"), (
         "MotorController must NOT declare an e_stop method"
     )
+
+
+# --------------------------------------------------------------------------- #
+# regression gate — dock presentation controllers must NOT own an estop method.
+# The E-stop kill path stays in the shell (updateUi_estop_pressed); moving it
+# into a presentation-only dock controller would hide the laser-off calls and
+# risk threading them.
+# --------------------------------------------------------------------------- #
+
+
+def test_adaptive_dock_controller_has_no_estop_method() -> None:
+    """AdaptiveDockController must NOT declare an estop/kill/e_stop method —
+    the E-stop kill path stays in the shell, lock-free on the GUI thread."""
+    from lightsheet.gui.coordinators.adaptive_dock_controller import (
+        AdaptiveDockController,
+    )
+
+    for name in ("estop", "kill", "e_stop"):
+        assert not hasattr(AdaptiveDockController, name), (
+            f"AdaptiveDockController must NOT declare a {name} method — "
+            "the E-stop kill path stays in the shell."
+        )
+
+
+def test_focus_dock_controller_has_no_estop_method() -> None:
+    """FocusDockController must NOT declare an estop/kill/e_stop method —
+    the E-stop kill path stays in the shell, lock-free on the GUI thread."""
+    from lightsheet.gui.coordinators.focus_dock_controller import (
+        FocusDockController,
+    )
+
+    for name in ("estop", "kill", "e_stop"):
+        assert not hasattr(FocusDockController, name), (
+            f"FocusDockController must NOT declare a {name} method — "
+            "the E-stop kill path stays in the shell."
+        )

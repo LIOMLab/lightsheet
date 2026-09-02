@@ -201,6 +201,119 @@ def test_estop_kill_path_stays_synchronous_and_lock_free(
         laser.off = original_offs[idx]
 
 
+def test_estop_laser_off_precedes_dock_freeze(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """The synchronous laser-off kill path completes before either
+    trajectory dock is frozen. For an E-stop with both adaptive and focus
+    active, every laser.off() call precedes any call to the dock
+    controllers' freeze() methods."""
+    ctrl, _bundle = make_controller(qtbot, request)
+
+    # Patch the refresh calls so the handler does not spawn a QThread.
+    patchers = [
+        patch.object(ctrl._hw, "_poll_laser_status"),
+        patch.object(ctrl._hw, "_refresh_laser_readback"),
+        patch.object(ctrl._hw, "_refresh_laser2_readback_async"),
+    ]
+    for p in patchers:
+        p.start()
+        request.addfinalizer(p.stop)
+
+    order: list[str] = []
+    original_offs: list[Callable[[], None]] = []
+
+    def _make_off_recorder(
+        _laser: Any, _orig: Callable[[], None]
+    ) -> Callable[[], None]:
+        def _off() -> None:
+            order.append("laser.off")
+            _orig()
+
+        return _off
+
+    for laser in ctrl.lasers:
+        original_offs.append(laser.off)
+        laser.off = _make_off_recorder(laser, laser.off)
+
+    def _record_adaptive_freeze() -> None:
+        order.append("adaptive.freeze")
+
+    def _record_focus_freeze() -> None:
+        order.append("focus.freeze")
+
+    adaptive_p = patch.object(
+        ctrl._adaptive_dock_controller, "freeze", side_effect=_record_adaptive_freeze
+    )
+    focus_p = patch.object(
+        ctrl._focus_dock_controller, "freeze", side_effect=_record_focus_freeze
+    )
+    adaptive_p.start()
+    focus_p.start()
+    request.addfinalizer(adaptive_p.stop)
+    request.addfinalizer(focus_p.stop)
+
+    ctrl.updateUi_estop_pressed()
+
+    # Restore original off() methods.
+    for laser, orig in zip(ctrl.lasers, original_offs, strict=True):
+        laser.off = orig
+
+    # Every laser must appear before every freeze.
+    off_positions = [i for i, v in enumerate(order) if v == "laser.off"]
+    freeze_positions = [
+        i
+        for i, v in enumerate(order)
+        if v in ("adaptive.freeze", "focus.freeze")
+    ]
+    assert off_positions, "laser.off was never called"
+    assert freeze_positions, "dock freeze was never called"
+    assert max(off_positions) < min(freeze_positions), (
+        f"laser.off must precede dock freeze; got order {order}"
+    )
+
+
+def test_estop_warning_emitted_and_freeze_still_runs(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """If a laser off() fails and sets laser.error, the E-stop handler
+    emits a warning message AND still freezes the dock plots afterwards."""
+    ctrl, _bundle = make_controller(qtbot, request)
+
+    patchers = [
+        patch.object(ctrl._hw, "_poll_laser_status"),
+        patch.object(ctrl._hw, "_refresh_laser_readback"),
+        patch.object(ctrl._hw, "_refresh_laser2_readback_async"),
+    ]
+    for p in patchers:
+        p.start()
+        request.addfinalizer(p.stop)
+
+    messages: list[str] = []
+    ctrl.sig_message.connect(messages.append)
+
+    def _failing_off(laser: Any) -> None:
+        def _off() -> None:
+            # Simulate a backend that reports the off() command failed.
+            laser.error = True
+            laser.error_message = "mock off failure"
+
+        return _off
+
+    for laser in ctrl.lasers:
+        laser.off = _failing_off(laser)
+
+    ctrl.updateUi_estop_pressed()
+
+    # The warning for the first failing laser appears in sig_message.
+    assert any(
+        "off command failed" in m for m in messages
+    ), f"Expected laser-off warning in sig_message, got {messages}"
+    # Both dock widgets are frozen even when a laser off fails.
+    assert ctrl._adaptive_dock_controller.widget._frozen is True
+    assert ctrl._focus_dock_controller.widget._frozen is True
+
+
 def test_arm_reset_first_press_clears_estop_event(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
