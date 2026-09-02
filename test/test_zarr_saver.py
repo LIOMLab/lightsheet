@@ -828,3 +828,15 @@ def test_zarr_non_zero_frames_still_produce_chunks(
         assert np.all(arr[0, z, :, :] == (z + 1) * 100), (  # ty: ignore[invalid-argument-type, not-subscriptable]
             f"plane {z} data mismatch after round-trip"
         )
+
+
+def test_zarr_saver_has_focused_module() -> None:
+    """ZarrSaver lives in a focused module while legacy imports from
+    ``frame_saver_controller`` remain object-identical."""
+    from lightsheet.gui.coordinators.frame_saver_controller import (
+        ZarrSaver as old_zarr,
+    )
+    from lightsheet.gui.coordinators.zarr_saver import ZarrSaver as new_zarr
+
+    assert new_zarr is old_zarr
+    assert new_zarr.__module__.endswith("zarr_saver")
