@@ -14,8 +14,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from lightsheet.gui.coordinators.hardware_manager import HardwareManager
-    from lightsheet.gui.shell.controller import Controller_MainWindow
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +32,15 @@ class _AcquireScanMixin:
     scan-acquisition body stays in one place.
     """
 
-    def acquire_scan(self) -> None:
+    def acquire_scan(self) -> bool:
         """
         Generate scan tasks using previously computed waveforms and
-        acquire a single reconstructed frame
+        acquire a single reconstructed frame.
+
+        Returns ``True`` only after the frame is reconstructed and queued
+        for display. Returns ``False`` after any pre-frame or no-data
+        abort, after deleting the recorder/scanner and disarming the
+        camera so the caller can stop lasers and finish cleanly.
         """
 
         # Store metadata about buffer to be acquired
@@ -81,7 +85,7 @@ class _AcquireScanMixin:
             logger.warning("SigGen create_scanner failed during acquire_scan")
             self.siggen.delete_scanner()
             self.camera.disarm()
-            return
+            return False
 
         # Prime the camera recorder before we start the acquisition taks
         self.camera.start_recorder(number_of_images)  # ty: ignore[unresolved-attribute]
@@ -121,11 +125,29 @@ class _AcquireScanMixin:
             # disarmed before any worker that might die afterward gets a
             # chance to skip its own cleanup.
             self.camera.disarm()  # ty: ignore[unresolved-attribute]
-            return
+            return False
 
         # Recover images from the recorder
         # Note: Images must be recovered before deleting the recorder
         recorded_images = self.camera.copy_recorder_images(number_of_images)  # ty: ignore[unresolved-attribute]
+
+        # If the recorder has no data, make the absence explicit instead of
+        # treating a synthetic zero-filled array as a real frame. Clean up
+        # the recorder and scanner and disarm before returning so the caller
+        # can stop lasers and emit finished.
+        if recorded_images is None:
+            self._shell.sig_message.emit(  # ty: ignore[unresolved-attribute]
+                "Camera recorder returned no data — the acquisition was "
+                "aborted before a frame could be reconstructed. "
+                "Check the camera trigger, exposure, and USB connection, "
+                "then restart the run."
+            )
+            logger.warning("Camera recorder returned no data during acquire_scan")
+            self.camera.delete_recorder()  # ty: ignore[unresolved-attribute]
+            self.siggen.delete_scanner()  # ty: ignore[unresolved-attribute]
+            self.camera.disarm()  # ty: ignore[unresolved-attribute]
+            return False
+
         self._shell.buffer = np.asarray(recorded_images)  # ty: ignore[unresolved-attribute]
 
         # Delete tasks and recorder
@@ -144,5 +166,6 @@ class _AcquireScanMixin:
 
         # Send reconstructed frame to display port
         self._shell._fs.enqueue_frame(self._shell.reconstructed_frame)  # ty: ignore[unresolved-attribute]
+        return True
 
 

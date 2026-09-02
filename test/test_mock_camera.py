@@ -17,9 +17,9 @@ it, keeping tests fast.
 
 from __future__ import annotations
 
-import numpy as np
 import time
 
+import numpy as np
 import pytest
 
 pytest.importorskip("PySide6")

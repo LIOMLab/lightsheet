@@ -738,7 +738,8 @@ class Camera(ICamera):
             if self.verbose:
                 print(" Camera not open. Aborted")
         if img_buffer is not None:
-            return img_buffer[0]  # Returning first (and in this case only) image from the buffer
+            # Returning first (and only) image from the buffer.
+            return img_buffer[0]
         return None
 
 

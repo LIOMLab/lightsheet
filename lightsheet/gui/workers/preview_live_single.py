@@ -10,8 +10,9 @@ import logging
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject, Signal, Slot
-from lightsheet.hal.bundle import DeviceBundle
+
 from lightsheet.gui.workers.scan_mixin import _AcquireScanMixin
+from lightsheet.hal.bundle import DeviceBundle
 
 if TYPE_CHECKING:
     from lightsheet.gui.coordinators.hardware_manager import HardwareManager
@@ -125,6 +126,18 @@ class PreviewWorker(QObject):
                 cam_images = self.camera.copy_recorder_images(1)
                 self.camera.delete_recorder()
 
+                # If the recorder has no data, stop the preview cleanly.
+                # The post-loop cleanup below stops the lasers and disarms
+                # the camera; breaking here ensures no stale/fake frame is
+                # enqueued.
+                if cam_images is None:
+                    self._shell.sig_message.emit(
+                        "Preview camera returned no data — the preview was stopped. "
+                        "Check the camera trigger, exposure, and USB "
+                        "connection, then restart."
+                    )
+                    break
+
                 # Sending first (and should be only) image to display port
                 frame = cam_images[0]
                 self._shell._fs.enqueue_frame(frame)  # ty: ignore[unresolved-attribute]
@@ -229,7 +242,8 @@ class LiveWorker(QObject, _AcquireScanMixin):
                 # Refresh scan waveforms every loop (live mode)
                 self.siggen.compute_scan_waveforms()
                 # Get single image
-                self.acquire_scan()
+                if not self.acquire_scan():
+                    break
 
             # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)  # noqa: E501
             self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
@@ -355,8 +369,7 @@ class SingleWorker(QObject, _AcquireScanMixin):
                 # before the first channel — the second channel reuses
                 # the same waveform).
                 self.siggen.compute_scan_waveforms()
-                self.acquire_scan()
-                if self.camera.recorder_timeout_status or self.siggen.error:
+                if not self.acquire_scan():
                     self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
                     self._hw.stop_lasers()
                     self.camera.disarm()
@@ -375,8 +388,7 @@ class SingleWorker(QObject, _AcquireScanMixin):
                     self._hw.stop_lasers()
                     self.camera.disarm()
                     return
-                self.acquire_scan()
-                if self.camera.recorder_timeout_status or self.siggen.error:
+                if not self.acquire_scan():
                     self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
                     self._hw.stop_lasers()
                     self.camera.disarm()
@@ -435,7 +447,11 @@ class SingleWorker(QObject, _AcquireScanMixin):
                 self.siggen.compute_scan_waveforms()
 
                 # Acquire a single scan
-                self.acquire_scan()
+                if not self.acquire_scan():
+                    self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+                    self._hw.stop_lasers()
+                    self.camera.disarm()
+                    return
 
             # Put ETLs in standby mode
             # 2.5V corresponds no current through coil (mid 0-5V adjustable range)
