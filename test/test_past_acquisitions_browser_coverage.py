@@ -693,10 +693,9 @@ def test_start_scan_async_emits_finished(
 ) -> None:
     """start_scan_async offloads the scan to a QThread and emits
     sig_scan_finished when done. The entries list is forwarded
-    verbatim. Uses QSignalSpy to wait for the signal deterministically."""
+    verbatim."""
     import h5py
     import numpy as np
-    from PySide6.QtTest import QSignalSpy
 
     ctrl, _ = make_controller(qtbot, request)
     data_dir = tmp_path / "data"
@@ -707,16 +706,18 @@ def test_start_scan_async_emits_finished(
         f.create_dataset("reconstructed_frame001", data=data)
     ctrl.save_directory = str(data_dir)
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
-    spy = QSignalSpy(browser.sig_scan_finished)
+    received: list[list] = []
+    browser.sig_scan_finished.connect(lambda entries: received.append(entries))
     browser.start_scan_async()
-    # Wait for the signal (15s timeout — generous for xdist worker
-    # contention). QSignalSpy.wait pumps the event loop and returns
-    # True when the signal fires.
-    assert spy.wait(15000), "sig_scan_finished did not fire within 15s"
-    assert spy.count() >= 1
-    # PySide6 QSignalSpy: use .at(0) to get the first argument list.
-    args = spy.at(0)
-    entries = args[0]
+    # Wait for the worker thread to finish by polling is_scanning() with
+    # qtbot.waitUntil. QSignalSpy.wait pumps the event loop which under
+    # xdist load can process deferred deletions from prior test
+    # teardowns, stealing time from the signal wait and causing flaky
+    # timeouts. waitUntil also pumps events but the predicate is our own
+    # state check, not a signal count.
+    qtbot.waitUntil(lambda: not browser.is_scanning(), timeout=15000)
+    assert len(received) >= 1
+    entries = received[0]
     assert len(entries) == 1
     assert entries[0].wavelength == 555
     # Stop the scan (cleanup any thread refs — the thread may have
@@ -993,10 +994,9 @@ def test_panel_refresh_triggers_async_scan(
     qtbot: QtBot, request: FixtureRequest, tmp_path: Path
 ) -> None:
     """panel.refresh() triggers an async scan that populates the table on
-    completion. Uses QSignalSpy to wait for the scan-finished signal."""
+    completion."""
     import h5py
     import numpy as np
-    from PySide6.QtTest import QSignalSpy
 
     ctrl, _ = make_controller(qtbot, request)
     data_dir = tmp_path / "data"
@@ -1007,8 +1007,16 @@ def test_panel_refresh_triggers_async_scan(
         f.create_dataset("reconstructed_frame001", data=data)
     ctrl.save_directory = str(data_dir)
     panel = ctrl.past_panel
-    spy = QSignalSpy(panel.past_acquisitions_scan_finished)
+    received: list[list] = []
+    panel.past_acquisitions_scan_finished.connect(
+        lambda entries: received.append(entries)
+    )
     panel.refresh()
-    assert spy.wait(15000), "scan did not finish within 15s"
+    # Wait for the scan to finish by polling the browser's is_scanning()
+    # state. QSignalSpy.wait is flaky under xdist load (event loop
+    # contention from prior test teardowns). qtbot.waitUntil pumps events
+    # but the predicate is our own state check.
+    qtbot.waitUntil(lambda: not panel._browser.is_scanning(), timeout=15000)
+    assert len(received) >= 1
     assert panel.ui.tableWidget_pastAcquisitions.rowCount() == 1
     panel.stop_scan()
