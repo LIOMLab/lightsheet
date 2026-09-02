@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from lightsheet.gui.styles import colors as _c
+from lightsheet.gui.styles import spacing as _s
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +64,8 @@ def build_no_dbl_click_title_bar(
     title_bar.setFrameShape(QFrame.Shape.NoFrame)
     title_bar.setObjectName(f"{dock.objectName()}TitleBar")
     tb_layout = QHBoxLayout(title_bar)
-    tb_layout.setContentsMargins(8, 4, 8, 4)
-    tb_layout.setSpacing(4)
+    tb_layout.setContentsMargins(_s.SM, _s.XS, _s.SM, _s.XS)
+    tb_layout.setSpacing(_s.XS)
     title_label = QLabel(title, title_bar)
     tb_layout.addWidget(title_label)
     tb_layout.addStretch(1)

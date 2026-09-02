@@ -415,7 +415,7 @@ def test_poll_laser_status_inactive_emits_inactive(
 
     ctrl._hw._poll_laser_status([0])
 
-    assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "● OFF"
+    assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "○ OFF"
 
 
 def test_poll_laser_status_error_wins_over_active(
@@ -431,7 +431,7 @@ def test_poll_laser_status_error_wins_over_active(
 
     ctrl._hw._poll_laser_status([1])
 
-    assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "● FAULT"
+    assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "⚠ FAULT"
 
 
 def test_poll_laser_status_both_indices_emits_twice(
@@ -451,7 +451,7 @@ def test_poll_laser_status_both_indices_emits_twice(
     # Both labels were updated via the connected slots — one emission per
     # index.
     assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "● ON"
-    assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "● OFF"
+    assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "○ OFF"
 
 
 def test_updateUi_laser_status_active_sets_on_label(
@@ -478,7 +478,7 @@ def test_updateUi_laser_status_inactive_sets_off_label(
 
     ctrl.laser_panel.updateUi_laser_status(0, "inactive")
 
-    assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "● OFF"
+    assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "○ OFF"
     style = ctrl.laser_panel.ui.label_laserOneStatus.styleSheet()
     assert "#8E8E93" in style
     assert "bold" in style
@@ -493,7 +493,7 @@ def test_updateUi_laser_status_error_sets_err_label_for_laser2(
 
     ctrl.laser_panel.updateUi_laser_status(1, "error")
 
-    assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "● FAULT"
+    assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "⚠ FAULT"
     style = ctrl.laser_panel.ui.label_laserTwoStatus.styleSheet()
     assert "#FF3B30" in style
     assert "bold" in style

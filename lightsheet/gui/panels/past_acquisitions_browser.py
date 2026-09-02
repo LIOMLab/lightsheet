@@ -53,6 +53,7 @@ from lightsheet.gui.panels.ui_past_acquisitions_panel import (
     Ui_PastAcquisitionsPanel,
 )
 from lightsheet.gui.styles import colors as _c
+from lightsheet.gui.styles import spacing as _s
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -671,7 +672,7 @@ class PastAcquisitionsPanel(QWidget):
         self.ui.tableWidget_pastAcquisitions.setSortingEnabled(True)
 
         # Status label styling (empty/scanning/error copy).
-        self.ui.label_pastStatus.setStyleSheet(f"color: {_c.MUTED_TEXT}; padding: 12px;")
+        self.ui.label_pastStatus.setStyleSheet(f"color: {_c.MUTED_TEXT}; padding: {_s.MD}px;")
         self.ui.label_pastStatus.setVisible(False)
 
         # Planned/Past toggle — exclusive group. "Planned" switches the

@@ -29,6 +29,11 @@ from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
+# Color-blind-safe shape fallbacks for laser status (red/green is not enough).
+_LASER_BULLET_ON = "\u25cf"      # ● filled bullet
+_LASER_BULLET_OFF = "\u25cb"     # ○ hollow bullet
+_LASER_BULLET_FAULT = "\u26a0"   # ⚠ warning triangle
+
 
 class LaserPanelWidget(QWidget):
     """Laser controls panel — owns laser amplitude/toggle/status/readback slots.
@@ -44,6 +49,13 @@ class LaserPanelWidget(QWidget):
         self._shell = shell
         self.ui = Ui_LaserPanel()
         self.ui.setupUi(self)
+
+        # Initialize both laser status labels to the OFF state with a
+        # color-blind-safe hollow bullet; the first poll will update if
+        # the real state differs.
+        self._optimistic_echo(self.ui.label_laserOneStatus, False)
+        self._optimistic_echo(self.ui.label_laserTwoStatus, False)
+
         # Apply the declarative FieldSpec policy table to every promoted
         # FieldSpecSpinBox by objectName. FieldSpec min/max are a SOFT
         # widget-layer block; the two-layer runtime clamp and the
@@ -102,19 +114,19 @@ class LaserPanelWidget(QWidget):
             self.ui.pushButton_laserTwoToggle,
         ]
         if status == "active":
-            labels[idx].setText("● ON")
+            labels[idx].setText(f"{_LASER_BULLET_ON} ON")
             labels[idx].setStyleSheet(
                 f"color: {_c.SUCCESS}; font-weight: bold;"
             )
             buttons[idx].setChecked(True)
         elif status == "inactive":
-            labels[idx].setText("● OFF")
+            labels[idx].setText(f"{_LASER_BULLET_OFF} OFF")
             labels[idx].setStyleSheet(
                 f"color: {_c.DISABLED}; font-weight: bold;"
             )
             buttons[idx].setChecked(False)
         else:  # "error"
-            labels[idx].setText("● FAULT")
+            labels[idx].setText(f"{_LASER_BULLET_FAULT} FAULT")
             labels[idx].setStyleSheet(
                 f"color: {_c.DANGER}; font-weight: bold;"
             )
@@ -237,10 +249,10 @@ class LaserPanelWidget(QWidget):
         starts so the label is never stale after a press. The next poll
         corrects it if the HAL state differs."""
         if turning_on:
-            label.setText("● ON")
+            label.setText(f"{_LASER_BULLET_ON} ON")
             label.setStyleSheet(f"color: {_c.SUCCESS}; font-weight: bold;")
         else:
-            label.setText("● OFF")
+            label.setText(f"{_LASER_BULLET_OFF} OFF")
             label.setStyleSheet(f"color: {_c.DISABLED}; font-weight: bold;")
 
     def _show_first_energize_dialog(self, idx: int) -> str:

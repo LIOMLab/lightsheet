@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from lightsheet.gui.styles import colors as _c
+from lightsheet.gui.styles import spacing as _s
 
 
 class _KeepLastTint:
@@ -65,7 +66,9 @@ class ImageView(QGraphicsView):
         # QGraphicsView adds a default 4px margin that can cause blank
         # rendering in tight layouts; the SC2 exit criterion requires
         # this padding fix.
-        self.setStyleSheet("QGraphicsView { padding: 0px; border: none; }")
+        self.setStyleSheet(
+            f"QGraphicsView {{ padding: {_s.ZERO}px; border: none; }}"
+        )
         self.setFrameShape(QGraphicsView.Shape.NoFrame)
         # No antialiasing — pixel-accurate display of grayscale frames.
         # QPainter.RenderHint(0) is the "no hints" value (Antialiasing
@@ -99,7 +102,7 @@ class ImageView(QGraphicsView):
         )
         self._placeholder.setStyleSheet(
             f"color: {_c.MUTED_TEXT}; background: transparent; "
-            f"font-size: 16px; padding: 16px;"
+            f"font-size: {_s.LG}px; padding: {_s.LG}px;"
         )
         self._placeholder.setGeometry(self.rect())
 

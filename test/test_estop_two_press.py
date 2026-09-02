@@ -67,7 +67,7 @@ def test_estop_actuated_state(qtbot: QtBot, request: FixtureRequest) -> None:
 
     ctrl.updateUi_estop_pressed()
 
-    assert ctrl.label_estopStatus.text() == "● E-STOP ACTUATED"
+    assert ctrl.label_estopStatus.text() == "⬤ E-STOP ACTUATED"
     assert "#FF3B30" in ctrl.label_estopStatus.styleSheet()
     assert ctrl.pushButton_armReset.text() == "Clear E-stop", (
         f"Expected 'Clear E-stop' (ACTUATED state), got "
@@ -89,7 +89,7 @@ def test_first_arm_reset_press_transitions_to_disarmed(
     ctrl.updateUi_estop_pressed()
     ctrl.updateUi_arm_reset_pressed()
 
-    assert ctrl.label_estopStatus.text() == "● DISARMED"
+    assert ctrl.label_estopStatus.text() == "○ DISARMED"
     assert "#8E8E93" in ctrl.label_estopStatus.styleSheet()
     assert ctrl.pushButton_armReset.text() == "Arm Lasers", (
         f"Expected 'Arm Lasers' (DISARMED state), got "
@@ -157,11 +157,11 @@ def test_single_press_from_actuated_does_not_re_arm(
     _patch_refresh(ctrl, request)
 
     ctrl.updateUi_estop_pressed()
-    assert ctrl.label_estopStatus.text() == "● E-STOP ACTUATED"
+    assert ctrl.label_estopStatus.text() == "⬤ E-STOP ACTUATED"
 
     # A single press from ACTUATED -> DISARMED (NOT -> ARMED).
     ctrl.updateUi_arm_reset_pressed()
-    assert ctrl.label_estopStatus.text() == "● DISARMED", (
+    assert ctrl.label_estopStatus.text() == "○ DISARMED", (
         "A single press from ACTUATED must transition to DISARMED, not "
         "re-arm to ARMED — no single-press re-arm of a Class IIIB laser "
         "(AGENTS.md §2)."

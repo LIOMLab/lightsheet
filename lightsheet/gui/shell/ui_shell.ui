@@ -631,9 +631,6 @@
       <height>0</height>
      </size>
     </property>
-    <property name="styleSheet">
-     <string notr="true">color: #34C759; font-weight: bold;</string>
-    </property>
     <property name="text">
      <string>● ARMED</string>
     </property>
@@ -647,9 +644,6 @@
     </property>
     <property name="toolTip">
      <string>Emergency stop (F12) — drives all lasers to 0 V and aborts the current acquisition</string>
-    </property>
-    <property name="styleSheet">
-     <string notr="true">QPushButton { background-color: #FF3B30; color: white; font-size: 18px; font-weight: bold; border: 2px solid black; }</string>
     </property>
     <property name="text">
      <string>E-STOP</string>

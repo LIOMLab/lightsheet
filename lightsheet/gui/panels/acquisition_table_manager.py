@@ -35,6 +35,7 @@ import typing
 from PySide6.QtCore import Qt
 
 from lightsheet.gui.styles import colors as _c
+from lightsheet.gui.styles import spacing as _s
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
@@ -155,7 +156,7 @@ class AcquisitionTableManager(QWidget):
         self._empty_label = QLabel(_EMPTY_COPY, self)
         self._empty_label.setWordWrap(True)
         self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._empty_label.setStyleSheet(f"color: {_c.MUTED_TEXT}; padding: 12px;")
+        self._empty_label.setStyleSheet(f"color: {_c.MUTED_TEXT}; padding: {_s.MD}px;")
 
         # --- Buttons ---
         btn_row = QHBoxLayout()

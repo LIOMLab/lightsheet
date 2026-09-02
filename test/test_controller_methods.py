@@ -256,13 +256,13 @@ def test_updateUi_laser_status_active(qtbot: QtBot, request: FixtureRequest) -> 
 def test_updateUi_laser_status_inactive(qtbot: QtBot, request: FixtureRequest) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.laser_panel.updateUi_laser_status(1, "inactive")
-    assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "● OFF"
+    assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "○ OFF"
 
 
 def test_updateUi_laser_status_error(qtbot: QtBot, request: FixtureRequest) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.laser_panel.updateUi_laser_status(0, "error")
-    assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "● FAULT"
+    assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "⚠ FAULT"
 
 
 # -- Position indicators (fixed mm display unit) ---------------------------

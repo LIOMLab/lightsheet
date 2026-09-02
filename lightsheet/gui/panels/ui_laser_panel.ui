@@ -100,11 +100,8 @@
           <property name="toolTip">
            <string>Laser 1 emission state (ON / OFF / FAULT)</string>
           </property>
-          <property name="styleSheet">
-           <string notr="true">color: #8E8E93; font-weight: bold;</string>
-          </property>
           <property name="text">
-           <string>● OFF</string>
+           <string>○ OFF</string>
           </property>
          </widget>
         </item>
@@ -231,11 +228,8 @@
           <property name="toolTip">
            <string>Laser 2 emission state (ON / OFF / FAULT)</string>
           </property>
-          <property name="styleSheet">
-           <string notr="true">color: #8E8E93; font-weight: bold;</string>
-          </property>
           <property name="text">
-           <string>● OFF</string>
+           <string>○ OFF</string>
           </property>
          </widget>
         </item>
@@ -251,7 +245,7 @@
            <string>iBeam power readback — click Refresh Power to re-query</string>
           </property>
           <property name="text">
-           <string>N/A</string>
+           <string>—</string>
           </property>
          </widget>
         </item>

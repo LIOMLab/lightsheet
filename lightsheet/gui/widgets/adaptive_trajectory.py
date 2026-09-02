@@ -32,6 +32,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from lightsheet.gui.styles import colors as _c
+from lightsheet.gui.styles import spacing as _s
 
 
 def _make_axis_range_drag(ax: pg.AxisItem, vb: pg.ViewBox) -> None:
@@ -196,8 +197,8 @@ class AdaptiveTrajectoryWidget(QWidget):
         self._run_started = False  # reset() called for current run
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(8)
+        layout.setContentsMargins(_s.LG, _s.LG, _s.LG, _s.LG)
+        layout.setSpacing(_s.SM)
 
         # Empty-state label: word-wrapped so the fixed English sentence
         # wraps without clipping at the dock's minimum width.

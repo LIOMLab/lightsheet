@@ -60,6 +60,13 @@ from lightsheet.gui.panels.properties_dialog import Properties_Dialog
 from lightsheet.gui.panels.save_panel import SavePanelWidget
 from lightsheet.gui.panels.scan_panel import ScanPanelWidget
 from lightsheet.gui.styles import colors as _c
+from lightsheet.gui.styles import spacing as _s
+
+# Color-blind-safe bullet fallbacks for E-stop status (filled = active,
+# hollow = inactive, heavy = actuated).
+_ESTOP_BULLET_ACTUATED = "\u2b24"  # ⬤
+_ESTOP_BULLET_ARMED = "\u25cf"     # ●
+_ESTOP_BULLET_DISARMED = "\u25cb"  # ○
 from lightsheet.gui.panels.stack_panel import StackPanelWidget
 from lightsheet.gui.shell.ui_shell import Ui_Shell
 from lightsheet.gui.widgets.channel_radio import ChannelRadio
@@ -240,11 +247,16 @@ class Controller_MainWindow(QMainWindow):
         self.pushButton_estop = self.ui.pushButton_estop
         self.pushButton_armReset = self.ui.pushButton_armReset
 
-        # Apply semantic color tokens to the E-stop toolbar; the .ui defaults
-        # are overridden so the single source of truth lives in colors.py.
+        # Apply semantic color tokens and color-blind-safe bullets to the
+        # E-stop toolbar; the .ui defaults are overridden so the single
+        # source of truth lives in the styles modules.
+        self.label_estopStatus.setText(f"{_ESTOP_BULLET_ARMED} ARMED")
         self.label_estopStatus.setStyleSheet(
             f"color: {_c.SUCCESS}; font-weight: bold;"
         )
+        self.pushButton_estop.setText("E-STOP")
+        # pushButton_estop toolTip is set in ui_shell.ui and must stay
+        # verbatim with the UI-SPEC copywriting contract.
         self.pushButton_estop.setStyleSheet(
             f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "
             f"font-size: 18px; font-weight: bold; border: 2px solid {_c.BREEZE_BG}; }}"
@@ -256,7 +268,9 @@ class Controller_MainWindow(QMainWindow):
         self.toolBar_estop.setFloatable(False)
         # lg spacing for the E-stop toolbar; the button's own stylesheet
         # overrides at the widget level.
-        self.toolBar_estop.setStyleSheet("QToolBar { spacing: 24px; padding: 0 24px; }")
+        self.toolBar_estop.setStyleSheet(
+            f"QToolBar {{ spacing: {_s.XL}px; padding: 0 {_s.XL}px; }}"
+        )
 
         # E-stop cooperative-abort event. Starts clear so the system boots
         # ARMED. Polled at the top of every acquisition worker loop; the
@@ -2087,7 +2101,9 @@ class Controller_MainWindow(QMainWindow):
         #    on the E-stop button. The Arm/Reset button label reflects the
         #    NEXT action available — "Clear E-stop" (the first press of the
         #    two-press re-arm sequence, audit #6).
-        self.label_estopStatus.setText("● E-STOP ACTUATED")
+        self.label_estopStatus.setText(
+            f"{_ESTOP_BULLET_ACTUATED} E-STOP ACTUATED"
+        )
         self.label_estopStatus.setStyleSheet(
             f"color: {_c.DANGER}; font-weight: bold;"
         )
@@ -2140,7 +2156,7 @@ class Controller_MainWindow(QMainWindow):
             # off until the operator explicitly toggles one or starts a
             # run.
             self._estop_disarmed = False
-            self.label_estopStatus.setText("● ARMED")
+            self.label_estopStatus.setText(f"{_ESTOP_BULLET_ARMED} ARMED")
             self.label_estopStatus.setStyleSheet(
                 f"color: {_c.SUCCESS}; font-weight: bold;"
             )
@@ -2159,7 +2175,7 @@ class Controller_MainWindow(QMainWindow):
             # press (above) is required.
             self.estop_event.clear()
             self._estop_disarmed = True
-            self.label_estopStatus.setText("● DISARMED")
+            self.label_estopStatus.setText(f"{_ESTOP_BULLET_DISARMED} DISARMED")
             self.label_estopStatus.setStyleSheet(
                 f"color: {_c.DISABLED}; font-weight: bold;"
             )

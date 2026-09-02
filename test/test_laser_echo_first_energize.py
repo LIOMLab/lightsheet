@@ -71,7 +71,7 @@ def test_optimistic_echo_on_when_turning_on(
     btn = ctrl.laser_panel.ui.pushButton_laserOneToggle
     label = ctrl.laser_panel.ui.label_laserOneStatus
     assert not btn.isChecked()
-    assert label.text() == "\u25cf OFF"
+    assert label.text() == "\u25cb OFF"
 
     spawned = {"did": False}
     real_thread = __import__(
@@ -99,7 +99,7 @@ def test_optimistic_echo_off_when_turning_off(
     qtbot: QtBot, request: FixtureRequest
 ) -> None:
     """Pressing the L1 toggle when ON immediately sets the status label to
-    '● OFF' gray."""
+    '○ OFF' gray."""
     ctrl, _ = make_controller(qtbot, request)
     btn = ctrl.laser_panel.ui.pushButton_laserOneToggle
     label = ctrl.laser_panel.ui.label_laserOneStatus
@@ -122,7 +122,7 @@ def test_optimistic_echo_off_when_turning_off(
     with patch.object(real_thread, "Thread", _fake_thread):
         btn.click()
 
-    assert label.text() == "\u25cf OFF"
+    assert label.text() == "\u25cb OFF"
     assert "#8E8E93" in label.styleSheet()
     assert btn.isChecked() is False
 
@@ -215,7 +215,7 @@ def test_first_energize_cancel_reverts_button_and_does_not_energize(
 ) -> None:
     """If the operator clicks Cancel on the first-energize dialog, the laser
     is NOT energized (the toggle thread does not start), the button checked
-    state reverts to unchecked, and the label reverts to '● OFF'."""
+    state reverts to unchecked, and the label reverts to '○ OFF'."""
     ctrl, _ = make_controller(qtbot, request)
     btn = ctrl.laser_panel.ui.pushButton_laserOneToggle
     label = ctrl.laser_panel.ui.label_laserOneStatus
@@ -242,7 +242,7 @@ def test_first_energize_cancel_reverts_button_and_does_not_energize(
 
     assert spawned["did"] is False, "Cancel must NOT spawn the toggle thread"
     assert btn.isChecked() is False, "Cancel must revert the button checked state"
-    assert label.text() == "\u25cf OFF", "Cancel must revert the label to OFF"
+    assert label.text() == "\u25cb OFF", "Cancel must revert the label to OFF"
     # The per-session flag must NOT be set on Cancel (next energize still warns).
     assert ctrl._laser1_first_energize_done is False
 
