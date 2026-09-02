@@ -1095,7 +1095,15 @@ class FrameSaver(QObject):
         join completes; the partial zarr store is left on disk for the
         operator to inspect/delete).
         """
-        n_planes = self.number_of_files * int(self.number_of_datasets)
+        if self.datasets_name in ("ETLscan", "FullETLscan"):
+            frames_per_buffer = int(
+                getattr(self.parent.siggen, "waveform_cycles", 1) or 1
+            )
+        else:
+            frames_per_buffer = 1
+        n_planes = (
+            self.number_of_files * int(self.number_of_datasets) * frames_per_buffer
+        )
         store_path = str(
             Path(self.parent.save_directory) / (self.files_name + ".ome.zarr")  # ty: ignore[unresolved-attribute]
         )
@@ -1530,7 +1538,15 @@ class FrameSaver(QObject):
         preserved: one queue, one consume loop, one ``sig_finished`` →
         ``thread.quit`` → ``wait(10000)``.
         """
-        n_planes = self.number_of_files * int(self.number_of_datasets)
+        if self.datasets_name in ("ETLscan", "FullETLscan"):
+            frames_per_buffer = int(
+                getattr(self.parent.siggen, "waveform_cycles", 1) or 1
+            )
+        else:
+            frames_per_buffer = 1
+        n_planes = (
+            self.number_of_files * int(self.number_of_datasets) * frames_per_buffer
+        )
         store_path = str(
             Path(self.parent.save_directory) / (self.files_name + ".ome.zarr")  # ty: ignore[unresolved-attribute]
         )
