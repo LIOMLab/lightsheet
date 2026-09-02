@@ -33,9 +33,10 @@ loop or a display (RESEARCH.md §Standard Stack: no pytest-qt). The
 ordered ``sig_message.emit`` / ``sig_progress_update.emit`` call sequence
 is captured as a JSON list of ``{"type": ..., "value": ...}`` dicts.
 
-``acquire_scan`` references module-level names (``datetime``, ``logger``,
-``np``) from ``lightsheet/gui/workers.py``; the exec namespace is
-seeded with them so the body resolves them at call time.
+``acquire_scan`` now lives in ``lightsheet/gui/workers/scan_mixin.py`` and
+references module-level names (``datetime``, ``logger``, ``np``) from
+there; the exec namespace is seeded with them so the body resolves them
+at call time.
 """
 
 import datetime
@@ -64,7 +65,12 @@ _CONTROLLER_SRC = _HERE / ".." / ".." / "lightsheet" / "gui" / "controller.py"
 _ACQ_SRC = (
     _HERE / ".." / ".." / "lightsheet" / "gui" / "acquisition_coordinator.py"
 )
-_WORKERS_SRC = _HERE / ".." / ".." / "lightsheet" / "gui" / "workers.py"
+_SCAN_MIXIN_SRC = (
+    _HERE / ".." / ".." / "lightsheet" / "gui" / "workers" / "scan_mixin.py"
+)
+_PREVIEW_LIVE_SINGLE_SRC = (
+    _HERE / ".." / ".." / "lightsheet" / "gui" / "workers" / "preview_live_single.py"
+)
 
 # Module-level logger the exec'd body references (controller.py:45).
 _logger = logging.getLogger("lightsheet.gui.shell.controller")
@@ -115,7 +121,7 @@ def _build_standin() -> Mock:
     """Build the Mock stand-in ``self`` for acquire_scan.
 
     acquire_scan now lives on ``_AcquireScanMixin`` in
-    ``lightsheet/gui/workers.py`` (relocated from AcquisitionCoordinator).
+    ``lightsheet/gui/workers/scan_mixin.py`` (relocated from AcquisitionCoordinator).
     The mixin reads its own ``self.camera`` / ``self.siggen`` /
     ``self.motors`` attributes, shell-owned state via ``self._shell.*``
     (``sig_message``, ``sig_progress_update``, ``_fs``,
@@ -178,8 +184,8 @@ def _build_standin() -> Mock:
 def _build_preview_standin() -> Mock:
     """Build the Mock stand-in ``self`` for ``PreviewWorker.run``.
 
-    ``PreviewWorker`` lives in ``lightsheet/gui/workers.py`` (relocated
-    from ``AcquisitionCoordinator.preview_mode_worker`` as the first step
+    ``PreviewWorker`` lives in ``lightsheet/gui/workers/preview_live_single.py``
+    (relocated from ``AcquisitionCoordinator.preview_mode_worker`` as the first step
     of the threading-vehicle migration) and reads its own ``self.camera``
     attribute plus shell-owned state via ``self._shell.*``
     (``preview_mode_started``, ``estop_event``, ``_fs``,
@@ -288,7 +294,7 @@ def capture_acquisition_sequence(scenario: str) -> list[dict]:  # ty: ignore[mis
 
     if scenario == "preview_auto_laser":
         standin = _build_preview_standin()
-        worker = _load_method("run(self) -> None", src_path=_WORKERS_SRC)  # ty: ignore[invalid-argument-type]
+        worker = _load_method("run(self) -> None", src_path=_PREVIEW_LIVE_SINGLE_SRC)  # ty: ignore[invalid-argument-type]
         worker(standin)
         sequence: list[dict] = []  # ty: ignore[missing-type-argument]
         for call in standin._shell.sig_message.emit.call_args_list:
@@ -308,7 +314,7 @@ def capture_acquisition_sequence(scenario: str) -> list[dict]:  # ty: ignore[mis
             standin.siggen.error_message = "create_scan error"
 
         standin.siggen.create_scanner = _fail_create_scanner
-    acquire_scan = _load_method("acquire_scan(self) -> None", src_path=_WORKERS_SRC)  # ty: ignore[invalid-argument-type]
+    acquire_scan = _load_method("acquire_scan(self) -> None", src_path=_SCAN_MIXIN_SRC)  # ty: ignore[invalid-argument-type]
     acquire_scan(standin)
 
     sequence = []

@@ -182,9 +182,9 @@ def test_worker_valueerror_catch_preserved() -> None:
     catch (the physical-safety backstop) is preserved verbatim."""
     import inspect
 
-    from lightsheet.gui import workers
+    from lightsheet.gui.workers import stack as stack_worker_module
 
-    src = inspect.getsource(workers)
+    src = inspect.getsource(stack_worker_module)
     # The per-plane ValueError catch in the stack worker must still be
     # present (the editingFinished soft block does not replace it).
     assert "move_absolute_position" in src
