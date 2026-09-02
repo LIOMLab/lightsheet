@@ -1344,3 +1344,41 @@ def test_preview_worker_single_laser_unchanged(qtbot: QtBot) -> None:
     spies["laser1_on"].assert_not_called()
     spies["laser0_off"].assert_called_once()
     assert len(finished_emits) == 1
+
+
+def test_live_worker_exception_in_cleanup_emits_message(qtbot: QtBot) -> None:
+    """LiveWorker.run catches exceptions in cleanup, emits sig_message, and
+    still emits finished exactly once."""
+    worker, shell, _hw = _make_live_worker(qtbot)
+    shell.live_mode_started = False
+    worker.camera.disarm = Mock(side_effect=RuntimeError("disarm fault"))  # type: ignore[method-assign]
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+    shell.sig_message.emit.assert_called_once()
+    assert "Live acquisition failed" in shell.sig_message.emit.call_args[0][0]
+    assert len(finished_emits) == 1
+
+
+def test_preview_worker_runs_one_frame_then_exits(qtbot: QtBot) -> None:
+    """PreviewWorker.run with preview_mode_started=True executes one frame-grab
+    iteration then exits when the started flag is cleared inside the loop."""
+    worker, shell, hw = _make_preview_worker(qtbot)
+    shell.preview_mode_started = True
+    shell.estop_event.is_set.return_value = False
+
+    def _copy_one_frame(number_of_images: int) -> np.ndarray:
+        # Stop the loop after this single frame.
+        shell.preview_mode_started = False
+        return np.zeros((number_of_images, 4, 4), dtype=np.uint16)
+
+    worker.camera.copy_recorder_images = _copy_one_frame  # type: ignore[method-assign]
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+
+    # One frame was enqueued and the loop stopped cleanly.
+    shell._fs.enqueue_frame.assert_called_once()
+    hw.stop_lasers.assert_called_once()
+    worker.camera.disarm()  # ensure disarm is reachable; already called in run
+    assert len(finished_emits) == 1

@@ -770,14 +770,27 @@ def _make_motors_container() -> Motors:
 @pytest.mark.parametrize(
     "moves,match_text",
     [
-        ([("horizontal", 9999.0, "mm"), ("camera", 5.0, "mm")], "exceeds the high travel limit"),
-        ([("horizontal", 5.0, "mm"), ("camera", 999.0, "mm")], "exceeds the high travel limit"),
-        ([("horizontal", -1.0, "mm"), ("camera", 5.0, "mm")], "below the low travel limit"),
-        ([("horizontal", 5.0, "mm"), ("camera", -1.0, "mm")], "below the low travel limit"),
+        (
+            [("horizontal", 9999.0, "mm"), ("camera", 5.0, "mm")],
+            "exceeds the high travel limit",
+        ),
+        (
+            [("horizontal", 5.0, "mm"), ("camera", 999.0, "mm")],
+            "exceeds the high travel limit",
+        ),
+        (
+            [("horizontal", -1.0, "mm"), ("camera", 5.0, "mm")],
+            "below the low travel limit",
+        ),
+        (
+            [("horizontal", 5.0, "mm"), ("camera", -1.0, "mm")],
+            "below the low travel limit",
+        ),
     ],
 )
 def test_move_axes_parallel_validates_both_before_any_bytes(
-    moves: list[tuple[str, float, str]], match_text: str,
+    moves: list[tuple[str, float, str]],
+    match_text: str,
 ) -> None:
     """Over-travel on ANY axis raises ValueError BEFORE any serial bytes are
     written, regardless of which axis in the list is out of range."""
@@ -829,3 +842,28 @@ def test_motors_close_closes_shared_handle() -> None:
     motors._serial.is_open = False
     motors.close()
     assert motors._serial.close.call_count == 1
+
+
+def test_move_axes_parallel_reuses_existing_io_lock_and_none_timeout() -> None:
+    """When ``Motors`` already has an ``_io_lock``, ``move_axes_parallel`` uses
+    it instead of creating a new one. When ``serial.timeout`` is ``None``,
+    the finally block skips restoring the original timeout."""
+    import threading
+
+    motors = _make_motors_container()
+    motors._io_lock = threading.RLock()
+    motors.horizontal = _make_motor_for_parallel(2, 0.19050, 533333)
+    motors.camera = _make_motor_for_parallel(3, 0.49609, 258015)
+    motors._serial.timeout = None
+    motors._serial.read.side_effect = [
+        b"\x02\x14\x00\x00\x00\x00",
+        b"\x03\x14\x00\x00\x00\x00",
+    ]
+
+    motors.move_axes_parallel([("horizontal", 5.0, "mm"), ("camera", 5.0, "mm")])
+
+    assert motors._serial.write.call_count == 2
+    assert motors._serial.read.call_count == 2
+    # Original timeout was None -> not restored; it stays at the 60.0 s
+    # move-command value set inside the with-block.
+    assert motors._serial.timeout == 60.0
