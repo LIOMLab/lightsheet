@@ -560,7 +560,23 @@ def test_ibeam_analog_setup_aborts_on_rejection() -> None:
     assert ib._is_on is False
 
 
-def test_ibeam_set_channel_power_delegates_to_send_cmd() -> None:
+def test_ibeam_smart_laser_forwards_resolved_port() -> None:
+    """IBeamSmartLaser accepts an optional port and forwards it to the
+    inner IBeam serial engine so DeviceRegistry can supply a resolved port."""
+    with patch("lightsheet.hal.real.ibeam_smart.IBeam") as MockIBeam:
+        mock_engine = MagicMock()
+        MockIBeam.return_value = mock_engine
+        # Mock the attributes IBeamSmartLaser reads from the inner engine.
+        mock_engine.wavelength = 647
+        mock_engine.max_power = 150000
+        adapter = ibeam_mod.IBeamSmartLaser(
+            label="Laser 2 (647 nm)", port="COM9"
+        )
+        assert MockIBeam.call_args.kwargs.get("port") == "COM9"
+        assert adapter._ibeam is mock_engine
+
+
+
     """set_channel_power(channel=2, power_uw=150000) issues
     'channel 2 power 150000 micro' via _send_cmd and clamps to max_power.
     set_power delegates to set_channel_power without changing standalone

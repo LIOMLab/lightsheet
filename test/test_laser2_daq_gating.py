@@ -27,6 +27,7 @@ under the conftest nidaqmx stub and asserts on runtime state.
 
 import os
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -238,42 +239,71 @@ def test_l2_native_unit_volts_clamp_in_write_volts() -> None:
 # --------------------------------------------------------------------------- #
 def test_registry_composes_l2_daq_with_readback(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    """DeviceRegistry.resolve() constructs lasers[1] as a DAQLaser on
-    /Dev7/ao1 with wavelength 647, max_power 150.0 mW, an InvertedVoltMap
-    (5.0 V ceiling, 150 mW max), and a retained IBeamSmartLaser as
-    readback_backend (constructed with analog_ceiling_mw=150.0). SigGen is
-    constructed with only the camera (no L2 injection)."""
+    """DeviceRegistry.resolve() constructs lasers[1] as a DAQLaser on the
+    second terminal parsed from `Lasers Terminals`, with a retained
+    IBeamSmartLaser readback_backend, and passes resolved serial ports to
+    all real HAL constructors. SigGen is constructed with only the camera
+    (no L2 injection)."""
     from lightsheet.hal import registry as registry_module
-    from lightsheet.hal.real.daqlaser import InvertedVoltMap
+    from lightsheet.hal.real.daqlaser import InvertedVoltMap, LinearVoltMap
 
     constructed: dict[str, object] = {}
+    hal_kwargs: dict[str, dict[str, object]] = {}
     ibeam_kwargs: dict[str, object] = {}
 
+    # A non-default two-channel DAQ range: /Dev1/ao2:3 means L1->ao2, L2->ao3.
+    config_path = tmp_path / "config.ini"
+    config_path.write_text(
+        "[Lasers]\n"
+        "Lasers Terminals = /Dev1/ao2:3\n"
+        "Laser1 Wavelength = 555\n"
+        "Laser1 Max Power = 107.5\n"
+        "Laser1 mW per Volt = 60\n"
+        "Laser2 Wavelength = 647\n"
+        "Laser2 Max Power = 150\n"
+    )
+
     def fake_resolve_ports(self: object) -> dict[str, str]:
-        return {"motors": "COM7", "etl_left": "COM5", "etl_right": "COM6"}
+        return {
+            "Zaber motor stages": "COM7",
+            "ETL left": "COM5",
+            "ETL right": "COM6",
+            "Toptica iBeam Smart 640nm laser": "COM4",
+        }
 
     monkeypatch.setattr(
         registry_module.DeviceRegistry, "_resolve_ports", fake_resolve_ports
     )
     monkeypatch.setattr(registry_module, "Camera", lambda **kw: object())
-    monkeypatch.setattr(registry_module, "Motors", lambda **kw: object())
-    monkeypatch.setattr(registry_module, "ETLs", lambda **kw: object())
 
-    class _FakeIBeam:
+    class _CaptureMotors:
+        def __init__(self, **kwargs: object) -> None:
+            hal_kwargs["motors"] = kwargs
+            constructed["motors"] = self
+
+    class _CaptureETLs:
+        def __init__(self, **kwargs: object) -> None:
+            hal_kwargs["etls"] = kwargs
+            constructed["etls"] = self
+
+    class _CaptureIBeam:
         def __init__(self, **kwargs: object) -> None:
             self.label = kwargs.get("label", "")
             ibeam_kwargs.update(kwargs)
             constructed["readback"] = self
 
-    monkeypatch.setattr(registry_module, "IBeamSmartLaser", _FakeIBeam)
+    monkeypatch.setattr(registry_module, "Motors", _CaptureMotors)
+    monkeypatch.setattr(registry_module, "ETLs", _CaptureETLs)
+    monkeypatch.setattr(registry_module, "IBeamSmartLaser", _CaptureIBeam)
 
     real_daqlaser = registry_module.DAQLaser
 
     class _CapturingDAQLaser(real_daqlaser):
         def __init__(self, **kwargs: object) -> None:
             super().__init__(**kwargs)  # ty: ignore[invalid-argument-type]
-            if "ao1" in kwargs.get("terminal", ""):  # ty: ignore[unsupported-operator]
+            if kwargs.get("wavelength") == 647:
                 constructed["l2"] = self
                 constructed["l2_kwargs"] = kwargs
             else:
@@ -293,30 +323,40 @@ def test_registry_composes_l2_daq_with_readback(
 
     reg = registry_module.DeviceRegistry(
         inventory_path="hardware_inventory.yaml",
-        config_path="config.ini",
+        config_path=str(config_path),
     )
     bundle = reg.resolve()
 
+    l1 = constructed["l1"]
     l2 = constructed["l2"]
-    assert l2.terminal == "/Dev7/ao1"  # ty: ignore[unresolved-attribute]
+    # Lasers Terminals is live: /Dev1/ao2:3 -> L1 on ao2, L2 on ao3.
+    assert l1.terminal == "/Dev1/ao2"  # ty: ignore[unresolved-attribute]
+    assert l2.terminal == "/Dev1/ao3"  # ty: ignore[unresolved-attribute]
     assert l2.wavelength == 647  # ty: ignore[unresolved-attribute]
     assert l2.max_power == 150.0  # ty: ignore[unresolved-attribute]
-    # L2 uses an InvertedVoltMap (rig-measured inverted transfer function).
+    # L2 uses an InvertedVoltMap; L1 keeps a LinearVoltMap.
     assert isinstance(l2._volt_map, InvertedVoltMap)  # ty: ignore[unresolved-attribute]
     assert l2._volt_map.off_volts == pytest.approx(5.0)  # ty: ignore[unresolved-attribute]
     assert l2._max_volts == pytest.approx(5.0)  # ty: ignore[unresolved-attribute]
+    assert isinstance(l1._volt_map, LinearVoltMap)  # ty: ignore[unresolved-attribute]
     assert l2.readback_backend is constructed["readback"]  # ty: ignore[unresolved-attribute]
-    # The readback backend was constructed with analog_ceiling_mw = Laser2
+    # Resolved serial ports are passed to all real HAL constructors.
+    assert hal_kwargs.get("motors") == {"port": "COM7"}
+    assert hal_kwargs.get("etls") == {
+        "port_etl_left": "COM5",
+        "port_etl_right": "COM6",
+    }
+    assert ibeam_kwargs.get("port") == "COM4"
+    # The iBeam readback_backend was constructed with analog_ceiling_mw = Laser2
     # Max Power (the sole L2 ceiling source).
     assert ibeam_kwargs.get("analog_ceiling_mw") == pytest.approx(150.0)
     # SigGen was constructed with only the camera — no L2 injection.
     assert len(siggen_calls) == 1
     assert not hasattr(siggen_calls[0], "laser2_daq")
-    # Bundle lasers is a frozen tuple of two; L1 on ao0, L2 on ao1.
+    # Bundle lasers is a frozen tuple of two.
     assert isinstance(bundle.lasers, tuple)
     assert len(bundle.lasers) == 2
     assert bundle.lasers[1] is l2
-    assert constructed["l1"].terminal == "/Dev7/ao0"  # ty: ignore[unresolved-attribute]
     import dataclasses
     assert dataclasses.is_dataclass(bundle)
     assert bundle.__class__.__dataclass_params__.frozen
@@ -334,7 +374,12 @@ def test_registry_l1_retains_linear_volt_map(
     constructed: dict[str, object] = {}
 
     def fake_resolve_ports(self: object) -> dict[str, str]:
-        return {"motors": "COM7", "etl_left": "COM5", "etl_right": "COM6"}
+        return {
+            "Zaber motor stages": "COM7",
+            "ETL left": "COM5",
+            "ETL right": "COM6",
+            "Toptica iBeam Smart 640nm laser": "COM4",
+        }
 
     monkeypatch.setattr(
         registry_module.DeviceRegistry, "_resolve_ports", fake_resolve_ports
@@ -354,7 +399,7 @@ def test_registry_l1_retains_linear_volt_map(
     class _CapturingDAQLaser(real_daqlaser):
         def __init__(self, **kwargs: object) -> None:
             super().__init__(**kwargs)  # ty: ignore[invalid-argument-type]
-            if "ao0" in kwargs.get("terminal", ""):  # ty: ignore[unsupported-operator]
+            if kwargs.get("terminal", "").endswith("ao0"):  # ty: ignore[unsupported-operator]
                 constructed["l1"] = self
 
     monkeypatch.setattr(registry_module, "DAQLaser", _CapturingDAQLaser)
