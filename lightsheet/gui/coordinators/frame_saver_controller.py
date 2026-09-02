@@ -1299,7 +1299,15 @@ class FrameSaver(QObject):
             self._both_save_worker_multi_channel()
             return
 
-        n_planes = self.number_of_files * int(self.number_of_datasets)
+        if self.datasets_name in ("ETLscan", "FullETLscan"):
+            frames_per_buffer = int(
+                getattr(self.parent.siggen, "waveform_cycles", 1) or 1
+            )
+        else:
+            frames_per_buffer = 1
+        n_planes = (
+            self.number_of_files * int(self.number_of_datasets) * frames_per_buffer
+        )
         store_path = str(
             Path(self.parent.save_directory) / (self.files_name + ".ome.zarr")  # ty: ignore[unresolved-attribute]
         )
