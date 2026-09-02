@@ -665,3 +665,88 @@ def test_laser2_config_strict_rejects_missing_laser2_keys() -> None:
         LasersSettings(**data)  # ty: ignore[invalid-argument-type]
     err_types = [e["type"] for e in exc_info.value.errors()]
     assert any("missing" in t for t in err_types)
+
+
+# --- Overlay generation contract (D-12.5) ----------------------------------
+
+
+def test_overlay_factory_exists_and_names_class() -> None:
+    """``_make_overlay`` returns a named subclass whose name ends with
+    ``SettingsOverlay`` and whose ``model_config['extra']`` is ``'ignore'``."""
+    from lightsheet.config_schema import _make_overlay, ControllerSettings
+
+    overlay = _make_overlay(ControllerSettings)
+    assert overlay.__name__ == "ControllerSettingsOverlay"
+    assert overlay.model_config.get("extra") == "ignore"
+
+
+def test_overlays_inherit_strict_settings() -> None:
+    """Each module-level ``*SettingsOverlay`` is a direct subclass of the
+    matching strict ``*Settings`` class, not a parallel sibling of
+    ``_NoEnvBaseSettings``."""
+    from lightsheet import config_schema
+
+    for base_name in (
+        "ControllerSettings",
+        "CameraSettings",
+        "SigGenSettings",
+        "LasersSettings",
+        "IBeamSettings",
+        "ETLsSettings",
+        "MotorsSettings",
+        "LoggingSettings",
+        "AdaptiveSettings",
+        "FocusSettings",
+    ):
+        overlay_name = f"{base_name}Overlay"
+        base = getattr(config_schema, base_name)
+        overlay = getattr(config_schema, overlay_name)
+        assert overlay.__mro__[1] is base, (
+            f"{overlay_name} must inherit directly from {base_name}, "
+            f"not {overlay.__mro__[1].__name__}"
+        )
+        assert overlay.__name__.endswith("SettingsOverlay")
+
+
+def test_generated_overlay_ignores_unknown_key() -> None:
+    """A generated overlay ignores a key not declared on the strict model."""
+    from lightsheet.config_schema import ControllerSettingsOverlay
+
+    settings = ControllerSettingsOverlay(
+        Units="mm",
+        **{"Image File Format": "hdf5"},
+        LegacyExtra="ignored",
+    )  # ty: ignore[invalid-argument-type]
+    assert settings.image_file_format == "hdf5"
+    assert settings.units == "mm"
+
+
+def test_generated_overlay_preserves_safety_validators() -> None:
+    """The generated Motors overlay still rejects out-of-range safety values
+    because it inherits the strict class's field validators."""
+    from lightsheet.config_schema import MotorsSettingsOverlay
+
+    data = {**_motors_valid(), "Vertical Limit High": 50.0}
+    with pytest.raises(ValidationError):
+        MotorsSettingsOverlay(**data)  # ty: ignore[invalid-argument-type]
+
+
+def test_generated_overlay_ignores_env_source() -> None:
+    """A generated overlay still uses init-only settings sources; a stray
+    environment variable cannot override a safety key."""
+    import os
+
+    from lightsheet.config_schema import IBeamSettingsOverlay
+
+    env_backup = os.environ.get("IBeam__Max_Power")
+    os.environ["IBeam__Max_Power"] = "200000"
+    try:
+        # The env source is not registered, so the valid init value stays
+        # in force and the out-of-range env value is ignored.
+        settings = IBeamSettingsOverlay(**_ibeam_valid())  # ty: ignore[invalid-argument-type]
+        assert settings.max_power == 150000
+    finally:
+        if env_backup is None:
+            os.environ.pop("IBeam__Max_Power", None)
+        else:
+            os.environ["IBeam__Max_Power"] = env_backup
