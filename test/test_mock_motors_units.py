@@ -254,6 +254,8 @@ def test_mock_motors_move_axes_parallel_rejects_without_partial_mutation() -> No
     """Over-travel on one axis in a parallel move raises ValueError and leaves
     every motor's position unchanged (no partial mutation)."""
     motors = MockMotors()
+    assert isinstance(motors.horizontal, MockMotor)
+    assert isinstance(motors.camera, MockMotor)
     with pytest.raises(ValueError, match="exceeds the high travel limit"):
         motors.move_axes_parallel([("horizontal", 5.0, "mm"), ("camera", 999.0, "mm")])
     assert motors.horizontal.position_microsteps == 0
@@ -263,6 +265,8 @@ def test_mock_motors_move_axes_parallel_rejects_without_partial_mutation() -> No
 def test_mock_motors_move_axes_parallel_updates_both_in_range() -> None:
     """All in-range parallel moves update each motor's position in order."""
     motors = MockMotors()
+    assert isinstance(motors.horizontal, MockMotor)
+    assert isinstance(motors.camera, MockMotor)
     motors.move_axes_parallel([("horizontal", 5.0, "mm"), ("camera", 5.0, "mm")])
     assert motors.horizontal.position_microsteps > 0
     assert motors.camera.position_microsteps > 0

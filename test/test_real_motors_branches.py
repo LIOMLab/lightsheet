@@ -23,11 +23,24 @@ never a static-source grep.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import Mock, patch
 
 import pytest
 
 from lightsheet.hal.real.motors import Motors, ZaberMotor
+
+
+def _serial_mock(device: Any) -> Mock:
+    """Return the injected ``Mock`` serial handle through a typed cast.
+
+    The real ``Motors``/``ZaberMotor`` source types the shared handle as
+    ``serial.Serial``; test fixtures inject a ``Mock`` instead, so this
+    helper gives the type checker a typed ``Mock`` reference while
+    preserving runtime behavior.
+    """
+    return cast(Mock, device._serial)
+
 
 # -- ZaberMotor.__new__ bypass (avoids ask_id serial probe) -----------------
 
@@ -131,7 +144,7 @@ def test_motorio_serial_exception_sets_error() -> None:
     """If serial.Serial raises, _motorIO catches it and sets error=1
     (line 214-217)."""
     m = _make_motor()
-    m._serial.reset_input_buffer.side_effect = OSError("port not found")
+    _serial_mock(m).reset_input_buffer.side_effect = OSError("port not found")
     m._motorIO(50, 0)
     assert m.error == 1
     assert "Serial port error" in m.error_message
@@ -146,7 +159,7 @@ def test_motorio_negative_cmd_param() -> None:
     m._motorIO(21, -1)
     # The write was called with 6 bytes — verify the instruction encodes
     # -1 as 0xFFFFFFFF (bytes 3-6).
-    written = m._serial.write.call_args[0][0]
+    written = _serial_mock(m).write.call_args[0][0]
     assert len(written) == 6
     assert written[0] == m.device_number  # device number
     assert written[1] == 21  # cmd_no
@@ -289,7 +302,7 @@ def test_ask_id_serial_error_sets_device_not_found() -> None:
     m.port = "COM3"
     m.device_number = 1
     m._serial = Mock()
-    m._serial.reset_input_buffer.side_effect = OSError("no port")
+    _serial_mock(m).reset_input_buffer.side_effect = OSError("no port")
     m.ask_id()
     assert m.id == 0
     assert m.name == "Device not found"
@@ -803,23 +816,23 @@ def test_move_axes_parallel_validates_both_before_any_bytes(
     motors.camera = _make_motor_for_parallel(3, 0.49609, 258015)
     with pytest.raises(ValueError, match=match_text):
         motors.move_axes_parallel(moves)
-    assert motors._serial.write.call_count == 0
+    assert _serial_mock(motors).write.call_count == 0
 
 
 def test_move_axes_parallel_reads_one_reply_per_command() -> None:
     """With all targets in range, move_axes_parallel writes one command per
     motor and reads exactly one 6-byte reply per command (never 12 at once)."""
     motors = _make_motors_container()
-    motors._serial.read.side_effect = [
+    _serial_mock(motors).read.side_effect = [
         b"\x02\x14\x00\x00\x00\x00",
         b"\x03\x14\x00\x00\x00\x00",
     ]
     motors.horizontal = _make_motor_for_parallel(2, 0.19050, 533333)
     motors.camera = _make_motor_for_parallel(3, 0.49609, 258015)
     motors.move_axes_parallel([("horizontal", 5.0, "mm"), ("camera", 5.0, "mm")])
-    assert motors._serial.write.call_count == 2
-    assert motors._serial.read.call_count == 2
-    for call in motors._serial.read.call_args_list:
+    assert _serial_mock(motors).write.call_count == 2
+    assert _serial_mock(motors).read.call_count == 2
+    for call in _serial_mock(motors).read.call_args_list:
         assert call[0][0] == 6
 
 
@@ -828,24 +841,24 @@ def test_zaber_motor_uses_injected_shared_serial() -> None:
     new serial.Serial instance per call."""
     m = _make_motor_for_parallel(2, 0.19050, 533333)
     m._serial = Mock()
-    m._serial.read.return_value = b"\x02\x14\x00\x00\x00\x00"
+    _serial_mock(m).read.return_value = b"\x02\x14\x00\x00\x00\x00"
     with patch("lightsheet.hal.real.motors.serial.Serial") as serial_cls:
         m._motorIO(20, 26246)
     assert serial_cls.call_count == 0
-    assert m._serial.write.called
-    assert m._serial.read.called
+    assert _serial_mock(m).write.called
+    assert _serial_mock(m).read.called
 
 
 def test_motors_close_closes_shared_handle() -> None:
     """Motors.close() closes the shared serial handle once and is a no-op if
     the handle is already closed."""
     motors = _make_motors_container()
-    motors._serial.is_open = True
+    _serial_mock(motors).is_open = True
     motors.close()
-    assert motors._serial.close.call_count == 1
-    motors._serial.is_open = False
+    assert _serial_mock(motors).close.call_count == 1
+    _serial_mock(motors).is_open = False
     motors.close()
-    assert motors._serial.close.call_count == 1
+    assert _serial_mock(motors).close.call_count == 1
 
 
 def test_move_axes_parallel_reuses_existing_io_lock_and_none_timeout() -> None:
@@ -858,19 +871,19 @@ def test_move_axes_parallel_reuses_existing_io_lock_and_none_timeout() -> None:
     motors._io_lock = threading.RLock()
     motors.horizontal = _make_motor_for_parallel(2, 0.19050, 533333)
     motors.camera = _make_motor_for_parallel(3, 0.49609, 258015)
-    motors._serial.timeout = None
-    motors._serial.read.side_effect = [
+    _serial_mock(motors).timeout = None
+    _serial_mock(motors).read.side_effect = [
         b"\x02\x14\x00\x00\x00\x00",
         b"\x03\x14\x00\x00\x00\x00",
     ]
 
     motors.move_axes_parallel([("horizontal", 5.0, "mm"), ("camera", 5.0, "mm")])
 
-    assert motors._serial.write.call_count == 2
-    assert motors._serial.read.call_count == 2
+    assert _serial_mock(motors).write.call_count == 2
+    assert _serial_mock(motors).read.call_count == 2
     # Original timeout was None -> not restored; it stays at the 60.0 s
     # move-command value set inside the with-block.
-    assert motors._serial.timeout == 60.0
+    assert _serial_mock(motors).timeout == 60.0
 
 
 # -- Optional resolved port parameter ---------------------------------------
