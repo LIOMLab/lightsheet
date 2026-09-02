@@ -424,6 +424,12 @@ def test_field_specs_motor_max_matches_hal() -> None:
     assert FIELD_SPECS["doubleSpinBox_cameraSetPosition"].maximum == float(
         motor_cfg["Camera Limit High"]
     )
+    assert FIELD_SPECS["doubleSpinBox_acqFirstPlane"].maximum == float(
+        motor_cfg["Horizontal Limit High"]
+    )
+    assert FIELD_SPECS["doubleSpinBox_acqLastPlane"].maximum == float(
+        motor_cfg["Horizontal Limit High"]
+    )
 
 
 def test_field_specs_galvo_offset_signed_range() -> None:

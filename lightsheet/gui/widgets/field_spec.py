@@ -73,8 +73,12 @@ FIELD_SPECS: dict[str, FieldSpec] = {
     # Stack panel — first/last plane (mm, motor H travel) + plane step (µm).
     # Plane positions use 2 decimals (manual control); the plane step keeps
     # µm precision (2 decimals in µm = 0.01 µm) for thin-section stacks.
-    "doubleSpinBox_acqFirstPlane": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 41.0),
-    "doubleSpinBox_acqLastPlane": FieldSpec("mm", 2, 0.1, 1.0, 0.0, 41.0),
+    "doubleSpinBox_acqFirstPlane": FieldSpec(
+        "mm", 2, 0.1, 1.0, _MOTOR_H_MIN, _MOTOR_H_MAX
+    ),
+    "doubleSpinBox_acqLastPlane": FieldSpec(
+        "mm", 2, 0.1, 1.0, _MOTOR_H_MIN, _MOTOR_H_MAX
+    ),
     "doubleSpinBox_acqPlaneStepSize": FieldSpec("µm", 2, 0.5, 6.5, 0.0, 25000.0),
     # Scan panel — ETL amplitudes/offsets (V, 0-5V) + ETL steps (dimensionless)
     "doubleSpinBox_etlLeftAmplitude": FieldSpec("V", 2, 0.05, 0.5, 0.0, 5.0),
