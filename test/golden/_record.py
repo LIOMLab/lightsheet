@@ -314,7 +314,7 @@ def capture_acquisition_sequence(scenario: str) -> list[dict]:  # ty: ignore[mis
             standin.siggen.error_message = "create_scan error"
 
         standin.siggen.create_scanner = _fail_create_scanner
-    acquire_scan = _load_method("acquire_scan(self) -> None", src_path=_SCAN_MIXIN_SRC)  # ty: ignore[invalid-argument-type]
+    acquire_scan = _load_method("acquire_scan(self) -> bool", src_path=_SCAN_MIXIN_SRC)  # ty: ignore[invalid-argument-type]
     acquire_scan(standin)
 
     sequence = []
