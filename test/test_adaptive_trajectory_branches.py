@@ -746,7 +746,9 @@ def test_adaptive_dock_controller_is_presentation_only(
     assert not hasattr(adc, "estop_event")
 
 
-def test_adaptive_shell_aliases_reachable(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_adaptive_shell_aliases_reachable(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
     """The shell still exposes dock, widget, plot, and label attributes
     so tests and AcquisitionPanelWidget keep working."""
     ctrl, _ = make_controller(qtbot, request)
