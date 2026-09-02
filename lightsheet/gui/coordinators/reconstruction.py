@@ -51,14 +51,7 @@ def crop_buffer(buffer: np.ndarray) -> np.ndarray:
 
         # Crop with overlap
         for frame in range(tile_count):
-            # NOTE - disabled intensity normalization
-            # # Uniformize frame intensities
-            # # average = np.average(buffer[frame,0:100,:]) #Average the  first rows
-            # if frame == 0:
-            #     reference_average = average
-            # else:
-            #     average_ratio = reference_average/average
-            #     # buffer[frame,:,:] = buffer[frame,:,:] * average_ratio
+            # Intensity normalization is intentionally disabled.
 
             first_column = int(frame * tile_width - tile_width_overlap)
             next_first_column = int(
@@ -106,15 +99,7 @@ def reconstruct_frame(buffer: np.ndarray) -> np.ndarray:
             )
 
         for frame in range(tile_count):
-            # NOTE - disabled intensity normalization
-            # # Uniformize frame intensities
-            # # average = np.average(buffer[frame,0:100,:]) #Average the  first rows
-            # if frame == 0:
-            #     reference_average = average
-            # else:
-            #     average_ratio = reference_average/average
-            #     #print('average_ratio:'+str(average_ratio))
-            #     # buffer[frame,:,:] = buffer[frame,:,:] * average_ratio
+            # Intensity normalization is intentionally disabled.
 
             # Reconstruct frame
             first_column = frame * tile_width
