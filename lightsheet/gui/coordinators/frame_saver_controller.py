@@ -1199,10 +1199,12 @@ class FrameSaver(QObject):
                     # add_motor_parameters during the acquisition loop.
                     # The entries are the shell's formatted display strings
                     # (e.g. "99.82 μm"); _position_to_float strips the unit
-                    # suffix for the Zarr numeric datasets. Channel 0's
-                    # z_idx == plane index, so pos_index = cz. Guard against
-                    # a short list (defensive).
-                    pos_index = cz
+                    # suffix for the Zarr numeric datasets. cz is the
+                    # sub-frame z-index; for ETL scans it advances
+                    # frames_per_buffer times per plane, so use the plane
+                    # index (cz // frames_per_buffer) when looking up
+                    # positions. Guard against a short list (defensive).
+                    pos_index = cz // frames_per_buffer
                     hor = (
                         _position_to_float(self.horizontal_positions_list[pos_index])
                         if pos_index < len(self.horizontal_positions_list)
@@ -1391,27 +1393,28 @@ class FrameSaver(QObject):
                                 counter += 1
 
                                 # --- Zarr write (mirrors zarr_save_worker) ---
+                                pos_index = zarr_pos_index // frames_per_buffer
                                 hor = (
                                     _position_to_float(
-                                        self.horizontal_positions_list[zarr_pos_index]
+                                        self.horizontal_positions_list[pos_index]
                                     )
-                                    if zarr_pos_index
+                                    if pos_index
                                     < len(self.horizontal_positions_list)
                                     else 0.0
                                 )
                                 ver = (
                                     _position_to_float(
-                                        self.vertical_positions_list[zarr_pos_index]
+                                        self.vertical_positions_list[pos_index]
                                     )
-                                    if zarr_pos_index
+                                    if pos_index
                                     < len(self.vertical_positions_list)
                                     else 0.0
                                 )
                                 cam = (
                                     _position_to_float(
-                                        self.camera_positions_list[zarr_pos_index]
+                                        self.camera_positions_list[pos_index]
                                     )
-                                    if zarr_pos_index < len(self.camera_positions_list)
+                                    if pos_index < len(self.camera_positions_list)
                                     else 0.0
                                 )
                                 self._zarr_saver.write_plane(
@@ -1657,13 +1660,11 @@ class FrameSaver(QObject):
                         # records the motor positions via its guarded append) ---
                         cz = z_idx_per_channel.get(channel_idx, 0)
                         if cz < n_planes:
-                            # Zarr motor positions use cz (the per-channel
-                            # Zarr z-index, which increments per f_idx) —
-                            # NOT pos_index. For a multi-dataset frame
-                            # (frame.shape[0] > 1) each sub-frame must get
-                            # its own motor position; using pos_index would
-                            # give every sub-frame the same position.
-                            zarr_pos_index = cz
+                            # Zarr motor positions use the per-channel
+                            # plane index (cz // frames_per_buffer), not
+                            # the sub-frame index, so all ETL sub-frames
+                            # in one plane share the same motor position.
+                            zarr_pos_index = cz // frames_per_buffer
                             hor = (
                                 _position_to_float(
                                     self.horizontal_positions_list[zarr_pos_index]
