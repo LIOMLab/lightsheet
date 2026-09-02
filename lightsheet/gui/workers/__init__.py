@@ -1,19 +1,19 @@
 """Compatibility barrel for ``lightsheet.gui.workers``.
 
-During the module-to-package conversion the original worker bodies live in
-``legacy.py``; the barrel re-exports the established names so every existing
-``from lightsheet.gui.workers import ...`` call keeps working.
+Submodules own focused concerns; the barrel re-exports the established
+public names so every existing ``from lightsheet.gui.workers import ...``
+call keeps working.
 """
 
 from __future__ import annotations
 
-from lightsheet.gui.workers.legacy import (
+from lightsheet.gui.workers.legacy import StackWorker
+from lightsheet.gui.workers.preview_live_single import (
     LiveWorker,
     PreviewWorker,
     SingleWorker,
-    StackWorker,
-    _AcquireScanMixin,
 )
+from lightsheet.gui.workers.scan_mixin import _AcquireScanMixin
 
 __all__ = [
     "LiveWorker",
