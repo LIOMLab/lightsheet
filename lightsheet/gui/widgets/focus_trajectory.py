@@ -137,7 +137,7 @@ class FocusTrajectoryWidget(QWidget):
 
         # Geometry sync: mirror the main ViewBox onto the right ViewBox.
         main_vb = item.getViewBox()
-        item.layout.setContentsMargins(16, 16, 16, 16)
+        item.layout.setContentsMargins(_s.LG, _s.LG, _s.LG, _s.LG)
 
         def _sync_right_vbs() -> None:
             right_vb.setGeometry(main_vb.sceneBoundingRect())

@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QFormLayout, QFrame,
     QGroupBox, QHBoxLayout, QLabel, QPushButton,
     QSizePolicy, QSpacerItem, QVBoxLayout, QWidget)
 
+from lightsheet.gui.styles import spacing as _s
 from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 

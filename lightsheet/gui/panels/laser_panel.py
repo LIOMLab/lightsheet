@@ -24,15 +24,11 @@ from PySide6.QtWidgets import QLabel, QMessageBox, QWidget
 
 from lightsheet.gui.panels.ui_laser_panel import Ui_LaserPanel
 from lightsheet.gui.styles import colors as _c
+from lightsheet.gui.styles import symbols as _sym
 from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
-
-# Color-blind-safe shape fallbacks for laser status (red/green is not enough).
-_LASER_BULLET_ON = "\u25cf"      # ● filled bullet
-_LASER_BULLET_OFF = "\u25cb"     # ○ hollow bullet
-_LASER_BULLET_FAULT = "\u26a0"   # ⚠ warning triangle
 
 
 class LaserPanelWidget(QWidget):
@@ -114,19 +110,19 @@ class LaserPanelWidget(QWidget):
             self.ui.pushButton_laserTwoToggle,
         ]
         if status == "active":
-            labels[idx].setText(f"{_LASER_BULLET_ON} ON")
+            labels[idx].setText(f"{_sym.LASER_ON} ON")
             labels[idx].setStyleSheet(
                 f"color: {_c.SUCCESS}; font-weight: bold;"
             )
             buttons[idx].setChecked(True)
         elif status == "inactive":
-            labels[idx].setText(f"{_LASER_BULLET_OFF} OFF")
+            labels[idx].setText(f"{_sym.LASER_OFF} OFF")
             labels[idx].setStyleSheet(
                 f"color: {_c.DISABLED}; font-weight: bold;"
             )
             buttons[idx].setChecked(False)
         else:  # "error"
-            labels[idx].setText(f"{_LASER_BULLET_FAULT} FAULT")
+            labels[idx].setText(f"{_sym.LASER_FAULT} FAULT")
             labels[idx].setStyleSheet(
                 f"color: {_c.DANGER}; font-weight: bold;"
             )
@@ -249,10 +245,10 @@ class LaserPanelWidget(QWidget):
         starts so the label is never stale after a press. The next poll
         corrects it if the HAL state differs."""
         if turning_on:
-            label.setText(f"{_LASER_BULLET_ON} ON")
+            label.setText(f"{_sym.LASER_ON} ON")
             label.setStyleSheet(f"color: {_c.SUCCESS}; font-weight: bold;")
         else:
-            label.setText(f"{_LASER_BULLET_OFF} OFF")
+            label.setText(f"{_sym.LASER_OFF} OFF")
             label.setStyleSheet(f"color: {_c.DISABLED}; font-weight: bold;")
 
     def _show_first_energize_dialog(self, idx: int) -> str:

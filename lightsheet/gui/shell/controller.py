@@ -61,12 +61,9 @@ from lightsheet.gui.panels.save_panel import SavePanelWidget
 from lightsheet.gui.panels.scan_panel import ScanPanelWidget
 from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.styles import spacing as _s
+from lightsheet.gui.styles import symbols as _sym
 
-# Color-blind-safe bullet fallbacks for E-stop status (filled = active,
-# hollow = inactive, heavy = actuated).
-_ESTOP_BULLET_ACTUATED = "\u2b24"  # ⬤
-_ESTOP_BULLET_ARMED = "\u25cf"     # ●
-_ESTOP_BULLET_DISARMED = "\u25cb"  # ○
+
 from lightsheet.gui.panels.stack_panel import StackPanelWidget
 from lightsheet.gui.shell.ui_shell import Ui_Shell
 from lightsheet.gui.widgets.channel_radio import ChannelRadio
@@ -250,7 +247,7 @@ class Controller_MainWindow(QMainWindow):
         # Apply semantic color tokens and color-blind-safe bullets to the
         # E-stop toolbar; the .ui defaults are overridden so the single
         # source of truth lives in the styles modules.
-        self.label_estopStatus.setText(f"{_ESTOP_BULLET_ARMED} ARMED")
+        self.label_estopStatus.setText(f"{_sym.ESTOP_ARMED} ARMED")
         self.label_estopStatus.setStyleSheet(
             f"color: {_c.SUCCESS}; font-weight: bold;"
         )
@@ -2102,7 +2099,7 @@ class Controller_MainWindow(QMainWindow):
         #    NEXT action available — "Clear E-stop" (the first press of the
         #    two-press re-arm sequence, audit #6).
         self.label_estopStatus.setText(
-            f"{_ESTOP_BULLET_ACTUATED} E-STOP ACTUATED"
+            f"{_sym.ESTOP_ACTUATED} E-STOP ACTUATED"
         )
         self.label_estopStatus.setStyleSheet(
             f"color: {_c.DANGER}; font-weight: bold;"
@@ -2156,7 +2153,7 @@ class Controller_MainWindow(QMainWindow):
             # off until the operator explicitly toggles one or starts a
             # run.
             self._estop_disarmed = False
-            self.label_estopStatus.setText(f"{_ESTOP_BULLET_ARMED} ARMED")
+            self.label_estopStatus.setText(f"{_sym.ESTOP_ARMED} ARMED")
             self.label_estopStatus.setStyleSheet(
                 f"color: {_c.SUCCESS}; font-weight: bold;"
             )
@@ -2175,7 +2172,7 @@ class Controller_MainWindow(QMainWindow):
             # press (above) is required.
             self.estop_event.clear()
             self._estop_disarmed = True
-            self.label_estopStatus.setText(f"{_ESTOP_BULLET_DISARMED} DISARMED")
+            self.label_estopStatus.setText(f"{_sym.ESTOP_DISARMED} DISARMED")
             self.label_estopStatus.setStyleSheet(
                 f"color: {_c.DISABLED}; font-weight: bold;"
             )

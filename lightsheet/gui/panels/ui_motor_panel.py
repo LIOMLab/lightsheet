@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QGroupBox,
     QHBoxLayout, QLabel, QPushButton, QSizePolicy,
     QSpacerItem, QVBoxLayout, QWidget)
 
+from lightsheet.gui.styles import spacing as _s
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
 class Ui_MotorPanel(object):
@@ -38,7 +39,7 @@ class Ui_MotorPanel(object):
         self.gridLayout_7 = QGridLayout(self.groupBox_SampleMovement)
         self.gridLayout_7.setObjectName(u"gridLayout_7")
         self.verticalLayout_32 = QVBoxLayout()
-        self.verticalLayout_32.setSpacing(10)
+        self.verticalLayout_32.setSpacing(_s.MD)
         self.verticalLayout_32.setObjectName(u"verticalLayout_32")
         self.gridLayout_5 = QGridLayout()
         self.gridLayout_5.setObjectName(u"gridLayout_5")
@@ -97,17 +98,17 @@ class Ui_MotorPanel(object):
         self.verticalLayout_32.addWidget(self.line)
 
         self.stepButtonsAndFields = QHBoxLayout()
-        self.stepButtonsAndFields.setSpacing(12)
+        self.stepButtonsAndFields.setSpacing(_s.MD)
         self.stepButtonsAndFields.setObjectName(u"stepButtonsAndFields")
         self.gridLayout_3 = QGridLayout()
-        self.gridLayout_3.setSpacing(4)
+        self.gridLayout_3.setSpacing(_s.XS)
         self.gridLayout_3.setObjectName(u"gridLayout_3")
         self.pushButton_sampleStepUp = QPushButton(self.groupBox_SampleMovement)
         self.pushButton_sampleStepUp.setObjectName(u"pushButton_sampleStepUp")
         sizePolicy2.setHeightForWidth(self.pushButton_sampleStepUp.sizePolicy().hasHeightForWidth())
         self.pushButton_sampleStepUp.setSizePolicy(sizePolicy2)
-        self.pushButton_sampleStepUp.setMinimumSize(QSize(48, 48))
-        self.pushButton_sampleStepUp.setMaximumSize(QSize(48, 48))
+        self.pushButton_sampleStepUp.setMinimumSize(QSize(_s.RAIL, _s.RAIL))
+        self.pushButton_sampleStepUp.setMaximumSize(QSize(_s.RAIL, _s.RAIL))
 
         self.gridLayout_3.addWidget(self.pushButton_sampleStepUp, 0, 1, 1, 1)
 
@@ -115,8 +116,8 @@ class Ui_MotorPanel(object):
         self.pushButton_sampleStepBackward.setObjectName(u"pushButton_sampleStepBackward")
         sizePolicy2.setHeightForWidth(self.pushButton_sampleStepBackward.sizePolicy().hasHeightForWidth())
         self.pushButton_sampleStepBackward.setSizePolicy(sizePolicy2)
-        self.pushButton_sampleStepBackward.setMinimumSize(QSize(48, 48))
-        self.pushButton_sampleStepBackward.setMaximumSize(QSize(48, 48))
+        self.pushButton_sampleStepBackward.setMinimumSize(QSize(_s.RAIL, _s.RAIL))
+        self.pushButton_sampleStepBackward.setMaximumSize(QSize(_s.RAIL, _s.RAIL))
 
         self.gridLayout_3.addWidget(self.pushButton_sampleStepBackward, 1, 0, 1, 1)
 
@@ -124,8 +125,8 @@ class Ui_MotorPanel(object):
         self.pushButton_sampleGotoOrigin.setObjectName(u"pushButton_sampleGotoOrigin")
         sizePolicy2.setHeightForWidth(self.pushButton_sampleGotoOrigin.sizePolicy().hasHeightForWidth())
         self.pushButton_sampleGotoOrigin.setSizePolicy(sizePolicy2)
-        self.pushButton_sampleGotoOrigin.setMinimumSize(QSize(48, 48))
-        self.pushButton_sampleGotoOrigin.setMaximumSize(QSize(48, 48))
+        self.pushButton_sampleGotoOrigin.setMinimumSize(QSize(_s.RAIL, _s.RAIL))
+        self.pushButton_sampleGotoOrigin.setMaximumSize(QSize(_s.RAIL, _s.RAIL))
 
         self.gridLayout_3.addWidget(self.pushButton_sampleGotoOrigin, 1, 1, 1, 1)
 
@@ -133,8 +134,8 @@ class Ui_MotorPanel(object):
         self.pushButton_sampleStepForward.setObjectName(u"pushButton_sampleStepForward")
         sizePolicy2.setHeightForWidth(self.pushButton_sampleStepForward.sizePolicy().hasHeightForWidth())
         self.pushButton_sampleStepForward.setSizePolicy(sizePolicy2)
-        self.pushButton_sampleStepForward.setMinimumSize(QSize(48, 48))
-        self.pushButton_sampleStepForward.setMaximumSize(QSize(48, 48))
+        self.pushButton_sampleStepForward.setMinimumSize(QSize(_s.RAIL, _s.RAIL))
+        self.pushButton_sampleStepForward.setMaximumSize(QSize(_s.RAIL, _s.RAIL))
 
         self.gridLayout_3.addWidget(self.pushButton_sampleStepForward, 1, 2, 1, 1)
 
@@ -142,8 +143,8 @@ class Ui_MotorPanel(object):
         self.pushButton_sampleStepDown.setObjectName(u"pushButton_sampleStepDown")
         sizePolicy2.setHeightForWidth(self.pushButton_sampleStepDown.sizePolicy().hasHeightForWidth())
         self.pushButton_sampleStepDown.setSizePolicy(sizePolicy2)
-        self.pushButton_sampleStepDown.setMinimumSize(QSize(48, 48))
-        self.pushButton_sampleStepDown.setMaximumSize(QSize(48, 48))
+        self.pushButton_sampleStepDown.setMinimumSize(QSize(_s.RAIL, _s.RAIL))
+        self.pushButton_sampleStepDown.setMaximumSize(QSize(_s.RAIL, _s.RAIL))
 
         self.gridLayout_3.addWidget(self.pushButton_sampleStepDown, 2, 1, 1, 1)
 
@@ -268,7 +269,7 @@ class Ui_MotorPanel(object):
         self.groupBox_CameraMovement.setSizePolicy(sizePolicy)
         self.groupBox_CameraMovement.setMinimumSize(QSize(300, 0))
         self.verticalLayout_34 = QVBoxLayout(self.groupBox_CameraMovement)
-        self.verticalLayout_34.setSpacing(10)
+        self.verticalLayout_34.setSpacing(_s.MD)
         self.verticalLayout_34.setObjectName(u"verticalLayout_34")
         self.horizontalLayout_58 = QHBoxLayout()
         self.horizontalLayout_58.setObjectName(u"horizontalLayout_58")

@@ -30,10 +30,12 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import (
+    QColor,
     QLinearGradient,
     QMouseEvent,
     QPainter,
     QPaintEvent,
+    QPen,
 )
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
@@ -315,6 +317,12 @@ class LevelsBar(QWidget):
                 QPointF(float(x), float(g_top)),
             ])
             painter.drawPolygon(tri)
+            # Color-blind-safe dot marker on top of the dark triangle.
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(_c.BREEZE_FG))
+            painter.drawEllipse(int(x) - 2, g_top - tri_h + 1, 4, 4)
+            painter.setPen(_c.Q_RANGE_PEN)
+            painter.setBrush(_c.Q_RANGE_BRUSH)
 
         # WINDOW handles: lighter gray upward-pointing triangles below the
         # gradient. Apex at (x, g_bottom) touches the gradient; base at
@@ -328,6 +336,18 @@ class LevelsBar(QWidget):
                 QPointF(float(x), float(g_bottom)),
             ])
             painter.drawPolygon(tri)
+            # Color-blind-safe diamond marker on top of the light triangle.
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(_c.BREEZE_BG))
+            diamond = QPolygonF([
+                QPointF(float(x), g_bottom + tri_h - 5),
+                QPointF(float(x) + 3, g_bottom + tri_h - 2),
+                QPointF(float(x), g_bottom + tri_h + 1),
+                QPointF(float(x) - 3, g_bottom + tri_h - 2),
+            ])
+            painter.drawPolygon(diamond)
+            painter.setPen(_c.Q_WINDOW_PEN)
+            painter.setBrush(_c.Q_WINDOW_BRUSH)
 
         # Central handle: small neutral-gray square between the window
         # handles on the lower row. Uses a lighter neutral gray so it
@@ -337,6 +357,10 @@ class LevelsBar(QWidget):
         painter.setPen(_c.Q_CENTER_PEN)
         half = tri_half - 1
         painter.drawRect(x_center - half, y_window - half, half * 2, half * 2)
+        # Color-blind-safe dot in the center of the square.
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(_c.BREEZE_FG))
+        painter.drawEllipse(int(x_center) - 2, int(y_window) - 2, 4, 4)
 
     # -- mouse interaction -------------------------------------------------
 

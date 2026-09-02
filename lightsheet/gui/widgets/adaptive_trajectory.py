@@ -311,7 +311,7 @@ class AdaptiveTrajectoryWidget(QWidget):
         # Inset the whole PlotItem layout (axes + ViewBox) from the
         # widget edges so the dark widget background shows as padding
         # around the axes/labels on all sides (16 px = md spacing token).
-        item.layout.setContentsMargins(16, 16, 16, 16)
+        item.layout.setContentsMargins(_s.LG, _s.LG, _s.LG, _s.LG)
 
         def _sync_right_vbs() -> None:
             if self._right_vb is not None:

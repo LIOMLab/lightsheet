@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame,
     QLineEdit, QPushButton, QSizePolicy, QSpacerItem,
     QVBoxLayout, QWidget)
 
+from lightsheet.gui.styles import spacing as _s
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
 class Ui_StackPanel(object):
@@ -52,7 +53,7 @@ class Ui_StackPanel(object):
 
         self.horizontalLayout_89 = QHBoxLayout()
         self.horizontalLayout_89.setObjectName(u"horizontalLayout_89")
-        self.horizontalLayout_89.setContentsMargins(0, -1, 0, -1)
+        self.horizontalLayout_89.setContentsMargins(_s.ZERO, -1, _s.ZERO, -1)
         self.label_41 = QLabel(self.groupBox_18)
         self.label_41.setObjectName(u"label_41")
         sizePolicy2 = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -94,7 +95,7 @@ class Ui_StackPanel(object):
         self.verticalLayout_14.setObjectName(u"verticalLayout_14")
         self.horizontalLayout_88 = QHBoxLayout()
         self.horizontalLayout_88.setObjectName(u"horizontalLayout_88")
-        self.horizontalLayout_88.setContentsMargins(0, -1, 0, -1)
+        self.horizontalLayout_88.setContentsMargins(_s.ZERO, -1, _s.ZERO, -1)
         self.label_84 = QLabel(self.groupBox_18)
         self.label_84.setObjectName(u"label_84")
         sizePolicy2.setHeightForWidth(self.label_84.sizePolicy().hasHeightForWidth())
@@ -142,7 +143,7 @@ class Ui_StackPanel(object):
         self.verticalLayout_14.addLayout(self.horizontalLayout_90)
 
         self.horizontalLayout_91 = QHBoxLayout()
-        self.horizontalLayout_91.setSpacing(6)
+        self.horizontalLayout_91.setSpacing(_s.SM)
         self.horizontalLayout_91.setObjectName(u"horizontalLayout_91")
         self.pushButton_acqSetLastPlane = QPushButton(self.groupBox_18)
         self.pushButton_acqSetLastPlane.setObjectName(u"pushButton_acqSetLastPlane")
@@ -198,7 +199,7 @@ class Ui_StackPanel(object):
         self.widget_adaptiveFields.setObjectName(u"widget_adaptiveFields")
         self.gridLayout_adaptiveFields = QGridLayout(self.widget_adaptiveFields)
         self.gridLayout_adaptiveFields.setObjectName(u"gridLayout_adaptiveFields")
-        self.gridLayout_adaptiveFields.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout_adaptiveFields.setContentsMargins(_s.ZERO, _s.ZERO, _s.ZERO, _s.ZERO)
         self.label_adaptiveMinExposure = QLabel(self.widget_adaptiveFields)
         self.label_adaptiveMinExposure.setObjectName(u"label_adaptiveMinExposure")
 
@@ -315,7 +316,7 @@ class Ui_StackPanel(object):
         self.widget_focusFields.setVisible(False)
         self.gridLayout_focusFields = QGridLayout(self.widget_focusFields)
         self.gridLayout_focusFields.setObjectName(u"gridLayout_focusFields")
-        self.gridLayout_focusFields.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout_focusFields.setContentsMargins(_s.ZERO, _s.ZERO, _s.ZERO, _s.ZERO)
         self.lineEdit_focusCurvePath = QLineEdit(self.widget_focusFields)
         self.lineEdit_focusCurvePath.setObjectName(u"lineEdit_focusCurvePath")
 
