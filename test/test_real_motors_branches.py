@@ -867,3 +867,107 @@ def test_move_axes_parallel_reuses_existing_io_lock_and_none_timeout() -> None:
     # Original timeout was None -> not restored; it stays at the 60.0 s
     # move-command value set inside the with-block.
     assert motors._serial.timeout == 60.0
+
+
+# -- Optional resolved port parameter ---------------------------------------
+
+
+def test_motors_init_uses_resolved_port_override(tmp_path: Path) -> None:
+    """Motors.__init__(port='COM7') overrides the configured [Motors] Port
+    after cfg_load_ini(), and serial.Serial is opened with the resolved port."""
+    import os
+    from unittest.mock import patch
+
+    config_path = tmp_path / "config.ini"
+    config_path.write_text(
+        "[Motors]\n"
+        "Port = COM3\n"
+        "Device Number Vertical = 1\n"
+        "Device Number Horizontal = 2\n"
+        "Device Number Camera = 3\n"
+        "Vertical Inverted = False\n"
+        "Vertical Units = mm\n"
+        "Vertical Origin = 0.0\n"
+        "Vertical Limit Low = 0.0\n"
+        "Vertical Limit High = 10.0\n"
+        "Horizontal Inverted = False\n"
+        "Horizontal Units = mm\n"
+        "Horizontal Origin = 0.0\n"
+        "Horizontal Limit Low = 0.0\n"
+        "Horizontal Limit High = 10.0\n"
+        "Camera Inverted = False\n"
+        "Camera Units = mm\n"
+        "Camera Origin = 0.0\n"
+        "Camera Limit Low = 0.0\n"
+        "Camera Limit High = 50.0\n"
+    )
+    cwd = Path.cwd()
+    os.chdir(tmp_path)
+    try:
+        replies = [
+            bytes([1, 50, 0x42, 0x18, 0, 0]),
+            bytes([2, 50, 0xB0, 0x18, 0, 0]),
+            bytes([3, 50, 0x38, 0x10, 0, 0]),
+        ]
+        shared_serial = _make_serial_mock()
+        shared_serial.read.side_effect = replies
+        with patch(
+            "lightsheet.hal.real.motors.serial.Serial",
+            return_value=shared_serial,
+        ) as MockSerial:
+            motors = Motors(port="COM7")
+            called_port = MockSerial.call_args.kwargs.get("port")
+    finally:
+        os.chdir(cwd)
+    assert motors.port == "COM7"
+    assert called_port == "COM7"
+
+
+def test_motors_init_no_port_uses_config_port(tmp_path: Path) -> None:
+    """Motors.__init__() without a port argument falls back to config.ini."""
+    import os
+    from unittest.mock import patch
+
+    config_path = tmp_path / "config.ini"
+    config_path.write_text(
+        "[Motors]\n"
+        "Port = COM7\n"
+        "Device Number Vertical = 1\n"
+        "Device Number Horizontal = 2\n"
+        "Device Number Camera = 3\n"
+        "Vertical Inverted = False\n"
+        "Vertical Units = mm\n"
+        "Vertical Origin = 0.0\n"
+        "Vertical Limit Low = 0.0\n"
+        "Vertical Limit High = 10.0\n"
+        "Horizontal Inverted = False\n"
+        "Horizontal Units = mm\n"
+        "Horizontal Origin = 0.0\n"
+        "Horizontal Limit Low = 0.0\n"
+        "Horizontal Limit High = 10.0\n"
+        "Camera Inverted = False\n"
+        "Camera Units = mm\n"
+        "Camera Origin = 0.0\n"
+        "Camera Limit Low = 0.0\n"
+        "Camera Limit High = 50.0\n"
+    )
+    cwd = Path.cwd()
+    os.chdir(tmp_path)
+    try:
+        replies = [
+            bytes([1, 50, 0x42, 0x18, 0, 0]),
+            bytes([2, 50, 0xB0, 0x18, 0, 0]),
+            bytes([3, 50, 0x38, 0x10, 0, 0]),
+        ]
+        shared_serial = _make_serial_mock()
+        shared_serial.read.side_effect = replies
+        with patch(
+            "lightsheet.hal.real.motors.serial.Serial",
+            return_value=shared_serial,
+        ) as MockSerial:
+            motors = Motors()
+            called_port = MockSerial.call_args.kwargs.get("port")
+    finally:
+        os.chdir(cwd)
+    assert motors.port == "COM7"
+    assert called_port == "COM7"
