@@ -92,24 +92,23 @@ def test_acquisition_coordinator_stores_bundle_handles_and_collaborators(
 def test_preview_worker_calls_start_lasers_after_arm_and_stop_before_disarm(
     qtbot: QtBot, request: pytest.FixtureRequest
 ) -> None:
-    """PreviewWorker.run now calls self._hw.start_lasers()
+    """PreviewWorker.run calls self._hw.start_lasers()
     immediately after self.camera.arm() (before the while loop) and
     self._hw.stop_lasers() immediately before self.camera.disarm() —
     mirroring live_mode_worker's existing shape. Verified by calling the
     real PreviewWorker.run (via make_controller) with the camera arm/disarm
     and hw start/stop_lasers methods patched to record the call order, and
-    estop_event set so the while loop breaks immediately after
-    start_lasers."""
+    preview_mode_started left False so the while loop body is skipped and
+    the cleanup tail runs."""
     from lightsheet.gui.workers import PreviewWorker
 
     ctrl, bundle = make_controller(qtbot, request)
 
     call_log: list[str] = []
-    # Set estop so the while loop breaks immediately after start_lasers —
+    # Leave preview_mode_started False so the while loop body is skipped —
     # we only need to observe the arm -> start_lasers ordering and the
     # stop_lasers -> disarm ordering in the cleanup tail.
-    ctrl.estop_event.set()
-    ctrl.preview_mode_started = True
+    ctrl.preview_mode_started = False
 
     worker = PreviewWorker(bundle, ctrl._hw, ctrl)
 
