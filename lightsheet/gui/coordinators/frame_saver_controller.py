@@ -291,9 +291,9 @@ class FrameSaver(QObject):
         root-level snapshot, not per-plane.
         """
         motors = self.parent.motors  # ty: ignore[unresolved-attribute]
-        outfile.attrs["Horizontal Position"] = motors.horizontal.get_position("mm")  # ty: ignore[unresolved-attribute]
-        outfile.attrs["Vertical Position"] = motors.vertical.get_position("mm")  # ty: ignore[unresolved-attribute]
-        outfile.attrs["Camera Position"] = motors.camera.get_position("mm")  # ty: ignore[unresolved-attribute]
+        outfile.attrs["Horizontal Position"] = motors.horizontal.get_position("mm")
+        outfile.attrs["Vertical Position"] = motors.vertical.get_position("mm")
+        outfile.attrs["Camera Position"] = motors.camera.get_position("mm")
 
         sg = self.parent.siggen  # ty: ignore[unresolved-attribute]
         outfile.attrs["Galvo Left Amplitude"] = sg.galvo_left_amplitude
@@ -548,7 +548,7 @@ class FrameSaver(QObject):
             end = start + row_count
             if start < len(self.adaptive_trajectory):
                 rows = self.adaptive_trajectory[
-                    start:min(end, len(self.adaptive_trajectory))
+                    start : min(end, len(self.adaptive_trajectory))
                 ]
                 self._write_adaptive_hdf5(outfile, samples=rows)
         else:
@@ -1097,7 +1097,7 @@ class FrameSaver(QObject):
         """
         if self.datasets_name in ("ETLscan", "FullETLscan"):
             frames_per_buffer = int(
-                getattr(self.parent.siggen, "waveform_cycles", 1) or 1
+                getattr(getattr(self, "parent"), "waveform_cycles", 1) or 1  # noqa: B009
             )
         else:
             frames_per_buffer = 1
@@ -1311,7 +1311,7 @@ class FrameSaver(QObject):
 
         if self.datasets_name in ("ETLscan", "FullETLscan"):
             frames_per_buffer = int(
-                getattr(self.parent.siggen, "waveform_cycles", 1) or 1
+                getattr(getattr(self, "parent"), "waveform_cycles", 1) or 1  # noqa: B009
             )
         else:
             frames_per_buffer = 1
@@ -1398,16 +1398,14 @@ class FrameSaver(QObject):
                                     _position_to_float(
                                         self.horizontal_positions_list[pos_index]
                                     )
-                                    if pos_index
-                                    < len(self.horizontal_positions_list)
+                                    if pos_index < len(self.horizontal_positions_list)
                                     else 0.0
                                 )
                                 ver = (
                                     _position_to_float(
                                         self.vertical_positions_list[pos_index]
                                     )
-                                    if pos_index
-                                    < len(self.vertical_positions_list)
+                                    if pos_index < len(self.vertical_positions_list)
                                     else 0.0
                                 )
                                 cam = (
@@ -1543,7 +1541,7 @@ class FrameSaver(QObject):
         """
         if self.datasets_name in ("ETLscan", "FullETLscan"):
             frames_per_buffer = int(
-                getattr(self.parent.siggen, "waveform_cycles", 1) or 1
+                getattr(getattr(self, "parent"), "waveform_cycles", 1) or 1  # noqa: B009
             )
         else:
             frames_per_buffer = 1
@@ -1844,7 +1842,6 @@ class FrameSaver(QObject):
                 )
 
 
-
 class FrameSaverController:
     """Owns the FrameSaver + FrameViewer QObjects and routes save/enqueue
     calls to them.
@@ -1858,8 +1855,13 @@ class FrameSaverController:
         self._shell = shell
         # FrameViewer is sized from the bundle's camera dimensions — the
         # same rows/columns the pre-extraction hardware_init passed.
+        ysize = bundle.camera.ysize
+        xsize = bundle.camera.xsize
+        assert ysize is not None and xsize is not None
         self.frame_viewer = FrameViewer(
-            shell, rows=bundle.camera.ysize, columns=bundle.camera.xsize  # ty: ignore[invalid-argument-type]
+            shell,
+            rows=ysize,
+            columns=xsize,
         )
         # FrameSaver is parented to the shell. Its sig_status_message
         # signal is wired to shell.updateUi_message_printer inside

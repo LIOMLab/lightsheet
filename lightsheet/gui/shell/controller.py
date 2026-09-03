@@ -59,14 +59,12 @@ from lightsheet.gui.panels.past_acquisitions_browser import (
 from lightsheet.gui.panels.properties_dialog import Properties_Dialog
 from lightsheet.gui.panels.save_panel import SavePanelWidget
 from lightsheet.gui.panels.scan_panel import ScanPanelWidget
+from lightsheet.gui.panels.stack_panel import StackPanelWidget
+from lightsheet.gui.shell.ui_shell import Ui_Shell
 from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.styles import spacing as _s
 from lightsheet.gui.styles import symbols as _sym
 from lightsheet.gui.styles import typography as _t
-
-
-from lightsheet.gui.panels.stack_panel import StackPanelWidget
-from lightsheet.gui.shell.ui_shell import Ui_Shell
 from lightsheet.gui.widgets.channel_radio import ChannelRadio
 from lightsheet.hal.bundle import DeviceBundle
 from lightsheet.wavelength_color import wavelength_to_hex
@@ -90,13 +88,13 @@ def _center_toolbutton_paint(btn: QToolButton) -> None:
         p = QPainter(btn)
         opt = QStyleOptionToolButton()
         opt.initFrom(btn)
-        opt.features = QStyleOptionToolButton.None_  # ty: ignore[unresolved-attribute]
+        opt.features = QStyleOptionToolButton.ToolButtonFeature.None_
         # Draw only button chrome; we paint the centered icon+text below.
         opt.toolButtonStyle = Qt.ToolButtonStyle.ToolButtonIconOnly
         opt.text = ""
         opt.icon = QIcon()
         opt.iconSize = icon_size
-        style.drawComplexControl(QStyle.CC_ToolButton, opt, p, btn)  # ty: ignore[unresolved-attribute]
+        style.drawComplexControl(QStyle.ComplexControl.CC_ToolButton, opt, p, btn)
         cr = btn.rect()
         icon_h = icon_size.height()
         text_h = QFontMetrics(btn.font()).height()
@@ -249,9 +247,7 @@ class Controller_MainWindow(QMainWindow):
         # E-stop toolbar; the .ui defaults are overridden so the single
         # source of truth lives in the styles modules.
         self.label_estopStatus.setText(f"{_sym.ESTOP_ARMED} ARMED")
-        self.label_estopStatus.setStyleSheet(
-            f"color: {_c.SUCCESS}; {_t.BOLD}"
-        )
+        self.label_estopStatus.setStyleSheet(f"color: {_c.SUCCESS}; {_t.BOLD}")
         self.pushButton_estop.setText("E-STOP")
         # pushButton_estop toolTip is set in ui_shell.ui and must stay
         # verbatim with the UI-SPEC copywriting contract.
@@ -260,7 +256,7 @@ class Controller_MainWindow(QMainWindow):
             f"{_t.HEADING} border: 2px solid {_c.BREEZE_BG}; }}"
         )
         self.pushButton_estop.setIcon(
-            QApplication.style().standardIcon(QStyle.SP_MessageBoxWarning)
+            QApplication.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
         )
         self.shortcut_estop = self.ui.shortcut_estop
         # Safety: E-stop toolbar is fixed (non-movable, non-floatable) so the
@@ -374,42 +370,42 @@ class Controller_MainWindow(QMainWindow):
         _rail_icon_specs = (
             (
                 self.ui.toolButton_railMotion,
-                QStyle.SP_MediaSkipForward,  # ty: ignore[unresolved-attribute]
+                QStyle.StandardPixmap.SP_MediaSkipForward,
                 "Motion: Jog the stage and set positions.",
             ),
             (
                 self.ui.toolButton_railAcquire,
-                QStyle.SP_MediaPlay,  # ty: ignore[unresolved-attribute]
+                QStyle.StandardPixmap.SP_MediaPlay,
                 "Acquire: Start preview, live, or single-frame acquisition.",
             ),
             (
                 self.ui.toolButton_railStack,
-                QStyle.SP_ToolBarHorizontalExtensionButton,  # ty: ignore[unresolved-attribute]
+                QStyle.StandardPixmap.SP_ToolBarHorizontalExtensionButton,
                 "Stack: Configure and run a z-stack.",
             ),
             (
                 self.ui.toolButton_railScan,
-                QStyle.SP_MediaSeekForward,  # ty: ignore[unresolved-attribute]
+                QStyle.StandardPixmap.SP_MediaSeekForward,
                 "Scan: Set galvo/ETL scan parameters.",
             ),
             (
                 self.ui.toolButton_railLasers,
-                QStyle.SP_DialogYesButton,  # ty: ignore[unresolved-attribute]
+                QStyle.StandardPixmap.SP_DialogYesButton,
                 "Lasers: Toggle and set laser power; per-laser status.",
             ),
             (
                 self.ui.toolButton_railFiles,
-                QStyle.SP_DialogSaveButton,  # ty: ignore[unresolved-attribute]
+                QStyle.StandardPixmap.SP_DialogSaveButton,
                 "Files: Set save directory, filename, and format.",
             ),
             (
                 self.ui.toolButton_railPast,
-                QStyle.SP_DirOpenIcon,  # ty: ignore[unresolved-attribute]
+                QStyle.StandardPixmap.SP_DirOpenIcon,
                 "Past: Browse previously saved acquisitions.",
             ),
             (
                 self.ui.toolButton_railCalibrate,
-                QStyle.SP_DialogResetButton,  # ty: ignore[unresolved-attribute]
+                QStyle.StandardPixmap.SP_DialogResetButton,
                 "Calibrate: Camera/ETL calibration (advanced).",
             ),
         )
@@ -433,7 +429,7 @@ class Controller_MainWindow(QMainWindow):
         # having to toggle the adaptive checkbox off and on. Checked
         # state mirrors dock visibility.
         self.ui.toolButton_railAdaptive.setIcon(
-            _style.standardIcon(QStyle.SP_MediaVolume)  # ty: ignore[unresolved-attribute]
+            _style.standardIcon(QStyle.StandardPixmap.SP_MediaVolume)
         )
         self.ui.toolButton_railAdaptive.setIconSize(QSize(_s.XL, _s.XL))
         self.ui.toolButton_railAdaptive.setToolTip(
@@ -452,7 +448,7 @@ class Controller_MainWindow(QMainWindow):
         # visible so the operator can open the focus trajectory dock on
         # demand. Checked state mirrors the dock's visibility.
         self.ui.toolButton_railFocus.setIcon(
-            _style.standardIcon(QStyle.SP_MediaPause)  # ty: ignore[unresolved-attribute]
+            _style.standardIcon(QStyle.StandardPixmap.SP_MediaPause)
         )
         self.ui.toolButton_railFocus.setIconSize(QSize(_s.XL, _s.XL))
         self.ui.toolButton_railFocus.setToolTip(
@@ -564,9 +560,7 @@ class Controller_MainWindow(QMainWindow):
         # checked radio once the group is wired (see _reflect_save_format_radio).
         self._pending_save_format_reflection = self.save_format
 
-        self.save_directory = str(
-            Path.home() / "Desktop" / "LightSheetData"
-        )
+        self.save_directory = str(Path.home() / "Desktop" / "LightSheetData")
         self.save_filename = ""
         self.save_filepath = ""
         self.save_description = ""
@@ -619,6 +613,29 @@ class Controller_MainWindow(QMainWindow):
         self.focus_selected = False
         self.horizontal_forward_boundary_selected = False
         self.horizontal_backward_boundary_selected = False
+
+        # Focus / calibration transient state (populated by MotorController).
+        # Typed as ``typing.Any`` because these are set by calibration methods
+        # before use; the exact shapes vary across focus and ETL pipelines.
+        self.slope_camera: typing.Any = None
+        self.intercept_camera: typing.Any = None
+        self.camera_focus_relation: typing.Any = None
+        self.focus_forward_boundary: typing.Any = None
+        self.focus_backward_boundary: typing.Any = None
+        self.etl_l_relation: typing.Any = None
+        self.etl_r_relation: typing.Any = None
+        self.donnees: typing.Any = None
+        self.xdata: list[typing.Any] = []
+        self.ydata: list[typing.Any] = []
+        self.popt: list[typing.Any] = []
+        self.number_of_calibration_planes: int = 0
+        self.number_of_camera_positions: int = 0
+        self.number_of_etls_points: int = 0
+
+        # Live position text updated by MotorController for display/image metadata.
+        self.current_horizontal_position_text: str = ""
+        self.current_vertical_position_text: str = ""
+        self.current_camera_position_text: str = ""
         self.stack_starting_plane = None
         self.stack_ending_plane = None
         self.number_of_planes = 0
@@ -1104,7 +1121,7 @@ class Controller_MainWindow(QMainWindow):
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         self._hw_progress = QProgressDialog(
             "Initializing hardware, please wait...",
-            None,
+            "",
             0,
             0,
             self,
@@ -1224,16 +1241,19 @@ class Controller_MainWindow(QMainWindow):
             # create a reference cycle (controller -> timer -> lambda ->
             # self._hw -> self._shell -> controller). This matches the
             # bound-method pattern documented in wire_collaborators.
-            self.timer_imageview.timeout.connect(partial(self._hw._poll_laser_status, [0]))  # ty: ignore[unresolved-attribute]
+            assert self._hw is not None
             self.timer_imageview.timeout.connect(
-                partial(self._hw._refresh_laser_readback, 0)  # ty: ignore[unresolved-attribute]
+                partial(self._hw._poll_laser_status, [0])
+            )
+            self.timer_imageview.timeout.connect(
+                partial(self._hw._refresh_laser_readback, 0)
             )
             self.timer_imageview.start(100)
 
             # L2 (iBeam) status poll — a separate gated QTimer
             _ibeam_cfg = cfg_read("config.ini", "iBeam", {"Status Poll Interval": 1.0})  # ty: ignore[invalid-argument-type]
             self.timer_laser2_status = QTimer()
-            self.timer_laser2_status.timeout.connect(self._hw._poll_laser2_status_gated)  # ty: ignore[unresolved-attribute]
+            self.timer_laser2_status.timeout.connect(self._hw._poll_laser2_status_gated)
             self.timer_laser2_status.start(
                 int(float(_ibeam_cfg["Status Poll Interval"]) * 1000)
             )
@@ -1251,9 +1271,7 @@ class Controller_MainWindow(QMainWindow):
             # hardware. The image lives in lightsheet/resources/ so it
             # works on any machine with the repo checked out.
             _demo_img_path = (
-                Path(__file__).resolve().parents[2]
-                / "resources"
-                / "demo_image.png"
+                Path(__file__).resolve().parents[2] / "resources" / "demo_image.png"
             )
             try:
                 import numpy as _np
@@ -1262,7 +1280,7 @@ class Controller_MainWindow(QMainWindow):
                 _img = QImage(str(_demo_img_path))
                 if not _img.isNull():
                     # Convert to grayscale numpy array for ImageView.
-                    _ptr = _img.convertToFormat(QImage.Format_Grayscale8)  # ty: ignore[unresolved-attribute]
+                    _ptr = _img.convertToFormat(QImage.Format.Format_Grayscale8)
                     _arr_u8 = (
                         _np.frombuffer(_ptr.bits(), dtype=_np.uint8)
                         .reshape(_ptr.height(), _ptr.width())
@@ -2103,12 +2121,8 @@ class Controller_MainWindow(QMainWindow):
         #    on the E-stop button. The Arm/Reset button label reflects the
         #    NEXT action available — "Clear E-stop" (the first press of the
         #    two-press re-arm sequence, audit #6).
-        self.label_estopStatus.setText(
-            f"{_sym.ESTOP_ACTUATED} E-STOP ACTUATED"
-        )
-        self.label_estopStatus.setStyleSheet(
-            f"color: {_c.DANGER}; {_t.BOLD}"
-        )
+        self.label_estopStatus.setText(f"{_sym.ESTOP_ACTUATED} E-STOP ACTUATED")
+        self.label_estopStatus.setStyleSheet(f"color: {_c.DANGER}; {_t.BOLD}")
         self.pushButton_estop.setStyleSheet(
             f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "
             f"{_t.HEADING} border: 4px solid {_c.WARNING}; }}"
@@ -2159,9 +2173,7 @@ class Controller_MainWindow(QMainWindow):
             # run.
             self._estop_disarmed = False
             self.label_estopStatus.setText(f"{_sym.ESTOP_ARMED} ARMED")
-            self.label_estopStatus.setStyleSheet(
-                f"color: {_c.SUCCESS}; {_t.BOLD}"
-            )
+            self.label_estopStatus.setStyleSheet(f"color: {_c.SUCCESS}; {_t.BOLD}")
             self.pushButton_estop.setStyleSheet(
                 f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "
                 f"{_t.HEADING} border: 2px solid {_c.BREEZE_BG}; }}"
@@ -2178,9 +2190,7 @@ class Controller_MainWindow(QMainWindow):
             self.estop_event.clear()
             self._estop_disarmed = True
             self.label_estopStatus.setText(f"{_sym.ESTOP_DISARMED} DISARMED")
-            self.label_estopStatus.setStyleSheet(
-                f"color: {_c.DISABLED}; {_t.BOLD}"
-            )
+            self.label_estopStatus.setStyleSheet(f"color: {_c.DISABLED}; {_t.BOLD}")
             # The E-stop button background stays safety-red in ALL states
             # (ARMED, DISARMED, ACTUATED) — only the border changes. The
             # DISARMED state is communicated by the gray status label above,

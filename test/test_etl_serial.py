@@ -700,9 +700,7 @@ def test_etls_open_propagates_programming_errors() -> None:
     it propagates so the test suite catches defects, not silent data loss."""
     etls = etls_mod.ETLs()
     with (
-        patch.object(
-            etls_mod, "Optotune", side_effect=AttributeError("missing attr")
-        ),
+        patch.object(etls_mod, "Optotune", side_effect=AttributeError("missing attr")),
         pytest.raises(AttributeError, match="missing attr"),
     ):
         etls.open()

@@ -309,9 +309,7 @@ _ensure_stub("serial", _make_serial_stub)
 # (which gates on LIGHTSHEET_HW): on the rig the real nidaqmx is active even
 # for the mock-suite run (without LIGHTSHEET_HW=1), so the stub-behavior
 # tests must skip based on stub presence, not the env var.
-_nidaqmx_is_stub: bool = getattr(
-    sys.modules.get("nidaqmx"), "_lightsheet_stub", False
-)
+_nidaqmx_is_stub: bool = getattr(sys.modules.get("nidaqmx"), "_lightsheet_stub", False)
 _pco_is_stub: bool = getattr(sys.modules.get("pco"), "_lightsheet_stub", False)
 
 

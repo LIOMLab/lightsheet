@@ -99,9 +99,7 @@ def test_clicking_each_rail_button_switches_stacked_page(
         )
 
 
-def test_motion_is_default_active_page(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_motion_is_default_active_page(qtbot: QtBot, request: FixtureRequest) -> None:
     """Motion (index 0) is the default active page after construction."""
     ctrl, _ = make_controller(qtbot, request)
     assert ctrl.ui.stackedPanels.currentIndex() == 0
@@ -128,9 +126,7 @@ def test_estop_toolbar_visible_across_all_switches(
         )
 
 
-def test_estop_toolbar_is_not_movable(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_estop_toolbar_is_not_movable(qtbot: QtBot, request: FixtureRequest) -> None:
     """The E-stop toolbar is fixed (movable=False) -- the safety-critical
     E-stop button must not be draggable off the TopToolBarArea."""
     ctrl, _ = make_controller(qtbot, request)

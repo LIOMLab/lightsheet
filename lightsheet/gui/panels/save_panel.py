@@ -96,11 +96,13 @@ class SavePanelWidget(QWidget):
         dlg.setFileMode(QFileDialog.FileMode.Directory)
         dlg.setOption(QFileDialog.Option.ShowDirsOnly, False)
         dlg.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-        dlg.setNameFilters([
-            "Lightsheet acquisition files (*.hdf5 *.ome.zarr *.zarr)",
-            "HDF5 (*.hdf5)",
-            "OME-Zarr (*.ome.zarr *.zarr)",
-        ])
+        dlg.setNameFilters(
+            [
+                "Lightsheet acquisition files (*.hdf5 *.ome.zarr *.zarr)",
+                "HDF5 (*.hdf5)",
+                "OME-Zarr (*.ome.zarr *.zarr)",
+            ]
+        )
         if not dlg.exec():
             self.ui.label_currentFileDirectory.setText("Select a file…")
             return
@@ -121,16 +123,12 @@ class SavePanelWidget(QWidget):
             else:
                 dataset_names = self._list_hdf5_datasets(path)
         except (OSError, KeyError, ValueError) as exc:
-            self._shell.sig_message.emit(
-                f"Could not open {path}: {exc}"
-            )
+            self._shell.sig_message.emit(f"Could not open {path}: {exc}")
             self.ui.label_currentFileDirectory.setText("Select a file…")
             return
 
         for item in range(len(dataset_names)):
-            self.ui.listWidget_fileDatasets.insertItem(
-                item, dataset_names[item]
-            )
+            self.ui.listWidget_fileDatasets.insertItem(item, dataset_names[item])
         self.ui.listWidget_fileDatasets.setCurrentRow(0)
         self._shell.updateUi_message_printer("File " + path + " opened")
         self.ui.pushButton_selectDataset.setEnabled(True)
@@ -194,9 +192,9 @@ class SavePanelWidget(QWidget):
 
             is_zarr = Path(self._shell.open_directory).is_dir()
             for item in range(len(self.ui.listWidget_fileDatasets.selectedItems())):
-                self._shell.dataset_name = self.ui.listWidget_fileDatasets.selectedItems()[  # noqa: E501
-                    item
-                ].text()
+                self._shell.dataset_name = (
+                    self.ui.listWidget_fileDatasets.selectedItems()[item].text()
+                )
                 # Wrap the open + dataset access in try/except — a
                 # corrupt file/store or a missing dataset key raises
                 # OSError / KeyError / ValueError. Emit a user-facing
@@ -242,11 +240,16 @@ class SavePanelWidget(QWidget):
                             )
                         self.ui.tableWidget_fileAttributes.resizeColumnsToContents()
                         self.ui.tableWidget_fileAttributes.setEditTriggers(
-                            QAbstractItemView.NoEditTriggers  # ty: ignore[unresolved-attribute]
+                            QAbstractItemView.EditTrigger.NoEditTriggers
                         )  # No editing possible
 
                     # Display image
-                    plt.figure(self._shell.open_directory + " (" + self._shell.dataset_name + ")")  # noqa: E501
+                    plt.figure(
+                        self._shell.open_directory
+                        + " ("
+                        + self._shell.dataset_name
+                        + ")"
+                    )
                     plt.imshow(data, cmap="gray")
                     plt.show(
                         block=False
@@ -324,8 +327,7 @@ class SavePanelWidget(QWidget):
     def updateUi_select_directory(self) -> None:
         """Allows the selection of a directory for single scan or stack saving"""
         options = (
-            QFileDialog.Option.DontResolveSymlinks
-            | QFileDialog.Option.ShowDirsOnly
+            QFileDialog.Option.DontResolveSymlinks | QFileDialog.Option.ShowDirsOnly
         )
         tmp_directory = QFileDialog.getExistingDirectory(
             self._shell, "Choose Directory", self._shell.save_directory, options
@@ -406,7 +408,11 @@ class SavePanelWidget(QWidget):
             """Saving frame"""
             if self.ui.radioButton_saveAllCrop.isChecked():
                 self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
-                    1, self._shell.save_filepath, "singleImage", 1, "ETLscan",
+                    1,
+                    self._shell.save_filepath,
+                    "singleImage",
+                    1,
+                    "ETLscan",
                     wavelengths=[self._active_single_channel_wavelength()],
                 )
                 cropped_buffer = self._shell._fs.crop_buffer(self._shell.buffer)  # ty: ignore[invalid-argument-type, unresolved-attribute]
@@ -416,7 +422,11 @@ class SavePanelWidget(QWidget):
                 )
             elif self.ui.radioButton_saveAllFull.isChecked():
                 self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
-                    1, self._shell.save_filepath, "singleImage", 1, "FullETLscan",
+                    1,
+                    self._shell.save_filepath,
+                    "singleImage",
+                    1,
+                    "FullETLscan",
                     wavelengths=[self._active_single_channel_wavelength()],
                 )
                 self._shell._fs.enqueue_buffer(self._shell.buffer)  # ty: ignore[invalid-argument-type, unresolved-attribute]
@@ -446,9 +456,7 @@ class SavePanelWidget(QWidget):
                 # neither) passes wavelengths=[active_wavelength] so the
                 # saved file carries the _{wavelength}nm suffix; the
                 # frame is enqueued as a bare ndarray.
-                multi_channel = (
-                    self._shell._auto_laser1 and self._shell._auto_laser2
-                )
+                multi_channel = self._shell._auto_laser1 and self._shell._auto_laser2
                 if multi_channel:
                     wl1 = self._shell.lasers[0].wavelength
                     wl2 = self._shell.lasers[1].wavelength
@@ -468,8 +476,12 @@ class SavePanelWidget(QWidget):
                         )
                         return
                     self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
-                        1, self._shell.save_filepath, "singleImage", 1,
-                        "reconstructed_frame", wavelengths=[wl1, wl2],
+                        1,
+                        self._shell.save_filepath,
+                        "singleImage",
+                        1,
+                        "reconstructed_frame",
+                        wavelengths=[wl1, wl2],
                     )
                     self._shell._fs.enqueue_buffer((0, frame1))  # ty: ignore[unresolved-attribute]
                     self._shell._fs.enqueue_buffer((1, frame2))  # ty: ignore[unresolved-attribute]
@@ -478,7 +490,10 @@ class SavePanelWidget(QWidget):
                     )
                 else:
                     self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
-                        1, self._shell.save_filepath, "singleImage", 1,
+                        1,
+                        self._shell.save_filepath,
+                        "singleImage",
+                        1,
                         "reconstructed_frame",
                         wavelengths=[self._active_single_channel_wavelength()],
                     )

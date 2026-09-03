@@ -52,23 +52,23 @@ def _ui_source() -> str:
 
 
 def test_label_laserOneStatus_defined_in_ui() -> None:
-    assert "name=\"label_laserOneStatus\"" in _ui_source()
+    assert 'name="label_laserOneStatus"' in _ui_source()
 
 
 def test_label_laserOneReadback_defined_in_ui() -> None:
-    assert "name=\"label_laserOneReadback\"" in _ui_source()
+    assert 'name="label_laserOneReadback"' in _ui_source()
 
 
 def test_label_laserTwoStatus_defined_in_ui() -> None:
-    assert "name=\"label_laserTwoStatus\"" in _ui_source()
+    assert 'name="label_laserTwoStatus"' in _ui_source()
 
 
 def test_label_laserTwoReadback_defined_in_ui() -> None:
-    assert "name=\"label_laserTwoReadback\"" in _ui_source()
+    assert 'name="label_laserTwoReadback"' in _ui_source()
 
 
 def test_pushButton_laserTwoRefresh_defined_in_ui() -> None:
-    assert "name=\"pushButton_laserTwoRefresh\"" in _ui_source()
+    assert 'name="pushButton_laserTwoRefresh"' in _ui_source()
 
 
 # --------------------------------------------------------------------------- #
@@ -151,9 +151,7 @@ def test_updateUi_laser_status_inactive_gray(
     assert "#8E8E93" in label.styleSheet()
 
 
-def test_updateUi_laser_status_error_red(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_updateUi_laser_status_error_red(qtbot: QtBot, request: FixtureRequest) -> None:
     ctrl, _ = make_controller(qtbot, request)
     ctrl.laser_panel.updateUi_laser_status(1, "error")
     label = ctrl.laser_panel.ui.label_laserTwoStatus
@@ -194,9 +192,7 @@ def test_laser_panel_slots_reference_panel_local_ui() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_sig_laser_status_connected(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_sig_laser_status_connected(qtbot: QtBot, request: FixtureRequest) -> None:
     ctrl, _ = make_controller(qtbot, request)
     seen = {"status": None}
 
@@ -212,9 +208,7 @@ def test_sig_laser_status_connected(
     assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "\u25cf ON"
 
 
-def test_sig_laser_readback_connected(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_sig_laser_readback_connected(qtbot: QtBot, request: FixtureRequest) -> None:
     ctrl, _ = make_controller(qtbot, request)
     seen = {"rb": None}
 
@@ -245,9 +239,7 @@ def test_pushButton_laserTwoRefresh_clicked_connected(
     assert seen["clicked"] is True, "pushButton_laserTwoRefresh.clicked must fire"
 
 
-def test_refresh_button_emits_via_slot(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_refresh_button_emits_via_slot(qtbot: QtBot, request: FixtureRequest) -> None:
     """Clicking Refresh Power routes to the laser panel refresh slot, which
     calls the hardware manager readback/poll helpers. Patch those helpers to
     assert the wiring end-to-end without a real serial round-trip."""

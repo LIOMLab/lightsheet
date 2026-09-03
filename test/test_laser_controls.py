@@ -273,9 +273,11 @@ def test_estop_emits_per_laser_warning_on_error(
         ctrl.lasers[1].error_message = "serial write failed"
         ctrl.lasers[1].active = False
 
-    with patch.object(ctrl._hw, "_refresh_laser2_readback_async"), patch.object(
-        ctrl.lasers[1], "off", side_effect=_fail_off
-    ), qtbot.waitSignal(ctrl.sig_message, timeout=1000) as blocker:
+    with (
+        patch.object(ctrl._hw, "_refresh_laser2_readback_async"),
+        patch.object(ctrl.lasers[1], "off", side_effect=_fail_off),
+        qtbot.waitSignal(ctrl.sig_message, timeout=1000) as blocker,
+    ):
         ctrl.updateUi_estop_pressed()
 
     # laser2 had an error — a warning was emitted naming its label + cause.

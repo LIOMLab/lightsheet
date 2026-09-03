@@ -167,9 +167,7 @@ def test_invalid_curve_non_increasing_v_falls_back_to_linear() -> None:
     """A curve with non-increasing V is invalid -> error=1, calibrated=False,
     max_power stays at config value, get_output_power() returns staged mW
     (linear fallback). Never raises."""
-    laser = _make_l1(
-        calibration_curve=[(0.0, 0.0), (3.0, 100.0), (2.0, 50.0)]
-    )
+    laser = _make_l1(calibration_curve=[(0.0, 0.0), (3.0, 100.0), (2.0, 50.0)])
     assert laser.calibrated is False
     assert laser.error == 1
     assert "strictly" in laser.error_message or "increasing" in laser.error_message
@@ -181,9 +179,7 @@ def test_invalid_curve_non_increasing_v_falls_back_to_linear() -> None:
 def test_invalid_curve_negative_mw_falls_back_to_linear() -> None:
     """A curve with negative mW entries is invalid -> error=1,
     calibrated=False, linear fallback."""
-    laser = _make_l1(
-        calibration_curve=[(0.0, 0.0), (3.0, -10.0), (5.0, 200.0)]
-    )
+    laser = _make_l1(calibration_curve=[(0.0, 0.0), (3.0, -10.0), (5.0, 200.0)])
     assert laser.calibrated is False
     assert laser.error == 1
     assert "negative" in laser.error_message

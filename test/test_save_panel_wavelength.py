@@ -120,9 +120,7 @@ def test_save_panel_single_channel_passes_wavelength_suffix(
 
     wl = int(ctrl.lasers[0].wavelength)
 
-    with patch.object(saver, "start_saving"), patch.object(
-        saver, "stop_saving"
-    ):
+    with patch.object(saver, "start_saving"), patch.object(saver, "stop_saving"):
         ctrl.save_panel.updateUi_save_single_image()
 
     # set_files was called with wavelengths=[wl] — filenames_lists has
@@ -177,7 +175,9 @@ def test_stack_worker_single_channel_presamples_wavelength(
     ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
 
     worker = StackWorker(
-        ctrl._bundle, ctrl._hw, ctrl,
+        ctrl._bundle,
+        ctrl._hw,
+        ctrl,
         save_description="single-channel stack test",
         save_stitch_blend=False,
         save_all_crop=False,
@@ -199,20 +199,18 @@ def test_stack_worker_single_channel_presamples_wavelength(
     # touching hardware.
     def _fake_acquire_scan() -> None:
         ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
+
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
 
-    with patch.object(
-        worker.motors.horizontal, "move_absolute_position"
-    ):
+    with patch.object(worker.motors.horizontal, "move_absolute_position"):
         finished_emits: list[None] = []
         worker.finished.connect(lambda: finished_emits.append(None))
         worker.run()
 
     assert len(finished_emits) == 1, (
-        f"StackWorker.run must emit finished exactly once; "
-        f"got {len(finished_emits)}"
+        f"StackWorker.run must emit finished exactly once; got {len(finished_emits)}"
     )
 
     fs = ctrl._fs.frame_saver
@@ -227,8 +225,7 @@ def test_stack_worker_single_channel_presamples_wavelength(
     wl = int(ctrl.lasers[0].wavelength)
     for fn in fs.filenames_lists[0]:
         assert f"_{wl}nm" in fn, (
-            f"single-channel stack filename must carry _{wl}nm suffix; "
-            f"got {fn}"
+            f"single-channel stack filename must carry _{wl}nm suffix; got {fn}"
         )
     # The HDF5 file was written to disk.
     for fname in fs.filenames_lists[0]:
@@ -254,7 +251,9 @@ def test_stack_worker_single_channel_neither_auto_laser_fallback(
     ctrl._auto_laser2 = False
 
     worker = StackWorker(
-        ctrl._bundle, ctrl._hw, ctrl,
+        ctrl._bundle,
+        ctrl._hw,
+        ctrl,
         save_description="fallback test",
         save_stitch_blend=False,
         save_all_crop=True,

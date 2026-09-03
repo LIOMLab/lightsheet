@@ -213,8 +213,11 @@ class SigGen(ISigGen):
         # Channel-reversal — order_galvos called with (waveform_right,
         # waveform_left) so swap=False preserves today's stack order. Array
         # clamps (galvo ±10V, ETL non-negative) are unconditional.
+        assert self.waveform_galvo_right is not None
+        assert self.waveform_galvo_left is not None
         galvo_first, galvo_second = self.channel_map.order_galvos(
-            self.waveform_galvo_right, self.waveform_galvo_left  # ty: ignore[invalid-argument-type]
+            self.waveform_galvo_right,
+            self.waveform_galvo_left,
         )
         galvo_first = np.clip(
             galvo_first,

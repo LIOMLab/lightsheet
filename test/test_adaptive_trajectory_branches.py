@@ -206,9 +206,14 @@ def test_reset_removes_old_reacquire_lines(qtbot: QtBot) -> None:
     w.reset(target_band_lo=0.90, target_band_hi=0.95)
     # Append a sample with reacquire=True to create a marker line.
     w.append_sample(
-        plane_idx=0, intensity=0.50, exposure_s=0.005,
-        power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
-        reacquired=True, power_fallback=False,
+        plane_idx=0,
+        intensity=0.50,
+        exposure_s=0.005,
+        power1_mw=10.0,
+        power2_mw=0.0,
+        control_variable_active="exposure",
+        reacquired=True,
+        power_fallback=False,
     )
     assert len(w._reacquire_lines) == 1
     # reset() removes the old lines.
@@ -261,9 +266,14 @@ def test_has_data_populated(qtbot: QtBot) -> None:
     w = _make_widget(qtbot)
     w.reset(target_band_lo=0.90, target_band_hi=0.95)
     w.append_sample(
-        plane_idx=0, intensity=0.92, exposure_s=0.005,
-        power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
-        reacquired=False, power_fallback=False,
+        plane_idx=0,
+        intensity=0.92,
+        exposure_s=0.005,
+        power1_mw=10.0,
+        power2_mw=0.0,
+        control_variable_active="exposure",
+        reacquired=False,
+        power_fallback=False,
     )
     assert w.has_data() is True
 
@@ -296,9 +306,14 @@ def test_append_sample_without_reset_auto_resets(qtbot: QtBot) -> None:
     # No reset() call — _run_started is False.
     assert w._run_started is False
     w.append_sample(
-        plane_idx=0, intensity=0.92, exposure_s=0.005,
-        power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
-        reacquired=False, power_fallback=False,
+        plane_idx=0,
+        intensity=0.92,
+        exposure_s=0.005,
+        power1_mw=10.0,
+        power2_mw=0.0,
+        control_variable_active="exposure",
+        reacquired=False,
+        power_fallback=False,
     )
     # Auto-reset fired: plot is visible, run_started is True.
     assert w._run_started is True
@@ -314,9 +329,14 @@ def test_append_sample_with_right_vb_none(qtbot: QtBot) -> None:
     w._right_vb = None
     w._power_vb = None
     w.append_sample(
-        plane_idx=0, intensity=0.92, exposure_s=0.005,
-        power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
-        reacquired=False, power_fallback=False,
+        plane_idx=0,
+        intensity=0.92,
+        exposure_s=0.005,
+        power1_mw=10.0,
+        power2_mw=0.0,
+        control_variable_active="exposure",
+        reacquired=False,
+        power_fallback=False,
     )
     xs, _ys = w._intensity_curve.getData()  # ty: ignore[unresolved-attribute]
     assert len(xs) == 1
@@ -329,9 +349,14 @@ def test_append_sample_power_fallback_scatter_none(qtbot: QtBot) -> None:
     w.reset(target_band_lo=0.90, target_band_hi=0.95)
     w._power_fallback_scatter = None
     w.append_sample(
-        plane_idx=0, intensity=0.85, exposure_s=0.005,
-        power1_mw=20.0, power2_mw=0.0, control_variable_active="power",
-        reacquired=False, power_fallback=True,
+        plane_idx=0,
+        intensity=0.85,
+        exposure_s=0.005,
+        power1_mw=20.0,
+        power2_mw=0.0,
+        control_variable_active="power",
+        reacquired=False,
+        power_fallback=True,
     )
     # No exception; intensity curve still got the sample.
     xs, _ys = w._intensity_curve.getData()  # ty: ignore[unresolved-attribute]
@@ -345,9 +370,14 @@ def test_append_sample_sliding_window_beyond_200(qtbot: QtBot) -> None:
     w.reset(target_band_lo=0.90, target_band_hi=0.95)
     for i in range(201):
         w.append_sample(
-            plane_idx=i, intensity=0.90, exposure_s=0.005,
-            power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
-            reacquired=False, power_fallback=False,
+            plane_idx=i,
+            intensity=0.90,
+            exposure_s=0.005,
+            power1_mw=10.0,
+            power2_mw=0.0,
+            control_variable_active="exposure",
+            reacquired=False,
+            power_fallback=False,
         )
     vb = w.plotWidget_adaptiveTrajectory.getPlotItem().getViewBox()
     x_min, _x_max = vb.viewRange()[0]
@@ -682,9 +712,14 @@ def test_append_sample_with_optional_curves_none(qtbot: QtBot) -> None:
     w._power2_curve = None
     # Must not raise — the None guards skip the setData calls.
     w.append_sample(
-        plane_idx=0, intensity=0.92, exposure_s=0.005,
-        power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
-        reacquired=False, power_fallback=False,
+        plane_idx=0,
+        intensity=0.92,
+        exposure_s=0.005,
+        power1_mw=10.0,
+        power2_mw=0.0,
+        control_variable_active="exposure",
+        reacquired=False,
+        power_fallback=False,
     )
     # The in-memory buffers are still populated (the guards only skip the
     # curve setData, not the buffer append).
@@ -753,9 +788,7 @@ def test_adaptive_shell_aliases_reachable(
     so tests and AcquisitionPanelWidget keep working."""
     ctrl, _ = make_controller(qtbot, request)
     assert ctrl.dockWidget_adaptiveTrajectory is ctrl._adaptive_dock_controller.dock
-    assert (
-        ctrl.adaptiveTrajectoryWidget is ctrl._adaptive_dock_controller.widget
-    )
+    assert ctrl.adaptiveTrajectoryWidget is ctrl._adaptive_dock_controller.widget
     assert (
         ctrl.plotWidget_adaptiveTrajectory
         is ctrl._adaptive_dock_controller.plotWidget_adaptiveTrajectory
@@ -778,9 +811,7 @@ def test_adaptive_trajectory_slot_is_shell_bound_method(
     ctrl, _ = make_controller(qtbot, request)
     slot = getattr(ctrl, "_on_adaptive_trajectory", None)
     assert slot is not None
-    assert slot.__self__ is ctrl or isinstance(
-        slot.__self__, AdaptiveDockController
-    )
+    assert slot.__self__ is ctrl or isinstance(slot.__self__, AdaptiveDockController)
     # Calling the slot appends to the widget.
     ctrl.adaptiveTrajectoryWidget.reset(target_band_lo=0.90, target_band_hi=0.95)
     slot(0, 0.92, 0.005, 10.0, 5.0, "exposure", False, False)
@@ -825,9 +856,7 @@ def test_adaptive_rail_toggled_show_plot_when_data_present(
 
     ctrl, _ = make_controller(qtbot, request)
     ctrl.adaptiveTrajectoryWidget.reset(target_band_lo=0.90, target_band_hi=0.95)
-    ctrl._on_adaptive_trajectory(
-        0, 0.92, 0.005, 10.0, 5.0, "exposure", False, False
-    )
+    ctrl._on_adaptive_trajectory(0, 0.92, 0.005, 10.0, 5.0, "exposure", False, False)
     assert ctrl.adaptiveTrajectoryWidget.has_data()
     ctrl._adaptive_dock_controller.on_rail_adaptive_toggled(True)
     QApplication.processEvents()

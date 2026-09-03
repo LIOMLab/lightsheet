@@ -109,7 +109,7 @@ def test_close_event_preview_timeout_logs_warning(
         patch.object(
             logging.getLogger("lightsheet.gui.shell.controller"),
             "warning",
-        ) as mock_warning
+        ) as mock_warning,
     ):
         event = QCloseEvent()
         ctrl.closeEvent(event)
@@ -134,6 +134,7 @@ def test_close_event_closes_motors_handle(
     ctrl, _bundle = make_controller(qtbot, request)
     with patch.object(ctrl.motors, "close") as mock_close:
         from PySide6.QtGui import QCloseEvent
+
         event = QCloseEvent()
         ctrl.closeEvent(event)
         assert event.isAccepted()

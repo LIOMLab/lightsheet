@@ -132,9 +132,7 @@ class StackPanelWidget(QWidget):
         # box title row stays visible (the affordance) while only the
         # fields container is hidden on toggle-off.
         self.ui.checkBox_focusEnable.toggled.connect(self._on_focus_toggled)
-        self.ui.widget_focusFields.setVisible(
-            self.ui.checkBox_focusEnable.isChecked()
-        )
+        self.ui.widget_focusFields.setVisible(self.ui.checkBox_focusEnable.isChecked())
         # Wire Browse to a JSON-only file chooser, Load to the validating
         # curve loader, and the block-size spinbox to the hard 1..100 guard.
         self.ui.pushButton_focusBrowse.clicked.connect(self._on_focus_browse)
@@ -191,7 +189,7 @@ class StackPanelWidget(QWidget):
         # stack_starting_plane stays in µm (the worker + motor HAL unit).
         # The spinbox displays in mm (FieldSpec unit), so convert µm→mm
         # for setValue only.
-        pos_um = self._shell.motors.horizontal.get_position("\u03bcm")  # ty: ignore[unresolved-attribute]
+        pos_um = self._shell.motors.horizontal.get_position("\u03bcm")
         self._shell.stack_starting_plane = pos_um
         self.ui.doubleSpinBox_acqFirstPlane.setValue(pos_um / 1000.0)
         self._shell.stack_first_plane_set = True
@@ -199,7 +197,7 @@ class StackPanelWidget(QWidget):
 
     def updateUi_set_stack_mode_ending_point(self) -> None:
         """Defines the ending point of the recorded stack volume"""
-        pos_um = self._shell.motors.horizontal.get_position("\u03bcm")  # ty: ignore[unresolved-attribute]
+        pos_um = self._shell.motors.horizontal.get_position("\u03bcm")
         self._shell.stack_ending_plane = pos_um
         self.ui.doubleSpinBox_acqLastPlane.setValue(pos_um / 1000.0)
         self._shell.stack_last_plane_set = True
@@ -937,9 +935,7 @@ class StackPanelWidget(QWidget):
             return
         n_points = len(self._armed_focus_curve.stage_pos)
         residual = (
-            "on"
-            if self.ui.checkBox_focusAutofocusResidual.isChecked()
-            else "off"
+            "on" if self.ui.checkBox_focusAutofocusResidual.isChecked() else "off"
         )
         self.ui.label_focusStatus.setText(
             f"Armed: {n_points} points | block size {block_size} "

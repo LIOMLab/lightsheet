@@ -200,7 +200,8 @@ class FocusTrajectoryWidget(QWidget):
 
         # Stage position curve (right ViewBox, grey, dashed).
         self._stage_curve = pg.PlotDataItem(
-            [], [],
+            [],
+            [],
             pen=pg.mkPen(_MIDTONE, width=1, style=Qt.PenStyle.DashLine),
             name="Stage position",
         )

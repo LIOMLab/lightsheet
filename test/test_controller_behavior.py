@@ -439,8 +439,7 @@ def test_estop_warn_branch_fires_for_failed_laser(
     # The warn branch fired for the failed laser — find the emit call
     # whose message names the failed laser's label and error_message.
     warn_msgs = [
-        m for m in messages
-        if "Laser 2 (647 nm)" in m and "daq write failed" in m
+        m for m in messages if "Laser 2 (647 nm)" in m and "daq write failed" in m
     ]
     assert len(warn_msgs) == 1, (
         f"warn branch must fire exactly once for the failed laser; "
@@ -474,10 +473,7 @@ def test_estop_warn_branch_does_not_fire_when_all_off_succeed(
     assert not laser2.active
     # No per-laser warning emitted — every emit message is the terminal
     # "E-STOP actuated" status, none name a laser label or "STILL BE ON".
-    warn_msgs = [
-        m for m in messages
-        if "STILL BE ON" in m or "off command failed" in m
-    ]
+    warn_msgs = [m for m in messages if "STILL BE ON" in m or "off command failed" in m]
     assert len(warn_msgs) == 0, (
         f"warn branch must not fire when all off() calls succeed; "
         f"got {warn_msgs} in {messages}"
@@ -562,7 +558,8 @@ def test_cache_auto_laser_flags_triggers_summary_refresh(
     _set_valid_stack_plan(ctrl)
 
     with patch.object(
-        ctrl.stack_panel, "_render_stack_plan_summary",
+        ctrl.stack_panel,
+        "_render_stack_plan_summary",
         wraps=ctrl.stack_panel._render_stack_plan_summary,
     ) as spy:
         ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
@@ -672,9 +669,7 @@ def test_stack_plan_summary_single_channel_byte_identical(
     assert baseline.count("Est. size:") == 1
 
 
-def test_auto_laser_tooltip_updated(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_auto_laser_tooltip_updated(qtbot: QtBot, request: FixtureRequest) -> None:
     """Both auto-laser checkbox tooltips contain the multi-channel
     consequence sentence ('When BOTH auto-laser boxes are checked')."""
     ctrl, _bundle = make_controller(qtbot, request)
@@ -698,9 +693,7 @@ def test_auto_laser_tooltip_updated(
 # --------------------------------------------------------------------------- #
 
 
-def test_channel_radio_hidden_by_default(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_channel_radio_hidden_by_default(qtbot: QtBot, request: FixtureRequest) -> None:
     """The channel-radio group is hidden by default (only one or zero
     auto-laser checkboxes checked at startup) — the ImageView area is
     visually identical to today's single-channel experience."""
@@ -820,18 +813,14 @@ def test_channel_radio_switch_updates_imageview(
     # LevelsBar window reset to frame_b's min/max.
     lb = ctrl.ui.levelsBar
     assert lb.window_min == int(frame_b.min()), (
-        f"LevelsBar window_min must reset to frame_b.min()=200; "
-        f"got {lb.window_min}"
+        f"LevelsBar window_min must reset to frame_b.min()=200; got {lb.window_min}"
     )
     assert lb.window_max == int(frame_b.max()), (
-        f"LevelsBar window_max must reset to frame_b.max()=400; "
-        f"got {lb.window_max}"
+        f"LevelsBar window_max must reset to frame_b.max()=400; got {lb.window_max}"
     )
 
 
-def test_channel_radio_l1_tint_is_green(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_channel_radio_l1_tint_is_green(qtbot: QtBot, request: FixtureRequest) -> None:
     """Clicking L1 calls ImageView.setImage with tint='00FF00' (green for
     555 nm) so the operator can visually distinguish L1 from L2 in demo
     mode where the frames are otherwise identical."""
@@ -875,7 +864,6 @@ def test_channel_radio_tints_demo_image_when_no_acquisition_frame(
     (the demo image) so the operator can verify the L1=green / L2=red cue
     without first running a multi-channel acquisition."""
     from unittest.mock import patch
-
 
     ctrl, _bundle = make_controller(qtbot, request)
     radio = ctrl.channel_radio
@@ -1059,5 +1047,6 @@ def test_channel_radio_single_channel_hidden(
         "auto-laser is checked"
     )
     # And it must not be merely disabled-while-visible.
-    assert (not radio.isEnabled() and not radio.isVisibleTo(parent)) or \
-        not radio.isVisibleTo(parent)
+    assert (
+        not radio.isEnabled() and not radio.isVisibleTo(parent)
+    ) or not radio.isVisibleTo(parent)

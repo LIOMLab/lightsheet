@@ -386,7 +386,10 @@ def test_hdf5_multi_file_multi_dataset_writes_aligned_plane_rows(
         all_rows: list[int] = []
         for fname in saver.filenames_list:
             with h5py.File(fname, "r") as f:
-                all_rows.extend(np.asarray(f["adaptive_trajectory"]["plane_index"]).tolist())  # ty: ignore[invalid-argument-type, not-subscriptable]
+                trajectory: Any = f["adaptive_trajectory"]
+                all_rows.extend(
+                    np.asarray(trajectory["plane_index"]).tolist()
+                )
         assert all_rows == list(range(n_planes)), (
             f"concatenated per-file plane_index {all_rows} != "
             f"{list(range(n_planes))} — trajectory not reconstructable"
@@ -572,11 +575,14 @@ def test_both_writes_adaptive_in_both_formats(
             )
         # Zarr
         store_path = str(tmp_path / "scan.ome.zarr")
-        root = zarr.open(store_path, mode="r")
+        root: Any = zarr.open(store_path, mode="r")
         assert "acquisition" in root
-        assert "adaptive" in root["acquisition"]  # ty: ignore[invalid-argument-type, unsupported-operator]
+        acq_group: Any = root["acquisition"]
+        assert "adaptive" in acq_group
         _assert_adaptive_group(
-            root["acquisition"]["adaptive"], saver.adaptive_trajectory, config  # ty: ignore[invalid-argument-type, not-subscriptable]
+            acq_group["adaptive"],
+            saver.adaptive_trajectory,
+            config,
         )
 
 

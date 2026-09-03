@@ -25,9 +25,7 @@ def load_focus_curve(
 
     pts = data.get("points")
     if not isinstance(pts, list) or len(pts) < 2:
-        raise ValueError(
-            "calibration file must have a 'points' list with >= 2 entries"
-        )
+        raise ValueError("calibration file must have a 'points' list with >= 2 entries")
 
     try:
         stage = tuple(float(p[0]) for p in pts)

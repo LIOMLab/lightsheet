@@ -578,6 +578,3 @@ class IBeamSmartLaser(ILaser):
         if self._analog_ceiling_mw is not None and uw == 0:
             return None
         return uw / 1000.0
-
-
-

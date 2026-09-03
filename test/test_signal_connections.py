@@ -46,9 +46,7 @@ def test_wire_collaborators_exists() -> None:
     import lightsheet.gui.shell.controller as controller_mod
 
     assert hasattr(controller_mod.Controller_MainWindow, "wire_collaborators")
-    assert callable(
-        controller_mod.Controller_MainWindow.wire_collaborators
-    )
+    assert callable(controller_mod.Controller_MainWindow.wire_collaborators)
 
 
 def test_converted_connection_fires_collaborator_slot(

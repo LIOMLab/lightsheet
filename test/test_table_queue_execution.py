@@ -45,8 +45,8 @@ def _add_valid_row(
     row = mgr.table.rowCount() - 1
     mgr.set_cell(row, 0, name)
     mgr.set_cell(row, 1, str(start / 1000.0))  # µm → mm cell
-    mgr.set_cell(row, 2, str(end / 1000.0))    # µm → mm cell
-    mgr.set_cell(row, 3, str(step))            # step stays µm
+    mgr.set_cell(row, 2, str(end / 1000.0))  # µm → mm cell
+    mgr.set_cell(row, 3, str(step))  # step stays µm
     return row
 
 
@@ -102,17 +102,19 @@ def test_queue_configures_stack_params_per_row(
     ctrl, _ = make_controller(qtbot, request)
     mgr = ctrl.stack_panel.table_manager
     _add_valid_row(mgr, 500, 600, 10, "A")  # 11 planes
-    _add_valid_row(mgr, 700, 702, 1, "B")   # 3 planes
+    _add_valid_row(mgr, 700, 702, 1, "B")  # 3 planes
 
     seen: list[tuple] = []  # ty: ignore[missing-type-argument]
     from lightsheet.gui.workers import StackWorker
 
     def _fake_run(self: StackWorker) -> None:
-        seen.append((
-            self._shell.stack_starting_plane,
-            self._shell.stack_ending_plane,
-            int(self._shell.number_of_planes),
-        ))
+        seen.append(
+            (
+                self._shell.stack_starting_plane,
+                self._shell.stack_ending_plane,
+                int(self._shell.number_of_planes),
+            )
+        )
         self.finished.emit()
 
     with patch.object(StackWorker, "run", _fake_run):
@@ -132,6 +134,7 @@ def test_queue_mode_badge_shows_row_index(
     _add_valid_row(mgr, 3000, 3100, 10, "C")
 
     from PySide6.QtCore import QTimer
+
     badge_texts: list[str] = []
 
     def _probe() -> None:
@@ -166,8 +169,12 @@ def test_queue_moves_stage_to_row_start(
         positions.append(pos)
         return orig(pos, units)
 
-    with patch.object(ctrl.motors.horizontal, "move_absolute_position",
-                      side_effect=_record), _patch_worker_run([]):
+    with (
+        patch.object(
+            ctrl.motors.horizontal, "move_absolute_position", side_effect=_record
+        ),
+        _patch_worker_run([]),
+    ):
         mgr._start_queue()
     # The queue moves to each row's start (1000, 3000) before the worker
     # runs. The worker's per-plane moves also call move_absolute_position,
@@ -199,9 +206,7 @@ def test_estop_aborts_queue(qtbot: QtBot, request: pytest.FixtureRequest) -> Non
     with patch.object(StackWorker, "run", _fake_run):
         mgr._start_queue()
     # Only the first row executed; the queue stopped after E-stop.
-    assert executed == [1000.0], (
-        f"queue did not stop after E-stop: {executed}"
-    )
+    assert executed == [1000.0], f"queue did not stop after E-stop: {executed}"
     # Reset estop for teardown.
     ctrl.estop_event.clear()
 
@@ -304,9 +309,11 @@ def test_queue_uses_qeventloop_not_threading_wait(
         used_threading_wait["value"] = True
         return orig_event_wait(self, *args, **kwargs)
 
-    with patch.object(QEventLoop, "exec", _spy_exec), \
-         patch.object(threading.Event, "wait", _spy_wait), \
-         _patch_worker_run([]):
+    with (
+        patch.object(QEventLoop, "exec", _spy_exec),
+        patch.object(threading.Event, "wait", _spy_wait),
+        _patch_worker_run([]),
+    ):
         mgr._start_queue()
     assert used_qeventloop["value"], (
         "queue loop did not use QEventLoop.exec() for the non-blocking wait"
@@ -347,6 +354,7 @@ def test_gui_thread_responsive_during_queue(
     _add_valid_row(mgr, 3000, 3100, 10, "C")
 
     from PySide6.QtCore import QTimer
+
     probe_fired = {"value": False}
 
     def _probe() -> None:

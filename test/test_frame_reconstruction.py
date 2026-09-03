@@ -67,8 +67,11 @@ def _make_bundle() -> DeviceBundle:
     )
     etls = MockETLs()
     return DeviceBundle(
-        camera=camera, siggen=siggen,
-        motors=motors, etls=etls, lasers=lasers,
+        camera=camera,
+        siggen=siggen,
+        motors=motors,
+        etls=etls,
+        lasers=lasers,
     )
 
 

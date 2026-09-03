@@ -51,8 +51,15 @@ def test_table_columns(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
         mgr.table.horizontalHeaderItem(i).text()  # ty: ignore[unresolved-attribute]
         for i in range(mgr.table.columnCount())
     ]
-    assert headers == ["Name", "Start (mm)", "End (mm)",
-                       "Step (\u03bcm)", "#Planes", "Est. Time", "Est. Size"]
+    assert headers == [
+        "Name",
+        "Start (mm)",
+        "End (mm)",
+        "Step (\u03bcm)",
+        "#Planes",
+        "Est. Time",
+        "Est. Size",
+    ]
 
 
 def test_empty_state_copy(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
@@ -121,8 +128,10 @@ def test_remove_stack_confirmation(
     assert mgr.table.rowCount() == 1
 
     # Cancel → row stays.
-    with patch("PySide6.QtWidgets.QMessageBox.question",
-               return_value=QMessageBox.StandardButton.Cancel):
+    with patch(
+        "PySide6.QtWidgets.QMessageBox.question",
+        return_value=QMessageBox.StandardButton.Cancel,
+    ):
         mgr.remove_stack()
     assert mgr.table.rowCount() == 1
 
@@ -236,14 +245,11 @@ def test_table_scrollable(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     exceeds the viewport."""
     _ctrl, mgr = _mgr(qtbot, request)
     from PySide6.QtCore import Qt
+
     assert (
-        mgr.table.horizontalScrollBarPolicy()
-        != Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        mgr.table.horizontalScrollBarPolicy() != Qt.ScrollBarPolicy.ScrollBarAlwaysOff
     )
-    assert (
-        mgr.table.verticalScrollBarPolicy()
-        != Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-    )
+    assert mgr.table.verticalScrollBarPolicy() != Qt.ScrollBarPolicy.ScrollBarAlwaysOff
 
 
 def test_zero_one_many(qtbot: QtBot, request: pytest.FixtureRequest) -> None:

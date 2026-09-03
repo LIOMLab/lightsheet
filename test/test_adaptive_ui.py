@@ -71,9 +71,7 @@ def _adaptive_ui(ctrl: Controller_MainWindow) -> Ui_StackPanel:
     return ctrl.stack_panel.ui
 
 
-def test_adaptive_group_widgets_exist(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_adaptive_group_widgets_exist(qtbot: QtBot, request: FixtureRequest) -> None:
     """The adaptive config group + toggle + 6 spinboxes + shutter hint
     exist on the stack panel with the exact UI-SPEC objectNames."""
     ctrl, _ = make_controller(qtbot, request)
@@ -110,6 +108,7 @@ def test_adaptive_toggle_off_hides_fields_container(
     # The toggle handler is wired in __init__; emit the signal to drive it.
     ui.checkBox_adaptiveEnable.toggled.emit(False)
     from PySide6.QtWidgets import QApplication
+
     QApplication.processEvents()
     assert not ui.widget_adaptiveFields.isVisibleTo(
         ui.widget_adaptiveFields.parentWidget()  # ty: ignore[invalid-argument-type]
@@ -129,6 +128,7 @@ def test_adaptive_toggle_on_shows_fields_container(
     ui.checkBox_adaptiveEnable.setChecked(True)
     ui.checkBox_adaptiveEnable.toggled.emit(True)
     from PySide6.QtWidgets import QApplication
+
     QApplication.processEvents()
     assert ui.widget_adaptiveFields.isVisibleTo(ui.widget_adaptiveFields.parentWidget())  # ty: ignore[invalid-argument-type]
 
@@ -202,9 +202,7 @@ def test_adaptive_later_valid_edit_clears_latch(
     assert isinstance(cfg, AdaptiveConfig)
 
 
-def test_adaptive_unchecked_returns_none(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_adaptive_unchecked_returns_none(qtbot: QtBot, request: FixtureRequest) -> None:
     """With the toggle unchecked, build_adaptive_config returns None
     (fixed stack behavior is selected)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -239,8 +237,11 @@ def test_adaptive_rolling_shutter_shows_ms(
     ctrl, _ = make_controller(qtbot, request)
     ui = _adaptive_ui(ctrl)
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentText("Rolling")
-    ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.emit("Rolling")
+    ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.emit(
+        "Rolling"
+    )
     from PySide6.QtWidgets import QApplication
+
     QApplication.processEvents()
     suffix = ui.doubleSpinBox_adaptiveMinExposure.suffix().strip().lower()
     assert suffix == "ms"
@@ -257,8 +258,11 @@ def test_adaptive_lightsheet_shutter_shows_us(
     ctrl, _ = make_controller(qtbot, request)
     ui = _adaptive_ui(ctrl)
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentText("Lightsheet")
-    ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.emit("Lightsheet")
+    ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.emit(
+        "Lightsheet"
+    )
     from PySide6.QtWidgets import QApplication
+
     QApplication.processEvents()
     suffix = ui.doubleSpinBox_adaptiveMinExposure.suffix().strip().lower()
     assert suffix == "µs"
@@ -276,7 +280,9 @@ def test_adaptive_lightsheet_bound_converts_to_seconds(
     ctrl, _ = make_controller(qtbot, request)
     ui = _adaptive_ui(ctrl)
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentText("Lightsheet")
-    ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.emit("Lightsheet")
+    ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.emit(
+        "Lightsheet"
+    )
     ui.checkBox_adaptiveEnable.setChecked(True)
     ui.doubleSpinBox_adaptiveMaxExposure.setValue(5000.0)  # 5000 µs
     ui.doubleSpinBox_adaptiveMaxExposure.editingFinished.emit()
@@ -295,7 +301,9 @@ def test_adaptive_rolling_bound_converts_ms_to_seconds(
     ctrl, _ = make_controller(qtbot, request)
     ui = _adaptive_ui(ctrl)
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentText("Rolling")
-    ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.emit("Rolling")
+    ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.emit(
+        "Rolling"
+    )
     ui.checkBox_adaptiveEnable.setChecked(True)
     ui.doubleSpinBox_adaptiveMinExposure.setValue(5.0)  # 5 ms
     ui.doubleSpinBox_adaptiveMinExposure.editingFinished.emit()
@@ -501,9 +509,7 @@ def test_enabling_adaptive_shows_rail_button_not_dock(
     )
 
 
-def test_rail_button_opens_dock_floating(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_rail_button_opens_dock_floating(qtbot: QtBot, request: FixtureRequest) -> None:
     """Toggling the rail button opens the trajectory dock as a
     standalone floating window (never docked into the main GUI)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -525,9 +531,7 @@ def test_rail_button_opens_dock_floating(
     )
 
 
-def test_empty_state_label_word_wraps(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_empty_state_label_word_wraps(qtbot: QtBot, request: FixtureRequest) -> None:
     """The empty-state label has wordWrap enabled so the fixed English
     sentence wraps without clipping at the dock's minimum width
     (backstop truth #11, #12)."""
@@ -553,9 +557,14 @@ def test_trajectory_widget_one_plane_shows_point_and_band(qtbot: QtBot) -> None:
     w = _make_trajectory_widget(qtbot)
     w.reset(target_band_lo=0.90, target_band_hi=0.95)
     w.append_sample(
-        plane_idx=0, intensity=0.92, exposure_s=0.005,
-        power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
-        reacquired=False, power_fallback=False,
+        plane_idx=0,
+        intensity=0.92,
+        exposure_s=0.005,
+        power1_mw=10.0,
+        power2_mw=0.0,
+        control_variable_active="exposure",
+        reacquired=False,
+        power_fallback=False,
     )
     assert not w.plotWidget_adaptiveTrajectory.isHidden()
     assert w.label_adaptiveTrajectoryEmpty.isHidden()
@@ -578,9 +587,14 @@ def test_trajectory_widget_many_planes_appends(qtbot: QtBot) -> None:
     w.reset(target_band_lo=0.90, target_band_hi=0.95)
     for i in range(10):
         w.append_sample(
-            plane_idx=i, intensity=0.90 + 0.001 * i, exposure_s=0.005,
-            power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
-            reacquired=False, power_fallback=False,
+            plane_idx=i,
+            intensity=0.90 + 0.001 * i,
+            exposure_s=0.005,
+            power1_mw=10.0,
+            power2_mw=0.0,
+            control_variable_active="exposure",
+            reacquired=False,
+            power_fallback=False,
         )
     xs, _ys = w._intensity_curve.getData()  # ty: ignore[unresolved-attribute]
     assert len(xs) == 10
@@ -595,9 +609,14 @@ def test_trajectory_widget_201_planes_retains_full_data(qtbot: QtBot) -> None:
     w.reset(target_band_lo=0.90, target_band_hi=0.95)
     for i in range(201):
         w.append_sample(
-            plane_idx=i, intensity=0.90, exposure_s=0.005,
-            power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
-            reacquired=False, power_fallback=False,
+            plane_idx=i,
+            intensity=0.90,
+            exposure_s=0.005,
+            power1_mw=10.0,
+            power2_mw=0.0,
+            control_variable_active="exposure",
+            reacquired=False,
+            power_fallback=False,
         )
     xs, _ys = w._intensity_curve.getData()  # ty: ignore[unresolved-attribute]
     assert len(xs) == 201, "full in-memory data must be retained"
@@ -613,9 +632,14 @@ def test_trajectory_widget_reacquire_marker(qtbot: QtBot) -> None:
     w = _make_trajectory_widget(qtbot)
     w.reset(target_band_lo=0.90, target_band_hi=0.95)
     w.append_sample(
-        plane_idx=3, intensity=0.50, exposure_s=0.005,
-        power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
-        reacquired=True, power_fallback=False,
+        plane_idx=3,
+        intensity=0.50,
+        exposure_s=0.005,
+        power1_mw=10.0,
+        power2_mw=0.0,
+        control_variable_active="exposure",
+        reacquired=True,
+        power_fallback=False,
     )
     # A re-acquire InfiniteLine was added at x=3.
     reacquire_lines = w._reacquire_lines
@@ -629,9 +653,14 @@ def test_trajectory_widget_power_fallback_marker(qtbot: QtBot) -> None:
     w = _make_trajectory_widget(qtbot)
     w.reset(target_band_lo=0.90, target_band_hi=0.95)
     w.append_sample(
-        plane_idx=2, intensity=0.85, exposure_s=0.005,
-        power1_mw=20.0, power2_mw=0.0, control_variable_active="power",
-        reacquired=False, power_fallback=True,
+        plane_idx=2,
+        intensity=0.85,
+        exposure_s=0.005,
+        power1_mw=20.0,
+        power2_mw=0.0,
+        control_variable_active="power",
+        reacquired=False,
+        power_fallback=True,
     )
     # The power-fallback scatter has one point at x=2.
     scatter = w._power_fallback_scatter
@@ -647,9 +676,14 @@ def test_trajectory_widget_twin_axis_exposure_power(qtbot: QtBot) -> None:
     w = _make_trajectory_widget(qtbot)
     w.reset(target_band_lo=0.90, target_band_hi=0.95)
     w.append_sample(
-        plane_idx=0, intensity=0.92, exposure_s=0.005,
-        power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
-        reacquired=False, power_fallback=False,
+        plane_idx=0,
+        intensity=0.92,
+        exposure_s=0.005,
+        power1_mw=10.0,
+        power2_mw=0.0,
+        control_variable_active="exposure",
+        reacquired=False,
+        power_fallback=False,
     )
     # The exposure + power curves have data.
     assert w._exposure_curve is not None
@@ -666,15 +700,25 @@ def test_trajectory_widget_freeze_blocks_appends(qtbot: QtBot) -> None:
     w = _make_trajectory_widget(qtbot)
     w.reset(target_band_lo=0.90, target_band_hi=0.95)
     w.append_sample(
-        plane_idx=0, intensity=0.92, exposure_s=0.005,
-        power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
-        reacquired=False, power_fallback=False,
+        plane_idx=0,
+        intensity=0.92,
+        exposure_s=0.005,
+        power1_mw=10.0,
+        power2_mw=0.0,
+        control_variable_active="exposure",
+        reacquired=False,
+        power_fallback=False,
     )
     w.freeze()
     w.append_sample(
-        plane_idx=1, intensity=0.93, exposure_s=0.005,
-        power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
-        reacquired=False, power_fallback=False,
+        plane_idx=1,
+        intensity=0.93,
+        exposure_s=0.005,
+        power1_mw=10.0,
+        power2_mw=0.0,
+        control_variable_active="exposure",
+        reacquired=False,
+        power_fallback=False,
     )
     xs, _ys = w._intensity_curve.getData()  # ty: ignore[unresolved-attribute]
     assert len(xs) == 1, "post-freeze append must be ignored"
@@ -691,9 +735,7 @@ def test_badge_adaptive_running_min_width_180(
     assert badge.minimumSize().width() >= 180
 
 
-def test_badge_adaptive_running_string(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_badge_adaptive_running_string(qtbot: QtBot, request: FixtureRequest) -> None:
     """The badge renders 'ADAPTIVE RUNNING — plane {n}/{N}' with the
     em-dash, and composes with the queue-row + MULTI-CH suffixes
     (must_have truth #7)."""
@@ -702,8 +744,12 @@ def test_badge_adaptive_running_string(
     ctrl._auto_laser2 = True
     ctrl.number_of_planes = 999
     ctrl._update_mode_badge(
-        "ADAPTIVE", "RUNNING", plane=999, total=999,
-        queue_row=3, queue_total=5,
+        "ADAPTIVE",
+        "RUNNING",
+        plane=999,
+        total=999,
+        queue_row=3,
+        queue_total=5,
     )
     text = ctrl.ui.label_modeBadge.text()
     assert "ADAPTIVE RUNNING" in text
@@ -713,9 +759,7 @@ def test_badge_adaptive_running_string(
     assert "MULTI-CH" in text
 
 
-def test_badge_adaptive_aborted_string(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_badge_adaptive_aborted_string(qtbot: QtBot, request: FixtureRequest) -> None:
     """E-stop mid-adaptive-run transitions the badge to 'ADAPTIVE
     ABORTED — plane {n}/{N}' (must_have truth #4)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -760,9 +804,14 @@ def test_estop_freezes_trajectory_after_laser_off(
     # Append one sample so freeze has something to freeze.
     widget.reset(target_band_lo=0.90, target_band_hi=0.95)
     widget.append_sample(
-        plane_idx=0, intensity=0.92, exposure_s=0.005,
-        power1_mw=10.0, power2_mw=0.0, control_variable_active="exposure",
-        reacquired=False, power_fallback=False,
+        plane_idx=0,
+        intensity=0.92,
+        exposure_s=0.005,
+        power1_mw=10.0,
+        power2_mw=0.0,
+        control_variable_active="exposure",
+        reacquired=False,
+        power_fallback=False,
     )
     # Track laser.off() call order vs the freeze.
     off_calls: list[int] = []
@@ -775,6 +824,7 @@ def test_estop_freezes_trajectory_after_laser_off(
                 freeze_before_off.append(True)
             off_calls.append(idx)
             real_off[idx]()
+
         return _off
 
     for idx, laser in enumerate(ctrl.lasers):
@@ -865,9 +915,7 @@ def test_worker_run_does_not_call_plotwidget(
     )
 
 
-def test_no_imageview_reintroduction(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_no_imageview_reintroduction(qtbot: QtBot, request: FixtureRequest) -> None:
     """pyqtgraph is reintroduced ONLY for PlotWidget — no
     pyqtgraph.ImageView / pyqtgraph.imageview import exists in
     production code (UI-SPEC §Registry Safety, threat T-10-SC)."""
@@ -901,9 +949,7 @@ def test_dock_state_persistence(
     assert len(bytes(state)) > 0
 
 
-def test_dock_is_floating_only_closable(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_dock_is_floating_only_closable(qtbot: QtBot, request: FixtureRequest) -> None:
     """The dock is a standalone floating window: closable but NOT
     movable, NOT floatable, and cannot re-dock into the main GUI
     (NoDockWidgetArea). This avoids re-dock overlay indicators on every
@@ -1017,16 +1063,18 @@ def test_no_adaptive_curve_or_marker_is_green(qtbot: QtBot) -> None:
             color = pen.color()  # ty: ignore[unresolved-attribute]
             # Green dominant: green channel strictly greater than both
             # red and blue by a clear margin.
-            assert not (color.green() > color.red() + 20
-                        and color.green() > color.blue() + 20), (
+            assert not (
+                color.green() > color.red() + 20 and color.green() > color.blue() + 20
+            ), (
                 f"adaptive plot primitive uses green: "
                 f"#{color.red():02x}{color.green():02x}{color.blue():02x}"
             )
         brush = item.opts.get("brush")
         if brush is not None:
             color = brush.color()  # ty: ignore[unresolved-attribute]
-            assert not (color.green() > color.red() + 20
-                        and color.green() > color.blue() + 20), (
+            assert not (
+                color.green() > color.red() + 20 and color.green() > color.blue() + 20
+            ), (
                 f"adaptive plot primitive brush uses green: "
                 f"#{color.red():02x}{color.green():02x}{color.blue():02x}"
             )
@@ -1038,8 +1086,12 @@ def test_widget_layout_margins_are_16(qtbot: QtBot) -> None:
     w = _make_trajectory_widget(qtbot)
     layout = w.layout()
     margins = layout.contentsMargins()  # ty: ignore[unresolved-attribute]
-    assert (margins.left(), margins.top(),
-            margins.right(), margins.bottom()) == (16, 16, 16, 16)
+    assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (
+        16,
+        16,
+        16,
+        16,
+    )
 
 
 def test_plotitem_layout_margins_are_16(qtbot: QtBot) -> None:
@@ -1063,8 +1115,12 @@ def test_dock_title_bar_margins_and_spacing(
     title_bar = ctrl.dockWidget_adaptiveTrajectory.titleBarWidget()
     layout = title_bar.layout()
     margins = layout.contentsMargins()
-    assert (margins.left(), margins.top(),
-            margins.right(), margins.bottom()) == (8, 4, 8, 4)
+    assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (
+        8,
+        4,
+        8,
+        4,
+    )
     assert layout.spacing() == 4
 
 

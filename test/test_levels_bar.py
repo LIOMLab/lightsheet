@@ -344,20 +344,14 @@ def test_drag_window_min_handle(qtbot: QtBot) -> None:
     bar.window_max = 400
     levels_received: list[tuple[int, int]] = []
     range_received: list[tuple[int, int]] = []
-    bar.sig_levelsChanged.connect(
-        lambda lo, hi: levels_received.append((lo, hi))
-    )
-    bar.sig_rangeChanged.connect(
-        lambda lo, hi: range_received.append((lo, hi))
-    )
+    bar.sig_levelsChanged.connect(lambda lo, hi: levels_received.append((lo, hi)))
+    bar.sig_rangeChanged.connect(lambda lo, hi: range_received.append((lo, hi)))
     # window_min@80. Press, drag to x=160 (value 400) — but that's window_max's
     # position; drag to x=120 (value 300) instead to stay below window_max.
     _press_at(bar, 80, _window_row_y(bar))
     _move_to(bar, 120, _window_row_y(bar))
     _release(bar)
-    assert bar.window_min == 300, (
-        f"expected window_min=300, got {bar.window_min}"
-    )
+    assert bar.window_min == 300, f"expected window_min=300, got {bar.window_min}"
     assert any(lo == 300 for (lo, _hi) in levels_received)
     # Moving a WINDOW handle must NOT emit sig_rangeChanged.
     assert range_received == []
@@ -375,9 +369,7 @@ def test_drag_window_max_handle(qtbot: QtBot) -> None:
     _press_at(bar, 160, _window_row_y(bar))
     _move_to(bar, 200, _window_row_y(bar))
     _release(bar)
-    assert bar.window_max == 500, (
-        f"expected window_max=500, got {bar.window_max}"
-    )
+    assert bar.window_max == 500, f"expected window_max=500, got {bar.window_max}"
     assert any(hi == 500 for (_lo, hi) in received)
 
 
@@ -432,9 +424,7 @@ def test_drag_range_min_handle(qtbot: QtBot) -> None:
     _press_at(bar, 0, _range_row_y(bar))
     _move_to(bar, 100, _range_row_y(bar))
     _release(bar)
-    assert bar.range_min == 250, (
-        f"expected range_min=250, got {bar.range_min}"
-    )
+    assert bar.range_min == 250, f"expected range_min=250, got {bar.range_min}"
     assert any(lo == 250 for (lo, _hi) in range_received)
 
 

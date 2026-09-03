@@ -16,11 +16,7 @@ from lightsheet.focus import FocusCurve, load_focus_curve
 
 def test_load_focus_curve_returns_valid_focus_curve(tmp_path: Path) -> None:
     path = tmp_path / "curve.json"
-    path.write_text(
-        json.dumps(
-            {"points": [[0.0, 20.0], [10.0, 22.0], [20.0, 25.0]]}
-        )
-    )
+    path.write_text(json.dumps({"points": [[0.0, 20.0], [10.0, 22.0], [20.0, 25.0]]}))
     curve = load_focus_curve(
         str(path), camera_limit_low_mm=0.0, camera_limit_high_mm=35.0
     )

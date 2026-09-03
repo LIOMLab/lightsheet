@@ -85,7 +85,7 @@ class Ui_AcquisitionPanel(object):
         self.groupBox_12.setObjectName(u"groupBox_12")
         self.formLayout = QFormLayout(self.groupBox_12)
         self.formLayout.setObjectName(u"formLayout")
-        self.formLayout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        self.formLayout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         self.label_9 = QLabel(self.groupBox_12)
         self.label_9.setObjectName(u"label_9")
 
@@ -93,7 +93,7 @@ class Ui_AcquisitionPanel(object):
 
         self.comboBox_cameraShutterMode = QComboBox(self.groupBox_12)
         self.comboBox_cameraShutterMode.setObjectName(u"comboBox_cameraShutterMode")
-        self.comboBox_cameraShutterMode.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.comboBox_cameraShutterMode.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.comboBox_cameraShutterMode.setMinimumContentsLength(12)
 
         self.formLayout.setWidget(1, QFormLayout.ItemRole.FieldRole, self.comboBox_cameraShutterMode)

@@ -110,9 +110,7 @@ def test_first_arm_reset_press_transitions_to_disarmed(
     )
 
 
-def test_disarmed_button_stays_red(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_disarmed_button_stays_red(qtbot: QtBot, request: FixtureRequest) -> None:
     """B1 safety gate: after ACTUATED -> DISARMED, the E-stop button
     background is #FF3B30 (red), NOT #8E8E93 (gray). The gray indicator
     stays on label_estopStatus only."""
@@ -217,6 +215,6 @@ def test_status_bar_hint_on_each_transition(
     messages.clear()
     ctrl.updateUi_arm_reset_pressed()  # DISARMED -> ARMED
     arm_messages = list(messages)
-    assert any(
-        "armed" in m.lower() for m in arm_messages
-    ), f"Expected a status-bar hint after the second press, got: {arm_messages}"
+    assert any("armed" in m.lower() for m in arm_messages), (
+        f"Expected a status-bar hint after the second press, got: {arm_messages}"
+    )

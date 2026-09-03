@@ -114,9 +114,7 @@ def test_wheel_event_zooms_and_marks_user_transformed(qtbot: QtBot) -> None:
     # QGraphicsView delivers wheel events to its viewport, not the widget
     # itself. Send to the viewport so the override fires.
     QApplication.sendEvent(view.viewport(), evt)
-    assert view._user_transformed, (
-        "wheelEvent must set _user_transformed after zoom"
-    )
+    assert view._user_transformed, "wheelEvent must set _user_transformed after zoom"
 
 
 def QPoint_for_wheel(x: int, y: int) -> QPoint:
@@ -141,10 +139,10 @@ def test_set_image_with_degenerate_levels_span_uses_binary_threshold(
     view._levels_min = 1000
     view._levels_max = 1000
     frame = np.zeros((1, 4), dtype=np.uint16)
-    frame[0, 0] = 0      # below threshold -> black
-    frame[0, 1] = 1000   # at threshold -> black (<=)
-    frame[0, 2] = 1001   # above threshold -> white
-    frame[0, 3] = 5000   # above threshold -> white
+    frame[0, 0] = 0  # below threshold -> black
+    frame[0, 1] = 1000  # at threshold -> black (<=)
+    frame[0, 2] = 1001  # above threshold -> white
+    frame[0, 3] = 5000  # above threshold -> white
     view.setImage(frame)
     # The re-render must not crash (no nan/inf from div-by-zero).
     assert view._pixmap_item is not None

@@ -118,10 +118,13 @@ class AcquisitionPanelWidget(QWidget):
             # Sample the auto-laser checkboxes on the GUI thread before
             # spawning the worker.
             self._shell._cache_auto_laser_flags()
+            assert self._shell._hw is not None
 
             # Spawn the preview worker on a QThread (moveToThread pattern).
             self._shell._preview_worker = PreviewWorker(  # ty: ignore[unresolved-attribute]
-                self._shell._bundle, self._shell._hw, self._shell  # ty: ignore[invalid-argument-type]
+                self._shell._bundle,
+                self._shell._hw,
+                self._shell,
             )
             self._shell._preview_thread = QThread()  # ty: ignore[unresolved-attribute]
             self._shell._preview_worker.moveToThread(self._shell._preview_thread)  # ty: ignore[unresolved-attribute]
@@ -169,10 +172,13 @@ class AcquisitionPanelWidget(QWidget):
             # Sample the auto-laser checkboxes on the GUI thread before
             # spawning the worker.
             self._shell._cache_auto_laser_flags()
+            assert self._shell._hw is not None
 
             # Spawn the live worker on a QThread (moveToThread pattern).
             self._shell._live_worker = LiveWorker(  # ty: ignore[unresolved-attribute]
-                self._shell._bundle, self._shell._hw, self._shell  # ty: ignore[invalid-argument-type]
+                self._shell._bundle,
+                self._shell._hw,
+                self._shell,
             )
             self._shell._live_thread = QThread()  # ty: ignore[unresolved-attribute]
             self._shell._live_worker.moveToThread(self._shell._live_thread)  # ty: ignore[unresolved-attribute]
@@ -220,11 +226,12 @@ class AcquisitionPanelWidget(QWidget):
             save_blend = (
                 self._shell.save_panel.ui.radioButton_saveStitchBlend.isChecked()
             )
+            assert self._shell._hw is not None
 
             # Spawn the single-image worker on a QThread (moveToThread pattern).
             self._shell._single_worker = SingleWorker(  # ty: ignore[unresolved-attribute]
                 self._shell._bundle,
-                self._shell._hw,  # ty: ignore[invalid-argument-type]
+                self._shell._hw,
                 self._shell,
                 save_desc,
                 save_blend,
@@ -399,9 +406,11 @@ class AcquisitionPanelWidget(QWidget):
         adaptive_cfg = self._shell.stack_panel.build_adaptive_config()
         focus_cfg = self._shell.stack_panel.build_focus_config()
         focus_curve = self._shell.stack_panel.build_focus_curve()
+        assert self._shell._hw is not None
+
         self._shell._stack_worker = StackWorker(  # ty: ignore[unresolved-attribute]
             self._shell._bundle,
-            self._shell._hw,  # ty: ignore[invalid-argument-type]
+            self._shell._hw,
             self._shell,
             save_desc,
             save_blend,
@@ -421,9 +430,14 @@ class AcquisitionPanelWidget(QWidget):
         # with none emits a libpyside RuntimeWarning that masks real
         # signal-wiring bugs.
         with contextlib.suppress(TypeError, RuntimeError):
-            if self._shell._stack_worker.receivers(  # ty: ignore[unresolved-attribute]
-                SIGNAL("sig_adaptive_trajectory(int,double,double,double,double,QString,bool,bool)")
-            ) > 0:
+            if (
+                self._shell._stack_worker.receivers(  # ty: ignore[unresolved-attribute]
+                    SIGNAL(
+                        "sig_adaptive_trajectory(int,double,double,double,double,QString,bool,bool)"
+                    )
+                )
+                > 0
+            ):
                 self._shell._stack_worker.sig_adaptive_trajectory.disconnect()  # ty: ignore[unresolved-attribute]
         self._shell._stack_worker.sig_adaptive_trajectory.connect(  # ty: ignore[unresolved-attribute]
             self._shell._on_adaptive_trajectory
@@ -432,9 +446,12 @@ class AcquisitionPanelWidget(QWidget):
         # GUI-thread slot. Queued connection so the worker never touches
         # pyqtgraph. Disconnect any prior connection first.
         with contextlib.suppress(TypeError, RuntimeError):
-            if self._shell._stack_worker.receivers(  # ty: ignore[unresolved-attribute]
-                SIGNAL("sig_focus_trajectory(int,double,double,double,double)")
-            ) > 0:
+            if (
+                self._shell._stack_worker.receivers(  # ty: ignore[unresolved-attribute]
+                    SIGNAL("sig_focus_trajectory(int,double,double,double,double)")
+                )
+                > 0
+            ):
                 self._shell._stack_worker.sig_focus_trajectory.disconnect()  # ty: ignore[unresolved-attribute]
         self._shell._stack_worker.sig_focus_trajectory.connect(  # ty: ignore[unresolved-attribute]
             self._shell._on_focus_trajectory

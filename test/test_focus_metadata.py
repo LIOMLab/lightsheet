@@ -397,6 +397,4 @@ def test_both_writes_focus_in_both_formats(
         assert "acquisition" in root
         acq = cast(zarr.Group, root["acquisition"])
         assert "focus" in acq
-        _assert_focus_group(
-            acq["focus"], saver.focus_trajectory, config
-        )
+        _assert_focus_group(acq["focus"], saver.focus_trajectory, config)

@@ -89,13 +89,9 @@ def test_focus_sample_is_frozen() -> None:
 
 
 def test_target_returns_feedforward_interpolation() -> None:
-    curve = FocusCurve(
-        stage_pos=(0.0, 10.0, 20.0), camera_pos=(20.0, 22.0, 25.0)
-    )
+    curve = FocusCurve(stage_pos=(0.0, 10.0, 20.0), camera_pos=(20.0, 22.0, 25.0))
     cfg = _cfg()
-    ctrl = FocusController(
-        cfg, curve, cam_lo_mm=0.0, cam_hi_mm=35.0
-    )
+    ctrl = FocusController(cfg, curve, cam_lo_mm=0.0, cam_hi_mm=35.0)
     assert ctrl.target(0.0) == pytest.approx(20.0)
     assert ctrl.target(10.0) == pytest.approx(22.0)
     assert ctrl.target(20.0) == pytest.approx(25.0)
@@ -106,17 +102,13 @@ def test_target_clamps_to_camera_travel_limits() -> None:
     # High-side curve: a +1 mm residual pushes the feedforward target over 35 mm.
     curve_hi = FocusCurve(stage_pos=(0.0, 10.0), camera_pos=(34.0, 35.0))
     cfg = _cfg(max_residual_mm=5.0, residual_gain_mm=1.0)
-    ctrl_hi = FocusController(
-        cfg, curve_hi, cam_lo_mm=0.0, cam_hi_mm=35.0
-    )
+    ctrl_hi = FocusController(cfg, curve_hi, cam_lo_mm=0.0, cam_hi_mm=35.0)
     ctrl_hi.update_residual(1.0)
     ctrl_hi.update_residual(0.0)
     assert ctrl_hi.target(0.0) == pytest.approx(35.0)
     # Low-side curve: a -1 mm residual pushes the feedforward target under 0 mm.
     curve_lo = FocusCurve(stage_pos=(0.0, 10.0), camera_pos=(1.0, 0.0))
-    ctrl_lo = FocusController(
-        cfg, curve_lo, cam_lo_mm=0.0, cam_hi_mm=35.0
-    )
+    ctrl_lo = FocusController(cfg, curve_lo, cam_lo_mm=0.0, cam_hi_mm=35.0)
     ctrl_lo.update_residual(1.0)
     ctrl_lo.update_residual(2.0)
     assert ctrl_lo.target(0.0) == pytest.approx(0.0)
@@ -124,12 +116,8 @@ def test_target_clamps_to_camera_travel_limits() -> None:
 
 def test_update_residual_clamps_to_max_residual_mm() -> None:
     curve = FocusCurve(stage_pos=(0.0, 10.0), camera_pos=(0.0, 0.0))
-    cfg = _cfg(
-        residual_gain_mm=1.0, max_residual_mm=0.5, autofocus_residual=True
-    )
-    ctrl = FocusController(
-        cfg, curve, cam_lo_mm=0.0, cam_hi_mm=35.0
-    )
+    cfg = _cfg(residual_gain_mm=1.0, max_residual_mm=0.5, autofocus_residual=True)
+    ctrl = FocusController(cfg, curve, cam_lo_mm=0.0, cam_hi_mm=35.0)
     # First call establishes the reference sharpness.
     ctrl.update_residual(1.0)
     assert ctrl.target(0.0) == pytest.approx(0.0)
@@ -144,9 +132,7 @@ def test_update_residual_clamps_to_max_residual_mm() -> None:
 def test_disabled_controller_pins_residual_at_zero() -> None:
     curve = FocusCurve(stage_pos=(0.0, 10.0), camera_pos=(20.0, 22.0))
     cfg = _cfg(enabled=False, autofocus_residual=True)
-    ctrl = FocusController(
-        cfg, curve, cam_lo_mm=0.0, cam_hi_mm=35.0
-    )
+    ctrl = FocusController(cfg, curve, cam_lo_mm=0.0, cam_hi_mm=35.0)
     ctrl.update_residual(1.0)
     ctrl.update_residual(0.0)
     # When disabled, the residual is not added even if autofocus_residual is on.

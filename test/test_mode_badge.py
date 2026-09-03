@@ -76,8 +76,7 @@ def test_mode_badge_initial_idle(qtbot: QtBot, request: FixtureRequest) -> None:
     """Initial state (idle) — badge text is 'IDLE'."""
     ctrl, _ = _make(qtbot, request)
     assert ctrl.ui.label_modeBadge.text() == "IDLE", (
-        f"initial badge text is {ctrl.ui.label_modeBadge.text()!r}, "
-        "expected 'IDLE'"
+        f"initial badge text is {ctrl.ui.label_modeBadge.text()!r}, expected 'IDLE'"
     )
 
 

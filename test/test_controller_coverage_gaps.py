@@ -36,9 +36,7 @@ from pytestqt.qtbot import QtBot
 # -- _update_levels_readout branches (902-931) -------------------------------
 
 
-def test_update_levels_readout_none_frame_is_noop(
-    qtbot: QtBot, request: Any
-) -> None:
+def test_update_levels_readout_none_frame_is_noop(qtbot: QtBot, request: Any) -> None:
     """_update_levels_readout with frame=None returns early (line 902)."""
     ctrl, _ = make_controller(qtbot, request)
     before = ctrl.ui.label_levelsReadout.text()
@@ -46,9 +44,7 @@ def test_update_levels_readout_none_frame_is_noop(
     assert ctrl.ui.label_levelsReadout.text() == before
 
 
-def test_update_levels_readout_empty_frame_is_noop(
-    qtbot: QtBot, request: Any
-) -> None:
+def test_update_levels_readout_empty_frame_is_noop(qtbot: QtBot, request: Any) -> None:
     """_update_levels_readout with an empty frame (min/max raises ValueError)
     returns early (lines 906-907)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -88,9 +84,7 @@ def test_update_levels_readout_uint_frame_sets_dtorange(
     assert "frame: 0-300" in text
 
 
-def test_update_levels_readout_autofits_first_frame(
-    qtbot: QtBot, request: Any
-) -> None:
+def test_update_levels_readout_autofits_first_frame(qtbot: QtBot, request: Any) -> None:
     """The first frame auto-fits the LevelsBar window to observed min/max
     (lines 936-939)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -155,9 +149,7 @@ def test_mode_badge_unknown_mode_falls_back_to_mode_text(
     assert ctrl.ui.label_modeBadge.text() == "PREVIEW"
 
 
-def test_mode_badge_stack_running_with_queue_row(
-    qtbot: QtBot, request: Any
-) -> None:
+def test_mode_badge_stack_running_with_queue_row(qtbot: QtBot, request: Any) -> None:
     """STACK RUNNING with queue_row + queue_total appends the row suffix (1487-1488)."""
     ctrl, _ = make_controller(qtbot, request)
     ctrl._update_mode_badge(
@@ -255,17 +247,13 @@ def test_channel_radio_visibility_single_hides_radio_clears_tint(
 # -- _apply_channel_tint branches (1627, 1630, 1639, 1654-1656) ---------------
 
 
-def test_apply_channel_tint_out_of_range_is_noop(
-    qtbot: QtBot, request: Any
-) -> None:
+def test_apply_channel_tint_out_of_range_is_noop(qtbot: QtBot, request: Any) -> None:
     """An out-of-range channel_idx is a no-op (line 1627)."""
     ctrl, _ = make_controller(qtbot, request)
     ctrl._apply_channel_tint(99)  # must not raise
 
 
-def test_apply_channel_tint_no_wavelength_is_noop(
-    qtbot: QtBot, request: Any
-) -> None:
+def test_apply_channel_tint_no_wavelength_is_noop(qtbot: QtBot, request: Any) -> None:
     """A laser with wavelength=None is a no-op (line 1630)."""
     ctrl, _ = make_controller(qtbot, request)
     # Temporarily null the first laser's wavelength.
@@ -309,9 +297,7 @@ def test_apply_channel_tint_no_frame_anywhere_is_noop(
 # -- closeEvent branches (1210-1214, 1262) ------------------------------------
 
 
-def test_close_event_before_hardware_init_accepts(
-    qtbot: QtBot, request: Any
-) -> None:
+def test_close_event_before_hardware_init_accepts(qtbot: QtBot, request: Any) -> None:
     """closeEvent before hardware_init (no self.lasers) stops the past scan +
     hardware_init timer + accepts the event (lines 1210-1214)."""
     from PySide6.QtCore import QEvent
@@ -351,9 +337,7 @@ def test_close_event_rejected_ignores_event(qtbot: QtBot, request: Any) -> None:
 # -- _FloatingOnlyDock + _NoDblClickFrame (1869, 1894) ------------------------
 
 
-def test_floating_only_dock_setfloating_is_noop(
-    qtbot: QtBot, request: Any
-) -> None:
+def test_floating_only_dock_setfloating_is_noop(qtbot: QtBot, request: Any) -> None:
     """The _FloatingOnlyDock.setFloating override is a no-op (line 1869)."""
     ctrl, _ = make_controller(qtbot, request)
     dock = ctrl.dockWidget_adaptiveTrajectory
@@ -363,9 +347,7 @@ def test_floating_only_dock_setfloating_is_noop(
     assert dock.isFloating() is True
 
 
-def test_no_dblclick_frame_swallows_double_click(
-    qtbot: QtBot, request: Any
-) -> None:
+def test_no_dblclick_frame_swallows_double_click(qtbot: QtBot, request: Any) -> None:
     """The _NoDblClickFrame.mouseDoubleClickEvent swallows the event (1894)."""
     from PySide6.QtCore import QEvent, QPointF, Qt
     from PySide6.QtGui import QMouseEvent
@@ -404,9 +386,7 @@ def test_adaptive_dock_visibility_noop_when_already_in_sync(
 # -- _on_adaptive_trajectory slot (2064-2067) ---------------------------------
 
 
-def test_on_adaptive_trajectory_appends_sample(
-    qtbot: QtBot, request: Any
-) -> None:
+def test_on_adaptive_trajectory_appends_sample(qtbot: QtBot, request: Any) -> None:
     """The _on_adaptive_trajectory slot appends a sample to the plot widget
     (lines 2064-2081)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -426,9 +406,7 @@ def test_on_adaptive_trajectory_appends_sample(
 # -- E-stop laser.error warn branch (2125->2136) ------------------------------
 
 
-def test_estop_warns_when_laser_off_fails(
-    qtbot: QtBot, request: Any
-) -> None:
+def test_estop_warns_when_laser_off_fails(qtbot: QtBot, request: Any) -> None:
     """When a laser's off() sets laser.error, the E-stop handler emits a
     'STILL BE ON' warning (lines 2120-2126)."""
     ctrl, _ = make_controller(qtbot, request)

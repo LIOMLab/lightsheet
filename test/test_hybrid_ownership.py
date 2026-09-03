@@ -38,9 +38,7 @@ def _make(
     return make_controller(qtbot, request)  # ty: ignore[unsound-return-statement]
 
 
-def test_shell_owned_widgets_stay_on_ui(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_shell_owned_widgets_stay_on_ui(qtbot: QtBot, request: FixtureRequest) -> None:
     """Shell-owned widgets stay accessible via ``controller.ui`` after the
     merge-loop trim (E-stop invariant + status bar + message log +
     left-rail navigation)."""

@@ -196,8 +196,7 @@ def test_concurrent_daq_task_creation_does_not_corrupt_session() -> None:
     # prevents the null-pointer access violation, not these driver-level
     # registry races.
     corruption_errors = [
-        e for e in errors
-        if not _is_concurrency_noise_error_from_repr(e)
+        e for e in errors if not _is_concurrency_noise_error_from_repr(e)
     ]
     assert not corruption_errors, (
         "Concurrent nidaqmx.Task creation produced access-violation errors "

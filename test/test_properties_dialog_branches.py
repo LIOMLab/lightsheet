@@ -53,8 +53,10 @@ def _make_dialog(parent: Mock) -> Mock:
     no setupUi. The ui attribute is a Mock so label.setText calls are captured."""
     pytest.importorskip("PySide6")
     import os
+
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
+
     QApplication.instance() or QApplication([])
 
     from lightsheet.gui.panels.properties_dialog import Properties_Dialog

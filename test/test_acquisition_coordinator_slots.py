@@ -67,22 +67,14 @@ class _Shell:
         self.scan_panel.ui.doubleSpinBox_etlLeftOffset.value.return_value = 2.5
         self.scan_panel.ui.doubleSpinBox_etlRightOffset.value.return_value = 2.5
         self.scan_panel.ui.doubleSpinBox_etlSteps.value.return_value = 5
-        exposure_spinbox = (
-            self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime
-        )
+        exposure_spinbox = self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime
         exposure_spinbox.value.return_value = 100
-        line_time_spinbox = (
-            self.acquisition_panel.ui.doubleSpinBox_cameraLineTime
-        )
+        line_time_spinbox = self.acquisition_panel.ui.doubleSpinBox_cameraLineTime
         line_time_spinbox.value.return_value = 48.8
-        exposed_spinbox = (
-            self.acquisition_panel.ui.doubleSpinBox_cameraExposedLines
-        )
+        exposed_spinbox = self.acquisition_panel.ui.doubleSpinBox_cameraExposedLines
         exposed_spinbox.value.return_value = 16
         self.acquisition_panel.ui.doubleSpinBox_cameraDelayLines.value.return_value = 0
-        shutter_combo = (
-            self.acquisition_panel.ui.comboBox_cameraShutterMode
-        )
+        shutter_combo = self.acquisition_panel.ui.comboBox_cameraShutterMode
         shutter_combo.currentText.return_value = "Rolling"
         # Sync checkboxes — default unchecked (the no-sync branch).
         self.scan_panel.ui.checkBox_galvoSync.isChecked.return_value = False
@@ -129,7 +121,9 @@ def test_galvo_amplitude_slots_propagate_and_sync() -> None:
     acq, shell = _make_acq()
     shell.scan_panel.ui.checkBox_galvoSync.isChecked.return_value = True
     acq.updateUi_galvo_left_amplitude()
-    shell.scan_panel.ui.doubleSpinBox_galvoRightAmplitude.setValue.assert_called_with(1.5)
+    shell.scan_panel.ui.doubleSpinBox_galvoRightAmplitude.setValue.assert_called_with(
+        1.5
+    )
     shell.scan_panel.ui.doubleSpinBox_galvoRightOffset.setValue.assert_called_with(0.5)
     assert acq.siggen.galvo_right_amplitude == 1.0
 
@@ -142,7 +136,9 @@ def test_galvo_amplitude_slots_propagate_and_sync() -> None:
     acq, shell = _make_acq()
     shell.scan_panel.ui.checkBox_galvoSync.isChecked.return_value = True
     acq.updateUi_galvo_right_amplitude()
-    shell.scan_panel.ui.doubleSpinBox_galvoLeftAmplitude.setValue.assert_called_with(1.0)
+    shell.scan_panel.ui.doubleSpinBox_galvoLeftAmplitude.setValue.assert_called_with(
+        1.0
+    )
     assert acq.siggen.galvo_left_amplitude == 1.5
 
 
@@ -179,7 +175,9 @@ def test_galvo_sync_checked_mirrors_left_to_right() -> None:
     acq, shell = _make_acq()
     shell.scan_panel.ui.checkBox_galvoSync.isChecked.return_value = True
     acq.updateUi_galvo_sync()
-    shell.scan_panel.ui.doubleSpinBox_galvoRightAmplitude.setValue.assert_called_with(1.5)
+    shell.scan_panel.ui.doubleSpinBox_galvoRightAmplitude.setValue.assert_called_with(
+        1.5
+    )
     shell.scan_panel.ui.doubleSpinBox_galvoRightOffset.setValue.assert_called_with(0.5)
     # siggen.galvo_right_amplitude reads the right widget's .value() after
     # setValue — Mock's setValue does not update value.return_value, so the
@@ -303,8 +301,9 @@ def test_etl_activate_propagates_to_siggen() -> None:
 # -- Camera shutter mode + setting slots ------------------------------------
 
 
-def test_camera_shutter_mode_rolling_enables_exposure_disables_lightsheet_widgets(
-) -> None:
+def test_camera_shutter_mode_rolling_enables_exposure_disables_lightsheet_widgets() -> (
+    None
+):
     acq, shell = _make_acq()
     shutter = shell.acquisition_panel.ui.comboBox_cameraShutterMode
     shutter.currentText.return_value = "Rolling"

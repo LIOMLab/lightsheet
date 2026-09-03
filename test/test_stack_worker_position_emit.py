@@ -50,8 +50,11 @@ def _make_bundle() -> DeviceBundle:
     )
     etls = MockETLs()
     return DeviceBundle(
-        camera=camera, siggen=siggen,
-        motors=motors, etls=etls, lasers=lasers,
+        camera=camera,
+        siggen=siggen,
+        motors=motors,
+        etls=etls,
+        lasers=lasers,
     )
 
 
@@ -120,7 +123,9 @@ def test_stack_worker_position_emit_uses_signal_not_direct_call(qtbot: QtBot) ->
     shell.lasers = bundle.lasers
     hw = Mock()
     worker = StackWorker(
-        bundle, hw, shell,  # ty: ignore[invalid-argument-type]
+        bundle,
+        hw,
+        shell,  # ty: ignore[invalid-argument-type]
         save_description="test sample",
         save_stitch_blend=False,
         save_all_crop=False,
@@ -138,8 +143,7 @@ def test_stack_worker_position_emit_uses_signal_not_direct_call(qtbot: QtBot) ->
 
     # The per-plane position update must reach the GUI via the queued signal.
     assert shell.sig_refresh_position_horizontal.emit.called, (
-        "StackWorker.run must emit sig_refresh_position_horizontal "
-        "after the motor move"
+        "StackWorker.run must emit sig_refresh_position_horizontal after the motor move"
     )
     # The legacy direct cross-thread widget mutation must NOT happen.
     assert not shell.updateUi_position_horizontal.called, (

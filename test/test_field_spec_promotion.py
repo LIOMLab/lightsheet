@@ -170,9 +170,7 @@ def test_applySpec_applied_suffix_decimals_range(
         )
 
 
-def test_no_slider_widgets_remain(
-    qtbot: QtBot, request: pytest.FixtureRequest
-) -> None:
+def test_no_slider_widgets_remain(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     """None of the formerly slider-paired fields has a QSlider sibling
     widget anymore. The sliders were removed from the panel .ui files
     because the FieldSpecSpinBox is itself scrollable; a separate
@@ -221,11 +219,11 @@ def test_wheel_gate_unfocused_spinbox_ignores_wheel(
     ctrl, _ = make_controller(qtbot, request)
     # Test one representative spinbox per panel that has one.
     representatives = (
-        "doubleSpinBox_sampleSetHPosition",   # motor_panel
-        "doubleSpinBox_cameraExposureTime",   # acquisition_panel
-        "doubleSpinBox_acqFirstPlane",        # stack_panel
-        "doubleSpinBox_etlLeftAmplitude",     # scan_panel
-        "doubleSpinBox_laserOneAmplitude",    # laser_panel
+        "doubleSpinBox_sampleSetHPosition",  # motor_panel
+        "doubleSpinBox_cameraExposureTime",  # acquisition_panel
+        "doubleSpinBox_acqFirstPlane",  # stack_panel
+        "doubleSpinBox_etlLeftAmplitude",  # scan_panel
+        "doubleSpinBox_laserOneAmplitude",  # laser_panel
     )
     for obj_name in representatives:
         sb = _get_spinbox(ctrl, obj_name)
@@ -268,8 +266,12 @@ def test_wheel_gate_focused_spinbox_responds(qtbot: QtBot) -> None:
     qtbot.waitExposed(sb)
     sb.applySpec(
         FieldSpec(
-            unit="", decimals=0, single_step=1, page_step=10,
-            minimum=0, maximum=1000,
+            unit="",
+            decimals=0,
+            single_step=1,
+            page_step=10,
+            minimum=0,
+            maximum=1000,
         )
     )
     sb.setValue(5.0)

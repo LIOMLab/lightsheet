@@ -62,9 +62,7 @@ from lightsheet.hal import (
 
 _HERE = Path(__file__).resolve().parent
 _CONTROLLER_SRC = _HERE / ".." / ".." / "lightsheet" / "gui" / "controller.py"
-_ACQ_SRC = (
-    _HERE / ".." / ".." / "lightsheet" / "gui" / "acquisition_coordinator.py"
-)
+_ACQ_SRC = _HERE / ".." / ".." / "lightsheet" / "gui" / "acquisition_coordinator.py"
 _SCAN_MIXIN_SRC = (
     _HERE / ".." / ".." / "lightsheet" / "gui" / "workers" / "scan_mixin.py"
 )

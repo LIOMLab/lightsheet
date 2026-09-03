@@ -255,9 +255,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 # The frozen FocusConfig is passed through so the writers
                 # publish the block size and residual settings as group attrs.
                 # When disabled, no focus trajectory is recorded or written.
-                focus_enabled = (
-                    self._focus_cfg is not None and self._focus_cfg.enabled
-                )
+                focus_enabled = self._focus_cfg is not None and self._focus_cfg.enabled
                 self._shell._fs.configure_focus(  # ty: ignore[unresolved-attribute]
                     focus_enabled,
                     config=self._focus_cfg if focus_enabled else None,
@@ -425,9 +423,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                             sharpness_metric = frame_sharpness_variance(
                                 self._shell.reconstructed_frame
                             )
-                            self._focus_controller.update_residual(
-                                sharpness_metric
-                            )
+                            self._focus_controller.update_residual(sharpness_metric)
 
                         feedforward_camera_pos_mm = float(
                             np.interp(
@@ -436,9 +432,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                                 self._focus_curve.camera_pos,
                             )
                         )
-                        focus_pos_mm = self._focus_controller.target(
-                            stage_pos_mm
-                        )
+                        focus_pos_mm = self._focus_controller.target(stage_pos_mm)
                         residual_mm = self._focus_controller.residual_mm
 
                         try:
@@ -464,9 +458,9 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
 
                         if self._shell.saving_allowed:
                             self._shell._fs.add_motor_parameters(  # ty: ignore[unresolved-attribute]
-                                self._shell.current_horizontal_position_text,  # ty: ignore[unresolved-attribute]
-                                self._shell.current_vertical_position_text,  # ty: ignore[unresolved-attribute]
-                                self._shell.current_camera_position_text,  # ty: ignore[unresolved-attribute]
+                                self._shell.current_horizontal_position_text,
+                                self._shell.current_vertical_position_text,
+                                self._shell.current_camera_position_text,
                             )
                             from lightsheet.focus.types import FocusSample
 
@@ -512,9 +506,9 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
 
                         if self._shell.saving_allowed:
                             self._shell._fs.add_motor_parameters(  # ty: ignore[unresolved-attribute]
-                                self._shell.current_horizontal_position_text,  # ty: ignore[unresolved-attribute]
-                                self._shell.current_vertical_position_text,  # ty: ignore[unresolved-attribute]
-                                self._shell.current_camera_position_text,  # ty: ignore[unresolved-attribute]
+                                self._shell.current_horizontal_position_text,
+                                self._shell.current_vertical_position_text,
+                                self._shell.current_camera_position_text,
                             )
 
                     # Pre-acquire guard: a Stop or E-stop requested while the worker

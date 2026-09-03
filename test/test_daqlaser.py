@@ -336,9 +336,7 @@ def test_write_volts_aborts_on_zero_mw_per_volt() -> None:
     the error surface stays clean. The ZeroDivisionError guard is still
     verified on the stub path (the write raises, surfacing the error)."""
     if not _nidaqmx_is_stub:
-        pytest.skip(
-            "Stub-only failure path -- the real nidaqmx writes 0.0 V cleanly"
-        )
+        pytest.skip("Stub-only failure path -- the real nidaqmx writes 0.0 V cleanly")
     laser = DAQLaser(
         terminal="/Dev7/ao0",
         wavelength=555,

@@ -147,10 +147,7 @@ def test_load_sections_from_ini_overlay_partial_does_not_clobber(
         "Status Poll Interval = 1000\n"
     )
     overlay = tmp_path / "overlay.ini"
-    overlay.write_text(
-        "[iBeam]\n"
-        "Max Power = 80000\n"
-    )
+    overlay.write_text("[iBeam]\nMax Power = 80000\n")
     sections = load_sections_from_ini(str(baseline), overlay_path=str(overlay))
     # Max Power overridden from overlay.
     assert sections["iBeam"]["Max Power"] == "80000"
@@ -179,8 +176,7 @@ def test_load_sections_from_ini_overlay_explicit_empty_propagates(
     )
     overlay = tmp_path / "overlay.ini"
     overlay.write_text(
-        "[iBeam]\n"
-        "Port =\n"  # explicitly empty — should clear the baseline value
+        "[iBeam]\nPort =\n"  # explicitly empty — should clear the baseline value
     )
     sections = load_sections_from_ini(str(baseline), overlay_path=str(overlay))
     # Port explicitly cleared by overlay.

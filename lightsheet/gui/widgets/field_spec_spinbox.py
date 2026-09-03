@@ -80,10 +80,7 @@ class FieldSpecSpinBox(QDoubleSpinBox):
         mods = QApplication.keyboardModifiers()
         if (
             mods
-            & (
-                Qt.KeyboardModifier.ControlModifier
-                | Qt.KeyboardModifier.ShiftModifier
-            )
+            & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)
             and self._spec is not None
             and self._spec.single_step != 0
         ):

@@ -37,7 +37,10 @@ from pytestqt.qtbot import QtBot
 
 _LASER_PANEL_PATH = (
     Path(__file__).resolve().parents[1]
-    / "lightsheet" / "gui" / "panels" / "laser_panel.py"
+    / "lightsheet"
+    / "gui"
+    / "panels"
+    / "laser_panel.py"
 )
 
 
@@ -80,9 +83,11 @@ def test_optimistic_echo_on_when_turning_on(
 
     def _fake_thread(*args: Any, **kwargs: Any) -> Any:
         spawned["did"] = True
+
         class _T:
             def start(self) -> None:
                 pass
+
         return _T()
 
     with patch.object(real_thread, "Thread", _fake_thread):
@@ -117,6 +122,7 @@ def test_optimistic_echo_off_when_turning_off(
         class _T:
             def start(self) -> None:
                 pass
+
         return _T()
 
     with patch.object(real_thread, "Thread", _fake_thread):
@@ -194,10 +200,13 @@ def test_first_energize_dialog_appears_first_time(
         class _T:
             def start(self) -> None:
                 pass
+
         return _T()
 
-    with patch("lightsheet.gui.panels.laser_panel.QMessageBox.question", _capture), \
-         patch.object(real_thread, "Thread", _fake_thread):
+    with (
+        patch("lightsheet.gui.panels.laser_panel.QMessageBox.question", _capture),
+        patch.object(real_thread, "Thread", _fake_thread),
+    ):
         btn.click()
 
     title, text = captured["text"]  # ty: ignore[not-iterable]
@@ -228,16 +237,22 @@ def test_first_energize_cancel_reverts_button_and_does_not_energize(
 
     def _fake_thread(*a: Any, **k: Any) -> Any:
         spawned["did"] = True
+
         class _T:
             def start(self) -> None:
                 pass
+
         return _T()
 
     from PySide6.QtWidgets import QMessageBox
 
-    with patch("lightsheet.gui.panels.laser_panel.QMessageBox.question",
-               return_value=QMessageBox.StandardButton.Cancel), \
-         patch.object(real_thread, "Thread", _fake_thread):
+    with (
+        patch(
+            "lightsheet.gui.panels.laser_panel.QMessageBox.question",
+            return_value=QMessageBox.StandardButton.Cancel,
+        ),
+        patch.object(real_thread, "Thread", _fake_thread),
+    ):
         btn.click()
 
     assert spawned["did"] is False, "Cancel must NOT spawn the toggle thread"
@@ -265,6 +280,7 @@ def test_first_energize_dont_warn_again_sets_flag(
         class _T:
             def start(self) -> None:
                 pass
+
         return _T()
 
     from PySide6.QtWidgets import QMessageBox
@@ -278,8 +294,10 @@ def test_first_energize_dont_warn_again_sets_flag(
         call_count["n"] += 1
         return QMessageBox.StandardButton.Discard
 
-    with patch("lightsheet.gui.panels.laser_panel.QMessageBox.question", _question), \
-         patch.object(real_thread, "Thread", _fake_thread):
+    with (
+        patch("lightsheet.gui.panels.laser_panel.QMessageBox.question", _question),
+        patch.object(real_thread, "Thread", _fake_thread),
+    ):
         btn.click()  # first energize — dialog shown, "don't warn again"
         # Reset the button to unchecked so the second click is again a
         # "turning on" — the flag must skip the dialog on this second
@@ -308,16 +326,22 @@ def test_first_energize_energize_proceeds(
 
     def _fake_thread(*a: Any, **k: Any) -> Any:
         spawned["did"] = True
+
         class _T:
             def start(self) -> None:
                 pass
+
         return _T()
 
     from PySide6.QtWidgets import QMessageBox
 
-    with patch("lightsheet.gui.panels.laser_panel.QMessageBox.question",
-               return_value=QMessageBox.StandardButton.Yes), \
-         patch.object(real_thread, "Thread", _fake_thread):
+    with (
+        patch(
+            "lightsheet.gui.panels.laser_panel.QMessageBox.question",
+            return_value=QMessageBox.StandardButton.Yes,
+        ),
+        patch.object(real_thread, "Thread", _fake_thread),
+    ):
         btn.click()
 
     assert spawned["did"] is True, "Energize must spawn the toggle thread"
@@ -348,11 +372,13 @@ def test_no_qthread_in_laser_panel() -> None:
     # Strip comments + docstrings by checking only executable lines: no
     # QThread import and no QThread(...) instantiation.
     import_lines = [
-        line for line in src.splitlines()
+        line
+        for line in src.splitlines()
         if line.strip().startswith(("import ", "from ")) and "QThread" in line
     ]
     instantiations = [
-        line for line in src.splitlines()
+        line
+        for line in src.splitlines()
         if "QThread(" in line and not line.strip().startswith("#")
     ]
     assert not import_lines, f"laser_panel.py must not import QThread: {import_lines}"

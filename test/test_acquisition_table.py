@@ -93,9 +93,7 @@ def test_zarr_estimate_is_larger_than_hdf5(
     assert abs(both_mb - (hdf5_mb + zarr_mb)) < 1.0, (hdf5_mb, zarr_mb, both_mb)
 
 
-def test_format_radio_re_estimates_table(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_format_radio_re_estimates_table(qtbot: QtBot, request: FixtureRequest) -> None:
     """Switching the save-format radio re-estimates the Est. Size cell via
     the controller subscription (the buttonClicked signal is wired to
     recompute_all_rows)."""

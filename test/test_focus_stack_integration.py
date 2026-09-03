@@ -146,7 +146,6 @@ def test_move_axes_parallel_called_only_at_block_boundaries(
     horizontal-only ``move_absolute_position`` calls."""
     from _helpers.controller_fixture import make_controller
 
-
     ctrl, _bundle = make_controller(qtbot, request)
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)
 
@@ -189,9 +188,7 @@ def test_move_axes_parallel_called_only_at_block_boundaries(
         patch.object(
             worker.motors.horizontal, "move_absolute_position", _track_horizontal
         ),
-        patch.object(
-            worker.motors.camera, "move_absolute_position", _track_camera
-        ),
+        patch.object(worker.motors.camera, "move_absolute_position", _track_camera),
     ):
         worker.run()
 
@@ -220,7 +217,6 @@ def test_add_motor_parameters_logs_held_camera_position_within_block(
     position is the actually-applied (held) position, not the
     feedforward target for planes 1-7."""
     from _helpers.controller_fixture import make_controller
-
 
     ctrl, _bundle = make_controller(qtbot, request)
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)
@@ -270,7 +266,6 @@ def test_focus_trajectory_records_one_sample_per_block(
     matches the move_axes_parallel camera target."""
     from _helpers.controller_fixture import make_controller
 
-
     ctrl, _bundle = make_controller(qtbot, request)
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)
 
@@ -297,15 +292,11 @@ def test_focus_trajectory_records_one_sample_per_block(
 
     assert len(finished_emits) == 1
     traj = ctrl._fs.focus_trajectory
-    assert len(traj) == 2, (
-        f"expected 2 focus samples; got {len(traj)}"
-    )
+    assert len(traj) == 2, f"expected 2 focus samples; got {len(traj)}"
 
     for i, sample in enumerate(traj):
         assert sample.block_index == i
-        camera_move = next(
-            m for m in parallel_calls[i] if m[0] == "camera"
-        )
+        camera_move = next(m for m in parallel_calls[i] if m[0] == "camera")
         camera_target = camera_move[1]
         assert sample.applied_camera_pos_mm == pytest.approx(camera_target)
 
@@ -395,7 +386,6 @@ def test_focus_over_travel_aborts_stack_with_beep(
     on the ``move_axes_parallel`` call is exercised.
     """
     from _helpers.controller_fixture import make_controller
-
 
     ctrl, _bundle = make_controller(qtbot, request)
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)
@@ -490,7 +480,6 @@ def test_estop_prevents_next_block_boundary_focus_move(
     """Setting estop_event after the first block aborts before the second
     block-boundary focus move is attempted."""
     from _helpers.controller_fixture import make_controller
-
 
     ctrl, _bundle = make_controller(qtbot, request)
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)

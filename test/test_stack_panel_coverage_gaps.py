@@ -81,9 +81,7 @@ def test_last_plane_edited_out_of_range_beeps_and_reverts(
     assert len(messages) == 1
     assert "outside the stage travel limits" in messages[0]
     # Reverted to the high limit (mm).
-    assert sp.ui.doubleSpinBox_acqLastPlane.value() == pytest.approx(
-        high_um / 1000.0
-    )
+    assert sp.ui.doubleSpinBox_acqLastPlane.value() == pytest.approx(high_um / 1000.0)
 
 
 def test_last_plane_edited_no_motors_returns_early(
@@ -168,9 +166,7 @@ def test_summary_render_multi_channel_doubles_estimates(
     assert "2 ch x 11 planes" in multi
 
 
-def test_summary_render_partial_state(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_summary_render_partial_state(qtbot: QtBot, request: FixtureRequest) -> None:
     """When only one boundary is set, the summary shows the partial-state
     message (the ``first_set != last_set`` branch)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -181,9 +177,7 @@ def test_summary_render_partial_state(
     assert "Partial stack plan" in sp.ui.label_stackPlanSummary.text()
 
 
-def test_summary_render_empty_state(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_summary_render_empty_state(qtbot: QtBot, request: FixtureRequest) -> None:
     """When neither boundary is set, the summary shows the empty-state
     message (the ``not first_set and not last_set`` branch)."""
     ctrl, _ = make_controller(qtbot, request)
@@ -547,9 +541,7 @@ def test_build_adaptive_config_missing_combo_uses_rolling_default(
 # ---------------------------------------------------------------------------
 
 
-def test_summary_render_no_laser_panel(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_summary_render_no_laser_panel(qtbot: QtBot, request: FixtureRequest) -> None:
     """When ``shell.laser_panel`` is None, the multi-channel detection
     skips the checkbox read and renders a single-channel summary (the
     ``laser_panel is None`` False-guard branch, 345->350)."""
@@ -632,9 +624,7 @@ def test_narrow_adaptive_power_maxima_bad_live_max_skips(
     type(bad_laser).max_power = property(  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
         lambda self: (_ for _ in ()).throw(TypeError("bad"))
     )
-    bad_bundle = replace(
-        real_bundle, lasers=(bad_laser, bad_laser)
-    )
+    bad_bundle = replace(real_bundle, lasers=(bad_laser, bad_laser))
     ctrl._bundle = bad_bundle  # type: ignore[assignment]
     try:
         # Must not raise — the except branches swallow the TypeError.

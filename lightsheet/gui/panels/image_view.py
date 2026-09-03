@@ -67,9 +67,7 @@ class ImageView(QGraphicsView):
         # QGraphicsView adds a default 4px margin that can cause blank
         # rendering in tight layouts; the SC2 exit criterion requires
         # this padding fix.
-        self.setStyleSheet(
-            f"QGraphicsView {{ padding: {_s.ZERO}px; border: none; }}"
-        )
+        self.setStyleSheet(f"QGraphicsView {{ padding: {_s.ZERO}px; border: none; }}")
         self.setFrameShape(QGraphicsView.Shape.NoFrame)
         # No antialiasing — pixel-accurate display of grayscale frames.
         # QPainter.RenderHint(0) is the "no hints" value (Antialiasing
@@ -80,12 +78,8 @@ class ImageView(QGraphicsView):
         # resize→fitInView→scrollbar-show/hide→resize recursion pitfall.
         # With scrollbars always off the viewport size only changes on
         # real resizes, so fitInView in resizeEvent is non-reentrant.
-        self.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-        )
-        self.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-        )
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         # Non-empty sceneRect at construction so fitInView has geometry
         # before the first frame (otherwise the view shows a tiny black
         # square until setImage populates the scene). 320x240 matches
@@ -181,9 +175,7 @@ class ImageView(QGraphicsView):
         super().resizeEvent(event)
         self._placeholder.setGeometry(self.rect())
         if self._pixmap_item is not None and not self._user_transformed:
-            self.fitInView(
-                self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio
-            )
+            self.fitInView(self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         """Zoom the view with the mouse wheel, centered on the cursor.
@@ -217,7 +209,7 @@ class ImageView(QGraphicsView):
         autoRange: bool = False,
         autoLevels: bool = False,
         autoHistogramRange: bool = False,
-        tint: str | None | _KeepLastTint = _KEEP_TINT,
+        tint: str | _KeepLastTint | None = _KEEP_TINT,
     ) -> None:
         """Display a uint16 numpy array as a grayscale image, optionally
         tinted with a per-channel color.
@@ -272,9 +264,9 @@ class ImageView(QGraphicsView):
         if span <= 0:
             frame_scaled = (frame > self._levels_min).astype(np.uint8) * 255
         else:
-            frame_scaled = (
-                (frame_clamped - self._levels_min) / span * 255
-            ).astype(np.uint8)
+            frame_scaled = ((frame_clamped - self._levels_min) / span * 255).astype(
+                np.uint8
+            )
 
         # Build a QImage over the uint8 buffer. Format_Grayscale8 is
         # cross-platform safe (QPixmap is typically backed by 32-bit

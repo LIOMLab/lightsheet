@@ -78,8 +78,7 @@ def test_show_hide_images_pane_uses_splitter_set_sizes(
     # splitter sizes + the action checked state.
     sizes_after_hide = splitter.sizes()
     assert sizes_after_hide[0] == 0, (
-        f"Expected imagesPane splitter size 0 after hide, got "
-        f"{sizes_after_hide}"
+        f"Expected imagesPane splitter size 0 after hide, got {sizes_after_hide}"
     )
     # The action's checked state must reflect the pane visibility
     # (unchecked = pane hidden).
@@ -89,8 +88,7 @@ def test_show_hide_images_pane_uses_splitter_set_sizes(
     ctrl.updateUi_show_hide_images_pane()
     sizes_after_show = splitter.sizes()
     assert sizes_after_show[0] > 0, (
-        f"Expected imagesPane splitter size > 0 after show, got "
-        f"{sizes_after_show}"
+        f"Expected imagesPane splitter size > 0 after show, got {sizes_after_show}"
     )
     assert action.isChecked() is True
 
@@ -122,8 +120,7 @@ def test_show_hide_controls_pane_uses_splitter_set_sizes(
     sizes_after_hide = splitter.sizes()
     # controlsPane is the SECOND widget in the splitter (index 1).
     assert sizes_after_hide[1] == 0, (
-        f"Expected controlsPane splitter size 0 after hide, got "
-        f"{sizes_after_hide}"
+        f"Expected controlsPane splitter size 0 after hide, got {sizes_after_hide}"
     )
     assert action.isChecked() is False
 
@@ -131,8 +128,7 @@ def test_show_hide_controls_pane_uses_splitter_set_sizes(
     ctrl.updateUi_show_hide_controls_pane()
     sizes_after_show = splitter.sizes()
     assert sizes_after_show[1] > 0, (
-        f"Expected controlsPane splitter size > 0 after show, got "
-        f"{sizes_after_show}"
+        f"Expected controlsPane splitter size > 0 after show, got {sizes_after_show}"
     )
     assert action.isChecked() is True
 

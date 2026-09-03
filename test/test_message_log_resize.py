@@ -35,15 +35,12 @@ def _make(qtbot: QtBot, request: pytest.FixtureRequest) -> tuple[object, object]
     return make_controller(qtbot, request)
 
 
-def test_message_log_cap_removed(
-    qtbot: QtBot, request: pytest.FixtureRequest
-) -> None:
+def test_message_log_cap_removed(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     """The fixed 80 px max-height cap is gone (set to 16777215)."""
     ctrl, _ = _make(qtbot, request)
     max_h = ctrl.ui.plainTextEdit_messageLog.maximumHeight()  # ty: ignore[unresolved-attribute]
     assert max_h != 80, (
-        f"message log max height is still 80 (got {max_h}) — the cap was "
-        "not removed"
+        f"message log max height is still 80 (got {max_h}) — the cap was not removed"
     )
     assert max_h >= 16777215, (
         f"message log max height should be effectively unbounded "
@@ -51,9 +48,7 @@ def test_message_log_cap_removed(
     )
 
 
-def test_message_splitter_exists(
-    qtbot: QtBot, request: pytest.FixtureRequest
-) -> None:
+def test_message_splitter_exists(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     """A vertical QSplitter (message_splitter) hosts stackedPanels + the
     message log inside controlsPane."""
     ctrl, _ = _make(qtbot, request)
@@ -142,8 +137,7 @@ def test_message_log_select_and_copy_enabled(
     ctrl, _ = _make(qtbot, request)
     flags = ctrl.ui.plainTextEdit_messageLog.textInteractionFlags()  # ty: ignore[unresolved-attribute]
     assert flags == Qt.TextInteractionFlag.TextSelectableByMouse, (
-        f"textInteractionFlags is {flags}, expected "
-        "TextSelectableByMouse"
+        f"textInteractionFlags is {flags}, expected TextSelectableByMouse"
     )
 
 

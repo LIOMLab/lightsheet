@@ -26,6 +26,7 @@ pytest.importorskip("PySide6")
 
 from lightsheet.gui.coordinators.acquisition_coordinator import AcquisitionCoordinator
 from lightsheet.gui.coordinators.hardware_manager import HardwareManager
+from lightsheet.gui.panels import acquisition_panel
 from lightsheet.gui.workers import LiveWorker, PreviewWorker, SingleWorker, StackWorker
 from lightsheet.hal import (
     DeviceBundle,
@@ -188,7 +189,11 @@ def _make_single_worker(qtbot: QtBot) -> tuple[SingleWorker, _WorkerShell, Mock]
     shell = _WorkerShell()
     hw = Mock()
     worker = SingleWorker(
-        bundle, hw, shell, save_description="test sample", save_stitch_blend=False  # ty: ignore[invalid-argument-type]
+        bundle,
+        hw,
+        shell,  # ty: ignore[invalid-argument-type]
+        save_description="test sample",
+        save_stitch_blend=False,
     )
     return worker, shell, hw
 
@@ -491,10 +496,12 @@ def test_acquire_scan_siggen_error_aborts(qtbot: QtBot) -> None:
     """acquire_scan with siggen.error set after create_scanner emits
     message + returns early (lines 337-344)."""
     worker, shell, _hw = _make_single_worker(qtbot)
+
     # Make create_scanner set error=1.
     def _fake_create_scanner() -> None:
         worker.siggen.error = 1
         worker.siggen.error_message = "DAQ error"
+
     worker.siggen.create_scanner = _fake_create_scanner  # ty: ignore[invalid-assignment]
     result = worker.acquire_scan()
     assert result is False, "acquire_scan must return False after a siggen error"
@@ -506,9 +513,11 @@ def test_acquire_scan_camera_timeout_aborts(qtbot: QtBot) -> None:
     """acquire_scan with camera.recorder_timeout_status set after monitor
     emits timeout message + returns early (lines 363-384)."""
     worker, shell, _hw = _make_single_worker(qtbot)
+
     # Make monitor_recorder set recorder_timeout_status.
     def _fake_monitor(n: object) -> None:
         worker.camera.recorder_timeout_status = True
+
     worker.camera.monitor_recorder = _fake_monitor  # ty: ignore[invalid-assignment]
     result = worker.acquire_scan()
     assert result is False, "acquire_scan must return False after a recorder timeout"
@@ -730,10 +739,12 @@ def test_stack_mode_worker_stop_interrupts(qtbot: QtBot) -> None:
     shell.stack_mode_started = True  # start True so lasers start
     shell.saving_allowed = False
     shell.number_of_planes = 1
+
     # Set stack_mode_started to False before the loop body runs.
     # We'll use a side_effect on sig_progress_update to flip it.
     def _flip(*a: Any) -> None:
         shell.stack_mode_started = False
+
     shell.sig_progress_update.side_effect = _flip
     worker.acquire_scan = Mock()
     finished_emits: list[None] = []
@@ -910,7 +921,7 @@ def test_single_mode_button_presamples_multi_channel(
         make_controller,
     )
 
-    from lightsheet.gui import panels as panels_module
+
 
     # --- Both checked -> multi_channel=True ---
     ctrl, _bundle = make_controller(qtbot, request)
@@ -941,10 +952,14 @@ def test_single_mode_button_presamples_multi_channel(
 
     with (
         patch.object(
-            panels_module.acquisition_panel, "SingleWorker", side_effect=_capture_worker  # ty: ignore[possibly-missing-submodule]
+            acquisition_panel,
+            "SingleWorker",
+            side_effect=_capture_worker,
         ),
         patch.object(
-            panels_module.acquisition_panel, "QThread", return_value=fake_thread  # ty: ignore[possibly-missing-submodule]
+            acquisition_panel,
+            "QThread",
+            return_value=fake_thread,
         ),
     ):
         ctrl.acquisition_panel.updateUi_single_mode_button()
@@ -964,10 +979,14 @@ def test_single_mode_button_presamples_multi_channel(
 
     with (
         patch.object(
-            panels_module.acquisition_panel, "SingleWorker", side_effect=_capture_worker  # ty: ignore[possibly-missing-submodule]
+            acquisition_panel,
+            "SingleWorker",
+            side_effect=_capture_worker,
         ),
         patch.object(
-            panels_module.acquisition_panel, "QThread", return_value=fake_thread2  # ty: ignore[possibly-missing-submodule]
+            acquisition_panel,
+            "QThread",
+            return_value=fake_thread2,
         ),
     ):
         ctrl.acquisition_panel.updateUi_single_mode_button()
@@ -1002,9 +1021,7 @@ def test_stack_worker_multi_channel_per_plane_cycle(qtbot: QtBot) -> None:
 
     def _fake_acquire_scan() -> bool:
         call_count["n"] += 1
-        shell.reconstructed_frame = np.full(
-            (4, 4), call_count["n"], dtype=np.uint16
-        )
+        shell.reconstructed_frame = np.full((4, 4), call_count["n"], dtype=np.uint16)
         return True
 
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
@@ -1284,7 +1301,7 @@ def test_spawn_stack_worker_presamples_multi_channel(
         make_controller,
     )
 
-    from lightsheet.gui import panels as panels_module
+
 
     # --- Both checked -> multi_channel=True ---
     ctrl, _bundle = make_controller(qtbot, request)
@@ -1304,7 +1321,8 @@ def test_spawn_stack_worker_presamples_multi_channel(
     ctrl.saving_allowed = False
     # Patch QMessageBox.question to auto-answer Yes (proceed without saving).
     with patch.object(
-        panels_module.acquisition_panel, "QMessageBox"  # ty: ignore[possibly-missing-submodule]
+        acquisition_panel,
+        "QMessageBox",
     ) as msg_box_mod:
         msg_box_mod.question.return_value = msg_box_mod.StandardButton.Yes
         msg_box_mod.warning = Mock()
@@ -1333,12 +1351,14 @@ def test_spawn_stack_worker_presamples_multi_channel(
         fake_thread = Mock()
         with (
             patch.object(
-                panels_module.acquisition_panel,  # ty: ignore[possibly-missing-submodule]
+                acquisition_panel,
                 "StackWorker",
                 side_effect=_capture_worker,
             ),
             patch.object(
-                panels_module.acquisition_panel, "QThread", return_value=fake_thread  # ty: ignore[possibly-missing-submodule]
+                acquisition_panel,
+                "QThread",
+                return_value=fake_thread,
             ),
         ):
             ctrl.acquisition_panel.updateUi_stack_mode_button()
@@ -1357,18 +1377,21 @@ def test_spawn_stack_worker_presamples_multi_channel(
     fake_thread2 = Mock()
 
     with patch.object(
-        panels_module.acquisition_panel, "QMessageBox"  # ty: ignore[possibly-missing-submodule]
+        acquisition_panel,
+        "QMessageBox",
     ) as msg_box_mod2:
         msg_box_mod2.question.return_value = msg_box_mod2.StandardButton.Yes
         msg_box_mod2.warning = Mock()
         with (
             patch.object(
-                panels_module.acquisition_panel,  # ty: ignore[possibly-missing-submodule]
+                acquisition_panel,
                 "StackWorker",
                 side_effect=_capture_worker,
             ),
             patch.object(
-                panels_module.acquisition_panel, "QThread", return_value=fake_thread2  # ty: ignore[possibly-missing-submodule]
+                acquisition_panel,
+                "QThread",
+                return_value=fake_thread2,
             ),
         ):
             ctrl.acquisition_panel.updateUi_stack_mode_button()
@@ -1433,9 +1456,7 @@ def test_preview_worker_both_checked_energizes_only_l1(qtbot: QtBot) -> None:
     for the session (D-04). lasers[0].on is called; lasers[1].on is NEVER
     called. stop_lasers at the end turns both off (L2 was never on, so
     its .off() is a no-op gated by the restored _auto_laser2 flag)."""
-    bundle, shell, hw, spies = _make_d04_shell(
-        auto_laser1=True, auto_laser2=True
-    )
+    bundle, shell, hw, spies = _make_d04_shell(auto_laser1=True, auto_laser2=True)
     shell.preview_mode_started = False  # loop doesn't execute
     worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
     finished_emits: list[None] = []
@@ -1460,9 +1481,7 @@ def test_live_worker_both_checked_energizes_only_l1(qtbot: QtBot) -> None:
     """LiveWorker.run with both auto-lasers checked energizes ONLY L1
     for the session (D-04). lasers[0].on is called; lasers[1].on is NEVER
     called."""
-    bundle, shell, hw, spies = _make_d04_shell(
-        auto_laser1=True, auto_laser2=True
-    )
+    bundle, shell, hw, spies = _make_d04_shell(auto_laser1=True, auto_laser2=True)
     shell.live_mode_started = False  # loop doesn't execute
     worker = LiveWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
     finished_emits: list[None] = []
@@ -1480,9 +1499,7 @@ def test_preview_worker_single_laser_unchanged(qtbot: QtBot) -> None:
     not fire because both flags are not True). lasers[0].on called,
     lasers[1].on NOT called (because _auto_laser2 is False, start_lasers
     skips L2 without the guard)."""
-    bundle, shell, hw, spies = _make_d04_shell(
-        auto_laser1=True, auto_laser2=False
-    )
+    bundle, shell, hw, spies = _make_d04_shell(auto_laser1=True, auto_laser2=False)
     shell.preview_mode_started = False
     worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
     finished_emits: list[None] = []

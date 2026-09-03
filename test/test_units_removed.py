@@ -56,9 +56,7 @@ def test_comboBox_units_absent_from_generated_ui_py() -> None:
 def test_label_units_absent_from_ui_file() -> None:
     """label_units is not declared in ui_shell.ui."""
     text = _UI_SHELL_UI.read_text(encoding="utf-8")
-    assert 'name="label_units"' not in text, (
-        "label_units still declared in ui_shell.ui"
-    )
+    assert 'name="label_units"' not in text, "label_units still declared in ui_shell.ui"
 
 
 def test_controller_ui_has_no_comboBox_units(

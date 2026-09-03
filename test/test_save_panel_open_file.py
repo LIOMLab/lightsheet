@@ -110,8 +110,12 @@ def test_list_zarr_datasets_multi_channel(
     )
     labels = ctrl.save_panel._list_zarr_datasets(str(zarr_path))
     assert labels == [
-        "ch0_plane_0001", "ch0_plane_0002", "ch0_plane_0003",
-        "ch1_plane_0001", "ch1_plane_0002", "ch1_plane_0003",
+        "ch0_plane_0001",
+        "ch0_plane_0002",
+        "ch0_plane_0003",
+        "ch1_plane_0001",
+        "ch1_plane_0002",
+        "ch1_plane_0003",
     ], labels
 
 
@@ -149,9 +153,7 @@ def test_read_zarr_dataset_single_channel(
     data = np.zeros((1, 3, 4, 4), dtype=np.uint16)
     data[0, 1, 0, 0] = 99  # plane 2 (0-based index 1)
     _write_zarr_store(zarr_path, data, n_channels=1)
-    slice_, attrs = ctrl.save_panel._read_zarr_dataset(
-        str(zarr_path), "plane_0002"
-    )
+    slice_, attrs = ctrl.save_panel._read_zarr_dataset(str(zarr_path), "plane_0002")
     assert slice_.shape == (4, 4)
     assert slice_[0, 0] == 99
     # Attrs come from the /acquisition group (the Zarr analog of the
@@ -174,9 +176,7 @@ def test_read_zarr_dataset_multi_channel(
     data = np.zeros((2, 3, 4, 4), dtype=np.uint16)
     data[1, 2, 0, 0] = 77  # channel 1, plane 3 (0-based index 2)
     _write_zarr_store(zarr_path, data, n_channels=2)
-    slice_, attrs = ctrl.save_panel._read_zarr_dataset(
-        str(zarr_path), "ch1_plane_0003"
-    )
+    slice_, attrs = ctrl.save_panel._read_zarr_dataset(str(zarr_path), "ch1_plane_0003")
     assert slice_.shape == (4, 4)
     assert slice_[0, 0] == 77
     # Attrs come from the /acquisition group.

@@ -79,9 +79,13 @@ def _adaptive_cfg(**overrides: object) -> Any:
     return AdaptiveConfig(**defaults)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 
 
-def _bright_to_dim_fill(acquisition_index: int, exposure_s: float,
-                        staged_power_mw: float, sensor_max: int = 65535,
-                        n_planes: int = 20) -> int:
+def _bright_to_dim_fill(
+    acquisition_index: int,
+    exposure_s: float,
+    staged_power_mw: float,
+    sensor_max: int = 65535,
+    n_planes: int = 20,
+) -> int:
     """Return a uint16 fill value whose fraction-of-sensor-max tracks a
     bright→dim profile over ``n_planes`` planes, multiplied by the
     currently staged laser power fraction so the mock frame reflects the
@@ -161,7 +165,9 @@ def test_adaptive_loop_tracks_bright_to_dim_profile(
 
     cfg = _adaptive_cfg()
     worker = StackWorker(
-        ctrl._bundle, ctrl._hw, ctrl,
+        ctrl._bundle,
+        ctrl._hw,
+        ctrl,
         save_description="adaptive tracer sample",
         save_stitch_blend=False,
         save_all_crop=False,
@@ -181,8 +187,11 @@ def test_adaptive_loop_tracks_bright_to_dim_profile(
         staged_pct = getattr(ctrl, "laser1_power_pct", 0.0)
         staged_mw = staged_pct / 100.0 * ctrl.lasers[0].max_power
         return _bright_to_dim_fill(
-            acquisition_index, exposure_s, staged_mw,
-            sensor_max=cfg.sensor_max, n_planes=n_planes,
+            acquisition_index,
+            exposure_s,
+            staged_mw,
+            sensor_max=cfg.sensor_max,
+            n_planes=n_planes,
         )
 
     # Wire the scripted hook on the mock camera.
@@ -203,9 +212,7 @@ def test_adaptive_loop_tracks_bright_to_dim_profile(
 
     # Collect the adaptive trajectory via the queued signal.
     trajectory: list[tuple] = []  # ty: ignore[missing-type-argument]
-    worker.sig_adaptive_trajectory.connect(
-        lambda *args: trajectory.append(args)
-    )
+    worker.sig_adaptive_trajectory.connect(lambda *args: trajectory.append(args))
 
     with patch.object(worker.motors.horizontal, "move_absolute_position"):
         finished_emits: list[None] = []
@@ -213,8 +220,7 @@ def test_adaptive_loop_tracks_bright_to_dim_profile(
         worker.run()
 
     assert len(finished_emits) == 1, (
-        f"StackWorker.run must emit finished exactly once; "
-        f"got {len(finished_emits)}"
+        f"StackWorker.run must emit finished exactly once; got {len(finished_emits)}"
     )
 
     # One AdaptiveCommand per main plane (pilots are NOT saved as
@@ -234,8 +240,7 @@ def test_adaptive_loop_tracks_bright_to_dim_profile(
     # All exposures within bounds.
     for e in exposures:
         assert cfg.min_exposure_s - 1e-9 <= e <= cfg.max_exposure_s + 1e-9, (
-            f"exposure {e} out of bounds "
-            f"[{cfg.min_exposure_s}, {cfg.max_exposure_s}]"
+            f"exposure {e} out of bounds [{cfg.min_exposure_s}, {cfg.max_exposure_s}]"
         )
 
     # The HDF5 stitch file must carry an /adaptive_trajectory group
@@ -243,20 +248,24 @@ def test_adaptive_loop_tracks_bright_to_dim_profile(
     fs = ctrl._fs.frame_saver
     assert isinstance(fs.filenames_lists, list)
     assert len(fs.filenames_lists) == 1, (
-        f"single-channel mode must have one channel list; "
-        f"got {len(fs.filenames_lists)}"
+        f"single-channel mode must have one channel list; got {len(fs.filenames_lists)}"
     )
     hdf5_path = Path(fs.filenames_lists[0][0])
     assert hdf5_path.exists(), f"HDF5 stitch file must exist: {hdf5_path}"
     with h5py.File(hdf5_path, "r") as f:  # ty: ignore[invalid-argument-type]
         assert "adaptive_trajectory" in f, (
-            f"HDF5 must carry /adaptive_trajectory group; "
-            f"keys={list(f.keys())}"
+            f"HDF5 must carry /adaptive_trajectory group; keys={list(f.keys())}"
         )
         grp = f["adaptive_trajectory"]
-        for ds_name in ("plane_index", "intensity_fraction", "exposure_s",
-                        "laser_power_mw", "control_variable_active",
-                        "reacquired", "power_fallback"):
+        for ds_name in (
+            "plane_index",
+            "intensity_fraction",
+            "exposure_s",
+            "laser_power_mw",
+            "control_variable_active",
+            "reacquired",
+            "power_fallback",
+        ):
             assert ds_name in grp, (  # ty: ignore[unsupported-operator]
                 f"adaptive_trajectory must carry dataset {ds_name}; "
                 f"keys={list(grp.keys())}"  # ty: ignore[unresolved-attribute]
@@ -293,7 +302,9 @@ def test_estop_aborts_before_adaptive_write(
 
     cfg = _adaptive_cfg()
     worker = StackWorker(
-        ctrl._bundle, ctrl._hw, ctrl,
+        ctrl._bundle,
+        ctrl._hw,
+        ctrl,
         save_description="adaptive tracer sample",
         save_stitch_blend=False,
         save_all_crop=False,
@@ -306,8 +317,11 @@ def test_estop_aborts_before_adaptive_write(
         staged_pct = getattr(ctrl, "laser1_power_pct", 0.0)
         staged_mw = staged_pct / 100.0 * ctrl.lasers[0].max_power
         return _bright_to_dim_fill(
-            acquisition_index, exposure_s, staged_mw,
-            sensor_max=cfg.sensor_max, n_planes=n_planes,
+            acquisition_index,
+            exposure_s,
+            staged_mw,
+            sensor_max=cfg.sensor_max,
+            n_planes=n_planes,
         )
 
     ctrl.camera.set_scripted_intensity_fn(scripted_fn)
@@ -339,9 +353,7 @@ def test_estop_aborts_before_adaptive_write(
     ctrl._hw._write_laser1_power = _write_then_estop
 
     trajectory: list[tuple] = []  # ty: ignore[missing-type-argument]
-    worker.sig_adaptive_trajectory.connect(
-        lambda *args: trajectory.append(args)
-    )
+    worker.sig_adaptive_trajectory.connect(lambda *args: trajectory.append(args))
 
     try:
         with patch.object(worker.motors.horizontal, "move_absolute_position"):
@@ -360,9 +372,7 @@ def test_estop_aborts_before_adaptive_write(
         assert ctrl.lasers[0].active is False, (
             "L1 must be inactive after E-stop (no re-energize past kill)"
         )
-        assert ctrl.lasers[1].active is False, (
-            "L2 must be inactive after E-stop"
-        )
+        assert ctrl.lasers[1].active is False, "L2 must be inactive after E-stop"
     finally:
         ctrl.estop_event.clear()
         ctrl._hw._write_laser1_power = real_write
@@ -396,7 +406,9 @@ def test_adaptive_off_preserves_fixed_stack(
 
     # adaptive_cfg=None → adaptive-off (the default fixed stack).
     worker = StackWorker(
-        ctrl._bundle, ctrl._hw, ctrl,
+        ctrl._bundle,
+        ctrl._hw,
+        ctrl,
         save_description="fixed stack sample",
         save_stitch_blend=False,
         save_all_crop=False,
@@ -421,9 +433,7 @@ def test_adaptive_off_preserves_fixed_stack(
     worker.siggen.error = 0
 
     trajectory: list[tuple] = []  # ty: ignore[missing-type-argument]
-    worker.sig_adaptive_trajectory.connect(
-        lambda *args: trajectory.append(args)
-    )
+    worker.sig_adaptive_trajectory.connect(lambda *args: trajectory.append(args))
 
     # Count extra per-plane actuator writes (power writes beyond the
     # existing select_laser path). In adaptive-off mode the loop must
@@ -449,8 +459,7 @@ def test_adaptive_off_preserves_fixed_stack(
         # computed power for lasers not under automatic control would be
         # misleading).
         assert len(trajectory) == 0, (
-            f"adaptive-off must not emit trajectory samples; "
-            f"got {len(trajectory)}"
+            f"adaptive-off must not emit trajectory samples; got {len(trajectory)}"
         )
         # Zero extra per-plane power writes (the fixed stack energizes
         # L1 once at top via start_lasers; the per-plane loop does not
@@ -489,7 +498,9 @@ def test_brighter_channel_drives_shared_exposure_in_multi_channel(
 
     cfg = _adaptive_cfg(block_size_n=8)
     worker = StackWorker(
-        ctrl._bundle, ctrl._hw, ctrl,
+        ctrl._bundle,
+        ctrl._hw,
+        ctrl,
         save_description="multi-channel adaptive sample",
         save_stitch_blend=False,
         save_all_crop=False,
@@ -537,9 +548,7 @@ def test_brighter_channel_drives_shared_exposure_in_multi_channel(
     worker.siggen.error = 0
 
     trajectory: list[tuple] = []  # ty: ignore[missing-type-argument]
-    worker.sig_adaptive_trajectory.connect(
-        lambda *args: trajectory.append(args)
-    )
+    worker.sig_adaptive_trajectory.connect(lambda *args: trajectory.append(args))
 
     try:
         with patch.object(worker.motors.horizontal, "move_absolute_position"):
@@ -588,7 +597,9 @@ def test_one_sharp_excursion_requests_one_reacquire(
 
     cfg = _adaptive_cfg(reacquire_threshold=0.08)
     worker = StackWorker(
-        ctrl._bundle, ctrl._hw, ctrl,
+        ctrl._bundle,
+        ctrl._hw,
+        ctrl,
         save_description="reacquire sample",
         save_stitch_blend=False,
         save_all_crop=False,
@@ -622,9 +633,7 @@ def test_one_sharp_excursion_requests_one_reacquire(
     worker.siggen.error = 0
 
     trajectory: list[tuple] = []  # ty: ignore[missing-type-argument]
-    worker.sig_adaptive_trajectory.connect(
-        lambda *args: trajectory.append(args)
-    )
+    worker.sig_adaptive_trajectory.connect(lambda *args: trajectory.append(args))
 
     with patch.object(worker.motors.horizontal, "move_absolute_position"):
         finished_emits: list[None] = []
@@ -636,8 +645,7 @@ def test_one_sharp_excursion_requests_one_reacquire(
     # excursion at plane 5). reacquired is arg 7 of the signal.
     reacquired_count = sum(1 for row in trajectory if row[6] is True)
     assert reacquired_count >= 1, (
-        f"sharp excursion must trigger at least one re-acquire; "
-        f"got {reacquired_count}"
+        f"sharp excursion must trigger at least one re-acquire; got {reacquired_count}"
     )
     # No more than max_reacquire_attempts re-acquires.
     assert reacquired_count <= cfg.max_reacquire_attempts, (
@@ -654,7 +662,11 @@ def test_one_sharp_excursion_requests_one_reacquire(
 
 
 def _make_adaptive_worker(
-    qtbot: Any, request: Any, tmp_path: Path, *, multi_channel: bool = False,
+    qtbot: Any,
+    request: Any,
+    tmp_path: Path,
+    *,
+    multi_channel: bool = False,
     cfg: Any = None,
 ) -> tuple[Any, Any]:
     """Construct a real controller + StackWorker with an enabled adaptive
@@ -677,7 +689,9 @@ def _make_adaptive_worker(
     if cfg is None:
         cfg = _adaptive_cfg()
     worker = StackWorker(
-        ctrl._bundle, ctrl._hw, ctrl,
+        ctrl._bundle,
+        ctrl._hw,
+        ctrl,
         save_description="adaptive write-failure sample",
         save_stitch_blend=False,
         save_all_crop=False,
@@ -724,12 +738,15 @@ def _make_adaptive_worker(
     return ctrl, worker
 
 
-def _make_failing_write(real_write: Callable[[float], None],
-                        exc: Exception) -> Callable[[float], None]:
+def _make_failing_write(
+    real_write: Callable[[float], None], exc: Exception
+) -> Callable[[float], None]:
     """Wrap a real _write_laserN_power so it raises ``exc`` instead of
     writing, leaving the HAL clamp path intact for the next call."""
+
     def _fail(pct: float) -> None:
         raise exc
+
     return _fail
 
 
@@ -783,9 +800,7 @@ def test_apply_adaptive_command_l1_write_failure_emits_copy_and_continues(
     # (no exception escapes, no broken state).
     messages.clear()
     worker._apply_adaptive_command(cmd)
-    assert messages == [], (
-        f"retry after restored write must not emit; got {messages}"
-    )
+    assert messages == [], f"retry after restored write must not emit; got {messages}"
 
 
 def test_apply_adaptive_command_l2_write_failure_emits_copy_and_continues(
@@ -794,9 +809,7 @@ def test_apply_adaptive_command_l2_write_failure_emits_copy_and_continues(
     """An L2 power-write exception (multi-channel) is caught separately,
     emits the exact mandated L2 copy, and does not abort. L1 is written
     successfully before L2 fails."""
-    ctrl, worker = _make_adaptive_worker(
-        qtbot, request, tmp_path, multi_channel=True
-    )
+    ctrl, worker = _make_adaptive_worker(qtbot, request, tmp_path, multi_channel=True)
 
     from lightsheet.adaptive.types import AdaptiveCommand
 
@@ -910,9 +923,7 @@ def test_record_adaptive_step_emits_exhaustion_message(
     # robust to p99 rounding.
     from lightsheet.adaptive.intensity import frame_intensity_pct
 
-    observed = frame_intensity_pct(
-        ctrl.reconstructed_frame, cfg.sensor_max
-    )
+    observed = frame_intensity_pct(ctrl.reconstructed_frame, cfg.sensor_max)
     expected_dev_pct = round(abs(observed - target_mid) * 100.0)
 
     messages: list[str] = []
@@ -945,9 +956,7 @@ def test_record_adaptive_step_emits_exhaustion_message(
         worker._adaptive_controller.update = real_update
 
     exh_msgs = [m for m in messages if "Re-acquire fallback exhausted" in m]
-    assert len(exh_msgs) == 1, (
-        f"expected one exhaustion message; got {messages}"
-    )
+    assert len(exh_msgs) == 1, f"expected one exhaustion message; got {messages}"
     msg = exh_msgs[0]
     assert "plane 5" in msg
     assert "review the trajectory after the run" in msg
@@ -999,6 +1008,7 @@ def test_record_adaptive_step_legacy_command_without_flag_accepted(
     class _LegacyCmd:
         """A minimal command-like object without reacquire_exhausted,
         mirroring a previously-constructed AdaptiveCommand shape."""
+
         exposure_s = 50e-3
         laser1_mw = 20.0
         laser2_mw = 0.0
@@ -1048,7 +1058,9 @@ def test_estop_after_successful_write_stops_later_writes(
 
     cfg = _adaptive_cfg()
     worker = StackWorker(
-        ctrl._bundle, ctrl._hw, ctrl,
+        ctrl._bundle,
+        ctrl._hw,
+        ctrl,
         save_description="estop regression sample",
         save_stitch_blend=False,
         save_all_crop=False,
@@ -1061,8 +1073,11 @@ def test_estop_after_successful_write_stops_later_writes(
         staged_pct = getattr(ctrl, "laser1_power_pct", 0.0)
         staged_mw = staged_pct / 100.0 * ctrl.lasers[0].max_power
         return _bright_to_dim_fill(
-            acquisition_index, exposure_s, staged_mw,
-            sensor_max=cfg.sensor_max, n_planes=n_planes,
+            acquisition_index,
+            exposure_s,
+            staged_mw,
+            sensor_max=cfg.sensor_max,
+            n_planes=n_planes,
         )
 
     ctrl.camera.set_scripted_intensity_fn(scripted_fn)
@@ -1089,9 +1104,7 @@ def test_estop_after_successful_write_stops_later_writes(
     ctrl._hw._write_laser1_power = _write_then_estop
 
     trajectory: list[tuple] = []  # ty: ignore[missing-type-argument]
-    worker.sig_adaptive_trajectory.connect(
-        lambda *args: trajectory.append(args)
-    )
+    worker.sig_adaptive_trajectory.connect(lambda *args: trajectory.append(args))
 
     try:
         with patch.object(worker.motors.horizontal, "move_absolute_position"):

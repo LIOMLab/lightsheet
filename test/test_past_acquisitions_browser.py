@@ -54,9 +54,7 @@ def test_past_acquisitions_browser_parses_hdf5_and_zarr(
     # inside the "ome" attrs key (verified against the real writer).
     zarr_path = data_dir / "S02_555nm.ome.zarr"
     root = zarr.open_group(str(zarr_path), mode="w")
-    root.require_array(
-        "0", shape=(1, 4, 8, 8), chunks=(1, 1, 8, 8), dtype=np.uint16
-    )
+    root.require_array("0", shape=(1, 4, 8, 8), chunks=(1, 1, 8, 8), dtype=np.uint16)
     root.attrs["ome"] = {
         "omero": {
             "channels": [

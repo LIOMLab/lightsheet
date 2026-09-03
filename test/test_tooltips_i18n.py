@@ -54,8 +54,7 @@ _FRENCH_KEYWORDS = (
 # The E-stop tooltip is preserved verbatim per the UI-SPEC Copywriting
 # contract — do not change this string without updating the UI-SPEC.
 ESTOP_TOOLTIP = (
-    "Emergency stop (F12) — drives all lasers to 0 V and "
-    "aborts the current acquisition"
+    "Emergency stop (F12) — drives all lasers to 0 V and aborts the current acquisition"
 )
 
 # The iBeam readback tooltip is preserved verbatim per the UI-SPEC
@@ -181,14 +180,10 @@ def test_all_panels_checkable_pushbuttons_have_tooltips(
         missing.extend(
             f"{attr}.{n}" for n in _assert_checkable_pushbuttons_have_tooltips(panel)
         )
-    assert not missing, (
-        f"These checkable QPushButton widgets lack a tooltip: {missing}"
-    )
+    assert not missing, f"These checkable QPushButton widgets lack a tooltip: {missing}"
 
 
-def test_estop_button_tooltip_preserved(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_estop_button_tooltip_preserved(qtbot: QtBot, request: FixtureRequest) -> None:
     """The E-stop button tooltip is preserved verbatim (UI-SPEC Copywriting)."""
     from _helpers.controller_fixture import (
         make_controller,
@@ -203,9 +198,7 @@ def test_estop_button_tooltip_preserved(
     )
 
 
-def test_arm_reset_button_has_tooltip(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_arm_reset_button_has_tooltip(qtbot: QtBot, request: FixtureRequest) -> None:
     """The Arm/Reset button carries a tooltip documenting the two-press sequence."""
     from _helpers.controller_fixture import (
         make_controller,
@@ -245,9 +238,7 @@ def test_no_french_labels_in_ui_files() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_help_menu_links_guide_pdf(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_help_menu_links_guide_pdf(qtbot: QtBot, request: FixtureRequest) -> None:
     """The Help menu contains an action that opens Guide.pdf, wired to open_help."""
     from _helpers.controller_fixture import (
         make_controller,

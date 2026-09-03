@@ -33,8 +33,7 @@ def test_monitor_recorder_no_delay_by_default() -> None:
 
     camera = MockCamera(verbose=False)
     assert camera.simulate_timing is False, (
-        "simulate_timing must default to False so the test suite is "
-        "not slowed"
+        "simulate_timing must default to False so the test suite is not slowed"
     )
     # Use a non-trivial exposure_time so a stray sleep would be
     # detectable; the default is 100ms which would blow the 10ms

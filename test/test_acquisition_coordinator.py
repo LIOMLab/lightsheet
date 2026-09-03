@@ -62,8 +62,7 @@ def test_acquisition_coordinator_no_worker_bodies(
     # callable attribute on the coordinator anymore.
     method = getattr(acq, "stack_mode_worker", None)
     assert not callable(method), (
-        f"AcquisitionCoordinator must NOT own stack_mode_worker "
-        f"(got {method!r})"
+        f"AcquisitionCoordinator must NOT own stack_mode_worker (got {method!r})"
     )
 
 
@@ -117,19 +116,23 @@ def test_preview_worker_calls_start_lasers_after_arm_and_stop_before_disarm(
     # intercepted to observe the ordering.
     with (
         patch.object(
-            worker.camera, "arm",
+            worker.camera,
+            "arm",
             side_effect=lambda: call_log.append("camera.arm"),
         ),
         patch.object(
-            worker.camera, "disarm",
+            worker.camera,
+            "disarm",
             side_effect=lambda: call_log.append("camera.disarm"),
         ),
         patch.object(
-            ctrl._hw, "start_lasers",
+            ctrl._hw,
+            "start_lasers",
             side_effect=lambda *a, **k: call_log.append("hw.start_lasers"),
         ),
         patch.object(
-            ctrl._hw, "stop_lasers",
+            ctrl._hw,
+            "stop_lasers",
             side_effect=lambda: call_log.append("hw.stop_lasers"),
         ),
     ):
@@ -176,7 +179,8 @@ def test_updateUi_preview_mode_button_caches_auto_laser_flags_before_thread_spaw
             side_effect=lambda: call_log.append("_cache_auto_laser_flags"),
         ),
         patch.object(
-            ctrl, "close_modes",
+            ctrl,
+            "close_modes",
             side_effect=lambda: call_log.append("close_modes"),
         ),
         # Patch QThread.start so no real thread is started. The real QThread
@@ -184,7 +188,8 @@ def test_updateUi_preview_mode_button_caches_auto_laser_flags_before_thread_spaw
         # connections are wired — only start() is intercepted to record the
         # spawn timing without launching a worker thread.
         patch.object(
-            QThread, "start",
+            QThread,
+            "start",
             side_effect=lambda: call_log.append("thread_spawn"),
         ),
     ):

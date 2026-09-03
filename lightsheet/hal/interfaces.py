@@ -321,9 +321,11 @@ class IMotorsCore(ABC):
     error_message: str
 
     # Controller-read attributes — class-level annotations.
-    vertical: "IMotorCore"
-    horizontal: "IMotorCore"
-    camera: "IMotorCore"
+    # The controller calls per-axis get_position/set_origin on these handles,
+    # so the type is the extended ``IMotor`` surface, not ``IMotorCore``.
+    vertical: "IMotor"
+    horizontal: "IMotor"
+    camera: "IMotor"
 
 
 class IMotors(IMotorsCore):

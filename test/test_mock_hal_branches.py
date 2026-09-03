@@ -247,7 +247,8 @@ def test_mock_optotune_unimplemented_methods_raise(method_name: str) -> None:
     ],
 )
 def test_mock_optotune_unimplemented_arg_methods_raise(
-    method_name: str, args: tuple  # ty: ignore[missing-type-argument]
+    method_name: str,
+    args: tuple,  # ty: ignore[missing-type-argument]
 ) -> None:
     lens = MockOptotune()
     method = getattr(lens, method_name)

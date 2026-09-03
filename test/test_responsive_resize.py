@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 pytest.importorskip("PySide6")
 
 from _helpers.controller_fixture import make_controller
+from PySide6 import QtCore
 
 
 def _resize_and_settle(
@@ -56,9 +57,7 @@ def test_layout_reflows_at_target_sizes(
     _resize_and_settle(controller, width, height, qtbot)
 
     iv = controller.ui.imageView
-    assert iv.width() >= 320, (
-        f"imageView width {iv.width()} < 320 at {width}x{height}"
-    )
+    assert iv.width() >= 320, f"imageView width {iv.width()} < 320 at {width}x{height}"
     assert iv.height() >= 240, (
         f"imageView height {iv.height()} < 240 at {width}x{height}"
     )
@@ -230,8 +229,7 @@ def test_jog_arrow_button_no_width_cap(qtbot: QtBot, request: FixtureRequest) ->
     btn = controller.motor_panel.ui.pushButton_sampleStepForward
     # Uniform 48px minimum width (touch target).
     assert btn.minimumSize().width() == 48, (
-        f"jog button min width {btn.minimumSize().width()} != 48 "
-        f"(touch target lost)"
+        f"jog button min width {btn.minimumSize().width()} != 48 (touch target lost)"
     )
     # The minimum height is content-driven (Qt layout engine can reduce
     # the .ui's 48px to the content-driven ~25px). Assert a reasonable
@@ -281,9 +279,7 @@ def test_left_rail_visible_at_all_target_sizes(
     for width, height in ((1366, 768), (1920, 1080), (1280, 800)):
         _resize_and_settle(controller, width, height, qtbot)
         rail = controller.ui.leftRail
-        assert rail.isVisible(), (
-            f"leftRail not visible at {width}x{height}"
-        )
+        assert rail.isVisible(), f"leftRail not visible at {width}x{height}"
         # The rail is a fixed-width column (80 px per the convention).
         assert rail.width() <= 96, (
             f"leftRail width {rail.width()} > 96 at {width}x{height} "
@@ -320,12 +316,11 @@ def test_estop_button_visible_at_all_target_sizes(
     for width, height in ((1366, 768), (1920, 1080), (1280, 800)):
         _resize_and_settle(controller, width, height, qtbot)
         estop = controller.findChild(
-            __import__("PySide6").QtCore.QObject, "pushButton_estop"  # ty: ignore[unresolved-attribute]
+            QtCore.QObject,
+            "pushButton_estop",
         )
         assert estop is not None, "pushButton_estop not found in shell"
-        assert estop.isVisible(), (
-            f"E-stop button not visible at {width}x{height}"
-        )
+        assert estop.isVisible(), f"E-stop button not visible at {width}x{height}"
 
 
 def test_all_eight_panels_scroll_area_wrapped(

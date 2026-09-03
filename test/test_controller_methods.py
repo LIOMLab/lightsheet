@@ -240,8 +240,10 @@ def test_updateUi_laser_readback(qtbot: QtBot, request: FixtureRequest) -> None:
 
 def test_updateUi_laser2_refresh_clicked(qtbot: QtBot, request: FixtureRequest) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    with patch.object(ctrl._hw, "_refresh_laser2_readback_async") as mock_refresh, \
-         patch.object(ctrl._hw, "_poll_laser_status") as mock_poll:
+    with (
+        patch.object(ctrl._hw, "_refresh_laser2_readback_async") as mock_refresh,
+        patch.object(ctrl._hw, "_poll_laser_status") as mock_poll,
+    ):
         ctrl.laser_panel.updateUi_laser2_refresh_clicked()
     mock_refresh.assert_called_once()
     mock_poll.assert_called_once_with([1])
@@ -361,8 +363,10 @@ def test_updateUi_preview_mode_button_start(
 ) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl.preview_mode_started = False
-    with patch.object(ctrl, "close_modes") as mock_close, \
-         patch.object(ctrl, "_cache_auto_laser_flags") as mock_cache:
+    with (
+        patch.object(ctrl, "close_modes") as mock_close,
+        patch.object(ctrl, "_cache_auto_laser_flags") as mock_cache,
+    ):
         ctrl.acquisition_panel.updateUi_preview_mode_button()
     assert ctrl.preview_mode_started is True
     mock_close.assert_called_once()
@@ -384,8 +388,10 @@ def test_updateUi_preview_mode_button_stop(
 
 def test_updateUi_post_preview_mode(qtbot: QtBot, request: FixtureRequest) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    with patch.object(ctrl.acquisition_panel, "updateUi_modes_buttons") as mock_modes, \
-         patch.object(ctrl, "updateUi_message_printer") as mock_msg:
+    with (
+        patch.object(ctrl.acquisition_panel, "updateUi_modes_buttons") as mock_modes,
+        patch.object(ctrl, "updateUi_message_printer") as mock_msg,
+    ):
         ctrl.acquisition_panel.updateUi_post_preview_mode()
     mock_modes.assert_called_once()
     mock_msg.assert_called_with("->Preview mode stopped")
@@ -413,8 +419,10 @@ def test_updateUi_live_mode_button_stop(qtbot: QtBot, request: FixtureRequest) -
 
 def test_updateUi_post_live_mode(qtbot: QtBot, request: FixtureRequest) -> None:
     ctrl, _bundle = make_controller(qtbot, request)
-    with patch.object(ctrl.acquisition_panel, "updateUi_modes_buttons"), \
-         patch.object(ctrl, "updateUi_message_printer") as mock_msg:
+    with (
+        patch.object(ctrl.acquisition_panel, "updateUi_modes_buttons"),
+        patch.object(ctrl, "updateUi_message_printer") as mock_msg,
+    ):
         ctrl.acquisition_panel.updateUi_post_live_mode()
     mock_msg.assert_called_with("->Live mode stopped")
 
@@ -834,4 +842,3 @@ def test_hardware_init_non_demo_shows_ready_status(
     # Restore demo mode so teardown's closeEvent does not persist stack
     # params to the real config.ini.
     ctrl._demo_mode = True
-

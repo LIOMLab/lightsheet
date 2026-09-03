@@ -438,9 +438,7 @@ def test_ibeam_smart_open_mirrors_inner_failure_onto_adapter() -> None:
         MockSerial.return_value = mock_ser
         # ser.open() raises SerialException -> inner IBeam.open() catches
         # it, sets self.error=1, and re-raises (per IBeam.open contract).
-        mock_ser.open.side_effect = real_serial_mod.SerialException(
-            "port in use"
-        )
+        mock_ser.open.side_effect = real_serial_mod.SerialException("port in use")
         adapter = ibeam_smart_mod.IBeamSmartLaser()
         with pytest.raises(real_serial_mod.SerialException):
             adapter.open()
@@ -481,8 +479,16 @@ def test_ibeam_smart_satisfies_ilaser_abc() -> None:
         assert callable(getattr(adapter, method)), (
             f"IBeamSmartLaser must expose ILaser method {method!r}"
         )
-    for attr in ("_lock", "error", "error_message", "wavelength", "power",
-                 "max_power", "active", "label"):
+    for attr in (
+        "_lock",
+        "error",
+        "error_message",
+        "wavelength",
+        "power",
+        "max_power",
+        "active",
+        "label",
+    ):
         assert hasattr(adapter, attr), (
             f"IBeamSmartLaser must expose ILaser attribute {attr!r}"
         )

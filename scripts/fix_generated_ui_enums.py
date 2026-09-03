@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E501
 """Idempotent post-processor for pyside6-uic generated Python.
 
 pyside6-uic emits unscoped Qt/QFrame enum names that are not recognised by
@@ -117,6 +118,103 @@ _TOKEN_MAP: dict[str, str] = {
     "Qt.MiddleButton": "Qt.MouseButton.MiddleButton",
     "Qt.BackButton": "Qt.MouseButton.BackButton",
     "Qt.ForwardButton": "Qt.MouseButton.ForwardButton",
+    # QAbstractItemView.EditTrigger
+    "QAbstractItemView.NoEditTriggers": "QAbstractItemView.EditTrigger.NoEditTriggers",
+    "QAbstractItemView.CurrentChanged": "QAbstractItemView.EditTrigger.CurrentChanged",
+    "QAbstractItemView.DoubleClicked": "QAbstractItemView.EditTrigger.DoubleClicked",
+    "QAbstractItemView.SelectedClicked": "QAbstractItemView.EditTrigger.SelectedClicked",
+    "QAbstractItemView.EditKeyPressed": "QAbstractItemView.EditTrigger.EditKeyPressed",
+    "QAbstractItemView.AnyKeyPressed": "QAbstractItemView.EditTrigger.AnyKeyPressed",
+    "QAbstractItemView.AllEditTriggers": "QAbstractItemView.EditTrigger.AllEditTriggers",
+    # QAbstractItemView.SelectionBehavior
+    "QAbstractItemView.SelectItems": "QAbstractItemView.SelectionBehavior.SelectItems",
+    "QAbstractItemView.SelectRows": "QAbstractItemView.SelectionBehavior.SelectRows",
+    "QAbstractItemView.SelectColumns": "QAbstractItemView.SelectionBehavior.SelectColumns",
+    # QAbstractItemView.SelectionMode
+    "QAbstractItemView.NoSelection": "QAbstractItemView.SelectionMode.NoSelection",
+    "QAbstractItemView.SingleSelection": "QAbstractItemView.SelectionMode.SingleSelection",
+    "QAbstractItemView.MultiSelection": "QAbstractItemView.SelectionMode.MultiSelection",
+    "QAbstractItemView.ExtendedSelection": "QAbstractItemView.SelectionMode.ExtendedSelection",
+    "QAbstractItemView.ContiguousSelection": "QAbstractItemView.SelectionMode.ContiguousSelection",
+    # QComboBox.SizeAdjustPolicy
+    "QComboBox.AdjustToContents": "QComboBox.SizeAdjustPolicy.AdjustToContents",
+    "QComboBox.AdjustToContentsOnFirstShow": "QComboBox.SizeAdjustPolicy.AdjustToContentsOnFirstShow",
+    "QComboBox.AdjustToMinimumContentsLengthWithIcon": "QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon",
+    # QFormLayout.FieldGrowthPolicy
+    "QFormLayout.FieldsStayAtSizeHint": "QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint",
+    "QFormLayout.ExpandingFieldsGrow": "QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow",
+    "QFormLayout.AllNonFixedFieldsGrow": "QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow",
+    # QStyle.StandardPixmap (PySide6 .pyi stubs only expose the scoped form).
+    "QStyle.SP_TitleBarMenuButton": "QStyle.StandardPixmap.SP_TitleBarMenuButton",
+    "QStyle.SP_TitleBarMinButton": "QStyle.StandardPixmap.SP_TitleBarMinButton",
+    "QStyle.SP_TitleBarMaxButton": "QStyle.StandardPixmap.SP_TitleBarMaxButton",
+    "QStyle.SP_TitleBarCloseButton": "QStyle.StandardPixmap.SP_TitleBarCloseButton",
+    "QStyle.SP_TitleBarNormalButton": "QStyle.StandardPixmap.SP_TitleBarNormalButton",
+    "QStyle.SP_TitleBarShadeButton": "QStyle.StandardPixmap.SP_TitleBarShadeButton",
+    "QStyle.SP_TitleBarUnshadeButton": "QStyle.StandardPixmap.SP_TitleBarUnshadeButton",
+    "QStyle.SP_TitleBarContextHelpButton": "QStyle.StandardPixmap.SP_TitleBarContextHelpButton",
+    "QStyle.SP_DockWidgetCloseButton": "QStyle.StandardPixmap.SP_DockWidgetCloseButton",
+    "QStyle.SP_MessageBoxInformation": "QStyle.StandardPixmap.SP_MessageBoxInformation",
+    "QStyle.SP_MessageBoxWarning": "QStyle.StandardPixmap.SP_MessageBoxWarning",
+    "QStyle.SP_MessageBoxCritical": "QStyle.StandardPixmap.SP_MessageBoxCritical",
+    "QStyle.SP_MessageBoxQuestion": "QStyle.StandardPixmap.SP_MessageBoxQuestion",
+    "QStyle.SP_DesktopIcon": "QStyle.StandardPixmap.SP_DesktopIcon",
+    "QStyle.SP_TrashIcon": "QStyle.StandardPixmap.SP_TrashIcon",
+    "QStyle.SP_ComputerIcon": "QStyle.StandardPixmap.SP_ComputerIcon",
+    "QStyle.SP_DriveFDIcon": "QStyle.StandardPixmap.SP_DriveFDIcon",
+    "QStyle.SP_DriveHDIcon": "QStyle.StandardPixmap.SP_DriveHDIcon",
+    "QStyle.SP_DriveCDIcon": "QStyle.StandardPixmap.SP_DriveCDIcon",
+    "QStyle.SP_DriveDVDIcon": "QStyle.StandardPixmap.SP_DriveDVDIcon",
+    "QStyle.SP_DriveNetIcon": "QStyle.StandardPixmap.SP_DriveNetIcon",
+    "QStyle.SP_DirOpenIcon": "QStyle.StandardPixmap.SP_DirOpenIcon",
+    "QStyle.SP_DirClosedIcon": "QStyle.StandardPixmap.SP_DirClosedIcon",
+    "QStyle.SP_DirLinkIcon": "QStyle.StandardPixmap.SP_DirLinkIcon",
+    "QStyle.SP_DirLinkOpenIcon": "QStyle.StandardPixmap.SP_DirLinkOpenIcon",
+    "QStyle.SP_FileIcon": "QStyle.StandardPixmap.SP_FileIcon",
+    "QStyle.SP_FileLinkIcon": "QStyle.StandardPixmap.SP_FileLinkIcon",
+    "QStyle.SP_ToolBarHorizontalExtensionButton": "QStyle.StandardPixmap.SP_ToolBarHorizontalExtensionButton",
+    "QStyle.SP_ToolBarVerticalExtensionButton": "QStyle.StandardPixmap.SP_ToolBarVerticalExtensionButton",
+    "QStyle.SP_FileDialogStart": "QStyle.StandardPixmap.SP_FileDialogStart",
+    "QStyle.SP_FileDialogEnd": "QStyle.StandardPixmap.SP_FileDialogEnd",
+    "QStyle.SP_FileDialogToParent": "QStyle.StandardPixmap.SP_FileDialogToParent",
+    "QStyle.SP_FileDialogNewFolder": "QStyle.StandardPixmap.SP_FileDialogNewFolder",
+    "QStyle.SP_FileDialogDetailedView": "QStyle.StandardPixmap.SP_FileDialogDetailedView",
+    "QStyle.SP_FileDialogInfoView": "QStyle.StandardPixmap.SP_FileDialogInfoView",
+    "QStyle.SP_FileDialogContentsView": "QStyle.StandardPixmap.SP_FileDialogContentsView",
+    "QStyle.SP_FileDialogListView": "QStyle.StandardPixmap.SP_FileDialogListView",
+    "QStyle.SP_FileDialogBack": "QStyle.StandardPixmap.SP_FileDialogBack",
+    "QStyle.SP_DirIcon": "QStyle.StandardPixmap.SP_DirIcon",
+    "QStyle.SP_DialogOkButton": "QStyle.StandardPixmap.SP_DialogOkButton",
+    "QStyle.SP_DialogCancelButton": "QStyle.StandardPixmap.SP_DialogCancelButton",
+    "QStyle.SP_DialogHelpButton": "QStyle.StandardPixmap.SP_DialogHelpButton",
+    "QStyle.SP_DialogOpenButton": "QStyle.StandardPixmap.SP_DialogOpenButton",
+    "QStyle.SP_DialogSaveButton": "QStyle.StandardPixmap.SP_DialogSaveButton",
+    "QStyle.SP_DialogCloseButton": "QStyle.StandardPixmap.SP_DialogCloseButton",
+    "QStyle.SP_DialogApplyButton": "QStyle.StandardPixmap.SP_DialogApplyButton",
+    "QStyle.SP_DialogResetButton": "QStyle.StandardPixmap.SP_DialogResetButton",
+    "QStyle.SP_DialogDiscardButton": "QStyle.StandardPixmap.SP_DialogDiscardButton",
+    "QStyle.SP_DialogYesButton": "QStyle.StandardPixmap.SP_DialogYesButton",
+    "QStyle.SP_DialogNoButton": "QStyle.StandardPixmap.SP_DialogNoButton",
+    "QStyle.SP_ArrowUp": "QStyle.StandardPixmap.SP_ArrowUp",
+    "QStyle.SP_ArrowDown": "QStyle.StandardPixmap.SP_ArrowDown",
+    "QStyle.SP_ArrowLeft": "QStyle.StandardPixmap.SP_ArrowLeft",
+    "QStyle.SP_ArrowRight": "QStyle.StandardPixmap.SP_ArrowRight",
+    "QStyle.SP_ArrowBack": "QStyle.StandardPixmap.SP_ArrowBack",
+    "QStyle.SP_ArrowForward": "QStyle.StandardPixmap.SP_ArrowForward",
+    "QStyle.SP_DirHomeIcon": "QStyle.StandardPixmap.SP_DirHomeIcon",
+    "QStyle.SP_CommandLink": "QStyle.StandardPixmap.SP_CommandLink",
+    "QStyle.SP_VistaShield": "QStyle.StandardPixmap.SP_VistaShield",
+    "QStyle.SP_BrowserReload": "QStyle.StandardPixmap.SP_BrowserReload",
+    "QStyle.SP_BrowserStop": "QStyle.StandardPixmap.SP_BrowserStop",
+    "QStyle.SP_MediaPlay": "QStyle.StandardPixmap.SP_MediaPlay",
+    "QStyle.SP_MediaStop": "QStyle.StandardPixmap.SP_MediaStop",
+    "QStyle.SP_MediaPause": "QStyle.StandardPixmap.SP_MediaPause",
+    "QStyle.SP_MediaSkipForward": "QStyle.StandardPixmap.SP_MediaSkipForward",
+    "QStyle.SP_MediaSkipBackward": "QStyle.StandardPixmap.SP_MediaSkipBackward",
+    "QStyle.SP_MediaSeekForward": "QStyle.StandardPixmap.SP_MediaSeekForward",
+    "QStyle.SP_MediaSeekBackward": "QStyle.StandardPixmap.SP_MediaSeekBackward",
+    "QStyle.SP_MediaVolume": "QStyle.StandardPixmap.SP_MediaVolume",
+    "QStyle.SP_MediaVolumeMuted": "QStyle.StandardPixmap.SP_MediaVolumeMuted",
 }
 
 
@@ -125,10 +223,17 @@ _TOKEN_MAP: dict[str, str] = {
 # substring of a larger, already-scoped name.
 _TOKEN_PATTERN = re.compile(
     r"\b("
-    + "|".join(
-        re.escape(token) for token in sorted(_TOKEN_MAP, key=len, reverse=True)
-    )
+    + "|".join(re.escape(token) for token in sorted(_TOKEN_MAP, key=len, reverse=True))
     + r")\b"
+)
+
+# pyside6-uic generated code calls ``setText`` on the result of
+# ``QTableWidget.horizontalHeaderItem`` without checking for ``None``. The stub
+# types this return as ``QTableWidgetItem | None``, so we insert a None guard.
+_HEADER_ITEM_SETTEXT_RE = re.compile(
+    r"^(        ([A-Za-z0-9_]+) = (self\.[A-Za-z0-9_]+\.horizontalHeaderItem\(\d+\))\n)"
+    r"^(        \2\.setText\(.*\))$",
+    re.MULTILINE,
 )
 
 
@@ -146,6 +251,16 @@ def _is_generated_file(path: Path, content: str) -> bool:
 def _replace_token(match: re.Match[str]) -> str:
     """Lookup a single matched token and return its scoped replacement."""
     return _TOKEN_MAP[match.group(0)]
+
+
+def _guard_header_item_settext(match: re.Match[str]) -> str:
+    """Wrap a QTableWidget horizontalHeaderItem setText call in a None guard."""
+    indent = "        "
+    return (
+        f"{match.group(1)}"
+        f"{indent}if {match.group(2)} is not None:\n"
+        f"{indent}    {match.group(4)}\n"
+    )
 
 
 def rewrite_generated_ui(path: Path) -> bool:
@@ -168,6 +283,7 @@ def rewrite_generated_ui(path: Path) -> bool:
         )
 
     rewritten = _TOKEN_PATTERN.sub(_replace_token, original)
+    rewritten = _HEADER_ITEM_SETTEXT_RE.sub(_guard_header_item_settext, rewritten)
     if rewritten == original:
         return False
 

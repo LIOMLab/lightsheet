@@ -112,21 +112,15 @@ class LaserPanelWidget(QWidget):
         ]
         if status == "active":
             labels[idx].setText(f"{_sym.LASER_ON} ON")
-            labels[idx].setStyleSheet(
-                f"color: {_c.SUCCESS}; {_t.BOLD}"
-            )
+            labels[idx].setStyleSheet(f"color: {_c.SUCCESS}; {_t.BOLD}")
             buttons[idx].setChecked(True)
         elif status == "inactive":
             labels[idx].setText(f"{_sym.LASER_OFF} OFF")
-            labels[idx].setStyleSheet(
-                f"color: {_c.DISABLED}; {_t.BOLD}"
-            )
+            labels[idx].setStyleSheet(f"color: {_c.DISABLED}; {_t.BOLD}")
             buttons[idx].setChecked(False)
         else:  # "error"
             labels[idx].setText(f"{_sym.LASER_FAULT} FAULT")
-            labels[idx].setStyleSheet(
-                f"color: {_c.DANGER}; {_t.BOLD}"
-            )
+            labels[idx].setStyleSheet(f"color: {_c.DANGER}; {_t.BOLD}")
             buttons[idx].setChecked(False)
 
     def updateUi_laser1_amplitude(self) -> None:
@@ -162,8 +156,11 @@ class LaserPanelWidget(QWidget):
         thread targeting the collaborator method."""
         pct = self.ui.doubleSpinBox_laserOneAmplitude.value()
         self._shell.laser1_power_pct = pct
+        assert self._shell._hw is not None
         threading.Thread(
-            target=self._shell._hw._write_laser1_power, args=(pct,), daemon=True  # ty: ignore[unresolved-attribute]
+            target=self._shell._hw._write_laser1_power,
+            args=(pct,),
+            daemon=True,
         ).start()
 
     def _apply_laser2_amplitude(self) -> None:
@@ -172,8 +169,11 @@ class LaserPanelWidget(QWidget):
         targeting HardwareManager._write_laser2_power."""
         pct = self.ui.doubleSpinBox_laserTwoAmplitude.value()
         self._shell.laser2_power_pct = pct
+        assert self._shell._hw is not None
         threading.Thread(
-            target=self._shell._hw._write_laser2_power, args=(pct,), daemon=True  # ty: ignore[unresolved-attribute]
+            target=self._shell._hw._write_laser2_power,
+            args=(pct,),
+            daemon=True,
         ).start()
 
     def laser1_toggle_button(self) -> None:

@@ -192,7 +192,6 @@ class ZarrSaver:
             )
         return channels
 
-
     def _write_acquisition_group(self) -> None:
         """Write the ``/acquisition`` group (per-plane motor positions +
         scan params) via the writer's public ``root`` handle.
@@ -398,7 +397,6 @@ class ZarrSaver:
             "sharpness_metric",
             data=np.array(sharpness, dtype=float),
         )
-
 
     def finalize(self) -> None:
         """Build the analysis pyramid + NGFF metadata, then the

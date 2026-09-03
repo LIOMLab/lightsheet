@@ -34,9 +34,6 @@ import math
 import typing
 
 from PySide6.QtCore import Qt
-
-from lightsheet.gui.styles import colors as _c
-from lightsheet.gui.styles import spacing as _s
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
@@ -48,6 +45,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from lightsheet.gui.styles import colors as _c
+from lightsheet.gui.styles import spacing as _s
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -104,8 +104,16 @@ class _Row:
         "step",
     )
 
-    def __init__(self, name: str, start: float, end: float, step: float,
-                 n_planes: int, est_time_s: float, est_size_mb: float) -> None:
+    def __init__(
+        self,
+        name: str,
+        start: float,
+        end: float,
+        step: float,
+        n_planes: int,
+        est_time_s: float,
+        est_size_mb: float,
+    ) -> None:
         self.name = name
         self.start = start
         self.end = end
@@ -174,9 +182,13 @@ class AcquisitionTableManager(QWidget):
         self.pushButton_startQueue = QPushButton("Start Queue", self)
         self.pushButton_startQueue.setObjectName("pushButton_startQueue")
         self.pushButton_startQueue.setEnabled(False)
-        for btn in (self.pushButton_addStack, self.pushButton_removeStack,
-                    self.pushButton_moveUp, self.pushButton_moveDown,
-                    self.pushButton_startQueue):
+        for btn in (
+            self.pushButton_addStack,
+            self.pushButton_removeStack,
+            self.pushButton_moveUp,
+            self.pushButton_moveDown,
+            self.pushButton_startQueue,
+        ):
             btn_row.addWidget(btn)
 
         layout.addWidget(self._empty_label)
@@ -245,7 +257,8 @@ class AcquisitionTableManager(QWidget):
         self._set_readonly_cell(row, _COL_NPLANES, "0")
         self._set_readonly_cell(row, _COL_ESTTIME, "0:00")
         self._set_readonly_cell(
-            row, _COL_ESTSIZE,
+            row,
+            _COL_ESTSIZE,
             self._format_size_human_readable(0.0, self._format_label()),
         )
         self.table.blockSignals(False)
@@ -274,9 +287,7 @@ class AcquisitionTableManager(QWidget):
             # Re-index flagged_cells: drop the removed row, shift rows
             # below it up by one.
             self._flagged_cells = {
-                (r - 1 if r > row else r, c)
-                for r, c in self._flagged_cells
-                if r != row
+                (r - 1 if r > row else r, c) for r, c in self._flagged_cells if r != row
             }
             self._update_empty_state()
             self._update_start_queue_state()
@@ -388,12 +399,12 @@ class AcquisitionTableManager(QWidget):
     def _set_readonly_cell(self, row: int, col: int, text: str) -> None:
         item = QTableWidgetItem(text)
         # Selectable + enabled, but NOT editable (computed columns).
-        item.setFlags(Qt.ItemFlag.ItemIsSelectable
-                      | Qt.ItemFlag.ItemIsEnabled)
+        item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
         self.table.setItem(row, col, item)
 
-    def _compute(self, start: float, end: float, step: float
-                 ) -> tuple[int, float, float]:
+    def _compute(
+        self, start: float, end: float, step: float
+    ) -> tuple[int, float, float]:
         """Compute (#planes, est. time s, est. size MB) for a row."""
         if step == 0 or start == end:
             return 0, 0.0, 0.0
@@ -406,8 +417,9 @@ class AcquisitionTableManager(QWidget):
     def _estimate_per_plane_time(self) -> float:
         """Advisory per-plane acquisition time in seconds."""
         try:
-            exposure = float(self._shell.acquisition_panel.ui
-                             .doubleSpinBox_cameraExposureTime.value())
+            exposure = float(
+                self._shell.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.value()
+            )
             return exposure / 1000.0 * 1.5
         except (AttributeError, ValueError, TypeError) as e:
             logger.warning(
@@ -441,7 +453,8 @@ class AcquisitionTableManager(QWidget):
             cols = int(getattr(self._shell.camera, "xsize", 2000) or 2000)
         except (AttributeError, TypeError, ValueError) as e:
             logger.warning(
-                "Failed to read camera ysize/xsize; falling back to 2000x2000 for size estimate: %s",
+                "Failed to read camera ysize/xsize; "
+                "falling back to 2000x2000 for size estimate: %s",
                 e,
             )
             rows, cols = 2000, 2000
@@ -472,7 +485,9 @@ class AcquisitionTableManager(QWidget):
             stack_step = float(getattr(self._shell, "stack_step", 0.0))
         except (TypeError, ValueError) as e:
             logger.warning(
-                "Failed to parse stack_step; disabling Zarr pyramid overhead estimate: %s", e
+                "Failed to parse stack_step; "
+                "disabling Zarr pyramid overhead estimate: %s",
+                e,
             )
             stack_step = 0.0
         cam = getattr(self._shell, "camera", None)
@@ -483,7 +498,7 @@ class AcquisitionTableManager(QWidget):
         level_count = sum(1 for t in (10, 25, 50, 100) if t >= max_res)
         # Level 0 (raw) is always present; each downsampled level adds
         # 0.25**i of L0. The multiplier covers L0 + all pyramid levels.
-        return sum(0.25 ** i for i in range(level_count))
+        return sum(0.25**i for i in range(level_count))
 
     def _format_size_human_readable(self, mb: float, fmt: str) -> str:
         """Format an MB value as a human-readable string with a format
@@ -565,7 +580,8 @@ class AcquisitionTableManager(QWidget):
         mm, ss = divmod(int(est_time_s), 60)
         self._set_readonly_cell(row, _COL_ESTTIME, f"{mm}:{ss:02d}")
         self._set_readonly_cell(
-            row, _COL_ESTSIZE,
+            row,
+            _COL_ESTSIZE,
             self._format_size_human_readable(est_size_mb, self._format_label()),
         )
         # Update the name tooltip in case the name was edited.
@@ -600,7 +616,9 @@ class AcquisitionTableManager(QWidget):
                 high = float(motors.horizontal.get_limit_high("\u03bcm"))
             except (TypeError, ValueError, AttributeError) as e:
                 logger.warning(
-                    "Failed to read horizontal motor limits; disabling travel-limit check: %s", e
+                    "Failed to read horizontal motor limits; "
+                    "disabling travel-limit check: %s",
+                    e,
                 )
                 low, high = None, None
             if low is not None and high is not None:
@@ -736,9 +754,7 @@ class AcquisitionTableManager(QWidget):
         if getattr(self._shell, "saving_allowed", False) and not getattr(
             self._shell, "save_directory", ""
         ):
-            self._shell.sig_message.emit(
-                self.error_state_text("no save path is set")
-            )
+            self._shell.sig_message.emit(self.error_state_text("no save path is set"))
             self._shell.sig_beep.emit()
             return
 
@@ -810,9 +826,12 @@ class AcquisitionTableManager(QWidget):
 
                 # Update the mode badge with the row index.
                 self._shell._update_mode_badge(
-                    "STACK", "RUNNING", plane=1,
+                    "STACK",
+                    "RUNNING",
+                    plane=1,
                     total=int(self._shell.number_of_planes),
-                    queue_row=i + 1, queue_total=len(rows),
+                    queue_row=i + 1,
+                    queue_total=len(rows),
                 )
 
                 # Move the stage to the row's start position. The

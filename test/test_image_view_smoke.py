@@ -73,12 +73,12 @@ def test_scrollbar_policy_always_off(qtbot: QtBot) -> None:
     view = ImageView()
     qtbot.addWidget(view)
 
-    assert (
-        view.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-    ), "horizontalScrollBarPolicy must be ScrollBarAlwaysOff"
-    assert (
-        view.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-    ), "verticalScrollBarPolicy must be ScrollBarAlwaysOff"
+    assert view.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff, (
+        "horizontalScrollBarPolicy must be ScrollBarAlwaysOff"
+    )
+    assert view.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff, (
+        "verticalScrollBarPolicy must be ScrollBarAlwaysOff"
+    )
 
 
 def test_scene_rect_at_construction(qtbot: QtBot) -> None:
@@ -229,9 +229,7 @@ def test_levels_readout_updates(qtbot: QtBot, request: FixtureRequest) -> None:
     assert "5678" in text, f"readout missing frame max: {text!r}"
 
 
-def test_levels_bar_wired_to_image_view(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_levels_bar_wired_to_image_view(qtbot: QtBot, request: FixtureRequest) -> None:
     """Dragging the LevelsBar handles updates the ImageView display
     window via the shell's sig_levelsChanged → set_levels wiring."""
     from _helpers.controller_fixture import (

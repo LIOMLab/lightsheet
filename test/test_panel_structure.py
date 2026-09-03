@@ -221,8 +221,7 @@ def test_stacked_page_order(qtbot: QtBot, request: FixtureRequest) -> None:
     assert sp.widget(6).findChild(QObject, "tableWidget_pastAcquisitions") is not None
     # Index 7 — Calibrate (calibration panel)
     assert (
-        sp.widget(7).findChild(QObject, "pushButton_calCameraComputeFocus")
-        is not None
+        sp.widget(7).findChild(QObject, "pushButton_calCameraComputeFocus") is not None
     )
 
 

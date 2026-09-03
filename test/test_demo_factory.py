@@ -124,9 +124,7 @@ def test_hardware_init_demo_indicator_emitted_via_statusbar_not_sigmessage(
     ctrl.hardware_init()
 
     # The window-title suffix was set.
-    assert "[DEMO]" in ctrl.windowTitle(), (
-        "window-title must carry the [DEMO] suffix"
-    )
+    assert "[DEMO]" in ctrl.windowTitle(), "window-title must carry the [DEMO] suffix"
     # The demo status-bar message was emitted via showMessage (not
     # sig_message.emit).
     statusbar_calls = [str(c) for c in statusbar_show.call_args_list]

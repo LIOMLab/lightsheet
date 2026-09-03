@@ -48,6 +48,7 @@ def _make_axis_range_drag(ax: pg.AxisItem, vb: pg.ViewBox) -> None:
     NOT start inside the linked ViewBox (mirroring AxisItem's own guard)
     so body drags still pan.
     """
+
     def _range_drag(ev: MouseDragEvent) -> None:
         if vb.sceneBoundingRect().contains(ev.buttonDownScenePos()):
             ev.ignore()
@@ -160,6 +161,7 @@ def _clamp_view_range(
     if not needs_clamp:
         return  # range already valid — don't touch auto-range
     vb.setRange(xRange=(x0, x1), yRange=(y0, y1), padding=0.0)
+
 
 # Breeze dark theme tokens imported from the shared color palette.
 _BG = _c.BREEZE_BG
@@ -387,8 +389,9 @@ class AdaptiveTrajectoryWidget(QWidget):
             def _guarded(ev: MouseDragEvent, axis: int | None = None) -> None:
                 orig(ev, axis)
                 dx_max, dx_span = _data_bounds()
-                _clamp_view_range(vb, data_x_max=dx_max, data_x_span=dx_span,
-                                  y_max=y_max)
+                _clamp_view_range(
+                    vb, data_x_max=dx_max, data_x_span=dx_span, y_max=y_max
+                )
 
             return _guarded
 
@@ -409,8 +412,9 @@ class AdaptiveTrajectoryWidget(QWidget):
                 # axis kwarg comes from AxisItem.wheelEvent forwarding.
                 orig(ev)
                 dx_max, dx_span = _data_bounds()
-                _clamp_view_range(vb, data_x_max=dx_max, data_x_span=dx_span,
-                                  y_max=y_max)
+                _clamp_view_range(
+                    vb, data_x_max=dx_max, data_x_span=dx_span, y_max=y_max
+                )
 
             return _guarded
 
@@ -459,7 +463,8 @@ class AdaptiveTrajectoryWidget(QWidget):
         # acquisition path, decoupled from power (illumination).
         if self._right_vb is not None:
             self._exposure_curve = pg.PlotDataItem(
-                [], [],
+                [],
+                [],
                 pen=pg.mkPen(_EXPOSURE, width=1, style=Qt.PenStyle.DashLine),
                 name="Exposure",
             )
@@ -500,10 +505,13 @@ class AdaptiveTrajectoryWidget(QWidget):
         # (those are not curve-like items); dummy curves with the right
         # pen are the safe way to label them.
         self._target_band_legend_sample = pg.PlotDataItem(
-            [], [], pen=pg.mkPen(_TARGET, width=1),
+            [],
+            [],
+            pen=pg.mkPen(_TARGET, width=1),
         )
         self._reacquire_legend_sample = pg.PlotDataItem(
-            [], [],
+            [],
+            [],
             pen=pg.mkPen(_WARNING, style=Qt.PenStyle.DashLine, width=1),
         )
         # Legend parented to the main ViewBox so the offset is in view
@@ -575,8 +583,7 @@ class AdaptiveTrajectoryWidget(QWidget):
         # (spec: "Target band {lo}-{hi} %"), then rebuild the whole
         # legend so entries stay in the canonical colour-grouped order.
         self._target_band_label = (
-            f"Target band {target_band_lo * 100:.0f}-"
-            f"{target_band_hi * 100:.0f} %"
+            f"Target band {target_band_lo * 100:.0f}-{target_band_hi * 100:.0f} %"
         )
         self._rebuild_legend()
         # X auto-range (enabled in _configure_plot) handles the initial

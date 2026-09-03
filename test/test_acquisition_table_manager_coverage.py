@@ -183,6 +183,7 @@ def test_estimate_stack_size_mb_camera_exception_fallback(
     """_estimate_stack_size_mb returns a raw-bytes estimate when the
     camera attrs cannot be read (falls back to 2000x2000)."""
     ctrl, mgr = _mgr(qtbot, request)
+
     # Replace camera with an object that raises on ysize.
     class BadCamera:
         @property
@@ -206,6 +207,7 @@ def test_zarr_pyramid_multiplier_exception_fallback(
     """_zarr_pyramid_multiplier returns a sane multiplier when
     stack_step cannot be parsed (TypeError / ValueError fallback to 0.0)."""
     ctrl, mgr = _mgr(qtbot, request)
+
     # Set stack_step to an object that raises on float().
     class BadFloat:
         def __float__(self) -> float:
@@ -320,6 +322,7 @@ def test_recompute_with_bad_motor_limits(
 
     # Replace the horizontal motor's get_limit_low with one that raises.
     orig_motor = ctrl.motors.horizontal
+
     class BadMotor:
         def get_limit_low(self, unit: str) -> float:
             raise ValueError("bad limit")
@@ -383,9 +386,7 @@ def test_start_queue_hardware_not_initialized(
     assert len(beeps) >= 1
 
 
-def test_start_queue_no_rows(
-    qtbot: QtBot, request: pytest.FixtureRequest
-) -> None:
+def test_start_queue_no_rows(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     """_start_queue with no rows emits an error message and beeps."""
     ctrl, mgr = _mgr(qtbot, request)
     assert mgr.table.rowCount() == 0
@@ -418,9 +419,7 @@ def test_start_queue_incomplete_row(
     assert len(beeps) >= 1
 
 
-def test_start_queue_no_save_path(
-    qtbot: QtBot, request: pytest.FixtureRequest
-) -> None:
+def test_start_queue_no_save_path(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     """_start_queue with saving_allowed=True but no save_directory emits
     an error and beeps."""
     ctrl, mgr = _mgr(qtbot, request)
@@ -429,8 +428,10 @@ def test_start_queue_no_save_path(
     mgr.set_cell(0, 2, "20")
     mgr.set_cell(0, 3, "10")
     # Force saving_allowed=True and save_directory="".
-    with patch.object(ctrl, "saving_allowed", True), \
-         patch.object(ctrl, "save_directory", ""):
+    with (
+        patch.object(ctrl, "saving_allowed", True),
+        patch.object(ctrl, "save_directory", ""),
+    ):
         messages: list[str] = []
         ctrl.sig_message.connect(lambda msg: messages.append(msg))
         beeps: list[None] = []

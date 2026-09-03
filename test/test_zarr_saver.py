@@ -90,9 +90,7 @@ def test_zarr_saver_streams_and_finalizes(
     assert root["0"].shape == (1, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)  # ty: ignore[invalid-argument-type, unresolved-attribute]
 
 
-def test_omero_channels(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
-) -> None:
+def test_omero_channels(qtbot: QtBot, request: FixtureRequest, tmp_path: Path) -> None:
     """SAV-02: the omero channels carry wavelength / color / label /
     active per laser that was actually used in the acquisition. Only
     lasers whose auto-laser flag was set at acquisition start are
@@ -174,9 +172,7 @@ def test_omero_from_live_lasers(
         ctrl.lasers[0].label = original_label
 
 
-def test_ngff_metadata(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
-) -> None:
+def test_ngff_metadata(qtbot: QtBot, request: FixtureRequest, tmp_path: Path) -> None:
     """SAV-02: NGFF v0.5 metadata is written — ``ome.version`` and the
     ``multiscales`` structure with at least one dataset pointing at L0."""
     import zarr
@@ -244,9 +240,7 @@ def test_acquisition_group(
 # file (VALIDATION.md resolves them by node id).
 
 
-def test_format_branch(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
-) -> None:
+def test_format_branch(qtbot: QtBot, request: FixtureRequest, tmp_path: Path) -> None:
     """SAV-01: the ``save_format`` branch selects the Zarr saver path.
     When ``save_format == 'zarr'`` the worker calls ``zarr_save_worker``
     (not ``frame_saver_worker``); ``'hdf5'`` -> ``frame_saver_worker``;
@@ -317,9 +311,7 @@ def test_format_branch(
     assert len(finished) == 1
 
 
-def test_close_ordering(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
-) -> None:
+def test_close_ordering(qtbot: QtBot, request: FixtureRequest, tmp_path: Path) -> None:
     """SAV-01: ``sig_finished`` fires only AFTER finalize completes
     (close ordering). The try/finally + ``sig_finished.emit()`` shape
     in ``FrameSaverWorker.start_saving`` is the load-bearing contract —
@@ -424,9 +416,7 @@ def test_zarr_save_finalizes_after_stop_saving_on_normal_completion(
     saver.horizontal_positions_list = ["0.00 μm", "1.00 μm"]
     saver.vertical_positions_list = ["0.00 μm", "2.00 μm"]
     saver.camera_positions_list = ["0.00 μm", "3.00 μm"]
-    frame = np.zeros(
-        (ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16
-    )
+    frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
 
     # Queue wrapper that flips saving_started=False once the last frame is
     # consumed — mimicking stop_saving() on normal completion.
@@ -435,9 +425,7 @@ def test_zarr_save_finalizes_after_stop_saving_on_normal_completion(
             self._real = real
             self._remaining = n_frames
 
-        def get(
-            self, block: bool = True, timeout: float | None = None
-        ) -> Any:
+        def get(self, block: bool = True, timeout: float | None = None) -> Any:
             buf = self._real.get(block=block, timeout=timeout)
             self._remaining -= 1
             if self._remaining <= 0:
@@ -516,9 +504,7 @@ def test_zarr_drains_queue_after_stop_saving(
     saver.horizontal_positions_list = [f"{i}.00 μm" for i in range(n_planes)]
     saver.vertical_positions_list = [f"{i}.00 μm" for i in range(n_planes)]
     saver.camera_positions_list = [f"{i}.00 μm" for i in range(n_planes)]
-    frame = np.zeros(
-        (ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16
-    )
+    frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
 
     # Pre-queue ALL frames BEFORE starting the worker — mimicking the
     # demo-mode scenario where the acquisition completes instantly.
@@ -538,9 +524,7 @@ def test_zarr_drains_queue_after_stop_saving(
             self._real = real
             self._count = 0
 
-        def get(
-            self, block: bool = True, timeout: float | None = None
-        ) -> Any:
+        def get(self, block: bool = True, timeout: float | None = None) -> Any:
             buf = self._real.get(block=block, timeout=timeout)
             self._count += 1
             if self._count >= 1:
@@ -667,8 +651,7 @@ def test_both_mode_writes_both_formats(
             keys = list(f.keys())
             # The dataset name pattern is datasets_name + counter (1-based).
             assert len(keys) == 1, (
-                f"HDF5 file {h5_path} has {len(keys)} datasets, "
-                f"expected 1"
+                f"HDF5 file {h5_path} has {len(keys)} datasets, expected 1"
             )
             ds = f[keys[0]]
             assert ds.shape == (ctrl.camera.ysize, ctrl.camera.xsize)  # ty: ignore[unresolved-attribute]

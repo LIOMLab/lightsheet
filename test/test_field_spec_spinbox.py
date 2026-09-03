@@ -84,11 +84,20 @@ def test_field_spec_is_frozen_dataclass() -> None:
     assert dataclasses.is_dataclass(FieldSpec)
     fields = [f.name for f in dataclasses.fields(FieldSpec)]
     assert fields == [
-        "unit", "decimals", "single_step", "page_step", "minimum", "maximum"
+        "unit",
+        "decimals",
+        "single_step",
+        "page_step",
+        "minimum",
+        "maximum",
     ]
     spec = FieldSpec(
-        unit="mm", decimals=3, single_step=0.1,
-        page_step=1.0, minimum=0.0, maximum=41.0,
+        unit="mm",
+        decimals=3,
+        single_step=0.1,
+        page_step=1.0,
+        minimum=0.0,
+        maximum=41.0,
     )
     assert spec.unit == "mm"
     with pytest.raises(dataclasses.FrozenInstanceError):
@@ -128,10 +137,16 @@ def test_apply_spec_sets_all_properties(qtbot: QtBot) -> None:
     from lightsheet.gui.widgets.field_spec import FieldSpec
 
     sb = _make_spinbox(qtbot)
-    sb.applySpec(FieldSpec(
-        unit="mm", decimals=3, single_step=0.1,
-        page_step=1.0, minimum=0.0, maximum=41.0,
-    ))
+    sb.applySpec(
+        FieldSpec(
+            unit="mm",
+            decimals=3,
+            single_step=0.1,
+            page_step=1.0,
+            minimum=0.0,
+            maximum=41.0,
+        )
+    )
     assert sb.suffix() == " mm"
     assert sb.decimals() == 3
     assert sb.singleStep() == pytest.approx(0.1)
@@ -144,10 +159,16 @@ def test_apply_spec_empty_unit_no_leading_space(qtbot: QtBot) -> None:
     from lightsheet.gui.widgets.field_spec import FieldSpec
 
     sb = _make_spinbox(qtbot)
-    sb.applySpec(FieldSpec(
-        unit="", decimals=0, single_step=1,
-        page_step=10, minimum=0, maximum=1000,
-    ))
+    sb.applySpec(
+        FieldSpec(
+            unit="",
+            decimals=0,
+            single_step=1,
+            page_step=10,
+            minimum=0,
+            maximum=1000,
+        )
+    )
     assert sb.suffix() == ""
 
 
@@ -226,10 +247,16 @@ def test_wheel_ignored_when_unfocused(qtbot: QtBot) -> None:
     from lightsheet.gui.widgets.field_spec import FieldSpec
 
     sb = _make_spinbox(qtbot)
-    sb.applySpec(FieldSpec(
-        unit="mm", decimals=3, single_step=0.1,
-        page_step=1.0, minimum=0.0, maximum=41.0,
-    ))
+    sb.applySpec(
+        FieldSpec(
+            unit="mm",
+            decimals=3,
+            single_step=0.1,
+            page_step=1.0,
+            minimum=0.0,
+            maximum=41.0,
+        )
+    )
     sb.setValue(5.0)
     # clearFocus() alone does not remove focus when the spinbox is the only
     # focusable widget in the window — Qt re-assigns focus to it. Give focus
@@ -255,10 +282,16 @@ def test_wheel_steps_value_when_focused(qtbot: QtBot) -> None:
     from lightsheet.gui.widgets.field_spec import FieldSpec
 
     sb = _make_spinbox(qtbot)
-    sb.applySpec(FieldSpec(
-        unit="mm", decimals=3, single_step=0.1,
-        page_step=1.0, minimum=0.0, maximum=41.0,
-    ))
+    sb.applySpec(
+        FieldSpec(
+            unit="mm",
+            decimals=3,
+            single_step=0.1,
+            page_step=1.0,
+            minimum=0.0,
+            maximum=41.0,
+        )
+    )
     sb.setValue(5.0)
     sb.setFocus()
     QApplication.processEvents()
@@ -283,10 +316,16 @@ def test_step_by_no_modifier_uses_single_step(qtbot: QtBot) -> None:
     from lightsheet.gui.widgets.field_spec import FieldSpec
 
     sb = _make_spinbox(qtbot)
-    sb.applySpec(FieldSpec(
-        unit="mm", decimals=3, single_step=0.1,
-        page_step=1.0, minimum=0.0, maximum=41.0,
-    ))
+    sb.applySpec(
+        FieldSpec(
+            unit="mm",
+            decimals=3,
+            single_step=0.1,
+            page_step=1.0,
+            minimum=0.0,
+            maximum=41.0,
+        )
+    )
     sb.setValue(5.0)
 
     # No modifier: stepBy(1) advances by single_step (0.1).
@@ -306,14 +345,21 @@ def test_step_by_control_modifier_uses_page_step(
     from lightsheet.gui.widgets.field_spec import FieldSpec
 
     sb = _make_spinbox(qtbot)
-    sb.applySpec(FieldSpec(
-        unit="mm", decimals=3, single_step=0.1,
-        page_step=1.0, minimum=0.0, maximum=41.0,
-    ))
+    sb.applySpec(
+        FieldSpec(
+            unit="mm",
+            decimals=3,
+            single_step=0.1,
+            page_step=1.0,
+            minimum=0.0,
+            maximum=41.0,
+        )
+    )
     sb.setValue(5.0)
 
     monkeypatch.setattr(
-        QApplication, "keyboardModifiers",
+        QApplication,
+        "keyboardModifiers",
         staticmethod(lambda: Qt.KeyboardModifier.ControlModifier),
     )
     sb.stepBy(1)
@@ -330,14 +376,21 @@ def test_step_by_shift_modifier_uses_page_step(
     from lightsheet.gui.widgets.field_spec import FieldSpec
 
     sb = _make_spinbox(qtbot)
-    sb.applySpec(FieldSpec(
-        unit="mm", decimals=3, single_step=0.1,
-        page_step=1.0, minimum=0.0, maximum=41.0,
-    ))
+    sb.applySpec(
+        FieldSpec(
+            unit="mm",
+            decimals=3,
+            single_step=0.1,
+            page_step=1.0,
+            minimum=0.0,
+            maximum=41.0,
+        )
+    )
     sb.setValue(5.0)
 
     monkeypatch.setattr(
-        QApplication, "keyboardModifiers",
+        QApplication,
+        "keyboardModifiers",
         staticmethod(lambda: Qt.KeyboardModifier.ShiftModifier),
     )
     sb.stepBy(1)
@@ -353,14 +406,21 @@ def test_step_by_negative_with_modifier_decrements(
     from lightsheet.gui.widgets.field_spec import FieldSpec
 
     sb = _make_spinbox(qtbot)
-    sb.applySpec(FieldSpec(
-        unit="V", decimals=2, single_step=0.05,
-        page_step=0.5, minimum=-10.0, maximum=10.0,
-    ))
+    sb.applySpec(
+        FieldSpec(
+            unit="V",
+            decimals=2,
+            single_step=0.05,
+            page_step=0.5,
+            minimum=-10.0,
+            maximum=10.0,
+        )
+    )
     sb.setValue(0.0)
 
     monkeypatch.setattr(
-        QApplication, "keyboardModifiers",
+        QApplication,
+        "keyboardModifiers",
         staticmethod(lambda: Qt.KeyboardModifier.ControlModifier),
     )
     sb.stepBy(-1)

@@ -133,9 +133,7 @@ class PM100D(IPowerMeter):
                 "and that the Thorlabs OPM driver is installed."
             )
         buf = ctypes.create_string_buffer(256)
-        status = self._dll.TLPMX_getRsrcName(
-            None, ctypes.c_uint32(0), buf
-        )
+        status = self._dll.TLPMX_getRsrcName(None, ctypes.c_uint32(0), buf)
         if status != 0:
             raise PM100DError(f"TLPMX_getRsrcName failed: status={status}")
         return buf.value.decode("ascii")  # ty: ignore[unsound-return-statement]
@@ -221,9 +219,7 @@ class PM100D(IPowerMeter):
         """Read the current optical power in milliwatts (convenience)."""
         return self.read_power() * 1000.0
 
-    def read_averaged(
-        self, n_samples: int, delay_s: float = 0.5
-    ) -> float:
+    def read_averaged(self, n_samples: int, delay_s: float = 0.5) -> float:
         """Take ``n_samples`` readings with ``delay_s`` between them,
         discard the first (settling throwaway), return the mean in watts.
 
@@ -273,9 +269,7 @@ class PM100D(IPowerMeter):
             )
             if status != 0:
                 self.error = 1
-                self.error_message = (
-                    f"TLPMX_startDarkAdjust failed: status={status}"
-                )
+                self.error_message = f"TLPMX_startDarkAdjust failed: status={status}"
                 raise PM100DError(self.error_message)
             logger.info("PM100D dark offset performed")
         except PM100DError:

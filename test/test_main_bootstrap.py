@@ -254,7 +254,7 @@ def test_main_demo_mode_returns_app_exec_exit_code(
 
     # The controller was constructed (it's a _MockController instance).
     # The collaborators were wired onto the controller by main().
-    assert hasattr(result, '__class__') or result == 0  # main returned 0
+    assert hasattr(result, "__class__") or result == 0  # main returned 0
 
     # --- Exercise the nested functions main() defined ---
 

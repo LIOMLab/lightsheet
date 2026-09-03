@@ -195,9 +195,7 @@ class PastAcquisitionsBrowser(QObject):
         (two-level depth, matching the rig probe) for HDF5 + Zarr stores."""
         entries: list[PastAcquisitionEntry] = []
         try:
-            top_entries = sorted(
-                child.name for child in Path(data_dir).iterdir()
-            )
+            top_entries = sorted(child.name for child in Path(data_dir).iterdir())
         except OSError as exc:
             self.sig_message.emit(
                 f"Cannot read past acquisitions: {data_dir} is missing or "
@@ -222,21 +220,15 @@ class PastAcquisitionsBrowser(QObject):
                 # Two-level depth: sample folder + immediate child folders.
                 entries.extend(self._scan_folder(top_path, sample_hint=name))
                 try:
-                    children = sorted(
-                        child.name for child in Path(top_path).iterdir()
-                    )
+                    children = sorted(child.name for child in Path(top_path).iterdir())
                 except OSError:
                     continue
                 for child in children:
                     child_path = str(Path(top_path) / child)
                     if Path(child_path).is_dir() and not self._is_zarr(child):
-                        entries.extend(
-                            self._scan_folder(child_path, sample_hint=child)
-                        )
+                        entries.extend(self._scan_folder(child_path, sample_hint=child))
                     elif self._is_zarr(child):
-                        entries.extend(
-                            self._parse_file(child_path, sample_hint=child)
-                        )
+                        entries.extend(self._parse_file(child_path, sample_hint=child))
         return entries
 
     def _scan_folder(self, folder: str, sample_hint: str) -> list[PastAcquisitionEntry]:
@@ -248,9 +240,7 @@ class PastAcquisitionsBrowser(QObject):
             return out
         for name in names:
             path = str(Path(folder) / name)
-            if self._is_hdf5(name) or (
-                self._is_zarr(name) and Path(path).is_dir()
-            ):
+            if self._is_hdf5(name) or (self._is_zarr(name) and Path(path).is_dir()):
                 out.extend(self._parse_file(path, sample_hint=sample_hint))
         return out
 
@@ -522,7 +512,8 @@ class PastAcquisitionsBrowser(QObject):
         # main thread, after the thread's finished signal is fully emitted,
         # avoiding any re-entrant delete during the signal itself.
         self._thread.finished.connect(
-            self._clear_thread_refs, Qt.QueuedConnection  # ty: ignore[unresolved-attribute]
+            self._clear_thread_refs,
+            Qt.QueuedConnection,  # ty: ignore[unresolved-attribute]
         )
         self._thread.start()
 
@@ -651,6 +642,7 @@ class PastAcquisitionsPanel(QWidget):
         self._shell = shell
         self.ui = Ui_PastAcquisitionsPanel()
         self.ui.setupUi(self)
+        self._past_scan_progress: QProgressDialog | None = None
 
         # Read-only past table: ResizeToContents + stretch last section +
         # ellipsis on long names. Sorting enabled after the batch populate
@@ -672,7 +664,9 @@ class PastAcquisitionsPanel(QWidget):
         self.ui.tableWidget_pastAcquisitions.setSortingEnabled(True)
 
         # Status label styling (empty/scanning/error copy).
-        self.ui.label_pastStatus.setStyleSheet(f"color: {_c.MUTED_TEXT}; padding: {_s.MD}px;")
+        self.ui.label_pastStatus.setStyleSheet(
+            f"color: {_c.MUTED_TEXT}; padding: {_s.MD}px;"
+        )
         self.ui.label_pastStatus.setVisible(False)
 
         # Planned/Past toggle — exclusive group. "Planned" switches the
@@ -745,7 +739,7 @@ class PastAcquisitionsPanel(QWidget):
         self.ui.tableWidget_pastAcquisitions.setRowCount(0)
         self._past_scan_progress = QProgressDialog(
             _PAST_SCANNING_COPY.format(save_directory=folder),
-            None,
+            "",
             0,
             0,
             self,
@@ -758,7 +752,7 @@ class PastAcquisitionsPanel(QWidget):
     def _on_scan_finished(self, entries: list) -> None:  # ty: ignore[missing-type-argument]
         """Populate the past-acquisitions table in one batch (called on
         the GUI thread via the browser's sig_scan_finished signal)."""
-        if getattr(self, "_past_scan_progress", None) is not None:
+        if self._past_scan_progress is not None:
             self._past_scan_progress.close()
             self._past_scan_progress = None
         self.ui.tableWidget_pastAcquisitions.setSortingEnabled(False)

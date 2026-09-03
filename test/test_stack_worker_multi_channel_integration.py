@@ -87,7 +87,9 @@ def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
 
     # Construct the StackWorker exactly as _spawn_stack_worker does.
     worker = StackWorker(
-        ctrl._bundle, ctrl._hw, ctrl,
+        ctrl._bundle,
+        ctrl._hw,
+        ctrl,
         save_description="integration test sample",
         save_stitch_blend=False,
         save_all_crop=True,
@@ -102,6 +104,7 @@ def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
     def _fake_acquire_scan() -> bool:
         ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
         return True
+
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
@@ -109,17 +112,14 @@ def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
     # Stub the motor move so MockMotors travel-limit enforcement does
     # not abort the stack (the mock enforces limits; a 10um step from 0
     # is fine but stubbing keeps the test independent of mock limits).
-    with patch.object(
-        worker.motors.horizontal, "move_absolute_position"
-    ):
+    with patch.object(worker.motors.horizontal, "move_absolute_position"):
         finished_emits: list[None] = []
         worker.finished.connect(lambda: finished_emits.append(None))
         worker.run()
 
     # The worker must have emitted finished exactly once.
     assert len(finished_emits) == 1, (
-        f"StackWorker.run must emit finished exactly once; "
-        f"got {len(finished_emits)}"
+        f"StackWorker.run must emit finished exactly once; got {len(finished_emits)}"
     )
 
     # CR-01 verification: set_files was called with wavelengths, so
@@ -134,19 +134,16 @@ def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
     )
     for ch in range(2):
         assert len(fs.filenames_lists[ch]) == 2, (
-            f"channel {ch} must have 2 plane entries; "
-            f"got {len(fs.filenames_lists[ch])}"
+            f"channel {ch} must have 2 plane entries; got {len(fs.filenames_lists[ch])}"
         )
 
     # The filenames must carry the per-channel wavelength suffix read
     # from the live ILaser instances.
     assert f"_{wl1}nm" in fs.filenames_lists[0][0], (
-        f"channel 0 filename must carry _{wl1}nm suffix; "
-        f"got {fs.filenames_lists[0][0]}"
+        f"channel 0 filename must carry _{wl1}nm suffix; got {fs.filenames_lists[0][0]}"
     )
     assert f"_{wl2}nm" in fs.filenames_lists[1][0], (
-        f"channel 1 filename must carry _{wl2}nm suffix; "
-        f"got {fs.filenames_lists[1][0]}"
+        f"channel 1 filename must carry _{wl2}nm suffix; got {fs.filenames_lists[1][0]}"
     )
 
     # The real save worker must have written the HDF5 files to disk
@@ -161,8 +158,7 @@ def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
                 f"disk after the real save worker drained: {p}"
             )
             assert p.suffix == ".hdf5", (
-                f"channel {ch} plane {plane} must be an .hdf5 file; "
-                f"got {p.suffix}"
+                f"channel {ch} plane {plane} must be an .hdf5 file; got {p.suffix}"
             )
 
 
@@ -230,7 +226,9 @@ def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
 
     # Construct the StackWorker exactly as _spawn_stack_worker does.
     worker = StackWorker(
-        ctrl._bundle, ctrl._hw, ctrl,
+        ctrl._bundle,
+        ctrl._hw,
+        ctrl,
         save_description="stitch integration test sample",
         save_stitch_blend=False,
         save_all_crop=False,
@@ -245,6 +243,7 @@ def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
     def _fake_acquire_scan() -> bool:
         ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
         return True
+
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
@@ -252,9 +251,7 @@ def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
     # Stub the motor move so MockMotors travel-limit enforcement does
     # not abort the stack (the mock enforces limits; a 10um step from 0
     # is fine but stubbing keeps the test independent of mock limits).
-    with patch.object(
-        worker.motors.horizontal, "move_absolute_position"
-    ):
+    with patch.object(worker.motors.horizontal, "move_absolute_position"):
         finished_emits: list[None] = []
         worker.finished.connect(lambda: finished_emits.append(None))
         worker.run()
@@ -282,8 +279,7 @@ def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
     # channels, each with 1 entry (number_of_files=1).
     fs = ctrl._fs.frame_saver
     assert isinstance(fs.filenames_lists, list), (
-        "filenames_lists must be a list of lists in multi-channel "
-        "stitch mode"
+        "filenames_lists must be a list of lists in multi-channel stitch mode"
     )
     assert len(fs.filenames_lists) == 2, (
         f"filenames_lists must have one list per channel (2); "
@@ -298,12 +294,10 @@ def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
     # The filenames must carry the per-channel wavelength suffix read
     # from the live ILaser instances.
     assert f"_{wl1}nm" in fs.filenames_lists[0][0], (
-        f"channel 0 filename must carry _{wl1}nm suffix; "
-        f"got {fs.filenames_lists[0][0]}"
+        f"channel 0 filename must carry _{wl1}nm suffix; got {fs.filenames_lists[0][0]}"
     )
     assert f"_{wl2}nm" in fs.filenames_lists[1][0], (
-        f"channel 1 filename must carry _{wl2}nm suffix; "
-        f"got {fs.filenames_lists[1][0]}"
+        f"channel 1 filename must carry _{wl2}nm suffix; got {fs.filenames_lists[1][0]}"
     )
 
     # The real save worker must have written exactly ONE HDF5 file per
@@ -328,10 +322,7 @@ def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
     # counter, 1-based).
     for ch, p in enumerate(per_channel_files):
         with h5py.File(p, "r") as f:  # ty: ignore[invalid-argument-type]
-            ds_keys = [
-                k for k in f
-                if k.startswith("reconstructed_frame")
-            ]
+            ds_keys = [k for k in f if k.startswith("reconstructed_frame")]
             assert len(ds_keys) == ctrl.number_of_planes, (
                 f"channel {ch} file {p.name} must contain "
                 f"{ctrl.number_of_planes} datasets (one per plane); "

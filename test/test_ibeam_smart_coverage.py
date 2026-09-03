@@ -49,8 +49,7 @@ _ANALOG_SETUP_COMMANDS = [
 def _write_sequence(mock_ser: MagicMock) -> list[str]:
     """Return the decoded (CRLF-stripped) commands written to mock_ser."""
     return [
-        c.args[0].decode("ascii").rstrip("\r\n")
-        for c in mock_ser.write.call_args_list
+        c.args[0].decode("ascii").rstrip("\r\n") for c in mock_ser.write.call_args_list
     ]
 
 
@@ -165,9 +164,7 @@ def test_open_for_analog_setup_serial_exception_ser_none() -> None:
     with patch("lightsheet.hal.real.ibeam_smart.serial.Serial") as MockSerial:
         # serial.Serial() itself raises — self.ser is never assigned,
         # so it stays None (from __init__) when the handler runs.
-        MockSerial.side_effect = serial.SerialException(
-            "no such port: COM4"
-        )
+        MockSerial.side_effect = serial.SerialException("no such port: COM4")
         ib = ibeam_mod.IBeam(port="COM4")
         # Sanity: __init__ leaves ser as None.
         assert ib.ser is None

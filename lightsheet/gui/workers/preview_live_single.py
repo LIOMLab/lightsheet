@@ -174,8 +174,6 @@ class PreviewWorker(QObject):
             self.finished.emit()
 
 
-
-
 class LiveWorker(QObject, _AcquireScanMixin):
     """Worker ``QObject`` for live mode (continuous scan acquisition).
 
@@ -289,8 +287,6 @@ class LiveWorker(QObject, _AcquireScanMixin):
             self.finished.emit()
 
 
-
-
 class SingleWorker(QObject, _AcquireScanMixin):
     """Worker ``QObject`` for single-image mode (one scan acquisition).
 
@@ -356,10 +352,10 @@ class SingleWorker(QObject, _AcquireScanMixin):
 
             # Getting positions for the image
             self._shell.image_hor_pos_text = (
-                self._shell.current_horizontal_position_text  # ty: ignore[unresolved-attribute]
+                self._shell.current_horizontal_position_text
             )
-            self._shell.image_ver_pos_text = self._shell.current_vertical_position_text  # ty: ignore[unresolved-attribute]
-            self._shell.image_cam_pos_text = self._shell.current_camera_position_text  # ty: ignore[unresolved-attribute]
+            self._shell.image_ver_pos_text = self._shell.current_vertical_position_text
+            self._shell.image_cam_pos_text = self._shell.current_camera_position_text
 
             # Setting the camera for scan acquisition
             self.camera.arm_scan()

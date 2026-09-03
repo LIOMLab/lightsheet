@@ -67,9 +67,7 @@ def _valid_calibration_json() -> str:
     return '{"points": [[0.0, 20.0], [10.0, 22.0], [20.0, 24.0]]}'
 
 
-def test_focus_group_widgets_exist(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_focus_group_widgets_exist(qtbot: QtBot, request: FixtureRequest) -> None:
     """The focus control group and its child widgets exist on the stack
     panel with the exact UI-SPEC objectNames."""
     ctrl, _ = make_controller(qtbot, request)
@@ -98,8 +96,7 @@ def test_focus_block_size_is_field_spec_subclass(
     ui = _focus_ui(ctrl)
     sb = ui.doubleSpinBox_focusBlockSize
     assert isinstance(sb, FieldSpecSpinBox), (
-        f"doubleSpinBox_focusBlockSize is {type(sb).__name__}, "
-        "not FieldSpecSpinBox"
+        f"doubleSpinBox_focusBlockSize is {type(sb).__name__}, not FieldSpecSpinBox"
     )
 
 
@@ -177,9 +174,7 @@ def test_load_calibration_arms_status_label(
     status = ui.label_focusStatus.text()
     assert "Armed: 3 points" in status, f"unexpected status: {status!r}"
     assert "block size 8" in status, f"unexpected status: {status!r}"
-    assert "autofocus residual on" in status.lower(), (
-        f"unexpected status: {status!r}"
-    )
+    assert "autofocus residual on" in status.lower(), f"unexpected status: {status!r}"
 
 
 def test_demo_mode_preloads_sample_focus_curve(
@@ -286,9 +281,7 @@ def test_build_focus_curve_returns_loaded_curve_object(
     ctrl, _ = make_controller(qtbot, request)
     ui = _focus_ui(ctrl)
     ui.checkBox_focusEnable.setChecked(True)
-    expected = FocusCurve(
-        stage_pos=(0.0, 10.0, 20.0), camera_pos=(20.0, 22.0, 24.0)
-    )
+    expected = FocusCurve(stage_pos=(0.0, 10.0, 20.0), camera_pos=(20.0, 22.0, 24.0))
     ui.lineEdit_focusCurvePath.setText(str(tmp_path / "curve.json"))
     with patch(
         "lightsheet.gui.panels.stack_panel.load_focus_curve",
@@ -393,9 +386,7 @@ def test_focus_rail_button_opens_dock_floating(
     assert widget.plotWidget_focusTrajectory.isHidden()
 
 
-def test_focus_rail_button_closes_dock(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_focus_rail_button_closes_dock(qtbot: QtBot, request: FixtureRequest) -> None:
     """Unchecking the focus rail button hides the trajectory dock."""
     ctrl, _ = make_controller(qtbot, request)
     ui = _focus_ui(ctrl)
@@ -517,9 +508,7 @@ def test_focus_trajectory_widget_freeze_blocks_appends(qtbot: QtBot) -> None:
     assert len(xs) == 1, "post-freeze append must be ignored"
 
 
-def test_badge_focus_running_string(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_badge_focus_running_string(qtbot: QtBot, request: FixtureRequest) -> None:
     """The badge renders 'FOCUS RUNNING — plane {n}/{N}' with the em-dash."""
     ctrl, _ = make_controller(qtbot, request)
     ctrl.number_of_planes = 50
@@ -530,9 +519,7 @@ def test_badge_focus_running_string(
     assert "plane 12/50" in text
 
 
-def test_badge_focus_aborted_string(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_badge_focus_aborted_string(qtbot: QtBot, request: FixtureRequest) -> None:
     """E-stop mid-focus-run transitions the badge to 'FOCUS ABORTED'."""
     ctrl, _ = make_controller(qtbot, request)
     ctrl.number_of_planes = 50
@@ -661,6 +648,7 @@ def test_estop_freezes_focus_trajectory_and_sets_badge(
                 off_calls.append(-1)
             off_calls.append(idx)
             real_off[idx]()
+
         return _off
 
     for idx, laser in enumerate(ctrl.lasers):

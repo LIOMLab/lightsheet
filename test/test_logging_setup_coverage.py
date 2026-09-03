@@ -103,9 +103,7 @@ def test_configure_falls_back_to_temp_when_default_also_unwritable(
     ro_parent.mkdir()
     ro_parent.chmod(0o555)
     bad_default = ro_parent / "default_child"
-    monkeypatch.setattr(
-        logging_setup_mod, "_default_log_dir", lambda: bad_default
-    )
+    monkeypatch.setattr(logging_setup_mod, "_default_log_dir", lambda: bad_default)
     configure()
     root = logging.getLogger()
     has_rotating = any(

@@ -23,9 +23,7 @@ def test_fixture_constructs_controller(
     assert len(ctrl.lasers) == 2
 
 
-def test_real_method_call_works(
-    qtbot: QtBot, request: pytest.FixtureRequest
-) -> None:
+def test_real_method_call_works(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     ctrl, _ = make_controller(qtbot, request)
     ctrl.updateUi_light_theme()
     ctrl.updateUi_dark_theme()

@@ -19,9 +19,7 @@ from _helpers.controller_fixture import make_controller
 from pytestqt.qtbot import QtBot
 
 
-def test_summary_label_exists(
-    qtbot: QtBot, request: pytest.FixtureRequest
-) -> None:
+def test_summary_label_exists(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     ctrl, _ = make_controller(qtbot, request)
     from PySide6.QtWidgets import QLabel
 
@@ -47,9 +45,7 @@ def test_summary_renders_full_plan(
     assert "Est" in text
 
 
-def test_summary_partial_state(
-    qtbot: QtBot, request: pytest.FixtureRequest
-) -> None:
+def test_summary_partial_state(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     ctrl, _ = make_controller(qtbot, request)
     ctrl.stack_first_plane_set = True
     ctrl.stack_last_plane_set = False
@@ -59,9 +55,7 @@ def test_summary_partial_state(
     assert "Set the other boundary" in text or "other boundary" in text.lower()
 
 
-def test_summary_empty_state(
-    qtbot: QtBot, request: pytest.FixtureRequest
-) -> None:
+def test_summary_empty_state(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     ctrl, _ = make_controller(qtbot, request)
     ctrl.stack_first_plane_set = False
     ctrl.stack_last_plane_set = False
@@ -79,17 +73,25 @@ def test_persist_last_round_trip(
 
     cfg_path = str(tmp_path / "test_config.ini")
     # Write last-stack params.
-    cfg_write(cfg_path, "Controller", {
-        "StackLastStart": "123.45",
-        "StackLastEnd": "678.90",
-        "StackLastStep": "5.0",
-    })
+    cfg_write(
+        cfg_path,
+        "Controller",
+        {
+            "StackLastStart": "123.45",
+            "StackLastEnd": "678.90",
+            "StackLastStep": "5.0",
+        },
+    )
     # Read them back.
-    read = cfg_read(cfg_path, "Controller", {
-        "StackLastStart": "",
-        "StackLastEnd": "",
-        "StackLastStep": "",
-    })
+    read = cfg_read(
+        cfg_path,
+        "Controller",
+        {
+            "StackLastStart": "",
+            "StackLastEnd": "",
+            "StackLastStep": "",
+        },
+    )
     assert read["StackLastStart"] == "123.45"
     assert read["StackLastEnd"] == "678.90"
     assert read["StackLastStep"] == "5.0"
@@ -113,8 +115,10 @@ def test_controller_persists_stack_params_on_close(
 
     # Patch cfg_write to capture the written dict.
     written: list[tuple] = []  # ty: ignore[missing-type-argument]
-    with patch("lightsheet.gui.shell.controller.cfg_write",
-               lambda *a, **k: written.append((a, k))):
+    with patch(
+        "lightsheet.gui.shell.controller.cfg_write",
+        lambda *a, **k: written.append((a, k)),
+    ):
         ctrl._save_stack_params()
     assert len(written) == 1
     args, _kw = written[0]
@@ -127,9 +131,7 @@ def test_controller_persists_stack_params_on_close(
     ctrl._demo_mode = True
 
 
-def test_summary_updates_on_edit(
-    qtbot: QtBot, request: pytest.FixtureRequest
-) -> None:
+def test_summary_updates_on_edit(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     ctrl, _ = make_controller(qtbot, request)
     ctrl.stack_first_plane_set = True
     ctrl.stack_last_plane_set = True

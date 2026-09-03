@@ -158,11 +158,11 @@ def test_fit_pilot_trajectory_smooth_monotonic() -> None:
     target = 0.925  # band midpoint
     # Required exposure ≈ base * (target / observed) — bright planes
     # need less, dim planes need more.
-    exposures = [base_exposure * (target / max(intensities[i], 1e-6))
-                 for i in range(len(intensities))]
-    traj = fit_pilot_trajectory(
-        pilot_indices, exposures, n_planes=n_planes
-    )
+    exposures = [
+        base_exposure * (target / max(intensities[i], 1e-6))
+        for i in range(len(intensities))
+    ]
+    traj = fit_pilot_trajectory(pilot_indices, exposures, n_planes=n_planes)
     # Evaluate the fitted trajectory at every plane.
     fitted = [traj(plane) for plane in range(n_planes)]
     # Smooth: no plane-to-plane jump larger than 30% of the span.
@@ -183,9 +183,7 @@ def test_pi_residual_proportional_response() -> None:
     cfg = _cfg()
     # Error of +0.05 (above target band) → P term reduces exposure.
     integral = 0.0
-    delta, integral = pi_residual(
-        error=0.05, integral=integral, cfg=cfg
-    )
+    delta, integral = pi_residual(error=0.05, integral=integral, cfg=cfg)
     # P term: kp * error = 0.4 * 0.05 = 0.02 (reduces exposure).
     assert delta == pytest.approx(-cfg.kp * 0.05, abs=1e-9)
 
@@ -225,17 +223,13 @@ def test_pi_residual_anti_windup_clamps_integral() -> None:
 def test_should_reacquire_on_sharp_excursion() -> None:
     cfg = _cfg(reacquire_threshold=0.08)
     # Observed 0.30 vs expected 0.90 → deviation 0.60 > threshold 0.08.
-    assert should_reacquire(
-        observed=0.30, expected=0.90, cfg=cfg
-    ) is True
+    assert should_reacquire(observed=0.30, expected=0.90, cfg=cfg) is True
 
 
 def test_should_not_reacquire_on_gradual_change() -> None:
     cfg = _cfg(reacquire_threshold=0.08)
     # Observed 0.88 vs expected 0.90 → deviation 0.02 < threshold.
-    assert should_reacquire(
-        observed=0.88, expected=0.90, cfg=cfg
-    ) is False
+    assert should_reacquire(observed=0.88, expected=0.90, cfg=cfg) is False
 
 
 # --------------------------------------------------------------------- #
@@ -454,8 +448,7 @@ def test_gradual_profile_does_not_reacquire() -> None:
     # expectation matches the observation at each plane → no excursion.
     pilot_indices = [0, 5, 10, 15, 19]
     pilot_exposures = [
-        50e-3 * (0.925 / max(0.95 - 0.65 * (i / 19), 1e-6))
-        for i in pilot_indices
+        50e-3 * (0.925 / max(0.95 - 0.65 * (i / 19), 1e-6)) for i in pilot_indices
     ]
     ctrl.prime(pilot_indices, pilot_exposures)
     reacquire_count = 0

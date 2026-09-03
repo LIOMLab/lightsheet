@@ -104,8 +104,11 @@ def _make_bundle() -> DeviceBundle:
     )
     etls = MockETLs()
     return DeviceBundle(
-        camera=camera, siggen=siggen, motors=motors,
-        etls=etls, lasers=lasers,
+        camera=camera,
+        siggen=siggen,
+        motors=motors,
+        etls=etls,
+        lasers=lasers,
     )
 
 
@@ -170,7 +173,7 @@ def test_move_sample_backward_preflight_boundary_check_skips_hal_call() -> None:
     # Configure so the pre-flight check fails:
     #   get_position(units) - step < get_limit_low(units)
     # i.e. position=0, step=1, limit_low=0  =>  0 - 1 = -1 < 0  =>  False
-    mc.motors.horizontal.get_position = Mock(return_value=0.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.horizontal.get_position = Mock(return_value=0.0)
     mc.motors.horizontal.get_limit_low = Mock(return_value=0.0)
     shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value.return_value = 1.0
     mc.motors.horizontal.move_relative_position = Mock()
@@ -210,8 +213,7 @@ def test_move_to_position_in_range_emits_moving_message() -> None:
     mc.updateUi_move_to_horizontal_position()
     mc.motors.horizontal.move_absolute_position.assert_called_once()
     assert any(
-        "Sample moving to horizontal position" in m
-        for m in shell.message_printer_calls
+        "Sample moving to horizontal position" in m for m in shell.message_printer_calls
     )
 
     mc, shell = _make_mc()
@@ -220,8 +222,7 @@ def test_move_to_position_in_range_emits_moving_message() -> None:
     mc.updateUi_move_to_vertical_position()
     mc.motors.vertical.move_absolute_position.assert_called_once()
     assert any(
-        "Sample moving to vertical position" in m
-        for m in shell.message_printer_calls
+        "Sample moving to vertical position" in m for m in shell.message_printer_calls
     )
 
     mc, shell = _make_mc()
@@ -327,8 +328,7 @@ def test_move_sample_to_origin_horizontal_out_of_boundaries() -> None:
     mc.updateUi_move_sample_to_origin()
     mc.motors.horizontal.move_absolute_position.assert_not_called()
     assert any(
-        "Horizontal origin out of boundaries" in m
-        for m in shell.message_printer_calls
+        "Horizontal origin out of boundaries" in m for m in shell.message_printer_calls
     )
 
 
@@ -345,8 +345,7 @@ def test_move_sample_to_origin_vertical_out_of_boundaries() -> None:
     mc.updateUi_move_sample_to_origin()
     mc.motors.vertical.move_absolute_position.assert_not_called()
     assert any(
-        "Vertical origin out of boundaries" in m
-        for m in shell.message_printer_calls
+        "Vertical origin out of boundaries" in m for m in shell.message_printer_calls
     )
 
 
@@ -455,7 +454,7 @@ def test_move_camera_to_focus_not_selected_valueerror_aborts() -> None:
 def test_move_sample_forward_in_range_emits_moving_message() -> None:
     mc, shell = _make_mc()
     mc.motors.horizontal.move_relative_position = Mock()
-    mc.motors.horizontal.get_position = Mock(return_value=5.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.horizontal.get_position = Mock(return_value=5.0)
     mc.motors.horizontal.get_limit_high = Mock(return_value=100.0)
     shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value.return_value = 1.0
     mc.updateUi_move_sample_forward()
@@ -466,7 +465,7 @@ def test_move_sample_forward_in_range_emits_moving_message() -> None:
 def test_move_sample_forward_out_of_boundaries_beeps() -> None:
     mc, shell = _make_mc()
     mc.motors.horizontal.move_relative_position = Mock()
-    mc.motors.horizontal.get_position = Mock(return_value=99.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.horizontal.get_position = Mock(return_value=99.0)
     mc.motors.horizontal.get_limit_high = Mock(return_value=100.0)
     shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value.return_value = 5.0
     mc.updateUi_move_sample_forward()
@@ -479,7 +478,7 @@ def test_move_sample_forward_valueerror_aborts() -> None:
     mc.motors.horizontal.move_relative_position = Mock(
         side_effect=ValueError("over-travel"),
     )
-    mc.motors.horizontal.get_position = Mock(return_value=5.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.horizontal.get_position = Mock(return_value=5.0)
     mc.motors.horizontal.get_limit_high = Mock(return_value=100.0)
     shell.motor_panel.ui.doubleSpinBox_sampleHStepSize.value.return_value = 1.0
     mc.updateUi_move_sample_forward()
@@ -490,7 +489,7 @@ def test_move_sample_forward_valueerror_aborts() -> None:
 def test_move_sample_up_in_range_emits_moving_message() -> None:
     mc, shell = _make_mc()
     mc.motors.vertical.move_relative_position = Mock()
-    mc.motors.vertical.get_position = Mock(return_value=5.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.vertical.get_position = Mock(return_value=5.0)
     mc.motors.vertical.get_limit_low = Mock(return_value=0.0)
     shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value.return_value = 1.0
     mc.updateUi_move_sample_up()
@@ -501,7 +500,7 @@ def test_move_sample_up_in_range_emits_moving_message() -> None:
 def test_move_sample_up_out_of_boundaries_beeps() -> None:
     mc, shell = _make_mc()
     mc.motors.vertical.move_relative_position = Mock()
-    mc.motors.vertical.get_position = Mock(return_value=1.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.vertical.get_position = Mock(return_value=1.0)
     mc.motors.vertical.get_limit_low = Mock(return_value=0.0)
     shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value.return_value = 5.0
     mc.updateUi_move_sample_up()
@@ -512,7 +511,7 @@ def test_move_sample_up_out_of_boundaries_beeps() -> None:
 def test_move_sample_down_in_range_emits_moving_message() -> None:
     mc, shell = _make_mc()
     mc.motors.vertical.move_relative_position = Mock()
-    mc.motors.vertical.get_position = Mock(return_value=5.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.vertical.get_position = Mock(return_value=5.0)
     mc.motors.vertical.get_limit_high = Mock(return_value=100.0)
     shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value.return_value = 1.0
     mc.updateUi_move_sample_down()
@@ -523,7 +522,7 @@ def test_move_sample_down_in_range_emits_moving_message() -> None:
 def test_move_sample_down_out_of_boundaries_beeps() -> None:
     mc, shell = _make_mc()
     mc.motors.vertical.move_relative_position = Mock()
-    mc.motors.vertical.get_position = Mock(return_value=99.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.vertical.get_position = Mock(return_value=99.0)
     mc.motors.vertical.get_limit_high = Mock(return_value=100.0)
     shell.motor_panel.ui.doubleSpinBox_sampleVStepSize.value.return_value = 5.0
     mc.updateUi_move_sample_down()
@@ -534,7 +533,7 @@ def test_move_sample_down_out_of_boundaries_beeps() -> None:
 def test_move_camera_backward_in_range_emits_moving_message() -> None:
     mc, shell = _make_mc()
     mc.motors.camera.move_relative_position = Mock()
-    mc.motors.camera.get_position = Mock(return_value=5.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.camera.get_position = Mock(return_value=5.0)
     mc.motors.camera.get_limit_low = Mock(return_value=0.0)
     shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value.return_value = 1.0
     mc.updateUi_move_camera_backward()
@@ -545,7 +544,7 @@ def test_move_camera_backward_in_range_emits_moving_message() -> None:
 def test_move_camera_backward_out_of_boundaries_beeps() -> None:
     mc, shell = _make_mc()
     mc.motors.camera.move_relative_position = Mock()
-    mc.motors.camera.get_position = Mock(return_value=1.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.camera.get_position = Mock(return_value=1.0)
     mc.motors.camera.get_limit_low = Mock(return_value=0.0)
     shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value.return_value = 5.0
     mc.updateUi_move_camera_backward()
@@ -556,7 +555,7 @@ def test_move_camera_backward_out_of_boundaries_beeps() -> None:
 def test_move_camera_forward_in_range_emits_moving_message() -> None:
     mc, shell = _make_mc()
     mc.motors.camera.move_relative_position = Mock()
-    mc.motors.camera.get_position = Mock(return_value=5.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.camera.get_position = Mock(return_value=5.0)
     mc.motors.camera.get_limit_high = Mock(return_value=100.0)
     shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value.return_value = 1.0
     mc.updateUi_move_camera_forward()
@@ -567,7 +566,7 @@ def test_move_camera_forward_in_range_emits_moving_message() -> None:
 def test_move_camera_forward_out_of_boundaries_beeps() -> None:
     mc, shell = _make_mc()
     mc.motors.camera.move_relative_position = Mock()
-    mc.motors.camera.get_position = Mock(return_value=99.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.camera.get_position = Mock(return_value=99.0)
     mc.motors.camera.get_limit_high = Mock(return_value=100.0)
     shell.motor_panel.ui.doubleSpinBox_cameraStepSize.value.return_value = 5.0
     mc.updateUi_move_camera_forward()
@@ -580,78 +579,86 @@ def test_move_camera_forward_out_of_boundaries_beeps() -> None:
 
 def test_reset_boundaries_resets_limits_and_disables_buttons() -> None:
     mc, shell = _make_mc()
-    mc.motors.horizontal.set_limit_low = Mock()  # ty: ignore[unresolved-attribute]
-    mc.motors.horizontal.set_limit_high = Mock()  # ty: ignore[unresolved-attribute]
+    mc.motors.horizontal.set_limit_low = Mock()
+    mc.motors.horizontal.set_limit_high = Mock()
     mc.updateUi_reset_boundaries()
-    mc.motors.horizontal.set_limit_low.assert_called_once()  # ty: ignore[unresolved-attribute]
-    mc.motors.horizontal.set_limit_high.assert_called_once()  # ty: ignore[unresolved-attribute]
-    shell.calibration_panel.ui.pushButton_calHorizontalStartRangeSelection.setEnabled.assert_called_with(False)
+    mc.motors.horizontal.set_limit_low.assert_called_once()
+    mc.motors.horizontal.set_limit_high.assert_called_once()
+    shell.calibration_panel.ui.pushButton_calHorizontalStartRangeSelection.setEnabled.assert_called_with(
+        False
+    )
     assert "indicators" in shell.position_calls
 
 
 def test_set_horizontal_backward_boundary_sets_limit_low() -> None:
     mc, shell = _make_mc()
-    mc.motors.horizontal.set_limit_low = Mock()  # ty: ignore[unresolved-attribute]
-    mc.motors.horizontal.get_position = Mock(return_value=3.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.horizontal.set_limit_low = Mock()
+    mc.motors.horizontal.get_position = Mock(return_value=3.0)
     shell.horizontal_forward_boundary_selected = False
     mc.updateUi_set_horizontal_backward_boundary()
-    mc.motors.horizontal.set_limit_low.assert_called_once()  # ty: ignore[unresolved-attribute]
+    mc.motors.horizontal.set_limit_low.assert_called_once()
     assert shell.horizontal_backward_boundary_selected is True
 
 
-def test_set_horizontal_backward_boundary_with_forward_already_set_enables_start(
-) -> None:
+def test_set_horizontal_backward_boundary_with_forward_already_set_enables_start() -> (
+    None
+):
     """When horizontal_forward_boundary_selected is True, setting the
     backward boundary enables the start-range button (the if-branch)."""
     mc, shell = _make_mc()
-    mc.motors.horizontal.set_limit_low = Mock()  # ty: ignore[unresolved-attribute]
-    mc.motors.horizontal.get_position = Mock(return_value=3.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.horizontal.set_limit_low = Mock()
+    mc.motors.horizontal.get_position = Mock(return_value=3.0)
     shell.horizontal_forward_boundary_selected = True
     mc.updateUi_set_horizontal_backward_boundary()
-    shell.calibration_panel.ui.pushButton_calHorizontalStartRangeSelection.setEnabled.assert_called_with(True)
+    shell.calibration_panel.ui.pushButton_calHorizontalStartRangeSelection.setEnabled.assert_called_with(
+        True
+    )
 
 
 def test_set_horizontal_forward_boundary_sets_limit_high() -> None:
     mc, shell = _make_mc()
-    mc.motors.horizontal.set_limit_high = Mock()  # ty: ignore[unresolved-attribute]
-    mc.motors.horizontal.get_position = Mock(return_value=7.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.horizontal.set_limit_high = Mock()
+    mc.motors.horizontal.get_position = Mock(return_value=7.0)
     shell.horizontal_backward_boundary_selected = False
     mc.updateUi_set_horizontal_forward_boundary()
-    mc.motors.horizontal.set_limit_high.assert_called_once()  # ty: ignore[unresolved-attribute]
+    mc.motors.horizontal.set_limit_high.assert_called_once()
     assert shell.horizontal_forward_boundary_selected is True
 
 
-def test_set_horizontal_forward_boundary_with_backward_already_set_enables_start(
-) -> None:
+def test_set_horizontal_forward_boundary_with_backward_already_set_enables_start() -> (
+    None
+):
     mc, shell = _make_mc()
-    mc.motors.horizontal.set_limit_high = Mock()  # ty: ignore[unresolved-attribute]
-    mc.motors.horizontal.get_position = Mock(return_value=7.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.horizontal.set_limit_high = Mock()
+    mc.motors.horizontal.get_position = Mock(return_value=7.0)
     shell.horizontal_backward_boundary_selected = True
     mc.updateUi_set_horizontal_forward_boundary()
-    shell.calibration_panel.ui.pushButton_calHorizontalStartRangeSelection.setEnabled.assert_called_with(True)
+    shell.calibration_panel.ui.pushButton_calHorizontalStartRangeSelection.setEnabled.assert_called_with(
+        True
+    )
 
 
 def test_set_sample_origin_sets_origin_and_emits_message() -> None:
     mc, shell = _make_mc()
-    mc.motors.horizontal.set_origin = Mock()  # ty: ignore[unresolved-attribute]
-    mc.motors.vertical.set_origin = Mock()  # ty: ignore[unresolved-attribute]
-    mc.motors.horizontal.get_position = Mock(return_value=3.0)  # ty: ignore[unresolved-attribute]
-    mc.motors.vertical.get_position = Mock(return_value=4.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.horizontal.set_origin = Mock()
+    mc.motors.vertical.set_origin = Mock()
+    mc.motors.horizontal.get_position = Mock(return_value=3.0)
+    mc.motors.vertical.get_position = Mock(return_value=4.0)
     mc.motors.horizontal.get_origin = Mock(return_value=3.0)
     mc.motors.vertical.get_origin = Mock(return_value=4.0)
     mc.updateUi_set_sample_origin()
-    mc.motors.horizontal.set_origin.assert_called_once()  # ty: ignore[unresolved-attribute]
-    mc.motors.vertical.set_origin.assert_called_once()  # ty: ignore[unresolved-attribute]
+    mc.motors.horizontal.set_origin.assert_called_once()
+    mc.motors.vertical.set_origin.assert_called_once()
     assert any("Sample origin set" in m for m in shell.message_printer_calls)
 
 
 def test_set_camera_focus_sets_origin_and_emits_message() -> None:
     mc, shell = _make_mc()
-    mc.motors.camera.set_origin = Mock()  # ty: ignore[unresolved-attribute]
-    mc.motors.camera.get_position = Mock(return_value=5.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.camera.set_origin = Mock()
+    mc.motors.camera.get_position = Mock(return_value=5.0)
     mc.motors.camera.get_origin = Mock(return_value=5.0)
     mc.updateUi_set_camera_focus()
-    mc.motors.camera.set_origin.assert_called_once()  # ty: ignore[unresolved-attribute]
+    mc.motors.camera.set_origin.assert_called_once()
     assert shell.focus_selected is True
     assert any("Camera focus manually set" in m for m in shell.message_printer_calls)
 
@@ -663,14 +670,14 @@ def test_calculate_camera_focus_sets_origin_and_focus_selected() -> None:
     """calculate_camera_focus computes focus_regression from slope/intercept
     and sets the camera origin + focus_selected flag."""
     mc, shell = _make_mc()
-    mc.motors.horizontal.get_position = Mock(return_value=10.0)  # ty: ignore[unresolved-attribute]
+    mc.motors.horizontal.get_position = Mock(return_value=10.0)
     shell.slope_camera = 0.5
     shell.intercept_camera = 1.0
-    mc.motors.camera.set_origin = Mock()  # ty: ignore[unresolved-attribute]
+    mc.motors.camera.set_origin = Mock()
     mc.calculate_camera_focus()
     # focus_regression = 0.5 * 10 + 1.0 = 6.0
-    mc.motors.camera.set_origin.assert_called_once()  # ty: ignore[unresolved-attribute]
-    args, _ = mc.motors.camera.set_origin.call_args  # ty: ignore[unresolved-attribute]
+    mc.motors.camera.set_origin.assert_called_once()
+    args, _ = mc.motors.camera.set_origin.call_args
     assert args[0] == pytest.approx(6.0)
     assert shell.focus_selected is True
     assert any("Focus automatically set" in m for m in shell.message_printer_calls)

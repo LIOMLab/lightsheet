@@ -196,8 +196,7 @@ def test_no_request_interruption_in_lightsheet() -> None:
     assert not offenders, (
         "requestInterruption (the QThread interruption API) must NOT appear "
         "anywhere in lightsheet/ — estop_event (threading.Event) is the "
-        "cooperative-abort mechanism (MIG-07). Offending files: "
-        + ", ".join(offenders)
+        "cooperative-abort mechanism (MIG-07). Offending files: " + ", ".join(offenders)
     )
 
 

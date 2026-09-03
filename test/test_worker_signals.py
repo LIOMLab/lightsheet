@@ -54,9 +54,7 @@ class _PreviewShell:
         # before moveToThread). The shell.ui namespace is not touched for
         # panel-internal widgets.
         self.acquisition_panel = Mock()
-        exposure_spinbox = (
-            self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime
-        )
+        exposure_spinbox = self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime
         exposure_spinbox.value.return_value = 100
         self.preview_mode_started = False  # skip the frame-grab loop
         self.estop_event = threading.Event()

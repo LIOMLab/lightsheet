@@ -134,9 +134,7 @@ def _validate_laser2_mw_per_volt(v: float) -> float:
 
 def _validate_laser1_max_power(v: float) -> float:
     if v <= 0:
-        raise ValueError(
-            f"Laser1 Max Power must be a positive power value, got {v} mW"
-        )
+        raise ValueError(f"Laser1 Max Power must be a positive power value, got {v} mW")
     if v > _LASER1_MAX_POWER_MW:
         raise ValueError(
             f"Laser1 Max Power {v} mW exceeds the L1 ceiling "

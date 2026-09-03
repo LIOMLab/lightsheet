@@ -333,9 +333,7 @@ def main() -> int:
     )
 
     overlay_path = (
-        "config.rig-specific.ini"
-        if Path("config.rig-specific.ini").exists()
-        else None
+        "config.rig-specific.ini" if Path("config.rig-specific.ini").exists() else None
     )
     ConfigValidator().validate_or_abort(
         load_sections_from_ini("config.ini", overlay_path)

@@ -151,9 +151,7 @@ def test_sync_right_vb_none(qtbot: QtBot) -> None:
 # --------------------------------------------------------------------- #
 
 
-def test_focus_dock_controller_module(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_focus_dock_controller_module(qtbot: QtBot, request: FixtureRequest) -> None:
     """FocusDockController lives in its own focused module."""
     from lightsheet.gui.coordinators.focus_dock_controller import (
         FocusDockController,
@@ -185,9 +183,7 @@ def test_focus_dock_controller_is_presentation_only(
     assert not hasattr(fdc, "estop_event")
 
 
-def test_focus_shell_aliases_reachable(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_focus_shell_aliases_reachable(qtbot: QtBot, request: FixtureRequest) -> None:
     """The shell still exposes focus dock/widget/plot/label attributes."""
     ctrl, _ = make_controller(qtbot, request)
     assert ctrl.dockWidget_focusTrajectory is ctrl._focus_dock_controller.dock

@@ -14,9 +14,7 @@ def _load_normalizer() -> ModuleType:
     """Load the scripts/fix_generated_ui_enums.py module as a one-off."""
     repo_root = Path(__file__).resolve().parents[1]
     script_path = repo_root / "scripts" / "fix_generated_ui_enums.py"
-    spec = importlib.util.spec_from_file_location(
-        "fix_generated_ui_enums", script_path
-    )
+    spec = importlib.util.spec_from_file_location("fix_generated_ui_enums", script_path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules["fix_generated_ui_enums"] = module
@@ -129,7 +127,7 @@ class TestRewriteGeneratedUi:
                 "from PySide6.QtCore import Qt\n"
                 "class Ui_Clean(object):\n"
                 "    def setupUi(self, w):\n"
-                "        self.label.setText(\"already clean\")\n"
+                '        self.label.setText("already clean")\n'
             )
         )
         assert normalizer.rewrite_generated_ui(p) is False

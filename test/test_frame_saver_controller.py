@@ -302,8 +302,7 @@ def test_set_files_sequential_plane_numbers(tmp_path: Path) -> None:
     ], (
         "set_files in a fresh directory must produce the compact "
         "sequential names (no scan_type, no suffix on first, then _01, "
-        "_02) with the _{wavelength}nm suffix; got: "
-        + repr(saver.filenames_list)
+        "_02) with the _{wavelength}nm suffix; got: " + repr(saver.filenames_list)
     )
 
 
@@ -342,8 +341,7 @@ def test_set_files_collision_suffix(tmp_path: Path) -> None:
         "stack_555nm_03.hdf5",
     ], (
         "set_files must shift the sequential counter past a colliding "
-        "first file (_01, _02, _03); got: "
-        + repr(saver.filenames_list)
+        "first file (_01, _02, _03); got: " + repr(saver.filenames_list)
     )
 
 
@@ -381,8 +379,7 @@ def test_set_files_collision_suffix_increments(tmp_path: Path) -> None:
         "stack_555nm_04.hdf5",
     ], (
         "set_files must increment the sequential counter past existing "
-        "base and _01 to _02, _03, _04; got: "
-        + repr(saver.filenames_list)
+        "base and _01 to _02, _03, _04; got: " + repr(saver.filenames_list)
     )
 
 
@@ -413,7 +410,11 @@ def test_set_files_multi_channel_wavelength_suffix(tmp_path: Path) -> None:
     os.chdir(tmp_path)
     try:
         saver.set_files(
-            2, "scan", "stack", 1, "reconstructed_frame",
+            2,
+            "scan",
+            "stack",
+            1,
+            "reconstructed_frame",
             wavelengths=[555, 640],
         )
     finally:
@@ -469,7 +470,11 @@ def test_set_files_single_channel_has_suffix(tmp_path: Path) -> None:
     os.chdir(tmp_path)
     try:
         saver.set_files(
-            2, "scan", "stack", 1, "reconstructed_frame",
+            2,
+            "scan",
+            "stack",
+            1,
+            "reconstructed_frame",
             wavelengths=[555],
         )
     finally:
@@ -520,7 +525,11 @@ def test_set_files_rejects_wavelengths_none(tmp_path: Path) -> None:
     try:
         with pytest.raises(ValueError):
             saver.set_files(
-                2, "scan", "stack", 1, "reconstructed_frame",
+                2,
+                "scan",
+                "stack",
+                1,
+                "reconstructed_frame",
                 wavelengths=None,
             )
     finally:
@@ -548,7 +557,11 @@ def test_set_files_collision_avoidance_per_channel(tmp_path: Path) -> None:
     os.chdir(tmp_path)
     try:
         saver.set_files(
-            1, "scan", "stack", 1, "reconstructed_frame",
+            1,
+            "scan",
+            "stack",
+            1,
+            "reconstructed_frame",
             wavelengths=[555, 640],
         )
     finally:
@@ -557,8 +570,7 @@ def test_set_files_collision_avoidance_per_channel(tmp_path: Path) -> None:
     assert len(saver.filenames_lists) == 2
     # Channel 0 collides → shifts to _01
     assert saver.filenames_lists[0][0] == "scan_555nm_01.hdf5", (
-        f"channel 0 colliding filename must shift to _01: "
-        f"{saver.filenames_lists[0][0]}"
+        f"channel 0 colliding filename must shift to _01: {saver.filenames_lists[0][0]}"
     )
     # Channel 1 does not collide → no sequential suffix
     assert saver.filenames_lists[1][0] == "scan_640nm.hdf5", (
@@ -664,12 +676,8 @@ def test_frame_saver_worker_branches_on_channel_tag(tmp_path: Path) -> None:
     # frameA → filenames_lists[0][0], frameB → filenames_lists[1][0]
     ch0_file = saver.filenames_lists[0][0]
     ch1_file = saver.filenames_lists[1][0]
-    assert ch0_file in written_files, (
-        f"channel 0 file must be opened: {ch0_file}"
-    )
-    assert ch1_file in written_files, (
-        f"channel 1 file must be opened: {ch1_file}"
-    )
+    assert ch0_file in written_files, f"channel 0 file must be opened: {ch0_file}"
+    assert ch1_file in written_files, f"channel 1 file must be opened: {ch1_file}"
     assert len(written_files[ch0_file]) == 1, (
         "channel 0 file must have exactly 1 dataset"
     )
@@ -722,9 +730,7 @@ def test_frame_saver_worker_single_channel_bare_ndarray(tmp_path: Path) -> None:
         f"single-channel file must be opened: {saver.filenames_list[0]}"
     )
     assert len(written_files[saver.filenames_list[0]]) == 1
-    np.testing.assert_array_equal(
-        written_files[saver.filenames_list[0]][0][1], frame
-    )
+    np.testing.assert_array_equal(written_files[saver.filenames_list[0]][0][1], frame)
 
 
 # ---------------------------------------------------------------------------
@@ -792,7 +798,11 @@ def test_save_single_image_multi_channel_writes_two_files(
     ctrl.save_panel.updateUi_save_single_image()
 
     ctrl._fs.set_files.assert_called_once_with(
-        1, ctrl.save_filepath, "singleImage", 1, "reconstructed_frame",
+        1,
+        ctrl.save_filepath,
+        "singleImage",
+        1,
+        "reconstructed_frame",
         wavelengths=[wl1, wl2],
     )
     enqueue_calls = ctrl._fs.enqueue_buffer.call_args_list
@@ -858,7 +868,11 @@ def test_save_single_image_single_channel_unchanged(
     # present).
     active_wl = int(ctrl.lasers[0].wavelength)
     ctrl._fs.set_files.assert_called_once_with(
-        1, ctrl.save_filepath, "singleImage", 1, "reconstructed_frame",
+        1,
+        ctrl.save_filepath,
+        "singleImage",
+        1,
+        "reconstructed_frame",
         wavelengths=[active_wl],
     )
     ctrl._fs.enqueue_buffer.assert_called_once_with(frameA)
@@ -983,12 +997,15 @@ def test_zarr_saver_write_plane_channel_idx(
 
     saver.write_plane(0, 1, frameA, 0.0, 0.0, 0.0)
     saver.write_plane(1, 1, frameB, 0.0, 0.0, 0.0)
+    assert saver._writer is not None
 
     np.testing.assert_array_equal(
-        np.asarray(saver._writer[0, 1, :, :]), frameA  # ty: ignore[not-subscriptable]
+        np.asarray(saver._writer[0, 1, :, :]),
+        frameA,
     )
     np.testing.assert_array_equal(
-        np.asarray(saver._writer[1, 1, :, :]), frameB  # ty: ignore[not-subscriptable]
+        np.asarray(saver._writer[1, 1, :, :]),
+        frameB,
     )
 
 
@@ -1181,6 +1198,7 @@ def test_zarr_save_worker_branches_on_channel_tag(
     # before the worker starts consuming — mirrors how the real
     # acquisition enqueues near-instantly then the worker drains.
     import queue as _queue
+
     saver.queue = _queue.Queue()
 
     frameA = np.zeros((4, 4), dtype=np.uint16)
@@ -1317,7 +1335,11 @@ def test_save_path_round_trips_channel_axis(
         os.chdir(tmp_path)
         try:
             saver.set_files(
-                2, "scan", "stack", 1, "reconstructed_frame",
+                2,
+                "scan",
+                "stack",
+                1,
+                "reconstructed_frame",
                 wavelengths=wavelengths,
             )
         finally:
@@ -1374,9 +1396,7 @@ def test_save_path_round_trips_channel_axis(
                 f"n_channels=1: file must be opened: {expected_file}; "
                 f"got {list(written_files.keys())}"
             )
-            np.testing.assert_array_equal(
-                written_files[expected_file][0][1], frames[0]
-            )
+            np.testing.assert_array_equal(written_files[expected_file][0][1], frames[0])
         else:
             for ch_idx in range(n_channels):
                 expected_file = saver.filenames_lists[ch_idx][0]

@@ -53,6 +53,7 @@ def test_open_serial_exception_with_ser_closes_and_nulls() -> None:
     _send_cmd inside open()'s try block (not from enable_channel, which
     catches its own SerialException)."""
     import pytest
+
     with patch("lightsheet.hal.real.ibeam_smart.serial.Serial") as MockSerial:
         mock_ser = MagicMock()
         MockSerial.return_value = mock_ser
@@ -70,6 +71,7 @@ def test_open_serial_exception_with_ser_none_skips_close() -> None:
     """open() SerialException when serial.Serial() itself raises -> ser is
     None -> skip close, just log + re-raise (lines 177->181, False branch)."""
     import pytest
+
     with patch("lightsheet.hal.real.ibeam_smart.serial.Serial") as MockSerial:
         MockSerial.side_effect = serial.SerialException("port not available")
         ib = ibeam_mod.IBeam(port="COM4")
@@ -270,9 +272,7 @@ def test_reboot_serial_exception_sets_error() -> None:
 
 def test_reboot_sends_reset_system() -> None:
     """reboot() sends 'reset system' command on success."""
-    ib, mock_ser = _make_open_ibeam(
-        readline_side_effect=[b"[OK]\r\n"]
-    )
+    ib, mock_ser = _make_open_ibeam(readline_side_effect=[b"[OK]\r\n"])
     ib.reboot()
     writes = [c.args[0].decode("ascii") for c in mock_ser.write.call_args_list]
     assert any("reset system" in w for w in writes)
