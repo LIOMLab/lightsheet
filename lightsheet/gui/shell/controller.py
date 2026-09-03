@@ -1609,7 +1609,7 @@ class Controller_MainWindow(QMainWindow):
         The badge mirrors the progress bar value into the badge text so
         the operator never has to look at the status bar mid-run. The
         badge uses QDarkStyle default text color + bold weight — no
-        accent color (audit #12).
+        accent color.
 
         Modes:
         - idle → "IDLE"
@@ -1617,9 +1617,9 @@ class Controller_MainWindow(QMainWindow):
         - live → "LIVE"
         - single → "SINGLE"
         - stack running → "STACK RUNNING — plane {plane}/{total}"
-        - stack running in a queue → appended " (row {queue_row}/{queue_total})"
-        - adaptive running → "ADAPTIVE RUNNING — plane {plane}/{total}"
-        - adaptive aborted → "ADAPTIVE ABORTED — plane {plane}/{total}"
+        - stack in a queue → appended " (row {queue_row}/{queue_total})"
+        - focus running (legacy or adaptive) → "FOCUS RUNNING — plane {plane}/{total}"
+        - focus aborted (legacy or adaptive) → "FOCUS ABORTED — plane {plane}/{total}"
         """
         if mode == "IDLE":
             text = "IDLE"

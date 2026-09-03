@@ -49,6 +49,7 @@ FOCUS_WIDGET_NAMES = (
     "pushButton_focusLoad",
     "doubleSpinBox_focusBlockSize",
     "checkBox_focusAutofocusResidual",
+    "line_focusResidualSeparator",
     "comboBox_focusXAxisVariable",
     "label_focusStatus",
     "label_focusBlockHint",
