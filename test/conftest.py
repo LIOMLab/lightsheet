@@ -19,6 +19,7 @@ parametrize marks are evaluated at collection time, not at fixture-resolution
 time, so the fixture cannot be used inside ``skipif``.
 """
 
+import contextlib
 import os
 import sys
 import types
@@ -27,6 +28,9 @@ from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
+# Qt cleanup helpers used by the autouse fixture and pytest_sessionfinish.
+from test.helpers.cleanup import _pump_deferred_delete, _quit_thread_draining
+
 if TYPE_CHECKING:
     # pyserial is installed on the Mac dev box (and types-pyserial provides
     # the stubs ty reads). Importing under TYPE_CHECKING gives ty the real
@@ -34,6 +38,10 @@ if TYPE_CHECKING:
     # runtime stub injection (_make_serial_stub, gated by find_spec) still
     # runs so the Mac path stubs at runtime if the real import ever fails.
     import serial  # noqa: F401  # ty static-analysis only; not used at runtime
+
+# Register the new fixtures so all test modules can use bundle/controller
+# without per-module imports.
+pytest_plugins = ["test.fixtures.controller"]
 
 # Module-level hardware gate (D-15). Parametrize marks are evaluated at
 # collection time, before any fixture resolves, so the conformance tests'
@@ -371,21 +379,74 @@ _gc.disable()
 # shutdown).
 
 
+@pytest.fixture(autouse=True)
+def _cleanup_qt_after_test(qtbot: Any) -> None:
+    """Stop active timers/threads and reap leaked top-level widgets after
+    every test.
+
+    Wraps each operation in ``RuntimeError`` guards so already-deleted C++
+    objects do not fail cleanup. A temporary ``QMessageBox.question`` patch
+    prevents a leaked ``Controller_MainWindow`` closeEvent from blocking the
+    runner with a modal exit-confirmation dialog.
+    """
+    yield
+
+    from unittest.mock import patch
+
+    from PySide6.QtCore import QThread, QTimer
+    from PySide6.QtWidgets import QApplication, QMessageBox
+
+    app = QApplication.instance()
+    if app is None:
+        return
+
+    # Stop all active QTimer objects first.
+    for obj in _gc.get_objects():
+        if isinstance(obj, QTimer):
+            try:
+                if obj.isActive():
+                    obj.stop()
+            except RuntimeError:
+                pass
+
+    # Quit and drain every running QThread except the main thread.
+    main_thread = QThread.currentThread()
+    for obj in _gc.get_objects():
+        if isinstance(obj, QThread) and obj is not main_thread:
+            _quit_thread_draining(obj, timeout_ms=2000)
+
+    # Close + deleteLater any remaining top-level widgets while the
+    # message-box patch is active.
+    with patch(
+        "PySide6.QtWidgets.QMessageBox.question",
+        return_value=QMessageBox.StandardButton.Yes,
+    ):
+        for widget in list(app.topLevelWidgets()):
+            with contextlib.suppress(RuntimeError):
+                widget.close()
+            with contextlib.suppress(RuntimeError):
+                widget.deleteLater()
+
+    _pump_deferred_delete(500)
+
+
 def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
-    """Stop every running QThread and active QTimer before the xdist worker
-    exits.
+    """Stop timers/threads and reap top-level widgets before the xdist
+    worker exits.
 
     PySide6/shiboken can deadlock or segfault during xdist worker shutdown
-    when QThreads are still running or QTimer events are undelivered (the
-    historical Qt/shiboken teardown race under gc.disable()). The
-    `make_controller` fixture already stops the controller-owned threads per
-    test, but other tests may create QThreads or QTimer objects directly. This
-    hook performs a bounded, process-exit cleanup pass so the worker can shut
-    down cleanly and the xdist master does not wait forever.
+    when QThreads are still running, QTimer events are undelivered, or
+    top-level widgets leak across the session boundary. This hook performs
+    the same bounded cleanup the autouse fixture does after every test,
+    then pumps DeferredDelete so C++ objects are destroyed before the
+    process exits.
     """
-    from PySide6.QtCore import QCoreApplication, QThread, QTimer
+    from unittest.mock import patch
 
-    app = QCoreApplication.instance()
+    from PySide6.QtCore import QThread, QTimer
+    from PySide6.QtWidgets import QApplication, QMessageBox
+
+    app = QApplication.instance()
     # Stop all active timers first so no timer fires while we are quitting
     # threads.
     for obj in _gc.get_objects():
@@ -396,22 +457,22 @@ def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
             except RuntimeError:
                 # C++ object already deleted.
                 pass
-    # Quit and wait every running QThread. Skip the current (main) thread
+    # Quit and drain every running QThread. Skip the current (main) thread
     # so a self-wait does not deadlock the worker process's shutdown.
     main_thread = QThread.currentThread()
     for obj in _gc.get_objects():
         if isinstance(obj, QThread) and obj is not main_thread:
-            try:
-                if obj.isRunning():
-                    obj.quit()
-                    if app is not None:
-                        # Deliver the queued quit() event to the thread's
-                        # event loop. A blocking wait without this can stall
-                        # when quit() races ahead of the thread's exec().
-                        app.processEvents()
-                    obj.wait(2000)
-            except RuntimeError:
-                # C++ object already deleted.
-                pass
+            _quit_thread_draining(obj, timeout_ms=2000)
+    # Close + deleteLater any remaining top-level widgets while the
+    # message-box patch is active, then pump DeferredDelete.
     if app is not None:
-        app.processEvents()
+        with patch(
+            "PySide6.QtWidgets.QMessageBox.question",
+            return_value=QMessageBox.StandardButton.Yes,
+        ):
+            for widget in list(app.topLevelWidgets()):
+                with contextlib.suppress(RuntimeError):
+                    widget.close()
+                with contextlib.suppress(RuntimeError):
+                    widget.deleteLater()
+        _pump_deferred_delete(500)
