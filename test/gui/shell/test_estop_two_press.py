@@ -27,13 +27,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
-from _helpers.controller_fixture import make_controller
 from pytest import FixtureRequest
-from pytestqt.qtbot import QtBot
 
 if TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
-
 
 def _patch_refresh(ctrl: Controller_MainWindow, request: FixtureRequest) -> None:
     """Patch the three post-kill refresh calls so the E-stop handler does
@@ -49,20 +46,21 @@ def _patch_refresh(ctrl: Controller_MainWindow, request: FixtureRequest) -> None
         p.start()
         request.addfinalizer(p.stop)
 
-
-def test_initial_state_is_armed(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_initial_state_is_armed(controller: Controller_MainWindow) -> None:
     """On construction the system is ARMED: label_estopStatus shows
     '● ARMED' with color #34C759, pushButton_armReset shows 'Arm/Reset'."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     assert ctrl.label_estopStatus.text() == "● ARMED"
     assert "#34C759" in ctrl.label_estopStatus.styleSheet()
     assert ctrl.pushButton_armReset.text() == "Arm/Reset"
 
-
-def test_estop_actuated_state(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_estop_actuated_state(
+    controller: Controller_MainWindow,
+    request: FixtureRequest,
+) -> None:
     """After E-stop (ACTUATED): label_estopStatus shows '● E-STOP ACTUATED'
     with color #FF3B30, pushButton_armReset shows 'Clear E-stop'."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _patch_refresh(ctrl, request)
 
     ctrl.updateUi_estop_pressed()
@@ -74,16 +72,16 @@ def test_estop_actuated_state(qtbot: QtBot, request: FixtureRequest) -> None:
         f"{ctrl.pushButton_armReset.text()!r}"
     )
 
-
 def test_first_arm_reset_press_transitions_to_disarmed(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    request: FixtureRequest,
 ) -> None:
     """After the first Arm/Reset press (ACTUATED -> DISARMED):
     label_estopStatus shows '● DISARMED' with color #8E8E93,
     pushButton_armReset shows 'Arm Lasers'. The E-stop button itself
     stays safety-red (#FF3B30) — only the status label goes gray
     (UI-SPEC §Safety-Critical Invariant)."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _patch_refresh(ctrl, request)
 
     ctrl.updateUi_estop_pressed()
@@ -109,12 +107,14 @@ def test_first_arm_reset_press_transitions_to_disarmed(
         "the gray belongs on label_estopStatus only"
     )
 
-
-def test_disarmed_button_stays_red(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_disarmed_button_stays_red(
+    controller: Controller_MainWindow,
+    request: FixtureRequest,
+) -> None:
     """B1 safety gate: after ACTUATED -> DISARMED, the E-stop button
     background is #FF3B30 (red), NOT #8E8E93 (gray). The gray indicator
     stays on label_estopStatus only."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _patch_refresh(ctrl, request)
 
     ctrl.updateUi_estop_pressed()
@@ -125,14 +125,14 @@ def test_disarmed_button_stays_red(qtbot: QtBot, request: FixtureRequest) -> Non
     # The label keeps the gray indicator.
     assert "#8E8E93" in ctrl.label_estopStatus.styleSheet()
 
-
 def test_second_arm_reset_press_transitions_to_armed(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    request: FixtureRequest,
 ) -> None:
     """After the second Arm/Reset press (DISARMED -> ARMED):
     label_estopStatus shows '● ARMED' with color #34C759,
     pushButton_armReset shows 'Arm/Reset'."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _patch_refresh(ctrl, request)
 
     ctrl.updateUi_estop_pressed()
@@ -143,15 +143,15 @@ def test_second_arm_reset_press_transitions_to_armed(
     assert "#34C759" in ctrl.label_estopStatus.styleSheet()
     assert ctrl.pushButton_armReset.text() == "Arm/Reset"
 
-
 def test_single_press_from_actuated_does_not_re_arm(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    request: FixtureRequest,
 ) -> None:
     """A single press from ACTUATED must NOT re-arm to ARMED — it must
     transition to DISARMED first (the two-press invariant, AGENTS.md §2).
     After one press from ACTUATED, the state is DISARMED (not ARMED) and
     the cooperative-abort Event is cleared but the system is not armed."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _patch_refresh(ctrl, request)
 
     ctrl.updateUi_estop_pressed()
@@ -169,21 +169,20 @@ def test_single_press_from_actuated_does_not_re_arm(
     # second press is required to re-arm.
     assert not ctrl.estop_event.is_set()
 
-
 def test_arm_reset_button_has_two_press_tooltip(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """pushButton_armReset has a tooltip documenting the two-press
     sequence (audit #6)."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     tooltip = ctrl.pushButton_armReset.toolTip()
     assert "Two-press sequence" in tooltip, (
         f"Expected tooltip to document the two-press sequence, got: {tooltip!r}"
     )
 
-
 def test_status_bar_hint_on_each_transition(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    request: FixtureRequest,
 ) -> None:
     """Each Arm/Reset transition emits a one-line status-bar hint so the
     operator knows what just happened and what to do next.
@@ -193,7 +192,7 @@ def test_status_bar_hint_on_each_transition(
     Second press (DISARMED -> ARMED): hint mentions the system is armed
     and lasers stay off until toggled or a run starts.
     """
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _patch_refresh(ctrl, request)
 
     # Capture sig_message emissions (the status-bar hint channel).

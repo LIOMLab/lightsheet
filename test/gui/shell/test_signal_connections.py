@@ -21,10 +21,13 @@ These tests verify:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
 import inspect
 
-from _helpers.controller_fixture import make_controller
-from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
 
 
@@ -40,7 +43,6 @@ def test_init_has_no_lambda_collaborator_connections() -> None:
     assert "lambda: self._mc." not in init_source
     assert "lambda: self._acq." not in init_source
 
-
 def test_wire_collaborators_exists() -> None:
     """``Controller_MainWindow`` has a ``wire_collaborators`` method."""
     import lightsheet.gui.shell.controller as controller_mod
@@ -48,9 +50,9 @@ def test_wire_collaborators_exists() -> None:
     assert hasattr(controller_mod.Controller_MainWindow, "wire_collaborators")
     assert callable(controller_mod.Controller_MainWindow.wire_collaborators)
 
-
 def test_converted_connection_fires_collaborator_slot(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    qtbot: QtBot,
 ) -> None:
     """A converted bound-method connection (pushButton_sampleStepUp →
     self._mc.updateUi_move_sample_up) actually fires the MotorController
@@ -65,7 +67,7 @@ def test_converted_connection_fires_collaborator_slot(
     """
     from PySide6.QtCore import Qt
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
 
     # Clear any existing messages from hardware_init.
     ctrl.ui.plainTextEdit_messageLog.clear()
@@ -81,16 +83,15 @@ def test_converted_connection_fires_collaborator_slot(
     log_text = ctrl.ui.plainTextEdit_messageLog.toPlainText()
     assert "Sample stepping up" in log_text or "Out of boundaries" in log_text
 
-
 def test_converted_acq_connection_fires_collaborator_slot(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """A converted AcquisitionCoordinator bound-method connection
     (doubleSpinBox_etlLeftAmplitude valueChanged →
     self._acq.updateUi_etl_left_amplitude) fires the coordinator slot
     when the spinbox value changes — proving the _acq bound-method
     connections also resolve and function post-wire_collaborators()."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
 
     # The updateUi_etl_left_amplitude slot writes to self.siggen.etl_left_amplitude.
     # Record the value before, change the spinbox, and confirm the HAL attr changed.

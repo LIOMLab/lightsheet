@@ -17,32 +17,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from pytest import FixtureRequest
-from pytestqt.qtbot import QtBot
-
-from lightsheet.hal import DeviceBundle
 
 if TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
 pytest.importorskip("PySide6")
 
-
-def _make(
-    qtbot: QtBot, request: FixtureRequest
-) -> tuple[Controller_MainWindow, DeviceBundle]:
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
-    return make_controller(qtbot, request)  # ty: ignore[unsound-return-statement]
-
-
-def test_shell_owned_widgets_stay_on_ui(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_shell_owned_widgets_stay_on_ui(controller: Controller_MainWindow) -> None:
     """Shell-owned widgets stay accessible via ``controller.ui`` after the
     merge-loop trim (E-stop invariant + status bar + message log +
     left-rail navigation)."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
 
     # E-stop toolbar widgets — the safety-critical invariant.
     assert hasattr(ctrl.ui, "pushButton_estop")
@@ -70,13 +55,12 @@ def test_shell_owned_widgets_stay_on_ui(qtbot: QtBot, request: FixtureRequest) -
     assert hasattr(ctrl.ui, "imagesPane")
     assert hasattr(ctrl.ui, "imageView")
 
-
 def test_panel_internal_widget_not_on_shell_ui(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """A panel-internal widget is NOT accessible via ``controller.ui`` after
     the merge-loop trim — it lives on its owning panel's ``ui`` only."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
 
     # doubleSpinBox_acqFirstPlane is a stack_panel-internal widget.
     assert not hasattr(ctrl.ui, "doubleSpinBox_acqFirstPlane"), (
@@ -86,12 +70,11 @@ def test_panel_internal_widget_not_on_shell_ui(
     # It IS accessible via the panel-qualified path.
     assert hasattr(ctrl.stack_panel.ui, "doubleSpinBox_acqFirstPlane")
 
-
 def test_panel_internal_widgets_not_on_shell_ui_sample(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """Several panel-internal widgets across panels are NOT on controller.ui."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
 
     # Sample one widget from each panel.
     panel_internal = {
@@ -107,7 +90,6 @@ def test_panel_internal_widgets_not_on_shell_ui_sample(
         assert not hasattr(ctrl.ui, name), (
             f"panel-internal widget {name!r} leaked onto controller.ui"
         )
-
 
 def test_shell_owned_objectnames_whitelist_exists() -> None:
     """The controller module defines a SHELL_OWNED_OBJECTNAMES whitelist
@@ -142,18 +124,17 @@ def test_shell_owned_objectnames_whitelist_exists() -> None:
             "after the shell re-architecture"
         )
 
-
 def test_merge_loop_only_sets_shell_owned_widgets(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """The merge loop only sets shell-owned widgets onto ``self.ui`` — no
     panel-internal widget leaks. Reconstruct the merge by iterating each
     panel's ``vars(panel.ui)`` and asserting every attr that would land on
     ``self.ui`` is in SHELL_OWNED_OBJECTNAMES."""
-    from lightsheet.gui.shell import controller
+    from lightsheet.gui.shell import controller as shell_controller
 
-    ctrl, _ = _make(qtbot, request)
-    whitelist = controller.SHELL_OWNED_OBJECTNAMES
+    ctrl = controller
+    whitelist = shell_controller.SHELL_OWNED_OBJECTNAMES
 
     panels = (
         ctrl.laser_panel,
@@ -178,7 +159,6 @@ def test_merge_loop_only_sets_shell_owned_widgets(
     assert not leaked, (
         f"merge loop leaked panel-internal widgets onto self.ui: {leaked}"
     )
-
 
 def test_estop_kill_path_unchanged() -> None:
     """The E-stop kill path (updateUi_estop_pressed) still iterates

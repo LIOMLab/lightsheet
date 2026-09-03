@@ -12,21 +12,20 @@ running.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
 from unittest.mock import patch
 
-from _helpers.controller_fixture import make_controller
-from pytest import FixtureRequest
-from pytestqt.qtbot import QtBot
 
-
-def test_close_event_quits_preview_thread(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_close_event_quits_preview_thread(controller: Controller_MainWindow) -> None:
     """closeEvent quits + waits the preview QThread (not join). Starting
     preview mode spawns ``self._preview_thread`` (a QThread); closeEvent
     must call ``quit()`` + ``wait(5000)`` on it and the thread must no
     longer be running afterward."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     # Start preview mode — this constructs PreviewWorker + QThread and
     # calls thread.start(). The worker's while loop runs with
@@ -54,16 +53,15 @@ def test_close_event_quits_preview_thread(
         "preview thread must not be running after closeEvent"
     )
 
-
 def test_close_event_no_join_on_preview_thread(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """closeEvent must NOT call join() on the preview thread — the QThread
     vehicle uses quit() + wait() instead. Verified by asserting the
     _preview_thread attribute is a QThread (which has no join method)."""
     from PySide6.QtCore import QThread
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     ctrl.preview_mode_started = False
     ctrl.acquisition_panel.updateUi_preview_mode_button()
@@ -80,9 +78,8 @@ def test_close_event_no_join_on_preview_thread(
     ctrl._preview_thread.quit()
     ctrl._preview_thread.wait(2000)
 
-
 def test_close_event_preview_timeout_logs_warning(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """closeEvent with the preview thread not exiting within 5s: the
     wait() timeout fires and logger.warning is emitted (log-only, no
@@ -94,7 +91,7 @@ def test_close_event_preview_timeout_logs_warning(
     from PySide6.QtCore import QThread
     from PySide6.QtGui import QCloseEvent
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     ctrl.preview_mode_started = False
     ctrl.acquisition_panel.updateUi_preview_mode_button()
@@ -125,13 +122,10 @@ def test_close_event_preview_timeout_logs_warning(
     ctrl._preview_thread.quit()
     ctrl._preview_thread.wait(2000)
 
-
-def test_close_event_closes_motors_handle(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_close_event_closes_motors_handle(controller: Controller_MainWindow) -> None:
     """closeEvent calls self.motors.close() exactly once alongside the existing
     camera/etls/laser close calls."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     with patch.object(ctrl.motors, "close") as mock_close:
         from PySide6.QtGui import QCloseEvent
 

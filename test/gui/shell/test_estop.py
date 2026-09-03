@@ -29,11 +29,16 @@ maintainer who sees HardwareManager.estop() will be tempted to queue/thread
 it — the single most safety-critical regression risk.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
 import threading
 from typing import Any
 from unittest.mock import patch
-
-from _helpers.controller_fixture import make_controller
 
 
 def test_estop_event_starts_clear() -> None:
@@ -41,7 +46,6 @@ def test_estop_event_starts_clear() -> None:
     is unset — the system starts ARMED, not actuated."""
     estop_event = threading.Event()
     assert estop_event.is_set() is False
-
 
 def test_estop_event_set_is_idempotent() -> None:
     """Calling .set() twice leaves the Event set with no error — re-pressing
@@ -51,7 +55,6 @@ def test_estop_event_set_is_idempotent() -> None:
     estop_event.set()  # idempotent — no exception
     assert estop_event.is_set() is True
 
-
 def test_estop_event_clear_after_set() -> None:
     """The Arm/Reset sequence: .set() then .clear() leaves the Event unset,
     so worker loops resume on the next acquisition."""
@@ -59,7 +62,6 @@ def test_estop_event_clear_after_set() -> None:
     estop_event.set()
     estop_event.clear()
     assert estop_event.is_set() is False
-
 
 def test_worker_poll_logic_breaks_on_set() -> None:
     """A worker loop polling `if estop_event.is_set(): break` at the top of
@@ -84,14 +86,12 @@ def test_worker_poll_logic_breaks_on_set() -> None:
 
     assert iterations == 0
 
-
 # --------------------------------------------------------------------------- #
 # regression gate — HardwareManager must NOT own an estop method.
 # The E-stop kill path stays in the shell (updateUi_estop_pressed) with a
 # direct list[ILaser] ref, lock-free, on the GUI thread. This gate runs at
 # every future commit touching lightsheet/gui/hardware_manager.py.
 # --------------------------------------------------------------------------- #
-
 
 def test_hardware_manager_has_no_estop_method() -> None:
     """HardwareManager must NOT declare an estop/kill/e_stop method — the
@@ -109,7 +109,6 @@ def test_hardware_manager_has_no_estop_method() -> None:
         "HardwareManager must NOT declare an e_stop method"
     )
 
-
 # --------------------------------------------------------------------------- #
 # regression gate — MotorController must NOT own an estop method.
 # MotorController is a motion collaborator (motor-move + focus/interpolation-
@@ -119,7 +118,6 @@ def test_hardware_manager_has_no_estop_method() -> None:
 # be tempted to queue/thread it — the single most safety-critical regression
 # risk. Mirrors the HardwareManager anti-pattern check.
 # --------------------------------------------------------------------------- #
-
 
 def test_motor_controller_has_no_estop_method() -> None:
     """MotorController must NOT declare an estop/kill/e_stop method — motion
@@ -137,14 +135,12 @@ def test_motor_controller_has_no_estop_method() -> None:
         "MotorController must NOT declare an e_stop method"
     )
 
-
 # --------------------------------------------------------------------------- #
 # regression gate — dock presentation controllers must NOT own an estop method.
 # The E-stop kill path stays in the shell (updateUi_estop_pressed); moving it
 # into a presentation-only dock controller would hide the laser-off calls and
 # risk threading them.
 # --------------------------------------------------------------------------- #
-
 
 def test_adaptive_dock_controller_has_no_estop_method() -> None:
     """AdaptiveDockController must NOT declare an estop/kill/e_stop method —
@@ -159,7 +155,6 @@ def test_adaptive_dock_controller_has_no_estop_method() -> None:
             "the E-stop kill path stays in the shell."
         )
 
-
 def test_focus_dock_controller_has_no_estop_method() -> None:
     """FocusDockController must NOT declare an estop/kill/e_stop method —
     the E-stop kill path stays in the shell, lock-free on the GUI thread."""
@@ -173,11 +168,9 @@ def test_focus_dock_controller_has_no_estop_method() -> None:
             "the E-stop kill path stays in the shell."
         )
 
-
 # --------------------------------------------------------------------------- #
 # Adaptive focus E-stop poll points
 # --------------------------------------------------------------------------- #
-
 
 def _autofocus_cfg(**overrides: Any) -> Any:
     """A standard per-plane autofocus config with cadence 1."""
@@ -193,7 +186,6 @@ def _autofocus_cfg(**overrides: Any) -> Any:
     )
     defaults.update(overrides)
     return AutofocusConfig(**defaults)
-
 
 def _configure_autofocus_stack_plan(
     ctrl: Any, tmp_path: Any, n_planes: int = 3
@@ -214,7 +206,6 @@ def _configure_autofocus_stack_plan(
     ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
     ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
 
-
 def _make_autofocus_worker(ctrl: Any, **overrides: Any) -> Any:
     """Build a single-channel StackWorker with the supplied autofocus config."""
     from lightsheet.gui.workers import StackWorker
@@ -232,13 +223,13 @@ def _make_autofocus_worker(ctrl: Any, **overrides: Any) -> Any:
         autofocus_cfg=_autofocus_cfg(**overrides),
     )
 
-
 def test_autofocus_estop_after_first_move_prevents_acquire(
-    qtbot: Any, request: Any, tmp_path: Any
+    controller: Controller_MainWindow,
+    tmp_path: Any,
 ) -> None:
     """Setting the E-stop after the first adaptive focus move prevents the
     frame acquisition from running and the loop breaks cleanly."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=3)
 
     worker = _make_autofocus_worker(ctrl)
@@ -273,13 +264,13 @@ def test_autofocus_estop_after_first_move_prevents_acquire(
     finally:
         ctrl.estop_event.clear()
 
-
 def test_autofocus_estop_set_before_acquire_breaks_loop(
-    qtbot: Any, request: Any, tmp_path: Any
+    controller: Controller_MainWindow,
+    tmp_path: Any,
 ) -> None:
     """If the E-stop is already actuated, the adaptive focus loop breaks
     before any motor move or laser/arming acquire step."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=3)
 
     worker = _make_autofocus_worker(ctrl)

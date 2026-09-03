@@ -20,13 +20,16 @@ Runs headless on Mac via ``QT_QPA_PLATFORM=offscreen`` (set by conftest).
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
 import pytest
-from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
-from _helpers.controller_fixture import make_controller
 from PySide6.QtWidgets import QButtonGroup, QWidget
 
 # The 8 left-rail button objectNames in left-rail order (index 0..7).
@@ -41,23 +44,21 @@ _RAIL_BUTTON_NAMES = (
     "toolButton_railCalibrate",
 )
 
-
 def test_left_rail_buttons_exist_and_are_checkable(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """The 8 left-rail QToolButtons exist on ui and are checkable."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     for name in _RAIL_BUTTON_NAMES:
         btn = getattr(ctrl.ui, name)
         assert btn is not None, f"{name} missing from controller.ui"
         assert btn.isCheckable(), f"{name} must be checkable"
 
-
 def test_rail_group_is_exclusive_with_eight_buttons(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """ctrl._rail_group is an exclusive QButtonGroup with 8 buttons."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     group = ctrl._rail_group
     assert isinstance(group, QButtonGroup)
     assert group.exclusive() is True, "left-rail QButtonGroup must be exclusive"
@@ -65,13 +66,10 @@ def test_rail_group_is_exclusive_with_eight_buttons(
         f"left-rail QButtonGroup has {len(group.buttons())} buttons, expected 8"
     )
 
-
-def test_rail_button_ids_match_page_indices(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_rail_button_ids_match_page_indices(controller: Controller_MainWindow) -> None:
     """Each left-rail button's QButtonGroup id matches its page index
     (Motion=0, Acquire=1, ..., Calibrate=7)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     group = ctrl._rail_group
     for expected_id, name in enumerate(_RAIL_BUTTON_NAMES):
         btn = getattr(ctrl.ui, name)
@@ -79,13 +77,12 @@ def test_rail_button_ids_match_page_indices(
             f"{name} has id {group.id(btn)}, expected {expected_id}"
         )
 
-
 def test_clicking_each_rail_button_switches_stacked_page(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """Clicking each left-rail button sets stackedPanels.currentIndex to
     the corresponding index."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     group = ctrl._rail_group
     for expected_id, name in enumerate(_RAIL_BUTTON_NAMES):
         btn = getattr(ctrl.ui, name)
@@ -98,20 +95,19 @@ def test_clicking_each_rail_button_switches_stacked_page(
             f"{ctrl.ui.stackedPanels.currentIndex()}, expected {expected_id}"
         )
 
-
-def test_motion_is_default_active_page(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_motion_is_default_active_page(controller: Controller_MainWindow) -> None:
     """Motion (index 0) is the default active page after construction."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     assert ctrl.ui.stackedPanels.currentIndex() == 0
     assert ctrl.ui.toolButton_railMotion.isChecked() is True
 
-
 def test_estop_toolbar_visible_across_all_switches(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    qtbot: QtBot,
 ) -> None:
     """The E-stop toolbar stays visible across all panel switches (it is
     in the TopToolBarArea, not inside any stacked page)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     group = ctrl._rail_group
     ctrl.show()
     qtbot.waitExposed(ctrl)
@@ -125,23 +121,21 @@ def test_estop_toolbar_visible_across_all_switches(
             f"toolBar_estop not visible after switching to {name}"
         )
 
-
-def test_estop_toolbar_is_not_movable(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_estop_toolbar_is_not_movable(controller: Controller_MainWindow) -> None:
     """The E-stop toolbar is fixed (movable=False) -- the safety-critical
     E-stop button must not be draggable off the TopToolBarArea."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     assert ctrl.ui.toolBar_estop.isMovable() is False, (
         "toolBar_estop must be non-movable (movable=False) so the E-stop "
         "button stays in the TopToolBarArea (AGENTS.md §2)"
     )
 
-
 def test_phase9_extension_seam_adds_ninth_page(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """The Phase 9 extension seam: a 9th page can be added to
     stackedPanels without re-architecture (addWidget appends)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     initial_count = ctrl.ui.stackedPanels.count()
     ninth = QWidget()
     ctrl.ui.stackedPanels.addWidget(ninth)
@@ -150,9 +144,8 @@ def test_phase9_extension_seam_adds_ninth_page(
     ctrl.ui.stackedPanels.removeWidget(ninth)
     ninth.deleteLater()
 
-
 def test_rail_buttons_have_icons_and_tooltips(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """UI-SPEC §Left-Rail Composition: all 8 rail buttons have a non-null
     SP_* icon and a non-empty tooltip matching the '{Panel}: {purpose}.'
@@ -160,7 +153,7 @@ def test_rail_buttons_have_icons_and_tooltips(
     so the TextUnderIcon text area is full-width and the label is not
     clipped to the icon's 24px width; the icon itself is drawn 24px tall
     within that area, so the visual icon stays 24x24."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     for name in _RAIL_BUTTON_NAMES:
         btn = getattr(ctrl.ui, name)
         assert not btn.icon().isNull(), (

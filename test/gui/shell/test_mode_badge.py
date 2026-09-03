@@ -26,26 +26,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from pytest import FixtureRequest
-from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
-
-from _helpers.controller_fixture import make_controller
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QLabel, QToolBar
 
     from lightsheet.gui.shell.controller import Controller_MainWindow
-    from lightsheet.hal import DeviceBundle
-
-
-def _make(
-    qtbot: QtBot, request: FixtureRequest
-) -> tuple[Controller_MainWindow, DeviceBundle]:
-    return make_controller(qtbot, request)  # ty: ignore[unsound-return-statement]
-
-
 def _badge_is_in_toolbar(badge: QLabel, toolbar: QToolBar) -> bool:
     """Return True if ``badge`` is a descendant of ``toolbar``."""
     parent = badge.parent()
@@ -55,12 +42,9 @@ def _badge_is_in_toolbar(badge: QLabel, toolbar: QToolBar) -> bool:
         parent = parent.parent()
     return False
 
-
-def test_mode_badge_exists_in_estop_toolbar(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_mode_badge_exists_in_estop_toolbar(controller: Controller_MainWindow) -> None:
     """A QLabel objectName label_modeBadge exists in the E-stop toolbar."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
     assert hasattr(ctrl.ui, "label_modeBadge"), (
         "label_modeBadge not found on controller.ui"
     )
@@ -71,48 +55,43 @@ def test_mode_badge_exists_in_estop_toolbar(
         "it is always visible on every tab"
     )
 
-
-def test_mode_badge_initial_idle(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_mode_badge_initial_idle(controller: Controller_MainWindow) -> None:
     """Initial state (idle) — badge text is 'IDLE'."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
     assert ctrl.ui.label_modeBadge.text() == "IDLE", (
         f"initial badge text is {ctrl.ui.label_modeBadge.text()!r}, expected 'IDLE'"
     )
 
-
-def test_mode_badge_preview(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_mode_badge_preview(controller: Controller_MainWindow) -> None:
     """When preview starts — badge text is 'PREVIEW'."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
     ctrl._update_mode_badge("PREVIEW")
     assert ctrl.ui.label_modeBadge.text() == "PREVIEW", (
         f"after preview start, badge text is "
         f"{ctrl.ui.label_modeBadge.text()!r}, expected 'PREVIEW'"
     )
 
-
-def test_mode_badge_live(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_mode_badge_live(controller: Controller_MainWindow) -> None:
     """When live starts — badge text is 'LIVE'."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
     ctrl._update_mode_badge("LIVE")
     assert ctrl.ui.label_modeBadge.text() == "LIVE", (
         f"after live start, badge text is "
         f"{ctrl.ui.label_modeBadge.text()!r}, expected 'LIVE'"
     )
 
-
-def test_mode_badge_single(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_mode_badge_single(controller: Controller_MainWindow) -> None:
     """When single acquisition starts — badge text is 'SINGLE'."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
     ctrl._update_mode_badge("SINGLE")
     assert ctrl.ui.label_modeBadge.text() == "SINGLE", (
         f"after single start, badge text is "
         f"{ctrl.ui.label_modeBadge.text()!r}, expected 'SINGLE'"
     )
 
-
-def test_mode_badge_stack_running(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_mode_badge_stack_running(controller: Controller_MainWindow) -> None:
     """When stack starts — badge text is 'STACK RUNNING — plane 1/{N}'."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
     ctrl.number_of_planes = 240
     ctrl._update_mode_badge("STACK", "RUNNING", plane=1, total=240)
     expected = "STACK RUNNING \u2014 plane 1/240"
@@ -121,11 +100,10 @@ def test_mode_badge_stack_running(qtbot: QtBot, request: FixtureRequest) -> None
         f"{ctrl.ui.label_modeBadge.text()!r}, expected {expected!r}"
     )
 
-
-def test_mode_badge_progress_mirror(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_mode_badge_progress_mirror(controller: Controller_MainWindow) -> None:
     """During a stack run, sig_progress_update updates the badge to
     'STACK RUNNING — plane {n}/{N}' mirroring the progress bar value."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
     ctrl.number_of_planes = 240
     ctrl.stack_mode_started = True
     # Emit a progress update — the badge should mirror it.
@@ -136,12 +114,11 @@ def test_mode_badge_progress_mirror(qtbot: QtBot, request: FixtureRequest) -> No
         f"{ctrl.ui.label_modeBadge.text()!r}, expected {expected!r}"
     )
 
-
 def test_mode_badge_reverts_to_idle_on_complete(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """When a run completes/aborts — badge text reverts to 'IDLE'."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
     ctrl._update_mode_badge("STACK", "RUNNING", plane=1, total=240)
     assert ctrl.ui.label_modeBadge.text() != "IDLE"
     ctrl._update_mode_badge("IDLE")
@@ -150,11 +127,10 @@ def test_mode_badge_reverts_to_idle_on_complete(
         f"{ctrl.ui.label_modeBadge.text()!r}, expected 'IDLE'"
     )
 
-
-def test_mode_badge_no_accent_color(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_mode_badge_no_accent_color(controller: Controller_MainWindow) -> None:
     """The badge uses QDarkStyle default text color + bold weight (no
     accent color — no #FF/#34/#8E in the badge stylesheet)."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
     ss = ctrl.ui.label_modeBadge.styleSheet() or ""
     # The badge may have a bold-weight stylesheet but must NOT contain
     # accent colors (#FF = red, #34 = green, #8E = gray).
@@ -164,11 +140,10 @@ def test_mode_badge_no_accent_color(qtbot: QtBot, request: FixtureRequest) -> No
             "— the badge must use QDarkStyle default text + bold weight only"
         )
 
-
-def test_mode_badge_bold_weight(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_mode_badge_bold_weight(controller: Controller_MainWindow) -> None:
     """The badge uses bold font weight (the QDarkStyle default text color
     with bold weight, matching the existing status-label pattern)."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
     ss = ctrl.ui.label_modeBadge.styleSheet() or ""
     assert "bold" in ss.lower(), (
         f"badge stylesheet should include 'font-weight: bold': {ss!r}"

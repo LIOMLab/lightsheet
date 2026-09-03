@@ -16,7 +16,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
 
 if TYPE_CHECKING:
@@ -24,7 +23,6 @@ if TYPE_CHECKING:
 
 pytest.importorskip("PySide6")
 
-from _helpers.controller_fixture import make_controller
 from PySide6 import QtCore
 
 
@@ -37,7 +35,6 @@ def _resize_and_settle(
     controller.resize(width, height)
     qtbot.wait(120)
 
-
 @pytest.mark.parametrize(
     "width,height",
     [
@@ -47,11 +44,13 @@ def _resize_and_settle(
     ],
 )
 def test_layout_reflows_at_target_sizes(
-    qtbot: QtBot, request: FixtureRequest, width: int, height: int
+    controller: Controller_MainWindow,
+    qtbot: QtBot,
+    width: int,
+    height: int,
 ) -> None:
     """At each target size the ImageView is >= 320x240, the controls pane
     is >= 360 wide, and the E-stop toolbar stays visible."""
-    controller, _bundle = make_controller(qtbot, request)
     controller.show()
     qtbot.waitExposed(controller)
     _resize_and_settle(controller, width, height, qtbot)
@@ -76,13 +75,12 @@ def test_layout_reflows_at_target_sizes(
         f"E-stop toolbar not visible at {width}x{height}"
     )
 
-
 def test_images_pane_wins_extra_space_on_lab_display(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    qtbot: QtBot,
 ) -> None:
     """At 1920x1080 the imagesPane (stretch=1) wins the extra width over
     the controlsPane (stretch=0)."""
-    controller, _bundle = make_controller(qtbot, request)
     controller.show()
     qtbot.waitExposed(controller)
     _resize_and_settle(controller, 1920, 1080, qtbot)
@@ -95,13 +93,12 @@ def test_images_pane_wins_extra_space_on_lab_display(
         f"on imagesPane vs stretch=0 on controlsPane is not in effect"
     )
 
-
 def test_window_cannot_resize_below_floor(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    qtbot: QtBot,
 ) -> None:
     """The window minimumSize (1280x800) is enforced — a resize below
     the floor clamps back up."""
-    controller, _bundle = make_controller(qtbot, request)
     controller.show()
     qtbot.waitExposed(controller)
     _resize_and_settle(controller, 1000, 600, qtbot)
@@ -119,11 +116,9 @@ def test_window_cannot_resize_below_floor(
         f"window height {controller.height()} < 800 (minimumSize not enforced)"
     )
 
-
-def test_splitter_panes_not_collapsible(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_splitter_panes_not_collapsible(controller: Controller_MainWindow) -> None:
     """QSplitter childrenCollapsible stays False — operator drag resizes
     but cannot collapse a pane to 0 (hiding is via the View menu)."""
-    controller, _bundle = make_controller(qtbot, request)
     assert controller.ui.splitter.childrenCollapsible() is False, (
         "splitter childrenCollapsible must be False (panes must not "
         "collapse via handle drag)"
@@ -132,9 +127,7 @@ def test_splitter_panes_not_collapsible(qtbot: QtBot, request: FixtureRequest) -
         f"splitter handleWidth {controller.ui.splitter.handleWidth()} != 5"
     )
 
-
 # --- Motion tab fixed-size group-box remediation (audit #5) ---
-
 
 def _show_motion_tab(controller: Controller_MainWindow, qtbot: QtBot) -> None:
     """Switch the stacked panes to the Motion page (index 0) and
@@ -143,13 +136,12 @@ def _show_motion_tab(controller: Controller_MainWindow, qtbot: QtBot) -> None:
     controller.ui.toolButton_railMotion.setChecked(True)
     qtbot.wait(50)
 
-
 def test_sample_movement_group_box_not_pinned(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    qtbot: QtBot,
 ) -> None:
     """groupBox_SampleMovement no longer has the 350x380 fixed max — the
     cap is removed so the box can grow with the layout."""
-    controller, _bundle = make_controller(qtbot, request)
     controller.show()
     qtbot.waitExposed(controller)
     _show_motion_tab(controller, qtbot)
@@ -164,12 +156,11 @@ def test_sample_movement_group_box_not_pinned(
         f"(got {max_size.width()}x{max_size.height()})"
     )
 
-
 def test_camera_movement_group_box_not_pinned(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    qtbot: QtBot,
 ) -> None:
     """groupBox_CameraMovement no longer has the 350x380 fixed max."""
-    controller, _bundle = make_controller(qtbot, request)
     controller.show()
     qtbot.waitExposed(controller)
     _show_motion_tab(controller, qtbot)
@@ -181,9 +172,9 @@ def test_camera_movement_group_box_not_pinned(
         f"(got {max_size.width()}x{max_size.height()})"
     )
 
-
 def test_sample_movement_group_box_min_width_content_driven(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    qtbot: QtBot,
 ) -> None:
     """groupBox_SampleMovement minimumSize is content-driven, not the old
     fixed 350x380 pin. The remediation drops the 380 height pin so the
@@ -193,7 +184,6 @@ def test_sample_movement_group_box_min_width_content_driven(
     (which is non-deterministic under xdist parallel execution), so we
     assert the height is no longer the old 380 pin rather than asserting
     an exact pixel value."""
-    controller, _bundle = make_controller(qtbot, request)
     controller.show()
     qtbot.waitExposed(controller)
     _show_motion_tab(controller, qtbot)
@@ -213,15 +203,16 @@ def test_sample_movement_group_box_min_width_content_driven(
         f"(old width pin still present)"
     )
 
-
-def test_jog_arrow_button_no_width_cap(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_jog_arrow_button_no_width_cap(
+    controller: Controller_MainWindow,
+    qtbot: QtBot,
+) -> None:
     """The jog arrow buttons are uniform 48x48 touch targets. The .ui
     sets minimumSize and maximumSize to 48x48 so the buttons stay uniform
     regardless of layout; Qt's layout engine can reduce the effective
     minimum height to the content-driven value under certain layout
     settle states (non-deterministic under xdist). The key assertions are
     the uniform 48px width and a reasonable touch-target height floor."""
-    controller, _bundle = make_controller(qtbot, request)
     controller.show()
     qtbot.waitExposed(controller)
     _show_motion_tab(controller, qtbot)
@@ -244,13 +235,12 @@ def test_jog_arrow_button_no_width_cap(qtbot: QtBot, request: FixtureRequest) ->
         f"(old width cap still present — should be 48 uniform)"
     )
 
-
 def test_motion_tab_group_boxes_visible_at_laptop_floor(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    qtbot: QtBot,
 ) -> None:
     """At 1366x768 the Motion tab group boxes stack vertically without
     clipping — both are visible and not pinned to 350x380."""
-    controller, _bundle = make_controller(qtbot, request)
     controller.show()
     qtbot.waitExposed(controller)
     _resize_and_settle(controller, 1366, 768, qtbot)
@@ -261,18 +251,16 @@ def test_motion_tab_group_boxes_visible_at_laptop_floor(
     assert sample_gb.isVisible(), "groupBox_SampleMovement not visible at 1366x768"
     assert camera_gb.isVisible(), "groupBox_CameraMovement not visible at 1366x768"
 
-
 # --- Left-rail + E-stop toolbar visibility (uniform layout convention) ---
 
-
 def test_left_rail_visible_at_all_target_sizes(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    qtbot: QtBot,
 ) -> None:
     """The left-rail (the fixed-width column of QToolButtons that drives
     the QStackedWidget) stays visible at every target size. The rail is
     not collapsible — single fixed layout, every panel is one click
     away."""
-    controller, _bundle = make_controller(qtbot, request)
     controller.show()
     qtbot.waitExposed(controller)
 
@@ -286,15 +274,11 @@ def test_left_rail_visible_at_all_target_sizes(
             f"(rail should be a narrow fixed-width column, not a pane)"
         )
 
-
-def test_estop_toolbar_fixed_and_non_movable(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_estop_toolbar_fixed_and_non_movable(controller: Controller_MainWindow) -> None:
     """The E-stop toolbar is fixed (non-movable, non-floatable) so the
     safety-critical kill button stays in a predictable location at every
     window size. A movable/floatable toolbar could be dragged off-screen
     or docked somewhere the operator cannot reach in an emergency."""
-    controller, _bundle = make_controller(qtbot, request)
     tb = controller.ui.toolBar_estop
     assert tb.isMovable() is False, (
         "E-stop toolbar must be non-movable (safety — fixed location)"
@@ -303,13 +287,12 @@ def test_estop_toolbar_fixed_and_non_movable(
         "E-stop toolbar must be non-floatable (safety — fixed location)"
     )
 
-
 def test_estop_button_visible_at_all_target_sizes(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    qtbot: QtBot,
 ) -> None:
     """The E-stop button itself stays visible at every target size — the
     toolbar is fixed and the button has a minimum touch target."""
-    controller, _bundle = make_controller(qtbot, request)
     controller.show()
     qtbot.waitExposed(controller)
 
@@ -322,9 +305,8 @@ def test_estop_button_visible_at_all_target_sizes(
         assert estop is not None, "pushButton_estop not found in shell"
         assert estop.isVisible(), f"E-stop button not visible at {width}x{height}"
 
-
 def test_all_eight_panels_scroll_area_wrapped(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """Every stacked-panel page (all 8) is a QScrollArea with
     widgetResizable=True — the uniform convention so resize is uniform
@@ -332,7 +314,6 @@ def test_all_eight_panels_scroll_area_wrapped(
     Acquisitions panel (index 6)."""
     from PySide6.QtWidgets import QScrollArea
 
-    controller, _bundle = make_controller(qtbot, request)
     sp = controller.ui.stackedPanels
     assert sp.count() == 8
     for idx in range(8):

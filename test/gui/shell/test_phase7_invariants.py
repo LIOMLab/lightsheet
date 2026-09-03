@@ -35,19 +35,23 @@ triggers ``from PySide6...``), so the module-level
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
 import importlib
 import threading
 from pathlib import Path
 
 import pytest
-from pytestqt.qtbot import QtBot
 
 # Importing any panel module pulls in PySide6 transitively, so gate the whole
 # module on PySide6 being importable — mirrors test_panel_structure.py.
 pytest.importorskip("PySide6")
 
 # Repository root (test/ is one level below it) → lightsheet/gui/...
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _GUI_DIR = _REPO_ROOT / "lightsheet" / "gui"
 _LIGHTSHEET_DIR = _REPO_ROOT / "lightsheet"
 
@@ -62,12 +66,10 @@ _PANEL_MODULE_NAMES = (
     "calibration_panel",
 )
 
-
 # --------------------------------------------------------------------------- #
 # GAP 1 — MIG-05 (SAFETY-CRITICAL): the E-stop kill-path SLOT lives ONLY in
 # the shell. No per-panel module may define ``updateUi_estop_pressed``.
 # --------------------------------------------------------------------------- #
-
 
 def test_estop_slot_lives_only_in_shell() -> None:
     """The E-stop kill-path SLOT ``updateUi_estop_pressed`` is defined on the
@@ -100,12 +102,10 @@ def test_estop_slot_lives_only_in_shell() -> None:
             "regression."
         )
 
-
 # --------------------------------------------------------------------------- #
 # GAP 2 — MIG-05 (structural): the monolithic ui_controller files are DELETED
 # and the 7 per-panel modules + ui_shell + native image_view (MIG-08) EXIST.
 # --------------------------------------------------------------------------- #
-
 
 def test_monolithic_ui_controller_deleted_and_panels_exist() -> None:
     """The monolithic ``ui_controller`` files are gone and the 7 per-panel
@@ -134,7 +134,6 @@ def test_monolithic_ui_controller_deleted_and_panels_exist() -> None:
         "ImageView replaced the dropped pyqtgraph ImageView (MIG-08)."
     )
 
-
 # --------------------------------------------------------------------------- #
 # GAP 3 — MIG-07 (SAFETY-CRITICAL, behavior): the REAL controller's
 # estop_event is a threading.Event instance (NOT a QThread interruption API).
@@ -143,20 +142,16 @@ def test_monolithic_ui_controller_deleted_and_panels_exist() -> None:
 # migration.
 # --------------------------------------------------------------------------- #
 
-
 def test_controller_estop_event_is_threading_event(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """The real controller's ``estop_event`` is a ``threading.Event``
     instance — the MIG-07 invariant that the cooperative-abort mechanism
     stays ``threading.Event`` under the QThread migration (NOT replaced by
     the QThread interruption API). Uses the real-construction fixture (same
     pattern as ``test_panel_structure.py::test_shell_composes_panels``)."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
 
     assert isinstance(ctrl.estop_event, threading.Event), (
         f"ctrl.estop_event must be a threading.Event instance, got "
@@ -165,7 +160,6 @@ def test_controller_estop_event_is_threading_event(
         "(MIG-07)."
     )
 
-
 # --------------------------------------------------------------------------- #
 # GAP 4 — MIG-07 (source-assert): (a) requestInterruption is NOT referenced
 # anywhere in lightsheet/ (the QThread interruption API is intentionally NOT
@@ -173,7 +167,6 @@ def test_controller_estop_event_is_threading_event(
 # creates the 4 laser toggle/power daemon threads as threading.Thread (not
 # QThread) to preserve the lock-free E-stop kill path.
 # --------------------------------------------------------------------------- #
-
 
 def test_no_request_interruption_in_lightsheet() -> None:
     """``requestInterruption`` (the QThread interruption API) does NOT appear
@@ -198,7 +191,6 @@ def test_no_request_interruption_in_lightsheet() -> None:
         "anywhere in lightsheet/ — estop_event (threading.Event) is the "
         "cooperative-abort mechanism (MIG-07). Offending files: " + ", ".join(offenders)
     )
-
 
 def test_laser_panel_daemons_are_threading_thread() -> None:
     """``laser_panel.py`` creates the 4 laser toggle/power daemon threads as

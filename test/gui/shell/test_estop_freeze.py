@@ -25,17 +25,23 @@ The real ``Controller_MainWindow`` is constructed via ``make_controller``
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
 from collections.abc import Callable
 from typing import Any
 from unittest.mock import patch
 
-from _helpers.controller_fixture import make_controller
 from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
 
 
 def test_estop_handler_defers_post_kill_refresh(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    qtbot: QtBot,
+    request: FixtureRequest,
 ) -> None:
     """The three post-kill refresh calls (_poll_laser_status /
     _refresh_laser_readback / _refresh_laser2_readback_async) are deferred
@@ -45,7 +51,7 @@ def test_estop_handler_defers_post_kill_refresh(
     thread is responsive), and the deferred refresh calls land after the
     event loop pumps.
     """
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     # Record synchronous-vs-deferred timing for each refresh call. A call
     # is "synchronous" if it happens during updateUi_estop_pressed() (i.e.
@@ -144,16 +150,16 @@ def test_estop_handler_defers_post_kill_refresh(
     assert len(deferred_readback_l1) >= 1
     assert len(deferred_readback_l2) >= 1
 
-
 def test_estop_kill_path_stays_synchronous_and_lock_free(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    request: FixtureRequest,
 ) -> None:
     """The kill loop (estop_event.set() + for laser in self.lasers:
     laser.off()) stays synchronous on the GUI thread — no thread/queue
     offload (AGENTS.md §2). The cooperative-abort Event is set before the
     handler returns, and every laser's off() is called synchronously.
     """
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     # Record which lasers had off() called. Wrap each laser's off() so we
     # can observe the synchronous call.
@@ -202,15 +208,15 @@ def test_estop_kill_path_stays_synchronous_and_lock_free(
     for idx, laser in enumerate(ctrl.lasers):
         laser.off = original_offs[idx]
 
-
 def test_estop_laser_off_precedes_dock_freeze(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    request: FixtureRequest,
 ) -> None:
     """The synchronous laser-off kill path completes before either
     trajectory dock is frozen. For an E-stop with both adaptive and focus
     active, every laser.off() call precedes any call to the dock
     controllers' freeze() methods."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     # Patch the refresh calls so the handler does not spawn a QThread.
     patchers = [
@@ -272,13 +278,13 @@ def test_estop_laser_off_precedes_dock_freeze(
         f"laser.off must precede dock freeze; got order {order}"
     )
 
-
 def test_estop_warning_emitted_and_freeze_still_runs(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    request: FixtureRequest,
 ) -> None:
     """If a laser off() fails and sets laser.error, the E-stop handler
     emits a warning message AND still freezes the dock plots afterwards."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     patchers = [
         patch.object(ctrl._hw, "_poll_laser_status"),
@@ -313,16 +319,17 @@ def test_estop_warning_emitted_and_freeze_still_runs(
     assert ctrl._adaptive_dock_controller.widget._frozen is True
     assert ctrl._focus_dock_controller.widget._frozen is True
 
-
 def test_arm_reset_first_press_clears_estop_event(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    qtbot: QtBot,
+    request: FixtureRequest,
 ) -> None:
     """After E-stop, the first Arm/Reset press clears the cooperative-abort
     Event (transitions to DISARMED). The GUI thread must stay responsive
     through the press — a QTimer.singleShot(0, ...) probe fires within
     200 ms of the Arm/Reset press.
     """
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     # Patch the refresh calls so the E-stop handler does not spawn a QThread
     # for the L2 readback (keeps the test focused on the Arm/Reset path).

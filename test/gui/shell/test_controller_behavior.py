@@ -32,25 +32,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from _helpers.controller_fixture import make_controller
-from pytest import FixtureRequest
-from pytestqt.qtbot import QtBot
-
 if TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
+    from lightsheet.hal import DeviceBundle
+
 
 # --------------------------------------------------------------------------- #
 # G1 — start_lasers surfaces a laser-1 DAQ write failure (LSR-01 / G-01-1)
 # --------------------------------------------------------------------------- #
 
-
 def test_start_lasers_surfaces_laser1_daq_error(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """When self.lasers[0].on() leaves .error set, start_lasers must emit
     an operator message naming the cause and reset the flag — a failed
     laser-1 DAQ start is no longer a silent no-op (G-01-1)."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._auto_laser1 = True
     ctrl._auto_laser2 = False
     ctrl.laser1_power_pct = 50
@@ -81,15 +78,13 @@ def test_start_lasers_surfaces_laser1_daq_error(
     # The flag is reset so the warning fires once per failure.
     assert laser1.error == 0
 
-
 # --------------------------------------------------------------------------- #
 # G2 — acquire_scan aborts on recorder timeout before copy_recorder_images
 #      (BUG-01)
 # --------------------------------------------------------------------------- #
 
-
 def test_acquire_scan_aborts_on_recorder_timeout_before_copy(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """When camera.recorder_timeout_status is True after monitor_recorder,
     acquire_scan must emit the timeout warning, tear down the recorder and
@@ -98,7 +93,7 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy(
     frames (BUG-01)."""
     from lightsheet.gui.workers import SingleWorker
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     # Construct a SingleWorker to exercise the relocated acquire_scan
     # (now on _AcquireScanMixin in workers.py). The save-option args are
     # pre-sampled on the GUI thread in production; here we pass defaults.
@@ -174,15 +169,13 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy(
     assert delete_scanner_called
     assert disarm_called
 
-
 # --------------------------------------------------------------------------- #
 # G3 — acquire_scan surfaces a siggen create_scanner failure before the
 #      recorder is primed (BUG-01 / G-01-5)
 # --------------------------------------------------------------------------- #
 
-
 def test_acquire_scan_surfaces_siggen_error_before_recorder(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """When create_scanner() sets self.siggen.error (its bare-except on DAQ
     task creation failure), acquire_scan must emit an operator message,
@@ -191,7 +184,7 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder(
     masked as a silent 15 s camera timeout (G-01-5)."""
     from lightsheet.gui.workers import SingleWorker
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     # Construct a SingleWorker to exercise the relocated acquire_scan.
     worker = SingleWorker(
         ctrl._bundle, ctrl._hw, ctrl, save_description="", save_stitch_blend=False
@@ -252,15 +245,13 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder(
     assert delete_scanner_called
     assert disarm_called
 
-
 # --------------------------------------------------------------------------- #
 # G4 — start_lasers reads cached auto-laser flags, never a Qt widget
 #      (BUG-01 / G-01-5)
 # --------------------------------------------------------------------------- #
 
-
 def test_start_lasers_reads_cached_flags_not_widgets(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """start_lasers runs on an acquisition worker thread and must read only
     the cached auto-laser flags sampled on the GUI thread — never a Qt
@@ -268,7 +259,7 @@ def test_start_lasers_reads_cached_flags_not_widgets(
     cached flag True but the Qt checkbox unchecked (its default state),
     start_lasers must energize laser 1 — proving it reads the cached flag,
     not the widget (if it read the checkbox, laser 1 would stay dark)."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     # The Qt checkbox is unchecked by default (QCheckBox defaults to False).
     # Set the cached flag True — if start_lasers reads the widget instead of
@@ -294,15 +285,14 @@ def test_start_lasers_reads_cached_flags_not_widgets(
         "the cached flag, not the widget (AGENTS.md §11)."
     )
 
-
 # --------------------------------------------------------------------------- #
 # G5 — PreviewWorker.run polls estop_event and breaks before frame
 #      acquisition; the finished signal fires exactly once (LSR-04 / CR-01)
 # --------------------------------------------------------------------------- #
 
-
 def test_preview_worker_breaks_on_estop_before_frame_acquisition(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
+    bundle: DeviceBundle,
 ) -> None:
     """With estop_event set before the worker loop starts, the E-stop poll
     at the top of PreviewWorker.run's while loop must break before any
@@ -311,7 +301,7 @@ def test_preview_worker_breaks_on_estop_before_frame_acquisition(
     (CR-01 — preview now aligns with live/single/stack per AGENTS.md §2)."""
     from lightsheet.gui.workers import PreviewWorker
 
-    ctrl, bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     # E-stop actuated before the loop starts.
     ctrl.estop_event.set()
@@ -353,21 +343,19 @@ def test_preview_worker_breaks_on_estop_before_frame_acquisition(
     # The finished signal fired exactly once (the finally block).
     assert len(finished_emits) == 1
 
-
 # --------------------------------------------------------------------------- #
 # G6 — updateUi_initial_hardware_state sets wavelength labels from the live
 #      list[ILaser] instances (LSR-05)
 # --------------------------------------------------------------------------- #
 
-
 def test_wavelength_labels_set_from_live_instances(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """updateUi_initial_hardware_state must set the wavelength labels from
     the live self.lasers[0].wavelength and self.lasers[1].wavelength
     instances — not hardcoded numbers — so the operator sees the real
     configured wavelength (LSR-05)."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     # The fixture's bundle has Laser 1 = 555 nm, Laser 2 = 647 nm.
     assert ctrl.lasers[0].wavelength == 555
@@ -391,15 +379,13 @@ def test_wavelength_labels_set_from_live_instances(
     assert "555" in toggle1_text
     assert "647" in toggle2_text
 
-
 # --------------------------------------------------------------------------- #
 # G7 — updateUi_estop_pressed warn branch: fires when a laser's off() leaves
 #      error truthy, does NOT fire when all off() calls succeed (AGENTS.md §2).
 # --------------------------------------------------------------------------- #
 
-
 def test_estop_warn_branch_fires_for_failed_laser(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """updateUi_estop_pressed must check laser.error after each off() and
     emit an operator warning naming the failed laser when off() leaves
@@ -409,7 +395,7 @@ def test_estop_warn_branch_fires_for_failed_laser(
     its label and error_message, and reset the error flag after warning
     (AGENTS.md §2: never silently show a clean state when a laser may
     still be emitting)."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     laser_ok = ctrl.lasers[0]
     laser_failed = ctrl.lasers[1]
@@ -450,15 +436,14 @@ def test_estop_warn_branch_fires_for_failed_laser(
     # The error flag is reset after the warn so it fires once per failure.
     assert laser_failed.error == 0
 
-
 def test_estop_warn_branch_does_not_fire_when_all_off_succeed(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """The control case: when both lasers report error=0 after off(), the
     warn branch must NOT fire — no spurious 'may still be on' warning when
     every off() succeeded cleanly. The method still emits its terminal
     'E-STOP actuated' status message, but no per-laser warning."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     laser1 = ctrl.lasers[0]
     laser2 = ctrl.lasers[1]
@@ -479,11 +464,9 @@ def test_estop_warn_branch_does_not_fire_when_all_off_succeed(
         f"got {warn_msgs} in {messages}"
     )
 
-
 # --------------------------------------------------------------------------- #
 # MCA-01 — MULTI-CH badge pill + stack-plan summary 2ch re-render + tooltip
 # --------------------------------------------------------------------------- #
-
 
 def _set_valid_stack_plan(ctrl: Controller_MainWindow) -> None:
     """Set a valid full stack plan (both boundaries + step + n_planes)."""
@@ -494,16 +477,15 @@ def _set_valid_stack_plan(ctrl: Controller_MainWindow) -> None:
     ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
     ctrl.stack_panel.updateUi_set_number_of_planes()
 
-
 def test_multi_ch_badge_pill_shown_when_both_checked(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """When both auto-laser checkboxes are checked, _update_mode_badge
     appends ' · MULTI-CH' to the badge text (the persistent multi-channel
     pill tied to the checkbox-pair state). SINGLE mode is used because it
     renders as a clean mode name (no RUNNING suffix), matching the UI-SPEC
     'SINGLE · MULTI-CH' composition example."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
     ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(True)
     ctrl._cache_auto_laser_flags()
@@ -520,13 +502,12 @@ def test_multi_ch_badge_pill_shown_when_both_checked(
     # existing QDarkStyle default text color + bold weight.
     assert "34C759" not in ctrl.ui.label_modeBadge.styleSheet().upper()
 
-
 def test_multi_ch_badge_pill_hidden_when_one_checked(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """When only one (or zero) auto-laser checkbox is checked, the badge
     text is exactly today's mode text — no pill, no separator."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
     ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(False)
     ctrl._cache_auto_laser_flags()
@@ -545,16 +526,15 @@ def test_multi_ch_badge_pill_hidden_when_one_checked(
     ctrl._update_mode_badge("STACK")
     assert "MULTI-CH" not in ctrl.ui.label_modeBadge.text()
 
-
 def test_cache_auto_laser_flags_triggers_summary_refresh(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """_cache_auto_laser_flags triggers a stack-plan summary re-render
     after setting the cached flags, so the 2ch re-estimate appears
     synchronously with the checkbox change."""
     from unittest.mock import patch
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _set_valid_stack_plan(ctrl)
 
     with patch.object(
@@ -570,14 +550,13 @@ def test_cache_auto_laser_flags_triggers_summary_refresh(
         "_cache_auto_laser_flags must call stack_panel._render_stack_plan_summary"
     )
 
-
 def test_stack_plan_summary_2ch_doubles_time_and_size(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """When both auto-laser checkboxes are checked AND a valid stack plan
     exists, the summary inserts '2 ch x {N} planes' after the Planes clause
     and doubles BOTH Est. time and Est. size."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _set_valid_stack_plan(ctrl)
 
     # Single-channel baseline (one auto-laser).
@@ -631,16 +610,15 @@ def test_stack_plan_summary_2ch_doubles_time_and_size(
         f"single={single_text!r} multi={multi_text!r}"
     )
 
-
 def test_stack_plan_summary_single_channel_byte_identical(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """When only one auto-laser checkbox is checked, the summary is
     byte-identical to today's single-channel render (no '2 ch' clause,
     no doubling). The baseline is captured with zero auto-lasers checked
     (the default 'today' state) and the one-checked render must match it
     byte-for-byte."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _set_valid_stack_plan(ctrl)
 
     # Baseline: zero auto-lasers checked (today's default single-channel
@@ -668,11 +646,10 @@ def test_stack_plan_summary_single_channel_byte_identical(
     assert baseline.count("Est. time:") == 1
     assert baseline.count("Est. size:") == 1
 
-
-def test_auto_laser_tooltip_updated(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_auto_laser_tooltip_updated(controller: Controller_MainWindow) -> None:
     """Both auto-laser checkbox tooltips contain the multi-channel
     consequence sentence ('When BOTH auto-laser boxes are checked')."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     tip1 = ctrl.laser_panel.ui.checkBox_laserOneAutomatic.toolTip()
     tip2 = ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.toolTip()
     assert "When BOTH auto-laser boxes are checked" in tip1, (
@@ -687,30 +664,27 @@ def test_auto_laser_tooltip_updated(qtbot: QtBot, request: FixtureRequest) -> No
     assert "automatically during acquisition" in tip1
     assert "automatically during acquisition" in tip2
 
-
 # --------------------------------------------------------------------------- #
 # MCA-01 / D-07 — ChannelRadio widget (L1/L2 display selector) + visibility
 # --------------------------------------------------------------------------- #
 
-
-def test_channel_radio_hidden_by_default(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_channel_radio_hidden_by_default(controller: Controller_MainWindow) -> None:
     """The channel-radio group is hidden by default (only one or zero
     auto-laser checkboxes checked at startup) — the ImageView area is
     visually identical to today's single-channel experience."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     radio = ctrl.channel_radio
     assert radio is not None, "controller must expose a channel_radio attribute"
     assert not radio.isVisible(), (
         "channel-radio must be hidden by default (single-channel back-compat)"
     )
 
-
 def test_channel_radio_shown_when_both_checked(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """When both auto-laser checkboxes become checked, the channel-radio
     group is shown (the operator can now switch between L1/L2 display)."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     radio = ctrl.channel_radio
     # Force the widget to be actually visible-shown (Qt needs the parent
     # shown for show() to flip isVisible(); in offscreen tests we check
@@ -726,14 +700,13 @@ def test_channel_radio_shown_when_both_checked(
         "channel-radio must be shown when both auto-lasers are checked"
     )
 
-
 def test_channel_radio_labels_from_live_wavelength(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """The channel-radio button labels read the live ILaser.wavelength
     values (555 / 647 from the fixture), with an L1/L2 fallback when a
     wavelength is unavailable."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     radio = ctrl.channel_radio
     # The fixture's bundle has Laser 1 = 555 nm, Laser 2 = 647 nm.
     t1 = radio.button_text(0)
@@ -743,22 +716,18 @@ def test_channel_radio_labels_from_live_wavelength(
     assert t1.startswith("L1"), f"L1 button must start with 'L1'; got {t1!r}"
     assert t2.startswith("L2"), f"L2 button must start with 'L2'; got {t2!r}"
 
-
-def test_channel_radio_default_l1_selected(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_channel_radio_default_l1_selected(controller: Controller_MainWindow) -> None:
     """When the channel-radio is shown, L1 (channel index 0) is the
     default checked button."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     radio = ctrl.channel_radio
     assert radio.is_checked(0), (
         "L1 (channel index 0) must be the default selected button"
     )
     assert not radio.is_checked(1), "L2 must not be checked by default"
 
-
 def test_channel_radio_switch_updates_imageview(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """Clicking L2 updates ImageView.setImage with the L2 channel's frame
     (reconstructed_frames[wavelength]) AND the per-channel LUT tint
@@ -769,7 +738,7 @@ def test_channel_radio_switch_updates_imageview(
 
     import numpy as np
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     radio = ctrl.channel_radio
 
     # Two distinct uint16 frames keyed by the fixture's wavelengths.
@@ -819,8 +788,7 @@ def test_channel_radio_switch_updates_imageview(
         f"LevelsBar window_max must reset to frame_b.max()=400; got {lb.window_max}"
     )
 
-
-def test_channel_radio_l1_tint_is_green(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_channel_radio_l1_tint_is_green(controller: Controller_MainWindow) -> None:
     """Clicking L1 calls ImageView.setImage with tint='00FF00' (green for
     555 nm) so the operator can visually distinguish L1 from L2 in demo
     mode where the frames are otherwise identical."""
@@ -828,7 +796,7 @@ def test_channel_radio_l1_tint_is_green(qtbot: QtBot, request: FixtureRequest) -
 
     import numpy as np
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     radio = ctrl.channel_radio
 
     frame_a = np.zeros((64, 64), dtype=np.uint16)
@@ -854,9 +822,8 @@ def test_channel_radio_l1_tint_is_green(qtbot: QtBot, request: FixtureRequest) -
         f"got tints={called_tints!r}"
     )
 
-
 def test_channel_radio_tints_demo_image_when_no_acquisition_frame(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """At boot (before any acquisition) reconstructed_frames is empty and
     only the demo image is loaded into the ImageView. Clicking L1/L2 must
@@ -865,7 +832,7 @@ def test_channel_radio_tints_demo_image_when_no_acquisition_frame(
     without first running a multi-channel acquisition."""
     from unittest.mock import patch
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     radio = ctrl.channel_radio
 
     # Boot state: no acquisition frames, demo image loaded by hardware_init.
@@ -902,9 +869,8 @@ def test_channel_radio_tints_demo_image_when_no_acquisition_frame(
         "(ImageView._last_frame) when no acquisition frame exists"
     )
 
-
 def test_channel_radio_auto_tints_demo_image_when_second_laser_enabled(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """When the operator checks the SECOND auto-laser box (so both are
     checked and the channel-radio appears), the currently-displayed demo
@@ -912,7 +878,7 @@ def test_channel_radio_auto_tints_demo_image_when_second_laser_enabled(
     the operator should NOT have to click L1/L2 first to see the color
     cue. Unchecking back to single-channel must clear the tint (back to
     grayscale)."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     radio = ctrl.channel_radio
     image_view = ctrl.ui.imageView
 
@@ -949,15 +915,14 @@ def test_channel_radio_auto_tints_demo_image_when_second_laser_enabled(
         if timer is not None:
             timer.start(100)
 
-
 def test_channel_radio_container_at_layout_index_one(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """The channel-radio container sits at imagesPane layout index 1 —
     BETWEEN the ImageView (index 0) and the LevelsBar layout. The
     container is a fixed-height QWidget wrapping the ChannelRadio so
     show/hide of the inner radio does not reflow the layout."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     container = getattr(ctrl, "channel_radio_container", None)
     assert container is not None, (
         "controller must expose a channel_radio_container attribute "
@@ -977,14 +942,13 @@ def test_channel_radio_container_at_layout_index_one(
         "ImageView at 0 and the LevelsBar layout)"
     )
 
-
 def test_channel_radio_toggle_does_not_reflow_imageview(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """Showing/hiding the channel-radio does NOT change the ImageView
     geometry — the fixed-height container reserves the layout slot
     regardless of the inner radio's visibility."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     image_view = ctrl.ui.imageView
 
     # Force a layout settle so the ImageView has a stable geometry.
@@ -1013,14 +977,13 @@ def test_channel_radio_toggle_does_not_reflow_imageview(
         "fixed-height container must reserve the slot (no reflow)"
     )
 
-
 def test_channel_radio_container_fixed_height(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """The channel-radio container has a fixed height so it always
     reserves its layout slot regardless of the inner radio's visibility
     (the show/hide reflow fix)."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     container = ctrl.channel_radio_container
     h = container.maximumHeight()
     assert h == container.minimumHeight(), (
@@ -1028,14 +991,11 @@ def test_channel_radio_container_fixed_height(
     )
     assert h > 0, "container fixed height must be > 0"
 
-
-def test_channel_radio_single_channel_hidden(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_channel_radio_single_channel_hidden(controller: Controller_MainWindow) -> None:
     """When only one auto-laser checkbox is checked, the channel-radio is
     HIDDEN (not just disabled) — the ImageView area stays visually
     identical to today's single-channel experience."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     radio = ctrl.channel_radio
     ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
     ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(True)

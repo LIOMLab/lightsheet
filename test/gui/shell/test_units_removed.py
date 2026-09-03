@@ -18,22 +18,22 @@ Runs headless on Mac via ``QT_QPA_PLATFORM=offscreen`` (set by conftest).
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
 from pathlib import Path
 
 import pytest
-from pytest import FixtureRequest
-from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
-from _helpers.controller_fixture import make_controller
-
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _UI_SHELL_UI = _REPO_ROOT / "lightsheet" / "gui" / "shell" / "ui_shell.ui"
 _UI_SHELL_PY = _REPO_ROOT / "lightsheet" / "gui" / "shell" / "ui_shell.py"
 _MOTOR_PANEL = _REPO_ROOT / "lightsheet" / "gui" / "panels" / "motor_panel.py"
 _STACK_PANEL = _REPO_ROOT / "lightsheet" / "gui" / "panels" / "stack_panel.py"
-
 
 def test_comboBox_units_absent_from_ui_file() -> None:
     """comboBox_units is not declared in ui_shell.ui."""
@@ -43,7 +43,6 @@ def test_comboBox_units_absent_from_ui_file() -> None:
         "was not removed from the .ui file"
     )
 
-
 def test_comboBox_units_absent_from_generated_ui_py() -> None:
     """comboBox_units is not in the generated ui_shell.py."""
     text = _UI_SHELL_PY.read_text(encoding="utf-8")
@@ -52,46 +51,35 @@ def test_comboBox_units_absent_from_generated_ui_py() -> None:
         "regenerated after the units selector removal"
     )
 
-
 def test_label_units_absent_from_ui_file() -> None:
     """label_units is not declared in ui_shell.ui."""
     text = _UI_SHELL_UI.read_text(encoding="utf-8")
     assert 'name="label_units"' not in text, "label_units still declared in ui_shell.ui"
 
-
-def test_controller_ui_has_no_comboBox_units(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_controller_ui_has_no_comboBox_units(controller: Controller_MainWindow) -> None:
     """The constructed controller's ui has no comboBox_units attribute."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     assert not hasattr(ctrl.ui, "comboBox_units"), (
         "controller.ui still has a comboBox_units attribute — the shell "
         "merge loop or the .ui is still surfacing the removed widget"
     )
 
-
-def test_controller_has_no_units_attribute(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_controller_has_no_units_attribute(controller: Controller_MainWindow) -> None:
     """The controller has no ``units`` attribute (the global toggle's
     backing attribute is gone)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     assert not hasattr(ctrl, "units"), (
         "controller still has a 'units' attribute — the global units "
         "toggle's backing attribute was not removed"
     )
 
-
-def test_controller_has_no_units_fixformat(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_controller_has_no_units_fixformat(controller: Controller_MainWindow) -> None:
     """The controller has no ``units_fixformat`` / ``units_decimals`` /
     ``units_increment`` attributes (set by the old updateUi_units)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     assert not hasattr(ctrl, "units_fixformat")
     assert not hasattr(ctrl, "units_decimals")
     assert not hasattr(ctrl, "units_increment")
-
 
 def test_motor_panel_has_no_shell_units_reads() -> None:
     """motor_panel.py has no ``self._shell.units`` reads."""
@@ -100,7 +88,6 @@ def test_motor_panel_has_no_shell_units_reads() -> None:
         "motor_panel.py still reads self._shell.units — the units removal "
         "left a stale read site"
     )
-
 
 def test_stack_panel_has_no_shell_units_reads() -> None:
     """stack_panel.py has no ``self._shell.units`` reads and no

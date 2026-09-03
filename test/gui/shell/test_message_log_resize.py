@@ -21,23 +21,23 @@ Runs headless on Mac via ``QT_QPA_PLATFORM=offscreen`` (set by conftest).
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
 import pytest
 
 pytest.importorskip("PySide6")
 
-from _helpers.controller_fixture import make_controller
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QSplitter
 from pytestqt.qtbot import QtBot
 
 
-def _make(qtbot: QtBot, request: pytest.FixtureRequest) -> tuple[object, object]:
-    return make_controller(qtbot, request)
-
-
-def test_message_log_cap_removed(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
+def test_message_log_cap_removed(controller: Controller_MainWindow) -> None:
     """The fixed 80 px max-height cap is gone (set to 16777215)."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
     max_h = ctrl.ui.plainTextEdit_messageLog.maximumHeight()  # ty: ignore[unresolved-attribute]
     assert max_h != 80, (
         f"message log max height is still 80 (got {max_h}) — the cap was not removed"
@@ -47,11 +47,10 @@ def test_message_log_cap_removed(qtbot: QtBot, request: pytest.FixtureRequest) -
         f"(>=16777215); got {max_h}"
     )
 
-
-def test_message_splitter_exists(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
+def test_message_splitter_exists(controller: Controller_MainWindow) -> None:
     """A vertical QSplitter (message_splitter) hosts stackedPanels + the
     message log inside controlsPane."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
     assert hasattr(ctrl.ui, "message_splitter"), (  # ty: ignore[unresolved-attribute]
         "message_splitter not found on controller.ui"
     )
@@ -71,20 +70,19 @@ def test_message_splitter_exists(qtbot: QtBot, request: pytest.FixtureRequest) -
         "plainTextEdit_messageLog must be a section of message_splitter"
     )
 
-
 def test_message_log_default_height_about_5_lines(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """The message log minimum height is ~96 px (5 lines)."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
     min_h = ctrl.ui.plainTextEdit_messageLog.minimumHeight()  # ty: ignore[unresolved-attribute]
     assert min_h >= 96, (
         f"message log minimum height should be >= 96 (5 lines); got {min_h}"
     )
 
-
 def test_message_splitter_drag_resizes_log(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    controller: Controller_MainWindow,
+    qtbot: QtBot,
 ) -> None:
     """The splitter handle is live and resizes the log. The log must not
     be collapsible to 0 via handle drag (childrenCollapsible=False); hiding
@@ -97,7 +95,7 @@ def test_message_splitter_drag_resizes_log(
     childrenCollapsible=False) and that setSizes with a non-zero log
     allocation produces a non-zero log size. The View-menu toggle test
     below proves setSizes changes the log size (hide → 0, show → > 0)."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
     splitter = ctrl.ui.message_splitter  # ty: ignore[unresolved-attribute]
     # childrenCollapsible=False — the handle cannot collapse a section to 0.
     assert splitter.childrenCollapsible() is False, (
@@ -128,36 +126,30 @@ def test_message_splitter_drag_resizes_log(
         "splitter handle is not live"
     )
 
-
-def test_message_log_select_and_copy_enabled(
-    qtbot: QtBot, request: pytest.FixtureRequest
-) -> None:
+def test_message_log_select_and_copy_enabled(controller: Controller_MainWindow) -> None:
     """textInteractionFlags is TextSelectableByMouse (operator can
     select-and-copy an error string)."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
     flags = ctrl.ui.plainTextEdit_messageLog.textInteractionFlags()  # ty: ignore[unresolved-attribute]
     assert flags == Qt.TextInteractionFlag.TextSelectableByMouse, (
         f"textInteractionFlags is {flags}, expected TextSelectableByMouse"
     )
 
-
-def test_message_log_still_read_only(
-    qtbot: QtBot, request: pytest.FixtureRequest
-) -> None:
+def test_message_log_still_read_only(controller: Controller_MainWindow) -> None:
     """readOnly stays True — only select-and-copy is enabled, not editing."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
     assert ctrl.ui.plainTextEdit_messageLog.isReadOnly() is True, (  # ty: ignore[unresolved-attribute]
         "message log readOnly must stay True (select-and-copy only)"
     )
 
-
 def test_view_menu_show_message_log_syncs_with_splitter(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    controller: Controller_MainWindow,
+    qtbot: QtBot,
 ) -> None:
     """The View-menu "Show Message Log" action toggles the splitter sizes
     (hide/show) and the action's checked state syncs with the log
     visibility (audit #7 pattern)."""
-    ctrl, _ = _make(qtbot, request)
+    ctrl = controller
     splitter = ctrl.ui.message_splitter  # ty: ignore[unresolved-attribute]
     action = ctrl.ui.action_ShowHideMessageLog  # ty: ignore[unresolved-attribute]
     # Show + process events so the splitter has a real laid-out size.
