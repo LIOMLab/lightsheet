@@ -21,6 +21,7 @@ from pydantic_settings import BaseSettings
 from lightsheet.config import cfg_read
 
 from .sections.adaptive import AdaptiveSettings, AdaptiveSettingsOverlay
+from .sections.autofocus import AutofocusSettings, AutofocusSettingsOverlay
 from .sections.camera import CameraSettings, CameraSettingsOverlay
 from .sections.controller import ControllerSettings, ControllerSettingsOverlay
 from .sections.etls import ETLsSettings, ETLsSettingsOverlay
@@ -75,12 +76,13 @@ _SECTION_MODELS: dict[str, tuple[type[BaseSettings], type[BaseSettings]]] = {
     "Motors": (MotorsSettings, MotorsSettingsOverlay),
     "Logging": (LoggingSettings, LoggingSettingsOverlay),
     "Adaptive": (AdaptiveSettings, AdaptiveSettingsOverlay),
+    "Autofocus": (AutofocusSettings, AutofocusSettingsOverlay),
     "Focus": (FocusSettings, FocusSettingsOverlay),
 }
 
 # Optional baseline sections — a config.ini without one of these sections
 # validates using the model defaults. Sections NOT in this set are required.
-_OPTIONAL_SECTIONS: frozenset[str] = frozenset({"Adaptive", "Focus"})
+_OPTIONAL_SECTIONS: frozenset[str] = frozenset({"Adaptive", "Autofocus", "Focus"})
 
 
 # Non-safety recommended-range WARN checks. Each entry maps a section name
