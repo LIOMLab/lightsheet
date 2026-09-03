@@ -412,8 +412,13 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
 
                 try:
                     cam_pos_mm = self.motors.camera.get_position("mm")
-                except Exception:
-                    cam_pos_mm = 0.0
+                except Exception as e:
+                    self._shell.sig_message.emit(
+                        f"Stack acquisition aborted: could not read current camera "
+                        f"position for autofocus seed: {e}"
+                    )
+                    self._shell.sig_beep.emit()
+                    return
                 self._autofocus_controller = AdaptiveFocusController(
                     self._autofocus_cfg,
                     cam_lo_mm,

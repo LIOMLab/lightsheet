@@ -389,6 +389,7 @@ class Camera(ICamera):
             if self.verbose:
                 print("Setting camera exposure time: " + str(exposure_time_ms) + "ms")
             self.camera.sdk.set_delay_exposure_time(0, "ms", exposure_time_ms, "ms")
+        self.exposure_time = float(exposure_time_ms) * 1e-3
         return None
 
     def set_lightsheet_mode(self) -> None:
