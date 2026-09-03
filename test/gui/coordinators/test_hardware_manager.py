@@ -34,15 +34,17 @@ from __future__ import annotations
 
 import contextlib
 import threading
+from typing import TYPE_CHECKING
 from unittest.mock import Mock, patch
 
-from _helpers.controller_fixture import make_controller
-from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
 
 import lightsheet.gui.shell.controller as controller_module
 from lightsheet.gui.coordinators.hardware_manager import HardwareManager
 from lightsheet.hal import DeviceBundle
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 # --------------------------------------------------------------------------- #
 # Test 1 — start_lasers drives the auto-selected lasers via the bundle.
@@ -50,7 +52,7 @@ from lightsheet.hal import DeviceBundle
 
 
 def test_start_lasers_drives_auto_laser1_via_bundle(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """ctrl._hw.start_lasers() with ctrl._auto_laser1 = True calls
     .set_power(mw) then .on() on ctrl._hw.lasers[0] — mirroring the
@@ -58,7 +60,7 @@ def test_start_lasers_drives_auto_laser1_via_bundle(
     the DAQ backend writes the staged power when it energizes the AO
     channel). Verified via real construction with spies on the real
     MockLaser methods."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._auto_laser1 = True
     ctrl._auto_laser2 = False
     ctrl.laser1_power_pct = 50.0
@@ -83,14 +85,14 @@ def test_start_lasers_drives_auto_laser1_via_bundle(
 
 
 def test_toggle_laser1_skips_when_estop_set(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """ctrl._hw._toggle_laser1() with ctrl.estop_event.is_set() -> True
     returns immediately without calling .on()/.off() on
     ctrl._hw.lasers[0] — the E-stop cooperative-skip survives the
     extraction. Verified via real construction with spies on the real
     MockLaser methods."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.estop_event.set()
     ctrl.laser1_power_pct = 50.0
 
@@ -113,7 +115,7 @@ def test_toggle_laser1_skips_when_estop_set(
 
 
 def test_shell_estop_pressed_calls_laser_off_directly_not_via_hw(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The shell's updateUi_estop_pressed must drive every laser off
     synchronously on the GUI thread, lock-free, NOT routed through
@@ -130,7 +132,7 @@ def test_shell_estop_pressed_calls_laser_off_directly_not_via_hw(
     synchronously). QTimer is NOT patched out — the deferred refresh is
     expected to schedule QTimer.singleShot calls, and the kill path
     itself does not touch QTimer."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     laser0 = ctrl.lasers[0]
     laser1 = ctrl.lasers[1]
@@ -162,14 +164,14 @@ def test_shell_estop_pressed_calls_laser_off_directly_not_via_hw(
 
 
 def test_open_laser2_calls_open_on_laser2_and_surfaces_error(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """ctrl._hw.open_laser2() calls .open() on ctrl._hw.lasers[1] and,
     when .error is set afterward (channel-enable failure caught inside
     enable_channel()), emits sig_message on the shell with the error
     message and clears the error flag — mirroring the pre-extraction
     hardware_init inline block verbatim. Verified via real construction."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     laser1 = ctrl._hw.lasers[1]
     # Simulate a channel-enable failure: open() succeeds (MockLaser no-op)
@@ -195,13 +197,13 @@ def test_open_laser2_calls_open_on_laser2_and_surfaces_error(
 
 
 def test_open_laser2_surfaces_open_exception_via_sig_message(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """If ctrl._hw.lasers[1].open() raises, open_laser2() catches it and
     emits sig_message with the exception text — the operator is told the
     red laser is unavailable, but the failure is non-fatal (no re-raise).
     Verified via real construction."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     laser1 = ctrl._hw.lasers[1]
 
@@ -221,7 +223,9 @@ def test_open_laser2_surfaces_open_exception_via_sig_message(
 
 
 def test_hardware_manager_init_does_not_call_open_on_laser2(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+    bundle: DeviceBundle,
 ) -> None:
     """Regression gate: constructing HardwareManager(bundle, shell) must
     NOT call .open() on bundle.lasers[1]. __init__ runs synchronously in
@@ -231,7 +235,7 @@ def test_hardware_manager_init_does_not_call_open_on_laser2(
     hardware_init via open_laser2(). Verified via real construction: a
     fresh HardwareManager is built with observable Mock lasers after
     make_controller provides the real shell."""
-    ctrl, bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     # Build a fresh bundle with Mock lasers whose .open() is observable.
     laser1 = Mock()
@@ -263,12 +267,12 @@ def test_hardware_manager_init_does_not_call_open_on_laser2(
 
 
 def test_select_laser_energizes_target_deenergizes_other(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """select_laser(0) with both lasers active de-energizes L2 and keeps
     L1 energized; select_laser(1) is symmetric. Verified via real
     construction with MockLaser spies."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.laser1_power_pct = 50.0
     ctrl.laser2_power_pct = 50.0
 
@@ -314,12 +318,12 @@ def test_select_laser_energizes_target_deenergizes_other(
 
 
 def test_select_laser_energizes_inactive_target(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """select_laser(0) with L1 inactive and L2 active -> L2 off, L1 on
     (stages power first). The energize branch stages power via set_power
     before .on()."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.laser1_power_pct = 50.0
     ctrl.laser2_power_pct = 50.0
 
@@ -342,12 +346,14 @@ def test_select_laser_energizes_inactive_target(
     assert laser1.active is False
 
 
-def test_select_laser_estop_skip(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_select_laser_estop_skip(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """select_laser(0) with estop_event set before the call -> neither
     laser .on() called (target not energized past the kill path). The
     de-energize of the other laser may still run (it drives toward the
     invariant), but the energize branch must be skipped."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.estop_event.set()
     ctrl.laser1_power_pct = 50.0
     ctrl.laser2_power_pct = 50.0
@@ -369,12 +375,12 @@ def test_select_laser_estop_skip(qtbot: QtBot, request: FixtureRequest) -> None:
 
 
 def test_select_laser_estop_set_between_deenergize_and_energize(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """If estop_event is set after the other laser's .off() but before the
     target's .on() (simulated mid-call), the target is NOT energized and
     both lasers end up off — the invariant holds under interruption."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.laser1_power_pct = 50.0
     ctrl.laser2_power_pct = 50.0
 
@@ -405,12 +411,12 @@ def test_select_laser_estop_set_between_deenergize_and_energize(
 
 
 def test_toggle_laser1_cross_deenergizes_laser2(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_toggle_laser1 energizing branch (L1 inactive -> on) calls
     lasers[1].off() before lasers[0].on() — D-03 all-modes strict,
     manual-toggle path. _toggle_laser2 is symmetric."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.laser1_power_pct = 50.0
     ctrl.laser2_power_pct = 50.0
 
@@ -474,14 +480,14 @@ def test_toggle_laser1_cross_deenergizes_laser2(
 
 
 def test_estop_kill_path_unaffected_by_select_laser(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """updateUi_estop_pressed still calls .off() on every laser
     synchronously with no _lock acquisition on the GUI thread, and
     select_laser introduced NO new threading.Lock attribute on
     HardwareManager — only the per-laser ILaser._lock RLocks exist."""
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     laser0 = ctrl.lasers[0]
     laser1 = ctrl.lasers[1]
@@ -522,11 +528,13 @@ def test_estop_kill_path_unaffected_by_select_laser(
     )
 
 
-def test_select_laser_idempotent(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_select_laser_idempotent(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """select_laser(0) when L1 already on and L2 already off -> no
     .off()/.on() HAL calls (no-op). The invariant already holds, so no
     redundant HAL writes."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.laser1_power_pct = 50.0
     ctrl.laser2_power_pct = 50.0
 
@@ -551,10 +559,12 @@ def test_select_laser_idempotent(qtbot: QtBot, request: FixtureRequest) -> None:
     assert laser1.active is False
 
 
-def test_select_laser_out_of_range(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_select_laser_out_of_range(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """select_laser(idx) with idx outside {0,1} raises IndexError or
     returns without HAL writes — only two lasers exist."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.laser1_power_pct = 50.0
     ctrl.laser2_power_pct = 50.0
 

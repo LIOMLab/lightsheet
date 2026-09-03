@@ -17,23 +17,25 @@ method on the real object — the same code that runs on the rig.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import h5py
-import pytest
-from _helpers.controller_fixture import make_controller
 from pytestqt.qtbot import QtBot
 
 from lightsheet.hal.mocks.mock_laser import MockLaser
 
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
 
 def test_write_laser_metadata_writes_all_five_attrs_per_laser(
-    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_write_laser_metadata writes Wavelength / Power / Max Power / Active
     / Label as h5py.File ROOT attrs once per file, for ALL configured
     lasers (one active, one inactive). The attrs round-trip correctly
     through h5py.File(path, 'r')."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
 
     # Make laser 1 active with a staged power; laser 2 stays inactive.
     ctrl.lasers[0].active = True
@@ -61,13 +63,13 @@ def test_write_laser_metadata_writes_all_five_attrs_per_laser(
 
 
 def test_write_laser_metadata_includes_inactive_laser(
-    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """An inactive laser (active=False, power=0) is NOT skipped — its
     attrs are written with whatever the live instance holds. This is the
     reproducibility contract: 'which lasers were configured but did not
     fire' is metadata context."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
 
     # Both inactive — neither fired.
     ctrl.lasers[0].active = False
@@ -88,13 +90,13 @@ def test_write_laser_metadata_includes_inactive_laser(
 
 
 def test_write_laser_metadata_reads_live_instance_not_config(
-    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """The metadata values match the live ILaser instance state at save
     time, not a config.ini value. If the live instance's power was
     changed at runtime (e.g. via set_power), the saved attr reflects the
     live value, not the config default."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
 
     # Replace the controller's laser list with a single laser whose live
     # state has been mutated after construction — the saved metadata must
@@ -136,14 +138,14 @@ def test_write_laser_metadata_reads_live_instance_not_config(
 
 
 def test_motor_and_scan_params_in_hdf5_metadata(
-    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """SAV-03: ``_write_acquisition_metadata`` writes the motor positions
     (horizontal/vertical/camera) + scan params (galvo/ETL amplitudes +
     offsets, sample rate) + camera params (exposure, shutter mode,
     binning, x/y size) as HDF5 root attrs, matching the live
     ``ctrl.motors`` / ``ctrl.siggen`` / ``ctrl.camera`` values."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
 
     outfile_path = tmp_path / "test_motor_meta.hdf5"
     with h5py.File(outfile_path, "a") as outfile:  # ty: ignore[invalid-argument-type]
@@ -177,14 +179,14 @@ def test_motor_and_scan_params_in_hdf5_metadata(
 
 
 def test_no_config_reparse(
-    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """SAV-03: the motor-position root attr reflects the LIVE motor value,
     not a config-parsed default. Mutating a siggen amplitude after
     construction is reflected in the saved attr — the saver reads the live
     instance, never re-parses config.ini at save time (the config-drift
     bug this fixes)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
 
     # Mutate a siggen amplitude after construction — the saved attr must
     # reflect the live mutated value, not the config default.

@@ -33,7 +33,7 @@ Behavior covered (per the plan's ``<behavior>`` block):
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import Mock
 
 import numpy as np
@@ -50,12 +50,10 @@ from lightsheet.gui.coordinators.frame_saver_controller import (
 )
 from lightsheet.hal import (
     DeviceBundle,
-    MockCamera,
-    MockETLs,
-    MockLaser,
-    MockMotors,
-    MockSigGen,
 )
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
 class _ShellStandin(QObject):
@@ -82,19 +80,9 @@ class _ShellStandin(QObject):
 
 
 def _make_bundle() -> DeviceBundle:
-    """Build a demo DeviceBundle with the camera dimensions
-    FrameSaverController reads (bundle.camera.ysize / xsize)."""
-    camera = MockCamera(verbose=True)
-    siggen = MockSigGen(camera)
-    motors = MockMotors()
-    lasers = (
-        MockLaser(wavelength=555, max_power_mw=300.0, label="Laser 1 (555 nm)"),
-        MockLaser(wavelength=647, max_power_mw=150.0, label="Laser 2 (647 nm)"),
-    )
-    etls = MockETLs()
-    return DeviceBundle(
-        camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers
-    )
+    from test.helpers.factories import make_bundle
+
+    return make_bundle()
 
 
 def _make_shell() -> _ShellStandin:
@@ -748,7 +736,7 @@ def test_frame_saver_worker_single_channel_bare_ndarray(tmp_path: Path) -> None:
 
 
 def test_save_single_image_multi_channel_writes_two_files(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Multi-channel single mode: when both auto-laser checkboxes are
     checked, the Save button writes TWO wavelength-suffixed HDF5 files
@@ -758,11 +746,8 @@ def test_save_single_image_multi_channel_writes_two_files(
     channel. The single-consumer queue contract is preserved (the two
     tagged frames go through the same enqueue_buffer → single queue).
     """
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.saving_allowed = True
     ctrl.save_directory = "/tmp"
     ctrl.save_filename = "test"
@@ -820,7 +805,7 @@ def test_save_single_image_multi_channel_writes_two_files(
 
 
 def test_save_single_image_single_channel_unchanged(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Single-channel mode (one auto-laser checked): updateUi_save_single_image
     calls set_files with wavelengths=[active_wavelength] so the saved
@@ -829,11 +814,8 @@ def test_save_single_image_single_channel_unchanged(
     channel save worker reads filenames_list (populated from
     filenames_lists[0]).
     """
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.saving_allowed = True
     ctrl.save_directory = "/tmp"
     ctrl.save_filename = "test"
@@ -898,20 +880,17 @@ def test_save_single_image_single_channel_unchanged(
 
 
 def test_zarr_saver_start_stack_n_channels(
-    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """MCA-04: start_stack(store_path, n_planes=3, n_channels=2)
     constructs the writer with shape (2, 3, ysize, xsize) and
     chunk_shape (1, 1, ysize, xsize). The channel axis is the leading
     axis so each channel's planes write to a distinct channel-axis
     index (NGFF v0.5 channel dimension)."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
     from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.save_directory = str(tmp_path)
     ctrl.stack_step = 1.0
 
@@ -931,18 +910,15 @@ def test_zarr_saver_start_stack_n_channels(
 
 
 def test_zarr_saver_start_stack_single_channel_back_compat(
-    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """MCA-04 back-compat: start_stack with n_channels=1 (and with
     n_channels omitted — default=1) produces shape (1, n_planes, y, x) —
     byte-identical to the Phase 8 single-channel writer shape."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
     from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.save_directory = str(tmp_path)
     ctrl.stack_step = 1.0
 
@@ -967,20 +943,17 @@ def test_zarr_saver_start_stack_single_channel_back_compat(
 
 
 def test_zarr_saver_write_plane_channel_idx(
-    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """MCA-04: after start_stack(n_channels=2), write_plane(channel_idx=0,
     z_idx=1, frame=A, ...) writes A to writer[0, 1, :, :] and
     write_plane(channel_idx=1, z_idx=1, frame=B, ...) writes B to
     writer[1, 1, :, :]. Each channel's planes write to a distinct
     channel-axis index — they do not merge or collide."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
     from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.save_directory = str(tmp_path)
     ctrl.stack_step = 1.0
 
@@ -1010,7 +983,7 @@ def test_zarr_saver_write_plane_channel_idx(
 
 
 def test_zarr_saver_write_plane_motor_positions_once_per_plane(
-    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """MCA-04 / T-09-12: write_plane records motor positions only when
     channel_idx == 0 (once per plane, not per channel) — avoids
@@ -1018,13 +991,10 @@ def test_zarr_saver_write_plane_motor_positions_once_per_plane(
     mapping. Calling write_plane(0, z_idx=0, ...) and write_plane(1,
     z_idx=0, ...) for the same plane must leave each position list at
     length 1, not 2."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
     from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.save_directory = str(tmp_path)
     ctrl.stack_step = 1.0
 
@@ -1057,7 +1027,7 @@ def test_zarr_saver_write_plane_motor_positions_once_per_plane(
 
 
 def test_zarr_saver_finalize_omero_channels_length(
-    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """MCA-04 / T-09-11: with n_channels=2 and both auto-laser flags set,
     finalize() calls finalize_with_resolutions with len(omero_channels)
@@ -1066,13 +1036,10 @@ def test_zarr_saver_finalize_omero_channels_length(
     over the writer's non-validating API) and raises RuntimeError on
     mismatch."""
     import zarr
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
     from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.save_directory = str(tmp_path)
     ctrl.stack_step = 1.0
     # Shrink the camera so the Dask pyramid build is fast.
@@ -1115,20 +1082,17 @@ def test_zarr_saver_finalize_omero_channels_length(
 
 
 def test_zarr_saver_finalize_raises_on_channel_count_mismatch(
-    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """MCA-04 / T-09-11: if the caller passes n_channels that differs
     from len(_build_omero_channels()), finalize raises RuntimeError —
     defense-in-depth over the writer's non-validating API. The caller
     MUST derive n_channels from the same auto-laser flags as
     _build_omero_channels."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
     from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.save_directory = str(tmp_path)
     ctrl.stack_step = 1.0
     ctrl.camera.xsize = 32
@@ -1149,7 +1113,7 @@ def test_zarr_saver_finalize_raises_on_channel_count_mismatch(
 
 
 def test_zarr_save_worker_branches_on_channel_tag(
-    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """MCA-04: zarr_save_worker branches on the channel tag from the
     dequeued (channel_idx, frame) tuple and calls
@@ -1158,15 +1122,11 @@ def test_zarr_save_worker_branches_on_channel_tag(
     frame, ...). The single-consumer queue contract is preserved."""
     from unittest.mock import MagicMock
 
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
     from lightsheet.gui.coordinators.frame_saver_controller import (
         FrameSaverWorker,
     )
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.save_directory = str(tmp_path)
     ctrl.stack_step = 1.0
     ctrl.save_format = "zarr"
@@ -1249,22 +1209,18 @@ def test_zarr_save_worker_branches_on_channel_tag(
 
 
 def test_zarr_save_worker_single_channel_bare_ndarray_calls_write_plane_channel0(
-    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """MCA-04 back-compat: a bare ndarray (no channel tag) dequeued by
     zarr_save_worker calls write_plane(0, z_idx, frame, ...) — channel
     0, the single-channel back-compat path."""
     from unittest.mock import MagicMock
 
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
     from lightsheet.gui.coordinators.frame_saver_controller import (
         FrameSaverWorker,
     )
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.save_directory = str(tmp_path)
     ctrl.stack_step = 1.0
     ctrl.save_format = "zarr"

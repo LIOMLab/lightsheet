@@ -26,19 +26,13 @@ import threading
 from unittest.mock import Mock
 
 from lightsheet.gui.coordinators.hardware_manager import HardwareManager
-from lightsheet.hal import DeviceBundle, MockCamera, MockETLs, MockMotors, MockSigGen
+from lightsheet.hal import DeviceBundle
 
 
 def _make_bundle() -> DeviceBundle:
-    """Build a demo DeviceBundle (lasers replaced per-test below)."""
-    camera = MockCamera(verbose=True)
-    siggen = MockSigGen(camera)
-    motors = MockMotors()
-    etls = MockETLs()
-    lasers = (Mock(spec=["_lock"]), Mock(spec=["_lock"]))
-    return DeviceBundle(
-        camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers
-    )
+    from test.helpers.factories import make_bundle
+
+    return make_bundle()
 
 
 def _make_shell() -> Mock:

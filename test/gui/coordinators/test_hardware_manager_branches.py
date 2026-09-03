@@ -26,26 +26,13 @@ pytest.importorskip("PySide6")
 from lightsheet.gui.coordinators.hardware_manager import HardwareManager
 from lightsheet.hal import (
     DeviceBundle,
-    MockCamera,
-    MockETLs,
-    MockLaser,
-    MockMotors,
-    MockSigGen,
 )
 
 
 def _make_bundle() -> DeviceBundle:
-    camera = MockCamera(verbose=False)
-    siggen = MockSigGen(camera)
-    motors = MockMotors()
-    lasers = (
-        MockLaser(wavelength=555, max_power_mw=300.0, label="L1"),
-        MockLaser(wavelength=647, max_power_mw=150.0, label="L2"),
-    )
-    etls = MockETLs()
-    return DeviceBundle(
-        camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers
-    )
+    from test.helpers.factories import make_bundle
+
+    return make_bundle()
 
 
 def _make_laser(

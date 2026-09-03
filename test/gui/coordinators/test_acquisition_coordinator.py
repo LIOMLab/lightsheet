@@ -40,22 +40,25 @@ Behavior covered (per the plan's ``<behavior>`` block):
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
-import pytest
-from _helpers.controller_fixture import make_controller
 from pytestqt.qtbot import QtBot
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+    from lightsheet.hal import DeviceBundle
 
 
 def test_acquisition_coordinator_no_worker_bodies(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """AcquisitionCoordinator(bundle, hw, shell) constructed via
     make_controller no longer owns any acquisition worker body — all
     four (preview/live/single/stack) + acquire_scan have relocated to
     PreviewWorker / LiveWorker / SingleWorker / StackWorker /
     _AcquireScanMixin in lightsheet/gui/workers.py."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     acq = ctrl._acq
 
     # stack_mode_worker is the last to relocate — it must NOT be a
@@ -67,12 +70,14 @@ def test_acquisition_coordinator_no_worker_bodies(
 
 
 def test_acquisition_coordinator_stores_bundle_handles_and_collaborators(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+    bundle: DeviceBundle,
 ) -> None:
     """The coordinator stores the bundle's HAL handles as its own
     attributes (self.camera / self.siggen / self.motors) and the hw +
     shell references for delegation."""
-    ctrl, bundle = make_controller(qtbot, request)
+    ctrl = controller
     acq = ctrl._acq
 
     assert acq.camera is bundle.camera
@@ -89,7 +94,9 @@ def test_acquisition_coordinator_stores_bundle_handles_and_collaborators(
 
 
 def test_preview_worker_calls_start_lasers_after_arm_and_stop_before_disarm(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+    bundle: DeviceBundle,
 ) -> None:
     """PreviewWorker.run calls self._hw.start_lasers()
     immediately after self.camera.arm() (before the while loop) and
@@ -101,7 +108,7 @@ def test_preview_worker_calls_start_lasers_after_arm_and_stop_before_disarm(
     the cleanup tail runs."""
     from lightsheet.gui.workers import PreviewWorker
 
-    ctrl, bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     call_log: list[str] = []
     # Leave preview_mode_started False so the while loop body is skipped —
@@ -155,7 +162,7 @@ def test_preview_worker_calls_start_lasers_after_arm_and_stop_before_disarm(
 
 
 def test_updateUi_preview_mode_button_caches_auto_laser_flags_before_thread_spawn(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """updateUi_preview_mode_button: updateUi_preview_mode_button must call
     self._cache_auto_laser_flags() before spawning the preview worker
@@ -166,7 +173,7 @@ def test_updateUi_preview_mode_button_caches_auto_laser_flags_before_thread_spaw
     asserting the cache call happens before the thread spawn."""
     from PySide6.QtCore import QThread
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
 
     call_log: list[str] = []
     ctrl.preview_mode_started = False  # the else: branch (start path)

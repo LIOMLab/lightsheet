@@ -28,11 +28,6 @@ pytest.importorskip("PySide6")  # FrameSaverController wraps QObjects
 from lightsheet.gui.coordinators.frame_saver_controller import FrameSaverController
 from lightsheet.hal import (
     DeviceBundle,
-    MockCamera,
-    MockETLs,
-    MockLaser,
-    MockMotors,
-    MockSigGen,
 )
 
 
@@ -58,21 +53,9 @@ class _ShellStandin(QObject):
 
 
 def _make_bundle() -> DeviceBundle:
-    camera = MockCamera(verbose=True)
-    siggen = MockSigGen(camera)
-    motors = MockMotors()
-    lasers = (
-        MockLaser(wavelength=555, max_power_mw=300.0, label="Laser 1 (555 nm)"),
-        MockLaser(wavelength=647, max_power_mw=150.0, label="Laser 2 (647 nm)"),
-    )
-    etls = MockETLs()
-    return DeviceBundle(
-        camera=camera,
-        siggen=siggen,
-        motors=motors,
-        etls=etls,
-        lasers=lasers,
-    )
+    from test.helpers.factories import make_bundle
+
+    return make_bundle()
 
 
 def _make_fs() -> FrameSaverController:
