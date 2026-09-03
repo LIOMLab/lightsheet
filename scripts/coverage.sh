@@ -70,13 +70,11 @@ cd "${REPO_ROOT}"
 # controller), so the Python wrapper reaches refcount zero naturally and the
 # deferred C++ destructor no longer fires at shutdown.
 #
-# The -o addopts override deliberately RE-DECLARES addopts rather than
-# inheriting from pyproject.toml: -o replaces the default addopts entirely, so
-# the new --dist=load / --max-worker-restart=0 flags added there do NOT apply
-# during the coverage run (coverage.sh is single-purpose and its exit-code
-# handling is already tuned for the shutdown segfault). -n auto is included
-# explicitly so xdist parallelism is not silently dropped; --maxprocesses=6 is
-# added here explicitly for memory-bound consistency with the iteration path.
+# The xdist run uses the default `addopts` in pyproject.toml
+# (-ra --strict-markers -n auto --maxprocesses=6 --dist=load
+# --max-worker-restart=0) and only appends the coverage flags here.
+# The single-process fallback still needs `-p no:xdist -o addopts=...`
+# because disabling the xdist plugin makes the `-n auto` flag unrecognised.
 #
 # Hang guard: xdist can occasionally deadlock at shutdown under gc.disable()
 # (a Qt/shiboken teardown race — the main process stalls at 0% CPU waiting on
@@ -90,12 +88,11 @@ cd "${REPO_ROOT}"
 # the hang is intermittent, not deterministic.
 _XDIST_TIMEOUT=90
 _run_cov_xdist() {
-  uv run pytest -q --cov=lightsheet --cov-branch \
-    -o "addopts=--strict-markers -n auto --maxprocesses=6 --dist=load --max-worker-restart=0"
+  uv run pytest -q --cov=lightsheet --cov-branch
 }
 _run_cov_serial() {
   uv run pytest -q --cov=lightsheet --cov-branch \
-    -o "addopts=--strict-markers" -p no:xdist
+    -p no:xdist -o "addopts=-ra --strict-markers"
 }
 # Export so `timeout` (which execs, not a shell builtin) can invoke them
 # via `bash -c`. This script already requires bash (${BASH_SOURCE[0]}).
