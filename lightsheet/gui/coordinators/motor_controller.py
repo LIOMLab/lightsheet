@@ -478,9 +478,7 @@ class MotorController:
             r_value,
             p_value,
             std_err,
-        ) = (
-            stats.linregress(x, y)
-        )
+        ) = stats.linregress(x, y)
         logger.debug("r_value: %s", r_value)
         logger.debug("p_value: %s", p_value)
         logger.debug("std_err: %s", std_err)

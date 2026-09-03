@@ -387,9 +387,7 @@ def test_hdf5_multi_file_multi_dataset_writes_aligned_plane_rows(
         for fname in saver.filenames_list:
             with h5py.File(fname, "r") as f:
                 trajectory: Any = f["adaptive_trajectory"]
-                all_rows.extend(
-                    np.asarray(trajectory["plane_index"]).tolist()
-                )
+                all_rows.extend(np.asarray(trajectory["plane_index"]).tolist())
         assert all_rows == list(range(n_planes)), (
             f"concatenated per-file plane_index {all_rows} != "
             f"{list(range(n_planes))} — trajectory not reconstructable"

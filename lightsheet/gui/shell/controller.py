@@ -256,7 +256,9 @@ class Controller_MainWindow(QMainWindow):
             f"{_t.HEADING} border: 2px solid {_c.BREEZE_BG}; }}"
         )
         self.pushButton_estop.setIcon(
-            QApplication.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
+            QApplication.style().standardIcon(
+                QStyle.StandardPixmap.SP_MessageBoxWarning
+            )
         )
         self.shortcut_estop = self.ui.shortcut_estop
         # Safety: E-stop toolbar is fixed (non-movable, non-floatable) so the

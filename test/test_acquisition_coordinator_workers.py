@@ -921,8 +921,6 @@ def test_single_mode_button_presamples_multi_channel(
         make_controller,
     )
 
-
-
     # --- Both checked -> multi_channel=True ---
     ctrl, _bundle = make_controller(qtbot, request)
     ctrl._single_thread = None  # attribute exists only after first click
@@ -1300,8 +1298,6 @@ def test_spawn_stack_worker_presamples_multi_channel(
     from _helpers.controller_fixture import (
         make_controller,
     )
-
-
 
     # --- Both checked -> multi_channel=True ---
     ctrl, _bundle = make_controller(qtbot, request)
