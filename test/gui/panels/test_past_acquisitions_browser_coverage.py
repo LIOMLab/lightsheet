@@ -31,7 +31,7 @@ Covers branches not exercised by the existing HDF5/Zarr parse tests:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 from pytestqt.qtbot import QtBot
@@ -678,7 +678,10 @@ def test_dir_size_oserror_suppressed(
     assert size >= 12  # "hello" (5) + "world!!" (7) = 12
 
 
-def test_date_str_oserror_returns_empty(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+def test_date_str_oserror_returns_empty(
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+) -> None:
     """_date_str returns "" when stat() raises OSError."""
     with patch.object(Path, "stat", side_effect=OSError("nope")):
         assert PastAcquisitionsBrowser._date_str("/nonexistent") == ""
@@ -881,7 +884,10 @@ def test_panel_on_view_changed_past_is_noop(
     assert stacked.currentIndex() != 2 or stacked.currentIndex() == 6
 
 
-def test_panel_on_refresh_scanning_guard(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+def test_panel_on_refresh_scanning_guard(
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+) -> None:
     """_on_refresh is a no-op when a scan is already in flight."""
     ctrl = controller
     panel = ctrl.past_panel

@@ -8,10 +8,10 @@ Runs headless on Mac via ``QT_QPA_PLATFORM=offscreen`` (set by conftest).
 
 from __future__ import annotations
 
-import numpy as np
-import pytest
 from typing import TYPE_CHECKING
 
+import numpy as np
+import pytest
 from pytestqt.qtbot import QtBot
 
 if TYPE_CHECKING:
@@ -212,7 +212,10 @@ def test_levels_driven_clamp(qtbot: QtBot) -> None:
     assert 100 <= v2 <= 155, f"midpoint pixel should be ~127, got {v2}"
 
 
-def test_levels_readout_updates(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+def test_levels_readout_updates(
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+) -> None:
     """After setImage, the live min/max QLabel readout shows the frame's
     actual pixel range (not the display window)."""
     ctrl = controller
@@ -229,7 +232,10 @@ def test_levels_readout_updates(qtbot: QtBot, controller: Controller_MainWindow)
     assert "5678" in text, f"readout missing frame max: {text!r}"
 
 
-def test_levels_bar_wired_to_image_view(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+def test_levels_bar_wired_to_image_view(
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+) -> None:
     """Dragging the LevelsBar handles updates the ImageView display
     window via the shell's sig_levelsChanged → set_levels wiring."""
     ctrl = controller

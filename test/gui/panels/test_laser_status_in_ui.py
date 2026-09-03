@@ -153,7 +153,10 @@ def test_updateUi_laser_status_inactive_gray(
     assert "#8E8E93" in label.styleSheet()
 
 
-def test_updateUi_laser_status_error_red(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+def test_updateUi_laser_status_error_red(
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+) -> None:
     ctrl = controller
     ctrl.laser_panel.updateUi_laser_status(1, "error")
     label = ctrl.laser_panel.ui.label_laserTwoStatus
@@ -194,7 +197,10 @@ def test_laser_panel_slots_reference_panel_local_ui() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_sig_laser_status_connected(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+def test_sig_laser_status_connected(
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+) -> None:
     ctrl = controller
     seen = {"status": None}
 
@@ -210,7 +216,10 @@ def test_sig_laser_status_connected(qtbot: QtBot, controller: Controller_MainWin
     assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "\u25cf ON"
 
 
-def test_sig_laser_readback_connected(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+def test_sig_laser_readback_connected(
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+) -> None:
     ctrl = controller
     seen = {"rb": None}
 
@@ -241,7 +250,10 @@ def test_pushButton_laserTwoRefresh_clicked_connected(
     assert seen["clicked"] is True, "pushButton_laserTwoRefresh.clicked must fire"
 
 
-def test_refresh_button_emits_via_slot(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+def test_refresh_button_emits_via_slot(
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+) -> None:
     """Clicking Refresh Power routes to the laser panel refresh slot, which
     calls the hardware manager readback/poll helpers. Patch those helpers to
     assert the wiring end-to-end without a real serial round-trip."""

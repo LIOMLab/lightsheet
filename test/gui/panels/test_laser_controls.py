@@ -131,7 +131,10 @@ def test_write_laser1_power_surfaces_error_and_resets(
 # --------------------------------------------------------------------------- #
 
 
-def test_toggle_laser1_on_when_inactive(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+def test_toggle_laser1_on_when_inactive(
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+) -> None:
     """_toggle_laser1 calls self.lasers[0].on() when the laser is inactive,
     then applies the staged percentage via _write_laser1_power."""
     ctrl = controller
@@ -146,7 +149,10 @@ def test_toggle_laser1_on_when_inactive(qtbot: QtBot, controller: Controller_Mai
     assert ctrl._hw.lasers[0].power == 150.0
 
 
-def test_toggle_laser2_on_when_inactive(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+def test_toggle_laser2_on_when_inactive(
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+) -> None:
     """_toggle_laser2 calls self.lasers[1].on() when inactive, then applies
     the staged percentage via _write_laser2_power. Symmetric with laser 1 —
     no laser-2-specific self.ibeam branch."""
@@ -292,7 +298,10 @@ def test_estop_emits_per_laser_warning_on_error(
     assert ctrl.lasers[1].error == 0
 
 
-def test_estop_acquires_no_laser_lock(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+def test_estop_acquires_no_laser_lock(
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+) -> None:
     """The E-stop kill path must NOT acquire self.lasers[i]._lock anywhere
     in the method body — a stuck daemon write thread holding a laser's lock
     must never delay the kill path (AGENTS.md §2). This test records any
@@ -319,7 +328,7 @@ def test_estop_acquires_no_laser_lock(qtbot: QtBot, controller: Controller_MainW
         during teardown) returns False (lock-skip no-op) instead of
         raising ``AttributeError``."""
 
-        def __enter__(self) -> "_NoLockAcquire":
+        def __enter__(self) -> _NoLockAcquire:
             raise AssertionError(
                 "E-stop must not acquire self.lasers[i]._lock — the kill "
                 "path is lock-free so a stuck daemon write thread can never "

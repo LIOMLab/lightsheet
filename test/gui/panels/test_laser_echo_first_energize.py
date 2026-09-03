@@ -28,7 +28,7 @@ This test verifies:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 from pytestqt.qtbot import QtBot
@@ -50,12 +50,18 @@ _LASER_PANEL_PATH = (
 # --------------------------------------------------------------------------- #
 
 
-def test_laser1_toggle_is_checkable(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+def test_laser1_toggle_is_checkable(
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+) -> None:
     ctrl = controller
     assert ctrl.laser_panel.ui.pushButton_laserOneToggle.isCheckable() is True
 
 
-def test_laser2_toggle_is_checkable(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+def test_laser2_toggle_is_checkable(
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+) -> None:
     ctrl = controller
     assert ctrl.laser_panel.ui.pushButton_laserTwoToggle.isCheckable() is True
 
@@ -388,7 +394,10 @@ def test_no_qthread_in_laser_panel() -> None:
     )
 
 
-def test_estop_kill_path_unchanged(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+def test_estop_kill_path_unchanged(
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+) -> None:
     """The E-stop kill path stays synchronous + lock-free in the shell:
     estop_event.set() + for laser in self.lasers: laser.off()."""
     ctrl = controller
