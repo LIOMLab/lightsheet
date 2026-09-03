@@ -144,3 +144,86 @@ def test_cadence_holds_residual_between_planes() -> None:
     _ = ctrl.target(1.0)
     _ = ctrl.target(2.0)
     assert ctrl.residual_mm == pytest.approx(residual)
+
+
+def test_target_clamps_feedforward_plus_residual() -> None:
+    # A +1 mm residual pushes the 34 mm seed exactly to the 35 mm high limit.
+    cfg = _cfg(residual_gain_mm=1.0, max_residual_mm=1.0)
+    ctrl = AdaptiveFocusController(
+        cfg,
+        cam_lo_mm=0.0,
+        cam_hi_mm=35.0,
+        seed_camera_pos_mm=34.0,
+    )
+    ctrl.update(1.0, 1.0)  # establish reference
+    ctrl.update(2.0, 2.0)  # one +1 mm step
+    assert ctrl.residual_mm == pytest.approx(1.0)
+    assert ctrl.target(5.0) == pytest.approx(35.0)
+
+
+def test_target_uses_curve_endpoints_outside_range() -> None:
+    curve = FocusCurve(stage_pos=(0.0, 10.0), camera_pos=(20.0, 22.0))
+    cfg = _cfg(use_curve_seed=True)
+    ctrl = AdaptiveFocusController(
+        cfg,
+        cam_lo_mm=0.0,
+        cam_hi_mm=35.0,
+        curve=curve,
+        seed_camera_pos_mm=100.0,
+    )
+    # np.interp returns the left endpoint below the curve and the right above.
+    assert ctrl.target(-5.0) == pytest.approx(20.0)
+    assert ctrl.target(15.0) == pytest.approx(22.0)
+
+
+def test_update_first_call_leaves_residual_zero() -> None:
+    cfg = _cfg()
+    ctrl = AdaptiveFocusController(
+        cfg,
+        cam_lo_mm=0.0,
+        cam_hi_mm=35.0,
+        seed_camera_pos_mm=10.0,
+    )
+    ctrl.update(1.0, 1.0)
+    assert ctrl.residual_mm == pytest.approx(0.0)
+
+
+def test_zero_residual_gain_keeps_residual_zero() -> None:
+    cfg = _cfg(residual_gain_mm=0.0)
+    ctrl = AdaptiveFocusController(
+        cfg,
+        cam_lo_mm=0.0,
+        cam_hi_mm=35.0,
+        seed_camera_pos_mm=0.0,
+    )
+    ctrl.update(1.0, 1.0)
+    for _ in range(10):
+        ctrl.update(1.0, 2.0)
+    assert ctrl.residual_mm == pytest.approx(0.0)
+
+
+def test_disabled_controller_does_not_update_residual() -> None:
+    cfg = _cfg(enabled=False)
+    ctrl = AdaptiveFocusController(
+        cfg,
+        cam_lo_mm=0.0,
+        cam_hi_mm=35.0,
+        seed_camera_pos_mm=0.0,
+    )
+    ctrl.update(1.0, 1.0)
+    ctrl.update(2.0, 2.0)
+    assert ctrl.residual_mm == pytest.approx(0.0)
+    # The constant seed is still clamped and returned.
+    assert ctrl.target(1.0) == pytest.approx(0.0)
+
+
+def test_residual_mm_is_read_only() -> None:
+    cfg = _cfg()
+    ctrl = AdaptiveFocusController(
+        cfg,
+        cam_lo_mm=0.0,
+        cam_hi_mm=35.0,
+        seed_camera_pos_mm=0.0,
+    )
+    with pytest.raises(AttributeError):
+        ctrl.residual_mm = 1.0  # type: ignore[misc]
