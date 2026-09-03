@@ -406,6 +406,12 @@ class AcquisitionPanelWidget(QWidget):
         adaptive_cfg = self._shell.stack_panel.build_adaptive_config()
         focus_cfg = self._shell.stack_panel.build_focus_config()
         focus_curve = self._shell.stack_panel.build_focus_curve()
+        autofocus_cfg = self._shell.stack_panel.build_autofocus_config()
+        autofocus_curve = (
+            self._shell.stack_panel.build_focus_curve()
+            if autofocus_cfg is not None and autofocus_cfg.use_curve_seed
+            else None
+        )
         assert self._shell._hw is not None
 
         self._shell._stack_worker = StackWorker(  # ty: ignore[unresolved-attribute]
@@ -420,6 +426,8 @@ class AcquisitionPanelWidget(QWidget):
             adaptive_cfg=adaptive_cfg,
             focus_cfg=focus_cfg,
             focus_curve=focus_curve,
+            autofocus_cfg=autofocus_cfg,
+            autofocus_curve=autofocus_curve,
         )
         self._shell._stack_worker.moveToThread(self._shell._stack_thread)  # ty: ignore[unresolved-attribute]
         # Connect the per-plane adaptive trajectory signal to the shell's
@@ -455,6 +463,20 @@ class AcquisitionPanelWidget(QWidget):
                 self._shell._stack_worker.sig_focus_trajectory.disconnect()  # ty: ignore[unresolved-attribute]
         self._shell._stack_worker.sig_focus_trajectory.connect(  # ty: ignore[unresolved-attribute]
             self._shell._on_focus_trajectory
+        )
+        # Connect the per-plane autofocus status signal to the stack panel's
+        # GUI-thread slot. Queued connection so the worker never touches
+        # Qt widgets. Disconnect any prior connection first.
+        with contextlib.suppress(TypeError, RuntimeError):
+            if (
+                self._shell._stack_worker.receivers(  # ty: ignore[unresolved-attribute]
+                    SIGNAL("sig_autofocus_status(int,int,double,double,double,QString)")
+                )
+                > 0
+            ):
+                self._shell._stack_worker.sig_autofocus_status.disconnect()  # ty: ignore[unresolved-attribute]
+        self._shell._stack_worker.sig_autofocus_status.connect(  # ty: ignore[unresolved-attribute]
+            self._shell.stack_panel._on_autofocus_status
         )
         # When reusing the thread (2nd+ queue row), disconnect the prior
         # started→run so the reused thread's started only invokes this
@@ -525,8 +547,11 @@ class AcquisitionPanelWidget(QWidget):
                 self._shell.focusTrajectoryWidget._legend.hide()
 
         # The mode badge switches to FOCUS RUNNING for the duration of the
-        # stack when focus compensation is enabled.
-        self._shell.focus_mode_started = focus_cfg is not None
+        # stack when either legacy focus compensation or per-plane autofocus
+        # is enabled.
+        self._shell.focus_mode_started = (focus_cfg is not None) or (
+            autofocus_cfg is not None
+        )
 
         self._shell._stack_thread.start()  # ty: ignore[unresolved-attribute]
         return self._shell._stack_worker  # ty: ignore[invalid-return-type, unresolved-attribute]
