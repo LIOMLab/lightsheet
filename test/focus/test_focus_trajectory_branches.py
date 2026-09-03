@@ -9,17 +9,17 @@ curve/scatter/legend guards and the state-machine branches
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import numpy as np
 import pytest
-from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
-from _helpers.controller_fixture import make_controller
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 from lightsheet.gui.widgets.focus_trajectory import FocusTrajectoryWidget
 
@@ -155,7 +155,7 @@ def test_sync_right_vb_none(qtbot: QtBot) -> None:
 # --------------------------------------------------------------------- #
 
 
-def test_focus_dock_controller_module(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_focus_dock_controller_module(controller: Controller_MainWindow) -> None:
     """FocusDockController lives in its own focused module."""
     from lightsheet.gui.coordinators.focus_dock_controller import (
         FocusDockController,
@@ -164,20 +164,20 @@ def test_focus_dock_controller_module(qtbot: QtBot, request: FixtureRequest) -> 
     assert FocusDockController.__module__ == (
         "lightsheet.gui.coordinators.focus_dock_controller"
     )
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     assert hasattr(ctrl, "_focus_dock_controller")
     assert ctrl._focus_dock_controller.__class__ is FocusDockController
 
 
 def test_focus_dock_controller_is_presentation_only(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """The focus dock controller does not hold HAL state."""
     from lightsheet.gui.coordinators.focus_dock_controller import (
         FocusDockController,
     )
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     fdc = ctrl._focus_dock_controller
     assert isinstance(fdc, FocusDockController)
     for attr in ("lasers", "camera", "motors", "etls", "siggen"):
@@ -187,9 +187,9 @@ def test_focus_dock_controller_is_presentation_only(
     assert not hasattr(fdc, "estop_event")
 
 
-def test_focus_shell_aliases_reachable(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_focus_shell_aliases_reachable(controller: Controller_MainWindow) -> None:
     """The shell still exposes focus dock/widget/plot/label attributes."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     assert ctrl.dockWidget_focusTrajectory is ctrl._focus_dock_controller.dock
     assert ctrl.focusTrajectoryWidget is ctrl._focus_dock_controller.widget
     assert (
@@ -203,7 +203,7 @@ def test_focus_shell_aliases_reachable(qtbot: QtBot, request: FixtureRequest) ->
 
 
 def test_focus_trajectory_slot_is_shell_bound_method(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """_on_focus_trajectory remains a shell-bound callable that
     delegates to the presentation controller."""
@@ -211,7 +211,7 @@ def test_focus_trajectory_slot_is_shell_bound_method(
         FocusDockController,
     )
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     slot = getattr(ctrl, "_on_focus_trajectory", None)
     assert slot is not None
     assert slot.__self__ is ctrl or isinstance(slot.__self__, FocusDockController)
@@ -229,7 +229,7 @@ def test_focus_trajectory_slot_is_shell_bound_method(
 
 
 def test_adaptive_and_focus_share_title_bar_helper(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """Both docks use the build_no_dbl_click_title_bar helper from
     dock_utils."""
@@ -237,7 +237,7 @@ def test_adaptive_and_focus_share_title_bar_helper(
         build_no_dbl_click_title_bar,
     )
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     assert (
         ctrl.dockWidget_adaptiveTrajectory.titleBarWidget().__class__.__name__
         == "_NoDblClickTitleBar"
@@ -327,11 +327,11 @@ def _fake_acquire_scan(worker: Any, state: dict[str, Any]) -> Any:
 
 
 def test_autofocus_over_travel_camera_axis_aborts_with_message_and_beep(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Any
+    controller: Controller_MainWindow, tmp_path: Any
 ) -> None:
     """A ``ValueError`` from ``move_axes_parallel`` on the camera axis
     aborts the stack with the focus over-travel message and a beep."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
 
     worker = _make_autofocus_worker(ctrl)
@@ -364,13 +364,13 @@ def test_autofocus_over_travel_camera_axis_aborts_with_message_and_beep(
 
 
 def test_autofocus_cadence_two_updates_residual_twice(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Any
+    controller: Controller_MainWindow, tmp_path: Any
 ) -> None:
     """With ``cadence=2`` over 4 planes, the residual ``update()`` is
     called exactly 2 times (planes 0 and 2)."""
     from lightsheet.focus.adaptive_controller import AdaptiveFocusController
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
 
     worker = _make_autofocus_worker(ctrl, cadence=2)

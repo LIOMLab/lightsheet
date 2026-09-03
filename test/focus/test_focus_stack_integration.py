@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import numpy as np
@@ -21,8 +21,8 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from _helpers.controller_fixture import make_controller  # noqa: I001
-
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 # --------------------------------------------------------------------- #
 # Helpers
@@ -162,14 +162,12 @@ def _fake_acquire_scan_factory(
 
 
 def test_move_axes_parallel_called_only_at_block_boundaries(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """A 16-plane focus stack with block size 8 issues exactly two
     dual-axis ``move_axes_parallel`` calls (planes 0 and 8) and 14
     horizontal-only ``move_absolute_position`` calls."""
-    from _helpers.controller_fixture import make_controller
-
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)
 
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
@@ -234,14 +232,12 @@ def test_move_axes_parallel_called_only_at_block_boundaries(
 
 
 def test_add_motor_parameters_logs_held_camera_position_within_block(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """All 8 planes in a block log the same camera position, and that
     position is the actually-applied (held) position, not the
     feedforward target for planes 1-7."""
-    from _helpers.controller_fixture import make_controller
-
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)
 
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
@@ -282,14 +278,12 @@ def test_add_motor_parameters_logs_held_camera_position_within_block(
 
 
 def test_focus_trajectory_records_one_sample_per_block(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """The outer FrameSaverController records exactly one FocusSample per
     focus block boundary, and each sample's applied camera position
     matches the move_axes_parallel camera target."""
-    from _helpers.controller_fixture import make_controller
-
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)
 
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
@@ -325,18 +319,16 @@ def test_focus_trajectory_records_one_sample_per_block(
 
 
 def test_update_residual_called_from_second_block_boundary_onward(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """FocusController.update_residual is called exactly once at the
     second block boundary (plane 8) with the sharpness of the previous
     block's frame. The first FocusSample.sharpness_metric is None; the
     second equals the computed value."""
-    from _helpers.controller_fixture import make_controller
-
     from lightsheet.focus.controller import FocusController
     from lightsheet.focus.sharpness import frame_sharpness_variance
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)
 
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
@@ -383,14 +375,12 @@ def test_update_residual_called_from_second_block_boundary_onward(
 
 
 def test_focus_curve_required_when_enabled_worker_does_not_reload_file(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Constructing StackWorker with focus enabled but no FocusCurve raises
     ValueError before any motor call — the worker must not fall back to
     loading a calibration file itself."""
-    from _helpers.controller_fixture import make_controller
-
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)
 
     with pytest.raises(ValueError, match="no calibration curve was loaded"):
@@ -398,7 +388,7 @@ def test_focus_curve_required_when_enabled_worker_does_not_reload_file(
 
 
 def test_focus_over_travel_aborts_stack_with_beep(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """A block-boundary move whose horizontal target exceeds the travel
     limit aborts the stack with the focus-specific over-travel message
@@ -408,9 +398,7 @@ def test_focus_over_travel_aborts_stack_with_beep(
     over-travel at the second block boundary (plane 8) so the abort path
     on the ``move_axes_parallel`` call is exercised.
     """
-    from _helpers.controller_fixture import make_controller
-
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)
 
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
@@ -443,16 +431,14 @@ def test_focus_over_travel_aborts_stack_with_beep(
 
 
 def test_focus_disabled_matches_fixed_stack_behavior(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """When focus compensation is disabled (focus_cfg=None), the stack
     runs the existing fixed-camera path: zero dual-axis moves, zero
     focus samples, and zero focus trajectory emissions."""
-    from _helpers.controller_fixture import make_controller
-
     from lightsheet.gui.workers import StackWorker
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)
 
     worker = StackWorker(
@@ -498,13 +484,11 @@ def test_focus_disabled_matches_fixed_stack_behavior(
 
 
 def test_estop_prevents_next_block_boundary_focus_move(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Setting estop_event after the first block aborts before the second
     block-boundary focus move is attempted."""
-    from _helpers.controller_fixture import make_controller
-
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _configure_stack_plan(ctrl, tmp_path, n_planes=16)
 
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
@@ -591,13 +575,11 @@ def _configure_autofocus_stack_plan(
 
 
 def test_autofocus_move_axes_parallel_called_every_plane(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """A 4-plane autofocus stack calls ``move_axes_parallel`` once per
     plane, each time moving the horizontal and camera axes together."""
-    from _helpers.controller_fixture import make_controller
-
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
 
     worker = _make_worker(ctrl, autofocus_cfg=_autofocus_cfg())
@@ -632,15 +614,13 @@ def test_autofocus_move_axes_parallel_called_every_plane(
 
 
 def test_autofocus_update_called_at_cadence(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """With cadence 2 over 4 planes, ``update()`` is called exactly 2
     times (planes 0 and 2)."""
-    from _helpers.controller_fixture import make_controller
-
     from lightsheet.focus.adaptive_controller import AdaptiveFocusController
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
 
     worker = _make_worker(ctrl, autofocus_cfg=_autofocus_cfg(cadence=2))
@@ -673,13 +653,11 @@ def test_autofocus_update_called_at_cadence(
 
 
 def test_autofocus_records_one_focus_sample_per_plane(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """The worker records exactly one ``FocusSample`` per plane and the
     sample's ``block_index`` equals the plane number."""
-    from _helpers.controller_fixture import make_controller
-
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
 
     worker = _make_worker(ctrl, autofocus_cfg=_autofocus_cfg())
@@ -703,13 +681,11 @@ def test_autofocus_records_one_focus_sample_per_plane(
 
 
 def test_autofocus_uses_curve_seed_when_use_curve_seed_true(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """When ``use_curve_seed`` is True the feedforward is sampled from
     the curve and varies with stage position; when False it is constant."""
-    from _helpers.controller_fixture import make_controller
-
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
 
     curve = _focus_curve()
@@ -740,13 +716,11 @@ def test_autofocus_uses_curve_seed_when_use_curve_seed_true(
 
 
 def test_autofocus_over_travel_aborts_stack(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """A ``ValueError`` from ``move_axes_parallel`` aborts the stack with
     the over-travel message and a beep."""
-    from _helpers.controller_fixture import make_controller
-
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
 
     worker = _make_worker(ctrl, autofocus_cfg=_autofocus_cfg())
@@ -780,12 +754,12 @@ def test_autofocus_over_travel_aborts_stack(
     assert len(focus_msgs) >= 1, f"expected over-travel message; got {messages}"
 
 
-def test_autofocus_estop_breaks_loop(qtbot: Any, request: Any, tmp_path: Path) -> None:
+def test_autofocus_estop_breaks_loop(
+    controller: Controller_MainWindow, tmp_path: Path
+) -> None:
     """Setting ``estop_event`` mid-run prevents further frames from being
     acquired."""
-    from _helpers.controller_fixture import make_controller
-
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
 
     worker = _make_worker(ctrl, autofocus_cfg=_autofocus_cfg())
@@ -821,14 +795,14 @@ def test_autofocus_estop_breaks_loop(qtbot: Any, request: Any, tmp_path: Path) -
 
 
 def test_autofocus_multi_channel_uses_same_camera_position_and_last_channel_update(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """In multi-channel mode, both channels use the same predicted camera
     position and the residual is updated once per main plane from the last
     channel's acquired frame."""
     from lightsheet.focus.adaptive_controller import AdaptiveFocusController
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=2)
 
     worker = _make_worker(ctrl, autofocus_cfg=_autofocus_cfg(), multi_channel=True)

@@ -8,16 +8,19 @@ Fixed-mode saves omit the focus group entirely.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, cast
 
 import h5py
 import numpy as np
 import pytest
-from _helpers.controller_fixture import make_controller
 
 from lightsheet.focus.types import AutofocusConfig, FocusConfig, FocusSample
 
@@ -57,10 +60,10 @@ def _make_samples(n_blocks: int) -> list[FocusSample]:
 
 
 def _setup_ctrl(
-    qtbot: Any, request: Any, tmp_path: Path, *, n_channels: int = 1
+    controller: Controller_MainWindow, tmp_path: Path, *, n_channels: int = 1
 ) -> tuple[Any, Any]:
     """Create a real controller with 8x8 camera and tmp_path save dir."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.save_directory = str(tmp_path)
     ctrl.stack_step = 1.0
     ctrl.camera.xsize = _FRAME_SIZE
@@ -186,11 +189,11 @@ def _assert_focus_group(
 
 
 def test_hdf5_writes_focus_trajectory_group(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Single-channel stitch writes the full ``/focus_trajectory`` group
     with one row per focus block and the frozen FocusConfig attrs."""
-    _ctrl, saver = _setup_ctrl(qtbot, request, tmp_path)
+    _ctrl, saver = _setup_ctrl(controller, tmp_path)
     config = _small_config()
     n_blocks = 2
     n_planes = 16
@@ -218,10 +221,10 @@ def test_hdf5_writes_focus_trajectory_group(
 
 
 def test_fixed_mode_omits_focus_trajectory_group(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Fixed-mode HDF5 save contains no ``/focus_trajectory`` group."""
-    _ctrl, saver = _setup_ctrl(qtbot, request, tmp_path)
+    _ctrl, saver = _setup_ctrl(controller, tmp_path)
     n_planes = 4
 
     with _chdir(tmp_path):
@@ -251,7 +254,7 @@ def test_fixed_mode_omits_focus_trajectory_group(
 
 
 def test_zarr_focus_group_sibling_of_adaptive(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """When both adaptive and focus are enabled, the Zarr store contains
     both ``/acquisition/adaptive`` and ``/acquisition/focus`` as sibling
@@ -260,7 +263,7 @@ def test_zarr_focus_group_sibling_of_adaptive(
 
     from lightsheet.adaptive.types import AdaptiveConfig, AdaptiveSample
 
-    ctrl, saver = _setup_ctrl(qtbot, request, tmp_path)
+    ctrl, saver = _setup_ctrl(controller, tmp_path)
     ctrl.save_format = "zarr"
     focus_config = _small_config()
     adaptive_config = AdaptiveConfig(
@@ -321,12 +324,12 @@ def test_zarr_focus_group_sibling_of_adaptive(
 
 
 def test_fixed_mode_omits_focus_group_zarr(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Fixed-mode Zarr save contains no ``/acquisition/focus`` group."""
     import zarr
 
-    ctrl, saver = _setup_ctrl(qtbot, request, tmp_path)
+    ctrl, saver = _setup_ctrl(controller, tmp_path)
     ctrl.save_format = "zarr"
     n_planes = 2
 
@@ -357,13 +360,13 @@ def test_fixed_mode_omits_focus_group_zarr(
 
 
 def test_both_writes_focus_in_both_formats(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Both save writes ``/focus_trajectory`` in HDF5 and ``/acquisition/focus``
     in Zarr with identical schema values."""
     import zarr
 
-    ctrl, saver = _setup_ctrl(qtbot, request, tmp_path)
+    ctrl, saver = _setup_ctrl(controller, tmp_path)
     ctrl.save_format = "both"
     config = _small_config()
     n_planes = 4
@@ -401,7 +404,7 @@ def test_both_writes_focus_in_both_formats(
 
 
 def test_hdf5_autofocus_writes_one_row_per_plane(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """A 3-plane single-channel stack with per-plane autofocus writes the
     ``/focus_trajectory`` group with one row per plane."""
@@ -409,7 +412,7 @@ def test_hdf5_autofocus_writes_one_row_per_plane(
 
     from lightsheet.gui.workers import StackWorker
 
-    ctrl, saver = _setup_ctrl(qtbot, request, tmp_path)
+    ctrl, saver = _setup_ctrl(controller, tmp_path)
     ctrl.save_format = "hdf5"
     n_planes = 3
 
