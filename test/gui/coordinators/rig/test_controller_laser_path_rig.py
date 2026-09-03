@@ -26,11 +26,13 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import threading
+from typing import TYPE_CHECKING
 
 import pytest
-from _helpers.controller_fixture import make_controller
-from pytest import FixtureRequest
-from pytestqt.qtbot import QtBot
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+    from lightsheet.hal import DeviceBundle  # noqa: F401
 
 
 def _real_nidaqmx_available() -> bool:
@@ -59,7 +61,7 @@ pytestmark = [
 
 
 def test_toggle_laser1_real_daq_no_access_violation(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow
 ) -> None:
     """The real _toggle_laser1 (daemon-thread toggle) via ctrl._hw.
 
@@ -70,7 +72,7 @@ def test_toggle_laser1_real_daq_no_access_violation(
     test asserts no access violation escapes and the laser's error surface
     is clean afterward.
     """
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.laser1_power_pct = 0.0  # 0 mW — laser OFF, safe
 
     ctrl._hw._toggle_laser1()
@@ -85,7 +87,7 @@ def test_toggle_laser1_real_daq_no_access_violation(
 
 
 def test_toggle_laser1_on_daemon_thread_real_daq(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow
 ) -> None:
     """_toggle_laser1 spawned on a daemon thread (as the GUI does it).
 
@@ -93,7 +95,7 @@ def test_toggle_laser1_on_daemon_thread_real_daq(
     violation is thread-context-related (nidaqmx Task destructor racing
     with thread exit, or a thread-local handle issue), this reproduces it.
     """
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.laser1_power_pct = 0.0  # 0 mW — laser OFF, safe
 
     errors = []
@@ -118,7 +120,7 @@ def test_toggle_laser1_on_daemon_thread_real_daq(
 
 
 def test_write_laser1_power_real_daq_repeated(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow
 ) -> None:
     """The real _write_laser1_power (debounce-slot worker) repeatedly.
 
@@ -127,7 +129,7 @@ def test_write_laser1_power_real_daq_repeated(
     catch intermittent corruption from repeated Task create/write/close
     cycles on the real Dev7 AO channels.
     """
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     # Mark laser active so the write path actually runs.
     ctrl._hw.lasers[0].active = True
     errors = []
@@ -144,7 +146,7 @@ def test_write_laser1_power_real_daq_repeated(
 
 
 def test_start_lasers_real_daq_then_siggen_create(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow
 ) -> None:
     """The real start_lasers (acquisition worker path) then siggen create.
 
@@ -156,7 +158,7 @@ def test_start_lasers_real_daq_then_siggen_create(
     """
     from lightsheet.hal import Camera, SigGen
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     # Enable auto-laser 1 so start_lasers actually writes to Dev7.
     ctrl._auto_laser1 = True
     ctrl.laser1_power_pct = 0.0  # 0 mW — safe
