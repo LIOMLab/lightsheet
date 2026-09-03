@@ -77,12 +77,30 @@ def _configure_stack_plan(ctrl: Any, tmp_path: Path, n_planes: int = 16) -> None
     ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
 
 
+def _autofocus_cfg(**overrides: Any) -> Any:
+    """A standard per-plane autofocus config with cadence 1."""
+    from lightsheet.focus.types import AutofocusConfig
+
+    defaults: dict[str, Any] = dict(
+        enabled=True,
+        cadence=1,
+        residual_gain_mm=0.05,
+        max_residual_mm=0.5,
+        smoothing=0.5,
+        use_curve_seed=False,
+    )
+    defaults.update(overrides)
+    return AutofocusConfig(**defaults)
+
+
 def _make_worker(
     ctrl: Any,
     focus_cfg: Any | None = None,
     focus_curve: Any | None = None,
+    autofocus_cfg: Any | None = None,
+    autofocus_curve: Any | None = None,
 ) -> Any:
-    """Build a StackWorker with the supplied focus config and curve."""
+    """Build a StackWorker with the supplied focus/autofocus config and curve."""
     from lightsheet.gui.workers import StackWorker
 
     return StackWorker(
@@ -97,6 +115,8 @@ def _make_worker(
         adaptive_cfg=None,
         focus_cfg=focus_cfg,
         focus_curve=focus_curve,
+        autofocus_cfg=autofocus_cfg,
+        autofocus_curve=autofocus_curve,
     )
 
 
@@ -524,3 +544,274 @@ def test_estop_prevents_next_block_boundary_focus_move(
         )
     finally:
         ctrl.estop_event.clear()
+
+
+# --------------------------------------------------------------------- #
+# D-13.4: per-plane adaptive autofocus
+# --------------------------------------------------------------------- #
+
+
+def _fake_acquire_scan_autofocus_factory(worker: Any, state: dict[str, Any]) -> Any:
+    """Return an ``acquire_scan`` stub that fills ``reconstructed_frame``
+    with a constant deterministic pattern for the autofocus tests."""
+
+    def _fake_acquire_scan() -> bool:
+        n_imgs = worker.siggen.waveform_cycles or 1
+        imgs = worker.camera.copy_recorder_images(n_imgs)
+        frame = np.asarray(imgs[0])
+        frame[:] = 30000
+        worker._shell.reconstructed_frame = frame
+        state["acq_index"] += 1
+        return True
+
+    return _fake_acquire_scan
+
+
+def _configure_autofocus_stack_plan(
+    ctrl: Any, tmp_path: Path, n_planes: int = 4
+) -> None:
+    """Configure a valid 4-plane single-channel stack plan for autofocus."""
+    ctrl.saving_allowed = True
+    ctrl.number_of_planes = n_planes
+    ctrl.stack_mode_started = True
+    ctrl.stack_starting_plane = 0.0
+    ctrl.stack_step = 10.0
+    ctrl.save_format = "hdf5"
+    ctrl.save_directory = str(tmp_path)
+    ctrl.save_filepath = str(tmp_path / "autofocus")
+    ctrl.save_description = "autofocus tracer sample"
+    ctrl.current_horizontal_position_text = "0.0"
+    ctrl.current_vertical_position_text = "0.0"
+    ctrl.current_camera_position_text = "0.0"
+    ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
+    ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
+
+
+def test_autofocus_move_axes_parallel_called_every_plane(
+    qtbot: Any, request: Any, tmp_path: Path
+) -> None:
+    """A 4-plane autofocus stack calls ``move_axes_parallel`` once per
+    plane, each time moving the horizontal and camera axes together."""
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
+
+    worker = _make_worker(ctrl, autofocus_cfg=_autofocus_cfg())
+
+    state = {"acq_index": 0}
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    parallel_calls: list[list[tuple[str, float, str]]] = []
+
+    def _track_parallel(moves: list[tuple[str, float, str]]) -> None:
+        parallel_calls.append(list(moves))
+
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    with (
+        patch.object(
+            worker, "acquire_scan", _fake_acquire_scan_autofocus_factory(worker, state)
+        ),
+        patch.object(worker.motors, "move_axes_parallel", _track_parallel),
+    ):
+        worker.run()
+
+    assert len(finished_emits) == 1
+    assert len(parallel_calls) == 4, (
+        f"expected 4 parallel calls; got {len(parallel_calls)}"
+    )
+    for i, moves in enumerate(parallel_calls):
+        axes = [m[0] for m in moves]
+        assert "horizontal" in axes, f"plane {i} missing horizontal"
+        assert "camera" in axes, f"plane {i} missing camera"
+
+
+def test_autofocus_update_called_at_cadence(
+    qtbot: Any, request: Any, tmp_path: Path
+) -> None:
+    """With cadence 2 over 4 planes, ``update()`` is called exactly 2
+    times (planes 0 and 2)."""
+    from _helpers.controller_fixture import make_controller
+
+    from lightsheet.focus.adaptive_controller import AdaptiveFocusController
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
+
+    worker = _make_worker(ctrl, autofocus_cfg=_autofocus_cfg(cadence=2))
+
+    state = {"acq_index": 0}
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    update_calls: list[tuple[float, float]] = []
+    real_update = AdaptiveFocusController.update
+
+    def _track_update(stage_pos_mm: float, sharpness: float) -> None:
+        # Class-level patch receives the explicit args only; call the
+        # unbound method with the controller instance the worker constructed.
+        update_calls.append((stage_pos_mm, sharpness))
+        real_update(worker._autofocus_controller, stage_pos_mm, sharpness)
+
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    with (
+        patch.object(
+            worker, "acquire_scan", _fake_acquire_scan_autofocus_factory(worker, state)
+        ),
+        patch.object(AdaptiveFocusController, "update", side_effect=_track_update),
+    ):
+        worker.run()
+
+    assert len(finished_emits) == 1
+    assert len(update_calls) == 2, f"expected 2 update calls; got {len(update_calls)}"
+
+
+def test_autofocus_records_one_focus_sample_per_plane(
+    qtbot: Any, request: Any, tmp_path: Path
+) -> None:
+    """The worker records exactly one ``FocusSample`` per plane and the
+    sample's ``block_index`` equals the plane number."""
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
+
+    worker = _make_worker(ctrl, autofocus_cfg=_autofocus_cfg())
+
+    state = {"acq_index": 0}
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    with patch.object(
+        worker, "acquire_scan", _fake_acquire_scan_autofocus_factory(worker, state)
+    ):
+        worker.run()
+
+    assert len(finished_emits) == 1
+    traj = ctrl._fs.focus_trajectory
+    assert len(traj) == 4, f"expected 4 focus samples; got {len(traj)}"
+    for i, sample in enumerate(traj):
+        assert sample.block_index == i
+
+
+def test_autofocus_uses_curve_seed_when_use_curve_seed_true(
+    qtbot: Any, request: Any, tmp_path: Path
+) -> None:
+    """When ``use_curve_seed`` is True the feedforward is sampled from
+    the curve and varies with stage position; when False it is constant."""
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
+
+    curve = _focus_curve()
+    worker = _make_worker(
+        ctrl,
+        autofocus_cfg=_autofocus_cfg(use_curve_seed=True),
+        autofocus_curve=curve,
+    )
+
+    state = {"acq_index": 0}
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    with patch.object(
+        worker, "acquire_scan", _fake_acquire_scan_autofocus_factory(worker, state)
+    ):
+        worker.run()
+
+    assert len(finished_emits) == 1
+    traj = ctrl._fs.focus_trajectory
+    assert len(traj) == 4
+    feedforwards = [s.feedforward_camera_pos_mm for s in traj]
+    assert feedforwards[-1] != feedforwards[0], (
+        f"curve seed should vary; got {feedforwards}"
+    )
+
+
+def test_autofocus_over_travel_aborts_stack(
+    qtbot: Any, request: Any, tmp_path: Path
+) -> None:
+    """A ``ValueError`` from ``move_axes_parallel`` aborts the stack with
+    the over-travel message and a beep."""
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
+
+    worker = _make_worker(ctrl, autofocus_cfg=_autofocus_cfg())
+
+    state = {"acq_index": 0}
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    messages: list[str] = []
+    beeps: list[None] = []
+    ctrl.sig_message.connect(messages.append)
+    ctrl.sig_beep.connect(lambda: beeps.append(None))
+
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    with (
+        patch.object(
+            worker, "acquire_scan", _fake_acquire_scan_autofocus_factory(worker, state)
+        ),
+        patch.object(
+            worker.motors,
+            "move_axes_parallel",
+            side_effect=ValueError("out of limits"),
+        ),
+    ):
+        worker.run()
+
+    assert len(finished_emits) == 1
+    assert len(beeps) >= 1, "expected at least one beep on over-travel abort"
+    focus_msgs = [m for m in messages if "Focus move rejected" in m]
+    assert len(focus_msgs) >= 1, f"expected over-travel message; got {messages}"
+
+
+def test_autofocus_estop_breaks_loop(qtbot: Any, request: Any, tmp_path: Path) -> None:
+    """Setting ``estop_event`` mid-run prevents further frames from being
+    acquired."""
+    from _helpers.controller_fixture import make_controller
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
+
+    worker = _make_worker(ctrl, autofocus_cfg=_autofocus_cfg())
+
+    state = {"acq_index": 0, "plane": 0}
+
+    def _fake_acquire_scan() -> bool:
+        n_imgs = worker.siggen.waveform_cycles or 1
+        imgs = worker.camera.copy_recorder_images(n_imgs)
+        frame = np.asarray(imgs[0])
+        frame[:] = 30000
+        worker._shell.reconstructed_frame = frame
+        state["plane"] += 1
+        if state["plane"] == 2:
+            ctrl.estop_event.set()
+        state["acq_index"] += 1
+        return True
+
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    with patch.object(worker, "acquire_scan") as mock_acquire:
+        mock_acquire.side_effect = _fake_acquire_scan
+
+        finished_emits: list[None] = []
+        worker.finished.connect(lambda: finished_emits.append(None))
+        worker.run()
+
+    assert len(finished_emits) == 1
+    assert mock_acquire.call_count == 2, (
+        f"E-stop must prevent further acquires; got {mock_acquire.call_count}"
+    )
