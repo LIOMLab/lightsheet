@@ -184,9 +184,12 @@ def test_resolve_ports_null_serial_config_port_match(tmp_path: Path) -> None:
     assert result == {"motors": "COM7"}
 
 
-def test_resolve_ports_null_serial_single_candidate(tmp_path: Path) -> None:
-    """A null-serial device with exactly one candidate resolves to it
-    (the elif len(candidates) == 1 branch, line 186)."""
+def test_resolve_ports_null_serial_single_nonmatch_raises(tmp_path: Path) -> None:
+    """A null-serial device with one candidate that does NOT match the
+    configured [Motors] Port is rejected — the registry requires an
+    exact config.ini match, and a single non-matching candidate is still
+    treated as an ambiguous bus (safe current behavior, no special-case
+    len == 1 branch)."""
     inv = {
         "devices": {
             "serial_devices": [
@@ -200,14 +203,18 @@ def test_resolve_ports_null_serial_single_candidate(tmp_path: Path) -> None:
     }
     reg = _make_registry(inv, tmp_path)
     # One candidate, but config.ini says COM7 and the candidate is COM3.
-    # Since there's only one candidate, it resolves to COM3.
+    # The current implementation raises because the candidate is not COM7.
     ports = [_make_port("COM3", 0x067B, 0x2303, None)]
-    with patch(
-        "lightsheet.hal.registry.serial.tools.list_ports.comports",
-        return_value=ports,
+    with (
+        patch(
+            "lightsheet.hal.registry.serial.tools.list_ports.comports",
+            return_value=ports,
+        ),
+        pytest.raises(UnresolvedDeviceError, match="COM3") as exc_info,
     ):
-        result = reg._resolve_ports()
-    assert result == {"motors": "COM3"}
+        reg._resolve_ports()
+    msg = str(exc_info.value)
+    assert "multiple" in msg.lower() or "ambiguous" in msg.lower()
 
 
 def test_resolve_ports_null_serial_zero_candidates_raises(tmp_path: Path) -> None:
