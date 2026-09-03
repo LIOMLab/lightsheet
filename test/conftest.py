@@ -368,6 +368,50 @@ _gc.disable()
 # — the cycle break makes it unnecessary. The make_controller fixture's
 # sip.delete teardown was likewise removed (replaced by
 # _stop_worker_threads, which mirrors closeEvent's quit()+wait()
-# shutdown). The single-process -p no:xdist flag in scripts/coverage.sh
-# is the last of the three workarounds and is re-enabled once xdist
-# workers no longer segfault at shutdown.
+# shutdown).
+
+
+def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
+    """Stop every running QThread and active QTimer before the xdist worker
+    exits.
+
+    PySide6/shiboken can deadlock or segfault during xdist worker shutdown
+    when QThreads are still running or QTimer events are undelivered (the
+    historical Qt/shiboken teardown race under gc.disable()). The
+    `make_controller` fixture already stops the controller-owned threads per
+    test, but other tests may create QThreads or QTimer objects directly. This
+    hook performs a bounded, process-exit cleanup pass so the worker can shut
+    down cleanly and the xdist master does not wait forever.
+    """
+    from PySide6.QtCore import QCoreApplication, QThread, QTimer
+
+    app = QCoreApplication.instance()
+    # Stop all active timers first so no timer fires while we are quitting
+    # threads.
+    for obj in _gc.get_objects():
+        if isinstance(obj, QTimer):
+            try:
+                if obj.isActive():
+                    obj.stop()
+            except RuntimeError:
+                # C++ object already deleted.
+                pass
+    # Quit and wait every running QThread. Skip the current (main) thread
+    # so a self-wait does not deadlock the worker process's shutdown.
+    main_thread = QThread.currentThread()
+    for obj in _gc.get_objects():
+        if isinstance(obj, QThread) and obj is not main_thread:
+            try:
+                if obj.isRunning():
+                    obj.quit()
+                    if app is not None:
+                        # Deliver the queued quit() event to the thread's
+                        # event loop. A blocking wait without this can stall
+                        # when quit() races ahead of the thread's exec().
+                        app.processEvents()
+                    obj.wait(2000)
+            except RuntimeError:
+                # C++ object already deleted.
+                pass
+    if app is not None:
+        app.processEvents()
