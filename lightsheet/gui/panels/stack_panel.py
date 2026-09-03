@@ -22,6 +22,9 @@ from lightsheet.focus.calibration import load_focus_curve
 from lightsheet.focus.types import AutofocusConfig, FocusConfig, FocusCurve
 from lightsheet.gui.panels.acquisition_table_manager import AcquisitionTableManager
 from lightsheet.gui.panels.ui_stack_panel import Ui_StackPanel
+from lightsheet.gui.styles import colors as _c
+from lightsheet.gui.styles import spacing as _s
+from lightsheet.gui.styles import typography as _t
 from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 
 if typing.TYPE_CHECKING:
@@ -165,6 +168,20 @@ class StackPanelWidget(QWidget):
             self._on_autofocus_smoothing_edited
         )
         self._on_autofocus_toggled(self.ui.checkBox_adaptiveAutofocus.isChecked())
+
+        # --- Adaptive-autofocus UI review fixes ---
+        # The live status label is the primary focal point and must be bold.
+        # The design uses exactly two weights: regular body and bold status.
+        self.ui.label_autofocusStatus.setStyleSheet(f"{_t.BOLD}")
+        # The adaptive parameter grid uses the 8 px spacing token, not the
+        # QGridLayout default.
+        self.ui.gridLayout_adaptiveAutofocusFields.setSpacing(_s.SM)
+        # The optional progress bar uses the accent color for its chunk so it
+        # reads as the secondary focal point while a stack is active. It stays
+        # hidden until a stack with adaptive focus starts.
+        self.ui.progressBar_autofocus.setStyleSheet(
+            f"QProgressBar::chunk {{ background-color: {_c.BREEZE_ACCENT}; }}"
+        )
 
     def _seed_spinbox_ranges(self) -> None:
         """Seed the first/last plane spinbox ranges from the motor travel
@@ -964,7 +981,7 @@ class StackPanelWidget(QWidget):
         )
         self.ui.label_focusStatus.setText(
             f"Armed: {n_points} points | block size {block_size} "
-            f"| autofocus residual {residual}"
+            f"| per-block residual {residual}"
         )
 
     def _on_focus_block_size_edited(self) -> None:
@@ -1113,8 +1130,8 @@ class StackPanelWidget(QWidget):
         use_curve = self.ui.checkBox_autofocusUseCurve.isChecked()
         if self._armed_focus_curve is None and use_curve:
             self.ui.label_autofocusStatus.setText(
-                "No focus curve loaded. Browse and load a curve, or uncheck "
-                "Use loaded focus curve as seed to start from the current "
+                'No focus curve loaded. Browse and load a curve, or uncheck '
+                '"Use loaded focus curve as seed" to start from the current '
                 "camera position."
             )
             return
@@ -1190,8 +1207,13 @@ class StackPanelWidget(QWidget):
         """GUI-thread slot for queued worker autofocus status updates.
 
         Renders the documented live status copy for tracking, holding,
-        clamped, waiting, and over-travel error states.
+        clamped, waiting, and over-travel error states, and mirrors the
+        per-plane progress into ``progressBar_autofocus``.
         """
+        if n_planes > 0 and not self.ui.progressBar_autofocus.isHidden():
+            self.ui.progressBar_autofocus.setRange(0, n_planes)
+            self.ui.progressBar_autofocus.setValue(plane)
+
         if state == "waiting" or predicted is None:
             self.ui.label_autofocusStatus.setText(
                 f"Plane {plane}/{n_planes} · acquiring first frames"
@@ -1209,3 +1231,33 @@ class StackPanelWidget(QWidget):
             f"Plane {plane}/{n_planes} · pred {predicted:.3f} mm · "
             f"res {residual:+.3f} mm · sharp {sharp:.2e} · {state}"
         )
+
+    def set_autofocus_running(self, running: bool) -> None:
+        """Update the adaptive-autofocus UI for stack start/stop.
+
+        When a stack starts, the adaptive config widgets are disabled so the
+        operator cannot edit the pre-sampled ``AutofocusConfig``, and the
+        per-plane progress bar is shown. When the stack finishes or aborts,
+        the widgets are re-enabled and the progress bar is hidden.
+        """
+        if not self.ui.checkBox_adaptiveAutofocus.isChecked():
+            self.ui.progressBar_autofocus.setVisible(False)
+            return
+
+        if running:
+            n_planes = int(getattr(self._shell, "number_of_planes", 0) or 0)
+            self.ui.progressBar_autofocus.setRange(0, n_planes)
+            self.ui.progressBar_autofocus.setValue(0)
+            self.ui.progressBar_autofocus.setVisible(True)
+            self.ui.checkBox_adaptiveAutofocus.setEnabled(False)
+            self.ui.widget_adaptiveAutofocusFields.setEnabled(False)
+            self.ui.checkBox_autofocusUseCurve.setEnabled(False)
+        else:
+            self.ui.progressBar_autofocus.setVisible(False)
+            self.ui.checkBox_adaptiveAutofocus.setEnabled(True)
+            # Re-enable the parameter container only when adaptive is on; the
+            # use-curve checkbox follows the armed-curve policy.
+            self.ui.widget_adaptiveAutofocusFields.setEnabled(
+                self.ui.checkBox_adaptiveAutofocus.isChecked()
+            )
+            self._refresh_autofocus_use_curve_state()

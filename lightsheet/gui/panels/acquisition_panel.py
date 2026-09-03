@@ -353,6 +353,10 @@ class AcquisitionPanelWidget(QWidget):
         queue loop. Pre-samples the auto-laser flags + save-option widgets
         on the GUI thread so the worker thread never reads ui.*.
         """
+        # Disable the adaptive-autofocus controls and show the per-plane
+        # progress bar when adaptive focus is active.
+        self._shell.stack_panel.set_autofocus_running(True)
+
         # Reuse the same QThread across queue rows instead of constructing
         # a new one per row — constructing + destroying a QThread C++
         # object while the previous worker's deleteLater is still pending
@@ -568,6 +572,10 @@ class AcquisitionPanelWidget(QWidget):
             )
             self.updateUi_modes_buttons(self._shell.default_buttons)
             self._shell.motor_panel.updateUi_motor_buttons(disable_button=False)
+
+        # Re-enable the adaptive-autofocus controls and hide the progress bar
+        # now that the stack has finished or aborted.
+        self._shell.stack_panel.set_autofocus_running(False)
 
         self._shell.stack_mode_started = False
         self._shell.focus_mode_started = False

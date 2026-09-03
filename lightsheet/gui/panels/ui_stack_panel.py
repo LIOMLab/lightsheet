@@ -389,6 +389,7 @@ class Ui_StackPanel(object):
         self.gridLayout_adaptiveAutofocusFields = QGridLayout(self.widget_adaptiveAutofocusFields)
         self.gridLayout_adaptiveAutofocusFields.setObjectName(u"gridLayout_adaptiveAutofocusFields")
         self.gridLayout_adaptiveAutofocusFields.setContentsMargins(_s.ZERO, _s.ZERO, _s.ZERO, _s.ZERO)
+        self.gridLayout_adaptiveAutofocusFields.setSpacing(_s.SM)
         self.label_autofocusCadence = QLabel(self.widget_adaptiveAutofocusFields)
         self.label_autofocusCadence.setObjectName(u"label_autofocusCadence")
 
@@ -460,6 +461,7 @@ class Ui_StackPanel(object):
 
         self.label_autofocusStatus = QLabel(self.widget_focusFields)
         self.label_autofocusStatus.setObjectName(u"label_autofocusStatus")
+        self.label_autofocusStatus.setStyleSheet(u"font-weight: bold;")
 
         self.gridLayout_focusFields.addWidget(self.label_autofocusStatus, 9, 0, 1, 4)
 
@@ -471,6 +473,9 @@ class Ui_StackPanel(object):
 
         self.progressBar_autofocus = QProgressBar(self.widget_focusFields)
         self.progressBar_autofocus.setObjectName(u"progressBar_autofocus")
+        self.progressBar_autofocus.setStyleSheet(
+            u"QProgressBar::chunk { background-color: #3daee9; }"
+        )
         self.progressBar_autofocus.setVisible(False)
 
         self.gridLayout_focusFields.addWidget(self.progressBar_autofocus, 11, 0, 1, 4)
@@ -561,7 +566,7 @@ class Ui_StackPanel(object):
 #if QT_CONFIG(tooltip)
         self.checkBox_focusAutofocusResidual.setToolTip(QCoreApplication.translate("StackPanel", u"Enable per-block sharpness-based residual correction on top of the feedforward calibration curve.", None))
 #endif // QT_CONFIG(tooltip)
-        self.checkBox_focusAutofocusResidual.setText(QCoreApplication.translate("StackPanel", u"Enable autofocus residual", None))
+        self.checkBox_focusAutofocusResidual.setText(QCoreApplication.translate("StackPanel", u"Enable per-block residual", None))
         self.label_focusXAxisVariable.setText(QCoreApplication.translate("StackPanel", u"X axis:", None))
         self.comboBox_focusXAxisVariable.setItemText(0, QCoreApplication.translate("StackPanel", u"Plane", None))
         self.comboBox_focusXAxisVariable.setItemText(1, QCoreApplication.translate("StackPanel", u"Stage position (mm)", None))

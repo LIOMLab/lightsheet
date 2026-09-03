@@ -188,7 +188,7 @@ def test_load_calibration_arms_status_label(
     status = ui.label_focusStatus.text()
     assert "Armed: 3 points" in status, f"unexpected status: {status!r}"
     assert "block size 8" in status, f"unexpected status: {status!r}"
-    assert "autofocus residual on" in status.lower(), f"unexpected status: {status!r}"
+    assert "per-block residual on" in status.lower(), f"unexpected status: {status!r}"
 
 
 def test_demo_mode_preloads_sample_focus_curve(
@@ -830,3 +830,108 @@ def test_autofocus_use_curve_disabled_when_no_curve_armed(
     cb = _focus_ui(ctrl).checkBox_autofocusUseCurve
     assert not cb.isEnabled()
     assert not cb.isChecked()
+
+
+def test_autofocus_status_label_is_bold(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """label_autofocusStatus uses the bold display weight."""
+    ctrl, _ = make_controller(qtbot, request)
+    ss = ctrl.stack_panel.ui.label_autofocusStatus.styleSheet() or ""
+    assert "bold" in ss.lower(), f"expected bold stylesheet, got {ss!r}"
+
+
+def test_autofocus_grid_uses_sm_spacing(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """gridLayout_adaptiveAutofocusFields uses the 8 px sm token."""
+    from lightsheet.gui.styles import spacing as _s
+
+    ctrl, _ = make_controller(qtbot, request)
+    assert (
+        ctrl.stack_panel.ui.gridLayout_adaptiveAutofocusFields.spacing() == _s.SM
+    )
+
+
+def test_legacy_residual_checkbox_text_disambiguated(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """The legacy residual checkbox no longer uses the overloaded
+    'autofocus residual' label."""
+    ctrl, _ = make_controller(qtbot, request)
+    text = ctrl.stack_panel.ui.checkBox_focusAutofocusResidual.text().lower()
+    assert "per-block residual" in text, f"unexpected checkbox text: {text!r}"
+    assert "autofocus residual" not in text
+
+
+def test_autofocus_no_curve_status_uses_quoted_checkbox_label(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """The no-curve empty-state copy puts the use-curve checkbox label
+    in quotation marks."""
+    ctrl, _ = make_controller(qtbot, request)
+    # Demo mode may pre-load a sample curve; explicitly disarm it.
+    ctrl.stack_panel._clear_focus_armed()
+    ui = _focus_ui(ctrl)
+    ui.checkBox_adaptiveAutofocus.setChecked(True)
+    ui.checkBox_adaptiveAutofocus.toggled.emit(True)
+    # Force the use-curve checkbox checked so the no-curve branch fires.
+    ui.checkBox_autofocusUseCurve.blockSignals(True)
+    ui.checkBox_autofocusUseCurve.setChecked(True)
+    ui.checkBox_autofocusUseCurve.blockSignals(False)
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.processEvents()
+    ctrl.stack_panel._update_autofocus_status_label()
+    assert '"Use loaded focus curve as seed"' in ui.label_autofocusStatus.text()
+
+
+def test_set_autofocus_running_toggles_progress_and_disables_controls(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """set_autofocus_running(True) shows the progress bar, disables the
+    adaptive controls, and set_autofocus_running(False) reverses it."""
+    ctrl, _ = make_controller(qtbot, request)
+    ui = _focus_ui(ctrl)
+    # The adaptive sub-surface lives inside the Focus Control fields container.
+    ui.checkBox_focusEnable.setChecked(True)
+    ui.checkBox_focusEnable.toggled.emit(True)
+    ui.checkBox_adaptiveAutofocus.setChecked(True)
+    ui.checkBox_adaptiveAutofocus.toggled.emit(True)
+    ctrl.number_of_planes = 25
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.processEvents()
+    ctrl.stack_panel.set_autofocus_running(True)
+    QApplication.processEvents()
+    assert not ui.progressBar_autofocus.isHidden()
+    assert ui.progressBar_autofocus.maximum() == 25
+    assert not ui.checkBox_adaptiveAutofocus.isEnabled()
+    assert not ui.widget_adaptiveAutofocusFields.isEnabled()
+    assert not ui.checkBox_autofocusUseCurve.isEnabled()
+
+    ctrl.stack_panel.set_autofocus_running(False)
+    QApplication.processEvents()
+    assert ui.progressBar_autofocus.isHidden()
+    assert ui.checkBox_adaptiveAutofocus.isEnabled()
+    assert ui.widget_adaptiveAutofocusFields.isEnabled()
+
+
+def test_on_autofocus_status_updates_progress_bar(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """_on_autofocus_status mirrors the plane index into the progress bar."""
+    ctrl, _ = make_controller(qtbot, request)
+    ui = _focus_ui(ctrl)
+    ui.checkBox_focusEnable.setChecked(True)
+    ui.checkBox_focusEnable.toggled.emit(True)
+    ui.checkBox_adaptiveAutofocus.setChecked(True)
+    ui.checkBox_adaptiveAutofocus.toggled.emit(True)
+    ctrl.number_of_planes = 50
+    ctrl.stack_panel.set_autofocus_running(True)
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.processEvents()
+    ctrl.stack_panel._on_autofocus_status(17, 50, 20.0, 0.0, 1.0, "tracking")
+    assert ui.progressBar_autofocus.value() == 17
+    assert ui.progressBar_autofocus.maximum() == 50

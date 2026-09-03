@@ -26,6 +26,7 @@ from typing import Any
 import pyqtgraph as pg
 from pyqtgraph.GraphicsScene.mouseEvents import MouseDragEvent
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from lightsheet.gui.styles import colors as _c
@@ -217,12 +218,15 @@ class FocusTrajectoryWidget(QWidget):
         )
         item.addItem(self._residual_scatter)
 
-        # Legend with the two curves + residual marker.
+        # Legend with the two curves + residual marker. The background
+        # brush derives from the Breeze background token so it stays
+        # consistent with the rest of the dark UI.
+        _bg_rgba = (*QColor(_BG).getRgb()[:3], 200)
         self._legend = pg.LegendItem(
             (180, 80),
             offset=(10, 10),
             labelTextColor=_FG,
-            brush=pg.mkBrush(29, 32, 35, 200),
+            brush=pg.mkBrush(*_bg_rgba),
         )
         self._legend.setParentItem(main_vb)
         self._legend.setZValue(1000)
