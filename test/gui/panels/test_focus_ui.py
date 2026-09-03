@@ -26,12 +26,10 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import pytest
-from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
-from _helpers.controller_fixture import make_controller
 
 from lightsheet.focus.types import AutofocusConfig, FocusConfig, FocusCurve
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
@@ -82,21 +80,23 @@ def _valid_calibration_json() -> str:
     return '{"points": [[0.0, 20.0], [10.0, 22.0], [20.0, 24.0]]}'
 
 
-def test_focus_group_widgets_exist(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_focus_group_widgets_exist(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """The focus control group and its child widgets exist on the stack
     panel with the exact UI-SPEC objectNames."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     for name in FOCUS_WIDGET_NAMES:
         assert hasattr(ui, name), f"missing focus widget {name}"
 
 
 def test_focus_x_axis_combo_has_only_block(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The focus X-axis combo contains only "Block"; the
     "Stage position (mm)" option has been removed."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     combo = ui.comboBox_focusXAxisVariable
     assert combo.count() == 1, f"expected one X-axis option, got {combo.count()}"
@@ -104,10 +104,10 @@ def test_focus_x_axis_combo_has_only_block(
 
 
 def test_focus_block_size_is_field_spec_subclass(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The focus block-size spinbox is a promoted FieldSpecSpinBox."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     sb = ui.doubleSpinBox_focusBlockSize
     assert isinstance(sb, FieldSpecSpinBox), (
@@ -116,11 +116,11 @@ def test_focus_block_size_is_field_spec_subclass(
 
 
 def test_focus_toggle_off_hides_only_fields_container(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When the toggle is unchecked, only the fields container is hidden
     -- the group box title row stays visible."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     ui.checkBox_focusEnable.setChecked(False)
     ui.checkBox_focusEnable.toggled.emit(False)
@@ -136,10 +136,10 @@ def test_focus_toggle_off_hides_only_fields_container(
 
 
 def test_focus_toggle_on_shows_fields_container(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When the toggle is checked, the fields container becomes visible."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     ui.checkBox_focusEnable.setChecked(True)
     ui.checkBox_focusEnable.toggled.emit(True)
@@ -152,11 +152,11 @@ def test_focus_toggle_on_shows_fields_container(
 
 
 def test_focus_browse_filter_is_json_only(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Any
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Any
 ) -> None:
     """pushButton_focusBrowse opens a QFileDialog restricted to *.json
     (plus All files) and writes the chosen path into the line edit."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     chosen = str(tmp_path / "curve.json")
     with patch(
@@ -175,11 +175,11 @@ def test_focus_browse_filter_is_json_only(
 
 
 def test_load_calibration_arms_status_label(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Any
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Any
 ) -> None:
     """Load Calibration on a valid 3-point JSON file arms focus and
     updates label_focusStatus with the exact armed copy."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     path = tmp_path / "curve.json"
     path.write_text(_valid_calibration_json())
@@ -193,11 +193,11 @@ def test_load_calibration_arms_status_label(
 
 
 def test_demo_mode_preloads_sample_focus_curve(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Demo mode auto-arms the bundled sample focus calibration so the
     feature is ready without a file dialog."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     assert ctrl.stack_panel._armed_focus_curve is not None
     assert "focus_sample_calibration.json" in ui.lineEdit_focusCurvePath.text()
@@ -205,12 +205,12 @@ def test_demo_mode_preloads_sample_focus_curve(
 
 
 def test_load_calibration_invalid_file_shows_error_copy(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Any
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Any
 ) -> None:
     """Load Calibration on a malformed/out-of-range file emits
     sig_beep + sig_message with the documented invalid-file copy and
     sets label_focusStatus to 'Invalid file -- {reason}'."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     beeps: list[None] = []
     messages: list[str] = []
@@ -230,11 +230,11 @@ def test_load_calibration_invalid_file_shows_error_copy(
 
 
 def test_focus_block_size_editing_finished_reverts_out_of_range(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """editingFinished on doubleSpinBox_focusBlockSize with a typed value
     of 0 or 150 beeps and reverts to 1 or 100 respectively."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     beeps: list[None] = []
     ctrl.sig_beep.connect(lambda: beeps.append(None))
@@ -255,12 +255,12 @@ def test_focus_block_size_editing_finished_reverts_out_of_range(
 
 
 def test_build_focus_config_returns_none_when_unarmed(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Any
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Any
 ) -> None:
     """build_focus_config returns None when unchecked or unarmed; it
     returns a frozen FocusConfig with the armed path and current widget
     values when a valid file is loaded."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     # Unchecked -> None.
     ui.checkBox_focusEnable.setChecked(False)
@@ -288,12 +288,12 @@ def test_build_focus_config_returns_none_when_unarmed(
 
 
 def test_build_focus_curve_returns_loaded_curve_object(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Any
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Any
 ) -> None:
     """build_focus_curve returns the exact FocusCurve object produced by
     a successful pushButton_focusLoad call, or None when unchecked or
     unarmed."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     ui.checkBox_focusEnable.setChecked(True)
     expected = FocusCurve(stage_pos=(0.0, 10.0, 20.0), camera_pos=(20.0, 22.0, 24.0))
@@ -337,11 +337,11 @@ def _focus_trajectory_widget(qtbot: QtBot) -> Any:
 
 
 def test_focus_dock_exists_and_hidden_initially(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The focus trajectory dock is created and hidden until the
     operator enables focus compensation."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     dock = getattr(ctrl, "dockWidget_focusTrajectory", None)
     assert dock is not None, "dockWidget_focusTrajectory must exist on the shell"
     from PySide6.QtCore import Qt
@@ -353,12 +353,12 @@ def test_focus_dock_exists_and_hidden_initially(
 
 
 def test_enabling_focus_shows_rail_button_not_dock(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Checking focus enable shows the conditional rail button so the
     operator can open the trajectory dock on demand. The dock itself does
     NOT open automatically."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     ui.checkBox_focusEnable.setChecked(True)
     ui.checkBox_focusEnable.toggled.emit(True)
@@ -376,11 +376,11 @@ def test_enabling_focus_shows_rail_button_not_dock(
 
 
 def test_focus_rail_button_opens_dock_floating(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Toggling the focus rail button opens the trajectory dock as a
     standalone floating window (never docked into the main GUI)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     ui.checkBox_focusEnable.setChecked(True)
     ui.checkBox_focusEnable.toggled.emit(True)
@@ -401,9 +401,11 @@ def test_focus_rail_button_opens_dock_floating(
     assert widget.plotWidget_focusTrajectory.isHidden()
 
 
-def test_focus_rail_button_closes_dock(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_focus_rail_button_closes_dock(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """Unchecking the focus rail button hides the trajectory dock."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     ui.checkBox_focusEnable.setChecked(True)
     ui.checkBox_focusEnable.toggled.emit(True)
@@ -421,10 +423,10 @@ def test_focus_rail_button_closes_dock(qtbot: QtBot, request: FixtureRequest) ->
 
 
 def test_focus_dock_visibility_syncs_rail_button(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Closing the dock via its close button unchecks the rail button."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     ui.checkBox_focusEnable.setChecked(True)
     ui.checkBox_focusEnable.toggled.emit(True)
@@ -441,11 +443,11 @@ def test_focus_dock_visibility_syncs_rail_button(
 
 
 def test_empty_state_label_has_exact_copy(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The empty-state label carries the exact UI-SPEC copy and is
     word-wrapped."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     label = getattr(ctrl, "label_focusTrajectoryEmpty", None)
     assert label is not None, "label_focusTrajectoryEmpty must exist on the shell"
     assert label.wordWrap() is True
@@ -523,9 +525,11 @@ def test_focus_trajectory_widget_freeze_blocks_appends(qtbot: QtBot) -> None:
     assert len(xs) == 1, "post-freeze append must be ignored"
 
 
-def test_badge_focus_running_string(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_badge_focus_running_string(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """The badge renders 'FOCUS RUNNING — plane {n}/{N}' with the em-dash."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.number_of_planes = 50
     ctrl._update_mode_badge("FOCUS", "RUNNING", plane=12, total=50)
     text = ctrl.ui.label_modeBadge.text()
@@ -534,9 +538,11 @@ def test_badge_focus_running_string(qtbot: QtBot, request: FixtureRequest) -> No
     assert "plane 12/50" in text
 
 
-def test_badge_focus_aborted_string(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_badge_focus_aborted_string(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """E-stop mid-focus-run transitions the badge to 'FOCUS ABORTED'."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.number_of_planes = 50
     ctrl._update_mode_badge("FOCUS", "ABORTED", plane=12, total=50)
     text = ctrl.ui.label_modeBadge.text()
@@ -545,11 +551,11 @@ def test_badge_focus_aborted_string(qtbot: QtBot, request: FixtureRequest) -> No
 
 
 def test_spawn_stack_worker_passes_frozen_focus_cfg_and_curve(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Any
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Any
 ) -> None:
     """`_spawn_stack_worker` pre-samples focus config and curve on the GUI
     thread and passes them as StackWorker constructor args."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     path = tmp_path / "curve.json"
     path.write_text('{"points": [[0.0, 20.0], [10.0, 22.0], [20.0, 24.0]]}')
@@ -588,11 +594,11 @@ def test_spawn_stack_worker_passes_frozen_focus_cfg_and_curve(
 
 
 def test_spawn_stack_worker_keeps_plot_visible_when_focus_dock_open(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Any
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Any
 ) -> None:
     """When the focus trajectory dock is already open, _spawn_stack_worker
     does not re-hide the plot/legend."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     path = tmp_path / "curve.json"
     path.write_text('{"points": [[0.0, 20.0], [10.0, 22.0], [20.0, 24.0]]}')
@@ -628,11 +634,11 @@ def test_spawn_stack_worker_keeps_plot_visible_when_focus_dock_open(
 
 
 def test_estop_freezes_focus_trajectory_and_sets_badge(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """E-stop performs synchronous laser.off() first, then freezes the
     focus trajectory plot and sets the badge to FOCUS ABORTED."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     # Arm a valid focus curve and enable focus.
     path = Path(str(getattr(ctrl, "save_directory", "/tmp"))) / "focus_curve.json"
@@ -677,11 +683,11 @@ def test_estop_freezes_focus_trajectory_and_sets_badge(
 
 
 def test_spawn_stack_worker_sets_focus_mode_flag_when_enabled(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Any
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Any
 ) -> None:
     """When focus is enabled and armed, _spawn_stack_worker sets
     focus_mode_started so the badge shows FOCUS RUNNING."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     path = tmp_path / "curve.json"
     path.write_text('{"points": [[0.0, 20.0], [10.0, 22.0], [20.0, 24.0]]}')
@@ -704,11 +710,11 @@ def test_spawn_stack_worker_sets_focus_mode_flag_when_enabled(
 
 
 def test_spawn_stack_worker_clears_focus_mode_flag_when_disabled(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When focus is disabled, _spawn_stack_worker leaves focus_mode_started
     False so the badge stays STACK RUNNING."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     _focus_ui(ctrl)
     ctrl.stack_first_plane_set = True
     ctrl.stack_last_plane_set = True
@@ -725,10 +731,10 @@ def test_spawn_stack_worker_clears_focus_mode_flag_when_disabled(
 
 
 def test_progress_update_shows_focus_running_badge(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_on_progress_update uses FOCUS mode when focus_mode_started is True."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     _focus_ui(ctrl)
     ctrl.stack_mode_started = True
     ctrl.focus_mode_started = True
@@ -739,31 +745,33 @@ def test_progress_update_shows_focus_running_badge(
     assert "2/5" in text
 
 
-def test_autofocus_group_widgets_exist(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_autofocus_group_widgets_exist(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """The adaptive-autofocus control group and its child widgets exist with
     the UI-SPEC objectNames."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     for name in AUTOFOCUS_WIDGET_NAMES:
         assert hasattr(ui, name), f"missing autofocus widget {name}"
 
 
 def test_build_autofocus_config_returns_none_when_disabled(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """build_autofocus_config returns None when adaptive is unchecked."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     ui.checkBox_adaptiveAutofocus.setChecked(False)
     assert ctrl.stack_panel.build_autofocus_config() is None
 
 
 def test_build_autofocus_config_returns_frozen_values_when_enabled(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """build_autofocus_config returns a frozen AutofocusConfig with the
     current widget values when adaptive is checked."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     ui.checkBox_adaptiveAutofocus.setChecked(True)
     ui.checkBox_adaptiveAutofocus.toggled.emit(True)
@@ -795,14 +803,14 @@ def test_build_autofocus_config_returns_frozen_values_when_enabled(
 )
 def test_autofocus_spinbox_out_of_range_reverts_and_beeps(
     qtbot: QtBot,
-    request: FixtureRequest,
+    controller: Controller_MainWindow,
     sb_name: str,
     low: float,
     high: float,
 ) -> None:
     """editingFinished on the four adaptive spinboxes beeps and clamps
     out-of-range values to the FieldSpec bounds."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sb = getattr(_focus_ui(ctrl), sb_name)
     beeps: list[None] = []
     ctrl.sig_beep.connect(lambda: beeps.append(None))
@@ -821,11 +829,11 @@ def test_autofocus_spinbox_out_of_range_reverts_and_beeps(
 
 
 def test_autofocus_use_curve_disabled_when_no_curve_armed(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """checkBox_autofocusUseCurve is disabled and unchecked when no focus
     curve is armed."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     # Demo mode may pre-load a sample curve; explicitly disarm it.
     ctrl.stack_panel._clear_focus_armed()
     cb = _focus_ui(ctrl).checkBox_autofocusUseCurve
@@ -834,43 +842,41 @@ def test_autofocus_use_curve_disabled_when_no_curve_armed(
 
 
 def test_autofocus_status_label_is_bold(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """label_autofocusStatus uses the bold display weight."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ss = ctrl.stack_panel.ui.label_autofocusStatus.styleSheet() or ""
     assert "bold" in ss.lower(), f"expected bold stylesheet, got {ss!r}"
 
 
 def test_autofocus_grid_uses_sm_spacing(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """gridLayout_adaptiveAutofocusFields uses the 8 px sm token."""
     from lightsheet.gui.styles import spacing as _s
 
-    ctrl, _ = make_controller(qtbot, request)
-    assert (
-        ctrl.stack_panel.ui.gridLayout_adaptiveAutofocusFields.spacing() == _s.SM
-    )
+    ctrl = controller
+    assert ctrl.stack_panel.ui.gridLayout_adaptiveAutofocusFields.spacing() == _s.SM
 
 
 def test_legacy_residual_checkbox_text_disambiguated(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The legacy residual checkbox no longer uses the overloaded
     'autofocus residual' label."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     text = ctrl.stack_panel.ui.checkBox_focusAutofocusResidual.text().lower()
     assert "per-block residual" in text, f"unexpected checkbox text: {text!r}"
     assert "autofocus residual" not in text
 
 
 def test_autofocus_no_curve_status_uses_quoted_checkbox_label(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The no-curve empty-state copy puts the use-curve checkbox label
     in quotation marks."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     # Demo mode may pre-load a sample curve; explicitly disarm it.
     ctrl.stack_panel._clear_focus_armed()
     ui = _focus_ui(ctrl)
@@ -888,11 +894,11 @@ def test_autofocus_no_curve_status_uses_quoted_checkbox_label(
 
 
 def test_set_autofocus_running_toggles_progress_and_disables_controls(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """set_autofocus_running(True) shows the progress bar, disables the
     adaptive controls, and set_autofocus_running(False) reverses it."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     # The adaptive sub-surface lives inside the Focus Control fields container.
     ui.checkBox_focusEnable.setChecked(True)
@@ -919,10 +925,10 @@ def test_set_autofocus_running_toggles_progress_and_disables_controls(
 
 
 def test_on_autofocus_status_updates_progress_bar(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_on_autofocus_status mirrors the plane index into the progress bar."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _focus_ui(ctrl)
     ui.checkBox_focusEnable.setChecked(True)
     ui.checkBox_focusEnable.toggled.emit(True)

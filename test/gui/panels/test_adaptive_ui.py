@@ -35,12 +35,11 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import pytest
-from pytest import FixtureRequest, MonkeyPatch
+from pytest import MonkeyPatch
 from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
-from _helpers.controller_fixture import make_controller
 
 from lightsheet.adaptive.types import AdaptiveConfig
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
@@ -71,10 +70,12 @@ def _adaptive_ui(ctrl: Controller_MainWindow) -> Ui_StackPanel:
     return ctrl.stack_panel.ui
 
 
-def test_adaptive_group_widgets_exist(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_adaptive_group_widgets_exist(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """The adaptive config group + toggle + 6 spinboxes + shutter hint
     exist on the stack panel with the exact UI-SPEC objectNames."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     assert hasattr(ui, "groupBox_adaptiveControl")
     assert hasattr(ui, "checkBox_adaptiveEnable")
@@ -85,10 +86,10 @@ def test_adaptive_group_widgets_exist(qtbot: QtBot, request: FixtureRequest) -> 
 
 
 def test_adaptive_spinboxes_are_field_spec_subclass(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Each of the 6 adaptive spinboxes is a promoted FieldSpecSpinBox."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     for name in ADAPTIVE_SPINBOX_OBJNAMES:
         sb = getattr(ui, name)
@@ -98,11 +99,11 @@ def test_adaptive_spinboxes_are_field_spec_subclass(
 
 
 def test_adaptive_toggle_off_hides_fields_container(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When the toggle is unchecked, only the fields container is hidden
     — the group box title row (the affordance) stays visible."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     ui.checkBox_adaptiveEnable.setChecked(False)
     # The toggle handler is wired in __init__; emit the signal to drive it.
@@ -120,10 +121,10 @@ def test_adaptive_toggle_off_hides_fields_container(
 
 
 def test_adaptive_toggle_on_shows_fields_container(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When the toggle is checked, the fields container becomes visible."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     ui.checkBox_adaptiveEnable.setChecked(True)
     ui.checkBox_adaptiveEnable.toggled.emit(True)
@@ -134,13 +135,13 @@ def test_adaptive_toggle_on_shows_fields_container(
 
 
 def test_adaptive_invalid_pair_beeps_messages_reverts(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Setting Min Exposure > Max Exposure emits the documented message
     + beep, reverts the offending spinbox, and latches fixed-fallback
     (build_adaptive_config returns None until a later valid edit clears
     the latch)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     beeps: list[None] = []
     messages: list[str] = []
@@ -163,11 +164,11 @@ def test_adaptive_invalid_pair_beeps_messages_reverts(
 
 
 def test_adaptive_invalid_pair_reverts_offending_spinbox(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The offending spinbox reverts to its prior valid value after the
     invalid edit."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     ui.checkBox_adaptiveEnable.setChecked(True)
     # Lower Max Exposure first so a Min Exposure of 500 is invalid.
@@ -180,11 +181,11 @@ def test_adaptive_invalid_pair_reverts_offending_spinbox(
 
 
 def test_adaptive_later_valid_edit_clears_latch(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """After an invalid pair latches fixed-fallback, a later valid edit
     clears the latch so build_adaptive_config returns a frozen config."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     ui.checkBox_adaptiveEnable.setChecked(True)
     # Lower Max Exposure first so a Min Exposure of 500 is invalid.
@@ -202,22 +203,24 @@ def test_adaptive_later_valid_edit_clears_latch(
     assert isinstance(cfg, AdaptiveConfig)
 
 
-def test_adaptive_unchecked_returns_none(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_adaptive_unchecked_returns_none(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """With the toggle unchecked, build_adaptive_config returns None
     (fixed stack behavior is selected)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     ui.checkBox_adaptiveEnable.setChecked(False)
     assert ctrl.stack_panel.build_adaptive_config() is None
 
 
 def test_adaptive_checked_valid_returns_frozen_config(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """With the toggle checked and valid bounds, build_adaptive_config
     returns a frozen AdaptiveConfig with target 0.90/0.95 and L2 block
     size 8 (the tracked defaults)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     ui.checkBox_adaptiveEnable.setChecked(True)
     cfg = ctrl.stack_panel.build_adaptive_config()
@@ -230,11 +233,11 @@ def test_adaptive_checked_valid_returns_frozen_config(
 
 
 def test_adaptive_rolling_shutter_shows_ms(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """In Rolling shutter mode the exposure bound spinboxes show the ms
     suffix and the hint reads the Rolling copy."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentText("Rolling")
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.emit(
@@ -251,11 +254,11 @@ def test_adaptive_rolling_shutter_shows_ms(
 
 
 def test_adaptive_lightsheet_shutter_shows_us(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """In Lightsheet shutter mode the exposure bound spinboxes show the
     µs suffix and the hint reads the Lightsheet copy."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentText("Lightsheet")
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.emit(
@@ -272,12 +275,12 @@ def test_adaptive_lightsheet_shutter_shows_us(
 
 
 def test_adaptive_lightsheet_bound_converts_to_seconds(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """In Lightsheet shutter mode the exposure bound is in µs (line time)
     and converts to seconds as µs x 1e-6. Set Min Exposure = 2500 µs
     → 2500e-6 = 2.5e-3 s."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentText("Lightsheet")
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.emit(
@@ -294,11 +297,11 @@ def test_adaptive_lightsheet_bound_converts_to_seconds(
 
 
 def test_adaptive_rolling_bound_converts_ms_to_seconds(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """In Rolling shutter mode the exposure bound converts ms to seconds
     (x1e-3). Set Min Exposure = 5 ms -> 5e-3 s."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentText("Rolling")
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.emit(
@@ -313,26 +316,26 @@ def test_adaptive_rolling_bound_converts_ms_to_seconds(
 
 
 def test_adaptive_power_narrowed_to_live_max(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The laser max-power spinbox maximum is narrowed at runtime to
     min(150.0, shell._bundle.lasers[i].max_power). The test fixture's
     laser[0] has max_power 300 mW → narrowed to 150.0; laser[1] has
     max_power 150 mW → narrowed to 150.0."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     assert ui.doubleSpinBox_adaptiveLaser1MaxPower.maximum() <= 150.0
     assert ui.doubleSpinBox_adaptiveLaser2MaxPower.maximum() <= 150.0
 
 
 def test_spawn_stack_worker_passes_frozen_adaptive_cfg(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_spawn_stack_worker pre-samples the adaptive config on the GUI
     thread and passes one frozen AdaptiveConfig as the final StackWorker
     constructor arg. With the toggle checked + valid bounds, the worker
     receives a frozen AdaptiveConfig (not None)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     ui.checkBox_adaptiveEnable.setChecked(True)
     # Set up a minimal valid stack plan so _spawn_stack_worker can run.
@@ -375,11 +378,11 @@ def test_spawn_stack_worker_passes_frozen_adaptive_cfg(
 
 
 def test_spawn_stack_worker_unchecked_passes_none(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """With the toggle unchecked, _spawn_stack_worker passes None as the
     adaptive_cfg arg (fixed stack behavior)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     ui.checkBox_adaptiveEnable.setChecked(False)
     ctrl.stack_first_plane_set = True
@@ -409,7 +412,7 @@ def test_spawn_stack_worker_unchecked_passes_none(
 
 
 def test_stack_worker_run_does_not_read_ui(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The StackWorker.run body never reaches into the shell's ui.* —
     the adaptive config is pre-sampled on the GUI thread and passed as
@@ -464,12 +467,12 @@ def _make_trajectory_widget(qtbot: QtBot) -> AdaptiveTrajectoryWidget:
 
 
 def test_dock_exists_and_hidden_initially(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The trajectory dock is created and is hidden until the operator
     opens it via the rail button. It does NOT auto-open when adaptive
     is enabled. It can never re-dock into the main GUI."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     dock = getattr(ctrl, "dockWidget_adaptiveTrajectory", None)
     assert dock is not None, "dockWidget_adaptiveTrajectory must exist on the shell"
     from PySide6.QtCore import Qt
@@ -484,13 +487,13 @@ def test_dock_exists_and_hidden_initially(
 
 
 def test_enabling_adaptive_shows_rail_button_not_dock(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """With adaptive enabled, the conditional rail button becomes
     visible so the operator can open the trajectory dock on demand.
     The dock itself does NOT open automatically — the trajectory plot
     is opt-in even when adaptive mode is on."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     ui.checkBox_adaptiveEnable.setChecked(True)
     ui.checkBox_adaptiveEnable.toggled.emit(True)
@@ -509,10 +512,12 @@ def test_enabling_adaptive_shows_rail_button_not_dock(
     )
 
 
-def test_rail_button_opens_dock_floating(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_rail_button_opens_dock_floating(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """Toggling the rail button opens the trajectory dock as a
     standalone floating window (never docked into the main GUI)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     ui.checkBox_adaptiveEnable.setChecked(True)
     ui.checkBox_adaptiveEnable.toggled.emit(True)
@@ -531,11 +536,13 @@ def test_rail_button_opens_dock_floating(qtbot: QtBot, request: FixtureRequest) 
     )
 
 
-def test_empty_state_label_word_wraps(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_empty_state_label_word_wraps(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """The empty-state label has wordWrap enabled so the fixed English
     sentence wraps without clipping at the dock's minimum width
     (backstop truth #11, #12)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     label = getattr(ctrl, "label_adaptiveTrajectoryEmpty", None)
     assert label is not None
     assert label.wordWrap() is True
@@ -725,21 +732,23 @@ def test_trajectory_widget_freeze_blocks_appends(qtbot: QtBot) -> None:
 
 
 def test_badge_adaptive_running_min_width_180(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The mode badge has a minimum width of 180 px so the single-line
     'ADAPTIVE RUNNING — plane 999/999 (row 3/5) · MULTI-CH' fits without
     elision (must_have truth #7)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     badge = ctrl.ui.label_modeBadge
     assert badge.minimumSize().width() >= 180
 
 
-def test_badge_adaptive_running_string(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_badge_adaptive_running_string(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """The badge renders 'ADAPTIVE RUNNING — plane {n}/{N}' with the
     em-dash, and composes with the queue-row + MULTI-CH suffixes
     (must_have truth #7)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._auto_laser1 = True
     ctrl._auto_laser2 = True
     ctrl.number_of_planes = 999
@@ -759,10 +768,12 @@ def test_badge_adaptive_running_string(qtbot: QtBot, request: FixtureRequest) ->
     assert "MULTI-CH" in text
 
 
-def test_badge_adaptive_aborted_string(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_badge_adaptive_aborted_string(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """E-stop mid-adaptive-run transitions the badge to 'ADAPTIVE
     ABORTED — plane {n}/{N}' (must_have truth #4)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.number_of_planes = 50
     ctrl._update_mode_badge("ADAPTIVE", "ABORTED", plane=12, total=50)
     text = ctrl.ui.label_modeBadge.text()
@@ -771,24 +782,24 @@ def test_badge_adaptive_aborted_string(qtbot: QtBot, request: FixtureRequest) ->
 
 
 def test_badge_no_green_or_accent_stylesheet(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The badge adds no green/accent stylesheet — it inherits the
     existing bold weight + default text color (must_have truth #7,
     UI-SPEC §Color)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ss = ctrl.ui.label_modeBadge.styleSheet()
     assert "green" not in ss.lower()
     assert "#3daee9" not in ss.lower()
 
 
 def test_estop_freezes_trajectory_after_laser_off(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """E-stop performs synchronous laser.off() first, then freezes the
     trajectory plot and sets the badge to ABORTED (must_have truth #4,
     threat T-10-02). The kill path precedes the GUI freeze/badge work."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     # Enable adaptive so the rail button + widget exist, then open the
     # dock via the rail button (it does not auto-open on enable).
     ui = _adaptive_ui(ctrl)
@@ -842,13 +853,13 @@ def test_estop_freezes_trajectory_after_laser_off(
 
 
 def test_worker_signal_connected_to_gui_slot_queued(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_spawn_stack_worker connects sig_adaptive_trajectory to a
     GUI-thread slot via a queued connection (must_have truth #3,
     threat T-10-05). The connection exists after spawning."""
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ui = _adaptive_ui(ctrl)
     ui.checkBox_adaptiveEnable.setChecked(True)
     ctrl.stack_first_plane_set = True
@@ -895,7 +906,7 @@ def test_worker_signal_connected_to_gui_slot_queued(
 
 
 def test_worker_run_does_not_call_plotwidget(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The worker run() body never calls pyqtgraph or PlotWidget
     directly (threat T-10-05). Static-source guard on the worker
@@ -915,7 +926,9 @@ def test_worker_run_does_not_call_plotwidget(
     )
 
 
-def test_no_imageview_reintroduction(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_no_imageview_reintroduction(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """pyqtgraph is reintroduced ONLY for PlotWidget — no
     pyqtgraph.ImageView / pyqtgraph.imageview import exists in
     production code (UI-SPEC §Registry Safety, threat T-10-SC)."""
@@ -928,14 +941,17 @@ def test_no_imageview_reintroduction(qtbot: QtBot, request: FixtureRequest) -> N
 
 
 def test_dock_state_persistence(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path, monkeypatch: MonkeyPatch
+    qtbot: QtBot,
+    controller: Controller_MainWindow,
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
 ) -> None:
     """QSettings saveState/restoreState preserves the dock area/geometry
     without writing config.ini during demo tests (must_have truth:
     dock persistence). The controller restores the dock state from
     QSettings during __init__ and saves it in closeEvent."""
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     # The dock exists after construction (restoreState ran in __init__).
     assert hasattr(ctrl, "dockWidget_adaptiveTrajectory")
     # The controller exposes the QSettings key it uses for dock state.
@@ -949,13 +965,15 @@ def test_dock_state_persistence(
     assert len(bytes(state)) > 0
 
 
-def test_dock_is_floating_only_closable(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_dock_is_floating_only_closable(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """The dock is a standalone floating window: closable but NOT
     movable, NOT floatable, and cannot re-dock into the main GUI
     (NoDockWidgetArea). This avoids re-dock overlay indicators on every
     drag near the main window during acquisition monitoring. When
     opened via the rail button it floats as a standalone window."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     dock = ctrl.dockWidget_adaptiveTrajectory
     features = dock.features()
     from PySide6.QtCore import Qt
@@ -1107,11 +1125,11 @@ def test_plotitem_layout_margins_are_16(qtbot: QtBot) -> None:
 
 
 def test_dock_title_bar_margins_and_spacing(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The adaptive dock title bar margins are 8/4/8/4 (sm horizontal,
     xs vertical) with 4 px spacing — all on the 4/8/16 scale."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     title_bar = ctrl.dockWidget_adaptiveTrajectory.titleBarWidget()
     layout = title_bar.layout()
     margins = layout.contentsMargins()
@@ -1125,11 +1143,11 @@ def test_dock_title_bar_margins_and_spacing(
 
 
 def test_dock_title_label_is_regular_weight(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The adaptive dock title label has no bold override — the mode
     badge is the only bold text in the app (UI-SPEC Typography)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     title_bar = ctrl.dockWidget_adaptiveTrajectory.titleBarWidget()
     from PySide6.QtWidgets import QLabel
 
@@ -1143,12 +1161,12 @@ def test_dock_title_label_is_regular_weight(
 
 
 def test_dock_close_button_inherits_font_and_has_tooltip(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The dock close button has no 16 px font override (it inherits
     the app font), keeps border/hover styling, and exposes the exact
     tooltip 'Close adaptive trajectory dock'."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     title_bar = ctrl.dockWidget_adaptiveTrajectory.titleBarWidget()
     from PySide6.QtWidgets import QPushButton
 

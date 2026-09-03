@@ -18,12 +18,10 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
 import pytest
-from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
-from _helpers.controller_fixture import make_controller
 
 if TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -36,11 +34,11 @@ if TYPE_CHECKING:
 
 
 def test_last_plane_edited_in_range_updates_ending_plane(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """A last-plane edit inside the motor travel limits stores the µm
     value on ``stack_ending_plane`` and sets ``stack_last_plane_set``."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     motors = ctrl.motors
     low_um = motors.horizontal.get_limit_low("\u03bcm")
@@ -53,12 +51,12 @@ def test_last_plane_edited_in_range_updates_ending_plane(
 
 
 def test_last_plane_edited_out_of_range_beeps_and_reverts(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """A last-plane edit outside the motor travel limits emits beep +
     message and reverts the spinbox to the high limit (the last-plane
     fallback when no prior valid ending plane is set)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     motors = ctrl.motors
     high_um = motors.horizontal.get_limit_high("\u03bcm")
@@ -85,11 +83,11 @@ def test_last_plane_edited_out_of_range_beeps_and_reverts(
 
 
 def test_last_plane_edited_no_motors_returns_early(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When ``shell.motors`` is None (hardware_init hasn't run), the
     last-plane editor returns without validating or moving the motor."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     real_motors = ctrl.motors
     ctrl.motors = None  # type: ignore[assignment]
@@ -101,11 +99,11 @@ def test_last_plane_edited_no_motors_returns_early(
 
 
 def test_first_plane_edited_no_motors_returns_early(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When ``shell.motors`` is None, the first-plane editor returns
     early (line 185)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     real_motors = ctrl.motors
     ctrl.motors = None  # type: ignore[assignment]
@@ -120,10 +118,12 @@ def test_first_plane_edited_no_motors_returns_early(
 # ---------------------------------------------------------------------------
 
 
-def test_rerender_stack_units_is_noop(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_rerender_stack_units_is_noop(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """``_rerender_stack_units`` is a retained no-op — calling it must
     not raise and must not change any visible state."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     summary_before = sp.ui.label_stackPlanSummary.text()
     # Must return None (the no-op) and leave the summary untouched.
@@ -138,12 +138,12 @@ def test_rerender_stack_units_is_noop(qtbot: QtBot, request: FixtureRequest) -> 
 
 
 def test_summary_render_multi_channel_doubles_estimates(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When both auto-laser checkboxes are checked, the summary doubles
     the est. time and est. size and inserts the ``2 ch x N planes``
     clause (the multi_channel=True branch)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     # Configure a full plan: both boundaries set + non-zero step.
     ctrl.stack_first_plane_set = True
@@ -166,10 +166,12 @@ def test_summary_render_multi_channel_doubles_estimates(
     assert "2 ch x 11 planes" in multi
 
 
-def test_summary_render_partial_state(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_summary_render_partial_state(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """When only one boundary is set, the summary shows the partial-state
     message (the ``first_set != last_set`` branch)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     ctrl.stack_first_plane_set = True
     ctrl.stack_last_plane_set = False
@@ -177,10 +179,12 @@ def test_summary_render_partial_state(qtbot: QtBot, request: FixtureRequest) -> 
     assert "Partial stack plan" in sp.ui.label_stackPlanSummary.text()
 
 
-def test_summary_render_empty_state(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_summary_render_empty_state(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """When neither boundary is set, the summary shows the empty-state
     message (the ``not first_set and not last_set`` branch)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     ctrl.stack_first_plane_set = False
     ctrl.stack_last_plane_set = False
@@ -194,12 +198,12 @@ def test_summary_render_empty_state(qtbot: QtBot, request: FixtureRequest) -> No
 
 
 def test_estimate_per_plane_time_falls_back_on_missing_widget(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """``_estimate_per_plane_time`` returns 0.5 when the
     acquisition_panel exposure spinbox is unavailable (the exception
     fallback)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     real_acq = ctrl.acquisition_panel
     # Replace acquisition_panel with a Mock whose ui lacks the spinbox
@@ -215,11 +219,11 @@ def test_estimate_per_plane_time_falls_back_on_missing_widget(
 
 
 def test_estimate_stack_size_mb_falls_back_on_bad_camera(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """``_estimate_stack_size_mb`` falls back to 2000x2000 when
     ``shell.camera.rows``/``columns`` raise (the exception fallback)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     real_camera = ctrl.camera
     mock_camera = MagicMock()
@@ -256,12 +260,12 @@ def _make_mock_shell_for_panel(ctrl: Controller_MainWindow) -> Any:
 
 
 def test_load_adaptive_config_handles_cfg_read_exception(
-    qtbot: QtBot, request: FixtureRequest, monkeypatch: pytest.MonkeyPatch
+    qtbot: QtBot, controller: Controller_MainWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When ``cfg_read`` raises (no [Adaptive] section / unreadable
     config.ini), ``_load_adaptive_config`` returns without raising and
     leaves the FieldSpec defaults in place (the exception fallback)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     from lightsheet.gui import panels as panels_mod
 
@@ -279,12 +283,12 @@ def test_load_adaptive_config_handles_cfg_read_exception(
 
 
 def test_load_adaptive_config_skips_empty_and_invalid_values(
-    qtbot: QtBot, request: FixtureRequest, monkeypatch: pytest.MonkeyPatch
+    qtbot: QtBot, controller: Controller_MainWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """``_load_adaptive_config`` skips empty raw values (the
     ``if not raw: continue`` branch) and swallows invalid float values
     (the ``except (ValueError, AttributeError)`` branch)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
 
     def _fake_cfg_read(path: str, section: str, defaults: dict) -> dict:  # ty: ignore[missing-type-argument]
@@ -317,13 +321,13 @@ def test_load_adaptive_config_skips_empty_and_invalid_values(
 
 
 def test_narrow_adaptive_power_maxima_defaults_to_live_max(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When config.ini did not save an explicit max-power value, the
     spinbox default is set to ``min(150.0, live_max)`` (the
     ``config_keys[i] not in loaded`` branch). The fixture's laser[0] has
     max_power 300 → narrowed to 150.0; laser[1] has 150 → 150.0."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     # Clear the loaded-keys set so the default-to-live-max branch fires.
     sp._adaptive_loaded_keys = set()
@@ -333,12 +337,12 @@ def test_narrow_adaptive_power_maxima_defaults_to_live_max(
 
 
 def test_narrow_adaptive_power_maxima_clamps_saved_value_above_live(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When the operator saved a max-power value above the live max, the
     spinbox is clamped down to ``min(150.0, live_max)`` (the
     ``elif sb.value() > narrowed`` branch)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     # Mark both keys as loaded so the default-to-live-max branch is
     # skipped and the clamp-down branch is the only path that fires.
@@ -364,23 +368,23 @@ def test_narrow_adaptive_power_maxima_clamps_saved_value_above_live(
 
 
 def test_adaptive_field_edited_no_sender_returns(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When ``sender()`` is None (called directly, not via a signal),
     ``_on_adaptive_field_edited`` returns without raising (line 551)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     # Call directly (no signal sender) — sender() returns None.
     sp._on_adaptive_field_edited()
 
 
 def test_adaptive_field_edited_max_lowered_below_min_beeps(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Lowering a max spinbox below the corresponding min emits the
     documented message + beep, reverts the max, and latches
     fixed-fallback (the max-side invalid pair branch, lines 574-581)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     ui = sp.ui
     ui.checkBox_adaptiveEnable.setChecked(True)
@@ -411,11 +415,11 @@ def test_adaptive_field_edited_max_lowered_below_min_beeps(
 
 
 def test_update_adaptive_shutter_units_no_acq_panel_returns(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When ``shell.acquisition_panel`` is None, the shutter-units
     updater returns early without raising (line 596)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     real_acq = ctrl.acquisition_panel
     ctrl.acquisition_panel = None  # type: ignore[assignment]
@@ -426,12 +430,12 @@ def test_update_adaptive_shutter_units_no_acq_panel_returns(
 
 
 def test_update_adaptive_shutter_units_missing_combo_defaults_rolling(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When the acq_panel ui lacks the shutter-mode combo, the updater
     falls back to the Rolling (ms) suffix (the ``combo is None`` branch,
     line 599->601)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     real_acq = ctrl.acquisition_panel
     mock_acq = MagicMock()
@@ -452,11 +456,11 @@ def test_update_adaptive_shutter_units_missing_combo_defaults_rolling(
 
 
 def test_read_adaptive_fixed_config_falls_back_on_cfg_exception(
-    qtbot: QtBot, request: FixtureRequest, monkeypatch: pytest.MonkeyPatch
+    qtbot: QtBot, controller: Controller_MainWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When ``cfg_read`` raises, ``_read_adaptive_fixed_config`` falls
     back to the schema defaults (the exception branch, lines 640-641)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
 
     def _boom(*a: Any, **k: Any) -> Any:
@@ -485,12 +489,12 @@ def test_read_adaptive_fixed_config_falls_back_on_cfg_exception(
 
 
 def test_build_adaptive_config_no_acq_panel_uses_rolling_default(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When ``shell.acquisition_panel`` is None, ``build_adaptive_config``
     treats the shutter mode as empty (Rolling default) and converts the
     exposure bound as ms → seconds (the ``acq_ui is None`` branch)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     ui = sp.ui
     ui.checkBox_adaptiveEnable.setChecked(True)
@@ -508,12 +512,12 @@ def test_build_adaptive_config_no_acq_panel_uses_rolling_default(
 
 
 def test_build_adaptive_config_missing_combo_uses_rolling_default(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When the acq_panel ui lacks the shutter-mode combo,
     ``build_adaptive_config`` treats the mode as empty (Rolling default)
     — the ``combo is None`` branch (line 681->684)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     ui = sp.ui
     ui.checkBox_adaptiveEnable.setChecked(True)
@@ -541,11 +545,13 @@ def test_build_adaptive_config_missing_combo_uses_rolling_default(
 # ---------------------------------------------------------------------------
 
 
-def test_summary_render_no_laser_panel(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_summary_render_no_laser_panel(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """When ``shell.laser_panel`` is None, the multi-channel detection
     skips the checkbox read and renders a single-channel summary (the
     ``laser_panel is None`` False-guard branch, 345->350)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     ctrl.stack_first_plane_set = True
     ctrl.stack_last_plane_set = True
@@ -564,12 +570,12 @@ def test_summary_render_no_laser_panel(qtbot: QtBot, request: FixtureRequest) ->
 
 
 def test_summary_render_laser_panel_missing_checkboxes(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When the laser_panel ui lacks the auto-laser checkboxes, the
     multi-channel detection falls back to single-channel (the
     ``cb1 is None or cb2 is None`` branch, 348->350)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     ctrl.stack_first_plane_set = True
     ctrl.stack_last_plane_set = True
@@ -590,11 +596,11 @@ def test_summary_render_laser_panel_missing_checkboxes(
 
 
 def test_narrow_adaptive_power_maxima_no_bundle_returns(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When ``shell._bundle`` is None or has no lasers tuple, the
     narrow-maxima method returns early (line 492 guard)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     real_bundle = ctrl._bundle
     ctrl._bundle = None  # type: ignore[assignment]
@@ -606,7 +612,7 @@ def test_narrow_adaptive_power_maxima_no_bundle_returns(
 
 
 def test_narrow_adaptive_power_maxima_bad_live_max_skips(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When ``lasers[i].max_power`` raises (TypeError/ValueError), the
     narrow loop skips that laser (the except branch, 506-507 and
@@ -615,7 +621,7 @@ def test_narrow_adaptive_power_maxima_bad_live_max_skips(
 
     from lightsheet.hal import MockLaser
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     real_bundle = ctrl._bundle
     # Build a laser whose max_power property raises TypeError.
@@ -636,11 +642,11 @@ def test_narrow_adaptive_power_maxima_bad_live_max_skips(
 
 
 def test_update_adaptive_shutter_units_lightsheet_sb_none(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """In Lightsheet mode, when an exposure spinbox is None (defensive
     guard), the loop skips it (the ``sb is None`` branch, 604->602)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentText("Lightsheet")
     # Temporarily hide one spinbox by setting the attribute to None on
@@ -655,11 +661,11 @@ def test_update_adaptive_shutter_units_lightsheet_sb_none(
 
 
 def test_update_adaptive_shutter_units_rolling_sb_none(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """In Rolling mode, when an exposure spinbox is None (defensive
     guard), the loop skips it (the ``sb is None`` branch, 612->610)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     sp = ctrl.stack_panel
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentText("Rolling")
     real_sb = sp.ui.doubleSpinBox_adaptiveMinExposure

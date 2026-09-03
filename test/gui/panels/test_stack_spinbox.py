@@ -12,21 +12,23 @@ per-plane ValueError catch stays as the physical-safety backstop).
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
 from unittest.mock import patch
 
 import pytest
-from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
-from _helpers.controller_fixture import make_controller
-
 
 def test_spinboxes_exist_and_checkboxes_gone(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     from PySide6.QtWidgets import QDoubleSpinBox
 
     sb_first = ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane
@@ -38,8 +40,10 @@ def test_spinboxes_exist_and_checkboxes_gone(
     assert not hasattr(ctrl.stack_panel.ui, "checkBox_acqLastPlaneSet")
 
 
-def test_shell_flags_initialized(qtbot: QtBot, request: FixtureRequest) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+def test_shell_flags_initialized(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
+    ctrl = controller
     # The flags start False unless config.ini has persisted stack params
     # from a prior run. In the test environment config.ini should not
     # carry stack params (demo mode skips persistence), so the flags
@@ -49,9 +53,9 @@ def test_shell_flags_initialized(qtbot: QtBot, request: FixtureRequest) -> None:
 
 
 def test_set_starting_plane_populates_spinbox_and_flag(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     with patch.object(ctrl.stack_panel, "updateUi_set_number_of_planes"):
         ctrl.stack_panel.updateUi_set_stack_mode_starting_point()
     pos = ctrl.motors.horizontal.get_position("\u03bcm")
@@ -63,9 +67,9 @@ def test_set_starting_plane_populates_spinbox_and_flag(
 
 
 def test_set_ending_plane_populates_spinbox_and_flag(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     with patch.object(ctrl.stack_panel, "updateUi_set_number_of_planes"):
         ctrl.stack_panel.updateUi_set_stack_mode_ending_point()
     pos = ctrl.motors.horizontal.get_position("\u03bcm")
@@ -75,9 +79,9 @@ def test_set_ending_plane_populates_spinbox_and_flag(
 
 
 def test_manual_entry_in_range_updates_shell_flag(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     low = ctrl.motors.horizontal.get_limit_low("\u03bcm")
     high = ctrl.motors.horizontal.get_limit_high("\u03bcm")
     in_range_um = (low + high) / 2
@@ -92,21 +96,21 @@ def test_manual_entry_in_range_updates_shell_flag(
 
 
 def test_mm_entry_produces_um_internal_value(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Safety gate (B2): a mm spinbox entry must produce a µm internal
     stack_starting_plane -- no 1000x motor over-travel error. 6.500 mm →
     6500.0 µm."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(6.500)
     ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.editingFinished.emit()
     assert ctrl.stack_starting_plane == pytest.approx(6500.0, abs=1.0)
 
 
 def test_manual_entry_out_of_range_beeps_and_does_not_move(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     beeps: list[None] = []
     messages: list[str] = []
     ctrl.sig_beep.connect(lambda: beeps.append(None))
@@ -134,9 +138,9 @@ def test_manual_entry_out_of_range_beeps_and_does_not_move(
 
 
 def test_number_of_planes_guards_on_shell_flags(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.stack_starting_plane = 0.0
     ctrl.stack_ending_plane = 100.0
     ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
@@ -162,9 +166,9 @@ def test_number_of_planes_guards_on_shell_flags(
 
 
 def test_spinbox_range_seeded_from_motor_limits(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     low = ctrl.motors.horizontal.get_limit_low("\u03bcm")
     high = ctrl.motors.horizontal.get_limit_high("\u03bcm")
     # The spinbox displays in mm; _seed_spinbox_ranges seeds from the

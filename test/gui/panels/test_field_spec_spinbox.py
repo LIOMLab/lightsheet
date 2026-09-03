@@ -475,7 +475,7 @@ def test_field_specs_motor_max_matches_hal() -> None:
         "Camera Limit High": "35.0",
     }
     motor_cfg = cfg_read(
-        str(Path(__file__).resolve().parents[1] / "config.ini"),
+        str(Path(__file__).resolve().parents[3] / "config.ini"),
         "Motors",
         motor_defaults,
     )

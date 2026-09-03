@@ -8,6 +8,11 @@ re-driving the stage.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,12 +20,11 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from _helpers.controller_fixture import make_controller
 from pytestqt.qtbot import QtBot
 
 
-def test_summary_label_exists(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+def test_summary_label_exists(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+    ctrl = controller
     from PySide6.QtWidgets import QLabel
 
     label = ctrl.stack_panel.ui.label_stackPlanSummary
@@ -28,9 +32,9 @@ def test_summary_label_exists(qtbot: QtBot, request: pytest.FixtureRequest) -> N
 
 
 def test_summary_renders_full_plan(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.stack_first_plane_set = True
     ctrl.stack_last_plane_set = True
     ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(100.0)
@@ -45,8 +49,8 @@ def test_summary_renders_full_plan(
     assert "Est" in text
 
 
-def test_summary_partial_state(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+def test_summary_partial_state(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+    ctrl = controller
     ctrl.stack_first_plane_set = True
     ctrl.stack_last_plane_set = False
     ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(100.0)
@@ -55,8 +59,8 @@ def test_summary_partial_state(qtbot: QtBot, request: pytest.FixtureRequest) -> 
     assert "Set the other boundary" in text or "other boundary" in text.lower()
 
 
-def test_summary_empty_state(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+def test_summary_empty_state(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+    ctrl = controller
     ctrl.stack_first_plane_set = False
     ctrl.stack_last_plane_set = False
     ctrl.stack_panel._render_stack_plan_summary()
@@ -65,7 +69,7 @@ def test_summary_empty_state(qtbot: QtBot, request: pytest.FixtureRequest) -> No
 
 
 def test_persist_last_round_trip(
-    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Writing StackLastStart/End/Step to a temp config.ini and reloading
     populates the spinboxes + sets the shell flags."""
@@ -98,10 +102,10 @@ def test_persist_last_round_trip(
 
 
 def test_controller_persists_stack_params_on_close(
-    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """closeEvent writes the current stack params to config.ini."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.stack_first_plane_set = True
     ctrl.stack_last_plane_set = True
     ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(100.0)
@@ -131,8 +135,10 @@ def test_controller_persists_stack_params_on_close(
     ctrl._demo_mode = True
 
 
-def test_summary_updates_on_edit(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+def test_summary_updates_on_edit(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
+    ctrl = controller
     ctrl.stack_first_plane_set = True
     ctrl.stack_last_plane_set = True
     # Stack plane positions + step are in µm (the fixed stack-display

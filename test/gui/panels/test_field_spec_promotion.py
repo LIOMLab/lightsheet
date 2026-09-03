@@ -17,7 +17,6 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from _helpers.controller_fixture import make_controller
 from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QWheelEvent
 from pytestqt.qtbot import QtBot
@@ -108,11 +107,11 @@ def _get_spinbox(ctrl: Controller_MainWindow, obj_name: str) -> FieldSpecSpinBox
 
 
 def test_every_canonical_spinbox_is_field_spec_subclass(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Each of the 24 canonical objectNames resolves to a FieldSpecSpinBox
     instance (the .ui promotion took effect + ui_*.py regenerated)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     for obj_name in FIELD_SPECS:
         sb = _get_spinbox(ctrl, obj_name)
         assert isinstance(sb, FieldSpecSpinBox), (
@@ -148,14 +147,14 @@ _SPEC_RANGE_OVERRIDDEN_FIELDS = frozenset(
 
 
 def test_applySpec_applied_suffix_decimals_range(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """applySpec was called for every canonical spinbox: suffix and
     decimals match the FIELD_SPECS entry. minimum/maximum also match
     except for fields whose range is overridden by pre-existing runtime
     mechanisms (dynamic amplitude-coupling for offsets; _seed_spinbox_ranges
     widening for stack first/last plane)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     for obj_name, spec in FIELD_SPECS.items():
         sb = _get_spinbox(ctrl, obj_name)
         expected_suffix = f" {spec.unit}" if spec.unit else ""
@@ -175,13 +174,15 @@ def test_applySpec_applied_suffix_decimals_range(
         )
 
 
-def test_no_slider_widgets_remain(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
+def test_no_slider_widgets_remain(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """None of the formerly slider-paired fields has a QSlider sibling
     widget anymore. The sliders were removed from the panel .ui files
     because the FieldSpecSpinBox is itself scrollable; a separate
     coarse-drag slider was redundant and broke the form-layout alignment.
     This test guards against an accidental re-introduction."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     for obj_name in FORMER_SLIDER_PAIRED_FIELDS:
         panel_attr = _OBJNAME_TO_PANEL[obj_name]
         panel = getattr(ctrl, panel_attr)
@@ -214,14 +215,14 @@ def _make_wheel_event(angle_delta: int = 120) -> QWheelEvent:
 
 
 def test_wheel_gate_unfocused_spinbox_ignores_wheel(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """An unfocused FieldSpecSpinBox ignores the mouse wheel (the
     wheel-steal fix). The value must not change when a wheel event is
     delivered without focus."""
     from PySide6.QtWidgets import QApplication, QLineEdit
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     # Test one representative spinbox per panel that has one.
     representatives = (
         "doubleSpinBox_sampleSetHPosition",  # motor_panel
