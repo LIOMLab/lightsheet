@@ -100,7 +100,7 @@ def test_has_hardware_module_level_bool_exists() -> None:
     # importlib mode; reach it via the test/ directory on sys.path. The
     # module is already loaded by pytest's conftest collection mechanism,
     # so this resolves to the same in-memory module.
-    test_dir = str(Path(__file__).resolve().parent)
+    test_dir = str(Path(__file__).resolve().parents[1])
     if test_dir not in sys.path:
         sys.path.insert(0, test_dir)
     import conftest

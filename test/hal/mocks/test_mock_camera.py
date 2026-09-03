@@ -95,7 +95,7 @@ def test_make_bundle_does_not_set_simulate_timing() -> None:
     ``test/_helpers/controller_fixture.py`` constructs
     ``MockCamera(verbose=False)`` with ``simulate_timing=False`` (the
     default) — tests are not slowed by the demo-only timing delay."""
-    from _helpers.controller_fixture import make_bundle
+    from helpers.factories import make_bundle
 
     bundle = make_bundle()
     camera = bundle.camera
