@@ -40,10 +40,10 @@ from lightsheet.config_schema.sections.siggen import (
 )
 
 __all__ = [
-    "AutofocusSettings",
-    "AutofocusSettingsOverlay",
     "AdaptiveSettings",
     "AdaptiveSettingsOverlay",
+    "AutofocusSettings",
+    "AutofocusSettingsOverlay",
     "CameraSettings",
     "CameraSettingsOverlay",
     "ControllerSettings",
