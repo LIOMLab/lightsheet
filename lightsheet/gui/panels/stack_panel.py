@@ -19,7 +19,7 @@ from PySide6.QtWidgets import QFileDialog, QWidget
 
 from lightsheet.adaptive.types import AdaptiveConfig
 from lightsheet.focus.calibration import load_focus_curve
-from lightsheet.focus.types import FocusConfig, FocusCurve
+from lightsheet.focus.types import AutofocusConfig, FocusConfig, FocusCurve
 from lightsheet.gui.panels.acquisition_table_manager import AcquisitionTableManager
 from lightsheet.gui.panels.ui_stack_panel import Ui_StackPanel
 from lightsheet.gui.widgets.field_spec import FIELD_SPECS
@@ -142,6 +142,29 @@ class StackPanelWidget(QWidget):
         )
         # Render the initial empty state and block-size hint.
         self._update_focus_status_label()
+
+        # --- Adaptive autofocus configuration group wiring ---
+        # The per-plane predictive focus loop. Its widgets are pre-sampled
+        # on the GUI thread into a frozen AutofocusConfig; the worker
+        # receives the immutable snapshot and never reads ui.*.
+        self._load_autofocus_config()
+        self.ui.checkBox_adaptiveAutofocus.toggled.connect(self._on_autofocus_toggled)
+        self.ui.checkBox_autofocusUseCurve.toggled.connect(
+            self._on_autofocus_use_curve_toggled
+        )
+        self.ui.doubleSpinBox_autofocusCadence.editingFinished.connect(
+            self._on_autofocus_cadence_edited
+        )
+        self.ui.doubleSpinBox_autofocusResidualGain.editingFinished.connect(
+            self._on_autofocus_residual_gain_edited
+        )
+        self.ui.doubleSpinBox_autofocusMaxResidual.editingFinished.connect(
+            self._on_autofocus_max_residual_edited
+        )
+        self.ui.doubleSpinBox_autofocusSmoothing.editingFinished.connect(
+            self._on_autofocus_smoothing_edited
+        )
+        self._on_autofocus_toggled(self.ui.checkBox_adaptiveAutofocus.isChecked())
 
     def _seed_spinbox_ranges(self) -> None:
         """Seed the first/last plane spinbox ranges from the motor travel
@@ -897,6 +920,7 @@ class StackPanelWidget(QWidget):
         self._armed_focus_curve = curve
         self._armed_focus_curve_path = path
         self._update_focus_status_label()
+        self._refresh_autofocus_use_curve_state()
 
     def _load_demo_focus_curve(self) -> None:
         """Arm the bundled sample focus curve when running in demo mode.
@@ -921,6 +945,7 @@ class StackPanelWidget(QWidget):
         will return None until a new file is loaded."""
         self._armed_focus_curve = None
         self._armed_focus_curve_path = ""
+        self._refresh_autofocus_use_curve_state()
 
     def _update_focus_status_label(self) -> None:
         """Render label_focusStatus and label_focusBlockHint from the
@@ -982,3 +1007,205 @@ class StackPanelWidget(QWidget):
         if not self.ui.checkBox_focusEnable.isChecked():
             return None
         return self._armed_focus_curve
+
+    def _load_autofocus_config(self) -> None:
+        """Load the validated [Autofocus] defaults from config.ini into the
+        adaptive-autofocus widgets. A missing [Autofocus] section leaves the
+        widgets at their FieldSpec defaults. If no focus curve is armed, the
+        use-curve seed checkbox is disabled and unchecked.
+        """
+        from lightsheet.config import cfg_read
+
+        defaults = {
+            "Enabled": "",
+            "Cadence": "",
+            "Residual Gain Mm": "",
+            "Max Residual Mm": "",
+            "Smoothing": "",
+            "Use Curve Seed": "",
+        }
+        try:
+            cfg = cfg_read("config.ini", "Autofocus", defaults)
+        except Exception:
+            cfg = defaults
+        _set = {
+            "Enabled": ("checkBox_adaptiveAutofocus", "bool"),
+            "Cadence": ("doubleSpinBox_autofocusCadence", "float"),
+            "Residual Gain Mm": ("doubleSpinBox_autofocusResidualGain", "float"),
+            "Max Residual Mm": ("doubleSpinBox_autofocusMaxResidual", "float"),
+            "Smoothing": ("doubleSpinBox_autofocusSmoothing", "float"),
+            "Use Curve Seed": ("checkBox_autofocusUseCurve", "bool"),
+        }
+        for key, (widget_name, kind) in _set.items():
+            raw = str(cfg.get(key, "")).strip()
+            if not raw:
+                continue
+            w = getattr(self.ui, widget_name, None)
+            if w is None:
+                continue
+            try:
+                if kind == "bool":
+                    w.setChecked(raw.lower() in ("true", "1", "yes"))
+                else:
+                    w.setValue(float(raw))
+            except (ValueError, AttributeError):
+                pass
+        self._refresh_autofocus_use_curve_state()
+
+    def _refresh_autofocus_use_curve_state(self) -> None:
+        """Enable the use-curve seed checkbox only when a focus curve is
+        armed, and uncheck it if none is available."""
+        cb = self.ui.checkBox_autofocusUseCurve
+        if self._armed_focus_curve is None:
+            cb.blockSignals(True)
+            cb.setChecked(False)
+            cb.setEnabled(False)
+            cb.blockSignals(False)
+        else:
+            cb.setEnabled(True)
+
+    def _on_autofocus_toggled(self, checked: bool) -> None:
+        """Toggle the adaptive-autofocus sub-surface. The group title and
+        master checkbox remain visible; the parameter container, status,
+        hint, and progress bar are shown only when adaptive is enabled."""
+        self.ui.widget_adaptiveAutofocusFields.setVisible(checked)
+        self.ui.label_autofocusStatus.setVisible(checked)
+        self.ui.label_autofocusHint.setVisible(checked)
+        self.ui.progressBar_autofocus.setVisible(False)
+        self._update_autofocus_status_label()
+
+    def _on_autofocus_use_curve_toggled(self, checked: bool) -> None:
+        """Enable the use-curve checkbox only when a focus curve is armed.
+        If the user checks it without an armed curve, beep and reject."""
+        if self._armed_focus_curve is None:
+            if checked:
+                self._shell.sig_beep.emit()
+            self.ui.checkBox_autofocusUseCurve.blockSignals(True)
+            self.ui.checkBox_autofocusUseCurve.setChecked(False)
+            self.ui.checkBox_autofocusUseCurve.setEnabled(False)
+            self.ui.checkBox_autofocusUseCurve.blockSignals(False)
+        self._update_autofocus_status_label()
+
+    def _update_autofocus_status_label(self) -> None:
+        """Render label_autofocusStatus and the fixed hint label from the
+        current adaptive state."""
+        self.ui.label_autofocusHint.setText(
+            "Predicted camera position = feedforward + running residual. "
+            "The residual is updated from the saved frame's sharpness and "
+            "applied to the next plane."
+        )
+        if not self.ui.checkBox_adaptiveAutofocus.isChecked():
+            self.ui.label_autofocusStatus.setText(
+                "Adaptive focus disabled. Enable it to update the camera focus "
+                "on the fly during the stack."
+            )
+            return
+        cadence = int(self.ui.doubleSpinBox_autofocusCadence.value())
+        gain = self.ui.doubleSpinBox_autofocusResidualGain.value()
+        max_res = self.ui.doubleSpinBox_autofocusMaxResidual.value()
+        smooth = self.ui.doubleSpinBox_autofocusSmoothing.value()
+        using_curve = (
+            " · using curve seed"
+            if self._armed_focus_curve is not None
+            and self.ui.checkBox_autofocusUseCurve.isChecked()
+            else ""
+        )
+        use_curve = self.ui.checkBox_autofocusUseCurve.isChecked()
+        if self._armed_focus_curve is None and use_curve:
+            self.ui.label_autofocusStatus.setText(
+                "No focus curve loaded. Browse and load a curve, or uncheck "
+                "Use loaded focus curve as seed to start from the current "
+                "camera position."
+            )
+            return
+        self.ui.label_autofocusStatus.setText(
+            f"Adaptive focus armed · cadence {cadence} · gain {gain:.3f} mm · "
+            f"max {max_res:.3f} mm · smoothing {smooth:.2f}{using_curve}"
+        )
+
+    def _on_autofocus_cadence_edited(self) -> None:
+        """editingFinished on cadence: clamp to the 1..1000 schema range."""
+        sb = self.ui.doubleSpinBox_autofocusCadence
+        value = sb.value()
+        if value < 1.0 or value > 1000.0:
+            self._shell.sig_beep.emit()
+            sb.setValue(1.0 if value < 1.0 else 1000.0)
+        self._update_autofocus_status_label()
+
+    def _on_autofocus_residual_gain_edited(self) -> None:
+        """editingFinished on residual gain: clamp to the 0..1 range."""
+        sb = self.ui.doubleSpinBox_autofocusResidualGain
+        value = sb.value()
+        if value < 0.0 or value > 1.0:
+            self._shell.sig_beep.emit()
+            sb.setValue(0.0 if value < 0.0 else 1.0)
+        self._update_autofocus_status_label()
+
+    def _on_autofocus_max_residual_edited(self) -> None:
+        """editingFinished on max residual: clamp to the 0..5 range."""
+        sb = self.ui.doubleSpinBox_autofocusMaxResidual
+        value = sb.value()
+        if value < 0.0 or value > 5.0:
+            self._shell.sig_beep.emit()
+            sb.setValue(0.0 if value < 0.0 else 5.0)
+        self._update_autofocus_status_label()
+
+    def _on_autofocus_smoothing_edited(self) -> None:
+        """editingFinished on smoothing: clamp to the 0..1 range."""
+        sb = self.ui.doubleSpinBox_autofocusSmoothing
+        value = sb.value()
+        if value < 0.0 or value > 1.0:
+            self._shell.sig_beep.emit()
+            sb.setValue(0.0 if value < 0.0 else 1.0)
+        self._update_autofocus_status_label()
+
+    def build_autofocus_config(self) -> AutofocusConfig | None:
+        """Pre-sample the adaptive autofocus configuration on the GUI thread
+        and return a frozen ``AutofocusConfig`` (or ``None`` when the toggle is
+        unchecked).
+
+        The frozen dataclass is safe to share across threads (immutable) — the
+        worker thread receives one snapshot and never reads ``ui.*``.
+        """
+        if not self.ui.checkBox_adaptiveAutofocus.isChecked():
+            return None
+        return AutofocusConfig(
+            enabled=True,
+            cadence=int(self.ui.doubleSpinBox_autofocusCadence.value()),
+            residual_gain_mm=self.ui.doubleSpinBox_autofocusResidualGain.value(),
+            max_residual_mm=self.ui.doubleSpinBox_autofocusMaxResidual.value(),
+            smoothing=self.ui.doubleSpinBox_autofocusSmoothing.value(),
+            use_curve_seed=self.ui.checkBox_autofocusUseCurve.isChecked(),
+        )
+
+    def _on_autofocus_status(
+        self,
+        plane: int,
+        n_planes: int,
+        predicted: float | None,
+        residual: float,
+        sharp: float,
+        state: str,
+    ) -> None:
+        """GUI-thread slot for queued worker autofocus status updates.
+
+        Renders the documented live status copy for tracking, holding,
+        clamped, waiting, and over-travel error states.
+        """
+        if state == "waiting" or predicted is None:
+            self.ui.label_autofocusStatus.setText(
+                f"Plane {plane}/{n_planes} · acquiring first frames"
+            )
+            return
+        if state == "error":
+            self.ui.label_autofocusStatus.setText(
+                f"Focus move rejected at plane {plane}: camera target "
+                f"{predicted:.3f} mm is outside travel limits. "
+                "Stack acquisition aborted."
+            )
+            self.ui.progressBar_autofocus.setVisible(False)
+            return
+        self.ui.label_autofocusStatus.setText(
+            f"Plane {plane}/{n_planes} · pred {predicted:.3f} mm · "
+            f"res {residual:+.3f} mm · sharp {sharp:.2e} · {state}"
+        )
