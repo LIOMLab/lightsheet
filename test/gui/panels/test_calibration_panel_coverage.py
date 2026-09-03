@@ -16,17 +16,20 @@ actually called — verifying the loop's apply path works on this panel.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
 from unittest.mock import patch
 
-import pytest
-from _helpers.controller_fixture import make_controller
 from pytestqt.qtbot import QtBot
 
 from lightsheet.gui.widgets.field_spec import FieldSpec
 
 
 def test_calibration_panel_applies_field_spec_to_matching_widget(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When a FIELD_SPECS entry matches a widget on the calibration panel,
     ``applySpec`` is called on that widget. Patches FIELD_SPECS to include
@@ -35,7 +38,7 @@ def test_calibration_panel_applies_field_spec_to_matching_widget(
     fires and the spec is applied."""
     from lightsheet.gui.panels import calibration_panel as mod
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     panel = ctrl.calibration_panel
     spinbox = panel.ui.doubleSpinBox_calNumberOfPlanes
     assert hasattr(spinbox, "applySpec"), (

@@ -20,7 +20,6 @@ from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
-from _helpers.controller_fixture import make_controller
 from PySide6.QtWidgets import QTableWidget, QWidget
 
 if TYPE_CHECKING:
@@ -31,22 +30,22 @@ if TYPE_CHECKING:
 
 
 def _mgr(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> tuple[Controller_MainWindow, AcquisitionTableManager]:
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     return ctrl, ctrl.stack_panel.table_manager  # ty: ignore[unsound-return-statement]
 
 
-def test_table_manager_exists(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
-    _ctrl, mgr = _mgr(qtbot, request)
+def test_table_manager_exists(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+    _ctrl, mgr = _mgr(qtbot, controller)
     assert isinstance(mgr, QWidget)
     assert isinstance(mgr.table, QTableWidget)
 
 
-def test_table_columns(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
+def test_table_columns(qtbot: QtBot, controller: Controller_MainWindow) -> None:
     """Test 1: columns Name, Start (mm), End (mm), Step (μm), #Planes,
     Est. Time, Est. Size. Start/End display in mm; Step stays µm."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     headers = [
         mgr.table.horizontalHeaderItem(i).text()  # ty: ignore[unresolved-attribute]
         for i in range(mgr.table.columnCount())
@@ -62,19 +61,19 @@ def test_table_columns(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     ]
 
 
-def test_empty_state_copy(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
+def test_empty_state_copy(qtbot: QtBot, controller: Controller_MainWindow) -> None:
     """Test 2: empty state renders the documented copy."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     assert mgr.table.rowCount() == 0
     text = mgr.empty_state_text()
     assert "No stacks in the queue" in text
     assert "re-driving the stage" in text
 
 
-def test_add_stack_default_row(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
+def test_add_stack_default_row(qtbot: QtBot, controller: Controller_MainWindow) -> None:
     """Test 3: Add Stack appends a row pre-filled with the current stack
     panel values (first plane, last plane, step size) + computed #planes."""
-    ctrl, mgr = _mgr(qtbot, request)
+    ctrl, mgr = _mgr(qtbot, controller)
     # Set the stack panel spinboxes to known values. The step spinbox is
     # in µm (the fixed stack-display unit; the global units toggle is
     # gone). 25.0 µm is a typical fine step.
@@ -93,11 +92,11 @@ def test_add_stack_default_row(qtbot: QtBot, request: pytest.FixtureRequest) -> 
     assert row.n_planes == 0
 
 
-def test_cell_edit_recomputes(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
+def test_cell_edit_recomputes(qtbot: QtBot, controller: Controller_MainWindow) -> None:
     """Test 4: editing a cell updates the value + recomputes #planes/est.
     time/est. size. Start/End cells display in mm (converted to µm for the
     internal _Row); Step stays µm."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     # Edit start=10 mm, end=20 mm, step=10 µm → 1001 planes.
     mgr.set_cell(0, 1, "10")
@@ -113,7 +112,7 @@ def test_cell_edit_recomputes(qtbot: QtBot, request: pytest.FixtureRequest) -> N
 
 
 def test_remove_stack_confirmation(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Test 5: Remove Stack shows a confirmation dialog with the row name;
     Yes removes, Cancel does not."""
@@ -121,7 +120,7 @@ def test_remove_stack_confirmation(
 
     from PySide6.QtWidgets import QMessageBox
 
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     mgr.set_cell(0, 0, "MyStack")
     mgr.table.selectRow(0)
@@ -153,9 +152,9 @@ def test_remove_stack_confirmation(
     assert "Remove" in seen_prompt[0]
 
 
-def test_move_up_down(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
+def test_move_up_down(qtbot: QtBot, controller: Controller_MainWindow) -> None:
     """Test 6: Move Up / Move Down reorder the selected row."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     mgr.set_cell(0, 0, "A")
     mgr.add_stack()
@@ -173,11 +172,11 @@ def test_move_up_down(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
 
 
 def test_incomplete_row_disables_start_queue(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Test 7: a row with start == end or step == 0 is flagged; Start Queue
     disabled while any row is incomplete."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     # Force start == end so the row is incomplete (on the rig, config.ini
     # may have non-zero spinbox values that make the default row valid).
@@ -195,11 +194,11 @@ def test_incomplete_row_disables_start_queue(
 
 
 def test_incomplete_row_flagged_visually(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Test 7b: an incomplete row is flagged with a red background on the
     offending cell."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     # Force start == end so the row is incomplete (on the rig, config.ini
     # may have non-zero spinbox values that make the default row valid).
@@ -212,10 +211,12 @@ def test_incomplete_row_flagged_visually(
     assert not mgr.is_row_flagged(0)
 
 
-def test_out_of_range_row_flagged(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
+def test_out_of_range_row_flagged(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """Test 8: a start/end value outside the motor travel limits is flagged
     + the row shows the out-of-range error."""
-    ctrl, mgr = _mgr(qtbot, request)
+    ctrl, mgr = _mgr(qtbot, controller)
     high = ctrl.motors.horizontal.get_limit_high("\u03bcm")
     mgr.add_stack()
     # End past the high limit. The cell displays in mm; convert the
@@ -228,11 +229,11 @@ def test_out_of_range_row_flagged(qtbot: QtBot, request: pytest.FixtureRequest) 
 
 
 def test_long_name_truncates_with_tooltip(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Test 9: long stack names truncate with ellipsis; the full name is in
     the cell tooltip."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     long_name = "A" * 200
     mgr.add_stack()
     mgr.set_cell(0, 0, long_name)
@@ -240,10 +241,10 @@ def test_long_name_truncates_with_tooltip(
     assert item.toolTip() == long_name  # ty: ignore[unresolved-attribute]
 
 
-def test_table_scrollable(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
+def test_table_scrollable(qtbot: QtBot, controller: Controller_MainWindow) -> None:
     """Test 10: the table scrolls horizontally/vertically when content
     exceeds the viewport."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     from PySide6.QtCore import Qt
 
     assert (
@@ -252,9 +253,9 @@ def test_table_scrollable(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
     assert mgr.table.verticalScrollBarPolicy() != Qt.ScrollBarPolicy.ScrollBarAlwaysOff
 
 
-def test_zero_one_many(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
+def test_zero_one_many(qtbot: QtBot, controller: Controller_MainWindow) -> None:
     """Test 11: the table renders 0 (empty copy), 1, and N rows."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     # 0 rows.
     assert mgr.table.rowCount() == 0
     assert "No stacks in the queue" in mgr.empty_state_text()

@@ -21,12 +21,12 @@ from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
-from _helpers.controller_fixture import make_controller
 
 if TYPE_CHECKING:
     from lightsheet.gui.panels.acquisition_table_manager import (
         AcquisitionTableManager,
     )
+    from lightsheet.gui.shell.controller import Controller_MainWindow
     from lightsheet.gui.workers import StackWorker
 
 
@@ -76,10 +76,10 @@ def _patch_worker_run_slow(record: list[float], delay_s: float = 0.1) -> Any:
 
 
 def test_queue_executes_rows_in_order(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Test 1: Start Queue with 3 rows executes them in order."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     mgr = ctrl.stack_panel.table_manager
     _add_valid_row(mgr, 1000, 1100, 10, "A")
     _add_valid_row(mgr, 2000, 2100, 10, "B")
@@ -95,11 +95,11 @@ def test_queue_executes_rows_in_order(
 
 
 def test_queue_configures_stack_params_per_row(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Test 2: each row configures stack_starting_plane/ending_plane/
     number_of_planes from the row's start/end/step before running."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     mgr = ctrl.stack_panel.table_manager
     _add_valid_row(mgr, 500, 600, 10, "A")  # 11 planes
     _add_valid_row(mgr, 700, 702, 1, "B")  # 3 planes
@@ -123,11 +123,11 @@ def test_queue_configures_stack_params_per_row(
 
 
 def test_queue_mode_badge_shows_row_index(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Test 3: the mode badge shows 'STACK RUNNING' with the row index
     during queue execution."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     mgr = ctrl.stack_panel.table_manager
     _add_valid_row(mgr, 1000, 1100, 10, "A")
     _add_valid_row(mgr, 2000, 2100, 10, "B")
@@ -153,11 +153,11 @@ def test_queue_mode_badge_shows_row_index(
 
 
 def test_queue_moves_stage_to_row_start(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Test 4: between rows, the stage moves to the next row's start
     position (the operator does NOT re-drive the stage)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     mgr = ctrl.stack_panel.table_manager
     _add_valid_row(mgr, 1000, 1100, 10, "A")
     _add_valid_row(mgr, 3000, 3100, 10, "B")
@@ -183,10 +183,10 @@ def test_queue_moves_stage_to_row_start(
     assert 3000.0 in positions
 
 
-def test_estop_aborts_queue(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
+def test_estop_aborts_queue(qtbot: QtBot, controller: Controller_MainWindow) -> None:
     """Test 5: E-stop during queue execution aborts the current stack +
     stops the queue (no more rows execute)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     mgr = ctrl.stack_panel.table_manager
     _add_valid_row(mgr, 1000, 1100, 10, "A")
     _add_valid_row(mgr, 2000, 2100, 10, "B")
@@ -212,11 +212,11 @@ def test_estop_aborts_queue(qtbot: QtBot, request: pytest.FixtureRequest) -> Non
 
 
 def test_no_auto_resume_after_estop(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Test 6: after E-stop, the queue does not auto-resume; the operator
     must re-arm + manually restart."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     mgr = ctrl.stack_panel.table_manager
     _add_valid_row(mgr, 1000, 1100, 10, "A")
     _add_valid_row(mgr, 2000, 2100, 10, "B")
@@ -238,11 +238,13 @@ def test_no_auto_resume_after_estop(
     ctrl.estop_event.clear()
 
 
-def test_out_of_range_row_caught(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
+def test_out_of_range_row_caught(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """Test 7: a row whose range exceeds travel limits is caught (the
     table validation flags it; if it slips, the worker's per-plane
     ValueError catch aborts that row)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     mgr = ctrl.stack_panel.table_manager
     high = ctrl.motors.horizontal.get_limit_high("\u03bcm")
     _add_valid_row(mgr, 1000, 1100, 10, "A")
@@ -263,10 +265,10 @@ def test_out_of_range_row_caught(qtbot: QtBot, request: pytest.FixtureRequest) -
     assert not mgr.start_queue_enabled()
 
 
-def test_error_copy_on_no_rows(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
+def test_error_copy_on_no_rows(qtbot: QtBot, controller: Controller_MainWindow) -> None:
     """Test 8: the error-state copy renders if start-attempt fails (no
     rows)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     mgr = ctrl.stack_panel.table_manager
     assert mgr.table.rowCount() == 0
     messages: list[str] = []
@@ -278,11 +280,11 @@ def test_error_copy_on_no_rows(qtbot: QtBot, request: pytest.FixtureRequest) -> 
 
 
 def test_queue_uses_qeventloop_not_threading_wait(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Test 9: the queue loop uses QEventLoop with quit() connected to the
     worker's finished signal — NOT threading.Event.wait()."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     mgr = ctrl.stack_panel.table_manager
     _add_valid_row(mgr, 1000, 1100, 10, "A")
     _add_valid_row(mgr, 2000, 2100, 10, "B")
@@ -321,7 +323,7 @@ def test_queue_uses_qeventloop_not_threading_wait(
 
 
 def test_worker_stays_threading_no_qthread_in_table(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Test 10: no new worker bypasses the per-plane ValueError catch; the
     queue re-uses the existing StackWorker (which has the catch)."""
@@ -341,13 +343,13 @@ def test_worker_stays_threading_no_qthread_in_table(
 
 
 def test_gui_thread_responsive_during_queue(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Test 11: GUI thread stays responsive during queue execution — a
     QTimer.singleShot fires within 200ms while a multi-row queue is
     running (the QEventLoop non-blocking wait keeps the event loop
     pumping). Mirrors the estop-freeze responsiveness probe pattern."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     mgr = ctrl.stack_panel.table_manager
     _add_valid_row(mgr, 1000, 1100, 10, "A")
     _add_valid_row(mgr, 2000, 2100, 10, "B")

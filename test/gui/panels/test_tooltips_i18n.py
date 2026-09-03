@@ -22,6 +22,10 @@ Runs headless on Mac via ``QT_QPA_PLATFORM=offscreen`` (set by conftest).
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 import pytest
 from PySide6.QtCore import QObject
@@ -31,12 +35,11 @@ from PySide6.QtWidgets import (
     QPushButton,
     QWidget,
 )
-from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
-GUI_DIR = Path(__file__).resolve().parent.parent / "lightsheet" / "gui"
+GUI_DIR = Path(__file__).resolve().parents[3] / "lightsheet" / "gui"
 
 # French keywords that must NOT appear in widget text properties (the UI
 # is standardized on English; Guide.pdf is the French reference).
@@ -129,14 +132,11 @@ def _assert_checkable_pushbuttons_have_tooltips(panel: QWidget) -> list[str]:
 
 
 def test_all_panels_spinboxes_have_tooltips(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Every QDoubleSpinBox across all 7 panels has a non-empty tooltip."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     missing: list[str] = []
     for attr in _panel_classes():
         panel = getattr(ctrl, attr)
@@ -148,14 +148,11 @@ def test_all_panels_spinboxes_have_tooltips(
 
 
 def test_all_panels_checkboxes_have_tooltips(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Every QCheckBox across all 7 panels has a non-empty tooltip."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     missing: list[str] = []
     for attr in _panel_classes():
         panel = getattr(ctrl, attr)
@@ -166,14 +163,11 @@ def test_all_panels_checkboxes_have_tooltips(
 
 
 def test_all_panels_checkable_pushbuttons_have_tooltips(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Every checkable QPushButton across all 7 panels has a non-empty tooltip."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     missing: list[str] = []
     for attr in _panel_classes():
         panel = getattr(ctrl, attr)
@@ -183,13 +177,12 @@ def test_all_panels_checkable_pushbuttons_have_tooltips(
     assert not missing, f"These checkable QPushButton widgets lack a tooltip: {missing}"
 
 
-def test_estop_button_tooltip_preserved(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_estop_button_tooltip_preserved(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """The E-stop button tooltip is preserved verbatim (UI-SPEC Copywriting)."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     estop = ctrl.findChild(QPushButton, "pushButton_estop")
     assert estop is not None
     assert estop.toolTip() == ESTOP_TOOLTIP, (
@@ -198,13 +191,12 @@ def test_estop_button_tooltip_preserved(qtbot: QtBot, request: FixtureRequest) -
     )
 
 
-def test_arm_reset_button_has_tooltip(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_arm_reset_button_has_tooltip(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """The Arm/Reset button carries a tooltip documenting the two-press sequence."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     arm = ctrl.findChild(QPushButton, "pushButton_armReset")
     assert arm is not None
     tip = arm.toolTip()
@@ -238,13 +230,12 @@ def test_no_french_labels_in_ui_files() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_help_menu_links_guide_pdf(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_help_menu_links_guide_pdf(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """The Help menu contains an action that opens Guide.pdf, wired to open_help."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     # The Help menu action that opens the documentation (Guide.pdf).
     action = ctrl.findChild(QObject, "actionGuidePdf")
     assert action is not None, (

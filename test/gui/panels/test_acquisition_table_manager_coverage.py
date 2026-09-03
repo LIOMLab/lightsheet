@@ -29,7 +29,6 @@ from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
-from _helpers.controller_fixture import make_controller
 
 if TYPE_CHECKING:
     from lightsheet.gui.panels.acquisition_table_manager import (
@@ -39,9 +38,9 @@ if TYPE_CHECKING:
 
 
 def _mgr(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> tuple[Controller_MainWindow, AcquisitionTableManager]:
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     return ctrl, ctrl.stack_panel.table_manager  # ty: ignore[unsound-return-statement]
 
 
@@ -49,11 +48,11 @@ def _mgr(
 
 
 def test_add_stack_with_zero_step_falls_back_to_one(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """add_stack with the step spinbox at 0 falls back to step=1.0 so the
     n_planes computation does not divide by zero."""
-    ctrl, mgr = _mgr(qtbot, request)
+    ctrl, mgr = _mgr(qtbot, controller)
     sp = ctrl.stack_panel.ui
     sp.doubleSpinBox_acqFirstPlane.setValue(0.0)
     sp.doubleSpinBox_acqLastPlane.setValue(1.0)
@@ -69,10 +68,10 @@ def test_add_stack_with_zero_step_falls_back_to_one(
 
 
 def test_remove_stack_no_selection_is_noop(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """remove_stack with no row selected (currentRow() < 0) is a no-op."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     mgr.table.clearSelection()
     mgr.table.setCurrentCell(-1, -1)
@@ -82,10 +81,10 @@ def test_remove_stack_no_selection_is_noop(
 
 
 def test_move_up_at_row_zero_is_noop(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """move_up at row 0 is a no-op (cannot move the first row up)."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     mgr.set_cell(0, 0, "A")
     mgr.table.selectRow(0)
@@ -94,10 +93,10 @@ def test_move_up_at_row_zero_is_noop(
 
 
 def test_move_down_at_last_row_is_noop(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """move_down at the last row is a no-op."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     mgr.set_cell(0, 0, "A")
     mgr.table.selectRow(0)
@@ -109,11 +108,11 @@ def test_move_down_at_last_row_is_noop(
 
 
 def test_set_cell_creates_new_item_when_none(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """set_cell on a cell with no existing item creates a new
     QTableWidgetItem instead of raising AttributeError."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     # Force-remove the start cell item so set_cell hits the None path.
     mgr.table.takeItem(0, 1)
@@ -124,11 +123,11 @@ def test_set_cell_creates_new_item_when_none(
 
 
 def test_safe_float_with_none_item_returns_zero(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_safe_float on a cell with no item returns 0.0 (does not raise
     AttributeError)."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     mgr.table.takeItem(0, 1)  # remove the start cell item
     assert mgr.table.item(0, 1) is None
@@ -136,22 +135,22 @@ def test_safe_float_with_none_item_returns_zero(
 
 
 def test_safe_float_with_non_numeric_text_returns_zero(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_safe_float on a cell with non-numeric text (e.g. "abc") returns
     0.0 instead of raising ValueError."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     mgr.set_cell(0, 1, "abc")
     assert mgr._safe_float(0, 1) == 0.0
 
 
 def test_parse_or_flag_non_numeric_flags_cell(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_parse_or_flag on non-numeric text flags the cell red and returns
     0.0."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     result = mgr._parse_or_flag(0, 1, "xyz")
     assert result == 0.0
@@ -162,12 +161,12 @@ def test_parse_or_flag_non_numeric_flags_cell(
 
 
 def test_estimate_per_plane_time_exception_fallback(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_estimate_per_plane_time returns 0.5 when the acquisition panel's
     exposure spinbox cannot be read (AttributeError / ValueError /
     TypeError)."""
-    ctrl, mgr = _mgr(qtbot, request)
+    ctrl, mgr = _mgr(qtbot, controller)
     # Remove the acquisition_panel attr so the access raises.
     orig = ctrl.acquisition_panel
     ctrl.acquisition_panel = None  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
@@ -178,11 +177,11 @@ def test_estimate_per_plane_time_exception_fallback(
 
 
 def test_estimate_stack_size_mb_camera_exception_fallback(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_estimate_stack_size_mb returns a raw-bytes estimate when the
     camera attrs cannot be read (falls back to 2000x2000)."""
-    ctrl, mgr = _mgr(qtbot, request)
+    ctrl, mgr = _mgr(qtbot, controller)
 
     # Replace camera with an object that raises on ysize.
     class BadCamera:
@@ -202,11 +201,11 @@ def test_estimate_stack_size_mb_camera_exception_fallback(
 
 
 def test_zarr_pyramid_multiplier_exception_fallback(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_zarr_pyramid_multiplier returns a sane multiplier when
     stack_step cannot be parsed (TypeError / ValueError fallback to 0.0)."""
-    ctrl, mgr = _mgr(qtbot, request)
+    ctrl, mgr = _mgr(qtbot, controller)
 
     # Set stack_step to an object that raises on float().
     class BadFloat:
@@ -229,11 +228,11 @@ def test_zarr_pyramid_multiplier_exception_fallback(
 
 
 def test_recompute_all_rows_reentrancy_guard(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """recompute_all_rows is a no-op when _recomputing is already True
     (re-entrancy guard)."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     mgr._recomputing = True
     # Should return immediately without touching the table.
@@ -244,10 +243,10 @@ def test_recompute_all_rows_reentrancy_guard(
 
 
 def test_recompute_row_reentrancy_guard(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_recompute_row is a no-op when _recomputing is already True."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     mgr._recomputing = True
     mgr._recompute_row(0)
@@ -256,11 +255,11 @@ def test_recompute_row_reentrancy_guard(
 
 
 def test_on_cell_changed_on_readonly_column_is_noop(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_on_cell_changed on a readonly column (#Planes / Est. Time / Est.
     Size) is a no-op — the recompute is skipped."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     # Directly call _on_cell_changed on a readonly column.
     mgr._on_cell_changed(0, 4)  # _COL_NPLANES
@@ -268,11 +267,11 @@ def test_on_cell_changed_on_readonly_column_is_noop(
 
 
 def test_on_cell_changed_during_recompute_is_noop(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_on_cell_changed during a recompute (_recomputing=True) is a
     no-op — the re-entrancy guard prevents a loop."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     mgr._recomputing = True
     mgr._on_cell_changed(0, 1)  # _COL_START
@@ -284,11 +283,11 @@ def test_on_cell_changed_during_recompute_is_noop(
 
 
 def test_recompute_with_none_name_item(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_recompute_row_impl does not raise when the name cell item is
     None (the tooltip update is skipped)."""
-    _ctrl, mgr = _mgr(qtbot, request)
+    _ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     mgr.table.takeItem(0, 0)  # remove name item
     assert mgr.table.item(0, 0) is None
@@ -297,11 +296,11 @@ def test_recompute_with_none_name_item(
 
 
 def test_recompute_with_motors_none(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_recompute_row_impl does not raise when self._shell.motors is
     None (the limit check is skipped)."""
-    ctrl, mgr = _mgr(qtbot, request)
+    ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     orig = ctrl.motors
     ctrl.motors = None  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
@@ -312,12 +311,12 @@ def test_recompute_with_motors_none(
 
 
 def test_recompute_with_bad_motor_limits(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_recompute_row_impl does not raise when the motor limits raise
     (TypeError / ValueError / AttributeError → low/high = None, skip the
     range check)."""
-    ctrl, mgr = _mgr(qtbot, request)
+    ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
 
     # Replace the horizontal motor's get_limit_low with one that raises.
@@ -340,11 +339,11 @@ def test_recompute_with_bad_motor_limits(
 
 
 def test_recompute_flagged_row_emits_sig_message(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When a row is flagged (incomplete or out-of-range), the shell's
     sig_message is emitted with a descriptive message."""
-    ctrl, mgr = _mgr(qtbot, request)
+    ctrl, mgr = _mgr(qtbot, controller)
     messages: list[str] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
     mgr.add_stack()
@@ -361,11 +360,11 @@ def test_recompute_flagged_row_emits_sig_message(
 
 
 def test_start_queue_hardware_not_initialized(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_start_queue emits a 'Hardware is still initializing' message and
     beeps when _hardware_initialized is False."""
-    ctrl, mgr = _mgr(qtbot, request)
+    ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     mgr.set_cell(0, 1, "10")
     mgr.set_cell(0, 2, "20")
@@ -386,9 +385,9 @@ def test_start_queue_hardware_not_initialized(
     assert len(beeps) >= 1
 
 
-def test_start_queue_no_rows(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
+def test_start_queue_no_rows(qtbot: QtBot, controller: Controller_MainWindow) -> None:
     """_start_queue with no rows emits an error message and beeps."""
-    ctrl, mgr = _mgr(qtbot, request)
+    ctrl, mgr = _mgr(qtbot, controller)
     assert mgr.table.rowCount() == 0
     messages: list[str] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
@@ -400,11 +399,11 @@ def test_start_queue_no_rows(qtbot: QtBot, request: pytest.FixtureRequest) -> No
 
 
 def test_start_queue_incomplete_row(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_start_queue with an incomplete row (n_planes==0) emits an error
     and beeps."""
-    ctrl, mgr = _mgr(qtbot, request)
+    ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     # Force start == end so n_planes==0 (on the rig, config.ini may have
     # non-zero spinbox values that make the default row valid).
@@ -419,10 +418,12 @@ def test_start_queue_incomplete_row(
     assert len(beeps) >= 1
 
 
-def test_start_queue_no_save_path(qtbot: QtBot, request: pytest.FixtureRequest) -> None:
+def test_start_queue_no_save_path(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """_start_queue with saving_allowed=True but no save_directory emits
     an error and beeps."""
-    ctrl, mgr = _mgr(qtbot, request)
+    ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     mgr.set_cell(0, 1, "10")
     mgr.set_cell(0, 2, "20")

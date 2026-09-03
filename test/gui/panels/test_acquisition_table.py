@@ -8,8 +8,11 @@ shows a format-suffixed human-readable value (e.g. "16.9 GB (HDF5)").
 
 from __future__ import annotations
 
-from _helpers.controller_fixture import make_controller
-from pytest import FixtureRequest
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
 from pytestqt.qtbot import QtBot
 
 from lightsheet.gui.panels.acquisition_table_manager import AcquisitionTableManager
@@ -28,11 +31,11 @@ def _add_valid_row(table: AcquisitionTableManager) -> int:
 
 
 def test_est_size_suffix_reflects_save_format(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The Est. Size cell text carries the format suffix and changes when
     the save format changes (HDF5 -> OME-Zarr -> Both)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     table = ctrl.stack_panel.table_manager
     # stack_step is read for the zarr pyramid level count (base_res Z);
     # set a non-zero value so the level count is well-defined.
@@ -56,12 +59,12 @@ def test_est_size_suffix_reflects_save_format(
 
 
 def test_zarr_estimate_is_larger_than_hdf5(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The OME-Zarr estimate includes the multiscale pyramid overhead, so
     it is strictly larger than the raw-bytes HDF5 estimate for the same
     stack. Both = hdf5 + zarr (sum)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     table = ctrl.stack_panel.table_manager
     ctrl.stack_step = 5.0
     row = _add_valid_row(table)
@@ -93,11 +96,13 @@ def test_zarr_estimate_is_larger_than_hdf5(
     assert abs(both_mb - (hdf5_mb + zarr_mb)) < 1.0, (hdf5_mb, zarr_mb, both_mb)
 
 
-def test_format_radio_re_estimates_table(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_format_radio_re_estimates_table(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
     """Switching the save-format radio re-estimates the Est. Size cell via
     the controller subscription (the buttonClicked signal is wired to
     recompute_all_rows)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     table = ctrl.stack_panel.table_manager
     ctrl.stack_step = 5.0
     row = _add_valid_row(table)
