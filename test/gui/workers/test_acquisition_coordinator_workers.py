@@ -15,7 +15,7 @@ never a static-source grep.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -30,26 +30,16 @@ from lightsheet.gui.panels import acquisition_panel
 from lightsheet.gui.workers import LiveWorker, PreviewWorker, SingleWorker, StackWorker
 from lightsheet.hal import (
     DeviceBundle,
-    MockCamera,
-    MockETLs,
-    MockLaser,
-    MockMotors,
-    MockSigGen,
 )
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
 def _make_bundle() -> DeviceBundle:
-    camera = MockCamera(verbose=False)
-    siggen = MockSigGen(camera)
-    motors = MockMotors()
-    lasers = (
-        MockLaser(wavelength=555, max_power_mw=300.0, label="L1"),
-        MockLaser(wavelength=647, max_power_mw=150.0, label="L2"),
-    )
-    etls = MockETLs()
-    return DeviceBundle(
-        camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers
-    )
+    from test.helpers.factories import make_bundle
+
+    return make_bundle()
 
 
 class _WorkerShell:
@@ -885,18 +875,15 @@ def test_single_worker_multi_channel_estop_after_first_channel(qtbot: QtBot) -> 
 
 
 def test_enqueue_buffer_accepts_tagged_tuple(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """FrameSaver.enqueue_buffer accepts a (channel_idx, frame) tuple in
     addition to a bare np.ndarray; bare-ndarray calls preserve the
     existing single-channel behavior unchanged. This plan only makes
     enqueue_buffer accept the tagged form without raising — the
     single-consumer workers branch on the tag in a later plan."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     fs = ctrl._fs.frame_saver
     # Tagged tuple — must not raise.
     tagged = (0, np.zeros((4, 4), dtype=np.uint16))
@@ -909,7 +896,7 @@ def test_enqueue_buffer_accepts_tagged_tuple(
 
 
 def test_single_mode_button_presamples_multi_channel(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """updateUi_single_mode_button with both auto-laser checkboxes
     checked passes multi_channel=True to SingleWorker; with one
@@ -917,12 +904,9 @@ def test_single_mode_button_presamples_multi_channel(
     constructor. Pre-sampling happens on the GUI thread after
     _cache_auto_laser_flags() — the worker never reads the checkboxes
     (AGENTS.md §11)."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
     # --- Both checked -> multi_channel=True ---
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._single_thread = None  # attribute exists only after first click
     ctrl._single_worker = None
     ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
@@ -1288,19 +1272,16 @@ def test_stack_worker_multi_channel_none_frames_skips_enqueue(qtbot: QtBot) -> N
 
 
 def test_spawn_stack_worker_presamples_multi_channel(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_spawn_stack_worker with both auto-laser checkboxes checked passes
     multi_channel=True to StackWorker; with one unchecked passes False.
     Verified by spying on the StackWorker constructor. Pre-sampling
     happens on the GUI thread after _cache_auto_laser_flags() — the
     worker never reads the checkboxes (AGENTS.md §11)."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
     # --- Both checked -> multi_channel=True ---
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._stack_thread = None
     ctrl._stack_worker = None
     # Configure a valid stack so updateUi_stack_mode_button reaches

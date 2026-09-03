@@ -32,29 +32,29 @@ Asserts:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import numpy as np
 import pytest
-from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 pytest.importorskip("PySide6")
 
 
 def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """StackWorker.run in multi-channel mode calls set_files with
     wavelengths and the real save worker writes one HDF5 file per
     channel per plane."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
     from lightsheet.gui.workers import StackWorker
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     # Multi-channel mode: both auto-laser checkboxes checked.
     ctrl._auto_laser1 = True
@@ -163,7 +163,7 @@ def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
 
 
 def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """StackWorker.run in multi-channel stitch mode (the default
     reconstructed_frame branch — save_all_crop=False, save_all_full=False)
@@ -185,13 +185,10 @@ def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
     frames consumed (n_channels * n_planes) — not files written.
     """
     import h5py
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
 
     from lightsheet.gui.workers import StackWorker
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
     # Multi-channel mode: both auto-laser checkboxes checked.
     ctrl._auto_laser1 = True
