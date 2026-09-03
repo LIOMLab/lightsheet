@@ -31,11 +31,9 @@ Covers branches not exercised by the existing HDF5/Zarr parse tests:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from unittest.mock import patch
 
-from _helpers.controller_fixture import make_controller
-from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
 
 from lightsheet.gui.panels.past_acquisitions_browser import (
@@ -45,6 +43,9 @@ from lightsheet.gui.panels.past_acquisitions_browser import (
     _NumericTableWidgetItem,
     normalize_wavelength,
 )
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 # -- pure helpers ---------------------------------------------------------
 
@@ -90,30 +91,30 @@ def test_normalize_wavelength_other_passthrough() -> None:
 
 
 def test_resolve_data_dir_falls_back_to_shell_save_directory(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """When data_dir is None, _resolve_data_dir falls back to
     shell.save_directory."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.save_directory = str(tmp_path)
     browser = PastAcquisitionsBrowser(ctrl, data_dir=None)
     assert browser._resolve_data_dir() == str(tmp_path)
 
 
 def test_list_acquisitions_empty_data_dir_returns_empty(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """list_acquisitions with a non-existent data_dir returns []."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(tmp_path / "nonexistent"))
     assert browser.list_acquisitions() == []
 
 
 def test_list_acquisitions_empty_dir_returns_empty(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """list_acquisitions with an empty (but existing) data_dir returns []."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "empty"
     data_dir.mkdir()
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
@@ -124,11 +125,11 @@ def test_list_acquisitions_empty_dir_returns_empty(
 
 
 def test_scan_directory_oserror_on_iterdir_emits_message(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_scan_directory emits sig_message when the top-level iterdir
     raises OSError (e.g. permission denied)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
@@ -149,7 +150,7 @@ def test_scan_directory_oserror_on_iterdir_emits_message(
 
 
 def test_scan_directory_nested_folder_recursion(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_scan_directory recurses into sample folders and their immediate
     children (two-level depth). HDF5 files inside a child folder are
@@ -157,7 +158,7 @@ def test_scan_directory_nested_folder_recursion(
     import h5py
     import numpy as np
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     # Sample folder with a child folder containing an HDF5 file.
@@ -176,14 +177,14 @@ def test_scan_directory_nested_folder_recursion(
 
 
 def test_scan_directory_top_level_zarr_dir(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """A .ome.zarr directory at the top level is parsed as one Zarr
     acquisition (not recursed into as a folder)."""
     import numpy as np
     import zarr
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     zarr_path = data_dir / "S01_555nm.ome.zarr"
@@ -197,10 +198,10 @@ def test_scan_directory_top_level_zarr_dir(
 
 
 def test_scan_folder_oserror_returns_empty(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_scan_folder returns [] when the folder's iterdir raises OSError."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
@@ -214,14 +215,14 @@ def test_scan_folder_oserror_returns_empty(
 
 
 def test_scan_directory_child_oserror_continues(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_scan_directory continues when a child folder's iterdir raises
     OSError (the per-child OSError is caught and skipped)."""
     import h5py
     import numpy as np
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     sample_dir = data_dir / "S01"
@@ -255,11 +256,11 @@ def test_scan_directory_child_oserror_continues(
 
 
 def test_parse_hdf5_corrupt_file_emits_message(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_parse_hdf5 on a corrupt HDF5 file (not valid HDF5) emits
     sig_message and returns None."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     h5_path = data_dir / "corrupt_555nm.hdf5"
@@ -273,11 +274,11 @@ def test_parse_hdf5_corrupt_file_emits_message(
 
 
 def test_parse_zarr_corrupt_dir_emits_message(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_parse_zarr on a corrupt Zarr directory emits sig_message and
     returns None."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     # Create a .ome.zarr directory that is NOT a valid Zarr store.
@@ -293,10 +294,10 @@ def test_parse_zarr_corrupt_dir_emits_message(
 
 
 def test_parse_file_non_matching_returns_empty(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_parse_file on a path that is neither HDF5 nor Zarr returns []."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     browser = PastAcquisitionsBrowser(ctrl, data_dir="/unused")
     result = browser._parse_file("/tmp/not_hdf5_or_zarr.txt", sample_hint="test")
     assert result == []
@@ -306,14 +307,14 @@ def test_parse_file_non_matching_returns_empty(
 
 
 def test_hdf5_wavelength_no_active_laser_falls_back_to_attrs(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """When no Laser Active attr is set, _hdf5_wavelength falls back to
     the Laser1/Laser2 Wavelength attrs (pre-Phase-4 style)."""
     import h5py
     import numpy as np
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     h5_path = data_dir / "test_555nm.hdf5"
@@ -329,14 +330,14 @@ def test_hdf5_wavelength_no_active_laser_falls_back_to_attrs(
 
 
 def test_hdf5_wavelength_bad_attr_int_falls_back(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """When the Laser Wavelength attr cannot be converted to int, the
     parser falls back to the next source (filename token)."""
     import h5py
     import numpy as np
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     h5_path = data_dir / "test_555nm.hdf5"
@@ -355,14 +356,14 @@ def test_hdf5_wavelength_bad_attr_int_falls_back(
 
 
 def test_hdf5_wavelength_filename_fallback(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """When no root attrs at all, _hdf5_wavelength falls back to the
     filename _<wl>nm_ token."""
     import h5py
     import numpy as np
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     h5_path = data_dir / "sample_647nm.hdf5"
@@ -379,14 +380,14 @@ def test_hdf5_wavelength_filename_fallback(
 
 
 def test_hdf5_sample_strips_scan_type_suffix(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_hdf5_sample strips a known scan-type suffix (_stack, _singleImage,
     _z) from the sample group to recover the bare sample name."""
     import h5py
     import numpy as np
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     # compact naming: tes1_stack_555nm.hdf5 → sample group "tes1_stack"
@@ -402,7 +403,7 @@ def test_hdf5_sample_strips_scan_type_suffix(
 
 
 def test_hdf5_sample_z_suffix(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_hdf5_sample strips the _z scan-type suffix (the third entry in
     _SCAN_TYPE_SUFFIXES). The suffix comparison is case-sensitive on the
@@ -411,7 +412,7 @@ def test_hdf5_sample_z_suffix(
     import h5py
     import numpy as np
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     h5_path = data_dir / "exp1_z_555nm.hdf5"
@@ -425,14 +426,14 @@ def test_hdf5_sample_z_suffix(
 
 
 def test_hdf5_sample_no_wavelength_token_stack_plane_suffix(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_hdf5_sample with no wavelength token in the filename strips the
     _stack_plane_NNNNN suffix to recover the sample name."""
     import h5py
     import numpy as np
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     # No _<wl>nm token; old-style _stack_plane_NNNNN suffix.
@@ -450,14 +451,14 @@ def test_hdf5_sample_no_wavelength_token_stack_plane_suffix(
 
 
 def test_hdf5_sample_falls_back_to_hint(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_hdf5_sample falls back to the sample_hint when the filename has
     no parseable sample prefix."""
     import h5py
     import numpy as np
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     # A filename that matches neither the wavelength regex nor the
@@ -479,12 +480,12 @@ def test_hdf5_sample_falls_back_to_hint(
 
 
 def test_zarr_n_planes_no_level0_returns_zero(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_zarr_n_planes returns 0 when the Zarr group has no "0" array."""
     import zarr
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     zarr_path = data_dir / "empty.ome.zarr"
@@ -498,14 +499,14 @@ def test_zarr_n_planes_no_level0_returns_zero(
 
 
 def test_zarr_n_planes_wrong_shape_returns_zero(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_zarr_n_planes returns 0 when the L0 array has a wrong shape
     (not 4D)."""
     import numpy as np
     import zarr
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     zarr_path = data_dir / "wrong_shape.ome.zarr"
@@ -520,14 +521,14 @@ def test_zarr_n_planes_wrong_shape_returns_zero(
 
 
 def test_zarr_wavelength_top_level_omero(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_zarr_wavelength falls back to a top-level "omero" attrs key when
     the "ome" key is absent or has no omero nested inside."""
     import numpy as np
     import zarr
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     zarr_path = data_dir / "top_omero.ome.zarr"
@@ -542,14 +543,14 @@ def test_zarr_wavelength_top_level_omero(
 
 
 def test_zarr_wavelength_bad_int_falls_back_to_filename(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_zarr_wavelength falls back to the filename token when the omero
     channel wavelength cannot be converted to int."""
     import numpy as np
     import zarr
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     zarr_path = data_dir / "S01_555nm.ome.zarr"
@@ -565,14 +566,14 @@ def test_zarr_wavelength_bad_int_falls_back_to_filename(
 
 
 def test_zarr_wavelength_filename_fallback(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_zarr_wavelength falls back to the filename token when no ome/omero
     attrs are present."""
     import numpy as np
     import zarr
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     zarr_path = data_dir / "S01_647nm.ome.zarr"
@@ -586,14 +587,14 @@ def test_zarr_wavelength_filename_fallback(
 
 
 def test_zarr_sample_strips_zarr_suffix(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_zarr_sample strips the .ome.zarr / .zarr suffix and the
     _<wl>nm token to recover the sample name."""
     import numpy as np
     import zarr
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     zarr_path = data_dir / "myexp_555nm.ome.zarr"
@@ -607,14 +608,14 @@ def test_zarr_sample_strips_zarr_suffix(
 
 
 def test_zarr_sample_no_wavelength_falls_back_to_stem(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_zarr_sample with no wavelength token in the filename returns the
     stem (filename minus .ome.zarr)."""
     import numpy as np
     import zarr
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     zarr_path = data_dir / "plain.ome.zarr"
@@ -628,14 +629,14 @@ def test_zarr_sample_no_wavelength_falls_back_to_stem(
 
 
 def test_zarr_sample_empty_stem_falls_back_to_hint(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_zarr_sample with an empty stem (after suffix strip) falls back to
     the sample_hint."""
     import numpy as np
     import zarr
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     # A zarr store named just ".ome.zarr" — stem is empty after strip.
@@ -654,21 +655,21 @@ def test_zarr_sample_empty_stem_falls_back_to_hint(
 
 
 def test_file_size_oserror_returns_zero(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_file_size returns 0 when stat() raises OSError."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     PastAcquisitionsBrowser(ctrl, data_dir="/unused")
     with patch.object(Path, "stat", side_effect=OSError("nope")):
         assert PastAcquisitionsBrowser._file_size("/nonexistent") == 0
 
 
 def test_dir_size_oserror_suppressed(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_dir_size suppresses OSError on individual files (contextlib.suppress)
     and returns the total of the readable files."""
-    _ctrl, _ = make_controller(qtbot, request)
+    _ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     (data_dir / "a.txt").write_text("hello")
@@ -677,7 +678,7 @@ def test_dir_size_oserror_suppressed(
     assert size >= 12  # "hello" (5) + "world!!" (7) = 12
 
 
-def test_date_str_oserror_returns_empty(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_date_str_oserror_returns_empty(qtbot: QtBot, controller: Controller_MainWindow) -> None:
     """_date_str returns "" when stat() raises OSError."""
     with patch.object(Path, "stat", side_effect=OSError("nope")):
         assert PastAcquisitionsBrowser._date_str("/nonexistent") == ""
@@ -687,7 +688,7 @@ def test_date_str_oserror_returns_empty(qtbot: QtBot, request: FixtureRequest) -
 
 
 def test_start_scan_async_emits_finished(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """start_scan_async offloads the scan to a QThread and emits
     sig_scan_finished when done. The entries list is forwarded
@@ -695,7 +696,7 @@ def test_start_scan_async_emits_finished(
     import h5py
     import numpy as np
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     h5_path = data_dir / "S01_555nm.hdf5"
@@ -724,10 +725,10 @@ def test_start_scan_async_emits_finished(
 
 
 def test_start_scan_async_skips_when_already_running(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """start_scan_async is a no-op when a scan is already running."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
@@ -744,10 +745,10 @@ def test_start_scan_async_skips_when_already_running(
 
 
 def test_stop_scan_with_no_thread_is_noop(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """stop_scan with no running thread is a no-op."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     browser = PastAcquisitionsBrowser(ctrl, data_dir="/unused")
     assert browser._thread is None
     browser.stop_scan()
@@ -756,20 +757,20 @@ def test_stop_scan_with_no_thread_is_noop(
 
 
 def test_is_scanning_false_when_no_thread(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """is_scanning returns False when no thread exists."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     browser = PastAcquisitionsBrowser(ctrl, data_dir="/unused")
     assert not browser.is_scanning()
 
 
 def test_scan_worker_run_empty_data_dir_emits_empty(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_ScanWorker.run with an empty/non-existent data_dir emits
     finished([])."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     browser = PastAcquisitionsBrowser(ctrl, data_dir="/nonexistent")
     from lightsheet.gui.panels.past_acquisitions_browser import _ScanWorker
 
@@ -782,11 +783,11 @@ def test_scan_worker_run_empty_data_dir_emits_empty(
 
 
 def test_scan_worker_run_exception_emits_empty(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_ScanWorker.run emits finished([]) when an unexpected exception
     occurs during the scan."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     browser = PastAcquisitionsBrowser(ctrl, data_dir=str(data_dir))
@@ -849,11 +850,11 @@ def test_numeric_table_widget_item_lt_falls_back_via_sort() -> None:
 
 
 def test_panel_on_view_changed_planned_switches_to_stack_page(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_on_view_changed with the 'Planned' radio button switches the
     left-rail to the Stack page (index 2) and re-checks 'Past'."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     panel = ctrl.past_panel
     # The stackedPanels widget should exist on the shell.
     stacked = getattr(ctrl.ui, "stackedPanels", None)
@@ -866,11 +867,11 @@ def test_panel_on_view_changed_planned_switches_to_stack_page(
 
 
 def test_panel_on_view_changed_past_is_noop(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_on_view_changed with the 'Past' radio button is a no-op (Past is
     the current page)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     panel = ctrl.past_panel
     stacked = ctrl.ui.stackedPanels
     stacked.setCurrentIndex(6)  # Past page
@@ -880,9 +881,9 @@ def test_panel_on_view_changed_past_is_noop(
     assert stacked.currentIndex() != 2 or stacked.currentIndex() == 6
 
 
-def test_panel_on_refresh_scanning_guard(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_panel_on_refresh_scanning_guard(qtbot: QtBot, controller: Controller_MainWindow) -> None:
     """_on_refresh is a no-op when a scan is already in flight."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     panel = ctrl.past_panel
     # Simulate a running scan.
     from unittest.mock import MagicMock
@@ -896,11 +897,11 @@ def test_panel_on_refresh_scanning_guard(qtbot: QtBot, request: FixtureRequest) 
 
 
 def test_panel_on_scan_finished_empty_dir_shows_error_copy(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_on_scan_finished with no entries and a missing save_directory
     shows the error copy (pointing the operator to the Files panel)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     panel = ctrl.past_panel
     ctrl.save_directory = str(tmp_path / "nonexistent")
     panel._on_scan_finished([])
@@ -909,11 +910,11 @@ def test_panel_on_scan_finished_empty_dir_shows_error_copy(
 
 
 def test_panel_on_scan_finished_empty_existing_dir_shows_empty_copy(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """_on_scan_finished with no entries but an existing save_directory
     shows the empty copy (telling the operator to run an acquisition)."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     panel = ctrl.past_panel
     data_dir = tmp_path / "data"
     data_dir.mkdir()
@@ -924,11 +925,11 @@ def test_panel_on_scan_finished_empty_existing_dir_shows_empty_copy(
 
 
 def test_panel_on_scan_finished_with_entries_populates_table(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_on_scan_finished with entries populates the past table and
     emits past_acquisitions_scan_finished."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     panel = ctrl.past_panel
     received: list[list[Any]] = []
     panel.past_acquisitions_scan_finished.connect(
@@ -965,11 +966,11 @@ def test_panel_on_scan_finished_with_entries_populates_table(
 
 
 def test_panel_add_past_row_with_none_wavelength(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """_add_past_row with a None wavelength shows an empty channel cell
     (not 'None')."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     panel = ctrl.past_panel
     entry = PastAcquisitionEntry(
         sample="S01",
@@ -987,14 +988,14 @@ def test_panel_add_past_row_with_none_wavelength(
 
 
 def test_panel_refresh_triggers_async_scan(
-    qtbot: QtBot, request: FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """panel.refresh() triggers an async scan that populates the table on
     completion."""
     import h5py
     import numpy as np
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     h5_path = data_dir / "S01_555nm.hdf5"

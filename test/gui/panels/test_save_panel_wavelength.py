@@ -17,6 +17,7 @@ single-channel wavelength pre-sampling.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import numpy as np
@@ -26,17 +27,16 @@ pytest.importorskip("PySide6")
 
 from pytestqt.qtbot import QtBot
 
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
 
 def test_active_single_channel_wavelength_laser1(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When _auto_laser1 is True (and _auto_laser2 is False), the
     active single-channel wavelength is lasers[0].wavelength."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._auto_laser1 = True
     ctrl._auto_laser2 = False
 
@@ -45,15 +45,11 @@ def test_active_single_channel_wavelength_laser1(
 
 
 def test_active_single_channel_wavelength_laser2_only(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When only _auto_laser2 is True, the active single-channel
     wavelength is lasers[1].wavelength."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._auto_laser1 = False
     ctrl._auto_laser2 = True
 
@@ -62,16 +58,12 @@ def test_active_single_channel_wavelength_laser2_only(
 
 
 def test_active_single_channel_wavelength_neither_fallback(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When neither _auto_laser1 nor _auto_laser2 is True (manual mode
     or edge case), the active wavelength falls back to lasers[0].wavelength
     — not None, not an error."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._auto_laser1 = False
     ctrl._auto_laser2 = False
 
@@ -80,18 +72,14 @@ def test_active_single_channel_wavelength_neither_fallback(
 
 
 def test_save_panel_single_channel_passes_wavelength_suffix(
-    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """The single-channel save path (saveStitch radio, one auto-laser
     checked) calls set_files with wavelengths=[active_wavelength] — the
     saved filename carries the _{wavelength}nm suffix. This is the
     G-09-10 gap: the suffix must ALWAYS be present, including
     single-channel."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._auto_laser1 = True
     ctrl._auto_laser2 = False
     ctrl.saving_allowed = True
@@ -139,19 +127,15 @@ def test_save_panel_single_channel_passes_wavelength_suffix(
 
 
 def test_stack_worker_single_channel_presamples_wavelength(
-    qtbot: QtBot, request: pytest.FixtureRequest, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """StackWorker with multi_channel=False and _auto_laser1=True has
     self._wavelengths = [lasers[0].wavelength] (not None). The set_files
     call in run() passes wavelengths=[wl] so the saved filenames carry
     the suffix."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
     from lightsheet.gui.workers import StackWorker
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._auto_laser1 = True
     ctrl._auto_laser2 = False
 
@@ -235,18 +219,14 @@ def test_stack_worker_single_channel_presamples_wavelength(
 
 
 def test_stack_worker_single_channel_neither_auto_laser_fallback(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """When neither _auto_laser1 nor _auto_laser2 is True, StackWorker
     single-channel pre-samples lasers[0].wavelength as the fallback
     (not None, not an error)."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
     from lightsheet.gui.workers import StackWorker
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._auto_laser1 = False
     ctrl._auto_laser2 = False
 

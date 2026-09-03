@@ -14,19 +14,22 @@ estimation land.
 
 from __future__ import annotations
 
-from _helpers.controller_fixture import make_controller
-from pytest import FixtureRequest
+from typing import TYPE_CHECKING
+
 from pytestqt.qtbot import QtBot
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
 def test_save_format_radio_sets_save_format(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """D-03: the save-format radio slot sets ``self.save_format``. The
     initial value is ``'hdf5'`` (the config-driven default in the test
     fixture); calling the slot with the OME-Zarr radio button updates the
     attribute to ``'zarr'``."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     assert ctrl.save_format == "hdf5"
     zarr_radio = ctrl.save_panel.ui.radioButton_saveFormat_zarr
     ctrl.updateUi_save_format_changed(zarr_radio)
@@ -34,12 +37,12 @@ def test_save_format_radio_sets_save_format(
 
 
 def test_save_format_radio_re_estimates_table(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """D-05: switching the save-format radio re-estimates the Est. Size
     cell in the acquisition table (Zarr vs HDF5 have different per-plane
     footprints). The table's Est. Size value changes after the slot fires."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     table = ctrl.stack_panel.table_manager
     ctrl.stack_step = 5.0
     table.add_stack()
