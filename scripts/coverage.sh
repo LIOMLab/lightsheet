@@ -86,7 +86,7 @@ cd "${REPO_ROOT}"
 # single-process collection (~4 min, reliable: no xdist shutdown race). If
 # `timeout` is unavailable (non-GNU environment), we run xdist unguarded —
 # the hang is intermittent, not deterministic.
-_XDIST_TIMEOUT=90
+_XDIST_TIMEOUT=120
 _run_cov_xdist() {
   uv run pytest -q --cov=lightsheet --cov-branch
 }
