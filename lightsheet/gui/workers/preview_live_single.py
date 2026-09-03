@@ -164,7 +164,6 @@ class PreviewWorker(QObject):
                 f"Preview acquisition failed — the run was aborted. Cause: {e}"
             )
             logger.exception("Preview mode worker failed")
-            raise
         finally:
             # The finished signal must fire exactly once whether the method
             # completes normally or an exception propagates from
@@ -276,7 +275,6 @@ class LiveWorker(QObject, _AcquireScanMixin):
                 f"Live acquisition failed — the run was aborted. Cause: {e}"
             )
             logger.exception("Live mode worker failed")
-            raise
         finally:
             # The finished signal must fire exactly once whether the method
             # completes normally, breaks out of the loop on E-stop, or an
@@ -496,7 +494,6 @@ class SingleWorker(QObject, _AcquireScanMixin):
                 f"Single image acquisition failed — the run was aborted. Cause: {e}"
             )
             logger.exception("Single image mode worker failed")
-            raise
         finally:
             # The finished signal must fire exactly once whether the method
             # returns early (E-stop), completes normally, or an exception

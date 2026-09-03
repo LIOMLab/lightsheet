@@ -1388,9 +1388,14 @@ class Controller_MainWindow(QMainWindow):
                             "shutdown anyway.",
                             attr,
                         )
+            # Close any live DAQ scan tasks before shutting the camera/etls,
+            # then close all laser backends and the motor serial chain.
+            self.siggen.delete_scanner()
             self.camera.close()
             self.etls.close()
-            # Laser 2 (iBeam) lifecycle close
+            # Laser backends — L1 (DAQ AO) + L2 (iBeam serial) both need a
+            # lifecycle close so any per-session readback/handles are released.
+            self.lasers[0].close()
             self.lasers[1].close()
             # Shared serial handle for Zaber motor chain
             self.motors.close()

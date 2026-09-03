@@ -300,16 +300,22 @@ class SigGen(ISigGen):
 
     def stop_scanner(self) -> None:
         """Stop all scanner tasks."""
-        if self.task_galvo_etl is not None and self.task_camera is not None:
-            self.task_camera.stop()
-            self.task_galvo_etl.stop()
+        if self.task_camera is not None:
+            with contextlib.suppress(Exception):
+                self.task_camera.stop()
+        if self.task_galvo_etl is not None:
+            with contextlib.suppress(Exception):
+                self.task_galvo_etl.stop()
 
     def delete_scanner(self) -> None:
         """Close and clear all scanner task handles."""
-        if self.task_galvo_etl is not None and self.task_camera is not None:
-            self.task_camera.close()
+        if self.task_camera is not None:
+            with contextlib.suppress(Exception):
+                self.task_camera.close()
             self.task_camera = None
-            self.task_galvo_etl.close()
+        if self.task_galvo_etl is not None:
+            with contextlib.suppress(Exception):
+                self.task_galvo_etl.close()
             self.task_galvo_etl = None
 
     def _cleanup_scanner_tasks(self) -> None:

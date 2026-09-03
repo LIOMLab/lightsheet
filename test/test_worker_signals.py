@@ -60,6 +60,10 @@ class _PreviewShell:
         self.estop_event = threading.Event()
         self._fs = Mock()
         self.sig_message = Mock()
+        # Auto-laser flags pre-sampled on the GUI thread; default to False so
+        # the continuous-mode L1-only guard does not energize L2 in tests.
+        self._auto_laser1 = False
+        self._auto_laser2 = False
 
 
 def test_preview_worker_finished_emits_exactly_once_normal(qtbot: QtBot) -> None:
