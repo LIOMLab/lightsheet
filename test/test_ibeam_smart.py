@@ -392,6 +392,27 @@ def test_ibeam_smart_get_output_power_returns_none_on_empty_response() -> None:
     )
 
 
+def test_ibeam_smart_output_power_none_on_zero_with_analog_ceiling() -> None:
+    """When an analog ceiling is configured and the firmware reports 0 uW,
+    ``get_output_power()`` returns ``None`` so the GUI does not display a
+    live 0.0 mW reading for a laser that is off or not yet emitting."""
+    with patch("lightsheet.hal.real.ibeam_smart.serial.Serial") as MockSerial:
+        mock_ser = MagicMock()
+        MockSerial.return_value = mock_ser
+        mock_ser.readline.return_value = b"[OK]\r\n"
+        adapter = ibeam_smart_mod.IBeamSmartLaser(analog_ceiling_mw=75.0)
+        adapter._ibeam.open()
+    mock_ser.readline.side_effect = [
+        b"CH1, PWR: 0.000 mW\r\n",
+        b"CMD>\r\n",
+    ]
+    result = adapter.get_output_power()
+    assert result is None, (
+        "get_output_power must return None when an analog ceiling is set and "
+        "the readback is 0 uW"
+    )
+
+
 # --------------------------------------------------------------------------- #
 # open() / close(): delegate to inner IBeam, mirror error surface onto adapter.
 # --------------------------------------------------------------------------- #

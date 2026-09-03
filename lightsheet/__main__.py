@@ -225,7 +225,7 @@ def main() -> int:
     # Preload nicaiu.dll before Qt DLLs load -- Qt corrupts the
     # NI-DAQmx driver's internal state if loaded first. Windows-only;
     # skipped in demo mode (no DAQmx task is ever created).
-    if sys.platform == "win32" and not demo:
+    if sys.platform == "win32" and not demo:  # pragma: no cover
         try:
             import ctypes
 
@@ -256,7 +256,7 @@ def main() -> int:
         import nidaqmx
         from nidaqmx.errors import DaqResourceWarning
 
-        def _safe_task_del(self: object) -> None:
+        def _safe_task_del(self: object) -> None:  # pragma: no cover
             # A task that was explicitly closed has _handle = None. A task that
             # should not be auto-closed has _close_on_exit = False. In both cases
             # the original library would not warn, so mirror that contract here.
@@ -273,7 +273,7 @@ def main() -> int:
             )
 
         nidaqmx.Task.__del__ = _safe_task_del  # type: ignore[attr-defined]
-    except Exception:
+    except Exception:  # pragma: no cover
         # nidaqmx not installed (macOS dev path uses the conftest stub) — skip.
         pass
 

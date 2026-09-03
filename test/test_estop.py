@@ -30,6 +30,10 @@ it — the single most safety-critical regression risk.
 """
 
 import threading
+from typing import Any
+from unittest.mock import patch
+
+from _helpers.controller_fixture import make_controller
 
 
 def test_estop_event_starts_clear() -> None:
@@ -168,3 +172,132 @@ def test_focus_dock_controller_has_no_estop_method() -> None:
             f"FocusDockController must NOT declare a {name} method — "
             "the E-stop kill path stays in the shell."
         )
+
+
+# --------------------------------------------------------------------------- #
+# Adaptive focus E-stop poll points
+# --------------------------------------------------------------------------- #
+
+
+def _autofocus_cfg(**overrides: Any) -> Any:
+    """A standard per-plane autofocus config with cadence 1."""
+    from lightsheet.focus.types import AutofocusConfig
+
+    defaults: dict[str, Any] = dict(
+        enabled=True,
+        cadence=1,
+        residual_gain_mm=0.05,
+        max_residual_mm=0.5,
+        smoothing=0.5,
+        use_curve_seed=False,
+    )
+    defaults.update(overrides)
+    return AutofocusConfig(**defaults)
+
+
+def _configure_autofocus_stack_plan(
+    ctrl: Any, tmp_path: Any, n_planes: int = 3
+) -> None:
+    """Configure a valid 3-plane single-channel stack plan for autofocus."""
+    ctrl.saving_allowed = True
+    ctrl.number_of_planes = n_planes
+    ctrl.stack_mode_started = True
+    ctrl.stack_starting_plane = 0.0
+    ctrl.stack_step = 10.0
+    ctrl.save_format = "hdf5"
+    ctrl.save_directory = str(tmp_path)
+    ctrl.save_filepath = str(tmp_path / "estop_autofocus")
+    ctrl.save_description = "autofocus estop sample"
+    ctrl.current_horizontal_position_text = "0.0"
+    ctrl.current_vertical_position_text = "0.0"
+    ctrl.current_camera_position_text = "0.0"
+    ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
+    ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
+
+
+def _make_autofocus_worker(ctrl: Any, **overrides: Any) -> Any:
+    """Build a single-channel StackWorker with the supplied autofocus config."""
+    from lightsheet.gui.workers import StackWorker
+
+    return StackWorker(
+        ctrl._bundle,
+        ctrl._hw,
+        ctrl,
+        save_description="autofocus estop sample",
+        save_stitch_blend=False,
+        save_all_crop=False,
+        save_all_full=False,
+        multi_channel=False,
+        adaptive_cfg=None,
+        autofocus_cfg=_autofocus_cfg(**overrides),
+    )
+
+
+def test_autofocus_estop_after_first_move_prevents_acquire(
+    qtbot: Any, request: Any, tmp_path: Any
+) -> None:
+    """Setting the E-stop after the first adaptive focus move prevents the
+    frame acquisition from running and the loop breaks cleanly."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=3)
+
+    worker = _make_autofocus_worker(ctrl)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    real_parallel = worker.motors.move_axes_parallel
+    parallel_calls: list[list[tuple[str, float, str]]] = []
+
+    def _track_and_stop(moves: list[tuple[str, float, str]]) -> None:
+        # Trip the E-stop on the very first dual-axis focus move.
+        if len(parallel_calls) == 0:
+            ctrl.estop_event.set()
+        parallel_calls.append(list(moves))
+        real_parallel(moves)
+
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    with (
+        patch.object(worker, "acquire_scan") as mock_acquire,
+        patch.object(worker.motors, "move_axes_parallel", _track_and_stop),
+    ):
+        mock_acquire.return_value = True
+        worker.run()
+
+    try:
+        assert len(finished_emits) == 1
+        assert len(parallel_calls) == 1
+        assert mock_acquire.call_count == 0, (
+            "E-stop before acquire must prevent the scan from starting"
+        )
+    finally:
+        ctrl.estop_event.clear()
+
+
+def test_autofocus_estop_set_before_acquire_breaks_loop(
+    qtbot: Any, request: Any, tmp_path: Any
+) -> None:
+    """If the E-stop is already actuated, the adaptive focus loop breaks
+    before any motor move or laser/arming acquire step."""
+    ctrl, _bundle = make_controller(qtbot, request)
+    _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=3)
+
+    worker = _make_autofocus_worker(ctrl)
+    ctrl.estop_event.set()
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    with (
+        patch.object(worker, "acquire_scan") as mock_acquire,
+        patch.object(worker.motors, "move_axes_parallel") as mock_parallel,
+    ):
+        worker.run()
+
+    try:
+        assert len(finished_emits) == 1
+        assert mock_parallel.call_count == 0
+        assert mock_acquire.call_count == 0
+    finally:
+        ctrl.estop_event.clear()

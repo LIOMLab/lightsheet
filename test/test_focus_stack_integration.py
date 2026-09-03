@@ -21,6 +21,8 @@ import pytest
 
 pytest.importorskip("PySide6")
 
+from _helpers.controller_fixture import make_controller  # noqa: I001
+
 
 # --------------------------------------------------------------------- #
 # Helpers
@@ -99,6 +101,7 @@ def _make_worker(
     focus_curve: Any | None = None,
     autofocus_cfg: Any | None = None,
     autofocus_curve: Any | None = None,
+    multi_channel: bool = False,
 ) -> Any:
     """Build a StackWorker with the supplied focus/autofocus config and curve."""
     from lightsheet.gui.workers import StackWorker
@@ -111,7 +114,7 @@ def _make_worker(
         save_stitch_blend=False,
         save_all_crop=False,
         save_all_full=False,
-        multi_channel=False,
+        multi_channel=multi_channel,
         adaptive_cfg=None,
         focus_cfg=focus_cfg,
         focus_curve=focus_curve,
@@ -814,4 +817,71 @@ def test_autofocus_estop_breaks_loop(qtbot: Any, request: Any, tmp_path: Path) -
     assert len(finished_emits) == 1
     assert mock_acquire.call_count == 2, (
         f"E-stop must prevent further acquires; got {mock_acquire.call_count}"
+    )
+
+
+def test_autofocus_multi_channel_uses_same_camera_position_and_last_channel_update(
+    qtbot: Any, request: Any, tmp_path: Path
+) -> None:
+    """In multi-channel mode, both channels use the same predicted camera
+    position and the residual is updated once per main plane from the last
+    channel's acquired frame."""
+    from lightsheet.focus.adaptive_controller import AdaptiveFocusController
+
+    ctrl, _bundle = make_controller(qtbot, request)
+    _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=2)
+
+    worker = _make_worker(ctrl, autofocus_cfg=_autofocus_cfg(), multi_channel=True)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    state = {"acq_index": 0}
+
+    def _fake_acquire_scan() -> bool:
+        n_imgs = worker.siggen.waveform_cycles or 1
+        imgs = worker.camera.copy_recorder_images(n_imgs)
+        frame = np.asarray(imgs[0])
+        frame[:] = 30000
+        worker._shell.reconstructed_frame = frame
+        state["acq_index"] += 1
+        return True
+
+    parallel_calls: list[list[tuple[str, float, str]]] = []
+    real_parallel = worker.motors.move_axes_parallel
+
+    def _track_parallel(moves: list[tuple[str, float, str]]) -> None:
+        parallel_calls.append(list(moves))
+        real_parallel(moves)
+
+    update_calls: list[tuple[float, float]] = []
+    real_update = AdaptiveFocusController.update
+
+    def _track_update(stage_pos_mm: float, sharpness: float) -> None:
+        update_calls.append((stage_pos_mm, sharpness))
+        real_update(worker._autofocus_controller, stage_pos_mm, sharpness)
+
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    with (
+        patch.object(worker, "acquire_scan", _fake_acquire_scan),
+        patch.object(worker.motors, "move_axes_parallel", _track_parallel),
+        patch.object(AdaptiveFocusController, "update", side_effect=_track_update),
+    ):
+        worker.run()
+
+    assert len(finished_emits) == 1
+    # One dual-axis move per main plane (before the two channel acquires).
+    assert len(parallel_calls) == 2
+    for i, moves in enumerate(parallel_calls):
+        assert any(m[0] == "camera" for m in moves), f"plane {i} missing camera move"
+    # The same camera target is used for both channels because there is
+    # only one focus move before the sequential channel acquisitions.
+    camera_targets = [next(m[1] for m in p if m[0] == "camera") for p in parallel_calls]
+    assert all(t == camera_targets[0] for t in camera_targets), (
+        f"camera targets differ across planes: {camera_targets}"
+    )
+    # Residual is updated once per main plane, using the sharpness from the
+    # last channel's frame (reconstructed_frame is aliased to channel 2).
+    assert len(update_calls) == 2, (
+        f"expected 2 residual updates; got {len(update_calls)}"
     )

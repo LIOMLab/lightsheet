@@ -9,6 +9,10 @@ curve/scatter/legend guards and the state-machine branches
 
 from __future__ import annotations
 
+from typing import Any
+from unittest.mock import patch
+
+import numpy as np
 import pytest
 from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
@@ -244,4 +248,153 @@ def test_adaptive_and_focus_share_title_bar_helper(
     )
     assert build_no_dbl_click_title_bar.__module__ == (
         "lightsheet.gui.coordinators.dock_utils"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Adaptive focus worker branches: over-travel and cadence
+# --------------------------------------------------------------------------- #
+
+
+def _autofocus_cfg(**overrides: Any) -> Any:
+    """A standard per-plane autofocus config for branch tests."""
+    from lightsheet.focus.types import AutofocusConfig
+
+    defaults: dict[str, Any] = dict(
+        enabled=True,
+        cadence=1,
+        residual_gain_mm=0.05,
+        max_residual_mm=0.5,
+        smoothing=0.5,
+        use_curve_seed=False,
+    )
+    defaults.update(overrides)
+    return AutofocusConfig(**defaults)
+
+
+def _configure_autofocus_stack_plan(
+    ctrl: Any, tmp_path: Any, n_planes: int = 4
+) -> None:
+    """Configure a valid 4-plane single-channel stack plan for autofocus."""
+    ctrl.saving_allowed = True
+    ctrl.number_of_planes = n_planes
+    ctrl.stack_mode_started = True
+    ctrl.stack_starting_plane = 0.0
+    ctrl.stack_step = 10.0
+    ctrl.save_format = "hdf5"
+    ctrl.save_directory = str(tmp_path)
+    ctrl.save_filepath = str(tmp_path / "autofocus_branches")
+    ctrl.save_description = "autofocus branch sample"
+    ctrl.current_horizontal_position_text = "0.0"
+    ctrl.current_vertical_position_text = "0.0"
+    ctrl.current_camera_position_text = "0.0"
+    ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
+    ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
+
+
+def _make_autofocus_worker(ctrl: Any, **overrides: Any) -> Any:
+    """Build a single-channel StackWorker with the supplied autofocus config."""
+    from lightsheet.gui.workers import StackWorker
+
+    return StackWorker(
+        ctrl._bundle,
+        ctrl._hw,
+        ctrl,
+        save_description="autofocus branch sample",
+        save_stitch_blend=False,
+        save_all_crop=False,
+        save_all_full=False,
+        multi_channel=False,
+        adaptive_cfg=None,
+        autofocus_cfg=_autofocus_cfg(**overrides),
+    )
+
+
+def _fake_acquire_scan(worker: Any, state: dict[str, Any]) -> Any:
+    """Return an ``acquire_scan`` stub that fills ``reconstructed_frame``
+    with a constant 30000 frame."""
+
+    def _acquire() -> bool:
+        n_imgs = worker.siggen.waveform_cycles or 1
+        imgs = worker.camera.copy_recorder_images(n_imgs)
+        frame = np.asarray(imgs[0])
+        frame[:] = 30000
+        worker._shell.reconstructed_frame = frame
+        state["acq_index"] += 1
+        return True
+
+    return _acquire
+
+
+def test_autofocus_over_travel_camera_axis_aborts_with_message_and_beep(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Any
+) -> None:
+    """A ``ValueError`` from ``move_axes_parallel`` on the camera axis
+    aborts the stack with the focus over-travel message and a beep."""
+    ctrl, _ = make_controller(qtbot, request)
+    _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
+
+    worker = _make_autofocus_worker(ctrl)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    messages: list[str] = []
+    beeps: list[None] = []
+    ctrl.sig_message.connect(messages.append)
+    ctrl.sig_beep.connect(lambda: beeps.append(None))
+
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    with (
+        patch.object(
+            worker, "acquire_scan", _fake_acquire_scan(worker, {"acq_index": 0})
+        ),
+        patch.object(
+            worker.motors,
+            "move_axes_parallel",
+            side_effect=ValueError("camera out of limits"),
+        ),
+    ):
+        worker.run()
+
+    assert len(finished_emits) == 1
+    assert len(beeps) >= 1, "expected at least one beep on over-travel abort"
+    focus_msgs = [m for m in messages if "Focus move rejected" in m]
+    assert len(focus_msgs) >= 1, f"expected over-travel message; got {messages}"
+
+
+def test_autofocus_cadence_two_updates_residual_twice(
+    qtbot: QtBot, request: FixtureRequest, tmp_path: Any
+) -> None:
+    """With ``cadence=2`` over 4 planes, the residual ``update()`` is
+    called exactly 2 times (planes 0 and 2)."""
+    from lightsheet.focus.adaptive_controller import AdaptiveFocusController
+
+    ctrl, _ = make_controller(qtbot, request)
+    _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
+
+    worker = _make_autofocus_worker(ctrl, cadence=2)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    update_calls: list[tuple[float, float]] = []
+    real_update = AdaptiveFocusController.update
+
+    def _track_update(stage_pos_mm: float, sharpness: float) -> None:
+        update_calls.append((stage_pos_mm, sharpness))
+        real_update(worker._autofocus_controller, stage_pos_mm, sharpness)
+
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    with (
+        patch.object(
+            worker, "acquire_scan", _fake_acquire_scan(worker, {"acq_index": 0})
+        ),
+        patch.object(AdaptiveFocusController, "update", side_effect=_track_update),
+    ):
+        worker.run()
+
+    assert len(finished_emits) == 1
+    assert len(update_calls) == 2, (
+        f"expected 2 residual update calls; got {len(update_calls)}"
     )

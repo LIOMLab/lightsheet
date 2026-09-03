@@ -738,9 +738,7 @@ def test_progress_update_shows_focus_running_badge(
     assert "2/5" in text
 
 
-def test_autofocus_group_widgets_exist(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_autofocus_group_widgets_exist(qtbot: QtBot, request: FixtureRequest) -> None:
     """The adaptive-autofocus control group and its child widgets exist with
     the UI-SPEC objectNames."""
     ctrl, _ = make_controller(qtbot, request)

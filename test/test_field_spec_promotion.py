@@ -72,6 +72,11 @@ _OBJNAME_TO_PANEL = {
     "doubleSpinBox_adaptiveLaser2MaxPower": "stack_panel",
     # stack_panel — focus compensation group
     "doubleSpinBox_focusBlockSize": "stack_panel",
+    # stack_panel — predictive adaptive-autofocus group
+    "doubleSpinBox_autofocusCadence": "stack_panel",
+    "doubleSpinBox_autofocusResidualGain": "stack_panel",
+    "doubleSpinBox_autofocusMaxResidual": "stack_panel",
+    "doubleSpinBox_autofocusSmoothing": "stack_panel",
 }
 
 # The fields that previously had QSlider siblings. The sliders were

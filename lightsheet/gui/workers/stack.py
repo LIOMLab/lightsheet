@@ -183,9 +183,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             and self._autofocus_cfg.use_curve_seed
             and self._autofocus_curve is None
         ):
-            raise ValueError(
-                "Autofocus curve seed enabled but no curve was loaded"
-            )
+            raise ValueError("Autofocus curve seed enabled but no curve was loaded")
 
     @Slot()
     def run(self) -> None:
@@ -283,9 +281,8 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 # publish the block size and residual settings as group attrs.
                 # When disabled, no focus trajectory is recorded or written.
                 focus_enabled = (
-                    (self._focus_cfg is not None and self._focus_cfg.enabled)
-                    or (self._autofocus_cfg is not None and self._autofocus_cfg.enabled)
-                )
+                    self._focus_cfg is not None and self._focus_cfg.enabled
+                ) or (self._autofocus_cfg is not None and self._autofocus_cfg.enabled)
                 # Pass the legacy FocusConfig as attrs when present; the
                 # per-plane autofocus path does not change the trajectory
                 # recorder schema, so only the legacy config is written.

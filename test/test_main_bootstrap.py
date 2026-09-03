@@ -22,6 +22,7 @@ import pytest
 
 from lightsheet.__main__ import (
     _build_demo_bundle,
+    _load_breeze_stylesheet,
     _show_missing_device_dialog,
 )
 from lightsheet.hal import (
@@ -373,3 +374,15 @@ def test_main_rig_path_unresolved_device_shows_dialog_and_exits(
     assert exc_info.value.code == 1
     assert dialog_called, "the missing-device dialog must be shown"
     assert "Device X not found" in dialog_called[0]
+
+
+def test_load_breeze_stylesheet_raises_on_missing_theme(
+    qtbot: pytest.QtBot,  # type: ignore[unresolved-attribute]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_load_breeze_stylesheet raises FileNotFoundError for an unknown theme
+    resource so the error branch (line 35-39) is covered."""
+    pytest.importorskip("PySide6")
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    with pytest.raises(FileNotFoundError):
+        _load_breeze_stylesheet("nonexistent")

@@ -838,3 +838,42 @@ def test_controller_theme_non_string_rejected_both_tiers() -> None:
             _construct_model(
                 cls, **{"Units": "mm", "Image File Format": "hdf5", "Theme": 123}
             )
+
+
+# --------------------------------------------------------------------------- #
+# Camera settings — shutter mode validator branch coverage
+# --------------------------------------------------------------------------- #
+
+
+def _valid_camera_dict(shutter_mode: str = "Rolling") -> dict[str, Any]:
+    """Return a valid [Camera] dict for the strict/overlay tiers."""
+    return {
+        "Shutter Mode": shutter_mode,
+        "Exposure Time": 100,
+        "Lightsheet Line Time": 100.0,
+        "Lightsheet Exposed Lines": 25,
+        "Lightsheet Delay Lines": 225,
+        "Recorder Timeout": 15,
+        "Recorder Timeout Floor": 5,
+        "Recorder Timeout Safety Factor": 3.0,
+    }
+
+
+def test_camera_settings_accepts_allowed_shutter_modes() -> None:
+    """CameraSettings accepts Rolling, Lightsheet, and Global shutter modes."""
+    from lightsheet.config_schema import CameraSettings, CameraSettingsOverlay
+
+    for mode in ("Rolling", "Lightsheet", "Global"):
+        for cls in (CameraSettings, CameraSettingsOverlay):
+            cfg = _construct_model(cls, **_valid_camera_dict(shutter_mode=mode))
+            assert cfg.shutter_mode == mode
+
+
+def test_camera_settings_rejects_invalid_shutter_mode() -> None:
+    """CameraSettings rejects a shutter mode outside the allowed set."""
+    from lightsheet.config_schema import CameraSettings, CameraSettingsOverlay
+
+    for cls in (CameraSettings, CameraSettingsOverlay):
+        with pytest.raises(ValidationError) as exc_info:
+            _construct_model(cls, **_valid_camera_dict(shutter_mode="Invalid"))
+        assert "Shutter Mode" in str(exc_info.value)

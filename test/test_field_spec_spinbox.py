@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 pytest.importorskip("PySide6")
 
 
-# Canonical 22 objectName keys from the UI-SPEC FieldSpec Policy Table.
+# Canonical 35 objectName keys from the UI-SPEC FieldSpec Policy Table.
 EXPECTED_FIELD_SPEC_KEYS = [
     "doubleSpinBox_sampleSetHPosition",
     "doubleSpinBox_sampleSetVPosition",
@@ -59,6 +59,11 @@ EXPECTED_FIELD_SPEC_KEYS = [
     "doubleSpinBox_adaptiveLaser2MaxPower",
     # Stack panel — focus compensation group
     "doubleSpinBox_focusBlockSize",
+    # Stack panel — predictive adaptive-autofocus group
+    "doubleSpinBox_autofocusCadence",
+    "doubleSpinBox_autofocusResidualGain",
+    "doubleSpinBox_autofocusMaxResidual",
+    "doubleSpinBox_autofocusSmoothing",
 ]
 
 
@@ -429,14 +434,14 @@ def test_step_by_negative_with_modifier_decrements(
 
 
 # ---------------------------------------------------------------------------
-# FIELD_SPECS table — 31 canonical entries
+# FIELD_SPECS table — 35 canonical entries
 # ---------------------------------------------------------------------------
 
 
 def test_field_specs_has_all_canonical_keys() -> None:
     from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 
-    assert len(FIELD_SPECS) == 31
+    assert len(FIELD_SPECS) == 35
     for key in EXPECTED_FIELD_SPEC_KEYS:
         assert key in FIELD_SPECS, f"missing key: {key}"
 
@@ -508,4 +513,4 @@ def test_field_spec_reexported_from_spinbox_module() -> None:
     from lightsheet.gui.widgets.field_spec_spinbox import FIELD_SPECS, FieldSpec
 
     assert FieldSpec is not None
-    assert len(FIELD_SPECS) == 31
+    assert len(FIELD_SPECS) == 35

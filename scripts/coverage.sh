@@ -91,7 +91,7 @@ cd "${REPO_ROOT}"
 _XDIST_TIMEOUT=90
 _run_cov_xdist() {
   uv run pytest -q --cov=lightsheet --cov-branch \
-    -o "addopts=--strict-markers -n auto --maxprocesses=6"
+    -o "addopts=--strict-markers -n auto --maxprocesses=6 --dist=load --max-worker-restart=0"
 }
 _run_cov_serial() {
   uv run pytest -q --cov=lightsheet --cov-branch \
