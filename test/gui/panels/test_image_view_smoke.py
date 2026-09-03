@@ -10,8 +10,12 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from pytest import FixtureRequest
+from typing import TYPE_CHECKING
+
 from pytestqt.qtbot import QtBot
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 pytest.importorskip("PySide6")
 
@@ -208,14 +212,10 @@ def test_levels_driven_clamp(qtbot: QtBot) -> None:
     assert 100 <= v2 <= 155, f"midpoint pixel should be ~127, got {v2}"
 
 
-def test_levels_readout_updates(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_levels_readout_updates(qtbot: QtBot, controller: Controller_MainWindow) -> None:
     """After setImage, the live min/max QLabel readout shows the frame's
     actual pixel range (not the display window)."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     import numpy as np
 
     frame = np.zeros((10, 10), dtype=np.uint16)
@@ -229,14 +229,10 @@ def test_levels_readout_updates(qtbot: QtBot, request: FixtureRequest) -> None:
     assert "5678" in text, f"readout missing frame max: {text!r}"
 
 
-def test_levels_bar_wired_to_image_view(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_levels_bar_wired_to_image_view(qtbot: QtBot, controller: Controller_MainWindow) -> None:
     """Dragging the LevelsBar handles updates the ImageView display
     window via the shell's sig_levelsChanged → set_levels wiring."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     import numpy as np
 
     frame = np.zeros((10, 10), dtype=np.uint16)

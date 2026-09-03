@@ -17,20 +17,22 @@ colors (green/gray/red) matching ``label_estopStatus``.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from _helpers.controller_fixture import make_controller
-from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
 
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
 _CONTROLLER_PATH = (
-    Path(__file__).resolve().parents[1]
+    Path(__file__).resolve().parents[3]
     / "lightsheet"
     / "gui"
     / "shell"
     / "controller.py"
 )
 _UI_PATH = (
-    Path(__file__).resolve().parents[1]
+    Path(__file__).resolve().parents[3]
     / "lightsheet"
     / "gui"
     / "panels"
@@ -95,33 +97,33 @@ def test_controller_no_programmatic_laser_status_labels() -> None:
 
 
 def test_label_laserOneStatus_minimum_width_in_ui(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     label = ctrl.laser_panel.ui.label_laserOneStatus
     assert label.minimumWidth() >= 140
 
 
 def test_label_laserOneReadback_minimum_width_in_ui(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     label = ctrl.laser_panel.ui.label_laserOneReadback
     assert label.minimumWidth() >= 80
 
 
 def test_label_laserTwoStatus_minimum_width_in_ui(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     label = ctrl.laser_panel.ui.label_laserTwoStatus
     assert label.minimumWidth() >= 140
 
 
 def test_label_laserTwoReadback_minimum_width_in_ui(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     label = ctrl.laser_panel.ui.label_laserTwoReadback
     assert label.minimumWidth() >= 80
 
@@ -132,9 +134,9 @@ def test_label_laserTwoReadback_minimum_width_in_ui(
 
 
 def test_updateUi_laser_status_active_green(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.laser_panel.updateUi_laser_status(0, "active")
     label = ctrl.laser_panel.ui.label_laserOneStatus
     assert label.text() == "\u25cf ON"
@@ -142,17 +144,17 @@ def test_updateUi_laser_status_active_green(
 
 
 def test_updateUi_laser_status_inactive_gray(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.laser_panel.updateUi_laser_status(0, "inactive")
     label = ctrl.laser_panel.ui.label_laserOneStatus
     assert label.text() == "\u25cb OFF"
     assert "#8E8E93" in label.styleSheet()
 
 
-def test_updateUi_laser_status_error_red(qtbot: QtBot, request: FixtureRequest) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+def test_updateUi_laser_status_error_red(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+    ctrl = controller
     ctrl.laser_panel.updateUi_laser_status(1, "error")
     label = ctrl.laser_panel.ui.label_laserTwoStatus
     assert label.text() == "\u26a0 FAULT"
@@ -169,7 +171,7 @@ def test_laser_panel_slots_reference_panel_local_ui() -> None:
     reference ``self.ui.label_laser*`` (panel-local), not
     ``self._shell.label_laser*`` (the old cross-panel reach)."""
     src = (
-        Path(__file__).resolve().parents[1]
+        Path(__file__).resolve().parents[3]
         / "lightsheet"
         / "gui"
         / "panels"
@@ -192,8 +194,8 @@ def test_laser_panel_slots_reference_panel_local_ui() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_sig_laser_status_connected(qtbot: QtBot, request: FixtureRequest) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+def test_sig_laser_status_connected(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+    ctrl = controller
     seen = {"status": None}
 
     def _spy(idx: int, status: str) -> None:
@@ -208,8 +210,8 @@ def test_sig_laser_status_connected(qtbot: QtBot, request: FixtureRequest) -> No
     assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "\u25cf ON"
 
 
-def test_sig_laser_readback_connected(qtbot: QtBot, request: FixtureRequest) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+def test_sig_laser_readback_connected(qtbot: QtBot, controller: Controller_MainWindow) -> None:
+    ctrl = controller
     seen = {"rb": None}
 
     def _spy(idx: int, text: str, tooltip: str) -> None:
@@ -222,9 +224,9 @@ def test_sig_laser_readback_connected(qtbot: QtBot, request: FixtureRequest) -> 
 
 
 def test_pushButton_laserTwoRefresh_clicked_connected(
-    qtbot: QtBot, request: FixtureRequest
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     btn = ctrl.laser_panel.ui.pushButton_laserTwoRefresh
     # Wire a spy slot alongside the real one and click — the spy firing
     # proves the clicked signal is connected (the real slot also runs and
@@ -239,11 +241,11 @@ def test_pushButton_laserTwoRefresh_clicked_connected(
     assert seen["clicked"] is True, "pushButton_laserTwoRefresh.clicked must fire"
 
 
-def test_refresh_button_emits_via_slot(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_refresh_button_emits_via_slot(qtbot: QtBot, controller: Controller_MainWindow) -> None:
     """Clicking Refresh Power routes to the laser panel refresh slot, which
     calls the hardware manager readback/poll helpers. Patch those helpers to
     assert the wiring end-to-end without a real serial round-trip."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     called = {"poll": False, "refresh": False}
 
     def _fake_refresh_async() -> None:
