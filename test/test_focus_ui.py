@@ -33,7 +33,7 @@ pytest.importorskip("PySide6")
 
 from _helpers.controller_fixture import make_controller
 
-from lightsheet.focus.types import FocusConfig, FocusCurve
+from lightsheet.focus.types import AutofocusConfig, FocusConfig, FocusCurve
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
 
 if TYPE_CHECKING:
@@ -53,6 +53,20 @@ FOCUS_WIDGET_NAMES = (
     "label_focusStatus",
     "label_focusBlockHint",
     "label_focusXAxisVariable",
+)
+
+AUTOFOCUS_WIDGET_NAMES = (
+    "checkBox_adaptiveAutofocus",
+    "line_autofocusSeparator",
+    "widget_adaptiveAutofocusFields",
+    "doubleSpinBox_autofocusCadence",
+    "doubleSpinBox_autofocusResidualGain",
+    "doubleSpinBox_autofocusMaxResidual",
+    "doubleSpinBox_autofocusSmoothing",
+    "checkBox_autofocusUseCurve",
+    "label_autofocusStatus",
+    "label_autofocusHint",
+    "progressBar_autofocus",
 )
 
 
@@ -722,3 +736,99 @@ def test_progress_update_shows_focus_running_badge(
     text = ctrl.ui.label_modeBadge.text()
     assert "FOCUS RUNNING" in text
     assert "2/5" in text
+
+
+def test_autofocus_group_widgets_exist(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """The adaptive-autofocus control group and its child widgets exist with
+    the UI-SPEC objectNames."""
+    ctrl, _ = make_controller(qtbot, request)
+    ui = _focus_ui(ctrl)
+    for name in AUTOFOCUS_WIDGET_NAMES:
+        assert hasattr(ui, name), f"missing autofocus widget {name}"
+
+
+def test_build_autofocus_config_returns_none_when_disabled(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """build_autofocus_config returns None when adaptive is unchecked."""
+    ctrl, _ = make_controller(qtbot, request)
+    ui = _focus_ui(ctrl)
+    ui.checkBox_adaptiveAutofocus.setChecked(False)
+    assert ctrl.stack_panel.build_autofocus_config() is None
+
+
+def test_build_autofocus_config_returns_frozen_values_when_enabled(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """build_autofocus_config returns a frozen AutofocusConfig with the
+    current widget values when adaptive is checked."""
+    ctrl, _ = make_controller(qtbot, request)
+    ui = _focus_ui(ctrl)
+    ui.checkBox_adaptiveAutofocus.setChecked(True)
+    ui.checkBox_adaptiveAutofocus.toggled.emit(True)
+    ui.doubleSpinBox_autofocusCadence.setValue(5.0)
+    ui.doubleSpinBox_autofocusResidualGain.setValue(0.100)
+    ui.doubleSpinBox_autofocusMaxResidual.setValue(1.000)
+    ui.doubleSpinBox_autofocusSmoothing.setValue(0.250)
+    cfg = ctrl.stack_panel.build_autofocus_config()
+    assert cfg is not None
+    assert isinstance(cfg, AutofocusConfig)
+    assert cfg.enabled is True
+    assert cfg.cadence == 5
+    assert cfg.residual_gain_mm == pytest.approx(0.1)
+    assert cfg.max_residual_mm == pytest.approx(1.0)
+    assert cfg.smoothing == pytest.approx(0.25)
+    assert cfg.use_curve_seed is False
+    with pytest.raises(AttributeError):
+        setattr(cfg, "cadence", 99)  # noqa: B010
+
+
+@pytest.mark.parametrize(
+    "sb_name,low,high",
+    [
+        ("doubleSpinBox_autofocusCadence", 1.0, 1000.0),
+        ("doubleSpinBox_autofocusResidualGain", 0.0, 1.0),
+        ("doubleSpinBox_autofocusMaxResidual", 0.0, 5.0),
+        ("doubleSpinBox_autofocusSmoothing", 0.0, 1.0),
+    ],
+)
+def test_autofocus_spinbox_out_of_range_reverts_and_beeps(
+    qtbot: QtBot,
+    request: FixtureRequest,
+    sb_name: str,
+    low: float,
+    high: float,
+) -> None:
+    """editingFinished on the four adaptive spinboxes beeps and clamps
+    out-of-range values to the FieldSpec bounds."""
+    ctrl, _ = make_controller(qtbot, request)
+    sb = getattr(_focus_ui(ctrl), sb_name)
+    beeps: list[None] = []
+    ctrl.sig_beep.connect(lambda: beeps.append(None))
+    # Widen the range temporarily so the test can inject an out-of-range value.
+    sb.setRange(low - 10, high + 10)
+    sb.setValue(low - 1)
+    sb.editingFinished.emit()
+    assert sb.value() == low, f"expected low bound {low}, got {sb.value()}"
+    assert len(beeps) == 1, "out-of-range low must beep"
+    beeps.clear()
+    sb.setRange(low - 10, high + 10)
+    sb.setValue(high + 1)
+    sb.editingFinished.emit()
+    assert sb.value() == high, f"expected high bound {high}, got {sb.value()}"
+    assert len(beeps) == 1, "out-of-range high must beep"
+
+
+def test_autofocus_use_curve_disabled_when_no_curve_armed(
+    qtbot: QtBot, request: FixtureRequest
+) -> None:
+    """checkBox_autofocusUseCurve is disabled and unchecked when no focus
+    curve is armed."""
+    ctrl, _ = make_controller(qtbot, request)
+    # Demo mode may pre-load a sample curve; explicitly disarm it.
+    ctrl.stack_panel._clear_focus_armed()
+    cb = _focus_ui(ctrl).checkBox_autofocusUseCurve
+    assert not cb.isEnabled()
+    assert not cb.isChecked()
