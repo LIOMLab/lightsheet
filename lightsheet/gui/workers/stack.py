@@ -20,8 +20,13 @@ from lightsheet.hal.bundle import DeviceBundle
 if TYPE_CHECKING:
     from lightsheet.adaptive.controller import AdaptiveController
     from lightsheet.adaptive.types import AdaptiveCommand, AdaptiveConfig
+    from lightsheet.focus.adaptive_controller import AdaptiveFocusController
     from lightsheet.focus.controller import FocusController
-    from lightsheet.focus.types import FocusConfig, FocusCurve
+    from lightsheet.focus.types import (
+        AutofocusConfig,
+        FocusConfig,
+        FocusCurve,
+    )
     from lightsheet.gui.coordinators.hardware_manager import HardwareManager
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
@@ -74,6 +79,11 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
     # Emitted once per focus block boundary for the GUI-thread trajectory
     # plot (the worker NEVER calls pyqtgraph directly).
     sig_focus_trajectory = Signal(int, float, float, float, float)
+    # Autofocus status signal: plane, n_planes, predicted_camera_pos_mm,
+    # residual_mm, sharpness, state. Emitted once per plane so the
+    # GUI-thread status label and progress bar update without the worker
+    # touching Qt widgets directly.
+    sig_autofocus_status = Signal(int, int, float, float, float, str)
 
     def __init__(
         self,
@@ -88,6 +98,8 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         adaptive_cfg: AdaptiveConfig | None = None,
         focus_cfg: FocusConfig | None = None,
         focus_curve: FocusCurve | None = None,
+        autofocus_cfg: AutofocusConfig | None = None,
+        autofocus_curve: FocusCurve | None = None,
     ) -> None:
         super().__init__()
         self.camera = bundle.camera
@@ -158,6 +170,21 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         ):
             raise ValueError(
                 "Focus compensation enabled but no calibration curve was loaded"
+            )
+        # Per-plane adaptive autofocus config and optional curve seed.
+        # The frozen dataclass is safe to share across threads; the curve
+        # is only required when ``use_curve_seed`` is True.
+        self._autofocus_cfg: AutofocusConfig | None = autofocus_cfg
+        self._autofocus_curve: FocusCurve | None = autofocus_curve
+        self._autofocus_controller: AdaptiveFocusController | None = None
+        if (
+            self._autofocus_cfg is not None
+            and self._autofocus_cfg.enabled
+            and self._autofocus_cfg.use_curve_seed
+            and self._autofocus_curve is None
+        ):
+            raise ValueError(
+                "Autofocus curve seed enabled but no curve was loaded"
             )
 
     @Slot()
@@ -255,7 +282,13 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 # The frozen FocusConfig is passed through so the writers
                 # publish the block size and residual settings as group attrs.
                 # When disabled, no focus trajectory is recorded or written.
-                focus_enabled = self._focus_cfg is not None and self._focus_cfg.enabled
+                focus_enabled = (
+                    (self._focus_cfg is not None and self._focus_cfg.enabled)
+                    or (self._autofocus_cfg is not None and self._autofocus_cfg.enabled)
+                )
+                # Pass the legacy FocusConfig as attrs when present; the
+                # per-plane autofocus path does not change the trajectory
+                # recorder schema, so only the legacy config is written.
                 self._shell._fs.configure_focus(  # ty: ignore[unresolved-attribute]
                     focus_enabled,
                     config=self._focus_cfg if focus_enabled else None,
@@ -349,14 +382,15 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     laser2_mw=current_powers[1],
                 )
 
-            # Focus control setup: construct the controller from the
-            # pre-sampled frozen FocusConfig and FocusCurve, reading the
-            # camera travel limits from the HAL (not the UI). When focus is
-            # off (cfg is None or disabled), no controller is constructed
-            # and the per-plane loop runs the existing fixed stack path
-            # unchanged.
+            # Focus control setup: read the camera travel limits once,
+            # then construct either the block-based legacy FocusController,
+            # the per-plane AdaptiveFocusController, or neither. When both
+            # are off, the per-plane loop runs the existing fixed stack path.
             self._focus_controller = None
             self._focus_block_count = 0
+            self._autofocus_controller = None
+            cam_lo_mm = self.motors.camera.get_limit_low("mm")
+            cam_hi_mm = self.motors.camera.get_limit_high("mm")
             if self._focus_cfg is not None and self._focus_cfg.enabled:
                 if self._focus_curve is None:
                     raise ValueError(
@@ -364,13 +398,31 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     )
                 from lightsheet.focus.controller import FocusController
 
-                cam_lo_mm = self.motors.camera.get_limit_low("mm")
-                cam_hi_mm = self.motors.camera.get_limit_high("mm")
                 self._focus_controller = FocusController(
                     self._focus_cfg,
                     self._focus_curve,
                     cam_lo_mm,
                     cam_hi_mm,
+                )
+
+            # Per-plane adaptive autofocus setup: construct the
+            # controller from the camera travel limits, the optional curve
+            # seed, and the current camera position. When autofocus is off,
+            # no controller is constructed and the per-plane loop runs the
+            # existing fixed or block focus path unchanged.
+            if self._autofocus_cfg is not None and self._autofocus_cfg.enabled:
+                from lightsheet.focus.adaptive_controller import AdaptiveFocusController
+
+                try:
+                    cam_pos_mm = self.motors.camera.get_position("mm")
+                except Exception:
+                    cam_pos_mm = 0.0
+                self._autofocus_controller = AdaptiveFocusController(
+                    self._autofocus_cfg,
+                    cam_lo_mm,
+                    cam_hi_mm,
+                    curve=self._autofocus_curve,
+                    seed_camera_pos_mm=cam_pos_mm,
                 )
 
             for plane in range(n_planes):
@@ -402,7 +454,58 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     )  # ty: ignore[unsupported-operator]
                     stage_pos_mm = position / 1000.0  # um -> mm
 
-                    if (
+                    autofocus_focus_pos_mm: float | None = None
+
+                    if self._autofocus_controller is not None:
+                        # Per-plane autofocus: compute the camera target,
+                        # move both axes in parallel, and let the
+                        # post-acquire block record the sample and update
+                        # the residual for the next plane.
+                        autofocus_focus_pos_mm = self._autofocus_controller.target(
+                            stage_pos_mm
+                        )
+
+                        if (
+                            not self._shell.stack_mode_started
+                            or self._shell.estop_event.is_set()
+                        ):
+                            break
+
+                        try:
+                            self.motors.move_axes_parallel(
+                                [
+                                    ("horizontal", position, "\u03bcm"),
+                                    ("camera", autofocus_focus_pos_mm, "mm"),
+                                ]
+                            )
+                        except ValueError:
+                            self._shell.sig_message.emit(
+                                f"Focus move rejected at plane {plane}: camera target "
+                                f"{autofocus_focus_pos_mm:.3f} mm is outside travel "
+                                "limits. Stack acquisition aborted."
+                            )
+                            self._shell.sig_beep.emit()
+                            self.sig_autofocus_status.emit(
+                                plane,
+                                n_planes,
+                                autofocus_focus_pos_mm,
+                                self._autofocus_controller.residual_mm,
+                                0.0,
+                                "error",
+                            )
+                            break
+
+                        self._shell.sig_refresh_position_horizontal.emit()
+                        self._shell.sig_refresh_position_camera.emit()
+
+                        if self._shell.saving_allowed:
+                            self._shell._fs.add_motor_parameters(  # ty: ignore[unresolved-attribute]
+                                self._shell.current_horizontal_position_text,
+                                self._shell.current_vertical_position_text,
+                                self._shell.current_camera_position_text,
+                            )
+
+                    elif (
                         self._focus_controller is not None
                         and self._focus_cfg is not None
                         and self._focus_curve is not None
@@ -672,6 +775,72 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                                 self._shell.sig_message.emit(
                                     "Saving Reconstructed Image"
                                 )
+
+                    # Per-plane autofocus: record the focus sample, emit
+                    # the trajectory and status signals, and update the
+                    # residual for the next plane. This is intentionally
+                    # placed after the frame has been acquired and the
+                    # adaptive power sample has been recorded.
+                    if (
+                        self._autofocus_controller is not None
+                        and autofocus_focus_pos_mm is not None
+                    ):
+                        from lightsheet.focus.sharpness import frame_sharpness_variance
+                        from lightsheet.focus.types import FocusSample
+
+                        focus_frame = self._shell.reconstructed_frame
+                        exposure = (
+                            self._adaptive_current_cmd.exposure_s
+                            if self._adaptive_current_cmd is not None
+                            else self.camera.exposure_time
+                        )
+                        sharp = frame_sharpness_variance(focus_frame) / max(
+                            exposure, 1e-9
+                        )
+
+                        feedforward = self._autofocus_controller.feedforward(
+                            stage_pos_mm
+                        )
+                        residual = self._autofocus_controller.residual_mm
+
+                        focus_sample = FocusSample(
+                            block_index=plane,
+                            stage_pos_mm=stage_pos_mm,
+                            feedforward_camera_pos_mm=feedforward,
+                            residual_mm=residual,
+                            applied_camera_pos_mm=autofocus_focus_pos_mm,
+                            sharpness_metric=sharp,
+                        )
+                        if self._shell.saving_allowed:
+                            self._shell._fs.record_focus_sample(  # ty: ignore[unresolved-attribute]
+                                focus_sample
+                            )
+                        self.sig_focus_trajectory.emit(
+                            plane,
+                            stage_pos_mm,
+                            feedforward,
+                            residual,
+                            autofocus_focus_pos_mm,
+                        )
+
+                        max_residual = self._autofocus_cfg.max_residual_mm
+                        if self._autofocus_controller._predicted_sharpness is None:
+                            state = "waiting"
+                        elif abs(residual) >= max_residual - 1e-9:
+                            state = "clamped"
+                        else:
+                            state = "tracking"
+                        self.sig_autofocus_status.emit(
+                            plane,
+                            n_planes,
+                            autofocus_focus_pos_mm,
+                            residual,
+                            sharp,
+                            state,
+                        )
+
+                        if (plane % self._autofocus_cfg.cadence) == 0:
+                            self._autofocus_controller.update(stage_pos_mm, sharp)
 
                     # Update progress bar
                     progress_value += progress_increment
