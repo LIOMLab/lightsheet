@@ -15,14 +15,17 @@ shapes, attrs, file plane subsets, and OME channel metadata.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any, Never
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
 import os
 from pathlib import Path
-from typing import Any, Never
 
 import h5py
 import numpy as np
 import pytest
-from _helpers.controller_fixture import make_controller
 
 from lightsheet.adaptive.types import AdaptiveConfig, AdaptiveSample
 
@@ -82,13 +85,13 @@ def _make_samples(n_planes: int, n_channels: int = 1) -> list[AdaptiveSample]:
 
 
 def _setup_ctrl(
-    qtbot: Any, request: Any, tmp_path: Path, *, n_channels: int = 1
+    controller: Controller_MainWindow, tmp_path: Path, *, n_channels: int = 1
 ) -> tuple:  # ty: ignore[missing-type-argument]
     """Create a real controller with 8x8 camera and tmp_path save dir.
 
     Returns ``(ctrl, saver)`` where ``saver`` is ``ctrl._fs.frame_saver``.
     """
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.save_directory = str(tmp_path)
     ctrl.stack_step = 1.0
     # Shrink the camera so Zarr pyramid finalization is instant.
@@ -248,11 +251,11 @@ def _assert_adaptive_group(
 
 
 def test_hdf5_stitch_writes_all_adaptive_rows(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Single-channel stitch (1 file, N datasets) stores all N sample
     rows in ``/adaptive_trajectory`` with full AdaptiveConfig attrs."""
-    _ctrl, saver = _setup_ctrl(qtbot, request, tmp_path)
+    _ctrl, saver = _setup_ctrl(controller, tmp_path)
     config = _small_config()
     n_planes = 4
 
@@ -287,12 +290,12 @@ def test_hdf5_stitch_writes_all_adaptive_rows(
 
 
 def test_hdf5_per_plane_writes_exact_plane_row(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Single-channel crop/full (N files, 1 dataset each) stores exactly
     one row per file — the file's global plane index — without
     duplicate plane records."""
-    _ctrl, saver = _setup_ctrl(qtbot, request, tmp_path)
+    _ctrl, saver = _setup_ctrl(controller, tmp_path)
     config = _small_config()
     n_planes = 3
 
@@ -324,7 +327,7 @@ def test_hdf5_per_plane_writes_exact_plane_row(
 
 
 def test_hdf5_multi_file_multi_dataset_writes_aligned_plane_rows(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Multi-file multi-dataset (``number_of_files > 1`` AND
     ``number_of_datasets > 1``) writes the correct plane-range slice per
@@ -337,7 +340,7 @@ def test_hdf5_multi_file_multi_dataset_writes_aligned_plane_rows(
     misaligned with the image data and the other ``M-1`` rows per file
     were missing.
     """
-    _ctrl, saver = _setup_ctrl(qtbot, request, tmp_path)
+    _ctrl, saver = _setup_ctrl(controller, tmp_path)
     config = _small_config()
     n_files = 2
     n_datasets_per_file = 2
@@ -400,12 +403,12 @@ def test_hdf5_multi_file_multi_dataset_writes_aligned_plane_rows(
 
 
 def test_hdf5_multi_channel_writes_same_trajectory_per_channel(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Multi-channel stitch stores the full same per-plane trajectory in
     each channel file; per-plane files store the corresponding row
     without duplicate plane records."""
-    _ctrl, saver = _setup_ctrl(qtbot, request, tmp_path, n_channels=2)
+    _ctrl, saver = _setup_ctrl(controller, tmp_path, n_channels=2)
     config = _small_config()
     n_planes = 3
 
@@ -437,7 +440,7 @@ def test_hdf5_multi_channel_writes_same_trajectory_per_channel(
 
 
 def test_hdf5_multi_channel_multi_file_multi_dataset_writes_aligned_rows(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Multi-channel + multi-file + multi-dataset: each channel's file
     carries its own plane-range slice (one trajectory row per plane in
@@ -449,7 +452,7 @@ def test_hdf5_multi_channel_multi_file_multi_dataset_writes_aligned_rows(
     so each file got a single row indexed by the file index instead of
     the correct ``M``-row slice.
     """
-    _ctrl, saver = _setup_ctrl(qtbot, request, tmp_path, n_channels=2)
+    _ctrl, saver = _setup_ctrl(controller, tmp_path, n_channels=2)
     config = _small_config()
     n_files = 2
     n_datasets_per_file = 2
@@ -497,12 +500,14 @@ def test_hdf5_multi_channel_multi_file_multi_dataset_writes_aligned_rows(
 # ---------------------------------------------------------------------------
 
 
-def test_zarr_writes_adaptive_group(qtbot: Any, request: Any, tmp_path: Path) -> None:
+def test_zarr_writes_adaptive_group(
+    controller: Controller_MainWindow, tmp_path: Path
+) -> None:
     """Zarr save creates ``/acquisition/adaptive`` with arrays equal to
     the HDF5 schema values and full AdaptiveConfig attrs."""
     import zarr
 
-    ctrl, saver = _setup_ctrl(qtbot, request, tmp_path)
+    ctrl, saver = _setup_ctrl(controller, tmp_path)
     ctrl.save_format = "zarr"
     config = _small_config()
     n_planes = 3
@@ -537,13 +542,13 @@ def test_zarr_writes_adaptive_group(qtbot: Any, request: Any, tmp_path: Path) ->
 
 
 def test_both_writes_adaptive_in_both_formats(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Both save writes ``/adaptive_trajectory`` in HDF5 and
     ``/acquisition/adaptive`` in Zarr with identical schema."""
     import zarr
 
-    ctrl, saver = _setup_ctrl(qtbot, request, tmp_path)
+    ctrl, saver = _setup_ctrl(controller, tmp_path)
     ctrl.save_format = "both"
     config = _small_config()
     n_planes = 2
@@ -590,10 +595,10 @@ def test_both_writes_adaptive_in_both_formats(
 
 
 def test_fixed_mode_omits_adaptive_group_hdf5(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Fixed-mode HDF5 save contains no ``/adaptive_trajectory`` group."""
-    _ctrl, saver = _setup_ctrl(qtbot, request, tmp_path)
+    _ctrl, saver = _setup_ctrl(controller, tmp_path)
     n_planes = 2
 
     with _chdir(tmp_path):
@@ -619,12 +624,12 @@ def test_fixed_mode_omits_adaptive_group_hdf5(
 
 
 def test_fixed_mode_omits_adaptive_group_zarr(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Fixed-mode Zarr save contains no ``/acquisition/adaptive`` group."""
     import zarr
 
-    ctrl, saver = _setup_ctrl(qtbot, request, tmp_path)
+    ctrl, saver = _setup_ctrl(controller, tmp_path)
     ctrl.save_format = "zarr"
     n_planes = 2
 
@@ -655,13 +660,15 @@ def test_fixed_mode_omits_adaptive_group_zarr(
 # ---------------------------------------------------------------------------
 
 
-def test_channel_axis_guard_preserved(qtbot: Any, request: Any, tmp_path: Path) -> None:
+def test_channel_axis_guard_preserved(
+    controller: Controller_MainWindow, tmp_path: Path
+) -> None:
     """Adaptive metadata is orthogonal to the OME channel axis:
     ``n_channels`` and ``omero.channels`` remain unchanged and the
     mismatch guard still raises RuntimeError."""
     from lightsheet.gui.coordinators.frame_saver_controller import ZarrSaver
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.save_directory = str(tmp_path)
     ctrl.stack_step = 1.0
     ctrl.camera.xsize = _FRAME_SIZE
@@ -688,12 +695,12 @@ def test_channel_axis_guard_preserved(qtbot: Any, request: Any, tmp_path: Path) 
 
 
 def test_adaptive_write_error_surfaces(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """When an adaptive metadata write raises, the error surfaces via
     ``sig_status_message`` and ``saving_started`` flips to False rather
     than silently producing an unaudited file."""
-    _ctrl, saver = _setup_ctrl(qtbot, request, tmp_path)
+    _ctrl, saver = _setup_ctrl(controller, tmp_path)
     config = _small_config()
     n_planes = 2
 

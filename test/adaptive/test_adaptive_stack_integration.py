@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import h5py
@@ -45,6 +45,9 @@ import numpy as np
 import pytest
 
 pytest.importorskip("PySide6")
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
 # --------------------------------------------------------------------- #
@@ -142,20 +145,16 @@ def _stub_acquire_scan(ctrl: Any, scripted_fn: Callable[..., int]) -> None:
 
 
 def test_adaptive_loop_tracks_bright_to_dim_profile(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """A scripted bright→dim mock stack produces one AdaptiveCommand per
     saved plane, exposure rises as the profile dims (D-01), and the
     HDF5 stitch file carries an ``/adaptive_trajectory`` group with one
     row per main plane (schema-a). Pilot frames are not saved as stack
     planes."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
     from lightsheet.gui.workers import StackWorker
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     # Single-channel mode (only L1 auto) — the simplest closed loop.
     ctrl._auto_laser1 = True
     ctrl._auto_laser2 = False
@@ -282,18 +281,14 @@ def test_adaptive_loop_tracks_bright_to_dim_profile(
 
 
 def test_estop_aborts_before_adaptive_write(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Mid-run E-stop prevents the next exposure/power write and leaves
     both MockLaser instances inactive (no re-energize past the kill
     path)."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
     from lightsheet.gui.workers import StackWorker
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._auto_laser1 = True
     ctrl._auto_laser2 = False
 
@@ -384,20 +379,16 @@ def test_estop_aborts_before_adaptive_write(
 
 
 def test_adaptive_off_preserves_fixed_stack(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """When adaptive is disabled (adaptive_cfg=None), the StackWorker
     emits no trajectory samples (the dock stays empty for fixed
     stacks), the existing fixed stack call sequence is preserved, and
     zero extra per-plane actuator writes occur beyond the existing
     select_laser/acquire cycle."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
     from lightsheet.gui.workers import StackWorker
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._auto_laser1 = True
     ctrl._auto_laser2 = False
 
@@ -478,18 +469,14 @@ def test_adaptive_off_preserves_fixed_stack(
 
 
 def test_brighter_channel_drives_shared_exposure_in_multi_channel(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """In multi-channel mode, the shared exposure is driven by the
     brighter channel's intensity; the dimmer channel's L2 power trims
     toward balance only at block boundaries (D-02)."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
     from lightsheet.gui.workers import StackWorker
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._auto_laser1 = True
     ctrl._auto_laser2 = True
 
@@ -578,17 +565,13 @@ def test_brighter_channel_drives_shared_exposure_in_multi_channel(
 
 
 def test_one_sharp_excursion_requests_one_reacquire(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """A sharp intensity excursion at one plane triggers exactly one
     re-acquire; the next plane is not flagged (max_reacquire_attempts=1)."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
     from lightsheet.gui.workers import StackWorker
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._auto_laser1 = True
     ctrl._auto_laser2 = False
 
@@ -662,8 +645,7 @@ def test_one_sharp_excursion_requests_one_reacquire(
 
 
 def _make_adaptive_worker(
-    qtbot: Any,
-    request: Any,
+    controller: Controller_MainWindow,
     tmp_path: Path,
     *,
     multi_channel: bool = False,
@@ -673,13 +655,9 @@ def _make_adaptive_worker(
     config and a stubbed acquire_scan, ready for direct
     _apply_adaptive_command / _record_adaptive_step calls. Returns
     (ctrl, worker)."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
     from lightsheet.gui.workers import StackWorker
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._auto_laser1 = True
     ctrl._auto_laser2 = multi_channel
 
@@ -751,13 +729,13 @@ def _make_failing_write(
 
 
 def test_apply_adaptive_command_l1_write_failure_emits_copy_and_continues(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """An L1 power-write exception is caught, emits the exact mandated
     per-laser safety copy via sig_message, does not abort the stack,
     and a subsequent _apply_adaptive_command call retries (the worker
     is not in a broken state)."""
-    ctrl, worker = _make_adaptive_worker(qtbot, request, tmp_path)
+    ctrl, worker = _make_adaptive_worker(controller, tmp_path)
 
     from lightsheet.adaptive.types import AdaptiveCommand
 
@@ -804,12 +782,12 @@ def test_apply_adaptive_command_l1_write_failure_emits_copy_and_continues(
 
 
 def test_apply_adaptive_command_l2_write_failure_emits_copy_and_continues(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """An L2 power-write exception (multi-channel) is caught separately,
     emits the exact mandated L2 copy, and does not abort. L1 is written
     successfully before L2 fails."""
-    ctrl, worker = _make_adaptive_worker(qtbot, request, tmp_path, multi_channel=True)
+    ctrl, worker = _make_adaptive_worker(controller, tmp_path, multi_channel=True)
 
     from lightsheet.adaptive.types import AdaptiveCommand
 
@@ -848,12 +826,12 @@ def test_apply_adaptive_command_l2_write_failure_emits_copy_and_continues(
 
 
 def test_apply_adaptive_command_camera_write_outside_laser_handlers(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """camera.set_exposure_time is called even when a laser write fails
     — it lives outside the new per-laser exception handlers. Verified
     by failing L1 and confirming the camera exposure was still set."""
-    ctrl, worker = _make_adaptive_worker(qtbot, request, tmp_path)
+    ctrl, worker = _make_adaptive_worker(controller, tmp_path)
 
     from lightsheet.adaptive.types import AdaptiveCommand
 
@@ -888,13 +866,13 @@ def test_apply_adaptive_command_camera_write_outside_laser_handlers(
 
 
 def test_record_adaptive_step_emits_exhaustion_message(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """When the next adaptive command carries reacquire_exhausted=True,
     _record_adaptive_step emits the exact mandated plane/deviation
     message via sig_message. Uses a deterministic frame intensity and
     target midpoint so the deviation percentage is predictable."""
-    ctrl, worker = _make_adaptive_worker(qtbot, request, tmp_path)
+    ctrl, worker = _make_adaptive_worker(controller, tmp_path)
     cfg = worker._adaptive_cfg
 
     from lightsheet.adaptive.types import AdaptiveCommand
@@ -966,12 +944,12 @@ def test_record_adaptive_step_emits_exhaustion_message(
 
 
 def test_record_adaptive_step_no_exhaustion_message_when_flag_false(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """When the next command's reacquire_exhausted is False (the common
     case), _record_adaptive_step emits no exhaustion message — the
     defensive getattr check returns False and the copy is suppressed."""
-    ctrl, worker = _make_adaptive_worker(qtbot, request, tmp_path)
+    ctrl, worker = _make_adaptive_worker(controller, tmp_path)
 
     from lightsheet.adaptive.types import AdaptiveCommand
 
@@ -998,12 +976,12 @@ def test_record_adaptive_step_no_exhaustion_message_when_flag_false(
 
 
 def test_record_adaptive_step_legacy_command_without_flag_accepted(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """A legacy command-like object lacking the reacquire_exhausted
     attribute is accepted (defensive getattr returns False) — no
     AttributeError, no exhaustion message."""
-    ctrl, worker = _make_adaptive_worker(qtbot, request, tmp_path)
+    ctrl, worker = _make_adaptive_worker(controller, tmp_path)
 
     class _LegacyCmd:
         """A minimal command-like object without reacquire_exhausted,
@@ -1036,20 +1014,16 @@ def test_record_adaptive_step_legacy_command_without_flag_accepted(
 
 
 def test_estop_after_successful_write_stops_later_writes(
-    qtbot: Any, request: Any, tmp_path: Path
+    controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """The existing E-stop-after-successful-write regression still holds
     after the new per-laser exception handlers are added: setting
     estop_event after the first L1 write breaks the loop before the
     next plane's write. The new handlers swallow write exceptions, not
     E-stop."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
     from lightsheet.gui.workers import StackWorker
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._auto_laser1 = True
     ctrl._auto_laser2 = False
 

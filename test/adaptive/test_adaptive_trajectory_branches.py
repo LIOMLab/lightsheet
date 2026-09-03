@@ -27,16 +27,16 @@ defensive code (see VALIDATION notes).
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pyqtgraph as pg
 import pytest
-from pytest import FixtureRequest
 from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
-from _helpers.controller_fixture import make_controller
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 from lightsheet.gui.widgets.adaptive_trajectory import (
     AdaptiveTrajectoryWidget,
@@ -735,7 +735,7 @@ def test_append_sample_with_optional_curves_none(qtbot: QtBot) -> None:
 # --------------------------------------------------------------------- #
 
 
-def test_adaptive_dock_controller_module(qtbot: QtBot, request: FixtureRequest) -> None:
+def test_adaptive_dock_controller_module(controller: Controller_MainWindow) -> None:
     """AdaptiveDockController lives in its own focused module."""
     from lightsheet.gui.coordinators.adaptive_dock_controller import (
         AdaptiveDockController,
@@ -744,7 +744,7 @@ def test_adaptive_dock_controller_module(qtbot: QtBot, request: FixtureRequest) 
     assert AdaptiveDockController.__module__ == (
         "lightsheet.gui.coordinators.adaptive_dock_controller"
     )
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     assert hasattr(ctrl, "_adaptive_dock_controller")
     assert ctrl._adaptive_dock_controller.__class__ is AdaptiveDockController
 
@@ -764,14 +764,14 @@ def test_adaptive_dock_utils_module(qtbot: QtBot) -> None:
 
 
 def test_adaptive_dock_controller_is_presentation_only(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """The dock controller does not hold HAL state."""
     from lightsheet.gui.coordinators.adaptive_dock_controller import (
         AdaptiveDockController,
     )
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     adc = ctrl._adaptive_dock_controller
     assert isinstance(adc, AdaptiveDockController)
     for attr in ("lasers", "camera", "motors", "etls", "siggen"):
@@ -781,12 +781,10 @@ def test_adaptive_dock_controller_is_presentation_only(
     assert not hasattr(adc, "estop_event")
 
 
-def test_adaptive_shell_aliases_reachable(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_adaptive_shell_aliases_reachable(controller: Controller_MainWindow) -> None:
     """The shell still exposes dock, widget, plot, and label attributes
     so tests and AcquisitionPanelWidget keep working."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     assert ctrl.dockWidget_adaptiveTrajectory is ctrl._adaptive_dock_controller.dock
     assert ctrl.adaptiveTrajectoryWidget is ctrl._adaptive_dock_controller.widget
     assert (
@@ -800,7 +798,7 @@ def test_adaptive_shell_aliases_reachable(
 
 
 def test_adaptive_trajectory_slot_is_shell_bound_method(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """_on_adaptive_trajectory remains a shell-bound callable that
     delegates to the presentation controller."""
@@ -808,7 +806,7 @@ def test_adaptive_trajectory_slot_is_shell_bound_method(
         AdaptiveDockController,
     )
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     slot = getattr(ctrl, "_on_adaptive_trajectory", None)
     assert slot is not None
     assert slot.__self__ is ctrl or isinstance(slot.__self__, AdaptiveDockController)
@@ -820,12 +818,12 @@ def test_adaptive_trajectory_slot_is_shell_bound_method(
 
 
 def test_adaptive_dock_restore_state_noop_when_no_saved_state(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """restore_state is a no-op when QSettings has no saved dock state."""
     from unittest.mock import MagicMock, patch
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     with patch("PySide6.QtCore.QSettings") as mock_settings_cls:
         instance = MagicMock()
         instance.value.return_value = None
@@ -836,11 +834,9 @@ def test_adaptive_dock_restore_state_noop_when_no_saved_state(
         )
 
 
-def test_adaptive_rail_toggled_hides_dock(
-    qtbot: QtBot, request: FixtureRequest
-) -> None:
+def test_adaptive_rail_toggled_hides_dock(controller: Controller_MainWindow) -> None:
     """Unchecking the rail button hides the adaptive dock."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl._adaptive_dock_controller.on_rail_adaptive_toggled(True)
     assert ctrl._adaptive_dock_controller.dock.isFloating()
     ctrl._adaptive_dock_controller.on_rail_adaptive_toggled(False)
@@ -848,13 +844,13 @@ def test_adaptive_rail_toggled_hides_dock(
 
 
 def test_adaptive_rail_toggled_show_plot_when_data_present(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """Checking the rail button while the widget already has data shows the
     existing plot instead of the empty-state label."""
     from PySide6.QtWidgets import QApplication
 
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.adaptiveTrajectoryWidget.reset(target_band_lo=0.90, target_band_hi=0.95)
     ctrl._on_adaptive_trajectory(0, 0.92, 0.005, 10.0, 5.0, "exposure", False, False)
     assert ctrl.adaptiveTrajectoryWidget.has_data()
