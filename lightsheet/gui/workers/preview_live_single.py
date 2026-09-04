@@ -105,8 +105,6 @@ class PreviewWorker(QObject):
             # between the worker spawn and this point, short-circuit to the
             # normal cleanup path without turning any laser on.
             if self._shell.estop_event.is_set():
-                self._hw.stop_lasers()
-                self.camera.disarm()
                 return
 
             self._hw.start_lasers(energize_lasers=energize_lasers)
@@ -160,15 +158,6 @@ class PreviewWorker(QObject):
                 # Sending first (and should be only) image to display port
                 frame = cam_images[0]
                 self._shell._fs.enqueue_frame(frame)  # ty: ignore[unresolved-attribute]
-
-            # Stop the lasers before camera.disarm(), mirroring
-            # live_mode_worker's cleanup shape. The lasers were started after
-            # camera.arm() above; stopping them here ensures no laser is left
-            # energized when the camera is disarmed and the mode exits.
-            self._hw.stop_lasers()
-
-            # Stopping camera
-            self.camera.disarm()
         except Exception as e:
             self._shell.sig_message.emit(
                 f"Preview acquisition failed — the run was aborted. Cause: {e}"
@@ -176,10 +165,28 @@ class PreviewWorker(QObject):
             logger.exception("Preview mode worker failed")
         finally:
             # The finished signal must fire exactly once whether the method
-            # completes normally or an exception propagates from
-            # start_lasers()/acquire_scan()/camera.disarm()/anything else in
-            # the body. Without this, a worker that dies mid-cleanup leaves
-            # the UI stuck on "Stop Preview Mode" with no slot to re-enable it.
+            # completes normally, breaks on E-stop or interruption, or an
+            # exception propagates from start_lasers()/acquire_scan()/anything
+            # else in the body. Stop the lasers and disarm the camera so a
+            # worker that exits mid-acquisition does not leave hardware
+            # energized; if a cleanup step fails, surface it but always emit
+            # finished so the UI can re-enable.
+            _cleanup_errors: list[str] = []
+            try:
+                self._hw.stop_lasers()
+            except Exception as e:
+                logger.exception("Preview worker stop_lasers cleanup failed")
+                _cleanup_errors.append(f"stop_lasers: {e}")
+            try:
+                self.camera.disarm()
+            except Exception as e:
+                logger.exception("Preview worker camera disarm cleanup failed")
+                _cleanup_errors.append(f"camera disarm: {e}")
+            if _cleanup_errors:
+                self._shell.sig_message.emit(
+                    "Preview acquisition failed — cleanup could not complete safely. "
+                    "Errors: " + "; ".join(_cleanup_errors)
+                )
             self.finished.emit()
 
 
@@ -248,9 +255,6 @@ class LiveWorker(QObject, _AcquireScanMixin):
             # between the worker spawn and this point, short-circuit to the
             # normal cleanup path without turning any laser on.
             if self._shell.estop_event.is_set():
-                self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-                self._hw.stop_lasers()
-                self.camera.disarm()
                 return
 
             self._hw.start_lasers(energize_lasers=energize_lasers)
@@ -275,15 +279,6 @@ class LiveWorker(QObject, _AcquireScanMixin):
                 # Get single image
                 if not self.acquire_scan():
                     break
-
-            # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)  # noqa: E501
-            self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-
-            # Stopping lasers
-            self._hw.stop_lasers()
-
-            # Stopping camera
-            self.camera.disarm()
         except Exception as e:
             self._shell.sig_message.emit(
                 f"Live acquisition failed — the run was aborted. Cause: {e}"
@@ -291,11 +286,33 @@ class LiveWorker(QObject, _AcquireScanMixin):
             logger.exception("Live mode worker failed")
         finally:
             # The finished signal must fire exactly once whether the method
-            # completes normally, breaks out of the loop on E-stop, or an
-            # exception propagates from start_lasers()/acquire_scan()/
-            # stop_lasers()/camera.disarm()/anything else in the body.
-            # Without this, a worker that dies mid-cleanup leaves the UI
-            # stuck on "Stop Live Mode" with no slot to re-enable it.
+            # completes normally, breaks out of the loop on E-stop or
+            # interruption, or an exception propagates from the body. Put the
+            # ETLs in standby, stop the lasers, and disarm the camera so a
+            # worker that exits mid-acquisition does not leave hardware
+            # energized; if a cleanup step fails, surface it but always emit
+            # finished so the UI can re-enable.
+            _cleanup_errors: list[str] = []
+            try:
+                self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+            except Exception as e:
+                logger.exception("Live worker ETL cleanup failed")
+                _cleanup_errors.append(f"ETL standby: {e}")
+            try:
+                self._hw.stop_lasers()
+            except Exception as e:
+                logger.exception("Live worker stop_lasers cleanup failed")
+                _cleanup_errors.append(f"stop_lasers: {e}")
+            try:
+                self.camera.disarm()
+            except Exception as e:
+                logger.exception("Live worker camera disarm cleanup failed")
+                _cleanup_errors.append(f"camera disarm: {e}")
+            if _cleanup_errors:
+                self._shell.sig_message.emit(
+                    "Live acquisition failed — cleanup could not complete safely. "
+                    "Errors: " + "; ".join(_cleanup_errors)
+                )
             self.finished.emit()
 
 
@@ -397,18 +414,12 @@ class SingleWorker(QObject, _AcquireScanMixin):
                 # the second select_laser + acquire_scan overwrites it).
                 self._hw.select_laser(0)
                 if self._shell.estop_event.is_set():
-                    self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-                    self._hw.stop_lasers()
-                    self.camera.disarm()
                     return
                 # Refresh scan waveforms with current settings (once,
                 # before the first channel — the second channel reuses
                 # the same waveform).
                 self.siggen.compute_scan_waveforms()
                 if not self.acquire_scan():
-                    self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-                    self._hw.stop_lasers()
-                    self.camera.disarm()
                     return
                 # Capture frame1 immediately — the next acquire_scan
                 # overwrites reconstructed_frame (pitfall #3).
@@ -420,14 +431,8 @@ class SingleWorker(QObject, _AcquireScanMixin):
 
                 self._hw.select_laser(1)
                 if self._shell.estop_event.is_set():
-                    self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-                    self._hw.stop_lasers()
-                    self.camera.disarm()
                     return
                 if not self.acquire_scan():
-                    self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-                    self._hw.stop_lasers()
-                    self.camera.disarm()
                     return
                 frame2 = (
                     None
@@ -468,9 +473,6 @@ class SingleWorker(QObject, _AcquireScanMixin):
                 # between the worker spawn and this point, short-circuit to the
                 # normal cleanup path without turning any laser on.
                 if self._shell.estop_event.is_set():
-                    self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-                    self._hw.stop_lasers()
-                    self.camera.disarm()
                     return
 
                 # Start lasers
@@ -483,9 +485,6 @@ class SingleWorker(QObject, _AcquireScanMixin):
                 if self._shell.estop_event.is_set():
                     # Put ETLs in standby and stop lasers/camera before exiting so the
                     # post-mode cleanup matches the normal single_mode_worker exit.
-                    self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-                    self._hw.stop_lasers()
-                    self.camera.disarm()
                     return
 
                 # Refresh scan waveforms with current settings
@@ -493,23 +492,8 @@ class SingleWorker(QObject, _AcquireScanMixin):
 
                 # Acquire a single scan
                 if not self.acquire_scan():
-                    self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-                    self._hw.stop_lasers()
-                    self.camera.disarm()
                     return
 
-            # Put ETLs in standby mode
-            # 2.5V corresponds no current through coil (mid 0-5V adjustable range)
-            self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-
-            # Stop lasers — safety: ensures both lasers off regardless of
-            # mode (multi-channel's last select_laser may have left L2 on;
-            # single-channel's start_lasers may have left the auto-selected
-            # laser on).
-            self._hw.stop_lasers()
-
-            # Stop camera
-            self.camera.disarm()
         except Exception as e:
             self._shell.sig_message.emit(
                 f"Single image acquisition failed — the run was aborted. Cause: {e}"
@@ -517,8 +501,32 @@ class SingleWorker(QObject, _AcquireScanMixin):
             logger.exception("Single image mode worker failed")
         finally:
             # The finished signal must fire exactly once whether the method
-            # returns early (E-stop), completes normally, or an exception
-            # propagates from stop_lasers()/camera.disarm()/anything else.
-            # Without this, a worker that dies mid-cleanup leaves the UI
-            # stuck on "Acquiring..." with no slot to re-enable it.
+            # returns early (E-stop or interruption), completes normally, or an
+            # exception propagates from the body. Put the ETLs in standby,
+            # stop the lasers, and disarm the camera so a worker that exits
+            # mid-acquisition does not leave hardware energized; if a cleanup
+            # step fails, surface it but always emit finished so the UI can
+            # re-enable.
+            _cleanup_errors: list[str] = []
+            try:
+                self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+            except Exception as e:
+                logger.exception("Single worker ETL cleanup failed")
+                _cleanup_errors.append(f"ETL standby: {e}")
+            try:
+                self._hw.stop_lasers()
+            except Exception as e:
+                logger.exception("Single worker stop_lasers cleanup failed")
+                _cleanup_errors.append(f"stop_lasers: {e}")
+            try:
+                self.camera.disarm()
+            except Exception as e:
+                logger.exception("Single worker camera disarm cleanup failed")
+                _cleanup_errors.append(f"camera disarm: {e}")
+            if _cleanup_errors:
+                self._shell.sig_message.emit(
+                    "Single image acquisition failed — "
+                    "cleanup could not complete safely. "
+                    "Errors: " + "; ".join(_cleanup_errors)
+                )
             self.finished.emit()

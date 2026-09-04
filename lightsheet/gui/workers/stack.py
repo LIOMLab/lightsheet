@@ -860,23 +860,6 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 self._shell.sig_progress_update.emit(
                     100
                 )  # In case the number of planes is not a multiple of 100
-
-            if self._shell.saving_allowed:
-                self._shell._fs.stop_saving()  # ty: ignore[unresolved-attribute]
-
-            # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)  # noqa: E501
-            self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-
-            # Stopping laser — safety: ensures both lasers off regardless
-            # of mode. In multi-channel mode the last select_laser(1) may
-            # have left L2 on; in single-channel mode start_lasers may
-            # have left the auto-selected laser on. stop_lasers reads the
-            # cached auto-laser flags and drives .off() on each active
-            # laser.
-            self._hw.stop_lasers()
-
-            # Stopping camera
-            self.camera.disarm()
         except Exception as e:
             self._shell.sig_message.emit(
                 f"Stack acquisition failed — the run was aborted. Cause: {e}"
@@ -884,9 +867,37 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             logger.exception("Stack mode worker failed")
         finally:
             # The finished signal must fire exactly once whether the method
-            # completes normally, breaks out of the per-plane loop, or an
-            # exception propagates from stop_lasers()/camera.disarm()/
-            # anything else in the body. Without this, a worker that dies
-            # mid-cleanup leaves the UI stuck on "Stop Stack Mode" with no
-            # slot to re-enable it.
+            # completes normally, breaks out of the per-plane loop on E-stop
+            # or interruption, or an exception propagates from the body. Stop
+            # saving (if started), put the ETLs in standby, stop the lasers,
+            # and disarm the camera so a worker that exits mid-acquisition
+            # does not leave hardware energized; if a cleanup step fails,
+            # surface it but always emit finished so the UI can re-enable.
+            _cleanup_errors: list[str] = []
+            if getattr(self._shell, "saving_allowed", False):
+                try:
+                    self._shell._fs.stop_saving()  # ty: ignore[unresolved-attribute]
+                except Exception as e:
+                    logger.exception("Stack worker stop_saving cleanup failed")
+                    _cleanup_errors.append(f"stop_saving: {e}")
+            try:
+                self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+            except Exception as e:
+                logger.exception("Stack worker ETL cleanup failed")
+                _cleanup_errors.append(f"ETL standby: {e}")
+            try:
+                self._hw.stop_lasers()
+            except Exception as e:
+                logger.exception("Stack worker stop_lasers cleanup failed")
+                _cleanup_errors.append(f"stop_lasers: {e}")
+            try:
+                self.camera.disarm()
+            except Exception as e:
+                logger.exception("Stack worker camera disarm cleanup failed")
+                _cleanup_errors.append(f"camera disarm: {e}")
+            if _cleanup_errors:
+                self._shell.sig_message.emit(
+                    "Stack acquisition failed — cleanup could not complete safely. "
+                    "Errors: " + "; ".join(_cleanup_errors)
+                )
             self.finished.emit()
