@@ -97,10 +97,9 @@ def shutdown_hardware(bundle: DeviceBundle) -> None:
 def play_audio(
     wav_path: Path, dry_run: bool, start_offset: float = 0.0
 ) -> tuple[float, float]:
-    """Load the WAV and start playback. Returns (start_timestamp, duration).
+    """Load the WAV, optionally skip to an offset, and start playback.
 
-    In dry-run the clock is fast-forwarded by ``start_offset`` song seconds so
-    the laser event is reached in a few real seconds.
+    In dry-run the clock is fast-forwarded by ``start_offset`` song seconds.
     """
     if dry_run:
         logger.info(
@@ -113,10 +112,19 @@ def play_audio(
     import soundfile as sf
 
     data, samplerate = sf.read(str(wav_path), dtype="float32")
+    start_sample = int(start_offset * samplerate)
+    data = data[start_sample:]
     duration = len(data) / samplerate
     sd.play(data, samplerate)
-    logger.info("Playing %s (%.2f s, %d Hz)", wav_path, duration, samplerate)
-    return time.perf_counter(), duration
+    logger.info(
+        "Playing %s from %.2f s (%.2f s, %d Hz)",
+        wav_path,
+        start_offset,
+        duration,
+        samplerate,
+    )
+    # Song-time zero must line up with the sliced offset.
+    return time.perf_counter() - start_offset, duration
 
 
 def run_pattern(
@@ -158,15 +166,12 @@ def _phase_boundaries(args: argparse.Namespace) -> tuple[list[float], list[list[
     delay = args.laser_delay
     c = args.laser_cues
     flash = args.laser_flash_dur
-    post_gap = flash
     pre_end = c[0] - flash
     flash1_end = min(c[0] + flash, c[1])
     flash2_end = min(c[1] + flash, c[2])
     flash3_end = min(c[2] + flash, c[3])
-    flash4_end = c[3] + flash
-    post_start = flash4_end + post_gap
     event_start = c[0] - args.laser_pre_time - delay
-    event_end = c[3] + flash + post_gap + args.laser_post_time - delay
+    event_end = c[3] + args.laser_post_time - delay
 
     starts = [
         event_start,
@@ -178,8 +183,6 @@ def _phase_boundaries(args: argparse.Namespace) -> tuple[list[float], list[list[
         c[2] - delay,
         flash3_end - delay,
         c[3] - delay,
-        flash4_end - delay,
-        post_start - delay,
     ]
     lasers = [
         [0],
@@ -189,8 +192,6 @@ def _phase_boundaries(args: argparse.Namespace) -> tuple[list[float], list[list[
         [1],
         [],
         [0],
-        [],
-        [0, 1],
         [],
         [0, 1],
     ]
@@ -220,6 +221,7 @@ def run_sync_loop(
     )
     phase = -10
     event_start = _event_start(args)
+    laser_powers = (args.laser1_power, args.laser2_power)
 
     while True:
         now_song = time.perf_counter() - t0
@@ -242,6 +244,7 @@ def run_sync_loop(
             for idx in active_indices - target:
                 bundle.lasers[idx].off()
             for idx in target - active_indices:
+                bundle.lasers[idx].set_power(laser_powers[idx])
                 bundle.lasers[idx].on()
             active_indices = target
             phase = new_phase
@@ -376,7 +379,7 @@ def main() -> int:
     )
 
     try:
-        start_offset = max(0.0, _event_start(args)) if args.dry_run else 0.0
+        start_offset = max(0.0, _event_start(args) - 2.0)
         t0, duration = play_audio(args.wav, args.dry_run, start_offset)
         run_sync_loop(bundle, t0, duration, args)
     except Exception:
