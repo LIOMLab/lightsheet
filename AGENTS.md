@@ -168,7 +168,7 @@ bash scripts/test.sh test/test_foo.py::test_bar   # xdist, one test
 ```
 
 **WARNING — never override `addopts`.** xdist is the default via `addopts`
-in `pyproject.toml` (`-n auto --maxprocesses=6 --dist=load
+in `pyproject.toml` (`-n auto --maxprocesses=8 --dist=load
 --max-worker-restart=0`). Any `addopts` override silently strips the xdist
 flags and drops to single-process — a ~2-3x slowdown (~98s → ~3-4 min) that is
 invisible on a single test but catastrophic on the full suite. The trap:
@@ -201,10 +201,11 @@ bare `uv run pytest -q` (or `scripts/test.sh`).
   break this gating.
 - pytest config lives in `pyproject.toml` under `[tool.pytest.ini_options]`
   (`testpaths = ["test"]`, `python_files = ["test_*.py"]`, `minversion = "9.1"`,
-  and `addopts` as a list: `-ra --strict-markers -n auto --maxprocesses=6
+  and `addopts` as a list: `-ra --strict-markers -n auto --maxprocesses=8
   --dist=load --max-worker-restart=0` for parallel execution via pytest-xdist).
-  `--maxprocesses=6` caps workers to bound PySide6 worker memory on high-core
-  machines; `--max-worker-restart=0` disables silent worker-restart-on-crash so
+  `--maxprocesses=8` caps workers on the dev machine to bound PySide6 worker
+  memory; `test/conftest.py` raises the cap to 14 when `LIGHTSHEET_HW=1` on the
+  rig. `--max-worker-restart=0` disables silent worker-restart-on-crash so
   a segfaulted worker's tests surface as failures instead of being hidden
   (lightsheet has a known shutdown segfault — see the segfault note below);
   `--dist=load` is the explicit xdist distribution mode (`xdist_group` still
@@ -296,7 +297,7 @@ bare `uv run pytest -q` (or `scripts/test.sh`).
     to avoid Qt/shiboken destructor races during parallel teardown; the
     serial run keeps GC enabled and the autouse/sessionfinish cleanup
     explicitly collects after the deferred-delete pump. `scripts/coverage.sh`
-    runs xdist-parallel (`-n auto --maxprocesses=6` in its `-o addopts`
+    runs xdist-parallel (`-n auto --maxprocesses=8` in its `-o addopts`
     override) with a 10-minute hard timeout and falls back to single-process
     collection on any non-zero xdist exit (hang, worker segfault, or test
     failure) so the gate completes reliably. A separate
