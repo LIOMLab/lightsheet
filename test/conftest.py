@@ -292,8 +292,10 @@ def _ensure_stub(
 
 def _nidaqmx_real_check(mod: types.ModuleType) -> None:
     """Smoke check: nidaqmx is only usable if Task() can be constructed
-    (i.e. the driver runtime is present)."""
-    mod.Task()
+    (i.e. the driver runtime is present). Close the probe so the
+    DaqResourceWarning about _unnamedTask<0> is not left for xdist workers."""
+    with contextlib.suppress(Exception):
+        mod.Task().close()
 
 
 def _pco_real_check(mod: types.ModuleType) -> None:
