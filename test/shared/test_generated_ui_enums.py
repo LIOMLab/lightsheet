@@ -12,7 +12,7 @@ import pytest
 
 def _load_normalizer() -> ModuleType:
     """Load the scripts/fix_generated_ui_enums.py module as a one-off."""
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     script_path = repo_root / "scripts" / "fix_generated_ui_enums.py"
     spec = importlib.util.spec_from_file_location("fix_generated_ui_enums", script_path)
     assert spec is not None and spec.loader is not None

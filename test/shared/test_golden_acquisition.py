@@ -42,7 +42,7 @@ import pytest
 
 from test.golden._record import capture_acquisition_sequence
 
-_GOLDEN_DIR = Path(__file__).parent / "golden"
+_GOLDEN_DIR = Path(__file__).resolve().parents[1] / "golden"
 
 _SCENARIOS = [
     "default",

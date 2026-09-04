@@ -1,7 +1,7 @@
 """TST-03 safe_char filename-validation corpus.
 
 Exercises the REAL ``Controller_MainWindow.validate_file_name`` method via
-real construction (``make_controller`` builds the full controller with all
+real construction (the ``controller`` fixture builds the full controller with all
 four collaborators wired and ``hardware_init`` already called). The
 sanitization code that runs here is the same code that runs on the rig.
 
@@ -13,15 +13,18 @@ joined absolute path passed to ``FrameSaver.set_files``. There is NO
 ``QRegExp`` in this codebase (RESEARCH Correction 1) — the corpus targets
 ``safe_char`` + ``rstrip(\"_\")`` + the Windows path join, not a regex port.
 
-Inline ``@pytest.mark.parametrize`` (D-13 — no JSON/YAML data file): the
-corpus is small, semantically stable, and readable at the assertion site.
+Inline ``@pytest.mark.parametrize``: the corpus is small, semantically
+stable, and readable at the assertion site.
 """
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
-from _helpers.controller_fixture import make_controller
-from pytestqt.qtbot import QtBot
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
 @pytest.mark.parametrize(
@@ -57,8 +60,7 @@ from pytestqt.qtbot import QtBot
     ],
 )
 def test_safe_char_sanitizes(
-    qtbot: QtBot,
-    request: pytest.FixtureRequest,
+    controller: Controller_MainWindow,
     raw: str,
     expected_substring: str,
     allows: bool,
@@ -66,7 +68,7 @@ def test_safe_char_sanitizes(
     """validate_file_name sanitizes the filename via safe_char + rstrip('_')
     and joins it to save_directory; saving_allowed is True only when both
     are non-empty."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.save_panel.ui.lineEdit_saveFilename.setText(raw)
     ctrl.save_directory = "C:\\data"
     ctrl.save_filename = ""
@@ -86,7 +88,7 @@ def test_safe_char_sanitizes(
 
 
 def test_safe_char_join_uses_save_directory(
-    qtbot: QtBot, request: pytest.FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """The sanitized filename is joined to save_directory via
     os.path.normpath(save_directory + '\\\\' + save_filename) into
@@ -94,7 +96,7 @@ def test_safe_char_join_uses_save_directory(
     ``save_filepath`` holds the joined path. On a non-Windows host normpath
     collapses the backslash separator, so we assert the bare name is in
     ``save_filename`` and the directory appears in ``save_filepath``."""
-    ctrl, _ = make_controller(qtbot, request)
+    ctrl = controller
     ctrl.save_panel.ui.lineEdit_saveFilename.setText("plane 01")
     ctrl.save_directory = "/tmp/data"
     ctrl.save_filename = ""
