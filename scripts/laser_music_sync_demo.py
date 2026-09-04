@@ -4,6 +4,7 @@ Plays a WAV file and drives the two lasers through a promotional sequence
 aligned to the "Laser" vocal hits in *Ray Volpe - Laserbeam (ÆON_MODE Remix)*.
 
 - 2 s before the first marker: L1 on with an interesting galvo/ETL pattern.
+- Briefly off just before the first marker.
 - At each of the four markers the active laser alternates:
   - 1st: L1
   - 2nd: L2 (red)
@@ -41,6 +42,7 @@ DEFAULT_LASER_CUES = [44.89, 45.16, 46.30, 46.31]
 DEFAULT_LASER_PRE = 2.0
 DEFAULT_LASER_POST = 2.0
 DEFAULT_LASER_PULSE = 1.0
+DEFAULT_LASER_PRE_GAP = 0.2
 
 
 def build_bundle(demo: bool) -> DeviceBundle:
@@ -165,7 +167,9 @@ def _phase_boundaries(args: argparse.Namespace) -> tuple[list[float], list[list[
     delay = args.laser_delay
     c = args.laser_cues
     pulse = args.laser_pulse_dur
+    pre_gap = args.laser_pre_gap
     event_start = c[0] - args.laser_pre_time - delay
+    pre_end = c[0] - pre_gap - delay
     w1_end = min(c[0] + pulse, c[1]) - delay
     w2_end = min(c[1] + pulse, c[2]) - delay
     w3_end = min(c[2] + pulse, c[3]) - delay
@@ -173,7 +177,9 @@ def _phase_boundaries(args: argparse.Namespace) -> tuple[list[float], list[list[
     event_end = c[3] + pulse + args.laser_post_time - delay
 
     windows = [
-        (event_start, w1_end, [0]),  # pre + 1st marker: L1
+        (event_start, pre_end, [0]),  # pre: L1
+        (pre_end, c[0] - delay, []),  # brief off before first marker
+        (c[0] - delay, w1_end, [0]),  # 1st marker: L1
         (c[1] - delay, w2_end, [1]),  # 2nd marker: L2
         (c[2] - delay, w3_end, [0]),  # 3rd marker: L1
         (c[3] - delay, w4_end, [1]),  # 4th marker: L2
@@ -299,10 +305,16 @@ def parse_args() -> argparse.Namespace:
         help="Seconds of L1-only activity before the first marker",
     )
     parser.add_argument(
+        "--laser-pre-gap",
+        type=float,
+        default=DEFAULT_LASER_PRE_GAP,
+        help="Seconds of off time just before the first marker",
+    )
+    parser.add_argument(
         "--laser-post-time",
         type=float,
         default=DEFAULT_LASER_POST,
-        help="Seconds both lasers stay on after the fourth marker flash",
+        help="Seconds both lasers stay on after the fourth marker pulse",
     )
     parser.add_argument(
         "--laser-pulse-dur",
