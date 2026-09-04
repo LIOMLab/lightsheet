@@ -1115,7 +1115,13 @@ class Controller_MainWindow(QMainWindow):
 
     def _load_stack_params(self) -> None:
         """Load the last stack's start/end/step from config.ini and
-        populate the spinboxes + set the shell flags if present."""
+        populate the spinboxes + set the shell flags if present.
+
+        Skipped in demo mode so the test suite (which constructs many
+        controllers with demo=True and tears them down concurrently under
+        xdist) does not inherit persisted state from the real config.ini."""
+        if getattr(self, "_demo_mode", False):
+            return
         cfg = cfg_read(
             "config.ini",
             "Controller",
@@ -1262,7 +1268,9 @@ class Controller_MainWindow(QMainWindow):
             # from the motor travel limits (the soft widget-layer block).
             self.stack_panel._seed_spinbox_ranges()
             # Restore the last stack's start/end/step from config.ini so a
-            # re-run does not require re-driving the stage.
+            # re-run does not require re-driving the stage. Skipped in demo
+            # mode so tests do not inherit persisted state from the real
+            # config.ini.
             self._load_stack_params()
             # Render the summary for the restored state.
             self.stack_panel._render_stack_plan_summary()
