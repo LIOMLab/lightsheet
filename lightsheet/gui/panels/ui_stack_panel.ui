@@ -519,6 +519,9 @@
       <string>Focus Control</string>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_focusControl">
+      <property name="spacing">
+       <number>8</number>
+      </property>
       <item>
        <widget class="QCheckBox" name="checkBox_focusEnable">
         <property name="toolTip">
@@ -535,112 +538,105 @@
          <bool>false</bool>
         </property>
         <layout class="QGridLayout" name="gridLayout_focusFields">
-         <item row="0" column="0" colspan="2">
-          <widget class="QLineEdit" name="lineEdit_focusCurvePath">
-           <property name="toolTip">
-            <string>Absolute or relative path to the JSON focus calibration file.</string>
+         <property name="spacing">
+          <number>8</number>
+         </property>
+         <item row="0" column="0" colspan="4">
+          <widget class="QGroupBox" name="groupBox_legacyFocus">
+           <property name="title">
+            <string>Legacy per-block focus</string>
            </property>
-          </widget>
-         </item>
-         <item row="0" column="2">
-          <widget class="QPushButton" name="pushButton_focusBrowse">
-           <property name="text">
-            <string>Browse...</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="3">
-          <widget class="QPushButton" name="pushButton_focusLoad">
-           <property name="text">
-            <string>Load Calibration</string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="0" colspan="4">
-          <widget class="FieldSpecSpinBox" name="doubleSpinBox_focusBlockSize">
-           <property name="toolTip">
-            <string>Number of planes between camera focus updates. The last applied position is held between blocks.</string>
-           </property>
-           <property name="decimals">
-            <number>0</number>
-           </property>
-           <property name="minimum">
-            <double>1.000000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>100.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>1.000000000000000</double>
-           </property>
-           <property name="value">
-            <double>8.000000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="0" colspan="4">
-          <widget class="QCheckBox" name="checkBox_focusAutofocusResidual">
-           <property name="toolTip">
-            <string>Enable per-block sharpness-based residual correction on top of the feedforward calibration curve.</string>
-           </property>
-           <property name="text">
-            <string>Enable per-block residual</string>
-           </property>
-           <property name="checked">
-            <bool>true</bool>
-           </property>
-          </widget>
-         </item>
-         <item row="3" column="0" colspan="4">
-          <widget class="QFrame" name="line_focusResidualSeparator">
-           <property name="frameShape">
-            <enum>QFrame::HLine</enum>
-           </property>
-           <property name="frameShadow">
-            <enum>QFrame::Sunken</enum>
-           </property>
-          </widget>
-         </item>
-
-         <item row="4" column="0">
-          <widget class="QLabel" name="label_focusXAxisVariable">
-           <property name="text">
-            <string>X axis:</string>
-           </property>
-          </widget>
-         </item>
-         <item row="4" column="1" colspan="3">
-          <widget class="QComboBox" name="comboBox_focusXAxisVariable">
-           <item>
-            <property name="text">
-             <string>Plane</string>
+           <layout class="QGridLayout" name="gridLayout_legacyFocus">
+            <property name="spacing">
+             <number>8</number>
             </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>Stage position (mm)</string>
-            </property>
-           </item>
+            <item row="0" column="0" colspan="2">
+             <widget class="QLineEdit" name="lineEdit_focusCurvePath">
+              <property name="toolTip">
+               <string>Absolute or relative path to the JSON focus calibration file.</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="2">
+             <widget class="QPushButton" name="pushButton_focusBrowse">
+              <property name="text">
+               <string>Browse...</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="3">
+             <widget class="QPushButton" name="pushButton_focusLoad">
+              <property name="text">
+               <string>Load Calibration</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0" colspan="4">
+             <widget class="FieldSpecSpinBox" name="doubleSpinBox_focusBlockSize">
+              <property name="toolTip">
+               <string>Number of planes between camera focus updates. The last applied position is held between blocks.</string>
+              </property>
+              <property name="decimals">
+               <number>0</number>
+              </property>
+              <property name="minimum">
+               <double>1.000000000000000</double>
+              </property>
+              <property name="maximum">
+               <double>100.000000000000000</double>
+              </property>
+              <property name="singleStep">
+               <double>1.000000000000000</double>
+              </property>
+              <property name="value">
+               <double>8.000000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="0" colspan="4">
+             <widget class="QCheckBox" name="checkBox_focusAutofocusResidual">
+              <property name="toolTip">
+               <string>Enable per-block sharpness-based residual correction on top of the feedforward calibration curve.</string>
+              </property>
+              <property name="text">
+               <string>Enable per-block residual</string>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0" colspan="4">
+             <widget class="QFrame" name="line_focusResidualSeparator">
+              <property name="frameShape">
+               <enum>QFrame::HLine</enum>
+              </property>
+              <property name="frameShadow">
+               <enum>QFrame::Sunken</enum>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="0" colspan="4">
+             <widget class="QLabel" name="label_focusStatus">
+              <property name="text">
+               <string>Not armed — no file loaded</string>
+              </property>
+             </widget>
+            </item>
+            <item row="5" column="0" colspan="4">
+             <widget class="QLabel" name="label_focusBlockHint">
+              <property name="text">
+               <string>Camera focus is updated once every 8 planes. The last applied position is held between blocks.</string>
+              </property>
+              <property name="wordWrap">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </widget>
          </item>
-         <item row="5" column="0" colspan="4">
-          <widget class="QLabel" name="label_focusStatus">
-           <property name="text">
-            <string>Not armed — no file loaded</string>
-           </property>
-          </widget>
-         </item>
-         <item row="6" column="0" colspan="4">
-          <widget class="QLabel" name="label_focusBlockHint">
-           <property name="text">
-            <string>Camera focus is updated once every 8 planes. The last applied position is held between blocks.</string>
-           </property>
-           <property name="wordWrap">
-            <bool>true</bool>
-           </property>
-          </widget>
-         </item>
-                <item row="7" column="0" colspan="4">
+        <item row="1" column="0" colspan="4">
          <widget class="QCheckBox" name="checkBox_adaptiveAutofocus">
           <property name="toolTip">
            <string>Enable per-plane adaptive autofocus to update camera focus during the stack.</string>
@@ -650,7 +646,7 @@
           </property>
          </widget>
         </item>
-        <item row="8" column="0" colspan="4">
+        <item row="2" column="0" colspan="4">
          <widget class="QFrame" name="line_autofocusSeparator">
           <property name="frameShape">
            <enum>QFrame::HLine</enum>
@@ -660,7 +656,7 @@
           </property>
          </widget>
         </item>
-        <item row="9" column="0" colspan="4">
+        <item row="3" column="0" colspan="4">
          <widget class="QWidget" name="widget_adaptiveAutofocusFields">
           <property name="visible">
            <bool>false</bool>
@@ -672,7 +668,7 @@
            <item row="0" column="0">
             <widget class="QLabel" name="label_autofocusCadence">
              <property name="text">
-              <string>Update cadence (planes):</string>
+              <string>Update cadence (planes)</string>
              </property>
             </widget>
            </item>
@@ -698,7 +694,7 @@
            <item row="1" column="0">
             <widget class="QLabel" name="label_autofocusResidualGain">
              <property name="text">
-              <string>Residual gain (mm):</string>
+              <string>Residual gain (mm)</string>
              </property>
             </widget>
            </item>
@@ -724,7 +720,7 @@
            <item row="2" column="0">
             <widget class="QLabel" name="label_autofocusMaxResidual">
              <property name="text">
-              <string>Max residual (mm):</string>
+              <string>Max residual (mm)</string>
              </property>
             </widget>
            </item>
@@ -750,7 +746,7 @@
            <item row="3" column="0">
             <widget class="QLabel" name="label_autofocusSmoothing">
              <property name="text">
-              <string>Smoothing:</string>
+              <string>Smoothing</string>
              </property>
             </widget>
            </item>
@@ -789,17 +785,14 @@
           </layout>
          </widget>
         </item>
-        <item row="10" column="0" colspan="4">
+        <item row="4" column="0" colspan="4">
          <widget class="QLabel" name="label_autofocusStatus">
-          <property name="styleSheet">
-           <string>font-weight: bold;</string>
-          </property>
           <property name="text">
            <string>Adaptive focus disabled. Enable it to update the camera focus on the fly during the stack.</string>
           </property>
          </widget>
         </item>
-        <item row="11" column="0" colspan="4">
+        <item row="5" column="0" colspan="4">
          <widget class="QLabel" name="label_autofocusHint">
           <property name="text">
            <string>Predicted camera position = feedforward + running residual. The residual is updated from the saved frame's sharpness and applied to the next plane.</string>
@@ -809,7 +802,7 @@
           </property>
          </widget>
         </item>
-        <item row="12" column="0" colspan="4">
+        <item row="6" column="0" colspan="4">
          <widget class="QProgressBar" name="progressBar_autofocus">
           <property name="visible">
            <bool>false</bool>

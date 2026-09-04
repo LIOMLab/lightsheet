@@ -48,10 +48,9 @@ FOCUS_WIDGET_NAMES = (
     "doubleSpinBox_focusBlockSize",
     "checkBox_focusAutofocusResidual",
     "line_focusResidualSeparator",
-    "comboBox_focusXAxisVariable",
+    "groupBox_legacyFocus",
     "label_focusStatus",
     "label_focusBlockHint",
-    "label_focusXAxisVariable",
 )
 
 AUTOFOCUS_WIDGET_NAMES = (
@@ -89,18 +88,6 @@ def test_focus_group_widgets_exist(
     ui = _focus_ui(ctrl)
     for name in FOCUS_WIDGET_NAMES:
         assert hasattr(ui, name), f"missing focus widget {name}"
-
-
-def test_focus_x_axis_combo_has_only_block(
-    qtbot: QtBot, controller: Controller_MainWindow
-) -> None:
-    """The focus X-axis combo contains only "Block"; the
-    "Stage position (mm)" option has been removed."""
-    ctrl = controller
-    ui = _focus_ui(ctrl)
-    combo = ui.comboBox_focusXAxisVariable
-    assert combo.count() == 1, f"expected one X-axis option, got {combo.count()}"
-    assert combo.currentText() == "Block"
 
 
 def test_focus_block_size_is_field_spec_subclass(

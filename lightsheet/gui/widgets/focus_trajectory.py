@@ -91,10 +91,7 @@ class FocusTrajectoryWidget(QWidget):
 
         # PlotWidget — the only pyqtgraph surface in this widget.
         self.plotWidget_focusTrajectory = pg.PlotWidget(self)
-        self.plotWidget_focusTrajectory.setStyleSheet(
-            f"PlotWidget {{ background-color: {_BG}; }}"
-        )
-        self.plotWidget_focusTrajectory.setBackground(None)
+        self.plotWidget_focusTrajectory.setBackground(_BG)
         self._configure_plot()
         self.plotWidget_focusTrajectory.hide()
         layout.addWidget(self.plotWidget_focusTrajectory)

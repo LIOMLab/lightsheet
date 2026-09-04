@@ -210,14 +210,14 @@ class AdaptiveDockController:
         )
 
     def freeze(self) -> None:
-        """Freeze the trajectory plot and set the badge to FOCUS ABORTED.
+        """Freeze the trajectory plot and set the badge to ADAPTIVE ABORTED.
 
-        The adaptive focus loop reuses the existing FOCUS badge string; it
-        does not introduce a new mode.
+        The adaptive-exposure loop reuses the existing ADAPTIVE badge string;
+        it does not introduce a new mode.
 
         Called from the E-stop handler AFTER the synchronous laser-off kill
         path completes."""
         self.widget.freeze()
         plane = int(self._last_plane)
         total = int(getattr(self._shell, "number_of_planes", 0))
-        self._shell._update_mode_badge("FOCUS", "ABORTED", plane=plane, total=total)
+        self._shell._update_mode_badge("ADAPTIVE", "ABORTED", plane=plane, total=total)

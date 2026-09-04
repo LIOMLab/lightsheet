@@ -1012,11 +1012,19 @@ class Controller_MainWindow(QMainWindow):
             self.stack_panel.ui.checkBox_focusEnable.isChecked()
         )
         # The mode badge min width accommodates the longest single-line
-        # adaptive string: "ADAPTIVE RUNNING — plane 999/999 (row 3/5)
-        # · MULTI-CH" Set
-        # once at construction so the badge reserves the width before
-        # the first ADAPTIVE mode render.
-        self.ui.label_modeBadge.setMinimumWidth(180)
+        # mode string: "ADAPTIVE RUNNING — plane 999/999 (row 3/5)
+        # · MULTI-CH". It is measured from the label's font at
+        # construction so the badge reserves the full width before the
+        # first mode render. The +10 px buffer covers the label's
+        # horizontal text margins so the rendered badge does not clip
+        # the last characters of the widest string.
+        _badge_fm = QFontMetrics(self.ui.label_modeBadge.font())
+        _badge_widest = (
+            "ADAPTIVE RUNNING \u2014 plane 999/999 (row 3/5) \u00b7 MULTI-CH"
+        )
+        self.ui.label_modeBadge.setMinimumWidth(
+            _badge_fm.horizontalAdvance(_badge_widest) + 10
+        )
 
     def _on_levels_changed(self, levels_min: int, levels_max: int) -> None:
         """Apply a LevelsBar WINDOW handle drag to the ImageView display

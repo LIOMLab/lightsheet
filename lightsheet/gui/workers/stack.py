@@ -836,10 +836,13 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         )
 
                         max_residual = self._autofocus_cfg.max_residual_mm
-                        if self._autofocus_controller._predicted_sharpness is None:
+                        is_cadence = (plane % self._autofocus_cfg.cadence) == 0
+                        if not self._autofocus_controller.has_reference:
                             state = "waiting"
                         elif abs(residual) >= max_residual - 1e-9:
                             state = "clamped"
+                        elif not is_cadence or self._autofocus_controller.residual_unchanged:
+                            state = "holding"
                         else:
                             state = "tracking"
                         self.sig_autofocus_status.emit(

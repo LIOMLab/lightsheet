@@ -42,6 +42,17 @@ class AdaptiveFocusController:
         """Current residual correction in millimetres (read-only)."""
         return self._residual_mm
 
+    @property
+    def has_reference(self) -> bool:
+        """A reference sharpness has been acquired and the controller can
+        update residuals."""
+        return self._predicted_sharpness is not None
+
+    @property
+    def residual_unchanged(self) -> bool:
+        """The last update produced no residual step."""
+        return abs(self._residual_mm - self._prev_residual_mm) < 1e-9
+
     def feedforward(self, stage_pos_mm: float) -> float:
         """Return the feedforward camera position for this stage position."""
         if self._curve is not None and self._cfg.use_curve_seed:

@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import ClassVar
 
 import numpy as np
-from PySide6.QtWidgets import QFileDialog, QWidget
+from PySide6.QtWidgets import QDoubleSpinBox, QFileDialog, QWidget
 
 from lightsheet.adaptive.types import AdaptiveConfig
 from lightsheet.focus.calibration import load_focus_curve
@@ -126,11 +126,6 @@ class StackPanelWidget(QWidget):
         # values. The schema already rejected out-of-range values at
         # startup, so the loaded values are safe.
         self._load_focus_config()
-        # The focus trajectory X-axis is fixed to "Block" in this phase;
-        # the "Stage position (mm)" option has been removed from the UI.
-        self.ui.comboBox_focusXAxisVariable.clear()
-        self.ui.comboBox_focusXAxisVariable.addItem("Block")
-        self.ui.comboBox_focusXAxisVariable.setCurrentIndex(0)
         # Wire the enable toggle → fields-container visibility. The group
         # box title row stays visible (the affordance) while only the
         # fields container is hidden on toggle-off.
@@ -1086,6 +1081,7 @@ class StackPanelWidget(QWidget):
         master checkbox remain visible; the parameter container, status,
         hint, and progress bar are shown only when adaptive is enabled."""
         self.ui.widget_adaptiveAutofocusFields.setVisible(checked)
+        self.ui.line_autofocusSeparator.setVisible(checked)
         self.ui.label_autofocusStatus.setVisible(checked)
         self.ui.label_autofocusHint.setVisible(checked)
         self.ui.progressBar_autofocus.setVisible(False)
@@ -1140,41 +1136,51 @@ class StackPanelWidget(QWidget):
             f"max {max_res:.3f} mm · smoothing {smooth:.2f}{using_curve}"
         )
 
+    def _clamp_autofocus_spinbox(
+        self, sb: QDoubleSpinBox, low: float, high: float
+    ) -> None:
+        """Reject an out-of-schema edit on an adaptive-autofocus spinbox:
+        clamp to the nearest bound, beep + emit the documented message,
+        and show the out-of-range copy in the status label until the next
+        valid edit refreshes it."""
+        value = sb.value()
+        if value < low or value > high:
+            sb.setValue(low if value < low else high)
+            self._shell.sig_beep.emit()
+            self._shell.sig_message.emit(
+                "Autofocus parameter out of range; value reset to the "
+                "nearest valid bound."
+            )
+            self.ui.label_autofocusStatus.setText(
+                "Autofocus parameter out of range; value reset to the "
+                "nearest valid bound."
+            )
+            return
+        self._update_autofocus_status_label()
+
     def _on_autofocus_cadence_edited(self) -> None:
         """editingFinished on cadence: clamp to the 1..1000 schema range."""
-        sb = self.ui.doubleSpinBox_autofocusCadence
-        value = sb.value()
-        if value < 1.0 or value > 1000.0:
-            self._shell.sig_beep.emit()
-            sb.setValue(1.0 if value < 1.0 else 1000.0)
-        self._update_autofocus_status_label()
+        self._clamp_autofocus_spinbox(
+            self.ui.doubleSpinBox_autofocusCadence, 1.0, 1000.0
+        )
 
     def _on_autofocus_residual_gain_edited(self) -> None:
         """editingFinished on residual gain: clamp to the 0..1 range."""
-        sb = self.ui.doubleSpinBox_autofocusResidualGain
-        value = sb.value()
-        if value < 0.0 or value > 1.0:
-            self._shell.sig_beep.emit()
-            sb.setValue(0.0 if value < 0.0 else 1.0)
-        self._update_autofocus_status_label()
+        self._clamp_autofocus_spinbox(
+            self.ui.doubleSpinBox_autofocusResidualGain, 0.0, 1.0
+        )
 
     def _on_autofocus_max_residual_edited(self) -> None:
         """editingFinished on max residual: clamp to the 0..5 range."""
-        sb = self.ui.doubleSpinBox_autofocusMaxResidual
-        value = sb.value()
-        if value < 0.0 or value > 5.0:
-            self._shell.sig_beep.emit()
-            sb.setValue(0.0 if value < 0.0 else 5.0)
-        self._update_autofocus_status_label()
+        self._clamp_autofocus_spinbox(
+            self.ui.doubleSpinBox_autofocusMaxResidual, 0.0, 5.0
+        )
 
     def _on_autofocus_smoothing_edited(self) -> None:
         """editingFinished on smoothing: clamp to the 0..1 range."""
-        sb = self.ui.doubleSpinBox_autofocusSmoothing
-        value = sb.value()
-        if value < 0.0 or value > 1.0:
-            self._shell.sig_beep.emit()
-            sb.setValue(0.0 if value < 0.0 else 1.0)
-        self._update_autofocus_status_label()
+        self._clamp_autofocus_spinbox(
+            self.ui.doubleSpinBox_autofocusSmoothing, 0.0, 1.0
+        )
 
     def build_autofocus_config(self) -> AutofocusConfig | None:
         """Pre-sample the adaptive autofocus configuration on the GUI thread
