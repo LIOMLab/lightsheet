@@ -173,12 +173,12 @@ class AcquisitionCoordinator(_AcquireScanMixin):
             )
 
     def updateUi_galvo_activate(self) -> None:
-        self.siggen.galvo_activated = (  # ty: ignore[unresolved-attribute]
+        self.siggen.galvo_activated = (
             self._shell.scan_panel.ui.checkBox_galvoActivate.isChecked()
         )
 
     def updateUi_galvo_invert(self) -> None:
-        self.siggen.galvo_inverted = (  # ty: ignore[unresolved-attribute]
+        self.siggen.galvo_inverted = (
             self._shell.scan_panel.ui.checkBox_galvoInvert.isChecked()
         )
 
@@ -312,12 +312,12 @@ class AcquisitionCoordinator(_AcquireScanMixin):
             )
 
     def updateUi_etl_steps(self) -> None:
-        self.siggen.etl_steps = int(  # ty: ignore[unresolved-attribute]
+        self.siggen.etl_steps = int(
             self._shell.scan_panel.ui.doubleSpinBox_etlSteps.value()
         )
 
     def updateUi_etl_activate(self) -> None:
-        self.siggen.etl_activated = (  # ty: ignore[unresolved-attribute]
+        self.siggen.etl_activated = (
             self._shell.scan_panel.ui.checkBox_etlActivate.isChecked()
         )
 
@@ -326,32 +326,80 @@ class AcquisitionCoordinator(_AcquireScanMixin):
             self._shell.acquisition_panel.ui.comboBox_cameraShutterMode.currentText()
         )
         if self.camera.shutter_mode == "Rolling":
-            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraExposureTime.setEnabled(True)
-            self._shell.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.setEnabled(True)
-            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraLineTime.setEnabled(False)
-            self._shell.acquisition_panel.ui.doubleSpinBox_cameraLineTime.setEnabled(False)
-            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraExposedLines.setEnabled(False)
-            self._shell.acquisition_panel.ui.doubleSpinBox_cameraExposedLines.setEnabled(False)
-            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraDelayLines.setEnabled(False)
-            self._shell.acquisition_panel.ui.doubleSpinBox_cameraDelayLines.setEnabled(False)
+            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraExposureTime.setEnabled(
+                True
+            )
+            self._shell.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.setEnabled(
+                True
+            )
+            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraLineTime.setEnabled(
+                False
+            )
+            self._shell.acquisition_panel.ui.doubleSpinBox_cameraLineTime.setEnabled(
+                False
+            )
+            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraExposedLines.setEnabled(
+                False
+            )
+            self._shell.acquisition_panel.ui.doubleSpinBox_cameraExposedLines.setEnabled(
+                False
+            )
+            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraDelayLines.setEnabled(
+                False
+            )
+            self._shell.acquisition_panel.ui.doubleSpinBox_cameraDelayLines.setEnabled(
+                False
+            )
         elif self.camera.shutter_mode == "Lightsheet":
-            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraExposureTime.setEnabled(False)
-            self._shell.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.setEnabled(False)
-            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraLineTime.setEnabled(True)
-            self._shell.acquisition_panel.ui.doubleSpinBox_cameraLineTime.setEnabled(True)
-            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraExposedLines.setEnabled(True)
-            self._shell.acquisition_panel.ui.doubleSpinBox_cameraExposedLines.setEnabled(True)
-            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraDelayLines.setEnabled(True)
-            self._shell.acquisition_panel.ui.doubleSpinBox_cameraDelayLines.setEnabled(True)
+            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraExposureTime.setEnabled(
+                False
+            )
+            self._shell.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.setEnabled(
+                False
+            )
+            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraLineTime.setEnabled(
+                True
+            )
+            self._shell.acquisition_panel.ui.doubleSpinBox_cameraLineTime.setEnabled(
+                True
+            )
+            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraExposedLines.setEnabled(
+                True
+            )
+            self._shell.acquisition_panel.ui.doubleSpinBox_cameraExposedLines.setEnabled(
+                True
+            )
+            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraDelayLines.setEnabled(
+                True
+            )
+            self._shell.acquisition_panel.ui.doubleSpinBox_cameraDelayLines.setEnabled(
+                True
+            )
         else:
-            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraExposureTime.setEnabled(True)
-            self._shell.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.setEnabled(True)
-            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraLineTime.setEnabled(False)
-            self._shell.acquisition_panel.ui.doubleSpinBox_cameraLineTime.setEnabled(False)
-            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraExposedLines.setEnabled(False)
-            self._shell.acquisition_panel.ui.doubleSpinBox_cameraExposedLines.setEnabled(False)
-            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraDelayLines.setEnabled(False)
-            self._shell.acquisition_panel.ui.doubleSpinBox_cameraDelayLines.setEnabled(False)
+            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraExposureTime.setEnabled(
+                True
+            )
+            self._shell.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.setEnabled(
+                True
+            )
+            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraLineTime.setEnabled(
+                False
+            )
+            self._shell.acquisition_panel.ui.doubleSpinBox_cameraLineTime.setEnabled(
+                False
+            )
+            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraExposedLines.setEnabled(
+                False
+            )
+            self._shell.acquisition_panel.ui.doubleSpinBox_cameraExposedLines.setEnabled(
+                False
+            )
+            self._shell.acquisition_panel.ui.label_doubleSpinBox_cameraDelayLines.setEnabled(
+                False
+            )
+            self._shell.acquisition_panel.ui.doubleSpinBox_cameraDelayLines.setEnabled(
+                False
+            )
 
     def updateUi_camera_exposure_time(self) -> None:
         self.camera.exposure_time = (
@@ -360,7 +408,7 @@ class AcquisitionCoordinator(_AcquireScanMixin):
         )  # ui(ms) to camera(s)
 
     def updateUi_camera_line_time(self) -> None:
-        self.camera.lightsheet_line_time = (  # ty: ignore[unresolved-attribute]
+        self.camera.lightsheet_line_time = (
             self._shell.acquisition_panel.ui.doubleSpinBox_cameraLineTime.value() * 1e-6
         )  # ui(us) to camera(s)
 

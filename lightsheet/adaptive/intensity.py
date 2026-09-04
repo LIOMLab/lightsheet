@@ -15,9 +15,7 @@ from __future__ import annotations
 import numpy as np
 
 
-def frame_intensity_pct(
-    frame: np.ndarray | None, sensor_max: int = 65535
-) -> float:
+def frame_intensity_pct(frame: np.ndarray | None, sensor_max: int = 65535) -> float:
     """Return the 99th-percentile of ``frame`` as a fraction of
     ``sensor_max`` (0.0 to 1.0).
 

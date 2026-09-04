@@ -19,13 +19,17 @@ parametrize marks are evaluated at collection time, not at fixture-resolution
 time, so the fixture cannot be used inside ``skipif``.
 """
 
+import contextlib
 import os
 import sys
 import types
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Iterator, cast
 
 import pytest
+
+# Qt cleanup helpers used by the autouse fixture and pytest_sessionfinish.
+from test.helpers.cleanup import _pump_deferred_delete, _quit_thread_draining
 
 if TYPE_CHECKING:
     # pyserial is installed on the Mac dev box (and types-pyserial provides
@@ -34,6 +38,10 @@ if TYPE_CHECKING:
     # runtime stub injection (_make_serial_stub, gated by find_spec) still
     # runs so the Mac path stubs at runtime if the real import ever fails.
     import serial  # noqa: F401  # ty static-analysis only; not used at runtime
+
+# Register the new fixtures so all test modules can use bundle/controller
+# without per-module imports.
+pytest_plugins = ["test.fixtures.controller"]
 
 # Module-level hardware gate (D-15). Parametrize marks are evaluated at
 # collection time, before any fixture resolves, so the conformance tests'
@@ -309,31 +317,35 @@ _ensure_stub("serial", _make_serial_stub)
 # (which gates on LIGHTSHEET_HW): on the rig the real nidaqmx is active even
 # for the mock-suite run (without LIGHTSHEET_HW=1), so the stub-behavior
 # tests must skip based on stub presence, not the env var.
-_nidaqmx_is_stub: bool = getattr(
-    sys.modules.get("nidaqmx"), "_lightsheet_stub", False
-)
+_nidaqmx_is_stub: bool = getattr(sys.modules.get("nidaqmx"), "_lightsheet_stub", False)
 _pco_is_stub: bool = getattr(sys.modules.get("pco"), "_lightsheet_stub", False)
 
 
-# Disable garbage collection for the entire test session. Qt widget
-# destructors segfault during garbage collection on macOS, killing xdist
-# worker processes before they can send coverage data back to the master.
-# The segfault happens during a GC pass triggered by pytest's fixture
-# introspection (getfuncargnames → signature → unwrap → GC) or at worker
-# exit. Disabling GC prevents the segfault without affecting test behavior
-# (test objects are never explicitly collected during the test run).
+# Garbage collection is disabled inside pytest-xdist workers. The xdist suite
+# previously showed intermittent worker hangs/segfaults at shutdown when
+# Python's cyclic GC ran while PySide6 QThreads and top-level widgets were
+# still being torn down, so GC stays off there as the conservative default.
+# The serial (single-process) run keeps GC enabled; the autouse Qt cleanup and
+# sessionfinish hooks explicitly call ``_gc.collect()`` after the deferred-delete
+# pump to bound the object graph and keep the serial run from slowing down.
+# We do NOT call os._exit() in pytest_sessionfinish — xdist workers must exit
+# normally to send coverage data back to the master.
 import gc as _gc  # noqa: E402
 
-_gc.disable()
+if os.environ.get("PYTEST_XDIST_WORKER"):
+    _gc.disable()
 
 
-# GC is disabled globally (above) to prevent Qt widget destructor
-# segfaults during the test run. We do NOT re-enable it or call os._exit()
-# in pytest_sessionfinish — xdist workers must exit normally to send
-# coverage data back to the master. The gc.disable() prevents the segfault
-# during the test run; at exit, Python's normal shutdown may re-enable GC
-# and segfault, but by that point pytest-cov has already written coverage
-# data and the xdist channel has already sent it to the master.
+# GC is disabled in xdist workers (above) to prevent Qt widget destructor races
+# during worker shutdown. The autouse and sessionfinish cleanup hooks call
+# ``_gc.collect()`` manually after the deferred-delete pump in serial, so the
+# object graph stays bounded without the risk of automatic collection
+# mid-teardown. We do NOT re-enable it or call os._exit() in
+# pytest_sessionfinish — xdist workers must exit normally to send coverage
+# data back to the master. The historical signal-lambda reference cycle that
+# also contributed to mid-run segfaults is fixed (wire_collaborators uses
+# bound-method connections); GC disable here is the shutdown-time safety
+# belt, not the original root-cause mitigation.
 #
 # Root cause of the historical segfault (a real reference-cycle bug, now
 # fixed — see ROADMAP.md Phase 6 known issue): 53 `lambda: self._mc.<slot>()`
@@ -370,6 +382,119 @@ _gc.disable()
 # — the cycle break makes it unnecessary. The make_controller fixture's
 # sip.delete teardown was likewise removed (replaced by
 # _stop_worker_threads, which mirrors closeEvent's quit()+wait()
-# shutdown). The single-process -p no:xdist flag in scripts/coverage.sh
-# is the last of the three workarounds and is re-enabled once xdist
-# workers no longer segfault at shutdown.
+# shutdown).
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_qt_after_test(qtbot: Any) -> Iterator[None]:
+    """Stop active timers/threads and reap leaked top-level widgets after
+    every test.
+
+    Wraps each operation in ``RuntimeError`` guards so already-deleted C++
+    objects do not fail cleanup. A temporary ``QMessageBox.question`` patch
+    prevents a leaked ``Controller_MainWindow`` closeEvent from blocking the
+    runner with a modal exit-confirmation dialog.
+    """
+    yield
+
+    from unittest.mock import patch
+
+    from PySide6.QtCore import QThread, QTimer
+    from PySide6.QtWidgets import QApplication, QMessageBox
+
+    app = QApplication.instance()
+    if app is None or not isinstance(app, QApplication):
+        return
+
+    # Stop all active QTimer objects first.
+    for obj in _gc.get_objects():
+        if isinstance(obj, QTimer):
+            try:
+                if obj.isActive():
+                    obj.stop()
+            except RuntimeError:
+                pass
+
+    # Quit and drain every running QThread except the main thread.
+    main_thread = QThread.currentThread()
+    for obj in _gc.get_objects():
+        if isinstance(obj, QThread) and obj is not main_thread:
+            _quit_thread_draining(obj, timeout_ms=2000)
+
+    # Close + deleteLater any remaining top-level widgets while the
+    # message-box patch is active.
+    with patch(
+        "PySide6.QtWidgets.QMessageBox.question",
+        return_value=QMessageBox.StandardButton.Yes,
+    ):
+        for widget in list(app.topLevelWidgets()):
+            with contextlib.suppress(RuntimeError):
+                widget.close()
+            with contextlib.suppress(RuntimeError):
+                widget.deleteLater()
+
+    _pump_deferred_delete()
+    # Serial runs keep the cyclic GC enabled, but the autouse cleanup above
+    # can leave short-lived wrapper cycles behind. A single explicit
+    # collection after the deferred-delete pump bounds the object graph
+    # so the next test's gc.get_objects() scan does not grow without bound.
+    # This is skipped in xdist workers where GC is intentionally disabled
+    # to avoid PySide6/shiboken destructor races at worker shutdown.
+    if not os.environ.get("PYTEST_XDIST_WORKER"):
+        _gc.collect()
+
+
+def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
+    """Stop timers/threads and reap top-level widgets before the xdist
+    worker exits.
+
+    PySide6/shiboken can deadlock or segfault during xdist worker shutdown
+    when QThreads are still running, QTimer events are undelivered, or
+    top-level widgets leak across the session boundary. This hook performs
+    the same bounded cleanup the autouse fixture does after every test,
+    then pumps DeferredDelete so C++ objects are destroyed before the
+    process exits.
+    """
+    from unittest.mock import patch
+
+    from PySide6.QtCore import QThread, QTimer
+    from PySide6.QtWidgets import QApplication, QMessageBox
+
+    app = QApplication.instance()
+    if app is None or not isinstance(app, QApplication):
+        return
+    # Stop all active timers first so no timer fires while we are quitting
+    # threads.
+    for obj in _gc.get_objects():
+        if isinstance(obj, QTimer):
+            try:
+                if obj.isActive():
+                    obj.stop()
+            except RuntimeError:
+                # C++ object already deleted.
+                pass
+    # Quit and drain every running QThread. Skip the current (main) thread
+    # so a self-wait does not deadlock the worker process's shutdown.
+    main_thread = QThread.currentThread()
+    for obj in _gc.get_objects():
+        if isinstance(obj, QThread) and obj is not main_thread:
+            _quit_thread_draining(obj, timeout_ms=2000)
+    # Close + deleteLater any remaining top-level widgets while the
+    # message-box patch is active, then pump DeferredDelete.
+    if app is not None:
+        with patch(
+            "PySide6.QtWidgets.QMessageBox.question",
+            return_value=QMessageBox.StandardButton.Yes,
+        ):
+            for widget in list(app.topLevelWidgets()):
+                with contextlib.suppress(RuntimeError):
+                    widget.close()
+                with contextlib.suppress(RuntimeError):
+                    widget.deleteLater()
+        _pump_deferred_delete()
+        # Serial runs keep the cyclic GC enabled; an explicit collection
+        # after the final deferred-delete pump frees any remaining wrapper
+        # cycles before the session exits. Skipped in xdist workers where
+        # GC is intentionally disabled to avoid shutdown-time destructor races.
+        if not os.environ.get("PYTEST_XDIST_WORKER"):
+            _gc.collect()

@@ -82,9 +82,7 @@ class LinearVoltMap:
         # would cause ZeroDivisionError on first write.
         if mw_per_volt <= 0:
             self.error = 1
-            self.error_message = (
-                f"mw_per_volt must be > 0, got {mw_per_volt!r}"
-            )
+            self.error_message = f"mw_per_volt must be > 0, got {mw_per_volt!r}"
             logger.error(
                 "LinearVoltMap(%s) constructed with invalid mw_per_volt=%r",
                 label,
@@ -106,9 +104,7 @@ class LinearVoltMap:
             pairs = [(float(v), float(mw)) for v, mw in calibration_curve]
         except (TypeError, ValueError) as exc:
             self.error = 1
-            self.error_message = (
-                f"calibration_curve has non-numeric entries: {exc}"
-            )
+            self.error_message = f"calibration_curve has non-numeric entries: {exc}"
             logger.error(
                 "LinearVoltMap(%s) calibration_curve non-numeric: %r",
                 self.label,
@@ -121,12 +117,10 @@ class LinearVoltMap:
         if len(vs) < 2 or vs != sorted(vs) or vs[0] == vs[-1]:
             self.error = 1
             self.error_message = (
-                "calibration_curve must have >= 2 points with "
-                "strictly-increasing V"
+                "calibration_curve must have >= 2 points with strictly-increasing V"
             )
             logger.error(
-                "LinearVoltMap(%s) calibration_curve not strictly "
-                "increasing: %r",
+                "LinearVoltMap(%s) calibration_curve not strictly increasing: %r",
                 self.label,
                 vs,
             )

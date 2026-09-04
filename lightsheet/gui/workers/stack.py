@@ -11,7 +11,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
-from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from lightsheet.gui.workers.scan_mixin import _AcquireScanMixin
 from lightsheet.gui.workers.stack_adaptive import _StackAdaptiveMixin
@@ -20,8 +20,13 @@ from lightsheet.hal.bundle import DeviceBundle
 if TYPE_CHECKING:
     from lightsheet.adaptive.controller import AdaptiveController
     from lightsheet.adaptive.types import AdaptiveCommand, AdaptiveConfig
+    from lightsheet.focus.adaptive_controller import AdaptiveFocusController
     from lightsheet.focus.controller import FocusController
-    from lightsheet.focus.types import FocusConfig, FocusCurve
+    from lightsheet.focus.types import (
+        AutofocusConfig,
+        FocusConfig,
+        FocusCurve,
+    )
     from lightsheet.gui.coordinators.hardware_manager import HardwareManager
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
@@ -74,11 +79,16 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
     # Emitted once per focus block boundary for the GUI-thread trajectory
     # plot (the worker NEVER calls pyqtgraph directly).
     sig_focus_trajectory = Signal(int, float, float, float, float)
+    # Autofocus status signal: plane, n_planes, predicted_camera_pos_mm,
+    # residual_mm, sharpness, state. Emitted once per plane so the
+    # GUI-thread status label and progress bar update without the worker
+    # touching Qt widgets directly.
+    sig_autofocus_status = Signal(int, int, float, float, float, str)
 
     def __init__(
         self,
         bundle: DeviceBundle,
-        hw: HardwareManager,
+        hw: HardwareManager | None,
         shell: Controller_MainWindow,
         save_description: str,
         save_stitch_blend: bool,
@@ -88,12 +98,15 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         adaptive_cfg: AdaptiveConfig | None = None,
         focus_cfg: FocusConfig | None = None,
         focus_curve: FocusCurve | None = None,
+        autofocus_cfg: AutofocusConfig | None = None,
+        autofocus_curve: FocusCurve | None = None,
     ) -> None:
         super().__init__()
+        assert hw is not None
         self.camera = bundle.camera
         self.siggen = bundle.siggen
         self.motors = bundle.motors
-        self._hw = hw
+        self._hw: HardwareManager = hw
         self._shell = shell
         # Save-option widgets are pre-sampled on the GUI thread before
         # spawning the worker so the worker thread never reaches into the
@@ -159,6 +172,19 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             raise ValueError(
                 "Focus compensation enabled but no calibration curve was loaded"
             )
+        # Per-plane adaptive autofocus config and optional curve seed.
+        # The frozen dataclass is safe to share across threads; the curve
+        # is only required when ``use_curve_seed`` is True.
+        self._autofocus_cfg: AutofocusConfig | None = autofocus_cfg
+        self._autofocus_curve: FocusCurve | None = autofocus_curve
+        self._autofocus_controller: AdaptiveFocusController | None = None
+        if (
+            self._autofocus_cfg is not None
+            and self._autofocus_cfg.enabled
+            and self._autofocus_cfg.use_curve_seed
+            and self._autofocus_curve is None
+        ):
+            raise ValueError("Autofocus curve seed enabled but no curve was loaded")
 
     @Slot()
     def run(self) -> None:
@@ -170,8 +196,8 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 self._shell.save_description = str(self._save_description)
 
                 # Setting frame saver
-                self._shell._fs.reinit(3)  # ty: ignore[unresolved-attribute]
-                self._shell._fs.add_sample_name(self._shell.save_description)  # ty: ignore[unresolved-attribute]
+                self._shell._fs.reinit(3)
+                self._shell._fs.add_sample_name(self._shell.save_description)
                 # In multi-channel mode, pass the pre-sampled wavelengths
                 # to set_files so the save side builds one per-channel
                 # filename list (HDF5) and the Zarr writer allocates a
@@ -187,7 +213,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 else:
                     set_files_kwargs = {}
                 if self._save_all_crop:
-                    self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
+                    self._shell._fs.set_files(
                         self._shell.number_of_planes,
                         self._shell.save_filepath,
                         "stack",
@@ -196,7 +222,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         **set_files_kwargs,
                     )
                 elif self._save_all_full:
-                    self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
+                    self._shell._fs.set_files(
                         self._shell.number_of_planes,
                         self._shell.save_filepath,
                         "stack",
@@ -221,7 +247,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     # number_of_planes datasets into each, terminating
                     # on frames consumed (n_channels * n_planes) — not
                     # files written.
-                    self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
+                    self._shell._fs.set_files(
                         1,
                         self._shell.save_filepath,
                         "stack",
@@ -230,7 +256,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         **set_files_kwargs,
                     )
                 # Starting frame saver
-                self._shell._fs.start_saving()  # ty: ignore[unresolved-attribute]
+                self._shell._fs.start_saving()
                 # Configure the adaptive trajectory recorder on the save
                 # side. When adaptive is enabled, the per-plane loop
                 # records one AdaptiveSample per main plane and the HDF5
@@ -243,7 +269,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 adaptive_enabled = (
                     self._adaptive_cfg is not None and self._adaptive_cfg.enabled
                 )
-                self._shell._fs.configure_adaptive(  # ty: ignore[unresolved-attribute]
+                self._shell._fs.configure_adaptive(
                     adaptive_enabled,
                     config=self._adaptive_cfg if adaptive_enabled else None,
                 )
@@ -257,8 +283,11 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 # When disabled, no focus trajectory is recorded or written.
                 focus_enabled = (
                     self._focus_cfg is not None and self._focus_cfg.enabled
-                )
-                self._shell._fs.configure_focus(  # ty: ignore[unresolved-attribute]
+                ) or (self._autofocus_cfg is not None and self._autofocus_cfg.enabled)
+                # Pass the legacy FocusConfig as attrs when present; the
+                # per-plane autofocus path does not change the trajectory
+                # recorder schema, so only the legacy config is written.
+                self._shell._fs.configure_focus(
                     focus_enabled,
                     config=self._focus_cfg if focus_enabled else None,
                 )
@@ -351,14 +380,15 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     laser2_mw=current_powers[1],
                 )
 
-            # Focus control setup: construct the controller from the
-            # pre-sampled frozen FocusConfig and FocusCurve, reading the
-            # camera travel limits from the HAL (not the UI). When focus is
-            # off (cfg is None or disabled), no controller is constructed
-            # and the per-plane loop runs the existing fixed stack path
-            # unchanged.
+            # Focus control setup: read the camera travel limits once,
+            # then construct either the block-based legacy FocusController,
+            # the per-plane AdaptiveFocusController, or neither. When both
+            # are off, the per-plane loop runs the existing fixed stack path.
             self._focus_controller = None
             self._focus_block_count = 0
+            self._autofocus_controller = None
+            cam_lo_mm = self.motors.camera.get_limit_low("mm")
+            cam_hi_mm = self.motors.camera.get_limit_high("mm")
             if self._focus_cfg is not None and self._focus_cfg.enabled:
                 if self._focus_curve is None:
                     raise ValueError(
@@ -366,8 +396,6 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     )
                 from lightsheet.focus.controller import FocusController
 
-                cam_lo_mm = self.motors.camera.get_limit_low("mm")
-                cam_hi_mm = self.motors.camera.get_limit_high("mm")
                 self._focus_controller = FocusController(
                     self._focus_cfg,
                     self._focus_curve,
@@ -375,7 +403,40 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     cam_hi_mm,
                 )
 
+            # Per-plane adaptive autofocus setup: construct the
+            # controller from the camera travel limits, the optional curve
+            # seed, and the current camera position. When autofocus is off,
+            # no controller is constructed and the per-plane loop runs the
+            # existing fixed or block focus path unchanged.
+            if self._autofocus_cfg is not None and self._autofocus_cfg.enabled:
+                from lightsheet.focus.adaptive_controller import AdaptiveFocusController
+
+                try:
+                    cam_pos_mm = self.motors.camera.get_position("mm")
+                except Exception as e:
+                    self._shell.sig_message.emit(
+                        f"Stack acquisition aborted: could not read current camera "
+                        f"position for autofocus seed: {e}"
+                    )
+                    self._shell.sig_beep.emit()
+                    return
+                self._autofocus_controller = AdaptiveFocusController(
+                    self._autofocus_cfg,
+                    cam_lo_mm,
+                    cam_hi_mm,
+                    curve=self._autofocus_curve,
+                    seed_camera_pos_mm=cam_pos_mm,
+                )
+
             for plane in range(n_planes):
+                # Cooperative shutdown: if the owning QThread has been asked
+                # to quit (e.g. during xdist worker teardown), stop the stack
+                # and let the post-loop cleanup run. This is intentionally
+                # checked at the loop top alongside the mode-started / E-stop
+                # guards so the worker never blocks teardown.
+                if QThread.currentThread().isInterruptionRequested():
+                    self._shell.sig_message.emit("Stack Acquisition Interrupted")
+                    break
                 if not self._shell.stack_mode_started:
                     self._shell.sig_message.emit("Stack Acquisition Interrupted")
                     break
@@ -404,7 +465,58 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     )  # ty: ignore[unsupported-operator]
                     stage_pos_mm = position / 1000.0  # um -> mm
 
-                    if (
+                    autofocus_focus_pos_mm: float | None = None
+
+                    if self._autofocus_controller is not None:
+                        # Per-plane autofocus: compute the camera target,
+                        # move both axes in parallel, and let the
+                        # post-acquire block record the sample and update
+                        # the residual for the next plane.
+                        autofocus_focus_pos_mm = self._autofocus_controller.target(
+                            stage_pos_mm
+                        )
+
+                        if (
+                            not self._shell.stack_mode_started
+                            or self._shell.estop_event.is_set()
+                        ):
+                            break
+
+                        try:
+                            self.motors.move_axes_parallel(
+                                [
+                                    ("horizontal", position, "\u03bcm"),
+                                    ("camera", autofocus_focus_pos_mm, "mm"),
+                                ]
+                            )
+                        except ValueError:
+                            self._shell.sig_message.emit(
+                                f"Focus move rejected at plane {plane}: camera target "
+                                f"{autofocus_focus_pos_mm:.3f} mm is outside travel "
+                                "limits. Stack acquisition aborted."
+                            )
+                            self._shell.sig_beep.emit()
+                            self.sig_autofocus_status.emit(
+                                plane,
+                                n_planes,
+                                autofocus_focus_pos_mm,
+                                self._autofocus_controller.residual_mm,
+                                0.0,
+                                "error",
+                            )
+                            break
+
+                        self._shell.sig_refresh_position_horizontal.emit()
+                        self._shell.sig_refresh_position_camera.emit()
+
+                        if self._shell.saving_allowed:
+                            self._shell._fs.add_motor_parameters(
+                                self._shell.current_horizontal_position_text,
+                                self._shell.current_vertical_position_text,
+                                self._shell.current_camera_position_text,
+                            )
+
+                    elif (
                         self._focus_controller is not None
                         and self._focus_cfg is not None
                         and self._focus_curve is not None
@@ -425,9 +537,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                             sharpness_metric = frame_sharpness_variance(
                                 self._shell.reconstructed_frame
                             )
-                            self._focus_controller.update_residual(
-                                sharpness_metric
-                            )
+                            self._focus_controller.update_residual(sharpness_metric)
 
                         feedforward_camera_pos_mm = float(
                             np.interp(
@@ -436,9 +546,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                                 self._focus_curve.camera_pos,
                             )
                         )
-                        focus_pos_mm = self._focus_controller.target(
-                            stage_pos_mm
-                        )
+                        focus_pos_mm = self._focus_controller.target(stage_pos_mm)
                         residual_mm = self._focus_controller.residual_mm
 
                         try:
@@ -463,10 +571,10 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         self._shell.sig_refresh_position_camera.emit()
 
                         if self._shell.saving_allowed:
-                            self._shell._fs.add_motor_parameters(  # ty: ignore[unresolved-attribute]
-                                self._shell.current_horizontal_position_text,  # ty: ignore[unresolved-attribute]
-                                self._shell.current_vertical_position_text,  # ty: ignore[unresolved-attribute]
-                                self._shell.current_camera_position_text,  # ty: ignore[unresolved-attribute]
+                            self._shell._fs.add_motor_parameters(
+                                self._shell.current_horizontal_position_text,
+                                self._shell.current_vertical_position_text,
+                                self._shell.current_camera_position_text,
                             )
                             from lightsheet.focus.types import FocusSample
 
@@ -480,7 +588,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                                 if self._focus_block_count > 0
                                 else None,
                             )
-                            self._shell._fs.record_focus_sample(  # ty: ignore[unresolved-attribute]
+                            self._shell._fs.record_focus_sample(
                                 focus_sample
                             )
 
@@ -511,10 +619,10 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         self._shell.sig_refresh_position_horizontal.emit()
 
                         if self._shell.saving_allowed:
-                            self._shell._fs.add_motor_parameters(  # ty: ignore[unresolved-attribute]
-                                self._shell.current_horizontal_position_text,  # ty: ignore[unresolved-attribute]
-                                self._shell.current_vertical_position_text,  # ty: ignore[unresolved-attribute]
-                                self._shell.current_camera_position_text,  # ty: ignore[unresolved-attribute]
+                            self._shell._fs.add_motor_parameters(
+                                self._shell.current_horizontal_position_text,
+                                self._shell.current_vertical_position_text,
+                                self._shell.current_camera_position_text,
                             )
 
                     # Pre-acquire guard: a Stop or E-stop requested while the worker
@@ -637,8 +745,8 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                             and frame1 is not None
                             and frame2 is not None
                         ):
-                            self._shell._fs.enqueue_buffer((0, frame1))  # ty: ignore[unresolved-attribute]
-                            self._shell._fs.enqueue_buffer((1, frame2))  # ty: ignore[unresolved-attribute]
+                            self._shell._fs.enqueue_buffer((0, frame1))
+                            self._shell._fs.enqueue_buffer((1, frame2))
                     else:
                         # Single-channel path (unchanged — back-compat).
 
@@ -659,25 +767,92 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         self._record_adaptive_step(plane)
                         if self._shell.saving_allowed:
                             if self._save_all_crop:
-                                cropped_buffer = self._shell._fs.crop_buffer(  # ty: ignore[unresolved-attribute]
+                                cropped_buffer = self._shell._fs.crop_buffer(
                                     self._shell.buffer  # ty: ignore[invalid-argument-type]
                                 )
-                                self._shell._fs.enqueue_buffer(cropped_buffer)  # ty: ignore[unresolved-attribute]
+                                self._shell._fs.enqueue_buffer(cropped_buffer)
                                 self._shell.sig_message.emit(
                                     "Saving All Images (one for each ETL step, cropped)"
                                 )
                             elif self._save_all_full:
-                                self._shell._fs.enqueue_buffer(self._shell.buffer)  # ty: ignore[invalid-argument-type, unresolved-attribute]
+                                self._shell._fs.enqueue_buffer(self._shell.buffer)  # ty: ignore[invalid-argument-type]
                                 self._shell.sig_message.emit(
                                     "Saving All Images (one for each ETL step, full)"
                                 )
                             else:
-                                self._shell._fs.enqueue_buffer(  # ty: ignore[unresolved-attribute]
+                                self._shell._fs.enqueue_buffer(
                                     self._shell.reconstructed_frame  # ty: ignore[invalid-argument-type]
                                 )
                                 self._shell.sig_message.emit(
                                     "Saving Reconstructed Image"
                                 )
+
+                    # Per-plane autofocus: record the focus sample, emit
+                    # the trajectory and status signals, and update the
+                    # residual for the next plane. This is intentionally
+                    # placed after the frame has been acquired and the
+                    # adaptive power sample has been recorded.
+                    if (
+                        self._autofocus_controller is not None
+                        and autofocus_focus_pos_mm is not None
+                        and self._autofocus_cfg is not None
+                    ):
+                        from lightsheet.focus.sharpness import frame_sharpness_variance
+                        from lightsheet.focus.types import FocusSample
+
+                        focus_frame = self._shell.reconstructed_frame
+                        exposure = (
+                            self._adaptive_current_cmd.exposure_s
+                            if self._adaptive_current_cmd is not None
+                            else self.camera.exposure_time
+                        )
+                        sharp = frame_sharpness_variance(focus_frame) / max(
+                            exposure, 1e-9
+                        )
+
+                        feedforward = self._autofocus_controller.feedforward(
+                            stage_pos_mm
+                        )
+                        residual = self._autofocus_controller.residual_mm
+
+                        focus_sample = FocusSample(
+                            block_index=plane,
+                            stage_pos_mm=stage_pos_mm,
+                            feedforward_camera_pos_mm=feedforward,
+                            residual_mm=residual,
+                            applied_camera_pos_mm=autofocus_focus_pos_mm,
+                            sharpness_metric=sharp,
+                        )
+                        if self._shell.saving_allowed:
+                            self._shell._fs.record_focus_sample(
+                                focus_sample
+                            )
+                        self.sig_focus_trajectory.emit(
+                            plane,
+                            stage_pos_mm,
+                            feedforward,
+                            residual,
+                            autofocus_focus_pos_mm,
+                        )
+
+                        max_residual = self._autofocus_cfg.max_residual_mm
+                        if self._autofocus_controller._predicted_sharpness is None:
+                            state = "waiting"
+                        elif abs(residual) >= max_residual - 1e-9:
+                            state = "clamped"
+                        else:
+                            state = "tracking"
+                        self.sig_autofocus_status.emit(
+                            plane,
+                            n_planes,
+                            autofocus_focus_pos_mm,
+                            residual,
+                            sharp,
+                            state,
+                        )
+
+                        if (plane % self._autofocus_cfg.cadence) == 0:
+                            self._autofocus_controller.update(stage_pos_mm, sharp)
 
                     # Update progress bar
                     progress_value += progress_increment
@@ -687,34 +862,44 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 self._shell.sig_progress_update.emit(
                     100
                 )  # In case the number of planes is not a multiple of 100
-
-            if self._shell.saving_allowed:
-                self._shell._fs.stop_saving()  # ty: ignore[unresolved-attribute]
-
-            # Put ETLs in standby mode: 2.5V corresponds no current through coil (mid 0-5V adjustable range)  # noqa: E501
-            self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
-
-            # Stopping laser — safety: ensures both lasers off regardless
-            # of mode. In multi-channel mode the last select_laser(1) may
-            # have left L2 on; in single-channel mode start_lasers may
-            # have left the auto-selected laser on. stop_lasers reads the
-            # cached auto-laser flags and drives .off() on each active
-            # laser.
-            self._hw.stop_lasers()
-
-            # Stopping camera
-            self.camera.disarm()
         except Exception as e:
             self._shell.sig_message.emit(
                 f"Stack acquisition failed — the run was aborted. Cause: {e}"
             )
             logger.exception("Stack mode worker failed")
-            raise
         finally:
             # The finished signal must fire exactly once whether the method
-            # completes normally, breaks out of the per-plane loop, or an
-            # exception propagates from stop_lasers()/camera.disarm()/
-            # anything else in the body. Without this, a worker that dies
-            # mid-cleanup leaves the UI stuck on "Stop Stack Mode" with no
-            # slot to re-enable it.
+            # completes normally, breaks out of the per-plane loop on E-stop
+            # or interruption, or an exception propagates from the body. Stop
+            # saving (if started), put the ETLs in standby, stop the lasers,
+            # and disarm the camera so a worker that exits mid-acquisition
+            # does not leave hardware energized; if a cleanup step fails,
+            # surface it but always emit finished so the UI can re-enable.
+            _cleanup_errors: list[str] = []
+            if getattr(self._shell, "saving_allowed", False):
+                try:
+                    self._shell._fs.stop_saving()
+                except Exception as e:
+                    logger.exception("Stack worker stop_saving cleanup failed")
+                    _cleanup_errors.append(f"stop_saving: {e}")
+            try:
+                self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+            except Exception as e:
+                logger.exception("Stack worker ETL cleanup failed")
+                _cleanup_errors.append(f"ETL standby: {e}")
+            try:
+                self._hw.stop_lasers()
+            except Exception as e:
+                logger.exception("Stack worker stop_lasers cleanup failed")
+                _cleanup_errors.append(f"stop_lasers: {e}")
+            try:
+                self.camera.disarm()
+            except Exception as e:
+                logger.exception("Stack worker camera disarm cleanup failed")
+                _cleanup_errors.append(f"camera disarm: {e}")
+            if _cleanup_errors:
+                self._shell.sig_message.emit(
+                    "Stack acquisition failed — cleanup could not complete safely. "
+                    "Errors: " + "; ".join(_cleanup_errors)
+                )
             self.finished.emit()

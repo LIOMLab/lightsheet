@@ -35,7 +35,6 @@ from PySide6.QtGui import (
     QMouseEvent,
     QPainter,
     QPaintEvent,
-    QPen,
 )
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
@@ -205,8 +204,9 @@ class LevelsBar(QWidget):
             self._window_max = max(
                 self._window_min, min(self._window_max, self._range_max)
             )
-            window_changed = (
-                (self._window_min, self._window_max) != (old_wmin, old_wmax)
+            window_changed = (self._window_min, self._window_max) != (
+                old_wmin,
+                old_wmax,
             )
             if range_changed:
                 self.sig_rangeChanged.emit(self._range_min, self._range_max)
@@ -296,7 +296,7 @@ class LevelsBar(QWidget):
 
         _y_range, y_window = self._row_y()
         tri_half = 7  # half-width of the triangle base
-        tri_h = 10    # triangle height (apex to base)
+        tri_h = 10  # triangle height (apex to base)
 
         # Handle x positions.
         x_rmin = self._value_to_x(self._range_min)
@@ -311,11 +311,13 @@ class LevelsBar(QWidget):
         painter.setBrush(_c.Q_RANGE_BRUSH)
         painter.setPen(_c.Q_RANGE_PEN)
         for x in (x_rmin, x_rmax):
-            tri = QPolygonF([
-                QPointF(x - tri_half, g_top - tri_h),
-                QPointF(x + tri_half, g_top - tri_h),
-                QPointF(float(x), float(g_top)),
-            ])
+            tri = QPolygonF(
+                [
+                    QPointF(x - tri_half, g_top - tri_h),
+                    QPointF(x + tri_half, g_top - tri_h),
+                    QPointF(float(x), float(g_top)),
+                ]
+            )
             painter.drawPolygon(tri)
             # Color-blind-safe dot marker on top of the dark triangle.
             painter.setPen(Qt.PenStyle.NoPen)
@@ -330,21 +332,25 @@ class LevelsBar(QWidget):
         painter.setBrush(_c.Q_WINDOW_BRUSH)
         painter.setPen(_c.Q_WINDOW_PEN)
         for x in (x_wmin, x_wmax):
-            tri = QPolygonF([
-                QPointF(x - tri_half, g_bottom + tri_h),
-                QPointF(x + tri_half, g_bottom + tri_h),
-                QPointF(float(x), float(g_bottom)),
-            ])
+            tri = QPolygonF(
+                [
+                    QPointF(x - tri_half, g_bottom + tri_h),
+                    QPointF(x + tri_half, g_bottom + tri_h),
+                    QPointF(float(x), float(g_bottom)),
+                ]
+            )
             painter.drawPolygon(tri)
             # Color-blind-safe diamond marker on top of the light triangle.
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(_c.BREEZE_BG))
-            diamond = QPolygonF([
-                QPointF(float(x), g_bottom + tri_h - 5),
-                QPointF(float(x) + 3, g_bottom + tri_h - 2),
-                QPointF(float(x), g_bottom + tri_h + 1),
-                QPointF(float(x) - 3, g_bottom + tri_h - 2),
-            ])
+            diamond = QPolygonF(
+                [
+                    QPointF(float(x), g_bottom + tri_h - 5),
+                    QPointF(float(x) + 3, g_bottom + tri_h - 2),
+                    QPointF(float(x), g_bottom + tri_h + 1),
+                    QPointF(float(x) - 3, g_bottom + tri_h - 2),
+                ]
+            )
             painter.drawPolygon(diamond)
             painter.setPen(_c.Q_WINDOW_PEN)
             painter.setBrush(_c.Q_WINDOW_BRUSH)
@@ -476,9 +482,7 @@ class LevelsBar(QWidget):
             if (new_wmin, new_wmax) != (self._window_min, self._window_max):
                 self._window_min = new_wmin
                 self._window_max = new_wmax
-                self.sig_levelsChanged.emit(
-                    self._window_min, self._window_max
-                )
+                self.sig_levelsChanged.emit(self._window_min, self._window_max)
                 self.update()
         elif h == "window_max":
             if value < self._window_min:
@@ -491,9 +495,7 @@ class LevelsBar(QWidget):
             if (new_wmin, new_wmax) != (self._window_min, self._window_max):
                 self._window_min = new_wmin
                 self._window_max = new_wmax
-                self.sig_levelsChanged.emit(
-                    self._window_min, self._window_max
-                )
+                self.sig_levelsChanged.emit(self._window_min, self._window_max)
                 self.update()
         elif h == "center":
             # Preserve window width, shift both setpoints, clamp to range.
@@ -516,9 +518,7 @@ class LevelsBar(QWidget):
             if (new_min, new_max) != (self._window_min, self._window_max):
                 self._window_min = new_min
                 self._window_max = new_max
-                self.sig_levelsChanged.emit(
-                    self._window_min, self._window_max
-                )
+                self.sig_levelsChanged.emit(self._window_min, self._window_max)
                 self.update()
         event.accept()
 
@@ -535,9 +535,7 @@ class LevelsBar(QWidget):
                 self._window_min, min(self._window_max, self._range_max)
             )
             if (self._window_min, self._window_max) != (old_wmin, old_wmax):
-                self.sig_levelsChanged.emit(
-                    self._window_min, self._window_max
-                )
+                self.sig_levelsChanged.emit(self._window_min, self._window_max)
             self.update()
         self._dragging_handle = None
         event.accept()

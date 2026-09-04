@@ -225,7 +225,7 @@ def main() -> int:
     # Preload nicaiu.dll before Qt DLLs load -- Qt corrupts the
     # NI-DAQmx driver's internal state if loaded first. Windows-only;
     # skipped in demo mode (no DAQmx task is ever created).
-    if sys.platform == "win32" and not demo:
+    if sys.platform == "win32" and not demo:  # pragma: no cover
         try:
             import ctypes
 
@@ -245,31 +245,35 @@ def main() -> int:
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
     # Workaround for a nidaqmx 0.6.x Task.__del__ bug: after the context manager
-    # closes a Task (close() -> clear()), the internal _saved_name attribute is
-    # removed, but __del__ still runs during garbage collection and tries to
-    # format a DaqResourceWarning using self._saved_name — raising AttributeError
-    # ("Exception ignored in <function Task.__del__>"). The exception is swallowed
-    # by Python (exceptions in __del__ are ignored) but printed to stderr, which
-    # surfaces as confusing noise during safety-critical actions like E-stop.
-    # Guard the attribute access so the resource-leak warning still fires for
-    # genuinely unclosed tasks (where _saved_name survives) while silencing the
-    # spurious AttributeError for properly-closed ones.
+    # closes a Task (close() -> clear()), the internal _saved_name attribute may
+    # still be present but _handle is None, while __del__ still runs during garbage
+    # collection. The original __del__ can raise AttributeError trying to access
+    # _saved_name for partially-constructed tasks. Guard the attribute access and
+    # only emit a resource-leak warning when the task handle is still live, so
+    # genuinely unclosed DAQ tasks (galvo/camera/laser AO) are reported while
+    # properly closed tasks stay silent.
     try:
         import nidaqmx
         from nidaqmx.errors import DaqResourceWarning
 
-        def _safe_task_del(self: object) -> None:
-            saved_name = getattr(self, "_saved_name", None)
-            if saved_name:
-                warnings.warn(
-                    f'Task "{saved_name}" was not explicitly closed and may still be '
-                    "reserved.",
-                    DaqResourceWarning,
-                    stacklevel=2,
-                )
+        def _safe_task_del(self: object) -> None:  # pragma: no cover
+            # A task that was explicitly closed has _handle = None. A task that
+            # should not be auto-closed has _close_on_exit = False. In both cases
+            # the original library would not warn, so mirror that contract here.
+            if getattr(self, "_handle", None) is None:
+                return
+            if not getattr(self, "_close_on_exit", False):
+                return
+            saved_name = getattr(self, "_saved_name", "<unnamed>")
+            warnings.warn(
+                f'Task "{saved_name}" was not explicitly closed and may still be '
+                "reserved.",
+                DaqResourceWarning,
+                stacklevel=2,
+            )
 
         nidaqmx.Task.__del__ = _safe_task_del  # type: ignore[attr-defined]
-    except Exception:
+    except Exception:  # pragma: no cover
         # nidaqmx not installed (macOS dev path uses the conftest stub) — skip.
         pass
 
@@ -333,9 +337,7 @@ def main() -> int:
     )
 
     overlay_path = (
-        "config.rig-specific.ini"
-        if Path("config.rig-specific.ini").exists()
-        else None
+        "config.rig-specific.ini" if Path("config.rig-specific.ini").exists() else None
     )
     ConfigValidator().validate_or_abort(
         load_sections_from_ini("config.ini", overlay_path)

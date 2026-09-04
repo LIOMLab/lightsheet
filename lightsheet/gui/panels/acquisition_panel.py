@@ -110,40 +110,43 @@ class AcquisitionPanelWidget(QWidget):
             # updating ui before starting preview mode thread
             self.updateUi_modes_buttons([self.ui.pushButton_acqStartPreviewMode])
             self._shell.updateUi_message_printer("->Preview mode started")
-            self._shell.ui.statusBar_label.setText("Current Acquisition Mode: Preview ")  # ty: ignore[unresolved-attribute]
-            self._shell.ui.statusBar_progress.setValue(100)  # ty: ignore[unresolved-attribute]
-            self._shell.ui.statusBar_progress.show()  # ty: ignore[unresolved-attribute]
+            self._shell.ui.statusBar_label.setText("Current Acquisition Mode: Preview ")
+            self._shell.ui.statusBar_progress.setValue(100)
+            self._shell.ui.statusBar_progress.show()
             self._shell._update_mode_badge("PREVIEW")
 
             # Sample the auto-laser checkboxes on the GUI thread before
             # spawning the worker.
             self._shell._cache_auto_laser_flags()
+            assert self._shell._hw is not None
 
             # Spawn the preview worker on a QThread (moveToThread pattern).
-            self._shell._preview_worker = PreviewWorker(  # ty: ignore[unresolved-attribute]
-                self._shell._bundle, self._shell._hw, self._shell  # ty: ignore[invalid-argument-type]
+            self._shell._preview_worker = PreviewWorker(
+                self._shell._bundle,
+                self._shell._hw,
+                self._shell,
             )
-            self._shell._preview_thread = QThread()  # ty: ignore[unresolved-attribute]
-            self._shell._preview_worker.moveToThread(self._shell._preview_thread)  # ty: ignore[unresolved-attribute]
-            self._shell._preview_thread.started.connect(self._shell._preview_worker.run)  # ty: ignore[unresolved-attribute]
-            self._shell._preview_worker.finished.connect(  # ty: ignore[unresolved-attribute]
+            self._shell._preview_thread = QThread()
+            self._shell._preview_worker.moveToThread(self._shell._preview_thread)
+            self._shell._preview_thread.started.connect(self._shell._preview_worker.run)
+            self._shell._preview_worker.finished.connect(
                 self.updateUi_post_preview_mode
             )
-            self._shell._preview_worker.finished.connect(  # ty: ignore[unresolved-attribute]
-                self._shell._preview_thread.quit  # ty: ignore[unresolved-attribute]
+            self._shell._preview_worker.finished.connect(
+                self._shell._preview_thread.quit
             )
-            self._shell._preview_thread.finished.connect(  # ty: ignore[unresolved-attribute]
-                self._shell._preview_worker.deleteLater  # ty: ignore[unresolved-attribute]
+            self._shell._preview_thread.finished.connect(
+                self._shell._preview_worker.deleteLater
             )
-            self._shell._preview_thread.start()  # ty: ignore[unresolved-attribute]
+            self._shell._preview_thread.start()
 
     @Slot()
     def updateUi_post_preview_mode(self) -> None:
         self.updateUi_modes_buttons(self._shell.default_buttons)
         self._shell.updateUi_message_printer("->Preview mode stopped")
-        self._shell.ui.statusBar_label.setText("")  # ty: ignore[unresolved-attribute]
-        self._shell.ui.statusBar_progress.setValue(0)  # ty: ignore[unresolved-attribute]
-        self._shell.ui.statusBar_progress.hide()  # ty: ignore[unresolved-attribute]
+        self._shell.ui.statusBar_label.setText("")
+        self._shell.ui.statusBar_progress.setValue(0)
+        self._shell.ui.statusBar_progress.hide()
         self._shell._update_mode_badge("IDLE")
 
     def updateUi_live_mode_button(self) -> None:
@@ -161,36 +164,39 @@ class AcquisitionPanelWidget(QWidget):
             # updating ui before starting live mode thread
             self.updateUi_modes_buttons([self.ui.pushButton_acqStartLiveMode])
             self._shell.updateUi_message_printer("->Live mode started")
-            self._shell.ui.statusBar_label.setText("Current Acquisition Mode: Live ")  # ty: ignore[unresolved-attribute]
-            self._shell.ui.statusBar_progress.setValue(100)  # ty: ignore[unresolved-attribute]
-            self._shell.ui.statusBar_progress.show()  # ty: ignore[unresolved-attribute]
+            self._shell.ui.statusBar_label.setText("Current Acquisition Mode: Live ")
+            self._shell.ui.statusBar_progress.setValue(100)
+            self._shell.ui.statusBar_progress.show()
             self._shell._update_mode_badge("LIVE")
 
             # Sample the auto-laser checkboxes on the GUI thread before
             # spawning the worker.
             self._shell._cache_auto_laser_flags()
+            assert self._shell._hw is not None
 
             # Spawn the live worker on a QThread (moveToThread pattern).
-            self._shell._live_worker = LiveWorker(  # ty: ignore[unresolved-attribute]
-                self._shell._bundle, self._shell._hw, self._shell  # ty: ignore[invalid-argument-type]
+            self._shell._live_worker = LiveWorker(
+                self._shell._bundle,
+                self._shell._hw,
+                self._shell,
             )
-            self._shell._live_thread = QThread()  # ty: ignore[unresolved-attribute]
-            self._shell._live_worker.moveToThread(self._shell._live_thread)  # ty: ignore[unresolved-attribute]
-            self._shell._live_thread.started.connect(self._shell._live_worker.run)  # ty: ignore[unresolved-attribute]
-            self._shell._live_worker.finished.connect(self.updateUi_post_live_mode)  # ty: ignore[unresolved-attribute]
-            self._shell._live_worker.finished.connect(self._shell._live_thread.quit)  # ty: ignore[unresolved-attribute]
-            self._shell._live_thread.finished.connect(  # ty: ignore[unresolved-attribute]
-                self._shell._live_worker.deleteLater  # ty: ignore[unresolved-attribute]
+            self._shell._live_thread = QThread()
+            self._shell._live_worker.moveToThread(self._shell._live_thread)
+            self._shell._live_thread.started.connect(self._shell._live_worker.run)
+            self._shell._live_worker.finished.connect(self.updateUi_post_live_mode)
+            self._shell._live_worker.finished.connect(self._shell._live_thread.quit)
+            self._shell._live_thread.finished.connect(
+                self._shell._live_worker.deleteLater
             )
-            self._shell._live_thread.start()  # ty: ignore[unresolved-attribute]
+            self._shell._live_thread.start()
 
     @Slot()
     def updateUi_post_live_mode(self) -> None:
         self.updateUi_modes_buttons(self._shell.default_buttons)
         self._shell.updateUi_message_printer("->Live mode stopped")
-        self._shell.ui.statusBar_label.setText("")  # ty: ignore[unresolved-attribute]
-        self._shell.ui.statusBar_progress.setValue(0)  # ty: ignore[unresolved-attribute]
-        self._shell.ui.statusBar_progress.hide()  # ty: ignore[unresolved-attribute]
+        self._shell.ui.statusBar_label.setText("")
+        self._shell.ui.statusBar_progress.setValue(0)
+        self._shell.ui.statusBar_progress.hide()
         self._shell._update_mode_badge("IDLE")
 
     def updateUi_single_mode_button(self) -> None:
@@ -220,25 +226,26 @@ class AcquisitionPanelWidget(QWidget):
             save_blend = (
                 self._shell.save_panel.ui.radioButton_saveStitchBlend.isChecked()
             )
+            assert self._shell._hw is not None
 
             # Spawn the single-image worker on a QThread (moveToThread pattern).
-            self._shell._single_worker = SingleWorker(  # ty: ignore[unresolved-attribute]
+            self._shell._single_worker = SingleWorker(
                 self._shell._bundle,
-                self._shell._hw,  # ty: ignore[invalid-argument-type]
+                self._shell._hw,
                 self._shell,
                 save_desc,
                 save_blend,
                 multi_channel,
             )
-            self._shell._single_thread = QThread()  # ty: ignore[unresolved-attribute]
-            self._shell._single_worker.moveToThread(self._shell._single_thread)  # ty: ignore[unresolved-attribute]
-            self._shell._single_thread.started.connect(self._shell._single_worker.run)  # ty: ignore[unresolved-attribute]
-            self._shell._single_worker.finished.connect(self.updateUi_post_single_mode)  # ty: ignore[unresolved-attribute]
-            self._shell._single_worker.finished.connect(self._shell._single_thread.quit)  # ty: ignore[unresolved-attribute]
-            self._shell._single_thread.finished.connect(  # ty: ignore[unresolved-attribute]
-                self._shell._single_worker.deleteLater  # ty: ignore[unresolved-attribute]
+            self._shell._single_thread = QThread()
+            self._shell._single_worker.moveToThread(self._shell._single_thread)
+            self._shell._single_thread.started.connect(self._shell._single_worker.run)
+            self._shell._single_worker.finished.connect(self.updateUi_post_single_mode)
+            self._shell._single_worker.finished.connect(self._shell._single_thread.quit)
+            self._shell._single_thread.finished.connect(
+                self._shell._single_worker.deleteLater
             )
-            self._shell._single_thread.start()  # ty: ignore[unresolved-attribute]
+            self._shell._single_thread.start()
 
     @Slot()
     def updateUi_post_single_mode(self) -> None:
@@ -292,7 +299,7 @@ class AcquisitionPanelWidget(QWidget):
                 # Check that filename is valid and saving is allowed
                 self._shell.save_panel.validate_file_name()
 
-                nosave_answer = False
+                nosave_answer = QMessageBox.StandardButton.No
                 if not self._shell.saving_allowed:
                     self._shell.sig_beep.emit()
                     nosave_answer = QMessageBox.question(
@@ -303,15 +310,18 @@ class AcquisitionPanelWidget(QWidget):
                         QMessageBox.StandardButton.Yes,
                     )
 
-                if self._shell.saving_allowed or nosave_answer:
+                if (
+                    self._shell.saving_allowed
+                    or nosave_answer == QMessageBox.StandardButton.Yes
+                ):
                     self._shell.stack_panel.ui.pushButton_acqStartStackMode.setText(
                         "Stop Stack Mode"
                     )
-                    ui = self._shell.ui
-                    ui.statusBar_label.setText(  # ty: ignore[unresolved-attribute]
+                    ui: typing.Any = self._shell.ui
+                    ui.statusBar_label.setText(
                         "Current Acquisition Mode: Stack "
                     )
-                    progress = ui.statusBar_progress  # ty: ignore[unresolved-attribute]
+                    progress = ui.statusBar_progress
                     progress.setValue(0)
                     progress.show()
                     self._shell.stack_mode_started = True
@@ -346,6 +356,10 @@ class AcquisitionPanelWidget(QWidget):
         queue loop. Pre-samples the auto-laser flags + save-option widgets
         on the GUI thread so the worker thread never reads ui.*.
         """
+        # Disable the adaptive-autofocus controls and show the per-plane
+        # progress bar when adaptive focus is active.
+        self._shell.stack_panel.set_autofocus_running(True)
+
         # Reuse the same QThread across queue rows instead of constructing
         # a new one per row — constructing + destroying a QThread C++
         # object while the previous worker's deleteLater is still pending
@@ -364,9 +378,9 @@ class AcquisitionPanelWidget(QWidget):
         # If the thread was never created or was destroyed, construct a
         # fresh one; otherwise reuse it.
         if prev_thread is None:
-            self._shell._stack_thread = QThread()  # ty: ignore[unresolved-attribute]
+            self._shell._stack_thread = QThread()
         else:
-            self._shell._stack_thread = prev_thread  # ty: ignore[unresolved-attribute]
+            self._shell._stack_thread = prev_thread
 
         # Pre-sample the save-option widgets on the GUI thread before
         # constructing the worker (no cross-thread widget reads from workers).
@@ -380,16 +394,11 @@ class AcquisitionPanelWidget(QWidget):
         # sequential cycle; otherwise the single-channel path runs.
         multi_channel = self._shell._auto_laser1 and self._shell._auto_laser2
 
-        # Disconnect the previous worker's signals so its finished→quit
-        # can't fire the reused thread a second time. Only disconnect if
-        # there is an existing connection — disconnecting with none
-        # emits a libpyside RuntimeWarning that masks real signal-wiring
-        # bugs.
-        prev_worker = getattr(self._shell, "_stack_worker", None)
-        if prev_worker is not None:
-            with contextlib.suppress(TypeError, RuntimeError):
-                if prev_worker.receivers(SIGNAL("finished()")) > 0:
-                    prev_worker.finished.disconnect()
+        # Disconnect the previous worker's started→run connection only.
+        # finished.disconnect() is intentionally avoided — it can deadlock
+        # under PySide6 if the worker QThread is stuck between run() and
+        # exec(). The worker is deleted via the thread's finished signal,
+        # so stale finished→thread.quit/updateUi connections become no-ops.
 
         # Spawn the stack worker on the (reused) QThread (moveToThread
         # pattern). Pre-sample the adaptive config on the GUI thread so
@@ -399,9 +408,17 @@ class AcquisitionPanelWidget(QWidget):
         adaptive_cfg = self._shell.stack_panel.build_adaptive_config()
         focus_cfg = self._shell.stack_panel.build_focus_config()
         focus_curve = self._shell.stack_panel.build_focus_curve()
-        self._shell._stack_worker = StackWorker(  # ty: ignore[unresolved-attribute]
+        autofocus_cfg = self._shell.stack_panel.build_autofocus_config()
+        autofocus_curve = (
+            self._shell.stack_panel.build_focus_curve()
+            if autofocus_cfg is not None and autofocus_cfg.use_curve_seed
+            else None
+        )
+        assert self._shell._hw is not None
+
+        self._shell._stack_worker = StackWorker(
             self._shell._bundle,
-            self._shell._hw,  # ty: ignore[invalid-argument-type]
+            self._shell._hw,
             self._shell,
             save_desc,
             save_blend,
@@ -411,8 +428,10 @@ class AcquisitionPanelWidget(QWidget):
             adaptive_cfg=adaptive_cfg,
             focus_cfg=focus_cfg,
             focus_curve=focus_curve,
+            autofocus_cfg=autofocus_cfg,
+            autofocus_curve=autofocus_curve,
         )
-        self._shell._stack_worker.moveToThread(self._shell._stack_thread)  # ty: ignore[unresolved-attribute]
+        self._shell._stack_worker.moveToThread(self._shell._stack_thread)
         # Connect the per-plane adaptive trajectory signal to the shell's
         # GUI-thread slot. The connection is queued so the worker never
         # calls pyqtgraph directly. Disconnect any prior connection from a
@@ -421,23 +440,45 @@ class AcquisitionPanelWidget(QWidget):
         # with none emits a libpyside RuntimeWarning that masks real
         # signal-wiring bugs.
         with contextlib.suppress(TypeError, RuntimeError):
-            if self._shell._stack_worker.receivers(  # ty: ignore[unresolved-attribute]
-                SIGNAL("sig_adaptive_trajectory(int,double,double,double,double,QString,bool,bool)")
-            ) > 0:
-                self._shell._stack_worker.sig_adaptive_trajectory.disconnect()  # ty: ignore[unresolved-attribute]
-        self._shell._stack_worker.sig_adaptive_trajectory.connect(  # ty: ignore[unresolved-attribute]
+            if (
+                self._shell._stack_worker.receivers(
+                    SIGNAL(
+                        "sig_adaptive_trajectory(int,double,double,double,double,QString,bool,bool)"
+                    )
+                )
+                > 0
+            ):
+                self._shell._stack_worker.sig_adaptive_trajectory.disconnect()
+        self._shell._stack_worker.sig_adaptive_trajectory.connect(
             self._shell._on_adaptive_trajectory
         )
         # Connect the per-block focus trajectory signal to the shell's
         # GUI-thread slot. Queued connection so the worker never touches
         # pyqtgraph. Disconnect any prior connection first.
         with contextlib.suppress(TypeError, RuntimeError):
-            if self._shell._stack_worker.receivers(  # ty: ignore[unresolved-attribute]
-                SIGNAL("sig_focus_trajectory(int,double,double,double,double)")
-            ) > 0:
-                self._shell._stack_worker.sig_focus_trajectory.disconnect()  # ty: ignore[unresolved-attribute]
-        self._shell._stack_worker.sig_focus_trajectory.connect(  # ty: ignore[unresolved-attribute]
+            if (
+                self._shell._stack_worker.receivers(
+                    SIGNAL("sig_focus_trajectory(int,double,double,double,double)")
+                )
+                > 0
+            ):
+                self._shell._stack_worker.sig_focus_trajectory.disconnect()
+        self._shell._stack_worker.sig_focus_trajectory.connect(
             self._shell._on_focus_trajectory
+        )
+        # Connect the per-plane autofocus status signal to the stack panel's
+        # GUI-thread slot. Queued connection so the worker never touches
+        # Qt widgets. Disconnect any prior connection first.
+        with contextlib.suppress(TypeError, RuntimeError):
+            if (
+                self._shell._stack_worker.receivers(
+                    SIGNAL("sig_autofocus_status(int,int,double,double,double,QString)")
+                )
+                > 0
+            ):
+                self._shell._stack_worker.sig_autofocus_status.disconnect()
+        self._shell._stack_worker.sig_autofocus_status.connect(
+            self._shell.stack_panel._on_autofocus_status
         )
         # When reusing the thread (2nd+ queue row), disconnect the prior
         # started→run so the reused thread's started only invokes this
@@ -446,27 +487,20 @@ class AcquisitionPanelWidget(QWidget):
         # that masks real signal-wiring bugs.
         if prev_thread is not None:
             with contextlib.suppress(TypeError, RuntimeError):
-                if self._shell._stack_thread.receivers(SIGNAL("started()")) > 0:  # ty: ignore[unresolved-attribute]
-                    self._shell._stack_thread.started.disconnect()  # ty: ignore[unresolved-attribute]
-        self._shell._stack_thread.started.connect(self._shell._stack_worker.run)  # ty: ignore[unresolved-attribute]
-        self._shell._stack_worker.finished.connect(self.updateUi_post_stack_mode)  # ty: ignore[unresolved-attribute]
-        self._shell._stack_worker.finished.connect(self._shell._stack_thread.quit)  # ty: ignore[unresolved-attribute]
+                if self._shell._stack_thread.receivers(SIGNAL("started()")) > 0:
+                    self._shell._stack_thread.started.disconnect()
+        self._shell._stack_thread.started.connect(self._shell._stack_worker.run)
+        self._shell._stack_worker.finished.connect(self.updateUi_post_stack_mode)
+        self._shell._stack_worker.finished.connect(self._shell._stack_thread.quit)
         # thread.finished→worker.deleteLater: this fires each row (the
-        # thread quits per row), reaping that row's worker. Disconnect any
-        # prior thread.finished→deleteLater connection from a previous
-        # queue row first — otherwise thread.finished accumulates one
-        # deleteLater connection per row, and when the thread finishes it
-        # calls deleteLater on already-deleted QObjects from prior rows
-        # (Qt warns "QObject::deleteLater called on a deleted object" or
-        # crashes under heavy queue use). The prev_worker.finished
-        # disconnect above only clears the worker's own signals, not the
-        # thread's finished signal.
-        if prev_thread is not None:
-            with contextlib.suppress(TypeError, RuntimeError):
-                if self._shell._stack_thread.receivers(SIGNAL("finished()")) > 0:  # ty: ignore[unresolved-attribute]
-                    self._shell._stack_thread.finished.disconnect()  # ty: ignore[unresolved-attribute]
-        self._shell._stack_thread.finished.connect(  # ty: ignore[unresolved-attribute]
-            self._shell._stack_worker.deleteLater  # ty: ignore[unresolved-attribute]
+        # thread quits per row), reaping that row's worker. We do NOT
+        # disconnect the previous connection while the thread may still be
+        # running — PySide6's disconnect can deadlock against a worker
+        # QThread stuck between run() and exec(). Calling deleteLater on an
+        # already-deleted worker is a no-op, so an accumulating connection
+        # list is safe and avoids the race.
+        self._shell._stack_thread.finished.connect(
+            self._shell._stack_worker.deleteLater
         )
         # Reset the adaptive trajectory plot at the start of each run so
         # per-plane samples do not accumulate across runs (historical
@@ -508,11 +542,14 @@ class AcquisitionPanelWidget(QWidget):
                 self._shell.focusTrajectoryWidget._legend.hide()
 
         # The mode badge switches to FOCUS RUNNING for the duration of the
-        # stack when focus compensation is enabled.
-        self._shell.focus_mode_started = focus_cfg is not None
+        # stack when either legacy focus compensation or per-plane autofocus
+        # is enabled.
+        self._shell.focus_mode_started = (focus_cfg is not None) or (
+            autofocus_cfg is not None
+        )
 
-        self._shell._stack_thread.start()  # ty: ignore[unresolved-attribute]
-        return self._shell._stack_worker  # ty: ignore[invalid-return-type, unresolved-attribute]
+        self._shell._stack_thread.start()
+        return self._shell._stack_worker  # ty: ignore[invalid-return-type]
 
     @Slot()
     def updateUi_post_stack_mode(self) -> None:
@@ -527,9 +564,13 @@ class AcquisitionPanelWidget(QWidget):
             self.updateUi_modes_buttons(self._shell.default_buttons)
             self._shell.motor_panel.updateUi_motor_buttons(disable_button=False)
 
+        # Re-enable the adaptive-autofocus controls and hide the progress bar
+        # now that the stack has finished or aborted.
+        self._shell.stack_panel.set_autofocus_running(False)
+
         self._shell.stack_mode_started = False
         self._shell.focus_mode_started = False
         self._shell.updateUi_message_printer("->Stack Mode Acquisition Done")
-        self._shell.ui.statusBar_label.setText("")  # ty: ignore[unresolved-attribute]
-        self._shell.ui.statusBar_progress.hide()  # ty: ignore[unresolved-attribute]
+        self._shell.ui.statusBar_label.setText("")
+        self._shell.ui.statusBar_progress.hide()
         self._shell._update_mode_badge("IDLE")

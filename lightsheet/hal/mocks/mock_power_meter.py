@@ -74,9 +74,7 @@ class MockPowerMeter(IPowerMeter):
         """Read the simulated optical power in milliwatts (convenience)."""
         return self.read_power() * 1000.0
 
-    def read_averaged(
-        self, n_samples: int, delay_s: float = 0.5
-    ) -> float:
+    def read_averaged(self, n_samples: int, delay_s: float = 0.5) -> float:
         """Take ``n_samples`` readings, discard the first, return the mean.
 
         For the mock, all readings are identical (no noise model), so the

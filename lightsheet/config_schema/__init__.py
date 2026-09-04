@@ -8,6 +8,8 @@ focused submodules. It contains no logic; all implementation lives in
 from lightsheet.config_schema.sections import (
     AdaptiveSettings,
     AdaptiveSettingsOverlay,
+    AutofocusSettings,
+    AutofocusSettingsOverlay,
     CameraSettings,
     CameraSettingsOverlay,
     ControllerSettings,
@@ -43,6 +45,8 @@ from lightsheet.config_schema.validation import (
 __all__ = [
     "AdaptiveSettings",
     "AdaptiveSettingsOverlay",
+    "AutofocusSettings",
+    "AutofocusSettingsOverlay",
     "CameraSettings",
     "CameraSettingsOverlay",
     "ConfigValidationResult",

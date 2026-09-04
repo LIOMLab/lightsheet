@@ -1,0 +1,143 @@
+"""Worker signal contract tests for PreviewWorker.
+
+Verifies that ``PreviewWorker.run`` emits its ``finished`` signal exactly
+once (whether the run completes normally, breaks on E-stop, or an
+exception propagates) and that the worker NEVER accesses
+``self._shell.ui.*`` widgets directly (AGENTS.md §11 — cross-thread UI
+mutation is forbidden; all cross-thread effects flow through queued
+signal/slot connections).
+"""
+
+from __future__ import annotations
+
+import threading
+from unittest.mock import Mock
+
+import pytest
+from pytestqt.qtbot import QtBot
+
+pytest.importorskip("PySide6")
+
+from lightsheet.gui.workers import PreviewWorker
+from lightsheet.hal import (
+    DeviceBundle,
+)
+
+
+def _make_bundle() -> DeviceBundle:
+    from test.helpers.factories import make_bundle
+
+    return make_bundle()
+
+
+class _PreviewShell:
+    """Minimal shell stand-in exposing only the attributes PreviewWorker.run
+    reads — no ui.* widget access (the worker must not touch widgets)."""
+
+    def __init__(self) -> None:
+        self.ui = Mock()
+        # Hybrid ownership: PreviewWorker reads the camera exposure spinbox
+        # via shell.acquisition_panel.ui.<name> in __init__ (GUI thread,
+        # before moveToThread). The shell.ui namespace is not touched for
+        # panel-internal widgets.
+        self.acquisition_panel = Mock()
+        exposure_spinbox = self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime
+        exposure_spinbox.value.return_value = 100
+        self.preview_mode_started = False  # skip the frame-grab loop
+        self.estop_event = threading.Event()
+        self._fs = Mock()
+        self.sig_message = Mock()
+        # Auto-laser flags pre-sampled on the GUI thread; default to False so
+        # the continuous-mode L1-only guard does not energize L2 in tests.
+        self._auto_laser1 = False
+        self._auto_laser2 = False
+
+
+def test_preview_worker_finished_emits_exactly_once_normal(qtbot: QtBot) -> None:
+    """PreviewWorker.run with preview_mode_started=False completes
+    normally and emits finished exactly once."""
+    bundle = _make_bundle()
+    shell = _PreviewShell()
+    hw = Mock()
+    worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
+
+    finished_count: list[int] = []
+    worker.finished.connect(lambda: finished_count.append(1))
+
+    worker.run()
+
+    assert len(finished_count) == 1, "finished must emit exactly once on normal exit"
+
+
+def test_preview_worker_finished_emits_exactly_once_estop(qtbot: QtBot) -> None:
+    """PreviewWorker.run with estop_event set breaks out of the loop and
+    emits finished exactly once."""
+    bundle = _make_bundle()
+    shell = _PreviewShell()
+    shell.preview_mode_started = True
+    shell.estop_event.set()
+    hw = Mock()
+    worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
+
+    finished_count: list[int] = []
+    worker.finished.connect(lambda: finished_count.append(1))
+
+    worker.run()
+
+    assert len(finished_count) == 1, "finished must emit exactly once on E-stop break"
+
+
+def test_preview_worker_finished_emits_exactly_once_exception(qtbot: QtBot) -> None:
+    """PreviewWorker.run with a camera.arm() exception catches it, emits
+    sig_message, and still emits finished exactly once from finally."""
+    bundle = _make_bundle()
+    shell = _PreviewShell()
+    hw = Mock()
+    worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
+    setattr(worker.camera, "arm", Mock(side_effect=RuntimeError("camera fault")))
+
+    finished_count: list[int] = []
+    worker.finished.connect(lambda: finished_count.append(1))
+
+    worker.run()
+
+    shell.sig_message.emit.assert_called_once()
+    assert "Preview acquisition failed" in shell.sig_message.emit.call_args[0][0]
+    assert len(finished_count) == 1, "finished must emit exactly once on exception"
+
+
+def test_preview_worker_never_accesses_ui_widgets(qtbot: QtBot) -> None:
+    """PreviewWorker.run must NOT access any self._shell.ui.* widget. The
+    exposure-time spinbox read happens in PreviewWorker.__init__ on the
+    GUI thread (before moveToThread), so run() never reaches into the
+    shell's ui.* from the worker thread. The worker never mutates
+    widgets — all cross-thread UI effects flow through queued signals
+    (AGENTS.md §11).
+
+    Verified by giving the shell a Mock ui and asserting no ui.* attribute
+    other than doubleSpinBox_cameraExposureTime was accessed after run()."""
+    bundle = _make_bundle()
+    shell = _PreviewShell()
+    hw = Mock()
+    worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
+
+    worker.run()
+
+    # The shell.ui namespace must NOT be accessed for any panel-internal
+    # widget (hybrid ownership — panel-internal widgets live on their
+    # panel's ui, not on shell.ui).
+    shell_ui_children = [name for name in shell.ui._mock_children]
+    assert shell_ui_children == [], (
+        f"PreviewWorker must not access shell.ui.* — got {shell_ui_children}"
+    )
+
+    # The only permitted panel-internal access is
+    # doubleSpinBox_cameraExposureTime via acquisition_panel.ui (the
+    # exposure-time read in PreviewWorker.__init__ on the GUI thread,
+    # before moveToThread). No other widget should be touched.
+    accessed_children = [name for name in shell.acquisition_panel.ui._mock_children]
+    for child_name in accessed_children:
+        assert child_name == "doubleSpinBox_cameraExposureTime", (
+            f"PreviewWorker must not access acquisition_panel.ui.{child_name} — "
+            f"only doubleSpinBox_cameraExposureTime is permitted (AGENTS.md §11)"
+        )

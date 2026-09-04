@@ -1,0 +1,150 @@
+"""Mode/state badge — persistent mode + run-state indicator in the E-stop
+toolbar (audit #12).
+
+The operator had no persistent mode/state indicator mid-run and had to look
+at the status bar to see the progress. This test asserts the audit #12
+remediation:
+
+- A QLabel (``label_modeBadge``) is in the E-stop toolbar, always visible
+  on every tab.
+- Initial state (idle) — badge text is "IDLE".
+- When preview starts — badge text is "PREVIEW".
+- When live starts — badge text is "LIVE".
+- When single acquisition starts — badge text is "SINGLE".
+- When stack starts — badge text is "STACK RUNNING — plane 1/{N}".
+- During a stack run, sig_progress_update updates the badge to
+  "STACK RUNNING — plane {n}/{N}" mirroring the progress bar value.
+- When a run completes/aborts — badge text reverts to "IDLE".
+- The badge uses QDarkStyle default text color + bold weight (no accent
+  color — no #FF/#34/#8E stylesheet on the badge).
+
+Runs headless on Mac via ``QT_QPA_PLATFORM=offscreen`` (set by conftest).
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import pytest
+
+pytest.importorskip("PySide6")
+
+if TYPE_CHECKING:
+    from PySide6.QtWidgets import QLabel, QToolBar
+
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+def _badge_is_in_toolbar(badge: QLabel, toolbar: QToolBar) -> bool:
+    """Return True if ``badge`` is a descendant of ``toolbar``."""
+    parent = badge.parent()
+    while parent is not None:
+        if parent is toolbar:
+            return True
+        parent = parent.parent()
+    return False
+
+def test_mode_badge_exists_in_estop_toolbar(controller: Controller_MainWindow) -> None:
+    """A QLabel objectName label_modeBadge exists in the E-stop toolbar."""
+    ctrl = controller
+    assert hasattr(ctrl.ui, "label_modeBadge"), (
+        "label_modeBadge not found on controller.ui"
+    )
+    badge = ctrl.ui.label_modeBadge
+    toolbar = ctrl.ui.toolBar_estop
+    assert _badge_is_in_toolbar(badge, toolbar), (
+        "label_modeBadge must be in the E-stop toolbar (toolBar_estop) so "
+        "it is always visible on every tab"
+    )
+
+def test_mode_badge_initial_idle(controller: Controller_MainWindow) -> None:
+    """Initial state (idle) — badge text is 'IDLE'."""
+    ctrl = controller
+    assert ctrl.ui.label_modeBadge.text() == "IDLE", (
+        f"initial badge text is {ctrl.ui.label_modeBadge.text()!r}, expected 'IDLE'"
+    )
+
+def test_mode_badge_preview(controller: Controller_MainWindow) -> None:
+    """When preview starts — badge text is 'PREVIEW'."""
+    ctrl = controller
+    ctrl._update_mode_badge("PREVIEW")
+    assert ctrl.ui.label_modeBadge.text() == "PREVIEW", (
+        f"after preview start, badge text is "
+        f"{ctrl.ui.label_modeBadge.text()!r}, expected 'PREVIEW'"
+    )
+
+def test_mode_badge_live(controller: Controller_MainWindow) -> None:
+    """When live starts — badge text is 'LIVE'."""
+    ctrl = controller
+    ctrl._update_mode_badge("LIVE")
+    assert ctrl.ui.label_modeBadge.text() == "LIVE", (
+        f"after live start, badge text is "
+        f"{ctrl.ui.label_modeBadge.text()!r}, expected 'LIVE'"
+    )
+
+def test_mode_badge_single(controller: Controller_MainWindow) -> None:
+    """When single acquisition starts — badge text is 'SINGLE'."""
+    ctrl = controller
+    ctrl._update_mode_badge("SINGLE")
+    assert ctrl.ui.label_modeBadge.text() == "SINGLE", (
+        f"after single start, badge text is "
+        f"{ctrl.ui.label_modeBadge.text()!r}, expected 'SINGLE'"
+    )
+
+def test_mode_badge_stack_running(controller: Controller_MainWindow) -> None:
+    """When stack starts — badge text is 'STACK RUNNING — plane 1/{N}'."""
+    ctrl = controller
+    ctrl.number_of_planes = 240
+    ctrl._update_mode_badge("STACK", "RUNNING", plane=1, total=240)
+    expected = "STACK RUNNING \u2014 plane 1/240"
+    assert ctrl.ui.label_modeBadge.text() == expected, (
+        f"after stack start, badge text is "
+        f"{ctrl.ui.label_modeBadge.text()!r}, expected {expected!r}"
+    )
+
+def test_mode_badge_progress_mirror(controller: Controller_MainWindow) -> None:
+    """During a stack run, sig_progress_update updates the badge to
+    'STACK RUNNING — plane {n}/{N}' mirroring the progress bar value."""
+    ctrl = controller
+    ctrl.number_of_planes = 240
+    ctrl.stack_mode_started = True
+    # Emit a progress update — the badge should mirror it.
+    ctrl.sig_progress_update.emit(12)
+    expected = "STACK RUNNING \u2014 plane 12/240"
+    assert ctrl.ui.label_modeBadge.text() == expected, (
+        f"after sig_progress_update(12), badge text is "
+        f"{ctrl.ui.label_modeBadge.text()!r}, expected {expected!r}"
+    )
+
+def test_mode_badge_reverts_to_idle_on_complete(
+    controller: Controller_MainWindow,
+) -> None:
+    """When a run completes/aborts — badge text reverts to 'IDLE'."""
+    ctrl = controller
+    ctrl._update_mode_badge("STACK", "RUNNING", plane=1, total=240)
+    assert ctrl.ui.label_modeBadge.text() != "IDLE"
+    ctrl._update_mode_badge("IDLE")
+    assert ctrl.ui.label_modeBadge.text() == "IDLE", (
+        f"after run complete, badge text is "
+        f"{ctrl.ui.label_modeBadge.text()!r}, expected 'IDLE'"
+    )
+
+def test_mode_badge_no_accent_color(controller: Controller_MainWindow) -> None:
+    """The badge uses QDarkStyle default text color + bold weight (no
+    accent color — no #FF/#34/#8E in the badge stylesheet)."""
+    ctrl = controller
+    ss = ctrl.ui.label_modeBadge.styleSheet() or ""
+    # The badge may have a bold-weight stylesheet but must NOT contain
+    # accent colors (#FF = red, #34 = green, #8E = gray).
+    for accent in ("#FF", "#34", "#8E"):
+        assert accent not in ss, (
+            f"badge stylesheet contains accent color {accent!r}: {ss!r} "
+            "— the badge must use QDarkStyle default text + bold weight only"
+        )
+
+def test_mode_badge_bold_weight(controller: Controller_MainWindow) -> None:
+    """The badge uses bold font weight (the QDarkStyle default text color
+    with bold weight, matching the existing status-label pattern)."""
+    ctrl = controller
+    ss = ctrl.ui.label_modeBadge.styleSheet() or ""
+    assert "bold" in ss.lower(), (
+        f"badge stylesheet should include 'font-weight: bold': {ss!r}"
+    )

@@ -80,3 +80,29 @@ class FocusSample:
     residual_mm: float
     applied_camera_pos_mm: float
     sharpness_metric: float | None = None
+
+
+@dataclass(frozen=True)
+class AutofocusConfig:
+    """Frozen operator-configurable bounds for the per-plane adaptive loop."""
+
+    enabled: bool = False
+    cadence: int = 1
+    residual_gain_mm: float = 0.05
+    max_residual_mm: float = 0.5
+    smoothing: float = 0.5
+    use_curve_seed: bool = False
+
+    def __post_init__(self) -> None:
+        if self.cadence < 1 or self.cadence > 1000:
+            raise ValueError(f"cadence must be between 1 and 1000; got {self.cadence}")
+        if self.residual_gain_mm < 0 or self.residual_gain_mm > 1:
+            raise ValueError(
+                f"residual_gain_mm must be in [0, 1]; got {self.residual_gain_mm}"
+            )
+        if self.max_residual_mm < 0 or self.max_residual_mm > 5:
+            raise ValueError(
+                f"max_residual_mm must be in [0, 5]; got {self.max_residual_mm}"
+            )
+        if self.smoothing < 0 or self.smoothing > 1:
+            raise ValueError(f"smoothing must be in [0, 1]; got {self.smoothing}")

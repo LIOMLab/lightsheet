@@ -72,7 +72,9 @@ def build_no_dbl_click_title_bar(
     close_btn = QPushButton("\u00d7", title_bar)
     close_btn.setFixedSize(20, 20)
     close_btn.setFlat(True)
-    close_btn.setIcon(QApplication.style().standardIcon(QStyle.SP_DialogCloseButton))
+    close_btn.setIcon(
+        QApplication.style().standardIcon(QStyle.StandardPixmap.SP_DialogCloseButton)
+    )
     close_btn.setIconSize(QSize(16, 16))
     close_btn.setAccessibleName("Close")
     close_btn.setToolTip(close_tooltip)

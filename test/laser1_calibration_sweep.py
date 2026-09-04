@@ -133,9 +133,7 @@ def _run_pass(
             _write_voltage(terminal, 0.0)
             continue
         power_mw = power_w * 1000.0
-        pairs.append(
-            (round(float(volts), 6), round(power_mw, 6), direction)
-        )
+        pairs.append((round(float(volts), 6), round(power_mw, 6), direction))
         print(f"{power_mw:7.2f} mW")
         # Zero between points so the laser is not left energized while the
         # thermal sensor settles to the next voltage.
@@ -225,13 +223,17 @@ def run_sweep(
     print("  PSU:    Laserglow PSU-H-LED (0-5 V analog modulation)")
     print(f"  Meter:  Thorlabs PM100D + S245C thermal (lambda={wavelength_nm}nm)")
     print(f"  DAQ AO: {terminal}")
-    print(f"  Steps:  {len(ascending)} ascending, 0.000 V to "
-          f"{max_volts:.3f} V (step {step:.3f} V)")
+    print(
+        f"  Steps:  {len(ascending)} ascending, 0.000 V to "
+        f"{max_volts:.3f} V (step {step:.3f} V)"
+    )
     if descending_v:
         print(f"          + {len(descending_v)} descending (hysteresis check)")
     print(f"  Warmup: {warmup_volts:.2f} V for {warmup_secs:.0f} s")
-    print(f"  Sample: {n_samples} per point, {settle_secs:.1f} s settle, "
-          f"first thrown away")
+    print(
+        f"  Sample: {n_samples} per point, {settle_secs:.1f} s settle, "
+        f"first thrown away"
+    )
     print(f"  Zero:   {'skipped' if skip_zero else 'dark offset before sweep'}")
     print(f"  Output: {output}")
     print()
@@ -275,13 +277,23 @@ def run_sweep(
 
         # Sweep passes.
         _run_pass(
-            terminal, ascending, "ascending",
-            n_samples, settle_secs, meter, pairs,
+            terminal,
+            ascending,
+            "ascending",
+            n_samples,
+            settle_secs,
+            meter,
+            pairs,
         )
         if descending_v:
             _run_pass(
-                terminal, descending_v, "descending",
-                n_samples, settle_secs, meter, pairs,
+                terminal,
+                descending_v,
+                "descending",
+                n_samples,
+                settle_secs,
+                meter,
+                pairs,
             )
     except KeyboardInterrupt:
         print("\n\n  Sweep aborted by operator. Writing partial results.")
@@ -297,14 +309,11 @@ def run_sweep(
 
     _write_csv(output, pairs)
     print(f"\n  Wrote {len(pairs)} (V, mW, direction) rows to {output}")
-    print("  Next: fit the curve and update config.ini "
-          "'Laser1 Calibration Curve'.")
+    print("  Next: fit the curve and update config.ini 'Laser1 Calibration Curve'.")
     return 0
 
 
-def _write_csv(
-    output: str, pairs: list[tuple[float, float, str]]
-) -> None:
+def _write_csv(output: str, pairs: list[tuple[float, float, str]]) -> None:
     """Write the (V, mW, direction) rows to ``output`` as CSV."""
     with Path(output).open("w", newline="") as f:
         f.write(
@@ -329,47 +338,65 @@ def main() -> int:
         "ABC.",
     )
     parser.add_argument(
-        "--terminal", default=DEFAULT_TERMINAL,
+        "--terminal",
+        default=DEFAULT_TERMINAL,
         help=f"DAQ AO terminal (default: {DEFAULT_TERMINAL})",
     )
     parser.add_argument(
-        "--step", type=float, default=0.1,
+        "--step",
+        type=float,
+        default=0.1,
         help="Voltage step in V (default: 0.1, min: 0.01)",
     )
     parser.add_argument(
-        "--max-volts", type=float, default=5.0,
+        "--max-volts",
+        type=float,
+        default=5.0,
         help="Maximum voltage in V, clamped to 5.0 (default: 5.0)",
     )
     parser.add_argument(
-        "--output", default="test/laser1_calibration.csv",
+        "--output",
+        default="test/laser1_calibration.csv",
         help="Output CSV path (default: test/laser1_calibration.csv)",
     )
     parser.add_argument(
-        "--warmup-volts", type=float, default=3.0,
+        "--warmup-volts",
+        type=float,
+        default=3.0,
         help="Warm-up voltage in V (default: 3.0, 0 = skip)",
     )
     parser.add_argument(
-        "--warmup-secs", type=float, default=180.0,
+        "--warmup-secs",
+        type=float,
+        default=180.0,
         help="Warm-up duration in s (default: 180, 0 = skip)",
     )
     parser.add_argument(
-        "--samples", type=int, default=5,
+        "--samples",
+        type=int,
+        default=5,
         help="Samples per point (default: 5, first thrown away)",
     )
     parser.add_argument(
-        "--settle-secs", type=float, default=2.0,
+        "--settle-secs",
+        type=float,
+        default=2.0,
         help="Settling delay after each voltage write (default: 2.0)",
     )
     parser.add_argument(
-        "--no-descending", action="store_true",
+        "--no-descending",
+        action="store_true",
         help="Skip the descending hysteresis-check pass",
     )
     parser.add_argument(
-        "--wavelength", type=float, default=561.0,
+        "--wavelength",
+        type=float,
+        default=561.0,
         help="Wavelength in nm for the PM100D (default: 561.0)",
     )
     parser.add_argument(
-        "--skip-zero", action="store_true",
+        "--skip-zero",
+        action="store_true",
         help="Skip the dark offset adjustment before the sweep",
     )
     args = parser.parse_args()

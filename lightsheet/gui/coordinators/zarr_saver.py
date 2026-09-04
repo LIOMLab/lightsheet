@@ -192,7 +192,6 @@ class ZarrSaver:
             )
         return channels
 
-
     def _write_acquisition_group(self) -> None:
         """Write the ``/acquisition`` group (per-plane motor positions +
         scan params) via the writer's public ``root`` handle.
@@ -235,7 +234,7 @@ class ZarrSaver:
         # sample_rate is a live instance attribute on the SigGen (the
         # mock sets it at construct time; the real SigGen reads it from config
         # at construct time).
-        grp.attrs["sample_rate"] = siggen.sample_rate  # ty: ignore[unresolved-attribute]
+        grp.attrs["sample_rate"] = siggen.sample_rate
         grp.attrs["binning_x"] = cam.binning_x
         grp.attrs["binning_y"] = cam.binning_y
 
@@ -398,7 +397,6 @@ class ZarrSaver:
             "sharpness_metric",
             data=np.array(sharpness, dtype=float),
         )
-
 
     def finalize(self) -> None:
         """Build the analysis pyramid + NGFF metadata, then the

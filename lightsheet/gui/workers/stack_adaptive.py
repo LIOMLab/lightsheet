@@ -175,8 +175,7 @@ class _StackAdaptiveMixin:
                 FrameSaverController,
             )
 
-            fs = cast(FrameSaverController, self._shell._fs)
-            fs.record_adaptive_sample(sample)
+            self._shell._fs.record_adaptive_sample(sample)
 
         # Emit the trajectory signal for the GUI-thread plot.
         self.sig_adaptive_trajectory.emit(
@@ -213,9 +212,7 @@ class _StackAdaptiveMixin:
         # NOT change AdaptiveSample storage schema or the trajectory
         # signal (exhaustion is not a saved decision).
         if getattr(self._adaptive_current_cmd, "reacquire_exhausted", False):
-            dev_pct = abs(
-                intensities[brighter_idx] - cfg.target_midpoint
-            ) * 100.0
+            dev_pct = abs(intensities[brighter_idx] - cfg.target_midpoint) * 100.0
             self._shell.sig_message.emit(
                 f"Re-acquire fallback exhausted at plane {plane_idx}: "
                 f"intensity still deviates {dev_pct:.0f}% from target "

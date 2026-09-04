@@ -239,7 +239,7 @@ class Ui_SavePanel(object):
         sizePolicy4.setVerticalStretch(0)
         sizePolicy4.setHeightForWidth(self.listWidget_fileDatasets.sizePolicy().hasHeightForWidth())
         self.listWidget_fileDatasets.setSizePolicy(sizePolicy4)
-        self.listWidget_fileDatasets.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.listWidget_fileDatasets.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
 
         self.verticalLayout_50.addWidget(self.listWidget_fileDatasets)
 

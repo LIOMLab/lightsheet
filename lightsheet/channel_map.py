@@ -9,6 +9,7 @@ Hardware limits:
   this to its 0-292.84 mA coil-current range internally)
 """
 
+import typing
 from dataclasses import dataclass
 from enum import Enum
 
@@ -38,7 +39,9 @@ class ChannelMap:
     galvo_voltage_limit: float = 10.0  # ±10 V (NI-6363 AO range)
     etl_voltage_limit: float = 5.0  # 0-5 V (EL-10-30 analog input range)
 
-    def order_galvos(self, left: float, right: float) -> tuple[float, float]:
+    def order_galvos(
+        self, left: typing.Any, right: typing.Any
+    ) -> tuple[typing.Any, typing.Any]:
         """Return galvo (left, right) setpoints, swapped if configured."""
         return (right, left) if self.galvo_left_right_swap else (left, right)
 

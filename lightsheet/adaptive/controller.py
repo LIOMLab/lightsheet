@@ -230,11 +230,7 @@ class AdaptiveController:
                 dimmer_idx = 1 - brighter_idx
             else:
                 dimmer_idx = min(
-                    (
-                        i
-                        for i in range(n_channels)
-                        if i != brighter_idx
-                    ),
+                    (i for i in range(n_channels) if i != brighter_idx),
                     key=lambda i: intensities[i] if i < len(intensities) else 0.0,
                     default=brighter_idx,
                 )

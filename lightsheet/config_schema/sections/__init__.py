@@ -4,6 +4,10 @@ from lightsheet.config_schema.sections.adaptive import (
     AdaptiveSettings,
     AdaptiveSettingsOverlay,
 )
+from lightsheet.config_schema.sections.autofocus import (
+    AutofocusSettings,
+    AutofocusSettingsOverlay,
+)
 from lightsheet.config_schema.sections.camera import (
     CameraSettings,
     CameraSettingsOverlay,
@@ -38,6 +42,8 @@ from lightsheet.config_schema.sections.siggen import (
 __all__ = [
     "AdaptiveSettings",
     "AdaptiveSettingsOverlay",
+    "AutofocusSettings",
+    "AutofocusSettingsOverlay",
     "CameraSettings",
     "CameraSettingsOverlay",
     "ControllerSettings",

@@ -8,11 +8,11 @@ numeric values here; Python modules can import them directly.
 from __future__ import annotations
 
 ZERO = 0  # explicit zero padding / margins
-XS = 4    # tight, e.g. title-bar button padding
-SM = 8    # standard widget/element spacing
-MD = 12   # between form rows
-LG = 16   # panel padding
-XL = 24   # toolbar/section spacing
+XS = 4  # tight, e.g. title-bar button padding
+SM = 8  # standard widget/element spacing
+MD = 12  # between form rows
+LG = 16  # panel padding
+XL = 24  # toolbar/section spacing
 XXL = 32  # large gaps
-RAIL = 48 # rail icon/button floor
+RAIL = 48  # rail icon/button floor
 PANEL_FLOOR = 126  # shared minimum height for compact laser/stack panels

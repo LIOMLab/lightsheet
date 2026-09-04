@@ -34,6 +34,7 @@ class ICameraCore(ABC):
     exposure_time: float
     shutter_mode: str
     line_time: float | None
+    lightsheet_line_time: float
     lightsheet_exposed_lines: int
     lightsheet_delay_lines: int
     recorder_timeout_status: bool
@@ -169,10 +170,15 @@ class ISigGenCore(ABC):
     galvo_right_amplitude: float
     galvo_left_offset: float
     galvo_right_offset: float
+    galvo_activated: bool
+    galvo_inverted: bool
     etl_left_amplitude: float
     etl_right_amplitude: float
     etl_left_offset: float
     etl_right_offset: float
+    etl_activated: bool
+    etl_steps: int
+    sample_rate: float
     waveform_cycles: int | None
     waveform_metadata: dict | None  # ty: ignore[missing-type-argument]
 
@@ -321,9 +327,11 @@ class IMotorsCore(ABC):
     error_message: str
 
     # Controller-read attributes — class-level annotations.
-    vertical: "IMotorCore"
-    horizontal: "IMotorCore"
-    camera: "IMotorCore"
+    # The controller calls per-axis get_position/set_origin on these handles,
+    # so the type is the extended ``IMotor`` surface, not ``IMotorCore``.
+    vertical: "IMotor"
+    horizontal: "IMotor"
+    camera: "IMotor"
 
 
 class IMotors(IMotorsCore):

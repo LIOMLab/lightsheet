@@ -4,8 +4,19 @@
 import argparse
 import difflib
 import re
-import sys
+import typing
 from pathlib import Path
+
+
+def _group_str(m: re.Match[str], idx: int) -> str:
+    """Return a regex capture group as a concrete ``str``.
+
+    PySide6/ty stubs type ``re.Match.__getitem__`` as ``Any``, which causes
+    ``unsound-return-statement`` errors in functions that concatenate groups.
+    The group is always a string in this module, so the cast is safe.
+    """
+    return typing.cast(str, m[idx])
+
 
 _SPACING_REMAP = {
     0: "_s.ZERO",
@@ -93,23 +104,26 @@ def _add_import(text: str) -> str:
 
 
 def _replace_set_spacing(m: re.Match[str]) -> str:
-    return f".setSpacing({_token(m[1])})"
+    return f".setSpacing({_token(_group_str(m, 1))})"
 
 
 def _replace_contents_margins(m: re.Match[str]) -> str:
-    return f".setContentsMargins({_token(m[1])}, {_token(m[2])}, {_token(m[3])}, {_token(m[4])})"
+    return (
+        f".setContentsMargins({_token(_group_str(m, 1))}, "
+        f"{_token(_group_str(m, 2))}, {_token(m[3])}, {_token(m[4])})"
+    )
 
 
 def _replace_fixed(m: re.Match[str]) -> str:
-    return f".setFixed{m[1]}({_token(m[2])})"
+    return f".setFixed{_group_str(m, 1)}({_token(_group_str(m, 2))})"
 
 
 def _replace_qsize(m: re.Match[str]) -> str:
-    return f"QSize({_token(m[1])}, {_token(m[2])})"
+    return f"QSize({_token(_group_str(m, 1))}, {_token(_group_str(m, 2))})"
 
 
 def _replace_spacer(m: re.Match[str]) -> str:
-    return f"QSpacerItem({_token(m[1])}, {_token(m[2])}"
+    return f"QSpacerItem({_token(_group_str(m, 1))}, {_token(_group_str(m, 2))}"
 
 
 def _transform(text: str) -> str:
@@ -156,42 +170,49 @@ def _ensure_imports(text: str, imports: list[tuple[str, str]], anchor: str) -> s
 
 def _replace_shell_estop_status(m: re.Match[str]) -> str:
     return (
-        m[1]
-        + '\n        self.label_estopStatus.setStyleSheet(f"color: {_c.SUCCESS}; {_t.BOLD}")\n'
-        + m[2]
+        _group_str(m, 1)
+        + "\n        self.label_estopStatus.setStyleSheet("
+        + 'f"color: {_c.SUCCESS}; {_t.BOLD}")\n'
+        + _group_str(m, 2)
     )
 
 
 def _replace_shell_estop_btn(m: re.Match[str]) -> str:
-    return m[1] + "\n" + (
-        "        self.pushButton_estop.setStyleSheet(\n"
-        '            f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "\n'
-        '            f"{_t.HEADING} border: 2px solid {_c.BREEZE_BG}; }}"\n'
-        "        )"
-    ) + "\n" + m[2]
+    return (
+        _group_str(m, 1)
+        + "\n"
+        + "        self.pushButton_estop.setStyleSheet(\n"
+        + '            f"QPushButton {{ background-color: {_c.DANGER}; "\n'
+        + '            f"color: {_c.ON_DANGER}; {_t.HEADING} "\n'
+        + '            f"border: 2px solid {_c.BREEZE_BG}; }}"\n'
+        + "        )\n"
+        + _group_str(m, 2)
+    )
 
 
 def _replace_shell_mode_badge(m: re.Match[str]) -> str:
     return (
-        m[1]
+        _group_str(m, 1)
         + '\n        self.label_modeBadge.setStyleSheet(f"{_t.BOLD}")\n'
-        + m[2]
+        + _group_str(m, 2)
     )
 
 
 def _replace_laser1_status_style(m: re.Match[str]) -> str:
     return (
-        m[1]
-        + '\n        self.label_laserOneStatus.setStyleSheet(f"color: {_c.DISABLED}; {_t.BOLD}")\n\n'
-        + m[2]
+        _group_str(m, 1)
+        + "\n        self.label_laserOneStatus.setStyleSheet("
+        + 'f"color: {_c.DISABLED}; {_t.BOLD}")\n\n'
+        + _group_str(m, 2)
     )
 
 
 def _replace_laser2_status_style(m: re.Match[str]) -> str:
     return (
-        m[1]
-        + '\n        self.label_laserTwoStatus.setStyleSheet(f"color: {_c.DISABLED}; {_t.BOLD}")\n\n'
-        + m[2]
+        _group_str(m, 1)
+        + "\n        self.label_laserTwoStatus.setStyleSheet("
+        + 'f"color: {_c.DISABLED}; {_t.BOLD}")\n\n'
+        + _group_str(m, 2)
     )
 
 
@@ -216,20 +237,38 @@ def _patch_laser(text: str) -> str:
     text = _LASER1_STATUS_STYLE_RE.sub(_replace_laser1_status_style, text)
     text = _LASER2_STATUS_STYLE_RE.sub(_replace_laser2_status_style, text)
     text = text.replace(
-        r'self.label_72.setText(QCoreApplication.translate("LaserPanel", u"Laser1", None))',
-        r'self.label_72.setText(QCoreApplication.translate("LaserPanel", f"<html><head/><body><p><span style=\"{_t.POWER}\">Laser1</span></p></body></html>", None))',
+        (
+            r'self.label_72.setText(QCoreApplication.translate("LaserPanel", '
+            r'u"Laser1", None))'
+        ),
+        (
+            r'self.label_72.setText(QCoreApplication.translate("LaserPanel", '
+            r'f"<html><head/><body><p><span style=\"{_t.POWER}\">'
+            r'Laser1</span></p></body></html>", None))'
+        ),
     )
     text = text.replace(
-        r'self.label_73.setText(QCoreApplication.translate("LaserPanel", u"Laser2", None))',
-        r'self.label_73.setText(QCoreApplication.translate("LaserPanel", f"<html><head/><body><p><span style=\"{_t.POWER}\">Laser2</span></p></body></html>", None))',
+        (
+            r'self.label_73.setText(QCoreApplication.translate("LaserPanel", '
+            r'u"Laser2", None))'
+        ),
+        (
+            r'self.label_73.setText(QCoreApplication.translate("LaserPanel", '
+            r'f"<html><head/><body><p><span style=\"{_t.POWER}\">'
+            r'Laser2</span></p></body></html>", None))'
+        ),
     )
     text = text.replace(
-        r'self.label_laserOneStatus.setText(QCoreApplication.translate("LaserPanel", u"\u25cb OFF", None))',
-        r'self.label_laserOneStatus.setText(QCoreApplication.translate("LaserPanel", f"{_sym.LASER_OFF} OFF", None))',
+        r'self.label_laserOneStatus.setText(QCoreApplication.translate("LaserPanel", '
+        r'u"\u25cb OFF", None))',
+        r'self.label_laserOneStatus.setText(QCoreApplication.translate("LaserPanel", '
+        r'f"{_sym.LASER_OFF} OFF", None))',
     )
     text = text.replace(
-        r'self.label_laserTwoStatus.setText(QCoreApplication.translate("LaserPanel", u"\u25cb OFF", None))',
-        r'self.label_laserTwoStatus.setText(QCoreApplication.translate("LaserPanel", f"{_sym.LASER_OFF} OFF", None))',
+        r'self.label_laserTwoStatus.setText(QCoreApplication.translate("LaserPanel", '
+        r'u"\u25cb OFF", None))',
+        r'self.label_laserTwoStatus.setText(QCoreApplication.translate("LaserPanel", '
+        r'f"{_sym.LASER_OFF} OFF", None))',
     )
     return text
 
@@ -246,8 +285,15 @@ def _patch_scan(text: str) -> str:
         ("label_69", "Left Galvo"),
         ("label_70", "Right Galvo"),
     ]:
-        old = f'self.{label}.setText(QCoreApplication.translate("ScanPanel", u"{inner}", None))'
-        new = f'self.{label}.setText(QCoreApplication.translate("ScanPanel", f\'<html><head/><body><p><span style="{{_t.POWER}}">{inner}</span></p></body></html>\', None))'
+        old = (
+            f'self.{label}.setText(QCoreApplication.translate("ScanPanel", '
+            f'u"{inner}", None))'
+        )
+        new = (
+            f'self.{label}.setText(QCoreApplication.translate("ScanPanel", '
+            f'f\'<html><head/><body><p><span style="{{_t.POWER}}">'
+            f"{inner}</span></p></body></html>', None))"
+        )
         text = text.replace(old, new)
     return text
 
@@ -321,9 +367,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--diff", action="store_true", help="print diffs of files that would change"
     )
-    parser.add_argument(
-        "--dry-run", action="store_true", help="do not write any files"
-    )
+    parser.add_argument("--dry-run", action="store_true", help="do not write any files")
     args = parser.parse_args(argv)
     if args.repo_root is None:
         args.repo_root = Path(__file__).resolve().parent.parent

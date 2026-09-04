@@ -5,12 +5,15 @@ feedforward interpolation, per-block residual, and an image-sharpness metric.
 No Qt, no HAL, no SDK imports — unit-testable with plain numpy arrays.
 """
 
+from lightsheet.focus.adaptive_controller import AdaptiveFocusController
 from lightsheet.focus.calibration import load_focus_curve
 from lightsheet.focus.controller import FocusController
 from lightsheet.focus.sharpness import frame_sharpness_variance
-from lightsheet.focus.types import FocusConfig, FocusCurve, FocusSample
+from lightsheet.focus.types import AutofocusConfig, FocusConfig, FocusCurve, FocusSample
 
 __all__ = [
+    "AdaptiveFocusController",
+    "AutofocusConfig",
     "FocusConfig",
     "FocusController",
     "FocusCurve",

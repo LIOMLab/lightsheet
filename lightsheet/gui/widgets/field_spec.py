@@ -111,6 +111,11 @@ FIELD_SPECS: dict[str, FieldSpec] = {
     "doubleSpinBox_adaptiveLaser2MaxPower": FieldSpec("mW", 1, 0.5, 5.0, 0.0, 150.0),
     # Stack panel — focus compensation group
     "doubleSpinBox_focusBlockSize": FieldSpec("", 0, 1, 5, 1, 100),
+    # Stack panel — predictive adaptive-autofocus group
+    "doubleSpinBox_autofocusCadence": FieldSpec("", 0, 1, 5, 1, 1000),
+    "doubleSpinBox_autofocusResidualGain": FieldSpec("mm", 3, 0.01, 0.1, 0.0, 1.0),
+    "doubleSpinBox_autofocusMaxResidual": FieldSpec("mm", 3, 0.05, 0.1, 0.0, 5.0),
+    "doubleSpinBox_autofocusSmoothing": FieldSpec("", 2, 0.05, 0.1, 0.0, 1.0),
 }
 
 # Author-supplied one-line purpose per field, used by FieldSpecSpinBox
@@ -155,4 +160,9 @@ FIELD_PURPOSES: dict[str, str] = {
     "doubleSpinBox_adaptiveLaser2MaxPower": "Adaptive laser 2 max power bound",
     # Stack panel — focus compensation group
     "doubleSpinBox_focusBlockSize": "Focus compensation block size (planes)",
+    # Stack panel — predictive adaptive-autofocus group
+    "doubleSpinBox_autofocusCadence": "Autofocus update cadence (planes)",
+    "doubleSpinBox_autofocusResidualGain": "Autofocus residual gain per step (mm)",
+    "doubleSpinBox_autofocusMaxResidual": "Autofocus maximum residual (mm)",
+    "doubleSpinBox_autofocusSmoothing": "Autofocus EMA smoothing / learning rate",
 }

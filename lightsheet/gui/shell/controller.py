@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import ClassVar
 
 import numpy as np
-from PySide6.QtCore import QEvent, QRect, QSize, Qt, QTimer, Signal, Slot
+from PySide6.QtCore import QEvent, QRect, QSize, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtGui import (
     QActionGroup,
     QCloseEvent,
@@ -59,14 +59,12 @@ from lightsheet.gui.panels.past_acquisitions_browser import (
 from lightsheet.gui.panels.properties_dialog import Properties_Dialog
 from lightsheet.gui.panels.save_panel import SavePanelWidget
 from lightsheet.gui.panels.scan_panel import ScanPanelWidget
+from lightsheet.gui.panels.stack_panel import StackPanelWidget
+from lightsheet.gui.shell.ui_shell import Ui_Shell
 from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.styles import spacing as _s
 from lightsheet.gui.styles import symbols as _sym
 from lightsheet.gui.styles import typography as _t
-
-
-from lightsheet.gui.panels.stack_panel import StackPanelWidget
-from lightsheet.gui.shell.ui_shell import Ui_Shell
 from lightsheet.gui.widgets.channel_radio import ChannelRadio
 from lightsheet.hal.bundle import DeviceBundle
 from lightsheet.wavelength_color import wavelength_to_hex
@@ -90,13 +88,13 @@ def _center_toolbutton_paint(btn: QToolButton) -> None:
         p = QPainter(btn)
         opt = QStyleOptionToolButton()
         opt.initFrom(btn)
-        opt.features = QStyleOptionToolButton.None_  # ty: ignore[unresolved-attribute]
+        opt.features = QStyleOptionToolButton.ToolButtonFeature.None_
         # Draw only button chrome; we paint the centered icon+text below.
         opt.toolButtonStyle = Qt.ToolButtonStyle.ToolButtonIconOnly
         opt.text = ""
         opt.icon = QIcon()
         opt.iconSize = icon_size
-        style.drawComplexControl(QStyle.CC_ToolButton, opt, p, btn)  # ty: ignore[unresolved-attribute]
+        style.drawComplexControl(QStyle.ComplexControl.CC_ToolButton, opt, p, btn)
         cr = btn.rect()
         icon_h = icon_size.height()
         text_h = QFontMetrics(btn.font()).height()
@@ -176,6 +174,7 @@ if typing.TYPE_CHECKING:
     from lightsheet.gui.coordinators.frame_saver_controller import FrameSaverController
     from lightsheet.gui.coordinators.hardware_manager import HardwareManager
     from lightsheet.gui.coordinators.motor_controller import MotorController
+    from lightsheet.hal.interfaces import ICamera, IETLs, ILaser, IMotors, ISigGen
 
 
 class Controller_MainWindow(QMainWindow):
@@ -212,6 +211,36 @@ class Controller_MainWindow(QMainWindow):
     # mutates the readback QLabel. Workers must not touch GUI widgets directly.
     sig_laser_readback = Signal(int, str, str)
 
+    # Collaborator references (set by ``main()`` / the test fixture after
+    # construction; cast to non-optional for the type checker because the
+    # production and test composition roots always populate them before use).
+    # The generated ``Ui_Shell`` gains runtime attributes (statusBar_*,
+    # message_splitter, etc.) beyond the .ui file, so treat it as ``Any``
+    # to keep the codebase ty-clean without maintaining a parallel type stub.
+    ui: typing.Any
+
+    _fs: "FrameSaverController"
+    _hw: "HardwareManager"
+    _acq: "AcquisitionCoordinator"
+    _mc: "MotorController"
+
+    # HAL device references (set in ``hardware_init``).
+    camera: "ICamera"
+    siggen: "ISigGen"
+    motors: "IMotors"
+    etls: "IETLs"
+    lasers: list["ILaser"]
+
+    # Worker threads / worker objects (created on first acquisition button click).
+    _preview_thread: QThread | None = None
+    _preview_worker: typing.Any | None = None
+    _live_thread: QThread | None = None
+    _live_worker: typing.Any | None = None
+    _single_thread: QThread | None = None
+    _single_worker: typing.Any | None = None
+    _stack_thread: QThread | None = None
+    _stack_worker: typing.Any | None = None
+
     def __init__(
         self,
         bundle: DeviceBundle,
@@ -225,10 +254,10 @@ class Controller_MainWindow(QMainWindow):
         # laser handle after construction would fail to de-energize a live
         # Class IIIB laser in the E-stop kill path.
         self._bundle = bundle
-        self._fs = fs
-        self._hw = hw
-        self._acq = acq
-        self._mc = mc
+        self._fs = typing.cast("FrameSaverController", fs)
+        self._hw = typing.cast("HardwareManager", hw)
+        self._acq = typing.cast("AcquisitionCoordinator", acq)
+        self._mc = typing.cast("MotorController", mc)
         self._demo_mode = demo
 
         QMainWindow.__init__(self)
@@ -236,7 +265,7 @@ class Controller_MainWindow(QMainWindow):
         # Load the shell UI (E-stop toolbar, ImageView, message log, leftRail
         # + stackedPanels). The 8 per-panel widgets are composed into
         # stackedPanels programmatically below.
-        self.ui = Ui_Shell()
+        self.ui = typing.cast(typing.Any, Ui_Shell())
         self.ui.setupUi(self)
 
         # Expose the E-stop widgets as direct attributes for back-compat.
@@ -249,9 +278,7 @@ class Controller_MainWindow(QMainWindow):
         # E-stop toolbar; the .ui defaults are overridden so the single
         # source of truth lives in the styles modules.
         self.label_estopStatus.setText(f"{_sym.ESTOP_ARMED} ARMED")
-        self.label_estopStatus.setStyleSheet(
-            f"color: {_c.SUCCESS}; {_t.BOLD}"
-        )
+        self.label_estopStatus.setStyleSheet(f"color: {_c.SUCCESS}; {_t.BOLD}")
         self.pushButton_estop.setText("E-STOP")
         # pushButton_estop toolTip is set in ui_shell.ui and must stay
         # verbatim with the UI-SPEC copywriting contract.
@@ -260,7 +287,9 @@ class Controller_MainWindow(QMainWindow):
             f"{_t.HEADING} border: 2px solid {_c.BREEZE_BG}; }}"
         )
         self.pushButton_estop.setIcon(
-            QApplication.style().standardIcon(QStyle.SP_MessageBoxWarning)
+            QApplication.style().standardIcon(
+                QStyle.StandardPixmap.SP_MessageBoxWarning
+            )
         )
         self.shortcut_estop = self.ui.shortcut_estop
         # Safety: E-stop toolbar is fixed (non-movable, non-floatable) so the
@@ -328,8 +357,9 @@ class Controller_MainWindow(QMainWindow):
             scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             # Zero the panel's top-level layout margins so content aligns
             # edge-to-edge with the message log sibling in the splitter.
-            if panel.layout() is not None:
-                panel.layout().setContentsMargins(_s.ZERO, _s.ZERO, _s.ZERO, _s.ZERO)  # ty: ignore[unresolved-attribute]
+            layout = panel.layout()
+            if layout is not None:
+                layout.setContentsMargins(_s.ZERO, _s.ZERO, _s.ZERO, _s.ZERO)
             scroll.setWidget(panel)
             return scroll
 
@@ -374,42 +404,42 @@ class Controller_MainWindow(QMainWindow):
         _rail_icon_specs = (
             (
                 self.ui.toolButton_railMotion,
-                QStyle.SP_MediaSkipForward,  # ty: ignore[unresolved-attribute]
+                QStyle.StandardPixmap.SP_MediaSkipForward,
                 "Motion: Jog the stage and set positions.",
             ),
             (
                 self.ui.toolButton_railAcquire,
-                QStyle.SP_MediaPlay,  # ty: ignore[unresolved-attribute]
+                QStyle.StandardPixmap.SP_MediaPlay,
                 "Acquire: Start preview, live, or single-frame acquisition.",
             ),
             (
                 self.ui.toolButton_railStack,
-                QStyle.SP_ToolBarHorizontalExtensionButton,  # ty: ignore[unresolved-attribute]
+                QStyle.StandardPixmap.SP_ToolBarHorizontalExtensionButton,
                 "Stack: Configure and run a z-stack.",
             ),
             (
                 self.ui.toolButton_railScan,
-                QStyle.SP_MediaSeekForward,  # ty: ignore[unresolved-attribute]
+                QStyle.StandardPixmap.SP_MediaSeekForward,
                 "Scan: Set galvo/ETL scan parameters.",
             ),
             (
                 self.ui.toolButton_railLasers,
-                QStyle.SP_DialogYesButton,  # ty: ignore[unresolved-attribute]
+                QStyle.StandardPixmap.SP_DialogYesButton,
                 "Lasers: Toggle and set laser power; per-laser status.",
             ),
             (
                 self.ui.toolButton_railFiles,
-                QStyle.SP_DialogSaveButton,  # ty: ignore[unresolved-attribute]
+                QStyle.StandardPixmap.SP_DialogSaveButton,
                 "Files: Set save directory, filename, and format.",
             ),
             (
                 self.ui.toolButton_railPast,
-                QStyle.SP_DirOpenIcon,  # ty: ignore[unresolved-attribute]
+                QStyle.StandardPixmap.SP_DirOpenIcon,
                 "Past: Browse previously saved acquisitions.",
             ),
             (
                 self.ui.toolButton_railCalibrate,
-                QStyle.SP_DialogResetButton,  # ty: ignore[unresolved-attribute]
+                QStyle.StandardPixmap.SP_DialogResetButton,
                 "Calibrate: Camera/ETL calibration (advanced).",
             ),
         )
@@ -433,7 +463,7 @@ class Controller_MainWindow(QMainWindow):
         # having to toggle the adaptive checkbox off and on. Checked
         # state mirrors dock visibility.
         self.ui.toolButton_railAdaptive.setIcon(
-            _style.standardIcon(QStyle.SP_MediaVolume)  # ty: ignore[unresolved-attribute]
+            _style.standardIcon(QStyle.StandardPixmap.SP_MediaVolume)
         )
         self.ui.toolButton_railAdaptive.setIconSize(QSize(_s.XL, _s.XL))
         self.ui.toolButton_railAdaptive.setToolTip(
@@ -452,7 +482,7 @@ class Controller_MainWindow(QMainWindow):
         # visible so the operator can open the focus trajectory dock on
         # demand. Checked state mirrors the dock's visibility.
         self.ui.toolButton_railFocus.setIcon(
-            _style.standardIcon(QStyle.SP_MediaPause)  # ty: ignore[unresolved-attribute]
+            _style.standardIcon(QStyle.StandardPixmap.SP_MediaPause)
         )
         self.ui.toolButton_railFocus.setIconSize(QSize(_s.XL, _s.XL))
         self.ui.toolButton_railFocus.setToolTip(
@@ -500,12 +530,12 @@ class Controller_MainWindow(QMainWindow):
         self.sig_laser_readback.connect(self.laser_panel.updateUi_laser_readback)
 
         # Add label and progress bar to status bar
-        self.ui.statusBar_label = QLabel(self.ui.statusbar)  # ty: ignore[unresolved-attribute]
-        self.ui.statusBar_progress = QProgressBar(self.ui.statusbar)  # ty: ignore[unresolved-attribute]
-        self.ui.statusbar.addPermanentWidget(self.ui.statusBar_label)  # ty: ignore[unresolved-attribute]
-        self.ui.statusbar.addPermanentWidget(self.ui.statusBar_progress)  # ty: ignore[unresolved-attribute]
+        self.ui.statusBar_label = QLabel(self.ui.statusbar)
+        self.ui.statusBar_progress = QProgressBar(self.ui.statusbar)
+        self.ui.statusbar.addPermanentWidget(self.ui.statusBar_label)
+        self.ui.statusbar.addPermanentWidget(self.ui.statusBar_progress)
         # Let the status bar size the progress bar with its default size policy.
-        self.ui.statusBar_progress.hide()  # ty: ignore[unresolved-attribute]
+        self.ui.statusBar_progress.hide()
 
         # Add first entry to message log
         self.ui.plainTextEdit_messageLog.appendPlainText("-- message log --")
@@ -564,9 +594,7 @@ class Controller_MainWindow(QMainWindow):
         # checked radio once the group is wired (see _reflect_save_format_radio).
         self._pending_save_format_reflection = self.save_format
 
-        self.save_directory = str(
-            Path.home() / "Desktop" / "LightSheetData"
-        )
+        self.save_directory = str(Path.home() / "Desktop" / "LightSheetData")
         self.save_filename = ""
         self.save_filepath = ""
         self.save_description = ""
@@ -619,6 +647,29 @@ class Controller_MainWindow(QMainWindow):
         self.focus_selected = False
         self.horizontal_forward_boundary_selected = False
         self.horizontal_backward_boundary_selected = False
+
+        # Focus / calibration transient state (populated by MotorController).
+        # Typed as ``typing.Any`` because these are set by calibration methods
+        # before use; the exact shapes vary across focus and ETL pipelines.
+        self.slope_camera: typing.Any = None
+        self.intercept_camera: typing.Any = None
+        self.camera_focus_relation: typing.Any = None
+        self.focus_forward_boundary: typing.Any = None
+        self.focus_backward_boundary: typing.Any = None
+        self.etl_l_relation: typing.Any = None
+        self.etl_r_relation: typing.Any = None
+        self.donnees: typing.Any = None
+        self.xdata: list[typing.Any] = []
+        self.ydata: list[typing.Any] = []
+        self.popt: list[typing.Any] = []
+        self.number_of_calibration_planes: int = 0
+        self.number_of_camera_positions: int = 0
+        self.number_of_etls_points: int = 0
+
+        # Live position text updated by MotorController for display/image metadata.
+        self.current_horizontal_position_text: str = ""
+        self.current_vertical_position_text: str = ""
+        self.current_camera_position_text: str = ""
         self.stack_starting_plane = None
         self.stack_ending_plane = None
         self.number_of_planes = 0
@@ -680,7 +731,7 @@ class Controller_MainWindow(QMainWindow):
         # ---
         # Signal connections for progress bar and command log
         # ---
-        self.sig_progress_update.connect(self.ui.statusBar_progress.setValue)  # ty: ignore[unresolved-attribute]
+        self.sig_progress_update.connect(self.ui.statusBar_progress.setValue)
         self.sig_progress_update.connect(self._on_progress_update)
         self.sig_message.connect(self.updateUi_message_printer)
 
@@ -1104,7 +1155,7 @@ class Controller_MainWindow(QMainWindow):
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         self._hw_progress = QProgressDialog(
             "Initializing hardware, please wait...",
-            None,
+            "",
             0,
             0,
             self,
@@ -1141,7 +1192,7 @@ class Controller_MainWindow(QMainWindow):
             # Open the Toptica iBeam serial laser (COM4 / self.lasers[1]).
             # Called here (not from HardwareManager.__init__) to preserve the
             # pre-extraction post-show timing.
-            self._hw.open_laser2()  # ty: ignore[unresolved-attribute]
+            self._hw.open_laser2()
 
             # Update Ui with initial hardware state
             self.updateUi_initial_hardware_state()
@@ -1186,7 +1237,9 @@ class Controller_MainWindow(QMainWindow):
             # and the LevelsBar layout).
             images_layout = self.ui.imagesPane.layout()
             if images_layout is not None:
-                images_layout.insertWidget(1, self.channel_radio_container)  # ty: ignore[unresolved-attribute]
+                typing.cast(QVBoxLayout, images_layout).insertWidget(
+                    1, self.channel_radio_container
+                )
             # Switch the ImageView + reset the LevelsBar when the operator
             # clicks L1/L2. Reads reconstructed_frames[wavelength] (no RGB
             # overlay; no per-channel levels state stored — the LevelsBar
@@ -1217,23 +1270,26 @@ class Controller_MainWindow(QMainWindow):
             # FrameSaverController display-port refresh timer
             self.timer_imageview = QTimer()
             self.timer_imageview.timeout.connect(
-                self._fs.frame_viewer.updateUi_refresh_view  # ty: ignore[unresolved-attribute]
+                self._fs.frame_viewer.updateUi_refresh_view
             )
             # Use functools.partial (bound callables) instead of lambdas so
             # the connection does not capture self._hw in a closure cell and
             # create a reference cycle (controller -> timer -> lambda ->
             # self._hw -> self._shell -> controller). This matches the
             # bound-method pattern documented in wire_collaborators.
-            self.timer_imageview.timeout.connect(partial(self._hw._poll_laser_status, [0]))  # ty: ignore[unresolved-attribute]
+            assert self._hw is not None
             self.timer_imageview.timeout.connect(
-                partial(self._hw._refresh_laser_readback, 0)  # ty: ignore[unresolved-attribute]
+                partial(self._hw._poll_laser_status, [0])
+            )
+            self.timer_imageview.timeout.connect(
+                partial(self._hw._refresh_laser_readback, 0)
             )
             self.timer_imageview.start(100)
 
             # L2 (iBeam) status poll — a separate gated QTimer
             _ibeam_cfg = cfg_read("config.ini", "iBeam", {"Status Poll Interval": 1.0})  # ty: ignore[invalid-argument-type]
             self.timer_laser2_status = QTimer()
-            self.timer_laser2_status.timeout.connect(self._hw._poll_laser2_status_gated)  # ty: ignore[unresolved-attribute]
+            self.timer_laser2_status.timeout.connect(self._hw._poll_laser2_status_gated)
             self.timer_laser2_status.start(
                 int(float(_ibeam_cfg["Status Poll Interval"]) * 1000)
             )
@@ -1251,9 +1307,7 @@ class Controller_MainWindow(QMainWindow):
             # hardware. The image lives in lightsheet/resources/ so it
             # works on any machine with the repo checked out.
             _demo_img_path = (
-                Path(__file__).resolve().parents[2]
-                / "resources"
-                / "demo_image.png"
+                Path(__file__).resolve().parents[2] / "resources" / "demo_image.png"
             )
             try:
                 import numpy as _np
@@ -1262,7 +1316,7 @@ class Controller_MainWindow(QMainWindow):
                 _img = QImage(str(_demo_img_path))
                 if not _img.isNull():
                     # Convert to grayscale numpy array for ImageView.
-                    _ptr = _img.convertToFormat(QImage.Format_Grayscale8)  # ty: ignore[unresolved-attribute]
+                    _ptr = _img.convertToFormat(QImage.Format.Format_Grayscale8)
                     _arr_u8 = (
                         _np.frombuffer(_ptr.bits(), dtype=_np.uint8)
                         .reshape(_ptr.height(), _ptr.width())
@@ -1345,7 +1399,7 @@ class Controller_MainWindow(QMainWindow):
             self.past_panel.stop_scan()
             # Stop the frame_saver QThread BEFORE the acquisition threads so
             # h5py.File.close() completes before the camera/etls close.
-            self._fs.frame_saver.stop_saving()  # ty: ignore[unresolved-attribute]
+            self._fs.frame_saver.stop_saving()
             # Shut down all four acquisition worker QThreads via a single
             # uniform quit() + wait(5000) loop. The cooperative poll model
             # means each worker exits on its own at the next loop iteration
@@ -1368,9 +1422,14 @@ class Controller_MainWindow(QMainWindow):
                             "shutdown anyway.",
                             attr,
                         )
+            # Close any live DAQ scan tasks before shutting the camera/etls,
+            # then close all laser backends and the motor serial chain.
+            self.siggen.delete_scanner()
             self.camera.close()
             self.etls.close()
-            # Laser 2 (iBeam) lifecycle close
+            # Laser backends — L1 (DAQ AO) + L2 (iBeam serial) both need a
+            # lifecycle close so any per-session readback/handles are released.
+            self.lasers[0].close()
             self.lasers[1].close()
             # Shared serial handle for Zaber motor chain
             self.motors.close()
@@ -1584,7 +1643,7 @@ class Controller_MainWindow(QMainWindow):
         The badge mirrors the progress bar value into the badge text so
         the operator never has to look at the status bar mid-run. The
         badge uses QDarkStyle default text color + bold weight — no
-        accent color (audit #12).
+        accent color.
 
         Modes:
         - idle → "IDLE"
@@ -1592,9 +1651,9 @@ class Controller_MainWindow(QMainWindow):
         - live → "LIVE"
         - single → "SINGLE"
         - stack running → "STACK RUNNING — plane {plane}/{total}"
-        - stack running in a queue → appended " (row {queue_row}/{queue_total})"
-        - adaptive running → "ADAPTIVE RUNNING — plane {plane}/{total}"
-        - adaptive aborted → "ADAPTIVE ABORTED — plane {plane}/{total}"
+        - stack in a queue → appended " (row {queue_row}/{queue_total})"
+        - focus running (legacy or adaptive) → "FOCUS RUNNING — plane {plane}/{total}"
+        - focus aborted (legacy or adaptive) → "FOCUS ABORTED — plane {plane}/{total}"
         """
         if mode == "IDLE":
             text = "IDLE"
@@ -1833,7 +1892,7 @@ class Controller_MainWindow(QMainWindow):
         if self.focus_mode_started:
             self.focus_mode_started = False
         if self.lasers[0].active or self.lasers[1].active:
-            self._hw.stop_lasers()  # ty: ignore[unresolved-attribute]
+            self._hw.stop_lasers()
 
     def wire_collaborators(self) -> None:
         """Wire the collaborator-dependent signal connections.
@@ -1850,42 +1909,42 @@ class Controller_MainWindow(QMainWindow):
         # Connections for the 'Motion' tab controls (MotorController)
         # ---
         self.motor_panel.ui.pushButton_sampleStepUp.clicked.connect(
-            self._mc.updateUi_move_sample_up  # ty: ignore[unresolved-attribute]
+            self._mc.updateUi_move_sample_up
         )
         self.motor_panel.ui.pushButton_sampleStepDown.clicked.connect(
-            self._mc.updateUi_move_sample_down  # ty: ignore[unresolved-attribute]
+            self._mc.updateUi_move_sample_down
         )
         self.motor_panel.ui.pushButton_sampleStepForward.clicked.connect(
-            self._mc.updateUi_move_sample_forward  # ty: ignore[unresolved-attribute]
+            self._mc.updateUi_move_sample_forward
         )
         self.motor_panel.ui.pushButton_sampleStepBackward.clicked.connect(
-            self._mc.updateUi_move_sample_backward  # ty: ignore[unresolved-attribute]
+            self._mc.updateUi_move_sample_backward
         )
         self.motor_panel.ui.pushButton_sampleGotoOrigin.clicked.connect(
-            self._mc.updateUi_move_sample_to_origin  # ty: ignore[unresolved-attribute]
+            self._mc.updateUi_move_sample_to_origin
         )
         self.motor_panel.ui.pushButton_sampleSetOrigin.clicked.connect(
-            self._mc.updateUi_set_sample_origin  # ty: ignore[unresolved-attribute]
+            self._mc.updateUi_set_sample_origin
         )
         self.motor_panel.ui.pushButton_sampleGotoHPosition.clicked.connect(
-            self._mc.updateUi_move_to_horizontal_position  # ty: ignore[unresolved-attribute]
+            self._mc.updateUi_move_to_horizontal_position
         )
         self.motor_panel.ui.pushButton_sampleGotoVPosition.clicked.connect(
-            self._mc.updateUi_move_to_vertical_position  # ty: ignore[unresolved-attribute]
+            self._mc.updateUi_move_to_vertical_position
         )
 
         # Connections for the camera motion buttons
         self.motor_panel.ui.pushButton_cameraGotoPosition.clicked.connect(
-            self._mc.updateUi_move_camera_to_position  # ty: ignore[unresolved-attribute]
+            self._mc.updateUi_move_camera_to_position
         )
         self.motor_panel.ui.pushButton_cameraSetFocus.clicked.connect(
-            self._mc.updateUi_set_camera_focus  # ty: ignore[unresolved-attribute]
+            self._mc.updateUi_set_camera_focus
         )
         self.motor_panel.ui.pushButton_cameraStepForward.clicked.connect(
-            self._mc.updateUi_move_camera_forward  # ty: ignore[unresolved-attribute]
+            self._mc.updateUi_move_camera_forward
         )
         self.motor_panel.ui.pushButton_cameraStepBackward.clicked.connect(
-            self._mc.updateUi_move_camera_backward  # ty: ignore[unresolved-attribute]
+            self._mc.updateUi_move_camera_backward
         )
 
         # ---
@@ -1893,53 +1952,53 @@ class Controller_MainWindow(QMainWindow):
         # (AcquisitionCoordinator)
         # ---
         self.scan_panel.ui.doubleSpinBox_etlLeftAmplitude.valueChanged.connect(
-            self._acq.updateUi_etl_left_amplitude  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_etl_left_amplitude
         )
         self.scan_panel.ui.doubleSpinBox_etlRightAmplitude.valueChanged.connect(
-            self._acq.updateUi_etl_right_amplitude  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_etl_right_amplitude
         )
         self.scan_panel.ui.doubleSpinBox_etlLeftOffset.valueChanged.connect(
-            self._acq.updateUi_etl_left_offset  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_etl_left_offset
         )
         self.scan_panel.ui.doubleSpinBox_etlRightOffset.valueChanged.connect(
-            self._acq.updateUi_etl_right_offset  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_etl_right_offset
         )
         self.scan_panel.ui.checkBox_etlSync.stateChanged.connect(
-            self._acq.updateUi_etl_sync  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_etl_sync
         )
         self.scan_panel.ui.checkBox_etlActivate.stateChanged.connect(
-            self._acq.updateUi_etl_activate  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_etl_activate
         )
         self.scan_panel.ui.doubleSpinBox_etlSteps.valueChanged.connect(
-            self._acq.updateUi_etl_steps  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_etl_steps
         )
 
         # Connection for galvo settings changes
         self.scan_panel.ui.doubleSpinBox_galvoLeftAmplitude.valueChanged.connect(
-            self._acq.updateUi_galvo_left_amplitude  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_galvo_left_amplitude
         )
         self.scan_panel.ui.doubleSpinBox_galvoRightAmplitude.valueChanged.connect(
-            self._acq.updateUi_galvo_right_amplitude  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_galvo_right_amplitude
         )
         self.scan_panel.ui.doubleSpinBox_galvoLeftOffset.valueChanged.connect(
-            self._acq.updateUi_galvo_left_offset  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_galvo_left_offset
         )
         self.scan_panel.ui.doubleSpinBox_galvoRightOffset.valueChanged.connect(
-            self._acq.updateUi_galvo_right_offset  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_galvo_right_offset
         )
         self.scan_panel.ui.checkBox_galvoSync.stateChanged.connect(
-            self._acq.updateUi_galvo_sync  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_galvo_sync
         )
         self.scan_panel.ui.checkBox_galvoActivate.stateChanged.connect(
-            self._acq.updateUi_galvo_activate  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_galvo_activate
         )
         self.scan_panel.ui.checkBox_galvoInvert.stateChanged.connect(
-            self._acq.updateUi_galvo_invert  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_galvo_invert
         )
 
         # Connection for camera settings changes
         self.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.connect(
-            self._acq.updateUi_camera_shutter_mode  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_camera_shutter_mode
         )
         # The adaptive exposure-bound spinbox units track the camera
         # shutter mode (ms in Rolling / lines in Lightsheet). Hook the
@@ -1949,38 +2008,38 @@ class Controller_MainWindow(QMainWindow):
             self.stack_panel._update_adaptive_shutter_units
         )
         self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.valueChanged.connect(
-            self._acq.updateUi_camera_exposure_time  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_camera_exposure_time
         )
         self.acquisition_panel.ui.doubleSpinBox_cameraLineTime.valueChanged.connect(
-            self._acq.updateUi_camera_line_time  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_camera_line_time
         )
         self.acquisition_panel.ui.doubleSpinBox_cameraExposedLines.valueChanged.connect(
-            self._acq.updateUi_camera_exposed_lines  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_camera_exposed_lines
         )
         self.acquisition_panel.ui.doubleSpinBox_cameraDelayLines.valueChanged.connect(
-            self._acq.updateUi_camera_delay_lines  # ty: ignore[unresolved-attribute]
+            self._acq.updateUi_camera_delay_lines
         )
 
         # ---
         # Connections for the 'Calibration' tab controls (MotorController)
         # ---
         self.calibration_panel.ui.pushButton_calCameraComputeFocus.clicked.connect(
-            self._mc.calculate_camera_focus  # ty: ignore[unresolved-attribute]
+            self._mc.calculate_camera_focus
         )
         self.calibration_panel.ui.pushButton_calCameraShowInterpolation.clicked.connect(
-            self._mc.show_camera_interpolation  # ty: ignore[unresolved-attribute]
+            self._mc.show_camera_interpolation
         )
         self.calibration_panel.ui.pushButton_calEtlShowInterpolation.clicked.connect(
-            self._mc.show_etl_interpolation  # ty: ignore[unresolved-attribute]
+            self._mc.show_etl_interpolation
         )
         self.calibration_panel.ui.pushButton_calHorizontalStartRangeSelection.clicked.connect(
-            self._mc.updateUi_reset_boundaries  # ty: ignore[unresolved-attribute]
+            self._mc.updateUi_reset_boundaries
         )
         self.calibration_panel.ui.pushButton_calHorizontalSetForwardLimit.clicked.connect(
-            self._mc.updateUi_set_horizontal_forward_boundary  # ty: ignore[unresolved-attribute]
+            self._mc.updateUi_set_horizontal_forward_boundary
         )
         self.calibration_panel.ui.pushButton_calHorizontalSetBackwardLimit.clicked.connect(
-            self._mc.updateUi_set_horizontal_backward_boundary  # ty: ignore[unresolved-attribute]
+            self._mc.updateUi_set_horizontal_backward_boundary
         )
 
     # --- adaptive trajectory dock lifecycle ---
@@ -2095,20 +2154,16 @@ class Controller_MainWindow(QMainWindow):
         # The kill loop itself (laser.off() above) stays in the shell,
         # direct on self.lasers, lock-free — only the post-kill *refresh*
         # is deferred (the kill path is never offloaded).
-        QTimer.singleShot(0, lambda: self._hw._poll_laser_status([0, 1]))  # ty: ignore[unresolved-attribute]
-        QTimer.singleShot(0, lambda: self._hw._refresh_laser_readback(0))  # ty: ignore[unresolved-attribute]
-        QTimer.singleShot(0, self._hw._refresh_laser2_readback_async)  # ty: ignore[unresolved-attribute]
+        QTimer.singleShot(0, lambda: self._hw._poll_laser_status([0, 1]))
+        QTimer.singleShot(0, lambda: self._hw._refresh_laser_readback(0))
+        QTimer.singleShot(0, self._hw._refresh_laser2_readback_async)
 
         # 4. Latch the UI into ACTUATED: red indicator, yellow 4px border
         #    on the E-stop button. The Arm/Reset button label reflects the
         #    NEXT action available — "Clear E-stop" (the first press of the
         #    two-press re-arm sequence, audit #6).
-        self.label_estopStatus.setText(
-            f"{_sym.ESTOP_ACTUATED} E-STOP ACTUATED"
-        )
-        self.label_estopStatus.setStyleSheet(
-            f"color: {_c.DANGER}; {_t.BOLD}"
-        )
+        self.label_estopStatus.setText(f"{_sym.ESTOP_ACTUATED} E-STOP ACTUATED")
+        self.label_estopStatus.setStyleSheet(f"color: {_c.DANGER}; {_t.BOLD}")
         self.pushButton_estop.setStyleSheet(
             f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "
             f"{_t.HEADING} border: 4px solid {_c.WARNING}; }}"
@@ -2159,9 +2214,7 @@ class Controller_MainWindow(QMainWindow):
             # run.
             self._estop_disarmed = False
             self.label_estopStatus.setText(f"{_sym.ESTOP_ARMED} ARMED")
-            self.label_estopStatus.setStyleSheet(
-                f"color: {_c.SUCCESS}; {_t.BOLD}"
-            )
+            self.label_estopStatus.setStyleSheet(f"color: {_c.SUCCESS}; {_t.BOLD}")
             self.pushButton_estop.setStyleSheet(
                 f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "
                 f"{_t.HEADING} border: 2px solid {_c.BREEZE_BG}; }}"
@@ -2178,9 +2231,7 @@ class Controller_MainWindow(QMainWindow):
             self.estop_event.clear()
             self._estop_disarmed = True
             self.label_estopStatus.setText(f"{_sym.ESTOP_DISARMED} DISARMED")
-            self.label_estopStatus.setStyleSheet(
-                f"color: {_c.DISABLED}; {_t.BOLD}"
-            )
+            self.label_estopStatus.setStyleSheet(f"color: {_c.DISABLED}; {_t.BOLD}")
             # The E-stop button background stays safety-red in ALL states
             # (ARMED, DISARMED, ACTUATED) — only the border changes. The
             # DISARMED state is communicated by the gray status label above,
@@ -2195,9 +2246,9 @@ class Controller_MainWindow(QMainWindow):
     def updateUi_initial_hardware_state(self) -> None:
         # SigGen
         self.scan_panel.ui.checkBox_galvoActivate.setChecked(
-            self.siggen.galvo_activated  # ty: ignore[unresolved-attribute]
+            self.siggen.galvo_activated
         )
-        self.scan_panel.ui.checkBox_galvoInvert.setChecked(self.siggen.galvo_inverted)  # ty: ignore[unresolved-attribute]
+        self.scan_panel.ui.checkBox_galvoInvert.setChecked(self.siggen.galvo_inverted)
         self.scan_panel.ui.doubleSpinBox_galvoLeftAmplitude.setValue(
             self.siggen.galvo_left_amplitude
         )
@@ -2211,7 +2262,7 @@ class Controller_MainWindow(QMainWindow):
             self.siggen.galvo_right_offset
         )
 
-        self.scan_panel.ui.checkBox_etlActivate.setChecked(self.siggen.etl_activated)  # ty: ignore[unresolved-attribute]
+        self.scan_panel.ui.checkBox_etlActivate.setChecked(self.siggen.etl_activated)
         self.scan_panel.ui.doubleSpinBox_etlLeftAmplitude.setValue(
             self.siggen.etl_left_amplitude
         )
@@ -2224,14 +2275,14 @@ class Controller_MainWindow(QMainWindow):
         self.scan_panel.ui.doubleSpinBox_etlRightOffset.setValue(
             self.siggen.etl_right_offset
         )
-        self.scan_panel.ui.doubleSpinBox_etlSteps.setValue(self.siggen.etl_steps)  # ty: ignore[unresolved-attribute]
+        self.scan_panel.ui.doubleSpinBox_etlSteps.setValue(self.siggen.etl_steps)
 
         # Camera
         self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.setValue(
             self.camera.exposure_time * 1e3
         )  # camera(s) to ui(ms)
         self.acquisition_panel.ui.doubleSpinBox_cameraLineTime.setValue(
-            self.camera.lightsheet_line_time * 1e6  # ty: ignore[unresolved-attribute]
+            self.camera.lightsheet_line_time * 1e6
         )  # camera(s) to ui(us)
         self.acquisition_panel.ui.doubleSpinBox_cameraExposedLines.setValue(
             self.camera.lightsheet_exposed_lines
@@ -2247,7 +2298,7 @@ class Controller_MainWindow(QMainWindow):
             self.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentIndex(1)
         else:
             self.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentIndex(0)
-        self._acq.updateUi_camera_shutter_mode()  # ty: ignore[unresolved-attribute]
+        self._acq.updateUi_camera_shutter_mode()
 
         # Lasers — both spinboxes are 0-100 % staged setpoints. Seed from
         # the persistent controller-side percentage, not the live HAL state,

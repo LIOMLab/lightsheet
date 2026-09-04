@@ -41,9 +41,7 @@ def crop_buffer(buffer: np.ndarray) -> np.ndarray:
             )
         tile_width_overlap = int(tile_width * 0.2)
         if tile_width_overlap == 0:
-            raise ValueError(
-                f"tile width {tile_width} is too small for 20% overlap"
-            )
+            raise ValueError(f"tile width {tile_width} is too small for 20% overlap")
 
         # Initializing empty cropped buffer
         target_width = tile_width + (2 * tile_width_overlap)
@@ -108,9 +106,7 @@ def reconstruct_frame(buffer: np.ndarray) -> np.ndarray:
             if (
                 frame == tile_count - 1
             ):  # For the last column step (may be different than the others...)
-                reconstructed_frame[:, first_column:] = buffer[
-                    frame, :, first_column:
-                ]
+                reconstructed_frame[:, first_column:] = buffer[frame, :, first_column:]
             else:
                 reconstructed_frame[:, first_column:next_first_column] = buffer[
                     frame, :, first_column:next_first_column
@@ -181,9 +177,7 @@ def reconstruct_frame_linear_blend(buffer: np.ndarray) -> np.ndarray:
         for frame in range(tile_count):
             first_center_column = int(frame * tile_width + tile_width_overlap)
             last_center_column = int((frame + 1) * tile_width - tile_width_overlap)
-            previous_last_center_column = int(
-                frame * tile_width - tile_width_overlap
-            )
+            previous_last_center_column = int(frame * tile_width - tile_width_overlap)
 
             if frame == 0:  # For the first column step
                 reconstructed_frame[:, 0:last_center_column] = cropped_buffer[
@@ -215,9 +209,7 @@ def reconstruct_frame_linear_blend(buffer: np.ndarray) -> np.ndarray:
                         + last_column_step,
                     ]
                 else:
-                    reconstructed_frame[
-                        :, first_center_column:last_center_column
-                    ] = cropped_buffer[
-                        frame, :, (2 * tile_width_overlap) : tile_width
-                    ]
+                    reconstructed_frame[:, first_center_column:last_center_column] = (
+                        cropped_buffer[frame, :, (2 * tile_width_overlap) : tile_width]
+                    )
     return reconstructed_frame

@@ -118,7 +118,7 @@ addopts = [
     "--strict-markers",
     "-n", "auto",
     "--maxprocesses=6",
-    "--dist=load",
+    "--dist=loadscope",
     "--max-worker-restart=0",
 ]
 testpaths = ["test"]

@@ -87,8 +87,8 @@ class LaserPanelWidget(QWidget):
         ILaser contract (IBeamSmartLaser queries the serial engine;
         DAQLaser and the mock laser backend return the staged mW power),
         so no demo-mode gate is needed."""
-        self._shell._hw._refresh_laser2_readback_async()  # ty: ignore[unresolved-attribute]
-        self._shell._hw._poll_laser_status([1])  # ty: ignore[unresolved-attribute]
+        self._shell._hw._refresh_laser2_readback_async()
+        self._shell._hw._poll_laser_status([1])
 
     @Slot(int, str)
     def updateUi_laser_status(self, idx: int, status: str) -> None:
@@ -112,21 +112,15 @@ class LaserPanelWidget(QWidget):
         ]
         if status == "active":
             labels[idx].setText(f"{_sym.LASER_ON} ON")
-            labels[idx].setStyleSheet(
-                f"color: {_c.SUCCESS}; {_t.BOLD}"
-            )
+            labels[idx].setStyleSheet(f"color: {_c.SUCCESS}; {_t.BOLD}")
             buttons[idx].setChecked(True)
         elif status == "inactive":
             labels[idx].setText(f"{_sym.LASER_OFF} OFF")
-            labels[idx].setStyleSheet(
-                f"color: {_c.DISABLED}; {_t.BOLD}"
-            )
+            labels[idx].setStyleSheet(f"color: {_c.DISABLED}; {_t.BOLD}")
             buttons[idx].setChecked(False)
         else:  # "error"
             labels[idx].setText(f"{_sym.LASER_FAULT} FAULT")
-            labels[idx].setStyleSheet(
-                f"color: {_c.DANGER}; {_t.BOLD}"
-            )
+            labels[idx].setStyleSheet(f"color: {_c.DANGER}; {_t.BOLD}")
             buttons[idx].setChecked(False)
 
     def updateUi_laser1_amplitude(self) -> None:
@@ -162,8 +156,11 @@ class LaserPanelWidget(QWidget):
         thread targeting the collaborator method."""
         pct = self.ui.doubleSpinBox_laserOneAmplitude.value()
         self._shell.laser1_power_pct = pct
+        assert self._shell._hw is not None
         threading.Thread(
-            target=self._shell._hw._write_laser1_power, args=(pct,), daemon=True  # ty: ignore[unresolved-attribute]
+            target=self._shell._hw._write_laser1_power,
+            args=(pct,),
+            daemon=True,
         ).start()
 
     def _apply_laser2_amplitude(self) -> None:
@@ -172,8 +169,11 @@ class LaserPanelWidget(QWidget):
         targeting HardwareManager._write_laser2_power."""
         pct = self.ui.doubleSpinBox_laserTwoAmplitude.value()
         self._shell.laser2_power_pct = pct
+        assert self._shell._hw is not None
         threading.Thread(
-            target=self._shell._hw._write_laser2_power, args=(pct,), daemon=True  # ty: ignore[unresolved-attribute]
+            target=self._shell._hw._write_laser2_power,
+            args=(pct,),
+            daemon=True,
         ).start()
 
     def laser1_toggle_button(self) -> None:
@@ -216,7 +216,7 @@ class LaserPanelWidget(QWidget):
             # latter sets the per-session flag (energize sets it too so a
             # second energize in the same session does not re-prompt).
             self._shell._laser1_first_energize_done = True
-        threading.Thread(target=self._shell._hw._toggle_laser1, daemon=True).start()  # ty: ignore[unresolved-attribute]
+        threading.Thread(target=self._shell._hw._toggle_laser1, daemon=True).start()
 
     def laser2_toggle_button(self) -> None:
         """Laser 2 toggle button handler — symmetric with laser 1. See
@@ -233,7 +233,7 @@ class LaserPanelWidget(QWidget):
                 self._optimistic_echo(label, turning_on=False)
                 return
             self._shell._laser2_first_energize_done = True
-        threading.Thread(target=self._shell._hw._toggle_laser2, daemon=True).start()  # ty: ignore[unresolved-attribute]
+        threading.Thread(target=self._shell._hw._toggle_laser2, daemon=True).start()
 
     # ------------------------------------------------------------------ #
     # First-energize + optimistic-echo helpers

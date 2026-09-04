@@ -185,12 +185,12 @@ Every `QDoubleSpinBox` in a panel `.ui` is promoted to
 ```python
 @dataclass(frozen=True)
 class FieldSpec:
-    unit: str            # "mm", "µm", "V", "ms", "" (dimensionless)
-    decimals: int        # displayed decimals
-    single_step: float   # unmodified wheel/arrow step
-    page_step: float     # Ctrl/Shift page-step (stepBy override)
-    minimum: float       # soft widget-layer block (HAL is the safety backstop)
-    maximum: float       # soft widget-layer block
+    unit: str  # "mm", "µm", "V", "ms", "" (dimensionless)
+    decimals: int  # displayed decimals
+    single_step: float  # unmodified wheel/arrow step
+    page_step: float  # Ctrl/Shift page-step (stepBy override)
+    minimum: float  # soft widget-layer block (HAL is the safety backstop)
+    maximum: float  # soft widget-layer block
 ```
 
 ```python

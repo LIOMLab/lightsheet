@@ -167,5 +167,3 @@ class _AcquireScanMixin:
         # Send reconstructed frame to display port
         self._shell._fs.enqueue_frame(self._shell.reconstructed_frame)  # ty: ignore[unresolved-attribute]
         return True
-
-
