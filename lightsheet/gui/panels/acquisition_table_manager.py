@@ -876,6 +876,9 @@ class AcquisitionTableManager(QWidget):
                 # invocation — no new worker spawned here; the shared
                 # helper in the acquisition panel owns the worker thread).
                 worker = self._shell.acquisition_panel._spawn_stack_worker()
+                if worker is None:
+                    # _spawn_stack_worker already emitted a message/beep.
+                    break
 
                 # Non-blocking wait: a QEventLoop with quit() connected to
                 # the worker's finished signal. This keeps the GUI event

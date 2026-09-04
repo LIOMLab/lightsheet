@@ -349,12 +349,15 @@ class AcquisitionPanelWidget(QWidget):
                     # Spawn the stack worker (shared with the queue loop).
                     self._spawn_stack_worker()
 
-    def _spawn_stack_worker(self) -> None:
+    def _spawn_stack_worker(self) -> StackWorker | None:
         """Spawn the stack worker on its QThread (moveToThread pattern),
         wire its finished signal to the post-stack UI cleanup, and start it.
         Shared by the single-stack Start button and the Acquisition Table
         queue loop. Pre-samples the auto-laser flags + save-option widgets
         on the GUI thread so the worker thread never reads ui.*.
+
+        Returns the spawned worker, or ``None`` if the previous stack thread
+        did not stop and a new worker cannot be started safely.
         """
         # Disable the adaptive-autofocus controls and show the per-plane
         # progress bar when adaptive focus is active.
@@ -368,18 +371,37 @@ class AcquisitionPanelWidget(QWidget):
         if prev_thread is not None and prev_thread.isRunning():
             prev_thread.quit()
             if not prev_thread.wait(5000):
-                # A stuck worker that didn't exit within 5s — calling start()
-                # on a still-running QThread is a no-op, so drop the reference
-                # and fall through to fresh-thread construction.
-                logger.warning(
-                    "_stack_thread still running after 5s wait — creating fresh thread"
+                # The previous worker is still blocked in a camera/motor call.
+                # Do not start a second worker while the previous one may still
+                # own hardware; abort the start and let the UI/queue recover.
+                logger.error(
+                    "Previous stack worker thread did not finish within 5 s; "
+                    "not starting a new stack worker."
                 )
-                prev_thread = None
+                self._shell.sig_message.emit(
+                    "Stack start failed: previous stack thread is still running."
+                )
+                self._shell.sig_beep.emit()
+                self.updateUi_post_stack_mode()
+                return None
+
         # If the thread was never created or was destroyed, construct a
-        # fresh one; otherwise reuse it.
+        # fresh one; otherwise reuse it and fully disconnect the previous
+        # worker's stale finished/deleteLater connections so they cannot
+        # fire after the new worker starts.
         if prev_thread is None:
             self._shell._stack_thread = QThread()
         else:
+            prev_worker = getattr(self._shell, "_stack_worker", None)
+            if prev_worker is not None:
+                with contextlib.suppress(RuntimeError, TypeError):
+                    prev_worker.finished.disconnect(self._shell._stack_thread.quit)
+                with contextlib.suppress(RuntimeError, TypeError):
+                    prev_worker.finished.disconnect(self.updateUi_post_stack_mode)
+                with contextlib.suppress(RuntimeError, TypeError):
+                    self._shell._stack_thread.finished.disconnect(
+                        prev_worker.deleteLater
+                    )
             self._shell._stack_thread = prev_thread
 
         # Pre-sample the save-option widgets on the GUI thread before
@@ -549,7 +571,7 @@ class AcquisitionPanelWidget(QWidget):
         )
 
         self._shell._stack_thread.start()
-        return self._shell._stack_worker  # ty: ignore[invalid-return-type]
+        return self._shell._stack_worker
 
     @Slot()
     def updateUi_post_stack_mode(self) -> None:
