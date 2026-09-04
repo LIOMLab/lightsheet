@@ -208,7 +208,9 @@ bare `uv run pytest -q` (or `scripts/test.sh`).
   a segfaulted worker's tests surface as failures instead of being hidden
   (lightsheet has a known shutdown segfault — see the segfault note below);
   `--dist=load` is the explicit xdist distribution mode (`xdist_group` still
-  works under any dist mode). Only `test/test_*.py` files are collected.
+  works under any dist mode). Only `test_*.py` files under `test/` are
+  collected (recursively in `test/core/`, `test/hal/`, `test/focus/`,
+  `test/adaptive/`, `test/gui/`, `test/main/`, `test/shared/`, etc.).
 - **Marker + parametrize dual contract** (rig/mock/slow markers registered in
   `pyproject.toml` under `[tool.pytest.ini_options].markers`, enforced by
   `--strict-markers` so a typo'd marker fails at collection). Two complementary
@@ -230,28 +232,34 @@ bare `uv run pytest -q` (or `scripts/test.sh`).
   - The three registered markers are: `rig` (requires real hardware, set
     `LIGHTSHEET_HW=1`), `mock` (mock-only path, default on a dev machine), `slow`
     (auto-deselected from fast iteration by convention).
-- **`test/_helpers/` import convention** (resolves via `pythonpath = ["test"]`
-  in `pyproject.toml`). The real-construction fixture lives in one importable
-  package — import it, do not re-inline:
-  - `from _helpers.controller_fixture import make_controller` — the shared
-    fixture that constructs a real `Controller_MainWindow` on a dev machine (via
-    `QT_QPA_PLATFORM=offscreen` + the conftest SDK stubs), wires all four
-    collaborators
+- **Fixture and helper packages** (resolved via `pythonpath = ["test"]` in
+  `pyproject.toml`). Pytest fixtures live in `test/fixtures/`; shared
+  construction helpers and Qt cleanup helpers live in `test/helpers/`. Do not
+  re-inline the real-construction setup:
+  - `test/fixtures/controller.py` registers the `controller` and `bundle`
+    fixtures via `pytest_plugins` in `test/conftest.py`. Tests use them by
+    name in the function signature and import `Controller_MainWindow` and
+    `DeviceBundle` under `if TYPE_CHECKING` for annotations. Do **not**
+    write `from test.fixtures.controller import controller, bundle` in test
+    modules — pytest injects fixture names automatically.
+  - The `controller` fixture builds a real `Controller_MainWindow` on a dev
+    machine (via `QT_QPA_PLATFORM=offscreen` + the conftest SDK stubs), wires
+    all four collaborators
     (`FrameSaverController` / `HardwareManager` / `AcquisitionCoordinator`
     / `MotorController`) in the same two-phase order `main()` uses, and calls
     `hardware_init` so `self.lasers` / `self.camera` / `self.siggen` /
     `self.motors` / `self.etls` and the display/status timers are populated.
-    Each test calls the REAL method on the real controller and asserts on
-    real attributes / Qt widget state / signals. The fixture imports
-    `Controller_MainWindow` from `lightsheet.gui.shell.controller`. The
-    fixture's `request.addfinalizer` teardown runs `_stop_worker_threads`
-    (mirroring `closeEvent`'s `quit()`+`wait()` shutdown so no worker QThread
-    outlives a test) and stops the `QMessageBox` patch; the controller is
-    registered with `qtbot.addWidget` for Qt-side cleanup. `sip.delete` is
-    no longer used — the signal-lambda cycle is broken at the connection
-    layer (see the segfault note below). This is a BEHAVIOR test (runs the
-    real method body, asserts on runtime postconditions) — NOT the
-    static-source/grep test this section forbids.
+    The fixture registers the controller with `qtbot.addWidget`, patches
+    `QMessageBox.question` during teardown, stops active timers and worker
+    threads, schedules owned top-level widgets for deletion, and pumps
+    `DeferredDelete` with `_pump_deferred_delete` from `test/helpers/cleanup.py`
+    so the C++ objects are destroyed before the next test.
+  - The `bundle` fixture returns a fresh `DeviceBundle` built by
+    `test/helpers/factories.py:make_bundle()` (a mock bundle mirroring
+    `_build_demo_bundle()`).
+  - Import plain helpers directly when needed:
+    `from test.helpers.factories import make_bundle` and
+    `from test.helpers.cleanup import _pump_deferred_delete, _quit_thread_draining`.
   - **Why real construction, not exec-against-Mock:** the previous
     `_load_method` exec pattern (extract the method source, `exec` it in a
     controlled namespace, call against a `Mock` stand-in `self`) produced 0%
@@ -280,11 +288,12 @@ bare `uv run pytest -q` (or `scripts/test.sh`).
     strong(`__func__`) — the signal system holds zero strong refs to the
     controller after disconnect, so the wrapper reaches refcount zero
     naturally. The per-test `pytest_runtest_teardown` hook that `sip.delete`d
-    every top-level QWidget, and the `make_controller` fixture's `sip.delete`
-    teardown, are both removed (replaced by `_stop_worker_threads`, mirroring
-    `closeEvent`'s `quit()`+`wait()` shutdown) — the cycle break makes them
-    unnecessary. `conftest.py` still calls `gc.disable()` for the whole
-    session (line 312) as a guard against Qt widget destructor segfaults
+    every top-level QWidget, and the old `make_controller` fixture's
+    `sip.delete` teardown, are both removed — the cycle break makes them
+    unnecessary. The fixtures' finalizer and `test/conftest.py`'s autouse
+    cleanup use `test/helpers/cleanup.py` (`_pump_deferred_delete`,
+    `_quit_thread_draining`) to stop timers/threads and reap C++ objects. `conftest.py` still calls `gc.disable()` for the whole
+    session as a guard against Qt widget destructor segfaults
     during the run. `scripts/coverage.sh` runs xdist-parallel (`-n auto
     --maxprocesses=6` in its `-o addopts` override) with a 5-minute hard
     timeout; if xdist deadlocks at shutdown (an intermittent Qt/shiboken
@@ -342,73 +351,98 @@ bare `uv run pytest -q` (or `scripts/test.sh`).
     on its one-time behavior test staying in the suite, not on the coverage
     gate re-verifying it every run. Do not delete that test.
 - `test/` also contains legacy standalone scripts (`daqmx.py`, `h5test.py`,
-  `hdf5_to_tiff.py`, `axial_resolution.py`, etc.) — these are manual
-  calibration/experiment utilities, NOT pytest tests. Don't treat failures in
-  them as test failures.
-- New tests go in `test/test_<thing>.py` and use one of the established
+  `hdf5_to_tiff.py`, `axial_resolution.py`, etc.) at the root — these are
+  manual calibration/experiment utilities, NOT pytest tests. Don't treat
+  failures in them as test failures.
+- New tests go in `test/<area>/test_<thing>.py` under one of the established
   **behavior** patterns:
-  - **Pure-logic** (`test_waveforms.py`, `test_config.py`, `test_gaussian.py`):
-    direct import + call + assert.
-  - **HAL logic via `__new__`** (`test_motor_limits.py`,
-    `test_camera_timeout.py`): bypass `__init__`'s hardware probe with
-    `__new__`, populate only the attrs the logic reads, exercise the method,
-    assert on behavior.
-  - **Mock-serial HAL** (`test_ibeam.py`, `test_etl_serial.py`):
-    `patch("<module>.serial.Serial")`, configure `readline` side effects,
-    exercise the real HAL method, assert on captured writes + error surface.
-  - **DAQ HAL under conftest stub** (`test_daqlaser.py`): construct the real
-    class; the stub makes `Task()` raise, firing the real typed-except path.
-  - **Controller methods via real construction** (`test_laser_controls.py`,
-    `test_controller_behavior.py`, `test_demo_factory.py`,
-    `test_controller_methods.py`, `test_hardware_manager.py`,
-    `test_validate_file_name.py`, `test_laser_metadata.py`,
-    `test_acquisition_coordinator.py`): construct the real
-    `Controller_MainWindow` on a dev machine via `make_controller(qtbot, request)` (see
-    `test/_helpers/controller_fixture.py`), which mirrors `main()`'s
-    composition root with a mock `DeviceBundle` + all four collaborators
-    wired + `hardware_init` called. Call the REAL method on the real
-    controller and assert on real attributes / Qt widget state / signals.
-    `QT_QPA_PLATFORM=offscreen` + the conftest SDK stubs make this work
-    without a display or real hardware.
-  - **Conformance (TST-04)** (`test_<device>_conformance.py`): parametrize over
-    `[real, mock]` (skip `real` on a dev machine via `skipif(not _has_hardware)`), one
-    assertion body calls `XXX_CONTRACT.assert_lifecycle` /
-    `assert_error_surface` / `assert_read_attrs` / `assert_setter_methods` /
-    `assert_getter_methods` behind both ids. Safety-critical behavior
-    (synchronous `off()`, `set_power` clamp) goes in dedicated tests on all
-    paths, not in the contract module. The power-meter family has its own
-    conformance test (`test_power_meter_conformance.py`) — `IPowerMeter` is
-    read-only so the contract asserts the `open`/`close`/`read_power`/`zero`
-    lifecycle and the absence of any power-setting method.
-  - **Mock ABC conformance** (`test_mock_abc_conformance.py`): asserts
-    `Mock*` classes satisfy their ABCs at runtime and preserve safety
+  - **Pure-logic** (`test/core/test_waveforms.py`, `test/core/test_config.py`,
+    `test/core/test_gaussian.py`): direct import + call + assert.
+  - **HAL logic via `__new__`** (`test/hal/real/test_motor_limits.py`,
+    `test/hal/real/test_camera_timeout.py`): bypass `__init__`'s hardware
+    probe with `__new__`, populate only the attrs the logic reads, exercise
+    the method, assert on behavior.
+  - **Mock-serial HAL** (`test/hal/real/test_ibeam.py`,
+    `test/hal/real/test_etl_serial.py`): `patch("<module>.serial.Serial")`,
+    configure `readline` side effects, exercise the real HAL method, assert
+    on captured writes + error surface.
+  - **DAQ HAL under conftest stub** (`test/hal/real/test_daqlaser.py`):
+    construct the real class; the stub makes `Task()` raise, firing the real
+    typed-except path.
+  - **GUI shell / panels** (`test/gui/shell/test_controller_behavior.py`,
+    `test/gui/shell/test_panel_structure.py`,
+    `test/gui/panels/test_laser_controls.py`): use the `controller` fixture
+    from `test/fixtures/controller.py` (parameter name `controller`), call
+    the REAL method on the real `Controller_MainWindow` and assert on real
+    attributes / Qt widget state / signals.
+  - **GUI coordinators / workers**
+    (`test/gui/coordinators/test_hardware_manager.py`,
+    `test/gui/coordinators/test_motor_controller.py`,
+    `test/gui/workers/test_worker_signals.py`): construct the real object or
+    use the `controller` fixture, call real methods, assert on signals and
+    state.
+  - **Main / bootstrap** (`test/main/test_demo_factory.py`,
+    `test/main/test_main_bootstrap.py`, `test/main/test_packaging.py`,
+    `test/main/test_theme_system_default.py`): pure Python and Qt smoke
+    tests for `__main__.py`, the demo bundle, and theming.
+  - **Focus** (`test/focus/test_focus_controller.py`,
+    `test/focus/test_focus_trajectory_branches.py`): focus-stack and
+    trajectory logic.
+  - **Adaptive** (`test/adaptive/test_adaptive_controller.py`,
+    `test/adaptive/test_adaptive_focus.py`): exposure/power adaptation and
+    autofocus.
+  - **Shared / cross-cutting** (`test/shared/test_fixture_smoke.py`,
+    `test/shared/test_golden_acquisition.py`,
+    `test/shared/test_generated_ui_enums.py`,
+    `test/shared/test_logging_setup.py`,
+    `test/shared/test_qt_teardown_canary.py`,
+    `test/shared/test_validate_file_name.py`): fixture smoke, golden-master
+    replay, generated UI token fixes, logging, Qt teardown, and utilities.
+  - **Conformance (TST-04)** (`test/hal/test_<device>_conformance.py`):
+    parametrize over `[real, mock]` (skip `real` on a dev machine via
+    `skipif(not _has_hardware)`), one assertion body calls
+    `XXX_CONTRACT.assert_lifecycle` / `assert_error_surface` /
+    `assert_read_attrs` / `assert_setter_methods` / `assert_getter_methods`
+    behind both ids. Safety-critical behavior (synchronous `off()`,
+    `set_power` clamp) goes in dedicated tests on all paths, not in the
+    contract module. The power-meter family has its own conformance test
+    (`test/hal/test_power_meter_conformance.py`) — `IPowerMeter` is read-only
+    so the contract asserts the `open`/`close`/`read_power`/`zero` lifecycle
+    and the absence of any power-setting method.
+  - **Mock ABC conformance** (`test/hal/test_mock_abc_conformance.py`):
+    asserts `Mock*` classes satisfy their ABCs at runtime and preserve safety
     invariants (travel limits, synchronous `off()`, power clamp).
     `MockPowerMeter` is included — it preserves the read-only invariant (no
     `set_power`).
-  - **Golden-master replay** (`test_golden_acquisition.py`): asserts the
-    ordered `sig_message` / `sig_progress_update` emission sequence of
-    `acquire_scan` equals one of the fixtures in `test/golden/`. There are
-    three: `default.json` and `preview_auto_laser.json` (both `[]` — the
-    genuine silent-happy-path contract; a successful acquisition emits nothing
-    on the message channel) and `siggen_create_scanner_fail.json` (non-empty —
-    the error-path emission). Regenerate with `uv run python test/golden/_record.py`
-    (review the diff before committing; never hand-edit the fixtures). The
-    golden master is the safety net for the god-object split — a behavior
-    change in the acquisition path shows up as a fixture diff.
+  - **Golden-master replay** (`test/shared/test_golden_acquisition.py`):
+    asserts the ordered `sig_message` / `sig_progress_update` emission
+    sequence of `acquire_scan` equals one of the fixtures in `test/golden/`.
+    There are three: `default.json` and `preview_auto_laser.json` (both `[]`
+    — the genuine silent-happy-path contract; a successful acquisition
+    emits nothing on the message channel) and
+    `siggen_create_scanner_fail.json` (non-empty — the error-path emission).
+    Regenerate with `uv run python test/golden/_record.py` (review the diff
+    before committing; never hand-edit the fixtures). The golden master is
+    the safety net for the god-object split — a behavior change in the
+    acquisition path shows up as a fixture diff.
   - **Registry / channel-map / config-schema (pure-logic)**:
-    `test_device_registry.py` mocks `serial.tools.list_ports.comports()` and
-    asserts VID/PID+serial resolution + `UnresolvedDeviceError` collect-all;
-    `test_channel_map.py` / `test_siggen_channel_map.py` assert
+    `test/hal/test_device_registry.py` mocks
+    `serial.tools.list_ports.comports()` and asserts VID/PID+serial
+    resolution + `UnresolvedDeviceError` collect-all;
+    `test/core/test_channel_map.py` /
+    `test/hal/real/test_siggen_channel_map.py` assert
     `ChannelMap.order_galvos`/`clamp_*` and the 4 siggen wiring sites;
-    `test_config_schema.py` asserts the strict/overlay tiers reject unknown
-    and out-of-range safety keys and that `collect_config_errors` is
-    collect-all.
-  - **Collaborator / estop regression**: `test_motor_controller.py` exercises
-    the extracted motor slots; `test_estop.py` asserts no collaborator
+    `test/core/test_config_schema.py` asserts the strict/overlay tiers reject
+    unknown and out-of-range safety keys and that `collect_config_errors`
+    is collect-all.
+  - **Collaborator / estop regression**:
+    `test/gui/coordinators/test_motor_controller.py` exercises the extracted
+    motor slots; `test/gui/shell/test_estop.py` asserts no collaborator
     (`HardwareManager`/`MotorController`/`FrameSaverController`/
     `AcquisitionCoordinator`) owns an `estop`/`kill` method — the kill path
     stays in the shell.
-  - **Rig-only** (`test_*_rig.py`): module-top
+  - **Rig-only** (`test/hal/rig/test_*_rig.py` and
+    `test/gui/coordinators/rig/test_*_rig.py`): module-top
     `pytestmark = pytest.mark.skipif(not _real_nidaqmx_available(), ...)`;
     run on the rig with `LIGHTSHEET_HW=1`. Rig tests write 0 V only (laser OFF).
 - **Do NOT write static-source tests** — i.e. tests that read a `.py` file as
@@ -416,13 +450,13 @@ bare `uv run pytest -q` (or `scripts/test.sh`).
   content. They are fragile (any whitespace-or-name refactor breaks them) and
   they exercise no code, so a passing test proves nothing about runtime
   behavior. This includes grep-based "method-body slicing" assertions against
-  `lightsheet/gui/shell/controller.py`. The `make_controller` real-construction
-  fixture above is the sanctioned way to test controller methods — it
-  executes the real body on the real controller.
+  `lightsheet/gui/shell/controller.py`. The `controller` fixture is the
+  sanctioned way to test shell/controller methods — it executes the real
+  body on the real controller.
 
 Always run the test suite after non-trivial changes. If you add a feature, add
-or extend a `test_*.py` covering it on the dev-machine path — with a behavior test, not
-a static-source grep.
+or extend a `test/<area>/test_*.py` covering it on the dev-machine path — with a
+behavior test, not a static-source grep.
 
 ## 6. Running the app
 
@@ -1068,8 +1102,8 @@ startup. Re-export both backends + `IPowerMeter` through the
   Do not reintroduce a fixed sleep; keep shutdown bounded.
 - **Static-source / grep-based tests** — reading a module's source as text and
   asserting on string/regex content. Fragile and exercises no code. Forbidden;
-  see §5 for the behavioral alternatives (real construction via
-  `make_controller`, `__new__` bypass for HAL logic, mock-serial `patch`, or
+  see §5 for the behavioral alternatives (real construction via the
+  `controller` fixture, `__new__` bypass for HAL logic, mock-serial `patch`, or
   the conformance/golden-master suites).
 - **Cross-thread Qt widget reads from a worker** — reading
   `self._shell.ui.checkBox_*` directly from an acquisition worker is undefined
