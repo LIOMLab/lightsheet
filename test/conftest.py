@@ -460,6 +460,23 @@ def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
     from PySide6.QtCore import QThread, QTimer
     from PySide6.QtWidgets import QApplication, QMessageBox
 
+    # Close any real vendor SDK handles that GC may not get to when xdist
+    # workers have the cyclic collector disabled. Without explicit close(),
+    # nidaqmx can keep DAQ sessions reserved and the worker can hang on exit.
+    _nidaqmx = sys.modules.get("nidaqmx")
+    if _nidaqmx is not None:
+        with contextlib.suppress(Exception):
+            for obj in _gc.get_objects():
+                if isinstance(obj, _nidaqmx.Task):
+                    with contextlib.suppress(Exception):
+                        obj.close()
+    _pco = sys.modules.get("pco")
+    if _pco is not None and hasattr(_pco, "Camera"):
+        for obj in _gc.get_objects():
+            if isinstance(obj, _pco.Camera):
+                with contextlib.suppress(Exception):
+                    obj.close()
+
     app = QApplication.instance()
     if app is None or not isinstance(app, QApplication):
         return
