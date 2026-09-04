@@ -157,7 +157,9 @@ def run_sync_loop(
     main_end = args.laser_window_end - args.laser_delay
     event_start = main_start - args.pre_time
     event_end = main_end + args.post_time
-    stop_time = event_end + 0.5 if duration == 0.0 else duration
+    stop_time = event_end + 0.5
+    if not args.stop_after_event and duration > 0.0:
+        stop_time = duration
     base_power = laser.power
 
     while True:
@@ -267,6 +269,11 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=2.0,
         help="Seconds of ramp/strobe after the laser window",
+    )
+    parser.add_argument(
+        "--stop-after-event",
+        action="store_true",
+        help="Exit after the laser event instead of playing the whole song",
     )
     parser.add_argument(
         "--pattern-interval",
