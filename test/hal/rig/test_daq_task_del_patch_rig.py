@@ -12,9 +12,15 @@ Rig-only: skipped when the real nidaqmx driver is absent (Mac stub).
 import importlib.util
 import os
 import threading
+import time
 import warnings
 
 import pytest
+
+# DAQ channel-release delay: unique names and a short retry avoid -50103
+# "resource is reserved" spurious failures under rapid Task creation.
+_DAQ_RETRY_DELAY_S = 0.2
+_DAQ_RETRY_COUNT = 3
 
 
 def _real_nidaqmx_available() -> bool:
@@ -88,20 +94,27 @@ def test_laser_write_with_task_del_patch_nonzero() -> None:
 
     errors = []
     for i in range(20):
-        try:
-            with nidaqmx.Task(new_task_name="lasers_setpoint") as task:
-                task.ao_channels.add_ao_voltage_chan(_laser_terminals())
-                task.write(
-                    np.stack((np.array([voltage]), np.array([0.0]))), auto_start=True
-                )
-        except BaseException as e:
-            errors.append((f"iter_{i}", repr(e)))
+        for attempt in range(_DAQ_RETRY_COUNT):
+            try:
+                task_name = f"laser_patch_{i}_{attempt}"
+                with nidaqmx.Task(new_task_name=task_name) as task:
+                    task.ao_channels.add_ao_voltage_chan(_laser_terminals())
+                    task.write(
+                        np.stack((np.array([voltage]), np.array([0.0]))),
+                        auto_start=True,
+                    )
+                break
+            except BaseException as e:
+                if "-50103" in repr(e) and attempt < _DAQ_RETRY_COUNT - 1:
+                    time.sleep(_DAQ_RETRY_DELAY_S)
+                    continue
+                errors.append((f"iter_{i}", repr(e)))
+                break
+        if errors:
             break
         # Force GC so __del__ runs on the just-closed Task while the next
         # iteration creates a new one — the race the patch might trigger.
         gc.collect()
-        if errors:
-            break
 
     assert not errors, (
         "Laser write crashed WITH the main.py __del__ patch applied:\n"
@@ -129,13 +142,25 @@ def test_laser_write_with_patch_daemon_thread_nonzero() -> None:
         import gc
 
         try:
-            for _ in range(10):
-                with nidaqmx.Task(new_task_name="lasers_setpoint") as task:
-                    task.ao_channels.add_ao_voltage_chan(_laser_terminals())
-                    task.write(
-                        np.stack((np.array([voltage]), np.array([0.0]))),
-                        auto_start=True,
-                    )
+            for i in range(10):
+                for attempt in range(_DAQ_RETRY_COUNT):
+                    try:
+                        task_name = f"laser_daemon_{i}_{attempt}"
+                        with nidaqmx.Task(new_task_name=task_name) as task:
+                            task.ao_channels.add_ao_voltage_chan(_laser_terminals())
+                            task.write(
+                                np.stack((np.array([voltage]), np.array([0.0]))),
+                                auto_start=True,
+                            )
+                        break
+                    except BaseException as e:
+                        if "-50103" in repr(e) and attempt < _DAQ_RETRY_COUNT - 1:
+                            time.sleep(_DAQ_RETRY_DELAY_S)
+                            continue
+                        errors.append(("worker", repr(e)))
+                        break
+                if errors:
+                    break
                 gc.collect()
         except BaseException as e:
             errors.append(("worker", repr(e)))
