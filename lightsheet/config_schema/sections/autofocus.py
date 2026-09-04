@@ -1,5 +1,7 @@
 """Autofocus settings models — strict + overlay tiers."""
 
+from typing import Any
+
 from pydantic import Field, field_validator
 from pydantic_settings import SettingsConfigDict
 
@@ -44,6 +46,14 @@ class AutofocusSettings(_NoEnvBaseSettings):
     def _smoothing_range(cls, v: float) -> float:
         if v < 0 or v > 1:
             raise ValueError(f"smoothing {v} is outside the valid range 0..1")
+        return v
+
+    @field_validator("update_threshold", mode="before")
+    @classmethod
+    def _coerce_update_threshold(cls, v: Any) -> Any:
+        """Treat a missing/empty config.ini value as the default 0.0."""
+        if v is None or v == "":
+            return 0.0
         return v
 
     @field_validator("update_threshold")
