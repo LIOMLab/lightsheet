@@ -59,15 +59,6 @@ def has_hardware() -> bool:
     return os.environ.get("LIGHTSHEET_HW", "0") == "1"
 
 
-@pytest.hookimpl(tryfirst=True)
-def pytest_configure(config: pytest.Config) -> None:
-    """Cap -n auto at 8 on dev, 14 on the rig, so the auto count is never exceeded."""
-    if os.environ.get("LIGHTSHEET_HW", "0") == "1":
-        config.option.maxprocesses = 14
-    else:
-        config.option.maxprocesses = 8
-
-
 def pytest_collection_modifyitems(config: Any, items: list[Any]) -> None:
     """Auto-skip ``@pytest.mark.rig`` tests when ``LIGHTSHEET_HW`` is unset.
 
