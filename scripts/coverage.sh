@@ -86,7 +86,7 @@ cd "${REPO_ROOT}"
 # single-process collection (~4 min, reliable: no xdist shutdown race). If
 # `timeout` is unavailable (non-GNU environment), we run xdist unguarded —
 # the hang is intermittent, not deterministic.
-_XDIST_TIMEOUT=120
+_XDIST_TIMEOUT=600
 _run_cov_xdist() {
   uv run pytest -q --cov=lightsheet --cov-branch
 }
@@ -105,19 +105,19 @@ else
   _run_cov_xdist || _pytest_exit=$?
 fi
 
-# 124 = timeout fired (xdist hung); 137 = SIGKILL'd after --kill-after.
-# Fall back to single-process, which has no xdist shutdown race.
-if [ "${_pytest_exit:-0}" = "124" ] || [ "${_pytest_exit:-0}" = "137" ]; then
-  echo "coverage.sh: xdist coverage run hung (exit ${_pytest_exit}); falling back to single-process" >&2
+# 124 = timeout fired (xdist hung); 137 = SIGKILL'd after --kill-after;
+# 139 = worker segfaulted during xdist shutdown. Fall back to single-process
+# in any of these cases — the combined .coverage data may be incomplete or
+# the worker may not have flushed its segment.
+if [ "${_pytest_exit:-0}" != "0" ]; then
+  echo "coverage.sh: xdist coverage run aborted (exit ${_pytest_exit}); falling back to single-process" >&2
   _pytest_exit=0
   _run_cov_serial || _pytest_exit=$?
 fi
 
-# Tolerate the shutdown segfault (exit 139): the .coverage file is written
-# BEFORE Python atexit runs, so the data is complete even when the process
-# segfaults at shutdown. Any other non-zero exit (test failure, real error)
-# is caught by the --fail-under check below.
-if [ "${_pytest_exit:-0}" -ne 0 ] && [ "${_pytest_exit:-0}" -ne 139 ]; then
+# Any non-zero exit from the single-process run is a real failure
+# (test failure, real error) and is caught by the --fail-under check below.
+if [ "${_pytest_exit:-0}" -ne 0 ]; then
   exit "${_pytest_exit}"
 fi
 
