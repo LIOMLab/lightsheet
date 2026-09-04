@@ -47,6 +47,7 @@ def test_message_log_cap_removed(controller: Controller_MainWindow) -> None:
         f"(>=16777215); got {max_h}"
     )
 
+
 def test_message_splitter_exists(controller: Controller_MainWindow) -> None:
     """A vertical QSplitter (message_splitter) hosts stackedPanels + the
     message log inside controlsPane."""
@@ -70,6 +71,7 @@ def test_message_splitter_exists(controller: Controller_MainWindow) -> None:
         "plainTextEdit_messageLog must be a section of message_splitter"
     )
 
+
 def test_message_log_default_height_about_5_lines(
     controller: Controller_MainWindow,
 ) -> None:
@@ -79,6 +81,7 @@ def test_message_log_default_height_about_5_lines(
     assert min_h >= 96, (
         f"message log minimum height should be >= 96 (5 lines); got {min_h}"
     )
+
 
 def test_message_splitter_drag_resizes_log(
     controller: Controller_MainWindow,
@@ -126,6 +129,7 @@ def test_message_splitter_drag_resizes_log(
         "splitter handle is not live"
     )
 
+
 def test_message_log_select_and_copy_enabled(controller: Controller_MainWindow) -> None:
     """textInteractionFlags is TextSelectableByMouse (operator can
     select-and-copy an error string)."""
@@ -135,12 +139,14 @@ def test_message_log_select_and_copy_enabled(controller: Controller_MainWindow) 
         f"textInteractionFlags is {flags}, expected TextSelectableByMouse"
     )
 
+
 def test_message_log_still_read_only(controller: Controller_MainWindow) -> None:
     """readOnly stays True — only select-and-copy is enabled, not editing."""
     ctrl = controller
     assert ctrl.ui.plainTextEdit_messageLog.isReadOnly() is True, (
         "message log readOnly must stay True (select-and-copy only)"
     )
+
 
 def test_view_menu_show_message_log_syncs_with_splitter(
     controller: Controller_MainWindow,

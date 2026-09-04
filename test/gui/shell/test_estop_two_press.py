@@ -32,6 +32,7 @@ from pytest import FixtureRequest
 if TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
+
 def _patch_refresh(ctrl: Controller_MainWindow, request: FixtureRequest) -> None:
     """Patch the three post-kill refresh calls so the E-stop handler does
     not spawn a QThread (L2 readback) or otherwise interfere with the
@@ -46,6 +47,7 @@ def _patch_refresh(ctrl: Controller_MainWindow, request: FixtureRequest) -> None
         p.start()
         request.addfinalizer(p.stop)
 
+
 def test_initial_state_is_armed(controller: Controller_MainWindow) -> None:
     """On construction the system is ARMED: label_estopStatus shows
     '● ARMED' with color #34C759, pushButton_armReset shows 'Arm/Reset'."""
@@ -53,6 +55,7 @@ def test_initial_state_is_armed(controller: Controller_MainWindow) -> None:
     assert ctrl.label_estopStatus.text() == "● ARMED"
     assert "#34C759" in ctrl.label_estopStatus.styleSheet()
     assert ctrl.pushButton_armReset.text() == "Arm/Reset"
+
 
 def test_estop_actuated_state(
     controller: Controller_MainWindow,
@@ -71,6 +74,7 @@ def test_estop_actuated_state(
         f"Expected 'Clear E-stop' (ACTUATED state), got "
         f"{ctrl.pushButton_armReset.text()!r}"
     )
+
 
 def test_first_arm_reset_press_transitions_to_disarmed(
     controller: Controller_MainWindow,
@@ -107,6 +111,7 @@ def test_first_arm_reset_press_transitions_to_disarmed(
         "the gray belongs on label_estopStatus only"
     )
 
+
 def test_disarmed_button_stays_red(
     controller: Controller_MainWindow,
     request: FixtureRequest,
@@ -125,6 +130,7 @@ def test_disarmed_button_stays_red(
     # The label keeps the gray indicator.
     assert "#8E8E93" in ctrl.label_estopStatus.styleSheet()
 
+
 def test_second_arm_reset_press_transitions_to_armed(
     controller: Controller_MainWindow,
     request: FixtureRequest,
@@ -142,6 +148,7 @@ def test_second_arm_reset_press_transitions_to_armed(
     assert ctrl.label_estopStatus.text() == "● ARMED"
     assert "#34C759" in ctrl.label_estopStatus.styleSheet()
     assert ctrl.pushButton_armReset.text() == "Arm/Reset"
+
 
 def test_single_press_from_actuated_does_not_re_arm(
     controller: Controller_MainWindow,
@@ -169,6 +176,7 @@ def test_single_press_from_actuated_does_not_re_arm(
     # second press is required to re-arm.
     assert not ctrl.estop_event.is_set()
 
+
 def test_arm_reset_button_has_two_press_tooltip(
     controller: Controller_MainWindow,
 ) -> None:
@@ -179,6 +187,7 @@ def test_arm_reset_button_has_two_press_tooltip(
     assert "Two-press sequence" in tooltip, (
         f"Expected tooltip to document the two-press sequence, got: {tooltip!r}"
     )
+
 
 def test_status_bar_hint_on_each_transition(
     controller: Controller_MainWindow,

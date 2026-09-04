@@ -33,6 +33,7 @@ pytest.importorskip("PySide6")
 
 # -- Simple slots -----------------------------------------------------------
 
+
 def test_updateUi_light_theme_emits_stylesheet(
     controller: Controller_MainWindow,
 ) -> None:
@@ -42,6 +43,7 @@ def test_updateUi_light_theme_emits_stylesheet(
     ctrl.updateUi_light_theme()
     assert received == ["light"]
 
+
 def test_updateUi_dark_theme_emits_stylesheet(
     controller: Controller_MainWindow,
 ) -> None:
@@ -50,6 +52,7 @@ def test_updateUi_dark_theme_emits_stylesheet(
     ctrl.sig_stylesheet.connect(lambda v: received.append(v))
     ctrl.updateUi_dark_theme()
     assert received == ["dark"]
+
 
 def test_updateUi_show_hide_images_pane_toggles_both_ways(
     controller: Controller_MainWindow,
@@ -70,6 +73,7 @@ def test_updateUi_show_hide_images_pane_toggles_both_ways(
     assert ctrl.ui.splitter.sizes()[0] > 0
     assert ctrl.ui.action_ShowHideImagesPane.isChecked() is True
 
+
 def test_updateUi_show_hide_controls_pane_toggles_both_ways(
     controller: Controller_MainWindow,
     qtbot: QtBot,
@@ -86,6 +90,7 @@ def test_updateUi_show_hide_controls_pane_toggles_both_ways(
     ctrl.updateUi_show_hide_controls_pane()
     assert ctrl.ui.splitter.sizes()[1] > 0
     assert ctrl.ui.action_ShowHideControlsPane.isChecked() is True
+
 
 def test_updateUi_show_hide_message_log_toggles_both_ways(
     controller: Controller_MainWindow,
@@ -106,11 +111,13 @@ def test_updateUi_show_hide_message_log_toggles_both_ways(
     assert splitter.sizes()[1] > 0
     assert ctrl.ui.action_ShowHideMessageLog.isChecked() is True
 
+
 def test_open_help_calls_webbrowser(controller: Controller_MainWindow) -> None:
     ctrl = controller
     with patch("lightsheet.gui.shell.controller.webbrowser.open_new") as mock_open:
         ctrl.open_help()
     mock_open.assert_called_once()
+
 
 def test_open_properties_dialog(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -121,7 +128,9 @@ def test_open_properties_dialog(controller: Controller_MainWindow) -> None:
     mock_dlg.open.assert_called_once()
     mock_dlg.get_properties.assert_called_once()
 
+
 # -- Motor/mode button helpers ----------------------------------------------
+
 
 def test_updateUi_motor_buttons_disable(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -129,10 +138,12 @@ def test_updateUi_motor_buttons_disable(controller: Controller_MainWindow) -> No
     # All buttons should have setEnabled(False) called
     assert ctrl.motor_panel.ui.pushButton_sampleStepUp.isEnabled() is False
 
+
 def test_updateUi_motor_buttons_enable(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.motor_panel.updateUi_motor_buttons(disable_button=False)
     assert ctrl.motor_panel.ui.pushButton_sampleStepUp.isEnabled() is True
+
 
 def test_updateUi_modes_buttons(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -142,12 +153,14 @@ def test_updateUi_modes_buttons(controller: Controller_MainWindow) -> None:
     assert btn_enable.isEnabled() is True
     assert ctrl.acquisition_panel.ui.pushButton_acqStartLiveMode.isEnabled() is False
 
+
 def test_updateUi_enable_buttons(controller: Controller_MainWindow) -> None:
     ctrl = controller
     btn = ctrl.acquisition_panel.ui.pushButton_acqStartPreviewMode
     btn.setEnabled(False)
     ctrl.acquisition_panel.updateUi_enable_buttons([btn])
     assert btn.isEnabled() is True
+
 
 def test_updateUi_disable_buttons(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -156,6 +169,7 @@ def test_updateUi_disable_buttons(controller: Controller_MainWindow) -> None:
     ctrl.acquisition_panel.updateUi_disable_buttons([btn])
     assert btn.isEnabled() is False
 
+
 def test_cache_auto_laser_flags(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.laser_panel.ui.checkBox_laserOneAutomatic.setChecked(True)
@@ -163,6 +177,7 @@ def test_cache_auto_laser_flags(controller: Controller_MainWindow) -> None:
     ctrl._cache_auto_laser_flags()
     assert ctrl._auto_laser1 is True
     assert ctrl._auto_laser2 is False
+
 
 def test_close_modes_all_active(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -178,6 +193,7 @@ def test_close_modes_all_active(controller: Controller_MainWindow) -> None:
     assert ctrl.stack_mode_started is False
     mock_stop.assert_called_once()
 
+
 def test_close_modes_no_lasers_active(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.preview_mode_started = True
@@ -188,7 +204,9 @@ def test_close_modes_no_lasers_active(controller: Controller_MainWindow) -> None
     assert ctrl.preview_mode_started is False
     mock_stop.assert_not_called()
 
+
 # -- E-stop / arm-reset -----------------------------------------------------
+
 
 def test_updateUi_arm_reset_pressed_first_press(
     controller: Controller_MainWindow,
@@ -203,6 +221,7 @@ def test_updateUi_arm_reset_pressed_first_press(
     # two-press re-arm sequence, audit #6).
     assert ctrl.pushButton_armReset.text() == "Arm Lasers"
 
+
 def test_updateUi_arm_reset_pressed_second_press(
     controller: Controller_MainWindow,
 ) -> None:
@@ -212,7 +231,9 @@ def test_updateUi_arm_reset_pressed_second_press(
     assert ctrl._estop_disarmed is False
     assert ctrl.pushButton_armReset.text() == "Arm/Reset"
 
+
 # -- Laser readback / status ------------------------------------------------
+
 
 def test_updateUi_laser_readback(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -220,6 +241,7 @@ def test_updateUi_laser_readback(controller: Controller_MainWindow) -> None:
     assert ctrl.laser_panel.ui.label_laserOneReadback.text() == "100 mW"
     ctrl.laser_panel.updateUi_laser_readback(1, "50 mW", "stale")
     assert ctrl.laser_panel.ui.label_laserTwoReadback.text() == "50 mW"
+
 
 def test_updateUi_laser2_refresh_clicked(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -231,22 +253,27 @@ def test_updateUi_laser2_refresh_clicked(controller: Controller_MainWindow) -> N
     mock_refresh.assert_called_once()
     mock_poll.assert_called_once_with([1])
 
+
 def test_updateUi_laser_status_active(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.laser_panel.updateUi_laser_status(0, "active")
     assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "● ON"
+
 
 def test_updateUi_laser_status_inactive(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.laser_panel.updateUi_laser_status(1, "inactive")
     assert ctrl.laser_panel.ui.label_laserTwoStatus.text() == "○ OFF"
 
+
 def test_updateUi_laser_status_error(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.laser_panel.updateUi_laser_status(0, "error")
     assert ctrl.laser_panel.ui.label_laserOneStatus.text() == "⚠ FAULT"
 
+
 # -- Position indicators (fixed mm display unit) ---------------------------
+
 
 def test_updateUi_position_horizontal(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -259,6 +286,7 @@ def test_updateUi_position_horizontal(controller: Controller_MainWindow) -> None
     assert ctrl.motor_panel.ui.label_sampleCurrentHPosition.text() == expected
     assert ctrl.current_horizontal_position_text == expected
 
+
 def test_updateUi_position_vertical(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.motor_panel.ui.label_sampleCurrentVPosition.setText("")
@@ -266,6 +294,7 @@ def test_updateUi_position_vertical(controller: Controller_MainWindow) -> None:
     ctrl.motor_panel.updateUi_position_vertical()
     assert ctrl.motor_panel.ui.label_sampleCurrentVPosition.text() == expected
     assert ctrl.current_vertical_position_text == expected
+
 
 def test_updateUi_position_camera(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -275,7 +304,9 @@ def test_updateUi_position_camera(controller: Controller_MainWindow) -> None:
     assert ctrl.motor_panel.ui.label_cameraCurrentPosition.text() == expected
     assert ctrl.current_camera_position_text == expected
 
+
 # -- Laser amplitude / toggle -----------------------------------------------
+
 
 def test_updateUi_laser1_amplitude(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -285,6 +316,7 @@ def test_updateUi_laser1_amplitude(controller: Controller_MainWindow) -> None:
     assert ctrl.laser1_power_pct == 50.0
     mock_start.assert_called_with(300)
 
+
 def test_updateUi_laser2_amplitude(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.laser_panel.ui.doubleSpinBox_laserTwoAmplitude.setValue(75.0)
@@ -292,6 +324,7 @@ def test_updateUi_laser2_amplitude(controller: Controller_MainWindow) -> None:
         ctrl.laser_panel.updateUi_laser2_amplitude()
     assert ctrl.laser2_power_pct == 75.0
     mock_start.assert_called_with(300)
+
 
 def test_apply_laser1_amplitude(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -301,6 +334,7 @@ def test_apply_laser1_amplitude(controller: Controller_MainWindow) -> None:
         ctrl.laser_panel._apply_laser1_amplitude()
         MockThread.return_value.start.assert_called_once()
 
+
 def test_apply_laser2_amplitude(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.laser_panel.ui.doubleSpinBox_laserTwoAmplitude.setValue(75.0)
@@ -309,12 +343,14 @@ def test_apply_laser2_amplitude(controller: Controller_MainWindow) -> None:
         ctrl.laser_panel._apply_laser2_amplitude()
         MockThread.return_value.start.assert_called_once()
 
+
 def test_laser1_toggle_button(controller: Controller_MainWindow) -> None:
     ctrl = controller
     with patch("lightsheet.gui.panels.laser_panel.threading.Thread") as MockThread:
         MockThread.return_value.start = Mock()
         ctrl.laser_panel.laser1_toggle_button()
         MockThread.return_value.start.assert_called_once()
+
 
 def test_laser2_toggle_button(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -323,7 +359,9 @@ def test_laser2_toggle_button(controller: Controller_MainWindow) -> None:
         ctrl.laser_panel.laser2_toggle_button()
         MockThread.return_value.start.assert_called_once()
 
+
 # -- Mode button slots ------------------------------------------------------
+
 
 def test_updateUi_preview_mode_button_start(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -337,6 +375,7 @@ def test_updateUi_preview_mode_button_start(controller: Controller_MainWindow) -
     mock_close.assert_called_once()
     mock_cache.assert_called_once()
 
+
 def test_updateUi_preview_mode_button_stop(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.preview_mode_started = True
@@ -346,6 +385,7 @@ def test_updateUi_preview_mode_button_stop(controller: Controller_MainWindow) ->
         ctrl.acquisition_panel.ui.pushButton_acqStartPreviewMode.text()
         == "Start Preview Mode"
     )
+
 
 def test_updateUi_post_preview_mode(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -357,6 +397,7 @@ def test_updateUi_post_preview_mode(controller: Controller_MainWindow) -> None:
     mock_modes.assert_called_once()
     mock_msg.assert_called_with("->Preview mode stopped")
 
+
 def test_updateUi_live_mode_button_start(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.live_mode_started = False
@@ -364,6 +405,7 @@ def test_updateUi_live_mode_button_start(controller: Controller_MainWindow) -> N
         ctrl.acquisition_panel.updateUi_live_mode_button()
     assert ctrl.live_mode_started is True
     mock_close.assert_called_once()
+
 
 def test_updateUi_live_mode_button_stop(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -375,6 +417,7 @@ def test_updateUi_live_mode_button_stop(controller: Controller_MainWindow) -> No
         == "Start Live Mode"
     )
 
+
 def test_updateUi_post_live_mode(controller: Controller_MainWindow) -> None:
     ctrl = controller
     with (
@@ -384,6 +427,7 @@ def test_updateUi_post_live_mode(controller: Controller_MainWindow) -> None:
         ctrl.acquisition_panel.updateUi_post_live_mode()
     mock_msg.assert_called_with("->Live mode stopped")
 
+
 def test_updateUi_single_mode_button_start(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.single_mode_started = False
@@ -391,6 +435,7 @@ def test_updateUi_single_mode_button_start(controller: Controller_MainWindow) ->
         ctrl.acquisition_panel.updateUi_single_mode_button()
     assert ctrl.single_mode_started is True
     mock_close.assert_called_once()
+
 
 def test_updateUi_post_single_mode(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -401,19 +446,23 @@ def test_updateUi_post_single_mode(controller: Controller_MainWindow) -> None:
         == "Get Single Image"
     )
 
+
 def test_updateUi_post_stack_mode(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.acquisition_panel.updateUi_post_stack_mode()
     assert ctrl.stack_mode_started is False
     assert ctrl.stack_panel.ui.pushButton_acqStartStackMode.text() == "Start Stack Mode"
 
+
 # -- Stack mode button (both branches) --------------------------------------
+
 
 def test_updateUi_stack_mode_button_stop(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.stack_mode_started = True
     ctrl.acquisition_panel.updateUi_stack_mode_button()
     assert ctrl.stack_mode_started is False
+
 
 def test_updateUi_stack_mode_button_start_valid(
     controller: Controller_MainWindow,
@@ -433,6 +482,7 @@ def test_updateUi_stack_mode_button_start_valid(
         ctrl.acquisition_panel.updateUi_stack_mode_button()
     assert ctrl.stack_mode_started is True
 
+
 def test_updateUi_stack_mode_button_start_invalid(
     controller: Controller_MainWindow,
 ) -> None:
@@ -450,6 +500,7 @@ def test_updateUi_stack_mode_button_start_invalid(
     assert ctrl.stack_mode_started is False
     assert len(messages) == 1
     assert len(beeps) == 1
+
 
 def test_updateUi_stack_mode_button_start_reverse_direction(
     controller: Controller_MainWindow,
@@ -474,6 +525,7 @@ def test_updateUi_stack_mode_button_start_reverse_direction(
         ctrl.acquisition_panel.updateUi_stack_mode_button()
     assert ctrl.stack_step == -10.0
 
+
 def test_updateUi_stack_mode_button_start_nosave_yes(
     controller: Controller_MainWindow,
 ) -> None:
@@ -493,6 +545,7 @@ def test_updateUi_stack_mode_button_start_nosave_yes(
         MockMsg.question.return_value = MockMsg.StandardButton.Yes
         ctrl.acquisition_panel.updateUi_stack_mode_button()
     assert ctrl.stack_mode_started is True
+
 
 def test_updateUi_stack_mode_button_start_nosave_no(
     controller: Controller_MainWindow,
@@ -514,7 +567,9 @@ def test_updateUi_stack_mode_button_start_nosave_no(
         ctrl.acquisition_panel.updateUi_stack_mode_button()
     assert ctrl.stack_mode_started is False
 
+
 # -- validate_file_name -----------------------------------------------------
+
 
 def test_validate_file_name_valid(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -523,12 +578,14 @@ def test_validate_file_name_valid(controller: Controller_MainWindow) -> None:
     ctrl.save_panel.validate_file_name()
     assert ctrl.saving_allowed is True
 
+
 def test_validate_file_name_empty(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.save_panel.ui.lineEdit_saveFilename.setText("")
     ctrl.save_directory = ""
     ctrl.save_panel.validate_file_name()
     assert ctrl.saving_allowed is False
+
 
 def test_validate_file_name_special_chars(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -539,7 +596,9 @@ def test_validate_file_name_special_chars(controller: Controller_MainWindow) -> 
     # Special chars should be replaced with _
     assert "_" in ctrl.save_filename
 
+
 # -- save_single_image ------------------------------------------------------
+
 
 def test_updateUi_save_single_image_saving_allowed_crop(
     controller: Controller_MainWindow,
@@ -570,6 +629,7 @@ def test_updateUi_save_single_image_saving_allowed_crop(
     cast(Any, ctrl._fs).start_saving.assert_called_once()
     cast(Any, ctrl._fs).stop_saving.assert_called_once()
 
+
 def test_updateUi_save_single_image_saving_allowed_full(
     controller: Controller_MainWindow,
 ) -> None:
@@ -594,6 +654,7 @@ def test_updateUi_save_single_image_saving_allowed_full(
     cast(Any, ctrl._fs).set_files.assert_called_with(
         1, ctrl.save_filepath, "singleImage", 1, "FullETLscan", wavelengths=[555]
     )
+
 
 def test_updateUi_save_single_image_saving_allowed_reconstructed(
     controller: Controller_MainWindow,
@@ -625,6 +686,7 @@ def test_updateUi_save_single_image_saving_allowed_reconstructed(
         wavelengths=[555],
     )
 
+
 def test_updateUi_save_single_image_not_allowed(
     controller: Controller_MainWindow,
 ) -> None:
@@ -644,7 +706,9 @@ def test_updateUi_save_single_image_not_allowed(
     assert len(beeps) == 1
     assert len(messages) == 1
 
+
 # -- Stack set points / number of planes ------------------------------------
+
 
 def test_updateUi_set_stack_mode_starting_point(
     controller: Controller_MainWindow,
@@ -662,6 +726,7 @@ def test_updateUi_set_stack_mode_starting_point(
     )
     mock_set_planes.assert_called_once()
 
+
 def test_updateUi_set_stack_mode_ending_point(
     controller: Controller_MainWindow,
 ) -> None:
@@ -678,6 +743,7 @@ def test_updateUi_set_stack_mode_ending_point(
     )
     mock_set_planes.assert_called_once()
 
+
 def test_updateUi_set_number_of_planes_valid(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.stack_starting_plane = 0.0
@@ -688,6 +754,7 @@ def test_updateUi_set_number_of_planes_valid(controller: Controller_MainWindow) 
     ctrl.stack_panel.updateUi_set_number_of_planes()
     assert ctrl.number_of_planes > 0
     assert ctrl.stack_panel.ui.label_acqNumberOfPlanes.text() != ""
+
 
 def test_updateUi_set_number_of_planes_zero_step(
     controller: Controller_MainWindow,
@@ -700,6 +767,7 @@ def test_updateUi_set_number_of_planes_zero_step(
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
     ctrl.stack_panel.updateUi_set_number_of_planes()
     assert any("non-zero" in m for m in messages)
+
 
 def test_updateUi_set_number_of_planes_planes_not_set(
     controller: Controller_MainWindow,
@@ -714,7 +782,9 @@ def test_updateUi_set_number_of_planes_planes_not_set(
     # Should not set number_of_planes or emit message
     assert len(messages) == 0
 
+
 # -- select_directory -------------------------------------------------------
+
 
 def test_updateUi_select_directory_valid(controller: Controller_MainWindow) -> None:
     ctrl = controller
@@ -726,6 +796,7 @@ def test_updateUi_select_directory_valid(controller: Controller_MainWindow) -> N
         ctrl.save_panel.updateUi_select_directory()
     assert ctrl.save_directory == os.path.normpath("/new/dir")
 
+
 def test_updateUi_select_directory_empty(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.save_directory = ""
@@ -736,10 +807,12 @@ def test_updateUi_select_directory_empty(controller: Controller_MainWindow) -> N
         ctrl.save_panel.updateUi_select_directory()
     assert ctrl.save_panel.ui.lineEdit_saveFilename.isEnabled() is False
 
+
 # --------------------------------------------------------------------------- #
 # Branch-coverage closure: defensive / alternate-path branches not hit by
 # the tests above.
 # --------------------------------------------------------------------------- #
+
 
 def test_updateUi_single_mode_button_already_started_is_noop(
     controller: Controller_MainWindow,
@@ -753,6 +826,7 @@ def test_updateUi_single_mode_button_already_started_is_noop(
         ctrl.acquisition_panel.updateUi_single_mode_button()
     mock_close.assert_not_called()
     assert ctrl.single_mode_started is True
+
 
 def test_updateUi_initial_hardware_state_lightsheet_shutter_mode(
     controller: Controller_MainWindow,
@@ -775,6 +849,7 @@ def test_updateUi_initial_hardware_state_lightsheet_shutter_mode(
     finally:
         ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.blockSignals(False)
     assert ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.currentIndex() == 1
+
 
 def test_hardware_init_non_demo_shows_ready_status(
     controller: Controller_MainWindow,

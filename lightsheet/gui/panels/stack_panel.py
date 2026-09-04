@@ -1121,7 +1121,7 @@ class StackPanelWidget(QWidget):
         use_curve = self.ui.checkBox_autofocusUseCurve.isChecked()
         if self._armed_focus_curve is None and use_curve:
             self.ui.label_autofocusStatus.setText(
-                'No focus curve loaded. Browse and load a curve, or uncheck '
+                "No focus curve loaded. Browse and load a curve, or uncheck "
                 '"Use loaded focus curve as seed" to start from the current '
                 "camera position."
             )

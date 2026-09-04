@@ -168,6 +168,7 @@ def test_list_zarr_datasets_rejects_no_l0_array(
     """_list_zarr_datasets raises ValueError for a store with no L0
     '0' array so the caller's except path surfaces a clear message."""
     import zarr
+
     ctrl = controller
     zarr_path = tmp_path / "empty.ome.zarr"
     zarr.open_group(str(zarr_path), mode="w")  # no arrays

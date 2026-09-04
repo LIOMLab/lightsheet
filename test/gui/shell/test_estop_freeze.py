@@ -150,6 +150,7 @@ def test_estop_handler_defers_post_kill_refresh(
     assert len(deferred_readback_l1) >= 1
     assert len(deferred_readback_l2) >= 1
 
+
 def test_estop_kill_path_stays_synchronous_and_lock_free(
     controller: Controller_MainWindow,
     request: FixtureRequest,
@@ -207,6 +208,7 @@ def test_estop_kill_path_stays_synchronous_and_lock_free(
     # handle the controller, but be tidy).
     for idx, laser in enumerate(ctrl.lasers):
         laser.off = original_offs[idx]  # ty: ignore[invalid-assignment]
+
 
 def test_estop_laser_off_precedes_dock_freeze(
     controller: Controller_MainWindow,
@@ -278,6 +280,7 @@ def test_estop_laser_off_precedes_dock_freeze(
         f"laser.off must precede dock freeze; got order {order}"
     )
 
+
 def test_estop_warning_emitted_and_freeze_still_runs(
     controller: Controller_MainWindow,
     request: FixtureRequest,
@@ -318,6 +321,7 @@ def test_estop_warning_emitted_and_freeze_still_runs(
     # Both dock widgets are frozen even when a laser off fails.
     assert ctrl._adaptive_dock_controller.widget._frozen is True
     assert ctrl._focus_dock_controller.widget._frozen is True
+
 
 def test_arm_reset_first_press_clears_estop_event(
     controller: Controller_MainWindow,

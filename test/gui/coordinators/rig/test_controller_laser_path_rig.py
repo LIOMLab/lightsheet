@@ -62,7 +62,7 @@ pytestmark = [
 
 
 def test_toggle_laser1_real_daq_no_access_violation(
-    controller: Controller_MainWindow
+    controller: Controller_MainWindow,
 ) -> None:
     """The real _toggle_laser1 (daemon-thread toggle) via ctrl._hw.
 
@@ -88,7 +88,7 @@ def test_toggle_laser1_real_daq_no_access_violation(
 
 
 def test_toggle_laser1_on_daemon_thread_real_daq(
-    controller: Controller_MainWindow
+    controller: Controller_MainWindow,
 ) -> None:
     """_toggle_laser1 spawned on a daemon thread (as the GUI does it).
 
@@ -121,7 +121,7 @@ def test_toggle_laser1_on_daemon_thread_real_daq(
 
 
 def test_write_laser1_power_real_daq_repeated(
-    controller: Controller_MainWindow
+    controller: Controller_MainWindow,
 ) -> None:
     """The real _write_laser1_power (debounce-slot worker) repeatedly.
 
@@ -147,7 +147,7 @@ def test_write_laser1_power_real_daq_repeated(
 
 
 def test_start_lasers_real_daq_then_siggen_create(
-    controller: Controller_MainWindow
+    controller: Controller_MainWindow,
 ) -> None:
     """The real start_lasers (acquisition worker path) then siggen create.
 

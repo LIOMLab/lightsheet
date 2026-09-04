@@ -55,6 +55,7 @@ def test_close_event_quits_preview_thread(controller: Controller_MainWindow) -> 
         "preview thread must not be running after closeEvent"
     )
 
+
 def test_close_event_no_join_on_preview_thread(
     controller: Controller_MainWindow,
 ) -> None:
@@ -79,6 +80,7 @@ def test_close_event_no_join_on_preview_thread(
     ctrl.preview_mode_started = False
     ctrl._preview_thread.quit()
     ctrl._preview_thread.wait(2000)
+
 
 def test_close_event_preview_timeout_logs_warning(
     controller: Controller_MainWindow,
@@ -124,6 +126,7 @@ def test_close_event_preview_timeout_logs_warning(
     assert ctrl._preview_thread is not None
     ctrl._preview_thread.quit()
     ctrl._preview_thread.wait(2000)
+
 
 def test_close_event_closes_motors_handle(controller: Controller_MainWindow) -> None:
     """closeEvent calls self.motors.close() exactly once alongside the existing

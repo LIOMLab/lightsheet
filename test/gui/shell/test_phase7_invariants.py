@@ -71,6 +71,7 @@ _PANEL_MODULE_NAMES = (
 # the shell. No per-panel module may define ``updateUi_estop_pressed``.
 # --------------------------------------------------------------------------- #
 
+
 def test_estop_slot_lives_only_in_shell() -> None:
     """The E-stop kill-path SLOT ``updateUi_estop_pressed`` is defined on the
     shell's ``Controller_MainWindow`` and on NONE of the 7 per-panel widget
@@ -102,10 +103,12 @@ def test_estop_slot_lives_only_in_shell() -> None:
             "regression."
         )
 
+
 # --------------------------------------------------------------------------- #
 # GAP 2 — MIG-05 (structural): the monolithic ui_controller files are DELETED
 # and the 7 per-panel modules + ui_shell + native image_view (MIG-08) EXIST.
 # --------------------------------------------------------------------------- #
+
 
 def test_monolithic_ui_controller_deleted_and_panels_exist() -> None:
     """The monolithic ``ui_controller`` files are gone and the 7 per-panel
@@ -134,6 +137,7 @@ def test_monolithic_ui_controller_deleted_and_panels_exist() -> None:
         "ImageView replaced the dropped pyqtgraph ImageView (MIG-08)."
     )
 
+
 # --------------------------------------------------------------------------- #
 # GAP 3 — MIG-07 (SAFETY-CRITICAL, behavior): the REAL controller's
 # estop_event is a threading.Event instance (NOT a QThread interruption API).
@@ -141,6 +145,7 @@ def test_monolithic_ui_controller_deleted_and_panels_exist() -> None:
 # the real controller's attribute stays threading.Event under the QThread
 # migration.
 # --------------------------------------------------------------------------- #
+
 
 def test_controller_estop_event_is_threading_event(
     controller: Controller_MainWindow,
@@ -160,6 +165,7 @@ def test_controller_estop_event_is_threading_event(
         "(MIG-07)."
     )
 
+
 # --------------------------------------------------------------------------- #
 # GAP 4 — MIG-07 (source-assert): (a) requestInterruption is NOT referenced
 # anywhere in lightsheet/ (the QThread interruption API is intentionally NOT
@@ -167,6 +173,7 @@ def test_controller_estop_event_is_threading_event(
 # creates the 4 laser toggle/power daemon threads as threading.Thread (not
 # QThread) to preserve the lock-free E-stop kill path.
 # --------------------------------------------------------------------------- #
+
 
 def test_no_request_interruption_in_lightsheet() -> None:
     """``requestInterruption`` (the QThread interruption API) does NOT appear
@@ -191,6 +198,7 @@ def test_no_request_interruption_in_lightsheet() -> None:
         "anywhere in lightsheet/ — estop_event (threading.Event) is the "
         "cooperative-abort mechanism (MIG-07). Offending files: " + ", ".join(offenders)
     )
+
 
 def test_laser_panel_daemons_are_threading_thread() -> None:
     """``laser_panel.py`` creates the 4 laser toggle/power daemon threads as

@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
 pytest.importorskip("PySide6")
 
+
 def test_shell_owned_widgets_stay_on_ui(controller: Controller_MainWindow) -> None:
     """Shell-owned widgets stay accessible via ``controller.ui`` after the
     merge-loop trim (E-stop invariant + status bar + message log +
@@ -55,6 +56,7 @@ def test_shell_owned_widgets_stay_on_ui(controller: Controller_MainWindow) -> No
     assert hasattr(ctrl.ui, "imagesPane")
     assert hasattr(ctrl.ui, "imageView")
 
+
 def test_panel_internal_widget_not_on_shell_ui(
     controller: Controller_MainWindow,
 ) -> None:
@@ -69,6 +71,7 @@ def test_panel_internal_widget_not_on_shell_ui(
     )
     # It IS accessible via the panel-qualified path.
     assert hasattr(ctrl.stack_panel.ui, "doubleSpinBox_acqFirstPlane")
+
 
 def test_panel_internal_widgets_not_on_shell_ui_sample(
     controller: Controller_MainWindow,
@@ -90,6 +93,7 @@ def test_panel_internal_widgets_not_on_shell_ui_sample(
         assert not hasattr(ctrl.ui, name), (
             f"panel-internal widget {name!r} leaked onto controller.ui"
         )
+
 
 def test_shell_owned_objectnames_whitelist_exists() -> None:
     """The controller module defines a SHELL_OWNED_OBJECTNAMES whitelist
@@ -123,6 +127,7 @@ def test_shell_owned_objectnames_whitelist_exists() -> None:
             f"{removed!r} must be removed from SHELL_OWNED_OBJECTNAMES "
             "after the shell re-architecture"
         )
+
 
 def test_merge_loop_only_sets_shell_owned_widgets(
     controller: Controller_MainWindow,
@@ -159,6 +164,7 @@ def test_merge_loop_only_sets_shell_owned_widgets(
     assert not leaked, (
         f"merge loop leaked panel-internal widgets onto self.ui: {leaked}"
     )
+
 
 def test_estop_kill_path_unchanged() -> None:
     """The E-stop kill path (updateUi_estop_pressed) still iterates

@@ -26,11 +26,13 @@ from pytestqt.qtbot import QtBot
 if TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
+
 def _show_window(ctrl: Controller_MainWindow, qtbot: QtBot) -> None:
     """Show the controller window and wait for it to be exposed so the
     splitter has real geometry (width > 0) for setSizes() to partition."""
     ctrl.show()
     qtbot.waitExposed(ctrl)
+
 
 def test_splitter_children_not_collapsible(
     controller: Controller_MainWindow,
@@ -41,6 +43,7 @@ def test_splitter_children_not_collapsible(
     ctrl = controller
     _show_window(ctrl, qtbot)
     assert ctrl.ui.splitter.childrenCollapsible() is False
+
 
 def test_show_hide_images_pane_uses_splitter_set_sizes(
     controller: Controller_MainWindow,
@@ -89,6 +92,7 @@ def test_show_hide_images_pane_uses_splitter_set_sizes(
     )
     assert action.isChecked() is True
 
+
 def test_show_hide_controls_pane_uses_splitter_set_sizes(
     controller: Controller_MainWindow,
     qtbot: QtBot,
@@ -129,6 +133,7 @@ def test_show_hide_controls_pane_uses_splitter_set_sizes(
     )
     assert action.isChecked() is True
 
+
 def test_show_hide_images_pane_does_not_call_widget_hide(
     controller: Controller_MainWindow,
     qtbot: QtBot,
@@ -153,6 +158,7 @@ def test_show_hide_images_pane_does_not_call_widget_hide(
 
     spy_hide.assert_not_called()
     spy_show.assert_not_called()
+
 
 def test_show_hide_controls_pane_does_not_call_widget_hide(
     controller: Controller_MainWindow,

@@ -35,6 +35,7 @@ def _resize_and_settle(
     controller.resize(width, height)
     qtbot.wait(120)
 
+
 @pytest.mark.parametrize(
     "width,height",
     [
@@ -75,6 +76,7 @@ def test_layout_reflows_at_target_sizes(
         f"E-stop toolbar not visible at {width}x{height}"
     )
 
+
 def test_images_pane_wins_extra_space_on_lab_display(
     controller: Controller_MainWindow,
     qtbot: QtBot,
@@ -92,6 +94,7 @@ def test_images_pane_wins_extra_space_on_lab_display(
         f"controlsPane ({controls.width()}px) at 1920x1080 — stretch=1 "
         f"on imagesPane vs stretch=0 on controlsPane is not in effect"
     )
+
 
 def test_window_cannot_resize_below_floor(
     controller: Controller_MainWindow,
@@ -116,6 +119,7 @@ def test_window_cannot_resize_below_floor(
         f"window height {controller.height()} < 800 (minimumSize not enforced)"
     )
 
+
 def test_splitter_panes_not_collapsible(controller: Controller_MainWindow) -> None:
     """QSplitter childrenCollapsible stays False — operator drag resizes
     but cannot collapse a pane to 0 (hiding is via the View menu)."""
@@ -127,7 +131,9 @@ def test_splitter_panes_not_collapsible(controller: Controller_MainWindow) -> No
         f"splitter handleWidth {controller.ui.splitter.handleWidth()} != 5"
     )
 
+
 # --- Motion tab fixed-size group-box remediation (audit #5) ---
+
 
 def _show_motion_tab(controller: Controller_MainWindow, qtbot: QtBot) -> None:
     """Switch the stacked panes to the Motion page (index 0) and
@@ -135,6 +141,7 @@ def _show_motion_tab(controller: Controller_MainWindow, qtbot: QtBot) -> None:
     controller.ui.stackedPanels.setCurrentIndex(0)
     controller.ui.toolButton_railMotion.setChecked(True)
     qtbot.wait(50)
+
 
 def test_sample_movement_group_box_not_pinned(
     controller: Controller_MainWindow,
@@ -156,6 +163,7 @@ def test_sample_movement_group_box_not_pinned(
         f"(got {max_size.width()}x{max_size.height()})"
     )
 
+
 def test_camera_movement_group_box_not_pinned(
     controller: Controller_MainWindow,
     qtbot: QtBot,
@@ -171,6 +179,7 @@ def test_camera_movement_group_box_not_pinned(
         f"groupBox_CameraMovement still pinned to 350x380 max "
         f"(got {max_size.width()}x{max_size.height()})"
     )
+
 
 def test_sample_movement_group_box_min_width_content_driven(
     controller: Controller_MainWindow,
@@ -202,6 +211,7 @@ def test_sample_movement_group_box_min_width_content_driven(
         f"groupBox_SampleMovement min width {min_size.width()} == 350 "
         f"(old width pin still present)"
     )
+
 
 def test_jog_arrow_button_no_width_cap(
     controller: Controller_MainWindow,
@@ -236,6 +246,7 @@ def test_jog_arrow_button_no_width_cap(
         f"(old width cap still present — should be 48 uniform)"
     )
 
+
 def test_motion_tab_group_boxes_visible_at_laptop_floor(
     controller: Controller_MainWindow,
     qtbot: QtBot,
@@ -252,7 +263,9 @@ def test_motion_tab_group_boxes_visible_at_laptop_floor(
     assert sample_gb.isVisible(), "groupBox_SampleMovement not visible at 1366x768"
     assert camera_gb.isVisible(), "groupBox_CameraMovement not visible at 1366x768"
 
+
 # --- Left-rail + E-stop toolbar visibility (uniform layout convention) ---
+
 
 def test_left_rail_visible_at_all_target_sizes(
     controller: Controller_MainWindow,
@@ -275,6 +288,7 @@ def test_left_rail_visible_at_all_target_sizes(
             f"(rail should be a narrow fixed-width column, not a pane)"
         )
 
+
 def test_estop_toolbar_fixed_and_non_movable(controller: Controller_MainWindow) -> None:
     """The E-stop toolbar is fixed (non-movable, non-floatable) so the
     safety-critical kill button stays in a predictable location at every
@@ -287,6 +301,7 @@ def test_estop_toolbar_fixed_and_non_movable(controller: Controller_MainWindow) 
     assert tb.isFloatable() is False, (
         "E-stop toolbar must be non-floatable (safety — fixed location)"
     )
+
 
 def test_estop_button_visible_at_all_target_sizes(
     controller: Controller_MainWindow,
@@ -305,6 +320,7 @@ def test_estop_button_visible_at_all_target_sizes(
         )
         assert estop is not None, "pushButton_estop not found in shell"
         assert estop.isVisible(), f"E-stop button not visible at {width}x{height}"
+
 
 def test_all_eight_panels_scroll_area_wrapped(
     controller: Controller_MainWindow,

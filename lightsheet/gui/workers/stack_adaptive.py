@@ -171,7 +171,6 @@ class _StackAdaptiveMixin:
             power_fallback=cmd.power_fallback,
         )
         if self._shell.saving_allowed:
-
             self._shell._fs.record_adaptive_sample(sample)
 
         # Emit the trajectory signal for the GUI-thread plot.

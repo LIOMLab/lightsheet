@@ -43,12 +43,14 @@ def test_init_has_no_lambda_collaborator_connections() -> None:
     assert "lambda: self._mc." not in init_source
     assert "lambda: self._acq." not in init_source
 
+
 def test_wire_collaborators_exists() -> None:
     """``Controller_MainWindow`` has a ``wire_collaborators`` method."""
     import lightsheet.gui.shell.controller as controller_mod
 
     assert hasattr(controller_mod.Controller_MainWindow, "wire_collaborators")
     assert callable(controller_mod.Controller_MainWindow.wire_collaborators)
+
 
 def test_converted_connection_fires_collaborator_slot(
     controller: Controller_MainWindow,
@@ -82,6 +84,7 @@ def test_converted_connection_fires_collaborator_slot(
     # MotorController slot ran via the bound-method connection.
     log_text = ctrl.ui.plainTextEdit_messageLog.toPlainText()
     assert "Sample stepping up" in log_text or "Out of boundaries" in log_text
+
 
 def test_converted_acq_connection_fires_collaborator_slot(
     controller: Controller_MainWindow,

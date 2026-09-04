@@ -35,6 +35,7 @@ _UI_SHELL_PY = _REPO_ROOT / "lightsheet" / "gui" / "shell" / "ui_shell.py"
 _MOTOR_PANEL = _REPO_ROOT / "lightsheet" / "gui" / "panels" / "motor_panel.py"
 _STACK_PANEL = _REPO_ROOT / "lightsheet" / "gui" / "panels" / "stack_panel.py"
 
+
 def test_comboBox_units_absent_from_ui_file() -> None:
     """comboBox_units is not declared in ui_shell.ui."""
     text = _UI_SHELL_UI.read_text(encoding="utf-8")
@@ -42,6 +43,7 @@ def test_comboBox_units_absent_from_ui_file() -> None:
         "comboBox_units still declared in ui_shell.ui — the units selector "
         "was not removed from the .ui file"
     )
+
 
 def test_comboBox_units_absent_from_generated_ui_py() -> None:
     """comboBox_units is not in the generated ui_shell.py."""
@@ -51,10 +53,12 @@ def test_comboBox_units_absent_from_generated_ui_py() -> None:
         "regenerated after the units selector removal"
     )
 
+
 def test_label_units_absent_from_ui_file() -> None:
     """label_units is not declared in ui_shell.ui."""
     text = _UI_SHELL_UI.read_text(encoding="utf-8")
     assert 'name="label_units"' not in text, "label_units still declared in ui_shell.ui"
+
 
 def test_controller_ui_has_no_comboBox_units(controller: Controller_MainWindow) -> None:
     """The constructed controller's ui has no comboBox_units attribute."""
@@ -63,6 +67,7 @@ def test_controller_ui_has_no_comboBox_units(controller: Controller_MainWindow) 
         "controller.ui still has a comboBox_units attribute — the shell "
         "merge loop or the .ui is still surfacing the removed widget"
     )
+
 
 def test_controller_has_no_units_attribute(controller: Controller_MainWindow) -> None:
     """The controller has no ``units`` attribute (the global toggle's
@@ -73,6 +78,7 @@ def test_controller_has_no_units_attribute(controller: Controller_MainWindow) ->
         "toggle's backing attribute was not removed"
     )
 
+
 def test_controller_has_no_units_fixformat(controller: Controller_MainWindow) -> None:
     """The controller has no ``units_fixformat`` / ``units_decimals`` /
     ``units_increment`` attributes (set by the old updateUi_units)."""
@@ -81,6 +87,7 @@ def test_controller_has_no_units_fixformat(controller: Controller_MainWindow) ->
     assert not hasattr(ctrl, "units_decimals")
     assert not hasattr(ctrl, "units_increment")
 
+
 def test_motor_panel_has_no_shell_units_reads() -> None:
     """motor_panel.py has no ``self._shell.units`` reads."""
     text = _MOTOR_PANEL.read_text(encoding="utf-8")
@@ -88,6 +95,7 @@ def test_motor_panel_has_no_shell_units_reads() -> None:
         "motor_panel.py still reads self._shell.units — the units removal "
         "left a stale read site"
     )
+
 
 def test_stack_panel_has_no_shell_units_reads() -> None:
     """stack_panel.py has no ``self._shell.units`` reads and no

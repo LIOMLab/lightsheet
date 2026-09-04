@@ -41,6 +41,7 @@ if TYPE_CHECKING:
 # G1 — start_lasers surfaces a laser-1 DAQ write failure (LSR-01 / G-01-1)
 # --------------------------------------------------------------------------- #
 
+
 def test_start_lasers_surfaces_laser1_daq_error(
     controller: Controller_MainWindow,
 ) -> None:
@@ -78,10 +79,12 @@ def test_start_lasers_surfaces_laser1_daq_error(
     # The flag is reset so the warning fires once per failure.
     assert laser1.error == 0
 
+
 # --------------------------------------------------------------------------- #
 # G2 — acquire_scan aborts on recorder timeout before copy_recorder_images
 #      (BUG-01)
 # --------------------------------------------------------------------------- #
+
 
 def test_acquire_scan_aborts_on_recorder_timeout_before_copy(
     controller: Controller_MainWindow,
@@ -169,10 +172,12 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy(
     assert delete_scanner_called
     assert disarm_called
 
+
 # --------------------------------------------------------------------------- #
 # G3 — acquire_scan surfaces a siggen create_scanner failure before the
 #      recorder is primed (BUG-01 / G-01-5)
 # --------------------------------------------------------------------------- #
+
 
 def test_acquire_scan_surfaces_siggen_error_before_recorder(
     controller: Controller_MainWindow,
@@ -245,10 +250,12 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder(
     assert delete_scanner_called
     assert disarm_called
 
+
 # --------------------------------------------------------------------------- #
 # G4 — start_lasers reads cached auto-laser flags, never a Qt widget
 #      (BUG-01 / G-01-5)
 # --------------------------------------------------------------------------- #
+
 
 def test_start_lasers_reads_cached_flags_not_widgets(
     controller: Controller_MainWindow,
@@ -285,10 +292,12 @@ def test_start_lasers_reads_cached_flags_not_widgets(
         "the cached flag, not the widget (AGENTS.md §11)."
     )
 
+
 # --------------------------------------------------------------------------- #
 # G5 — PreviewWorker.run polls estop_event and breaks before frame
 #      acquisition; the finished signal fires exactly once (LSR-04 / CR-01)
 # --------------------------------------------------------------------------- #
+
 
 def test_preview_worker_breaks_on_estop_before_frame_acquisition(
     controller: Controller_MainWindow,
@@ -343,10 +352,12 @@ def test_preview_worker_breaks_on_estop_before_frame_acquisition(
     # The finished signal fired exactly once (the finally block).
     assert len(finished_emits) == 1
 
+
 # --------------------------------------------------------------------------- #
 # G6 — updateUi_initial_hardware_state sets wavelength labels from the live
 #      list[ILaser] instances (LSR-05)
 # --------------------------------------------------------------------------- #
+
 
 def test_wavelength_labels_set_from_live_instances(
     controller: Controller_MainWindow,
@@ -379,10 +390,12 @@ def test_wavelength_labels_set_from_live_instances(
     assert "555" in toggle1_text
     assert "647" in toggle2_text
 
+
 # --------------------------------------------------------------------------- #
 # G7 — updateUi_estop_pressed warn branch: fires when a laser's off() leaves
 #      error truthy, does NOT fire when all off() calls succeed (AGENTS.md §2).
 # --------------------------------------------------------------------------- #
+
 
 def test_estop_warn_branch_fires_for_failed_laser(
     controller: Controller_MainWindow,
@@ -436,6 +449,7 @@ def test_estop_warn_branch_fires_for_failed_laser(
     # The error flag is reset after the warn so it fires once per failure.
     assert laser_failed.error == 0
 
+
 def test_estop_warn_branch_does_not_fire_when_all_off_succeed(
     controller: Controller_MainWindow,
 ) -> None:
@@ -464,9 +478,11 @@ def test_estop_warn_branch_does_not_fire_when_all_off_succeed(
         f"got {warn_msgs} in {messages}"
     )
 
+
 # --------------------------------------------------------------------------- #
 # MCA-01 — MULTI-CH badge pill + stack-plan summary 2ch re-render + tooltip
 # --------------------------------------------------------------------------- #
+
 
 def _set_valid_stack_plan(ctrl: Controller_MainWindow) -> None:
     """Set a valid full stack plan (both boundaries + step + n_planes)."""
@@ -476,6 +492,7 @@ def _set_valid_stack_plan(ctrl: Controller_MainWindow) -> None:
     ctrl.stack_panel.ui.doubleSpinBox_acqLastPlane.setValue(200.0)
     ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
     ctrl.stack_panel.updateUi_set_number_of_planes()
+
 
 def test_multi_ch_badge_pill_shown_when_both_checked(
     controller: Controller_MainWindow,
@@ -502,6 +519,7 @@ def test_multi_ch_badge_pill_shown_when_both_checked(
     # existing QDarkStyle default text color + bold weight.
     assert "34C759" not in ctrl.ui.label_modeBadge.styleSheet().upper()
 
+
 def test_multi_ch_badge_pill_hidden_when_one_checked(
     controller: Controller_MainWindow,
 ) -> None:
@@ -526,6 +544,7 @@ def test_multi_ch_badge_pill_hidden_when_one_checked(
     ctrl._update_mode_badge("STACK")
     assert "MULTI-CH" not in ctrl.ui.label_modeBadge.text()
 
+
 def test_cache_auto_laser_flags_triggers_summary_refresh(
     controller: Controller_MainWindow,
 ) -> None:
@@ -549,6 +568,7 @@ def test_cache_auto_laser_flags_triggers_summary_refresh(
     assert spy.called, (
         "_cache_auto_laser_flags must call stack_panel._render_stack_plan_summary"
     )
+
 
 def test_stack_plan_summary_2ch_doubles_time_and_size(
     controller: Controller_MainWindow,
@@ -610,6 +630,7 @@ def test_stack_plan_summary_2ch_doubles_time_and_size(
         f"single={single_text!r} multi={multi_text!r}"
     )
 
+
 def test_stack_plan_summary_single_channel_byte_identical(
     controller: Controller_MainWindow,
 ) -> None:
@@ -646,6 +667,7 @@ def test_stack_plan_summary_single_channel_byte_identical(
     assert baseline.count("Est. time:") == 1
     assert baseline.count("Est. size:") == 1
 
+
 def test_auto_laser_tooltip_updated(controller: Controller_MainWindow) -> None:
     """Both auto-laser checkbox tooltips contain the multi-channel
     consequence sentence ('When BOTH auto-laser boxes are checked')."""
@@ -664,9 +686,11 @@ def test_auto_laser_tooltip_updated(controller: Controller_MainWindow) -> None:
     assert "automatically during acquisition" in tip1
     assert "automatically during acquisition" in tip2
 
+
 # --------------------------------------------------------------------------- #
 # MCA-01 / D-07 — ChannelRadio widget (L1/L2 display selector) + visibility
 # --------------------------------------------------------------------------- #
+
 
 def test_channel_radio_hidden_by_default(controller: Controller_MainWindow) -> None:
     """The channel-radio group is hidden by default (only one or zero
@@ -678,6 +702,7 @@ def test_channel_radio_hidden_by_default(controller: Controller_MainWindow) -> N
     assert not radio.isVisible(), (
         "channel-radio must be hidden by default (single-channel back-compat)"
     )
+
 
 def test_channel_radio_shown_when_both_checked(
     controller: Controller_MainWindow,
@@ -697,10 +722,12 @@ def test_channel_radio_shown_when_both_checked(
     # does not mask the explicit show() call.
     parent = radio.parent() if radio.parent() is not None else ctrl
     from PySide6.QtWidgets import QWidget
+
     assert isinstance(parent, QWidget)
     assert radio.isVisibleTo(parent), (
         "channel-radio must be shown when both auto-lasers are checked"
     )
+
 
 def test_channel_radio_labels_from_live_wavelength(
     controller: Controller_MainWindow,
@@ -718,6 +745,7 @@ def test_channel_radio_labels_from_live_wavelength(
     assert t1.startswith("L1"), f"L1 button must start with 'L1'; got {t1!r}"
     assert t2.startswith("L2"), f"L2 button must start with 'L2'; got {t2!r}"
 
+
 def test_channel_radio_default_l1_selected(controller: Controller_MainWindow) -> None:
     """When the channel-radio is shown, L1 (channel index 0) is the
     default checked button."""
@@ -727,6 +755,7 @@ def test_channel_radio_default_l1_selected(controller: Controller_MainWindow) ->
         "L1 (channel index 0) must be the default selected button"
     )
     assert not radio.is_checked(1), "L2 must not be checked by default"
+
 
 def test_channel_radio_switch_updates_imageview(
     controller: Controller_MainWindow,
@@ -790,6 +819,7 @@ def test_channel_radio_switch_updates_imageview(
         f"LevelsBar window_max must reset to frame_b.max()=400; got {lb.window_max}"
     )
 
+
 def test_channel_radio_l1_tint_is_green(controller: Controller_MainWindow) -> None:
     """Clicking L1 calls ImageView.setImage with tint='00FF00' (green for
     555 nm) so the operator can visually distinguish L1 from L2 in demo
@@ -823,6 +853,7 @@ def test_channel_radio_l1_tint_is_green(controller: Controller_MainWindow) -> No
         f"clicking L1 must pass tint='00FF00' (green for 555 nm); "
         f"got tints={called_tints!r}"
     )
+
 
 def test_channel_radio_tints_demo_image_when_no_acquisition_frame(
     controller: Controller_MainWindow,
@@ -871,6 +902,7 @@ def test_channel_radio_tints_demo_image_when_no_acquisition_frame(
         "(ImageView._last_frame) when no acquisition frame exists"
     )
 
+
 def test_channel_radio_auto_tints_demo_image_when_second_laser_enabled(
     controller: Controller_MainWindow,
 ) -> None:
@@ -917,6 +949,7 @@ def test_channel_radio_auto_tints_demo_image_when_second_laser_enabled(
         if timer is not None:
             timer.start(100)
 
+
 def test_channel_radio_container_at_layout_index_one(
     controller: Controller_MainWindow,
 ) -> None:
@@ -943,6 +976,7 @@ def test_channel_radio_container_at_layout_index_one(
         "layout index 1 must be the channel-radio container (between "
         "ImageView at 0 and the LevelsBar layout)"
     )
+
 
 def test_channel_radio_toggle_does_not_reflow_imageview(
     controller: Controller_MainWindow,
@@ -979,6 +1013,7 @@ def test_channel_radio_toggle_does_not_reflow_imageview(
         "fixed-height container must reserve the slot (no reflow)"
     )
 
+
 def test_channel_radio_container_fixed_height(
     controller: Controller_MainWindow,
 ) -> None:
@@ -993,6 +1028,7 @@ def test_channel_radio_container_fixed_height(
     )
     assert h > 0, "container fixed height must be > 0"
 
+
 def test_channel_radio_single_channel_hidden(controller: Controller_MainWindow) -> None:
     """When only one auto-laser checkbox is checked, the channel-radio is
     HIDDEN (not just disabled) — the ImageView area stays visually
@@ -1005,6 +1041,7 @@ def test_channel_radio_single_channel_hidden(controller: Controller_MainWindow) 
     ctrl.laser_panel.ui.checkBox_laserTwoAutomatic.setChecked(False)
     parent = radio.parent() if radio.parent() is not None else ctrl
     from PySide6.QtWidgets import QWidget
+
     assert isinstance(parent, QWidget)
     assert not radio.isVisibleTo(parent), (
         "channel-radio must be hidden (not disabled) when only one "

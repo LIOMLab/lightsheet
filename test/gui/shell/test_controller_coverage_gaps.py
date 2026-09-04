@@ -39,6 +39,7 @@ from test.fixtures.controller import patch_qmessage_question
 
 # -- _update_levels_readout branches (902-931) -------------------------------
 
+
 def test_update_levels_readout_none_frame_is_noop(
     controller: Controller_MainWindow,
 ) -> None:
@@ -47,6 +48,7 @@ def test_update_levels_readout_none_frame_is_noop(
     before = ctrl.ui.label_levelsReadout.text()
     ctrl._update_levels_readout(cast(Any, None))
     assert ctrl.ui.label_levelsReadout.text() == before
+
 
 def test_update_levels_readout_empty_frame_is_noop(
     controller: Controller_MainWindow,
@@ -58,6 +60,7 @@ def test_update_levels_readout_empty_frame_is_noop(
     # An empty array -> frame.min() raises ValueError.
     ctrl._update_levels_readout(np.array([], dtype=np.uint16))
     assert ctrl.ui.label_levelsReadout.text() == before
+
 
 def test_update_levels_readout_float_dtype_uses_observed_range(
     controller: Controller_MainWindow,
@@ -76,6 +79,7 @@ def test_update_levels_readout_float_dtype_uses_observed_range(
     # Auto-fit set the window to the observed range on the first frame.
     assert ctrl._levels_autofit_done is True
 
+
 def test_update_levels_readout_uint_frame_sets_dtorange(
     controller: Controller_MainWindow,
 ) -> None:
@@ -86,6 +90,7 @@ def test_update_levels_readout_uint_frame_sets_dtorange(
     ctrl._update_levels_readout(frame)
     text = ctrl.ui.label_levelsReadout.text()
     assert "frame: 0-300" in text
+
 
 def test_update_levels_readout_autofits_first_frame(
     controller: Controller_MainWindow,
@@ -100,7 +105,9 @@ def test_update_levels_readout_autofits_first_frame(
     assert ctrl.ui.levelsBar.window_min == 10
     assert ctrl.ui.levelsBar.window_max == 90
 
+
 # -- _on_range_changed (877-878) ----------------------------------------------
+
 
 def test_on_range_changed_updates_colormap_and_readout(
     controller: Controller_MainWindow,
@@ -112,7 +119,9 @@ def test_on_range_changed_updates_colormap_and_readout(
     assert "range:" in text
     assert "window:" in text
 
+
 # -- updateUi_save_format_changed radio branches (1281-1288) ------------------
+
 
 def test_save_format_changed_zarr(controller: Controller_MainWindow) -> None:
     """Selecting the zarr radio sets save_format='zarr' (line 1284-1285)."""
@@ -121,12 +130,14 @@ def test_save_format_changed_zarr(controller: Controller_MainWindow) -> None:
     ctrl.updateUi_save_format_changed(ui.radioButton_saveFormat_zarr)
     assert ctrl.save_format == "zarr"
 
+
 def test_save_format_changed_both(controller: Controller_MainWindow) -> None:
     """Selecting the both radio sets save_format='both' (line 1286-1287)."""
     ctrl = controller
     ui = ctrl.save_panel.ui
     ctrl.updateUi_save_format_changed(ui.radioButton_saveFormat_both)
     assert ctrl.save_format == "both"
+
 
 def test_save_format_changed_hdf5(controller: Controller_MainWindow) -> None:
     """Selecting the hdf5 radio sets save_format='hdf5' (line 1282-1283)."""
@@ -135,7 +146,9 @@ def test_save_format_changed_hdf5(controller: Controller_MainWindow) -> None:
     ctrl.updateUi_save_format_changed(ui.radioButton_saveFormat_hdf5)
     assert ctrl.save_format == "hdf5"
 
+
 # -- _update_mode_badge else + queue branches (1496, 1528) --------------------
+
 
 def test_mode_badge_unknown_mode_falls_back_to_mode_text(
     controller: Controller_MainWindow,
@@ -144,6 +157,7 @@ def test_mode_badge_unknown_mode_falls_back_to_mode_text(
     ctrl = controller
     ctrl._update_mode_badge("PREVIEW")
     assert ctrl.ui.label_modeBadge.text() == "PREVIEW"
+
 
 def test_mode_badge_stack_running_with_queue_row(
     controller: Controller_MainWindow,
@@ -158,7 +172,9 @@ def test_mode_badge_stack_running_with_queue_row(
     assert "plane 3/10" in text
     assert "(row 2/5)" in text
 
+
 # -- _on_progress_update queue-active path (1521-1537) ------------------------
+
 
 def test_progress_update_with_queue_active_renders_row_badge(
     controller: Controller_MainWindow,
@@ -178,6 +194,7 @@ def test_progress_update_with_queue_active_renders_row_badge(
     assert "plane 5/10" in text
     assert "(row 2/4)" in text
 
+
 def test_progress_update_without_queue_renders_plain_badge(
     controller: Controller_MainWindow,
 ) -> None:
@@ -194,7 +211,9 @@ def test_progress_update_without_queue_renders_plain_badge(
     assert "plane 3/8" in text
     assert "(row" not in text
 
+
 # -- _update_channel_radio_visibility branches (1579, 1597->1601, 1607->exit) -
+
 
 def test_channel_radio_visibility_radio_none_is_noop(
     controller: Controller_MainWindow,
@@ -209,6 +228,7 @@ def test_channel_radio_visibility_radio_none_is_noop(
     finally:
         ctrl.channel_radio = radio
 
+
 def test_channel_radio_visibility_both_checked_shows_radio(
     controller: Controller_MainWindow,
 ) -> None:
@@ -220,6 +240,7 @@ def test_channel_radio_visibility_both_checked_shows_radio(
     ctrl._update_channel_radio_visibility()
     # The radio's multi-channel visibility flag is set.
     assert ctrl.channel_radio.isVisible() or True  # offscreen platform
+
 
 def test_channel_radio_visibility_single_hides_radio_clears_tint(
     controller: Controller_MainWindow,
@@ -234,7 +255,9 @@ def test_channel_radio_visibility_single_hides_radio_clears_tint(
     ctrl.ui.imageView._last_frame = None
     ctrl._update_channel_radio_visibility()  # must not raise
 
+
 # -- _apply_channel_tint branches (1627, 1630, 1639, 1654-1656) ---------------
+
 
 def test_apply_channel_tint_out_of_range_is_noop(
     controller: Controller_MainWindow,
@@ -243,6 +266,7 @@ def test_apply_channel_tint_out_of_range_is_noop(
     ctrl = controller
     ctrl._apply_channel_tint(99)  # must not raise
 
+
 def test_apply_channel_tint_no_wavelength_is_noop(
     controller: Controller_MainWindow,
 ) -> None:
@@ -250,11 +274,12 @@ def test_apply_channel_tint_no_wavelength_is_noop(
     ctrl = controller
     # Temporarily null the first laser's wavelength.
     original = ctrl.lasers[0].wavelength
-    ctrl.lasers[0].wavelength = None # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
+    ctrl.lasers[0].wavelength = None  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
     try:
         ctrl._apply_channel_tint(0)
     finally:
         ctrl.lasers[0].wavelength = original  # type: ignore[attr-defined]
+
 
 def test_apply_channel_tint_no_acq_frame_falls_back_to_last(
     controller: Controller_MainWindow,
@@ -273,6 +298,7 @@ def test_apply_channel_tint_no_acq_frame_falls_back_to_last(
     assert ctrl.ui.levelsBar.window_min == 10
     assert ctrl.ui.levelsBar.window_max == 90
 
+
 def test_apply_channel_tint_no_frame_anywhere_is_noop(
     controller: Controller_MainWindow,
 ) -> None:
@@ -283,7 +309,9 @@ def test_apply_channel_tint_no_frame_anywhere_is_noop(
     ctrl.ui.imageView._last_frame = None
     ctrl._apply_channel_tint(0)  # must not raise
 
+
 # -- closeEvent branches (1210-1214, 1262) ------------------------------------
+
 
 def test_close_event_before_hardware_init_accepts(
     controller: Controller_MainWindow,
@@ -305,6 +333,7 @@ def test_close_event_before_hardware_init_accepts(
     finally:
         ctrl.lasers = saved_lasers
 
+
 def test_close_event_rejected_ignores_event(controller: Controller_MainWindow) -> None:
     """When the close confirmation dialog is rejected, closeEvent ignores the
     event (line 1262)."""
@@ -319,7 +348,9 @@ def test_close_event_rejected_ignores_event(controller: Controller_MainWindow) -
         ctrl.closeEvent(event)
     assert not event.isAccepted()
 
+
 # -- _FloatingOnlyDock + _NoDblClickFrame (1869, 1894) ------------------------
+
 
 def test_floating_only_dock_setfloating_is_noop(
     controller: Controller_MainWindow,
@@ -331,6 +362,7 @@ def test_floating_only_dock_setfloating_is_noop(
     # not change the floating state (isFloating always returns True).
     dock.setFloating(False)
     assert dock.isFloating() is True
+
 
 def test_no_dblclick_frame_swallows_double_click(
     controller: Controller_MainWindow,
@@ -353,7 +385,9 @@ def test_no_dblclick_frame_swallows_double_click(
     )
     title_bar.mouseDoubleClickEvent(ev)  # must not raise
 
+
 # -- _on_adaptive_dock_visibility_changed no-op (2037->exit) ------------------
+
 
 def test_adaptive_dock_visibility_noop_when_already_in_sync(
     controller: Controller_MainWindow,
@@ -367,7 +401,9 @@ def test_adaptive_dock_visibility_noop_when_already_in_sync(
     ctrl._adaptive_dock_controller._on_dock_visibility_changed(False)
     assert btn.isChecked() is False
 
+
 # -- _on_adaptive_trajectory slot (2064-2067) ---------------------------------
+
 
 def test_on_adaptive_trajectory_appends_sample(
     controller: Controller_MainWindow,
@@ -387,7 +423,9 @@ def test_on_adaptive_trajectory_appends_sample(
     )
     assert ctrl._adaptive_last_plane == 2
 
+
 # -- E-stop laser.error warn branch (2125->2136) ------------------------------
+
 
 def test_estop_warns_when_laser_off_fails(controller: Controller_MainWindow) -> None:
     """When a laser's off() sets laser.error, the E-stop handler emits a

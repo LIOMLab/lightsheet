@@ -44,6 +44,7 @@ _RAIL_BUTTON_NAMES = (
     "toolButton_railCalibrate",
 )
 
+
 def test_left_rail_buttons_exist_and_are_checkable(
     controller: Controller_MainWindow,
 ) -> None:
@@ -53,6 +54,7 @@ def test_left_rail_buttons_exist_and_are_checkable(
         btn = getattr(ctrl.ui, name)
         assert btn is not None, f"{name} missing from controller.ui"
         assert btn.isCheckable(), f"{name} must be checkable"
+
 
 def test_rail_group_is_exclusive_with_eight_buttons(
     controller: Controller_MainWindow,
@@ -66,6 +68,7 @@ def test_rail_group_is_exclusive_with_eight_buttons(
         f"left-rail QButtonGroup has {len(group.buttons())} buttons, expected 8"
     )
 
+
 def test_rail_button_ids_match_page_indices(controller: Controller_MainWindow) -> None:
     """Each left-rail button's QButtonGroup id matches its page index
     (Motion=0, Acquire=1, ..., Calibrate=7)."""
@@ -76,6 +79,7 @@ def test_rail_button_ids_match_page_indices(controller: Controller_MainWindow) -
         assert group.id(btn) == expected_id, (
             f"{name} has id {group.id(btn)}, expected {expected_id}"
         )
+
 
 def test_clicking_each_rail_button_switches_stacked_page(
     controller: Controller_MainWindow,
@@ -95,11 +99,13 @@ def test_clicking_each_rail_button_switches_stacked_page(
             f"{ctrl.ui.stackedPanels.currentIndex()}, expected {expected_id}"
         )
 
+
 def test_motion_is_default_active_page(controller: Controller_MainWindow) -> None:
     """Motion (index 0) is the default active page after construction."""
     ctrl = controller
     assert ctrl.ui.stackedPanels.currentIndex() == 0
     assert ctrl.ui.toolButton_railMotion.isChecked() is True
+
 
 def test_estop_toolbar_visible_across_all_switches(
     controller: Controller_MainWindow,
@@ -121,6 +127,7 @@ def test_estop_toolbar_visible_across_all_switches(
             f"toolBar_estop not visible after switching to {name}"
         )
 
+
 def test_estop_toolbar_is_not_movable(controller: Controller_MainWindow) -> None:
     """The E-stop toolbar is fixed (movable=False) -- the safety-critical
     E-stop button must not be draggable off the TopToolBarArea."""
@@ -129,6 +136,7 @@ def test_estop_toolbar_is_not_movable(controller: Controller_MainWindow) -> None
         "toolBar_estop must be non-movable (movable=False) so the E-stop "
         "button stays in the TopToolBarArea (AGENTS.md §2)"
     )
+
 
 def test_phase9_extension_seam_adds_ninth_page(
     controller: Controller_MainWindow,
@@ -143,6 +151,7 @@ def test_phase9_extension_seam_adds_ninth_page(
     # Clean up the added page so it does not leak into other tests.
     ctrl.ui.stackedPanels.removeWidget(ninth)
     ninth.deleteLater()
+
 
 def test_rail_buttons_have_icons_and_tooltips(
     controller: Controller_MainWindow,
