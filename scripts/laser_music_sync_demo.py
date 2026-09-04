@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 
 from lightsheet.hal.bundle import DeviceBundle
-from lightsheet.hal.interfaces import ILaser, ISigGen
+from lightsheet.hal.interfaces import ISigGen
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("laser_music_sync_demo")
@@ -33,7 +33,7 @@ logger = logging.getLogger("laser_music_sync_demo")
 # Default WAV and cue timings for Ray Volpe - Laserbeam (ÆON_MODE Remix)
 DEFAULT_WAV = "/Users/frans/Downloads/Ray Volpe - Laserbeam (ÆON_MODE Remix).wav"
 DEFAULT_LASER_START = 44.5
-DEFAULT_LASER_END = 47.0
+DEFAULT_LASER_END = 47.5
 DEFAULT_LASER_CUES = [44.89, 45.16, 46.30, 46.31]
 
 
@@ -146,8 +146,8 @@ def run_sync_loop(
     duration: float,
     args: argparse.Namespace,
 ) -> None:
-    """Switch lasers through the cue sequence: L1, L2, L1, L2, L2."""
-    active_laser: ILaser | None = None
+    """Switch lasers through the cue sequence: L1, L2, L1, L2, both."""
+    active_indices: set[int] = set()
     pattern_last = 0.0
     delay = args.laser_delay
     phase_times = [
@@ -155,7 +155,7 @@ def run_sync_loop(
         *(cue - delay for cue in args.laser_cues),
         args.laser_window_end - delay,
     ]
-    laser_sequence = [0, 1, 0, 1, 1]
+    phase_lasers = [[0], [1], [0], [1], [0, 1]]
     stop_time = (
         phase_times[-1] + 0.5 if duration == 0.0 or args.stop_after_event else duration
     )
@@ -171,32 +171,24 @@ def run_sync_loop(
 
         if new_phase == -1:
             pass
-        elif new_phase == -2:
-            if active_laser is not None:
-                active_laser.off()
-                active_laser = None
-                logger.info("LASER EVENT END @ %.3f s", now_song)
-        elif new_phase != phase:
-            next_laser = bundle.lasers[laser_sequence[new_phase]]
-            if next_laser is not active_laser:
-                if active_laser is not None:
-                    active_laser.off()
-                active_laser = next_laser
-                active_laser.on()
-            else:
-                active_laser = next_laser
+        elif new_phase == -2 and active_indices:
+            for idx in active_indices:
+                bundle.lasers[idx].off()
+            active_indices.clear()
             phase = new_phase
-            logger.info(
-                "PHASE %d @ %.3f s: %s",
-                phase,
-                now_song,
-                active_laser.label,
-            )
+            logger.info("LASER EVENT END @ %.3f s", now_song)
+        elif new_phase >= 0 and new_phase != phase:
+            target = set(phase_lasers[new_phase])
+            for idx in active_indices - target:
+                bundle.lasers[idx].off()
+            for idx in target - active_indices:
+                bundle.lasers[idx].on()
+            active_indices = target
+            phase = new_phase
+            labels = [bundle.lasers[i].label for i in sorted(active_indices)]
+            logger.info("PHASE %d @ %.3f s: %s", phase, now_song, ", ".join(labels))
 
-        if (
-            active_laser is not None
-            and (now_song - pattern_last) >= args.pattern_interval
-        ):
+        if active_indices and (now_song - pattern_last) >= args.pattern_interval:
             run_pattern(
                 bundle.siggen,
                 now_song,
@@ -209,8 +201,8 @@ def run_sync_loop(
             break
         time.sleep(0.01 if args.dry_run and args.demo else 0.001)
 
-    if active_laser is not None:
-        active_laser.off()
+    for idx in active_indices:
+        bundle.lasers[idx].off()
 
 
 def parse_args() -> argparse.Namespace:
@@ -232,10 +224,10 @@ def parse_args() -> argparse.Namespace:
         "--yes", action="store_true", help="Acknowledge real laser emission and proceed"
     )
     parser.add_argument(
-        "--laser1-power", type=float, default=10.0, help="L1 (555 nm) power in mW"
+        "--laser1-power", type=float, default=100.0, help="L1 (555 nm) power in mW"
     )
     parser.add_argument(
-        "--laser2-power", type=float, default=10.0, help="L2 (647 nm) power in mW"
+        "--laser2-power", type=float, default=100.0, help="L2 (647 nm) power in mW"
     )
     parser.add_argument(
         "--laser-cues",
