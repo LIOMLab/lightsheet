@@ -20,6 +20,7 @@ time, so the fixture cannot be used inside ``skipif``.
 """
 
 import contextlib
+import gc as _gc
 import os
 import sys
 import types
@@ -321,32 +322,13 @@ _nidaqmx_is_stub: bool = getattr(sys.modules.get("nidaqmx"), "_lightsheet_stub",
 _pco_is_stub: bool = getattr(sys.modules.get("pco"), "_lightsheet_stub", False)
 
 
-# Garbage collection is disabled inside pytest-xdist workers. The xdist suite
-# previously showed intermittent worker hangs/segfaults at shutdown when
-# Python's cyclic GC ran while PySide6 QThreads and top-level widgets were
-# still being torn down, so GC stays off there as the conservative default.
-# The serial (single-process) run keeps GC enabled; the autouse Qt cleanup and
-# sessionfinish hooks explicitly call ``_gc.collect()`` after the deferred-delete
-# pump to bound the object graph and keep the serial run from slowing down.
-# We do NOT call os._exit() in pytest_sessionfinish — xdist workers must exit
-# normally to send coverage data back to the master.
-import gc as _gc  # noqa: E402
+# Cyclic GC stays enabled in both serial and xdist runs. The historical
+# signal-lambda reference cycle that caused mid-run segfaults is fixed
+# (wire_collaborators uses bound-method connections), and the per-test
+# autouse cleanup plus pytest_sessionfinish explicitly stop timers/threads,
+# close SDK handles, pump DeferredDelete, and call _gc.collect() so C++
+# objects are destroyed before the worker exits.
 
-if os.environ.get("PYTEST_XDIST_WORKER"):
-    _gc.disable()
-
-
-# GC is disabled in xdist workers (above) to prevent Qt widget destructor races
-# during worker shutdown. The autouse and sessionfinish cleanup hooks call
-# ``_gc.collect()`` manually after the deferred-delete pump in serial, so the
-# object graph stays bounded without the risk of automatic collection
-# mid-teardown. We do NOT re-enable it or call os._exit() in
-# pytest_sessionfinish — xdist workers must exit normally to send coverage
-# data back to the master. The historical signal-lambda reference cycle that
-# also contributed to mid-run segfaults is fixed (wire_collaborators uses
-# bound-method connections); GC disable here is the shutdown-time safety
-# belt, not the original root-cause mitigation.
-#
 # Root cause of the historical segfault (a real reference-cycle bug, now
 # fixed — see ROADMAP.md Phase 6 known issue): 53 `lambda: self._mc.<slot>()`
 # signal connections in Controller_MainWindow.__init__ each created a cycle

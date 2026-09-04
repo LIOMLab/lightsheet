@@ -304,10 +304,10 @@ bare `uv run pytest -q` (or `scripts/test.sh`).
     unnecessary. The `controller` fixture's finalizer and the autouse cleanup
     in `test/conftest.py` use `test/helpers/cleanup.py`
     (`_pump_deferred_delete`, `_quit_thread_draining`) to stop timers/threads
-    and reap C++ objects. `test/conftest.py` disables `gc` only inside
-    pytest-xdist workers to avoid Qt/shiboken destructor races during parallel
-    teardown; the serial run keeps GC enabled and the autouse/sessionfinish
-    cleanup explicitly collects after the deferred-delete pump.
+    and reap C++ objects. Cyclic GC now stays enabled in both serial and
+    xdist runs; the autouse and sessionfinish cleanup in `test/conftest.py`
+    call `_gc.collect()` after the deferred-delete pump so C++ objects are
+    destroyed before each worker exits.
     `scripts/coverage.sh` runs the default xdist invocation from
     `pyproject.toml` with `--cov=lightsheet --cov-branch` appended, uses a
     600 s hard timeout, and falls back to single-process collection on exit
