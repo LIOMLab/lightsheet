@@ -4,12 +4,11 @@ Plays a WAV file and drives the two lasers through a promotional sequence
 aligned to the "Laser" vocal hits in *Ray Volpe - Laserbeam (ÆON_MODE Remix)*.
 
 - 2 s before the first marker: L1 on with an interesting galvo/ETL pattern.
-- Just before the first marker: all lasers off.
-- At each of the four markers: a quick laser flash.
+- At each of the four markers the active laser alternates:
   - 1st: L1
   - 2nd: L2 (red)
   - 3rd: L1
-  - 4th: L1 + L2
+  - 4th: L2
 - Last 2 s: both L1 and L2 on.
 
 Use ``--demo`` to smoke-test the timing and patterns on macOS without hardware.
@@ -41,7 +40,7 @@ DEFAULT_WAV = "/Users/frans/Downloads/Ray Volpe - Laserbeam (ÆON_MODE Remix).wa
 DEFAULT_LASER_CUES = [44.89, 45.16, 46.30, 46.31]
 DEFAULT_LASER_PRE = 2.0
 DEFAULT_LASER_POST = 2.0
-DEFAULT_LASER_FLASH = 0.1
+DEFAULT_LASER_PULSE = 1.0
 
 
 def build_bundle(demo: bool) -> DeviceBundle:
@@ -160,45 +159,39 @@ def _phase_boundaries(args: argparse.Namespace) -> tuple[list[float], list[list[
     """Return sorted command boundaries and per-phase active-laser indices.
 
     ``phase_times[i]`` to ``phase_times[i + 1]`` uses ``phase_lasers[i]``.
-    Cues that are closer than ``laser_flash_dur`` are handled by clamping the
-    flash so it ends at the next cue.
+    The sequence alternates L1, L2, L1, L2, then both.  Each pulse lasts
+    ``laser_pulse_dur`` or until the next cue, whichever is first.
     """
     delay = args.laser_delay
     c = args.laser_cues
-    flash = args.laser_flash_dur
-    pre_end = c[0] - flash
-    flash1_end = min(c[0] + flash, c[1])
-    flash2_end = min(c[1] + flash, c[2])
-    flash3_end = min(c[2] + flash, c[3])
+    pulse = args.laser_pulse_dur
     event_start = c[0] - args.laser_pre_time - delay
-    event_end = c[3] + args.laser_post_time - delay
+    w1_end = min(c[0] + pulse, c[1]) - delay
+    w2_end = min(c[1] + pulse, c[2]) - delay
+    w3_end = min(c[2] + pulse, c[3]) - delay
+    w4_end = c[3] + pulse - delay
+    event_end = c[3] + pulse + args.laser_post_time - delay
 
-    starts = [
-        event_start,
-        pre_end - delay,
-        c[0] - delay,
-        flash1_end - delay,
-        c[1] - delay,
-        flash2_end - delay,
-        c[2] - delay,
-        flash3_end - delay,
-        c[3] - delay,
+    windows = [
+        (event_start, w1_end, [0]),  # pre + 1st marker: L1
+        (c[1] - delay, w2_end, [1]),  # 2nd marker: L2
+        (c[2] - delay, w3_end, [0]),  # 3rd marker: L1
+        (c[3] - delay, w4_end, [1]),  # 4th marker: L2
+        (w4_end, event_end, [0, 1]),  # post: both
     ]
-    lasers = [
-        [0],
-        [],
-        [0],
-        [],
-        [1],
-        [],
-        [0],
-        [],
-        [0, 1],
-    ]
-    paired = sorted(zip(starts, lasers, strict=True), key=lambda x: x[0])
-    phase_times = [p[0] for p in paired]
-    phase_lasers = [p[1] for p in paired]
-    phase_times.append(event_end)
+    windows = [(s, e, ls) for s, e, ls in windows if e > s]
+
+    boundaries = sorted({s for s, _, _ in windows} | {e for _, e, _ in windows})
+    phase_times = boundaries
+    phase_lasers: list[list[int]] = []
+    for i in range(len(phase_times) - 1):
+        t = phase_times[i]
+        active: list[int] = []
+        for s, e, ls in windows:
+            if s <= t < e:
+                active = ls
+                break
+        phase_lasers.append(active)
     return phase_times, phase_lasers
 
 
@@ -312,10 +305,10 @@ def parse_args() -> argparse.Namespace:
         help="Seconds both lasers stay on after the fourth marker flash",
     )
     parser.add_argument(
-        "--laser-flash-dur",
+        "--laser-pulse-dur",
         type=float,
-        default=DEFAULT_LASER_FLASH,
-        help="Duration (s) of each marker flash and the pre-marker off gap",
+        default=DEFAULT_LASER_PULSE,
+        help="Seconds each marker laser stays on (clamped to the next cue)",
     )
     parser.add_argument(
         "--laser-delay",
