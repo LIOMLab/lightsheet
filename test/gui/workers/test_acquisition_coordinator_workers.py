@@ -20,6 +20,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
+from PySide6.QtCore import QThread
 from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
@@ -780,6 +781,8 @@ def test_single_worker_multi_channel_both_frames(qtbot: QtBot) -> None:
     worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
     worker.camera.recorder_timeout_status = False
     worker.siggen.error = 0
+    # saving_allowed=True exercises the multi-channel enqueue path.
+    shell.saving_allowed = True
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -801,6 +804,11 @@ def test_single_worker_multi_channel_both_frames(qtbot: QtBot) -> None:
     assert (shell.reconstructed_frames[647] == 2).all()
     # reconstructed_frame is an alias equal to the last channel's frame.
     assert (shell.reconstructed_frame == 2).all()
+    # Both tagged frames are enqueued when saving is allowed.
+    assert shell._fs.enqueue_buffer.call_count == 2
+    enqueued = [c.args[0] for c in shell._fs.enqueue_buffer.call_args_list]
+    assert enqueued[0] == (0, shell.reconstructed_frames[555])
+    assert enqueued[1] == (1, shell.reconstructed_frames[647])
     # stop_lasers called at the end (safety — both off regardless).
     hw.stop_lasers.assert_called_once()
     # start_lasers NOT called in multi-channel branch
@@ -1502,6 +1510,21 @@ def test_live_worker_exception_in_cleanup_emits_message(qtbot: QtBot) -> None:
     assert len(finished_emits) == 1
 
 
+def test_live_worker_exception_in_etl_and_laser_cleanup(qtbot: QtBot) -> None:
+    """LiveWorker.run catches ETL and stop_lasers cleanup faults, emits a single
+    sig_message, and still emits finished exactly once."""
+    worker, shell, _hw = _make_live_worker(qtbot)
+    shell.live_mode_started = False
+    worker.siggen.update_etls = Mock(side_effect=RuntimeError("etl fault"))  # type: ignore[method-assign]
+    worker._hw.stop_lasers = Mock(side_effect=RuntimeError("stop_lasers fault"))  # type: ignore[method-assign]
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+    shell.sig_message.emit.assert_called_once()
+    assert "Live acquisition failed" in shell.sig_message.emit.call_args[0][0]
+    assert len(finished_emits) == 1
+
+
 def test_preview_worker_runs_one_frame_then_exits(qtbot: QtBot) -> None:
     """PreviewWorker.run with preview_mode_started=True executes one frame-grab
     iteration then exits when the started flag is cleared inside the loop."""
@@ -1523,4 +1546,206 @@ def test_preview_worker_runs_one_frame_then_exits(qtbot: QtBot) -> None:
     shell._fs.enqueue_frame.assert_called_once()
     hw.stop_lasers.assert_called_once()
     worker.camera.disarm()  # ensure disarm is reachable; already called in run
+    assert len(finished_emits) == 1
+
+
+def test_preview_worker_exception_in_cleanup_emits_message(qtbot: QtBot) -> None:
+    """PreviewWorker.run catches exceptions in cleanup, emits sig_message, and
+    still emits finished exactly once."""
+    worker, shell, _hw = _make_preview_worker(qtbot)
+    shell.preview_mode_started = False
+    worker._hw.stop_lasers = Mock(side_effect=RuntimeError("stop_lasers fault"))  # type: ignore[method-assign]
+    worker.camera.disarm = Mock(side_effect=RuntimeError("disarm fault"))  # type: ignore[method-assign]
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+    shell.sig_message.emit.assert_called_once()
+    assert "Preview acquisition failed" in shell.sig_message.emit.call_args[0][0]
+    assert len(finished_emits) == 1
+
+
+def test_single_worker_exception_in_cleanup_emits_message(qtbot: QtBot) -> None:
+    """SingleWorker.run catches exceptions in cleanup, emits sig_message, and
+    still emits finished exactly once."""
+    worker, shell, _hw = _make_single_worker(qtbot)
+    worker.siggen.update_etls = Mock(side_effect=RuntimeError("etl fault"))  # type: ignore[method-assign]
+    worker._hw.stop_lasers = Mock(side_effect=RuntimeError("stop_lasers fault"))  # type: ignore[method-assign]
+    worker.camera.disarm = Mock(side_effect=RuntimeError("disarm fault"))  # type: ignore[method-assign]
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+    shell.sig_message.emit.assert_called_once()
+    assert "Single image acquisition failed" in shell.sig_message.emit.call_args[0][0]
+    assert len(finished_emits) == 1
+
+
+# -- coverage gap closure for preview_live_single.py ------------------------
+
+
+def _patch_qthread_interrupt(values: list[bool]) -> Any:
+    """Patch QThread.currentThread().isInterruptionRequested() to the
+    given sequence of return values."""
+    fake_thread = Mock()
+    fake_thread.isInterruptionRequested.side_effect = values
+    return patch.object(QThread, "currentThread", return_value=fake_thread)
+
+
+# PreviewWorker branches
+
+
+def test_preview_worker_interruption_breaks_at_loop_top(qtbot: QtBot) -> None:
+    """PreviewWorker.run breaks on QThread.isInterruptionRequested() at the
+    top of the frame loop (line 118)."""
+    worker, shell, hw = _make_preview_worker(qtbot)
+    shell.preview_mode_started = True
+    shell.estop_event.is_set.return_value = False
+    with _patch_qthread_interrupt([True]):
+        worker.run()
+    hw.stop_lasers.assert_called_once()
+
+
+def test_preview_worker_estop_breaks_in_loop(qtbot: QtBot) -> None:
+    """PreviewWorker.run breaks on estop_event set inside the frame loop
+    (line 132)."""
+    worker, shell, hw = _make_preview_worker(qtbot)
+    shell.preview_mode_started = True
+    shell.estop_event.is_set.side_effect = [False, True]
+    with _patch_qthread_interrupt([False]):
+        worker.run()
+    hw.stop_lasers.assert_called_once()
+
+
+def test_preview_worker_interruption_after_start_recorder(qtbot: QtBot) -> None:
+    """PreviewWorker.run breaks on QThread.isInterruptionRequested() after
+    camera.start_recorder() (line 140)."""
+    worker, shell, hw = _make_preview_worker(qtbot)
+    shell.preview_mode_started = True
+    shell.estop_event.is_set.side_effect = [False, False]
+    with _patch_qthread_interrupt([False, True]):
+        worker.run()
+    hw.stop_lasers.assert_called_once()
+
+
+# LiveWorker branches
+
+
+def test_live_worker_interruption_breaks_at_loop_top(qtbot: QtBot) -> None:
+    """LiveWorker.run breaks on QThread.isInterruptionRequested() at the top
+    of the scan loop (line 265)."""
+    worker, shell, hw = _make_live_worker(qtbot)
+    shell.live_mode_started = True
+    shell.estop_event.is_set.return_value = False
+    with _patch_qthread_interrupt([True]):
+        worker.run()
+    hw.stop_lasers.assert_called_once()
+
+
+def test_live_worker_estop_breaks_in_loop(qtbot: QtBot) -> None:
+    """LiveWorker.run breaks on estop_event set inside the scan loop
+    (line 272)."""
+    worker, shell, hw = _make_live_worker(qtbot)
+    shell.live_mode_started = True
+    shell.estop_event.is_set.side_effect = [False, True]
+    with _patch_qthread_interrupt([False]):
+        worker.run()
+    hw.stop_lasers.assert_called_once()
+
+
+def test_live_worker_exception_in_start_lasers_emits_message(qtbot: QtBot) -> None:
+    """LiveWorker.run catches exceptions in the body (start_lasers failure),
+    emits sig_message (lines 282-286), and still emits finished."""
+    worker, shell, _hw = _make_live_worker(qtbot)
+    shell.live_mode_started = False
+    worker._hw.start_lasers = Mock(side_effect=RuntimeError("laser fault"))  # type: ignore[method-assign]
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+    shell.sig_message.emit.assert_called_once()
+    assert "Live acquisition failed" in shell.sig_message.emit.call_args[0][0]
+    assert len(finished_emits) == 1
+
+
+# SingleWorker branches
+
+
+def test_single_worker_interruption_at_start_returns(qtbot: QtBot) -> None:
+    """SingleWorker.run returns immediately on QThread.isInterruptionRequested()
+    before the acquisition starts (line 378)."""
+    worker, shell, hw = _make_single_worker(qtbot)
+    with _patch_qthread_interrupt([True]):
+        worker.run()
+    hw.stop_lasers.assert_called_once()
+    shell.sig_message.emit.assert_not_called()
+
+
+def test_single_worker_estop_after_start_lasers_returns(qtbot: QtBot) -> None:
+    """SingleWorker.run (single-channel) returns on estop after start_lasers
+    (line 488)."""
+    worker, shell, hw = _make_single_worker(qtbot)
+    shell.estop_event.is_set.side_effect = [False, True]
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+    hw.start_lasers.assert_called_once()
+    hw.stop_lasers.assert_called_once()
+    assert len(finished_emits) == 1
+
+
+# SingleWorker multi-channel branches
+
+
+def test_single_worker_multi_channel_estop_after_select_laser0(qtbot: QtBot) -> None:
+    """SingleWorker.run (multi-channel) returns on estop after select_laser(0)
+    (line 417)."""
+    worker, shell, hw = _make_single_worker_multi(qtbot, multi_channel=True)
+    shell.estop_event.is_set.return_value = True
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+    hw.select_laser.assert_called_once_with(0)
+    hw.stop_lasers.assert_called_once()
+    assert len(finished_emits) == 1
+
+
+def test_single_worker_multi_channel_second_acquire_fails(qtbot: QtBot) -> None:
+    """SingleWorker.run (multi-channel) returns when the second channel's
+    acquire_scan fails (line 436)."""
+    worker, shell, hw = _make_single_worker_multi(qtbot, multi_channel=True)
+    shell.estop_event.is_set.return_value = False
+    worker.acquire_scan = Mock(side_effect=[True, False])  # type: ignore[method-assign]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+    assert hw.select_laser.call_count == 2
+    assert worker.acquire_scan.call_count == 2
+    hw.stop_lasers.assert_called_once()
+    assert len(finished_emits) == 1
+
+
+def test_single_worker_multi_channel_none_frames_skips_enqueue(qtbot: QtBot) -> None:
+    """SingleWorker.run (multi-channel) skips enqueue when both channel
+    frames are None (branches 450->452 and 452->462)."""
+    worker, shell, hw = _make_single_worker_multi(qtbot, multi_channel=True)
+    shell.saving_allowed = True
+    shell.estop_event.is_set.return_value = False
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    def _fake_acquire_scan() -> bool:
+        # Succeed but leave no frame data so frame1/frame2 are None.
+        shell.reconstructed_frame = None
+        return True
+
+    acquire_mock = Mock(side_effect=_fake_acquire_scan)
+    worker.acquire_scan = acquire_mock  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+
+    assert acquire_mock.call_count == 2
+    assert shell.reconstructed_frames == {}
+    shell._fs.enqueue_buffer.assert_not_called()
+    hw.stop_lasers.assert_called_once()
     assert len(finished_emits) == 1

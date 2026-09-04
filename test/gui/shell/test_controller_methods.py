@@ -421,6 +421,9 @@ def test_updateUi_stack_mode_button_start_valid(
     ctrl = controller
     ctrl.stack_mode_started = False
     ctrl.saving_allowed = True
+    ctrl.save_directory = "/tmp"
+    ctrl.save_filename = "test"
+    ctrl.save_panel.ui.lineEdit_saveFilename.setText("test")
     ctrl.stack_starting_plane = 0.0
     ctrl.stack_ending_plane = 100.0
     ctrl.stack_first_plane_set = True
@@ -454,6 +457,9 @@ def test_updateUi_stack_mode_button_start_reverse_direction(
     ctrl = controller
     ctrl.stack_mode_started = False
     ctrl.saving_allowed = True
+    ctrl.save_directory = "/tmp"
+    ctrl.save_filename = "test"
+    ctrl.save_panel.ui.lineEdit_saveFilename.setText("test")
     ctrl.stack_starting_plane = 100.0
     ctrl.stack_ending_plane = 0.0
     ctrl.stack_first_plane_set = True
@@ -482,9 +488,31 @@ def test_updateUi_stack_mode_button_start_nosave_yes(
     with patch("lightsheet.gui.panels.acquisition_panel.QMessageBox") as MockMsg:
         MockMsg.Yes = 1
         MockMsg.No = 0
-        MockMsg.question.return_value = MockMsg.Yes
+        MockMsg.StandardButton.Yes = 1
+        MockMsg.StandardButton.No = 0
+        MockMsg.question.return_value = MockMsg.StandardButton.Yes
         ctrl.acquisition_panel.updateUi_stack_mode_button()
     assert ctrl.stack_mode_started is True
+
+def test_updateUi_stack_mode_button_start_nosave_no(
+    controller: Controller_MainWindow,
+) -> None:
+    ctrl = controller
+    ctrl.stack_mode_started = False
+    ctrl.saving_allowed = False
+    ctrl.stack_starting_plane = 0.0
+    ctrl.stack_ending_plane = 100.0
+    ctrl.stack_first_plane_set = True
+    ctrl.stack_last_plane_set = True
+    ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
+    with patch("lightsheet.gui.panels.acquisition_panel.QMessageBox") as MockMsg:
+        MockMsg.Yes = 1
+        MockMsg.No = 0
+        MockMsg.StandardButton.Yes = 1
+        MockMsg.StandardButton.No = 0
+        MockMsg.question.return_value = MockMsg.StandardButton.No
+        ctrl.acquisition_panel.updateUi_stack_mode_button()
+    assert ctrl.stack_mode_started is False
 
 # -- validate_file_name -----------------------------------------------------
 
