@@ -62,19 +62,14 @@ class _StackAdaptiveMixin:
         # write failure must not skip the camera exposure for this plane
         # (the next plane's loop-top E-stop poll is the abort point).
         #
-        # In Lightsheet shutter mode the adaptive exposure bounds are in
-        # microseconds (line times), so the requested exposure_s is
-        # typically sub-millisecond. The set_exposure_time interface takes
-        # an integer millisecond value, and int() truncates toward zero —
-        # int(1e-6 * 1000) == 0 — which would write 0 ms every plane and
-        # effectively disable the exposure actuator. Round to the nearest
-        # ms and clamp to a minimum of 1 ms so a sub-ms Lightsheet exposure
-        # is never silently dropped to zero. The Rolling path is unchanged
-        # (exposures are 1-1000 ms, all >= 1 after truncation).
+        # In Lightsheet shutter mode the integration time is fixed by the
+        # DAQ waveform (lightsheet_line_time * lightsheet_exposed_lines);
+        # calling set_exposure_time per plane changes the PCO delay/exposure
+        # register and breaks the external-trigger timing. Skip the write so
+        # the adaptive loop is power-only in Lightsheet. For Rolling/Global
+        # the exposure is still the active actuator.
         shutter_mode = getattr(self.camera, "shutter_mode", "Rolling")
-        if shutter_mode == "Lightsheet":
-            self.camera.set_exposure_time(max(1, round(cmd.exposure_s * 1000)))
-        else:
+        if shutter_mode != "Lightsheet":
             self.camera.set_exposure_time(max(1, int(cmd.exposure_s * 1000)))
         # Write laser powers through the safe HAL paths. The percent is
         # computed from the command's mW value and the laser's max_power.

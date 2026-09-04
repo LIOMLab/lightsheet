@@ -7,6 +7,7 @@ planes, acquires scans, and saves frames. Adaptive/focus helpers live in
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from typing import TYPE_CHECKING
 
@@ -347,6 +348,18 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             self._adaptive_controller = None
             self._adaptive_current_cmd = None
             if self._adaptive_cfg is not None and self._adaptive_cfg.enabled:
+                if getattr(self.camera, "shutter_mode", "Rolling") == "Lightsheet":
+                    # In Lightsheet mode the integration time is set by the
+                    # DAQ waveform, not by per-plane set_exposure_time. Lock
+                    # the adaptive exposure bounds to the current camera value
+                    # so the controller uses only laser power as the actuator.
+                    fixed_exposure_s = self.camera.exposure_time
+                    self._adaptive_cfg = dataclasses.replace(
+                        self._adaptive_cfg,
+                        min_exposure_s=fixed_exposure_s,
+                        max_exposure_s=fixed_exposure_s,
+                    )
+
                 from lightsheet.adaptive.controller import AdaptiveController
 
                 self._adaptive_controller = AdaptiveController(
