@@ -168,10 +168,13 @@ bash scripts/test.sh test/test_foo.py::test_bar   # xdist, one test
 ```
 
 **WARNING — never override `addopts`.** xdist is the default via `addopts`
-in `pyproject.toml` (`-n auto --maxprocesses=8 --dist=load
---max-worker-restart=0`). Any `addopts` override silently strips the xdist
-flags and drops to single-process — a ~2-3x slowdown (~98s → ~3-4 min) that is
-invisible on a single test but catastrophic on the full suite. The trap:
+in `pyproject.toml` (`-ra --strict-markers -n auto --dist=loadscope
+--max-worker-restart=0`). The worker count cap is set by the repo-root
+`conftest.py` (`pytest_configure`) so xdist sees it before command-line
+parsing: 8 workers on a dev machine, 14 on the rig (`LIGHTSHEET_HW=1`). Any
+`addopts` override silently strips the xdist flags and drops to single-process
+— a ~2-3x slowdown (~98s → ~3-4 min) that is invisible on a single test but
+catastrophic on the full suite. The trap:
 
 | Command | xdist? | Why |
 |---|---|---|
@@ -201,17 +204,19 @@ bare `uv run pytest -q` (or `scripts/test.sh`).
   break this gating.
 - pytest config lives in `pyproject.toml` under `[tool.pytest.ini_options]`
   (`testpaths = ["test"]`, `python_files = ["test_*.py"]`, `minversion = "9.1"`,
-  and `addopts` as a list: `-ra --strict-markers -n auto --maxprocesses=8
-  --dist=load --max-worker-restart=0` for parallel execution via pytest-xdist).
-  `--maxprocesses=8` caps workers on the dev machine to bound PySide6 worker
-  memory; `test/conftest.py` raises the cap to 14 when `LIGHTSHEET_HW=1` on the
-  rig. `--max-worker-restart=0` disables silent worker-restart-on-crash so
-  a segfaulted worker's tests surface as failures instead of being hidden
-  (lightsheet has a known shutdown segfault — see the segfault note below);
-  `--dist=load` is the explicit xdist distribution mode (`xdist_group` still
-  works under any dist mode). Only `test_*.py` files under `test/` are
-  collected (recursively in `test/core/`, `test/hal/`, `test/focus/`,
-  `test/adaptive/`, `test/gui/`, `test/main/`, `test/shared/`, etc.).
+  and `addopts` as a list: `-ra --strict-markers -n auto --dist=loadscope
+  --max-worker-restart=0` for parallel execution via pytest-xdist). The worker
+  cap is set by the repo-root `conftest.py` (`pytest_configure`): 8 on a dev
+  machine, 14 on the rig (`LIGHTSHEET_HW=1`). This bounds PySide6 worker memory
+  on macOS and lets the rig use more workers. `--max-worker-restart=0`
+  disables silent worker-restart-on-crash so a segfaulted worker's tests surface
+  as failures instead of being hidden (lightsheet has a known shutdown segfault
+  — see the segfault note below); `--dist=loadscope` is the explicit xdist
+  distribution mode (keeps each module's tests on one worker; the `xdist_group`
+  marker in `pyproject.toml` can still group hardware-heavy tests). Only
+  `test_*.py` files under `test/` are collected (recursively in `test/core/`,
+  `test/hal/`, `test/focus/`, `test/adaptive/`, `test/gui/`, `test/main/`,
+  `test/shared/`, etc.).
 - **Marker + parametrize dual contract** (rig/mock/slow markers registered in
   `pyproject.toml` under `[tool.pytest.ini_options].markers`, enforced by
   `--strict-markers` so a typo'd marker fails at collection). Two complementary
@@ -234,9 +239,11 @@ bare `uv run pytest -q` (or `scripts/test.sh`).
     `LIGHTSHEET_HW=1`), `mock` (mock-only path, default on a dev machine), `slow`
     (auto-deselected from fast iteration by convention).
 - **Fixture and helper packages** (resolved via `pythonpath = ["test"]` in
-  `pyproject.toml`). Pytest fixtures live in `test/fixtures/`; shared
-  construction helpers and Qt cleanup helpers live in `test/helpers/`. Do not
-  re-inline the real-construction setup:
+  `pyproject.toml`, plus a repo-root `conftest.py` that sets the xdist worker
+  cap and re-exports `_nidaqmx_is_stub` / `_pco_is_stub` from `test.conftest`).
+  Pytest fixtures live in `test/fixtures/`; shared construction helpers and Qt
+  cleanup helpers live in `test/helpers/`. Do not re-inline the real-construction
+  setup:
   - `test/fixtures/controller.py` registers the `controller` and `bundle`
     fixtures via `pytest_plugins` in `test/conftest.py`. Tests use them by
     name in the function signature and import `Controller_MainWindow` and
@@ -261,6 +268,10 @@ bare `uv run pytest -q` (or `scripts/test.sh`).
   - Import plain helpers directly when needed:
     `from test.helpers.factories import make_bundle` and
     `from test.helpers.cleanup import _pump_deferred_delete, _quit_thread_draining`.
+    `_quit_thread_draining` calls `requestInterruption()` before `quit()` and
+    pumps the event loop while `wait()`-ing, so worker `run()` loops that check
+    `QThread.currentThread().isInterruptionRequested()` exit promptly during
+    teardown.
   - **Why real construction, not exec-against-Mock:** the previous
     `_load_method` exec pattern (extract the method source, `exec` it in a
     controlled namespace, call against a `Mock` stand-in `self`) produced 0%
@@ -285,31 +296,31 @@ bare `uv run pytest -q` (or `scripts/test.sh`).
     mid-construction of the next controller and segfaulted. **This cycle is
     now broken at the connection layer:** `wire_collaborators()` (added in
     the Phase 6 threading migration) uses bare bound-method connections,
-    which the signal system decomposes into weakref(`__self__`) +
-    strong(`__func__`) — the signal system holds zero strong refs to the
-    controller after disconnect, so the wrapper reaches refcount zero
-    naturally. The per-test `pytest_runtest_teardown` hook that `sip.delete`d
-    every top-level QWidget, and the old `make_controller` fixture's
-    `sip.delete` teardown, are both removed — the cycle break makes them
-    unnecessary. The fixtures' finalizer and `test/conftest.py`'s autouse
-    cleanup use `test/helpers/cleanup.py` (`_pump_deferred_delete`,
-    `_quit_thread_draining`) to stop timers/threads and reap C++ objects. `conftest.py` now disables `gc` only inside pytest-xdist workers
-    to avoid Qt/shiboken destructor races during parallel teardown; the
-    serial run keeps GC enabled and the autouse/sessionfinish cleanup
-    explicitly collects after the deferred-delete pump. `scripts/coverage.sh`
-    runs xdist-parallel (`-n auto --maxprocesses=8` in its `-o addopts`
-    override) with a 10-minute hard timeout and falls back to single-process
-    collection on any non-zero xdist exit (hang, worker segfault, or test
-    failure) so the gate completes reliably. A separate
-    shutdown-time `QApplication` teardown segfault was historical under the
-    legacy Qt5/sip binding; whether it still applies under PySide6/shiboken
-    is unverified — do not assert it as current. It fires AFTER coverage
-    data is written so it
-    does not affect the gate either way.
+    which PySide6 decomposes into a strong ref to `__func__` released on
+    disconnect — the signal system holds zero strong refs to the controller
+    after disconnect, so the wrapper reaches refcount zero naturally. The
+    per-test `pytest_runtest_teardown` hook and the old fixture's
+    `sip.delete` teardown are both removed — the cycle break makes them
+    unnecessary. The `controller` fixture's finalizer and the autouse cleanup
+    in `test/conftest.py` use `test/helpers/cleanup.py`
+    (`_pump_deferred_delete`, `_quit_thread_draining`) to stop timers/threads
+    and reap C++ objects. `test/conftest.py` disables `gc` only inside
+    pytest-xdist workers to avoid Qt/shiboken destructor races during parallel
+    teardown; the serial run keeps GC enabled and the autouse/sessionfinish
+    cleanup explicitly collects after the deferred-delete pump.
+    `scripts/coverage.sh` runs the default xdist invocation from
+    `pyproject.toml` with `--cov=lightsheet --cov-branch` appended, uses a
+    600 s hard timeout, and falls back to single-process collection on exit
+    124/137/139 (timeout, SIGKILL, worker segfault) so the gate completes
+    reliably. A separate shutdown-time `QApplication` teardown segfault was
+    historical under the legacy Qt5/sip binding; whether it still applies
+    under PySide6/shiboken is unverified — do not assert it as current. It
+    fires AFTER coverage data is written so it does not affect the gate
+    either way.
 - **Coverage-gate invocation** (`bash scripts/coverage.sh`) runs the explicit
-  3-step gate: `pytest --cov=lightsheet --cov-branch --cov-fail-under=70` →
-  `coverage json` → `coverage-threshold`. It is NOT part of the fast
-  `uv run pytest -q` iteration path (that stays snappy, no `--cov`).
+  coverage gate: `pytest --cov=lightsheet --cov-branch` → `coverage report
+  --fail-under=70` → `coverage json` → `coverage-threshold`. It is NOT part of
+  the fast `uv run pytest -q` iteration path (that stays snappy, no `--cov`).
   Run it before committing a change that touches a safety-critical module
   (see §2), and before any high-risk refactor — the gate exists to protect
   safety-critical modules and high-risk structural work. The completed Phase 6
@@ -345,7 +356,7 @@ bare `uv run pytest -q` (or `scripts/test.sh`).
     `updateUi_estop_pressed` warn branch (the E-stop laser-off failure path
     that emits a per-laser "STILL BE ON" warning when an `off()` returns
     `error`) is behavior-tested, but is gate-enforced only at the 80%
-    `controller.py` default tier, NOT at 100%. `controller.py` is ~1451 lines
+    `controller.py` default tier, NOT at 100%. `controller.py` is ~2360 lines
     (`lightsheet/gui/shell/controller.py`) with Qt-unreachable code
     (constructors, slot wiring, UI refresh), making 100% module-wide branch
     coverage impractical. The 100% gate enforcement applies ONLY to the 3 HAL
@@ -520,7 +531,7 @@ lightsheet/                    importable package (importable as `lightsheet`)
     __init__.py                empty (package marker)
     shell/                     the UI shell — composition-root-facing controller + generated UI
       __init__.py              empty (package marker)
-      controller.py            Controller_MainWindow — a THIN UI-WIRING SHELL (~1451 lines).
+      controller.py            Controller_MainWindow — a THIN UI-WIRING SHELL (~2360 lines).
                                Holds `self._bundle` + `self.lasers`, wires Qt signals/slots,
                                owns the E-stop kill path (stays in the shell by design), and
                                delegates all real work to the 4 collaborators via `self._fs` /
@@ -536,7 +547,9 @@ lightsheet/                    importable package (importable as `lightsheet`)
       acquisition_coordinator.py AcquisitionCoordinator — plain-Python (NOT QObject). Owns the
                                galvo/ETL/camera-setting updateUi_* slots and the D-05 auto-laser
                                fold (start_lasers after arm, stop_lasers before disarm). The
-                               4 acquisition worker BODIES moved OUT to gui/workers.py.
+                               4 acquisition worker BODIES moved OUT to the
+                               `lightsheet/gui/workers/` package (`preview_live_single.py`,
+                               `stack.py`, `scan_mixin.py`, `stack_adaptive.py`).
       hardware_manager.py      HardwareManager — plain-Python. Owns laser write/toggle/poll/
                                readback (start_lasers/stop_lasers/_toggle_laser*/_write_laser*
                                _power/_poll_laser*_status/_refresh_laser_readback) and
@@ -602,8 +615,9 @@ lightsheet/                    importable package (importable as `lightsheet`)
     __init__.py                barrel re-export shim (the deliberate exception to no-barrel-files).
                                DeviceRegistry/UnresolvedDeviceError are lazily exported via
                                __getattr__ so importing the barrel on the --demo path does NOT
-                               pull in pyserial. __all__ now includes IPowerMeter, MockPowerMeter,
-                               PM100D, PM100DError, PM100DNotConnected.
+                               pull in pyserial. `__all__` now includes `IPowerMeter`,
+                               `MockPowerMeter`, `PM100D`, `PM100DError`, `PM100DNotConnected`,
+                               plus `DAQLaser` re-exports `InvertedVoltMap` / `LinearVoltMap`.
     interfaces.py              pure-abc HAL contracts (layered IXxxCore/IXxx + unified ILaser).
                                IPowerMeter (read-only optical power ABC) around line 778 —
                                NOT part of DeviceBundle (calibration-only, see §10).
@@ -682,7 +696,7 @@ root — do not construct collaborators or HAL instances anywhere else (see
 `frame_saver_controller.py` / `motor_controller.py` / `properties_dialog.py`
 layout was reorganized (phase 7.1 / 8.1) into the
 `gui/{shell,coordinators,panels,widgets}` tree above; the shell controller is
-now `lightsheet/gui/shell/controller.py` (~1451 lines).
+now `lightsheet/gui/shell/controller.py` (~2360 lines).
 
 **GUI layout convention:** `docs/gui-layout-convention.md` is the
 authoritative layout convention for the left-rail + QStackedWidget shell
@@ -996,14 +1010,16 @@ startup. Re-export both backends + `IPowerMeter` through the
   `lightsheet/gui/workers/scan_mixin.py` (`_AcquireScanMixin`). Each worker is a
   `QObject` + `QThread` + `moveToThread`. Do NOT join the worker
   from the toggle slot — just clear the flag; the worker polls it and exits on
-  its own. The worker polls the flag for cancellation and `estop_event.is_set()`
-  for E-stop at the top of each iteration, and is wrapped in
+  its own. The worker polls the `*_mode_started` flag for cancellation,
+  `estop_event.is_set()` for E-stop, and `QThread.currentThread().isInterruptionRequested()`
+  for cooperative teardown at the top of each iteration. It is wrapped in
   `try / except Exception as e: / finally:` — the `except` emits a cause message
   via `sig_message` and logs the traceback via `logger.exception` so no worker
-  death is silent, and the `finally` emits `sig_*_mode_finished` exactly once so
-  the UI always re-enables. The `updateUi_post_*_mode` slot re-enables UI. The
-  shell slot just samples state, constructs the worker + thread, and wires the
-  finished signal → re-enable.
+  death is silent, and the `finally` de-energizes hardware (ETLs to standby,
+  `stop_lasers()`, `camera.disarm()`, stop saving if it was started) before
+  emitting `sig_*_mode_finished` exactly once. The `updateUi_post_*_mode` slot
+  re-enables UI. The shell slot just samples state, constructs the worker +
+  thread, and wires the finished signal → re-enable.
 - **Laser power write path**: operator edits
   `doubleSpinBox_laser*Amplitude` → `updateUi_laser*_amplitude` restarts a
   300 ms debounce `QTimer` → `_apply_laser*_amplitude` (GUI thread) spawns a
@@ -1039,18 +1055,18 @@ startup. Re-export both backends + `IPowerMeter` through the
 
 ## 12. Code style
 
-- 4-space indent. Ruff is configured (`[tool.ruff]` in `pyproject.toml`) for
-  lint + format; run it via `uv run ruff check` and `uv run ruff format`. Ty
-  is configured for type-checking (`[tool.ty]`); run via `uv run ty check`.
-  No black/flake8/mypy.
-- Ruff `select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "ANN"]`,
+- 4-space indent. Ruff is configured (`[tool.ruff]` / `[tool.ruff.lint]` in
+  `pyproject.toml`) for lint + format; run it via `uv run ruff check` and
+  `uv run ruff format`. Ty is configured for type-checking (`[tool.ty]`);
+  run via `uv run ty check`. No black/flake8/mypy.
+- Ruff `select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "ANN", "PTH"]`,
   `ignore = ["ANN401"]`. `extend-exclude` skips the generated UI files
   (`lightsheet/gui/shell/ui_shell.py`, the per-panel `ui_*_panel.py` /
   `ui_*_panel_rc.py`, `ui_properties.py`) and legacy manual scripts in
-  `test/`. `lightsheet/__main__.py` gets `E402` ignored (deferred PySide6
-  imports after the nicaiu preload). `# noqa: RUF012` on class-level mutable
-  `_cfg_defaults` templates. `# ty: ignore[invalid-assignment]` for
-  `cfg.optionxform = str`.
+  `test/`. `lightsheet/__main__.py` gets `E402` ignored in
+  `[tool.ruff.lint.per-file-ignores]` (deferred PySide6 imports after the
+  nicaiu preload). `# noqa: RUF012` on class-level mutable `_cfg_defaults`
+  templates. `# ty: ignore[invalid-assignment]` for `cfg.optionxform = str`.
 - Ty: `missing-type-argument = "error"`, `unsound-return-statement = "error"`,
   `error-on-warning = true`.
 - Match the surrounding style. In `cfg_load_ini` / `cfg_save_ini` blocks, the
