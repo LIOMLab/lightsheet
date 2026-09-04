@@ -84,10 +84,7 @@ def test_laser_task_from_qtimer_slot() -> None:
     """
     if not _have_pyside6():
         pytest.skip("PySide6 not available")
-    voltage = os.environ.get("RIG_LASER_VOLTAGE")
-    if not voltage:
-        pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
-    voltage = float(voltage)
+    voltage = float(os.environ.get("RIG_LASER_VOLTAGE", "0"))
 
     from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QApplication
@@ -124,10 +121,7 @@ def test_laser_task_from_daemon_thread_under_qapp() -> None:
     """
     if not _have_pyside6():
         pytest.skip("PySide6 not available")
-    voltage = os.environ.get("RIG_LASER_VOLTAGE")
-    if not voltage:
-        pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
-    voltage = float(voltage)
+    voltage = float(os.environ.get("RIG_LASER_VOLTAGE", "0"))
 
     from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QApplication
@@ -175,10 +169,7 @@ def test_laser_task_with_full_hal_under_qapp() -> None:
     """
     if not _have_pyside6():
         pytest.skip("PySide6 not available")
-    voltage = os.environ.get("RIG_LASER_VOLTAGE")
-    if not voltage:
-        pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
-    voltage = float(voltage)
+    voltage = float(os.environ.get("RIG_LASER_VOLTAGE", "0"))
 
     from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QApplication

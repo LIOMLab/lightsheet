@@ -107,9 +107,10 @@ fi
 
 # 124 = timeout fired (xdist hung); 137 = SIGKILL'd after --kill-after;
 # 139 = worker segfaulted during xdist shutdown. Fall back to single-process
-# in any of these cases — the combined .coverage data may be incomplete or
-# the worker may not have flushed its segment.
-if [ "${_pytest_exit:-0}" != "0" ]; then
+# ONLY in those cases — the combined .coverage data may be incomplete or
+# the worker may not have flushed its segment. Test failures (exit 1) should
+# not trigger a slow serial re-run; they are reported immediately.
+if [ "${_pytest_exit:-0}" -eq 124 ] || [ "${_pytest_exit:-0}" -eq 137 ] || [ "${_pytest_exit:-0}" -eq 139 ]; then
   echo "coverage.sh: xdist coverage run aborted (exit ${_pytest_exit}); falling back to single-process" >&2
   _pytest_exit=0
   _run_cov_serial || _pytest_exit=$?

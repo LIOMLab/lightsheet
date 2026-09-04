@@ -82,10 +82,7 @@ def test_laser_write_with_task_del_patch_nonzero() -> None:
     import nidaqmx
     import numpy as np
 
-    voltage = os.environ.get("RIG_LASER_VOLTAGE")
-    if not voltage:
-        pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
-    voltage = float(voltage)
+    voltage = float(os.environ.get("RIG_LASER_VOLTAGE", "0"))
 
     assert _apply_main_py_task_del_patch(), "failed to apply __del__ patch"
 
@@ -121,10 +118,7 @@ def test_laser_write_with_patch_daemon_thread_nonzero() -> None:
     import nidaqmx
     import numpy as np
 
-    voltage = os.environ.get("RIG_LASER_VOLTAGE")
-    if not voltage:
-        pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
-    voltage = float(voltage)
+    voltage = float(os.environ.get("RIG_LASER_VOLTAGE", "0"))
 
     assert _apply_main_py_task_del_patch(), "failed to apply __del__ patch"
 

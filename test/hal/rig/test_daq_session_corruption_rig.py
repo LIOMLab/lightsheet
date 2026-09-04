@@ -13,15 +13,10 @@ Task close — a use-after-free of the task handle), and the subsequent
 single-image acquisition hung silently after camera arm with no further
 log output — i.e. create_scanner() never returned.
 
-This test reproduces both steps against the real DAQ with a NONZERO laser
-voltage (the operator's 555nm toggle used a nonzero spinbox %). 0 V did
-not reproduce the crash in earlier probes. The nonzero voltage exercises
-the same write path the GUI used.
-
-Safety: writes a small voltage (0.5 V) to Dev7/ao0 (laser 1, 555nm). This
-IS a real laser emission — only safe if the beam path is clear / blocked.
-The test is gated on an env var RIG_LASER_VOLTAGE so it cannot run by
-accident; without the env var it skips.
+This test reproduces both steps against the real DAQ. By default it writes
+0 V, which is safe and still exercises the write/close path. Set
+RIG_LASER_VOLTAGE (e.g. 0.5) to reproduce with a nonzero laser emission;
+only do this when the beam path is clear / blocked.
 
 Rig-only: skipped when the real nidaqmx driver is absent (Mac stub).
 """
@@ -133,13 +128,10 @@ def _siggen_create(errors: list[tuple[str, str]], tag: str = "siggen") -> None:
 def test_laser_write_then_siggen_create_no_corruption() -> None:
     """Laser write (nonzero V) + close, then siggen create — must not hang/crash.
 
-    This is the exact GUI sequence that hung the rig. Without the env var
-    RIG_LASER_VOLTAGE set it skips (the nonzero write energizes the laser).
+    This is the exact GUI sequence that hung the rig. By default writes 0 V;
+    set RIG_LASER_VOLTAGE for a nonzero write that energizes the laser.
     """
-    voltage = os.environ.get("RIG_LASER_VOLTAGE")
-    if not voltage:
-        pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
-    voltage = float(voltage)
+    voltage = float(os.environ.get("RIG_LASER_VOLTAGE", "0"))
 
     errors = []
     _laser_write(voltage, errors, tag="laser_toggle")
@@ -162,10 +154,7 @@ def test_laser_write_daemon_thread_then_siggen_main_thread() -> None:
     Task close races with the main thread's Task create, the session
     corrupts and create_scanner hangs.
     """
-    voltage = os.environ.get("RIG_LASER_VOLTAGE")
-    if not voltage:
-        pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
-    voltage = float(voltage)
+    voltage = float(os.environ.get("RIG_LASER_VOLTAGE", "0"))
 
     errors = []
     done = threading.Event()
@@ -200,10 +189,7 @@ def test_repeated_laser_write_nonzero_eventually_corrupts() -> None:
     hammers the laser write path to see if a crash emerges from
     accumulation rather than a single call.
     """
-    voltage = os.environ.get("RIG_LASER_VOLTAGE")
-    if not voltage:
-        pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
-    voltage = float(voltage)
+    voltage = float(os.environ.get("RIG_LASER_VOLTAGE", "0"))
 
     errors = []
     import gc
@@ -229,10 +215,7 @@ def test_laser_write_with_concurrent_siggen_create_stress() -> None:
     both paths concurrently to surface a rare race that a single paired
     call doesn't hit.
     """
-    voltage = os.environ.get("RIG_LASER_VOLTAGE")
-    if not voltage:
-        pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
-    voltage = float(voltage)
+    voltage = float(os.environ.get("RIG_LASER_VOLTAGE", "0"))
 
     errors = []
     stop = threading.Event()

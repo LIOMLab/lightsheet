@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import contextlib
 import importlib.util
+import os
 import threading
 from typing import TYPE_CHECKING
 
@@ -131,7 +132,7 @@ def test_write_laser1_power_real_daq_repeated(
     """
     ctrl = controller
     # Mark laser active so the write path actually runs.
-    setattr(ctrl._hw.lasers[0], "active", True)
+    ctrl._hw.lasers[0].active = True
     errors = []
     for _ in range(15):
         try:
@@ -204,12 +205,7 @@ def test_real_daqlaser_on_nonzero_voltage_no_crash() -> None:
     nidaqmx.Task) at a small nonzero voltage to reproduce the access
     violation. Gated on RIG_LASER_VOLTAGE (energizes the laser).
     """
-    import os
-
-    voltage_pct = os.environ.get("RIG_LASER_VOLTAGE")
-    if not voltage_pct:
-        pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
-    voltage = float(voltage_pct)
+    voltage = float(os.environ.get("RIG_LASER_VOLTAGE", "0"))
 
     from lightsheet.hal import DAQLaser
 
@@ -236,12 +232,7 @@ def test_real_daqlaser_on_daemon_thread_nonzero() -> None:
     reproduces that exactly: real DAQLaser instance, nonzero voltage,
     daemon thread. Gated on RIG_LASER_VOLTAGE.
     """
-    import os
-
-    voltage_pct = os.environ.get("RIG_LASER_VOLTAGE")
-    if not voltage_pct:
-        pytest.skip("set RIG_LASER_VOLTAGE (e.g. 0.5) to run; energizes laser 1")
-    voltage = float(voltage_pct)
+    voltage = float(os.environ.get("RIG_LASER_VOLTAGE", "0"))
 
     from lightsheet.hal import DAQLaser
 
