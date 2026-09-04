@@ -36,6 +36,7 @@ def test_autofocus_config_defaults() -> None:
     assert cfg.residual_gain_mm == pytest.approx(0.05)
     assert cfg.max_residual_mm == pytest.approx(0.5)
     assert cfg.smoothing == pytest.approx(0.5)
+    assert cfg.update_threshold == pytest.approx(0.0)
     assert cfg.use_curve_seed is False
 
 

@@ -1193,6 +1193,7 @@ class StackPanelWidget(QWidget):
             residual_gain_mm=self.ui.doubleSpinBox_autofocusResidualGain.value(),
             max_residual_mm=self.ui.doubleSpinBox_autofocusMaxResidual.value(),
             smoothing=self.ui.doubleSpinBox_autofocusSmoothing.value(),
+            update_threshold=0.05,
             use_curve_seed=self.ui.checkBox_autofocusUseCurve.isChecked(),
         )
 

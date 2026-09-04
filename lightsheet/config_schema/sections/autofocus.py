@@ -15,6 +15,7 @@ class AutofocusSettings(_NoEnvBaseSettings):
     residual_gain_mm: float = Field(alias="Residual Gain Mm", default=0.05)
     max_residual_mm: float = Field(alias="Max Residual Mm", default=0.5)
     smoothing: float = Field(alias="Smoothing", default=0.5)
+    update_threshold: float = Field(alias="Update Threshold", default=0.0)
     use_curve_seed: bool = Field(alias="Use Curve Seed", default=False)
 
     @field_validator("cadence")
@@ -43,6 +44,13 @@ class AutofocusSettings(_NoEnvBaseSettings):
     def _smoothing_range(cls, v: float) -> float:
         if v < 0 or v > 1:
             raise ValueError(f"smoothing {v} is outside the valid range 0..1")
+        return v
+
+    @field_validator("update_threshold")
+    @classmethod
+    def _update_threshold_range(cls, v: float) -> float:
+        if v < 0 or v > 1:
+            raise ValueError(f"update threshold {v} is outside the valid range 0..1")
         return v
 
 

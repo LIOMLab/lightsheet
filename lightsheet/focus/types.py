@@ -91,6 +91,7 @@ class AutofocusConfig:
     residual_gain_mm: float = 0.05
     max_residual_mm: float = 0.5
     smoothing: float = 0.5
+    update_threshold: float = 0.0
     use_curve_seed: bool = False
 
     def __post_init__(self) -> None:
@@ -106,3 +107,7 @@ class AutofocusConfig:
             )
         if self.smoothing < 0 or self.smoothing > 1:
             raise ValueError(f"smoothing must be in [0, 1]; got {self.smoothing}")
+        if self.update_threshold < 0 or self.update_threshold > 1:
+            raise ValueError(
+                f"update_threshold must be in [0, 1]; got {self.update_threshold}"
+            )

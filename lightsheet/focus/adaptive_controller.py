@@ -88,14 +88,36 @@ class AdaptiveFocusController:
         self._predicted_sharpness = s
 
         error = sharpness - s
+
+        # Deadband: ignore changes within the configured relative threshold.
+        # ``residual_gain_mm`` then becomes the maximum step, applied
+        # proportionally to the relative deviation outside the deadband.
+        threshold = self._cfg.update_threshold
+        if threshold > 0.0 and s > 0.0 and abs(error) <= threshold * s:
+            self._prev_residual_mm = self._residual_mm
+            return
+
         dr = self._residual_mm - self._prev_residual_mm
+
+        if threshold > 0.0:
+            # Proportional step scaled by the relative deviation from the
+            # smoothed reference.  This makes the step small when the error is
+            # small, eliminating the fixed bang-bang oscillation when the focus
+            # is already close.  Cap the scale at 1.0 so the gain is the max.
+            scale = 1.0 if s <= 0.0 else min(1.0, abs(error) / s)
+        else:
+            # Legacy fixed-step mode for threshold == 0.0.
+            scale = 1.0
 
         # If there is no prior residual step to infer an ascent direction from,
         # take a bootstrap step in the direction of the sharpness error.
         direction = np.sign(error) if dr == 0.0 else np.sign(error) * np.sign(dr)
 
         self._prev_residual_mm = self._residual_mm
-        new_residual = self._residual_mm + self._cfg.residual_gain_mm * float(direction)
+        new_residual = (
+            self._residual_mm
+            + self._cfg.residual_gain_mm * float(direction) * scale
+        )
         self._residual_mm = max(
             -self._cfg.max_residual_mm,
             min(self._cfg.max_residual_mm, new_residual),
