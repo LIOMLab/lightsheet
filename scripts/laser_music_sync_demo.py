@@ -38,10 +38,10 @@ logger = logging.getLogger("laser_music_sync_demo")
 
 # Default WAV and cue timings for Ray Volpe - Laserbeam (ÆON_MODE Remix)
 DEFAULT_WAV = "/Users/frans/Downloads/Ray Volpe - Laserbeam (ÆON_MODE Remix).wav"
-DEFAULT_LASER_CUES = [44.89, 45.16, 46.30, 46.31]
+DEFAULT_LASER_CUES = [44.9, 45.6, 46.3, 46.93]
 DEFAULT_LASER_PRE = 2.0
 DEFAULT_LASER_POST = 2.0
-DEFAULT_LASER_PULSE = 1.0
+DEFAULT_LASER_PULSE = 0.7
 DEFAULT_LASER_PRE_GAP = 0.2
 
 
