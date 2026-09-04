@@ -75,7 +75,7 @@ class _StackAdaptiveMixin:
         if shutter_mode == "Lightsheet":
             self.camera.set_exposure_time(max(1, round(cmd.exposure_s * 1000)))
         else:
-            self.camera.set_exposure_time(int(cmd.exposure_s * 1000))
+            self.camera.set_exposure_time(max(1, int(cmd.exposure_s * 1000)))
         # Write laser powers through the safe HAL paths. The percent is
         # computed from the command's mW value and the laser's max_power.
         # Each laser write is wrapped in its own except handler so a
