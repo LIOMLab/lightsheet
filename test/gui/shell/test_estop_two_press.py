@@ -17,8 +17,8 @@ The UI must make this state machine explicit on screen (audit #6):
   - A single press from ACTUATED must NOT re-arm — it must transition to
     DISARMED first (the two-press invariant).
 
-The real ``Controller_MainWindow`` is constructed via ``make_controller``
-(see ``test/_helpers/controller_fixture.py``), mirroring
+The real ``Controller_MainWindow`` is constructed via the ``controller`` fixture
+(see ``test/fixtures/controller.py``), mirroring
 ``lightsheet/__main__.main()``'s composition root.
 """
 

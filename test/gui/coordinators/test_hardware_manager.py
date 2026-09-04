@@ -8,8 +8,8 @@ the pitfall). The E-stop kill path (``updateUi_estop_pressed``) stays in
 the thin shell with a direct ``list[ILaser]`` ref, lock-free, on the GUI
 thread.
 
-The real controller is constructed via ``make_controller`` (see
-``test/_helpers/controller_fixture.py``). HardwareManager methods are
+The real controller is constructed via the ``controller`` fixture (see
+``test/fixtures/controller.py``). HardwareManager methods are
 exercised via ``ctrl._hw.<method>()`` real calls against the real
 collaborator wired into the real controller.
 

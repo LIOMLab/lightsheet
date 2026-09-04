@@ -7,8 +7,8 @@ DAQLaser/IBeamSmartLaser instances hardware_init constructs). A
 clean-process probe cannot reproduce a corruption that builds up from the
 GUI's specific call sequence. This test closes that gap.
 
-The real controller is constructed via ``make_controller`` (see
-``test/_helpers/controller_fixture.py``), which builds a mock
+The real controller is constructed via the ``controller`` fixture (see
+``test/fixtures/controller.py``), which builds a mock
 ``DeviceBundle`` and wires all four collaborators. The laser methods are
 exercised via ``ctrl._hw.<method>()`` real calls — the actual controller
 code running against the actual HAL layer.

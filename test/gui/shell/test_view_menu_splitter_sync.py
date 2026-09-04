@@ -12,8 +12,8 @@ stays ``False`` (handle-drag-to-zero is blocked; hiding is via the menu
 only). The menu action's checked state stays in sync with the splitter
 sizes (checked = pane width > 0).
 
-The real ``Controller_MainWindow`` is constructed via ``make_controller``
-(see ``test/_helpers/controller_fixture.py``), mirroring
+The real ``Controller_MainWindow`` is constructed via the ``controller`` fixture
+(see ``test/fixtures/controller.py``), mirroring
 ``lightsheet/__main__.main()``'s composition root.
 """
 

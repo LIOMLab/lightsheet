@@ -10,8 +10,8 @@ launch. The delay is demo-only: ``MockCamera`` is never used on the
 real rig.
 
 ``_build_demo_bundle`` in ``lightsheet/__main__.py`` is the ONLY place
-``simulate_timing`` is set to ``True`` — the test fixture
-``make_bundle`` in ``test/_helpers/controller_fixture.py`` does NOT set
+``simulate_timing`` is set to ``True`` — the test helper
+``make_bundle`` in ``test/helpers/factories.py`` does NOT set
 it, keeping tests fast.
 """
 
@@ -91,11 +91,11 @@ def test_build_demo_bundle_sets_simulate_timing_true() -> None:
 
 
 def test_make_bundle_does_not_set_simulate_timing() -> None:
-    """The test fixture ``make_bundle`` in
-    ``test/_helpers/controller_fixture.py`` constructs
+    """The test helper ``make_bundle`` in
+    ``test/helpers/factories.py`` constructs
     ``MockCamera(verbose=False)`` with ``simulate_timing=False`` (the
     default) — tests are not slowed by the demo-only timing delay."""
-    from helpers.factories import make_bundle
+    from test.helpers.factories import make_bundle
 
     bundle = make_bundle()
     camera = bundle.camera

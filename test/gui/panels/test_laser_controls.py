@@ -2,8 +2,8 @@
 Laser power-control regression tests for the staged-percent spinbox
 contract and the E-stop cooperative-skip guard.
 
-The real Controller_MainWindow is constructed via make_controller
-(test/_helpers/controller_fixture.py), which mirrors
+The real Controller_MainWindow is constructed via the controller fixture
+(test/fixtures/controller.py), which mirrors
 lightsheet/__main__.main()'s composition root: a mock DeviceBundle, real
 Controller_MainWindow, all four collaborators wired, hardware_init called.
 Laser write/toggle/poll/readback methods live on the real HardwareManager

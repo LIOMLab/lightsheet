@@ -18,8 +18,8 @@ synchronously inline from the handler), while the kill loop itself
 (``estop_event.set()`` + ``laser.off()`` for every laser) stays
 synchronous and lock-free on the GUI thread (AGENTS.md §2).
 
-The real ``Controller_MainWindow`` is constructed via ``make_controller``
-(see ``test/_helpers/controller_fixture.py``), mirroring
+The real ``Controller_MainWindow`` is constructed via the ``controller`` fixture
+(see ``test/fixtures/controller.py``), mirroring
 ``lightsheet/__main__.main()``'s composition root.
 """
 

@@ -1,8 +1,8 @@
 """Smoke test proving ``test.fixtures`` and ``test.helpers`` packages import.
 
-Replaces the legacy ``test/_helpers/test_import.py`` smoke test. It validates
-that the reorganized fixture and helper packages resolve and expose the
-expected public names now that ``test/_helpers/`` is removed.
+Replaces the legacy helper-package import smoke test. It validates that the
+reorganized fixture and helper packages resolve and expose the expected public
+names after the legacy helper package was removed.
 """
 
 from __future__ import annotations

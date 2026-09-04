@@ -2,8 +2,8 @@
 Behavioral regression tests for Phase 01 controller methods, via real
 construction.
 
-The real ``Controller_MainWindow`` is constructed via ``make_controller``
-(see ``test/_helpers/controller_fixture.py``), which mirrors
+The real ``Controller_MainWindow`` is constructed via the ``controller`` fixture
+(see ``test/fixtures/controller.py``), which mirrors
 ``lightsheet/__main__.main()``'s composition root: a mock ``DeviceBundle``
 is built, the controller is constructed with ``demo=True``, all four
 collaborators (``FrameSaverController`` / ``HardwareManager`` /
