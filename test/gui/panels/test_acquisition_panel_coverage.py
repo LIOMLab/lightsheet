@@ -95,6 +95,7 @@ def test_reused_worker_defensively_disconnects_stale_signal_connections(
     # First spawn wires the worker and thread.
     ctrl.acquisition_panel._spawn_stack_worker()
     first_thread = ctrl._stack_thread
+    assert first_thread is not None
     assert first_thread.receivers(SIGNAL("started()")) == 1
     assert (
         worker.receivers(
@@ -153,6 +154,7 @@ def test_reused_qthread_without_prev_worker_skips_finished_disconnect(
 
     ctrl.acquisition_panel._spawn_stack_worker()
     first_thread = ctrl._stack_thread
+    assert first_thread is not None
 
     # Remove the worker reference before the second spawn.
     ctrl._stack_worker = None
@@ -169,6 +171,7 @@ def test_reused_qthread_connects_started_without_stale_disconnect(
 
     ctrl.acquisition_panel._spawn_stack_worker()
     first_thread = ctrl._stack_thread
+    assert first_thread is not None
     assert first_thread.receivers(SIGNAL("started()")) == 1
 
     # Simulate an external cleanup of the started() slot.
