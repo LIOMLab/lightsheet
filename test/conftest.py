@@ -61,8 +61,9 @@ def has_hardware() -> bool:
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_configure(config: pytest.Config) -> None:
-    """Default to 8 xdist workers; raise the cap to 14 on the rig."""
+    """Default to -n auto with 8 workers on the dev machine; run 14 on the rig."""
     if os.environ.get("LIGHTSHEET_HW", "0") == "1":
+        config.option.numprocesses = 14
         config.option.maxprocesses = 14
     else:
         config.option.maxprocesses = 8
