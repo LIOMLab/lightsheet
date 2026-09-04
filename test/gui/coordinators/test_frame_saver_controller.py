@@ -33,7 +33,7 @@ Behavior covered (per the plan's ``<behavior>`` block):
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import Mock
 
 import numpy as np
@@ -772,17 +772,17 @@ def test_save_single_image_multi_channel_writes_two_files(
     ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
     ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
 
-    ctrl._fs.reinit = Mock()
-    ctrl._fs.set_files = Mock()
-    ctrl._fs.enqueue_buffer = Mock()
-    ctrl._fs.start_saving = Mock()
-    ctrl._fs.stop_saving = Mock()
-    ctrl._fs.add_sample_name = Mock()
-    ctrl._fs.add_motor_parameters = Mock()
+    setattr(cast(Any, ctrl._fs), "reinit", Mock())
+    setattr(cast(Any, ctrl._fs), "set_files", Mock())
+    setattr(cast(Any, ctrl._fs), "enqueue_buffer", Mock())
+    setattr(cast(Any, ctrl._fs), "start_saving", Mock())
+    setattr(cast(Any, ctrl._fs), "stop_saving", Mock())
+    setattr(cast(Any, ctrl._fs), "add_sample_name", Mock())
+    setattr(cast(Any, ctrl._fs), "add_motor_parameters", Mock())
 
     ctrl.save_panel.updateUi_save_single_image()
 
-    ctrl._fs.set_files.assert_called_once_with(
+    cast(Any, ctrl._fs).set_files.assert_called_once_with(
         1,
         ctrl.save_filepath,
         "singleImage",
@@ -790,7 +790,7 @@ def test_save_single_image_multi_channel_writes_two_files(
         "reconstructed_frame",
         wavelengths=[wl1, wl2],
     )
-    enqueue_calls = ctrl._fs.enqueue_buffer.call_args_list
+    enqueue_calls = cast(Any, ctrl._fs).enqueue_buffer.call_args_list
     assert len(enqueue_calls) == 2, (
         f"multi-channel must enqueue two tagged frames; got {len(enqueue_calls)}"
     )
@@ -800,8 +800,8 @@ def test_save_single_image_multi_channel_writes_two_files(
     assert enqueue_calls[1].args == ((1, frameB),), (
         f"second enqueue must be (1, frameB); got {enqueue_calls[1].args}"
     )
-    ctrl._fs.start_saving.assert_called_once()
-    ctrl._fs.stop_saving.assert_called_once()
+    cast(Any, ctrl._fs).start_saving.assert_called_once()
+    cast(Any, ctrl._fs).stop_saving.assert_called_once()
 
 
 def test_save_single_image_single_channel_unchanged(
@@ -835,13 +835,13 @@ def test_save_single_image_single_channel_unchanged(
     ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
     ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
 
-    ctrl._fs.reinit = Mock()
-    ctrl._fs.set_files = Mock()
-    ctrl._fs.enqueue_buffer = Mock()
-    ctrl._fs.start_saving = Mock()
-    ctrl._fs.stop_saving = Mock()
-    ctrl._fs.add_sample_name = Mock()
-    ctrl._fs.add_motor_parameters = Mock()
+    setattr(cast(Any, ctrl._fs), "reinit", Mock())
+    setattr(cast(Any, ctrl._fs), "set_files", Mock())
+    setattr(cast(Any, ctrl._fs), "enqueue_buffer", Mock())
+    setattr(cast(Any, ctrl._fs), "start_saving", Mock())
+    setattr(cast(Any, ctrl._fs), "stop_saving", Mock())
+    setattr(cast(Any, ctrl._fs), "add_sample_name", Mock())
+    setattr(cast(Any, ctrl._fs), "add_motor_parameters", Mock())
 
     ctrl.save_panel.updateUi_save_single_image()
 
@@ -849,7 +849,7 @@ def test_save_single_image_single_channel_unchanged(
     # now passes the active laser wavelength so the suffix is always
     # present).
     active_wl = int(ctrl.lasers[0].wavelength)
-    ctrl._fs.set_files.assert_called_once_with(
+    cast(Any, ctrl._fs).set_files.assert_called_once_with(
         1,
         ctrl.save_filepath,
         "singleImage",
@@ -857,9 +857,9 @@ def test_save_single_image_single_channel_unchanged(
         "reconstructed_frame",
         wavelengths=[active_wl],
     )
-    ctrl._fs.enqueue_buffer.assert_called_once_with(frameA)
-    ctrl._fs.start_saving.assert_called_once()
-    ctrl._fs.stop_saving.assert_called_once()
+    cast(Any, ctrl._fs).enqueue_buffer.assert_called_once_with(frameA)
+    cast(Any, ctrl._fs).start_saving.assert_called_once()
+    cast(Any, ctrl._fs).stop_saving.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -892,7 +892,7 @@ def test_zarr_saver_start_stack_n_channels(
 
     ctrl = controller
     ctrl.save_directory = str(tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
 
     store_path = str(tmp_path / "stack.ome.zarr")
     saver = ZarrSaver(ctrl)
@@ -920,7 +920,7 @@ def test_zarr_saver_start_stack_single_channel_back_compat(
 
     ctrl = controller
     ctrl.save_directory = str(tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
 
     # Explicit n_channels=1
     store_path = str(tmp_path / "stack_a.ome.zarr")
@@ -955,7 +955,7 @@ def test_zarr_saver_write_plane_channel_idx(
 
     ctrl = controller
     ctrl.save_directory = str(tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
 
     store_path = str(tmp_path / "stack.ome.zarr")
     saver = ZarrSaver(ctrl)
@@ -963,6 +963,7 @@ def test_zarr_saver_write_plane_channel_idx(
 
     ysize = ctrl.camera.ysize
     xsize = ctrl.camera.xsize
+    assert ysize is not None and xsize is not None
     frameA = np.zeros((ysize, xsize), dtype=np.uint16)
     frameA[0, 0] = 100
     frameB = np.zeros((ysize, xsize), dtype=np.uint16)
@@ -996,7 +997,7 @@ def test_zarr_saver_write_plane_motor_positions_once_per_plane(
 
     ctrl = controller
     ctrl.save_directory = str(tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
 
     store_path = str(tmp_path / "stack.ome.zarr")
     saver = ZarrSaver(ctrl)
@@ -1004,6 +1005,7 @@ def test_zarr_saver_write_plane_motor_positions_once_per_plane(
 
     ysize = ctrl.camera.ysize
     xsize = ctrl.camera.xsize
+    assert ysize is not None and xsize is not None
     frame = np.zeros((ysize, xsize), dtype=np.uint16)
 
     saver.write_plane(0, 0, frame, 1.0, 2.0, 3.0)
@@ -1041,7 +1043,7 @@ def test_zarr_saver_finalize_omero_channels_length(
 
     ctrl = controller
     ctrl.save_directory = str(tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
     # Shrink the camera so the Dask pyramid build is fast.
     ctrl.camera.xsize = 32
     ctrl.camera.ysize = 32
@@ -1094,7 +1096,7 @@ def test_zarr_saver_finalize_raises_on_channel_count_mismatch(
 
     ctrl = controller
     ctrl.save_directory = str(tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
     ctrl.camera.xsize = 32
     ctrl.camera.ysize = 32
 
@@ -1128,9 +1130,9 @@ def test_zarr_save_worker_branches_on_channel_tag(
 
     ctrl = controller
     ctrl.save_directory = str(tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
     ctrl.save_format = "zarr"
-    saver = ctrl._fs.frame_saver
+    saver = cast(Any, ctrl._fs).frame_saver
 
     # Replace the ZarrSaver with a Mock so we can assert on write_plane
     # calls without touching the disk.
@@ -1222,9 +1224,9 @@ def test_zarr_save_worker_single_channel_bare_ndarray_calls_write_plane_channel0
 
     ctrl = controller
     ctrl.save_directory = str(tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
     ctrl.save_format = "zarr"
-    saver = ctrl._fs.frame_saver
+    saver = cast(Any, ctrl._fs).frame_saver
 
     saver._zarr_saver = MagicMock()
     saver._zarr_saver.start_stack = MagicMock()

@@ -71,12 +71,13 @@ def test_zarr_saver_streams_and_finalizes(
 
     ctrl = controller
     _save_directory(ctrl, tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
 
     store_path = str(tmp_path / "stack.ome.zarr")
     saver = ZarrSaver(ctrl)
     n_planes = 4
     saver.start_stack(store_path, n_planes)
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
     frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
     for z in range(n_planes):
         saver.write_plane(0, z, frame, 0.0, 0.0, 0.0)
@@ -100,7 +101,7 @@ def test_omero_channels(
 
     ctrl = controller
     _save_directory(ctrl, tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
 
     # Only laser 2 (647 nm) was active for this acquisition.
     ctrl._auto_laser1 = False
@@ -109,6 +110,7 @@ def test_omero_channels(
     store_path = str(tmp_path / "stack.ome.zarr")
     saver = ZarrSaver(ctrl)
     saver.start_stack(store_path, 1)
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
     frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
     saver.write_plane(0, 0, frame, 0.0, 0.0, 0.0)
     saver.finalize()
@@ -143,7 +145,7 @@ def test_omero_from_live_lasers(
 
     ctrl = controller
     _save_directory(ctrl, tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
 
     # Laser 1 was active for this acquisition.
     ctrl._auto_laser1 = True
@@ -157,6 +159,7 @@ def test_omero_from_live_lasers(
         store_path = str(tmp_path / "stack.ome.zarr")
         saver = ZarrSaver(ctrl)
         saver.start_stack(store_path, 1)
+        assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
         frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
         saver.write_plane(0, 0, frame, 0.0, 0.0, 0.0)
         saver.finalize()
@@ -181,11 +184,12 @@ def test_ngff_metadata(
 
     ctrl = controller
     _save_directory(ctrl, tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
 
     store_path = str(tmp_path / "stack.ome.zarr")
     saver = ZarrSaver(ctrl)
     saver.start_stack(store_path, 1)
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
     frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
     saver.write_plane(0, 0, frame, 0.0, 0.0, 0.0)
     saver.finalize()
@@ -211,12 +215,13 @@ def test_acquisition_group(
 
     ctrl = controller
     _save_directory(ctrl, tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
 
     store_path = str(tmp_path / "stack.ome.zarr")
     saver = ZarrSaver(ctrl)
     n_planes = 3
     saver.start_stack(store_path, n_planes)
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
     frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
     for z in range(n_planes):
         saver.write_plane(0, z, frame, float(z), float(z) * 2.0, float(z) * 3.0)
@@ -327,7 +332,7 @@ def test_close_ordering(
 
     ctrl = controller
     _save_directory(ctrl, tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
     ctrl.save_format = "zarr"
     saver = ctrl._fs.frame_saver
 
@@ -346,6 +351,7 @@ def test_close_ordering(
     saver.horizontal_positions_list = [0.0, 1.0]
     saver.vertical_positions_list = [0.0, 2.0]
     saver.camera_positions_list = [0.0, 3.0]
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
     frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
     # Pre-load the queue so zarr_save_worker drains without waiting.
     saver.queue.put(frame)
@@ -397,7 +403,7 @@ def test_zarr_save_finalizes_after_stop_saving_on_normal_completion(
 
     ctrl = controller
     _save_directory(ctrl, tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
     ctrl.save_format = "zarr"
     # Shrink the camera frame so the Dask pyramid build in finalize is
     # fast (2048x2048 x 5 planes takes minutes; 32x32 takes milliseconds).
@@ -422,6 +428,7 @@ def test_zarr_save_finalizes_after_stop_saving_on_normal_completion(
     saver.horizontal_positions_list = ["0.00 μm", "1.00 μm"]
     saver.vertical_positions_list = ["0.00 μm", "2.00 μm"]
     saver.camera_positions_list = ["0.00 μm", "3.00 μm"]
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
     frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
 
     # Queue wrapper that flips saving_started=False once the last frame is
@@ -441,7 +448,7 @@ def test_zarr_save_finalizes_after_stop_saving_on_normal_completion(
         def __getattr__(self, name: str) -> Any:
             return getattr(self._real, name)
 
-    saver.queue = _StopAfterLastQueue(saver.queue, n_planes)
+    setattr(saver, "queue", _StopAfterLastQueue(saver.queue, n_planes))
     for _ in range(n_planes):
         saver.queue.put(frame)
     saver.saving_started = True
@@ -487,7 +494,7 @@ def test_zarr_drains_queue_after_stop_saving(
 
     ctrl = controller
     _save_directory(ctrl, tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
     ctrl.save_format = "zarr"
     # Shrink the camera frame so the Dask pyramid build in finalize is
     # fast (2048x2048 x 5 planes takes minutes; 32x32 takes milliseconds).
@@ -510,6 +517,7 @@ def test_zarr_drains_queue_after_stop_saving(
     saver.horizontal_positions_list = [f"{i}.00 μm" for i in range(n_planes)]
     saver.vertical_positions_list = [f"{i}.00 μm" for i in range(n_planes)]
     saver.camera_positions_list = [f"{i}.00 μm" for i in range(n_planes)]
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
     frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
 
     # Pre-queue ALL frames BEFORE starting the worker — mimicking the
@@ -543,7 +551,7 @@ def test_zarr_drains_queue_after_stop_saving(
         def __getattr__(self, name: str) -> Any:
             return getattr(self._real, name)
 
-    saver.queue = _FlipAfterFirstGet(saver.queue)
+    setattr(saver, "queue", _FlipAfterFirstGet(saver.queue))
 
     worker = FrameSaverWorker(saver)
     finished: list[int] = []
@@ -590,7 +598,7 @@ def test_both_mode_writes_both_formats(
 
     ctrl = controller
     _save_directory(ctrl, tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
     ctrl.save_format = "both"
     # Shrink the camera frame so the Dask pyramid build in finalize is
     # fast (2048x2048 takes minutes; 32x32 takes milliseconds).
@@ -621,6 +629,7 @@ def test_both_mode_writes_both_formats(
     # actually landed in both formats (not just metadata headers).
     frames = []
     for z in range(n_planes):
+        assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
         frame = np.full(
             (ctrl.camera.ysize, ctrl.camera.xsize), (z + 1) * 100, dtype=np.uint16
         )
@@ -710,7 +719,7 @@ def test_zarr_all_zero_frames_produce_chunks(
     to the L0 array creation so all-zero chunks are persisted."""
     ctrl = controller
     _save_directory(ctrl, tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
     # Shrink the camera frame so the Dask pyramid build in finalize is
     # fast (2048x2048 takes minutes; 32x32 takes milliseconds).
     ctrl.camera.xsize = 32
@@ -721,6 +730,7 @@ def test_zarr_all_zero_frames_produce_chunks(
     n_planes = 2
     saver.start_stack(store_path, n_planes)
     # All-zero frames — the MockCamera demo case.
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
     frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
     for z in range(n_planes):
         saver.write_plane(0, z, frame, 0.0, 0.0, 0.0)
@@ -746,7 +756,7 @@ def test_zarr_multi_channel_all_zero_produce_chunks(
 
     ctrl = controller
     _save_directory(ctrl, tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
     ctrl.camera.xsize = 32
     ctrl.camera.ysize = 32
     # Both auto-laser flags set so the omero channels match n_channels=2
@@ -759,6 +769,7 @@ def test_zarr_multi_channel_all_zero_produce_chunks(
     n_planes = 2
     n_channels = 2
     saver.start_stack(store_path, n_planes, n_channels=n_channels)
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
     frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
     for ch in range(n_channels):
         for z in range(n_planes):
@@ -785,7 +796,7 @@ def test_zarr_non_zero_frames_still_produce_chunks(
     write_empty_chunks=True fix must not break the non-zero path)."""
     ctrl = controller
     _save_directory(ctrl, tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
     ctrl.camera.xsize = 32
     ctrl.camera.ysize = 32
 
@@ -795,6 +806,7 @@ def test_zarr_non_zero_frames_still_produce_chunks(
     saver.start_stack(store_path, n_planes)
     # Non-zero frames with distinct values per plane.
     for z in range(n_planes):
+        assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
         frame = np.full(
             (ctrl.camera.ysize, ctrl.camera.xsize),
             (z + 1) * 100,

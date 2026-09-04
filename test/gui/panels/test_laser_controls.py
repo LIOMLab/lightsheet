@@ -76,7 +76,7 @@ def test_write_laser1_power_writes_when_estop_clear_and_active(
     self.lasers[0].set_power(mw). The mW value is the canonical ILaser
     unit; the backend (DAQLaser) converts mW -> V internally."""
     ctrl = controller
-    ctrl._hw.lasers[0].active = True
+    setattr(ctrl._hw.lasers[0], "active", True)
 
     ctrl._hw._write_laser1_power(50.0)
 
@@ -91,7 +91,7 @@ def test_write_laser2_power_writes_when_estop_clear_and_active(
     must scale the staged percentage to mW (pct/100 * max_power) and call
     self.lasers[1].set_power(mw)."""
     ctrl = controller
-    ctrl._hw.lasers[1].active = True
+    setattr(ctrl._hw.lasers[1], "active", True)
 
     ctrl._hw._write_laser2_power(50.0)
 
@@ -106,11 +106,11 @@ def test_write_laser1_power_surfaces_error_and_resets(
     must emit a sig_message naming the laser's label + error_message and
     reset .error = 0."""
     ctrl = controller
-    ctrl._hw.lasers[0].active = True
+    setattr(ctrl._hw.lasers[0], "active", True)
 
     def _fail_set_power(mw: float) -> None:
-        ctrl._hw.lasers[0].error = 1
-        ctrl._hw.lasers[0].error_message = "daq write failed"
+        setattr(ctrl._hw.lasers[0], "error", 1)
+        setattr(ctrl._hw.lasers[0], "error_message", "daq write failed")
 
     with (
         patch.object(ctrl._hw.lasers[0], "set_power", side_effect=_fail_set_power),
@@ -138,7 +138,7 @@ def test_toggle_laser1_on_when_inactive(
     """_toggle_laser1 calls self.lasers[0].on() when the laser is inactive,
     then applies the staged percentage via _write_laser1_power."""
     ctrl = controller
-    ctrl._hw.lasers[0].active = False
+    setattr(ctrl._hw.lasers[0], "active", False)
     ctrl.laser1_power_pct = 50.0
 
     ctrl._hw._toggle_laser1()
@@ -157,7 +157,7 @@ def test_toggle_laser2_on_when_inactive(
     the staged percentage via _write_laser2_power. Symmetric with laser 1 —
     no laser-2-specific self.ibeam branch."""
     ctrl = controller
-    ctrl._hw.lasers[1].active = False
+    setattr(ctrl._hw.lasers[1], "active", False)
     ctrl.laser2_power_pct = 50.0
 
     ctrl._hw._toggle_laser2()
@@ -174,8 +174,8 @@ def test_start_lasers_drives_both_auto_lasers(
     (.on() / .set_power(mw)) for the auto-selected lasers — no
     laser-2-specific self.ibeam branch."""
     ctrl = controller
-    ctrl._hw.lasers[0].active = False
-    ctrl._hw.lasers[1].active = False
+    setattr(ctrl._hw.lasers[0], "active", False)
+    setattr(ctrl._hw.lasers[1], "active", False)
     ctrl._auto_laser1 = True
     ctrl._auto_laser2 = True
     ctrl.laser1_power_pct = 50.0
@@ -196,8 +196,8 @@ def test_start_lasers_skips_non_auto_lasers(
     """start_lasers only energizes lasers whose auto-checkbox was sampled
     True; the other laser is untouched."""
     ctrl = controller
-    ctrl._hw.lasers[0].active = False
-    ctrl._hw.lasers[1].active = False
+    setattr(ctrl._hw.lasers[0], "active", False)
+    setattr(ctrl._hw.lasers[1], "active", False)
     ctrl._auto_laser1 = True
     ctrl._auto_laser2 = False
     ctrl.laser1_power_pct = 50.0
@@ -217,8 +217,8 @@ def test_stop_lasers_drives_both_auto_lasers_off(
     uniformly for the auto-selected lasers — no laser-2-specific
     self.ibeam branch."""
     ctrl = controller
-    ctrl._hw.lasers[0].active = True
-    ctrl._hw.lasers[1].active = True
+    setattr(ctrl._hw.lasers[0], "active", True)
+    setattr(ctrl._hw.lasers[1], "active", True)
     ctrl._auto_laser1 = True
     ctrl._auto_laser2 = True
 
@@ -253,8 +253,8 @@ def test_estop_drives_both_lasers_off_in_loop(
     self.ibeam.off() — neither is a method on a list[ILaser], so this test
     fails until the method is rewritten to the loop form."""
     ctrl = controller
-    ctrl._hw.lasers[0].active = True
-    ctrl._hw.lasers[1].active = True
+    setattr(ctrl._hw.lasers[0], "active", True)
+    setattr(ctrl._hw.lasers[1], "active", True)
 
     # Patch _refresh_laser2_readback_async to avoid spawning a daemon
     # thread during the test (the refresh-after-action call site in the
@@ -344,8 +344,8 @@ def test_estop_acquires_no_laser_lock(
         def release(self) -> None:
             return None
 
-    ctrl.lasers[0]._lock = _NoLockAcquire()
-    ctrl.lasers[1]._lock = _NoLockAcquire()
+    setattr(ctrl.lasers[0], "_lock", _NoLockAcquire())
+    setattr(ctrl.lasers[1], "_lock", _NoLockAcquire())
 
     # Patch the refresh-after-action call sites so only the kill loop
     # itself runs (the refresh calls probe the lock with
@@ -410,8 +410,8 @@ def test_poll_laser_status_active_emits_active(
     sig_laser_status(0, 'active') — the connected updateUi_laser_status
     slot sets label_laserOneStatus to '● ON'."""
     ctrl = controller
-    ctrl._hw.lasers[0].active = True
-    ctrl._hw.lasers[0].error = 0
+    setattr(ctrl._hw.lasers[0], "active", True)
+    setattr(ctrl._hw.lasers[0], "error", 0)
 
     ctrl._hw._poll_laser_status([0])
 
@@ -425,8 +425,8 @@ def test_poll_laser_status_inactive_emits_inactive(
     sig_laser_status(0, 'inactive') — the connected slot sets
     label_laserOneStatus to '● OFF'."""
     ctrl = controller
-    ctrl._hw.lasers[0].active = False
-    ctrl._hw.lasers[0].error = 0
+    setattr(ctrl._hw.lasers[0], "active", False)
+    setattr(ctrl._hw.lasers[0], "error", 0)
 
     ctrl._hw._poll_laser_status([0])
 
@@ -440,9 +440,9 @@ def test_poll_laser_status_error_wins_over_active(
     emits 'error' — the HAL error surface is authoritative (AGENTS.md §10)
     so an errored-but-still-active laser shows ERR, not ON."""
     ctrl = controller
-    ctrl._hw.lasers[1].active = True
-    ctrl._hw.lasers[1].error = 1
-    ctrl._hw.lasers[1].error_message = "serial fault"
+    setattr(ctrl._hw.lasers[1], "active", True)
+    setattr(ctrl._hw.lasers[1], "error", 1)
+    setattr(ctrl._hw.lasers[1], "error_message", "serial fault")
 
     ctrl._hw._poll_laser_status([1])
 
@@ -456,10 +456,10 @@ def test_poll_laser_status_both_indices_emits_twice(
     E-stop / start_lasers / stop_lasers refresh-after-action paths that
     touch both lasers."""
     ctrl = controller
-    ctrl._hw.lasers[0].active = True
-    ctrl._hw.lasers[0].error = 0
-    ctrl._hw.lasers[1].active = False
-    ctrl._hw.lasers[1].error = 0
+    setattr(ctrl._hw.lasers[0], "active", True)
+    setattr(ctrl._hw.lasers[0], "error", 0)
+    setattr(ctrl._hw.lasers[1], "active", False)
+    setattr(ctrl._hw.lasers[1], "error", 0)
 
     ctrl._hw._poll_laser_status([0, 1])
 
@@ -557,7 +557,7 @@ def test_refresh_laser2_readback_populated(
     get_output_power() returns 75.0 emits (1, '75.0 mW', '') on
     sig_laser_readback — the GUI-thread slot applies it to the label."""
     ctrl = controller
-    ctrl._hw.lasers[1].power = 75.0
+    setattr(ctrl._hw.lasers[1], "power", 75.0)
 
     ctrl._hw._refresh_laser_readback(1)
 
@@ -574,7 +574,7 @@ def test_refresh_laser2_readback_degraded_shows_commanded_fallback(
     (1, '{power:.1f} mW (cmd)', <degraded tooltip>) on sig_laser_readback
     so the GUI-thread slot can show the commanded fallback + tooltip."""
     ctrl = controller
-    ctrl._hw.lasers[1].power = 42.0
+    setattr(ctrl._hw.lasers[1], "power", 42.0)
 
     with patch.object(ctrl._hw.lasers[1], "get_output_power", return_value=None):
         ctrl._hw._refresh_laser_readback(1)
@@ -598,7 +598,7 @@ def test_refresh_laser2_readback_lock_skip_is_noop(
     # teardown, and timer_laser2_status could spawn a readback thread.
     ctrl.timer_imageview.stop()
     ctrl.timer_laser2_status.stop()
-    ctrl._hw.lasers[1]._lock = threading.Lock()
+    setattr(ctrl._hw.lasers[1], "_lock", threading.Lock())
     ctrl._hw.lasers[1]._lock.acquire()
     try:
         with patch.object(ctrl._hw.lasers[1], "get_output_power") as spy:
@@ -654,7 +654,7 @@ def test_refresh_laser1_readback_shows_staged_mw(
     drives this refresh so the L1 mW field stays live as the operator
     edits the percentage."""
     ctrl = controller
-    ctrl._hw.lasers[0].power = 12.5
+    setattr(ctrl._hw.lasers[0], "power", 12.5)
 
     ctrl._hw._refresh_laser_readback(0)
 

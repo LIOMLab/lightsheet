@@ -33,7 +33,7 @@ def _mgr(
     qtbot: QtBot, controller: Controller_MainWindow
 ) -> tuple[Controller_MainWindow, AcquisitionTableManager]:
     ctrl = controller
-    return ctrl, ctrl.stack_panel.table_manager  # ty: ignore[unsound-return-statement]
+    return ctrl, ctrl.stack_panel.table_manager
 
 
 def test_table_manager_exists(qtbot: QtBot, controller: Controller_MainWindow) -> None:

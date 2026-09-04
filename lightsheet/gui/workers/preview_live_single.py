@@ -39,12 +39,13 @@ class PreviewWorker(QObject):
     def __init__(
         self,
         bundle: DeviceBundle,
-        hw: HardwareManager,
+        hw: HardwareManager | None,
         shell: Controller_MainWindow,
     ) -> None:
         super().__init__()
+        assert hw is not None
         self.camera = bundle.camera
-        self._hw = hw
+        self._hw: HardwareManager = hw
         self._shell = shell
         # Live mode never saves, but acquire_scan() reads these to populate
         # buffer metadata. Empty/False defaults keep the metadata field
@@ -157,7 +158,7 @@ class PreviewWorker(QObject):
 
                 # Sending first (and should be only) image to display port
                 frame = cam_images[0]
-                self._shell._fs.enqueue_frame(frame)  # ty: ignore[unresolved-attribute]
+                self._shell._fs.enqueue_frame(frame)
         except Exception as e:
             self._shell.sig_message.emit(
                 f"Preview acquisition failed — the run was aborted. Cause: {e}"
@@ -211,14 +212,15 @@ class LiveWorker(QObject, _AcquireScanMixin):
     def __init__(
         self,
         bundle: DeviceBundle,
-        hw: HardwareManager,
+        hw: HardwareManager | None,
         shell: Controller_MainWindow,
     ) -> None:
         super().__init__()
+        assert hw is not None
         self.camera = bundle.camera
         self.siggen = bundle.siggen
         self.motors = bundle.motors
-        self._hw = hw
+        self._hw: HardwareManager = hw
         self._shell = shell
         # Live mode never saves, but acquire_scan() reads these to populate
         # buffer metadata. Empty/False defaults keep the metadata field
@@ -341,17 +343,18 @@ class SingleWorker(QObject, _AcquireScanMixin):
     def __init__(
         self,
         bundle: DeviceBundle,
-        hw: HardwareManager,
+        hw: HardwareManager | None,
         shell: Controller_MainWindow,
         save_description: str,
         save_stitch_blend: bool,
         multi_channel: bool = False,
     ) -> None:
         super().__init__()
+        assert hw is not None
         self.camera = bundle.camera
         self.siggen = bundle.siggen
         self.motors = bundle.motors
-        self._hw = hw
+        self._hw: HardwareManager = hw
         self._shell = shell
         # Save-option widgets are pre-sampled on the GUI thread before
         # spawning the worker so the worker thread never reaches into the

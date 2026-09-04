@@ -94,7 +94,7 @@ def test_preview_worker_finished_emits_exactly_once_exception(qtbot: QtBot) -> N
     shell = _PreviewShell()
     hw = Mock()
     worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
-    worker.camera.arm = Mock(side_effect=RuntimeError("camera fault"))
+    setattr(worker.camera, "arm", Mock(side_effect=RuntimeError("camera fault")))
 
     finished_count: list[int] = []
     worker.finished.connect(lambda: finished_count.append(1))

@@ -88,7 +88,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
     def __init__(
         self,
         bundle: DeviceBundle,
-        hw: HardwareManager,
+        hw: HardwareManager | None,
         shell: Controller_MainWindow,
         save_description: str,
         save_stitch_blend: bool,
@@ -102,10 +102,11 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         autofocus_curve: FocusCurve | None = None,
     ) -> None:
         super().__init__()
+        assert hw is not None
         self.camera = bundle.camera
         self.siggen = bundle.siggen
         self.motors = bundle.motors
-        self._hw = hw
+        self._hw: HardwareManager = hw
         self._shell = shell
         # Save-option widgets are pre-sampled on the GUI thread before
         # spawning the worker so the worker thread never reaches into the
@@ -195,8 +196,8 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 self._shell.save_description = str(self._save_description)
 
                 # Setting frame saver
-                self._shell._fs.reinit(3)  # ty: ignore[unresolved-attribute]
-                self._shell._fs.add_sample_name(self._shell.save_description)  # ty: ignore[unresolved-attribute]
+                self._shell._fs.reinit(3)
+                self._shell._fs.add_sample_name(self._shell.save_description)
                 # In multi-channel mode, pass the pre-sampled wavelengths
                 # to set_files so the save side builds one per-channel
                 # filename list (HDF5) and the Zarr writer allocates a
@@ -212,7 +213,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 else:
                     set_files_kwargs = {}
                 if self._save_all_crop:
-                    self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
+                    self._shell._fs.set_files(
                         self._shell.number_of_planes,
                         self._shell.save_filepath,
                         "stack",
@@ -221,7 +222,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         **set_files_kwargs,
                     )
                 elif self._save_all_full:
-                    self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
+                    self._shell._fs.set_files(
                         self._shell.number_of_planes,
                         self._shell.save_filepath,
                         "stack",
@@ -246,7 +247,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     # number_of_planes datasets into each, terminating
                     # on frames consumed (n_channels * n_planes) — not
                     # files written.
-                    self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
+                    self._shell._fs.set_files(
                         1,
                         self._shell.save_filepath,
                         "stack",
@@ -255,7 +256,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         **set_files_kwargs,
                     )
                 # Starting frame saver
-                self._shell._fs.start_saving()  # ty: ignore[unresolved-attribute]
+                self._shell._fs.start_saving()
                 # Configure the adaptive trajectory recorder on the save
                 # side. When adaptive is enabled, the per-plane loop
                 # records one AdaptiveSample per main plane and the HDF5
@@ -268,7 +269,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 adaptive_enabled = (
                     self._adaptive_cfg is not None and self._adaptive_cfg.enabled
                 )
-                self._shell._fs.configure_adaptive(  # ty: ignore[unresolved-attribute]
+                self._shell._fs.configure_adaptive(
                     adaptive_enabled,
                     config=self._adaptive_cfg if adaptive_enabled else None,
                 )
@@ -286,7 +287,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 # Pass the legacy FocusConfig as attrs when present; the
                 # per-plane autofocus path does not change the trajectory
                 # recorder schema, so only the legacy config is written.
-                self._shell._fs.configure_focus(  # ty: ignore[unresolved-attribute]
+                self._shell._fs.configure_focus(
                     focus_enabled,
                     config=self._focus_cfg if focus_enabled else None,
                 )
@@ -509,7 +510,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         self._shell.sig_refresh_position_camera.emit()
 
                         if self._shell.saving_allowed:
-                            self._shell._fs.add_motor_parameters(  # ty: ignore[unresolved-attribute]
+                            self._shell._fs.add_motor_parameters(
                                 self._shell.current_horizontal_position_text,
                                 self._shell.current_vertical_position_text,
                                 self._shell.current_camera_position_text,
@@ -570,7 +571,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         self._shell.sig_refresh_position_camera.emit()
 
                         if self._shell.saving_allowed:
-                            self._shell._fs.add_motor_parameters(  # ty: ignore[unresolved-attribute]
+                            self._shell._fs.add_motor_parameters(
                                 self._shell.current_horizontal_position_text,
                                 self._shell.current_vertical_position_text,
                                 self._shell.current_camera_position_text,
@@ -587,7 +588,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                                 if self._focus_block_count > 0
                                 else None,
                             )
-                            self._shell._fs.record_focus_sample(  # ty: ignore[unresolved-attribute]
+                            self._shell._fs.record_focus_sample(
                                 focus_sample
                             )
 
@@ -618,7 +619,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         self._shell.sig_refresh_position_horizontal.emit()
 
                         if self._shell.saving_allowed:
-                            self._shell._fs.add_motor_parameters(  # ty: ignore[unresolved-attribute]
+                            self._shell._fs.add_motor_parameters(
                                 self._shell.current_horizontal_position_text,
                                 self._shell.current_vertical_position_text,
                                 self._shell.current_camera_position_text,
@@ -744,8 +745,8 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                             and frame1 is not None
                             and frame2 is not None
                         ):
-                            self._shell._fs.enqueue_buffer((0, frame1))  # ty: ignore[unresolved-attribute]
-                            self._shell._fs.enqueue_buffer((1, frame2))  # ty: ignore[unresolved-attribute]
+                            self._shell._fs.enqueue_buffer((0, frame1))
+                            self._shell._fs.enqueue_buffer((1, frame2))
                     else:
                         # Single-channel path (unchanged — back-compat).
 
@@ -766,20 +767,20 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         self._record_adaptive_step(plane)
                         if self._shell.saving_allowed:
                             if self._save_all_crop:
-                                cropped_buffer = self._shell._fs.crop_buffer(  # ty: ignore[unresolved-attribute]
+                                cropped_buffer = self._shell._fs.crop_buffer(
                                     self._shell.buffer  # ty: ignore[invalid-argument-type]
                                 )
-                                self._shell._fs.enqueue_buffer(cropped_buffer)  # ty: ignore[unresolved-attribute]
+                                self._shell._fs.enqueue_buffer(cropped_buffer)
                                 self._shell.sig_message.emit(
                                     "Saving All Images (one for each ETL step, cropped)"
                                 )
                             elif self._save_all_full:
-                                self._shell._fs.enqueue_buffer(self._shell.buffer)  # ty: ignore[invalid-argument-type, unresolved-attribute]
+                                self._shell._fs.enqueue_buffer(self._shell.buffer)  # ty: ignore[invalid-argument-type]
                                 self._shell.sig_message.emit(
                                     "Saving All Images (one for each ETL step, full)"
                                 )
                             else:
-                                self._shell._fs.enqueue_buffer(  # ty: ignore[unresolved-attribute]
+                                self._shell._fs.enqueue_buffer(
                                     self._shell.reconstructed_frame  # ty: ignore[invalid-argument-type]
                                 )
                                 self._shell.sig_message.emit(
@@ -794,6 +795,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     if (
                         self._autofocus_controller is not None
                         and autofocus_focus_pos_mm is not None
+                        and self._autofocus_cfg is not None
                     ):
                         from lightsheet.focus.sharpness import frame_sharpness_variance
                         from lightsheet.focus.types import FocusSample
@@ -822,7 +824,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                             sharpness_metric=sharp,
                         )
                         if self._shell.saving_allowed:
-                            self._shell._fs.record_focus_sample(  # ty: ignore[unresolved-attribute]
+                            self._shell._fs.record_focus_sample(
                                 focus_sample
                             )
                         self.sig_focus_trajectory.emit(
@@ -876,7 +878,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             _cleanup_errors: list[str] = []
             if getattr(self._shell, "saving_allowed", False):
                 try:
-                    self._shell._fs.stop_saving()  # ty: ignore[unresolved-attribute]
+                    self._shell._fs.stop_saving()
                 except Exception as e:
                     logger.exception("Stack worker stop_saving cleanup failed")
                     _cleanup_errors.append(f"stop_saving: {e}")

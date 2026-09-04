@@ -5,6 +5,8 @@ Pure logic and numpy — no Qt, no HAL, no hardware.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from lightsheet.focus.adaptive_controller import (
@@ -14,8 +16,8 @@ from lightsheet.focus.adaptive_controller import (
 from lightsheet.focus.types import FocusCurve
 
 
-def _cfg(**overrides: object) -> AutofocusConfig:
-    defaults: dict[str, object] = dict(
+def _cfg(**overrides: Any) -> AutofocusConfig:
+    defaults: dict[str, Any] = dict(
         enabled=True,
         cadence=1,
         residual_gain_mm=0.05,
@@ -226,4 +228,4 @@ def test_residual_mm_is_read_only() -> None:
         seed_camera_pos_mm=0.0,
     )
     with pytest.raises(AttributeError):
-        ctrl.residual_mm = 1.0  # type: ignore[misc]
+        setattr(ctrl, "residual_mm", 1.0)

@@ -898,7 +898,7 @@ class AcquisitionTableManager(QWidget):
                 from PySide6.QtCore import QTimer
 
                 loop = QEventLoop()
-                thread = self._shell._stack_thread  # ty: ignore[unresolved-attribute]
+                thread = self._shell._stack_thread
                 worker.finished.connect(loop.quit)  # ty: ignore[unresolved-attribute]
 
                 def _watchdog(

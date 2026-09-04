@@ -65,7 +65,7 @@ def _setup_ctrl(
     """Create a real controller with 8x8 camera and tmp_path save dir."""
     ctrl = controller
     ctrl.save_directory = str(tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
     ctrl.camera.xsize = _FRAME_SIZE
     ctrl.camera.ysize = _FRAME_SIZE
     if n_channels >= 1:
@@ -73,7 +73,8 @@ def _setup_ctrl(
     if n_channels >= 2:
         ctrl._auto_laser2 = True
     saver = ctrl._fs.frame_saver
-    saver.parent.save_format = "hdf5"
+    parent = cast("Controller_MainWindow", saver.parent)
+    parent.save_format = "hdf5"
     saver.reinit(block_size=32)
     return ctrl, saver
 
@@ -420,7 +421,7 @@ def test_hdf5_autofocus_writes_one_row_per_plane(
     ctrl.number_of_planes = n_planes
     ctrl.stack_mode_started = True
     ctrl.stack_starting_plane = 0.0
-    ctrl.stack_step = 10.0
+    ctrl.stack_step = 10
     ctrl.save_directory = str(tmp_path)
     ctrl.save_filepath = str(tmp_path / "autofocus_metadata")
     ctrl.save_description = "autofocus metadata sample"
@@ -450,17 +451,18 @@ def test_hdf5_autofocus_writes_one_row_per_plane(
         adaptive_cfg=None,
         autofocus_cfg=config,
     )
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     state = {"acq_index": 0}
 
     def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = worker.camera.copy_recorder_images(n_imgs)
+        assert imgs is not None
         frame = np.asarray(imgs[0])
         frame[:] = 30000
-        worker._shell.reconstructed_frame = frame
+        setattr(worker._shell, "reconstructed_frame", frame)
         state["acq_index"] += 1
         return True
 
@@ -473,14 +475,15 @@ def test_hdf5_autofocus_writes_one_row_per_plane(
     fname = saver.filenames_list[0]
     with h5py.File(fname, "r") as f:
         assert "focus_trajectory" in f
-        grp = f["focus_trajectory"]
-        assert len(grp["block_index"]) == n_planes
-        assert list(grp["block_index"]) == [0, 1, 2]
+        grp = cast(h5py.Group, f["focus_trajectory"])
+        block_ds = cast(h5py.Dataset, grp["block_index"])
+        assert len(block_ds) == n_planes
+        assert list(block_ds[:]) == [0, 1, 2]
 
-        residuals = np.asarray(grp["residual_mm"])
-        feedforward = np.asarray(grp["feedforward_camera_pos_mm"])
-        applied = np.asarray(grp["applied_camera_pos_mm"])
-        sharpness = np.asarray(grp["sharpness_metric"])
+        residuals = np.asarray(cast(h5py.Dataset, grp["residual_mm"])[:])
+        feedforward = np.asarray(cast(h5py.Dataset, grp["feedforward_camera_pos_mm"])[:])
+        applied = np.asarray(cast(h5py.Dataset, grp["applied_camera_pos_mm"])[:])
+        sharpness = np.asarray(cast(h5py.Dataset, grp["sharpness_metric"])[:])
 
         # Constant frames keep the residual correction at zero so the
         # applied camera position equals the feedforward seed position.

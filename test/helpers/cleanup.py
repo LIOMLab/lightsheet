@@ -36,7 +36,7 @@ def _pump_deferred_delete(max_ms: int = _DEFERRED_DELETE_MAX_MS) -> None:
     on long single-process runs).
     """
     app = QApplication.instance()
-    if app is None:
+    if app is None or not isinstance(app, QApplication):
         return
 
     loop = QEventLoop()

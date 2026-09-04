@@ -93,7 +93,7 @@ def _setup_ctrl(
     """
     ctrl = controller
     ctrl.save_directory = str(tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
     # Shrink the camera so Zarr pyramid finalization is instant.
     ctrl.camera.xsize = _FRAME_SIZE
     ctrl.camera.ysize = _FRAME_SIZE
@@ -103,7 +103,7 @@ def _setup_ctrl(
     if n_channels >= 2:
         ctrl._auto_laser2 = True
     saver = ctrl._fs.frame_saver
-    saver.parent.save_format = "hdf5"
+    setattr(saver.parent, "save_format", "hdf5")
     # Reinit with a block_size large enough that the queue (maxsize
     # 2*block_size) can hold all test frames without blocking the put
     # call — the default block_size=1 gives maxsize=2, which blocks on
@@ -670,7 +670,7 @@ def test_channel_axis_guard_preserved(
 
     ctrl = controller
     ctrl.save_directory = str(tmp_path)
-    ctrl.stack_step = 1.0
+    ctrl.stack_step = 1
     ctrl.camera.xsize = _FRAME_SIZE
     ctrl.camera.ysize = _FRAME_SIZE
 

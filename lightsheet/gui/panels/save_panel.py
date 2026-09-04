@@ -397,9 +397,9 @@ class SavePanelWidget(QWidget):
             self._shell.save_description = str(self.ui.lineEdit_saveDescription.text())
 
             """Setting up frame saver"""
-            self._shell._fs.reinit(1)  # ty: ignore[unresolved-attribute]
-            self._shell._fs.add_sample_name(self._shell.save_description)  # ty: ignore[unresolved-attribute]
-            self._shell._fs.add_motor_parameters(  # ty: ignore[unresolved-attribute]
+            self._shell._fs.reinit(1)
+            self._shell._fs.add_sample_name(self._shell.save_description)
+            self._shell._fs.add_motor_parameters(
                 self._shell.image_hor_pos_text,
                 self._shell.image_ver_pos_text,
                 self._shell.image_cam_pos_text,
@@ -407,7 +407,7 @@ class SavePanelWidget(QWidget):
 
             """Saving frame"""
             if self.ui.radioButton_saveAllCrop.isChecked():
-                self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
+                self._shell._fs.set_files(
                     1,
                     self._shell.save_filepath,
                     "singleImage",
@@ -415,13 +415,13 @@ class SavePanelWidget(QWidget):
                     "ETLscan",
                     wavelengths=[self._active_single_channel_wavelength()],
                 )
-                cropped_buffer = self._shell._fs.crop_buffer(self._shell.buffer)  # ty: ignore[invalid-argument-type, unresolved-attribute]
-                self._shell._fs.enqueue_buffer(cropped_buffer)  # ty: ignore[unresolved-attribute]
+                cropped_buffer = self._shell._fs.crop_buffer(self._shell.buffer)  # ty: ignore[invalid-argument-type]
+                self._shell._fs.enqueue_buffer(cropped_buffer)
                 self._shell.updateUi_message_printer(
                     "Saving Images (one for each ETL scan, cropped)"
                 )
             elif self.ui.radioButton_saveAllFull.isChecked():
-                self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
+                self._shell._fs.set_files(
                     1,
                     self._shell.save_filepath,
                     "singleImage",
@@ -429,7 +429,7 @@ class SavePanelWidget(QWidget):
                     "FullETLscan",
                     wavelengths=[self._active_single_channel_wavelength()],
                 )
-                self._shell._fs.enqueue_buffer(self._shell.buffer)  # ty: ignore[invalid-argument-type, unresolved-attribute]
+                self._shell._fs.enqueue_buffer(self._shell.buffer)  # ty: ignore[invalid-argument-type]
                 self._shell.updateUi_message_printer(
                     "Saving Images (one for each ETL scan, full)"
                 )
@@ -475,7 +475,7 @@ class SavePanelWidget(QWidget):
                             "missing. Re-run the acquisition."
                         )
                         return
-                    self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
+                    self._shell._fs.set_files(
                         1,
                         self._shell.save_filepath,
                         "singleImage",
@@ -483,13 +483,13 @@ class SavePanelWidget(QWidget):
                         "reconstructed_frame",
                         wavelengths=[wl1, wl2],
                     )
-                    self._shell._fs.enqueue_buffer((0, frame1))  # ty: ignore[unresolved-attribute]
-                    self._shell._fs.enqueue_buffer((1, frame2))  # ty: ignore[unresolved-attribute]
+                    self._shell._fs.enqueue_buffer((0, frame1))
+                    self._shell._fs.enqueue_buffer((1, frame2))
                     self._shell.updateUi_message_printer(
                         "Saving Reconstructed Images (multi-channel)"
                     )
                 else:
-                    self._shell._fs.set_files(  # ty: ignore[unresolved-attribute]
+                    self._shell._fs.set_files(
                         1,
                         self._shell.save_filepath,
                         "singleImage",
@@ -497,11 +497,11 @@ class SavePanelWidget(QWidget):
                         "reconstructed_frame",
                         wavelengths=[self._active_single_channel_wavelength()],
                     )
-                    self._shell._fs.enqueue_buffer(self._shell.reconstructed_frame)  # ty: ignore[invalid-argument-type, unresolved-attribute]
+                    self._shell._fs.enqueue_buffer(self._shell.reconstructed_frame)  # ty: ignore[invalid-argument-type]
                     self._shell.updateUi_message_printer("Saving Reconstructed Image")
 
-            self._shell._fs.start_saving()  # ty: ignore[unresolved-attribute]
-            self._shell._fs.stop_saving()  # ty: ignore[unresolved-attribute]
+            self._shell._fs.start_saving()
+            self._shell._fs.stop_saving()
         else:
             self._shell.sig_beep.emit()
             QMessageBox.warning(

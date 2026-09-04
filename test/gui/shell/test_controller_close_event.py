@@ -36,6 +36,7 @@ def test_close_event_quits_preview_thread(controller: Controller_MainWindow) -> 
 
     # The preview thread should now exist and be running.
     assert hasattr(ctrl, "_preview_thread"), "preview thread must be spawned"
+    assert ctrl._preview_thread is not None
     assert ctrl._preview_thread.isRunning(), (
         "preview thread must be running after start"
     )
@@ -49,6 +50,7 @@ def test_close_event_quits_preview_thread(controller: Controller_MainWindow) -> 
     assert event.isAccepted(), "closeEvent must accept the event on Yes"
 
     # The preview thread must no longer be running after quit()+wait().
+    assert ctrl._preview_thread is not None
     assert not ctrl._preview_thread.isRunning(), (
         "preview thread must not be running after closeEvent"
     )
@@ -119,6 +121,7 @@ def test_close_event_preview_timeout_logs_warning(
 
     # Clean up: stop the thread for real.
     ctrl.preview_mode_started = False
+    assert ctrl._preview_thread is not None
     ctrl._preview_thread.quit()
     ctrl._preview_thread.wait(2000)
 

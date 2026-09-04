@@ -531,12 +531,12 @@ def test_frame_saver_worker_per_dataset_exception_aborts(tmp_path: Path) -> None
     def _raise(self: Any, *a: Any, **k: Any) -> Never:
         raise RuntimeError("simulated write error")
 
-    h5py.File.create_dataset = _raise  # type: ignore[method-assign]
+    h5py.File.create_dataset = _raise
     try:
         saver.enqueue_buffer(np.ones((4, 4), dtype=np.uint16))
         saver.frame_saver_worker()
     finally:
-        h5py.File.create_dataset = original  # type: ignore[method-assign]
+        h5py.File.create_dataset = original
     assert saver.saving_started is False
     assert any("simulated write error" in m for m in shell.message_printer_calls)
 
@@ -562,7 +562,7 @@ def test_frame_saver_worker_adaptive_write_error_aborts(tmp_path: Path) -> None:
     def _bad_write(*a: Any, **k: Any) -> Never:
         raise RuntimeError("adaptive write boom")
 
-    saver._write_adaptive_hdf5_for_file = _bad_write  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
+    setattr(saver, "_write_adaptive_hdf5_for_file", _bad_write)
     saver.enqueue_buffer(np.ones((4, 4), dtype=np.uint16))
     saver.frame_saver_worker()
     assert saver.saving_started is False
@@ -657,7 +657,7 @@ def test_zarr_save_worker_finalize_error_flips_saving(tmp_path: Path) -> None:
     def _bad_finalize() -> Never:
         raise RuntimeError("finalize boom")
 
-    saver._zarr_saver.finalize = _bad_finalize  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
+    setattr(saver._zarr_saver, "finalize", _bad_finalize)
     saver.zarr_save_worker()
     assert saver.saving_started is False
     assert any("finalize boom" in m for m in shell.message_printer_calls)
@@ -808,12 +808,12 @@ def test_both_save_worker_per_dataset_write_error_aborts(tmp_path: Path) -> None
     def _raise(self: Any, *a: Any, **k: Any) -> Never:
         raise RuntimeError("both write boom")
 
-    h5py.File.create_dataset = _raise  # type: ignore[method-assign]
+    h5py.File.create_dataset = _raise
     try:
         saver.enqueue_buffer(np.zeros((32, 32), dtype=np.uint16))
         saver.both_save_worker()
     finally:
-        h5py.File.create_dataset = original  # type: ignore[method-assign]
+        h5py.File.create_dataset = original
     assert saver.saving_started is False
     assert any("both write boom" in m for m in shell.message_printer_calls)
 
@@ -829,7 +829,7 @@ def test_both_save_worker_adaptive_write_error_aborts(tmp_path: Path) -> None:
     def _bad(*a: Any, **k: Any) -> Never:
         raise RuntimeError("both adaptive boom")
 
-    saver._write_adaptive_hdf5_for_file = _bad  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
+    setattr(saver, "_write_adaptive_hdf5_for_file", _bad)
     saver.enqueue_buffer(np.zeros((32, 32), dtype=np.uint16))
     saver.both_save_worker()
     assert saver.saving_started is False
@@ -881,7 +881,7 @@ def test_both_save_worker_finalize_error_flips_saving(tmp_path: Path) -> None:
     def _bad() -> Never:
         raise RuntimeError("both finalize boom")
 
-    saver._zarr_saver.finalize = _bad  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
+    setattr(saver._zarr_saver, "finalize", _bad)
     saver.both_save_worker()
     assert saver.saving_started is False
     assert any("both finalize boom" in m for m in shell.message_printer_calls)
@@ -1012,12 +1012,12 @@ def test_both_save_worker_multichannel_per_dataset_error_aborts(
     def _raise(self: Any, *a: Any, **k: Any) -> Never:
         raise RuntimeError("mc both write boom")
 
-    h5py.File.create_dataset = _raise  # type: ignore[method-assign]
+    h5py.File.create_dataset = _raise
     try:
         saver.enqueue_buffer((0, np.zeros((32, 32), dtype=np.uint16)))
         saver._both_save_worker_multi_channel()
     finally:
-        h5py.File.create_dataset = original  # type: ignore[method-assign]
+        h5py.File.create_dataset = original
     assert saver.saving_started is False
     assert any("mc both write boom" in m for m in shell.message_printer_calls)
 
@@ -1195,7 +1195,7 @@ def test_both_save_worker_multichannel_finalize_error_flips_saving(
     def _bad() -> Never:
         raise RuntimeError("mc both finalize boom")
 
-    saver._zarr_saver.finalize = _bad  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
+    setattr(saver._zarr_saver, "finalize", _bad)
     saver.enqueue_buffer((0, np.zeros((32, 32), dtype=np.uint16)))
     saver.enqueue_buffer((1, np.zeros((32, 32), dtype=np.uint16)))
     saver._both_save_worker_multi_channel()

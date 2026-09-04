@@ -813,7 +813,7 @@ def test_adaptive_trajectory_slot_is_shell_bound_method(
     # Calling the slot appends to the widget.
     ctrl.adaptiveTrajectoryWidget.reset(target_band_lo=0.90, target_band_hi=0.95)
     slot(0, 0.92, 0.005, 10.0, 5.0, "exposure", False, False)
-    xs, _ys = ctrl.adaptiveTrajectoryWidget._intensity_curve.getData()  # type: ignore[unresolved-attribute]
+    xs, _ys = ctrl.adaptiveTrajectoryWidget._intensity_curve.getData()  # ty: ignore[unresolved-attribute]
     assert len(xs) == 1
 
 

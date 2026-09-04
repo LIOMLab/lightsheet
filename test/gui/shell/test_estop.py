@@ -195,7 +195,7 @@ def _configure_autofocus_stack_plan(
     ctrl.number_of_planes = n_planes
     ctrl.stack_mode_started = True
     ctrl.stack_starting_plane = 0.0
-    ctrl.stack_step = 10.0
+    ctrl.stack_step = 10
     ctrl.save_format = "hdf5"
     ctrl.save_directory = str(tmp_path)
     ctrl.save_filepath = str(tmp_path / "estop_autofocus")
@@ -233,8 +233,8 @@ def test_autofocus_estop_after_first_move_prevents_acquire(
     _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=3)
 
     worker = _make_autofocus_worker(ctrl)
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     real_parallel = worker.motors.move_axes_parallel
     parallel_calls: list[list[tuple[str, float, str]]] = []
@@ -275,8 +275,8 @@ def test_autofocus_estop_set_before_acquire_breaks_loop(
 
     worker = _make_autofocus_worker(ctrl)
     ctrl.estop_event.set()
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))

@@ -24,7 +24,7 @@ import os
 import sys
 import types
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Iterator, cast
 
 import pytest
 
@@ -386,7 +386,7 @@ if os.environ.get("PYTEST_XDIST_WORKER"):
 
 
 @pytest.fixture(autouse=True)
-def _cleanup_qt_after_test(qtbot: Any) -> None:
+def _cleanup_qt_after_test(qtbot: Any) -> Iterator[None]:
     """Stop active timers/threads and reap leaked top-level widgets after
     every test.
 
@@ -403,7 +403,7 @@ def _cleanup_qt_after_test(qtbot: Any) -> None:
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     app = QApplication.instance()
-    if app is None:
+    if app is None or not isinstance(app, QApplication):
         return
 
     # Stop all active QTimer objects first.
@@ -461,6 +461,8 @@ def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     app = QApplication.instance()
+    if app is None or not isinstance(app, QApplication):
+        return
     # Stop all active timers first so no timer fires while we are quitting
     # threads.
     for obj in _gc.get_objects():

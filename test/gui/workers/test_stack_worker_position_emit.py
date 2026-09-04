@@ -115,9 +115,9 @@ def test_stack_worker_position_emit_uses_signal_not_direct_call(qtbot: QtBot) ->
         save_all_full=False,
     )
     # Mock acquire_scan so we don't run the full scan logic.
-    worker.acquire_scan = Mock()
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", Mock())
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))

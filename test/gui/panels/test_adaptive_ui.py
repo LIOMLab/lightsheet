@@ -888,7 +888,7 @@ def test_worker_signal_connected_to_gui_slot_queued(
             # Emit and confirm the slot is reached (queued delivery on
             # the GUI thread; processEvents drains the queue).
             received: list[tuple] = []  # ty: ignore[missing-type-argument]
-            ctrl._on_adaptive_trajectory = lambda *a: received.append(a)
+            setattr(ctrl, "_on_adaptive_trajectory", lambda *a: received.append(a))
             # Re-connect to the patched slot to verify the connection
             # path: the spawn wired sig_adaptive_trajectory -> slot.
             worker.sig_adaptive_trajectory.emit(
@@ -962,7 +962,7 @@ def test_dock_state_persistence(
     # registered with the QMainWindow).
     state = ctrl.saveState()
     assert state is not None
-    assert len(bytes(state)) > 0
+    assert state.size() > 0
 
 
 def test_dock_is_floating_only_closable(
@@ -1132,6 +1132,7 @@ def test_dock_title_bar_margins_and_spacing(
     ctrl = controller
     title_bar = ctrl.dockWidget_adaptiveTrajectory.titleBarWidget()
     layout = title_bar.layout()
+    assert layout is not None
     margins = layout.contentsMargins()
     assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (
         8,

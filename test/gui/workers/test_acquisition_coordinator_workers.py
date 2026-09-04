@@ -15,7 +15,7 @@ never a static-source grep.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast, cast
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -267,7 +267,7 @@ def test_preview_worker_exception_emits_message(qtbot: QtBot) -> None:
     """PreviewWorker.run catches exceptions and emits sig_message."""
     worker, shell, _hw = _make_preview_worker(qtbot)
     # Make camera.arm() raise to trigger the except block.
-    worker.camera.arm = Mock(side_effect=RuntimeError("camera error"))
+    setattr(worker.camera, "arm", Mock(side_effect=RuntimeError("camera error")))
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -283,10 +283,10 @@ def test_preview_worker_no_data_breaks_and_cleans(qtbot: QtBot) -> None:
     worker, shell, hw = _make_preview_worker(qtbot)
     shell.preview_mode_started = True
     shell.estop_event.is_set.return_value = False
-    worker.camera.copy_recorder_images = Mock(return_value=None)
+    setattr(worker.camera, "copy_recorder_images", Mock(return_value=None))
 
     disarm_spy = Mock(wraps=worker.camera.disarm)
-    worker.camera.disarm = disarm_spy  # type: ignore[method-assign]
+    setattr(worker.camera, "disarm", disarm_spy)
 
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
@@ -348,10 +348,10 @@ def test_live_mode_worker_acquire_scan_does_not_skip_cleanup(qtbot: QtBot) -> No
         shell.live_mode_started = False
         return result
 
-    worker.acquire_scan = _acquire_then_stop  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
+    setattr(worker, "acquire_scan", _acquire_then_stop)
     # Spy on camera.disarm (MockCamera is a real instance, not a Mock).
     disarm_spy = Mock(wraps=worker.camera.disarm)
-    worker.camera.disarm = disarm_spy  # type: ignore[method-assign]
+    setattr(worker.camera, "disarm", disarm_spy)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -368,16 +368,16 @@ def test_live_worker_no_data_breaks_and_cleans(qtbot: QtBot) -> None:
     worker, shell, hw = _make_live_worker(qtbot)
     shell.live_mode_started = True
     shell.estop_event.is_set.return_value = False
-    worker.acquire_scan = Mock(return_value=False)
+    setattr(worker, "acquire_scan", Mock(return_value=False))
 
     disarm_spy = Mock(wraps=worker.camera.disarm)
-    worker.camera.disarm = disarm_spy  # type: ignore[method-assign]
+    setattr(worker.camera, "disarm", disarm_spy)
 
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
 
-    worker.acquire_scan.assert_called_once()
+    cast(Any, worker).acquire_scan.assert_called_once()
     hw.stop_lasers.assert_called_once()
     disarm_spy.assert_called_once()
     shell._fs.enqueue_frame.assert_not_called()
@@ -404,7 +404,7 @@ def test_single_mode_worker_normal_path(qtbot: QtBot) -> None:
     acquire_scan, ETL standby, stop_lasers, disarm, emit finished."""
     worker, _shell, hw = _make_single_worker(qtbot)
     # Mock acquire_scan to avoid running the full scan logic.
-    worker.acquire_scan = Mock()
+    setattr(worker, "acquire_scan", Mock())
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -416,7 +416,7 @@ def test_single_mode_worker_normal_path(qtbot: QtBot) -> None:
 def test_single_mode_worker_exception_emits_message(qtbot: QtBot) -> None:
     """SingleWorker.run catches exceptions and emits sig_message."""
     worker, shell, _hw = _make_single_worker(qtbot)
-    worker.camera.arm_scan = Mock(side_effect=RuntimeError("arm failed"))
+    setattr(worker.camera, "arm_scan", Mock(side_effect=RuntimeError("arm failed")))
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -430,16 +430,16 @@ def test_single_mode_worker_no_data_returns_and_cleans(qtbot: QtBot) -> None:
     disarms the camera, and emits finished exactly once. No frame is
     enqueued."""
     worker, shell, hw = _make_single_worker(qtbot)
-    worker.acquire_scan = Mock(return_value=False)
+    setattr(worker, "acquire_scan", Mock(return_value=False))
 
     disarm_spy = Mock(wraps=worker.camera.disarm)
-    worker.camera.disarm = disarm_spy  # type: ignore[method-assign]
+    setattr(worker.camera, "disarm", disarm_spy)
 
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
 
-    worker.acquire_scan.assert_called_once()
+    cast(Any, worker).acquire_scan.assert_called_once()
     hw.stop_lasers.assert_called_once()
     disarm_spy.assert_called_once()
     shell._fs.enqueue_frame.assert_not_called()
@@ -459,12 +459,12 @@ def test_single_worker_multi_channel_no_data_breaks_and_cleans(
         call_count["n"] += 1
         return False
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     disarm_spy = Mock(wraps=worker.camera.disarm)
-    worker.camera.disarm = disarm_spy  # type: ignore[method-assign]
+    setattr(worker.camera, "disarm", disarm_spy)
 
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
@@ -490,10 +490,10 @@ def test_acquire_scan_siggen_error_aborts(qtbot: QtBot) -> None:
 
     # Make create_scanner set error=1.
     def _fake_create_scanner() -> None:
-        worker.siggen.error = 1
-        worker.siggen.error_message = "DAQ error"
+        setattr(worker.siggen, "error", 1)
+        setattr(worker.siggen, "error_message", "DAQ error")
 
-    worker.siggen.create_scanner = _fake_create_scanner  # ty: ignore[invalid-assignment]
+    setattr(worker.siggen, "create_scanner", _fake_create_scanner)
     result = worker.acquire_scan()
     assert result is False, "acquire_scan must return False after a siggen error"
     shell.sig_message.emit.assert_called_once()
@@ -507,9 +507,9 @@ def test_acquire_scan_camera_timeout_aborts(qtbot: QtBot) -> None:
 
     # Make monitor_recorder set recorder_timeout_status.
     def _fake_monitor(n: object) -> None:
-        worker.camera.recorder_timeout_status = True
+        setattr(worker.camera, "recorder_timeout_status", True)
 
-    worker.camera.monitor_recorder = _fake_monitor  # ty: ignore[invalid-assignment]
+    setattr(worker.camera, "monitor_recorder", _fake_monitor)
     result = worker.acquire_scan()
     assert result is False, "acquire_scan must return False after a recorder timeout"
     shell.sig_message.emit.assert_called_once()
@@ -520,10 +520,10 @@ def test_acquire_scan_normal_path_no_stitch(qtbot: QtBot) -> None:
     """acquire_scan normal path with stitch blend unchecked -> reconstruct_frame
     (line 401)."""
     worker, shell, _hw = _make_single_worker(qtbot)
-    worker.siggen.waveform_cycles = 1
+    setattr(worker.siggen, "waveform_cycles", 1)
     # Mock camera copy_recorder_images to return a simple array.
-    worker.camera.copy_recorder_images = Mock(return_value=np.zeros((1, 100, 100)))
-    worker.camera.recorder_timeout_status = False
+    setattr(worker.camera, "copy_recorder_images", Mock(return_value=np.zeros((1, 100, 100))))
+    setattr(worker.camera, "recorder_timeout_status", False)
     shell._fs.reconstruct_frame.return_value = np.zeros((100, 100))
     result = worker.acquire_scan()
     assert result is True, "acquire_scan must return True on a successful scan"
@@ -535,10 +535,10 @@ def test_acquire_scan_normal_path_with_stitch(qtbot: QtBot) -> None:
     """acquire_scan normal path with stitch blend checked ->
     reconstruct_frame_linear_blend (lines 396-399)."""
     worker, shell, _hw = _make_single_worker(qtbot)
-    worker._save_stitch_blend = True
-    worker.siggen.waveform_cycles = 1
-    worker.camera.copy_recorder_images = Mock(return_value=np.zeros((1, 100, 100)))
-    worker.camera.recorder_timeout_status = False
+    setattr(worker, "_save_stitch_blend", True)
+    setattr(worker.siggen, "waveform_cycles", 1)
+    setattr(worker.camera, "copy_recorder_images", Mock(return_value=np.zeros((1, 100, 100))))
+    setattr(worker.camera, "recorder_timeout_status", False)
     shell._fs.reconstruct_frame_linear_blend.return_value = np.zeros((100, 100))
     result = worker.acquire_scan()
     assert result is True, "acquire_scan must return True on a successful scan"
@@ -551,17 +551,17 @@ def test_acquire_scan_no_data_aborts_and_cleans_up(qtbot: QtBot) -> None:
     the camera when copy_recorder_images returns None, without enqueuing
     a frame."""
     worker, shell, _hw = _make_single_worker(qtbot)
-    worker.siggen.waveform_cycles = 1
-    worker.camera.recorder_timeout_status = False
+    setattr(worker.siggen, "waveform_cycles", 1)
+    setattr(worker.camera, "recorder_timeout_status", False)
 
     delete_recorder_spy = Mock(wraps=worker.camera.delete_recorder)
-    worker.camera.delete_recorder = delete_recorder_spy  # type: ignore[method-assign]
+    setattr(worker.camera, "delete_recorder", delete_recorder_spy)
     delete_scanner_spy = Mock(wraps=worker.siggen.delete_scanner)
-    worker.siggen.delete_scanner = delete_scanner_spy  # type: ignore[method-assign]
+    setattr(worker.siggen, "delete_scanner", delete_scanner_spy)
     disarm_spy = Mock(wraps=worker.camera.disarm)
-    worker.camera.disarm = disarm_spy  # type: ignore[method-assign]
+    setattr(worker.camera, "disarm", disarm_spy)
 
-    worker.camera.copy_recorder_images = Mock(return_value=None)
+    setattr(worker.camera, "copy_recorder_images", Mock(return_value=None))
 
     result = worker.acquire_scan()
 
@@ -598,9 +598,9 @@ def test_stack_mode_worker_normal_path_no_saving(qtbot: QtBot) -> None:
     shell.stack_mode_started = True
     shell.saving_allowed = False
     shell.number_of_planes = 1
-    worker.acquire_scan = Mock()
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", Mock())
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -616,10 +616,10 @@ def test_stack_mode_worker_saving_crop(qtbot: QtBot) -> None:
     shell.stack_mode_started = True
     shell.saving_allowed = True
     shell.number_of_planes = 1
-    worker._save_all_crop = True
-    worker.acquire_scan = Mock()
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "_save_all_crop", True)
+    setattr(worker, "acquire_scan", Mock())
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
     shell._fs.crop_buffer.return_value = np.zeros((100, 100))
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
@@ -637,10 +637,10 @@ def test_stack_mode_worker_saving_full(qtbot: QtBot) -> None:
     shell.stack_mode_started = True
     shell.saving_allowed = True
     shell.number_of_planes = 1
-    worker._save_all_full = True
-    worker.acquire_scan = Mock()
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "_save_all_full", True)
+    setattr(worker, "acquire_scan", Mock())
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -656,9 +656,9 @@ def test_stack_mode_worker_saving_reconstructed(qtbot: QtBot) -> None:
     shell.stack_mode_started = True
     shell.saving_allowed = True
     shell.number_of_planes = 1
-    worker.acquire_scan = Mock()
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", Mock())
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -674,11 +674,11 @@ def test_stack_mode_worker_motor_value_error_aborts(qtbot: QtBot) -> None:
     shell.stack_mode_started = True
     shell.saving_allowed = False
     shell.number_of_planes = 1
-    worker.acquire_scan = Mock()
+    setattr(worker, "acquire_scan", Mock())
     # Make the motor raise ValueError on move_absolute_position.
-    worker.motors.horizontal.move_absolute_position = Mock(
+    setattr(worker.motors.horizontal, "move_absolute_position", Mock(
         side_effect=ValueError("over limit")
-    )
+    ))
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -696,14 +696,14 @@ def test_stack_mode_worker_camera_timeout_breaks(qtbot: QtBot) -> None:
     shell.stack_mode_started = True
     shell.saving_allowed = False
     shell.number_of_planes = 1
-    worker.acquire_scan = Mock(return_value=False)
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", Mock(return_value=False))
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
     # Should have called acquire_scan once then broken.
-    worker.acquire_scan.assert_called_once()
+    cast(Any, worker).acquire_scan.assert_called_once()
 
 
 def test_stack_mode_worker_siggen_error_breaks(qtbot: QtBot) -> None:
@@ -713,14 +713,14 @@ def test_stack_mode_worker_siggen_error_breaks(qtbot: QtBot) -> None:
     shell.stack_mode_started = True
     shell.saving_allowed = False
     shell.number_of_planes = 2
-    worker.acquire_scan = Mock(return_value=False)
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", Mock(return_value=False))
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
     # Only 1 plane attempted (break after first), not 2.
-    worker.acquire_scan.assert_called_once()
+    cast(Any, worker).acquire_scan.assert_called_once()
 
 
 def test_stack_mode_worker_stop_interrupts(qtbot: QtBot) -> None:
@@ -737,7 +737,7 @@ def test_stack_mode_worker_stop_interrupts(qtbot: QtBot) -> None:
         shell.stack_mode_started = False
 
     shell.sig_progress_update.side_effect = _flip
-    worker.acquire_scan = Mock()
+    setattr(worker, "acquire_scan", Mock())
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -748,7 +748,7 @@ def test_stack_mode_worker_stop_interrupts(qtbot: QtBot) -> None:
 def test_stack_mode_worker_exception_emits_message(qtbot: QtBot) -> None:
     """StackWorker.run catches exceptions and emits sig_message."""
     worker, shell, _hw = _make_stack_worker(qtbot)
-    worker.camera.arm_scan = Mock(side_effect=RuntimeError("arm failed"))
+    setattr(worker.camera, "arm_scan", Mock(side_effect=RuntimeError("arm failed")))
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -778,9 +778,9 @@ def test_single_worker_multi_channel_both_frames(qtbot: QtBot) -> None:
         shell.reconstructed_frame = np.full((4, 4), call_count["n"], dtype=np.uint16)
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
     # saving_allowed=True exercises the multi-channel enqueue path.
     shell.saving_allowed = True
     finished_emits: list[None] = []
@@ -830,9 +830,9 @@ def test_single_worker_single_channel_unchanged(qtbot: QtBot) -> None:
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -865,9 +865,9 @@ def test_single_worker_multi_channel_estop_after_first_channel(qtbot: QtBot) -> 
         shell.estop_event.is_set.return_value = True
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -933,9 +933,9 @@ def test_single_mode_button_presamples_multi_channel(
             captured["multi_channel"] = args[-1]
         # Return a Mock-like object so moveToThread/connect/start are no-ops.
         worker_mock = Mock()
-        worker_mock.finished = Mock()
-        worker_mock.moveToThread = Mock()
-        worker_mock.deleteLater = Mock()
+        setattr(worker_mock, "finished", Mock())
+        setattr(worker_mock, "moveToThread", Mock())
+        setattr(worker_mock, "deleteLater", Mock())
         return worker_mock
 
     fake_thread = Mock()
@@ -1014,9 +1014,9 @@ def test_stack_worker_multi_channel_per_plane_cycle(qtbot: QtBot) -> None:
         shell.reconstructed_frame = np.full((4, 4), call_count["n"], dtype=np.uint16)
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -1064,9 +1064,9 @@ def test_stack_worker_single_channel_unchanged(qtbot: QtBot) -> None:
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -1111,10 +1111,10 @@ def test_stack_worker_multi_channel_estop_mid_plane(qtbot: QtBot) -> None:
         if idx == 0 and select_calls.count(0) == 1:
             shell.estop_event.is_set.return_value = True
 
-    hw.select_laser.side_effect = _fake_select_laser
-    worker.acquire_scan = Mock()  # type: ignore[method-assign]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(hw.select_laser, "side_effect", _fake_select_laser)
+    setattr(worker, "acquire_scan", Mock())
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -1125,7 +1125,7 @@ def test_stack_worker_multi_channel_estop_mid_plane(qtbot: QtBot) -> None:
         f"Expected only [0] (estop after first select_laser(0)), got {select_calls}"
     )
     # acquire_scan never ran (estop before the first acquire_scan).
-    worker.acquire_scan.assert_not_called()
+    cast(Any, worker).acquire_scan.assert_not_called()
     # stop_lasers called at the end (safety — both off regardless).
     hw.stop_lasers.assert_called_once()
     # finished signal emitted exactly once.
@@ -1142,7 +1142,7 @@ def test_stack_worker_multi_channel_timeout_after_channel0(qtbot: QtBot) -> None
     shell.saving_allowed = False
     shell.number_of_planes = 2
     select_calls: list[int] = []
-    hw.select_laser.side_effect = lambda idx: select_calls.append(idx)
+    setattr(hw.select_laser, "side_effect", lambda idx: select_calls.append(idx))
     acquire_count = {"n": 0}
 
     def _fake_acquire_scan() -> bool:
@@ -1151,13 +1151,13 @@ def test_stack_worker_multi_channel_timeout_after_channel0(qtbot: QtBot) -> None
         # Simulate a recorder timeout after the first acquire_scan
         # (channel 0 of plane 0).
         if acquire_count["n"] == 1:
-            worker.camera.recorder_timeout_status = True
+            setattr(worker.camera, "recorder_timeout_status", True)
             return False
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -1178,7 +1178,7 @@ def test_stack_worker_multi_channel_siggen_error_after_channel1(qtbot: QtBot) ->
     shell.stack_mode_started = True
     shell.saving_allowed = True
     shell.number_of_planes = 2
-    hw.select_laser = Mock()
+    setattr(hw, "select_laser", Mock())
     acquire_count = {"n": 0}
 
     def _fake_acquire_scan() -> bool:
@@ -1186,13 +1186,13 @@ def test_stack_worker_multi_channel_siggen_error_after_channel1(qtbot: QtBot) ->
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
         if acquire_count["n"] == 2:
             # Simulate a siggen error on channel 1 of plane 0.
-            worker.siggen.error = 1
+            setattr(worker.siggen, "error", 1)
             return False
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -1224,7 +1224,7 @@ def test_stack_worker_multi_channel_estop_after_select_laser1(qtbot: QtBot) -> N
             # E-stop after select_laser(1), before channel-1 acquire_scan.
             shell.estop_event.is_set.return_value = True
 
-    hw.select_laser.side_effect = _fake_select_laser
+    setattr(hw.select_laser, "side_effect", _fake_select_laser)
     acquire_count = {"n": 0}
 
     def _fake_acquire_scan() -> bool:
@@ -1232,9 +1232,9 @@ def test_stack_worker_multi_channel_estop_after_select_laser1(qtbot: QtBot) -> N
         shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -1255,16 +1255,16 @@ def test_stack_worker_multi_channel_none_frames_skips_enqueue(qtbot: QtBot) -> N
     shell.stack_mode_started = True
     shell.saving_allowed = True
     shell.number_of_planes = 1
-    hw.select_laser = Mock()
+    setattr(hw, "select_laser", Mock())
 
     def _fake_acquire_scan() -> bool:
         # Failed scan path: no frame data.
         shell.reconstructed_frame = None
         return False
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -1325,12 +1325,12 @@ def test_spawn_stack_worker_presamples_multi_channel(
                 # Positional: signature ends with multi_channel.
                 captured["multi_channel"] = args[-1]
             worker_mock = Mock()
-            worker_mock.finished = Mock()
-            worker_mock.moveToThread = Mock()
-            worker_mock.deleteLater = Mock()
+            setattr(worker_mock, "finished", Mock())
+            setattr(worker_mock, "moveToThread", Mock())
+            setattr(worker_mock, "deleteLater", Mock())
             # _spawn_stack_worker guards disconnects with receivers() > 0;
             # return 0 so the disconnect path is skipped on a fresh mock.
-            worker_mock.receivers.return_value = 0
+            setattr(worker_mock.receivers, "return_value", 0)
             return worker_mock
 
         fake_thread = Mock()
@@ -1423,10 +1423,10 @@ def _make_d04_shell(
     laser0_off_spy = Mock(wraps=bundle.lasers[0].off)
     laser1_on_spy = Mock(wraps=bundle.lasers[1].on)
     laser1_off_spy = Mock(wraps=bundle.lasers[1].off)
-    bundle.lasers[0].on = laser0_on_spy  # type: ignore[method-assign]
-    bundle.lasers[0].off = laser0_off_spy  # type: ignore[method-assign]
-    bundle.lasers[1].on = laser1_on_spy  # type: ignore[method-assign]
-    bundle.lasers[1].off = laser1_off_spy  # type: ignore[method-assign]
+    bundle.lasers[0].on = laser0_on_spy
+    bundle.lasers[0].off = laser0_off_spy
+    bundle.lasers[1].on = laser1_on_spy
+    bundle.lasers[1].off = laser1_off_spy
     spies = {
         "laser0_on": laser0_on_spy,
         "laser0_off": laser0_off_spy,
@@ -1501,7 +1501,7 @@ def test_live_worker_exception_in_cleanup_emits_message(qtbot: QtBot) -> None:
     still emits finished exactly once."""
     worker, shell, _hw = _make_live_worker(qtbot)
     shell.live_mode_started = False
-    worker.camera.disarm = Mock(side_effect=RuntimeError("disarm fault"))  # type: ignore[method-assign]
+    setattr(worker.camera, "disarm", Mock(side_effect=RuntimeError("disarm fault")))
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -1515,8 +1515,8 @@ def test_live_worker_exception_in_etl_and_laser_cleanup(qtbot: QtBot) -> None:
     sig_message, and still emits finished exactly once."""
     worker, shell, _hw = _make_live_worker(qtbot)
     shell.live_mode_started = False
-    worker.siggen.update_etls = Mock(side_effect=RuntimeError("etl fault"))  # type: ignore[method-assign]
-    worker._hw.stop_lasers = Mock(side_effect=RuntimeError("stop_lasers fault"))  # type: ignore[method-assign]
+    setattr(worker.siggen, "update_etls", Mock(side_effect=RuntimeError("etl fault")))
+    setattr(worker._hw, "stop_lasers", Mock(side_effect=RuntimeError("stop_lasers fault")))
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -1537,7 +1537,7 @@ def test_preview_worker_runs_one_frame_then_exits(qtbot: QtBot) -> None:
         shell.preview_mode_started = False
         return np.zeros((number_of_images, 4, 4), dtype=np.uint16)
 
-    worker.camera.copy_recorder_images = _copy_one_frame  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
+    setattr(worker.camera, "copy_recorder_images", _copy_one_frame)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -1554,8 +1554,8 @@ def test_preview_worker_exception_in_cleanup_emits_message(qtbot: QtBot) -> None
     still emits finished exactly once."""
     worker, shell, _hw = _make_preview_worker(qtbot)
     shell.preview_mode_started = False
-    worker._hw.stop_lasers = Mock(side_effect=RuntimeError("stop_lasers fault"))  # type: ignore[method-assign]
-    worker.camera.disarm = Mock(side_effect=RuntimeError("disarm fault"))  # type: ignore[method-assign]
+    setattr(worker._hw, "stop_lasers", Mock(side_effect=RuntimeError("stop_lasers fault")))
+    setattr(worker.camera, "disarm", Mock(side_effect=RuntimeError("disarm fault")))
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -1568,9 +1568,9 @@ def test_single_worker_exception_in_cleanup_emits_message(qtbot: QtBot) -> None:
     """SingleWorker.run catches exceptions in cleanup, emits sig_message, and
     still emits finished exactly once."""
     worker, shell, _hw = _make_single_worker(qtbot)
-    worker.siggen.update_etls = Mock(side_effect=RuntimeError("etl fault"))  # type: ignore[method-assign]
-    worker._hw.stop_lasers = Mock(side_effect=RuntimeError("stop_lasers fault"))  # type: ignore[method-assign]
-    worker.camera.disarm = Mock(side_effect=RuntimeError("disarm fault"))  # type: ignore[method-assign]
+    setattr(worker.siggen, "update_etls", Mock(side_effect=RuntimeError("etl fault")))
+    setattr(worker._hw, "stop_lasers", Mock(side_effect=RuntimeError("stop_lasers fault")))
+    setattr(worker.camera, "disarm", Mock(side_effect=RuntimeError("disarm fault")))
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -1656,7 +1656,7 @@ def test_live_worker_exception_in_start_lasers_emits_message(qtbot: QtBot) -> No
     emits sig_message (lines 282-286), and still emits finished."""
     worker, shell, _hw = _make_live_worker(qtbot)
     shell.live_mode_started = False
-    worker._hw.start_lasers = Mock(side_effect=RuntimeError("laser fault"))  # type: ignore[method-assign]
+    setattr(worker._hw, "start_lasers", Mock(side_effect=RuntimeError("laser fault")))
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
@@ -1712,14 +1712,14 @@ def test_single_worker_multi_channel_second_acquire_fails(qtbot: QtBot) -> None:
     acquire_scan fails (line 436)."""
     worker, shell, hw = _make_single_worker_multi(qtbot, multi_channel=True)
     shell.estop_event.is_set.return_value = False
-    worker.acquire_scan = Mock(side_effect=[True, False])  # type: ignore[method-assign]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", Mock(side_effect=[True, False]))
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()
     assert hw.select_laser.call_count == 2
-    assert worker.acquire_scan.call_count == 2
+    assert cast(Any, worker).acquire_scan.call_count == 2
     hw.stop_lasers.assert_called_once()
     assert len(finished_emits) == 1
 
@@ -1730,8 +1730,8 @@ def test_single_worker_multi_channel_none_frames_skips_enqueue(qtbot: QtBot) -> 
     worker, shell, hw = _make_single_worker_multi(qtbot, multi_channel=True)
     shell.saving_allowed = True
     shell.estop_event.is_set.return_value = False
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     def _fake_acquire_scan() -> bool:
         # Succeed but leave no frame data so frame1/frame2 are None.
@@ -1739,7 +1739,7 @@ def test_single_worker_multi_channel_none_frames_skips_enqueue(qtbot: QtBot) -> 
         return True
 
     acquire_mock = Mock(side_effect=_fake_acquire_scan)
-    worker.acquire_scan = acquire_mock  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
+    setattr(worker, "acquire_scan", acquire_mock)
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
     worker.run()

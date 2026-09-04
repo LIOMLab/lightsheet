@@ -22,7 +22,7 @@ Runs headless on Mac via ``QT_QPA_PLATFORM=offscreen`` (set by conftest).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -35,6 +35,7 @@ from pytestqt.qtbot import QtBot
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QObject
+from PySide6.QtWidgets import QWidget
 
 # ---------------------------------------------------------------------------
 # Standalone panel instantiation — each panel builds its own widget tree
@@ -189,24 +190,27 @@ def test_stacked_page_order(controller: Controller_MainWindow) -> None:
     ctrl = controller
     sp = ctrl.ui.stackedPanels
 
+    def _page_widget(index: int) -> QWidget:
+        widget = sp.widget(index)
+        assert widget is not None
+        return cast(QWidget, widget)
+
     # Index 0 — Motion (motor panel)
-    assert sp.widget(0).findChild(QObject, "pushButton_sampleStepForward") is not None
+    assert _page_widget(0).findChild(QObject, "pushButton_sampleStepForward") is not None
     # Index 1 — Acquire (acquisition panel)
-    assert sp.widget(1).findChild(QObject, "pushButton_acqGetSingleImage") is not None
+    assert _page_widget(1).findChild(QObject, "pushButton_acqGetSingleImage") is not None
     # Index 2 — Stack (stack panel)
-    assert sp.widget(2).findChild(QObject, "pushButton_acqStartStackMode") is not None
+    assert _page_widget(2).findChild(QObject, "pushButton_acqStartStackMode") is not None
     # Index 3 — Scan (scan panel)
-    assert sp.widget(3).findChild(QObject, "checkBox_etlSync") is not None
+    assert _page_widget(3).findChild(QObject, "checkBox_etlSync") is not None
     # Index 4 — Lasers (laser panel)
-    assert sp.widget(4).findChild(QObject, "pushButton_laserOneToggle") is not None
+    assert _page_widget(4).findChild(QObject, "pushButton_laserOneToggle") is not None
     # Index 5 — Files (save panel)
-    assert sp.widget(5).findChild(QObject, "pushButton_saveSelectDirectory") is not None
+    assert _page_widget(5).findChild(QObject, "pushButton_saveSelectDirectory") is not None
     # Index 6 — Past (dedicated PastAcquisitionsPanel)
-    assert sp.widget(6).findChild(QObject, "tableWidget_pastAcquisitions") is not None
+    assert _page_widget(6).findChild(QObject, "tableWidget_pastAcquisitions") is not None
     # Index 7 — Calibrate (calibration panel)
-    assert (
-        sp.widget(7).findChild(QObject, "pushButton_calCameraComputeFocus") is not None
-    )
+    assert _page_widget(7).findChild(QObject, "pushButton_calCameraComputeFocus") is not None
 
 def test_all_panels_wrapped_in_scroll_area(controller: Controller_MainWindow) -> None:
     """Each panel page is a QScrollArea with widgetResizable=True

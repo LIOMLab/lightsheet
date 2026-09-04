@@ -38,7 +38,7 @@ from pytestqt.qtbot import QtBot
 def test_message_log_cap_removed(controller: Controller_MainWindow) -> None:
     """The fixed 80 px max-height cap is gone (set to 16777215)."""
     ctrl = controller
-    max_h = ctrl.ui.plainTextEdit_messageLog.maximumHeight()  # ty: ignore[unresolved-attribute]
+    max_h = ctrl.ui.plainTextEdit_messageLog.maximumHeight()
     assert max_h != 80, (
         f"message log max height is still 80 (got {max_h}) — the cap was not removed"
     )
@@ -51,10 +51,10 @@ def test_message_splitter_exists(controller: Controller_MainWindow) -> None:
     """A vertical QSplitter (message_splitter) hosts stackedPanels + the
     message log inside controlsPane."""
     ctrl = controller
-    assert hasattr(ctrl.ui, "message_splitter"), (  # ty: ignore[unresolved-attribute]
+    assert hasattr(ctrl.ui, "message_splitter"), (
         "message_splitter not found on controller.ui"
     )
-    splitter = ctrl.ui.message_splitter  # ty: ignore[unresolved-attribute]
+    splitter = ctrl.ui.message_splitter
     assert isinstance(splitter, QSplitter), (
         f"message_splitter is {type(splitter).__name__}, expected QSplitter"
     )
@@ -63,10 +63,10 @@ def test_message_splitter_exists(controller: Controller_MainWindow) -> None:
     )
     # stackedPanels and the message log are both children of the splitter.
     children = [splitter.widget(i) for i in range(splitter.count())]
-    assert ctrl.ui.stackedPanels in children, (  # ty: ignore[unresolved-attribute]
+    assert ctrl.ui.stackedPanels in children, (
         "stackedPanels must be a section of message_splitter"
     )
-    assert ctrl.ui.plainTextEdit_messageLog in children, (  # ty: ignore[unresolved-attribute]
+    assert ctrl.ui.plainTextEdit_messageLog in children, (
         "plainTextEdit_messageLog must be a section of message_splitter"
     )
 
@@ -75,7 +75,7 @@ def test_message_log_default_height_about_5_lines(
 ) -> None:
     """The message log minimum height is ~96 px (5 lines)."""
     ctrl = controller
-    min_h = ctrl.ui.plainTextEdit_messageLog.minimumHeight()  # ty: ignore[unresolved-attribute]
+    min_h = ctrl.ui.plainTextEdit_messageLog.minimumHeight()
     assert min_h >= 96, (
         f"message log minimum height should be >= 96 (5 lines); got {min_h}"
     )
@@ -96,7 +96,7 @@ def test_message_splitter_drag_resizes_log(
     allocation produces a non-zero log size. The View-menu toggle test
     below proves setSizes changes the log size (hide → 0, show → > 0)."""
     ctrl = controller
-    splitter = ctrl.ui.message_splitter  # ty: ignore[unresolved-attribute]
+    splitter = ctrl.ui.message_splitter
     # childrenCollapsible=False — the handle cannot collapse a section to 0.
     assert splitter.childrenCollapsible() is False, (
         "message_splitter must have childrenCollapsible=False so the "
@@ -115,7 +115,7 @@ def test_message_splitter_drag_resizes_log(
     )
     # setSizes with a non-zero log allocation produces a non-zero log size
     # (the handle is live, not stuck at 0 or a fixed value).
-    ctrl.show()  # ty: ignore[unresolved-attribute]
+    ctrl.show()
     qtbot.waitExposed(ctrl)
     qtbot.wait(50)
     total = sum(splitter.sizes()) or splitter.height() or 1
@@ -130,7 +130,7 @@ def test_message_log_select_and_copy_enabled(controller: Controller_MainWindow) 
     """textInteractionFlags is TextSelectableByMouse (operator can
     select-and-copy an error string)."""
     ctrl = controller
-    flags = ctrl.ui.plainTextEdit_messageLog.textInteractionFlags()  # ty: ignore[unresolved-attribute]
+    flags = ctrl.ui.plainTextEdit_messageLog.textInteractionFlags()
     assert flags == Qt.TextInteractionFlag.TextSelectableByMouse, (
         f"textInteractionFlags is {flags}, expected TextSelectableByMouse"
     )
@@ -138,7 +138,7 @@ def test_message_log_select_and_copy_enabled(controller: Controller_MainWindow) 
 def test_message_log_still_read_only(controller: Controller_MainWindow) -> None:
     """readOnly stays True — only select-and-copy is enabled, not editing."""
     ctrl = controller
-    assert ctrl.ui.plainTextEdit_messageLog.isReadOnly() is True, (  # ty: ignore[unresolved-attribute]
+    assert ctrl.ui.plainTextEdit_messageLog.isReadOnly() is True, (
         "message log readOnly must stay True (select-and-copy only)"
     )
 
@@ -150,10 +150,10 @@ def test_view_menu_show_message_log_syncs_with_splitter(
     (hide/show) and the action's checked state syncs with the log
     visibility (audit #7 pattern)."""
     ctrl = controller
-    splitter = ctrl.ui.message_splitter  # ty: ignore[unresolved-attribute]
-    action = ctrl.ui.action_ShowHideMessageLog  # ty: ignore[unresolved-attribute]
+    splitter = ctrl.ui.message_splitter
+    action = ctrl.ui.action_ShowHideMessageLog
     # Show + process events so the splitter has a real laid-out size.
-    ctrl.show()  # ty: ignore[unresolved-attribute]
+    ctrl.show()
     qtbot.waitExposed(ctrl)
     qtbot.wait(50)
     # The action is checkable + starts checked (log visible by default).

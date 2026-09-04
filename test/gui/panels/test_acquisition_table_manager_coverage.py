@@ -41,7 +41,7 @@ def _mgr(
     qtbot: QtBot, controller: Controller_MainWindow
 ) -> tuple[Controller_MainWindow, AcquisitionTableManager]:
     ctrl = controller
-    return ctrl, ctrl.stack_panel.table_manager  # ty: ignore[unsound-return-statement]
+    return ctrl, ctrl.stack_panel.table_manager
 
 
 # -- add_stack edge case --------------------------------------------------
@@ -169,7 +169,7 @@ def test_estimate_per_plane_time_exception_fallback(
     ctrl, mgr = _mgr(qtbot, controller)
     # Remove the acquisition_panel attr so the access raises.
     orig = ctrl.acquisition_panel
-    ctrl.acquisition_panel = None  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+    setattr(ctrl, "acquisition_panel", None)
     try:
         assert mgr._estimate_per_plane_time() == 0.5
     finally:
@@ -190,7 +190,7 @@ def test_estimate_stack_size_mb_camera_exception_fallback(
             raise TypeError("no camera")
 
     orig = ctrl.camera
-    ctrl.camera = BadCamera()  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+    setattr(ctrl, "camera", BadCamera())
     try:
         mb = mgr._estimate_stack_size_mb(100)
         # 2000*2000*2*100 / (1024*1024) ≈ 762.9 MB
@@ -213,7 +213,7 @@ def test_zarr_pyramid_multiplier_exception_fallback(
             raise ValueError("bad float")
 
     orig = ctrl.stack_step
-    ctrl.stack_step = BadFloat()  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+    setattr(ctrl, "stack_step", BadFloat())
     try:
         mult = mgr._zarr_pyramid_multiplier()
         # stack_step=0.0 → base_res=(0, 6.5, 6.5) → max_res=6.5 → all
@@ -303,7 +303,7 @@ def test_recompute_with_motors_none(
     ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     orig = ctrl.motors
-    ctrl.motors = None  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+    setattr(ctrl, "motors", None)
     try:
         mgr._recompute_row(0)
     finally:
@@ -331,7 +331,7 @@ def test_recompute_with_bad_motor_limits(
 
         move_absolute_position = orig_motor.move_absolute_position
 
-    ctrl.motors.horizontal = BadMotor()  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+    setattr(ctrl.motors, "horizontal", BadMotor())
     try:
         mgr._recompute_row(0)
     finally:

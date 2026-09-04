@@ -307,7 +307,7 @@ class FrameSaver(QObject):
         # sample_rate is a live instance attribute on the SigGen (the mock
         # sets it at construct time; the real SigGen reads it from config
         # at construct time).
-        outfile.attrs["Sample Rate"] = sg.sample_rate  # ty: ignore[unresolved-attribute]
+        outfile.attrs["Sample Rate"] = sg.sample_rate
 
         cam = self.parent.camera  # ty: ignore[unresolved-attribute]
         outfile.attrs["Exposure Time (s)"] = cam.exposure_time

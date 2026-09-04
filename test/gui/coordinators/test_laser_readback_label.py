@@ -64,7 +64,7 @@ def test_l1_uncalibrated_emits_est_suffix() -> None:
     shell = _make_shell()
     hw = HardwareManager(bundle, shell)
     laser = _make_laser_mock(calibrated=False, power=150.0, output=150.0)
-    hw.lasers = [laser, Mock()]
+    setattr(hw, "lasers", [laser, Mock()])
 
     hw._refresh_laser_readback(0)
 
@@ -83,7 +83,7 @@ def test_l1_calibrated_emits_cal_suffix() -> None:
     shell = _make_shell()
     hw = HardwareManager(bundle, shell)
     laser = _make_laser_mock(calibrated=True, power=300.0, output=236.6)
-    hw.lasers = [laser, Mock()]
+    setattr(hw, "lasers", [laser, Mock()])
 
     hw._refresh_laser_readback(0)
 
@@ -104,7 +104,7 @@ def test_l2_path_unchanged_no_suffix() -> None:
     shell = _make_shell()
     hw = HardwareManager(bundle, shell)
     laser = _make_laser_mock(calibrated=False, power=120.0, output=120.0)
-    hw.lasers = [Mock(), laser]
+    setattr(hw, "lasers", [Mock(), laser])
 
     hw._refresh_laser_readback(1)
 
@@ -123,7 +123,7 @@ def test_l2_none_readback_emits_cmd_fallback() -> None:
     shell = _make_shell()
     hw = HardwareManager(bundle, shell)
     laser = _make_laser_mock(calibrated=False, power=120.0, output=None)
-    hw.lasers = [Mock(), laser]
+    setattr(hw, "lasers", [Mock(), laser])
 
     hw._refresh_laser_readback(1)
 
@@ -141,7 +141,7 @@ def test_l1_zero_power_emits_est_zero() -> None:
     shell = _make_shell()
     hw = HardwareManager(bundle, shell)
     laser = _make_laser_mock(calibrated=False, power=0.0, output=0.0)
-    hw.lasers = [laser, Mock()]
+    setattr(hw, "lasers", [laser, Mock()])
 
     hw._refresh_laser_readback(0)
 

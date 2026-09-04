@@ -44,7 +44,7 @@ def test_save_format_radio_re_estimates_table(
     footprints). The table's Est. Size value changes after the slot fires."""
     ctrl = controller
     table = ctrl.stack_panel.table_manager
-    ctrl.stack_step = 5.0
+    ctrl.stack_step = 5
     table.add_stack()
     row = table.table.rowCount() - 1
     table.set_cell(row, 1, "0")
@@ -53,8 +53,12 @@ def test_save_format_radio_re_estimates_table(
 
     ctrl.save_format = "hdf5"
     table.recompute_all_rows()
-    before = table.table.item(row, 6).text()
+    item = table.table.item(row, 6)
+    assert item is not None
+    before = item.text()
     ctrl.save_panel.ui.radioButton_saveFormat_zarr.click()
-    after = table.table.item(row, 6).text()
+    item = table.table.item(row, 6)
+    assert item is not None
+    after = item.text()
     assert before != after
     assert "(OME-Zarr)" in after, after

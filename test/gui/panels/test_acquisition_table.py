@@ -39,22 +39,28 @@ def test_est_size_suffix_reflects_save_format(
     table = ctrl.stack_panel.table_manager
     # stack_step is read for the zarr pyramid level count (base_res Z);
     # set a non-zero value so the level count is well-defined.
-    ctrl.stack_step = 5.0
+    ctrl.stack_step = 5
     row = _add_valid_row(table)
 
     ctrl.save_format = "hdf5"
     table.recompute_all_rows()
-    hdf5_text = table.table.item(row, 6).text()
+    item = table.table.item(row, 6)
+    assert item is not None
+    hdf5_text = item.text()
     assert "(HDF5)" in hdf5_text, hdf5_text
 
     ctrl.save_format = "zarr"
     table.recompute_all_rows()
-    zarr_text = table.table.item(row, 6).text()
+    item = table.table.item(row, 6)
+    assert item is not None
+    zarr_text = item.text()
     assert "(OME-Zarr)" in zarr_text, zarr_text
 
     ctrl.save_format = "both"
     table.recompute_all_rows()
-    both_text = table.table.item(row, 6).text()
+    item = table.table.item(row, 6)
+    assert item is not None
+    both_text = item.text()
     assert "(Both)" in both_text, both_text
 
 
@@ -66,7 +72,7 @@ def test_zarr_estimate_is_larger_than_hdf5(
     stack. Both = hdf5 + zarr (sum)."""
     ctrl = controller
     table = ctrl.stack_panel.table_manager
-    ctrl.stack_step = 5.0
+    ctrl.stack_step = 5
     row = _add_valid_row(table)
 
     def _mb(text: str) -> float:
@@ -82,17 +88,23 @@ def test_zarr_estimate_is_larger_than_hdf5(
 
     ctrl.save_format = "hdf5"
     table.recompute_all_rows()
-    hdf5_mb = _mb(table.table.item(row, 6).text())
+    item = table.table.item(row, 6)
+    assert item is not None
+    hdf5_mb = _mb(item.text())
 
     ctrl.save_format = "zarr"
     table.recompute_all_rows()
-    zarr_mb = _mb(table.table.item(row, 6).text())
+    item = table.table.item(row, 6)
+    assert item is not None
+    zarr_mb = _mb(item.text())
 
     assert zarr_mb > hdf5_mb, (hdf5_mb, zarr_mb)
 
     ctrl.save_format = "both"
     table.recompute_all_rows()
-    both_mb = _mb(table.table.item(row, 6).text())
+    item = table.table.item(row, 6)
+    assert item is not None
+    both_mb = _mb(item.text())
     assert abs(both_mb - (hdf5_mb + zarr_mb)) < 1.0, (hdf5_mb, zarr_mb, both_mb)
 
 
@@ -104,18 +116,22 @@ def test_format_radio_re_estimates_table(
     recompute_all_rows)."""
     ctrl = controller
     table = ctrl.stack_panel.table_manager
-    ctrl.stack_step = 5.0
+    ctrl.stack_step = 5
     row = _add_valid_row(table)
 
     ctrl.save_format = "hdf5"
     table.recompute_all_rows()
-    before = table.table.item(row, 6).text()
+    item = table.table.item(row, 6)
+    assert item is not None
+    before = item.text()
 
     # Click the OME-Zarr radio — fires the button group's buttonClicked
     # signal, which runs updateUi_save_format_changed (sets save_format)
     # then recompute_all_rows (re-estimates every row) in connection order.
     ctrl.save_panel.ui.radioButton_saveFormat_zarr.click()
-    after = table.table.item(row, 6).text()
+    item = table.table.item(row, 6)
+    assert item is not None
+    after = item.text()
 
     assert before != after
     assert "(OME-Zarr)" in after, after

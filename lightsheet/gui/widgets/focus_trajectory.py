@@ -21,7 +21,7 @@ label hidden), frozen (further appends ignored).
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import pyqtgraph as pg
 from pyqtgraph.GraphicsScene.mouseEvents import MouseDragEvent
@@ -221,7 +221,8 @@ class FocusTrajectoryWidget(QWidget):
         # Legend with the two curves + residual marker. The background
         # brush derives from the Breeze background token so it stays
         # consistent with the rest of the dark UI.
-        _bg_rgba = (*QColor(_BG).getRgb()[:3], 200)
+        _bg = cast(tuple[int, int, int, int], QColor(_BG).getRgb())
+        _bg_rgba = (_bg[0], _bg[1], _bg[2], 200)
         self._legend = pg.LegendItem(
             (180, 80),
             offset=(10, 10),

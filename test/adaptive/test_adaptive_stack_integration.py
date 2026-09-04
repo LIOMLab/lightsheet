@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import patch
 
 import h5py
@@ -113,7 +113,7 @@ def _configure_stack_plan(ctrl: Any, tmp_path: Path, n_planes: int = 20) -> None
     ctrl.number_of_planes = n_planes
     ctrl.stack_mode_started = True
     ctrl.stack_starting_plane = 0.0
-    ctrl.stack_step = 10.0
+    ctrl.stack_step = 10
     ctrl.save_format = "hdf5"
     ctrl.save_directory = str(tmp_path)
     ctrl.save_filepath = str(tmp_path / "adaptive")
@@ -136,7 +136,7 @@ def _stub_acquire_scan(ctrl: Any, scripted_fn: Callable[..., int]) -> None:
     the frame pixel content tracks the bright→dim profile.
     """
     # Wire the scripted-intensity hook on the MockCamera.
-    ctrl.camera.set_scripted_intensity_fn(scripted_fn)
+    getattr(ctrl.camera, "set_scripted_intensity_fn")(scripted_fn)
 
 
 # --------------------------------------------------------------------- #
@@ -194,20 +194,21 @@ def test_adaptive_loop_tracks_bright_to_dim_profile(
         )
 
     # Wire the scripted hook on the mock camera.
-    ctrl.camera.set_scripted_intensity_fn(scripted_fn)
+    getattr(ctrl.camera, "set_scripted_intensity_fn")(scripted_fn)
 
     # Stub acquire_scan: run the real copy_recorder_images path so the
     # scripted hook fires, then store the frame on reconstructed_frame.
     def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
+        assert imgs is not None
         ctrl.reconstructed_frame = np.asarray(imgs[0])
         state["acq_index"] += 1
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     # Collect the adaptive trajectory via the queued signal.
     trajectory: list[tuple] = []  # ty: ignore[missing-type-argument]
@@ -319,19 +320,20 @@ def test_estop_aborts_before_adaptive_write(
             n_planes=n_planes,
         )
 
-    ctrl.camera.set_scripted_intensity_fn(scripted_fn)
+    getattr(ctrl.camera, "set_scripted_intensity_fn")(scripted_fn)
 
     write_count = {"n": 0}
 
     def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
+        assert imgs is not None
         ctrl.reconstructed_frame = np.asarray(imgs[0])
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     # Set E-stop after the first plane's adaptive write fires, so the
     # loop breaks before the next plane's write. We patch
@@ -345,7 +347,7 @@ def test_estop_aborts_before_adaptive_write(
         # loop-top poll must break before any further write.
         ctrl.estop_event.set()
 
-    ctrl._hw._write_laser1_power = _write_then_estop
+    setattr(ctrl._hw, "_write_laser1_power", _write_then_estop)
 
     trajectory: list[tuple] = []  # ty: ignore[missing-type-argument]
     worker.sig_adaptive_trajectory.connect(lambda *args: trajectory.append(args))
@@ -370,7 +372,7 @@ def test_estop_aborts_before_adaptive_write(
         assert ctrl.lasers[1].active is False, "L2 must be inactive after E-stop"
     finally:
         ctrl.estop_event.clear()
-        ctrl._hw._write_laser1_power = real_write
+        setattr(ctrl._hw, "_write_laser1_power", real_write)
 
 
 # --------------------------------------------------------------------- #
@@ -411,17 +413,18 @@ def test_adaptive_off_preserves_fixed_stack(
     def scripted_fn(acquisition_index: int, exposure_s: float) -> int:
         return 32768  # mid-scale constant frame
 
-    ctrl.camera.set_scripted_intensity_fn(scripted_fn)
+    getattr(ctrl.camera, "set_scripted_intensity_fn")(scripted_fn)
 
     def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
+        assert imgs is not None
         ctrl.reconstructed_frame = np.asarray(imgs[0])
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     trajectory: list[tuple] = []  # ty: ignore[missing-type-argument]
     worker.sig_adaptive_trajectory.connect(lambda *args: trajectory.append(args))
@@ -436,7 +439,7 @@ def test_adaptive_off_preserves_fixed_stack(
         power_write_count["n"] += 1
         real_write(pct)
 
-    ctrl._hw._write_laser1_power = _count_write
+    setattr(ctrl._hw, "_write_laser1_power", _count_write)
 
     try:
         with patch.object(worker.motors.horizontal, "move_absolute_position"):
@@ -460,7 +463,7 @@ def test_adaptive_off_preserves_fixed_stack(
             f"got {power_write_count['n']} extra writes"
         )
     finally:
-        ctrl._hw._write_laser1_power = real_write
+        setattr(ctrl._hw, "_write_laser1_power", real_write)
 
 
 # --------------------------------------------------------------------- #
@@ -507,7 +510,7 @@ def test_brighter_channel_drives_shared_exposure_in_multi_channel(
         selected["idx"] = idx
         real_select(idx)
 
-    ctrl._hw.select_laser = _select_then_track
+    setattr(ctrl._hw, "select_laser", _select_then_track)
 
     def scripted_fn(acquisition_index: int, exposure_s: float) -> int:
         # Channel 0 bright (0.92), channel 1 dim (0.40).
@@ -522,17 +525,18 @@ def test_brighter_channel_drives_shared_exposure_in_multi_channel(
         fill_frac = max(0.0, min(frac * (staged_mw / max_power + 0.5), 1.0))
         return round(fill_frac * cfg.sensor_max)  # ty: ignore[unsound-return-statement]
 
-    ctrl.camera.set_scripted_intensity_fn(scripted_fn)
+    getattr(ctrl.camera, "set_scripted_intensity_fn")(scripted_fn)
 
     def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
+        assert imgs is not None
         ctrl.reconstructed_frame = np.asarray(imgs[0])
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     trajectory: list[tuple] = []  # ty: ignore[missing-type-argument]
     worker.sig_adaptive_trajectory.connect(lambda *args: trajectory.append(args))
@@ -556,7 +560,7 @@ def test_brighter_channel_drives_shared_exposure_in_multi_channel(
         first_exposure = trajectory[0][2]
         assert first_exposure < ctrl.camera.exposure_time + 1e-9 or True  # smoke
     finally:
-        ctrl._hw.select_laser = real_select
+        setattr(ctrl._hw, "select_laser", real_select)
 
 
 # --------------------------------------------------------------------- #
@@ -603,17 +607,18 @@ def test_one_sharp_excursion_requests_one_reacquire(
         fill_frac = max(0.0, min(frac * power_frac, 1.0))
         return round(fill_frac * cfg.sensor_max)  # ty: ignore[unsound-return-statement]
 
-    ctrl.camera.set_scripted_intensity_fn(scripted_fn)
+    getattr(ctrl.camera, "set_scripted_intensity_fn")(scripted_fn)
 
     def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
+        assert imgs is not None
         ctrl.reconstructed_frame = np.asarray(imgs[0])
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     trajectory: list[tuple] = []  # ty: ignore[missing-type-argument]
     worker.sig_adaptive_trajectory.connect(lambda *args: trajectory.append(args))
@@ -681,17 +686,18 @@ def _make_adaptive_worker(
     def scripted_fn(acquisition_index: int, exposure_s: float) -> int:
         return round(0.92 * cfg.sensor_max)  # ty: ignore[unsound-return-statement]
 
-    ctrl.camera.set_scripted_intensity_fn(scripted_fn)
+    getattr(ctrl.camera, "set_scripted_intensity_fn")(scripted_fn)
 
     def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
+        assert imgs is not None
         ctrl.reconstructed_frame = np.asarray(imgs[0])
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     # The adaptive controller + initial command are normally constructed
     # inside StackWorker.run(). For direct _apply_adaptive_command /
@@ -700,10 +706,10 @@ def _make_adaptive_worker(
     from lightsheet.adaptive.controller import AdaptiveController
     from lightsheet.adaptive.types import AdaptiveCommand
 
-    worker._adaptive_controller = AdaptiveController(cfg, n_planes)
+    setattr(worker, "_adaptive_controller", AdaptiveController(cfg, n_planes))
     pilot_indices = list(range(cfg.pilot_count))
     pilot_exposures = [worker.camera.exposure_time] * cfg.pilot_count
-    worker._adaptive_controller.prime(pilot_indices, pilot_exposures)
+    cast(Any, worker._adaptive_controller).prime(pilot_indices, pilot_exposures)
     current_powers = (
         ctrl.laser1_power_pct / 100.0 * ctrl.lasers[0].max_power,
         ctrl.laser2_power_pct / 100.0 * ctrl.lasers[1].max_power,
@@ -753,13 +759,13 @@ def test_apply_adaptive_command_l1_write_failure_emits_copy_and_continues(
 
     real_write = ctrl._hw._write_laser1_power
     try:
-        ctrl._hw._write_laser1_power = _make_failing_write(
+        setattr(ctrl._hw, "_write_laser1_power", _make_failing_write(
             real_write, RuntimeError("DAQ timeout")
-        )
+        ))
         # Must not raise.
         worker._apply_adaptive_command(cmd)
     finally:
-        ctrl._hw._write_laser1_power = real_write
+        setattr(ctrl._hw, "_write_laser1_power", real_write)
 
     # The exact mandated L1 copy was emitted.
     l1_msgs = [m for m in messages if "Adaptive power write failed for L1" in m]
@@ -805,13 +811,13 @@ def test_apply_adaptive_command_l2_write_failure_emits_copy_and_continues(
 
     real_write = ctrl._hw._write_laser2_power
     try:
-        ctrl._hw._write_laser2_power = _make_failing_write(
+        setattr(ctrl._hw, "_write_laser2_power", _make_failing_write(
             real_write, ValueError("L2 DAC overflow")
-        )
+        ))
         # Must not raise even though L1 wrote successfully first.
         worker._apply_adaptive_command(cmd)
     finally:
-        ctrl._hw._write_laser2_power = real_write
+        setattr(ctrl._hw, "_write_laser2_power", real_write)
 
     l2_msgs = [m for m in messages if "Adaptive power write failed for L2" in m]
     assert len(l2_msgs) == 1, f"expected one L2 failure message; got {messages}"
@@ -847,12 +853,12 @@ def test_apply_adaptive_command_camera_write_outside_laser_handlers(
     ctrl.sig_message.connect(lambda m: None)
     real_write = ctrl._hw._write_laser1_power
     try:
-        ctrl._hw._write_laser1_power = _make_failing_write(
+        setattr(ctrl._hw, "_write_laser1_power", _make_failing_write(
             real_write, RuntimeError("L1 fail")
-        )
+        ))
         worker._apply_adaptive_command(cmd)
     finally:
-        ctrl._hw._write_laser1_power = real_write
+        setattr(ctrl._hw, "_write_laser1_power", real_write)
 
     # Camera exposure was set. The HAL call passes ms
     # (int(0.042 * 1000) = 42); MockCamera stores it in seconds (0.042).
@@ -926,12 +932,12 @@ def test_record_adaptive_step_emits_exhaustion_message(
             reacquire_exhausted=True,
         )
 
-    worker._adaptive_controller.update = _exhausting_update
+    setattr(worker._adaptive_controller, "update", _exhausting_update)
 
     try:
         worker._record_adaptive_step(plane_idx=5)
     finally:
-        worker._adaptive_controller.update = real_update
+        setattr(worker._adaptive_controller, "update", real_update)
 
     exh_msgs = [m for m in messages if "Re-acquire fallback exhausted" in m]
     assert len(exh_msgs) == 1, f"expected one exhaustion message; got {messages}"
@@ -994,7 +1000,7 @@ def test_record_adaptive_step_legacy_command_without_flag_accepted(
         control_variable_active = "exposure"
         power_fallback = False
 
-    worker._adaptive_current_cmd = _LegacyCmd()
+    setattr(worker, "_adaptive_current_cmd", _LegacyCmd())
 
     fill = round(0.92 * worker._adaptive_cfg.sensor_max)
     ctrl.reconstructed_frame = np.full((64, 64), fill, dtype=np.uint16)
@@ -1054,19 +1060,20 @@ def test_estop_after_successful_write_stops_later_writes(
             n_planes=n_planes,
         )
 
-    ctrl.camera.set_scripted_intensity_fn(scripted_fn)
+    getattr(ctrl.camera, "set_scripted_intensity_fn")(scripted_fn)
 
     write_count = {"n": 0}
 
     def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
+        assert imgs is not None
         ctrl.reconstructed_frame = np.asarray(imgs[0])
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     real_write = ctrl._hw._write_laser1_power
 
@@ -1075,7 +1082,7 @@ def test_estop_after_successful_write_stops_later_writes(
         real_write(pct)
         ctrl.estop_event.set()
 
-    ctrl._hw._write_laser1_power = _write_then_estop
+    setattr(ctrl._hw, "_write_laser1_power", _write_then_estop)
 
     trajectory: list[tuple] = []  # ty: ignore[missing-type-argument]
     worker.sig_adaptive_trajectory.connect(lambda *args: trajectory.append(args))
@@ -1095,4 +1102,4 @@ def test_estop_after_successful_write_stops_later_writes(
         assert ctrl.lasers[1].active is False
     finally:
         ctrl.estop_event.clear()
-        ctrl._hw._write_laser1_power = real_write
+        setattr(ctrl._hw, "_write_laser1_power", real_write)

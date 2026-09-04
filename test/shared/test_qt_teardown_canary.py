@@ -27,6 +27,7 @@ def test_no_top_level_widgets_after_teardown() -> None:
     """Teardown reaps the full controller widget tree."""
     app = QApplication.instance()
     assert app is not None
+    assert isinstance(app, QApplication)
     try:
         widgets = app.topLevelWidgets()
     except RuntimeError:

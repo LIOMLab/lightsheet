@@ -186,14 +186,14 @@ def test_galvo_activate_propagates_to_siggen() -> None:
     acq, shell = _make_acq()
     shell.scan_panel.ui.checkBox_galvoActivate.isChecked.return_value = True
     acq.updateUi_galvo_activate()
-    assert acq.siggen.galvo_activated is True  # ty: ignore[unresolved-attribute]
+    assert acq.siggen.galvo_activated is True
 
 
 def test_galvo_invert_propagates_to_siggen() -> None:
     acq, shell = _make_acq()
     shell.scan_panel.ui.checkBox_galvoInvert.isChecked.return_value = True
     acq.updateUi_galvo_invert()
-    assert acq.siggen.galvo_inverted is True  # ty: ignore[unresolved-attribute]
+    assert acq.siggen.galvo_inverted is True
 
 
 # -- ETL amplitude/offset slots (sync + no-sync branches) --------------------
@@ -274,15 +274,15 @@ def test_etl_sync_unchecked_is_noop_on_siggen() -> None:
 def test_etl_steps_propagates_to_siggen_as_int() -> None:
     acq, _shell = _make_acq()
     acq.updateUi_etl_steps()
-    assert acq.siggen.etl_steps == 5  # ty: ignore[unresolved-attribute]
-    assert isinstance(acq.siggen.etl_steps, int)  # ty: ignore[unresolved-attribute]
+    assert acq.siggen.etl_steps == 5
+    assert isinstance(acq.siggen.etl_steps, int)
 
 
 def test_etl_activate_propagates_to_siggen() -> None:
     acq, shell = _make_acq()
     shell.scan_panel.ui.checkBox_etlActivate.isChecked.return_value = True
     acq.updateUi_etl_activate()
-    assert acq.siggen.etl_activated is True  # ty: ignore[unresolved-attribute]
+    assert acq.siggen.etl_activated is True
 
 
 # -- Camera shutter mode + setting slots ------------------------------------
@@ -337,7 +337,7 @@ def test_camera_exposure_time_converts_ms_to_seconds() -> None:
 def test_camera_line_time_converts_us_to_seconds() -> None:
     acq, _shell = _make_acq()
     acq.updateUi_camera_line_time()
-    assert acq.camera.lightsheet_line_time == pytest.approx(48.8e-6)  # ty: ignore[unresolved-attribute]
+    assert acq.camera.lightsheet_line_time == pytest.approx(48.8e-6)
 
 
 def test_camera_exposed_lines_propagates_as_int() -> None:

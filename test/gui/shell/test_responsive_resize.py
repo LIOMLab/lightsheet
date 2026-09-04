@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 pytest.importorskip("PySide6")
 
 from PySide6 import QtCore
+from PySide6.QtWidgets import QPushButton
 
 
 def _resize_and_settle(
@@ -299,7 +300,7 @@ def test_estop_button_visible_at_all_target_sizes(
     for width, height in ((1366, 768), (1920, 1080), (1280, 800)):
         _resize_and_settle(controller, width, height, qtbot)
         estop = controller.findChild(
-            QtCore.QObject,
+            QPushButton,
             "pushButton_estop",
         )
         assert estop is not None, "pushButton_estop not found in shell"

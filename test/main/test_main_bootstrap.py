@@ -377,7 +377,7 @@ def test_main_rig_path_unresolved_device_shows_dialog_and_exits(
 
 
 def test_load_breeze_stylesheet_raises_on_missing_theme(
-    qtbot: pytest.QtBot,  # type: ignore[unresolved-attribute]
+    qtbot: pytest.QtBot,  # ty: ignore[unresolved-attribute]
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """_load_breeze_stylesheet raises FileNotFoundError for an unknown theme

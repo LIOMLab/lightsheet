@@ -65,7 +65,7 @@ def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
     ctrl.number_of_planes = 2
     ctrl.stack_mode_started = True
     ctrl.stack_starting_plane = 0.0
-    ctrl.stack_step = 10.0
+    ctrl.stack_step = 10
     ctrl.save_format = "hdf5"
     ctrl.save_directory = str(tmp_path)
     ctrl.save_filepath = str(tmp_path / "test")
@@ -105,9 +105,9 @@ def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
         ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     # Stub the motor move so MockMotors travel-limit enforcement does
     # not abort the stack (the mock enforces limits; a 10um step from 0
@@ -199,7 +199,7 @@ def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
     ctrl.number_of_planes = 2
     ctrl.stack_mode_started = True
     ctrl.stack_starting_plane = 0.0
-    ctrl.stack_step = 10.0
+    ctrl.stack_step = 10
     ctrl.save_format = "hdf5"
     ctrl.save_directory = str(tmp_path)
     ctrl.save_filepath = str(tmp_path / "test")
@@ -241,9 +241,9 @@ def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
         ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
         return True
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     # Stub the motor move so MockMotors travel-limit enforcement does
     # not abort the stack (the mock enforces limits; a 10um step from 0

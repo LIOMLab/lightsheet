@@ -237,7 +237,9 @@ def test_help_menu_links_guide_pdf(
 
     ctrl = controller
     # The Help menu action that opens the documentation (Guide.pdf).
-    action = ctrl.findChild(QObject, "actionGuidePdf")
+    from PySide6.QtGui import QAction
+
+    action = ctrl.findChild(QAction, "actionGuidePdf")
     assert action is not None, (
         "The Help menu must contain actionGuidePdf linking to "
         "Guide.pdf (the French reference)."

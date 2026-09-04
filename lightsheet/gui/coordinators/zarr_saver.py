@@ -234,7 +234,7 @@ class ZarrSaver:
         # sample_rate is a live instance attribute on the SigGen (the
         # mock sets it at construct time; the real SigGen reads it from config
         # at construct time).
-        grp.attrs["sample_rate"] = siggen.sample_rate  # ty: ignore[unresolved-attribute]
+        grp.attrs["sample_rate"] = siggen.sample_rate
         grp.attrs["binning_x"] = cam.binning_x
         grp.attrs["binning_y"] = cam.binning_y
 

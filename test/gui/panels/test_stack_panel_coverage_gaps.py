@@ -90,12 +90,12 @@ def test_last_plane_edited_no_motors_returns_early(
     ctrl = controller
     sp = ctrl.stack_panel
     real_motors = ctrl.motors
-    ctrl.motors = None  # type: ignore[assignment]
+    ctrl.motors = None  # ty: ignore[invalid-assignment]
     try:
         # Should not raise; the early return path (line 217-219) fires.
         sp._on_last_plane_edited()
     finally:
-        ctrl.motors = real_motors  # type: ignore[assignment]
+        ctrl.motors = real_motors
 
 
 def test_first_plane_edited_no_motors_returns_early(
@@ -106,11 +106,11 @@ def test_first_plane_edited_no_motors_returns_early(
     ctrl = controller
     sp = ctrl.stack_panel
     real_motors = ctrl.motors
-    ctrl.motors = None  # type: ignore[assignment]
+    ctrl.motors = None  # ty: ignore[invalid-assignment]
     try:
         sp._on_first_plane_edited()
     finally:
-        ctrl.motors = real_motors  # type: ignore[assignment]
+        ctrl.motors = real_motors
 
 
 # ---------------------------------------------------------------------------
@@ -210,11 +210,11 @@ def test_estimate_per_plane_time_falls_back_on_missing_widget(
     # attribute → AttributeError inside the try block.
     mock_acq = MagicMock()
     mock_acq.ui = MagicMock(spec=[])  # no doubleSpinBox_cameraExposureTime
-    ctrl.acquisition_panel = mock_acq  # type: ignore[assignment]
+    ctrl.acquisition_panel = mock_acq
     try:
         per_plane = sp._estimate_per_plane_time()
     finally:
-        ctrl.acquisition_panel = real_acq  # type: ignore[assignment]
+        ctrl.acquisition_panel = real_acq
     assert per_plane == 0.5
 
 
@@ -230,11 +230,11 @@ def test_estimate_stack_size_mb_falls_back_on_bad_camera(
     type(mock_camera).rows = property(
         lambda self: (_ for _ in ()).throw(TypeError("bad"))
     )
-    ctrl.camera = mock_camera  # type: ignore[assignment]
+    ctrl.camera = mock_camera
     try:
         size_mb = sp._estimate_stack_size_mb(10)
     finally:
-        ctrl.camera = real_camera  # type: ignore[assignment]
+        ctrl.camera = real_camera
     # 10 planes * 2000 * 2000 * 2 bytes / (1024*1024) = ~76.29 MB
     assert size_mb == pytest.approx(10 * 2000 * 2000 * 2 / (1024.0 * 1024.0))
 
@@ -422,11 +422,11 @@ def test_update_adaptive_shutter_units_no_acq_panel_returns(
     ctrl = controller
     sp = ctrl.stack_panel
     real_acq = ctrl.acquisition_panel
-    ctrl.acquisition_panel = None  # type: ignore[assignment]
+    ctrl.acquisition_panel = None  # ty: ignore[invalid-assignment]
     try:
         sp._update_adaptive_shutter_units()
     finally:
-        ctrl.acquisition_panel = real_acq  # type: ignore[assignment]
+        ctrl.acquisition_panel = real_acq
 
 
 def test_update_adaptive_shutter_units_missing_combo_defaults_rolling(
@@ -440,11 +440,11 @@ def test_update_adaptive_shutter_units_missing_combo_defaults_rolling(
     real_acq = ctrl.acquisition_panel
     mock_acq = MagicMock()
     mock_acq.ui = MagicMock(spec=[])  # no comboBox_cameraShutterMode
-    ctrl.acquisition_panel = mock_acq  # type: ignore[assignment]
+    ctrl.acquisition_panel = mock_acq
     try:
         sp._update_adaptive_shutter_units()
     finally:
-        ctrl.acquisition_panel = real_acq  # type: ignore[assignment]
+        ctrl.acquisition_panel = real_acq
     # Defaulted to Rolling (ms).
     suffix = sp.ui.doubleSpinBox_adaptiveMinExposure.suffix().strip().lower()
     assert suffix == "ms"
@@ -501,11 +501,11 @@ def test_build_adaptive_config_no_acq_panel_uses_rolling_default(
     ui.doubleSpinBox_adaptiveMinExposure.setValue(5.0)  # 5 ms
     ui.doubleSpinBox_adaptiveMinExposure.editingFinished.emit()
     real_acq = ctrl.acquisition_panel
-    ctrl.acquisition_panel = None  # type: ignore[assignment]
+    ctrl.acquisition_panel = None  # ty: ignore[invalid-assignment]
     try:
         cfg = sp.build_adaptive_config()
     finally:
-        ctrl.acquisition_panel = real_acq  # type: ignore[assignment]
+        ctrl.acquisition_panel = real_acq
     assert cfg is not None
     # 5 ms → 5e-3 s (Rolling default conversion).
     assert cfg.min_exposure_s == pytest.approx(5e-3, rel=1e-9)
@@ -526,11 +526,11 @@ def test_build_adaptive_config_missing_combo_uses_rolling_default(
     real_acq = ctrl.acquisition_panel
     mock_acq = MagicMock()
     mock_acq.ui = MagicMock(spec=[])  # no comboBox_cameraShutterMode
-    ctrl.acquisition_panel = mock_acq  # type: ignore[assignment]
+    ctrl.acquisition_panel = mock_acq
     try:
         cfg = sp.build_adaptive_config()
     finally:
-        ctrl.acquisition_panel = real_acq  # type: ignore[assignment]
+        ctrl.acquisition_panel = real_acq
     assert cfg is not None
     # 5 ms → 5e-3 s (Rolling default).
     assert cfg.min_exposure_s == pytest.approx(5e-3, rel=1e-9)
@@ -560,12 +560,12 @@ def test_summary_render_no_laser_panel(
     sp.ui.doubleSpinBox_acqLastPlane.setValue(10.0)
     ctrl.number_of_planes = 11
     real_lp = ctrl.laser_panel
-    ctrl.laser_panel = None  # type: ignore[assignment]
+    ctrl.laser_panel = None  # ty: ignore[invalid-assignment]
     try:
         sp._render_stack_plan_summary()
         text = sp.ui.label_stackPlanSummary.text()
     finally:
-        ctrl.laser_panel = real_lp  # type: ignore[assignment]
+        ctrl.laser_panel = real_lp
     assert "2 ch" not in text
 
 
@@ -586,12 +586,12 @@ def test_summary_render_laser_panel_missing_checkboxes(
     real_lp = ctrl.laser_panel
     mock_lp = MagicMock()
     mock_lp.ui = MagicMock(spec=[])  # no checkBox_laserOneAutomatic etc.
-    ctrl.laser_panel = mock_lp  # type: ignore[assignment]
+    ctrl.laser_panel = mock_lp
     try:
         sp._render_stack_plan_summary()
         text = sp.ui.label_stackPlanSummary.text()
     finally:
-        ctrl.laser_panel = real_lp  # type: ignore[assignment]
+        ctrl.laser_panel = real_lp
     assert "2 ch" not in text
 
 
@@ -603,12 +603,12 @@ def test_narrow_adaptive_power_maxima_no_bundle_returns(
     ctrl = controller
     sp = ctrl.stack_panel
     real_bundle = ctrl._bundle
-    ctrl._bundle = None  # type: ignore[assignment]
+    ctrl._bundle = None  # ty: ignore[invalid-assignment]
     try:
         # Must not raise — the early return fires.
         sp._narrow_adaptive_power_maxima()
     finally:
-        ctrl._bundle = real_bundle  # type: ignore[assignment]
+        ctrl._bundle = real_bundle
 
 
 def test_narrow_adaptive_power_maxima_bad_live_max_skips(
@@ -631,12 +631,12 @@ def test_narrow_adaptive_power_maxima_bad_live_max_skips(
         lambda self: (_ for _ in ()).throw(TypeError("bad"))
     )
     bad_bundle = replace(real_bundle, lasers=(bad_laser, bad_laser))
-    ctrl._bundle = bad_bundle  # type: ignore[assignment]
+    ctrl._bundle = bad_bundle
     try:
         # Must not raise — the except branches swallow the TypeError.
         sp._narrow_adaptive_power_maxima()
     finally:
-        ctrl._bundle = real_bundle  # type: ignore[assignment]
+        ctrl._bundle = real_bundle
         # Restore the original MockLaser.max_power property.
         del type(bad_laser).max_power  # type: ignore[attr-defined]
 
@@ -652,12 +652,12 @@ def test_update_adaptive_shutter_units_lightsheet_sb_none(
     # Temporarily hide one spinbox by setting the attribute to None on
     # the ui namespace — the loop uses getattr with a None default.
     real_sb = sp.ui.doubleSpinBox_adaptiveMinExposure
-    sp.ui.doubleSpinBox_adaptiveMinExposure = None  # type: ignore[assignment]
+    sp.ui.doubleSpinBox_adaptiveMinExposure = None  # ty: ignore[invalid-assignment]
     try:
         # Must not raise — the sb-None guard skips the missing spinbox.
         sp._update_adaptive_shutter_units()
     finally:
-        sp.ui.doubleSpinBox_adaptiveMinExposure = real_sb  # type: ignore[assignment]
+        sp.ui.doubleSpinBox_adaptiveMinExposure = real_sb
 
 
 def test_update_adaptive_shutter_units_rolling_sb_none(
@@ -669,8 +669,8 @@ def test_update_adaptive_shutter_units_rolling_sb_none(
     sp = ctrl.stack_panel
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentText("Rolling")
     real_sb = sp.ui.doubleSpinBox_adaptiveMinExposure
-    sp.ui.doubleSpinBox_adaptiveMinExposure = None  # type: ignore[assignment]
+    sp.ui.doubleSpinBox_adaptiveMinExposure = None  # ty: ignore[invalid-assignment]
     try:
         sp._update_adaptive_shutter_units()
     finally:
-        sp.ui.doubleSpinBox_adaptiveMinExposure = real_sb  # type: ignore[assignment]
+        sp.ui.doubleSpinBox_adaptiveMinExposure = real_sb

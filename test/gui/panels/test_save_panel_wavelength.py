@@ -143,7 +143,7 @@ def test_stack_worker_single_channel_presamples_wavelength(
     ctrl.number_of_planes = 2
     ctrl.stack_mode_started = True
     ctrl.stack_starting_plane = 0.0
-    ctrl.stack_step = 10.0
+    ctrl.stack_step = 10
     ctrl.save_format = "hdf5"
     ctrl.save_directory = str(tmp_path)
     ctrl.save_filepath = str(tmp_path / "test")
@@ -184,9 +184,9 @@ def test_stack_worker_single_channel_presamples_wavelength(
     def _fake_acquire_scan() -> None:
         ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
 
-    worker.acquire_scan = _fake_acquire_scan  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker, "acquire_scan", _fake_acquire_scan)
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     with patch.object(worker.motors.horizontal, "move_absolute_position"):
         finished_emits: list[None] = []

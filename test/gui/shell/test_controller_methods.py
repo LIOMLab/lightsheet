@@ -18,7 +18,7 @@ value, signal emit, widget state), never a static-source grep.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -554,21 +554,21 @@ def test_updateUi_save_single_image_saving_allowed_crop(
     ctrl.buffer = Mock()
     ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(True)
     ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
-    ctrl._fs.reinit = Mock()
-    ctrl._fs.set_files = Mock()
-    ctrl._fs.crop_buffer = Mock(return_value=Mock())
-    ctrl._fs.enqueue_buffer = Mock()
-    ctrl._fs.start_saving = Mock()
-    ctrl._fs.stop_saving = Mock()
-    ctrl._fs.add_sample_name = Mock()
-    ctrl._fs.add_motor_parameters = Mock()
+    setattr(cast(Any, ctrl._fs), "reinit", Mock())
+    setattr(cast(Any, ctrl._fs), "set_files", Mock())
+    setattr(cast(Any, ctrl._fs), "crop_buffer", Mock(return_value=Mock()))
+    setattr(cast(Any, ctrl._fs), "enqueue_buffer", Mock())
+    setattr(cast(Any, ctrl._fs), "start_saving", Mock())
+    setattr(cast(Any, ctrl._fs), "stop_saving", Mock())
+    setattr(cast(Any, ctrl._fs), "add_sample_name", Mock())
+    setattr(cast(Any, ctrl._fs), "add_motor_parameters", Mock())
     ctrl.save_panel.updateUi_save_single_image()
-    ctrl._fs.reinit.assert_called_with(1)
-    ctrl._fs.set_files.assert_called_with(
+    cast(Any, ctrl._fs).reinit.assert_called_with(1)
+    cast(Any, ctrl._fs).set_files.assert_called_with(
         1, ctrl.save_filepath, "singleImage", 1, "ETLscan", wavelengths=[555]
     )
-    ctrl._fs.start_saving.assert_called_once()
-    ctrl._fs.stop_saving.assert_called_once()
+    cast(Any, ctrl._fs).start_saving.assert_called_once()
+    cast(Any, ctrl._fs).stop_saving.assert_called_once()
 
 def test_updateUi_save_single_image_saving_allowed_full(
     controller: Controller_MainWindow,
@@ -583,15 +583,15 @@ def test_updateUi_save_single_image_saving_allowed_full(
     ctrl.buffer = Mock()
     ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
     ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(True)
-    ctrl._fs.reinit = Mock()
-    ctrl._fs.set_files = Mock()
-    ctrl._fs.enqueue_buffer = Mock()
-    ctrl._fs.start_saving = Mock()
-    ctrl._fs.stop_saving = Mock()
-    ctrl._fs.add_sample_name = Mock()
-    ctrl._fs.add_motor_parameters = Mock()
+    setattr(cast(Any, ctrl._fs), "reinit", Mock())
+    setattr(cast(Any, ctrl._fs), "set_files", Mock())
+    setattr(cast(Any, ctrl._fs), "enqueue_buffer", Mock())
+    setattr(cast(Any, ctrl._fs), "start_saving", Mock())
+    setattr(cast(Any, ctrl._fs), "stop_saving", Mock())
+    setattr(cast(Any, ctrl._fs), "add_sample_name", Mock())
+    setattr(cast(Any, ctrl._fs), "add_motor_parameters", Mock())
     ctrl.save_panel.updateUi_save_single_image()
-    ctrl._fs.set_files.assert_called_with(
+    cast(Any, ctrl._fs).set_files.assert_called_with(
         1, ctrl.save_filepath, "singleImage", 1, "FullETLscan", wavelengths=[555]
     )
 
@@ -608,15 +608,15 @@ def test_updateUi_save_single_image_saving_allowed_reconstructed(
     ctrl.reconstructed_frame = Mock()
     ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
     ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
-    ctrl._fs.reinit = Mock()
-    ctrl._fs.set_files = Mock()
-    ctrl._fs.enqueue_buffer = Mock()
-    ctrl._fs.start_saving = Mock()
-    ctrl._fs.stop_saving = Mock()
-    ctrl._fs.add_sample_name = Mock()
-    ctrl._fs.add_motor_parameters = Mock()
+    setattr(cast(Any, ctrl._fs), "reinit", Mock())
+    setattr(cast(Any, ctrl._fs), "set_files", Mock())
+    setattr(cast(Any, ctrl._fs), "enqueue_buffer", Mock())
+    setattr(cast(Any, ctrl._fs), "start_saving", Mock())
+    setattr(cast(Any, ctrl._fs), "stop_saving", Mock())
+    setattr(cast(Any, ctrl._fs), "add_sample_name", Mock())
+    setattr(cast(Any, ctrl._fs), "add_motor_parameters", Mock())
     ctrl.save_panel.updateUi_save_single_image()
-    ctrl._fs.set_files.assert_called_with(
+    cast(Any, ctrl._fs).set_files.assert_called_with(
         1,
         ctrl.save_filepath,
         "singleImage",

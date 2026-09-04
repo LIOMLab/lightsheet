@@ -27,7 +27,7 @@ never a static-source grep.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -45,7 +45,7 @@ def test_update_levels_readout_none_frame_is_noop(
     """_update_levels_readout with frame=None returns early (line 902)."""
     ctrl = controller
     before = ctrl.ui.label_levelsReadout.text()
-    ctrl._update_levels_readout(None)
+    ctrl._update_levels_readout(cast(Any, None))
     assert ctrl.ui.label_levelsReadout.text() == before
 
 def test_update_levels_readout_empty_frame_is_noop(
@@ -203,7 +203,7 @@ def test_channel_radio_visibility_radio_none_is_noop(
     ctrl = controller
     # Remove the channel_radio to simulate early-init state.
     radio = ctrl.channel_radio
-    ctrl.channel_radio = None
+    setattr(ctrl, "channel_radio", None)
     try:
         ctrl._update_channel_radio_visibility()  # must not raise
     finally:
@@ -250,7 +250,7 @@ def test_apply_channel_tint_no_wavelength_is_noop(
     ctrl = controller
     # Temporarily null the first laser's wavelength.
     original = ctrl.lasers[0].wavelength
-    ctrl.lasers[0].wavelength = None  # type: ignore[attr-defined]
+    setattr(ctrl.lasers[0], "wavelength", None) # type: ignore[attr-defined]
     try:
         ctrl._apply_channel_tint(0)
     finally:
@@ -290,7 +290,7 @@ def test_close_event_before_hardware_init_accepts(
 ) -> None:
     """closeEvent before hardware_init (no self.lasers) stops the past scan +
     hardware_init timer + accepts the event (lines 1210-1214)."""
-    from PySide6.QtCore import QEvent
+    from PySide6.QtGui import QCloseEvent
 
     ctrl = controller
     # Simulate the pre-hardware_init state by deleting the lasers attribute.
@@ -298,7 +298,7 @@ def test_close_event_before_hardware_init_accepts(
     # close_modes -> reads self.lasers) does not AttributeError.
     saved_lasers = ctrl.lasers
     del ctrl.lasers
-    event = QEvent(QEvent.Type.Close)
+    event = QCloseEvent()
     try:
         ctrl.closeEvent(event)
         assert event.isAccepted()
@@ -308,11 +308,11 @@ def test_close_event_before_hardware_init_accepts(
 def test_close_event_rejected_ignores_event(controller: Controller_MainWindow) -> None:
     """When the close confirmation dialog is rejected, closeEvent ignores the
     event (line 1262)."""
-    from PySide6.QtCore import QEvent
+    from PySide6.QtGui import QCloseEvent
     from PySide6.QtWidgets import QMessageBox
 
     ctrl = controller
-    event = QEvent(QEvent.Type.Close)
+    event = QCloseEvent()
     # Patch the dialog to return No (reject).
     with patch_qmessage_question() as qm:
         qm.return_value = QMessageBox.StandardButton.No
@@ -401,12 +401,12 @@ def test_estop_warns_when_laser_off_fails(controller: Controller_MainWindow) -> 
         ctrl.lasers[0].error = 1
         ctrl.lasers[0].error_message = "simulated off failure"
 
-    ctrl.lasers[0].off = _bad_off  # type: ignore[method-assign]
+    ctrl.lasers[0].off = _bad_off  # ty: ignore[invalid-assignment]
     messages: list[str] = []
     ctrl.sig_message.connect(lambda m: messages.append(m))
     try:
         ctrl.updateUi_estop_pressed()
     finally:
-        ctrl.lasers[0].off = original_off  # type: ignore[method-assign]
+        ctrl.lasers[0].off = original_off  # ty: ignore[invalid-assignment]
         ctrl.lasers[0].error = 0
     assert any("STILL BE ON" in m for m in messages)

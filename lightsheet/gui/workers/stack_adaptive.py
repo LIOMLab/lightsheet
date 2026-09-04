@@ -175,8 +175,7 @@ class _StackAdaptiveMixin:
                 FrameSaverController,
             )
 
-            fs = cast(FrameSaverController, self._shell._fs)
-            fs.record_adaptive_sample(sample)
+            self._shell._fs.record_adaptive_sample(sample)
 
         # Emit the trajectory signal for the GUI-thread plot.
         self.sig_adaptive_trajectory.emit(

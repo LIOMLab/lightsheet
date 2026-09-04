@@ -6,7 +6,7 @@ import contextlib
 from typing import Any
 
 import pytest
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
 from pytestqt.qtbot import QtBot
 
 from lightsheet.gui.coordinators.acquisition_coordinator import (
@@ -86,8 +86,8 @@ def _build_controller(
 
         # (c) Schedule owned top-level widgets and the controller for deletion.
         app = QApplication.instance()
-        if app is not None:
-            owned_toplevels: list = []
+        if app is not None and isinstance(app, QApplication):
+            owned_toplevels: list[QWidget] = []
             for widget in app.topLevelWidgets():
                 if widget is controller:
                     continue

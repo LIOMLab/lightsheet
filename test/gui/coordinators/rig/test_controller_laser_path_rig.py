@@ -131,7 +131,7 @@ def test_write_laser1_power_real_daq_repeated(
     """
     ctrl = controller
     # Mark laser active so the write path actually runs.
-    ctrl._hw.lasers[0].active = True
+    setattr(ctrl._hw.lasers[0], "active", True)
     errors = []
     for _ in range(15):
         try:

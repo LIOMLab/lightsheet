@@ -280,7 +280,7 @@ def _configure_autofocus_stack_plan(
     ctrl.number_of_planes = n_planes
     ctrl.stack_mode_started = True
     ctrl.stack_starting_plane = 0.0
-    ctrl.stack_step = 10.0
+    ctrl.stack_step = 10
     ctrl.save_format = "hdf5"
     ctrl.save_directory = str(tmp_path)
     ctrl.save_filepath = str(tmp_path / "autofocus_branches")
@@ -319,7 +319,7 @@ def _fake_acquire_scan(worker: Any, state: dict[str, Any]) -> Any:
         imgs = worker.camera.copy_recorder_images(n_imgs)
         frame = np.asarray(imgs[0])
         frame[:] = 30000
-        worker._shell.reconstructed_frame = frame
+        setattr(worker._shell, "reconstructed_frame", frame)
         state["acq_index"] += 1
         return True
 
@@ -335,8 +335,8 @@ def test_autofocus_over_travel_camera_axis_aborts_with_message_and_beep(
     _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
 
     worker = _make_autofocus_worker(ctrl)
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     messages: list[str] = []
     beeps: list[None] = []
@@ -374,8 +374,8 @@ def test_autofocus_cadence_two_updates_residual_twice(
     _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=4)
 
     worker = _make_autofocus_worker(ctrl, cadence=2)
-    worker.camera.recorder_timeout_status = False
-    worker.siggen.error = 0
+    setattr(worker.camera, "recorder_timeout_status", False)
+    setattr(worker.siggen, "error", 0)
 
     update_calls: list[tuple[float, float]] = []
     real_update = AdaptiveFocusController.update
