@@ -8,7 +8,7 @@ Covers two concerns:
    ``LIGHTSHEET_DEMO`` env var with CLI-overrides-env precedence.
 
 2. The ``hardware_init`` HAL-assignment branch — tested via real
-   construction: ``make_controller`` builds the real
+   construction: the ``controller`` and ``bundle`` fixtures build the real
    ``Controller_MainWindow`` with a mock ``DeviceBundle`` (Laser 1 = 555 nm
    / 300 mW, Laser 2 = 647 nm / 150 mW, mock camera/siggen/motors/etls),
    wires all four collaborators, and calls ``hardware_init``. Asserts the
@@ -16,21 +16,22 @@ Covers two concerns:
    receives the camera reference (dependency ordering preserved), and that
    the demo indicator is emitted via the status bar (not ``sig_message``).
 
-The real controller is constructed via ``make_controller`` (see
-``test/_helpers/controller_fixture.py``) — ``QT_QPA_PLATFORM=offscreen``
+The real controller is constructed via the ``controller`` fixture (see
+``test/fixtures/controller.py``) — ``QT_QPA_PLATFORM=offscreen``
 plus the conftest SDK stubs make real construction work on the Mac dev box,
 producing genuine branch coverage that the exec pattern structurally cannot.
 """
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
-from _helpers.controller_fixture import make_controller
-from pytest import FixtureRequest
-from pytestqt.qtbot import QtBot
-
 from lightsheet.__main__ import _resolve_demo
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+    from lightsheet.hal import DeviceBundle
 
 # --------------------------------------------------------------------------- #
 # _resolve_demo: CLI-overrides-env precedence.
@@ -60,7 +61,7 @@ def test_resolve_demo_cli_true_overrides_env_zero() -> None:
 
 # --------------------------------------------------------------------------- #
 # hardware_init HAL-assignment branch — tested via real construction.
-# make_controller builds the real Controller_MainWindow with a mock
+# The controller fixture builds the real Controller_MainWindow with a mock
 # DeviceBundle, wires all four collaborators, and calls hardware_init.
 # Asserts the bundle's HAL handles are assigned onto the controller and
 # the demo indicator is emitted via the status bar (not sig_message).
@@ -68,14 +69,14 @@ def test_resolve_demo_cli_true_overrides_env_zero() -> None:
 
 
 def test_hardware_init_assigns_mock_camera_from_bundle_under_demo(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow, bundle: DeviceBundle
 ) -> None:
     """When demo=True (bundle built from Mock* by _build_demo_bundle),
     hardware_init assigns the bundle's MockCamera onto self.camera — no
     hardware init runs on a dev box. Verified via real construction."""
     from lightsheet.hal import MockCamera
 
-    ctrl, bundle = make_controller(qtbot, request)
+    ctrl = controller
     assert isinstance(ctrl.camera, MockCamera), (
         "demo bundle's camera must be a MockCamera"
     )
@@ -85,28 +86,28 @@ def test_hardware_init_assigns_mock_camera_from_bundle_under_demo(
 
 
 def test_hardware_init_preserves_siggen_camera_dependency(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow, bundle: DeviceBundle
 ) -> None:
     """The bundle's SigGen was constructed with the bundle's camera
     reference (waveform timing derives from camera settings). After
     hardware_init assigns from the bundle, the dependency is preserved
     by identity. Verified via real construction."""
-    ctrl, bundle = make_controller(qtbot, request)
+    ctrl = controller
     assert ctrl.siggen is bundle.siggen
     assert ctrl.camera is bundle.camera
 
 
 def test_hardware_init_demo_indicator_emitted_via_statusbar_not_sigmessage(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow,
 ) -> None:
     """Under demo mode the indicator (window-title suffix + status-bar
     message) must go through QStatusBar.showMessage directly, NOT via
     sig_message.emit, so it does not pollute the future golden-master
     sig_message sequence. Verified via real construction: re-run
     hardware_init with spies on both emission channels."""
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
 
-    # hardware_init already ran during make_controller. To observe the
+    # hardware_init already ran during the controller fixture. To observe the
     # demo indicator routing, stop the existing timers, reset the window
     # title, set up spies on both channels, and re-run hardware_init.
     ctrl.timer_imageview.stop()
@@ -146,13 +147,13 @@ def test_hardware_init_demo_indicator_emitted_via_statusbar_not_sigmessage(
 
 
 def test_hardware_init_assigns_from_bundle(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow, bundle: DeviceBundle
 ) -> None:
     """hardware_init must assign HAL handles from the injected bundle,
     not construct them itself. After execution, ctrl.camera IS
     bundle.camera (identity, not a new instance). Verified via real
     construction."""
-    ctrl, bundle = make_controller(qtbot, request)
+    ctrl = controller
     assert ctrl.camera is bundle.camera, (
         "hardware_init must assign self.camera from the bundle, not construct"
     )
@@ -165,7 +166,7 @@ def test_hardware_init_assigns_from_bundle(
 
 
 def test_hardware_init_does_not_construct_hal_classes(
-    qtbot: QtBot, request: FixtureRequest
+    controller: Controller_MainWindow, bundle: DeviceBundle
 ) -> None:
     """hardware_init must NOT import or construct MockCamera/Camera/SigGen/
     Motors/DAQLaser/IBeamSmartLaser/ETLs/Mock* — those constructions moved
@@ -176,7 +177,7 @@ def test_hardware_init_does_not_construct_hal_classes(
     instance."""
     from lightsheet.hal import MockCamera, MockETLs, MockLaser, MockMotors, MockSigGen
 
-    ctrl, bundle = make_controller(qtbot, request)
+    ctrl = controller
     # Identity: hardware_init assigned from the bundle, not constructed.
     assert ctrl.camera is bundle.camera
     assert ctrl.siggen is bundle.siggen

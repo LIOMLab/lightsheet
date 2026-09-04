@@ -21,16 +21,19 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
-from pytest import FixtureRequest, MonkeyPatch
+from pytest import MonkeyPatch
 from pytestqt.qtbot import QtBot
 
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
 def _construct_model(model_cls: Any, **kwargs: Any) -> Any:
@@ -391,7 +394,7 @@ def test_controller_overlay_theme_rejects_unknown() -> None:
 
 
 def test_qdarkstyle_absent_from_pyproject() -> None:
-    project_root = Path(__file__).resolve().parent.parent
+    project_root = Path(__file__).resolve().parents[2]
     pyproject = project_root / "pyproject.toml"
     with pyproject.open(encoding="utf-8") as f:
         content = f.read()
@@ -401,7 +404,7 @@ def test_qdarkstyle_absent_from_pyproject() -> None:
 
 
 def test_qdarkstyle_not_imported_in_main() -> None:
-    project_root = Path(__file__).resolve().parent.parent
+    project_root = Path(__file__).resolve().parents[2]
     main_py = project_root / "lightsheet" / "__main__.py"
     with main_py.open(encoding="utf-8") as f:
         content = f.read()
@@ -414,7 +417,7 @@ def test_qdarkstyle_not_imported_in_main() -> None:
 
 
 def test_breeze_compiled_resource_committed() -> None:
-    project_root = Path(__file__).resolve().parent.parent
+    project_root = Path(__file__).resolve().parents[2]
     breeze_py = project_root / "lightsheet" / "gui" / "breeze_pyside6.py"
     assert breeze_py.is_file(), (
         "lightsheet/gui/breeze_pyside6.py (compiled resource) must be committed"
@@ -422,7 +425,7 @@ def test_breeze_compiled_resource_committed() -> None:
 
 
 def test_breeze_vendor_license_retained() -> None:
-    project_root = Path(__file__).resolve().parent.parent
+    project_root = Path(__file__).resolve().parents[2]
     license_path = (
         project_root
         / "lightsheet"
@@ -440,7 +443,7 @@ def test_breeze_vendor_license_retained() -> None:
 
 
 def test_build_breeze_script_exists() -> None:
-    project_root = Path(__file__).resolve().parent.parent
+    project_root = Path(__file__).resolve().parents[2]
     script = project_root / "scripts" / "build-breeze.sh"
     assert script.is_file(), "scripts/build-breeze.sh must exist"
     with script.open(encoding="utf-8") as f:
@@ -455,29 +458,25 @@ def test_build_breeze_script_exists() -> None:
 
 # ---------------------------------------------------------------------------
 # Theme slot persistence + QActionGroup exclusivity (UI-SPEC §Theme Contract).
-# These tests construct the real Controller_MainWindow via make_controller and
+# These tests construct the real Controller_MainWindow via the controller fixture and
 # exercise the updateUi_*_theme slots, asserting cfg_write is called with the
 # right Theme value and the QActionGroup is exclusive + checkable.
 # ---------------------------------------------------------------------------
 
 
 def test_light_theme_slot_persists_to_config(
-    qtbot: QtBot, request: FixtureRequest, monkeypatch: MonkeyPatch
+    controller: Controller_MainWindow, monkeypatch: MonkeyPatch
 ) -> None:
     """updateUi_light_theme writes {"Theme": "light"} to config.ini and
     shows the status-bar hint.
 
-    The controller is constructed with demo=True (per make_controller), and
+    The controller is constructed with demo=True (per the controller fixture), and
     the theme slots skip cfg_write in demo mode to avoid corrupting the real
     config.ini during the test suite. These tests verify the rig-path
     persistence, so they flip _demo_mode off (with cfg_write monkeypatched,
     no real file is touched).
     """
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     captured: list[tuple] = []  # ty: ignore[missing-type-argument]
     import lightsheet.gui.shell.controller as ctrl_mod
 
@@ -496,13 +495,9 @@ def test_light_theme_slot_persists_to_config(
 
 
 def test_dark_theme_slot_persists_to_config(
-    qtbot: QtBot, request: FixtureRequest, monkeypatch: MonkeyPatch
+    controller: Controller_MainWindow, monkeypatch: MonkeyPatch
 ) -> None:
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     captured: list[tuple] = []  # ty: ignore[missing-type-argument]
     import lightsheet.gui.shell.controller as ctrl_mod
 
@@ -521,13 +516,9 @@ def test_dark_theme_slot_persists_to_config(
 
 
 def test_follow_system_theme_slot_persists_to_config(
-    qtbot: QtBot, request: FixtureRequest, monkeypatch: MonkeyPatch
+    controller: Controller_MainWindow, monkeypatch: MonkeyPatch
 ) -> None:
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     captured: list[tuple] = []  # ty: ignore[missing-type-argument]
     import lightsheet.gui.shell.controller as ctrl_mod
 
@@ -546,16 +537,12 @@ def test_follow_system_theme_slot_persists_to_config(
 
 
 def test_theme_action_group_is_exclusive_with_three_checkable_actions(
-    qtbot: QtBot,
-    request: FixtureRequest,
+    controller: Controller_MainWindow,
 ) -> None:
     """ctrl._theme_action_group is exclusive with 3 actions, all checkable."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
     from PySide6.QtGui import QActionGroup
 
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     group = ctrl._theme_action_group
     assert isinstance(group, QActionGroup)
     assert group.isExclusive(), "theme QActionGroup must be exclusive"
@@ -568,16 +555,12 @@ def test_theme_action_group_is_exclusive_with_three_checkable_actions(
 
 
 def test_startup_theme_reflected_on_checked_action(
-    qtbot: QtBot, request: FixtureRequest, monkeypatch: MonkeyPatch
+    controller: Controller_MainWindow,
 ) -> None:
     """The persisted [Controller] Theme is reflected onto the checked
     action of the exclusive group on startup. With the default config.ini
     (no Theme key → 'system'), action_followSystemTheme is checked."""
-    from _helpers.controller_fixture import (
-        make_controller,
-    )
-
-    ctrl, _bundle = make_controller(qtbot, request)
+    ctrl = controller
     # config.ini has no [Controller] Theme key → default 'system'.
     assert ctrl.ui.action_followSystemTheme.isChecked()
     assert not ctrl.ui.action_lightTheme.isChecked()
