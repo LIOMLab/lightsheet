@@ -299,7 +299,7 @@ class AcquisitionPanelWidget(QWidget):
                 # Check that filename is valid and saving is allowed
                 self._shell.save_panel.validate_file_name()
 
-                nosave_answer = False
+                nosave_answer = QMessageBox.StandardButton.No
                 if not self._shell.saving_allowed:
                     self._shell.sig_beep.emit()
                     nosave_answer = QMessageBox.question(
@@ -310,7 +310,10 @@ class AcquisitionPanelWidget(QWidget):
                         QMessageBox.StandardButton.Yes,
                     )
 
-                if self._shell.saving_allowed or nosave_answer:
+                if (
+                    self._shell.saving_allowed
+                    or nosave_answer == QMessageBox.StandardButton.Yes
+                ):
                     self._shell.stack_panel.ui.pushButton_acqStartStackMode.setText(
                         "Stop Stack Mode"
                     )
@@ -396,7 +399,6 @@ class AcquisitionPanelWidget(QWidget):
         # under PySide6 if the worker QThread is stuck between run() and
         # exec(). The worker is deleted via the thread's finished signal,
         # so stale finished→thread.quit/updateUi connections become no-ops.
-        prev_worker = getattr(self._shell, "_stack_worker", None)
 
         # Spawn the stack worker on the (reused) QThread (moveToThread
         # pattern). Pre-sample the adaptive config on the GUI thread so
