@@ -162,7 +162,7 @@ uv run pytest -q
 **Use the convenience scripts instead of constructing pytest flags by hand**
 (this avoids a common trap — see the warning below):
 ```bash
-bash scripts/test.sh              # xdist-parallel (default, ~21s) — use this
+bash scripts/test.sh              # xdist-parallel (default, ~98s) — use this
 bash scripts/test-serial.sh       # single-process (debugging only, ~3-4 min)
 bash scripts/test.sh test/test_foo.py::test_bar   # xdist, one test
 ```
@@ -170,7 +170,7 @@ bash scripts/test.sh test/test_foo.py::test_bar   # xdist, one test
 **WARNING — never override `addopts`.** xdist is the default via `addopts`
 in `pyproject.toml` (`-n auto --maxprocesses=6 --dist=load
 --max-worker-restart=0`). Any `addopts` override silently strips the xdist
-flags and drops to single-process — a ~10x slowdown (21s → 3:36) that is
+flags and drops to single-process — a ~2-3x slowdown (~98s → ~3-4 min) that is
 invisible on a single test but catastrophic on the full suite. The trap:
 
 | Command | xdist? | Why |
