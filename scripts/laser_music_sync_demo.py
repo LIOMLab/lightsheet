@@ -2,16 +2,22 @@
 
 Plays a WAV file and drives the two lasers through a promotional sequence
 aligned to the "Laser" vocal hits in *Ray Volpe - Laserbeam (ÆON_MODE Remix)*.
-The sequence is: L1 active just before the first hit, L2 (red) on the first
-hit, L1 on the second, L2 on the third, and L2 continuing after the fourth.
-Galvos and ETLs run a free Lissajous-like pattern through the whole event.
+
+- 2 s before the first marker: L1 on with an interesting galvo/ETL pattern.
+- Just before the first marker: all lasers off.
+- At each of the four markers: a quick laser flash.
+  - 1st: L1
+  - 2nd: L2 (red)
+  - 3rd: L1
+  - 4th: L1 + L2
+- Last 2 s: both L1 and L2 on.
 
 Use ``--demo`` to smoke-test the timing and patterns on macOS without hardware.
 
-Example (real hardware, 10 mW per laser, cue at 44.89s):
+Example (real hardware, default 100 mW):
     uv run python scripts/laser_music_sync_demo.py --yes
 
-Example (mock hardware, no audio, fast-forward to the event):
+Example (mock, no audio, fast-forward to the event):
     uv run python scripts/laser_music_sync_demo.py --demo --dry-run --stop-after-event
 """
 
@@ -32,9 +38,10 @@ logger = logging.getLogger("laser_music_sync_demo")
 
 # Default WAV and cue timings for Ray Volpe - Laserbeam (ÆON_MODE Remix)
 DEFAULT_WAV = "/Users/frans/Downloads/Ray Volpe - Laserbeam (ÆON_MODE Remix).wav"
-DEFAULT_LASER_START = 44.5
-DEFAULT_LASER_END = 47.5
 DEFAULT_LASER_CUES = [44.89, 45.16, 46.30, 46.31]
+DEFAULT_LASER_PRE = 2.0
+DEFAULT_LASER_POST = 2.0
+DEFAULT_LASER_FLASH = 0.1
 
 
 def build_bundle(demo: bool) -> DeviceBundle:
@@ -115,18 +122,19 @@ def play_audio(
 def run_pattern(
     siggen: ISigGen, now: float, t: float, args: argparse.Namespace
 ) -> None:
-    """Compute and write one galvo/ETL setpoint for the current time."""
-    left_g = args.galvo_offset + args.galvo_amp * math.sin(
-        2 * math.pi * args.pattern_freq * t
+    """Compute and write one galvo/ETL setpoint for the current time.
+
+    The left and right galvos/ETLs move at independent rates and phases so the
+    pattern is more interesting than a simple coupled Lissajous.
+    """
+    f = args.pattern_freq
+    left_g = args.galvo_offset + args.galvo_amp * math.sin(2 * math.pi * f * t)
+    right_g = args.galvo_offset + args.galvo_amp * math.sin(
+        2 * math.pi * f * 1.3 * t + 0.25
     )
-    right_g = args.galvo_offset + args.galvo_amp * math.cos(
-        2 * math.pi * args.pattern_freq * t
-    )
-    left_e = args.etl_offset + args.etl_amp * math.sin(
-        2 * math.pi * args.pattern_freq * 0.3 * t + 0.25
-    )
-    right_e = args.etl_offset + args.etl_amp * math.cos(
-        2 * math.pi * args.pattern_freq * 0.3 * t + 0.25
+    left_e = args.etl_offset + args.etl_amp * math.sin(2 * math.pi * f * 0.7 * t + 0.5)
+    right_e = args.etl_offset + args.etl_amp * math.sin(
+        2 * math.pi * f * 1.1 * t + 0.75
     )
     siggen.update_galvos(left_g, right_g)
     siggen.update_etls(left_e, right_e)
@@ -140,26 +148,78 @@ def run_pattern(
     )
 
 
+def _phase_boundaries(args: argparse.Namespace) -> tuple[list[float], list[list[int]]]:
+    """Return sorted command boundaries and per-phase active-laser indices.
+
+    ``phase_times[i]`` to ``phase_times[i + 1]`` uses ``phase_lasers[i]``.
+    Cues that are closer than ``laser_flash_dur`` are handled by clamping the
+    flash so it ends at the next cue.
+    """
+    delay = args.laser_delay
+    c = args.laser_cues
+    flash = args.laser_flash_dur
+    post_gap = flash
+    pre_end = c[0] - flash
+    flash1_end = min(c[0] + flash, c[1])
+    flash2_end = min(c[1] + flash, c[2])
+    flash3_end = min(c[2] + flash, c[3])
+    flash4_end = c[3] + flash
+    post_start = flash4_end + post_gap
+    event_start = c[0] - args.laser_pre_time - delay
+    event_end = c[3] + flash + post_gap + args.laser_post_time - delay
+
+    starts = [
+        event_start,
+        pre_end - delay,
+        c[0] - delay,
+        flash1_end - delay,
+        c[1] - delay,
+        flash2_end - delay,
+        c[2] - delay,
+        flash3_end - delay,
+        c[3] - delay,
+        flash4_end - delay,
+        post_start - delay,
+    ]
+    lasers = [
+        [0],
+        [],
+        [0],
+        [],
+        [1],
+        [],
+        [0],
+        [],
+        [0, 1],
+        [],
+        [0, 1],
+    ]
+    paired = sorted(zip(starts, lasers, strict=True), key=lambda x: x[0])
+    phase_times = [p[0] for p in paired]
+    phase_lasers = [p[1] for p in paired]
+    phase_times.append(event_end)
+    return phase_times, phase_lasers
+
+
+def _event_start(args: argparse.Namespace) -> float:
+    return args.laser_cues[0] - args.laser_pre_time - args.laser_delay
+
+
 def run_sync_loop(
     bundle: DeviceBundle,
     t0: float,
     duration: float,
     args: argparse.Namespace,
 ) -> None:
-    """Switch lasers through the cue sequence: L1, L2, L1, L2, both."""
+    """Switch lasers through the cue flash sequence and keep galvos active."""
     active_indices: set[int] = set()
     pattern_last = 0.0
-    delay = args.laser_delay
-    phase_times = [
-        args.laser_window_start - delay,
-        *(cue - delay for cue in args.laser_cues),
-        args.laser_window_end - delay,
-    ]
-    phase_lasers = [[0], [1], [0], [1], [0, 1]]
+    phase_times, phase_lasers = _phase_boundaries(args)
     stop_time = (
         phase_times[-1] + 0.5 if duration == 0.0 or args.stop_after_event else duration
     )
     phase = -10
+    event_start = _event_start(args)
 
     while True:
         now_song = time.perf_counter() - t0
@@ -186,15 +246,15 @@ def run_sync_loop(
             active_indices = target
             phase = new_phase
             labels = [bundle.lasers[i].label for i in sorted(active_indices)]
-            logger.info("PHASE %d @ %.3f s: %s", phase, now_song, ", ".join(labels))
-
-        if active_indices and (now_song - pattern_last) >= args.pattern_interval:
-            run_pattern(
-                bundle.siggen,
+            logger.info(
+                "PHASE %d @ %.3f s: %s",
+                phase,
                 now_song,
-                now_song - (args.laser_window_start - delay),
-                args,
+                ", ".join(labels) if labels else "OFF",
             )
+
+        if new_phase >= 0 and (now_song - pattern_last) >= args.pattern_interval:
+            run_pattern(bundle.siggen, now_song, now_song - event_start, args)
             pattern_last = now_song
 
         if now_song >= stop_time:
@@ -237,16 +297,22 @@ def parse_args() -> argparse.Namespace:
         help="Song times (s) for each 'Laser' vocal hit",
     )
     parser.add_argument(
-        "--laser-window-start",
+        "--laser-pre-time",
         type=float,
-        default=DEFAULT_LASER_START,
-        help="Song time (s) to start the laser event (L1 pre-period)",
+        default=DEFAULT_LASER_PRE,
+        help="Seconds of L1-only activity before the first marker",
     )
     parser.add_argument(
-        "--laser-window-end",
+        "--laser-post-time",
         type=float,
-        default=DEFAULT_LASER_END,
-        help="Song time (s) to end the final L2 post-period",
+        default=DEFAULT_LASER_POST,
+        help="Seconds both lasers stay on after the fourth marker flash",
+    )
+    parser.add_argument(
+        "--laser-flash-dur",
+        type=float,
+        default=DEFAULT_LASER_FLASH,
+        help="Duration (s) of each marker flash and the pre-marker off gap",
     )
     parser.add_argument(
         "--laser-delay",
@@ -310,7 +376,7 @@ def main() -> int:
     )
 
     try:
-        start_offset = max(0.0, args.laser_window_start - 1.0) if args.dry_run else 0.0
+        start_offset = max(0.0, _event_start(args)) if args.dry_run else 0.0
         t0, duration = play_audio(args.wav, args.dry_run, start_offset)
         run_sync_loop(bundle, t0, duration, args)
     except Exception:
