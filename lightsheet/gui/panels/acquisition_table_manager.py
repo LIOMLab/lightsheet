@@ -358,15 +358,19 @@ class AcquisitionTableManager(QWidget):
         except (ValueError, TypeError):
             return 0.0
 
-    def _parse_or_flag(self, row: int, col: int, text: str) -> float:
+    def _parse_or_flag(
+        self, row: int, col: int, text: str, bad_parses: set | None = None
+    ) -> float:
         """Parse a numeric cell's text to float during recompute, flagging
-        the cell red if the text is non-numeric so the operator sees the
-        bad cell. Returns 0.0 for unparseable text so the downstream
-        plane-count computation does not crash."""
+        the cell red if the text is empty or non-numeric so the operator
+        sees the bad cell. Returns 0.0 for unparseable text so the
+        downstream plane-count computation does not crash."""
         try:
-            return float(text or 0.0)
+            return float(text)
         except (ValueError, TypeError):
             self._flag(row, col)
+            if bad_parses is not None:
+                bad_parses.add(col)
             return 0.0
 
     def is_row_flagged(self, row: int) -> bool:
@@ -406,7 +410,7 @@ class AcquisitionTableManager(QWidget):
         self, start: float, end: float, step: float
     ) -> tuple[int, float, float]:
         """Compute (#planes, est. time s, est. size MB) for a row."""
-        if step == 0 or start == end:
+        if step <= 0 or start == end:
             return 0, 0.0, 0.0
         n_planes = math.floor(abs((end - start) / step)) + 1
         per_plane_s = self._estimate_per_plane_time()
@@ -553,21 +557,22 @@ class AcquisitionTableManager(QWidget):
             self._recomputing = False
 
     def _recompute_row_impl(self, row: int) -> None:
-        # Parse each editable numeric cell, flagging non-numeric text
-        # (e.g. "abc", "1.0.0") instead of crashing on every keystroke.
-        # _safe_float returns 0.0 for unparseable text; the flag below
-        # surfaces the bad cell to the operator so they can fix it.
-        # Guard missing items (None) so a partially-populated row does not
-        # raise AttributeError.
+        # Parse each editable numeric cell, flagging empty or non-numeric
+        # text (e.g. "", "abc", "1.0.0") instead of crashing on every
+        # keystroke. _safe_float returns 0.0 for unparseable text; the
+        # flag below surfaces the bad cell to the operator so they can fix
+        # it. Guard missing items (None) so a partially-populated row does
+        # not raise AttributeError.
         start_item = self.table.item(row, _COL_START)
         end_item = self.table.item(row, _COL_END)
         step_item = self.table.item(row, _COL_STEP)
         start_text = start_item.text() if start_item is not None else ""
         end_text = end_item.text() if end_item is not None else ""
         step_text = step_item.text() if step_item is not None else ""
-        start = self._parse_or_flag(row, _COL_START, start_text)
-        end = self._parse_or_flag(row, _COL_END, end_text)
-        step = self._parse_or_flag(row, _COL_STEP, step_text)
+        bad_parses: set[int] = set()
+        start = self._parse_or_flag(row, _COL_START, start_text, bad_parses)
+        end = self._parse_or_flag(row, _COL_END, end_text, bad_parses)
+        step = self._parse_or_flag(row, _COL_STEP, step_text, bad_parses)
         # Start/End cells display in mm; convert to µm for the plane-count
         # computation + limit check (the step cell is already µm, so all
         # three must share the µm unit inside _compute).
@@ -600,8 +605,12 @@ class AcquisitionTableManager(QWidget):
         self.table.blockSignals(False)
 
         flagged = False
-        # Incomplete: start == end or step == 0.
-        if step == 0:
+        # Bad parses (empty or non-numeric) survive the re-validation pass.
+        for col in bad_parses:
+            self._flag(row, col)
+            flagged = True
+        # Incomplete: start == end or step <= 0.
+        if step <= 0:
             self._flag(row, _COL_STEP)
             flagged = True
         if start == end:
@@ -739,7 +748,7 @@ class AcquisitionTableManager(QWidget):
             self._shell.sig_beep.emit()
             return
         for i, r in enumerate(rows):
-            if r.n_planes == 0:
+            if r.n_planes == 0 or r.step <= 0:
                 self._shell.sig_message.emit(
                     self.error_state_text(
                         f"row {i + 1} ({r.name}) is incomplete \u2014 "
@@ -902,7 +911,7 @@ class AcquisitionTableManager(QWidget):
 
                 loop = QEventLoop()
                 thread = self._shell._stack_thread
-                worker.finished.connect(loop.quit)  # ty: ignore[unresolved-attribute]
+                worker.finished.connect(loop.quit)
 
                 def _watchdog(
                     _loop: QEventLoop = loop, _thread: object = thread
