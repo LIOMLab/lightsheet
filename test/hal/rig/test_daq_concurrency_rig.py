@@ -77,8 +77,8 @@ def _real_nidaqmx_available() -> bool:
     try:
         import nidaqmx
 
-        nidaqmx.Task()  # conftest uses the same probe
-        return True
+        with nidaqmx.Task():  # conftest uses the same probe
+            return True
     except Exception:
         return False
 

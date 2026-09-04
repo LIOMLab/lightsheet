@@ -28,8 +28,8 @@ def _real_nidaqmx_available() -> bool:
     try:
         import nidaqmx
 
-        nidaqmx.Task()
-        return True
+        with nidaqmx.Task():
+            return True
     except Exception:
         return False
 
