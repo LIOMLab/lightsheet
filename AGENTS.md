@@ -517,7 +517,12 @@ lightsheet/                    importable package (importable as `lightsheet`)
   config_schema/               pydantic-settings config schema package (see §9)
     __init__.py                compatibility barrel re-exporting all public names
     validation.py              collect_config_errors + ConfigValidator modal startup gate
-    sections/*.py              ten strict + ten overlay BaseSettings section models
+    sections/*.py              strict + overlay BaseSettings section models (currently
+                               11 section families: Adaptive, Autofocus, Camera,
+                               Controller, ETLs, Focus, IBeam, Lasers, Logging,
+                               Motors, SigGen). Each has a strict `extra='forbid'`
+                               model and a `_make_overlay` sibling with
+                               `extra='ignore'` for the rig overlay.
     shared.py                  _NoEnvBaseSettings, _make_overlay overlay factory,
                                hard-limit validators, and safety constants
   channel_map.py               frozen ChannelMap value object: galvo_left_right_swap flag
@@ -527,6 +532,25 @@ lightsheet/                    importable package (importable as `lightsheet`)
   waveforms.py                 pure-numpy squarewave/sawtooth/staircase generators (no SDK, no Qt)
   gaussian.py                  beam-width model used by ETL calibration fits
   logging_setup.py             configure() — RotatingFileHandler + StreamHandler from [Logging]
+  wavelength_color.py          single source of truth for laser wavelength -> hex color
+                               mapping (used by Zarr metadata and ImageView channel tint).
+  adaptive/                    pure-Python adaptive exposure + laser power control law
+    __init__.py                re-exports AdaptiveController, AdaptiveConfig, etc.
+    controller.py              pilot+PI adaptive controller with power fallback,
+                               cross-channel balance, and re-acquire decision
+    intensity.py               frame_intensity_pct helper
+    types.py                   frozen dataclasses: AdaptiveConfig, AdaptiveCommand,
+                               AdaptiveSample
+  focus/                       pure-Python camera focus compensation control law
+    __init__.py                re-exports FocusController, AdaptiveFocusController,
+                               FocusConfig, AutofocusConfig, FocusSample, FocusCurve, etc.
+    controller.py              feedforward + clamped residual focus controller
+    adaptive_controller.py     per-plane residual tracker (uses AutofocusConfig)
+    calibration.py             load_focus_curve helper
+    sharpness.py               frame_sharpness_variance metric
+    types.py                   frozen dataclasses: FocusConfig, AutofocusConfig,
+                               FocusSample, FocusCurve
+  resources/                   runtime package data (demo image, focus calibration JSON)
   gui/                         Qt UI subpackage (importable as `lightsheet.gui`)
     __init__.py                empty (package marker)
     shell/                     the UI shell — composition-root-facing controller + generated UI
@@ -561,6 +585,13 @@ lightsheet/                    importable package (importable as `lightsheet`)
                                Zarr streaming path to zarr_saver.py, and the live display
                                queue to frame_viewer.py. Writes per-laser HDF5 metadata from
                                the live `self.parent.lasers` (no cfg_read at save time).
+      adaptive_dock_controller.py Presentation-only controller for the adaptive-trajectory
+                               QDockWidget. Owns no HAL/E-stop; the shell calls its
+                               append/freeze/toggle slots from GUI-thread worker signals.
+      focus_dock_controller.py Presentation-only controller for the focus-trajectory
+                               QDockWidget. Mirrors AdaptiveDockController.
+      dock_utils.py            Shared floating-only QDockWidget primitives
+                               (FloatingOnlyDock, no-dbl-click title bar).
       reconstruction.py        Pure-numpy helpers: _position_to_float, crop_buffer,
                                reconstruct_frame, reconstruct_frame_linear_blend.
       frame_viewer.py          FrameViewer QObject — queues/displays frames through ImageView.
@@ -587,7 +618,10 @@ lightsheet/                    importable package (importable as `lightsheet`)
       properties_dialog.py     Properties_Dialog (extracted from the old controller)
       save_panel.py            SavePanelWidget
       scan_panel.py            ScanPanelWidget
-      stack_panel.py           StackPanelWidget
+      stack_panel.py           StackPanelWidget — includes adaptive autofocus config UI
+                               (exposure/power bounds, pilot planes, PI gains, focus curve
+                               selection) and status display. The widgets are wired to
+                               `StackWorker`/`_StackAdaptiveMixin`.
       ui_*_panel.py            GENERATED by pyside6-uic — DO NOT hand-edit (one per panel)
       ui_*_panel.ui            Qt Designer source for the matching ui_*_panel.py
       ui_*_panel.qrc           resource collection source for the matching ui_*_panel_rc.py
@@ -598,18 +632,32 @@ lightsheet/                    importable package (importable as `lightsheet`)
       __init__.py              empty (package marker)
       field_spec.py            declarative FieldSpec policy table for promoted spinboxes
       field_spec_spinbox.py    FieldSpecSpinBox — promoted Qt Designer custom widget
+      adaptive_trajectory.py   AdaptiveTrajectoryWidget (pyqtgraph plot for per-plane
+                               exposure / laser power / re-acquire telemetry)
+      focus_trajectory.py      FocusTrajectoryWidget (pyqtgraph plot for camera vs
+                               horizontal position per focus block)
+      channel_radio.py         ChannelRadio — compact L1/L2 display selector for the
+                               ImageView area (multi-channel activator).
     workers/                   acquisition-worker package (see §11)
       __init__.py              compatibility barrel re-exporting the public names
       scan_mixin.py            _AcquireScanMixin with the shared acquire_scan() body
       preview_live_single.py   PreviewWorker, LiveWorker, SingleWorker
-      stack.py                 StackWorker core volume-acquisition loop
-      stack_adaptive.py        _StackAdaptiveMixin (adaptive/focus stack helpers)
+      stack.py                 StackWorker core volume-acquisition loop (per-plane motor
+                               moves, optional adaptive exposure/laser power + focus tracking)
+      stack_adaptive.py        _StackAdaptiveMixin — per-plane adaptive (exposure/power)
+                               and focus-control integration for StackWorker
 
     _vendor/breezestylesheets/ vendored BreezeStyleSheets source (NOT on PyPI) — compiled into
                                breeze_pyside6.py via scripts/build-breeze.sh. Do not hand-edit
                                the compiled module.
     breeze_pyside6.py          GENERATED by pyside6-rcc from the vendored Breeze .qrc —
                                DO NOT hand-edit (rebuild via scripts/build-breeze.sh)
+    styles/                    design tokens for hand-written widgets and generated .ui files
+      colors.py                semantic color palette (status/safety, Breeze dark,
+                               structural grays, QColor paint tokens)
+      spacing.py               4 px base-grid spacing tokens
+      symbols.py               icon/symbol constants
+      typography.py            font/typography tokens
     resources/                 Qt resources (PNGs)
   hal/                         HAL subpackage — interfaces + real + mocks + conformance + registry + bundle
     __init__.py                barrel re-export shim (the deliberate exception to no-barrel-files).
@@ -667,10 +715,18 @@ scripts/
                                BreezeStyleSheets source via pyside6-rcc — run after touching
                                lightsheet/gui/_vendor/breezestylesheets/. Do NOT hand-edit
                                breeze_pyside6.py.
+  compile_ui.sh                one-command UI build: runs pyside6-uic on every
+                               lightsheet/gui/*.ui file, then
+                               fix_generated_ui_enums.py, then tokenize_forms.py.
+                               Use this after editing any .ui file in Qt Designer.
   coverage.sh                  the 3-step coverage gate (see §5)
   fix_generated_ui_enums.py    idempotent post-processor for pyside6-uic output. Run after
                                pyside6-uic to normalize unscoped Qt/QFrame enum tokens to
                                scoped PySide6 equivalents (see §8).
+  tokenize_forms.py            idempotent post-processor that remaps hard-coded pixel
+                               values in generated `ui_*.py` files to `lightsheet.gui.styles`
+                               design-token references (`_s.ZERO`, `_s.SM`, `_c.BREEZE_BG`,
+                               etc.). Run automatically by compile_ui.sh.
   snapshot-rig-config.sh       rig config snapshot helper
 docs/
   gui-layout-convention.md     authoritative GUI layout convention (264 lines) — QScrollArea
@@ -679,7 +735,10 @@ docs/
 test/                          pytest tests + legacy manual scripts (see §5)
 pyproject.toml                 project + tool config (ruff, pytest, ty, project.scripts).
                                requires-python >=3.12,<3.13; PySide6>=6.8, nidaqmx, pco, h5py,
-                               liom-toolkit[io]>=1.1.
+                               liom-toolkit[io]>=1.1. packages include lightsheet, lightsheet.adaptive,
+                               lightsheet.focus, lightsheet.config_schema.*, lightsheet.gui.*
+                               (shell, coordinators, panels, styles, widgets, workers),
+                               lightsheet.hal.*, and lightsheet.resources.
 uv.lock                        uv lockfile (Python 3.12, pinned deps)
 ```
 
@@ -689,14 +748,16 @@ the `lightsheet.hal` barrel (`from lightsheet.hal import Camera, MockCamera,
 ICamera, ILaser, DAQLaser, DeviceBundle, IPowerMeter, MockPowerMeter`) so
 import-path churn is absorbed in one place. The god-object
 `Controller_MainWindow` was split (phase 05) into a thin shell + 4
-plain-Python collaborators; `main()` in `__main__.py` is the sole composition
-root — do not construct collaborators or HAL instances anywhere else (see
-§10). The flat `gui/controller.py` (~1936 lines) + flat
+plain-Python collaborators plus presentation-only `AdaptiveDockController`/
+`FocusDockController` docks built by the shell for trajectory telemetry.
+`main()` in `__main__.py` is the sole composition root — do not construct
+main collaborators, HAL instances, or adaptive/focus controllers anywhere else
+(see §10). The flat `gui/controller.py` (~1936 lines) + flat
 `acquisition_coordinator.py` / `hardware_manager.py` /
 `frame_saver_controller.py` / `motor_controller.py` / `properties_dialog.py`
 layout was reorganized (phase 7.1 / 8.1) into the
-`gui/{shell,coordinators,panels,widgets}` tree above; the shell controller is
-now `lightsheet/gui/shell/controller.py` (~2360 lines).
+`gui/{shell,coordinators,panels,widgets,styles}` tree above, with the pure-Python
+`adaptive/` and `focus/` control-law packages kept outside the GUI layer.
 
 **GUI layout convention:** `docs/gui-layout-convention.md` is the
 authoritative layout convention for the left-rail + QStackedWidget shell
@@ -723,10 +784,13 @@ touching the vendored Breeze source; do NOT hand-edit `breeze_pyside6.py`
   widgets programmatically in `lightsheet/gui/shell/controller.py` (the
   established approach for toolbars and the laser status labels — see the
   E-stop toolbar button wired in `wire_collaborators`).
-- After running `pyside6-uic`, run `uv run python scripts/fix_generated_ui_enums.py
-  <generated.py> ...` to normalize unscoped Qt/QFrame enum tokens to their
-  scoped PySide6 equivalents. The script is idempotent, validates the generated
-  header, and refuses to touch non-generated or non-Python files.
+- Regenerate the generated files with `bash scripts/compile_ui.sh`. It runs
+  `pyside6-uic` for every `.ui` file, then `scripts/fix_generated_ui_enums.py`
+  to normalize unscoped Qt/QFrame enum tokens to scoped PySide6 equivalents,
+  then `scripts/tokenize_forms.py` to remap hard-coded pixel values to the
+  `lightsheet.gui.styles` design tokens. The two post-processors are idempotent.
+- If you are only fixing enum scoping, you can run
+  `uv run python scripts/fix_generated_ui_enums.py <generated.py> ...` by hand.
 - Never edit the generated `.py` files directly.
 
 ## 9. Config pattern (config.ini)
@@ -758,10 +822,12 @@ touching the vendored Breeze source; do NOT hand-edit `breeze_pyside6.py`
 - **Startup schema validation (phases 05/12):** `lightsheet.config_schema` is a
   package. `lightsheet/config_schema/validation.py` provides the collect-all
   `ConfigValidator.validate_or_abort()` entry point; `lightsheet/config_schema/sections/*.py`
-  define a pydantic-settings model per INI section — 10 strict
-  (`extra='forbid'`, rejects unknown keys) and 10 overlay (`extra='ignore'`,
+  define a pydantic-settings model per INI section — 11 strict
+  (`extra='forbid'`, rejects unknown keys) and 11 overlay (`extra='ignore'`,
   generated by `_make_overlay` in `lightsheet/config_schema/shared.py`) — for
-  the baseline and the gitignored rig overlay. `settings_customise_sources`
+  the baseline and the gitignored rig overlay. Section families: `[Adaptive]`,
+  `[Autofocus]`, `[Camera]`, `[Controller]`, `[ETLs]`, `[Focus]`, `[IBeam]`,
+  `[Lasers]`, `[Logging]`, `[Motors]`, `[SigGen]`. `settings_customise_sources`
   returns only the init source (no env-var source) so a stray env var can't
   override a safety key. `collect_config_errors` is collect-all — it gathers
   every section's errors in one pass, and `ConfigValidator.validate_or_abort`
@@ -1176,6 +1242,24 @@ startup. Re-export both backends + `IPowerMeter` through the
   (`zarr_save_worker` / `both_save_worker`) follows the same separation. If you
   touch either save loop, preserve that separation; do not collapse the two
   `except` branches back into one bare `except Exception:`.
+- **`QMessageBox.question` results are `QMessageBox.StandardButton` enums, not
+  booleans** — `Yes` and `No` are both non-zero, so a truthy check (`if
+  nosave_answer:`) always passes. Compare explicitly to
+  `QMessageBox.StandardButton.Yes`.
+- **Stack worker motor-position metadata** — do not read
+  `self._shell.current_*_position_text` in `StackWorker` for HDF5 metadata. Those
+  strings are updated by queued cross-thread GUI signals and can be stale at the
+  moment the worker reads them. Read `self.motors.get_positions()` directly and
+  format the strings in the worker (phase 13.1 WR-02).
+- **Adaptive exposure and laser-power edge cases** — in `_StackAdaptiveMixin`:
+  clamp Rolling/Global exposure with `max(1, int(...))` so sub-ms values are not
+  truncated to 0, and update both `laser1_power_pct` and `laser2_power_pct` (with
+  the same `max_power > 0` guard) so single-channel Laser-2 stacks are adjusted
+  correctly (phase 13.1 WR-03/WR-04).
+- **`_spawn_stack_worker` must not start a second worker while a previous stack
+  thread is still running** — the return type is `StackWorker | None`; the panel
+  waits for `prev_thread.wait()` and only spawns a new worker after a clean
+  shutdown (phase 13.1 WR-01).
 
 ## 14. Before you finish a task
 
