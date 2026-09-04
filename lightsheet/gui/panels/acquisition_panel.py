@@ -11,6 +11,7 @@ import contextlib
 import logging
 import typing
 
+import shiboken6
 from PySide6.QtCore import SIGNAL, QThread, Slot
 from PySide6.QtWidgets import QMessageBox, QPushButton, QWidget
 
@@ -391,13 +392,14 @@ class AcquisitionPanelWidget(QWidget):
             self._shell._stack_thread = QThread()
         else:
             prev_worker = getattr(self._shell, "_stack_worker", None)
-            if prev_worker is not None:
+            if prev_worker is not None and shiboken6.isValid(prev_worker):
                 with contextlib.suppress(RuntimeError, TypeError):
                     prev_worker.finished.disconnect(prev_thread.quit)
                 with contextlib.suppress(RuntimeError, TypeError):
                     prev_worker.finished.disconnect(self.updateUi_post_stack_mode)
-                with contextlib.suppress(RuntimeError, TypeError):
-                    prev_thread.finished.disconnect(prev_worker.deleteLater)
+                if shiboken6.isValid(prev_thread):
+                    with contextlib.suppress(RuntimeError, TypeError):
+                        prev_thread.finished.disconnect(prev_worker.deleteLater)
             self._shell._stack_thread = prev_thread
 
         # Pre-sample the save-option widgets on the GUI thread before
