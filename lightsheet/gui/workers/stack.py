@@ -510,10 +510,11 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         self._shell.sig_refresh_position_camera.emit()
 
                         if self._shell.saving_allowed:
+                            positions = self.motors.get_positions()
                             self._shell._fs.add_motor_parameters(
-                                self._shell.current_horizontal_position_text,
-                                self._shell.current_vertical_position_text,
-                                self._shell.current_camera_position_text,
+                                f"{positions['horizontal position']:.5f} mm",
+                                f"{positions['vertical position']:.5f} mm",
+                                f"{positions['camera position']:.5f} mm",
                             )
 
                     elif (
@@ -571,10 +572,11 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         self._shell.sig_refresh_position_camera.emit()
 
                         if self._shell.saving_allowed:
+                            positions = self.motors.get_positions()
                             self._shell._fs.add_motor_parameters(
-                                self._shell.current_horizontal_position_text,
-                                self._shell.current_vertical_position_text,
-                                self._shell.current_camera_position_text,
+                                f"{positions['horizontal position']:.5f} mm",
+                                f"{positions['vertical position']:.5f} mm",
+                                f"{positions['camera position']:.5f} mm",
                             )
                             from lightsheet.focus.types import FocusSample
 
@@ -617,10 +619,11 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         self._shell.sig_refresh_position_horizontal.emit()
 
                         if self._shell.saving_allowed:
+                            positions = self.motors.get_positions()
                             self._shell._fs.add_motor_parameters(
-                                self._shell.current_horizontal_position_text,
-                                self._shell.current_vertical_position_text,
-                                self._shell.current_camera_position_text,
+                                f"{positions['horizontal position']:.5f} mm",
+                                f"{positions['vertical position']:.5f} mm",
+                                f"{positions['camera position']:.5f} mm",
                             )
 
                     # Pre-acquire guard: a Stop or E-stop requested while the worker
