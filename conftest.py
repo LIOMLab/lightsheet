@@ -12,9 +12,9 @@ import pytest
 # Re-export the hardware-stub flags that the test suite imports as
 # `from conftest import _nidaqmx_is_stub, _pco_is_stub` (the module search
 # now finds this root conftest first).
-from test.conftest import _nidaqmx_is_stub, _pco_is_stub
+from test.conftest import _has_hardware, _nidaqmx_is_stub, _pco_is_stub
 
-__all__ = ["_nidaqmx_is_stub", "_pco_is_stub"]
+__all__ = ["_has_hardware", "_nidaqmx_is_stub", "_pco_is_stub"]
 
 # Use xdist's auto env override so the worker count is set before xdist's
 # command-line handling. On the rig (LIGHTSHEET_HW=1) use 14 workers; on the
