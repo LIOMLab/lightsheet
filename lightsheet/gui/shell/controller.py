@@ -1958,6 +1958,9 @@ class Controller_MainWindow(QMainWindow):
         self.motor_panel.ui.pushButton_cameraSetFocus.clicked.connect(
             self._mc.updateUi_set_camera_focus
         )
+        self.motor_panel.ui.pushButton_cameraGotoFocus.clicked.connect(
+            self._mc.updateUi_move_camera_to_focus
+        )
         self.motor_panel.ui.pushButton_cameraStepForward.clicked.connect(
             self._mc.updateUi_move_camera_forward
         )

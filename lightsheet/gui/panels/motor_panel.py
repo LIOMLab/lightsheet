@@ -49,7 +49,7 @@ class MotorPanelWidget(QWidget):
             self.ui.pushButton_sampleGotoVPosition,
             self.ui.pushButton_cameraStepBackward,
             self.ui.pushButton_cameraStepForward,
-            # self.ui.pushButton_cameraGotoFocus,
+            self.ui.pushButton_cameraGotoFocus,
             self.ui.pushButton_cameraGotoPosition,
         ]
         for button in buttons_to_disable:
