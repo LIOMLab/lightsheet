@@ -101,9 +101,9 @@ ignore = ["ANN401"]
 [tool.pytest.ini_options]
 minversion = "9.1"
 # xdist flags:
-#   -n auto --maxprocesses=8  caps workers at 8 to bound PySide6 worker memory on
-#                             high-core machines; test/conftest.py raises the
-#                             cap to 14 on the rig when LIGHTSHEET_HW=1.
+#   -n auto                   auto-detect CPU count; test/conftest.py sets the
+#                             --maxprocesses cap (8 dev / 14 rig) so the rig can
+#                             use more workers without overloading the dev box.
 #   --dist=load               explicit xdist distribution mode (the xdist
 #                             default); xdist_group("rig_hardware") still works
 #                             under any dist mode.
@@ -116,7 +116,6 @@ addopts = [
     "-ra",
     "--strict-markers",
     "-n", "auto",
-    "--maxprocesses=8",
     "--dist=loadscope",
     "--max-worker-restart=0",
 ]
