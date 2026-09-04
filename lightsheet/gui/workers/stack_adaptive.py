@@ -171,9 +171,6 @@ class _StackAdaptiveMixin:
             power_fallback=cmd.power_fallback,
         )
         if self._shell.saving_allowed:
-            from lightsheet.gui.coordinators.frame_saver_controller import (
-                FrameSaverController,
-            )
 
             self._shell._fs.record_adaptive_sample(sample)
 

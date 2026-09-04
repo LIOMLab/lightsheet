@@ -203,7 +203,7 @@ def test_channel_radio_visibility_radio_none_is_noop(
     ctrl = controller
     # Remove the channel_radio to simulate early-init state.
     radio = ctrl.channel_radio
-    setattr(ctrl, "channel_radio", None)
+    ctrl.channel_radio = None  # ty: ignore[invalid-assignment]
     try:
         ctrl._update_channel_radio_visibility()  # must not raise
     finally:
@@ -250,7 +250,7 @@ def test_apply_channel_tint_no_wavelength_is_noop(
     ctrl = controller
     # Temporarily null the first laser's wavelength.
     original = ctrl.lasers[0].wavelength
-    setattr(ctrl.lasers[0], "wavelength", None) # type: ignore[attr-defined]
+    ctrl.lasers[0].wavelength = None # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
     try:
         ctrl._apply_channel_tint(0)
     finally:

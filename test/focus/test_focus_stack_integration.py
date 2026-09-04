@@ -149,7 +149,7 @@ def _fake_acquire_scan_factory(
         else:
             # Constant frame: zero sharpness.
             frame[:] = 30000
-        setattr(worker._shell, "reconstructed_frame", frame)
+        worker._shell.reconstructed_frame = frame
         state["acq_index"] += 1
         return True
 
@@ -173,8 +173,8 @@ def test_move_axes_parallel_called_only_at_block_boundaries(
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
 
     state = {"acq_index": 0}
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     parallel_calls: list[list[tuple[str, float, str]]] = []
     horizontal_calls: list[tuple[float, str]] = []
@@ -243,8 +243,8 @@ def test_add_motor_parameters_logs_held_camera_position_within_block(
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
 
     state = {"acq_index": 0}
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
@@ -289,8 +289,8 @@ def test_focus_trajectory_records_one_sample_per_block(
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
 
     state = {"acq_index": 0}
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     parallel_calls: list[list[tuple[str, float, str]]] = []
     real_parallel = worker.motors.move_axes_parallel
@@ -334,8 +334,8 @@ def test_update_residual_called_from_second_block_boundary_onward(
     worker = _make_worker(ctrl, focus_cfg=_focus_cfg(), focus_curve=_focus_curve())
 
     state = {"acq_index": 0}
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     residual_calls: list[float] = []
     captured_frames: list[np.ndarray] = []
@@ -409,8 +409,8 @@ def test_focus_over_travel_aborts_stack_with_beep(
     worker.motors.horizontal.set_limit_high(0.075, "mm")
 
     state = {"acq_index": 0}
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     messages: list[str] = []
     beeps: list[None] = []
@@ -454,8 +454,8 @@ def test_focus_disabled_matches_fixed_stack_behavior(
     )
 
     state = {"acq_index": 0}
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     parallel_calls: list[list[tuple[str, float, str]]] = []
     real_parallel = worker.motors.move_axes_parallel
@@ -498,7 +498,7 @@ def test_estop_prevents_next_block_boundary_focus_move(
     def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
         imgs = worker.camera.copy_recorder_images(n_imgs)
-        setattr(worker._shell, "reconstructed_frame", np.asarray(imgs[0]))
+        worker._shell.reconstructed_frame = np.asarray(imgs[0])
         state["plane"] += 1
         # E-stop after the first block completes (after plane 7).
         if state["plane"] == 8:
@@ -506,8 +506,8 @@ def test_estop_prevents_next_block_boundary_focus_move(
         state["acq_index"] += 1
         return True
 
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     parallel_calls: list[list[tuple[str, float, str]]] = []
     real_parallel = worker.motors.move_axes_parallel
@@ -547,7 +547,7 @@ def _fake_acquire_scan_autofocus_factory(worker: Any, state: dict[str, Any]) -> 
         imgs = worker.camera.copy_recorder_images(n_imgs)
         frame = np.asarray(imgs[0])
         frame[:] = 30000
-        setattr(worker._shell, "reconstructed_frame", frame)
+        worker._shell.reconstructed_frame = frame
         state["acq_index"] += 1
         return True
 
@@ -585,8 +585,8 @@ def test_autofocus_move_axes_parallel_called_every_plane(
     worker = _make_worker(ctrl, autofocus_cfg=_autofocus_cfg())
 
     state = {"acq_index": 0}
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     parallel_calls: list[list[tuple[str, float, str]]] = []
 
@@ -626,8 +626,8 @@ def test_autofocus_update_called_at_cadence(
     worker = _make_worker(ctrl, autofocus_cfg=_autofocus_cfg(cadence=2))
 
     state = {"acq_index": 0}
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     update_calls: list[tuple[float, float]] = []
     real_update = AdaptiveFocusController.update
@@ -663,8 +663,8 @@ def test_autofocus_records_one_focus_sample_per_plane(
     worker = _make_worker(ctrl, autofocus_cfg=_autofocus_cfg())
 
     state = {"acq_index": 0}
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
@@ -696,8 +696,8 @@ def test_autofocus_uses_curve_seed_when_use_curve_seed_true(
     )
 
     state = {"acq_index": 0}
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))
@@ -726,8 +726,8 @@ def test_autofocus_over_travel_aborts_stack(
     worker = _make_worker(ctrl, autofocus_cfg=_autofocus_cfg())
 
     state = {"acq_index": 0}
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     messages: list[str] = []
     beeps: list[None] = []
@@ -771,15 +771,15 @@ def test_autofocus_estop_breaks_loop(
         imgs = worker.camera.copy_recorder_images(n_imgs)
         frame = np.asarray(imgs[0])
         frame[:] = 30000
-        setattr(worker._shell, "reconstructed_frame", frame)
+        worker._shell.reconstructed_frame = frame
         state["plane"] += 1
         if state["plane"] == 2:
             ctrl.estop_event.set()
         state["acq_index"] += 1
         return True
 
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     with patch.object(worker, "acquire_scan") as mock_acquire:
         mock_acquire.side_effect = _fake_acquire_scan
@@ -806,8 +806,8 @@ def test_autofocus_multi_channel_uses_same_camera_position_and_last_channel_upda
     _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=2)
 
     worker = _make_worker(ctrl, autofocus_cfg=_autofocus_cfg(), multi_channel=True)
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     state = {"acq_index": 0}
 
@@ -816,7 +816,7 @@ def test_autofocus_multi_channel_uses_same_camera_position_and_last_channel_upda
         imgs = worker.camera.copy_recorder_images(n_imgs)
         frame = np.asarray(imgs[0])
         frame[:] = 30000
-        setattr(worker._shell, "reconstructed_frame", frame)
+        worker._shell.reconstructed_frame = frame
         state["acq_index"] += 1
         return True
 

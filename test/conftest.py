@@ -23,8 +23,8 @@ import contextlib
 import os
 import sys
 import types
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Iterator, cast
+from collections.abc import Callable, Iterator
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 

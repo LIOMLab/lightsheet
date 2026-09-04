@@ -888,7 +888,7 @@ def test_worker_signal_connected_to_gui_slot_queued(
             # Emit and confirm the slot is reached (queued delivery on
             # the GUI thread; processEvents drains the queue).
             received: list[tuple] = []  # ty: ignore[missing-type-argument]
-            setattr(ctrl, "_on_adaptive_trajectory", lambda *a: received.append(a))
+            ctrl._on_adaptive_trajectory = lambda *a: received.append(a)  # ty: ignore[invalid-assignment]
             # Re-connect to the patched slot to verify the connection
             # path: the spawn wired sig_adaptive_trajectory -> slot.
             worker.sig_adaptive_trajectory.emit(

@@ -228,4 +228,4 @@ def test_residual_mm_is_read_only() -> None:
         seed_camera_pos_mm=0.0,
     )
     with pytest.raises(AttributeError):
-        setattr(ctrl, "residual_mm", 1.0)
+        ctrl.residual_mm = 1.0  # ty: ignore[invalid-assignment]

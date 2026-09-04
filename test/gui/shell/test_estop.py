@@ -233,8 +233,8 @@ def test_autofocus_estop_after_first_move_prevents_acquire(
     _configure_autofocus_stack_plan(ctrl, tmp_path, n_planes=3)
 
     worker = _make_autofocus_worker(ctrl)
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     real_parallel = worker.motors.move_axes_parallel
     parallel_calls: list[list[tuple[str, float, str]]] = []
@@ -275,8 +275,8 @@ def test_autofocus_estop_set_before_acquire_breaks_loop(
 
     worker = _make_autofocus_worker(ctrl)
     ctrl.estop_event.set()
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     finished_emits: list[None] = []
     worker.finished.connect(lambda: finished_emits.append(None))

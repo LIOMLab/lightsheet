@@ -266,8 +266,8 @@ def test_refresh_button_emits_via_slot(
     def _fake_poll(indices: object) -> None:
         called["poll"] = True
 
-    setattr(ctrl._hw, "_refresh_laser2_readback_async", _fake_refresh_async)
-    setattr(ctrl._hw, "_poll_laser_status", _fake_poll)
+    ctrl._hw._refresh_laser2_readback_async = _fake_refresh_async  # ty: ignore[invalid-assignment]
+    ctrl._hw._poll_laser_status = _fake_poll  # ty: ignore[invalid-assignment]
 
     ctrl.laser_panel.ui.pushButton_laserTwoRefresh.click()
 

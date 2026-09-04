@@ -184,9 +184,9 @@ def test_stack_worker_single_channel_presamples_wavelength(
     def _fake_acquire_scan() -> None:
         ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
 
-    setattr(worker, "acquire_scan", _fake_acquire_scan)
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.acquire_scan = _fake_acquire_scan  # ty: ignore[invalid-assignment]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     with patch.object(worker.motors.horizontal, "move_absolute_position"):
         finished_emits: list[None] = []

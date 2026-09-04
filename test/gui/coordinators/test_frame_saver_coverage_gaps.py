@@ -562,7 +562,7 @@ def test_frame_saver_worker_adaptive_write_error_aborts(tmp_path: Path) -> None:
     def _bad_write(*a: Any, **k: Any) -> Never:
         raise RuntimeError("adaptive write boom")
 
-    setattr(saver, "_write_adaptive_hdf5_for_file", _bad_write)
+    saver._write_adaptive_hdf5_for_file = _bad_write  # ty: ignore[invalid-assignment]
     saver.enqueue_buffer(np.ones((4, 4), dtype=np.uint16))
     saver.frame_saver_worker()
     assert saver.saving_started is False
@@ -657,7 +657,7 @@ def test_zarr_save_worker_finalize_error_flips_saving(tmp_path: Path) -> None:
     def _bad_finalize() -> Never:
         raise RuntimeError("finalize boom")
 
-    setattr(saver._zarr_saver, "finalize", _bad_finalize)
+    saver._zarr_saver.finalize = _bad_finalize  # ty: ignore[invalid-assignment]
     saver.zarr_save_worker()
     assert saver.saving_started is False
     assert any("finalize boom" in m for m in shell.message_printer_calls)
@@ -829,7 +829,7 @@ def test_both_save_worker_adaptive_write_error_aborts(tmp_path: Path) -> None:
     def _bad(*a: Any, **k: Any) -> Never:
         raise RuntimeError("both adaptive boom")
 
-    setattr(saver, "_write_adaptive_hdf5_for_file", _bad)
+    saver._write_adaptive_hdf5_for_file = _bad  # ty: ignore[invalid-assignment]
     saver.enqueue_buffer(np.zeros((32, 32), dtype=np.uint16))
     saver.both_save_worker()
     assert saver.saving_started is False
@@ -881,7 +881,7 @@ def test_both_save_worker_finalize_error_flips_saving(tmp_path: Path) -> None:
     def _bad() -> Never:
         raise RuntimeError("both finalize boom")
 
-    setattr(saver._zarr_saver, "finalize", _bad)
+    saver._zarr_saver.finalize = _bad  # ty: ignore[invalid-assignment]
     saver.both_save_worker()
     assert saver.saving_started is False
     assert any("both finalize boom" in m for m in shell.message_printer_calls)
@@ -1195,7 +1195,7 @@ def test_both_save_worker_multichannel_finalize_error_flips_saving(
     def _bad() -> Never:
         raise RuntimeError("mc both finalize boom")
 
-    setattr(saver._zarr_saver, "finalize", _bad)
+    saver._zarr_saver.finalize = _bad  # ty: ignore[invalid-assignment]
     saver.enqueue_buffer((0, np.zeros((32, 32), dtype=np.uint16)))
     saver.enqueue_buffer((1, np.zeros((32, 32), dtype=np.uint16)))
     saver._both_save_worker_multi_channel()

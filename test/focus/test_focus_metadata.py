@@ -451,8 +451,8 @@ def test_hdf5_autofocus_writes_one_row_per_plane(
         adaptive_cfg=None,
         autofocus_cfg=config,
     )
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     state = {"acq_index": 0}
 
@@ -462,7 +462,7 @@ def test_hdf5_autofocus_writes_one_row_per_plane(
         assert imgs is not None
         frame = np.asarray(imgs[0])
         frame[:] = 30000
-        setattr(worker._shell, "reconstructed_frame", frame)
+        worker._shell.reconstructed_frame = frame
         state["acq_index"] += 1
         return True
 
@@ -481,7 +481,9 @@ def test_hdf5_autofocus_writes_one_row_per_plane(
         assert list(block_ds[:]) == [0, 1, 2]
 
         residuals = np.asarray(cast(h5py.Dataset, grp["residual_mm"])[:])
-        feedforward = np.asarray(cast(h5py.Dataset, grp["feedforward_camera_pos_mm"])[:])
+        feedforward = np.asarray(
+            cast(h5py.Dataset, grp["feedforward_camera_pos_mm"])[:]
+        )
         applied = np.asarray(cast(h5py.Dataset, grp["applied_camera_pos_mm"])[:])
         sharpness = np.asarray(cast(h5py.Dataset, grp["sharpness_metric"])[:])
 

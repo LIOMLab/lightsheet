@@ -44,6 +44,7 @@ from PySide6.QtWidgets import QWidget
 # construction-time structural assertions.
 # ---------------------------------------------------------------------------
 
+
 def test_laser_panel_instantiates(qtbot: QtBot) -> None:
     """LaserPanelWidget exposes the per-laser toggle + amplitude controls."""
     from lightsheet.gui.panels.laser_panel import LaserPanelWidget
@@ -62,6 +63,7 @@ def test_laser_panel_instantiates(qtbot: QtBot) -> None:
     assert panel.findChild(QObject, "checkBox_laserOneAutomatic") is not None
     assert panel.findChild(QObject, "checkBox_laserTwoAutomatic") is not None
 
+
 def test_motor_panel_instantiates(qtbot: QtBot) -> None:
     """MotorPanelWidget exposes the sample + camera movement group boxes."""
     from lightsheet.gui.panels.motor_panel import MotorPanelWidget
@@ -74,6 +76,7 @@ def test_motor_panel_instantiates(qtbot: QtBot) -> None:
     # A representative motor button (used by updateUi_motor_buttons).
     assert panel.findChild(QObject, "pushButton_sampleStepForward") is not None
     assert panel.findChild(QObject, "pushButton_cameraStepForward") is not None
+
 
 def test_acquisition_panel_instantiates(qtbot: QtBot) -> None:
     """AcquisitionPanelWidget exposes the four mode buttons."""
@@ -89,6 +92,7 @@ def test_acquisition_panel_instantiates(qtbot: QtBot) -> None:
     assert panel.findChild(QObject, "comboBox_cameraShutterMode") is not None
     assert panel.findChild(QObject, "doubleSpinBox_cameraExposureTime") is not None
 
+
 def test_save_panel_instantiates(qtbot: QtBot) -> None:
     """SavePanelWidget exposes the file-manager group box + directory picker."""
     from lightsheet.gui.panels.save_panel import SavePanelWidget
@@ -102,6 +106,7 @@ def test_save_panel_instantiates(qtbot: QtBot) -> None:
     assert panel.findChild(QObject, "pushButton_saveSelectDirectory") is not None
     assert panel.findChild(QObject, "pushButton_selectDataset") is not None
     assert panel.findChild(QObject, "lineEdit_saveDirectory") is not None
+
 
 def test_stack_panel_instantiates(qtbot: QtBot) -> None:
     """StackPanelWidget exposes the stack setup controls."""
@@ -120,6 +125,7 @@ def test_stack_panel_instantiates(qtbot: QtBot) -> None:
     assert panel.findChild(QObject, "checkBox_acqFirstPlaneSet") is None
     assert panel.findChild(QObject, "checkBox_acqLastPlaneSet") is None
 
+
 def test_scan_panel_instantiates(qtbot: QtBot) -> None:
     """ScanPanelWidget exposes the ETL/Galvo settings container."""
     from lightsheet.gui.panels.scan_panel import ScanPanelWidget
@@ -135,6 +141,7 @@ def test_scan_panel_instantiates(qtbot: QtBot) -> None:
         or panel.objectName() == "scanPanel"
     )
 
+
 def test_calibration_panel_instantiates(qtbot: QtBot) -> None:
     """CalibrationPanelWidget exposes the calibration controls container."""
     from lightsheet.gui.panels.calibration_panel import CalibrationPanelWidget
@@ -148,11 +155,13 @@ def test_calibration_panel_instantiates(qtbot: QtBot) -> None:
         or panel.objectName() == "calibrationPanel"
     )
 
+
 # ---------------------------------------------------------------------------
 # Shell composition — the thin shell composes the 8 panels into
 # stackedPanels (a QStackedWidget driven by the left-rail QButtonGroup)
 # and exposes them as attributes. Uses the real-construction fixture.
 # ---------------------------------------------------------------------------
+
 
 def test_shell_composes_panels(controller: Controller_MainWindow) -> None:
     """The shell instantiates and exposes all per-panel widgets."""
@@ -170,6 +179,7 @@ def test_shell_composes_panels(controller: Controller_MainWindow) -> None:
     assert ctrl.scan_panel is not None
     assert ctrl.calibration_panel is not None
 
+
 def test_stacked_panels_has_eight_pages(controller: Controller_MainWindow) -> None:
     """The shell's stackedPanels holds 8 pages (one per left-rail button).
 
@@ -181,6 +191,7 @@ def test_stacked_panels_has_eight_pages(controller: Controller_MainWindow) -> No
 
     ctrl = controller
     assert ctrl.ui.stackedPanels.count() == 8
+
 
 def test_stacked_page_order(controller: Controller_MainWindow) -> None:
     """Each stacked page hosts the panel for its left-rail index:
@@ -196,21 +207,35 @@ def test_stacked_page_order(controller: Controller_MainWindow) -> None:
         return cast(QWidget, widget)
 
     # Index 0 — Motion (motor panel)
-    assert _page_widget(0).findChild(QObject, "pushButton_sampleStepForward") is not None
+    assert (
+        _page_widget(0).findChild(QObject, "pushButton_sampleStepForward") is not None
+    )
     # Index 1 — Acquire (acquisition panel)
-    assert _page_widget(1).findChild(QObject, "pushButton_acqGetSingleImage") is not None
+    assert (
+        _page_widget(1).findChild(QObject, "pushButton_acqGetSingleImage") is not None
+    )
     # Index 2 — Stack (stack panel)
-    assert _page_widget(2).findChild(QObject, "pushButton_acqStartStackMode") is not None
+    assert (
+        _page_widget(2).findChild(QObject, "pushButton_acqStartStackMode") is not None
+    )
     # Index 3 — Scan (scan panel)
     assert _page_widget(3).findChild(QObject, "checkBox_etlSync") is not None
     # Index 4 — Lasers (laser panel)
     assert _page_widget(4).findChild(QObject, "pushButton_laserOneToggle") is not None
     # Index 5 — Files (save panel)
-    assert _page_widget(5).findChild(QObject, "pushButton_saveSelectDirectory") is not None
+    assert (
+        _page_widget(5).findChild(QObject, "pushButton_saveSelectDirectory") is not None
+    )
     # Index 6 — Past (dedicated PastAcquisitionsPanel)
-    assert _page_widget(6).findChild(QObject, "tableWidget_pastAcquisitions") is not None
+    assert (
+        _page_widget(6).findChild(QObject, "tableWidget_pastAcquisitions") is not None
+    )
     # Index 7 — Calibrate (calibration panel)
-    assert _page_widget(7).findChild(QObject, "pushButton_calCameraComputeFocus") is not None
+    assert (
+        _page_widget(7).findChild(QObject, "pushButton_calCameraComputeFocus")
+        is not None
+    )
+
 
 def test_all_panels_wrapped_in_scroll_area(controller: Controller_MainWindow) -> None:
     """Each panel page is a QScrollArea with widgetResizable=True
@@ -231,6 +256,7 @@ def test_all_panels_wrapped_in_scroll_area(controller: Controller_MainWindow) ->
         assert page.widgetResizable() is True, (
             f"page {idx} scroll area must have widgetResizable=True"
         )
+
 
 def test_estop_button_in_shell(controller: Controller_MainWindow) -> None:
     """The E-stop button lives in the shell, NOT in any panel.
@@ -265,6 +291,7 @@ def test_estop_button_in_shell(controller: Controller_MainWindow) -> None:
             f"E-stop button leaked into {type(panel).__name__} — "
             "the kill path must stay in the shell (AGENTS.md §2)."
         )
+
 
 def test_image_view_in_shell(controller: Controller_MainWindow) -> None:
     """The ImageView lives in the shell (not in any panel)."""

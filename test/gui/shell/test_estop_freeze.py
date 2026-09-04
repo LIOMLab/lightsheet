@@ -175,7 +175,7 @@ def test_estop_kill_path_stays_synchronous_and_lock_free(
 
             return _off
 
-        setattr(laser, "off", _make_recorder(idx, laser.off))
+        laser.off = _make_recorder(idx, laser.off)  # ty: ignore[invalid-assignment]
 
     # Patch the refresh calls so they do not spawn a QThread (the L2
     # async readback) or otherwise interfere with the synchronous kill
@@ -206,7 +206,7 @@ def test_estop_kill_path_stays_synchronous_and_lock_free(
     # Restore the original off() methods (the fixture teardown will
     # handle the controller, but be tidy).
     for idx, laser in enumerate(ctrl.lasers):
-        setattr(laser, "off", original_offs[idx])
+        laser.off = original_offs[idx]  # ty: ignore[invalid-assignment]
 
 def test_estop_laser_off_precedes_dock_freeze(
     controller: Controller_MainWindow,
@@ -242,7 +242,7 @@ def test_estop_laser_off_precedes_dock_freeze(
 
     for laser in ctrl.lasers:
         original_offs.append(laser.off)
-        setattr(laser, "off", _make_off_recorder(laser, laser.off))
+        laser.off = _make_off_recorder(laser, laser.off)  # ty: ignore[invalid-assignment]
 
     def _record_adaptive_freeze() -> None:
         order.append("adaptive.freeze")
@@ -265,7 +265,7 @@ def test_estop_laser_off_precedes_dock_freeze(
 
     # Restore original off() methods.
     for laser, orig in zip(ctrl.lasers, original_offs, strict=True):
-        setattr(laser, "off", orig)
+        laser.off = orig  # ty: ignore[invalid-assignment]
 
     # Every laser must appear before every freeze.
     off_positions = [i for i, v in enumerate(order) if v == "laser.off"]
@@ -307,7 +307,7 @@ def test_estop_warning_emitted_and_freeze_still_runs(
         return _off
 
     for laser in ctrl.lasers:
-        setattr(laser, "off", _failing_off(laser))
+        laser.off = _failing_off(laser)  # ty: ignore[invalid-assignment]
 
     ctrl.updateUi_estop_pressed()
 

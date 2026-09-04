@@ -162,8 +162,17 @@ FIELD_PURPOSES: dict[str, str] = {
     "doubleSpinBox_focusBlockSize": "Focus compensation block size (planes)",
     # Stack panel — predictive adaptive-autofocus group. Each purpose leads
     # with the exact on-widget label text so tooltips and labels stay in sync.
-    "doubleSpinBox_autofocusCadence": "Update cadence (planes) — autofocus residual re-evaluated every N planes",
-    "doubleSpinBox_autofocusResidualGain": "Residual gain (mm) — autofocus residual step applied per update",
-    "doubleSpinBox_autofocusMaxResidual": "Max residual (mm) — autofocus residual clamp bound",
-    "doubleSpinBox_autofocusSmoothing": "Smoothing — autofocus EMA learning rate for the reference sharpness",
+    "doubleSpinBox_autofocusCadence": (
+        "Update cadence (planes) — autofocus residual re-evaluated "
+        "every N planes"
+    ),
+    "doubleSpinBox_autofocusResidualGain": (
+        "Residual gain (mm) — autofocus residual step applied per update"
+    ),
+    "doubleSpinBox_autofocusMaxResidual": (
+        "Max residual (mm) — autofocus residual clamp bound"
+    ),
+    "doubleSpinBox_autofocusSmoothing": (
+        "Smoothing — autofocus EMA learning rate for the reference sharpness"
+    ),
 }

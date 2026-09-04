@@ -588,9 +588,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                                 if self._focus_block_count > 0
                                 else None,
                             )
-                            self._shell._fs.record_focus_sample(
-                                focus_sample
-                            )
+                            self._shell._fs.record_focus_sample(focus_sample)
 
                         self.sig_focus_trajectory.emit(
                             self._focus_block_count,
@@ -824,9 +822,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                             sharpness_metric=sharp,
                         )
                         if self._shell.saving_allowed:
-                            self._shell._fs.record_focus_sample(
-                                focus_sample
-                            )
+                            self._shell._fs.record_focus_sample(focus_sample)
                         self.sig_focus_trajectory.emit(
                             plane,
                             stage_pos_mm,
@@ -841,7 +837,10 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                             state = "waiting"
                         elif abs(residual) >= max_residual - 1e-9:
                             state = "clamped"
-                        elif not is_cadence or self._autofocus_controller.residual_unchanged:
+                        elif (
+                            not is_cadence
+                            or self._autofocus_controller.residual_unchanged
+                        ):
                             state = "holding"
                         else:
                             state = "tracking"

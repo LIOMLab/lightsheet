@@ -117,7 +117,7 @@ def test_optimistic_echo_off_when_turning_off(
     label = ctrl.laser_panel.ui.label_laserOneStatus
     # Pretend the laser is already on.
     btn.setChecked(True)
-    setattr(ctrl._hw.lasers[0], "active", True)
+    ctrl._hw.lasers[0].active = True
     label.setText("\u25cf ON")
     label.setStyleSheet("color: #34C759; font-weight: bold;")
 
@@ -401,8 +401,8 @@ def test_estop_kill_path_unchanged(
     """The E-stop kill path stays synchronous + lock-free in the shell:
     estop_event.set() + for laser in self.lasers: laser.off()."""
     ctrl = controller
-    setattr(ctrl._hw.lasers[0], "active", True)
-    setattr(ctrl._hw.lasers[1], "active", True)
+    ctrl._hw.lasers[0].active = True
+    ctrl._hw.lasers[1].active = True
     ctrl.updateUi_estop_pressed()
     assert ctrl.estop_event.is_set()
     assert ctrl._hw.lasers[0].active is False

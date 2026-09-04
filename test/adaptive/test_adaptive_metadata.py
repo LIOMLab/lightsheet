@@ -103,7 +103,7 @@ def _setup_ctrl(
     if n_channels >= 2:
         ctrl._auto_laser2 = True
     saver = ctrl._fs.frame_saver
-    setattr(saver.parent, "save_format", "hdf5")
+    saver.parent.save_format = "hdf5"  # ty: ignore[invalid-assignment]
     # Reinit with a block_size large enough that the queue (maxsize
     # 2*block_size) can hold all test frames without blocking the put
     # call — the default block_size=1 gives maxsize=2, which blocks on

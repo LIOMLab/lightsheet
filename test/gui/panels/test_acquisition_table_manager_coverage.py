@@ -169,7 +169,7 @@ def test_estimate_per_plane_time_exception_fallback(
     ctrl, mgr = _mgr(qtbot, controller)
     # Remove the acquisition_panel attr so the access raises.
     orig = ctrl.acquisition_panel
-    setattr(ctrl, "acquisition_panel", None)
+    ctrl.acquisition_panel = None  # ty: ignore[invalid-assignment]
     try:
         assert mgr._estimate_per_plane_time() == 0.5
     finally:
@@ -190,7 +190,7 @@ def test_estimate_stack_size_mb_camera_exception_fallback(
             raise TypeError("no camera")
 
     orig = ctrl.camera
-    setattr(ctrl, "camera", BadCamera())
+    ctrl.camera = BadCamera()  # ty: ignore[invalid-assignment]
     try:
         mb = mgr._estimate_stack_size_mb(100)
         # 2000*2000*2*100 / (1024*1024) ≈ 762.9 MB
@@ -213,7 +213,7 @@ def test_zarr_pyramid_multiplier_exception_fallback(
             raise ValueError("bad float")
 
     orig = ctrl.stack_step
-    setattr(ctrl, "stack_step", BadFloat())
+    ctrl.stack_step = BadFloat()  # ty: ignore[invalid-assignment]
     try:
         mult = mgr._zarr_pyramid_multiplier()
         # stack_step=0.0 → base_res=(0, 6.5, 6.5) → max_res=6.5 → all
@@ -303,7 +303,7 @@ def test_recompute_with_motors_none(
     ctrl, mgr = _mgr(qtbot, controller)
     mgr.add_stack()
     orig = ctrl.motors
-    setattr(ctrl, "motors", None)
+    ctrl.motors = None  # ty: ignore[invalid-assignment]
     try:
         mgr._recompute_row(0)
     finally:
@@ -331,7 +331,7 @@ def test_recompute_with_bad_motor_limits(
 
         move_absolute_position = orig_motor.move_absolute_position
 
-    setattr(ctrl.motors, "horizontal", BadMotor())
+    ctrl.motors.horizontal = BadMotor()  # ty: ignore[invalid-assignment]
     try:
         mgr._recompute_row(0)
     finally:

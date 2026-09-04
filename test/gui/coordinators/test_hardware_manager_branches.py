@@ -487,7 +487,7 @@ def test_refresh_laser2_readback_async_skips_when_thread_alive() -> None:
     # Plant a fake running QThread.
     fake_thread = Mock()
     fake_thread.isRunning.return_value = True
-    setattr(hw, "_readback_thread", fake_thread)
+    hw._readback_thread = fake_thread
     hw._refresh_laser2_readback_async()
     # No new thread started — the fake thread is still the cached one.
     assert hw._readback_thread is fake_thread

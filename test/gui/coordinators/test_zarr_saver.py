@@ -448,7 +448,7 @@ def test_zarr_save_finalizes_after_stop_saving_on_normal_completion(
         def __getattr__(self, name: str) -> Any:
             return getattr(self._real, name)
 
-    setattr(saver, "queue", _StopAfterLastQueue(saver.queue, n_planes))
+    saver.queue = _StopAfterLastQueue(saver.queue, n_planes)  # ty: ignore[invalid-assignment]
     for _ in range(n_planes):
         saver.queue.put(frame)
     saver.saving_started = True
@@ -551,7 +551,7 @@ def test_zarr_drains_queue_after_stop_saving(
         def __getattr__(self, name: str) -> Any:
             return getattr(self._real, name)
 
-    setattr(saver, "queue", _FlipAfterFirstGet(saver.queue))
+    saver.queue = _FlipAfterFirstGet(saver.queue)  # ty: ignore[invalid-assignment]
 
     worker = FrameSaverWorker(saver)
     finished: list[int] = []

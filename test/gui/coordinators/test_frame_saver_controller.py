@@ -772,13 +772,13 @@ def test_save_single_image_multi_channel_writes_two_files(
     ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
     ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
 
-    setattr(cast(Any, ctrl._fs), "reinit", Mock())
-    setattr(cast(Any, ctrl._fs), "set_files", Mock())
-    setattr(cast(Any, ctrl._fs), "enqueue_buffer", Mock())
-    setattr(cast(Any, ctrl._fs), "start_saving", Mock())
-    setattr(cast(Any, ctrl._fs), "stop_saving", Mock())
-    setattr(cast(Any, ctrl._fs), "add_sample_name", Mock())
-    setattr(cast(Any, ctrl._fs), "add_motor_parameters", Mock())
+    cast(Any, ctrl._fs).reinit = Mock()
+    cast(Any, ctrl._fs).set_files = Mock()
+    cast(Any, ctrl._fs).enqueue_buffer = Mock()
+    cast(Any, ctrl._fs).start_saving = Mock()
+    cast(Any, ctrl._fs).stop_saving = Mock()
+    cast(Any, ctrl._fs).add_sample_name = Mock()
+    cast(Any, ctrl._fs).add_motor_parameters = Mock()
 
     ctrl.save_panel.updateUi_save_single_image()
 
@@ -835,13 +835,13 @@ def test_save_single_image_single_channel_unchanged(
     ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
     ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
 
-    setattr(cast(Any, ctrl._fs), "reinit", Mock())
-    setattr(cast(Any, ctrl._fs), "set_files", Mock())
-    setattr(cast(Any, ctrl._fs), "enqueue_buffer", Mock())
-    setattr(cast(Any, ctrl._fs), "start_saving", Mock())
-    setattr(cast(Any, ctrl._fs), "stop_saving", Mock())
-    setattr(cast(Any, ctrl._fs), "add_sample_name", Mock())
-    setattr(cast(Any, ctrl._fs), "add_motor_parameters", Mock())
+    cast(Any, ctrl._fs).reinit = Mock()
+    cast(Any, ctrl._fs).set_files = Mock()
+    cast(Any, ctrl._fs).enqueue_buffer = Mock()
+    cast(Any, ctrl._fs).start_saving = Mock()
+    cast(Any, ctrl._fs).stop_saving = Mock()
+    cast(Any, ctrl._fs).add_sample_name = Mock()
+    cast(Any, ctrl._fs).add_motor_parameters = Mock()
 
     ctrl.save_panel.updateUi_save_single_image()
 

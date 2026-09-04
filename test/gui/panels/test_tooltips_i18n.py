@@ -28,7 +28,6 @@ if TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
 import pytest
-from PySide6.QtCore import QObject
 from PySide6.QtWidgets import (
     QCheckBox,
     QDoubleSpinBox,

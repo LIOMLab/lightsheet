@@ -63,7 +63,7 @@ def test_start_lasers_surfaces_laser1_daq_error(
         laser1.error = 1
         laser1.error_message = "daq write failed"
 
-    setattr(laser1, "on", _failing_on)
+    laser1.on = _failing_on  # ty: ignore[invalid-assignment]
 
     messages: list[str] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
@@ -101,7 +101,7 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy(
         ctrl._bundle, ctrl._hw, ctrl, save_description="", save_stitch_blend=False
     )
     # waveform_cycles must be set so number_of_images is a valid int.
-    setattr(worker.siggen, "waveform_cycles", 1)
+    worker.siggen.waveform_cycles = 1
 
     # Simulate a recorder timeout: monitor_recorder sets the timeout flag
     # (the real MockCamera.monitor_recorder never times out, so we wrap it
@@ -110,9 +110,9 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy(
 
     def _timeout_monitor(n: int) -> None:
         _real_monitor(n)
-        setattr(worker.camera, "recorder_timeout_status", True)
+        worker.camera.recorder_timeout_status = True
 
-    setattr(worker.camera, "monitor_recorder", _timeout_monitor)
+    worker.camera.monitor_recorder = _timeout_monitor  # ty: ignore[invalid-assignment]
 
     # Track whether copy_recorder_images is reached.
     copy_called: list[int] = []
@@ -122,7 +122,7 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy(
         copy_called.append(n)
         return _real_copy(n)
 
-    setattr(worker.camera, "copy_recorder_images", _tracking_copy)
+    worker.camera.copy_recorder_images = _tracking_copy  # ty: ignore[invalid-assignment]
 
     # Track teardown calls.
     delete_recorder_called: list[bool] = []
@@ -132,7 +132,7 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy(
         delete_recorder_called.append(True)
         _real_delete_recorder()
 
-    setattr(worker.camera, "delete_recorder", _tracking_delete_recorder)
+    worker.camera.delete_recorder = _tracking_delete_recorder  # ty: ignore[invalid-assignment]
 
     delete_scanner_called: list[bool] = []
     _real_delete_scanner = worker.siggen.delete_scanner
@@ -141,7 +141,7 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy(
         delete_scanner_called.append(True)
         _real_delete_scanner()
 
-    setattr(worker.siggen, "delete_scanner", _tracking_delete_scanner)
+    worker.siggen.delete_scanner = _tracking_delete_scanner  # ty: ignore[invalid-assignment]
 
     disarm_called: list[bool] = []
     _real_disarm = worker.camera.disarm
@@ -150,7 +150,7 @@ def test_acquire_scan_aborts_on_recorder_timeout_before_copy(
         disarm_called.append(True)
         _real_disarm()
 
-    setattr(worker.camera, "disarm", _tracking_disarm)
+    worker.camera.disarm = _tracking_disarm  # ty: ignore[invalid-assignment]
 
     messages: list[str] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
@@ -189,16 +189,16 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder(
     worker = SingleWorker(
         ctrl._bundle, ctrl._hw, ctrl, save_description="", save_stitch_blend=False
     )
-    setattr(worker.siggen, "waveform_cycles", 1)
+    worker.siggen.waveform_cycles = 1
 
     # Simulate a create_scanner DAQ failure: the real MockSigGen.create_scanner
     # is a no-op that never errors, so we wrap it to inject the error the real
     # SigGen would surface on a DAQ task creation fault.
     def _fail_create_scanner() -> None:
-        setattr(worker.siggen, "error", 1)
-        setattr(worker.siggen, "error_message", "create_scan error")
+        worker.siggen.error = 1
+        worker.siggen.error_message = "create_scan error"
 
-    setattr(worker.siggen, "create_scanner", _fail_create_scanner)
+    worker.siggen.create_scanner = _fail_create_scanner  # ty: ignore[invalid-assignment]
 
     # Track whether start_recorder is reached.
     start_recorder_called: list[int] = []
@@ -208,7 +208,7 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder(
         start_recorder_called.append(n)
         _real_start_recorder(n)
 
-    setattr(worker.camera, "start_recorder", _tracking_start_recorder)
+    worker.camera.start_recorder = _tracking_start_recorder  # ty: ignore[invalid-assignment]
 
     delete_scanner_called: list[bool] = []
     _real_delete_scanner = worker.siggen.delete_scanner
@@ -217,7 +217,7 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder(
         delete_scanner_called.append(True)
         _real_delete_scanner()
 
-    setattr(worker.siggen, "delete_scanner", _tracking_delete_scanner)
+    worker.siggen.delete_scanner = _tracking_delete_scanner  # ty: ignore[invalid-assignment]
 
     disarm_called: list[bool] = []
     _real_disarm = worker.camera.disarm
@@ -226,7 +226,7 @@ def test_acquire_scan_surfaces_siggen_error_before_recorder(
         disarm_called.append(True)
         _real_disarm()
 
-    setattr(worker.camera, "disarm", _tracking_disarm)
+    worker.camera.disarm = _tracking_disarm  # ty: ignore[invalid-assignment]
 
     messages: list[str] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))
@@ -315,7 +315,7 @@ def test_preview_worker_breaks_on_estop_before_frame_acquisition(
         start_recorder_called.append(n)
         _real_start_recorder(n)
 
-    setattr(ctrl._acq.camera, "start_recorder", _tracking_start_recorder)
+    ctrl._acq.camera.start_recorder = _tracking_start_recorder  # ty: ignore[invalid-assignment]
 
     copy_called: list[int] = []
     _real_copy = ctrl._acq.camera.copy_recorder_images
@@ -324,7 +324,7 @@ def test_preview_worker_breaks_on_estop_before_frame_acquisition(
         copy_called.append(n)
         return _real_copy(n)
 
-    setattr(ctrl._acq.camera, "copy_recorder_images", _tracking_copy)
+    ctrl._acq.camera.copy_recorder_images = _tracking_copy  # ty: ignore[invalid-assignment]
 
     # Construct the PreviewWorker and track its finished signal.
     worker = PreviewWorker(bundle, ctrl._hw, ctrl)
@@ -410,7 +410,7 @@ def test_estop_warn_branch_fires_for_failed_laser(
         laser_failed.error = 1
         laser_failed.error_message = "daq write failed"
 
-    setattr(laser_failed, "off", _failing_off)
+    laser_failed.off = _failing_off  # ty: ignore[invalid-assignment]
 
     messages: list[str] = []
     ctrl.sig_message.connect(lambda msg: messages.append(msg))

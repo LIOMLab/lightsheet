@@ -105,9 +105,9 @@ def test_stack_worker_multi_channel_real_fs_writes_per_channel_files(
         ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
         return True
 
-    setattr(worker, "acquire_scan", _fake_acquire_scan)
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.acquire_scan = _fake_acquire_scan  # ty: ignore[invalid-assignment]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     # Stub the motor move so MockMotors travel-limit enforcement does
     # not abort the stack (the mock enforces limits; a 10um step from 0
@@ -241,9 +241,9 @@ def test_stack_worker_multi_channel_stitch_branch_writes_one_file_per_channel(
         ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
         return True
 
-    setattr(worker, "acquire_scan", _fake_acquire_scan)
-    setattr(worker.camera, "recorder_timeout_status", False)
-    setattr(worker.siggen, "error", 0)
+    worker.acquire_scan = _fake_acquire_scan  # ty: ignore[invalid-assignment]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
 
     # Stub the motor move so MockMotors travel-limit enforcement does
     # not abort the stack (the mock enforces limits; a 10um step from 0
