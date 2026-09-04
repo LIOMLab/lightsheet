@@ -359,7 +359,7 @@ class AcquisitionTableManager(QWidget):
             return 0.0
 
     def _parse_or_flag(
-        self, row: int, col: int, text: str, bad_parses: set | None = None
+        self, row: int, col: int, text: str, bad_parses: set[int] | None = None
     ) -> float:
         """Parse a numeric cell's text to float during recompute, flagging
         the cell red if the text is empty or non-numeric so the operator
