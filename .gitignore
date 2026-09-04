@@ -4,7 +4,6 @@
 
 # === OpenGSD (gsd-core) — keep ALL GSD-produced files out of git ===
 .cursor/
-.windsurf/
 .devin/
 .planning/
 .planning/tmp/
@@ -52,3 +51,4 @@ htmlcov/
 # keep this as a backstop.
 /*.hdf5
 /*.zarr
+
