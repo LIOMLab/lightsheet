@@ -318,9 +318,7 @@ class AcquisitionPanelWidget(QWidget):
                         "Stop Stack Mode"
                     )
                     ui: typing.Any = self._shell.ui
-                    ui.statusBar_label.setText(
-                        "Current Acquisition Mode: Stack "
-                    )
+                    ui.statusBar_label.setText("Current Acquisition Mode: Stack ")
                     progress = ui.statusBar_progress
                     progress.setValue(0)
                     progress.show()
@@ -395,13 +393,11 @@ class AcquisitionPanelWidget(QWidget):
             prev_worker = getattr(self._shell, "_stack_worker", None)
             if prev_worker is not None:
                 with contextlib.suppress(RuntimeError, TypeError):
-                    prev_worker.finished.disconnect(self._shell._stack_thread.quit)
+                    prev_worker.finished.disconnect(prev_thread.quit)
                 with contextlib.suppress(RuntimeError, TypeError):
                     prev_worker.finished.disconnect(self.updateUi_post_stack_mode)
                 with contextlib.suppress(RuntimeError, TypeError):
-                    self._shell._stack_thread.finished.disconnect(
-                        prev_worker.deleteLater
-                    )
+                    prev_thread.finished.disconnect(prev_worker.deleteLater)
             self._shell._stack_thread = prev_thread
 
         # Pre-sample the save-option widgets on the GUI thread before
