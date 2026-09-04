@@ -493,3 +493,103 @@ def test_hdf5_autofocus_writes_one_row_per_plane(
         np.testing.assert_allclose(applied, feedforward)
         # All sharpness values are zero for the uniform 30000 frame.
         np.testing.assert_allclose(sharpness, 0.0)
+
+
+def test_hdf5_autofocus_applied_equals_predicted_target_with_nonzero_residual(
+    controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    """A 3-plane single-channel stack with varying sharpness produces a
+    non-zero residual, and the saved ``applied_camera_pos_mm`` equals the
+    predicted target ``feedforward_camera_pos_mm + residual_mm`` for every
+    plane."""
+    from unittest.mock import patch
+
+    from lightsheet.gui.workers import StackWorker
+
+    ctrl, saver = _setup_ctrl(controller, tmp_path)
+    ctrl.save_format = "hdf5"
+    n_planes = 3
+
+    ctrl.saving_allowed = True
+    ctrl.number_of_planes = n_planes
+    ctrl.stack_mode_started = True
+    ctrl.stack_starting_plane = 0.0
+    ctrl.stack_step = 10
+    ctrl.save_directory = str(tmp_path)
+    ctrl.save_filepath = str(tmp_path / "autofocus_metadata_residual")
+    ctrl.save_description = "autofocus metadata residual"
+    ctrl.current_horizontal_position_text = "0.0"
+    ctrl.current_vertical_position_text = "0.0"
+    ctrl.current_camera_position_text = "0.0"
+    ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(False)
+    ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
+
+    config = AutofocusConfig(
+        enabled=True,
+        cadence=1,
+        residual_gain_mm=0.05,
+        max_residual_mm=0.5,
+        smoothing=0.5,
+        use_curve_seed=False,
+    )
+    worker = StackWorker(
+        ctrl._bundle,
+        ctrl._hw,
+        ctrl,
+        save_description="autofocus metadata residual",
+        save_stitch_blend=False,
+        save_all_crop=False,
+        save_all_full=False,
+        multi_channel=False,
+        adaptive_cfg=None,
+        autofocus_cfg=config,
+    )
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    state = {"acq_index": 0}
+
+    def _fake_acquire_scan() -> bool:
+        n_imgs = worker.siggen.waveform_cycles or 1
+        imgs = worker.camera.copy_recorder_images(n_imgs)
+        assert imgs is not None
+        frame = np.asarray(imgs[0])
+        frame[:] = 30000
+        worker._shell.reconstructed_frame = frame
+        state["acq_index"] += 1
+        return True
+
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    with (
+        _chdir(tmp_path),
+        patch.object(worker, "acquire_scan", _fake_acquire_scan),
+        patch(
+            "lightsheet.focus.sharpness.frame_sharpness_variance",
+            side_effect=[1.0, 2.0, 3.0],
+        ),
+    ):
+        worker.run()
+
+    assert len(finished_emits) == 1
+    fname = saver.filenames_list[0]
+    with h5py.File(fname, "r") as f:
+        assert "focus_trajectory" in f
+        grp = cast(h5py.Group, f["focus_trajectory"])
+        block_ds = cast(h5py.Dataset, grp["block_index"])
+        assert len(block_ds) == n_planes
+        assert list(block_ds[:]) == [0, 1, 2]
+
+        residuals = np.asarray(cast(h5py.Dataset, grp["residual_mm"])[:])
+        feedforward = np.asarray(
+            cast(h5py.Dataset, grp["feedforward_camera_pos_mm"])[:]
+        )
+        applied = np.asarray(cast(h5py.Dataset, grp["applied_camera_pos_mm"])[:])
+
+        # Varying sharpness drives a positive residual from the second
+        # update onward; the residual stored for each plane is the residual
+        # used for that plane's move (before that plane's own update).
+        np.testing.assert_allclose(residuals, [0.0, 0.0, 0.05], atol=1e-9)
+        # The applied camera position is the predicted target:
+        # feedforward + residual for the plane that produced it.
+        np.testing.assert_allclose(applied, feedforward + residuals)
