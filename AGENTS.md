@@ -292,13 +292,14 @@ bare `uv run pytest -q` (or `scripts/test.sh`).
     `sip.delete` teardown, are both removed — the cycle break makes them
     unnecessary. The fixtures' finalizer and `test/conftest.py`'s autouse
     cleanup use `test/helpers/cleanup.py` (`_pump_deferred_delete`,
-    `_quit_thread_draining`) to stop timers/threads and reap C++ objects. `conftest.py` still calls `gc.disable()` for the whole
-    session as a guard against Qt widget destructor segfaults
-    during the run. `scripts/coverage.sh` runs xdist-parallel (`-n auto
-    --maxprocesses=6` in its `-o addopts` override) with a 5-minute hard
-    timeout; if xdist deadlocks at shutdown (an intermittent Qt/shiboken
-    teardown race under gc.disable()) it falls back to single-process
-    collection (`-p no:xdist`, ~4 min, no xdist shutdown race). A separate
+    `_quit_thread_draining`) to stop timers/threads and reap C++ objects. `conftest.py` now disables `gc` only inside pytest-xdist workers
+    to avoid Qt/shiboken destructor races during parallel teardown; the
+    serial run keeps GC enabled and the autouse/sessionfinish cleanup
+    explicitly collects after the deferred-delete pump. `scripts/coverage.sh`
+    runs xdist-parallel (`-n auto --maxprocesses=6` in its `-o addopts`
+    override) with a 10-minute hard timeout and falls back to single-process
+    collection on any non-zero xdist exit (hang, worker segfault, or test
+    failure) so the gate completes reliably. A separate
     shutdown-time `QApplication` teardown segfault was historical under the
     legacy Qt5/sip binding; whether it still applies under PySide6/shiboken
     is unverified — do not assert it as current. It fires AFTER coverage
