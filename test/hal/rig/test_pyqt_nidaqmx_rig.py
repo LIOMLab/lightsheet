@@ -14,8 +14,14 @@ import importlib.util
 import os
 import sys
 import threading
+import time
 
 import pytest
+
+# DAQ channel-release delay: unique names and a short retry avoid -50103
+# "resource is reserved" spurious failures under rapid Task creation.
+_DAQ_RETRY_DELAY_S = 0.2
+_DAQ_RETRY_COUNT = 3
 
 
 def _real_nidaqmx_available() -> bool:
@@ -66,14 +72,21 @@ def _do_laser_write(voltage: float, errors: list[tuple[str, str]], tag: str) -> 
     import nidaqmx
     import numpy as np
 
-    try:
-        with nidaqmx.Task(new_task_name="lasers_setpoint") as task:
-            task.ao_channels.add_ao_voltage_chan(_laser_terminals())
-            task.write(
-                np.stack((np.array([voltage]), np.array([0.0]))), auto_start=True
-            )
-    except BaseException as e:
-        errors.append((tag, repr(e)))
+    for attempt in range(_DAQ_RETRY_COUNT):
+        try:
+            task_name = f"laser_pyside_{tag}_{time.time_ns()}"
+            with nidaqmx.Task(new_task_name=task_name) as task:
+                task.ao_channels.add_ao_voltage_chan(_laser_terminals())
+                task.write(
+                    np.stack((np.array([voltage]), np.array([0.0]))), auto_start=True
+                )
+            return
+        except BaseException as e:
+            if "-50103" in repr(e) and attempt < _DAQ_RETRY_COUNT - 1:
+                time.sleep(_DAQ_RETRY_DELAY_S)
+                continue
+            errors.append((tag, repr(e)))
+            return
 
 
 def test_laser_task_from_qtimer_slot() -> None:
