@@ -221,6 +221,7 @@ def run_sync_loop(
     phase = -10
     event_start = _event_start(args)
     laser_powers = (args.laser1_power, args.laser2_power)
+    laser_was_active = [False, False]
 
     while True:
         now_song = time.perf_counter() - t0
@@ -234,17 +235,19 @@ def run_sync_loop(
             pass
         elif new_phase == -2 and active_indices:
             for idx in active_indices:
-                bundle.lasers[idx].off()
+                bundle.lasers[idx].set_power(0.0)
             active_indices.clear()
             phase = new_phase
             logger.info("LASER EVENT END @ %.3f s", now_song)
         elif new_phase >= 0 and new_phase != phase:
             target = set(phase_lasers[new_phase])
             for idx in active_indices - target:
-                bundle.lasers[idx].off()
+                bundle.lasers[idx].set_power(0.0)
             for idx in target - active_indices:
                 bundle.lasers[idx].set_power(laser_powers[idx])
-                bundle.lasers[idx].on()
+                if not laser_was_active[idx]:
+                    bundle.lasers[idx].on()
+                    laser_was_active[idx] = True
             active_indices = target
             phase = new_phase
             labels = [bundle.lasers[i].label for i in sorted(active_indices)]
@@ -264,7 +267,7 @@ def run_sync_loop(
         time.sleep(0.01 if args.dry_run and args.demo else 0.001)
 
     for idx in active_indices:
-        bundle.lasers[idx].off()
+        bundle.lasers[idx].set_power(0.0)
 
 
 def parse_args() -> argparse.Namespace:
