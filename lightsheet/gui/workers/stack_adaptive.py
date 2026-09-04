@@ -100,7 +100,7 @@ class _StackAdaptiveMixin:
                     f"changed past the safe limit. The loop will retry "
                     f"on the next plane; press E-stop (F12) to abort."
                 )
-        if self._multi_channel and self._shell.lasers[1].max_power > 0:
+        if self._shell.lasers[1].max_power > 0:
             pct2 = cmd.laser2_mw / self._shell.lasers[1].max_power * 100.0
             self._shell.laser2_power_pct = pct2
             try:
