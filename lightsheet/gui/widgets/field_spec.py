@@ -160,9 +160,10 @@ FIELD_PURPOSES: dict[str, str] = {
     "doubleSpinBox_adaptiveLaser2MaxPower": "Adaptive laser 2 max power bound",
     # Stack panel — focus compensation group
     "doubleSpinBox_focusBlockSize": "Focus compensation block size (planes)",
-    # Stack panel — predictive adaptive-autofocus group
-    "doubleSpinBox_autofocusCadence": "Autofocus update cadence (planes)",
-    "doubleSpinBox_autofocusResidualGain": "Autofocus residual gain per step (mm)",
-    "doubleSpinBox_autofocusMaxResidual": "Autofocus maximum residual (mm)",
-    "doubleSpinBox_autofocusSmoothing": "Autofocus EMA smoothing / learning rate",
+    # Stack panel — predictive adaptive-autofocus group. Each purpose leads
+    # with the exact on-widget label text so tooltips and labels stay in sync.
+    "doubleSpinBox_autofocusCadence": "Update cadence (planes) — autofocus residual re-evaluated every N planes",
+    "doubleSpinBox_autofocusResidualGain": "Residual gain (mm) — autofocus residual step applied per update",
+    "doubleSpinBox_autofocusMaxResidual": "Max residual (mm) — autofocus residual clamp bound",
+    "doubleSpinBox_autofocusSmoothing": "Smoothing — autofocus EMA learning rate for the reference sharpness",
 }

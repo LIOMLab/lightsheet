@@ -117,6 +117,10 @@ def _center_toolbutton_paint(btn: QToolButton) -> None:
     btn.paintEvent = _paint  # ty: ignore[invalid-assignment]
 
 
+# Anti-clipping padding added to the mode badge's font-metric width so the
+# label's internal text margins do not clip the widest mode string.
+_MODE_BADGE_HPADDING_PX = 10
+
 # Shell-owned widget objectNames. Only these are surfaced onto self.ui via
 # the vars(panel.ui) merge loop; panel-internal widgets stay on their owning
 # panel's ui. Covers the safety-critical E-stop toolbar, status bar, message
@@ -1015,15 +1019,13 @@ class Controller_MainWindow(QMainWindow):
         # mode string: "ADAPTIVE RUNNING — plane 999/999 (row 3/5)
         # · MULTI-CH". It is measured from the label's font at
         # construction so the badge reserves the full width before the
-        # first mode render. The +10 px buffer covers the label's
-        # horizontal text margins so the rendered badge does not clip
-        # the last characters of the widest string.
+        # first mode render.
         _badge_fm = QFontMetrics(self.ui.label_modeBadge.font())
         _badge_widest = (
             "ADAPTIVE RUNNING \u2014 plane 999/999 (row 3/5) \u00b7 MULTI-CH"
         )
         self.ui.label_modeBadge.setMinimumWidth(
-            _badge_fm.horizontalAdvance(_badge_widest) + 10
+            _badge_fm.horizontalAdvance(_badge_widest) + _MODE_BADGE_HPADDING_PX
         )
 
     def _on_levels_changed(self, levels_min: int, levels_max: int) -> None:

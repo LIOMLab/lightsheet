@@ -22,7 +22,6 @@ from lightsheet.focus.calibration import load_focus_curve
 from lightsheet.focus.types import AutofocusConfig, FocusConfig, FocusCurve
 from lightsheet.gui.panels.acquisition_table_manager import AcquisitionTableManager
 from lightsheet.gui.panels.ui_stack_panel import Ui_StackPanel
-from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.styles import spacing as _s
 from lightsheet.gui.styles import typography as _t
 from lightsheet.gui.widgets.field_spec import FIELD_SPECS
@@ -171,12 +170,8 @@ class StackPanelWidget(QWidget):
         # The adaptive parameter grid uses the 8 px spacing token, not the
         # QGridLayout default.
         self.ui.gridLayout_adaptiveAutofocusFields.setSpacing(_s.SM)
-        # The optional progress bar uses the accent color for its chunk so it
-        # reads as the secondary focal point while a stack is active. It stays
-        # hidden until a stack with adaptive focus starts.
-        self.ui.progressBar_autofocus.setStyleSheet(
-            f"QProgressBar::chunk {{ background-color: {_c.BREEZE_ACCENT}; }}"
-        )
+        # The progress bar takes its chunk color from the active theme's
+        # Breeze QSS (slider:foreground ≈ accent) — no per-widget override.
 
     def _seed_spinbox_ranges(self) -> None:
         """Seed the first/last plane spinbox ranges from the motor travel
