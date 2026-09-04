@@ -103,7 +103,7 @@ def _build_controller(
             controller.deleteLater()
 
         # (d) Pump DeferredDelete until the widget tree is gone.
-        _pump_deferred_delete(500)
+        _pump_deferred_delete()
 
         # (e) Stop the message-box patch only after deletion is complete.
         qm_patch.stop()

@@ -11,7 +11,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
-from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from lightsheet.gui.workers.scan_mixin import _AcquireScanMixin
 from lightsheet.gui.workers.stack_adaptive import _StackAdaptiveMixin
@@ -428,6 +428,14 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 )
 
             for plane in range(n_planes):
+                # Cooperative shutdown: if the owning QThread has been asked
+                # to quit (e.g. during xdist worker teardown), stop the stack
+                # and let the post-loop cleanup run. This is intentionally
+                # checked at the loop top alongside the mode-started / E-stop
+                # guards so the worker never blocks teardown.
+                if QThread.currentThread().isInterruptionRequested():
+                    self._shell.sig_message.emit("Stack Acquisition Interrupted")
+                    break
                 if not self._shell.stack_mode_started:
                     self._shell.sig_message.emit("Stack Acquisition Interrupted")
                     break

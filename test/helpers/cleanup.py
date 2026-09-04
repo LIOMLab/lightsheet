@@ -14,7 +14,7 @@ from PySide6.QtCore import QEventLoop, QTimer
 from PySide6.QtWidgets import QApplication
 
 
-def _pump_deferred_delete(max_ms: int = 500) -> None:
+def _pump_deferred_delete(max_ms: int = 150) -> None:
     """Spin a real ``QEventLoop`` until ``QApplication.topLevelWidgets()``
     is empty or ``max_ms`` expires.
 
@@ -58,12 +58,26 @@ def _quit_thread_draining(thread: Any | None, timeout_ms: int = 2000) -> None:
     That lets a queued ``quit()`` reach the thread's event loop and the
     thread reap deterministically under xdist, where a blocking wait can
     stall when ``quit()`` races ahead of the thread's ``exec()``.
+
+    ``requestInterruption()`` is called before ``quit()`` so production
+    acquisition worker ``run()`` loops that poll
+    ``QThread.currentThread().isInterruptionRequested()`` can exit early
+    instead of blocking teardown on a long-running acquisition step.
     """
     if thread is None:
         return
     try:
         if not thread.isRunning():
             return
+    except RuntimeError:
+        # C++ object already deleted.
+        return
+    # Set the interruption flag first so any cooperative worker loop that
+    # checks ``isInterruptionRequested()`` can break before we ask the event
+    # loop to quit.
+    with contextlib.suppress(RuntimeError):
+        thread.requestInterruption()
+    try:
         thread.quit()
     except RuntimeError:
         # C++ object already deleted.

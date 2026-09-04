@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from lightsheet.gui.workers.scan_mixin import _AcquireScanMixin
 from lightsheet.hal.bundle import DeviceBundle
@@ -112,6 +112,14 @@ class PreviewWorker(QObject):
             self._hw.start_lasers(energize_lasers=energize_lasers)
 
             while self._shell.preview_mode_started:
+                # Cooperative shutdown: if the owning QThread has been asked
+                # to quit (e.g. during xdist worker teardown), break out of
+                # the loop so the post-loop cleanup can run. This check is
+                # intentionally adjacent to the E-stop poll and the
+                # mode-started guard so the worker never blocks teardown.
+                if QThread.currentThread().isInterruptionRequested():
+                    break
+
                 # E-stop poll point — checked at the top of each iteration
                 # before any frame acquisition work. The lasers are already
                 # dark (driven off synchronously on the GUI thread in
@@ -130,6 +138,8 @@ class PreviewWorker(QObject):
 
                 # Recording a single image
                 self.camera.start_recorder(1)
+                if QThread.currentThread().isInterruptionRequested():
+                    break
                 self.camera.monitor_recorder(1)
                 self.camera.stop_recorder()
                 cam_images = self.camera.copy_recorder_images(1)
@@ -246,6 +256,10 @@ class LiveWorker(QObject, _AcquireScanMixin):
             self._hw.start_lasers(energize_lasers=energize_lasers)
 
             while self._shell.live_mode_started:
+                # Cooperative shutdown — see PreviewWorker.run for rationale.
+                if QThread.currentThread().isInterruptionRequested():
+                    break
+
                 # E-stop poll point — checked at the top of each iteration before
                 # any frame acquisition work. The lasers are already dark (driven
                 # off synchronously on the GUI thread in updateUi_estop_pressed);
@@ -339,6 +353,13 @@ class SingleWorker(QObject, _AcquireScanMixin):
     def run(self) -> None:
         """Generates and display a single scan which can be saved afterwards"""
         try:
+            # Cooperative shutdown: if the owning QThread has been asked to
+            # quit before the single acquisition starts, do nothing. The
+            # camera is not yet armed and no lasers are on, so a plain return
+            # (which still runs the ``finally`` finished emit) is safe.
+            if QThread.currentThread().isInterruptionRequested():
+                return
+
             # Clear the prior run's frame so a failed acquire_scan (siggen
             # error / camera timeout early-return) cannot leave a stale
             # buffer that updateUi_save_single_image would silently save as

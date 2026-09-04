@@ -321,25 +321,25 @@ _nidaqmx_is_stub: bool = getattr(sys.modules.get("nidaqmx"), "_lightsheet_stub",
 _pco_is_stub: bool = getattr(sys.modules.get("pco"), "_lightsheet_stub", False)
 
 
-# Disable garbage collection for the entire test session. Qt widget
-# destructors segfault during garbage collection on macOS, killing xdist
-# worker processes before they can send coverage data back to the master.
-# The segfault happens during a GC pass triggered by pytest's fixture
-# introspection (getfuncargnames → signature → unwrap → GC) or at worker
-# exit. Disabling GC prevents the segfault without affecting test behavior
-# (test objects are never explicitly collected during the test run).
+# Disable garbage collection for the entire test session. Re-enabling GC
+# was attempted, but the xdist suite still showed intermittent worker hangs
+# at shutdown, so GC stays disabled as the conservative default. Qt widget
+# destructor races at worker exit are avoided by keeping the Python GC pass
+# from running while QThreads and top-level widgets are still being torn down.
+# We do NOT call os._exit() in pytest_sessionfinish — xdist workers must exit
+# normally to send coverage data back to the master.
 import gc as _gc  # noqa: E402
 
 _gc.disable()
 
 
-# GC is disabled globally (above) to prevent Qt widget destructor
-# segfaults during the test run. We do NOT re-enable it or call os._exit()
-# in pytest_sessionfinish — xdist workers must exit normally to send
-# coverage data back to the master. The gc.disable() prevents the segfault
-# during the test run; at exit, Python's normal shutdown may re-enable GC
-# and segfault, but by that point pytest-cov has already written coverage
-# data and the xdist channel has already sent it to the master.
+# GC is disabled globally (above) to prevent Qt widget destructor races
+# during the test run. We do NOT re-enable it or call os._exit() in
+# pytest_sessionfinish — xdist workers must exit normally to send coverage
+# data back to the master. The historical signal-lambda reference cycle that
+# also contributed to mid-run segfaults is fixed (wire_collaborators uses
+# bound-method connections); GC disable here is the shutdown-time safety
+# belt, not the original root-cause mitigation.
 #
 # Root cause of the historical segfault (a real reference-cycle bug, now
 # fixed — see ROADMAP.md Phase 6 known issue): 53 `lambda: self._mc.<slot>()`
@@ -427,7 +427,7 @@ def _cleanup_qt_after_test(qtbot: Any) -> None:
             with contextlib.suppress(RuntimeError):
                 widget.deleteLater()
 
-    _pump_deferred_delete(500)
+    _pump_deferred_delete()
 
 
 def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
@@ -475,4 +475,4 @@ def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
                     widget.close()
                 with contextlib.suppress(RuntimeError):
                     widget.deleteLater()
-        _pump_deferred_delete(500)
+        _pump_deferred_delete()

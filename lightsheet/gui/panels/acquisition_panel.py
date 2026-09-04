@@ -391,16 +391,12 @@ class AcquisitionPanelWidget(QWidget):
         # sequential cycle; otherwise the single-channel path runs.
         multi_channel = self._shell._auto_laser1 and self._shell._auto_laser2
 
-        # Disconnect the previous worker's signals so its finished→quit
-        # can't fire the reused thread a second time. Only disconnect if
-        # there is an existing connection — disconnecting with none
-        # emits a libpyside RuntimeWarning that masks real signal-wiring
-        # bugs.
+        # Disconnect the previous worker's started→run connection only.
+        # finished.disconnect() is intentionally avoided — it can deadlock
+        # under PySide6 if the worker QThread is stuck between run() and
+        # exec(). The worker is deleted via the thread's finished signal,
+        # so stale finished→thread.quit/updateUi connections become no-ops.
         prev_worker = getattr(self._shell, "_stack_worker", None)
-        if prev_worker is not None:
-            with contextlib.suppress(TypeError, RuntimeError):
-                if prev_worker.receivers(SIGNAL("finished()")) > 0:
-                    prev_worker.finished.disconnect()
 
         # Spawn the stack worker on the (reused) QThread (moveToThread
         # pattern). Pre-sample the adaptive config on the GUI thread so
@@ -495,19 +491,12 @@ class AcquisitionPanelWidget(QWidget):
         self._shell._stack_worker.finished.connect(self.updateUi_post_stack_mode)  # ty: ignore[unresolved-attribute]
         self._shell._stack_worker.finished.connect(self._shell._stack_thread.quit)  # ty: ignore[unresolved-attribute]
         # thread.finished→worker.deleteLater: this fires each row (the
-        # thread quits per row), reaping that row's worker. Disconnect any
-        # prior thread.finished→deleteLater connection from a previous
-        # queue row first — otherwise thread.finished accumulates one
-        # deleteLater connection per row, and when the thread finishes it
-        # calls deleteLater on already-deleted QObjects from prior rows
-        # (Qt warns "QObject::deleteLater called on a deleted object" or
-        # crashes under heavy queue use). The prev_worker.finished
-        # disconnect above only clears the worker's own signals, not the
-        # thread's finished signal.
-        if prev_thread is not None:
-            with contextlib.suppress(TypeError, RuntimeError):
-                if self._shell._stack_thread.receivers(SIGNAL("finished()")) > 0:  # ty: ignore[unresolved-attribute]
-                    self._shell._stack_thread.finished.disconnect()  # ty: ignore[unresolved-attribute]
+        # thread quits per row), reaping that row's worker. We do NOT
+        # disconnect the previous connection while the thread may still be
+        # running — PySide6's disconnect can deadlock against a worker
+        # QThread stuck between run() and exec(). Calling deleteLater on an
+        # already-deleted worker is a no-op, so an accumulating connection
+        # list is safe and avoids the race.
         self._shell._stack_thread.finished.connect(  # ty: ignore[unresolved-attribute]
             self._shell._stack_worker.deleteLater  # ty: ignore[unresolved-attribute]
         )
