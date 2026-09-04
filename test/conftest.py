@@ -321,20 +321,26 @@ _nidaqmx_is_stub: bool = getattr(sys.modules.get("nidaqmx"), "_lightsheet_stub",
 _pco_is_stub: bool = getattr(sys.modules.get("pco"), "_lightsheet_stub", False)
 
 
-# Disable garbage collection for the entire test session. Re-enabling GC
-# was attempted, but the xdist suite still showed intermittent worker hangs
-# at shutdown, so GC stays disabled as the conservative default. Qt widget
-# destructor races at worker exit are avoided by keeping the Python GC pass
-# from running while QThreads and top-level widgets are still being torn down.
+# Garbage collection is disabled inside pytest-xdist workers. The xdist suite
+# previously showed intermittent worker hangs/segfaults at shutdown when
+# Python's cyclic GC ran while PySide6 QThreads and top-level widgets were
+# still being torn down, so GC stays off there as the conservative default.
+# The serial (single-process) run keeps GC enabled; the autouse Qt cleanup and
+# sessionfinish hooks explicitly call ``_gc.collect()`` after the deferred-delete
+# pump to bound the object graph and keep the serial run from slowing down.
 # We do NOT call os._exit() in pytest_sessionfinish — xdist workers must exit
 # normally to send coverage data back to the master.
 import gc as _gc  # noqa: E402
 
-_gc.disable()
+if os.environ.get("PYTEST_XDIST_WORKER"):
+    _gc.disable()
 
 
-# GC is disabled globally (above) to prevent Qt widget destructor races
-# during the test run. We do NOT re-enable it or call os._exit() in
+# GC is disabled in xdist workers (above) to prevent Qt widget destructor races
+# during worker shutdown. The autouse and sessionfinish cleanup hooks call
+# ``_gc.collect()`` manually after the deferred-delete pump in serial, so the
+# object graph stays bounded without the risk of automatic collection
+# mid-teardown. We do NOT re-enable it or call os._exit() in
 # pytest_sessionfinish — xdist workers must exit normally to send coverage
 # data back to the master. The historical signal-lambda reference cycle that
 # also contributed to mid-run segfaults is fixed (wire_collaborators uses
@@ -428,6 +434,14 @@ def _cleanup_qt_after_test(qtbot: Any) -> None:
                 widget.deleteLater()
 
     _pump_deferred_delete()
+    # Serial runs keep the cyclic GC enabled, but the autouse cleanup above
+    # can leave short-lived wrapper cycles behind. A single explicit
+    # collection after the deferred-delete pump bounds the object graph
+    # so the next test's gc.get_objects() scan does not grow without bound.
+    # This is skipped in xdist workers where GC is intentionally disabled
+    # to avoid PySide6/shiboken destructor races at worker shutdown.
+    if not os.environ.get("PYTEST_XDIST_WORKER"):
+        _gc.collect()
 
 
 def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
@@ -476,3 +490,9 @@ def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
                 with contextlib.suppress(RuntimeError):
                     widget.deleteLater()
         _pump_deferred_delete()
+        # Serial runs keep the cyclic GC enabled; an explicit collection
+        # after the final deferred-delete pump frees any remaining wrapper
+        # cycles before the session exits. Skipped in xdist workers where
+        # GC is intentionally disabled to avoid shutdown-time destructor races.
+        if not os.environ.get("PYTEST_XDIST_WORKER"):
+            _gc.collect()

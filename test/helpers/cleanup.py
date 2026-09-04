@@ -8,13 +8,20 @@ tests under xdist.
 from __future__ import annotations
 
 import contextlib
+import os
 from typing import Any
 
 from PySide6.QtCore import QEventLoop, QTimer
 from PySide6.QtWidgets import QApplication
 
+# xdist workers process a subset of tests and exit, so a shorter pump is
+# enough and keeps the parallel wall time down. The serial (single-
+# process) run needs a longer pump to fully reap deep widget trees and
+# avoid leaking C++ objects across the full suite.
+_DEFERRED_DELETE_MAX_MS = 100 if os.environ.get("PYTEST_XDIST_WORKER") else 300
 
-def _pump_deferred_delete(max_ms: int = 150) -> None:
+
+def _pump_deferred_delete(max_ms: int = _DEFERRED_DELETE_MAX_MS) -> None:
     """Spin a real ``QEventLoop`` until ``QApplication.topLevelWidgets()``
     is empty or ``max_ms`` expires.
 
@@ -22,6 +29,11 @@ def _pump_deferred_delete(max_ms: int = 150) -> None:
     events; only a real event-loop spin does. A 20 ms poll timer checks
     ``topLevelWidgets()`` and quits early once the tree is reaped, while
     an absolute single-shot deadline guarantees the loop returns.
+
+    The default deadline is 100 ms under xdist (keeps the parallel wall
+    time low) and 300 ms for serial runs (lets deep ``Controller_MainWindow``
+    widget trees finish deleting and avoids the OOM-and-kill pattern seen
+    on long single-process runs).
     """
     app = QApplication.instance()
     if app is None:
