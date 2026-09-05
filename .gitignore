@@ -51,4 +51,5 @@ htmlcov/
 # keep this as a backstop.
 /*.hdf5
 /*.zarr
+.windsurf/
 
