@@ -71,3 +71,49 @@ def test_stack_adaptive_mixin_missing_branches(qtbot: QtBot) -> None:
     worker._record_adaptive_step(0)
 
     assert worker._adaptive_controller.update.called
+
+
+def test_apply_adaptive_command_clamps_readback_and_preserves_intent(
+    qtbot: QtBot,
+) -> None:
+    """The applied-percent readback is cosmetic: a backend power value
+    above max_power must clamp into [0, 100] instead of raising out of
+    AppliedMicroscopeSnapshot and aborting the stack, and a laser that
+    was not writable this plane must keep the staged intent percent
+    rather than being reported as 0."""
+    from lightsheet.state.types import (
+        AppliedMicroscopeSnapshot,
+        MicroscopeSnapshot,
+    )
+    from test.helpers.factories import make_bundle
+
+    bundle = make_bundle()
+    shell = Mock()
+    shell.lasers = bundle.lasers
+    shell.lasers[0].max_power = 100.0
+    shell.lasers[0].power = 150.0  # readback exceeds max -> clamps to 100
+    shell.lasers[1].max_power = 0.0  # not writable -> keeps staged intent
+    shell.sig_message = Mock()
+
+    worker = StackWorker(
+        bundle,
+        Mock(),
+        shell,
+        snapshot=MicroscopeSnapshot(
+            lightsheet_line_time_s=1e-5,
+            laser_power_pct=(30.0, 40.0),
+        ),
+    )
+    worker.camera.shutter_mode = "Rolling"
+    captured: list[AppliedMicroscopeSnapshot] = []
+    worker.sig_applied_state.connect(captured.append)
+
+    cmd = AdaptiveCommand.fixed(
+        exposure_s=0.01,
+        laser1_mw=50.0,
+        laser2_mw=0.0,
+    )
+    worker._apply_adaptive_command(cmd)
+
+    assert len(captured) == 1
+    assert captured[0].laser_power_pct == (100.0, 40.0)

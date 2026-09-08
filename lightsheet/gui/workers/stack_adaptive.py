@@ -118,7 +118,15 @@ class _StackAdaptiveMixin:
         # native clamp) held the power at the safe limit; the loop does
         # NOT abort (the outer StackWorker.run failure handler is
         # bypassed). The operator can press E-stop (F12) to abort.
-        applied_pct = [0.0, 0.0]
+        # Read back the applied percent per laser. The readback is
+        # cosmetic, so it must never abort the run: a backend clamp
+        # mismatch or a lowered max_power could derive a value outside
+        # [0, 100] (or NaN) whose ValueError out of
+        # AppliedMicroscopeSnapshot would abort the whole stack — clamp
+        # to the contract range. A laser that was not writable this plane
+        # stays None so the emit preserves the staged intent percent
+        # instead of overwriting it with 0.
+        applied_pct: list[float | None] = [None, None]
         if self._shell.lasers[0].max_power > 0:
             pct1 = cmd.laser1_mw / self._shell.lasers[0].max_power * 100.0
             try:
@@ -133,10 +141,13 @@ class _StackAdaptiveMixin:
                     f"changed past the safe limit. The loop will retry "
                     f"on the next plane; press E-stop (F12) to abort."
                 )
-            applied_pct[0] = (
+            raw1 = (
                 self._shell.lasers[0].power
                 / self._shell.lasers[0].max_power
                 * 100.0
+            )
+            applied_pct[0] = (
+                min(100.0, max(0.0, raw1)) if math.isfinite(raw1) else 0.0
             )
         if self._shell.lasers[1].max_power > 0:
             pct2 = cmd.laser2_mw / self._shell.lasers[1].max_power * 100.0
@@ -152,15 +163,30 @@ class _StackAdaptiveMixin:
                     f"changed past the safe limit. The loop will retry "
                     f"on the next plane; press E-stop (F12) to abort."
                 )
-            applied_pct[1] = (
+            raw2 = (
                 self._shell.lasers[1].power
                 / self._shell.lasers[1].max_power
                 * 100.0
             )
+            applied_pct[1] = (
+                min(100.0, max(0.0, raw2)) if math.isfinite(raw2) else 0.0
+            )
 
+        emitted_pct = (
+            None
+            if applied_pct[0] is None and applied_pct[1] is None
+            else (
+                applied_pct[0]
+                if applied_pct[0] is not None
+                else self._snapshot.laser_power_pct[0],
+                applied_pct[1]
+                if applied_pct[1] is not None
+                else self._snapshot.laser_power_pct[1],
+            )
+        )
         self.sig_applied_state.emit(
             AppliedMicroscopeSnapshot(
-                laser_power_pct=(applied_pct[0], applied_pct[1]),
+                laser_power_pct=emitted_pct,
                 lightsheet_line_time_s=applied_line_time_s,
             )
         )
