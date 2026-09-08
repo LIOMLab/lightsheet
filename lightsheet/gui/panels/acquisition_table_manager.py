@@ -807,7 +807,7 @@ class AcquisitionTableManager(QWidget):
                 self._shell.stack_ending_plane = row.end
                 # stack_step carries the direction sign (negative when
                 # end < start), matching updateUi_stack_mode_button.
-                self._shell.stack_step = (  # ty: ignore[invalid-assignment]
+                self._shell.stack_step = (
                     row.step if row.end >= row.start else -row.step
                 )
                 self._shell.number_of_planes = row.n_planes

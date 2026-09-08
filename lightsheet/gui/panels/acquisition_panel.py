@@ -294,9 +294,9 @@ class AcquisitionPanelWidget(QWidget):
             else:
                 # Set stack step sign (taking into account the direction of acquisition)
                 if self._shell.stack_starting_plane > self._shell.stack_ending_plane:  # ty: ignore[unsupported-operator]
-                    self._shell.stack_step = -1 * step_spin.value()  # ty: ignore[invalid-assignment]
+                    self._shell.stack_step = -1 * step_spin.value()
                 else:
-                    self._shell.stack_step = step_spin.value()  # ty: ignore[invalid-assignment]
+                    self._shell.stack_step = step_spin.value()
 
                 # Check that filename is valid and saving is allowed
                 self._shell.save_panel.validate_file_name()

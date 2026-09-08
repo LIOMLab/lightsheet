@@ -688,7 +688,7 @@ class Controller_MainWindow(QMainWindow):
         self.stack_starting_plane = None
         self.stack_ending_plane = None
         self.number_of_planes = 0
-        self.stack_step = 0
+        self.stack_step: int | float = 0
         # Set True at the end of hardware_init (deferred via a 100ms
         # single-shot timer from __init__). Acquisition entry points gate
         # on this so the deferred hardware_init cannot fire mid-acquisition
