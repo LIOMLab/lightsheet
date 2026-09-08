@@ -578,7 +578,10 @@ def test_brighter_channel_drives_shared_exposure_in_multi_channel(
         # band (0.90-0.95) at the start — exposure should drop relative
         # to the initial 100 ms.
         first_exposure = trajectory[0][2]
-        assert first_exposure < ctrl.camera.exposure_time + 1e-9 or True  # smoke
+        assert first_exposure < ctrl.camera.exposure_time - 1e-9, (
+            "shared exposure must drop when the bright channel is above "
+            f"target; first={first_exposure}, camera={ctrl.camera.exposure_time}"
+        )
     finally:
         ctrl._hw.select_laser = real_select  # ty: ignore[invalid-assignment]
 
