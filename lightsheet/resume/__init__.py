@@ -15,6 +15,7 @@ from lightsheet.resume.manifest import (
 )
 from lightsheet.resume.probe import (
     ResumeProbeError,
+    _common_resume_plane,
     manifest_dir_contains,
     probe_hdf5,
     probe_zarr,
@@ -32,6 +33,7 @@ __all__ = [
     "read_manifest",
     "write_manifest",
     "ResumeProbeError",
+    "_common_resume_plane",
     "manifest_dir_contains",
     "probe_hdf5",
     "probe_zarr",

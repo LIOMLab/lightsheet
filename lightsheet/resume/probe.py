@@ -18,7 +18,7 @@ import numpy as np
 import zarr
 
 if TYPE_CHECKING:
-    pass
+    from lightsheet.resume.manifest import ResumeManifest
 
 logger = logging.getLogger(__name__)
 
@@ -263,3 +263,30 @@ def manifest_dir_contains(save_directory: str, target: str) -> None:
         raise ValueError(
             f"target {resolved!r} is outside save directory {save_dir!r}"
         )
+
+
+def _common_resume_plane(
+    manifest: "ResumeManifest",
+    probes: dict[str, dict[str, int]],
+) -> tuple[int, bool]:
+    """Return the common resume plane and whether a torn tail was found.
+
+    ``probes`` maps ``{format: {key: observed_count}}`` and is compared to
+    the corresponding ``manifest.cursors``. The safe count for each key is
+    ``min(cursor, observed)``; the common resume plane is the minimum safe
+    count across every format and channel. ``torn_tail`` is ``True`` when
+    any channel/format is ahead of the common, which means the final
+    plane-pair is only partially complete and must be re-acquired.
+    """
+    safe_counts: list[int] = []
+    for fmt, group in manifest.cursors.items():
+        observed = probes.get(fmt, {})
+        for key, cursor in group.items():
+            safe_counts.append(min(cursor, observed.get(key, 0)))
+
+    if not safe_counts:
+        return 0, False
+
+    common = min(safe_counts)
+    torn_tail = any(safe > common for safe in safe_counts)
+    return common, torn_tail
