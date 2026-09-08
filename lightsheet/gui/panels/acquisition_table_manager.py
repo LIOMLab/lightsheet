@@ -32,9 +32,12 @@ from __future__ import annotations
 import logging
 import math
 import typing
+import uuid
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -48,9 +51,19 @@ from PySide6.QtWidgets import (
 
 from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.styles import spacing as _s
+from lightsheet.resume import (
+    QueueResumeManifest,
+    hash_queue_rows,
+    queue_manifest_path_for,
+    read_manifest,
+    read_queue_manifest,
+    write_queue_manifest,
+)
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
+    from lightsheet.resume.gate import GateFindings
+    from lightsheet.resume.manifest import ResumeManifest
 
 
 # Column indices in the QTableWidget.
@@ -87,12 +100,74 @@ _FLAG_COLOR = _c.Q_FLAG_ERROR
 logger = logging.getLogger(__name__)
 
 
+def show_resume_safety_dialog(
+    parent: QWidget | None, findings: GateFindings
+) -> bool:
+    """Report-then-confirm modal for the resume safety gate (D-06).
+
+    Lists every gate finding — errors in the text block the resume
+    outright (a blocking critical dialog, no Resume button); warnings and
+    a clean bill are shown with a Resume/Cancel choice where **Cancel is
+    the default AND the Escape action**, so the safe path is always one
+    keystroke away. Returns ``True`` only when the operator explicitly
+    clicks Resume.
+    """
+    if parent is None:
+        app = QApplication.instance()
+        parent = app.activeWindow() if app is not None else None
+    if findings.errors:
+        lines = [f"• {e}" for e in findings.errors]
+        if findings.warnings:
+            lines.append("")
+            lines.extend(f"• {w}" for w in findings.warnings)
+        QMessageBox.critical(
+            parent,
+            "Resume Blocked",
+            "The resume safety gate found blocking problems — the "
+            "acquisition cannot be resumed:\n\n" + "\n".join(lines),
+            QMessageBox.StandardButton.Ok,
+            QMessageBox.StandardButton.Ok,
+        )
+        return False
+
+    box = QMessageBox(parent)
+    box.setWindowTitle("Resume Acquisition — Safety Check")
+    box.setIcon(
+        QMessageBox.Icon.Warning
+        if findings.warnings
+        else QMessageBox.Icon.Information
+    )
+    if findings.warnings:
+        body = "\n".join(f"• {w}" for w in findings.warnings)
+        box.setText(
+            "The resume safety gate completed. Review the findings "
+            "before continuing:\n\n" + body
+        )
+    else:
+        box.setText(
+            "The resume safety gate found no problems. Resume the "
+            "acquisition from the last committed plane?"
+        )
+    resume_btn = box.addButton("Resume", QMessageBox.ButtonRole.AcceptRole)
+    cancel_btn = box.addButton(QMessageBox.StandardButton.Cancel)
+    box.setDefaultButton(cancel_btn)
+    box.setEscapeButton(cancel_btn)
+    box.exec()
+    return box.clickedButton() is resume_btn
+
+
 class _Row:
     """A snapshot of one table row's values.
 
     ``start``/``end`` are in micrometres (the internal unit the worker +
     motor HAL use), converted from the mm cell text. ``step`` is in µm
-    (the step cell is already µm)."""
+    (the step cell is already µm).
+
+    Resume rows additionally carry ``start_plane`` (the durable plane the
+    run resumes at), ``resume_manifest`` (the loaded per-acquisition
+    sidecar), ``save_filepath`` (restored onto the shell so the resumed
+    fileset lands in the original location), and ``uuid`` (the identity
+    the queue-level manifest records)."""
 
     __slots__ = (
         "end",
@@ -100,8 +175,12 @@ class _Row:
         "est_time_s",
         "n_planes",
         "name",
+        "resume_manifest",
+        "save_filepath",
         "start",
+        "start_plane",
         "step",
+        "uuid",
     )
 
     def __init__(
@@ -121,6 +200,10 @@ class _Row:
         self.n_planes = n_planes
         self.est_time_s = est_time_s
         self.est_size_mb = est_size_mb
+        self.start_plane = 0
+        self.resume_manifest: ResumeManifest | None = None
+        self.save_filepath = ""
+        self.uuid = ""
 
 
 class AcquisitionTableManager(QWidget):
@@ -226,6 +309,13 @@ class AcquisitionTableManager(QWidget):
         # trusting the unreliable background() comparison.
         self._flagged_cells: set[tuple[int, int]] = set()
 
+        # Per-row identity + resume metadata, kept parallel to the table
+        # rows. ``_row_uuids[i]`` identifies table row ``i`` in the
+        # queue-level manifest; ``_row_meta[uuid]`` carries the resume
+        # attributes ``row_at`` re-attaches to each _Row snapshot.
+        self._row_uuids: list[str] = []
+        self._row_meta: dict[str, dict[str, typing.Any]] = {}
+
     # ------------------------------------------------------------------ #
     # Public API (used by tests + the queue loop)
     # ------------------------------------------------------------------ #
@@ -250,6 +340,7 @@ class AcquisitionTableManager(QWidget):
         row = self.table.rowCount()
         self.table.blockSignals(True)
         self.table.insertRow(row)
+        self._row_uuids.insert(row, uuid.uuid4().hex)
         self._set_name_cell(row, f"Stack {row + 1}")
         self._set_numeric_cell(row, _COL_START, start)
         self._set_numeric_cell(row, _COL_END, end)
@@ -284,6 +375,8 @@ class AcquisitionTableManager(QWidget):
         )
         if answer == QMessageBox.StandardButton.Yes:
             self.table.removeRow(row)
+            if row < len(self._row_uuids):
+                del self._row_uuids[row]
             # Re-index flagged_cells: drop the removed row, shift rows
             # below it up by one.
             self._flagged_cells = {
@@ -341,7 +434,20 @@ class AcquisitionTableManager(QWidget):
         start_um = start_mm * 1000.0
         end_um = end_mm * 1000.0
         n_planes, est_time_s, est_size_mb = self._compute(start_um, end_um, step)
-        return _Row(name, start_um, end_um, step, n_planes, est_time_s, est_size_mb)
+        row_obj = _Row(name, start_um, end_um, step, n_planes, est_time_s, est_size_mb)
+        if row < len(self._row_uuids):
+            row_obj.uuid = self._row_uuids[row]
+            meta = self._row_meta.get(row_obj.uuid)
+            if meta is not None:
+                row_obj.start_plane = int(meta.get("start_plane", 0))
+                row_obj.resume_manifest = meta.get("resume_manifest")
+                row_obj.save_filepath = str(meta.get("save_filepath", ""))
+                # A resume row's n_planes is the TOTAL stack plane count —
+                # the worker loop is range(start_plane, n_planes), so the
+                # cell-derived remaining count would truncate the run.
+                if "n_planes" in meta:
+                    row_obj.n_planes = int(meta["n_planes"])
+        return row_obj
 
     def _safe_float(self, row: int, col: int) -> float:
         """Parse a numeric cell's text to float, returning 0.0 on
@@ -386,6 +492,223 @@ class AcquisitionTableManager(QWidget):
         if self.table.rowCount() == 0:
             return False
         return all(not self.is_row_flagged(row) for row in range(self.table.rowCount()))
+
+    # ------------------------------------------------------------------ #
+    # Resume rows (D-05/D-06)
+    # ------------------------------------------------------------------ #
+
+    def enqueue_resume_row(
+        self,
+        manifest_path: Path | str,
+        queue_manifest: Path | str | None = None,
+    ) -> bool:
+        """Enqueue a flagged resume row for an interrupted acquisition.
+
+        Reads the per-acquisition ``ResumeManifest`` and appends a row
+        whose ``start_plane``/``save_filepath`` come from the manifest.
+        The row is inert until Start Queue reaches it; the safety gate
+        and report-then-confirm dialog run at spawn time inside
+        ``_spawn_stack_worker`` — this method never starts hardware.
+
+        When ``queue_manifest`` is given, the queue-level manifest is
+        validated against the live table (T-16-07-02): a mismatch is
+        rejected with an operator-visible error. On success the table
+        becomes exactly ``[resume row] + remaining rows`` so Start Queue
+        resumes the interrupted row and continues the rest.
+        """
+        manifest = read_manifest(manifest_path)
+        if manifest is None:
+            self._shell.sig_message.emit(
+                f"Cannot resume: {manifest_path} is missing, unreadable, "
+                "or failed validation."
+            )
+            self._shell.sig_beep.emit()
+            return False
+        if manifest.state == "completed":
+            self._shell.sig_message.emit(
+                "Cannot resume: the acquisition already completed."
+            )
+            self._shell.sig_beep.emit()
+            return False
+
+        # Nominal resume plane from the committed cursors; the gate
+        # recomputes the durable plane from on-disk probes at spawn time.
+        cursors = [v for group in manifest.cursors.values() for v in group.values()]
+        start_plane = min(cursors) if cursors else manifest.start_plane
+        resume_start = (
+            manifest.stack_starting_plane + start_plane * manifest.stack_step
+        )
+        if manifest.save_filepath:
+            base_name = Path(manifest.save_filepath).name
+        else:
+            base_name = Path(str(manifest_path)).stem.removesuffix(".resume")
+        row = _Row(
+            name=f"Resume: {base_name}",
+            start=resume_start,
+            end=manifest.stack_ending_plane,
+            step=abs(manifest.stack_step),
+            n_planes=manifest.n_planes,
+            est_time_s=0.0,
+            est_size_mb=0.0,
+        )
+        meta = {
+            "start_plane": int(start_plane),
+            "n_planes": manifest.n_planes,
+            "resume_manifest": manifest,
+            "save_filepath": manifest.save_filepath or "",
+        }
+
+        if queue_manifest is not None:
+            return self._apply_queue_resume(row, meta, queue_manifest)
+        self._insert_row_at(self.table.rowCount(), row, meta)
+        return True
+
+    def _insert_row_at(
+        self, index: int, row: _Row, meta: dict[str, typing.Any] | None = None
+    ) -> str:
+        """Insert ``row`` into the table at ``index`` and register its
+        uuid + optional resume metadata. Returns the row uuid."""
+        row_uuid = uuid.uuid4().hex
+        self.table.blockSignals(True)
+        self.table.insertRow(index)
+        self._set_name_cell(index, row.name)
+        # Cells display mm; rows store µm.
+        self._set_numeric_cell(index, _COL_START, row.start / 1000.0)
+        self._set_numeric_cell(index, _COL_END, row.end / 1000.0)
+        self._set_numeric_cell(index, _COL_STEP, row.step)
+        self._set_readonly_cell(index, _COL_NPLANES, str(row.n_planes))
+        mm, ss = divmod(int(row.est_time_s), 60)
+        self._set_readonly_cell(index, _COL_ESTTIME, f"{mm}:{ss:02d}")
+        self._set_readonly_cell(
+            index,
+            _COL_ESTSIZE,
+            self._format_size_human_readable(
+                row.est_size_mb, self._format_label()
+            ),
+        )
+        self.table.blockSignals(False)
+        self._row_uuids.insert(index, row_uuid)
+        if meta:
+            self._row_meta[row_uuid] = meta
+        self._update_empty_state()
+        self._update_start_queue_state()
+        return row_uuid
+
+    @staticmethod
+    def _row_to_dict(row: _Row) -> dict[str, typing.Any]:
+        return {
+            "name": row.name,
+            "start": row.start,
+            "end": row.end,
+            "step": row.step,
+            "n_planes": row.n_planes,
+        }
+
+    @staticmethod
+    def _rows_match(
+        a: list[dict[str, typing.Any]], b: list[dict[str, typing.Any]]
+    ) -> bool:
+        if len(a) != len(b):
+            return False
+        for ra, rb in zip(a, b, strict=True):
+            if ra.get("name") != rb.get("name"):
+                return False
+            for key in ("start", "end", "step"):
+                try:
+                    if not math.isclose(float(ra[key]), float(rb[key])):
+                        return False
+                except (KeyError, TypeError, ValueError):
+                    return False
+        return True
+
+    def _apply_queue_resume(
+        self,
+        resume_row: _Row,
+        meta: dict[str, typing.Any],
+        queue_manifest: Path | str,
+    ) -> bool:
+        """Validate a queue-level manifest against the live table and
+        arrange ``[resume row] + remaining rows`` for execution."""
+        qm = read_queue_manifest(queue_manifest)
+        if qm is None:
+            self._shell.sig_message.emit(
+                f"Cannot resume the queue: {queue_manifest} is missing, "
+                "unreadable, or failed validation."
+            )
+            self._shell.sig_beep.emit()
+            return False
+
+        remaining = qm.rows[qm.row_index + 1 :]
+        live = [
+            self._row_to_dict(self.row_at(i))
+            for i in range(self.table.rowCount())
+        ]
+
+        if self._rows_match(live, qm.rows):
+            # Untouched pre-crash queue: drop the completed rows and the
+            # interrupted row; the resume row replaces the interrupted
+            # one at the head.
+            for _ in range(min(qm.row_index + 1, self.table.rowCount())):
+                self.table.removeRow(0)
+                if self._row_uuids:
+                    del self._row_uuids[0]
+            self._insert_row_at(0, resume_row, meta)
+            return True
+        if self._rows_match(live, remaining):
+            # The table already holds exactly the remaining rows.
+            self._insert_row_at(0, resume_row, meta)
+            return True
+        if not live:
+            # Fresh session: rebuild the queue from the manifest.
+            self._insert_row_at(0, resume_row, meta)
+            for rd in remaining:
+                row = _Row(
+                    name=str(rd.get("name", "Stack")),
+                    start=float(rd.get("start", 0.0)),
+                    end=float(rd.get("end", 0.0)),
+                    step=float(rd.get("step", 0.0)),
+                    n_planes=int(rd.get("n_planes", 0)),
+                    est_time_s=0.0,
+                    est_size_mb=0.0,
+                )
+                self._insert_row_at(self.table.rowCount(), row)
+            return True
+
+        self._shell.sig_message.emit(
+            "Cannot resume the queue: the queue table no longer matches "
+            "the recorded queue manifest — the queue was edited after the "
+            "interruption. Rebuild the queue manually and restart it."
+        )
+        self._shell.sig_beep.emit()
+        return False
+
+    def _write_queue_manifest(
+        self,
+        path: Path,
+        state: str,
+        row_index: int,
+        rows: list[dict[str, typing.Any]],
+        row_uuids: list[str],
+        queue_uuid: str,
+        created_at: str,
+    ) -> None:
+        """Atomically (re)write the queue-level resume manifest."""
+        try:
+            write_queue_manifest(
+                path,
+                QueueResumeManifest(
+                    uuid=queue_uuid,
+                    state=state,
+                    row_index=row_index,
+                    rows=rows,
+                    row_uuids=row_uuids,
+                    row_hash=hash_queue_rows(rows),
+                    created_at=created_at,
+                    save_directory=str(path.parent),
+                ),
+            )
+        except OSError as e:
+            logger.warning("could not write queue manifest %s: %s", path, e)
 
     # ------------------------------------------------------------------ #
     # Internal helpers
@@ -675,6 +998,12 @@ class AcquisitionTableManager(QWidget):
             self.table.setItem(a, col, ib)
             self.table.setItem(b, col, ia)
         self.table.blockSignals(False)
+        # Swap the row-uuid bookkeeping to match the row swap.
+        if a < len(self._row_uuids) and b < len(self._row_uuids):
+            self._row_uuids[a], self._row_uuids[b] = (
+                self._row_uuids[b],
+                self._row_uuids[a],
+            )
         # Swap flagged-cell row indices to match the row swap.
         new_flagged: set[tuple[int, int]] = set()
         for r, c in self._flagged_cells:
@@ -787,6 +1116,32 @@ class AcquisitionTableManager(QWidget):
             self._shell.stack_first_plane_set,
             self._shell.stack_last_plane_set,
         )
+        saved_save_state = (
+            getattr(self._shell, "save_filepath", ""),
+            getattr(self._shell, "saving_allowed", False),
+            getattr(self._shell, "stack_queue_row_index", None),
+        )
+
+        # Queue-level resume manifest: written before each row with the
+        # active row_index so a crash mid-queue leaves an in_progress
+        # record pointing at the row that was running. Terminal state is
+        # written in the finally block below.
+        queue_manifest_path: Path | None = None
+        queue_uuid = uuid.uuid4().hex
+        import datetime as _dt
+
+        queue_created_at = _dt.datetime.now(_dt.UTC).isoformat()
+        queue_state = "completed"
+        save_dir = getattr(self._shell, "save_directory", "") or ""
+        if save_dir:
+            base = (
+                Path(getattr(self._shell, "save_filepath", "") or "").name
+                or "queue"
+            )
+            queue_manifest_path = queue_manifest_path_for(save_dir, base)
+        queue_rows = [self._row_to_dict(r) for r in rows]
+        queue_uuids = [r.uuid for r in rows]
+
         try:
             for i, row in enumerate(rows):
                 # Between rows, check E-stop — abort the queue if set.
@@ -795,8 +1150,22 @@ class AcquisitionTableManager(QWidget):
                         "Queue aborted by E-stop. Re-arm and manually "
                         "restart the queue to resume."
                     )
+                    queue_state = "interrupted"
                     break
                 self._queue_row_index = i
+                # Record which queue row is executing so the
+                # per-acquisition manifest picks it up at set_files time.
+                self._shell.stack_queue_row_index = i
+                if queue_manifest_path is not None:
+                    self._write_queue_manifest(
+                        queue_manifest_path,
+                        "in_progress",
+                        i,
+                        queue_rows,
+                        queue_uuids,
+                        queue_uuid,
+                        queue_created_at,
+                    )
 
                 # Configure the shell's stack params from the row (μm).
                 # Set them directly (not via updateUi_set_number_of_planes,
@@ -822,6 +1191,31 @@ class AcquisitionTableManager(QWidget):
                 # set it here. Reset to False in the finally block below
                 # so a subsequent single-stack Start re-arms cleanly.
                 self._shell.stack_mode_started = True
+
+                # Resume row: restore operator intent through the model
+                # mutators (widgets re-render via signals), then point the
+                # save side at the recorded fileset. A failed restore
+                # aborts the queue — running with the wrong laser/save
+                # intent is worse than stopping.
+                if row.resume_manifest is not None:
+                    try:
+                        self._shell.state.restore_from_manifest(
+                            row.resume_manifest
+                        )
+                    except (TypeError, ValueError) as e:
+                        self._shell.sig_message.emit(
+                            self.error_state_text(
+                                f"row {i + 1} ({row.name}) state restore "
+                                f"failed: {e}"
+                            )
+                        )
+                        self._shell.sig_beep.emit()
+                        queue_state = "interrupted"
+                        break
+                    if row.save_filepath:
+                        self._shell.save_filepath = row.save_filepath
+                        self._shell.saving_allowed = True
+
                 # Mirror the row's step into the single-stack spinbox for
                 # UI consistency (blocked so it does not recompute). The
                 # row stores µm; the spinbox displays in micrometres (the
@@ -866,6 +1260,7 @@ class AcquisitionTableManager(QWidget):
                         "Queue aborted by E-stop. Re-arm and manually "
                         "restart the queue to resume."
                     )
+                    queue_state = "interrupted"
                     break
                 try:
                     self._shell.motors.horizontal.move_absolute_position(
@@ -879,14 +1274,23 @@ class AcquisitionTableManager(QWidget):
                         )
                     )
                     self._shell.sig_beep.emit()
+                    queue_state = "interrupted"
                     break
 
                 # Start the stack worker (re-use the existing single-stack
                 # invocation — no new worker spawned here; the shared
                 # helper in the acquisition panel owns the worker thread).
-                worker = self._shell.acquisition_panel._spawn_stack_worker()
+                # Resume rows hand the manifest + plane offset through so
+                # the safety gate and report-then-confirm dialog run
+                # before any hardware moves (T-16-07-01).
+                worker = self._shell.acquisition_panel._spawn_stack_worker(
+                    start_plane=row.start_plane,
+                    resume_manifest=row.resume_manifest,
+                )
                 if worker is None:
-                    # _spawn_stack_worker already emitted a message/beep.
+                    # _spawn_stack_worker already emitted a message/beep
+                    # (or the resume was cancelled/blocked at the gate).
+                    queue_state = "interrupted"
                     break
 
                 # Non-blocking wait: a QEventLoop with quit() connected to
@@ -941,6 +1345,24 @@ class AcquisitionTableManager(QWidget):
                 self._shell.stack_first_plane_set,
                 self._shell.stack_last_plane_set,
             ) = saved_single_stack
+            (
+                self._shell.save_filepath,
+                self._shell.saving_allowed,
+                self._shell.stack_queue_row_index,
+            ) = saved_save_state
+            # Terminal queue-manifest state: completed on a full pass,
+            # interrupted on any abort. A crash leaves the last
+            # in_progress write on disk — the crash signature.
+            if queue_manifest_path is not None:
+                self._write_queue_manifest(
+                    queue_manifest_path,
+                    queue_state,
+                    self._queue_row_index,
+                    queue_rows,
+                    queue_uuids,
+                    queue_uuid,
+                    queue_created_at,
+                )
             self._queue_active = False
             self._set_queue_running(False)
             # Re-enable the main acquisition mode buttons now that the
