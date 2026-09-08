@@ -438,7 +438,7 @@ class ZarrSaver:
             return list(self._existing_omero_channels) + channels
         return channels
 
-    def _write_acquisition_group(self) -> None:
+    def _write_acquisition_group(self, root: zarr.Group | None = None) -> None:
         """Write the ``/acquisition`` group (per-plane motor positions +
         scan params) via the writer's public ``root`` handle.
 
@@ -449,12 +449,18 @@ class ZarrSaver:
         scan params (galvo/ETL amplitudes+offsets, exposure, sample
         rate, shutter mode, binning) are group attrs read from the live
         HAL instances.
+
+        ``root`` may be an already-open store root — the resumed
+        finalize path has no ``AnalysisOmeZarrWriter`` and reopens the
+        store itself. When ``None`` the live writer's ``root`` handle is
+        used.
         """
-        if self._writer is None:
-            raise RuntimeError(
-                "ZarrSaver._write_acquisition_group called with no writer"
-            )
-        root = self._writer.root
+        if root is None:
+            if self._writer is None:
+                raise RuntimeError(
+                    "ZarrSaver._write_acquisition_group called with no writer"
+                )
+            root = self._writer.root
         grp = root.require_group("acquisition")
         motor = grp.require_group("motor")
         motor.create_array(
@@ -498,7 +504,7 @@ class ZarrSaver:
         self._adaptive_trajectory = list(trajectory) if trajectory else []
         self._adaptive_config = config
 
-    def _write_adaptive_group(self) -> None:
+    def _write_adaptive_group(self, root: zarr.Group | None = None) -> None:
         """Write the ``/acquisition/adaptive`` group via the
         writer's public ``root`` handle.
 
@@ -510,15 +516,19 @@ class ZarrSaver:
         laser_power_mw, control_variable_active, reacquired,
         power_fallback. The frozen AdaptiveConfig bounds + gains are
         published as group attrs. No-op when the trajectory is empty
-        (fixed mode).
+        (fixed mode). ``root`` may be an already-open store root (the
+        resumed finalize path has no writer and reopens the store
+        itself); when ``None`` the live writer's ``root`` handle is
+        used.
         """
         if not self._adaptive_trajectory:
             return
-        if self._writer is None:
-            raise RuntimeError("ZarrSaver._write_adaptive_group called with no writer")
-        root = self._writer.root
+        if root is None:
+            if self._writer is None:
+                raise RuntimeError("ZarrSaver._write_adaptive_group called with no writer")
+            root = self._writer.root
         acq = root["acquisition"]
-        grp = acq.create_group("adaptive")  # ty: ignore[unresolved-attribute]
+        grp = acq.require_group("adaptive")
         traj = self._adaptive_trajectory
         cfg = self._adaptive_config
 
@@ -584,7 +594,7 @@ class ZarrSaver:
         self._focus_trajectory = list(trajectory) if trajectory else []
         self._focus_config = config
 
-    def _write_focus_group(self) -> None:
+    def _write_focus_group(self, root: zarr.Group | None = None) -> None:
         """Write the ``/acquisition/focus`` group via the writer's public
         ``root`` handle.
 
@@ -595,15 +605,19 @@ class ZarrSaver:
         block_index, stage_pos_mm, feedforward_camera_pos_mm,
         residual_mm, applied_camera_pos_mm, sharpness_metric. The frozen
         FocusConfig block size + residual settings are published as group
-        attrs. No-op when the trajectory is empty (fixed mode).
+        attrs. No-op when the trajectory is empty (fixed mode). ``root``
+        may be an already-open store root (the resumed finalize path has
+        no writer and reopens the store itself); when ``None`` the live
+        writer's ``root`` handle is used.
         """
         if not self._focus_trajectory:
             return
-        if self._writer is None:
-            raise RuntimeError("ZarrSaver._write_focus_group called with no writer")
-        root = self._writer.root
+        if root is None:
+            if self._writer is None:
+                raise RuntimeError("ZarrSaver._write_focus_group called with no writer")
+            root = self._writer.root
         acq = root["acquisition"]
-        grp = acq.create_group("focus")  # ty: ignore[unresolved-attribute]
+        grp = acq.require_group("focus")
         traj = self._focus_trajectory
         cfg = self._focus_config
 
@@ -806,11 +820,18 @@ class ZarrSaver:
         """Close a resumed Zarr run without rebuilding the analysis pyramid.
 
         The original ``AnalysisOmeZarrWriter`` cannot be safely reopened
-        on an existing store, so this path only restores the global
-        ``write_empty_chunks`` config and marks the save as finalized.
-        The L0 array is complete and a future rebuild phase can construct
-        the multiscale pyramid from it.
+        on an existing store, so the store root is reopened directly and
+        the ``/acquisition`` metadata, adaptive trajectory, and focus
+        trajectory groups are written through it — a completed resumed
+        run must carry the same acquisition metadata as a fresh run.
+        Only the multiscale pyramid build is skipped: the L0 array is
+        complete and a future rebuild phase can construct the pyramid
+        from it.
         """
+        root = zarr.open(self._store_path, mode="r+")
+        self._write_acquisition_group(root=root)
+        self._write_adaptive_group(root=root)
+        self._write_focus_group(root=root)
         logger.warning(
             "ZarrSaver: resumed run finalized without rebuilding the "
             "analysis pyramid — the L0 array is complete at %s",
