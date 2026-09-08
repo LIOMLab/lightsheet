@@ -323,6 +323,13 @@ class Controller_MainWindow(QMainWindow):
         self.estop_event = threading.Event()
         self._estop_disarmed = False
 
+        # Pause cooperative-suspend event, a peer of estop_event — never
+        # wrapped or aliased to it. Set by the stack panel's Pause button;
+        # the stack worker polls it at each plane boundary and exits
+        # through the normal teardown, finalizing the resume manifest as
+        # "paused" so the run can be resumed later through the queue.
+        self.pause_requested = threading.Event()
+
         # Wire the E-stop signal/slot connections explicitly in the shell.
         self.pushButton_estop.clicked.connect(self.updateUi_estop_pressed)
         self.pushButton_armReset.clicked.connect(self.updateUi_arm_reset_pressed)
@@ -827,6 +834,9 @@ class Controller_MainWindow(QMainWindow):
         # Connections for the 'Automatic Acquisition' controls — target stack panel.
         self.stack_panel.ui.pushButton_acqStartStackMode.clicked.connect(
             self.acquisition_panel.updateUi_stack_mode_button
+        )
+        self.stack_panel.ui.pushButton_acqPauseStack.clicked.connect(
+            self.acquisition_panel.on_stack_pause_clicked
         )
         self.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.valueChanged.connect(
             self.stack_panel.updateUi_set_number_of_planes
@@ -1765,17 +1775,23 @@ class Controller_MainWindow(QMainWindow):
             q_row = int(getattr(qm, "_queue_row_index", 0)) + 1 if qm else 0
             q_total = int(getattr(qm, "_queue_rows_total", 0)) if qm else 0
             mode = "FOCUS" if getattr(self, "focus_mode_started", False) else "STACK"
+            # A requested-but-not-yet-completed pause must keep showing
+            # PAUSING — the per-plane progress emit would otherwise
+            # overwrite the badge back to RUNNING until teardown lands.
+            run_state = (
+                "PAUSING" if self.pause_requested.is_set() else "RUNNING"
+            )
             if qm is not None and getattr(qm, "_queue_active", False):
                 self._update_mode_badge(
                     mode,
-                    "RUNNING",
+                    run_state,
                     plane=value,
                     total=total,
                     queue_row=q_row,
                     queue_total=q_total,
                 )
             else:
-                self._update_mode_badge(mode, "RUNNING", plane=value, total=total)
+                self._update_mode_badge(mode, run_state, plane=value, total=total)
 
     def _cache_auto_laser_flags(self) -> None:
         """Commit the auto-laser checkboxes to the model. GUI thread only.

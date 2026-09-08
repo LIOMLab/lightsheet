@@ -51,6 +51,14 @@ class Ui_StackPanel(object):
 
         self.verticalLayout_13.addWidget(self.pushButton_acqStartStackMode)
 
+        self.pushButton_acqPauseStack = QPushButton(self.groupBox_18)
+        self.pushButton_acqPauseStack.setObjectName(u"pushButton_acqPauseStack")
+        self.pushButton_acqPauseStack.setEnabled(False)
+        sizePolicy1.setHeightForWidth(self.pushButton_acqPauseStack.sizePolicy().hasHeightForWidth())
+        self.pushButton_acqPauseStack.setSizePolicy(sizePolicy1)
+
+        self.verticalLayout_13.addWidget(self.pushButton_acqPauseStack)
+
         self.horizontalLayout_89 = QHBoxLayout()
         self.horizontalLayout_89.setObjectName(u"horizontalLayout_89")
         self.horizontalLayout_89.setContentsMargins(_s.ZERO, -1, _s.ZERO, -1)
@@ -509,6 +517,10 @@ class Ui_StackPanel(object):
 #if QT_CONFIG(shortcut)
         self.pushButton_acqStartStackMode.setShortcut(QCoreApplication.translate("StackPanel", u"Ctrl+K", None))
 #endif // QT_CONFIG(shortcut)
+#if QT_CONFIG(tooltip)
+        self.pushButton_acqPauseStack.setToolTip(QCoreApplication.translate("StackPanel", u"Pause the running stack at the next plane boundary. The current plane finishes, lasers switch off, and the run can be resumed later from the acquisition queue.", None))
+#endif // QT_CONFIG(tooltip)
+        self.pushButton_acqPauseStack.setText(QCoreApplication.translate("StackPanel", u"Pause Stack", None))
 #if QT_CONFIG(tooltip)
         self.label_41.setToolTip(QCoreApplication.translate("StackPanel", u"Number of planes of stack acquisition", None))
 #endif // QT_CONFIG(tooltip)

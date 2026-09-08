@@ -272,6 +272,7 @@ class AcquisitionPanelWidget(QWidget):
             # Disable until the worker finishes to prevent a restart race
             # that would spawn a second worker accessing the camera concurrently.
             self._shell.stack_panel.ui.pushButton_acqStartStackMode.setEnabled(False)
+            self._shell.stack_panel.ui.pushButton_acqPauseStack.setEnabled(False)
         else:
             self._shell.close_modes()
             # Making sure the limits of the volume are set
@@ -325,6 +326,10 @@ class AcquisitionPanelWidget(QWidget):
                     progress.setValue(0)
                     progress.show()
                     self._shell.stack_mode_started = True
+                    # A fresh run always starts unpaused — a stale set
+                    # event (e.g. a pause whose worker never spawned)
+                    # must not abort the new run at the first plane.
+                    self._shell.pause_requested.clear()
 
                     # Modes disabling while stack acquisition
                     self.updateUi_modes_buttons(
@@ -601,7 +606,40 @@ class AcquisitionPanelWidget(QWidget):
         )
 
         self._shell._stack_thread.start()
+        # A live stack worker can now observe the pause event — enable the
+        # Pause control. Covers both the single-stack start and queue-row
+        # spawns (queue runs route through this method too).
+        self._shell.stack_panel.ui.pushButton_acqPauseStack.setEnabled(
+            not self._shell.pause_requested.is_set()
+        )
         return self._shell._stack_worker
+
+    @Slot()
+    def on_stack_pause_clicked(self) -> None:
+        """Pause the running stack at the next plane boundary.
+
+        Sets the cooperative ``pause_requested`` event — a peer of
+        ``estop_event``, never a wrapper around it. The stack worker
+        finishes the current plane, then exits through the normal
+        ``finally`` teardown (lasers off, camera disarmed, save queue
+        drained) and finalizes the resume manifest as ``paused``. The
+        button latches off immediately so a second click cannot
+        double-request, and the mode badge shows the pausing state until
+        ``updateUi_post_stack_mode`` returns the UI to IDLE.
+        """
+        self._shell.pause_requested.set()
+        self._shell.stack_panel.ui.pushButton_acqPauseStack.setEnabled(False)
+        if self._shell.stack_mode_started:
+            progress = self._shell.ui.statusBar_progress
+            self._shell._update_mode_badge(
+                "STACK",
+                "PAUSING",
+                plane=int(progress.value()),
+                total=int(self._shell.number_of_planes),
+            )
+        self._shell.updateUi_message_printer(
+            "->Stack pause requested — pausing at the next plane boundary"
+        )
 
     @Slot()
     def updateUi_post_stack_mode(self) -> None:
@@ -622,6 +660,9 @@ class AcquisitionPanelWidget(QWidget):
 
         self._shell.stack_mode_started = False
         self._shell.focus_mode_started = False
+        # The pause control is only meaningful while a worker polls the
+        # event — latch it off when no stack worker is running.
+        self._shell.stack_panel.ui.pushButton_acqPauseStack.setEnabled(False)
         self._shell.updateUi_message_printer("->Stack Mode Acquisition Done")
         self._shell.ui.statusBar_label.setText("")
         self._shell.ui.statusBar_progress.hide()
