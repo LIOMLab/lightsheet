@@ -242,8 +242,18 @@ def _build_preview_standin() -> Mock:
     standin.camera = camera
     standin._hw = hw
     standin._shell = shell
-    # PreviewWorker.__init__ pre-samples the exposure time on the GUI
-    # thread; the golden harness execs only run(), so set it here.
+    # PreviewWorker.__init__ pre-samples the exposure time and receives the
+    # frozen spawn MicroscopeSnapshot on the GUI thread; the golden harness
+    # execs only run(), so set both here. The snapshot mirrors the
+    # production spawn path: the shell's auto-laser flags and staged power
+    # are folded into the frozen input the worker reads.
+    from lightsheet.state.types import MicroscopeSnapshot
+
+    standin._snapshot = MicroscopeSnapshot(
+        lightsheet_line_time_s=1.0,
+        laser_power_pct=(shell.laser1_power_pct, shell.laser2_power_pct),
+        auto_lasers=(shell._auto_laser1, shell._auto_laser2),
+    )
     standin._camera_exposure_time = 100
     return standin
 
