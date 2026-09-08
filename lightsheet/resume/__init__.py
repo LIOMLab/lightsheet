@@ -13,6 +13,15 @@ from lightsheet.resume.manifest import (
     read_manifest,
     write_manifest,
 )
+from lightsheet.resume.probe import (
+    ResumeProbeError,
+    manifest_dir_contains,
+    probe_hdf5,
+    probe_zarr,
+    reopen_hdf5_append,
+    reopen_zarr_l0,
+    truncate_hdf5_tail,
+)
 
 __all__ = [
     "MANIFEST_SUFFIX",
@@ -22,4 +31,11 @@ __all__ = [
     "manifest_path_for",
     "read_manifest",
     "write_manifest",
+    "ResumeProbeError",
+    "manifest_dir_contains",
+    "probe_hdf5",
+    "probe_zarr",
+    "reopen_hdf5_append",
+    "reopen_zarr_l0",
+    "truncate_hdf5_tail",
 ]
