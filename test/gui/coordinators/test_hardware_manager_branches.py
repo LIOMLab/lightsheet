@@ -580,3 +580,34 @@ def test_refresh_laser_readback_l2_none_emits_cmd_fallback() -> None:
     shell.sig_laser_readback.emit.assert_called_once()
     args, _ = shell.sig_laser_readback.emit.call_args
     assert "(cmd)" in args[1]
+
+
+# -- _snapshot_from_shell fallback branches ----------------------------------
+
+
+def test_snapshot_from_shell_logs_model_failure(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A raising ``state.snapshot()`` must be logged at warning level —
+    silently downgrading to the legacy path hides the integration faults
+    the model exists to surface."""
+    import logging
+
+    hw, shell = _make_hw()
+    shell.state.snapshot.side_effect = RuntimeError("boom")
+    shell.camera.lightsheet_line_time = 2e-5
+    with caplog.at_level(logging.WARNING):
+        snap = hw._snapshot_from_shell()
+    assert snap.lightsheet_line_time_s == 2e-5
+    assert any("state.snapshot() failed" in r.message for r in caplog.records)
+
+
+def test_snapshot_from_shell_fallback_range_checks_line_time() -> None:
+    """A HAL ``lightsheet_line_time`` of 0 / negative / non-finite would
+    raise ValueError out of MicroscopeSnapshot on a laser-energize path —
+    the fallback must substitute a positive default instead."""
+    hw, shell = _make_hw()
+    for bad in (0.0, -1e-5, float("inf"), float("nan"), "x"):
+        shell.camera.lightsheet_line_time = bad
+        snap = hw._snapshot_from_shell()
+        assert snap.lightsheet_line_time_s == 1.0

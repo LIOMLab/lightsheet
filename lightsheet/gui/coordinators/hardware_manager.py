@@ -9,6 +9,7 @@ GUI-thread, synchronous ``.off()``).
 from __future__ import annotations
 
 import logging
+import math
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
@@ -259,11 +260,22 @@ class HardwareManager:
                 snap = self._shell.state.snapshot()
                 if isinstance(snap, MicroscopeSnapshot):
                     return snap
-            except Exception:
-                pass
+            except Exception as e:
+                # A broken model silently downgrading to the legacy path
+                # hides exactly the integration faults the model exists
+                # to surface — log before falling back.
+                logger.warning("state.snapshot() failed: %s", e)
         camera = getattr(self._shell, "camera", None)
         line_time = getattr(camera, "lightsheet_line_time", 1.0)
-        if not isinstance(line_time, (int, float)) or isinstance(line_time, bool):
+        # Range-check, not just type-check: a HAL value of 0 / negative /
+        # non-finite would raise ValueError out of MicroscopeSnapshot on
+        # a laser-energize path — fall back instead.
+        if (
+            not isinstance(line_time, (int, float))
+            or isinstance(line_time, bool)
+            or not math.isfinite(line_time)
+            or line_time <= 0
+        ):
             line_time = 1.0
         pct1 = getattr(self._shell, "laser1_power_pct", 0.0)
         if not isinstance(pct1, (int, float)) or isinstance(pct1, bool):
