@@ -5,6 +5,7 @@ Implements ``ICamera`` with no ``pco`` SDK dependency, returning synthetic
 """
 
 import logging
+import math
 import time
 from typing import Any
 
@@ -235,7 +236,22 @@ class MockCamera(ICamera):
                 "lightsheet_exposed_lines must be positive; "
                 f"got {self.lightsheet_exposed_lines}"
             )
-        self.line_time = self.lightsheet_line_time
+        # A None / non-positive / non-finite line time would either raise
+        # TypeError mid-worker on the multiply below or silently produce
+        # a broken exposure — reject it loudly, mirroring the real
+        # backend's guard semantics.
+        line_time = self.lightsheet_line_time
+        if (
+            not isinstance(line_time, (int, float))
+            or isinstance(line_time, bool)
+            or not math.isfinite(line_time)
+            or line_time <= 0
+        ):
+            raise ValueError(
+                "lightsheet_line_time must be a positive finite number; "
+                f"got {line_time!r}"
+            )
+        self.line_time = line_time
         self.exposure_time = self.line_time * self.lightsheet_exposed_lines
         return None
 

@@ -341,3 +341,16 @@ def test_set_lightsheet_mode_rejects_non_positive_exposed_lines() -> None:
     camera.lightsheet_exposed_lines = -4
     with pytest.raises(ValueError, match="lightsheet_exposed_lines"):
         camera.set_lightsheet_mode()
+
+
+def test_set_lightsheet_mode_rejects_invalid_line_time() -> None:
+    """A None / non-positive / non-finite ``lightsheet_line_time`` must
+    raise ValueError, never a TypeError mid-worker on the exposure
+    multiply."""
+    from lightsheet.hal.mocks.mock_camera import MockCamera
+
+    camera = MockCamera(verbose=False)
+    for bad in (None, 0.0, -1e-5, float("inf"), float("nan"), "x"):
+        camera.lightsheet_line_time = bad
+        with pytest.raises(ValueError, match="lightsheet_line_time"):
+            camera.set_lightsheet_mode()
