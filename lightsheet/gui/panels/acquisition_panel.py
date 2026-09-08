@@ -509,10 +509,19 @@ class AcquisitionPanelWidget(QWidget):
         )
         # Connect the per-plane applied-state signal to the model's GUI-thread
         # slot. Queued delivery so the worker never mutates the live model.
+        # Only disconnect when a prior connection exists — disconnecting an
+        # unconnected signal emits a libpyside RuntimeWarning that masks
+        # real signal-wiring bugs (same guard as sig_autofocus_status above).
         applied_state = getattr(self._shell._stack_worker, "sig_applied_state", None)
         if applied_state is not None:
             with contextlib.suppress(TypeError, RuntimeError):
-                applied_state.disconnect()
+                if (
+                    self._shell._stack_worker.receivers(
+                        SIGNAL("sig_applied_state(PyObject)")
+                    )
+                    > 0
+                ):
+                    applied_state.disconnect()
             applied_state.connect(
                 self._shell.state.apply_worker_snapshot,
                 Qt.ConnectionType.QueuedConnection,
