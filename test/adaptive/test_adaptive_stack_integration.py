@@ -1257,3 +1257,117 @@ def test_sphere_drives_adaptive_loop(
         f"exposures={exposures}, l1_mw={l1_mw}"
     )
 
+
+def test_sphere_shared_across_channels_scales_with_active_laser(
+    controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    """Multi-channel: the same physical sphere serves both channels —
+    the 555 nm and 647 nm frames acquired at one plane differ by the
+    ratio of the staged laser power fractions, because ``select_laser``
+    energizes exactly one laser and ``MockStage`` reads the first
+    ``active is True`` laser's ``power / max_power``. ``select_laser``
+    is NOT stubbed — the de-energize -> stage power -> energize handoff
+    is the behavior under test.
+    """
+    from lightsheet.gui.workers import StackWorker
+
+    ctrl = controller
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = True
+
+    # Position the stack ON the bright part of the sphere so both
+    # channel frames are clearly non-zero at every plane.
+    n_planes = 4
+    start_um = 8000.0
+    step_um = 250.0
+    _configure_stack_plan(ctrl, tmp_path, n_planes=n_planes)
+    ctrl.stack_starting_plane = start_um
+    ctrl.stack_step = step_um
+
+    _attach_sphere_stage(ctrl)
+
+    # Distinct staged powers: select_laser stages pct/100 * max_power
+    # before energizing, so the stage reads a real per-channel fraction.
+    # 60/30 keeps the brighter channel below clip on the sheet-centre
+    # planes so the measured ratio tracks the staged ratio.
+    ctrl.laser1_power_pct = 60.0
+    ctrl.laser2_power_pct = 30.0
+
+    cfg = _adaptive_cfg()
+    worker = StackWorker(
+        ctrl._bundle,
+        ctrl._hw,
+        ctrl,
+        save_description="sphere multi-channel sample",
+        save_stitch_blend=False,
+        save_all_crop=False,
+        save_all_full=False,
+        multi_channel=True,
+        adaptive_cfg=cfg,
+    )
+
+    worker.acquire_scan = _sphere_acquire_scan(ctrl, worker)  # ty: ignore[invalid-assignment]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    trajectory: list[tuple] = []  # ty: ignore[missing-type-argument]
+    worker.sig_adaptive_trajectory.connect(lambda *args: trajectory.append(args))
+
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+
+    assert len(finished_emits) == 1, (
+        f"StackWorker.run must emit finished exactly once; got {len(finished_emits)}"
+    )
+    assert len(trajectory) == n_planes, (
+        f"multi-channel adaptive must emit one row per plane "
+        f"({n_planes}); got {len(trajectory)}"
+    )
+
+    # The last plane's per-channel pair: both wavelength keys present,
+    # both frames real sphere slices (non-zero).
+    wl1 = int(ctrl.lasers[0].wavelength)
+    wl2 = int(ctrl.lasers[1].wavelength)
+    frames = ctrl.reconstructed_frames
+    assert wl1 in frames and wl2 in frames, (
+        f"reconstructed_frames must carry both channels "
+        f"({wl1}, {wl2}); keys={list(frames)}"
+    )
+    frame1 = np.asarray(frames[wl1])
+    frame2 = np.asarray(frames[wl2])
+    assert frame1.max() > 0, "channel-1 sphere frame must be non-zero"
+    assert frame2.max() > 0, "channel-2 sphere frame must be non-zero"
+
+    # The per-channel intensity ratio tracks the staged power-fraction
+    # ratio. select_laser stages pct/100 * max_power and the stage reads
+    # power/max_power, so the expected ratio is pct2/pct1 read from LIVE
+    # staged state at assert time (the adaptive loop may have trimmed
+    # them mid-run — do not hardcode). Tolerance band: the p99
+    # statistic, texture modulation, and uint16 clip/rounding justify
+    # +-0.15 around the staged ratio.
+    from lightsheet.adaptive.intensity import frame_intensity_pct
+
+    pct1 = float(ctrl.laser1_power_pct)
+    pct2 = float(ctrl.laser2_power_pct)
+    assert pct1 > 0 and pct2 > 0, (
+        f"staged powers must stay non-zero; pct1={pct1}, pct2={pct2}"
+    )
+    expected_ratio = pct2 / pct1
+    i1 = frame_intensity_pct(frame1, cfg.sensor_max)
+    i2 = frame_intensity_pct(frame2, cfg.sensor_max)
+    assert i1 > 0.0, f"channel-1 intensity must be non-zero; got {i1}"
+    measured_ratio = i2 / i1
+    assert abs(measured_ratio - expected_ratio) <= 0.15, (
+        f"channel ratio {measured_ratio:.3f} must track the staged "
+        f"power ratio {expected_ratio:.3f} (pct2/pct1 = {pct2}/{pct1}); "
+        f"i1={i1:.3f}, i2={i2:.3f}"
+    )
+
+    # End state: the finally-block stop_lasers cleanup leaves no laser
+    # energized (the one-laser-energized invariant holds at frame time
+    # by construction — select_laser de-energizes before energizing).
+    assert not (ctrl.lasers[0].active and ctrl.lasers[1].active), (
+        "both lasers must not be simultaneously active after the run"
+    )
+
