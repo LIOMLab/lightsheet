@@ -252,14 +252,7 @@ class MicroscopeState(QObject):
         if new == self._snapshot:
             return
 
-        self._snapshot = new
-
-        for idx, val in power_emits:
-            self.sig_laser_power_changed.emit(idx, val)
-        for idx, val in enabled_emits:
-            self.sig_laser_enabled_changed.emit(idx, val)
-
-        if (
+        line_time_changed = (
             snapshot.lightsheet_line_time_s is not None
             and not math.isclose(
                 self._snapshot.lightsheet_line_time_s,
@@ -267,7 +260,16 @@ class MicroscopeState(QObject):
                 rel_tol=1e-9,
                 abs_tol=1e-9,
             )
-        ):
+        )
+
+        self._snapshot = new
+
+        for idx, val in power_emits:
+            self.sig_laser_power_changed.emit(idx, val)
+        for idx, val in enabled_emits:
+            self.sig_laser_enabled_changed.emit(idx, val)
+
+        if line_time_changed:
             self.sig_lightsheet_line_time_changed.emit(
                 self._snapshot.lightsheet_line_time_s
             )
