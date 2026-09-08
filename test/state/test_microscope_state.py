@@ -342,9 +342,7 @@ def test_model_apply_worker_snapshot_partial_changes(qtbot: QtBot) -> None:
     # Only index 1 changes; index 0 is isclose-equal to the live value.
     applied = AppliedMicroscopeSnapshot(laser_power_pct=(50.0, 75.0))
     emissions: list[tuple[int, float]] = []
-    state.sig_laser_power_changed.connect(
-        lambda idx, val: emissions.append((idx, val))
-    )
+    state.sig_laser_power_changed.connect(lambda idx, val: emissions.append((idx, val)))
     state.apply_worker_snapshot(applied)
     assert state.laser_power_pct == (50.0, 75.0)
     assert emissions == [(1, 75.0)]
@@ -354,9 +352,7 @@ def test_model_apply_worker_snapshot_partial_changes(qtbot: QtBot) -> None:
     state.sig_laser_enabled_changed.connect(
         lambda idx, val: enabled_emissions.append((idx, val))
     )
-    state.apply_worker_snapshot(
-        AppliedMicroscopeSnapshot(laser_enabled=(True, True))
-    )
+    state.apply_worker_snapshot(AppliedMicroscopeSnapshot(laser_enabled=(True, True)))
     assert state.laser_enabled == (True, True)
     assert enabled_emissions == [(1, True)]
 
@@ -390,16 +386,12 @@ def test_model_apply_worker_snapshot_folds_line_time(qtbot: QtBot) -> None:
     emissions: list[float] = []
     state.sig_lightsheet_line_time_changed.connect(emissions.append)
 
-    state.apply_worker_snapshot(
-        AppliedMicroscopeSnapshot(lightsheet_line_time_s=3e-5)
-    )
+    state.apply_worker_snapshot(AppliedMicroscopeSnapshot(lightsheet_line_time_s=3e-5))
     assert state.lightsheet_line_time_s == 3e-5
     assert emissions == [3e-5]
 
     emissions.clear()
-    state.apply_worker_snapshot(
-        AppliedMicroscopeSnapshot(lightsheet_line_time_s=3e-5)
-    )
+    state.apply_worker_snapshot(AppliedMicroscopeSnapshot(lightsheet_line_time_s=3e-5))
     assert emissions == []
 
 

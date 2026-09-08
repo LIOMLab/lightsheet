@@ -76,9 +76,7 @@ def test_single_worker_save_metadata_frozen_at_spawn(
     """SingleWorker derives _save_description/_save_stitch_blend from the
     snapshot; post-spawn model edits leave them unchanged."""
     ctrl = controller
-    snap = _spawn_snapshot(
-        ctrl, description="single spawn", mode=SaveMode.STITCH_BLEND
-    )
+    snap = _spawn_snapshot(ctrl, description="single spawn", mode=SaveMode.STITCH_BLEND)
     worker = SingleWorker(ctrl._bundle, ctrl._hw, ctrl, snapshot=snap)
     assert worker._save_description == "single spawn"
     assert worker._save_stitch_blend is True
@@ -151,9 +149,7 @@ def test_stack_worker_save_mode_branches_frozen_at_spawn(
     description from the snapshot; post-spawn model edits leave them
     unchanged."""
     ctrl = controller
-    snap = _spawn_snapshot(
-        ctrl, description="stack spawn", mode=SaveMode.ALL_FULL
-    )
+    snap = _spawn_snapshot(ctrl, description="stack spawn", mode=SaveMode.ALL_FULL)
     worker = StackWorker(ctrl._bundle, ctrl._hw, ctrl, snapshot=snap)
     assert worker._save_description == "stack spawn"
     assert worker._save_all_full is True
@@ -192,9 +188,7 @@ def test_stack_worker_multi_channel_and_wavelengths_from_snapshot(
     auto_lasers, and run() passes the snapshot description to
     add_sample_name (never writes shell.save_description)."""
     ctrl = controller
-    snap = _spawn_snapshot(
-        ctrl, description="mc spawn", auto=(True, True)
-    )
+    snap = _spawn_snapshot(ctrl, description="mc spawn", auto=(True, True))
     worker = StackWorker(ctrl._bundle, ctrl._hw, ctrl, snapshot=snap)
     assert worker._multi_channel is True
     assert worker._wavelengths == [
@@ -225,9 +219,7 @@ def test_spawn_sites_pass_frozen_snapshot(
     """updateUi_single_mode_button passes one MicroscopeSnapshot to
     SingleWorker (the GUI-thread freeze point)."""
     ctrl = controller
-    ctrl.state.set_save_options(
-        SaveOptions("spawn-site desc", SaveMode.STITCH_BLEND)
-    )
+    ctrl.state.set_save_options(SaveOptions("spawn-site desc", SaveMode.STITCH_BLEND))
 
     captured: dict[str, object] = {}
 

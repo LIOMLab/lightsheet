@@ -179,12 +179,8 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         self._save_stitch_blend = (
             self._snapshot.save_options.mode == SaveMode.STITCH_BLEND
         )
-        self._save_all_crop = (
-            self._snapshot.save_options.mode == SaveMode.ALL_CROP
-        )
-        self._save_all_full = (
-            self._snapshot.save_options.mode == SaveMode.ALL_FULL
-        )
+        self._save_all_crop = self._snapshot.save_options.mode == SaveMode.ALL_CROP
+        self._save_all_full = self._snapshot.save_options.mode == SaveMode.ALL_FULL
         # Multi-channel flag and active-laser wavelengths are read from the
         # immutable worker snapshot; run() never reaches into the shell's
         # mutable state. In multi-channel mode these are passed to
@@ -193,9 +189,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         # single-channel mode the active laser's wavelength is pre-sampled.
         auto_lasers = self._snapshot.auto_lasers
         self._multi_channel = (
-            auto_lasers[0] and auto_lasers[1]
-            if snapshot is not None
-            else multi_channel
+            auto_lasers[0] and auto_lasers[1] if snapshot is not None else multi_channel
         )
         if self._multi_channel:
             self._wavelengths: list[int] | None = [

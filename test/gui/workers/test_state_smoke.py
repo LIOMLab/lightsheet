@@ -79,12 +79,8 @@ def test_worker_snapshot_is_frozen_and_feedback_reaches_model(
     assert ctrl._hw.lasers[0].power == 150.0
     assert ctrl._hw.lasers[1].power == 75.0
     assert ctrl.state.laser_power_pct == (50.0, 50.0)
-    assert (
-        ctrl.laser_panel.ui.doubleSpinBox_laserOneAmplitude.value() == 50.0
-    )
-    assert (
-        ctrl.laser_panel.ui.doubleSpinBox_laserTwoAmplitude.value() == 50.0
-    )
+    assert ctrl.laser_panel.ui.doubleSpinBox_laserOneAmplitude.value() == 50.0
+    assert ctrl.laser_panel.ui.doubleSpinBox_laserTwoAmplitude.value() == 50.0
 
     # The worker's frozen input snapshot is unchanged despite the model update.
     assert worker._snapshot.laser_power_pct == original_power

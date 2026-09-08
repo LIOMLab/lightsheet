@@ -235,9 +235,10 @@ class MockStage:
             )
             if sample.texture_amplitude > 0:
                 k = 2.0 * math.pi / sample.texture_period_px
-                texture = np.sin(k * np.arange(rows))[:, None] * np.sin(
-                    k * np.arange(cols)
-                )[None, :]
+                texture = (
+                    np.sin(k * np.arange(rows))[:, None]
+                    * np.sin(k * np.arange(cols))[None, :]
+                )
                 profile = profile * (1.0 + sample.texture_amplitude * texture)
             self._lateral_key = key
             self._lateral_profile = profile

@@ -194,9 +194,7 @@ class ZarrSaver:
                     try:
                         source_path_obj.rename(resolved)
                     except Exception as e2:
-                        logger.warning(
-                            "Could not restore existing zarr store: %s", e2
-                        )
+                        logger.warning("Could not restore existing zarr store: %s", e2)
                         self._merge_source_path = source_path
                         self.parent.sig_message.emit(
                             "Existing zarr could not be restored after a "

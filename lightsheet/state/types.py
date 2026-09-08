@@ -126,24 +126,16 @@ class AppliedMicroscopeSnapshot:
 
 def _valid_percentage(value: Any, field_name: str, idx: int) -> None:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
-        raise ValueError(
-            f"{field_name}[{idx}] must be a number; got {type(value)}"
-        )
+        raise ValueError(f"{field_name}[{idx}] must be a number; got {type(value)}")
     if not math.isfinite(value):
-        raise ValueError(
-            f"{field_name}[{idx}] must be finite; got {value}"
-        )
+        raise ValueError(f"{field_name}[{idx}] must be finite; got {value}")
     if value < 0.0 or value > 100.0:
-        raise ValueError(
-            f"{field_name}[{idx}] must be in [0, 100]; got {value}"
-        )
+        raise ValueError(f"{field_name}[{idx}] must be in [0, 100]; got {value}")
 
 
 def _valid_bool(value: Any, field_name: str, idx: int) -> None:
     if not isinstance(value, bool):
-        raise ValueError(
-            f"{field_name}[{idx}] must be a bool; got {type(value)}"
-        )
+        raise ValueError(f"{field_name}[{idx}] must be a bool; got {type(value)}")
 
 
 def _validate_two_tuple(
@@ -152,12 +144,8 @@ def _validate_two_tuple(
     validator: Any,
 ) -> None:
     if not isinstance(value, tuple):
-        raise ValueError(
-            f"{field_name} must be a tuple; got {type(value)}"
-        )
+        raise ValueError(f"{field_name} must be a tuple; got {type(value)}")
     if len(value) != 2:
-        raise ValueError(
-            f"{field_name} must be a 2-tuple; got length {len(value)}"
-        )
+        raise ValueError(f"{field_name} must be a 2-tuple; got length {len(value)}")
     for idx, item in enumerate(value):
         validator(item, field_name, idx)

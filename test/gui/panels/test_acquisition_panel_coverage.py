@@ -53,9 +53,7 @@ class _FakeStackWorker(QObject):
     """StackWorker stand-in with the exact signals _spawn_stack_worker wires."""
 
     finished = Signal()
-    sig_adaptive_trajectory = Signal(
-        int, float, float, float, float, str, bool, bool
-    )
+    sig_adaptive_trajectory = Signal(int, float, float, float, float, str, bool, bool)
     sig_focus_trajectory = Signal(int, float, float, float, float)
     sig_autofocus_status = Signal(int, int, float, float, float, str)
 

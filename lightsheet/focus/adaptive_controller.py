@@ -115,8 +115,7 @@ class AdaptiveFocusController:
 
         self._prev_residual_mm = self._residual_mm
         new_residual = (
-            self._residual_mm
-            + self._cfg.residual_gain_mm * float(direction) * scale
+            self._residual_mm + self._cfg.residual_gain_mm * float(direction) * scale
         )
         self._residual_mm = max(
             -self._cfg.max_residual_mm,

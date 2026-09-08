@@ -55,9 +55,7 @@ def _resolve_spawn_snapshot(
         try:
             candidate = getter()
         except Exception as e:
-            logger.warning(
-                "hw._snapshot_from_shell() failed, falling back: %s", e
-            )
+            logger.warning("hw._snapshot_from_shell() failed, falling back: %s", e)
             candidate = None
         if isinstance(candidate, MicroscopeSnapshot):
             return candidate
@@ -414,15 +412,11 @@ class SingleWorker(QObject, _AcquireScanMixin):
         # the GUI thread — the compatibility values are never read in run().
         caller_snapshot = snapshot is not None
         if snapshot is None:
-            save_mode = (
-                SaveMode.STITCH_BLEND if save_stitch_blend else SaveMode.STITCH
-            )
+            save_mode = SaveMode.STITCH_BLEND if save_stitch_blend else SaveMode.STITCH
             try:
                 base = shell.state.snapshot()
             except Exception as e:
-                logger.warning(
-                    "state.snapshot() failed, falling back: %s", e
-                )
+                logger.warning("state.snapshot() failed, falling back: %s", e)
                 base = None
             if not isinstance(base, MicroscopeSnapshot):
                 # Legacy test callers pass a Mock shell; carry the

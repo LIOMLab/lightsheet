@@ -883,7 +883,6 @@ def test_zarr_saver_merges_second_single_channel(
     assert channels[1]["wavelength"] == ctrl.lasers[1].wavelength
 
 
-
 def test_zarr_saver_has_focused_module() -> None:
     """ZarrSaver lives in a focused module while legacy imports from
     ``frame_saver_controller`` remain object-identical."""
@@ -1031,9 +1030,7 @@ def test_zarr_merge_removes_stale_merge_source_file(
     assert Path(saver._merge_source_path).is_dir()
 
     assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
-    frame = np.full(
-        (ctrl.camera.ysize, ctrl.camera.xsize), 50, dtype=np.uint16
-    )
+    frame = np.full((ctrl.camera.ysize, ctrl.camera.xsize), 50, dtype=np.uint16)
     for z in range(n_planes):
         saver.write_plane(0, z, frame, 0.0, 0.0, 0.0)
     saver.finalize()
@@ -1130,9 +1127,7 @@ def test_zarr_remove_merge_source_edge_paths(
 
     import lightsheet.gui.coordinators.zarr_saver as zarr_module
 
-    with patch.object(
-        zarr_module.shutil, "rmtree", side_effect=OSError("locked")
-    ):
+    with patch.object(zarr_module.shutil, "rmtree", side_effect=OSError("locked")):
         saver._remove_merge_source()
 
 
@@ -1276,9 +1271,7 @@ def test_zarr_merge_copy_failure_preserves_source(
 
     saver = ZarrSaver(ctrl)
     with monkeypatch.context() as m:
-        m.setattr(
-            zarr_saver.AnalysisOmeZarrWriter, "__setitem__", _failing_setitem
-        )
+        m.setattr(zarr_saver.AnalysisOmeZarrWriter, "__setitem__", _failing_setitem)
         saver.start_stack(store_path, n_planes)
 
     # Merge aborted: merge state cleared, source store left on disk.

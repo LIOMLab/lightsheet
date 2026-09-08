@@ -189,9 +189,7 @@ class MicroscopeState(QObject):
     def set_save_description(self, description: str) -> None:
         """Replace only the save description, preserving the mode."""
         if not isinstance(description, str):
-            raise ValueError(
-                f"description must be a str; got {type(description)}"
-            )
+            raise ValueError(f"description must be a str; got {type(description)}")
         if self._snapshot.save_options.description == description:
             return
         self.set_save_options(

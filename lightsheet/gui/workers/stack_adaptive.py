@@ -19,9 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _lightsheet_line_time_from_exposure(
-    exposure_s: float, exposed_lines: int
-) -> float:
+def _lightsheet_line_time_from_exposure(exposure_s: float, exposed_lines: int) -> float:
     """Convert a total per-plane integration time (seconds) into the
     per-line time (seconds) the camera applies in Lightsheet mode.
 
@@ -90,10 +88,8 @@ class _StackAdaptiveMixin:
         applied_line_time_s: float | None = None
         if shutter_mode == "Lightsheet":
             previous_line_time = getattr(self.camera, "line_time", None)
-            self.camera.lightsheet_line_time = (
-                _lightsheet_line_time_from_exposure(
-                    cmd.exposure_s, self.camera.lightsheet_exposed_lines
-                )
+            self.camera.lightsheet_line_time = _lightsheet_line_time_from_exposure(
+                cmd.exposure_s, self.camera.lightsheet_exposed_lines
             )
             self.camera.set_lightsheet_mode()
             applied_line_time_s = self.camera.line_time
@@ -141,14 +137,8 @@ class _StackAdaptiveMixin:
                     f"changed past the safe limit. The loop will retry "
                     f"on the next plane; press E-stop (F12) to abort."
                 )
-            raw1 = (
-                self._shell.lasers[0].power
-                / self._shell.lasers[0].max_power
-                * 100.0
-            )
-            applied_pct[0] = (
-                min(100.0, max(0.0, raw1)) if math.isfinite(raw1) else 0.0
-            )
+            raw1 = self._shell.lasers[0].power / self._shell.lasers[0].max_power * 100.0
+            applied_pct[0] = min(100.0, max(0.0, raw1)) if math.isfinite(raw1) else 0.0
         if self._shell.lasers[1].max_power > 0:
             pct2 = cmd.laser2_mw / self._shell.lasers[1].max_power * 100.0
             try:
@@ -163,14 +153,8 @@ class _StackAdaptiveMixin:
                     f"changed past the safe limit. The loop will retry "
                     f"on the next plane; press E-stop (F12) to abort."
                 )
-            raw2 = (
-                self._shell.lasers[1].power
-                / self._shell.lasers[1].max_power
-                * 100.0
-            )
-            applied_pct[1] = (
-                min(100.0, max(0.0, raw2)) if math.isfinite(raw2) else 0.0
-            )
+            raw2 = self._shell.lasers[1].power / self._shell.lasers[1].max_power * 100.0
+            applied_pct[1] = min(100.0, max(0.0, raw2)) if math.isfinite(raw2) else 0.0
 
         emitted_pct = (
             None

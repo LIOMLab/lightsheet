@@ -58,9 +58,7 @@ class _ExplodingState:
         )
 
 
-def _snapshot_with(
-    ctrl: Controller_MainWindow, **overrides: Any
-) -> MicroscopeSnapshot:
+def _snapshot_with(ctrl: Controller_MainWindow, **overrides: Any) -> MicroscopeSnapshot:
     """Return the current model snapshot with selected fields replaced."""
     return dataclasses.replace(ctrl.state.snapshot(), **overrides)
 

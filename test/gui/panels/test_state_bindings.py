@@ -44,9 +44,7 @@ def test_model_change_updates_matching_spinbox(
 ) -> None:
     """state.set_laser_power_pct updates only the matching spinbox."""
     ctrl = controller
-    with qtbot.waitSignal(
-        ctrl.state.sig_laser_power_changed, timeout=100
-    ) as blocker:
+    with qtbot.waitSignal(ctrl.state.sig_laser_power_changed, timeout=100) as blocker:
         ctrl.state.set_laser_power_pct(0, 42.0)
     assert blocker.signal_triggered
     assert ctrl.laser_panel.ui.doubleSpinBox_laserOneAmplitude.value() == 42.0
@@ -138,9 +136,7 @@ def test_applied_line_time_projects_to_widget_without_echo(
     spin.valueChanged.connect(fired.append)
 
     applied = AppliedMicroscopeSnapshot(lightsheet_line_time_s=0.0049)
-    with qtbot.waitSignal(
-        ctrl.state.sig_lightsheet_line_time_changed, timeout=100
-    ):
+    with qtbot.waitSignal(ctrl.state.sig_lightsheet_line_time_changed, timeout=100):
         ctrl.state.apply_worker_snapshot(applied)
 
     assert ctrl.state.lightsheet_line_time_s == pytest.approx(0.0049)

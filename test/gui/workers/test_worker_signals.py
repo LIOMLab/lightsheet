@@ -58,9 +58,7 @@ def _make_worker(
     shell: _PreviewShell, auto: tuple[bool, bool] = (False, False)
 ) -> tuple[PreviewWorker, Mock]:
     hw = Mock()
-    worker = PreviewWorker(
-        _make_bundle(), hw, shell, snapshot=_snapshot(auto)
-    )  # ty: ignore[invalid-argument-type]
+    worker = PreviewWorker(_make_bundle(), hw, shell, snapshot=_snapshot(auto))  # ty: ignore[invalid-argument-type]
     return worker, hw
 
 

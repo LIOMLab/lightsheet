@@ -1272,9 +1272,7 @@ def test_sphere_drives_adaptive_loop(
     # The brightest observed plane is near the sheet position (8.5 mm).
     positions_mm = [(start_um + i * step_um) / 1000.0 for i in range(n_planes)]
     sheet_mm = 8.5
-    expected_idx = min(
-        range(n_planes), key=lambda i: abs(positions_mm[i] - sheet_mm)
-    )
+    expected_idx = min(range(n_planes), key=lambda i: abs(positions_mm[i] - sheet_mm))
     brightest_idx = int(np.argmax(intensities))
     assert abs(brightest_idx - expected_idx) <= 2, (
         f"brightest plane {brightest_idx} must be near the sheet plane "
@@ -1408,4 +1406,3 @@ def test_sphere_shared_across_channels_scales_with_active_laser(
     assert not (ctrl.lasers[0].active and ctrl.lasers[1].active), (
         "both lasers must not be simultaneously active after the run"
     )
-
