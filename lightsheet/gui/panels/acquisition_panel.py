@@ -632,6 +632,15 @@ class AcquisitionPanelWidget(QWidget):
         value_us = line_time_s * 1e6
         if math.isclose(spin.value(), value_us, rel_tol=1e-9, abs_tol=1e-9):
             return
+        # Qt clamps the projected value to the widget's range — surface
+        # the clamp so a silent divergence between the model and its
+        # projection is visible to the operator.
+        if value_us < spin.minimum() or value_us > spin.maximum():
+            self._shell.sig_message.emit(
+                f"Applied lightsheet line time {value_us:.3f} µs is "
+                f"outside the widget range [{spin.minimum()}, "
+                f"{spin.maximum()}] µs — displaying the clamped value."
+            )
         was = spin.blockSignals(True)
         spin.setValue(value_us)
         spin.blockSignals(was)
