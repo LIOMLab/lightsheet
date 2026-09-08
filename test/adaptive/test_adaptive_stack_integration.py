@@ -1103,3 +1103,157 @@ def test_estop_after_successful_write_stops_later_writes(
     finally:
         ctrl.estop_event.clear()
         ctrl._hw._write_laser1_power = real_write  # ty: ignore[invalid-assignment]
+
+
+# --------------------------------------------------------------------- #
+# Sphere-driven stacks: MockStage feeds the closed loop through
+# camera.frame_source (the synthetic-volume verification).
+# --------------------------------------------------------------------- #
+
+
+def _attach_sphere_stage(ctrl: Any, sample: Any | None = None) -> Any:
+    """Construct a ``MockStage`` on the controller's OWN mock motors and
+    lasers (identity — the stage must see the same instances the worker
+    moves and energizes) and wire it into ``camera.frame_source``.
+
+    A narrow axial sigma gives a steep intensity-vs-position gradient
+    that the PI loop cannot fully track inside a handful of planes, so
+    the trajectory shows a real axial sweep instead of a compensated
+    flat line.
+    """
+    from lightsheet.hal import MockSample, MockStage
+
+    if sample is None:
+        sample = MockSample(sigma_x_mm=0.8)
+    stage = MockStage(sample, ctrl._bundle.motors, ctrl._bundle.lasers)
+    ctrl.camera.frame_source = stage.frame
+    return stage
+
+
+def _sphere_acquire_scan(ctrl: Any, worker: Any) -> Callable[[], bool]:
+    """Return an ``acquire_scan`` stub that drives the sphere path.
+
+    The ``frame_source`` branch in ``MockCamera.copy_recorder_images``
+    is gated on ``new_data_ready`` — the stub MUST set it immediately
+    before the copy or the camera returns zero-filled frames and the
+    sphere never enters the loop (a dead signal). The real
+    ``monitor_recorder`` sets this flag after the exposure completes;
+    the stub reproduces that ordering.
+    """
+
+    def _fake_acquire_scan() -> bool:
+        n_imgs = worker.siggen.waveform_cycles or 1
+        ctrl.camera.new_data_ready = True
+        imgs = ctrl.camera.copy_recorder_images(n_imgs)
+        assert imgs is not None
+        ctrl.reconstructed_frame = np.asarray(imgs[0])
+        return True
+
+    return _fake_acquire_scan
+
+
+def test_sphere_drives_adaptive_loop(
+    controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    """A real StackWorker stack whose frames come from MockStage (the
+    Gaussian sphere) produces one adaptive-trajectory row per plane with
+    a measured intensity that varies with the sphere's axial position —
+    the sphere drives the loop, not a scripted scalar. The loop
+    responds: at least one actuator column (exposure, the primary
+    actuator) changes as the slice brightness crosses the target band.
+    """
+    from lightsheet.gui.workers import StackWorker
+
+    ctrl = controller
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = False
+
+    # Sweep the horizontal axis THROUGH the static sheet at 8.5 mm:
+    # 6.5 -> 10.0 mm in 0.5 mm steps. The default _configure_stack_plan
+    # (0.0 start, 10 um step) never reaches the sheet — override it.
+    n_planes = 8
+    start_um = 6500.0
+    step_um = 500.0
+    _configure_stack_plan(ctrl, tmp_path, n_planes=n_planes)
+    ctrl.stack_starting_plane = start_um
+    ctrl.stack_step = step_um
+
+    # The stage MUST hold the bundle's motor/laser instances so it reads
+    # the positions the worker moves and the powers the loop writes.
+    _attach_sphere_stage(ctrl)
+
+    # Stage a non-zero L1 power so the sphere is lit at start —
+    # start_lasers stages pct/100 * max_power then energizes.
+    ctrl.laser1_power_pct = 80.0
+
+    cfg = _adaptive_cfg()
+    worker = StackWorker(
+        ctrl._bundle,
+        ctrl._hw,
+        ctrl,
+        save_description="sphere adaptive sample",
+        save_stitch_blend=False,
+        save_all_crop=False,
+        save_all_full=False,
+        multi_channel=False,
+        adaptive_cfg=cfg,
+    )
+
+    worker.acquire_scan = _sphere_acquire_scan(ctrl, worker)  # ty: ignore[invalid-assignment]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    trajectory: list[tuple] = []  # ty: ignore[missing-type-argument]
+    worker.sig_adaptive_trajectory.connect(lambda *args: trajectory.append(args))
+
+    # Do NOT patch the motor move: the real MockMotor move is what
+    # positions the stage for each plane's sphere slice. The sweep
+    # (6.5-10.0 mm) is inside the ~101.6 mm travel limit.
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    worker.run()
+
+    assert len(finished_emits) == 1, (
+        f"StackWorker.run must emit finished exactly once; got {len(finished_emits)}"
+    )
+    assert len(trajectory) == n_planes, (
+        f"adaptive trajectory must have one row per plane "
+        f"({n_planes}); got {len(trajectory)}"
+    )
+
+    # The sphere actually drove intensity: a real axial gradient, not
+    # flat zeros (this also proves new_data_ready was set in the stub —
+    # a dead signal cannot produce a >0.1 swing).
+    intensities = [row[1] for row in trajectory]
+    intensity_span = max(intensities) - min(intensities)
+    assert intensity_span > 0.1, (
+        f"sphere sweep must produce an axial intensity gradient; "
+        f"intensities={intensities}"
+    )
+
+    # The brightest observed plane is near the sheet position (8.5 mm).
+    positions_mm = [(start_um + i * step_um) / 1000.0 for i in range(n_planes)]
+    sheet_mm = 8.5
+    expected_idx = min(
+        range(n_planes), key=lambda i: abs(positions_mm[i] - sheet_mm)
+    )
+    brightest_idx = int(np.argmax(intensities))
+    assert abs(brightest_idx - expected_idx) <= 2, (
+        f"brightest plane {brightest_idx} must be near the sheet plane "
+        f"{expected_idx} ({positions_mm[expected_idx]} mm); "
+        f"intensities={intensities}"
+    )
+
+    # The loop responded: exposure is the primary actuator and must
+    # move as the measured fraction leaves the target band (the laser
+    # power column only moves on power fallback — whichever actuator
+    # moved, at least one must be non-constant).
+    exposures = [row[2] for row in trajectory]
+    l1_mw = [row[3] for row in trajectory]
+    exposure_varies = max(exposures) - min(exposures) > 1e-9
+    power_varies = max(l1_mw) - min(l1_mw) > 1e-9
+    assert exposure_varies or power_varies, (
+        f"adaptive loop must move at least one actuator; "
+        f"exposures={exposures}, l1_mw={l1_mw}"
+    )
+
