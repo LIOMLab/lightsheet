@@ -432,8 +432,8 @@ class AcquisitionPanelWidget(QWidget):
             self._shell.state.snapshot(),
             save_options=SaveOptions(description=save_desc, mode=save_mode),
             auto_lasers=(
-                bool(self._shell._auto_laser1),
-                bool(self._shell._auto_laser2),
+                bool(getattr(self._shell, "_auto_laser1", False)),
+                bool(getattr(self._shell, "_auto_laser2", False)),
             ),
         )
 
@@ -526,12 +526,14 @@ class AcquisitionPanelWidget(QWidget):
         )
         # Connect the per-plane applied-state signal to the model's GUI-thread
         # slot. Queued delivery so the worker never mutates the live model.
-        with contextlib.suppress(TypeError, RuntimeError):
-            self._shell._stack_worker.sig_applied_state.disconnect()
-        self._shell._stack_worker.sig_applied_state.connect(
-            self._shell.state.apply_worker_snapshot,
-            Qt.ConnectionType.QueuedConnection,
-        )
+        applied_state = getattr(self._shell._stack_worker, "sig_applied_state", None)
+        if applied_state is not None:
+            with contextlib.suppress(TypeError, RuntimeError):
+                applied_state.disconnect()
+            applied_state.connect(
+                self._shell.state.apply_worker_snapshot,
+                Qt.ConnectionType.QueuedConnection,
+            )
         # When reusing the thread (2nd+ queue row), disconnect the prior
         # started→run so the reused thread's started only invokes this
         # row's run. Skip on the first spawn — no prior connection exists

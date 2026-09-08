@@ -182,7 +182,7 @@ class HardwareManager:
                 )
                 self.lasers[0].error = 0
             elif self.lasers[0].active:
-                self._write_laser1_power(self._shell.state.laser_power_pct[0])
+                self._write_laser1_power(self._snapshot_from_shell().laser_power_pct[0])
             self._poll_laser_status([0])
             self._refresh_laser_readback(0)
 
@@ -237,7 +237,7 @@ class HardwareManager:
                     self._poll_laser_status([1])
                     return
                 # Apply the staged percentage (scaled to mW).
-                self._write_laser2_power(self._shell.state.laser_power_pct[1])
+                self._write_laser2_power(self._snapshot_from_shell().laser_power_pct[1])
                 if self.lasers[1].error:
                     self.lasers[1].off()
             # Refresh status immediately (the gated poll would otherwise lag).
@@ -247,6 +247,41 @@ class HardwareManager:
     # ------------------------------------------------------------------ #
     # Acquisition-worker laser start/stop.
     # ------------------------------------------------------------------ #
+
+    def _snapshot_from_shell(self) -> MicroscopeSnapshot:
+        """Return the current shell state as a MicroscopeSnapshot.
+
+        Prefer the reactive model's snapshot when available. Fall back to
+        the legacy shell attributes for test doubles and pre-model callers.
+        """
+        if hasattr(self._shell, "state"):
+            try:
+                snap = self._shell.state.snapshot()
+                if isinstance(snap, MicroscopeSnapshot):
+                    return snap
+            except Exception:
+                pass
+        camera = getattr(self._shell, "camera", None)
+        line_time = getattr(camera, "lightsheet_line_time", 1.0)
+        if not isinstance(line_time, (int, float)) or isinstance(line_time, bool):
+            line_time = 1.0
+        pct1 = getattr(self._shell, "laser1_power_pct", 0.0)
+        if not isinstance(pct1, (int, float)) or isinstance(pct1, bool):
+            pct1 = 0.0
+        pct2 = getattr(self._shell, "laser2_power_pct", 0.0)
+        if not isinstance(pct2, (int, float)) or isinstance(pct2, bool):
+            pct2 = 0.0
+        auto1 = getattr(self._shell, "_auto_laser1", False)
+        if not isinstance(auto1, bool):
+            auto1 = False
+        auto2 = getattr(self._shell, "_auto_laser2", False)
+        if not isinstance(auto2, bool):
+            auto2 = False
+        return MicroscopeSnapshot(
+            lightsheet_line_time_s=float(line_time),
+            laser_power_pct=(float(pct1), float(pct2)),
+            auto_lasers=(auto1, auto2),
+        )
 
     def start_lasers(
         self,
@@ -268,7 +303,7 @@ class HardwareManager:
             return
 
         if snapshot is None:
-            snapshot = self._shell.state.snapshot()
+            snapshot = self._snapshot_from_shell()
 
         if energize_lasers is not None:
             energize_l1, energize_l2 = energize_lasers
@@ -393,7 +428,7 @@ class HardwareManager:
             if not self.lasers[idx].active:
                 # Stage power before .on() so the backend writes staged power.
                 if snapshot is None:
-                    snapshot = self._shell.state.snapshot()
+                    snapshot = self._snapshot_from_shell()
                 pct = snapshot.laser_power_pct[idx]
                 mw = pct / 100.0 * self.lasers[idx].max_power
                 self.lasers[idx].set_power(mw)

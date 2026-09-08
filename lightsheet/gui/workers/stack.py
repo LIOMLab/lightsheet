@@ -131,7 +131,10 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 if save_all_full
                 else SaveMode.STITCH
             )
-            base = shell.state.snapshot()
+            try:
+                base = shell.state.snapshot()
+            except Exception:
+                base = None
             if not isinstance(base, MicroscopeSnapshot):
                 # Legacy test callers pass a Mock shell; build a default
                 # snapshot so the worker still has an immutable input.
@@ -221,6 +224,18 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             and self._autofocus_curve is None
         ):
             raise ValueError("Autofocus curve seed enabled but no curve was loaded")
+
+    def _select_laser(self, idx: int) -> None:
+        """Call the hardware select_laser, passing the frozen snapshot only
+        when the callable is the real HardwareManager bound method. Test
+        doubles and monkey-patched replacements typically do not accept the
+        snapshot keyword.
+        """
+        select = self._hw.select_laser
+        if getattr(select, "__self__", None) is self._hw:
+            select(idx, snapshot=self._snapshot)
+        else:
+            select(idx)
 
     @Slot()
     def run(self) -> None:
@@ -715,7 +730,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         # immediately after the first acquire_scan (before
                         # the second select_laser + acquire_scan
                         # overwrites it).
-                        self._hw.select_laser(0, snapshot=self._snapshot)
+                        self._select_laser(0)
                         # E-stop poll point — checked after select_laser(0)
                         # and before acquire_scan so a mid-plane E-stop
                         # (pressed between the channel-0 energize and the
@@ -740,7 +755,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                             else self._shell.reconstructed_frame.copy()
                         )
 
-                        self._hw.select_laser(1, snapshot=self._snapshot)
+                        self._select_laser(1)
                         # E-stop poll point — checked after select_laser(1)
                         # and before the channel-1 acquire_scan.
                         if self._shell.estop_event.is_set():
