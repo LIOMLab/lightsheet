@@ -116,8 +116,11 @@ class ZarrSaver:
         chunk_shape = (1, 1, ysize, xsize)
 
         # Merge check: a single-channel acquisition targeting an existing
-        # OME-Zarr with one channel and matching dimensions can append a
-        # new channel instead of overwriting. The old store is moved to a
+        # OME-Zarr with matching z/y/x dimensions can append a new channel
+        # instead of overwriting — the existing store may itself already
+        # hold multiple channels (an earlier merge), so the check accepts
+        # any channel count and the new channel lands at index N where N
+        # is the existing channel count. The old store is moved to a
         # temporary source path, copied into the lower channels of a fresh
         # (n+1)-channel writer, and new frames are streamed into the new
         # channel. If the existing store is incompatible or missing, the
