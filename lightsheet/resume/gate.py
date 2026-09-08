@@ -35,8 +35,19 @@ from lightsheet.resume.probe import (
 )
 
 if TYPE_CHECKING:
-    from lightsheet.hal.interfaces import IMotors
+    from typing import Protocol
+
     from lightsheet.resume.manifest import ResumeManifest
+
+    class _MotorReadback(Protocol):
+        """Structural surface the gate needs from the live motor bundle.
+
+        Only ``get_positions`` is required for the drift check; the
+        horizontal-axis limit readout is reached via ``getattr`` so test
+        doubles and partial shells satisfy the same contract.
+        """
+
+        def get_positions(self) -> dict[str, float]: ...
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +123,7 @@ class ResumeSafetyGate:
         cls,
         manifest: ResumeManifest,
         live_config: dict[str, dict[str, Any]] | None,
-        motors: IMotors | None,
+        motors: _MotorReadback | None,
         *,
         drift_tolerance_mm: float = DEFAULT_DRIFT_TOLERANCE_MM,
     ) -> GateFindings:
@@ -137,18 +148,13 @@ class ResumeSafetyGate:
                 )
             except Exception as e:
                 findings.warnings.append(
-                    f"Live config could not be loaded for the fingerprint "
-                    f"diff: {e}"
+                    f"Live config could not be loaded for the fingerprint diff: {e}"
                 )
                 live_config = {}
         if live_config:
             live_result = collect_config_errors(live_config)
-            findings.errors.extend(
-                f"[live config] {e}" for e in live_result.errors
-            )
-            findings.warnings.extend(
-                f"[live config] {w}" for w in live_result.warnings
-            )
+            findings.errors.extend(f"[live config] {e}" for e in live_result.errors)
+            findings.warnings.extend(f"[live config] {w}" for w in live_result.warnings)
             for section, entries in manifest.safety_config.items():
                 live_section = live_config.get(section, {})
                 for key, saved in entries.items():
@@ -171,8 +177,7 @@ class ResumeSafetyGate:
             findings.check_results.append(
                 "Config fingerprint — matches the live config"
                 if fingerprint_diffs == 0
-                else f"Config fingerprint — {fingerprint_diffs} "
-                "difference(s) found"
+                else f"Config fingerprint — {fingerprint_diffs} difference(s) found"
             )
         elif manifest.safety_config:
             findings.warnings.append(
@@ -180,8 +185,7 @@ class ResumeSafetyGate:
                 "live config is unavailable"
             )
             findings.check_results.append(
-                "Config fingerprint — could not be compared (live config "
-                "unavailable)"
+                "Config fingerprint — could not be compared (live config unavailable)"
             )
 
         # --- (d) per-format probes (before limits so resume_plane is
@@ -215,10 +219,7 @@ class ResumeSafetyGate:
                         n = probe_hdf5(path)
                     elif fmt == "zarr":
                         n_channels = max(1, len(manifest.wavelengths or []))
-                        n = min(
-                            probe_zarr(path, f"ch{c}")
-                            for c in range(n_channels)
-                        )
+                        n = min(probe_zarr(path, f"ch{c}") for c in range(n_channels))
                     else:
                         continue
                 except ResumeProbeError as e:
@@ -240,9 +241,7 @@ class ResumeSafetyGate:
             # Cursors were normalized to resolved file paths above so the
             # per-key observed lookup matches for both the path-keyed
             # schema and legacy save-mode keys.
-            norm_manifest = dataclasses.replace(
-                manifest, cursors=norm_cursors
-            )
+            norm_manifest = dataclasses.replace(manifest, cursors=norm_cursors)
             resume_plane, _ = _common_resume_plane(norm_manifest, probes)
         else:
             resume_plane = manifest.start_plane
@@ -281,9 +280,7 @@ class ResumeSafetyGate:
                 }
             except Exception as e:
                 positions = {}
-                findings.warnings.append(
-                    f"Motor position readback failed: {e}"
-                )
+                findings.warnings.append(f"Motor position readback failed: {e}")
             for key, saved in manifest.last_motor_positions.items():
                 live = positions.get(key)
                 if live is None:
@@ -307,17 +304,14 @@ class ResumeSafetyGate:
                     f"Motor drift — {drifted_axes} of {compared_axes} "
                     "axis(es) beyond tolerance"
                     if drifted_axes
-                    else f"Motor drift — {compared_axes} axis(es) within "
-                    "tolerance"
+                    else f"Motor drift — {compared_axes} axis(es) within tolerance"
                 )
             elif positions:
                 findings.check_results.append(
                     "Motor drift — no recorded positions to compare"
                 )
             else:
-                findings.check_results.append(
-                    "Motor drift — readback unavailable"
-                )
+                findings.check_results.append("Motor drift — readback unavailable")
 
         # --- (c) travel-limit re-validation of the remaining range -----
         horizontal = getattr(motors, "horizontal", None) if motors else None
@@ -334,12 +328,8 @@ class ResumeSafetyGate:
                 low = float(horizontal.get_limit_low("µm"))
                 high = float(horizontal.get_limit_high("µm"))
             except (TypeError, ValueError, AttributeError) as e:
-                findings.warnings.append(
-                    f"Travel-limit re-validation failed: {e}"
-                )
-                findings.check_results.append(
-                    "Travel limits — re-validation failed"
-                )
+                findings.warnings.append(f"Travel-limit re-validation failed: {e}")
+                findings.check_results.append("Travel limits — re-validation failed")
             else:
                 resume_start = (
                     manifest.stack_starting_plane
@@ -354,8 +344,7 @@ class ResumeSafetyGate:
                         f"[{low:.1f}, {high:.1f}] \u03bcm"
                     )
                     findings.check_results.append(
-                        "Travel limits — remaining range exceeds the "
-                        "stage limits"
+                        "Travel limits — remaining range exceeds the stage limits"
                     )
                 else:
                     findings.check_results.append(

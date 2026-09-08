@@ -7,6 +7,8 @@ laser.off()) stays synchronous and lock-free on the GUI thread.
 @authors: Pierre Girard-Collins & flesage
 """
 
+from __future__ import annotations
+
 import contextlib
 import copy
 import logging
@@ -179,6 +181,9 @@ if typing.TYPE_CHECKING:
     from lightsheet.gui.coordinators.frame_saver_controller import FrameSaverController
     from lightsheet.gui.coordinators.hardware_manager import HardwareManager
     from lightsheet.gui.coordinators.motor_controller import MotorController
+    from lightsheet.gui.panels.past_acquisitions_browser import (
+        PastAcquisitionEntry,
+    )
     from lightsheet.hal.interfaces import ICamera, IETLs, ILaser, IMotors, ISigGen
 
 
@@ -224,17 +229,17 @@ class Controller_MainWindow(QMainWindow):
     # to keep the codebase ty-clean without maintaining a parallel type stub.
     ui: typing.Any
 
-    _fs: "FrameSaverController"
-    _hw: "HardwareManager"
-    _acq: "AcquisitionCoordinator"
-    _mc: "MotorController"
+    _fs: FrameSaverController
+    _hw: HardwareManager
+    _acq: AcquisitionCoordinator
+    _mc: MotorController
 
     # HAL device references (set in ``hardware_init``).
-    camera: "ICamera"
-    siggen: "ISigGen"
-    motors: "IMotors"
-    etls: "IETLs"
-    lasers: list["ILaser"]
+    camera: ICamera
+    siggen: ISigGen
+    motors: IMotors
+    etls: IETLs
+    lasers: list[ILaser]
 
     # Worker threads / worker objects (created on first acquisition button click).
     _preview_thread: QThread | None = None
@@ -250,10 +255,10 @@ class Controller_MainWindow(QMainWindow):
         self,
         bundle: DeviceBundle,
         demo: bool = False,
-        fs: "FrameSaverController | None" = None,
-        hw: "HardwareManager | None" = None,
-        acq: "AcquisitionCoordinator | None" = None,
-        mc: "MotorController | None" = None,
+        fs: FrameSaverController | None = None,
+        hw: HardwareManager | None = None,
+        acq: AcquisitionCoordinator | None = None,
+        mc: MotorController | None = None,
     ) -> None:
         # The frozen DeviceBundle is the sole HAL-handle channel. A re-bound
         # laser handle after construction would fail to de-energize a live
@@ -699,6 +704,13 @@ class Controller_MainWindow(QMainWindow):
         self.stack_ending_plane = None
         self.number_of_planes = 0
         self.stack_step: int | float = 0
+        # Resume offset for the current stack run; the acquisition panel
+        # stamps it before the worker spawns and the mode badge reads it
+        # back. 0 = fresh run (no resume offset).
+        self._start_plane: int = 0
+        # Queue row currently executing (None outside a queue run); the
+        # per-acquisition manifest picks it up at set_files time.
+        self.stack_queue_row_index: int | None = None
         # Set True at the end of hardware_init (deferred via a 100ms
         # single-shot timer from __init__). Acquisition entry points gate
         # on this so the deferred hardware_init cannot fire mid-acquisition
@@ -1419,7 +1431,9 @@ class Controller_MainWindow(QMainWindow):
         # value).
         self._hardware_initialized = True
 
-    def _on_startup_scan_finished(self, entries: list) -> None:
+    def _on_startup_scan_finished(
+        self, entries: list[PastAcquisitionEntry]
+    ) -> None:
         """Show a notification-only dialog if the startup scan found any
         resumable acquisitions. The dialog deliberately has no Resume
         Now button — the operator must open the Past panel and confirm

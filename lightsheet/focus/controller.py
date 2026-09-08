@@ -98,12 +98,8 @@ class FocusController:
             raise ValueError(f"checkpoint state must be a dict; got {type(state)}")
 
         raw_residual = state.get("residual_mm", 0.0)
-        if not isinstance(raw_residual, (int, float)) or isinstance(
-            raw_residual, bool
-        ):
-            raise ValueError(
-                f"residual_mm must be a number; got {type(raw_residual)}"
-            )
+        if not isinstance(raw_residual, (int, float)) or isinstance(raw_residual, bool):
+            raise ValueError(f"residual_mm must be a number; got {type(raw_residual)}")
         if not math.isfinite(raw_residual):
             raise ValueError(f"residual_mm must be finite; got {raw_residual}")
         residual = float(raw_residual)
@@ -118,21 +114,16 @@ class FocusController:
         if raw_ref is not None:
             if not isinstance(raw_ref, (int, float)) or isinstance(raw_ref, bool):
                 raise ValueError(
-                    f"reference_sharpness must be a number or None; "
-                    f"got {type(raw_ref)}"
+                    f"reference_sharpness must be a number or None; got {type(raw_ref)}"
                 )
             if not math.isfinite(raw_ref):
-                raise ValueError(
-                    f"reference_sharpness must be finite; got {raw_ref}"
-                )
+                raise ValueError(f"reference_sharpness must be finite; got {raw_ref}")
             reference = float(raw_ref)
 
         raw_last = state.get("last_command")
         last_command: float | None = None
         if raw_last is not None:
-            if not isinstance(raw_last, (int, float)) or isinstance(
-                raw_last, bool
-            ):
+            if not isinstance(raw_last, (int, float)) or isinstance(raw_last, bool):
                 raise ValueError(
                     f"last_command must be a number or None; got {type(raw_last)}"
                 )
@@ -140,9 +131,7 @@ class FocusController:
                 raise ValueError(f"last_command must be finite; got {raw_last}")
             last_command = float(raw_last)
             tol = 1e-6
-            if not (
-                self._cam_lo - tol <= last_command <= self._cam_hi + tol
-            ):
+            if not (self._cam_lo - tol <= last_command <= self._cam_hi + tol):
                 raise ValueError(
                     f"last_command {last_command} outside camera travel range "
                     f"[{self._cam_lo}, {self._cam_hi}] mm"

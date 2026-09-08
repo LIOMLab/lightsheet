@@ -7,12 +7,12 @@ notification, and the resumed mode badge / progress bar offset.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
 
 import h5py
 import numpy as np
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox, QPushButton, QTableWidget
 from pytestqt.qtbot import QtBot
 
 from lightsheet.gui.panels.acquisition_table_manager import (
@@ -29,9 +29,15 @@ if TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
+def _cell_text(table: QTableWidget, row: int, col: int) -> str:
+    """Text of a table cell, or "" when the cell has no item."""
+    item = table.item(row, col)
+    return item.text() if item is not None else ""
+
+
 def _make_hdf5(path: Path) -> Path:
     """Create a minimal HDF5 file the past browser will parse."""
-    with h5py.File(path, "w") as f:  # ty: ignore[invalid-argument-type]
+    with h5py.File(str(path), "w") as f:
         f.attrs["Laser1 Wavelength"] = 555
         f.attrs["Laser1 Active"] = True
         f.create_dataset(
@@ -119,7 +125,7 @@ def test_past_panel_state_chips_and_resume_button(
     interrupted_row = next(
         i
         for i in range(table.rowCount())
-        if table.item(i, _PAST_COL_STATE).text() == "RESUMABLE"
+        if _cell_text(table, i, _PAST_COL_STATE) == "RESUMABLE"
     )
     interrupted_item = table.item(interrupted_row, _PAST_COL_STATE)
     assert interrupted_item is not None
@@ -130,9 +136,10 @@ def test_past_panel_state_chips_and_resume_button(
     completed_row = next(
         i
         for i in range(table.rowCount())
-        if table.item(i, _PAST_COL_STATE).text() == "Completed"
+        if _cell_text(table, i, _PAST_COL_STATE) == "Completed"
     )
     completed_item = table.item(completed_row, _PAST_COL_STATE)
+    assert completed_item is not None
     assert completed_item.text() == "Completed"
     assert table.cellWidget(completed_row, _PAST_COL_RESUME) is None
 
@@ -150,7 +157,10 @@ def test_resume_action_enqueues_a_resume_row(
     panel._on_scan_finished(entries)
     qtbot.wait(50)
 
-    btn = panel.ui.tableWidget_pastAcquisitions.cellWidget(0, _PAST_COL_RESUME)
+    btn = cast(
+        QPushButton,
+        panel.ui.tableWidget_pastAcquisitions.cellWidget(0, _PAST_COL_RESUME),
+    )
     assert btn is not None
     assert btn.text() == "Resume"
 

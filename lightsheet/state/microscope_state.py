@@ -244,17 +244,14 @@ class MicroscopeState(QObject):
 
         if not isinstance(manifest, ResumeManifest):
             raise TypeError(
-                f"restore_from_manifest expects a ResumeManifest; got "
-                f"{type(manifest)}"
+                f"restore_from_manifest expects a ResumeManifest; got {type(manifest)}"
             )
 
         def _try(label: str, fn: object, *args: object) -> None:
             try:
                 fn(*args)  # ty: ignore[call-non-callable]
             except (ValueError, IndexError) as e:
-                logger.warning(
-                    "manifest restore skipped %s (%r): %s", label, args, e
-                )
+                logger.warning("manifest restore skipped %s (%r): %s", label, args, e)
 
         if manifest.laser_power_pct is not None:
             for idx, pct in enumerate(manifest.laser_power_pct):

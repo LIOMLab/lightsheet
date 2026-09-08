@@ -34,9 +34,7 @@ QUEUE_MANIFEST_SUFFIX = ".queue-resume.json"
 
 # Lifecycle states. ``in_progress`` doubles as the crash signature: a
 # manifest that never received a terminal lifecycle update.
-LIFECYCLE_STATES = frozenset(
-    {"in_progress", "paused", "interrupted", "completed"}
-)
+LIFECYCLE_STATES = frozenset({"in_progress", "paused", "interrupted", "completed"})
 TERMINAL_STATES = frozenset({"paused", "interrupted", "completed"})
 
 # Cursor namespace: which output format a cursor group belongs to.
@@ -76,9 +74,7 @@ def _json_safe(value: Any, field: str = "manifest") -> Any:
         return {str(k): _json_safe(v, field) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
         return [_json_safe(v, field) for v in value]
-    raise ValueError(
-        f"{field}: value of type {type(value).__name__} is not JSON-safe"
-    )
+    raise ValueError(f"{field}: value of type {type(value).__name__} is not JSON-safe")
 
 
 def _check_int(name: str, value: Any, *, minimum: int | None = None) -> None:
@@ -107,9 +103,7 @@ def _check_int_map(name: str, value: Any) -> None:
         if not isinstance(k, str):
             raise ValueError(f"{name} keys must be str; got {type(k).__name__}")
         if not isinstance(v, (int, float)) or isinstance(v, bool):
-            raise ValueError(
-                f"{name}[{k!r}] must be a number; got {type(v).__name__}"
-            )
+            raise ValueError(f"{name}[{k!r}] must be a number; got {type(v).__name__}")
         _json_safe(v, f"{name}[{k!r}]")
 
 
@@ -148,16 +142,10 @@ class ResumeManifest:
     multi_channel: bool = False
     adaptive_cfg: dict[str, Any] | None = None
     focus_cfg: dict[str, Any] | None = None
-    safety_config: dict[str, dict[str, Any]] = dataclasses.field(
-        default_factory=dict
-    )
-    last_motor_positions: dict[str, float] = dataclasses.field(
-        default_factory=dict
-    )
+    safety_config: dict[str, dict[str, Any]] = dataclasses.field(default_factory=dict)
+    last_motor_positions: dict[str, float] = dataclasses.field(default_factory=dict)
     cursors: dict[str, dict[str, int]] = dataclasses.field(default_factory=dict)
-    trajectory_samples: list[dict[str, Any]] = dataclasses.field(
-        default_factory=list
-    )
+    trajectory_samples: list[dict[str, Any]] = dataclasses.field(default_factory=list)
     controller_checkpoints: list[dict[str, Any]] = dataclasses.field(
         default_factory=list
     )
@@ -177,15 +165,13 @@ class ResumeManifest:
         _check_str("state", self.state, allow_empty=False)
         if self.state not in LIFECYCLE_STATES:
             raise ValueError(
-                f"state must be one of {sorted(LIFECYCLE_STATES)}; "
-                f"got {self.state!r}"
+                f"state must be one of {sorted(LIFECYCLE_STATES)}; got {self.state!r}"
             )
         _check_int("n_planes", self.n_planes, minimum=1)
         _check_int("start_plane", self.start_plane, minimum=0)
         if self.start_plane >= self.n_planes:
             raise ValueError(
-                f"start_plane {self.start_plane} must be < n_planes "
-                f"{self.n_planes}"
+                f"start_plane {self.start_plane} must be < n_planes {self.n_planes}"
             )
         _check_float("stack_starting_plane", self.stack_starting_plane)
         _check_float("stack_ending_plane", self.stack_ending_plane)
@@ -202,8 +188,7 @@ class ResumeManifest:
                 _check_int("wavelengths[]", w, minimum=1)
         if not isinstance(self.multi_channel, bool):
             raise ValueError(
-                "multi_channel must be a bool; got "
-                f"{type(self.multi_channel).__name__}"
+                f"multi_channel must be a bool; got {type(self.multi_channel).__name__}"
             )
         if self.adaptive_cfg is not None:
             _check_dict("adaptive_cfg", self.adaptive_cfg)
@@ -211,8 +196,7 @@ class ResumeManifest:
             _check_dict("focus_cfg", self.focus_cfg)
         if not isinstance(self.safety_config, dict):
             raise ValueError(
-                "safety_config must be a dict; got "
-                f"{type(self.safety_config).__name__}"
+                f"safety_config must be a dict; got {type(self.safety_config).__name__}"
             )
         for section, entries in self.safety_config.items():
             _check_str("safety_config key", section)
@@ -225,13 +209,11 @@ class ResumeManifest:
         for fmt, group in self.cursors.items():
             if fmt not in CURSOR_FORMATS:
                 raise ValueError(
-                    f"cursors key must be one of {sorted(CURSOR_FORMATS)}; "
-                    f"got {fmt!r}"
+                    f"cursors key must be one of {sorted(CURSOR_FORMATS)}; got {fmt!r}"
                 )
             if not isinstance(group, dict):
                 raise ValueError(
-                    f"cursors[{fmt!r}] must be a dict; got "
-                    f"{type(group).__name__}"
+                    f"cursors[{fmt!r}] must be a dict; got {type(group).__name__}"
                 )
             for key, value in group.items():
                 _check_str(f"cursors[{fmt!r}] key", key)
@@ -286,9 +268,7 @@ class ResumeManifest:
         corrupt input should use ``read_manifest``.
         """
         if not isinstance(d, dict):
-            raise ValueError(
-                f"manifest payload must be a dict; got {type(d).__name__}"
-            )
+            raise ValueError(f"manifest payload must be a dict; got {type(d).__name__}")
         return ResumeManifest(**d)
 
 
@@ -309,8 +289,7 @@ class ManifestUpdate:
     def __post_init__(self) -> None:
         if self.kind not in UPDATE_KINDS:
             raise ValueError(
-                f"kind must be one of {sorted(UPDATE_KINDS)}; got "
-                f"{self.kind!r}"
+                f"kind must be one of {sorted(UPDATE_KINDS)}; got {self.kind!r}"
             )
         _check_dict("payload", self.payload)
         if self.plane_index is not None:
@@ -336,9 +315,7 @@ def apply_manifest_update(
         completed_at = manifest.completed_at
         if state in TERMINAL_STATES:
             completed_at = _utc_now_iso()
-        return dataclasses.replace(
-            manifest, state=state, completed_at=completed_at
-        )
+        return dataclasses.replace(manifest, state=state, completed_at=completed_at)
     if update.kind == "motor_position":
         positions = dict(manifest.last_motor_positions)
         for k, v in update.payload.items():
@@ -381,9 +358,7 @@ def write_manifest(path: Path | str, manifest: ResumeManifest) -> None:
     """
     path = Path(path)
     tmp = path.with_suffix(f".{uuid.uuid4().hex}.tmp")
-    tmp.write_text(
-        json.dumps(manifest.to_dict(), indent=2), encoding="utf-8"
-    )
+    tmp.write_text(json.dumps(manifest.to_dict(), indent=2), encoding="utf-8")
     tmp.replace(path)  # os.replace semantics — atomic on POSIX and NTFS
 
 
@@ -479,22 +454,16 @@ def hash_queue_rows(rows: list[dict[str, Any]]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def queue_manifest_path_for(
-    save_directory: Path | str, base_name: str
-) -> Path:
+def queue_manifest_path_for(save_directory: Path | str, base_name: str) -> Path:
     """Return the queue manifest path inside ``save_directory``."""
     return Path(save_directory) / f"{base_name}{QUEUE_MANIFEST_SUFFIX}"
 
 
-def write_queue_manifest(
-    path: Path | str, manifest: QueueResumeManifest
-) -> None:
+def write_queue_manifest(path: Path | str, manifest: QueueResumeManifest) -> None:
     """Atomically write a queue manifest (temp file + os.replace)."""
     path = Path(path)
     tmp = path.with_suffix(f".{uuid.uuid4().hex}.tmp")
-    tmp.write_text(
-        json.dumps(manifest.to_dict(), indent=2), encoding="utf-8"
-    )
+    tmp.write_text(json.dumps(manifest.to_dict(), indent=2), encoding="utf-8")
     tmp.replace(path)
 
 

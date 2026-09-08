@@ -142,7 +142,8 @@ def test_single_worker_acquire_scan_metadata_uses_spawn_snapshot(
     assert (
         ctrl.buffer_metadata_general[  # ty: ignore[unresolved-attribute]
             "Sample Name"
-        ] == "run-start name"
+        ]
+        == "run-start name"
     )
 
 

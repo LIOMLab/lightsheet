@@ -17,7 +17,7 @@ import logging
 import queue
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import h5py
 import numpy as np
@@ -47,6 +47,8 @@ from lightsheet.resume import (
 )
 
 if TYPE_CHECKING:
+    from lightsheet.adaptive.types import AdaptiveConfig, AdaptiveSample
+    from lightsheet.focus.types import FocusConfig, FocusSample
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
 logger = logging.getLogger(__name__)
@@ -117,20 +119,20 @@ class FrameSaver(QObject):
         self._zarr_saver = ZarrSaver(parent)
 
         # Adaptive trajectory samples. Cleared in reinit.
-        self.adaptive_trajectory: list = []  # ty: ignore[missing-type-argument]
+        self.adaptive_trajectory: list[AdaptiveSample] = []
         self._adaptive_enabled: bool = False
         # Frozen AdaptiveConfig (bounds + gains). Stored when
         # configure_adaptive is called so the writers can publish config
         # attrs alongside the trajectory. None in fixed mode.
-        self._adaptive_config: object | None = None
+        self._adaptive_config: AdaptiveConfig | None = None
 
         # Focus trajectory samples. Cleared in reinit.
-        self.focus_trajectory: list = []  # ty: ignore[missing-type-argument]
+        self.focus_trajectory: list[FocusSample] = []
         self._focus_enabled: bool = False
         # Frozen FocusConfig. Stored when configure_focus is called so the
         # writers can publish config attrs alongside the trajectory. None
         # in fixed mode.
-        self._focus_config: object | None = None
+        self._focus_config: FocusConfig | None = None
 
         # Resume-manifest state. ``acquisition_uuid`` is minted in
         # set_files and stamped into every output file so a resume never
@@ -277,9 +279,7 @@ class FrameSaver(QObject):
                 # against the expected channel filename so older crashed
                 # acquisitions still resume into their torn fileset.
                 legacy = [
-                    cv
-                    for cp, cv in resume_cursors.items()
-                    if not cp.endswith(".hdf5")
+                    cv for cp, cv in resume_cursors.items() if not cp.endswith(".hdf5")
                 ]
                 if legacy:
                     candidate = str(save_dir / f"{base}.hdf5")
@@ -386,8 +386,7 @@ class FrameSaver(QObject):
                 try:
                     n_channels = len(wavelengths)
                     z_observed = min(
-                        probe_zarr(zarr_store, f"ch{c}")
-                        for c in range(n_channels)
+                        probe_zarr(zarr_store, f"ch{c}") for c in range(n_channels)
                     )
                     probes["zarr"] = {zarr_store: z_observed}
                 except ResumeProbeError:
@@ -411,9 +410,7 @@ class FrameSaver(QObject):
             for path, _, observed, _, _, _ in channel_targets:
                 if observed > common:
                     truncate_hdf5_tail(path, common)
-            hdf5_cursors = {
-                path: common for path, _, _, _, _, _ in channel_targets
-            }
+            hdf5_cursors = {path: common for path, _, _, _, _, _ in channel_targets}
         else:
             self._common_resume_plane = 0
 
@@ -443,9 +440,7 @@ class FrameSaver(QObject):
         # (cursor commits, lifecycle updates) must land next to the
         # fileset chosen here, not wherever the process cwd happens to
         # be when they run.
-        self._manifest_path = manifest_path_for(
-            self.filenames_lists[0][0]
-        ).resolve()
+        self._manifest_path = manifest_path_for(self.filenames_lists[0][0]).resolve()
         save_mode = {
             "reconstructed_frame": "stitch",
             "ETLscan": "all_crop",
@@ -463,7 +458,7 @@ class FrameSaver(QObject):
         try:
             from lightsheet.state.types import MicroscopeSnapshot
 
-            snap = self.parent.state.snapshot()
+            snap = cast("Controller_MainWindow", self.parent).state.snapshot()
         except Exception:
             snap = None
         if isinstance(snap, MicroscopeSnapshot):
@@ -495,9 +490,7 @@ class FrameSaver(QObject):
             uuid=self.acquisition_uuid,
             state="in_progress",
             n_planes=int(self.number_of_files) * int(self.number_of_datasets),
-            stack_starting_plane=self._coerce_shell_float(
-                "stack_starting_plane"
-            ),
+            stack_starting_plane=self._coerce_shell_float("stack_starting_plane"),
             stack_ending_plane=self._coerce_shell_float("stack_ending_plane"),
             stack_step=self._coerce_shell_float("stack_step"),
             save_mode=save_mode,
@@ -528,23 +521,17 @@ class FrameSaver(QObject):
         is written next to the first resolved channel-0 file.
         """
         self.acquisition_uuid = resume_manifest.uuid
-        self._manifest_path = manifest_path_for(
-            self.filenames_lists[0][0]
-        ).resolve()
+        self._manifest_path = manifest_path_for(self.filenames_lists[0][0]).resolve()
         new_cursors = dict(resume_manifest.cursors)
         # Keep only path-keyed HDF5 cursors — legacy save-mode keys
         # ("stitch"/"all_crop"/"all_full") are retired on the first
         # resume so a re-crash resolves through the path-key schema.
         hdf5_group = {
-            k: v
-            for k, v in new_cursors.get("hdf5", {}).items()
-            if k.endswith(".hdf5")
+            k: v for k, v in new_cursors.get("hdf5", {}).items() if k.endswith(".hdf5")
         }
         hdf5_group.update(hdf5_cursors)
         new_cursors["hdf5"] = hdf5_group
-        self.resume_manifest = dataclasses.replace(
-            resume_manifest, cursors=new_cursors
-        )
+        self.resume_manifest = dataclasses.replace(resume_manifest, cursors=new_cursors)
         write_manifest(self._manifest_path, self.resume_manifest)
 
     def _unique_hdf5_path(
@@ -740,7 +727,9 @@ class FrameSaver(QObject):
         outfile.attrs["X Size"] = cam.xsize
         outfile.attrs["Y Size"] = cam.ysize
 
-    def configure_adaptive(self, enabled: bool, config: object | None = None) -> None:
+    def configure_adaptive(
+        self, enabled: bool, config: AdaptiveConfig | None = None
+    ) -> None:
         """Configure the adaptive trajectory recorder for this acquisition.
 
         When ``enabled`` is True, the per-plane loop calls
@@ -760,7 +749,7 @@ class FrameSaver(QObject):
         self.adaptive_trajectory = []
         self._adaptive_config = config if enabled else None
 
-    def record_adaptive_sample(self, sample: object) -> None:
+    def record_adaptive_sample(self, sample: AdaptiveSample) -> None:
         """Append a frozen AdaptiveSample to the trajectory list.
 
         Called by the StackWorker per main plane, before the frame is
@@ -774,16 +763,18 @@ class FrameSaver(QObject):
         logger.info(
             "adaptive sample: plane=%d exposure=%.4fs power=(%.1f,%.1f) "
             "cva=%s reacquired=%s fallback=%s",
-            sample.plane_index,  # ty: ignore[unresolved-attribute]
-            sample.exposure_s,  # ty: ignore[unresolved-attribute]
-            sample.laser_power_mw[0],  # ty: ignore[unresolved-attribute]
-            sample.laser_power_mw[1],  # ty: ignore[unresolved-attribute]
-            sample.control_variable_active,  # ty: ignore[unresolved-attribute]
-            sample.reacquired,  # ty: ignore[unresolved-attribute]
-            sample.power_fallback,  # ty: ignore[unresolved-attribute]
+            sample.plane_index,
+            sample.exposure_s,
+            sample.laser_power_mw[0],
+            sample.laser_power_mw[1],
+            sample.control_variable_active,
+            sample.reacquired,
+            sample.power_fallback,
         )
 
-    def configure_focus(self, enabled: bool, config: object | None = None) -> None:
+    def configure_focus(
+        self, enabled: bool, config: FocusConfig | None = None
+    ) -> None:
         """Configure the focus trajectory recorder for this acquisition.
 
         When ``enabled`` is True, the per-plane loop calls
@@ -803,7 +794,7 @@ class FrameSaver(QObject):
         self.focus_trajectory = []
         self._focus_config = config if enabled else None
 
-    def record_focus_sample(self, sample: object) -> None:
+    def record_focus_sample(self, sample: FocusSample) -> None:
         """Append a frozen FocusSample to the focus trajectory list.
 
         Called by the StackWorker once per focus block boundary, before
@@ -817,15 +808,15 @@ class FrameSaver(QObject):
         logger.info(
             "focus sample: block=%d stage=%.4fmm feedforward=%.4fmm "
             "residual=%.4fmm applied=%.4fmm sharpness=%s",
-            sample.block_index,  # ty: ignore[unresolved-attribute]
-            sample.stage_pos_mm,  # ty: ignore[unresolved-attribute]
-            sample.feedforward_camera_pos_mm,  # ty: ignore[unresolved-attribute]
-            sample.residual_mm,  # ty: ignore[unresolved-attribute]
-            sample.applied_camera_pos_mm,  # ty: ignore[unresolved-attribute]
-            sample.sharpness_metric,  # ty: ignore[unresolved-attribute]
+            sample.block_index,
+            sample.stage_pos_mm,
+            sample.feedforward_camera_pos_mm,
+            sample.residual_mm,
+            sample.applied_camera_pos_mm,
+            sample.sharpness_metric,
         )
 
-    def _adaptive_config_attrs(self) -> dict:  # ty: ignore[missing-type-argument]
+    def _adaptive_config_attrs(self) -> dict[str, Any]:
         """Build the AdaptiveConfig attrs dict from the frozen
         ``self._adaptive_config``. Returns an empty dict when no config
         is set (fixed mode) so the caller can decide whether to write
@@ -835,31 +826,31 @@ class FrameSaver(QObject):
         if cfg is None:
             return {}
         return {
-            "enabled": bool(cfg.enabled),  # ty: ignore[unresolved-attribute]
-            "min_exposure_s": float(cfg.min_exposure_s),  # ty: ignore[unresolved-attribute]
-            "max_exposure_s": float(cfg.max_exposure_s),  # ty: ignore[unresolved-attribute]
+            "enabled": bool(cfg.enabled),
+            "min_exposure_s": float(cfg.min_exposure_s),
+            "max_exposure_s": float(cfg.max_exposure_s),
             # Store as a Python list (not np.array) so the HDF5 attrs
             # match the Zarr attrs type (Zarr v3 attrs are JSON-serialised
             # and cannot store np.array). The schema-a contract requires
             # identical field names AND types across both formats; a
             # downstream tool reading both gets a list in either case.
-            "min_power_mw": list(cfg.min_power_mw),  # ty: ignore[unresolved-attribute]
-            "max_power_mw": list(cfg.max_power_mw),  # ty: ignore[unresolved-attribute]
-            "target_band_lo": float(cfg.target_band_lo),  # ty: ignore[unresolved-attribute]
-            "target_band_hi": float(cfg.target_band_hi),  # ty: ignore[unresolved-attribute]
-            "reacquire_threshold": float(cfg.reacquire_threshold),  # ty: ignore[unresolved-attribute]
-            "block_size_n": int(cfg.block_size_n),  # ty: ignore[unresolved-attribute]
-            "kp": float(cfg.kp),  # ty: ignore[unresolved-attribute]
-            "ki": float(cfg.ki),  # ty: ignore[unresolved-attribute]
-            "pilot_count": int(cfg.pilot_count),  # ty: ignore[unresolved-attribute]
-            "sensor_max": int(cfg.sensor_max),  # ty: ignore[unresolved-attribute]
-            "max_reacquire_attempts": int(cfg.max_reacquire_attempts),  # ty: ignore[unresolved-attribute]
+            "min_power_mw": list(cfg.min_power_mw),
+            "max_power_mw": list(cfg.max_power_mw),
+            "target_band_lo": float(cfg.target_band_lo),
+            "target_band_hi": float(cfg.target_band_hi),
+            "reacquire_threshold": float(cfg.reacquire_threshold),
+            "block_size_n": int(cfg.block_size_n),
+            "kp": float(cfg.kp),
+            "ki": float(cfg.ki),
+            "pilot_count": int(cfg.pilot_count),
+            "sensor_max": int(cfg.sensor_max),
+            "max_reacquire_attempts": int(cfg.max_reacquire_attempts),
         }
 
     def _write_adaptive_hdf5(
         self,
         outfile: h5py.File,
-        samples: list | None = None,  # ty: ignore[missing-type-argument]
+        samples: list[AdaptiveSample] | None = None,
     ) -> None:
         """Write the /adaptive_trajectory group  to an open
         HDF5 file. Called before file close in every HDF5 save path
@@ -977,7 +968,7 @@ class FrameSaver(QObject):
         else:
             self._write_adaptive_hdf5(outfile)
 
-    def _focus_config_attrs(self) -> dict:  # ty: ignore[missing-type-argument]
+    def _focus_config_attrs(self) -> dict[str, Any]:
         """Build the FocusConfig attrs dict from the frozen
         ``self._focus_config``. Returns an empty dict when no config is set
         (fixed mode) so the caller can decide whether to write the group at
@@ -987,18 +978,18 @@ class FrameSaver(QObject):
         if cfg is None:
             return {}
         return {
-            "enabled": bool(cfg.enabled),  # ty: ignore[unresolved-attribute]
-            "block_size_n": int(cfg.block_size_n),  # ty: ignore[unresolved-attribute]
-            "autofocus_residual": bool(cfg.autofocus_residual),  # ty: ignore[unresolved-attribute]
-            "curve_path": str(cfg.curve_path),  # ty: ignore[unresolved-attribute]
-            "residual_gain_mm": float(cfg.residual_gain_mm),  # ty: ignore[unresolved-attribute]
-            "max_residual_mm": float(cfg.max_residual_mm),  # ty: ignore[unresolved-attribute]
+            "enabled": bool(cfg.enabled),
+            "block_size_n": int(cfg.block_size_n),
+            "autofocus_residual": bool(cfg.autofocus_residual),
+            "curve_path": str(cfg.curve_path),
+            "residual_gain_mm": float(cfg.residual_gain_mm),
+            "max_residual_mm": float(cfg.max_residual_mm),
         }
 
     def _write_focus_hdf5(
         self,
         outfile: h5py.File,
-        samples: list | None = None,  # ty: ignore[missing-type-argument]
+        samples: list[FocusSample] | None = None,
     ) -> None:
         """Write the ``/focus_trajectory`` group to an open HDF5 file.
 
@@ -1151,9 +1142,7 @@ class FrameSaver(QObject):
                 self.saving_started = False
                 break
 
-            counter = (
-                (resume_offset % n_ds) + 1 if idx == start_file_idx else 1
-            )
+            counter = (resume_offset % n_ds) + 1 if idx == start_file_idx else 1
             for dataset in range(counter - 1, n_ds):
                 while True:
                     try:
@@ -1330,9 +1319,7 @@ class FrameSaver(QObject):
         # (file_idx, ds_counter) so the first resumed dataset is named
         # and indexed correctly.
         resume_offset = self._common_resume_plane
-        file_idx = [
-            resume_offset // n_datasets_per_file for _ in range(n_channels)
-        ]
+        file_idx = [resume_offset // n_datasets_per_file for _ in range(n_channels)]
         ds_counter = [
             (resume_offset % n_datasets_per_file) + 1 for _ in range(n_channels)
         ]
@@ -1437,7 +1424,8 @@ class FrameSaver(QObject):
                         # the channel's first file (stitch holds all planes).
                         plane_cursor = (
                             file_idx[channel_idx] * n_datasets_per_file
-                            + ds_counter[channel_idx] - 1
+                            + ds_counter[channel_idx]
+                            - 1
                         )
                         self._commit_manifest_cursor(
                             "hdf5",
@@ -1594,9 +1582,7 @@ class FrameSaver(QObject):
         # IndexError.
         n_channels = len(self.filenames_lists) if self.filenames_lists else 1
         resume_cursors = (
-            self.resume_manifest.cursors.get("zarr", {})
-            if self.resume_manifest
-            else {}
+            self.resume_manifest.cursors.get("zarr", {}) if self.resume_manifest else {}
         )
         try:
             if store_path in resume_cursors and self.resume_manifest is not None:
@@ -1620,7 +1606,8 @@ class FrameSaver(QObject):
             counter = 2
             while True:
                 candidate = f"{base}.ome.zarr"
-                fallback_path = str(Path(self.parent.save_directory) / candidate)
+                save_dir = cast("Controller_MainWindow", self.parent).save_directory
+                fallback_path = str(Path(save_dir) / candidate)
                 if not Path(fallback_path).exists():
                     break
                 counter += 1
@@ -1928,8 +1915,7 @@ class FrameSaver(QObject):
                                 self._commit_manifest_cursor(
                                     "hdf5",
                                     self.filenames_list[0],
-                                    idx * int(self.number_of_datasets)
-                                    + counter - 1,
+                                    idx * int(self.number_of_datasets) + counter - 1,
                                 )
 
                                 # --- Zarr write (mirrors zarr_save_worker) ---
@@ -2130,9 +2116,7 @@ class FrameSaver(QObject):
         # (file_idx, ds_counter) so the first resumed dataset is named
         # and indexed correctly.
         resume_offset = self._common_resume_plane
-        file_idx = [
-            resume_offset // n_datasets_per_file for _ in range(n_channels)
-        ]
+        file_idx = [resume_offset // n_datasets_per_file for _ in range(n_channels)]
         ds_counter = [
             (resume_offset % n_datasets_per_file) + 1 for _ in range(n_channels)
         ]
@@ -2232,7 +2216,8 @@ class FrameSaver(QObject):
                         # the channel's first file (stitch holds all planes).
                         plane_cursor = (
                             file_idx[channel_idx] * n_datasets_per_file
-                            + ds_counter[channel_idx] - 1
+                            + ds_counter[channel_idx]
+                            - 1
                         )
                         self._commit_manifest_cursor(
                             "hdf5",
@@ -2440,23 +2425,16 @@ class FrameSaver(QObject):
             # kill latch is actuated records "interrupted" — the manifest
             # must never claim a clean pause when the E-stop fired.
             estop = getattr(self.parent, "estop_event", None)
-            if (
-                state == "paused"
-                and estop is not None
-                and estop.is_set()
-            ):
+            if state == "paused" and estop is not None and estop.is_set():
                 state = "interrupted"
             motors = getattr(self.parent, "motors", None)
             if motors is not None:
                 try:
                     positions = {
-                        str(k): float(v)
-                        for k, v in motors.get_positions().items()
+                        str(k): float(v) for k, v in motors.get_positions().items()
                     }
                     self.manifest_update_queue.put(
-                        ManifestUpdate(
-                            kind="motor_position", payload=positions
-                        )
+                        ManifestUpdate(kind="motor_position", payload=positions)
                     )
                 except Exception as e:
                     logger.warning(
@@ -2543,7 +2521,7 @@ class FrameSaverController:
         wavelengths: list[int] | None = None,
         resume_manifest: ResumeManifest | None = None,
     ) -> None:
-        kwargs = {"wavelengths": wavelengths}
+        kwargs: dict[str, Any] = {"wavelengths": wavelengths}
         if resume_manifest is not None:
             kwargs["resume_manifest"] = resume_manifest
         self.frame_saver.set_files(
@@ -2571,7 +2549,9 @@ class FrameSaverController:
         """The cross-thread queue for staging manifest updates."""
         return self.frame_saver.manifest_update_queue
 
-    def configure_adaptive(self, enabled: bool, config: object | None = None) -> None:
+    def configure_adaptive(
+        self, enabled: bool, config: AdaptiveConfig | None = None
+    ) -> None:
         self.frame_saver.configure_adaptive(enabled, config=config)
         # If resuming, seed the trajectory list with the pre-resume samples
         # stored in the sidecar manifest so the final file metadata carries
@@ -2598,17 +2578,19 @@ class FrameSaverController:
                     pre_samples + self.frame_saver.adaptive_trajectory
                 )
 
-    def record_adaptive_sample(self, sample: object) -> None:
+    def record_adaptive_sample(self, sample: AdaptiveSample) -> None:
         self.frame_saver.record_adaptive_sample(sample)
 
     # Focus trajectory recorder — outer delegation to the inner FrameSaver.
 
     @property
-    def focus_trajectory(self) -> list:  # ty: ignore[missing-type-argument]
+    def focus_trajectory(self) -> list[FocusSample]:
         """Read-only view of the inner FrameSaver's focus trajectory."""
         return self.frame_saver.focus_trajectory
 
-    def configure_focus(self, enabled: bool, config: object | None = None) -> None:
+    def configure_focus(
+        self, enabled: bool, config: FocusConfig | None = None
+    ) -> None:
         self.frame_saver.configure_focus(enabled, config=config)
         # If resuming, seed the focus trajectory list with the pre-resume
         # focus samples stored in the sidecar manifest so the final file
@@ -2632,9 +2614,7 @@ class FrameSaverController:
                                 row["feedforward_camera_pos_mm"]
                             ),
                             residual_mm=float(row["residual_mm"]),
-                            applied_camera_pos_mm=float(
-                                row["applied_camera_pos_mm"]
-                            ),
+                            applied_camera_pos_mm=float(row["applied_camera_pos_mm"]),
                             sharpness_metric=(
                                 None
                                 if row.get("sharpness_metric") is None
@@ -2644,8 +2624,7 @@ class FrameSaverController:
                     )
                 except (KeyError, TypeError, ValueError) as e:
                     logger.warning(
-                        "Skipping malformed pre-resume focus trajectory "
-                        "sample: %s",
+                        "Skipping malformed pre-resume focus trajectory sample: %s",
                         e,
                     )
             if pre_samples:
@@ -2656,7 +2635,7 @@ class FrameSaverController:
                     merged, key=lambda s: s.block_index
                 )
 
-    def record_focus_sample(self, sample: object) -> None:
+    def record_focus_sample(self, sample: FocusSample) -> None:
         self.frame_saver.record_focus_sample(sample)
 
     # -- pass-through to the wrapped FrameViewer ---------------------------

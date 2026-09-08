@@ -67,7 +67,7 @@ def _make_worker(
     worker = StackWorker(
         bundle,
         Mock(),
-        shell,  # ty: ignore[invalid-argument-type]
+        shell,
         save_description="resume test",
         start_plane=start_plane,
     )
@@ -84,9 +84,11 @@ def test_start_plane_offsets_loop_and_positions(qtbot: QtBot) -> None:
 
     moves: list[tuple[float, str]] = []
     orig = worker.motors.horizontal.move_absolute_position
+
     def _rec(pos: float, units: str) -> None:
         moves.append((pos, units))
         orig(pos, units)
+
     worker.motors.horizontal.move_absolute_position = _rec  # ty: ignore[invalid-assignment]
 
     finished: list[None] = []
@@ -107,9 +109,11 @@ def test_start_plane_zero_is_unchanged(qtbot: QtBot) -> None:
 
     moves: list[float] = []
     orig = worker.motors.horizontal.move_absolute_position
+
     def _rec(pos: float, units: str) -> None:
         moves.append(pos)
         orig(pos, units)
+
     worker.motors.horizontal.move_absolute_position = _rec  # ty: ignore[invalid-assignment]
 
     worker.run()
@@ -124,7 +128,7 @@ def test_start_plane_negative_rejected(qtbot: QtBot) -> None:
         StackWorker(
             bundle,
             Mock(),
-            shell,  # ty: ignore[invalid-argument-type]
+            shell,
             start_plane=-1,
         )
 
@@ -141,6 +145,7 @@ def test_interrupted_run_marks_manifest_interrupted(qtbot: QtBot) -> None:
     def _acquire() -> bool:
         shell.stack_mode_started = False
         return True
+
     worker.acquire_scan = _acquire  # ty: ignore[invalid-assignment]
 
     worker.run()
@@ -151,7 +156,7 @@ def test_interrupted_run_marks_manifest_interrupted(qtbot: QtBot) -> None:
 
 
 def test_spawn_stack_worker_passes_start_plane(
-    qtbot: QtBot, controller: object, monkeypatch: pytest.MonkeyPatch
+    qtbot: QtBot, controller: Controller_MainWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """_spawn_stack_worker(start_plane=N) forwards the offset to the
     StackWorker constructor without disturbing thread/signal wiring."""
@@ -159,9 +164,11 @@ def test_spawn_stack_worker_passes_start_plane(
 
     captured: dict = {}  # ty: ignore[missing-type-argument]
     fake_worker = Mock()
+
     def _ctor(*args: object, **kwargs: object) -> Mock:
         captured.update(kwargs)
         return fake_worker
+
     monkeypatch.setattr(ap, "StackWorker", _ctor)
 
     worker = controller.acquisition_panel._spawn_stack_worker(start_plane=7)
@@ -171,15 +178,18 @@ def test_spawn_stack_worker_passes_start_plane(
 
 def _image_datasets(path: str | Path) -> list[str]:
     """Sorted reconstructed_frame dataset names in an HDF5 file."""
-    with h5py.File(path, "r") as f:
-        return sorted(
-            k for k in f if k.startswith("reconstructed_frame")
-        )
+    with h5py.File(str(path), "r") as f:
+        return sorted(k for k in f if k.startswith("reconstructed_frame"))
 
 
-def _arm_crash_run(
-    ctrl: Controller_MainWindow, tmp_path: Path, n_planes: int
-) -> None:
+def _dataset(f: h5py.File, name: str) -> h5py.Dataset:
+    """Narrow ``f[name]`` to an image dataset (asserts on wrong types)."""
+    ds = f[name]
+    assert isinstance(ds, h5py.Dataset)
+    return ds
+
+
+def _arm_crash_run(ctrl: Controller_MainWindow, tmp_path: Path, n_planes: int) -> None:
     """Point the real controller at tmp_path with a valid stack plan."""
     ctrl.saving_allowed = True
     ctrl.number_of_planes = n_planes
@@ -256,7 +266,8 @@ def test_fixed_stack_crash_resume_end_to_end(
 
     torn_path = fs.filenames_list[0]
     manifest_path = fs._manifest_path
-    crashed = read_manifest(manifest_path)  # ty: ignore[invalid-argument-type]
+    assert manifest_path is not None
+    crashed = read_manifest(manifest_path)
     assert crashed is not None
     assert crashed.state == "in_progress"
     assert probe_hdf5(torn_path) == crash_after
@@ -278,9 +289,7 @@ def test_fixed_stack_crash_resume_end_to_end(
         # Resumed planes carry 1000+plane so on-disk reads can tell
         # re-acquired data from pre-crash data.
         plane = resume_plane + i
-        ctrl.reconstructed_frame = np.full(
-            (4, 4), 1000 + plane, dtype=np.uint16
-        )
+        ctrl.reconstructed_frame = np.full((4, 4), 1000 + plane, dtype=np.uint16)
         return True
 
     worker2 = StackWorker(
@@ -302,23 +311,26 @@ def test_fixed_stack_crash_resume_end_to_end(
     # append-in-place is the contract; a healthy torn file must never
     # spawn a second fileset.
     names = _image_datasets(torn_path)
-    assert names == [
-        f"reconstructed_frame{i:03d}" for i in range(1, n_planes + 1)
-    ], f"torn fileset incomplete after resume: {names} in {torn_path}"
-    with h5py.File(torn_path, "r") as f:
+    assert names == [f"reconstructed_frame{i:03d}" for i in range(1, n_planes + 1)], (
+        f"torn fileset incomplete after resume: {names} in {torn_path}"
+    )
+    with h5py.File(str(torn_path), "r") as f:
         for p in range(crash_after):
-            assert (f[f"reconstructed_frame{p + 1:03d}"][0] == p + 1).all(), (
+            ds = _dataset(f, f"reconstructed_frame{p + 1:03d}")
+            assert (ds[0] == p + 1).all(), (
                 f"pre-crash plane {p} data was altered by the resume"
             )
         for p in range(crash_after, n_planes):
-            assert (
-                f[f"reconstructed_frame{p + 1:03d}"][0] == 1000 + p
-            ).all(), f"resumed plane {p} missing from the torn fileset"
+            ds = _dataset(f, f"reconstructed_frame{p + 1:03d}")
+            assert (ds[0] == 1000 + p).all(), (
+                f"resumed plane {p} missing from the torn fileset"
+            )
 
     # The torn fileset's own manifest must reach a terminal state — a
     # manifest left in_progress means the next scan would offer the same
     # acquisition for resume again.
-    final = read_manifest(manifest_path)  # ty: ignore[invalid-argument-type]
+    assert manifest_path is not None
+    final = read_manifest(manifest_path)
     assert final is not None
     assert final.state == "completed", (
         f"manifest must finalize as completed after a full resume; "
@@ -395,7 +407,8 @@ def test_multi_channel_crash_resumes_at_complete_plane_pair(
     ch0_path = fs.filenames_lists[0][0]
     ch1_path = fs.filenames_lists[1][0]
     manifest_path = fs._manifest_path
-    crashed = read_manifest(manifest_path)  # ty: ignore[invalid-argument-type]
+    assert manifest_path is not None
+    crashed = read_manifest(manifest_path)
     assert crashed is not None
     assert crashed.state == "in_progress"
     # Torn pair: channel 0 committed plane K, channel 1 stopped at K-1.
@@ -466,24 +479,23 @@ def test_multi_channel_crash_resumes_at_complete_plane_pair(
         assert names == [
             f"reconstructed_frame{i:03d}" for i in range(1, n_planes + 1)
         ], f"channel {ch} fileset incomplete after resume: {names}"
-        with h5py.File(path, "r") as f:
+        with h5py.File(str(path), "r") as f:
             for p in range(common):
                 expected = 10 * p + ch + 1
-                assert (
-                    f[f"reconstructed_frame{p + 1:03d}"][0] == expected
-                ).all(), (
+                ds = _dataset(f, f"reconstructed_frame{p + 1:03d}")
+                assert (ds[0] == expected).all(), (
                     f"channel {ch} plane {p}: pre-crash data altered"
                 )
             for p in range(common, n_planes):
                 expected = 500 + 10 * p + ch
-                assert (
-                    f[f"reconstructed_frame{p + 1:03d}"][0] == expected
-                ).all(), (
+                ds = _dataset(f, f"reconstructed_frame{p + 1:03d}")
+                assert (ds[0] == expected).all(), (
                     f"channel {ch} plane {p}: resumed data missing — "
                     f"torn tail not re-acquired"
                 )
 
-    final = read_manifest(manifest_path)  # ty: ignore[invalid-argument-type]
+    assert manifest_path is not None
+    final = read_manifest(manifest_path)
     assert final is not None
     assert final.state == "completed"
     # Per-channel cursors both reach the full plane count.
@@ -539,7 +551,7 @@ def test_resume_manifest_restores_matching_controller_checkpoint(
     worker = StackWorker(
         bundle,
         Mock(),
-        shell,  # ty: ignore[invalid-argument-type]
+        shell,
         save_description="resume checkpoint routing",
         resume_manifest=manifest,
     )
@@ -566,9 +578,7 @@ def test_resumed_progress_bar_offsets_from_start_plane(
 
     worker.run()
 
-    values = [
-        c.args[0] for c in shell.sig_progress_update.emit.call_args_list
-    ]
+    values = [c.args[0] for c in shell.sig_progress_update.emit.call_args_list]
     assert values[0] == 0
     assert values[-1] == 2  # n_planes - start_plane: the bar's maximum
     assert 1 in values, values

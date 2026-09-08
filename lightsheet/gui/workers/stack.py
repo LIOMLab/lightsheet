@@ -11,7 +11,7 @@ import dataclasses
 import logging
 import math
 import threading
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from PySide6.QtCore import QObject, QThread, Signal, Slot
@@ -31,6 +31,7 @@ if TYPE_CHECKING:
         AutofocusConfig,
         FocusConfig,
         FocusCurve,
+        FocusSample,
     )
     from lightsheet.gui.coordinators.hardware_manager import HardwareManager
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -268,9 +269,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         # which planes are acquired, never the geometry. 0 = fresh run.
         self._start_plane = int(start_plane)
         if self._start_plane < 0:
-            raise ValueError(
-                f"start_plane must be >= 0; got {self._start_plane}"
-            )
+            raise ValueError(f"start_plane must be >= 0; got {self._start_plane}")
         # Resume manifest: supplies the last controller checkpoint and
         # pre-resume trajectory for adaptive/focus resumption.
         self._resume_manifest = resume_manifest
@@ -278,7 +277,9 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         # drives the completed/interrupted manifest lifecycle at teardown.
         self._run_completed = False
 
-    def _last_controller_checkpoint(self, controller: str) -> dict | None:
+    def _last_controller_checkpoint(
+        self, controller: str
+    ) -> dict[str, Any] | None:
         """Return the most recent manifest checkpoint for ``controller``.
 
         The manifest's ``controller_checkpoints`` list mixes adaptive,
@@ -294,7 +295,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         return None
 
     def _stage_focus_manifest_updates(
-        self, payload: dict, sample: object, plane: int
+        self, payload: dict[str, Any], sample: FocusSample, plane: int
     ) -> None:
         """Stage a focus checkpoint and a trajectory row on the save-side
         manifest update queue. The save worker drains these and persists
@@ -308,7 +309,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         self._shell._fs.manifest_update_queue.put_nowait(
             ManifestUpdate(
                 kind="trajectory",
-                payload=sample.as_dict(),  # ty: ignore[unresolved-attribute]
+                payload=sample.as_dict(),
                 plane_index=plane,
             )
         )
@@ -344,10 +345,9 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 # single-channel mode the pre-sampled [active_wavelength]
                 # is passed so the saved filename carries the
                 # _{wavelength}nm suffix.
+                set_files_kwargs: dict[str, Any] = {}
                 if self._wavelengths:
-                    set_files_kwargs = {"wavelengths": self._wavelengths}
-                else:
-                    set_files_kwargs = {}
+                    set_files_kwargs["wavelengths"] = self._wavelengths
                 if self._resume_manifest is not None:
                     set_files_kwargs["resume_manifest"] = self._resume_manifest
                 if self._save_all_crop:
@@ -539,9 +539,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 else:
                     # Resumed run: the restored controller carries the
                     # last computed command for the resume plane.
-                    self._adaptive_current_cmd = (
-                        self._adaptive_controller._last_command
-                    )
+                    self._adaptive_current_cmd = self._adaptive_controller._last_command
                     if self._adaptive_current_cmd is None:
                         current_powers = (
                             self._snapshot.laser_power_pct[0]
@@ -585,9 +583,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     initial_state=focus_state,
                 )
                 if focus_state is not None:
-                    self._focus_block_count = int(
-                        focus_state.get("block_count", 0)
-                    )
+                    self._focus_block_count = int(focus_state.get("block_count", 0))
 
             # Per-plane adaptive autofocus setup: construct the
             # controller from the camera travel limits, the optional curve
@@ -1081,9 +1077,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     # resumed run fills empty->full across the planes
                     # actually acquired. The mode badge adds start_plane
                     # back to display the absolute plane index.
-                    self._shell.sig_progress_update.emit(
-                        plane - self._start_plane + 1
-                    )
+                    self._shell.sig_progress_update.emit(plane - self._start_plane + 1)
             else:
                 # The loop exhausted without hitting a break — every plane
                 # in [start_plane, n_planes) was acquired. Any break path
@@ -1126,9 +1120,10 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     # kill path's interrupted state is the honest record.
                     if self._run_completed:
                         _lifecycle = "completed"
-                    elif _pause_is_requested(
-                        self._shell
-                    ) and not self._shell.estop_event.is_set():
+                    elif (
+                        _pause_is_requested(self._shell)
+                        and not self._shell.estop_event.is_set()
+                    ):
                         _lifecycle = "paused"
                     else:
                         _lifecycle = "interrupted"

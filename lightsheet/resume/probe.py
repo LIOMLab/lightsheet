@@ -48,9 +48,7 @@ def _read_small_region(ds: h5py.Dataset) -> None:
     elif ds.ndim == 3:
         ds[0, 0, 0]
     else:
-        raise ValueError(
-            f"dataset {ds.name!r} has unsupported rank {ds.ndim}"
-        )
+        raise ValueError(f"dataset {ds.name!r} has unsupported rank {ds.ndim}")
 
 
 def _is_image_dataset(ds: Any) -> bool:
@@ -68,16 +66,16 @@ def probe_hdf5(path: Path | str) -> int:
     """
     path = Path(path)
     try:
-        with h5py.File(path, "r") as f:
-            names = [
-                k for k in f.keys() if _is_image_dataset(f[k])
-            ]
+        with h5py.File(str(path), "r") as f:
+            names = [k for k in f if _is_image_dataset(f[k])]
             if not names:
                 return 0
             names.sort(key=_dataset_index)
             good = 0
             for i, name in enumerate(names):
                 ds = f[name]
+                if not isinstance(ds, h5py.Dataset):
+                    raise ValueError(f"{name!r} is not a dataset")
                 try:
                     _read_small_region(ds)
                 except (OSError, RuntimeError, ValueError) as e:
@@ -108,10 +106,10 @@ def truncate_hdf5_tail(path: Path | str, keep_datasets: int) -> None:
     """
     path = Path(path)
     try:
-        with h5py.File(path, "a") as f:
+        with h5py.File(str(path), "a") as f:
             to_remove = [
                 k
-                for k in f.keys()
+                for k in f
                 if _is_image_dataset(f[k]) and _dataset_index(k) > keep_datasets
             ]
             # Remove in reverse index order so earlier keys' indices stay
@@ -120,9 +118,7 @@ def truncate_hdf5_tail(path: Path | str, keep_datasets: int) -> None:
             for name in to_remove:
                 del f[name]
     except (OSError, RuntimeError) as e:
-        raise ResumeProbeError(
-            f"cannot truncate HDF5 tail {path}: {e}"
-        ) from e
+        raise ResumeProbeError(f"cannot truncate HDF5 tail {path}: {e}") from e
 
 
 def reopen_hdf5_append(path: Path | str) -> h5py.File:
@@ -133,11 +129,9 @@ def reopen_hdf5_append(path: Path | str) -> h5py.File:
     """
     path = Path(path)
     try:
-        return h5py.File(path, "a")
+        return h5py.File(str(path), "a")
     except (OSError, RuntimeError) as e:
-        raise ResumeProbeError(
-            f"cannot reopen HDF5 {path} for append: {e}"
-        ) from e
+        raise ResumeProbeError(f"cannot reopen HDF5 {path} for append: {e}") from e
 
 
 def probe_zarr(path: Path | str, channel: str = "ch0") -> int:
@@ -156,27 +150,23 @@ def probe_zarr(path: Path | str, channel: str = "ch0") -> int:
     except Exception as e:
         raise ResumeProbeError(f"cannot open zarr store {path}: {e}") from e
 
+    if not isinstance(root, zarr.Group):
+        raise ResumeProbeError(f"zarr store {path} root is not a group")
+
     try:
         arr = root["0"]
     except Exception as e:
-        raise ResumeProbeError(
-            f"zarr store {path} has no level-0 array: {e}"
-        ) from e
+        raise ResumeProbeError(f"zarr store {path} has no level-0 array: {e}") from e
 
     if not isinstance(arr, zarr.Array):
         raise ResumeProbeError(f"zarr node 0 in {path} is not an array")
 
     if arr.ndim != 4:
-        raise ResumeProbeError(
-            f"zarr L0 in {path} has rank {arr.ndim}, expected 4"
-        )
+        raise ResumeProbeError(f"zarr L0 in {path} has rank {arr.ndim}, expected 4")
 
     # Map the caller's channel token to an axis-0 index. Current saves use
     # the integer channel index (0, 1, ...); accept "ch0"/"ch1" tokens too.
-    if channel.startswith("ch"):
-        channel_idx = int(channel[2:])
-    else:
-        channel_idx = int(channel)
+    channel_idx = int(channel[2:]) if channel.startswith("ch") else int(channel)
     if not (0 <= channel_idx < arr.shape[0]):
         raise ResumeProbeError(
             f"channel index {channel_idx} out of range for zarr shape {arr.shape}"
@@ -188,9 +178,7 @@ def probe_zarr(path: Path | str, channel: str = "ch0") -> int:
 
     n_initialized = getattr(arr, "nchunks_initialized", None)
     if n_initialized is None:
-        raise ResumeProbeError(
-            f"zarr L0 in {path} does not expose nchunks_initialized"
-        )
+        raise ResumeProbeError(f"zarr L0 in {path} does not expose nchunks_initialized")
 
     total = int(n_initialized)
     if arr.shape[0] == 1:
@@ -204,7 +192,7 @@ def reopen_zarr_l0(
     shape: tuple[int, ...],
     dtype: Any,
     channel: str = "ch0",
-) -> zarr.Array:
+) -> zarr.Array[Any]:
     """Open an existing Zarr level-0 array for resume writing.
 
     The store is opened in read/write mode. The existing array at node
@@ -220,25 +208,22 @@ def reopen_zarr_l0(
             f"cannot reopen zarr store {path} for append: {e}"
         ) from e
 
+    if not isinstance(root, zarr.Group):
+        raise ResumeProbeError(f"zarr store {path} root is not a group")
+
     try:
         arr = root["0"]
     except Exception as e:
-        raise ResumeProbeError(
-            f"zarr store {path} has no level-0 array: {e}"
-        ) from e
+        raise ResumeProbeError(f"zarr store {path} has no level-0 array: {e}") from e
 
     if not isinstance(arr, zarr.Array):
         raise ResumeProbeError(f"zarr node 0 in {path} is not an array")
 
     if arr.shape != tuple(shape):
-        raise ResumeProbeError(
-            f"zarr L0 shape mismatch: {arr.shape} != {shape}"
-        )
+        raise ResumeProbeError(f"zarr L0 shape mismatch: {arr.shape} != {shape}")
 
     if arr.dtype != dtype:
-        raise ResumeProbeError(
-            f"zarr L0 dtype mismatch: {arr.dtype} != {dtype}"
-        )
+        raise ResumeProbeError(f"zarr L0 dtype mismatch: {arr.dtype} != {dtype}")
 
     return arr
 
@@ -259,9 +244,7 @@ def manifest_dir_contains(save_directory: str, target: str) -> None:
             f"target {resolved!r} is outside save directory {save_dir!r}"
         ) from e
     if Path(common) != save_dir:
-        raise ValueError(
-            f"target {resolved!r} is outside save directory {save_dir!r}"
-        )
+        raise ValueError(f"target {resolved!r} is outside save directory {save_dir!r}")
 
 
 def _common_resume_plane(

@@ -898,9 +898,7 @@ class PastAcquisitionsPanel(QWidget):
         )
         item.setFont(_t.label_font())
         item.setForeground(QColor(state_color))
-        self.ui.tableWidget_pastAcquisitions.setItem(
-            row, _PAST_COL_STATE, item
-        )
+        self.ui.tableWidget_pastAcquisitions.setItem(row, _PAST_COL_STATE, item)
 
     @staticmethod
     def _state_text_for_manifest(state: str) -> tuple[str, str]:

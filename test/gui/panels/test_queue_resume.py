@@ -16,7 +16,7 @@ from pytestqt.qtbot import QtBot
 pytest.importorskip("PySide6")
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import QObject, QThread, QTimer, Signal
 from PySide6.QtWidgets import QMessageBox, QWidget
@@ -50,16 +50,14 @@ class _FakeWorker(QObject):
 
 
 def _stub_spawn(
-    qtbot: QtBot, ctrl: Controller_MainWindow, calls: list[dict]
+    qtbot: QtBot, ctrl: Controller_MainWindow, calls: list[dict[str, Any]]
 ) -> None:
     """Replace _spawn_stack_worker with a recorder that finishes at once."""
 
     def spawn(
         *, start_plane: int = 0, resume_manifest: ResumeManifest | None = None
     ) -> _FakeWorker:
-        calls.append(
-            {"start_plane": start_plane, "resume_manifest": resume_manifest}
-        )
+        calls.append({"start_plane": start_plane, "resume_manifest": resume_manifest})
         worker = _FakeWorker()
         # The queue loop's watchdog reads _stack_thread.isRunning() — a
         # real (unstarted) QThread reports False so the watchdog quits the
@@ -69,13 +67,12 @@ def _stub_spawn(
         QTimer.singleShot(0, worker.finished.emit)
         return worker
 
-    ctrl.acquisition_panel._spawn_stack_worker = spawn
+    ap = ctrl.acquisition_panel
+    ap._spawn_stack_worker = spawn  # ty: ignore[invalid-assignment]
 
 
-def _write_manifest(
-    tmp_path: Path, name: str = "acq", **kw: object
-) -> Path:
-    base = dict(
+def _write_manifest(tmp_path: Path, name: str = "acq", **kw: object) -> Path:
+    base: dict[str, Any] = dict(
         uuid="cafe" * 8,
         state="interrupted",
         n_planes=4,
@@ -94,7 +91,7 @@ def _write_manifest(
 
 def _write_queue_manifest(
     tmp_path: Path,
-    rows: list[dict],
+    rows: list[dict[str, Any]],
     row_index: int = 0,
     row_uuids: list[str] | None = None,
     state: str = "in_progress",
@@ -114,9 +111,7 @@ def _write_queue_manifest(
     return path
 
 
-def _add_two_rows(
-    ctrl: Controller_MainWindow, mgr: AcquisitionTableManager
-) -> None:
+def _add_two_rows(ctrl: Controller_MainWindow, mgr: AcquisitionTableManager) -> None:
     sp = ctrl.stack_panel.ui
     sp.doubleSpinBox_acqFirstPlane.setValue(3.0)
     sp.doubleSpinBox_acqLastPlane.setValue(5.0)
@@ -138,7 +133,7 @@ def test_queue_run_writes_queue_manifest(
     ctrl.save_directory = str(tmp_path)
     ctrl.save_filepath = str(tmp_path / "acq")
     ctrl.saving_allowed = True
-    calls: list[dict] = []
+    calls: list[dict[str, Any]] = []
     _stub_spawn(qtbot, ctrl, calls)
     _add_two_rows(ctrl, mgr)
 
@@ -163,7 +158,7 @@ def test_queue_abort_marks_manifest_interrupted(
     ctrl.save_directory = str(tmp_path)
     ctrl.save_filepath = str(tmp_path / "acq")
     ctrl.saving_allowed = True
-    calls: list[dict] = []
+    calls: list[dict[str, Any]] = []
 
     def spawn_abort(
         *, start_plane: int = 0, resume_manifest: ResumeManifest | None = None
@@ -175,7 +170,8 @@ def test_queue_abort_marks_manifest_interrupted(
         QTimer.singleShot(0, worker.finished.emit)
         return worker
 
-    ctrl.acquisition_panel._spawn_stack_worker = spawn_abort
+    ap = ctrl.acquisition_panel
+    ap._spawn_stack_worker = spawn_abort  # ty: ignore[invalid-assignment]
     _add_two_rows(ctrl, mgr)
 
     mgr._start_queue()
@@ -222,7 +218,7 @@ def test_enqueue_resume_row_and_run(
     assert row.resume_manifest is not None
     assert row.n_planes == 4  # total stack planes, not remaining
 
-    calls: list[dict] = []
+    calls: list[dict[str, Any]] = []
     _stub_spawn(qtbot, ctrl, calls)
     mgr._start_queue()
 
@@ -281,7 +277,7 @@ def test_queue_resume_mid_row_continues_remaining(
     assert mgr.row_at(0).resume_manifest is not None
     assert mgr.row_at(1).name == "Stack 2"
 
-    calls: list[dict] = []
+    calls: list[dict[str, Any]] = []
     _stub_spawn(qtbot, ctrl, calls)
     mgr._start_queue()
 
@@ -324,10 +320,20 @@ def test_queue_resume_rebuilds_empty_table(
     ctrl = controller
     mgr = ctrl.stack_panel.table_manager
     rows = [
-        {"name": "Stack 1", "start": 3000.0, "end": 5000.0,
-         "step": 10.0, "n_planes": 201},
-        {"name": "Stack 2", "start": 3000.0, "end": 5000.0,
-         "step": 10.0, "n_planes": 201},
+        {
+            "name": "Stack 1",
+            "start": 3000.0,
+            "end": 5000.0,
+            "step": 10.0,
+            "n_planes": 201,
+        },
+        {
+            "name": "Stack 2",
+            "start": 3000.0,
+            "end": 5000.0,
+            "step": 10.0,
+            "n_planes": 201,
+        },
     ]
     qpath = _write_queue_manifest(tmp_path, rows, row_index=0)
     mpath = _write_manifest(
@@ -341,8 +347,7 @@ def test_queue_resume_rebuilds_empty_table(
 
 def test_corrupt_queue_manifest_rejected(tmp_path: Path) -> None:
     """A row_hash that does not match the stored rows fails closed."""
-    rows = [{"name": "A", "start": 0.0, "end": 1.0, "step": 1.0,
-             "n_planes": 2}]
+    rows = [{"name": "A", "start": 0.0, "end": 1.0, "step": 1.0, "n_planes": 2}]
     qm = QueueResumeManifest(
         uuid="x" * 4,
         state="in_progress",
@@ -353,9 +358,7 @@ def test_corrupt_queue_manifest_rejected(tmp_path: Path) -> None:
         created_at="2026-09-08T00:00:00+00:00",
     )
     path = tmp_path / "tampered.queue-resume.json"
-    path.write_text(
-        __import__("json").dumps(qm.to_dict()), encoding="utf-8"
-    )
+    path.write_text(__import__("json").dumps(qm.to_dict()), encoding="utf-8")
     assert read_queue_manifest(path) is None
 
 
@@ -378,7 +381,7 @@ def _exec_clicking(button_text: str) -> Callable[[QMessageBox], int]:
 def test_safety_dialog_resume_returns_true(
     qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    seen: dict = {}
+    seen: dict[str, object] = {}
 
     def fake_exec(self: QMessageBox) -> int:
         # Cancel must be the default AND the escape action.
@@ -409,7 +412,7 @@ def test_safety_dialog_errors_block_resume(
     """Blocking findings show a critical box with no Resume button and
     return False. exec() is patched — a real exec() would block the
     worker on a modal dialog forever."""
-    calls: list = []
+    calls: list[QMessageBox] = []
 
     def fake_exec(self: QMessageBox) -> int:
         calls.append(self)
@@ -442,19 +445,15 @@ def test_spawn_resume_cancelled_by_dialog(
     manifest = __import__(
         "lightsheet.resume", fromlist=["read_manifest"]
     ).read_manifest(tmp_path / "acq.resume.json")
-    seen: list = []
+    seen: list[GateFindings] = []
 
     def fake_dialog(parent: QWidget | None, findings: GateFindings) -> bool:
         seen.append(findings)
         return False
 
-    monkeypatch.setattr(
-        atm_mod, "show_resume_safety_dialog", fake_dialog
-    )
+    monkeypatch.setattr(atm_mod, "show_resume_safety_dialog", fake_dialog)
     prev_worker = getattr(ctrl, "_stack_worker", None)
-    worker = ctrl.acquisition_panel._spawn_stack_worker(
-        resume_manifest=manifest
-    )
+    worker = ctrl.acquisition_panel._spawn_stack_worker(resume_manifest=manifest)
     assert worker is None
     assert getattr(ctrl, "_stack_worker", None) is prev_worker
     assert len(seen) == 1  # findings were computed and reported
@@ -477,9 +476,7 @@ def test_spawn_resume_rechecks_estop(
     )
     ctrl.estop_event.set()
     try:
-        worker = ctrl.acquisition_panel._spawn_stack_worker(
-            resume_manifest=manifest
-        )
+        worker = ctrl.acquisition_panel._spawn_stack_worker(resume_manifest=manifest)
         assert worker is None
     finally:
         ctrl.estop_event.clear()

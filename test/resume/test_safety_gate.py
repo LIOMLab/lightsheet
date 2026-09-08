@@ -9,6 +9,7 @@ violation is an error, and per-format probes feed the authoritative
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import h5py
 import numpy as np
@@ -24,7 +25,7 @@ from lightsheet.resume.manifest import ResumeManifest
 
 
 def _manifest(**overrides: object) -> ResumeManifest:
-    base = dict(
+    base: dict[str, Any] = dict(
         uuid="deadbeef" * 4,
         state="interrupted",
         n_planes=4,
@@ -77,18 +78,14 @@ def _no_config_validation(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_clean_manifest_produces_no_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     _no_config_validation(monkeypatch)
-    findings = ResumeSafetyGate.from_manifest(
-        _manifest(), {}, _FakeMotors({})
-    )
+    findings = ResumeSafetyGate.from_manifest(_manifest(), {}, _FakeMotors({}))
     assert findings.errors == []
     assert findings.resume_plane == 0
 
 
 def test_config_fingerprint_diff_is_a_warning(monkeypatch: pytest.MonkeyPatch) -> None:
     _no_config_validation(monkeypatch)
-    manifest = _manifest(
-        safety_config={"iBeam": {"Max Power": "100000"}}
-    )
+    manifest = _manifest(safety_config={"iBeam": {"Max Power": "100000"}})
     live = {"iBeam": {"Max Power": "120000"}}
     findings = ResumeSafetyGate.from_manifest(manifest, live, _FakeMotors({}))
     assert findings.errors == []
@@ -99,9 +96,7 @@ def test_matching_fingerprint_produces_no_diff_warning(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _no_config_validation(monkeypatch)
-    manifest = _manifest(
-        safety_config={"iBeam": {"Max Power": "100000"}}
-    )
+    manifest = _manifest(safety_config={"iBeam": {"Max Power": "100000"}})
     live = {"iBeam": {"Max Power": "100000"}}
     findings = ResumeSafetyGate.from_manifest(manifest, live, _FakeMotors({}))
     assert not any("Max Power" in w for w in findings.warnings)
@@ -123,9 +118,7 @@ def test_live_config_errors_block_resume(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_motor_drift_is_a_warning(monkeypatch: pytest.MonkeyPatch) -> None:
     _no_config_validation(monkeypatch)
-    manifest = _manifest(
-        last_motor_positions={"horizontal position": 5.0}
-    )
+    manifest = _manifest(last_motor_positions={"horizontal position": 5.0})
     motors = _FakeMotors({"horizontal position": 5.2})
     findings = ResumeSafetyGate.from_manifest(manifest, {}, motors)
     assert findings.errors == []
@@ -134,9 +127,7 @@ def test_motor_drift_is_a_warning(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_motor_drift_within_tolerance_is_quiet(monkeypatch: pytest.MonkeyPatch) -> None:
     _no_config_validation(monkeypatch)
-    manifest = _manifest(
-        last_motor_positions={"horizontal position": 5.0}
-    )
+    manifest = _manifest(last_motor_positions={"horizontal position": 5.0})
     motors = _FakeMotors({"horizontal position": 5.05})
     findings = ResumeSafetyGate.from_manifest(manifest, {}, motors)
     assert not any("drifted" in w for w in findings.warnings)
@@ -155,7 +146,7 @@ def test_probe_records_observed_and_resume_plane(
 ) -> None:
     _no_config_validation(monkeypatch)
     target = tmp_path / "acq_488nm.hdf5"
-    with h5py.File(target, "w") as f:
+    with h5py.File(str(target), "w") as f:
         for i in (1, 2):
             f.create_dataset(
                 f"reconstructed_frame{i:03d}",

@@ -91,9 +91,7 @@ class FocusSample:
             "residual_mm": float(self.residual_mm),
             "applied_camera_pos_mm": float(self.applied_camera_pos_mm),
             "sharpness_metric": (
-                None
-                if self.sharpness_metric is None
-                else float(self.sharpness_metric)
+                None if self.sharpness_metric is None else float(self.sharpness_metric)
             ),
         }
 

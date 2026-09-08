@@ -425,9 +425,7 @@ class AcquisitionPanelWidget(QWidget):
             # after the dialog and before the worker (and its laser
             # start) is created.
             if self._shell.estop_event.is_set():
-                self._shell.sig_message.emit(
-                    "Resume aborted: the E-stop is actuated."
-                )
+                self._shell.sig_message.emit("Resume aborted: the E-stop is actuated.")
                 self._shell.sig_beep.emit()
                 return None
             start_plane = findings.resume_plane

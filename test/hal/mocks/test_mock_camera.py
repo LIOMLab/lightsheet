@@ -244,9 +244,7 @@ def test_frame_source_index_progression_and_reset() -> None:
     assert camera.ysize is not None and camera.xsize is not None
     shape = (camera.ysize, camera.xsize)
     seen: list[int] = []
-    camera.set_frame_source(
-        lambda _cam, i: seen.append(i) or np.zeros(shape)
-    )
+    camera.set_frame_source(lambda _cam, i: seen.append(i) or np.zeros(shape))
     assert camera.scripted_frame_index == 0
 
     camera.new_data_ready = True

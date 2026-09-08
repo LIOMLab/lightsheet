@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid as uuid_mod
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import Mock
 
 import numpy as np
@@ -22,13 +23,15 @@ from lightsheet.resume import (
     apply_manifest_update,
 )
 
-
 pytest.importorskip("PySide6")
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
 def _manifest(**overrides: object) -> ResumeManifest:
     """Build a minimal valid manifest with override slots."""
-    kwargs: dict = {
+    kwargs: dict[str, Any] = {
         "uuid": uuid_mod.uuid4().hex,
         "state": "in_progress",
         "n_planes": 6,
@@ -82,15 +85,21 @@ def test_adaptive_controller_checkpoint_roundtrip() -> None:
 def test_adaptive_controller_restore_rejects_invalid_state() -> None:
     """restore() validates the checkpoint before mutating internal state."""
     ctrl = _controller()
-    c1 = ctrl.update([0.90], 0, 0.01, (10.0, 0.0), 0)
+    _ = ctrl.update([0.90], 0, 0.01, (10.0, 0.0), 0)
     base = ctrl.checkpoint()
     assert base["last_command"] is not None
 
     with pytest.raises(ValueError, match="integral"):
-        AdaptiveController(AdaptiveConfig(enabled=True), 10, initial_state={**base, "integral": "x"})
+        AdaptiveController(
+            AdaptiveConfig(enabled=True), 10, initial_state={**base, "integral": "x"}
+        )
 
     with pytest.raises(ValueError, match="reacquire_count"):
-        AdaptiveController(AdaptiveConfig(enabled=True), 10, initial_state={**base, "reacquire_count": -1})
+        AdaptiveController(
+            AdaptiveConfig(enabled=True),
+            10,
+            initial_state={**base, "reacquire_count": -1},
+        )
 
     last = base["last_command"]
     assert last is not None
@@ -119,7 +128,7 @@ def test_adaptive_sample_as_dict_is_manifest_safe() -> None:
     """AdaptiveSample.as_dict yields JSON-safe values."""
     sample = AdaptiveSample(
         plane_index=3,
-        intensity_fraction=[0.5, None],
+        intensity_fraction=cast("list[float]", [0.5, None]),
         exposure_s=0.02,
         laser_power_mw=(10.0, 20.0),
         control_variable_active="exposure",
@@ -163,9 +172,10 @@ def test_manifest_stores_adaptive_checkpoint_and_trajectory() -> None:
 
 
 def test_frame_saver_merges_pre_resume_adaptive_trajectory(
-    qtbot: QtBot, controller: object, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
-    """Resumed FrameSaver prepends manifest trajectory samples before recording new ones."""
+    """Resumed FrameSaver prepends manifest trajectory samples before
+    recording new ones."""
     ctrl = controller
     ctrl.save_directory = str(tmp_path)
     ctrl.save_format = "hdf5"
@@ -213,7 +223,7 @@ def test_frame_saver_merges_pre_resume_adaptive_trajectory(
 
 
 def test_frame_saver_skips_malformed_pre_resume_trajectory(
-    qtbot: QtBot, controller: object, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Malformed pre-resume trajectory rows are skipped with a warning."""
     ctrl = controller

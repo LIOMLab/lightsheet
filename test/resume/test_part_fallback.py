@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 def _hdf5(path: Path, n: int) -> None:
-    with h5py.File(path, "w") as f:
+    with h5py.File(str(path), "w") as f:
         for i in range(1, n + 1):
             f.create_dataset(
                 f"reconstructed_frame{i:03d}",
@@ -68,6 +68,7 @@ def test_set_files_appends_valid_hdf5_and_truncates_torn_tail(
         resume_manifest=m,
     )
     assert fs.filenames_lists[0][0] == str(good)
+    assert fs._manifest_path is not None
     loaded = read_manifest(fs._manifest_path)
     assert loaded is not None
     assert loaded.cursors["hdf5"][str(good)] == 2
@@ -97,6 +98,7 @@ def test_set_files_falls_back_to_partn_for_corrupt_hdf5(
     assert fs.filenames_lists[0][0] == str(good)
     # Channel 1 gets a _part2 continuation fileset.
     assert "_part2_640nm" in fs.filenames_lists[1][0]
+    assert fs._manifest_path is not None
     loaded = read_manifest(fs._manifest_path)
     assert loaded is not None
     # A corrupt channel forces the common resume plane to 0, so both

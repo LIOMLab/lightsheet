@@ -21,17 +21,23 @@ from lightsheet.resume.probe import (
 )
 
 
-def _hdf5_with_datasets(path: Path, n: int, prefix: str = "reconstructed_frame") -> None:
-    with h5py.File(path, "w") as f:
+def _hdf5_with_datasets(
+    path: Path, n: int, prefix: str = "reconstructed_frame"
+) -> None:
+    with h5py.File(str(path), "w") as f:
         for i in range(1, n + 1):
-            f.create_dataset(f"{prefix}{i:03d}", data=np.full((4, 4), i, dtype=np.uint16))
+            f.create_dataset(
+                f"{prefix}{i:03d}", data=np.full((4, 4), i, dtype=np.uint16)
+            )
 
 
 def _partial_hdf5(path: Path, n: int) -> None:
     """Create an HDF5 with the first n-1 datasets complete and the n-th torn."""
-    with h5py.File(path, "w") as f:
+    with h5py.File(str(path), "w") as f:
         for i in range(1, n):
-            f.create_dataset(f"reconstructed_frame{i:03d}", data=np.full((4, 4), i, dtype=np.uint16))
+            f.create_dataset(
+                f"reconstructed_frame{i:03d}", data=np.full((4, 4), i, dtype=np.uint16)
+            )
         # Create a torn dataset: declare the shape but do not write any data.
         f.create_dataset(
             f"reconstructed_frame{n:03d}",
@@ -43,6 +49,7 @@ def _partial_hdf5(path: Path, n: int) -> None:
 
 def _zarr_with_planes(path: Path, n_planes: int, n_channels: int = 1) -> Any:
     root = zarr.open(str(path), mode="w")
+    assert isinstance(root, zarr.Group)
     shape = (n_channels, n_planes, 4, 4)
     chunks = (1, 1, 4, 4)
     arr = root.create_array(
@@ -59,6 +66,7 @@ def _zarr_with_planes(path: Path, n_planes: int, n_channels: int = 1) -> Any:
 
 def _partial_zarr(path: Path, n_written: int, n_planes: int) -> Any:
     root = zarr.open(str(path), mode="w")
+    assert isinstance(root, zarr.Group)
     shape = (1, n_planes, 4, 4)
     chunks = (1, 1, 4, 4)
     arr = root.create_array(
@@ -96,8 +104,8 @@ def test_truncate_hdf5_tail_removes_last_n(tmp_path: Path) -> None:
     _hdf5_with_datasets(path, 5)
     truncate_hdf5_tail(path, 3)
     assert probe_hdf5(path) == 3
-    with h5py.File(path, "r") as f:
-        names = [k for k in f.keys() if k.startswith("reconstructed_frame")]
+    with h5py.File(str(path), "r") as f:
+        names = [k for k in f if k.startswith("reconstructed_frame")]
         assert sorted(names) == [
             "reconstructed_frame001",
             "reconstructed_frame002",

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
 import pytest
@@ -20,6 +21,9 @@ pytest.importorskip("PySide6")
 
 from lightsheet.gui.workers import StackWorker
 from lightsheet.hal import DeviceBundle
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
 def _make_bundle() -> DeviceBundle:
@@ -52,7 +56,7 @@ def _make_worker(
     worker = StackWorker(
         bundle,
         Mock(),
-        shell,  # ty: ignore[invalid-argument-type]
+        shell,
         save_description="pause test",
         start_plane=start_plane,
     )
@@ -61,7 +65,7 @@ def _make_worker(
 
 
 def test_pause_requested_is_separate_event(
-    qtbot: QtBot, controller: object
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The shell carries a dedicated threading.Event for pause — it must
     never alias or wrap estop_event."""
@@ -76,7 +80,7 @@ def test_pause_requested_is_separate_event(
 
 
 def test_pause_button_disabled_when_idle(
-    qtbot: QtBot, controller: object
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """With no stack running, the Pause control stays latched off."""
     btn = controller.stack_panel.ui.pushButton_acqPauseStack
@@ -84,7 +88,7 @@ def test_pause_button_disabled_when_idle(
 
 
 def test_pause_click_sets_event_and_latches_button(
-    qtbot: QtBot, controller: object
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """Clicking Pause while a stack runs sets pause_requested, disables
     the button, and shows the STACK PAUSING badge."""
@@ -103,7 +107,7 @@ def test_pause_click_sets_event_and_latches_button(
 
 
 def test_estop_does_not_set_pause(
-    qtbot: QtBot, controller: object
+    qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """The E-stop kill path touches only estop_event and lasers — pause
     is never part of the E-stop path."""
@@ -162,7 +166,7 @@ def test_estop_precedence_over_pause(qtbot: QtBot) -> None:
 
 
 def test_pause_resume_end_to_end(
-    qtbot: QtBot, controller: object, tmp_path: Path, request: object
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path, request: object
 ) -> None:
     """Full pause→resume: pause a fixed 3-plane stack after the first
     plane, verify the sidecar manifest reads ``paused`` with a committed

@@ -179,9 +179,7 @@ def test_apply_motor_position_and_checkpoint() -> None:
     m = _manifest()
     m = apply_manifest_update(
         m,
-        ManifestUpdate(
-            kind="motor_position", payload={"horizontal": 10.0}
-        ),
+        ManifestUpdate(kind="motor_position", payload={"horizontal": 10.0}),
     )
     m = apply_manifest_update(
         m,

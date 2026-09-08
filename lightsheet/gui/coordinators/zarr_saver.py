@@ -22,6 +22,8 @@ from lightsheet.resume import ResumeProbeError, probe_zarr, reopen_zarr_l0
 from lightsheet.wavelength_color import wavelength_to_hex
 
 if TYPE_CHECKING:
+    from lightsheet.adaptive.types import AdaptiveConfig, AdaptiveSample
+    from lightsheet.focus.types import FocusConfig, FocusSample
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
 logger = logging.getLogger(__name__)
@@ -46,7 +48,7 @@ class ZarrSaver:
     def __init__(self, shell: Controller_MainWindow) -> None:
         self.parent = shell
         self._writer: AnalysisOmeZarrWriter | None = None
-        self._l0: zarr.Array | AnalysisOmeZarrWriter | None = None
+        self._l0: zarr.Array[Any] | AnalysisOmeZarrWriter | None = None
         self._resumed: bool = False
         self._store_path: str = ""
         self._resume_offsets: list[int] = []
@@ -60,13 +62,13 @@ class ZarrSaver:
         # before finalize so _write_adaptive_group can publish the
         # /acquisition/adaptive group. Empty list + None config = fixed
         # mode (no adaptive group written).
-        self._adaptive_trajectory: list = []  # ty: ignore[missing-type-argument]
-        self._adaptive_config: object | None = None
+        self._adaptive_trajectory: list[AdaptiveSample] = []
+        self._adaptive_config: AdaptiveConfig | None = None
 
         # Focus trajectory. Set by set_focus_trajectory before finalize
         # so _write_focus_group can publish the /acquisition/focus group.
-        self._focus_trajectory: list = []  # ty: ignore[missing-type-argument]
-        self._focus_config: object | None = None
+        self._focus_trajectory: list[FocusSample] = []
+        self._focus_config: FocusConfig | None = None
         # ``write_empty_chunks`` global-config override state. Set in
         # start_stack, restored in finalize. Defaults to False here so
         # _restore_write_empty_chunks is a no-op if start_stack never ran
@@ -152,7 +154,8 @@ class ZarrSaver:
         ):
             try:
                 old_root = zarr.open(resolved, mode="r")
-                old_arr = old_root["0"]  # ty: ignore[invalid-argument-type]
+                assert isinstance(old_root, zarr.Group)
+                old_arr = old_root["0"]
                 if (
                     isinstance(old_arr, zarr.Array)
                     and old_arr.ndim == 4
@@ -174,14 +177,16 @@ class ZarrSaver:
                     resolved_path.rename(source_path)
                     renamed = True
                     old_root = zarr.open(source_path, mode="r")
-                    old_arr = old_root["0"]  # ty: ignore[invalid-argument-type]
-                    new_n_channels = old_arr.shape[0] + 1  # ty: ignore[unresolved-attribute]
-                    self._merge_target_channel = old_arr.shape[0]  # ty: ignore[unresolved-attribute]
+                    assert isinstance(old_root, zarr.Group)
+                    old_arr = old_root["0"]
+                    assert isinstance(old_arr, zarr.Array)
+                    new_n_channels = old_arr.shape[0] + 1
+                    self._merge_target_channel = old_arr.shape[0]
                     self._merge_source_path = source_path
+                    ome = old_root.attrs.get("ome", {})
+                    omero = ome.get("omero", {}) if isinstance(ome, dict) else {}
                     self._existing_omero_channels = (
-                        old_root.attrs.get("ome", {})  # ty: ignore[unresolved-attribute]
-                        .get("omero", {})
-                        .get("channels", [])
+                        omero.get("channels", []) if isinstance(omero, dict) else []
                     )
                     self._merge_mode = True
                     self.parent.sig_message.emit(
@@ -317,12 +322,12 @@ class ZarrSaver:
         try:
             root = zarr.open(resolved, mode="r+")
         except Exception as e:
-            raise ResumeProbeError(
-                f"cannot reopen zarr store {resolved}: {e}"
-            ) from e
+            raise ResumeProbeError(f"cannot reopen zarr store {resolved}: {e}") from e
 
         try:
+            assert isinstance(root, zarr.Group)
             acq = root["acquisition"]
+            assert isinstance(acq, zarr.Group)
             stored_uuid = acq.attrs.get("uuid")
         except Exception as e:
             raise ResumeProbeError(
@@ -336,6 +341,10 @@ class ZarrSaver:
             )
 
         cam = self.parent.camera
+        if cam.ysize is None or cam.xsize is None:
+            raise ResumeProbeError(
+                "camera xsize/ysize are unset — cannot size the zarr L0 reopen"
+            )
         shape = (n_channels, n_planes, int(cam.ysize), int(cam.xsize))
         l0 = reopen_zarr_l0(resolved, shape, np.uint16)
 
@@ -344,9 +353,7 @@ class ZarrSaver:
         self._l0 = l0
         self._writer = None
         self._n_channels = n_channels
-        probed = [
-            probe_zarr(resolved, f"ch{c}") for c in range(n_channels)
-        ]
+        probed = [probe_zarr(resolved, f"ch{c}") for c in range(n_channels)]
         if start_plane is not None:
             for c, count in enumerate(probed):
                 if count < start_plane:
@@ -492,8 +499,8 @@ class ZarrSaver:
 
     def set_adaptive_trajectory(
         self,
-        trajectory: list,  # ty: ignore[missing-type-argument]
-        config: object | None,
+        trajectory: list[AdaptiveSample],
+        config: AdaptiveConfig | None,
     ) -> None:
         """Provide the adaptive trajectory samples + frozen config so
         ``finalize`` can publish the ``/acquisition/adaptive`` group
@@ -525,9 +532,12 @@ class ZarrSaver:
             return
         if root is None:
             if self._writer is None:
-                raise RuntimeError("ZarrSaver._write_adaptive_group called with no writer")
+                raise RuntimeError(
+                    "ZarrSaver._write_adaptive_group called with no writer"
+                )
             root = self._writer.root
         acq = root["acquisition"]
+        assert isinstance(acq, zarr.Group)
         grp = acq.require_group("adaptive")
         traj = self._adaptive_trajectory
         cfg = self._adaptive_config
@@ -536,20 +546,20 @@ class ZarrSaver:
         # zarr v3 attrs are JSON-serialised, so tuple fields are stored
         # as lists (not np.array, which is not JSON serialisable).
         if cfg is not None:
-            grp.attrs["enabled"] = bool(cfg.enabled)  # ty: ignore[unresolved-attribute]
-            grp.attrs["min_exposure_s"] = float(cfg.min_exposure_s)  # ty: ignore[unresolved-attribute]
-            grp.attrs["max_exposure_s"] = float(cfg.max_exposure_s)  # ty: ignore[unresolved-attribute]
-            grp.attrs["min_power_mw"] = list(cfg.min_power_mw)  # ty: ignore[unresolved-attribute]
-            grp.attrs["max_power_mw"] = list(cfg.max_power_mw)  # ty: ignore[unresolved-attribute]
-            grp.attrs["target_band_lo"] = float(cfg.target_band_lo)  # ty: ignore[unresolved-attribute]
-            grp.attrs["target_band_hi"] = float(cfg.target_band_hi)  # ty: ignore[unresolved-attribute]
-            grp.attrs["reacquire_threshold"] = float(cfg.reacquire_threshold)  # ty: ignore[unresolved-attribute]
-            grp.attrs["block_size_n"] = int(cfg.block_size_n)  # ty: ignore[unresolved-attribute]
-            grp.attrs["kp"] = float(cfg.kp)  # ty: ignore[unresolved-attribute]
-            grp.attrs["ki"] = float(cfg.ki)  # ty: ignore[unresolved-attribute]
-            grp.attrs["pilot_count"] = int(cfg.pilot_count)  # ty: ignore[unresolved-attribute]
-            grp.attrs["sensor_max"] = int(cfg.sensor_max)  # ty: ignore[unresolved-attribute]
-            grp.attrs["max_reacquire_attempts"] = int(cfg.max_reacquire_attempts)  # ty: ignore[unresolved-attribute]
+            grp.attrs["enabled"] = bool(cfg.enabled)
+            grp.attrs["min_exposure_s"] = float(cfg.min_exposure_s)
+            grp.attrs["max_exposure_s"] = float(cfg.max_exposure_s)
+            grp.attrs["min_power_mw"] = list(cfg.min_power_mw)
+            grp.attrs["max_power_mw"] = list(cfg.max_power_mw)
+            grp.attrs["target_band_lo"] = float(cfg.target_band_lo)
+            grp.attrs["target_band_hi"] = float(cfg.target_band_hi)
+            grp.attrs["reacquire_threshold"] = float(cfg.reacquire_threshold)
+            grp.attrs["block_size_n"] = int(cfg.block_size_n)
+            grp.attrs["kp"] = float(cfg.kp)
+            grp.attrs["ki"] = float(cfg.ki)
+            grp.attrs["pilot_count"] = int(cfg.pilot_count)
+            grp.attrs["sensor_max"] = int(cfg.sensor_max)
+            grp.attrs["max_reacquire_attempts"] = int(cfg.max_reacquire_attempts)
 
         grp.create_array(
             "plane_index",
@@ -582,8 +592,8 @@ class ZarrSaver:
 
     def set_focus_trajectory(
         self,
-        trajectory: list,  # ty: ignore[missing-type-argument]
-        config: object | None,
+        trajectory: list[FocusSample],
+        config: FocusConfig | None,
     ) -> None:
         """Provide the focus trajectory samples + frozen config so
         ``finalize`` can publish the ``/acquisition/focus`` group. Called
@@ -617,17 +627,18 @@ class ZarrSaver:
                 raise RuntimeError("ZarrSaver._write_focus_group called with no writer")
             root = self._writer.root
         acq = root["acquisition"]
+        assert isinstance(acq, zarr.Group)
         grp = acq.require_group("focus")
         traj = self._focus_trajectory
         cfg = self._focus_config
 
         if cfg is not None:
-            grp.attrs["enabled"] = bool(cfg.enabled)  # ty: ignore[unresolved-attribute]
-            grp.attrs["block_size_n"] = int(cfg.block_size_n)  # ty: ignore[unresolved-attribute]
-            grp.attrs["autofocus_residual"] = bool(cfg.autofocus_residual)  # ty: ignore[unresolved-attribute]
-            grp.attrs["curve_path"] = str(cfg.curve_path)  # ty: ignore[unresolved-attribute]
-            grp.attrs["residual_gain_mm"] = float(cfg.residual_gain_mm)  # ty: ignore[unresolved-attribute]
-            grp.attrs["max_residual_mm"] = float(cfg.max_residual_mm)  # ty: ignore[unresolved-attribute]
+            grp.attrs["enabled"] = bool(cfg.enabled)
+            grp.attrs["block_size_n"] = int(cfg.block_size_n)
+            grp.attrs["autofocus_residual"] = bool(cfg.autofocus_residual)
+            grp.attrs["curve_path"] = str(cfg.curve_path)
+            grp.attrs["residual_gain_mm"] = float(cfg.residual_gain_mm)
+            grp.attrs["max_residual_mm"] = float(cfg.max_residual_mm)
 
         grp.create_array(
             "block_index",
@@ -679,7 +690,8 @@ class ZarrSaver:
             return False
         try:
             old_root = zarr.open(self._merge_source_path, mode="r")
-            old_arr = old_root["0"]  # ty: ignore[invalid-argument-type]
+            assert isinstance(old_root, zarr.Group)
+            old_arr = old_root["0"]
             if not isinstance(old_arr, zarr.Array):
                 logger.warning(
                     "Merge source %s has no level-0 array at node '0'",
@@ -829,6 +841,7 @@ class ZarrSaver:
         from it.
         """
         root = zarr.open(self._store_path, mode="r+")
+        assert isinstance(root, zarr.Group)
         self._write_acquisition_group(root=root)
         self._write_adaptive_group(root=root)
         self._write_focus_group(root=root)

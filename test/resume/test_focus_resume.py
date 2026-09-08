@@ -10,6 +10,7 @@ from __future__ import annotations
 import queue
 import uuid as uuid_mod
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import Mock
 
 import numpy as np
@@ -32,10 +33,15 @@ from lightsheet.resume import (
 
 pytest.importorskip("PySide6")
 
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+    from lightsheet.gui.workers import StackWorker
+    from lightsheet.hal import DeviceBundle
+
 
 def _manifest(**overrides: object) -> ResumeManifest:
     """Build a minimal valid manifest with override slots."""
-    kwargs: dict = {
+    kwargs: dict[str, Any] = {
         "uuid": uuid_mod.uuid4().hex,
         "state": "in_progress",
         "n_planes": 6,
@@ -96,9 +102,7 @@ def test_focus_controller_checkpoint_roundtrip() -> None:
     )
     assert restored._residual_mm == pytest.approx(ctrl._residual_mm)
     assert restored._residual_mm != 0.0
-    assert restored._reference_sharpness == pytest.approx(
-        ctrl._reference_sharpness
-    )
+    assert restored._reference_sharpness == pytest.approx(ctrl._reference_sharpness)
     assert restored._last_command == pytest.approx(ctrl._last_command)
 
     # The restored controller continues the residual path identically.
@@ -156,7 +160,7 @@ def test_focus_controller_restore_rejects_invalid_state() -> None:
             _curve(),
             0.0,
             128.0,
-            initial_state=["not", "a", "dict"],  # type: ignore[arg-type]
+            initial_state=cast("dict[str, Any]", ["not", "a", "dict"]),
         )
 
 
@@ -185,9 +189,7 @@ def test_autofocus_controller_checkpoint_roundtrip() -> None:
     assert restored._residual_mm == pytest.approx(ctrl._residual_mm)
     assert restored._residual_mm != 0.0
     assert restored._prev_residual_mm == pytest.approx(ctrl._prev_residual_mm)
-    assert restored._predicted_sharpness == pytest.approx(
-        ctrl._predicted_sharpness
-    )
+    assert restored._predicted_sharpness == pytest.approx(ctrl._predicted_sharpness)
     assert restored._seed == pytest.approx(ctrl._seed)
     assert restored._last_command == pytest.approx(ctrl._last_command)
 
@@ -299,7 +301,7 @@ def test_manifest_stores_focus_checkpoint_and_trajectory() -> None:
 
 
 def test_frame_saver_merges_pre_resume_focus_trajectory(
-    qtbot: QtBot, controller: object, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Resumed FrameSaver prepends manifest focus rows before recording
     new ones, sorted by absolute block index."""
@@ -348,7 +350,7 @@ def test_frame_saver_merges_pre_resume_focus_trajectory(
 
 
 def test_frame_saver_skips_malformed_pre_resume_focus_trajectory(
-    qtbot: QtBot, controller: object, tmp_path: Path
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
     """Malformed focus rows and non-focus rows are skipped."""
     ctrl = controller
@@ -391,7 +393,7 @@ def test_frame_saver_skips_malformed_pre_resume_focus_trajectory(
 # --------------------------------------------------------------------- #
 
 
-def _make_shell(bundle: object, n_planes: int) -> Mock:
+def _make_shell(bundle: DeviceBundle, n_planes: int) -> Mock:
     shell = Mock()
     shell.lasers = bundle.lasers
     shell.stack_mode_started = True
@@ -425,7 +427,7 @@ def test_block_focus_worker_stages_manifest_updates(qtbot: QtBot) -> None:
         focus_cfg=FocusConfig(enabled=True, block_size_n=2),
         focus_curve=_curve(),
     )
-    worker.acquire_scan = Mock(return_value=True)  # ty: ignore[invalid-assignment]
+    worker.acquire_scan = Mock(return_value=True)
 
     worker.run()
     assert worker._run_completed is True
@@ -461,7 +463,7 @@ def test_autofocus_worker_stages_manifest_updates(qtbot: QtBot) -> None:
         save_description="autofocus staging",
         autofocus_cfg=AutofocusConfig(enabled=True, cadence=1),
     )
-    worker.acquire_scan = Mock(return_value=True)  # ty: ignore[invalid-assignment]
+    worker.acquire_scan = Mock(return_value=True)
 
     worker.run()
     assert worker._run_completed is True
@@ -483,11 +485,16 @@ def test_autofocus_worker_stages_manifest_updates(qtbot: QtBot) -> None:
 
 
 def _fake_acquire_frames(
-    worker: object, shell: Mock, frames: dict[int, np.ndarray], default: int = 30000
-) -> None:
+    worker: StackWorker,
+    shell: Mock,
+    frames: dict[int, str | int],
+    default: int = 30000,
+) -> dict[str, int]:
     """Install an acquire_scan stub that fills ``reconstructed_frame`` with
     a deterministic per-plane pattern. ``frames`` maps acquisition index to
-    a fill value (or ``"checkerboard"`` for a high-sharpness pattern)."""
+    a fill value (or ``"checkerboard"`` for a high-sharpness pattern).
+    Returns the shared ``{"idx": ...}`` counter so callers can trigger a
+    simulated crash after N acquisitions."""
     state = {"idx": 0}
 
     def _acquire() -> bool:
@@ -506,7 +513,7 @@ def _fake_acquire_frames(
         return True
 
     worker.acquire_scan = _acquire  # ty: ignore[invalid-assignment]
-    worker._acquire_state = state
+    return state
 
 
 def _drain_updates(shell: Mock) -> list[ManifestUpdate]:
@@ -538,20 +545,23 @@ def test_block_focus_crash_resume_continues_trajectory(qtbot: QtBot) -> None:
     # Plane 1's frame is high-sharpness (becomes the reference at the
     # plane-2 block boundary); later frames are flat so the residual
     # grows by residual_gain_mm at each subsequent boundary.
-    _fake_acquire_frames(worker, shell, {1: "checkerboard"})
+    acquire_state = _fake_acquire_frames(worker, shell, {1: "checkerboard"})
 
     # Simulate a crash after plane 5: the loop-top poll breaks before
     # plane 6, leaving the manifest in_progress.
     orig_run_acquire = worker.acquire_scan
+
     def _crash_after_five() -> bool:
         ok = orig_run_acquire()
-        if worker._acquire_state["idx"] >= 6:
+        if acquire_state["idx"] >= 6:
             shell.stack_mode_started = False
         return ok
+
     worker.acquire_scan = _crash_after_five  # ty: ignore[invalid-assignment]
 
     worker.run()
     assert worker._run_completed is False
+    assert worker._focus_controller is not None
     pre_crash_residual = worker._focus_controller._residual_mm
     assert pre_crash_residual > 0.0
     pre_crash_block_count = worker._focus_block_count
@@ -582,6 +592,7 @@ def test_block_focus_crash_resume_continues_trajectory(qtbot: QtBot) -> None:
     assert resumed._run_completed is True
     # The residual was restored and continued (flat frames keep growing it
     # by residual_gain_mm at each boundary) — it did not reset to zero.
+    assert resumed._focus_controller is not None
     assert resumed._focus_controller._residual_mm > pre_crash_residual
     # Block numbering continued: restored count 3, plus boundaries at
     # planes 4 and 6 → 5.
@@ -616,18 +627,23 @@ def test_autofocus_crash_resume_continues_trajectory(qtbot: QtBot) -> None:
         save_description="autofocus crash",
         autofocus_cfg=cfg,
     )
-    _fake_acquire_frames(worker, shell, {0: "checkerboard", 1: "checkerboard"})
+    acquire_state = _fake_acquire_frames(
+        worker, shell, {0: "checkerboard", 1: "checkerboard"}
+    )
 
     orig_acquire = worker.acquire_scan
+
     def _crash_after_three() -> bool:
         ok = orig_acquire()
-        if worker._acquire_state["idx"] >= 3:
+        if acquire_state["idx"] >= 3:
             shell.stack_mode_started = False
         return ok
+
     worker.acquire_scan = _crash_after_three  # ty: ignore[invalid-assignment]
 
     worker.run()
     assert worker._run_completed is False
+    assert worker._autofocus_controller is not None
     pre_crash = worker._autofocus_controller.checkpoint()
     assert pre_crash["predicted_sharpness"] is not None
 

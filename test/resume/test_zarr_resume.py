@@ -4,21 +4,36 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
 import zarr
 from pytestqt.qtbot import QtBot
 
+from lightsheet.adaptive.types import AdaptiveSample
+from lightsheet.focus.types import FocusSample
 from lightsheet.resume import ResumeManifest
 from lightsheet.resume.probe import ResumeProbeError
 
 if TYPE_CHECKING:
+    from lightsheet.gui.coordinators.frame_saver_controller import FrameSaver
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
 ACQ_UUID = "resume-uuid-123"
+
+
+def _zarr_group(node: object) -> zarr.Group:
+    """Narrow a ``zarr.Group.__getitem__`` / ``zarr.open`` result to a group."""
+    assert isinstance(node, zarr.Group)
+    return node
+
+
+def _zarr_array(node: object) -> zarr.Array[Any]:
+    """Narrow a ``zarr.Group.__getitem__`` result to an array."""
+    assert isinstance(node, zarr.Array)
+    return node
 
 
 def _frame(z: int) -> np.ndarray:
@@ -26,7 +41,11 @@ def _frame(z: int) -> np.ndarray:
 
 
 def _partial_store(
-    fs: object, controller: Controller_MainWindow, tmp_path: Path, n_written: int, n_planes: int
+    fs: FrameSaver,
+    controller: Controller_MainWindow,
+    tmp_path: Path,
+    n_written: int,
+    n_planes: int,
 ) -> Path:
     controller.camera.xsize = 4
     controller.camera.ysize = 4
@@ -51,8 +70,10 @@ def test_fresh_start_stamps_acquisition_uuid(
     controller.save_directory = str(tmp_path)
     store_path = _partial_store(fs, controller, tmp_path, 2, 4)
     root = zarr.open(str(store_path), mode="r")
+    assert isinstance(root, zarr.Group)
     assert "acquisition" in root
-    assert root["acquisition"].attrs["uuid"] == ACQ_UUID
+    acq = _zarr_group(root["acquisition"])
+    assert acq.attrs["uuid"] == ACQ_UUID
 
 
 def test_resume_stack_reopens_and_writes_missing_planes(
@@ -127,10 +148,10 @@ def test_manifest_cursor_matches_observed_zarr_planes(
     assert fs.resume_manifest.cursors["zarr"][str(store_path)] == 2
 
 
-def _adaptive_sample(plane: int) -> object:
+def _adaptive_sample(plane: int) -> AdaptiveSample:
     """Minimal adaptive-trajectory sample matching the field names read
     by ``ZarrSaver._write_adaptive_group``."""
-    return SimpleNamespace(
+    return cast(AdaptiveSample, SimpleNamespace(
         plane_index=plane,
         intensity_fraction=[0.5, 0.5],
         exposure_s=0.01,
@@ -138,20 +159,20 @@ def _adaptive_sample(plane: int) -> object:
         control_variable_active="exposure",
         reacquired=False,
         power_fallback=False,
-    )
+    ))
 
 
-def _focus_sample(block: int) -> object:
+def _focus_sample(block: int) -> FocusSample:
     """Minimal focus-trajectory sample matching the field names read
     by ``ZarrSaver._write_focus_group``."""
-    return SimpleNamespace(
+    return cast(FocusSample, SimpleNamespace(
         block_index=block,
         stage_pos_mm=1.0 + block,
         feedforward_camera_pos_mm=2.0,
         residual_mm=0.01,
         applied_camera_pos_mm=2.01,
         sharpness_metric=None,
-    )
+    ))
 
 
 def test_resumed_finalize_writes_acquisition_metadata(
@@ -178,32 +199,38 @@ def test_resumed_finalize_writes_acquisition_metadata(
     assert saver._finalized
 
     root = zarr.open(str(store_path), mode="r")
+    assert isinstance(root, zarr.Group)
     assert "acquisition" in root
-    acq = root["acquisition"]
+    acq = _zarr_group(root["acquisition"])
     assert acq.attrs["uuid"] == ACQ_UUID
     # Scan params are published as group attrs.
     assert "exposure_time_s" in acq.attrs
     assert "galvo_left_amplitude" in acq.attrs
     # Per-plane motor positions cover the planes streamed by the resumed
     # run (the resumed run only records planes it wrote).
-    motor = acq["motor"]
+    motor = _zarr_group(acq["motor"])
     np.testing.assert_array_equal(
-        motor["horizontal"][:], np.array([10.0 + z for z in range(2, 4)])
+        _zarr_array(motor["horizontal"])[:],
+        np.array([10.0 + z for z in range(2, 4)]),
     )
     np.testing.assert_array_equal(
-        motor["vertical"][:], np.array([20.0 + z for z in range(2, 4)])
+        _zarr_array(motor["vertical"])[:],
+        np.array([20.0 + z for z in range(2, 4)]),
     )
     np.testing.assert_array_equal(
-        motor["camera"][:], np.array([30.0 + z for z in range(2, 4)])
-    )
-
-    adaptive = acq["adaptive"]
-    np.testing.assert_array_equal(
-        adaptive["plane_index"][:], np.array([0, 1, 2, 3])
+        _zarr_array(motor["camera"])[:],
+        np.array([30.0 + z for z in range(2, 4)]),
     )
 
-    focus = acq["focus"]
-    np.testing.assert_array_equal(focus["block_index"][:], np.array([0]))
+    adaptive = _zarr_group(acq["adaptive"])
+    np.testing.assert_array_equal(
+        _zarr_array(adaptive["plane_index"])[:], np.array([0, 1, 2, 3])
+    )
+
+    focus = _zarr_group(acq["focus"])
+    np.testing.assert_array_equal(
+        _zarr_array(focus["block_index"])[:], np.array([0])
+    )
 
 
 def test_resumed_finalize_without_trajectories_omits_groups(
@@ -224,7 +251,8 @@ def test_resumed_finalize_without_trajectories_omits_groups(
     assert saver._finalized
 
     root = zarr.open(str(store_path), mode="r")
-    acq = root["acquisition"]
+    assert isinstance(root, zarr.Group)
+    acq = _zarr_group(root["acquisition"])
     assert "motor" in acq
     assert "adaptive" not in acq
     assert "focus" not in acq

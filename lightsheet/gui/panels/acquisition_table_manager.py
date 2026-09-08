@@ -103,9 +103,7 @@ logger = logging.getLogger(__name__)
 
 
 _GATE_TITLE = "Resume safety check"
-_GATE_FOOTER = (
-    "Review the findings and confirm to proceed, or cancel to abort."
-)
+_GATE_FOOTER = "Review the findings and confirm to proceed, or cancel to abort."
 _DRIFT_TITLE = "Resume despite reported drift?"
 _DRIFT_BODY = (
     "One or more safety checks reported a difference. Resume only if "
@@ -113,9 +111,7 @@ _DRIFT_BODY = (
 )
 
 
-def show_resume_safety_dialog(
-    parent: QWidget | None, findings: GateFindings
-) -> bool:
+def show_resume_safety_dialog(parent: QWidget | None, findings: GateFindings) -> bool:
     """Report-then-confirm modal for the resume safety gate (D-06).
 
     Lists every gate finding — errors in the text block the resume
@@ -129,7 +125,8 @@ def show_resume_safety_dialog(
     """
     if parent is None:
         app = QApplication.instance()
-        parent = app.activeWindow() if app is not None else None
+        if isinstance(app, QApplication):
+            parent = app.activeWindow()
     if findings.errors:
         lines = [f"• {e}" for e in findings.errors]
         if findings.warnings:
@@ -150,9 +147,7 @@ def show_resume_safety_dialog(
 
     box = QMessageBox(parent)
     box.setIcon(
-        QMessageBox.Icon.Warning
-        if findings.warnings
-        else QMessageBox.Icon.Information
+        QMessageBox.Icon.Warning if findings.warnings else QMessageBox.Icon.Information
     )
     parts: list[str] = []
     if findings.has_differences:
@@ -562,9 +557,7 @@ class AcquisitionTableManager(QWidget):
         # recomputes the durable plane from on-disk probes at spawn time.
         cursors = [v for group in manifest.cursors.values() for v in group.values()]
         start_plane = min(cursors) if cursors else manifest.start_plane
-        resume_start = (
-            manifest.stack_starting_plane + start_plane * manifest.stack_step
-        )
+        resume_start = manifest.stack_starting_plane + start_plane * manifest.stack_step
         if manifest.save_filepath:
             base_name = Path(manifest.save_filepath).name
         else:
@@ -609,12 +602,8 @@ class AcquisitionTableManager(QWidget):
             n_planes_text = f"RESUME {start_plane}/{row.n_planes}"
             item = QTableWidgetItem(n_planes_text)
             item.setFont(_t.body_font())
-            item.setFlags(
-                Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
-            )
-            item.setToolTip(
-                f"Resuming from plane {start_plane} of {row.n_planes}"
-            )
+            item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+            item.setToolTip(f"Resuming from plane {start_plane} of {row.n_planes}")
             item.setForeground(QColor(_c.BREEZE_ACCENT))
             self.table.setItem(index, _COL_NPLANES, item)
         else:
@@ -624,9 +613,7 @@ class AcquisitionTableManager(QWidget):
         self._set_readonly_cell(
             index,
             _COL_ESTSIZE,
-            self._format_size_human_readable(
-                row.est_size_mb, self._format_label()
-            ),
+            self._format_size_human_readable(row.est_size_mb, self._format_label()),
         )
         self.table.blockSignals(False)
         self._row_uuids.insert(index, row_uuid)
@@ -682,10 +669,7 @@ class AcquisitionTableManager(QWidget):
             return False
 
         remaining = qm.rows[qm.row_index + 1 :]
-        live = [
-            self._row_to_dict(self.row_at(i))
-            for i in range(self.table.rowCount())
-        ]
+        live = [self._row_to_dict(self.row_at(i)) for i in range(self.table.rowCount())]
 
         if self._rows_match(live, qm.rows):
             # Untouched pre-crash queue: drop the completed rows and the
@@ -758,9 +742,7 @@ class AcquisitionTableManager(QWidget):
     # Internal helpers
     # ------------------------------------------------------------------ #
 
-    def _set_name_cell(
-        self, row: int, name: str, is_resume: bool = False
-    ) -> None:
+    def _set_name_cell(self, row: int, name: str, is_resume: bool = False) -> None:
         item = QTableWidgetItem(name)
         # Long names truncate with ellipsis; the full name is in the tooltip.
         item.setToolTip(name)
@@ -1183,10 +1165,7 @@ class AcquisitionTableManager(QWidget):
         queue_state = "completed"
         save_dir = getattr(self._shell, "save_directory", "") or ""
         if save_dir:
-            base = (
-                Path(getattr(self._shell, "save_filepath", "") or "").name
-                or "queue"
-            )
+            base = Path(getattr(self._shell, "save_filepath", "") or "").name or "queue"
             queue_manifest_path = queue_manifest_path_for(save_dir, base)
         queue_rows = [self._row_to_dict(r) for r in rows]
         queue_uuids = [r.uuid for r in rows]
@@ -1225,9 +1204,7 @@ class AcquisitionTableManager(QWidget):
                 self._shell.stack_ending_plane = row.end
                 # stack_step carries the direction sign (negative when
                 # end < start), matching updateUi_stack_mode_button.
-                self._shell.stack_step = (
-                    row.step if row.end >= row.start else -row.step
-                )
+                self._shell.stack_step = row.step if row.end >= row.start else -row.step
                 self._shell.number_of_planes = row.n_planes
                 self._shell.stack_first_plane_set = True
                 self._shell.stack_last_plane_set = True
@@ -1248,14 +1225,11 @@ class AcquisitionTableManager(QWidget):
                 # intent is worse than stopping.
                 if row.resume_manifest is not None:
                     try:
-                        self._shell.state.restore_from_manifest(
-                            row.resume_manifest
-                        )
+                        self._shell.state.restore_from_manifest(row.resume_manifest)
                     except (TypeError, ValueError) as e:
                         self._shell.sig_message.emit(
                             self.error_state_text(
-                                f"row {i + 1} ({row.name}) state restore "
-                                f"failed: {e}"
+                                f"row {i + 1} ({row.name}) state restore failed: {e}"
                             )
                         )
                         self._shell.sig_beep.emit()

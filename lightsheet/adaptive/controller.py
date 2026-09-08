@@ -411,9 +411,7 @@ class AdaptiveController:
             if not isinstance(indices, (list, tuple)) or not isinstance(
                 exposures, (list, tuple)
             ):
-                raise ValueError(
-                    "pilot.indices and pilot.exposures must be sequences"
-                )
+                raise ValueError("pilot.indices and pilot.exposures must be sequences")
             if len(indices) != len(exposures):
                 raise ValueError("pilot.indices and pilot.exposures length mismatch")
             self._pilot_indices = [int(i) for i in indices]
@@ -442,7 +440,8 @@ class AdaptiveController:
                 raw_exposure, bool
             ):
                 raise ValueError(
-                    f"last_command.exposure_s must be a number; got {type(raw_exposure)}"
+                    "last_command.exposure_s must be a number; "
+                    f"got {type(raw_exposure)}"
                 )
             if not math.isfinite(raw_exposure) or raw_exposure <= 0:
                 raise ValueError(
@@ -470,7 +469,7 @@ class AdaptiveController:
                         f"last_command.laser{idx + 1}_mw must be finite; got {raw}"
                     )
             for idx, (p, p_min, p_max) in enumerate(
-                zip(powers, cfg.min_power_mw, cfg.max_power_mw)
+                zip(powers, cfg.min_power_mw, cfg.max_power_mw, strict=True)
             ):
                 if not (p_min - 1e-9 <= p <= p_max + 1e-9):
                     raise ValueError(

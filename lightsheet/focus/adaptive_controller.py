@@ -190,17 +190,13 @@ class AdaptiveFocusController:
         raw_pred = state.get("predicted_sharpness")
         predicted: float | None = None
         if raw_pred is not None:
-            if not isinstance(raw_pred, (int, float)) or isinstance(
-                raw_pred, bool
-            ):
+            if not isinstance(raw_pred, (int, float)) or isinstance(raw_pred, bool):
                 raise ValueError(
                     f"predicted_sharpness must be a number or None; "
                     f"got {type(raw_pred)}"
                 )
             if not math.isfinite(raw_pred):
-                raise ValueError(
-                    f"predicted_sharpness must be finite; got {raw_pred}"
-                )
+                raise ValueError(f"predicted_sharpness must be finite; got {raw_pred}")
             predicted = float(raw_pred)
 
         def _travel_bounded(name: str, default: float | None) -> float | None:
