@@ -876,6 +876,19 @@ class Controller_MainWindow(QMainWindow):
             self.save_panel.ui.radioButton_saveAllFull
         )
         self.save_option_button_group.setExclusive(True)
+        # Save-mode radios + description line edit commit to the reactive
+        # model; the model projects back through sig_save_options_changed.
+        self.save_option_button_group.buttonClicked.connect(
+            self.save_panel.updateUi_save_mode
+        )
+        self.save_panel.ui.lineEdit_saveDescription.editingFinished.connect(
+            self.save_panel.updateUi_save_description
+        )
+        # Seed the model once from the actual post-setup widget defaults,
+        # then render through the model so widget and model cannot diverge
+        # at startup.
+        self.state.set_save_options(self.save_panel.save_options_from_widgets())
+        self.save_panel.updateUi_save_options_from_state(self.state.save_options)
 
         # Format radio group — exclusive, session-only (does NOT write
         # config.ini). The slot maps the clicked radio to a lowercase
@@ -2083,6 +2096,11 @@ class Controller_MainWindow(QMainWindow):
         self.state.sig_lightsheet_line_time_changed.connect(
             self.acquisition_panel.updateUi_lightsheet_line_time_from_state
         )
+        # The save description + exclusive save-mode radios are reactive
+        # projections of the model's SaveOptions.
+        self.state.sig_save_options_changed.connect(
+            self.save_panel.updateUi_save_options_from_state
+        )
 
     # --- adaptive trajectory dock lifecycle ---
 
@@ -2426,3 +2444,11 @@ class Controller_MainWindow(QMainWindow):
     @_auto_laser2.setter
     def _auto_laser2(self, value: bool) -> None:
         self.state.set_auto_lasers(self.state.auto_laser1, bool(value))
+
+    @property
+    def save_description(self) -> str:
+        return self.state.save_options.description
+
+    @save_description.setter
+    def save_description(self, value: str) -> None:
+        self.state.set_save_description(str(value))

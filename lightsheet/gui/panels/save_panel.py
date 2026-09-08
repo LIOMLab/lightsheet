@@ -10,7 +10,9 @@ from __future__ import annotations
 import typing
 from pathlib import Path
 
+from PySide6.QtCore import Slot
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QAbstractItemView,
     QFileDialog,
     QMessageBox,
@@ -20,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from lightsheet.gui.panels.ui_save_panel import Ui_SavePanel
 from lightsheet.gui.widgets.field_spec import FIELD_SPECS
+from lightsheet.state import SaveMode, SaveOptions
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -42,16 +45,30 @@ class SavePanelWidget(QWidget):
             if w is not None and hasattr(w, "applySpec"):
                 w.applySpec(spec)
 
+        # Explicit four-radio <-> SaveMode map for the exclusive
+        # save_option_button_group. The commit slot maps the clicked radio
+        # to a mode; the projection slot checks exactly the mode's radio.
+        self._radio_by_mode: dict[SaveMode, QAbstractButton] = {
+            SaveMode.STITCH: self.ui.radioButton_saveStitch,
+            SaveMode.STITCH_BLEND: self.ui.radioButton_saveStitchBlend,
+            SaveMode.ALL_CROP: self.ui.radioButton_saveAllCrop,
+            SaveMode.ALL_FULL: self.ui.radioButton_saveAllFull,
+        }
+        self._mode_by_radio: dict[QAbstractButton, SaveMode] = {
+            radio: mode for mode, radio in self._radio_by_mode.items()
+        }
+
     def _active_single_channel_wavelength(self) -> int:
         """Return the active laser wavelength for single-channel mode.
 
-        Reads the cached ``_auto_laser1`` / ``_auto_laser2`` flags on the
-        shell (sampled at acquisition start by
-        ``_cache_auto_laser_flags``) and returns the wavelength of the
-        laser that will actually fire:
+        Reads the current model ``auto_lasers`` intent (via
+        ``shell.state.snapshot()`` when the reactive model is present,
+        falling back to the legacy ``_auto_laser*`` attributes on test
+        double shells) and returns the wavelength of the laser that will
+        actually fire:
 
-        - ``_auto_laser1`` -> ``lasers[0].wavelength``
-        - ``_auto_laser2`` (only L2 checked) -> ``lasers[1].wavelength``
+        - ``auto_laser1`` -> ``lasers[0].wavelength``
+        - ``auto_laser2`` (only L2 checked) -> ``lasers[1].wavelength``
         - neither checked (manual mode / edge case) -> ``lasers[0].wavelength``
           as the fallback
 
@@ -61,11 +78,91 @@ class SavePanelWidget(QWidget):
         saved HDF5 filename carries the ``_{wavelength}nm`` suffix.
         """
         shell = self._shell
-        if getattr(shell, "_auto_laser1", False):
+        auto1, auto2 = self._auto_laser_selection()
+        if auto1:
             return int(shell.lasers[0].wavelength)
-        if getattr(shell, "_auto_laser2", False):
+        if auto2:
             return int(shell.lasers[1].wavelength)
         return int(shell.lasers[0].wavelength)
+
+    def _auto_laser_selection(self) -> tuple[bool, bool]:
+        """Return the current auto-laser pair, preferring one model
+        snapshot read over the legacy shell attribute cache."""
+        shell = self._shell
+        state = getattr(shell, "state", None)
+        snapshot = None
+        if state is not None:
+            try:
+                snapshot = state.snapshot()
+            except Exception:
+                snapshot = None
+        if snapshot is not None and isinstance(snapshot.auto_lasers, tuple):
+            return (
+                bool(snapshot.auto_lasers[0]),
+                bool(snapshot.auto_lasers[1]),
+            )
+        return (
+            bool(getattr(shell, "_auto_laser1", False)),
+            bool(getattr(shell, "_auto_laser2", False)),
+        )
+
+    # ------------------------------------------------------------------ #
+    # SaveOptions model <-> widget bindings
+    # ------------------------------------------------------------------ #
+
+    def save_options_from_widgets(self) -> SaveOptions:
+        """Sample the save-option widgets once (GUI thread only) into a
+        frozen ``SaveOptions`` — used to seed the model with the actual
+        post-setup widget defaults."""
+        mode = SaveMode.STITCH
+        for radio, radio_mode in self._mode_by_radio.items():
+            if radio.isChecked():
+                mode = radio_mode
+                break
+        return SaveOptions(
+            description=str(self.ui.lineEdit_saveDescription.text()),
+            mode=mode,
+        )
+
+    @Slot()
+    def updateUi_save_description(self) -> None:
+        """Commit the description line edit's text to the model. Bound to
+        ``lineEdit_saveDescription.editingFinished``."""
+        self._shell.state.set_save_description(
+            str(self.ui.lineEdit_saveDescription.text())
+        )
+
+    @Slot(QAbstractButton)
+    def updateUi_save_mode(self, button: QAbstractButton) -> None:
+        """Map the clicked exclusive save-mode radio to a ``SaveMode``
+        and commit it to the model. Bound to
+        ``save_option_button_group.buttonClicked``."""
+        mode = self._mode_by_radio.get(button)
+        if mode is None:
+            return
+        self._shell.state.set_save_mode(mode)
+
+    @Slot(object)
+    def updateUi_save_options_from_state(self, options: object) -> None:
+        """Echo-guarded model -> widget projection. Rejects non-
+        ``SaveOptions`` payloads, sets the description text, and checks
+        exactly the radio matching ``options.mode``. Each widget's prior
+        ``blockSignals`` state is restored so the projection cannot echo
+        back into the commit slots."""
+        if not isinstance(options, SaveOptions):
+            return
+        edit = self.ui.lineEdit_saveDescription
+        if edit.text() != options.description:
+            was = edit.blockSignals(True)
+            edit.setText(options.description)
+            edit.blockSignals(was)
+        radios = list(self._radio_by_mode.values())
+        blocked = [radio.blockSignals(True) for radio in radios]
+        # The button group is exclusive: checking the target radio
+        # unchecks the others, so exactly one radio ends up checked.
+        self._radio_by_mode[options.mode].setChecked(True)
+        for radio, was in zip(radios, blocked, strict=True):
+            radio.blockSignals(was)
 
     def updateUi_select_file(self) -> None:
         """Allows the selection of an HDF5 file OR an OME-Zarr store
@@ -351,6 +448,13 @@ class SavePanelWidget(QWidget):
                 "Description - Select Save Directory First"
             )
             self.ui.lineEdit_saveDescription.setEnabled(False)
+        # Keep the model in lock-step with the widget: a directory change
+        # clears the description field, so commit the (now empty) text
+        # explicitly rather than waiting for an editingFinished that never
+        # fires on programmatic clears.
+        self._shell.state.set_save_description(
+            str(self.ui.lineEdit_saveDescription.text())
+        )
 
     def validate_file_name(self) -> None:
         """Validate filename set by the user"""
@@ -393,12 +497,16 @@ class SavePanelWidget(QWidget):
         self.validate_file_name()
 
         if self._shell.saving_allowed:
-            # Getting sample name
-            self._shell.save_description = str(self.ui.lineEdit_saveDescription.text())
+            # Save intent comes from the model — one frozen snapshot for
+            # this save action (description + exclusive mode + auto-laser
+            # selection), not live widget reads.
+            snapshot = self._shell.state.snapshot()
+            save_options = snapshot.save_options
+            auto1, auto2 = snapshot.auto_lasers
 
             """Setting up frame saver"""
             self._shell._fs.reinit(1)
-            self._shell._fs.add_sample_name(self._shell.save_description)
+            self._shell._fs.add_sample_name(save_options.description)
             self._shell._fs.add_motor_parameters(
                 self._shell.image_hor_pos_text,
                 self._shell.image_ver_pos_text,
@@ -406,7 +514,7 @@ class SavePanelWidget(QWidget):
             )
 
             """Saving frame"""
-            if self.ui.radioButton_saveAllCrop.isChecked():
+            if save_options.mode == SaveMode.ALL_CROP:
                 self._shell._fs.set_files(
                     1,
                     self._shell.save_filepath,
@@ -420,7 +528,7 @@ class SavePanelWidget(QWidget):
                 self._shell.updateUi_message_printer(
                     "Saving Images (one for each ETL scan, cropped)"
                 )
-            elif self.ui.radioButton_saveAllFull.isChecked():
+            elif save_options.mode == SaveMode.ALL_FULL:
                 self._shell._fs.set_files(
                     1,
                     self._shell.save_filepath,
@@ -434,12 +542,11 @@ class SavePanelWidget(QWidget):
                     "Saving Images (one for each ETL scan, full)"
                 )
             else:
-                # radioButton_saveStitch (the default "Stitched - No blend"
-                # option) falls through to this branch — it is the
-                # reconstructed_frame save mode. The radio is in the
-                # exclusive save_option_button_group but is not explicitly
-                # checked here because it is the implicit default (the
-                # else branch covers it).
+                # SaveMode.STITCH (the default "Stitched - No blend"
+                # option) and SaveMode.STITCH_BLEND both land on the
+                # reconstructed_frame save path — the blend difference is
+                # applied at reconstruction time in the acquisition worker,
+                # not in the save branch selection here.
                 #
                 # Multi-channel single mode (both auto-laser checkboxes
                 # checked): write TWO wavelength-suffixed HDF5 files, one
@@ -456,7 +563,7 @@ class SavePanelWidget(QWidget):
                 # neither) passes wavelengths=[active_wavelength] so the
                 # saved file carries the _{wavelength}nm suffix; the
                 # frame is enqueued as a bare ndarray.
-                multi_channel = self._shell._auto_laser1 and self._shell._auto_laser2
+                multi_channel = auto1 and auto2
                 if multi_channel:
                     wl1 = self._shell.lasers[0].wavelength
                     wl2 = self._shell.lasers[1].wavelength
