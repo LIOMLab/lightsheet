@@ -870,17 +870,17 @@ def test_zarr_saver_merges_second_single_channel(
     saver2.finalize()
 
     root = zarr.open(store_path, mode="r")
-    l0 = root["0"]
-    assert l0.shape == (2, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)  # ty: ignore[invalid-argument-type, unresolved-attribute]
+    l0 = root["0"]  # ty: ignore[invalid-argument-type]
+    assert l0.shape == (2, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)  # ty: ignore[unresolved-attribute]
     for z in range(n_planes):
-        assert np.all(np.asarray(l0[0, z, :, :]) == 100 + z)
-        assert np.all(np.asarray(l0[1, z, :, :]) == 200 + z)
+        assert np.all(np.asarray(l0[0, z, :, :]) == 100 + z)  # ty: ignore[invalid-argument-type, not-subscriptable]
+        assert np.all(np.asarray(l0[1, z, :, :]) == 200 + z)  # ty: ignore[invalid-argument-type, not-subscriptable]
 
     ome = root.attrs["ome"]
-    channels = ome["omero"]["channels"]  # ty: ignore[not-subscriptable]
+    channels = ome["omero"]["channels"]  # ty: ignore[not-subscriptable, invalid-argument-type]
     assert len(channels) == 2
-    assert channels[0]["wavelength"] == ctrl.lasers[0].wavelength  # ty: ignore[index]
-    assert channels[1]["wavelength"] == ctrl.lasers[1].wavelength  # ty: ignore[index]
+    assert channels[0]["wavelength"] == ctrl.lasers[0].wavelength
+    assert channels[1]["wavelength"] == ctrl.lasers[1].wavelength
 
 
 
@@ -894,3 +894,351 @@ def test_zarr_saver_has_focused_module() -> None:
 
     assert new_zarr is old_zarr
     assert new_zarr.__module__.endswith("zarr_saver")
+
+
+def _seed_single_channel_store(
+    store_path: str,
+    n_planes: int,
+    ysize: int,
+    xsize: int,
+    value: int = 7,
+) -> None:
+    """Create a minimal existing OME-Zarr store on disk that the merge
+    check accepts: a 4-D uint16 L0 array at ``0`` with one channel and
+    the caller's plane/pixel dimensions."""
+    import zarr
+
+    root = zarr.open(store_path, mode="w")
+    data = np.full((1, n_planes, ysize, xsize), value, dtype=np.uint16)
+    root.create_array(  # ty: ignore[unresolved-attribute]
+        "0", data=data, chunks=(1, 1, ysize, xsize)
+    )
+    # One existing omero channel so the merged writer's channel count
+    # stays consistent with the appended metadata.
+    root.attrs["ome"] = {
+        "omero": {
+            "channels": [
+                {
+                    "label": "seed channel",
+                    "color": "00FF00",
+                    "active": True,
+                    "wavelength": 555,
+                }
+            ]
+        }
+    }
+
+
+def test_zarr_merge_skipped_for_incompatible_store(
+    controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    """An existing OME-Zarr whose L0 shape does not match the requested
+    acquisition is NOT merged — the merge-check condition fails closed
+    and the default overwrite path runs, producing a 1-channel store."""
+    import zarr
+
+    ctrl = controller
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = False
+
+    store_path = str(tmp_path / "stack.ome.zarr")
+    # Plane-count mismatch (99 vs the requested 3) fails the merge
+    # condition — the store must be overwritten, not appended.
+    _seed_single_channel_store(store_path, 99, 4, 4)
+
+    saver = ZarrSaver(ctrl)
+    n_planes = 3
+    saver.start_stack(store_path, n_planes)
+    assert saver._merge_mode is False
+
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
+    frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
+    for z in range(n_planes):
+        saver.write_plane(0, z, frame, 0.0, 0.0, 0.0)
+    saver.finalize()
+
+    root = zarr.open(store_path, mode="r")
+    assert root["0"].shape == (1, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)  # ty: ignore[invalid-argument-type, unresolved-attribute]
+
+
+def test_zarr_merge_failure_falls_back_to_overwrite(
+    controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    """A directory with a zarr.json that is not a readable zarr store
+    trips the merge check's exception fallback: merge state is cleared
+    and the acquisition still writes a valid store."""
+    import zarr
+
+    ctrl = controller
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = False
+
+    store_path = str(tmp_path / "stack.ome.zarr")
+    store_dir = Path(store_path)
+    store_dir.mkdir()
+    (store_dir / "zarr.json").write_text("{ not valid zarr")
+
+    saver = ZarrSaver(ctrl)
+    n_planes = 2
+    saver.start_stack(store_path, n_planes)
+    assert saver._merge_mode is False
+    assert saver._merge_source_path == ""
+
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
+    frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
+    for z in range(n_planes):
+        saver.write_plane(0, z, frame, 0.0, 0.0, 0.0)
+    saver.finalize()
+
+    root = zarr.open(store_path, mode="r")
+    assert root["0"].shape == (1, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)  # ty: ignore[invalid-argument-type, unresolved-attribute]
+
+
+def test_zarr_merge_removes_stale_merge_source_file(
+    controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    """A leftover ``<store>.merge-source`` FILE from a crashed merge is
+    unlinked before the rename — the merge still completes and appends
+    the new channel."""
+    import zarr
+
+    ctrl = controller
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = False
+
+    store_path = str(tmp_path / "stack.ome.zarr")
+    n_planes = 2
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
+    _seed_single_channel_store(
+        store_path, n_planes, ctrl.camera.ysize, ctrl.camera.xsize
+    )
+
+    # Stale merge-source leftover as a plain file (non-directory path).
+    stale = Path(store_path + ".merge-source")
+    stale.write_text("stale leftover")
+
+    saver = ZarrSaver(ctrl)
+    saver.start_stack(store_path, n_planes)
+    assert saver._merge_mode is True
+    assert saver._merge_target_channel == 1
+    # The stale file was removed and the old store renamed into its place.
+    assert Path(saver._merge_source_path).is_dir()
+
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
+    frame = np.full(
+        (ctrl.camera.ysize, ctrl.camera.xsize), 50, dtype=np.uint16
+    )
+    for z in range(n_planes):
+        saver.write_plane(0, z, frame, 0.0, 0.0, 0.0)
+    saver.finalize()
+
+    root = zarr.open(store_path, mode="r")
+    l0 = root["0"]  # ty: ignore[invalid-argument-type]
+    assert l0.shape == (2, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)  # ty: ignore[unresolved-attribute]
+
+
+def test_zarr_merge_removes_stale_merge_source_directory(
+    controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    """A leftover ``<store>.merge-source`` DIRECTORY from a crashed
+    merge is removed via rmtree before the rename."""
+    ctrl = controller
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = False
+
+    store_path = str(tmp_path / "stack.ome.zarr")
+    n_planes = 2
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
+    _seed_single_channel_store(
+        store_path, n_planes, ctrl.camera.ysize, ctrl.camera.xsize
+    )
+
+    stale = Path(store_path + ".merge-source")
+    stale.mkdir()
+    (stale / "junk.bin").write_text("stale")
+
+    saver = ZarrSaver(ctrl)
+    saver.start_stack(store_path, n_planes)
+    assert saver._merge_mode is True
+    # The stale directory was removed and the old store renamed in.
+    assert Path(saver._merge_source_path).is_dir()
+    assert (Path(saver._merge_source_path) / "zarr.json").is_file()
+
+
+def test_zarr_copy_existing_l0_early_returns_and_warns(
+    controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    """_copy_existing_l0 returns immediately outside merge mode, returns
+    when the merge source's ``0`` node is not an array, and logs instead
+    of raising when the source cannot be opened."""
+    import zarr
+
+    ctrl = controller
+    _save_directory(ctrl, tmp_path)
+    saver = ZarrSaver(ctrl)
+
+    # Not in merge mode: early return, no store touched.
+    saver._copy_existing_l0()
+
+    # Merge source whose "0" is a group, not an Array: early return.
+    bad_source = str(tmp_path / "bad.ome.zarr")
+    bad_root = zarr.open(bad_source, mode="w")
+    bad_root.create_group("0")  # ty: ignore[unresolved-attribute]
+    saver._merge_mode = True
+    saver._merge_source_path = bad_source
+    saver._copy_existing_l0()
+
+    # Merge source path that does not exist: zarr.open raises and the
+    # copy logs a warning instead of propagating.
+    saver._merge_source_path = str(tmp_path / "missing.ome.zarr")
+    saver._copy_existing_l0()
+
+
+def test_zarr_remove_merge_source_edge_paths(
+    controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    """_remove_merge_source returns early outside merge mode, unlinks a
+    non-directory leftover, and logs instead of raising when removal
+    fails."""
+    ctrl = controller
+    _save_directory(ctrl, tmp_path)
+    saver = ZarrSaver(ctrl)
+
+    # Not in merge mode: early return.
+    saver._remove_merge_source()
+
+    # Merge source is a plain file (not a directory): unlink branch.
+    leftover = tmp_path / "stack.ome.zarr.merge-source"
+    leftover.write_text("stale")
+    saver._merge_mode = True
+    saver._merge_source_path = str(leftover)
+    saver._remove_merge_source()
+    assert not leftover.exists()
+
+    # Removal failure (rmtree raises) is logged, not raised.
+    saver._merge_source_path = str(tmp_path / "boom.ome.zarr")
+    Path(saver._merge_source_path).mkdir()
+    from unittest.mock import patch
+
+    import lightsheet.gui.coordinators.zarr_saver as zarr_module
+
+    with patch.object(
+        zarr_module.shutil, "rmtree", side_effect=OSError("locked")
+    ):
+        saver._remove_merge_source()
+
+
+def test_zarr_focus_group_requires_writer_and_skips_none_config(
+    controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    """_write_focus_group raises a clear RuntimeError with no writer;
+    during a real finalize a focus trajectory with ``config=None`` writes
+    the group with no config attrs."""
+    import zarr
+
+    from lightsheet.focus.types import FocusSample
+
+    ctrl = controller
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = False
+
+    # No-writer guard fires before any array work.
+    saver = ZarrSaver(ctrl)
+    saver._focus_trajectory = [
+        FocusSample(
+            block_index=0,
+            stage_pos_mm=1.0,
+            feedforward_camera_pos_mm=2.0,
+            residual_mm=0.0,
+            applied_camera_pos_mm=2.0,
+        )
+    ]
+    import pytest
+
+    with pytest.raises(RuntimeError, match="no writer"):
+        saver._write_focus_group()
+
+    # Real finalize with focus samples but config=None: the attrs block
+    # is skipped and the arrays are still written.
+    store_path = str(tmp_path / "stack.ome.zarr")
+    saver = ZarrSaver(ctrl)
+    n_planes = 2
+    saver.start_stack(store_path, n_planes)
+    saver.set_focus_trajectory(
+        [
+            FocusSample(
+                block_index=0,
+                stage_pos_mm=1.0,
+                feedforward_camera_pos_mm=2.0,
+                residual_mm=0.05,
+                applied_camera_pos_mm=2.05,
+                sharpness_metric=3.5,
+            )
+        ],
+        None,
+    )
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
+    frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
+    for z in range(n_planes):
+        saver.write_plane(0, z, frame, 0.0, 0.0, 0.0)
+    saver.finalize()
+
+    root = zarr.open(store_path, mode="r")
+    focus = root["acquisition"]["focus"]  # ty: ignore[invalid-argument-type, not-subscriptable]
+    assert list(focus["block_index"][:]) == [0]  # ty: ignore[not-subscriptable, invalid-argument-type]
+    assert "enabled" not in focus.attrs  # ty: ignore[unresolved-attribute]
+
+
+def test_zarr_adaptive_group_skips_none_config(
+    controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    """An adaptive trajectory with ``config=None`` writes the
+    /acquisition/adaptive arrays without the AdaptiveConfig attrs."""
+    import zarr
+
+    from lightsheet.adaptive.types import AdaptiveSample
+
+    ctrl = controller
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = False
+
+    store_path = str(tmp_path / "stack.ome.zarr")
+    saver = ZarrSaver(ctrl)
+    n_planes = 2
+    saver.start_stack(store_path, n_planes)
+    saver.set_adaptive_trajectory(
+        [
+            AdaptiveSample(
+                plane_index=0,
+                intensity_fraction=[0.9],
+                exposure_s=0.1,
+                laser_power_mw=(150.0, 0.0),
+                control_variable_active="exposure",
+                reacquired=False,
+                power_fallback=False,
+            )
+        ],
+        None,
+    )
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
+    frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
+    for z in range(n_planes):
+        saver.write_plane(0, z, frame, 0.0, 0.0, 0.0)
+    saver.finalize()
+
+    root = zarr.open(store_path, mode="r")
+    adaptive = root["acquisition"]["adaptive"]  # ty: ignore[invalid-argument-type, not-subscriptable]
+    assert list(adaptive["plane_index"][:]) == [0]  # ty: ignore[not-subscriptable, invalid-argument-type]
+    assert "enabled" not in adaptive.attrs  # ty: ignore[unresolved-attribute]

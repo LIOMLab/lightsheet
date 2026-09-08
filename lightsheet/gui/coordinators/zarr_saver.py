@@ -12,7 +12,7 @@ import os
 import shutil
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import zarr
@@ -77,7 +77,7 @@ class ZarrSaver:
         self._merge_mode: bool = False
         self._merge_target_channel: int = 0
         self._merge_source_path: str = ""
-        self._existing_omero_channels: list[dict] = []
+        self._existing_omero_channels: list[dict[str, Any]] = []
 
     def start_stack(self, store_path: str, n_planes: int, n_channels: int = 1) -> None:
         """Construct the OME-Zarr writer for a new stack.
@@ -111,8 +111,8 @@ class ZarrSaver:
         cam = self.parent.camera
         n_channels = int(n_channels)
         n_planes = int(n_planes)
-        ysize = int(cam.ysize)
-        xsize = int(cam.xsize)
+        ysize = int(cam.ysize)  # ty: ignore[invalid-argument-type]
+        xsize = int(cam.xsize)  # ty: ignore[invalid-argument-type]
         chunk_shape = (1, 1, ysize, xsize)
 
         # Merge check: a single-channel acquisition targeting an existing
@@ -128,10 +128,14 @@ class ZarrSaver:
         self._merge_source_path = ""
         self._existing_omero_channels = []
         new_n_channels = n_channels
-        if n_channels == 1 and resolved_path.is_dir() and (resolved_path / "zarr.json").is_file():
+        if (
+            n_channels == 1
+            and resolved_path.is_dir()
+            and (resolved_path / "zarr.json").is_file()
+        ):
             try:
                 old_root = zarr.open(resolved, mode="r")
-                old_arr = old_root["0"]
+                old_arr = old_root["0"]  # ty: ignore[invalid-argument-type]
                 if (
                     isinstance(old_arr, zarr.Array)
                     and old_arr.ndim == 4
@@ -143,22 +147,28 @@ class ZarrSaver:
                     source_path = str(resolved_path) + ".merge-source"
                     source_path_obj = Path(source_path)
                     if source_path_obj.exists() or source_path_obj.is_symlink():
-                        if source_path_obj.is_dir() and not source_path_obj.is_symlink():
+                        if (
+                            source_path_obj.is_dir()
+                            and not source_path_obj.is_symlink()
+                        ):
                             shutil.rmtree(source_path)
                         else:
                             source_path_obj.unlink()
-                    os.rename(resolved, source_path)
+                    resolved_path.rename(source_path)
                     old_root = zarr.open(source_path, mode="r")
-                    old_arr = old_root["0"]
-                    new_n_channels = old_arr.shape[0] + 1
-                    self._merge_target_channel = old_arr.shape[0]
+                    old_arr = old_root["0"]  # ty: ignore[invalid-argument-type]
+                    new_n_channels = old_arr.shape[0] + 1  # ty: ignore[unresolved-attribute]
+                    self._merge_target_channel = old_arr.shape[0]  # ty: ignore[unresolved-attribute]
                     self._merge_source_path = source_path
                     self._existing_omero_channels = (
-                        old_root.attrs.get("ome", {}).get("omero", {}).get("channels", [])
+                        old_root.attrs.get("ome", {})  # ty: ignore[unresolved-attribute]
+                        .get("omero", {})
+                        .get("channels", [])
                     )
                     self._merge_mode = True
                     self.parent.sig_message.emit(
-                        f"Merging into existing zarr; new channel index {self._merge_target_channel}"
+                        "Merging into existing zarr; new channel index "
+                        f"{self._merge_target_channel}"
                     )
             except Exception as e:
                 # If merge detection or relocation fails, fall back to
@@ -489,16 +499,18 @@ class ZarrSaver:
         """
         if not self._merge_mode or not self._merge_source_path:
             return
+        if self._writer is None:
+            return
         try:
             old_root = zarr.open(self._merge_source_path, mode="r")
-            old_arr = old_root["0"]
+            old_arr = old_root["0"]  # ty: ignore[invalid-argument-type]
             if not isinstance(old_arr, zarr.Array):
                 return
             n_old_channels = old_arr.shape[0]
             n_planes = old_arr.shape[1]
             for c in range(n_old_channels):
                 for z in range(n_planes):
-                    self._writer[c, z, :, :] = np.asarray(old_arr[c, z, :, :])  # ty: ignore[index]
+                    self._writer[c, z, :, :] = np.asarray(old_arr[c, z, :, :])
         except Exception as e:
             logger.warning("Failed to copy existing zarr L0: %s", e)
 

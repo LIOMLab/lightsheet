@@ -236,6 +236,13 @@ file_branch_coverage_min = 50
 [tool.coverage-threshold.modules."lightsheet/gui/panels/save_panel.py"]
 file_branch_coverage_min = 50
 
+# Reactive state model package (lightsheet/state/*.py) — explicit 80%
+# branch floor matching the global default, pinned here so the model's
+# validation and changed/unchanged branches cannot silently regress below
+# the default tier.
+[tool.coverage-threshold.modules."lightsheet/state"]
+file_branch_coverage_min = 80
+
 [tool.ty.rules]
 missing-type-argument = "error"
 unsound-return-statement = "error"

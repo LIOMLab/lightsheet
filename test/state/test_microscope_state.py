@@ -197,3 +197,207 @@ def test_model_set_save_options_emits_on_change(qtbot: QtBot) -> None:
     with qtbot.waitSignal(state.sig_save_options_changed, timeout=100):
         state.set_save_options(new_opts)
     assert state.save_options == new_opts
+
+
+def test_model_set_save_options_suppresses_unchanged(qtbot: QtBot) -> None:
+    """Applying an equal SaveOptions does not re-emit the change signal."""
+    _ = QCoreApplication.instance() or QCoreApplication()
+    state = MicroscopeState(lightsheet_line_time_s=1e-5)
+    with qtbot.assertNotEmitted(state.sig_save_options_changed, wait=100):
+        state.set_save_options(SaveOptions())
+
+
+def test_model_set_save_options_validates_type(qtbot: QtBot) -> None:
+    """set_save_options rejects non-SaveOptions payloads."""
+    _ = QCoreApplication.instance() or QCoreApplication()
+    state = MicroscopeState(lightsheet_line_time_s=1e-5)
+    with pytest.raises(ValueError, match="SaveOptions"):
+        state.set_save_options({"description": "x"})  # type: ignore[arg-type]
+
+
+def test_model_set_save_mode_and_description(qtbot: QtBot) -> None:
+    """set_save_mode and set_save_description fold one field through
+    set_save_options and validate their argument types."""
+    _ = QCoreApplication.instance() or QCoreApplication()
+    state = MicroscopeState(lightsheet_line_time_s=1e-5)
+
+    with qtbot.waitSignal(state.sig_save_options_changed, timeout=100):
+        state.set_save_mode(SaveMode.ALL_FULL)
+    assert state.save_options.mode == SaveMode.ALL_FULL
+    assert state.save_options.description == ""
+
+    with qtbot.waitSignal(state.sig_save_options_changed, timeout=100):
+        state.set_save_description("new desc")
+    assert state.save_options.description == "new desc"
+    assert state.save_options.mode == SaveMode.ALL_FULL
+
+    # Unchanged values do not re-emit.
+    with qtbot.assertNotEmitted(state.sig_save_options_changed, wait=100):
+        state.set_save_mode(SaveMode.ALL_FULL)
+        state.set_save_description("new desc")
+
+    with pytest.raises(ValueError, match="SaveMode"):
+        state.set_save_mode("stitch")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="str"):
+        state.set_save_description(5)  # type: ignore[arg-type]
+
+
+def test_model_set_laser_enabled_emits_and_validates(qtbot: QtBot) -> None:
+    """set_laser_enabled validates index/type, emits on change, and
+    suppresses an unchanged write."""
+    _ = QCoreApplication.instance() or QCoreApplication()
+    state = MicroscopeState(lightsheet_line_time_s=1e-5)
+    assert state.laser_enabled == (False, False)
+
+    with qtbot.waitSignal(state.sig_laser_enabled_changed, timeout=100):
+        state.set_laser_enabled(1, True)
+    assert state.laser_enabled == (False, True)
+
+    with qtbot.assertNotEmitted(state.sig_laser_enabled_changed, wait=100):
+        state.set_laser_enabled(1, True)
+
+    with pytest.raises(IndexError, match="0 or 1"):
+        state.set_laser_enabled(2, True)
+    with pytest.raises(IndexError, match="0 or 1"):
+        state.set_laser_enabled(-1, False)
+    with pytest.raises(ValueError, match="bool"):
+        state.set_laser_enabled(0, 1)  # type: ignore[arg-type]
+
+
+def test_model_set_laser_power_rejects_bad_index_and_nonfinite(
+    qtbot: QtBot,
+) -> None:
+    """set_laser_power_pct rejects out-of-range indices and non-finite
+    percentages."""
+    _ = QCoreApplication.instance() or QCoreApplication()
+    state = MicroscopeState(lightsheet_line_time_s=1e-5)
+    with pytest.raises(IndexError, match="0 or 1"):
+        state.set_laser_power_pct(5, 10.0)
+    with pytest.raises(IndexError, match="0 or 1"):
+        state.set_laser_power_pct(-1, 10.0)
+    with pytest.raises(ValueError, match="finite"):
+        state.set_laser_power_pct(0, float("nan"))
+    with pytest.raises(ValueError, match="finite"):
+        state.set_laser_power_pct(1, float("inf"))
+    with pytest.raises(ValueError, match="numeric"):
+        state.set_laser_power_pct(0, True)  # type: ignore[arg-type]
+
+
+def test_model_set_auto_lasers_validates_bools(qtbot: QtBot) -> None:
+    """set_auto_lasers rejects non-bool arguments and emits on change."""
+    _ = QCoreApplication.instance() or QCoreApplication()
+    state = MicroscopeState(lightsheet_line_time_s=1e-5)
+    with pytest.raises(ValueError, match="bool"):
+        state.set_auto_lasers(True, 1)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="bool"):
+        state.set_auto_lasers("yes", False)  # type: ignore[arg-type]
+
+    with qtbot.waitSignal(state.sig_auto_lasers_changed, timeout=100):
+        state.set_auto_lasers(True, False)
+    assert state.auto_laser1 is True
+    assert state.auto_laser2 is False
+
+    with qtbot.assertNotEmitted(state.sig_auto_lasers_changed, wait=100):
+        state.set_auto_lasers(True, False)
+
+
+def test_model_set_lightsheet_line_time_emits_and_validates(
+    qtbot: QtBot,
+) -> None:
+    """set_lightsheet_line_time_s rejects non-numeric, non-finite, and
+    non-positive values and emits only on a real change."""
+    _ = QCoreApplication.instance() or QCoreApplication()
+    state = MicroscopeState(lightsheet_line_time_s=1e-5)
+
+    with pytest.raises(ValueError, match="numeric"):
+        state.set_lightsheet_line_time_s("fast")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="numeric"):
+        state.set_lightsheet_line_time_s(True)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="finite"):
+        state.set_lightsheet_line_time_s(float("nan"))
+    with pytest.raises(ValueError, match="finite"):
+        state.set_lightsheet_line_time_s(float("inf"))
+    with pytest.raises(ValueError, match="positive"):
+        state.set_lightsheet_line_time_s(0.0)
+    with pytest.raises(ValueError, match="positive"):
+        state.set_lightsheet_line_time_s(-1e-5)
+
+    with qtbot.waitSignal(state.sig_lightsheet_line_time_changed, timeout=100):
+        state.set_lightsheet_line_time_s(2e-5)
+    assert state.lightsheet_line_time_s == 2e-5
+
+    with qtbot.assertNotEmitted(state.sig_lightsheet_line_time_changed, wait=100):
+        state.set_lightsheet_line_time_s(2e-5)
+
+
+def test_model_apply_worker_snapshot_partial_changes(qtbot: QtBot) -> None:
+    """apply_worker_snapshot emits only for the elements that actually
+    changed — an unchanged applied value is folded but not re-emitted."""
+    _ = QCoreApplication.instance() or QCoreApplication()
+    state = MicroscopeState(lightsheet_line_time_s=1e-5)
+    state.set_laser_power_pct(0, 50.0)
+    state.set_laser_power_pct(1, 50.0)
+    state.set_laser_enabled(0, True)
+
+    # Only index 1 changes; index 0 is isclose-equal to the live value.
+    applied = AppliedMicroscopeSnapshot(laser_power_pct=(50.0, 75.0))
+    emissions: list[tuple[int, float]] = []
+    state.sig_laser_power_changed.connect(
+        lambda idx, val: emissions.append((idx, val))
+    )
+    state.apply_worker_snapshot(applied)
+    assert state.laser_power_pct == (50.0, 75.0)
+    assert emissions == [(1, 75.0)]
+
+    # Only index 1 changes on the enabled pair as well.
+    enabled_emissions: list[tuple[int, bool]] = []
+    state.sig_laser_enabled_changed.connect(
+        lambda idx, val: enabled_emissions.append((idx, val))
+    )
+    state.apply_worker_snapshot(
+        AppliedMicroscopeSnapshot(laser_enabled=(True, True))
+    )
+    assert state.laser_enabled == (True, True)
+    assert enabled_emissions == [(1, True)]
+
+
+def test_model_apply_worker_snapshot_no_change_returns_early(
+    qtbot: QtBot,
+) -> None:
+    """An applied snapshot equal to the live model takes the early-return
+    path and emits nothing."""
+    _ = QCoreApplication.instance() or QCoreApplication()
+    state = MicroscopeState(lightsheet_line_time_s=1e-5)
+    emissions: list[object] = []
+    state.sig_laser_power_changed.connect(lambda i, v: emissions.append((i, v)))
+    state.sig_lightsheet_line_time_changed.connect(lambda v: emissions.append(v))
+
+    state.apply_worker_snapshot(
+        AppliedMicroscopeSnapshot(
+            laser_power_pct=(0.0, 0.0),
+            laser_enabled=(False, False),
+            lightsheet_line_time_s=1e-5,
+        )
+    )
+    assert emissions == []
+
+
+def test_model_apply_worker_snapshot_folds_line_time(qtbot: QtBot) -> None:
+    """An applied line-time change updates the model and emits the
+    line-time signal; an unchanged line time emits nothing."""
+    _ = QCoreApplication.instance() or QCoreApplication()
+    state = MicroscopeState(lightsheet_line_time_s=1e-5)
+    emissions: list[float] = []
+    state.sig_lightsheet_line_time_changed.connect(emissions.append)
+
+    state.apply_worker_snapshot(
+        AppliedMicroscopeSnapshot(lightsheet_line_time_s=3e-5)
+    )
+    assert state.lightsheet_line_time_s == 3e-5
+    assert emissions == [3e-5]
+
+    emissions.clear()
+    state.apply_worker_snapshot(
+        AppliedMicroscopeSnapshot(lightsheet_line_time_s=3e-5)
+    )
+    assert emissions == []
