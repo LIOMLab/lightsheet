@@ -881,6 +881,10 @@ class Controller_MainWindow(QMainWindow):
         self.save_option_button_group.buttonClicked.connect(
             self.save_panel.updateUi_save_mode
         )
+        # buttonClicked only fires on real clicks; toggled covers
+        # programmatic setChecked so model and widgets cannot diverge.
+        for _radio in self.save_panel._radio_by_mode.values():
+            _radio.toggled.connect(self.save_panel.updateUi_save_mode_checked)
         self.save_panel.ui.lineEdit_saveDescription.editingFinished.connect(
             self.save_panel.updateUi_save_description
         )
@@ -1735,10 +1739,11 @@ class Controller_MainWindow(QMainWindow):
         # of mode. The pill inherits the badge's existing QDarkStyle
         # default text color + bold weight — NO green accent (the green
         # token is reserved exclusively for laser ● ON status, the
-        # one-laser-energized invariant's visual corollary).
-        if getattr(self, "_auto_laser1", False) and getattr(
-            self, "_auto_laser2", False
-        ):
+        # one-laser-energized invariant's visual corollary). The pill reads
+        # the current model snapshot — the auto-laser intent source of
+        # truth committed by the checkbox-stateChanged path.
+        _auto1, _auto2 = self.state.snapshot().auto_lasers
+        if _auto1 and _auto2:
             text = text + " · MULTI-CH"
         self.ui.label_modeBadge.setText(text)
 
@@ -1771,16 +1776,19 @@ class Controller_MainWindow(QMainWindow):
                 self._update_mode_badge(mode, "RUNNING", plane=value, total=total)
 
     def _cache_auto_laser_flags(self) -> None:
-        """Sample the auto-laser checkboxes. GUI thread only.
+        """Commit the auto-laser checkboxes to the model. GUI thread only.
 
-        Acquisition workers run start_lasers()/stop_lasers() off the GUI
-        thread and must read these cached bools rather than the widgets,
-        which belong to the GUI thread. Called at every
+        The model is the single source of truth for auto-laser intent:
+        acquisition workers receive the pair frozen inside their spawn
+        ``MicroscopeSnapshot``, and ``stop_lasers()`` reads the live
+        ``laser.active`` state — never these flags. Called at every
         mode-*start* entry point that leads to a worker calling
         start_lasers()/stop_lasers().
         """
-        self._auto_laser1 = self.laser_panel.ui.checkBox_laserOneAutomatic.isChecked()
-        self._auto_laser2 = self.laser_panel.ui.checkBox_laserTwoAutomatic.isChecked()
+        self.state.set_auto_lasers(
+            self.laser_panel.ui.checkBox_laserOneAutomatic.isChecked(),
+            self.laser_panel.ui.checkBox_laserTwoAutomatic.isChecked(),
+        )
         # Re-render the stack-plan summary synchronously with the checkbox
         # change so the 2ch re-estimate (2x time/size + "2 ch x N planes"
         # clause) appears the instant the operator toggles the second
@@ -1811,11 +1819,11 @@ class Controller_MainWindow(QMainWindow):
         radio = getattr(self, "channel_radio", None)
         if radio is None:
             return
-        cb1 = getattr(self.laser_panel.ui, "checkBox_laserOneAutomatic", None)
-        cb2 = getattr(self.laser_panel.ui, "checkBox_laserTwoAutomatic", None)
-        both = bool(
-            cb1 is not None and cb2 is not None and cb1.isChecked() and cb2.isChecked()
-        )
+        # The checkbox stateChanged slot commits to the model before this
+        # runs (via _cache_auto_laser_flags), so one model snapshot is the
+        # source of truth for the pair state.
+        _a1, _a2 = self.state.snapshot().auto_lasers
+        both = _a1 and _a2
         if both:
             radio.show_for_multi_channel()
             # Apply the selected channel's tint to the currently-displayed

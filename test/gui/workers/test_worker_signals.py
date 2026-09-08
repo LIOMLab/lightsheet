@@ -1,11 +1,11 @@
-"""Worker signal contract tests for PreviewWorker.
+"""Worker signal + snapshot contract tests for PreviewWorker.
 
 Verifies that ``PreviewWorker.run`` emits its ``finished`` signal exactly
 once (whether the run completes normally, breaks on E-stop, or an
-exception propagates) and that the worker NEVER accesses
-``self._shell.ui.*`` widgets directly (AGENTS.md §11 — cross-thread UI
-mutation is forbidden; all cross-thread effects flow through queued
-signal/slot connections).
+exception propagates), derives the laser selection from the frozen spawn
+``MicroscopeSnapshot`` (including the continuous-mode both-checked ->
+L1-only override), always calls ``stop_lasers`` in cleanup, and NEVER
+accesses ``self._shell.ui.*`` widgets directly (AGENTS.md §11).
 """
 
 from __future__ import annotations
@@ -22,12 +22,17 @@ from lightsheet.gui.workers import PreviewWorker
 from lightsheet.hal import (
     DeviceBundle,
 )
+from lightsheet.state import MicroscopeSnapshot, MicroscopeState
 
 
 def _make_bundle() -> DeviceBundle:
     from test.helpers.factories import make_bundle
 
     return make_bundle()
+
+
+def _snapshot(auto: tuple[bool, bool]) -> MicroscopeSnapshot:
+    return MicroscopeSnapshot(lightsheet_line_time_s=1.0, auto_lasers=auto)
 
 
 class _PreviewShell:
@@ -47,19 +52,23 @@ class _PreviewShell:
         self.estop_event = threading.Event()
         self._fs = Mock()
         self.sig_message = Mock()
-        # Auto-laser flags pre-sampled on the GUI thread; default to False so
-        # the continuous-mode L1-only guard does not energize L2 in tests.
-        self._auto_laser1 = False
-        self._auto_laser2 = False
+
+
+def _make_worker(
+    shell: _PreviewShell, auto: tuple[bool, bool] = (False, False)
+) -> tuple[PreviewWorker, Mock]:
+    hw = Mock()
+    worker = PreviewWorker(
+        _make_bundle(), hw, shell, snapshot=_snapshot(auto)
+    )  # ty: ignore[invalid-argument-type]
+    return worker, hw
 
 
 def test_preview_worker_finished_emits_exactly_once_normal(qtbot: QtBot) -> None:
     """PreviewWorker.run with preview_mode_started=False completes
     normally and emits finished exactly once."""
-    bundle = _make_bundle()
     shell = _PreviewShell()
-    hw = Mock()
-    worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
+    worker, _hw = _make_worker(shell)
 
     finished_count: list[int] = []
     worker.finished.connect(lambda: finished_count.append(1))
@@ -72,12 +81,10 @@ def test_preview_worker_finished_emits_exactly_once_normal(qtbot: QtBot) -> None
 def test_preview_worker_finished_emits_exactly_once_estop(qtbot: QtBot) -> None:
     """PreviewWorker.run with estop_event set breaks out of the loop and
     emits finished exactly once."""
-    bundle = _make_bundle()
     shell = _PreviewShell()
     shell.preview_mode_started = True
     shell.estop_event.set()
-    hw = Mock()
-    worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
+    worker, _hw = _make_worker(shell)
 
     finished_count: list[int] = []
     worker.finished.connect(lambda: finished_count.append(1))
@@ -90,10 +97,8 @@ def test_preview_worker_finished_emits_exactly_once_estop(qtbot: QtBot) -> None:
 def test_preview_worker_finished_emits_exactly_once_exception(qtbot: QtBot) -> None:
     """PreviewWorker.run with a camera.arm() exception catches it, emits
     sig_message, and still emits finished exactly once from finally."""
-    bundle = _make_bundle()
     shell = _PreviewShell()
-    hw = Mock()
-    worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
+    worker, _hw = _make_worker(shell)
     worker.camera.arm = Mock(side_effect=RuntimeError("camera fault"))
 
     finished_count: list[int] = []
@@ -106,6 +111,107 @@ def test_preview_worker_finished_emits_exactly_once_exception(qtbot: QtBot) -> N
     assert len(finished_count) == 1, "finished must emit exactly once on exception"
 
 
+# -- snapshot-derived laser selection ---------------------------------------
+
+
+def test_preview_worker_l1_only_selection(qtbot: QtBot) -> None:
+    """auto_lasers=(True, False): the snapshot is passed through to
+    start_lasers with no continuous-mode override; stop_lasers runs in
+    the cleanup tail."""
+    shell = _PreviewShell()
+    snap = _snapshot((True, False))
+    hw = Mock()
+    worker = PreviewWorker(_make_bundle(), hw, shell, snapshot=snap)  # ty: ignore[invalid-argument-type]
+    worker.run()
+    hw.start_lasers.assert_called_once_with(snap, energize_lasers=None)
+    hw.stop_lasers.assert_called_once()
+
+
+def test_preview_worker_l2_only_selection(qtbot: QtBot) -> None:
+    """auto_lasers=(False, True): the snapshot is passed through with no
+    override — start_lasers energizes L2 from the snapshot flags."""
+    shell = _PreviewShell()
+    snap = _snapshot((False, True))
+    hw = Mock()
+    worker = PreviewWorker(_make_bundle(), hw, shell, snapshot=snap)  # ty: ignore[invalid-argument-type]
+    worker.run()
+    hw.start_lasers.assert_called_once_with(snap, energize_lasers=None)
+    hw.stop_lasers.assert_called_once()
+
+
+def test_preview_worker_both_selected_maps_to_l1_only(qtbot: QtBot) -> None:
+    """auto_lasers=(True, True): continuous mode energizes ONLY L1 — the
+    override tuple (True, False) is passed to start_lasers so L2 stays off
+    for the whole session (one-laser invariant holds trivially)."""
+    shell = _PreviewShell()
+    snap = _snapshot((True, True))
+    hw = Mock()
+    worker = PreviewWorker(_make_bundle(), hw, shell, snapshot=snap)  # ty: ignore[invalid-argument-type]
+    worker.run()
+    hw.start_lasers.assert_called_once_with(snap, energize_lasers=(True, False))
+    hw.stop_lasers.assert_called_once()
+
+
+def test_preview_worker_neither_selected(qtbot: QtBot) -> None:
+    """auto_lasers=(False, False): start_lasers is still invoked with the
+    snapshot (it energizes nothing) and stop_lasers still runs."""
+    shell = _PreviewShell()
+    snap = _snapshot((False, False))
+    hw = Mock()
+    worker = PreviewWorker(_make_bundle(), hw, shell, snapshot=snap)  # ty: ignore[invalid-argument-type]
+    worker.run()
+    hw.start_lasers.assert_called_once_with(snap, energize_lasers=None)
+    hw.stop_lasers.assert_called_once()
+
+
+def test_preview_worker_estop_before_start_never_energizes(qtbot: QtBot) -> None:
+    """E-stop set before run() -> start_lasers is never called, but
+    stop_lasers still runs in the finally cleanup and finished emits."""
+    shell = _PreviewShell()
+    shell.estop_event.set()
+    snap = _snapshot((True, True))
+    hw = Mock()
+    worker = PreviewWorker(_make_bundle(), hw, shell, snapshot=snap)  # ty: ignore[invalid-argument-type]
+    finished_count: list[int] = []
+    worker.finished.connect(lambda: finished_count.append(1))
+    worker.run()
+    hw.start_lasers.assert_not_called()
+    hw.stop_lasers.assert_called_once()
+    assert len(finished_count) == 1
+
+
+def test_preview_worker_snapshot_immune_to_post_spawn_model_edits(
+    qtbot: QtBot,
+) -> None:
+    """The worker's frozen snapshot does not follow model edits made after
+    construction — mid-run GUI changes are intent for the NEXT run only."""
+    shell = _PreviewShell()
+    state = MicroscopeState()
+    state.set_auto_lasers(True, True)
+    snap = state.snapshot()
+    hw = Mock()
+    worker = PreviewWorker(_make_bundle(), hw, shell, snapshot=snap)  # ty: ignore[invalid-argument-type]
+    # Post-spawn model edit.
+    state.set_auto_lasers(False, False)
+    worker.run()
+    # The run used the spawn-time selection (both -> L1-only override),
+    # not the edited (False, False).
+    hw.start_lasers.assert_called_once_with(snap, energize_lasers=(True, False))
+    assert worker._snapshot.auto_lasers == (True, True)
+
+
+def test_preview_worker_stop_lasers_on_exception_exit(qtbot: QtBot) -> None:
+    """stop_lasers runs even when the body raises — a worker that exits
+    mid-acquisition must not leave hardware energized."""
+    shell = _PreviewShell()
+    snap = _snapshot((True, False))
+    hw = Mock()
+    worker = PreviewWorker(_make_bundle(), hw, shell, snapshot=snap)  # ty: ignore[invalid-argument-type]
+    worker.camera.arm = Mock(side_effect=RuntimeError("camera fault"))
+    worker.run()
+    hw.stop_lasers.assert_called_once()
+
+
 def test_preview_worker_never_accesses_ui_widgets(qtbot: QtBot) -> None:
     """PreviewWorker.run must NOT access any self._shell.ui.* widget. The
     exposure-time spinbox read happens in PreviewWorker.__init__ on the
@@ -116,10 +222,8 @@ def test_preview_worker_never_accesses_ui_widgets(qtbot: QtBot) -> None:
 
     Verified by giving the shell a Mock ui and asserting no ui.* attribute
     other than doubleSpinBox_cameraExposureTime was accessed after run()."""
-    bundle = _make_bundle()
     shell = _PreviewShell()
-    hw = Mock()
-    worker = PreviewWorker(bundle, hw, shell)  # ty: ignore[invalid-argument-type]
+    worker, _hw = _make_worker(shell)
 
     worker.run()
 

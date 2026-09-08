@@ -557,8 +557,8 @@ class AcquisitionPanelWidget(QWidget):
         else:
             self._shell.adaptiveTrajectoryWidget.reset()
         self._shell.adaptiveTrajectoryWidget.set_power_visible(
-            bool(self._shell._auto_laser1),
-            bool(self._shell._auto_laser2),
+            bool(snapshot.auto_lasers[0]),
+            bool(snapshot.auto_lasers[1]),
         )
         # If the dock is hidden, hide the plot again (reset() shows it).
         # The data is cleared and ready; the plot will be shown when the

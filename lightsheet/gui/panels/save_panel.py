@@ -132,6 +132,22 @@ class SavePanelWidget(QWidget):
             str(self.ui.lineEdit_saveDescription.text())
         )
 
+    @Slot(bool)
+    def updateUi_save_mode_checked(self, checked: bool) -> None:
+        """Commit the save mode when a save-mode radio becomes checked.
+
+        Bound to each radio's ``toggled`` signal — ``buttonClicked`` only
+        fires on real clicks, so a programmatic ``setChecked(True)``
+        (seeding, tests, future callers) would otherwise leave the model
+        stale. The exclusive group unchecks the previous radio with
+        ``toggled(False)``, which this slot ignores. Model projection
+        blocks signals, so this cannot echo."""
+        if not checked:
+            return
+        mode = self._mode_by_radio.get(self.sender())
+        if mode is not None:
+            self._shell.state.set_save_mode(mode)
+
     @Slot(QAbstractButton)
     def updateUi_save_mode(self, button: QAbstractButton) -> None:
         """Map the clicked exclusive save-mode radio to a ``SaveMode``
