@@ -349,12 +349,17 @@ class AcquisitionPanelWidget(QWidget):
                     # Spawn the stack worker (shared with the queue loop).
                     self._spawn_stack_worker()
 
-    def _spawn_stack_worker(self) -> StackWorker | None:
+    def _spawn_stack_worker(self, *, start_plane: int = 0) -> StackWorker | None:
         """Spawn the stack worker on its QThread (moveToThread pattern),
         wire its finished signal to the post-stack UI cleanup, and start it.
         Shared by the single-stack Start button and the Acquisition Table
         queue loop. Pre-samples the auto-laser flags + save-option widgets
         on the GUI thread so the worker thread never reads ui.*.
+
+        ``start_plane`` is the resume offset handed to the worker — the
+        absolute plane index the run starts at (0 for a fresh stack). It
+        passes through unchanged; thread-reuse and signal hygiene are
+        identical for fresh and resumed runs.
 
         Returns the spawned worker, or ``None`` if the previous stack thread
         did not stop and a new worker cannot be started safely.
@@ -457,6 +462,7 @@ class AcquisitionPanelWidget(QWidget):
             focus_curve=focus_curve,
             autofocus_cfg=autofocus_cfg,
             autofocus_curve=autofocus_curve,
+            start_plane=start_plane,
         )
         self._shell._stack_worker.moveToThread(self._shell._stack_thread)
         # Connect the per-plane adaptive trajectory signal to the shell's

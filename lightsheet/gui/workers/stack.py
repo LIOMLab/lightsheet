@@ -109,6 +109,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         focus_curve: FocusCurve | None = None,
         autofocus_cfg: AutofocusConfig | None = None,
         autofocus_curve: FocusCurve | None = None,
+        start_plane: int = 0,
     ) -> None:
         super().__init__()
         assert hw is not None
@@ -243,6 +244,20 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             and self._autofocus_curve is None
         ):
             raise ValueError("Autofocus curve seed enabled but no curve was loaded")
+
+        # Resume offset: the absolute plane index the run starts at. The
+        # loop iterates range(start_plane, n_planes) and the position
+        # formula is unchanged (stack_starting_plane + plane * stack_step),
+        # so motor positions stay correct — start_plane only controls
+        # which planes are acquired, never the geometry. 0 = fresh run.
+        self._start_plane = int(start_plane)
+        if self._start_plane < 0:
+            raise ValueError(
+                f"start_plane must be >= 0; got {self._start_plane}"
+            )
+        # Set True only when the plane loop exhausts without a break —
+        # drives the completed/interrupted manifest lifecycle at teardown.
+        self._run_completed = False
 
     def _select_laser(self, idx: int) -> None:
         """Call the hardware select_laser, passing the frozen snapshot only
@@ -511,7 +526,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     seed_camera_pos_mm=cam_pos_mm,
                 )
 
-            for plane in range(n_planes):
+            for plane in range(self._start_plane, n_planes):
                 # Cooperative shutdown: if the owning QThread has been asked
                 # to quit (e.g. during xdist worker teardown), stop the stack
                 # and let the post-loop cleanup run. This is intentionally
@@ -945,6 +960,13 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     # Update progress bar
                     progress_value += progress_increment
                     self._shell.sig_progress_update.emit(int(progress_value))
+            else:
+                # The loop exhausted without hitting a break — every plane
+                # in [start_plane, n_planes) was acquired. Any break path
+                # (interruption, E-stop, failed scan, rejected move) leaves
+                # _run_completed False, which finalizes the manifest as
+                # interrupted in the teardown below.
+                self._run_completed = True
 
             if self._shell.stack_mode_started:
                 self._shell.sig_progress_update.emit(
@@ -964,9 +986,21 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             # does not leave hardware energized; if a cleanup step fails,
             # surface it but always emit finished so the UI can re-enable.
             _cleanup_errors: list[str] = []
+            logger.info(
+                "Stack worker teardown (start_plane=%d, run_completed=%s)",
+                self._start_plane,
+                self._run_completed,
+            )
             if getattr(self._shell, "saving_allowed", False):
                 try:
-                    self._shell._fs.stop_saving()
+                    # The manifest lifecycle reflects whether the plane
+                    # loop ran to completion — a break path finalizes as
+                    # interrupted so the run is resumable.
+                    self._shell._fs.stop_saving(
+                        lifecycle=(
+                            "completed" if self._run_completed else "interrupted"
+                        )
+                    )
                 except Exception as e:
                     logger.exception("Stack worker stop_saving cleanup failed")
                     _cleanup_errors.append(f"stop_saving: {e}")
