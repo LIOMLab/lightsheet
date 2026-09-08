@@ -105,7 +105,9 @@ class MockMotor(IMotor):
         elif units in ("μStep", "µStep"):
             factor = self.microstep_size * pow(10, -6)
         else:
-            factor = 0
+            # Real Zaber rejects unknown units; the mock must not mask
+            # caller errors by silently converting to zero.
+            raise ValueError(f"Unsupported motor units: {units!r}")
 
         if self.microstep_size > 0 and factor > 0:
             microsteps = position * factor / (self.microstep_size * pow(10, -6))
@@ -126,7 +128,9 @@ class MockMotor(IMotor):
         elif units in ("μStep", "µStep"):
             factor = self.microstep_size * pow(10, -6)
         else:
-            factor = 0
+            # See position_to_microsteps — unknown units raise instead of
+            # silently reporting position 0.
+            raise ValueError(f"Unsupported motor units: {units!r}")
 
         if self.microstep_size > 0 and factor > 0:
             position = microsteps * self.microstep_size * pow(10, -6) / factor

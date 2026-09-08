@@ -65,11 +65,13 @@ def test_position_to_microsteps_microstep_unit_branch() -> None:
     assert axis.position_to_microsteps(500.0, "\u03bcStep") == 500
 
 
-def test_position_to_microsteps_unknown_unit_falls_back_to_zero() -> None:
-    """The unknown-unit else branch yields factor=0 -> microsteps=0
-    (the safety fallback that prevents UnboundLocalError)."""
+def test_position_to_microsteps_unknown_unit_raises() -> None:
+    """An unknown unit raises ValueError — the mock mirrors the real
+    Zaber contract instead of silently converting to zero (a typo'd
+    unit must not move/report the stage at the origin)."""
     axis = _make_axis()
-    assert axis.position_to_microsteps(123.0, "furlongs") == 0
+    with pytest.raises(ValueError, match="Unsupported motor units"):
+        axis.position_to_microsteps(123.0, "furlongs")
 
 
 def test_position_to_microsteps_zero_microstep_size_falls_back_to_zero() -> None:
@@ -98,10 +100,12 @@ def test_microsteps_to_position_unit_branches(units: str) -> None:
     assert position == position  # finite
 
 
-def test_microsteps_to_position_unknown_unit_falls_back_to_zero() -> None:
-    """The unknown-unit else branch yields factor=0 -> position=0."""
+def test_microsteps_to_position_unknown_unit_raises() -> None:
+    """An unknown unit raises ValueError (same contract as
+    position_to_microsteps)."""
     axis = _make_axis()
-    assert axis.microsteps_to_position(1000, "parsecs") == 0
+    with pytest.raises(ValueError, match="Unsupported motor units"):
+        axis.microsteps_to_position(1000, "parsecs")
 
 
 def test_microsteps_to_position_zero_microstep_size_falls_back_to_zero() -> None:
