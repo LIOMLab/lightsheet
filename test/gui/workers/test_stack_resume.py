@@ -192,3 +192,65 @@ def test_multi_channel_crash_resumes_at_complete_plane_pair(
     contract is covered in test/resume/test_multi_channel_resume.py.
     """
     raise AssertionError("multi-channel crash/resume harness not ready")
+
+
+def test_resume_manifest_restores_matching_controller_checkpoint(
+    qtbot: QtBot,
+) -> None:
+    """A resume manifest carrying mixed controller checkpoints restores the
+    row tagged for each controller type — adaptive rows (and untagged
+    legacy rows) never feed the focus controllers."""
+    import uuid as uuid_mod
+
+    from lightsheet.resume import ResumeManifest
+
+    bundle = _make_bundle()
+    shell = _make_shell(bundle, n_planes=4)
+    manifest = ResumeManifest(
+        uuid=uuid_mod.uuid4().hex,
+        state="interrupted",
+        n_planes=4,
+        stack_starting_plane=0.0,
+        stack_ending_plane=30.0,
+        stack_step=10.0,
+        save_mode="stitch",
+        created_at="2026-09-08T00:00:00+00:00",
+        controller_checkpoints=[
+            {
+                "controller": "focus",
+                "residual_mm": 0.1,
+                "reference_sharpness": 50.0,
+                "last_command": 20.1,
+                "block_count": 2,
+            },
+            {
+                "controller": "adaptive",
+                "integral": 0.01,
+                "reacquire_count": 0,
+                "pilot": None,
+                "last_command": None,
+            },
+            {
+                "controller": "focus",
+                "residual_mm": 0.2,
+                "reference_sharpness": 55.0,
+                "last_command": 20.2,
+                "block_count": 3,
+            },
+        ],
+    )
+    worker = StackWorker(
+        bundle,
+        Mock(),
+        shell,  # ty: ignore[invalid-argument-type]
+        save_description="resume checkpoint routing",
+        resume_manifest=manifest,
+    )
+    focus_cp = worker._last_controller_checkpoint("focus")
+    assert focus_cp is not None
+    assert focus_cp["residual_mm"] == 0.2
+    assert focus_cp["block_count"] == 3
+    adaptive_cp = worker._last_controller_checkpoint("adaptive")
+    assert adaptive_cp is not None
+    assert adaptive_cp["integral"] == 0.01
+    assert worker._last_controller_checkpoint("autofocus") is None

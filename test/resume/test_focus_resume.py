@@ -475,3 +475,203 @@ def test_autofocus_worker_stages_manifest_updates(qtbot: QtBot) -> None:
     checkpoints = [u for u in updates if u.kind == "checkpoint"]
     assert all(u.payload["controller"] == "autofocus" for u in checkpoints)
     assert checkpoints[-1].payload["predicted_sharpness"] is not None
+
+
+# --------------------------------------------------------------------- #
+# Crash/resume integration
+# --------------------------------------------------------------------- #
+
+
+def _fake_acquire_frames(
+    worker: object, shell: Mock, frames: dict[int, np.ndarray], default: int = 30000
+) -> None:
+    """Install an acquire_scan stub that fills ``reconstructed_frame`` with
+    a deterministic per-plane pattern. ``frames`` maps acquisition index to
+    a fill value (or ``"checkerboard"`` for a high-sharpness pattern)."""
+    state = {"idx": 0}
+
+    def _acquire() -> bool:
+        idx = state["idx"]
+        frame = np.full((64, 64), default, dtype=np.uint16)
+        fill = frames.get(idx)
+        if fill == "checkerboard":
+            frame[:32, :32] = 50000
+            frame[:32, 32:] = 10000
+            frame[32:, :32] = 10000
+            frame[32:, 32:] = 50000
+        elif isinstance(fill, int):
+            frame[:] = fill
+        shell.reconstructed_frame = frame
+        state["idx"] += 1
+        return True
+
+    worker.acquire_scan = _acquire  # ty: ignore[invalid-assignment]
+    worker._acquire_state = state
+
+
+def _drain_updates(shell: Mock) -> list[ManifestUpdate]:
+    updates: list[ManifestUpdate] = []
+    q = shell._fs.manifest_update_queue
+    while not q.empty():
+        updates.append(q.get_nowait())
+    return updates
+
+
+def test_block_focus_crash_resume_continues_trajectory(qtbot: QtBot) -> None:
+    """Run a block-focus stack for half the planes, simulate a crash, then
+    resume from the manifest — the residual and block numbering continue
+    instead of resetting to zero."""
+    from lightsheet.gui.workers import StackWorker
+    from test.helpers.factories import make_bundle
+
+    bundle = make_bundle()
+    shell = _make_shell(bundle, n_planes=8)
+    cfg = FocusConfig(enabled=True, block_size_n=2)
+    worker = StackWorker(
+        bundle,
+        Mock(),
+        shell,
+        save_description="focus crash",
+        focus_cfg=cfg,
+        focus_curve=_curve(),
+    )
+    # Plane 1's frame is high-sharpness (becomes the reference at the
+    # plane-2 block boundary); later frames are flat so the residual
+    # grows by residual_gain_mm at each subsequent boundary.
+    _fake_acquire_frames(worker, shell, {1: "checkerboard"})
+
+    # Simulate a crash after plane 5: the loop-top poll breaks before
+    # plane 6, leaving the manifest in_progress.
+    orig_run_acquire = worker.acquire_scan
+    def _crash_after_five() -> bool:
+        ok = orig_run_acquire()
+        if worker._acquire_state["idx"] >= 6:
+            shell.stack_mode_started = False
+        return ok
+    worker.acquire_scan = _crash_after_five  # ty: ignore[invalid-assignment]
+
+    worker.run()
+    assert worker._run_completed is False
+    pre_crash_residual = worker._focus_controller._residual_mm
+    assert pre_crash_residual > 0.0
+    pre_crash_block_count = worker._focus_block_count
+    assert pre_crash_block_count == 3  # boundaries at planes 0, 2, 4
+
+    # Persist the staged updates into a manifest like the save worker would.
+    manifest = _manifest(n_planes=8)
+    for update in _drain_updates(shell):
+        manifest = apply_manifest_update(manifest, update)
+    assert manifest.controller_checkpoints
+    assert manifest.trajectory_samples
+
+    # Resume from the last durable plane with a fresh worker + shell.
+    shell2 = _make_shell(bundle, n_planes=8)
+    resumed = StackWorker(
+        bundle,
+        Mock(),
+        shell2,
+        save_description="focus crash resumed",
+        focus_cfg=cfg,
+        focus_curve=_curve(),
+        start_plane=4,
+        resume_manifest=manifest,
+    )
+    _fake_acquire_frames(resumed, shell2, {})
+    resumed.run()
+
+    assert resumed._run_completed is True
+    # The residual was restored and continued (flat frames keep growing it
+    # by residual_gain_mm at each boundary) — it did not reset to zero.
+    assert resumed._focus_controller._residual_mm > pre_crash_residual
+    # Block numbering continued: restored count 3, plus boundaries at
+    # planes 4 and 6 → 5.
+    assert resumed._focus_block_count == 5
+
+    updates2 = _drain_updates(shell2)
+    traj_rows = [u.payload for u in updates2 if u.kind == "trajectory"]
+    assert [r["block_index"] for r in traj_rows] == [3, 4]
+    # The first post-resume checkpoint carries the restored reference
+    # sharpness and a non-zero residual.
+    cp_rows = [u.payload for u in updates2 if u.kind == "checkpoint"]
+    assert cp_rows[0]["controller"] == "focus"
+    assert cp_rows[0]["reference_sharpness"] is not None
+    assert cp_rows[0]["residual_mm"] > 0.0
+
+
+def test_autofocus_crash_resume_continues_trajectory(qtbot: QtBot) -> None:
+    """A per-plane autofocus stack resumes with the residual and the
+    smoothed reference sharpness intact."""
+    from lightsheet.gui.workers import StackWorker
+    from test.helpers.factories import make_bundle
+
+    bundle = make_bundle()
+    shell = _make_shell(bundle, n_planes=6)
+    cfg = AutofocusConfig(
+        enabled=True, cadence=1, update_threshold=0.0, residual_gain_mm=0.05
+    )
+    worker = StackWorker(
+        bundle,
+        Mock(),
+        shell,
+        save_description="autofocus crash",
+        autofocus_cfg=cfg,
+    )
+    _fake_acquire_frames(worker, shell, {0: "checkerboard", 1: "checkerboard"})
+
+    orig_acquire = worker.acquire_scan
+    def _crash_after_three() -> bool:
+        ok = orig_acquire()
+        if worker._acquire_state["idx"] >= 3:
+            shell.stack_mode_started = False
+        return ok
+    worker.acquire_scan = _crash_after_three  # ty: ignore[invalid-assignment]
+
+    worker.run()
+    assert worker._run_completed is False
+    pre_crash = worker._autofocus_controller.checkpoint()
+    assert pre_crash["predicted_sharpness"] is not None
+
+    manifest = _manifest(n_planes=6)
+    for update in _drain_updates(shell):
+        manifest = apply_manifest_update(manifest, update)
+
+    shell2 = _make_shell(bundle, n_planes=6)
+    resumed = StackWorker(
+        bundle,
+        Mock(),
+        shell2,
+        save_description="autofocus crash resumed",
+        autofocus_cfg=cfg,
+        start_plane=3,
+        resume_manifest=manifest,
+    )
+    _fake_acquire_frames(resumed, shell2, {0: "checkerboard"})
+    resumed.run()
+
+    assert resumed._run_completed is True
+    updates2 = _drain_updates(shell2)
+    traj_rows = [u for u in updates2 if u.kind == "trajectory"]
+    # Per-plane autofocus: rows for planes 3, 4, 5 (block_index == plane).
+    assert [u.plane_index for u in traj_rows] == [3, 4, 5]
+    cp_rows = [u.payload for u in updates2 if u.kind == "checkpoint"]
+    # The restored controller's smoothed reference survived the resume —
+    # the first post-resume checkpoint already carries a sharpness state.
+    assert cp_rows[0]["controller"] == "autofocus"
+    assert cp_rows[0]["predicted_sharpness"] is not None
+
+
+def test_focus_controller_restore_rejects_out_of_range_residual() -> None:
+    """The safety-gate fallback: a checkpoint whose residual exceeds the
+    configured travel bound is rejected, so a forged or corrupted manifest
+    cannot push the camera focus motor past its limits."""
+    cfg = FocusConfig(enabled=True, max_residual_mm=0.5)
+    ctrl = _focus_controller()
+    state = {**ctrl.checkpoint(), "residual_mm": 0.6}
+    with pytest.raises(ValueError, match="residual_mm"):
+        FocusController(cfg, _curve(), 0.0, 128.0, initial_state=state)
+
+    af_cfg = AutofocusConfig(enabled=True, max_residual_mm=0.5)
+    af = _autofocus_controller()
+    af_state = {**af.checkpoint(), "residual_mm": -0.7}
+    with pytest.raises(ValueError, match="residual_mm"):
+        AdaptiveFocusController(af_cfg, 0.0, 128.0, initial_state=af_state)
