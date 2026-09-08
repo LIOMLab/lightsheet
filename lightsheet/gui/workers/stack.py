@@ -454,7 +454,6 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 self._hw.start_lasers(snapshot=self._snapshot)
 
             # Set progress bar
-            progress_value = 0
             # Defensive guard: a zero plane count (e.g. a queue row that
             # slipped past validation, or a future code path/race) would
             # divide by zero below. Abort with a status message instead of
@@ -471,7 +470,6 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             remaining_planes = n_planes - self._start_plane
             if remaining_planes <= 0:
                 remaining_planes = n_planes
-            progress_increment = 100 / n_planes
             self._shell.sig_progress_update.emit(0)  # To reset progress bar
 
             # Compute scan waveforms only once before we start the stack acquisition
@@ -1076,16 +1074,16 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         if (plane % self._autofocus_cfg.cadence) == 0:
                             self._autofocus_controller.update(stage_pos_mm, sharp)
 
-                    # Update progress bar. For resumed runs the progress
-                    # spans the remaining [start_plane, n_planes) range so
-                    # the bar fills from empty to full over the planes that
-                    # are actually being acquired.
-                    progress_value = (
-                        100
-                        * (plane - self._start_plane + 1)
-                        / remaining_planes
+                    # Update progress bar. The emitted value is the count
+                    # of planes completed in THIS run
+                    # (current_plane - start_plane); the bar's maximum is
+                    # n_planes - start_plane (set at worker spawn), so a
+                    # resumed run fills empty->full across the planes
+                    # actually acquired. The mode badge adds start_plane
+                    # back to display the absolute plane index.
+                    self._shell.sig_progress_update.emit(
+                        plane - self._start_plane + 1
                     )
-                    self._shell.sig_progress_update.emit(int(progress_value))
             else:
                 # The loop exhausted without hitting a break — every plane
                 # in [start_plane, n_planes) was acquired. Any break path
@@ -1096,8 +1094,8 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
 
             if self._shell.stack_mode_started:
                 self._shell.sig_progress_update.emit(
-                    100
-                )  # In case the number of planes is not a multiple of 100
+                    remaining_planes
+                )  # Fill the bar on completion (maximum = planes in run)
         except Exception as e:
             self._shell.sig_message.emit(
                 f"Stack acquisition failed — the run was aborted. Cause: {e}"

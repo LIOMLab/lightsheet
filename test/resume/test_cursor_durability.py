@@ -93,7 +93,7 @@ def test_cursor_equals_datasets_on_disk_after_crash(
 
     m = read_manifest(fs._manifest_path)  # ty: ignore[invalid-argument-type]
     assert m is not None
-    assert m.cursors["hdf5"]["stitch"] == n_on_disk == 3
+    assert m.cursors["hdf5"][hdf5_path] == n_on_disk == 3
     # No lifecycle update ran — the crash signature is preserved.
     assert m.state == "in_progress"
     # The output file carries the manifest's UUID.
@@ -118,7 +118,7 @@ def test_completed_lifecycle_written_by_stop_saving(
     assert m is not None
     assert m.state == "completed"
     assert m.completed_at is not None
-    assert m.cursors["hdf5"]["stitch"] == 5
+    assert m.cursors["hdf5"][fs.filenames_list[0]] == 5
     assert m.last_motor_positions  # staged by stop_saving
 
 
@@ -137,7 +137,7 @@ def test_interrupted_lifecycle_written_by_stop_saving(
     m = read_manifest(fs._manifest_path)  # ty: ignore[invalid-argument-type]
     assert m is not None
     assert m.state == "interrupted"
-    assert m.cursors["hdf5"]["stitch"] == 2
+    assert m.cursors["hdf5"][fs.filenames_list[0]] == 2
 
 
 def test_no_manifest_for_single_image_save(

@@ -16,6 +16,7 @@ Findings use ``ConfigValidationResult`` semantics:
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -53,11 +54,16 @@ class GateFindings(ConfigValidationResult):
     ``observed_planes`` maps output-file path -> readable plane count.
     ``resume_plane`` is the common durable plane index across all formats
     (``min(cursor, observed)`` per cursor key), the value the resumed
-    worker must start from.
+    worker must start from. ``has_differences`` is set when a check
+    measured a concrete divergence (config-fingerprint diff or motor
+    drift) so the GUI layer can show the destructive "resume despite
+    reported drift" confirmation copy for those runs.
     """
 
     observed_planes: dict[str, int] = field(default_factory=dict)
     resume_plane: int = 0
+    has_differences: bool = False
+    check_results: list[str] = field(default_factory=list)
 
 
 def collect_safety_config(
@@ -123,6 +129,7 @@ class ResumeSafetyGate:
         findings = GateFindings()
 
         # --- (a) config-fingerprint diff -------------------------------
+        fingerprint_diffs = 0
         if live_config is None:
             try:
                 live_config = load_sections_from_ini(
@@ -152,23 +159,57 @@ class ResumeSafetyGate:
                             f"recorded {saved!r} but the key is absent from "
                             f"the live config"
                         )
+                        findings.has_differences = True
+                        fingerprint_diffs += 1
                     elif str(live_val) != str(saved):
                         findings.warnings.append(
                             f"[{section}] {key} changed since the "
                             f"acquisition: {saved!r} -> {live_val!r}"
                         )
+                        findings.has_differences = True
+                        fingerprint_diffs += 1
+            findings.check_results.append(
+                "Config fingerprint — matches the live config"
+                if fingerprint_diffs == 0
+                else f"Config fingerprint — {fingerprint_diffs} "
+                "difference(s) found"
+            )
         elif manifest.safety_config:
             findings.warnings.append(
                 "Safety-config fingerprint could not be compared — the "
                 "live config is unavailable"
             )
+            findings.check_results.append(
+                "Config fingerprint — could not be compared (live config "
+                "unavailable)"
+            )
 
         # --- (d) per-format probes (before limits so resume_plane is
         # computed from the durable cursor, not the nominal one) ---------
         probes: dict[str, dict[str, int]] = {}
+        norm_cursors: dict[str, dict[str, int]] = {}
         for fmt, group in manifest.cursors.items():
             observed: dict[str, int] = {}
-            for path in group:
+            norm_group: dict[str, int] = {}
+            for key, cursor in group.items():
+                path = key
+                if fmt == "hdf5" and not key.endswith(".hdf5"):
+                    # Legacy single-channel manifests keyed the HDF5
+                    # cursor by save mode ("stitch"/"all_crop"/
+                    # "all_full"); resolve it against the recorded save
+                    # filepath so the torn file is still probed.
+                    base = manifest.save_filepath or ""
+                    wl = (manifest.wavelengths or [0])[0]
+                    candidate = f"{base}_{wl}nm.hdf5" if base else ""
+                    if not candidate or not Path(candidate).is_file():
+                        findings.warnings.append(
+                            f"Recorded cursor {key!r} could not be "
+                            "resolved to an output file — resume falls "
+                            "back to a _partN continuation fileset"
+                        )
+                        continue
+                    path = candidate
+                norm_group[path] = cursor
                 try:
                     if fmt == "hdf5":
                         n = probe_hdf5(path)
@@ -194,18 +235,44 @@ class ResumeSafetyGate:
                 observed[path] = n
                 findings.observed_planes[path] = n
             probes[fmt] = observed
+            norm_cursors[fmt] = norm_group
         if manifest.cursors:
-            resume_plane, _ = _common_resume_plane(manifest, probes)
+            # Cursors were normalized to resolved file paths above so the
+            # per-key observed lookup matches for both the path-keyed
+            # schema and legacy save-mode keys.
+            norm_manifest = dataclasses.replace(
+                manifest, cursors=norm_cursors
+            )
+            resume_plane, _ = _common_resume_plane(norm_manifest, probes)
         else:
             resume_plane = manifest.start_plane
         findings.resume_plane = max(0, int(resume_plane))
+        n_probed = sum(len(g) for g in probes.values())
+        if manifest.cursors:
+            findings.check_results.append(
+                f"Output probes — resume plane {findings.resume_plane} "
+                f"(durable across {n_probed} file(s))"
+            )
+        else:
+            findings.check_results.append(
+                "Output probes — no committed cursors recorded"
+            )
 
         # --- (b) motor position readback vs recorded positions ---------
+        drifted_axes = 0
+        compared_axes = 0
         if motors is None:
             if manifest.last_motor_positions:
                 findings.warnings.append(
                     "Motor positions could not be read back — the drift "
                     "check was skipped"
+                )
+                findings.check_results.append(
+                    "Motor drift — check skipped (no live readback)"
+                )
+            else:
+                findings.check_results.append(
+                    "Motor drift — no recorded positions to compare"
                 )
         else:
             try:
@@ -225,6 +292,7 @@ class ResumeSafetyGate:
                         f"readback is unavailable"
                     )
                     continue
+                compared_axes += 1
                 drift = live - saved
                 if abs(drift) > drift_tolerance_mm:
                     findings.warnings.append(
@@ -232,6 +300,24 @@ class ResumeSafetyGate:
                         f"interruption (recorded {saved:.3f} mm, live "
                         f"{live:.3f} mm)"
                     )
+                    findings.has_differences = True
+                    drifted_axes += 1
+            if compared_axes:
+                findings.check_results.append(
+                    f"Motor drift — {drifted_axes} of {compared_axes} "
+                    "axis(es) beyond tolerance"
+                    if drifted_axes
+                    else f"Motor drift — {compared_axes} axis(es) within "
+                    "tolerance"
+                )
+            elif positions:
+                findings.check_results.append(
+                    "Motor drift — no recorded positions to compare"
+                )
+            else:
+                findings.check_results.append(
+                    "Motor drift — readback unavailable"
+                )
 
         # --- (c) travel-limit re-validation of the remaining range -----
         horizontal = getattr(motors, "horizontal", None) if motors else None
@@ -240,6 +326,9 @@ class ResumeSafetyGate:
                 "Horizontal stage limits could not be read — the "
                 "travel-limit check was skipped"
             )
+            findings.check_results.append(
+                "Travel limits — check skipped (no limit readback)"
+            )
         else:
             try:
                 low = float(horizontal.get_limit_low("µm"))
@@ -247,6 +336,9 @@ class ResumeSafetyGate:
             except (TypeError, ValueError, AttributeError) as e:
                 findings.warnings.append(
                     f"Travel-limit re-validation failed: {e}"
+                )
+                findings.check_results.append(
+                    "Travel limits — re-validation failed"
                 )
             else:
                 resume_start = (
@@ -260,6 +352,14 @@ class ResumeSafetyGate:
                         f"Remaining stack range {lo:.1f}-{hi:.1f} µm "
                         f"exceeds the stage travel limits "
                         f"[{low:.1f}, {high:.1f}] \u03bcm"
+                    )
+                    findings.check_results.append(
+                        "Travel limits — remaining range exceeds the "
+                        "stage limits"
+                    )
+                else:
+                    findings.check_results.append(
+                        "Travel limits — remaining range validated"
                     )
 
         return findings

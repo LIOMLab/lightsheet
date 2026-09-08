@@ -36,6 +36,7 @@ import uuid
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -51,6 +52,7 @@ from PySide6.QtWidgets import (
 
 from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.styles import spacing as _s
+from lightsheet.gui.styles import typography as _t
 from lightsheet.resume import (
     QueueResumeManifest,
     hash_queue_rows,
@@ -100,6 +102,17 @@ _FLAG_COLOR = _c.Q_FLAG_ERROR
 logger = logging.getLogger(__name__)
 
 
+_GATE_TITLE = "Resume safety check"
+_GATE_FOOTER = (
+    "Review the findings and confirm to proceed, or cancel to abort."
+)
+_DRIFT_TITLE = "Resume despite reported drift?"
+_DRIFT_BODY = (
+    "One or more safety checks reported a difference. Resume only if "
+    "the change is benign."
+)
+
+
 def show_resume_safety_dialog(
     parent: QWidget | None, findings: GateFindings
 ) -> bool:
@@ -109,8 +122,10 @@ def show_resume_safety_dialog(
     outright (a blocking critical dialog, no Resume button); warnings and
     a clean bill are shown with a Resume/Cancel choice where **Cancel is
     the default AND the Escape action**, so the safe path is always one
-    keystroke away. Returns ``True`` only when the operator explicitly
-    clicks Resume.
+    keystroke away. When the gate measured a concrete divergence
+    (config-fingerprint diff or motor drift — ``findings.has_differences``)
+    the dialog uses the destructive-confirmation title and body. Returns
+    ``True`` only when the operator explicitly clicks Resume.
     """
     if parent is None:
         app = QApplication.instance()
@@ -120,34 +135,43 @@ def show_resume_safety_dialog(
         if findings.warnings:
             lines.append("")
             lines.extend(f"• {w}" for w in findings.warnings)
-        QMessageBox.critical(
-            parent,
-            "Resume Blocked",
+        box = QMessageBox(parent)
+        box.setIcon(QMessageBox.Icon.Critical)
+        box.setWindowTitle("Resume Blocked")
+        box.setText(
             "The resume safety gate found blocking problems — the "
-            "acquisition cannot be resumed:\n\n" + "\n".join(lines),
-            QMessageBox.StandardButton.Ok,
-            QMessageBox.StandardButton.Ok,
+            "acquisition cannot be resumed:\n\n" + "\n".join(lines)
         )
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        box.setDefaultButton(QMessageBox.StandardButton.Ok)
+        box.setStyleSheet(f"QLabel {{ {_t.BODY} }}")
+        box.exec()
         return False
 
     box = QMessageBox(parent)
-    box.setWindowTitle("Resume Acquisition — Safety Check")
     box.setIcon(
         QMessageBox.Icon.Warning
         if findings.warnings
         else QMessageBox.Icon.Information
     )
-    if findings.warnings:
-        body = "\n".join(f"• {w}" for w in findings.warnings)
-        box.setText(
-            "The resume safety gate completed. Review the findings "
-            "before continuing:\n\n" + body
-        )
+    parts: list[str] = []
+    if findings.has_differences:
+        box.setWindowTitle(_DRIFT_TITLE)
+        parts.append(_DRIFT_BODY)
     else:
-        box.setText(
-            "The resume safety gate found no problems. Resume the "
-            "acquisition from the last committed plane?"
-        )
+        box.setWindowTitle(_GATE_TITLE)
+        if not findings.warnings:
+            parts.append("The resume safety gate found no problems.")
+    # The contract body lists each check's result — fingerprint diff,
+    # motor drift, travel-limit validation, and per-format probe — so a
+    # clean gate still enumerates what was verified.
+    if findings.check_results:
+        parts.append("\n".join(f"• {c}" for c in findings.check_results))
+    if findings.warnings:
+        parts.append("\n".join(f"• {w}" for w in findings.warnings))
+    parts.append(_GATE_FOOTER)
+    box.setText("\n\n".join(parts))
+    box.setStyleSheet(f"QLabel {{ {_t.BODY} }}")
     resume_btn = box.addButton("Resume", QMessageBox.ButtonRole.AcceptRole)
     cancel_btn = box.addButton(QMessageBox.StandardButton.Cancel)
     box.setDefaultButton(cancel_btn)
@@ -250,7 +274,9 @@ class AcquisitionTableManager(QWidget):
         self._empty_label = QLabel(_EMPTY_COPY, self)
         self._empty_label.setWordWrap(True)
         self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._empty_label.setStyleSheet(f"color: {_c.MUTED_TEXT}; padding: {_s.MD}px;")
+        self._empty_label.setStyleSheet(
+            f"color: {_c.MUTED_TEXT}; padding: {_s.MD}px; {_t.BODY}"
+        )
 
         # --- Buttons ---
         btn_row = QHBoxLayout()
@@ -520,13 +546,14 @@ class AcquisitionTableManager(QWidget):
         if manifest is None:
             self._shell.sig_message.emit(
                 f"Cannot resume: {manifest_path} is missing, unreadable, "
-                "or failed validation."
+                "or failed validation. The acquisition was not modified."
             )
             self._shell.sig_beep.emit()
             return False
         if manifest.state == "completed":
             self._shell.sig_message.emit(
-                "Cannot resume: the acquisition already completed."
+                "Cannot resume: the acquisition already completed. "
+                "The acquisition was not modified."
             )
             self._shell.sig_beep.emit()
             return False
@@ -580,9 +607,8 @@ class AcquisitionTableManager(QWidget):
         self._set_numeric_cell(index, _COL_STEP, row.step)
         if is_resume:
             n_planes_text = f"RESUME {start_plane}/{row.n_planes}"
-            from PySide6.QtGui import QColor
-
             item = QTableWidgetItem(n_planes_text)
+            item.setFont(_t.body_font())
             item.setFlags(
                 Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
             )
@@ -648,8 +674,9 @@ class AcquisitionTableManager(QWidget):
         qm = read_queue_manifest(queue_manifest)
         if qm is None:
             self._shell.sig_message.emit(
-                f"Cannot resume the queue: {queue_manifest} is missing, "
-                "unreadable, or failed validation."
+                f"Cannot resume: the queue manifest {queue_manifest} is "
+                "missing, unreadable, or failed validation. The "
+                "acquisition was not modified."
             )
             self._shell.sig_beep.emit()
             return False
@@ -691,9 +718,10 @@ class AcquisitionTableManager(QWidget):
             return True
 
         self._shell.sig_message.emit(
-            "Cannot resume the queue: the queue table no longer matches "
+            "Cannot resume: the queue table no longer matches "
             "the recorded queue manifest — the queue was edited after the "
-            "interruption. Rebuild the queue manually and restart it."
+            "interruption. Rebuild the queue manually and restart it. "
+            "The acquisition was not modified."
         )
         self._shell.sig_beep.emit()
         return False
@@ -737,11 +765,7 @@ class AcquisitionTableManager(QWidget):
         # Long names truncate with ellipsis; the full name is in the tooltip.
         item.setToolTip(name)
         if is_resume:
-            from PySide6.QtGui import QColor, QFont
-
-            font = QFont()
-            font.setItalic(True)
-            item.setFont(font)
+            item.setFont(_t.body_font(italic=True))
             item.setForeground(QColor(_c.MUTED_TEXT))
         self.table.setItem(row, _COL_NAME, item)
 

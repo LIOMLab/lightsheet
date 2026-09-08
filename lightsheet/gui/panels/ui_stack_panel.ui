@@ -54,10 +54,13 @@
            </sizepolicy>
           </property>
           <property name="toolTip">
-           <string>Pause the running stack at the next plane boundary. The current plane finishes, lasers switch off, and the run can be resumed later from the acquisition queue.</string>
+           <string>Pause cleanly at the next plane boundary. Lasers de-energize and the manifest is written as paused.</string>
+          </property>
+          <property name="accessibleName">
+           <string>Pause at Next Plane</string>
           </property>
           <property name="text">
-           <string>Pause Stack</string>
+           <string>Pause</string>
           </property>
          </widget>
         </item>

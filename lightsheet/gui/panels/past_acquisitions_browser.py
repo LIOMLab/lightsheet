@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -56,6 +56,7 @@ from lightsheet.gui.panels.ui_past_acquisitions_panel import (
 )
 from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.styles import spacing as _s
+from lightsheet.gui.styles import typography as _t
 from lightsheet.resume import manifest_path_for, read_manifest
 
 if typing.TYPE_CHECKING:
@@ -702,7 +703,7 @@ class PastAcquisitionsPanel(QWidget):
 
         # Status label styling (empty/scanning/error copy).
         self.ui.label_pastStatus.setStyleSheet(
-            f"color: {_c.MUTED_TEXT}; padding: {_s.MD}px;"
+            f"color: {_c.MUTED_TEXT}; padding: {_s.MD}px; {_t.LABEL}"
         )
         self.ui.label_pastStatus.setVisible(False)
 
@@ -854,25 +855,48 @@ class PastAcquisitionsPanel(QWidget):
         directly from the past-acquisitions table."""
         if entry.resumable and entry.manifest_path:
             btn = QPushButton("Resume")
-            btn.setToolTip(f"Resume this {entry.state} stack from the last committed plane")
+            underlying_state, _ = self._state_text_for_manifest(entry.state)
+            btn.setAccessibleName("Resume Stack")
+            btn.setToolTip("Resume this interrupted stack")
+            # Accent fill for the primary resume action, but keep the
+            # interaction feedback `border: none` destroyed: a visible
+            # focus outline plus hover/pressed shades so keyboard focus
+            # and click state stay legible on the accent surface.
             btn.setStyleSheet(
                 f"QPushButton {{ color: {_c.BREEZE_BG}; "
-                f"background-color: {_c.BREEZE_ACCENT}; border: none; }}"
+                f"background-color: {_c.BREEZE_ACCENT}; "
+                f"border: 1px solid {_c.BREEZE_ACCENT}; "
+                f"border-radius: 3px; "
+                f"padding: {_s.XS}px {_s.SM}px; }} "
+                f"QPushButton:hover {{ "
+                f"background-color: {_c.BREEZE_ACCENT_HOVER}; "
+                f"border-color: {_c.BREEZE_ACCENT_HOVER}; }} "
+                f"QPushButton:pressed {{ "
+                f"background-color: {_c.BREEZE_ACCENT_PRESSED}; "
+                f"border-color: {_c.BREEZE_ACCENT_PRESSED}; }} "
+                f"QPushButton:focus {{ border-color: {_c.BREEZE_FG}; }}"
             )
+            btn.setFont(_t.label_font())
             btn.clicked.connect(
                 lambda _checked=False, e=entry: self._on_resume_clicked(e)
             )
             self.ui.tableWidget_pastAcquisitions.setCellWidget(
                 row, _PAST_COL_RESUME, btn
             )
-            state_text, state_color = self._state_text_for_manifest(
-                entry.state
-            )
+            # The contract chip for a resumable row is RESUMABLE (accent);
+            # the underlying lifecycle state stays visible in the tooltip.
+            state_text, state_color = "RESUMABLE", _c.BREEZE_ACCENT
         else:
-            state_text, state_color = "Completed", _c.MUTED_TEXT
+            underlying_state, state_color = "Completed", _c.MUTED_TEXT
+            state_text = underlying_state
         item = QTableWidgetItem(state_text)
         item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
-        item.setToolTip(state_text)
+        item.setToolTip(
+            state_text
+            if state_text == underlying_state
+            else f"{underlying_state} — resumable from the last committed plane"
+        )
+        item.setFont(_t.label_font())
         item.setForeground(QColor(state_color))
         self.ui.tableWidget_pastAcquisitions.setItem(
             row, _PAST_COL_STATE, item

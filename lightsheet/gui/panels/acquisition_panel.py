@@ -115,6 +115,7 @@ class AcquisitionPanelWidget(QWidget):
             self.updateUi_modes_buttons([self.ui.pushButton_acqStartPreviewMode])
             self._shell.updateUi_message_printer("->Preview mode started")
             self._shell.ui.statusBar_label.setText("Current Acquisition Mode: Preview ")
+            self._shell.ui.statusBar_progress.setRange(0, 100)
             self._shell.ui.statusBar_progress.setValue(100)
             self._shell.ui.statusBar_progress.show()
             self._shell._update_mode_badge("PREVIEW")
@@ -171,6 +172,7 @@ class AcquisitionPanelWidget(QWidget):
             self.updateUi_modes_buttons([self.ui.pushButton_acqStartLiveMode])
             self._shell.updateUi_message_printer("->Live mode started")
             self._shell.ui.statusBar_label.setText("Current Acquisition Mode: Live ")
+            self._shell.ui.statusBar_progress.setRange(0, 100)
             self._shell.ui.statusBar_progress.setValue(100)
             self._shell.ui.statusBar_progress.show()
             self._shell._update_mode_badge("LIVE")
@@ -670,6 +672,15 @@ class AcquisitionPanelWidget(QWidget):
         # Stash the resume offset so the mode badge and the stack worker
         # both see the same start plane without a second cross-thread read.
         self._shell._start_plane = start_plane
+        # Re-range the progress bar to the planes this run will actually
+        # acquire: the worker emits current_plane - start_plane and the
+        # maximum is n_planes - start_plane, so a resumed run fills the
+        # bar across the remaining range instead of the whole stack.
+        n_planes = max(1, int(getattr(self._shell, "number_of_planes", 1)))
+        progress = self._shell.ui.statusBar_progress
+        progress.setRange(0, max(1, n_planes - start_plane))
+        progress.setValue(0)
+        progress.show()
         self._shell._stack_thread.start()
         # A live stack worker can now observe the pause event — enable the
         # Pause control. Covers both the single-stack start and queue-row
@@ -696,10 +707,13 @@ class AcquisitionPanelWidget(QWidget):
         self._shell.stack_panel.ui.pushButton_acqPauseStack.setEnabled(False)
         if self._shell.stack_mode_started:
             progress = self._shell.ui.statusBar_progress
+            # The bar value counts planes completed in this run; add the
+            # resume offset so the badge shows the absolute plane index.
             self._shell._update_mode_badge(
                 "STACK",
                 "PAUSING",
-                plane=int(progress.value()),
+                plane=int(progress.value())
+                + int(getattr(self._shell, "_start_plane", 0)),
                 total=int(self._shell.number_of_planes),
             )
         self._shell.updateUi_message_printer(

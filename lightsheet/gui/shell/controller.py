@@ -1797,13 +1797,18 @@ class Controller_MainWindow(QMainWindow):
     def _on_progress_update(self, value: int) -> None:
         """Mirror sig_progress_update into the mode badge during a stack
         run so the operator sees 'STACK RUNNING — plane {n}/{N}' without
-        looking at the status bar (audit #12). Outside a stack run, the
+        looking at the status bar (audit #12). The emitted value counts
+        planes completed in the current run (current_plane - start_plane);
+        the badge adds ``_start_plane`` back so it always shows the
+        absolute plane index of the stack. Outside a stack run, the
         progress value is not shown in the badge (the badge reflects the
         mode, set by the mode-start/complete sites). During a queue run,
         the badge appends the row index so the operator sees which row is
         acquiring."""
         if getattr(self, "stack_mode_started", False):
             total = int(getattr(self, "number_of_planes", 0))
+            start_plane = int(getattr(self, "_start_plane", 0))
+            plane = value + start_plane
             mgr = getattr(self, "stack_panel", None)
             qm = getattr(mgr, "table_manager", None) if mgr else None
             q_row = int(getattr(qm, "_queue_row_index", 0)) + 1 if qm else 0
@@ -1814,7 +1819,7 @@ class Controller_MainWindow(QMainWindow):
             # overwrite the badge back to RUNNING until teardown lands.
             if self.pause_requested.is_set():
                 run_state = "PAUSED"
-            elif getattr(self, "_start_plane", 0) > 0:
+            elif start_plane > 0:
                 run_state = "RESUMING"
             else:
                 run_state = "RUNNING"
@@ -1822,13 +1827,13 @@ class Controller_MainWindow(QMainWindow):
                 self._update_mode_badge(
                     mode,
                     run_state,
-                    plane=value,
+                    plane=plane,
                     total=total,
                     queue_row=q_row,
                     queue_total=q_total,
                 )
             else:
-                self._update_mode_badge(mode, run_state, plane=value, total=total)
+                self._update_mode_badge(mode, run_state, plane=plane, total=total)
 
     def _cache_auto_laser_flags(self) -> None:
         """Commit the auto-laser checkboxes to the model. GUI thread only.

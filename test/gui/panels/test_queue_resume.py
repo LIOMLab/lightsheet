@@ -406,12 +406,20 @@ def test_safety_dialog_cancel_returns_false(
 def test_safety_dialog_errors_block_resume(
     qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Blocking findings show a critical box with no Resume button and
+    return False. exec() is patched — a real exec() would block the
+    worker on a modal dialog forever."""
     calls: list = []
-    monkeypatch.setattr(
-        QMessageBox,
-        "critical",
-        staticmethod(lambda *a, **k: calls.append(a) or None),
-    )
+
+    def fake_exec(self: QMessageBox) -> int:
+        calls.append(self)
+        assert self.icon() == QMessageBox.Icon.Critical
+        # macOS ignores QMessageBox.windowTitle — assert on the body.
+        assert "cannot be resumed" in self.text()
+        assert not any(b.text() == "Resume" for b in self.buttons())
+        return 0
+
+    monkeypatch.setattr(QMessageBox, "exec", fake_exec)
     findings = GateFindings(errors=["remaining range exceeds limits"])
     assert show_resume_safety_dialog(None, findings) is False
     assert len(calls) == 1

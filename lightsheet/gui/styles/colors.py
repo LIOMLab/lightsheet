@@ -25,6 +25,10 @@ ON_DANGER = "#FFFFFF"  # text on top of a danger background
 BREEZE_BG = "#1d2023"  # plot / dark widget background
 BREEZE_FG = "#eff0f1"  # primary foreground text / axes
 BREEZE_ACCENT = "#3daee9"  # primary accent (camera, intensity curves)
+# Derived accent shades for interaction feedback on accent CTAs (the
+# Past-acquisitions Resume button) — hover brightens, pressed darkens.
+BREEZE_ACCENT_HOVER = "#5fc0ee"
+BREEZE_ACCENT_PRESSED = "#2f8fc4"
 BREEZE_MIDTONE = "#76797c"  # secondary curve / mid-tone grey
 BREEZE_WARNING = "#99995C"  # warning markers (residual, re-acquire)
 BREEZE_INFORMATION = "#E0A030"  # information / power L1

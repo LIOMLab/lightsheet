@@ -10,17 +10,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
-import pytest
-import numpy as np
 import h5py
+import numpy as np
 from PySide6.QtWidgets import QMessageBox
 from pytestqt.qtbot import QtBot
 
-from lightsheet.gui.panels.acquisition_table_manager import _COL_NPLANES as _QM_COL_NPLANES
+from lightsheet.gui.panels.acquisition_table_manager import (
+    _COL_NPLANES as _QM_COL_NPLANES,
+)
 from lightsheet.gui.panels.past_acquisitions_browser import (
-    PastAcquisitionsBrowser,
     _PAST_COL_RESUME,
     _PAST_COL_STATE,
+    PastAcquisitionsBrowser,
 )
 from lightsheet.resume import ResumeManifest, manifest_path_for, write_manifest
 
@@ -113,15 +114,17 @@ def test_past_panel_state_chips_and_resume_button(
     table = panel.ui.tableWidget_pastAcquisitions
     assert table.rowCount() == 2
 
-    # Find each row by its state chip text.
+    # Resumable rows carry the contract's RESUMABLE chip; the underlying
+    # lifecycle state stays visible in the chip tooltip.
     interrupted_row = next(
         i
         for i in range(table.rowCount())
-        if table.item(i, _PAST_COL_STATE).text() == "INTERRUPTED"
+        if table.item(i, _PAST_COL_STATE).text() == "RESUMABLE"
     )
     interrupted_item = table.item(interrupted_row, _PAST_COL_STATE)
     assert interrupted_item is not None
-    assert interrupted_item.text() == "INTERRUPTED"
+    assert interrupted_item.text() == "RESUMABLE"
+    assert "INTERRUPTED" in interrupted_item.toolTip()
     assert table.cellWidget(interrupted_row, _PAST_COL_RESUME) is not None
 
     completed_row = next(
@@ -140,7 +143,7 @@ def test_resume_action_enqueues_a_resume_row(
     """Clicking Resume in the Past table enqueues a resume row with the
     correct start-plane offset, name prefix, and RESUME badge."""
     controller.save_directory = str(tmp_path)
-    h5_path = _make_case(tmp_path, "paused")
+    _make_case(tmp_path, "paused")
 
     panel = controller.past_panel
     entries = panel.browser.list_acquisitions()

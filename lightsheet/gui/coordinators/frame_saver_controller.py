@@ -256,11 +256,12 @@ class FrameSaver(QObject):
 
         def _resolve_channel_target(
             ch_idx: int, wl: int, reserved: set[str]
-        ) -> tuple[str, int, int, bool, str]:
+        ) -> tuple[str, int, int, bool, str, bool]:
             """Return the first-file path, manifest cursor, observed count,
-            whether a fallback happened, and the base name for subsequent
-            files. Truncation to the common resume plane is performed once
-            all channel cursors are known."""
+            whether a fallback happened, the base name for subsequent
+            files, and whether a manifest cursor matched. Truncation to
+            the common resume plane is performed once all channel cursors
+            are known."""
             base = self.files_name + f"_{wl}nm"
             target_path = ""
             cursor = 0
@@ -269,11 +270,27 @@ class FrameSaver(QObject):
                     target_path = cp
                     cursor = cv
                     break
+            if not target_path and save_dir:
+                # Legacy single-channel manifests recorded the HDF5 cursor
+                # under the save-mode token ("stitch"/"all_crop"/
+                # "all_full") instead of the file path. Resolve such keys
+                # against the expected channel filename so older crashed
+                # acquisitions still resume into their torn fileset.
+                legacy = [
+                    cv
+                    for cp, cv in resume_cursors.items()
+                    if not cp.endswith(".hdf5")
+                ]
+                if legacy:
+                    candidate = str(save_dir / f"{base}.hdf5")
+                    if Path(candidate).is_file():
+                        target_path = candidate
+                        cursor = max(legacy)
             if not target_path or not save_dir:
                 path = self._unique_hdf5_path(
                     save_dir, base, width, 0, reserved=reserved
                 )
-                return path, 0, 0, False, base
+                return path, 0, 0, False, base, False
 
             manifest_dir_contains(save_dir_str, target_path)
 
@@ -289,12 +306,12 @@ class FrameSaver(QObject):
                 fallback_path = self._unique_hdf5_path(
                     save_dir, fallback_base, width, 0, reserved=reserved
                 )
-                return fallback_path, 0, 0, True, fallback_base
+                return fallback_path, 0, 0, True, fallback_base, True
 
-            return target_path, cursor, observed, False, base
+            return target_path, cursor, observed, False, base, True
 
         self.filenames_lists = []
-        channel_targets: list[tuple[str, int, int, str, bool]] = []
+        channel_targets: list[tuple[str, int, int, str, bool, bool]] = []
         used_paths: set[str] = set()
         for ch_idx, wl in enumerate(wavelengths):
             channel_list: list[str] = []
@@ -304,6 +321,7 @@ class FrameSaver(QObject):
             first_cursor = 0
             first_observed = 0
             first_fallback = False
+            first_matched = False
             if resume_cursors:
                 (
                     first_path,
@@ -311,6 +329,7 @@ class FrameSaver(QObject):
                     first_observed,
                     first_fallback,
                     first_base,
+                    first_matched,
                 ) = _resolve_channel_target(ch_idx, wl, used_paths)
                 channel_list.append(first_path)
             else:
@@ -331,7 +350,14 @@ class FrameSaver(QObject):
                 counter += 1
             self.filenames_lists.append(channel_list)
             channel_targets.append(
-                (first_path, first_cursor, first_observed, first_base, first_fallback)
+                (
+                    first_path,
+                    first_cursor,
+                    first_observed,
+                    first_base,
+                    first_fallback,
+                    first_matched,
+                )
             )
 
         # Single-channel back-compat: populate filenames_list from
@@ -346,11 +372,12 @@ class FrameSaver(QObject):
         hdf5_observed: dict[str, int] = {}
         hdf5_cursors: dict[str, int] = {}
         any_fallback = False
-        for path, cursor, observed, _, fallback in channel_targets:
+        for path, cursor, observed, _, fallback, matched in channel_targets:
             any_fallback = any_fallback or fallback
             if resume_cursors:
                 hdf5_observed[path] = observed
-                hdf5_cursors[path] = cursor
+                if matched:
+                    hdf5_cursors[path] = cursor
         probes: dict[str, dict[str, int]] = {"hdf5": hdf5_observed}
         if resume_manifest is not None and save_dir_str:
             zarr_store = str(save_dir / (self.files_name + ".ome.zarr"))
@@ -370,14 +397,23 @@ class FrameSaver(QObject):
                     )
 
         if resume_manifest is not None and save_dir_str:
-            common, _ = _common_resume_plane(resume_manifest, probes)
+            # Normalize the HDF5 cursor group to the resolved file paths
+            # so _common_resume_plane's key lookup works for both the
+            # current path-keyed schema and legacy save-mode keys.
+            normalized = dataclasses.replace(
+                resume_manifest,
+                cursors={**resume_manifest.cursors, "hdf5": hdf5_cursors},
+            )
+            common, _ = _common_resume_plane(normalized, probes)
             self._common_resume_plane = common
             # Truncate any HDF5 channel that is ahead of the common plane
             # so the resumed run re-acquires the torn tail in lockstep.
-            for path, _, observed, _, _ in channel_targets:
+            for path, _, observed, _, _, _ in channel_targets:
                 if observed > common:
                     truncate_hdf5_tail(path, common)
-            hdf5_cursors = {path: common for path, _, _, _, _ in channel_targets}
+            hdf5_cursors = {
+                path: common for path, _, _, _, _, _ in channel_targets
+            }
         else:
             self._common_resume_plane = 0
 
@@ -488,7 +524,14 @@ class FrameSaver(QObject):
         self.acquisition_uuid = resume_manifest.uuid
         self._manifest_path = manifest_path_for(self.filenames_lists[0][0])
         new_cursors = dict(resume_manifest.cursors)
-        hdf5_group = dict(new_cursors.get("hdf5", {}))
+        # Keep only path-keyed HDF5 cursors — legacy save-mode keys
+        # ("stitch"/"all_crop"/"all_full") are retired on the first
+        # resume so a re-crash resolves through the path-key schema.
+        hdf5_group = {
+            k: v
+            for k, v in new_cursors.get("hdf5", {}).items()
+            if k.endswith(".hdf5")
+        }
         hdf5_group.update(hdf5_cursors)
         new_cursors["hdf5"] = hdf5_group
         self.resume_manifest = dataclasses.replace(
@@ -534,14 +577,6 @@ class FrameSaver(QObject):
             return float(getattr(self.parent, attr, 0.0) or 0.0)
         except (TypeError, ValueError):
             return 0.0
-
-    def _hdf5_cursor_key(self) -> str:
-        """Cursor sub-key for the active single-channel HDF5 layout."""
-        return {
-            "reconstructed_frame": "stitch",
-            "ETLscan": "all_crop",
-            "FullETLscan": "all_full",
-        }.get(self.datasets_name, "stitch")
 
     def _drain_manifest_updates(self) -> None:
         """Apply every staged ``ManifestUpdate`` to ``resume_manifest``.
@@ -1066,7 +1101,15 @@ class FrameSaver(QObject):
             self._frame_saver_worker_multi_channel()
             return
         aborted = False
-        for idx in range(len(self.filenames_list)):
+        # set_files may not have run (direct-worker tests); the offset
+        # math only applies once a fileset exists.
+        n_ds = int(getattr(self, "number_of_datasets", 1) or 1)
+        # Resume offset: split the common resume plane into the starting
+        # file index and the 1-based dataset counter within that file,
+        # so appended datasets continue the torn file's numbering.
+        resume_offset = self._common_resume_plane
+        start_file_idx = resume_offset // n_ds if n_ds else 0
+        for idx in range(start_file_idx, len(self.filenames_list)):
             logger.info("File created: %s", self.filenames_list[idx])
             outfile: h5py.File | None = None
             try:
@@ -1100,8 +1143,10 @@ class FrameSaver(QObject):
                 self.saving_started = False
                 break
 
-            counter = 1
-            for dataset in range(int(self.number_of_datasets)):
+            counter = (
+                (resume_offset % n_ds) + 1 if idx == start_file_idx else 1
+            )
+            for dataset in range(counter - 1, n_ds):
                 while True:
                     try:
                         # Retrieve buffer
@@ -1153,9 +1198,15 @@ class FrameSaver(QObject):
                             # The committed-plane cursor advances only
                             # after create_dataset + attrs have returned —
                             # it is the durable-on-disk truth, not the
-                            # count of frames the producer enqueued.
+                            # count of frames the producer enqueued. The
+                            # cursor is keyed by the channel's first file
+                            # path (same convention as the multi-channel
+                            # worker) so the resume resolution layer can
+                            # find the torn fileset.
                             self._commit_manifest_cursor(
-                                "hdf5", self._hdf5_cursor_key(), counter - 1
+                                "hdf5",
+                                self.filenames_list[0],
+                                idx * n_ds + counter - 1,
                             )
                         break
                     except queue.Empty:
@@ -1862,9 +1913,15 @@ class FrameSaver(QObject):
                                 counter += 1
                                 # Committed-plane cursor: only after the
                                 # HDF5 dataset write returned (durable
-                                # truth, not frames enqueued).
+                                # truth, not frames enqueued). Keyed by
+                                # the channel's first file path — the same
+                                # convention as the HDF5 workers — so the
+                                # resume layer can find the torn fileset.
                                 self._commit_manifest_cursor(
-                                    "hdf5", self._hdf5_cursor_key(), counter - 1
+                                    "hdf5",
+                                    self.filenames_list[0],
+                                    idx * int(self.number_of_datasets)
+                                    + counter - 1,
                                 )
 
                                 # --- Zarr write (mirrors zarr_save_worker) ---
