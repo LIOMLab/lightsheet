@@ -748,7 +748,7 @@ def _make_adaptive_worker(
         ctrl.laser2_power_pct / 100.0 * ctrl.lasers[1].max_power,
     )
     worker._adaptive_current_cmd = AdaptiveCommand.fixed(
-        exposure_s=worker.camera.exposure_time / 1000.0,
+        exposure_s=worker.camera.exposure_time,
         laser1_mw=current_powers[0],
         laser2_mw=current_powers[1],
     )
