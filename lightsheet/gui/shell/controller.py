@@ -2077,6 +2077,12 @@ class Controller_MainWindow(QMainWindow):
         self.state.sig_laser_power_changed.connect(
             self.laser_panel.updateUi_laser_power_from_state
         )
+        # The camera line-time spinbox is a reactive projection of the
+        # model's seconds value (rendered in microseconds); worker-applied
+        # readback reaches it through this signal.
+        self.state.sig_lightsheet_line_time_changed.connect(
+            self.acquisition_panel.updateUi_lightsheet_line_time_from_state
+        )
 
     # --- adaptive trajectory dock lifecycle ---
 
@@ -2317,9 +2323,13 @@ class Controller_MainWindow(QMainWindow):
         self.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.setValue(
             self.camera.exposure_time * 1e3
         )  # camera(s) to ui(ms)
+        # Line-time intent is seeded from the model so model, HAL intent,
+        # and widget start from one source of truth (model seconds ->
+        # widget microseconds).
+        self.camera.lightsheet_line_time = self.state.lightsheet_line_time_s
         self.acquisition_panel.ui.doubleSpinBox_cameraLineTime.setValue(
-            self.camera.lightsheet_line_time * 1e6
-        )  # camera(s) to ui(us)
+            self.state.lightsheet_line_time_s * 1e6
+        )  # model(s) to ui(us)
         self.acquisition_panel.ui.doubleSpinBox_cameraExposedLines.setValue(
             self.camera.lightsheet_exposed_lines
         )

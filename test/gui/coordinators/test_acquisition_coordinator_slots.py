@@ -24,6 +24,7 @@ from lightsheet.gui.coordinators.acquisition_coordinator import AcquisitionCoord
 from lightsheet.hal import (
     DeviceBundle,
 )
+from lightsheet.state import MicroscopeState
 
 
 def _make_bundle() -> DeviceBundle:
@@ -44,6 +45,10 @@ class _Shell:
         # camera) as Mocks so their .ui.<widget> attrs auto-create.
         self.scan_panel = Mock()
         self.acquisition_panel = Mock()
+        # The line-time slot commits widget intent to the real model, so
+        # the stand-in owns a real MicroscopeState (initial value differs
+        # from the widget value below so a commit is an observable change).
+        self.state = MicroscopeState(lightsheet_line_time_s=10e-6)
         # Default widget values used by the slots.
         self.scan_panel.ui.doubleSpinBox_galvoLeftAmplitude.value.return_value = 1.5
         self.scan_panel.ui.doubleSpinBox_galvoRightAmplitude.value.return_value = 1.0
@@ -335,9 +340,29 @@ def test_camera_exposure_time_converts_ms_to_seconds() -> None:
 
 
 def test_camera_line_time_converts_us_to_seconds() -> None:
-    acq, _shell = _make_acq()
+    """The widget's microseconds commit to the model in seconds, the
+    validated model value becomes the HAL intent, and the idle edit does
+    not apply hardware (no set_lightsheet_mode call)."""
+    acq, shell = _make_acq()
+    acq.camera.set_lightsheet_mode = Mock()
     acq.updateUi_camera_line_time()
+    assert shell.state.lightsheet_line_time_s == pytest.approx(48.8e-6)
     assert acq.camera.lightsheet_line_time == pytest.approx(48.8e-6)
+    acq.camera.set_lightsheet_mode.assert_not_called()
+
+
+def test_camera_line_time_model_change_updates_hal_intent() -> None:
+    """A second edit at a different microsecond value flows through the
+    model into the HAL intent — the camera attribute always mirrors the
+    validated model seconds."""
+    acq, shell = _make_acq()
+    line_time_spinbox = shell.acquisition_panel.ui.doubleSpinBox_cameraLineTime
+    line_time_spinbox.value.return_value = 5000
+    acq.camera.set_lightsheet_mode = Mock()
+    acq.updateUi_camera_line_time()
+    assert shell.state.lightsheet_line_time_s == pytest.approx(0.005)
+    assert acq.camera.lightsheet_line_time == pytest.approx(0.005)
+    acq.camera.set_lightsheet_mode.assert_not_called()
 
 
 def test_camera_exposed_lines_propagates_as_int() -> None:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
 from PySide6.QtWidgets import QApplication
 from pytestqt.qtbot import QtBot
 
@@ -120,3 +121,31 @@ def test_apply_worker_snapshot_updates_widget(
         ctrl.state.apply_worker_snapshot(applied)
     assert ctrl.laser_panel.ui.doubleSpinBox_laserOneAmplitude.value() == 12.5
     assert ctrl.laser_panel.ui.doubleSpinBox_laserTwoAmplitude.value() == 87.5
+
+
+def test_applied_line_time_projects_to_widget_without_echo(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
+    """A worker-originated applied line time (seconds) renders on the
+    line-time spinbox in microseconds, and the blockSignals projection
+    does not emit valueChanged — so the coordinator slot that commits
+    widget edits to the model is not re-entered."""
+    from lightsheet.state import AppliedMicroscopeSnapshot
+
+    ctrl = controller
+    spin = ctrl.acquisition_panel.ui.doubleSpinBox_cameraLineTime
+    fired: list[float] = []
+    spin.valueChanged.connect(fired.append)
+
+    applied = AppliedMicroscopeSnapshot(lightsheet_line_time_s=0.0049)
+    with qtbot.waitSignal(
+        ctrl.state.sig_lightsheet_line_time_changed, timeout=100
+    ):
+        ctrl.state.apply_worker_snapshot(applied)
+
+    assert ctrl.state.lightsheet_line_time_s == pytest.approx(0.0049)
+    assert spin.value() == pytest.approx(4900)
+    assert fired == [], (
+        "The state->widget projection must be signal-blocked so it does "
+        "not echo back into updateUi_camera_line_time"
+    )

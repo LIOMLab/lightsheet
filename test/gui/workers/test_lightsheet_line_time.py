@@ -27,7 +27,6 @@ from lightsheet.gui.workers.stack_adaptive import (
     _lightsheet_line_time_from_exposure,
 )
 
-
 # -- pure conversion helper ------------------------------------------------
 
 

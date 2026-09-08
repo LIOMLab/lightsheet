@@ -409,8 +409,10 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 # an active adaptive actuator in Lightsheet via the
                 # exposure_s -> line-time mapping.
                 if getattr(self.camera, "shutter_mode", "Rolling") == "Lightsheet":
+                    # line_time is populated by arm_scan() above; the
+                    # Optional in the HAL type is the pre-open state.
                     effective_exposure_s = (
-                        self.camera.line_time * self.camera.lightsheet_exposed_lines
+                        self.camera.line_time * self.camera.lightsheet_exposed_lines  # ty: ignore[unsupported-operator]
                     )
                 else:
                     effective_exposure_s = self.camera.exposure_time

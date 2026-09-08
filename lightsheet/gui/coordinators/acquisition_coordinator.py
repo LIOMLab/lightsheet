@@ -408,9 +408,17 @@ class AcquisitionCoordinator(_AcquireScanMixin):
         )  # ui(ms) to camera(s)
 
     def updateUi_camera_line_time(self) -> None:
-        self.camera.lightsheet_line_time = (
+        # The widget carries microseconds; the model and HAL carry
+        # seconds. The model is the intent source of truth — commit the
+        # seconds value through it, then assign the validated model value
+        # as the HAL intent. Idle edits intentionally do NOT call
+        # camera.set_lightsheet_mode(): hardware application is owned by
+        # the arm/adaptive path.
+        line_time_s = (
             self._shell.acquisition_panel.ui.doubleSpinBox_cameraLineTime.value() * 1e-6
-        )  # ui(us) to camera(s)
+        )  # ui(us) to seconds
+        self._shell.state.set_lightsheet_line_time_s(line_time_s)
+        self.camera.lightsheet_line_time = self._shell.state.lightsheet_line_time_s
 
     def updateUi_camera_exposed_lines(self) -> None:
         self.camera.lightsheet_exposed_lines = int(

@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import logging
+import math
 import typing
 
 import shiboken6
@@ -628,3 +629,18 @@ class AcquisitionPanelWidget(QWidget):
         self._shell.ui.statusBar_label.setText("")
         self._shell.ui.statusBar_progress.hide()
         self._shell._update_mode_badge("IDLE")
+
+    @Slot(float)
+    def updateUi_lightsheet_line_time_from_state(self, line_time_s: float) -> None:
+        """GUI-thread slot projecting the model's seconds-based line time
+        onto the microsecond spinbox under blockSignals so the projection
+        cannot echo back into the widget's ``valueChanged`` slot. The
+        previous signal-blocked state is restored.
+        """
+        spin = self.ui.doubleSpinBox_cameraLineTime
+        value_us = line_time_s * 1e6
+        if math.isclose(spin.value(), value_us, rel_tol=1e-9, abs_tol=1e-9):
+            return
+        was = spin.blockSignals(True)
+        spin.setValue(value_us)
+        spin.blockSignals(was)
