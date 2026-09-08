@@ -109,7 +109,11 @@ class MockSample:
             raise ValueError(
                 f"light_sheet_fwhm_um must be positive, got {self.light_sheet_fwhm_um}"
             )
-        if len(self.sensor_shape) != 2 or any(s <= 0 for s in self.sensor_shape):
+        if (
+            len(self.sensor_shape) != 2
+            or not all(isinstance(s, int) for s in self.sensor_shape)
+            or any(s <= 0 for s in self.sensor_shape)
+        ):
             raise ValueError(
                 f"sensor_shape must be two positive ints, got {self.sensor_shape}"
             )
