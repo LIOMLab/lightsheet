@@ -264,6 +264,41 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         # drives the completed/interrupted manifest lifecycle at teardown.
         self._run_completed = False
 
+    def _last_controller_checkpoint(self, controller: str) -> dict | None:
+        """Return the most recent manifest checkpoint for ``controller``.
+
+        The manifest's ``controller_checkpoints`` list mixes adaptive,
+        block-focus, and autofocus rows; each row carries a ``controller``
+        discriminator. Rows written before the discriminator existed
+        default to ``"adaptive"`` for backward compatibility.
+        """
+        if self._resume_manifest is None:
+            return None
+        for cp in reversed(self._resume_manifest.controller_checkpoints):
+            if cp.get("controller", "adaptive") == controller:
+                return cp
+        return None
+
+    def _stage_focus_manifest_updates(
+        self, payload: dict, sample: object, plane: int
+    ) -> None:
+        """Stage a focus checkpoint and a trajectory row on the save-side
+        manifest update queue. The save worker drains these and persists
+        them with the sidecar manifest so a crash or pause can resume the
+        focus-compensation trajectory. Called only when saving is allowed;
+        the acquisition thread never calls ``write_manifest`` itself.
+        """
+        self._shell._fs.manifest_update_queue.put_nowait(
+            ManifestUpdate(kind="checkpoint", payload=payload, plane_index=plane)
+        )
+        self._shell._fs.manifest_update_queue.put_nowait(
+            ManifestUpdate(
+                kind="trajectory",
+                payload=sample.as_dict(),  # ty: ignore[unresolved-attribute]
+                plane_index=plane,
+            )
+        )
+
     def _select_laser(self, idx: int) -> None:
         """Call the hardware select_laser, passing the frozen snapshot only
         when the callable is the real HardwareManager bound method. Test
@@ -441,12 +476,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
 
                 # Resume: pick up the last adaptive controller checkpoint
                 # stored in the resume manifest.
-                initial_state = None
-                if (
-                    self._resume_manifest is not None
-                    and self._resume_manifest.controller_checkpoints
-                ):
-                    initial_state = self._resume_manifest.controller_checkpoints[-1]
+                initial_state = self._last_controller_checkpoint("adaptive")
 
                 self._adaptive_controller = AdaptiveController(
                     self._adaptive_cfg, n_planes, initial_state=initial_state
@@ -529,12 +559,21 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     )
                 from lightsheet.focus.controller import FocusController
 
+                # Resume: restore the block-focus controller state and the
+                # block counter from the last manifest checkpoint so the
+                # compensation trajectory continues instead of resetting.
+                focus_state = self._last_controller_checkpoint("focus")
                 self._focus_controller = FocusController(
                     self._focus_cfg,
                     self._focus_curve,
                     cam_lo_mm,
                     cam_hi_mm,
+                    initial_state=focus_state,
                 )
+                if focus_state is not None:
+                    self._focus_block_count = int(
+                        focus_state.get("block_count", 0)
+                    )
 
             # Per-plane adaptive autofocus setup: construct the
             # controller from the camera travel limits, the optional curve
@@ -559,6 +598,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     cam_hi_mm,
                     curve=self._autofocus_curve,
                     seed_camera_pos_mm=cam_pos_mm,
+                    initial_state=self._last_controller_checkpoint("autofocus"),
                 )
 
             for plane in range(self._start_plane, n_planes):
@@ -724,6 +764,18 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                                 else None,
                             )
                             self._shell._fs.record_focus_sample(focus_sample)
+                            # block_count is incremented after the
+                            # trajectory emit below; the checkpoint
+                            # records the post-increment count so a
+                            # resumed run continues block numbering.
+                            self._stage_focus_manifest_updates(
+                                {
+                                    **self._focus_controller.checkpoint(),
+                                    "block_count": self._focus_block_count + 1,
+                                },
+                                focus_sample,
+                                plane,
+                            )
 
                         self.sig_focus_trajectory.emit(
                             self._focus_block_count,
@@ -959,6 +1011,11 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         )
                         if self._shell.saving_allowed:
                             self._shell._fs.record_focus_sample(focus_sample)
+                            self._stage_focus_manifest_updates(
+                                self._autofocus_controller.checkpoint(),
+                                focus_sample,
+                                plane,
+                            )
                         self.sig_focus_trajectory.emit(
                             plane,
                             stage_pos_mm,

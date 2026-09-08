@@ -2452,6 +2452,11 @@ class FrameSaverController:
 
             pre_samples: list[AdaptiveSample] = []
             for row in self.frame_saver.resume_manifest.trajectory_samples:
+                if not isinstance(row, dict) or "exposure_s" not in row:
+                    # Not an adaptive row (e.g. a focus trajectory sample
+                    # sharing the manifest list) — configure_focus merges
+                    # those separately.
+                    continue
                 try:
                     pre_samples.append(AdaptiveSample(**row))
                 except Exception as e:
@@ -2476,6 +2481,51 @@ class FrameSaverController:
 
     def configure_focus(self, enabled: bool, config: object | None = None) -> None:
         self.frame_saver.configure_focus(enabled, config=config)
+        # If resuming, seed the focus trajectory list with the pre-resume
+        # focus samples stored in the sidecar manifest so the final file
+        # metadata carries the full merged trajectory. Adaptive trajectory
+        # rows share the manifest list and are skipped here (handled by
+        # configure_adaptive); malformed rows are skipped with a warning
+        # rather than aborting the merge.
+        if enabled and self.frame_saver.resume_manifest is not None:
+            from lightsheet.focus.types import FocusSample
+
+            pre_samples: list[FocusSample] = []
+            for row in self.frame_saver.resume_manifest.trajectory_samples:
+                if not isinstance(row, dict) or "feedforward_camera_pos_mm" not in row:
+                    continue
+                try:
+                    pre_samples.append(
+                        FocusSample(
+                            block_index=int(row["block_index"]),
+                            stage_pos_mm=float(row["stage_pos_mm"]),
+                            feedforward_camera_pos_mm=float(
+                                row["feedforward_camera_pos_mm"]
+                            ),
+                            residual_mm=float(row["residual_mm"]),
+                            applied_camera_pos_mm=float(
+                                row["applied_camera_pos_mm"]
+                            ),
+                            sharpness_metric=(
+                                None
+                                if row.get("sharpness_metric") is None
+                                else float(row["sharpness_metric"])
+                            ),
+                        )
+                    )
+                except (KeyError, TypeError, ValueError) as e:
+                    logger.warning(
+                        "Skipping malformed pre-resume focus trajectory "
+                        "sample: %s",
+                        e,
+                    )
+            if pre_samples:
+                merged = pre_samples + self.frame_saver.focus_trajectory
+                # Sort by absolute block index so pre- and post-resume
+                # samples form one continuous trajectory.
+                self.frame_saver.focus_trajectory = sorted(
+                    merged, key=lambda s: s.block_index
+                )
 
     def record_focus_sample(self, sample: object) -> None:
         self.frame_saver.record_focus_sample(sample)
