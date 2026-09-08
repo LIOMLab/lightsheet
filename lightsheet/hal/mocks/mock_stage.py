@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+from scipy.ndimage import gaussian_filter
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,34 @@ class MockSample:
     light_sheet_fwhm_um: float = 6.0
     pixel_size_um: float = 6.5
     sensor_shape: tuple[int, int] = (2048, 2048)
+    # Sample-lensing focus model: the ideal camera focus plane sits at
+    # ``light_sheet_x_mm + lensing_shift(h)`` where ``lensing_shift`` is a
+    # small Gaussian bump of the axial sample position (peak
+    # ``lensing_amplitude_mm`` at ``center_x_mm``, width
+    # ``lensing_sigma_mm``). Camera defocus in mm maps to a 2D Gaussian
+    # PSF sigma in pixels via ``defocus_scale`` (fraction of the
+    # defocus-in-pixels to use), capped at ``max_blur_sigma_px`` so the
+    # per-plane blur stays inside the demo timing budget (~21 ms at
+    # sigma=2 on the 1500x1500 demo default). ``blur_deadband_mm``
+    # skips the blur entirely for near-focus planes (~2 ms path).
+    lensing_amplitude_mm: float = 0.3
+    lensing_sigma_mm: float = 2.0
+    defocus_scale: float = 0.02
+    max_blur_sigma_px: float = 2.0
+    blur_deadband_mm: float = 0.02
+    # Deterministic high-frequency sample texture: a zero-mean
+    # sinusoidal grid modulated by the Gaussian envelope
+    # (``lateral * (1 + texture_amplitude * sin(...) * sin(...))``).
+    # The smooth envelope alone yields almost no
+    # ``frame_sharpness_variance`` gradient under a few-px PSF blur —
+    # variance is a global statistic, so blurring a broad Gaussian
+    # barely changes it. The texture adds high-frequency energy that
+    # the defocus blur removes, producing a strong, monotonic
+    # sharpness-vs-defocus signal for the focus residual. Fully
+    # deterministic (closed-form, no RNG) so frames stay bit-exact.
+    # ``texture_period_px`` is the grid period in sensor pixels.
+    texture_amplitude: float = 0.5
+    texture_period_px: float = 4.0
 
     def __post_init__(self) -> None:
         """Reject ill-formed parameters — a non-positive sigma or pixel
@@ -84,6 +113,23 @@ class MockSample:
             raise ValueError(
                 f"sensor_shape must be two positive ints, got {self.sensor_shape}"
             )
+        if self.lensing_sigma_mm <= 0:
+            raise ValueError(
+                f"lensing_sigma_mm must be positive, got {self.lensing_sigma_mm}"
+            )
+        if self.texture_period_px <= 0:
+            raise ValueError(
+                f"texture_period_px must be positive, got {self.texture_period_px}"
+            )
+        for name in (
+            "lensing_amplitude_mm",
+            "defocus_scale",
+            "max_blur_sigma_px",
+            "blur_deadband_mm",
+            "texture_amplitude",
+        ):
+            if getattr(self, name) < 0:
+                raise ValueError(f"{name} must be >= 0, got {getattr(self, name)}")
 
 
 class MockStage:
@@ -125,13 +171,15 @@ class MockStage:
 
         lateral = self._lateral()
 
-        # Extension seam for camera-defocus blur: a future sigma > 0
-        # blurs the lateral slice before scaling. Currently always 0.
+        # Camera-defocus blur: convolve the cached lateral slice with a
+        # 2D Gaussian PSF whose sigma grows with the distance between the
+        # camera focus position and the (lensing-shifted) ideal focus.
+        # gaussian_filter returns a fresh array, so the cached profile
+        # is never mutated. The blur is applied to the unscaled density
+        # before the peak_density * power * exposure scaling.
         blur_sigma_px = self._defocus_sigma_px(cam_mm, h_mm)
         if blur_sigma_px > 0.0:
-            from scipy.ndimage import gaussian_filter
-
-            lateral = gaussian_filter(lateral, blur_sigma_px)
+            lateral = gaussian_filter(lateral, blur_sigma_px, mode="nearest")
 
         exposure_s = float(getattr(camera, "exposure_time", 0.0))
         return sample.peak_density * lateral * axial * power_frac * exposure_s
@@ -151,12 +199,21 @@ class MockStage:
 
         Sensor rows map to the sample y axis and columns to the z axis,
         scaled by ``pixel_size_um``; ``center_y_mm`` / ``center_z_mm``
-        land on the sensor centre. Cached on
-        ``(sensor_shape, sigma_y_mm, sigma_z_mm)`` so the per-plane cost
-        stays ~2 ms.
+        land on the sensor centre. A deterministic zero-mean sinusoidal
+        texture modulates the envelope when ``texture_amplitude`` > 0 so
+        the defocus blur has high-frequency energy to remove (without
+        it, blurring a smooth Gaussian barely moves the frame's
+        variance). Cached on the geometry + texture parameters so the
+        per-plane cost stays ~2 ms.
         """
         sample = self.sample
-        key = (tuple(sample.sensor_shape), sample.sigma_y_mm, sample.sigma_z_mm)
+        key = (
+            tuple(sample.sensor_shape),
+            sample.sigma_y_mm,
+            sample.sigma_z_mm,
+            sample.texture_amplitude,
+            sample.texture_period_px,
+        )
         if self._lateral_key != key or self._lateral_profile is None:
             rows, cols = sample.sensor_shape
             pixel_mm = sample.pixel_size_um * 1e-3
@@ -170,12 +227,44 @@ class MockStage:
                     + (dz[None, :] ** 2) / (2 * sample.sigma_z_mm**2)
                 )
             )
+            if sample.texture_amplitude > 0:
+                k = 2.0 * math.pi / sample.texture_period_px
+                texture = np.sin(k * np.arange(rows))[:, None] * np.sin(
+                    k * np.arange(cols)
+                )[None, :]
+                profile = profile * (1.0 + sample.texture_amplitude * texture)
             self._lateral_key = key
             self._lateral_profile = profile
         return self._lateral_profile
 
+    def _ideal_focus_mm(self, h_mm: float) -> float:
+        """Ideal camera focus position for a given axial sample position.
+
+        The static light sheet sits at ``light_sheet_x_mm``; the sample
+        lenses the sheet slightly, shifting the ideal focus plane by a
+        small Gaussian bump centred on the sample's axial centre.
+        """
+        sample = self.sample
+        shift = sample.lensing_amplitude_mm * math.exp(
+            -((h_mm - sample.center_x_mm) ** 2) / (2 * sample.lensing_sigma_mm**2)
+        )
+        return sample.light_sheet_x_mm + shift
+
     def _defocus_sigma_px(self, cam_mm: float, h_mm: float) -> float:
-        """Camera-defocus blur sigma in pixels. Always 0.0 for now —
-        the blur model lands in a later change without altering the
-        ``frame()`` signature."""
-        return 0.0
+        """Map camera defocus (mm) to a 2D Gaussian PSF sigma in pixels.
+
+        Returns ``0.0`` inside the deadband and for blur sigmas too small
+        to matter (~0.3 px), so in-focus planes keep the ~2 ms unblurred
+        path. Larger defocus maps linearly to sigma via
+        ``defocus_scale``, hard-capped at ``max_blur_sigma_px`` so the
+        per-plane cost stays inside the demo timing budget.
+        """
+        sample = self.sample
+        defocus_mm = abs(cam_mm - self._ideal_focus_mm(h_mm))
+        if defocus_mm < sample.blur_deadband_mm:
+            return 0.0
+        sigma_px = defocus_mm * 1000.0 / sample.pixel_size_um * sample.defocus_scale
+        sigma_px = min(sigma_px, sample.max_blur_sigma_px)
+        if sigma_px <= 0.3:
+            return 0.0
+        return sigma_px
