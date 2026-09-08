@@ -348,6 +348,8 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     set_files_kwargs = {"wavelengths": self._wavelengths}
                 else:
                     set_files_kwargs = {}
+                if self._resume_manifest is not None:
+                    set_files_kwargs["resume_manifest"] = self._resume_manifest
                 if self._save_all_crop:
                     self._shell._fs.set_files(
                         self._shell.number_of_planes,
@@ -355,8 +357,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         "stack",
                         1,
                         "ETLscan",
-                        wavelengths=set_files_kwargs.get("wavelengths"),
-                        resume_manifest=self._resume_manifest,
+                        **set_files_kwargs,
                     )
                 elif self._save_all_full:
                     self._shell._fs.set_files(
@@ -365,8 +366,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         "stack",
                         1,
                         "FullETLscan",
-                        wavelengths=set_files_kwargs.get("wavelengths"),
-                        resume_manifest=self._resume_manifest,
+                        **set_files_kwargs,
                     )
                 else:
                     # Stitch (reconstructed_frame) branch — the "1 file
@@ -391,8 +391,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         "stack",
                         self._shell.number_of_planes,
                         "reconstructed_frame",
-                        wavelengths=set_files_kwargs.get("wavelengths"),
-                        resume_manifest=self._resume_manifest,
+                        **set_files_kwargs,
                     )
                 # Starting frame saver
                 self._shell._fs.start_saving()

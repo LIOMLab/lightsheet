@@ -1142,7 +1142,9 @@ def test_zarr_save_worker_branches_on_channel_tag(
     saver._zarr_saver.finalize = MagicMock()
 
     # Multi-channel: 2 channels x 2 planes = 4 frames total.
-    saver.filenames_lists = []  # not used by zarr_save_worker
+    # filenames_lists now drives the channel count inside zarr_save_worker,
+    # so supply one entry per channel.
+    saver.filenames_lists = [["stack_555nm.hdf5"], ["stack_640nm.hdf5"]]
     saver.number_of_files = 2
     saver.number_of_datasets = 1
     saver.files_name = "stack"
@@ -1151,6 +1153,7 @@ def test_zarr_save_worker_branches_on_channel_tag(
     saver.vertical_positions_list = ["0.0", "0.0", "0.0", "0.0"]
     saver.camera_positions_list = ["0.0", "0.0", "0.0", "0.0"]
     saver.saving_started = True
+    saver._zarr_saver.resume_offset = MagicMock(return_value=0)
 
     # The save queue is constructed in FrameSaver.__init__ with
     # maxsize = 2 * block_size (= 2 by default). enqueue_buffer uses
@@ -1186,9 +1189,7 @@ def test_zarr_save_worker_branches_on_channel_tag(
     worker.start_saving()
 
     assert len(finished) == 1, "sig_finished must emit exactly once"
-    # start_stack called with n_planes (and the default n_channels=1 —
-    # the worker does not yet derive n_channels from the auto-laser
-    # flags; that is the caller's job via set_files / a future plan).
+    # start_stack called once; n_channels is derived from filenames_lists.
     saver._zarr_saver.start_stack.assert_called_once()
     # write_plane called 4 times — once per enqueued frame, with the
     # correct channel_idx.
@@ -1232,6 +1233,7 @@ def test_zarr_save_worker_single_channel_bare_ndarray_calls_write_plane_channel0
     saver._zarr_saver.start_stack = MagicMock()
     saver._zarr_saver.write_plane = MagicMock()
     saver._zarr_saver.finalize = MagicMock()
+    saver._zarr_saver.resume_offset = MagicMock(return_value=0)
 
     saver.filenames_lists = []
     saver.number_of_files = 1

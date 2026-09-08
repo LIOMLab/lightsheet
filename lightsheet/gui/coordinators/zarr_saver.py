@@ -455,8 +455,8 @@ class ZarrSaver:
                 "ZarrSaver._write_acquisition_group called with no writer"
             )
         root = self._writer.root
-        grp = root.create_group("acquisition")
-        motor = grp.create_group("motor")
+        grp = root.require_group("acquisition")
+        motor = grp.require_group("motor")
         motor.create_array(
             "horizontal", data=np.array(self._horizontal_positions, dtype=float)
         )

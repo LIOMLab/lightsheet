@@ -255,7 +255,7 @@ class FrameSaver(QObject):
         )
 
         def _resolve_channel_target(
-            ch_idx: int, wl: int
+            ch_idx: int, wl: int, reserved: set[str]
         ) -> tuple[str, int, int, bool, str]:
             """Return the first-file path, manifest cursor, observed count,
             whether a fallback happened, and the base name for subsequent
@@ -270,13 +270,10 @@ class FrameSaver(QObject):
                     cursor = cv
                     break
             if not target_path or not save_dir:
-                return (
-                    self._unique_hdf5_path(save_dir, base, width, 0),
-                    0,
-                    0,
-                    False,
-                    base,
+                path = self._unique_hdf5_path(
+                    save_dir, base, width, 0, reserved=reserved
                 )
+                return path, 0, 0, False, base
 
             manifest_dir_contains(save_dir_str, target_path)
 
@@ -290,7 +287,7 @@ class FrameSaver(QObject):
                 )
                 fallback_base = self.files_name + "_part2" + f"_{wl}nm"
                 fallback_path = self._unique_hdf5_path(
-                    save_dir, fallback_base, width, 0
+                    save_dir, fallback_base, width, 0, reserved=reserved
                 )
                 return fallback_path, 0, 0, True, fallback_base
 
@@ -298,6 +295,7 @@ class FrameSaver(QObject):
 
         self.filenames_lists = []
         channel_targets: list[tuple[str, int, int, str, bool]] = []
+        used_paths: set[str] = set()
         for ch_idx, wl in enumerate(wavelengths):
             channel_list: list[str] = []
             base_for_channel = self.files_name + f"_{wl}nm"
@@ -313,21 +311,23 @@ class FrameSaver(QObject):
                     first_observed,
                     first_fallback,
                     first_base,
-                ) = _resolve_channel_target(ch_idx, wl)
+                ) = _resolve_channel_target(ch_idx, wl, used_paths)
                 channel_list.append(first_path)
             else:
                 first_path = self._unique_hdf5_path(
-                    save_dir, base_for_channel, width, 0
+                    save_dir, base_for_channel, width, 0, reserved=used_paths
                 )
                 channel_list.append(first_path)
                 first_base = base_for_channel
 
+            used_paths.add(first_path)
             counter = len(channel_list)
             for _ in range(self.number_of_files - len(channel_list)):
                 full = self._unique_hdf5_path(
-                    save_dir, first_base, width, counter
+                    save_dir, first_base, width, counter, reserved=used_paths
                 )
                 channel_list.append(full)
+                used_paths.add(full)
                 counter += 1
             self.filenames_lists.append(channel_list)
             channel_targets.append(
@@ -502,14 +502,18 @@ class FrameSaver(QObject):
         base: str,
         width: int,
         counter: int,
+        reserved: set[str] | None = None,
     ) -> str:
         """Return a path that does not collide with an existing HDF5 file.
 
         ``counter`` is the starting sequential number. ``counter == 0``
         produces ``<base>.hdf5``; higher counters produce
         ``<base>_<NN>.hdf5``. The loop increments until a non-existent
-        candidate is found.
+        candidate is found. ``reserved`` is a set of in-memory paths
+        already assigned within this ``set_files`` call so we do not
+        return the same candidate twice before it is created on disk.
         """
+        reserved = reserved or set()
         full = ""
         while True:
             if counter == 0:
@@ -517,7 +521,7 @@ class FrameSaver(QObject):
             else:
                 candidate = f"{base}_{counter:0{width}d}.hdf5"
             full = str(save_dir / candidate)
-            if not Path(full).is_file():
+            if full not in reserved and not Path(full).is_file():
                 break
             counter += 1
         return full
@@ -2474,14 +2478,16 @@ class FrameSaverController:
         wavelengths: list[int] | None = None,
         resume_manifest: ResumeManifest | None = None,
     ) -> None:
+        kwargs = {"wavelengths": wavelengths}
+        if resume_manifest is not None:
+            kwargs["resume_manifest"] = resume_manifest
         self.frame_saver.set_files(
             number_of_files,
             files_name,
             scan_type,
             number_of_datasets,
             datasets_name,
-            wavelengths=wavelengths,
-            resume_manifest=resume_manifest,
+            **kwargs,
         )
 
     def enqueue_buffer(self, buffer: np.ndarray | tuple[int, np.ndarray]) -> None:

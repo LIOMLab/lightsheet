@@ -698,7 +698,7 @@ class AcquisitionPanelWidget(QWidget):
             progress = self._shell.ui.statusBar_progress
             self._shell._update_mode_badge(
                 "STACK",
-                "PAUSED",
+                "PAUSING",
                 plane=int(progress.value()),
                 total=int(self._shell.number_of_planes),
             )

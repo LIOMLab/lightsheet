@@ -99,8 +99,10 @@ def test_set_files_falls_back_to_partn_for_corrupt_hdf5(
     assert "_part2_640nm" in fs.filenames_lists[1][0]
     loaded = read_manifest(fs._manifest_path)
     assert loaded is not None
-    # The good channel keeps its observed count; the fallback starts at 0.
-    assert loaded.cursors["hdf5"][str(good)] == 2
+    # A corrupt channel forces the common resume plane to 0, so both
+    # the surviving channel and the _partN fallback start at plane 0 to
+    # keep the multi-channel plane pairs in lockstep.
+    assert loaded.cursors["hdf5"][str(good)] == 0
     fallback_key = fs.filenames_lists[1][0]
     assert loaded.cursors["hdf5"][fallback_key] == 0
 
