@@ -859,3 +859,190 @@ def test_autofocus_multi_channel_uses_same_camera_position_and_last_channel_upda
     assert len(update_calls) == 2, (
         f"expected 2 residual updates; got {len(update_calls)}"
     )
+
+
+# --------------------------------------------------------------------- #
+# Sphere-driven stacks: MockStage feeds the focus residual path through
+# camera.frame_source (the D-06 sharpness-gradient verification).
+# --------------------------------------------------------------------- #
+
+
+def _attach_sphere_stage(ctrl: Any, sample: Any | None = None) -> Any:
+    """Construct a ``MockStage`` on the controller's OWN mock motors and
+    lasers (identity — the stage must read the same instances the worker
+    moves and ``start_lasers`` energizes) and wire it into
+    ``camera.frame_source``.
+    """
+    from lightsheet.hal import MockSample, MockStage
+
+    if sample is None:
+        sample = MockSample()
+    stage = MockStage(sample, ctrl._bundle.motors, ctrl._bundle.lasers)
+    ctrl.camera.frame_source = stage.frame
+    return stage
+
+
+def _sphere_acquire_scan_preserve(ctrl: Any, worker: Any) -> Callable[[], bool]:
+    """Return an ``acquire_scan`` stub that drives the sphere path
+    WITHOUT overwriting the frame afterward.
+
+    The ``frame_source`` branch in ``MockCamera.copy_recorder_images``
+    is gated on ``new_data_ready`` — the stub MUST set it immediately
+    before the copy or the camera returns zero-filled frames and the
+    sphere never reaches the sharpness metric (a dead signal). The real
+    ``monitor_recorder`` sets this flag after the exposure completes;
+    the stub reproduces that ordering. Unlike
+    ``_fake_acquire_scan_factory``, this stub stores ``imgs[0]``
+    verbatim — drawing over the frame would measure the sharpness of
+    the test pattern, not the sphere.
+    """
+
+    def _fake_acquire_scan() -> bool:
+        n_imgs = worker.siggen.waveform_cycles or 1
+        ctrl.camera.new_data_ready = True
+        imgs = ctrl.camera.copy_recorder_images(n_imgs)
+        assert imgs is not None
+        worker._shell.reconstructed_frame = np.asarray(imgs[0])
+        return True
+
+    return _fake_acquire_scan
+
+
+def test_sphere_drives_focus_residual(
+    controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    """A real StackWorker run whose frames come from MockStage (the
+    Gaussian sphere) feeds ``FocusController.update_residual`` sharpness
+    values computed from real sphere slices — non-None, non-zero, and
+    varying across block boundaries as the camera axis approaches the
+    lensing-shifted ideal focus.
+
+    Strategy (b) from the plan: the ``FocusCurve`` camera targets
+    interpolate TOWARD the ideal focus (~8.73-8.79 mm for the default
+    sample over h = 7.0-10.0 mm), so the per-block camera position
+    steps 9.40 -> 8.88 mm and the defocus PSF blur (and therefore the
+    measured sharpness) changes at every boundary. The horizontal sweep
+    (7.0 -> 10.75 mm, 250 um steps) crosses the sheet at 8.5 mm so the
+    slices stay inside the sphere's bright region.
+    """
+    from lightsheet.focus.controller import FocusController
+    from lightsheet.focus.types import FocusCurve
+
+    ctrl = controller
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = False
+    ctrl.laser1_power_pct = 80.0
+
+    # 16 planes, block size 4 -> block boundaries at planes 0, 4, 8, 12
+    # -> 3 update_residual calls (boundaries 4, 8, 12).
+    _configure_stack_plan(ctrl, tmp_path, n_planes=16)
+    ctrl.stack_starting_plane = 7000.0  # um
+    ctrl.stack_step = 250.0  # um
+
+    # Curve: camera target walks from a defocused 9.4 mm toward the
+    # lensing-shifted ideal (~8.8 mm) as the stage sweeps the sheet.
+    curve = FocusCurve(
+        stage_pos=(7.0, 10.75),
+        camera_pos=(9.4, 8.75),
+    )
+    worker = _make_worker(ctrl, focus_cfg=_focus_cfg(block_size_n=4), focus_curve=curve)
+
+    _attach_sphere_stage(ctrl)
+
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    residual_calls: list[float] = []
+    captured_frames: list[np.ndarray] = []
+    real_update = FocusController.update_residual
+
+    def _track_residual(self: FocusController, sharpness: float) -> None:
+        # Capture the exact frame the metric ran on (the previous
+        # plane's reconstructed frame, still held on the shell).
+        captured_frames.append(np.asarray(worker._shell.reconstructed_frame).copy())
+        residual_calls.append(sharpness)
+        real_update(self, sharpness)
+
+    parallel_calls: list[list[tuple[str, float, str]]] = []
+    real_parallel = worker.motors.move_axes_parallel
+
+    def _track_parallel(moves: list[tuple[str, float, str]]) -> None:
+        parallel_calls.append(list(moves))
+        real_parallel(moves)
+
+    finished_emits: list[None] = []
+    worker.finished.connect(lambda: finished_emits.append(None))
+    with (
+        patch.object(
+            worker, "acquire_scan", _sphere_acquire_scan_preserve(ctrl, worker)
+        ),
+        patch.object(FocusController, "update_residual", _track_residual),
+        patch.object(worker.motors, "move_axes_parallel", _track_parallel),
+    ):
+        worker.run()
+
+    assert len(finished_emits) == 1, (
+        f"StackWorker.run must emit finished exactly once; got {len(finished_emits)}"
+    )
+
+    # One residual update per non-first block boundary: planes 4, 8, 12.
+    assert len(residual_calls) == 3, (
+        f"expected 3 residual updates; got {len(residual_calls)}"
+    )
+
+    # Every recorded sharpness came from a real sphere frame: non-zero
+    # (flat/zero frames return exactly 0.0, so this is also the
+    # dead-signal guard proving new_data_ready was set in the stub) and
+    # equal to the metric recomputed from the captured frame.
+    from lightsheet.focus.sharpness import frame_sharpness_variance
+
+    for i, (sharp, frame) in enumerate(
+        zip(residual_calls, captured_frames, strict=True)
+    ):
+        assert sharp > 0.0, (
+            f"residual call {i} sharpness must be non-zero on a real "
+            f"sphere slice; got {sharp}"
+        )
+        assert sharp == pytest.approx(frame_sharpness_variance(frame)), (
+            f"residual call {i} must carry the metric of the actual frame"
+        )
+    # The captured frames are the sphere's slices, not a constant fill:
+    # they differ as the stage sweeps and the defocus blur changes.
+    assert not np.array_equal(captured_frames[0], captured_frames[-1]), (
+        "sphere frames must differ across blocks (stage sweep + blur)"
+    )
+
+    # D-06 gradient: the defocus/lensing model produces distinct
+    # sharpness values across blocks (the camera walks toward focus).
+    assert len(set(residual_calls)) > 1, (
+        f"sharpness must vary across blocks; got {residual_calls}"
+    )
+
+    # The residual actually moved (later blocks measure sharper frames
+    # than the stored reference, so the trim is non-zero).
+    assert worker._focus_controller.residual_mm != 0.0, (
+        "residual must respond to the sphere sharpness gradient"
+    )
+
+    # Trajectory: 4 samples (one per block boundary); first has no
+    # sharpness, the rest mirror the recorded calls.
+    traj = ctrl._fs.focus_trajectory
+    assert len(traj) == 4, f"expected 4 focus samples; got {len(traj)}"
+    assert traj[0].sharpness_metric is None
+    for i, call in enumerate(residual_calls, start=1):
+        assert traj[i].sharpness_metric == pytest.approx(call), (
+            f"sample {i} sharpness must equal the update_residual arg"
+        )
+
+    # All camera targets stayed inside the camera axis travel limits
+    # (the move_axes_parallel path is the real MockMotor contract).
+    cam_lo = worker.motors.camera.get_limit_low("mm")
+    cam_hi = worker.motors.camera.get_limit_high("mm")
+    for sample in traj:
+        assert cam_lo <= sample.applied_camera_pos_mm <= cam_hi, (
+            f"applied camera position {sample.applied_camera_pos_mm} mm "
+            f"outside limits [{cam_lo}, {cam_hi}]"
+        )
+    for moves in parallel_calls:
+        cam_target = next(m[1] for m in moves if m[0] == "camera")
+        assert cam_lo <= cam_target <= cam_hi
