@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import h5py
-import numpy as np
 import zarr
 
 if TYPE_CHECKING:
@@ -266,7 +265,7 @@ def manifest_dir_contains(save_directory: str, target: str) -> None:
 
 
 def _common_resume_plane(
-    manifest: "ResumeManifest",
+    manifest: ResumeManifest,
     probes: dict[str, dict[str, int]],
 ) -> tuple[int, bool]:
     """Return the common resume plane and whether a torn tail was found.
