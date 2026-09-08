@@ -215,14 +215,20 @@ def test_adaptive_unchecked_returns_none(
 
 
 def test_adaptive_checked_valid_returns_frozen_config(
-    qtbot: QtBot, controller: Controller_MainWindow
+    qtbot: QtBot, controller: Controller_MainWindow, monkeypatch: MonkeyPatch
 ) -> None:
     """With the toggle checked and valid bounds, build_adaptive_config
-    returns a frozen AdaptiveConfig with target 0.90/0.95 and L2 block
-    size 8 (the tracked defaults)."""
+    returns a frozen AdaptiveConfig that passes the fixed
+    controller-tuning values through unchanged. The config.ini read is
+    stubbed so the test does not depend on the live config file."""
     ctrl = controller
     ui = _adaptive_ui(ctrl)
     ui.checkBox_adaptiveEnable.setChecked(True)
+    monkeypatch.setattr(
+        ctrl.stack_panel,
+        "_read_adaptive_fixed_config",
+        lambda: (0.90, 0.95, 0.08, 8, 0.4, 0.05, 5),
+    )
     cfg = ctrl.stack_panel.build_adaptive_config()
     assert cfg is not None
     assert isinstance(cfg, AdaptiveConfig)
