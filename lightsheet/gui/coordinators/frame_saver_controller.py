@@ -14,6 +14,7 @@ import contextlib
 import datetime
 import logging
 import queue
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -30,6 +31,13 @@ from lightsheet.gui.coordinators.reconstruction import (
 )
 from lightsheet.gui.coordinators.zarr_saver import ZarrSaver
 from lightsheet.hal.bundle import DeviceBundle
+from lightsheet.resume import (
+    ManifestUpdate,
+    ResumeManifest,
+    apply_manifest_update,
+    manifest_path_for,
+    write_manifest,
+)
 
 if TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -117,6 +125,20 @@ class FrameSaver(QObject):
         # in fixed mode.
         self._focus_config: object | None = None
 
+        # Resume-manifest state. ``acquisition_uuid`` is minted in
+        # set_files and stamped into every output file so a resume never
+        # targets the wrong fileset after renames. ``resume_manifest`` is
+        # the frozen value type; every mutation produces a new instance
+        # via ``apply_manifest_update``. ``manifest_update_queue`` is the
+        # ONLY channel across which other threads (the acquisition worker,
+        # stop_saving on the GUI thread) contribute manifest state — the
+        # save worker drains it and is the sole write_manifest caller
+        # while a save is in flight.
+        self.acquisition_uuid: str | None = None
+        self.resume_manifest: ResumeManifest | None = None
+        self._manifest_path: Path | None = None
+        self.manifest_update_queue: queue.Queue[ManifestUpdate] = queue.Queue()
+
     def reinit(self, block_size: int) -> None:
         if self.saving_started:
             self.saving_started = False
@@ -147,6 +169,12 @@ class FrameSaver(QObject):
         self.focus_trajectory = []
         self._focus_enabled = False
         self._focus_config = None
+
+        # Clear resume-manifest state so a re-run starts a fresh record.
+        self.acquisition_uuid = None
+        self.resume_manifest = None
+        self._manifest_path = None
+        self.manifest_update_queue = queue.Queue()
 
     def add_sample_name(self, sample_name: str) -> None:
         """Add to a list the different motor positions"""
@@ -228,6 +256,125 @@ class FrameSaver(QObject):
             # Multi-channel: clear so the multi-channel worker branch is taken.
             self.filenames_list = []
 
+        # Mint the resume manifest for stack acquisitions. Single-image
+        # saves (scan_type "singleImage") produce no resumable artifact,
+        # so no manifest is created for them.
+        if self.scan_type == "stack":
+            self._init_resume_manifest(wavelengths)
+        else:
+            self.acquisition_uuid = None
+            self.resume_manifest = None
+            self._manifest_path = None
+
+    def _init_resume_manifest(self, wavelengths: list[int]) -> None:
+        """Mint the acquisition UUID and write the initial sidecar
+        ``<acquisition>.resume.json`` with ``state="in_progress"``.
+
+        Called from ``set_files`` before any frame is acquired, so a
+        crash between the first frame and the first cursor write still
+        leaves a discoverable manifest. The manifest path is derived from
+        the first resolved channel-0 filename so the post-collision-bump
+        fileset and its manifest always share a stem.
+        """
+        self.acquisition_uuid = uuid.uuid4().hex
+        self._manifest_path = manifest_path_for(self.filenames_lists[0][0])
+        save_mode = {
+            "reconstructed_frame": "stitch",
+            "ETLscan": "all_crop",
+            "FullETLscan": "all_full",
+        }.get(self.datasets_name, "stitch")
+        self.resume_manifest = ResumeManifest(
+            uuid=self.acquisition_uuid,
+            state="in_progress",
+            n_planes=int(self.number_of_files) * int(self.number_of_datasets),
+            stack_starting_plane=self._coerce_shell_float(
+                "stack_starting_plane"
+            ),
+            stack_ending_plane=self._coerce_shell_float("stack_ending_plane"),
+            stack_step=self._coerce_shell_float("stack_step"),
+            save_mode=save_mode,
+            wavelengths=[int(w) for w in wavelengths],
+            multi_channel=len(wavelengths) > 1,
+            created_at=datetime.datetime.now(datetime.UTC).isoformat(),
+        )
+        write_manifest(self._manifest_path, self.resume_manifest)
+
+    def _coerce_shell_float(self, attr: str) -> float:
+        """Read a numeric stack-geometry attribute off the shell, coercing
+        to float and falling back to 0.0 for missing/non-numeric values
+        (e.g. minimal shell stand-ins in tests)."""
+        try:
+            return float(getattr(self.parent, attr, 0.0) or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _hdf5_cursor_key(self) -> str:
+        """Cursor sub-key for the active single-channel HDF5 layout."""
+        return {
+            "reconstructed_frame": "stitch",
+            "ETLscan": "all_crop",
+            "FullETLscan": "all_full",
+        }.get(self.datasets_name, "stitch")
+
+    def _drain_manifest_updates(self) -> None:
+        """Apply every staged ``ManifestUpdate`` to ``resume_manifest``.
+
+        Called by the save worker before each manifest write and once more
+        on exit, so updates staged by other threads (lifecycle, motor
+        positions, checkpoints, trajectory rows) land on disk.
+        """
+        while True:
+            try:
+                update = self.manifest_update_queue.get_nowait()
+            except queue.Empty:
+                break
+            if self.resume_manifest is not None:
+                self.resume_manifest = apply_manifest_update(
+                    self.resume_manifest, update
+                )
+
+    def _commit_manifest_cursor(self, fmt: str, key: str, value: int) -> None:
+        """Update a committed-plane cursor and rewrite the manifest.
+
+        MUST only be called after the underlying write (``create_dataset``
+        / ``write_plane``) has returned — the cursor is the
+        durable-on-disk truth, not the number of frames enqueued.
+        """
+        if self.resume_manifest is None or self._manifest_path is None:
+            return
+        self._drain_manifest_updates()
+        self.resume_manifest = apply_manifest_update(
+            self.resume_manifest,
+            ManifestUpdate(
+                kind="cursor",
+                payload={"format": fmt, "key": key, "value": int(value)},
+            ),
+        )
+        try:
+            write_manifest(self._manifest_path, self.resume_manifest)
+        except OSError as e:
+            # A manifest write failure must not abort the acquisition —
+            # the image data is already durable; a stale cursor resumes
+            # into a re-acquire, never a skip (probe clamps the cursor).
+            logger.warning("resume manifest write failed: %s", e)
+
+    def _finalize_manifest(self) -> None:
+        """Drain staged updates and write the manifest one last time.
+
+        Called at the end of every save-worker body, and again from
+        ``stop_saving`` after the worker thread has been joined (the
+        worker may have already exited before the lifecycle update was
+        staged). Post-join there is exactly one writer, so the call is
+        race-free.
+        """
+        if self.resume_manifest is None or self._manifest_path is None:
+            return
+        try:
+            self._drain_manifest_updates()
+            write_manifest(self._manifest_path, self.resume_manifest)
+        except Exception as e:
+            logger.warning("resume manifest finalize failed: %s", e)
+
     # Saving methods
 
     def enqueue_buffer(self, buffer: np.ndarray | tuple[int, np.ndarray]) -> None:
@@ -290,6 +437,12 @@ class FrameSaver(QObject):
         as dataset attrs in ``frame_saver_worker`` — this adds the
         root-level snapshot, not per-plane.
         """
+        # Stamp the acquisition UUID minted in set_files so a resume can
+        # prove the file belongs to the manifest's run (renames and _NN
+        # collision bumps cannot break the binding).
+        if self.acquisition_uuid:
+            outfile.attrs["Acquisition UUID"] = self.acquisition_uuid
+
         motors = self.parent.motors  # ty: ignore[unresolved-attribute]
         outfile.attrs["Horizontal Position"] = motors.horizontal.get_position("mm")
         outfile.attrs["Vertical Position"] = motors.vertical.get_position("mm")
@@ -770,6 +923,13 @@ class FrameSaver(QObject):
                                 )
 
                             counter += 1
+                            # The committed-plane cursor advances only
+                            # after create_dataset + attrs have returned —
+                            # it is the durable-on-disk truth, not the
+                            # count of frames the producer enqueued.
+                            self._commit_manifest_cursor(
+                                "hdf5", self._hdf5_cursor_key(), counter - 1
+                            )
                         break
                     except queue.Empty:
                         # Timeout waiting for a buffer — stop_saving()
@@ -837,6 +997,7 @@ class FrameSaver(QObject):
             self.sig_status_message.emit("File " + self.filenames_list[idx] + " saved")
             if aborted:
                 break
+        self._finalize_manifest()
         logger.info(
             "frame_saver_worker exited (saving_started=%s)", self.saving_started
         )
@@ -1064,6 +1225,7 @@ class FrameSaver(QObject):
                         with contextlib.suppress(Exception):
                             outfile.close()
 
+        self._finalize_manifest()
         logger.info(
             "frame_saver_worker (multi-channel) exited "
             "(saving_started=%s, frames_written=%d)",
@@ -1262,6 +1424,7 @@ class FrameSaver(QObject):
                 except Exception as e:
                     self.sig_status_message.emit(f"Save error: {e}")
                     self.saving_started = False
+        self._finalize_manifest()
         logger.info("zarr_save_worker exited (saving_started=%s)", self.saving_started)
 
     def both_save_worker(self) -> None:
@@ -1391,6 +1554,12 @@ class FrameSaver(QObject):
                                         self.camera_positions_list[h5_pos_index]
                                     )
                                 counter += 1
+                                # Committed-plane cursor: only after the
+                                # HDF5 dataset write returned (durable
+                                # truth, not frames enqueued).
+                                self._commit_manifest_cursor(
+                                    "hdf5", self._hdf5_cursor_key(), counter - 1
+                                )
 
                                 # --- Zarr write (mirrors zarr_save_worker) ---
                                 pos_index = zarr_pos_index // frames_per_buffer
@@ -1509,6 +1678,7 @@ class FrameSaver(QObject):
         except Exception as e:
             self.sig_status_message.emit(f"Save error: {e}")
             self.saving_started = False
+        self._finalize_manifest()
         logger.info("both_save_worker exited (saving_started=%s)", self.saving_started)
 
     def _both_save_worker_multi_channel(self) -> None:
@@ -1804,6 +1974,7 @@ class FrameSaver(QObject):
                 if outfile is not None:
                     with contextlib.suppress(Exception):
                         outfile.close()
+        self._finalize_manifest()
         logger.info(
             "both_save_worker (multi-channel) exited "
             "(saving_started=%s, frames_written=%d)",
@@ -1811,8 +1982,18 @@ class FrameSaver(QObject):
             frames_written,
         )
 
-    def stop_saving(self) -> None:
+    def stop_saving(self, lifecycle: str | None = None) -> None:
         """Signal the save worker to stop and join it with a bounded timeout.
+
+        ``lifecycle`` is the final resume-manifest state
+        (``"completed"``/``"interrupted"``; ``"paused"`` arrives with the
+        pause work). It is staged on ``manifest_update_queue`` together
+        with the last known motor positions BEFORE the flag flip, so the
+        save worker's final drain applies them; if the worker already
+        exited, the post-join ``_finalize_manifest`` writes them. When no
+        lifecycle is given and a stack manifest exists, the default is
+        ``"interrupted"`` — a stack manifest still open at stop time means
+        the run did not finish cleanly.
 
         The flag flip tells the worker to exit its inner loop after the
         current buffer; ``quit()`` + ``wait(10000)`` ensures the HDF5 file
@@ -1830,6 +2011,30 @@ class FrameSaver(QObject):
         is not thread-safe across concurrent file handles, and the race can
         corrupt HDF5 state and crash the process with a native segfault.
         """
+        if self.resume_manifest is not None:
+            # Stage the lifecycle + last motor positions on the update
+            # queue — the save worker is the sole manifest writer while it
+            # runs, so other threads never call write_manifest directly.
+            state = lifecycle if lifecycle is not None else "interrupted"
+            motors = getattr(self.parent, "motors", None)
+            if motors is not None:
+                try:
+                    positions = {
+                        str(k): float(v)
+                        for k, v in motors.get_positions().items()
+                    }
+                    self.manifest_update_queue.put(
+                        ManifestUpdate(
+                            kind="motor_position", payload=positions
+                        )
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "could not stage motor positions for manifest: %s", e
+                    )
+            self.manifest_update_queue.put(
+                ManifestUpdate(kind="lifecycle", payload={"state": state})
+            )
         self.saving_started = False
         worker_thread = getattr(self, "_saver_thread", None)
         if worker_thread is not None and worker_thread.isRunning():
@@ -1840,6 +2045,11 @@ class FrameSaver(QObject):
                     "in stop_saving — proceeding anyway (HDF5 state may be "
                     "indeterminate)."
                 )
+        # The worker may have already exited before the lifecycle update
+        # was staged (the dataset loop completes without waiting for the
+        # flag). After the join there is exactly one writer, so draining
+        # and writing here is race-free.
+        self._finalize_manifest()
 
 
 class FrameSaverController:
@@ -1919,8 +2129,8 @@ class FrameSaverController:
     def start_saving(self) -> None:
         self.frame_saver.start_saving()
 
-    def stop_saving(self) -> None:
-        self.frame_saver.stop_saving()
+    def stop_saving(self, lifecycle: str | None = None) -> None:
+        self.frame_saver.stop_saving(lifecycle=lifecycle)
 
     def configure_adaptive(self, enabled: bool, config: object | None = None) -> None:
         self.frame_saver.configure_adaptive(enabled, config=config)
