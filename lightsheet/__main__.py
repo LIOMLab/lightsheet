@@ -174,7 +174,7 @@ def _build_demo_bundle() -> DeviceBundle:
     camera.xsize = 1500
     camera.ysize = 1500
     camera.bytes_per_image = 1500 * 1500 * 2
-    camera.frame_source = stage.frame
+    camera.set_frame_source(stage.frame)
     return DeviceBundle(
         camera=camera,
         siggen=siggen,
