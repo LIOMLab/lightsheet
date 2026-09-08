@@ -831,6 +831,59 @@ def test_zarr_non_zero_frames_still_produce_chunks(
         )
 
 
+def test_zarr_saver_merges_second_single_channel(
+    controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    """SAV-02-merging: a second single-channel acquisition at the same
+    OME-Zarr path appends a new channel instead of overwriting. Both
+    channels survive finalization and both omero entries are present."""
+    import zarr
+
+    ctrl = controller
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = False
+
+    store_path = str(tmp_path / "stack.ome.zarr")
+    saver1 = ZarrSaver(ctrl)
+    n_planes = 3
+    saver1.start_stack(store_path, n_planes)
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
+    for z in range(n_planes):
+        frame = np.full(
+            (ctrl.camera.ysize, ctrl.camera.xsize), 100 + z, dtype=np.uint16
+        )
+        saver1.write_plane(0, z, frame, 0.0, 0.0, 0.0)
+    saver1.finalize()
+
+    # Second single-channel run, different laser, same zarr path.
+    ctrl._auto_laser1 = False
+    ctrl._auto_laser2 = True
+    saver2 = ZarrSaver(ctrl)
+    saver2.start_stack(store_path, n_planes)
+    for z in range(n_planes):
+        frame = np.full(
+            (ctrl.camera.ysize, ctrl.camera.xsize), 200 + z, dtype=np.uint16
+        )
+        saver2.write_plane(0, z, frame, 1.0, 2.0, 3.0)
+    saver2.finalize()
+
+    root = zarr.open(store_path, mode="r")
+    l0 = root["0"]
+    assert l0.shape == (2, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)  # ty: ignore[invalid-argument-type, unresolved-attribute]
+    for z in range(n_planes):
+        assert np.all(np.asarray(l0[0, z, :, :]) == 100 + z)
+        assert np.all(np.asarray(l0[1, z, :, :]) == 200 + z)
+
+    ome = root.attrs["ome"]
+    channels = ome["omero"]["channels"]  # ty: ignore[not-subscriptable]
+    assert len(channels) == 2
+    assert channels[0]["wavelength"] == ctrl.lasers[0].wavelength  # ty: ignore[index]
+    assert channels[1]["wavelength"] == ctrl.lasers[1].wavelength  # ty: ignore[index]
+
+
+
 def test_zarr_saver_has_focused_module() -> None:
     """ZarrSaver lives in a focused module while legacy imports from
     ``frame_saver_controller`` remain object-identical."""

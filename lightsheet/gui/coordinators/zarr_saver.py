@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -68,6 +69,16 @@ class ZarrSaver:
         self._write_empty_chunks_overridden = False
         self._prev_write_empty_chunks: bool = False
 
+        # Merge state: when a second single-channel acquisition targets an
+        # existing single-channel zarr, the old store is relocated, copied
+        # into channel 0 of a new (n+1)-channel writer, and new frames are
+        # streamed into the additional channel. The source path is removed
+        # after a successful finalize.
+        self._merge_mode: bool = False
+        self._merge_target_channel: int = 0
+        self._merge_source_path: str = ""
+        self._existing_omero_channels: list[dict] = []
+
     def start_stack(self, store_path: str, n_planes: int, n_channels: int = 1) -> None:
         """Construct the OME-Zarr writer for a new stack.
 
@@ -99,8 +110,66 @@ class ZarrSaver:
 
         cam = self.parent.camera
         n_channels = int(n_channels)
-        shape = (n_channels, int(n_planes), int(cam.ysize), int(cam.xsize))  # ty: ignore[invalid-argument-type]
-        chunk_shape = (1, 1, int(cam.ysize), int(cam.xsize))  # ty: ignore[invalid-argument-type]
+        n_planes = int(n_planes)
+        ysize = int(cam.ysize)
+        xsize = int(cam.xsize)
+        chunk_shape = (1, 1, ysize, xsize)
+
+        # Merge check: a single-channel acquisition targeting an existing
+        # OME-Zarr with one channel and matching dimensions can append a
+        # new channel instead of overwriting. The old store is moved to a
+        # temporary source path, copied into the lower channels of a fresh
+        # (n+1)-channel writer, and new frames are streamed into the new
+        # channel. If the existing store is incompatible or missing, the
+        # default overwrite behavior is preserved.
+        resolved_path = Path(resolved)
+        self._merge_mode = False
+        self._merge_target_channel = 0
+        self._merge_source_path = ""
+        self._existing_omero_channels = []
+        new_n_channels = n_channels
+        if n_channels == 1 and resolved_path.is_dir() and (resolved_path / "zarr.json").is_file():
+            try:
+                old_root = zarr.open(resolved, mode="r")
+                old_arr = old_root["0"]
+                if (
+                    isinstance(old_arr, zarr.Array)
+                    and old_arr.ndim == 4
+                    and old_arr.shape[1] == n_planes
+                    and old_arr.shape[2] == ysize
+                    and old_arr.shape[3] == xsize
+                    and old_arr.dtype == np.uint16
+                ):
+                    source_path = str(resolved_path) + ".merge-source"
+                    source_path_obj = Path(source_path)
+                    if source_path_obj.exists() or source_path_obj.is_symlink():
+                        if source_path_obj.is_dir() and not source_path_obj.is_symlink():
+                            shutil.rmtree(source_path)
+                        else:
+                            source_path_obj.unlink()
+                    os.rename(resolved, source_path)
+                    old_root = zarr.open(source_path, mode="r")
+                    old_arr = old_root["0"]
+                    new_n_channels = old_arr.shape[0] + 1
+                    self._merge_target_channel = old_arr.shape[0]
+                    self._merge_source_path = source_path
+                    self._existing_omero_channels = (
+                        old_root.attrs.get("ome", {}).get("omero", {}).get("channels", [])
+                    )
+                    self._merge_mode = True
+                    self.parent.sig_message.emit(
+                        f"Merging into existing zarr; new channel index {self._merge_target_channel}"
+                    )
+            except Exception as e:
+                # If merge detection or relocation fails, fall back to
+                # the default overwrite path and clear partial state.
+                logger.info("Existing zarr merge check failed: %s", e)
+                self._merge_mode = False
+                self._merge_target_channel = 0
+                self._merge_source_path = ""
+                self._existing_omero_channels = []
+
+        shape = (new_n_channels, n_planes, ysize, xsize)
 
         # Force zarr v3 to persist all-zero chunks (write_empty_chunks=True).
         # zarr v3 defaults ``write_empty_chunks`` to False, so all-zero chunks
@@ -125,7 +194,10 @@ class ZarrSaver:
             unit="micrometer",
         )
 
-        self._n_channels = n_channels
+        if self._merge_mode:
+            self._copy_existing_l0()
+
+        self._n_channels = new_n_channels
         self.saving_started = True
         self._finalized = False
         self._horizontal_positions = []
@@ -153,7 +225,13 @@ class ZarrSaver:
         """
         if self._writer is None:
             raise RuntimeError("ZarrSaver.write_plane called before start_stack")
-        self._writer[channel_idx, z_idx, :, :] = frame
+        array_channel = channel_idx
+        if self._merge_mode and channel_idx == 0:
+            # In merge mode, the single-channel new frames are the
+            # additional channel; logical channel 0 still records motor
+            # positions once per plane.
+            array_channel = self._merge_target_channel
+        self._writer[array_channel, z_idx, :, :] = frame
         if channel_idx == 0:
             self._horizontal_positions.append(float(hor_pos))
             self._vertical_positions.append(float(ver_pos))
@@ -190,6 +268,8 @@ class ZarrSaver:
                     "wavelength": int(laser.wavelength),
                 }
             )
+        if self._merge_mode:
+            return list(self._existing_omero_channels) + channels
         return channels
 
     def _write_acquisition_group(self) -> None:
@@ -398,6 +478,45 @@ class ZarrSaver:
             data=np.array(sharpness, dtype=float),
         )
 
+    def _copy_existing_l0(self) -> None:
+        """Copy the level-0 data from the merge source into the new
+        writer's lower channels before the new run's frames are streamed.
+
+        The old store is chunked one plane per channel, so the copy is
+        done plane-by-plane to keep peak memory at one chunk. Values are
+        read as plain arrays before writing to avoid any subtle slicing
+        coercion issues between the source and destination zarr stores.
+        """
+        if not self._merge_mode or not self._merge_source_path:
+            return
+        try:
+            old_root = zarr.open(self._merge_source_path, mode="r")
+            old_arr = old_root["0"]
+            if not isinstance(old_arr, zarr.Array):
+                return
+            n_old_channels = old_arr.shape[0]
+            n_planes = old_arr.shape[1]
+            for c in range(n_old_channels):
+                for z in range(n_planes):
+                    self._writer[c, z, :, :] = np.asarray(old_arr[c, z, :, :])  # ty: ignore[index]
+        except Exception as e:
+            logger.warning("Failed to copy existing zarr L0: %s", e)
+
+    def _remove_merge_source(self) -> None:
+        """Delete the temporary source zarr created during a merge once
+        the new combined store has been finalized successfully.
+        """
+        if not self._merge_mode or not self._merge_source_path:
+            return
+        try:
+            source_path = Path(self._merge_source_path)
+            if source_path.is_dir() and not source_path.is_symlink():
+                shutil.rmtree(self._merge_source_path)
+            elif source_path.exists() or source_path.is_symlink():
+                source_path.unlink()
+        except Exception as e:
+            logger.warning("Failed to remove merge source zarr: %s", e)
+
     def finalize(self) -> None:
         """Build the analysis pyramid + NGFF metadata, then the
         ``/acquisition`` group.
@@ -493,5 +612,7 @@ class ZarrSaver:
         # it is a sibling under /acquisition/focus. No-op when the
         # trajectory is empty (fixed mode).
         self._write_focus_group()
+        if self._merge_mode:
+            self._remove_merge_source()
         self._finalized = True
         self.saving_started = False
