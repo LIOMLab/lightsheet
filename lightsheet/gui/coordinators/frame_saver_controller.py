@@ -409,6 +409,46 @@ class FrameSaver(QObject):
             "ETLscan": "all_crop",
             "FullETLscan": "all_full",
         }.get(self.datasets_name, "stitch")
+        # Operator-intent fields: captured from the live model snapshot so
+        # a resume can restore them through the MicroscopeState mutators.
+        # Guarded — a minimal shell stand-in (tests) or an unbuilt model
+        # leaves them None instead of crashing the save.
+        laser_power_pct = None
+        laser_enabled = None
+        auto_lasers = None
+        save_options = None
+        line_time_s = None
+        try:
+            from lightsheet.state.types import MicroscopeSnapshot
+
+            snap = self.parent.state.snapshot()
+        except Exception:
+            snap = None
+        if isinstance(snap, MicroscopeSnapshot):
+            laser_power_pct = [float(v) for v in snap.laser_power_pct]
+            laser_enabled = [bool(v) for v in snap.laser_enabled]
+            auto_lasers = [bool(v) for v in snap.auto_lasers]
+            save_options = {
+                "mode": str(snap.save_options.mode),
+                "description": str(snap.save_options.description),
+            }
+            line_time_s = float(snap.lightsheet_line_time_s)
+        save_filepath = getattr(self.parent, "save_filepath", "")
+        if not isinstance(save_filepath, str):
+            save_filepath = ""
+        # Safety-config fingerprint for the resume gate's diff check.
+        safety_config: dict[str, dict[str, str]] = {}
+        try:
+            from lightsheet.resume.gate import collect_safety_config
+
+            safety_config = collect_safety_config(
+                "config.ini", "config.rig-specific.ini"
+            )
+        except Exception as e:
+            logger.warning("could not snapshot safety config: %s", e)
+        row_index = getattr(self.parent, "stack_queue_row_index", None)
+        if not isinstance(row_index, int) or isinstance(row_index, bool):
+            row_index = None
         self.resume_manifest = ResumeManifest(
             uuid=self.acquisition_uuid,
             state="in_progress",
@@ -422,6 +462,14 @@ class FrameSaver(QObject):
             wavelengths=[int(w) for w in wavelengths],
             multi_channel=len(wavelengths) > 1,
             created_at=datetime.datetime.now(datetime.UTC).isoformat(),
+            row_index=row_index,
+            laser_power_pct=laser_power_pct,
+            laser_enabled=laser_enabled,
+            auto_lasers=auto_lasers,
+            save_options=save_options,
+            lightsheet_line_time_s=line_time_s,
+            save_filepath=save_filepath,
+            safety_config=safety_config,
         )
         write_manifest(self._manifest_path, self.resume_manifest)
 

@@ -19,6 +19,7 @@ lifecycle update.
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import json
 import logging
 import uuid
@@ -29,6 +30,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 MANIFEST_SUFFIX = ".resume.json"
+QUEUE_MANIFEST_SUFFIX = ".queue-resume.json"
 
 # Lifecycle states. ``in_progress`` doubles as the crash signature: a
 # manifest that never received a terminal lifecycle update.
@@ -161,6 +163,14 @@ class ResumeManifest:
     )
     completed_at: str | None = None
     row_index: int | None = None
+    # Operator-intent fields restored by MicroscopeState.restore_from_manifest.
+    # All optional so manifests written before they existed still validate.
+    laser_power_pct: list[float] | None = None
+    laser_enabled: list[bool] | None = None
+    auto_lasers: list[bool] | None = None
+    save_options: dict[str, Any] | None = None
+    lightsheet_line_time_s: float | None = None
+    save_filepath: str | None = None
 
     def __post_init__(self) -> None:
         _check_str("uuid", self.uuid, allow_empty=False)
@@ -232,6 +242,36 @@ class ResumeManifest:
             _check_str("completed_at", self.completed_at, allow_empty=False)
         if self.row_index is not None:
             _check_int("row_index", self.row_index, minimum=0)
+        for name, value in (
+            ("laser_power_pct", self.laser_power_pct),
+            ("laser_enabled", self.laser_enabled),
+            ("auto_lasers", self.auto_lasers),
+        ):
+            if value is not None:
+                _check_list(name, value)
+                if len(value) != 2:
+                    raise ValueError(
+                        f"{name} must have exactly 2 entries; got {len(value)}"
+                    )
+        if self.laser_power_pct is not None:
+            for v in self.laser_power_pct:
+                _check_float("laser_power_pct[]", v)
+        for name, value in (
+            ("laser_enabled", self.laser_enabled),
+            ("auto_lasers", self.auto_lasers),
+        ):
+            if value is not None:
+                for v in value:
+                    if not isinstance(v, bool):
+                        raise ValueError(
+                            f"{name}[] must be bools; got {type(v).__name__}"
+                        )
+        if self.save_options is not None:
+            _check_dict("save_options", self.save_options)
+        if self.lightsheet_line_time_s is not None:
+            _check_float("lightsheet_line_time_s", self.lightsheet_line_time_s)
+        if self.save_filepath is not None:
+            _check_str("save_filepath", self.save_filepath)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe plain-dict representation."""
@@ -369,3 +409,121 @@ def read_manifest(path: Path | str) -> ResumeManifest | None:
     except (ValueError, TypeError) as e:
         logger.warning("resume manifest %s failed validation: %s", path, e)
         return None
+
+
+# ---------------------------------------------------------------------------
+# Queue-level resume manifest
+# ---------------------------------------------------------------------------
+
+QUEUE_LIFECYCLE_STATES = frozenset(
+    {"in_progress", "paused", "interrupted", "completed"}
+)
+
+
+@dataclasses.dataclass(frozen=True)
+class QueueResumeManifest:
+    """Queue-level resume record (``<base>.queue-resume.json``).
+
+    Written by the queue loop in the save directory when a queued stack run
+    starts and rewritten before each row with the active ``row_index``. A
+    queue manifest stuck in ``in_progress`` is the crash signature: the
+    ``row_index``-th row was executing when the queue died. ``row_hash``
+    covers the full row list so a tampered or stale manifest is detected;
+    ``row_uuids`` identifies the live table rows the manifest belongs to.
+    """
+
+    uuid: str
+    state: str
+    row_index: int
+    rows: list[dict[str, Any]]
+    row_uuids: list[str]
+    row_hash: str
+    created_at: str
+    save_directory: str = ""
+    completed_at: str | None = None
+
+    def __post_init__(self) -> None:
+        _check_str("uuid", self.uuid, allow_empty=False)
+        _check_str("state", self.state, allow_empty=False)
+        if self.state not in QUEUE_LIFECYCLE_STATES:
+            raise ValueError(
+                f"state must be one of {sorted(QUEUE_LIFECYCLE_STATES)}; "
+                f"got {self.state!r}"
+            )
+        _check_int("row_index", self.row_index, minimum=0)
+        _check_list("rows", self.rows)
+        _check_list("row_uuids", self.row_uuids)
+        for u in self.row_uuids:
+            _check_str("row_uuids[]", u)
+        _check_str("row_hash", self.row_hash, allow_empty=False)
+        _check_str("created_at", self.created_at, allow_empty=False)
+        _check_str("save_directory", self.save_directory)
+        if self.completed_at is not None:
+            _check_str("completed_at", self.completed_at, allow_empty=False)
+
+    def to_dict(self) -> dict[str, Any]:
+        return _json_safe(dataclasses.asdict(self), "QueueResumeManifest")
+
+    @staticmethod
+    def from_dict(d: dict[str, Any]) -> QueueResumeManifest:
+        if not isinstance(d, dict):
+            raise ValueError(
+                f"queue manifest payload must be a dict; got {type(d).__name__}"
+            )
+        return QueueResumeManifest(**d)
+
+
+def hash_queue_rows(rows: list[dict[str, Any]]) -> str:
+    """Canonical SHA-256 over the row list — order-sensitive."""
+    canonical = json.dumps(rows, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def queue_manifest_path_for(
+    save_directory: Path | str, base_name: str
+) -> Path:
+    """Return the queue manifest path inside ``save_directory``."""
+    return Path(save_directory) / f"{base_name}{QUEUE_MANIFEST_SUFFIX}"
+
+
+def write_queue_manifest(
+    path: Path | str, manifest: QueueResumeManifest
+) -> None:
+    """Atomically write a queue manifest (temp file + os.replace)."""
+    path = Path(path)
+    tmp = path.with_suffix(f".{uuid.uuid4().hex}.tmp")
+    tmp.write_text(
+        json.dumps(manifest.to_dict(), indent=2), encoding="utf-8"
+    )
+    tmp.replace(path)
+
+
+def read_queue_manifest(path: Path | str) -> QueueResumeManifest | None:
+    """Read and validate a queue manifest, failing closed on any problem.
+
+    A stored ``row_hash`` that does not match the stored ``rows`` is a
+    tamper/corruption signature and is rejected here so a stale manifest
+    can never drive a queue resume.
+    """
+    path = Path(path)
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("queue manifest %s is not valid JSON", path)
+        return None
+    try:
+        manifest = QueueResumeManifest.from_dict(data)
+    except (ValueError, TypeError) as e:
+        logger.warning("queue manifest %s failed validation: %s", path, e)
+        return None
+    if manifest.row_hash != hash_queue_rows(manifest.rows):
+        logger.warning(
+            "queue manifest %s row hash mismatch — rejecting as tampered",
+            path,
+        )
+        return None
+    return manifest

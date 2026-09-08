@@ -225,6 +225,79 @@ class MicroscopeState(QObject):
         self.sig_lightsheet_line_time_changed.emit(float(line_time_s))
 
     # ------------------------------------------------------------------ #
+    # Resume restore
+    # ------------------------------------------------------------------ #
+
+    def restore_from_manifest(self, manifest: object) -> None:
+        """Restore operator intent recorded in a ``ResumeManifest``.
+
+        Routes every field through the existing mutators so widgets
+        re-render via the normal per-domain signals — the GUI-owned-model
+        invariant is preserved (no direct widget pokes). Fields absent
+        from the manifest (older records, or a minimal test manifest) are
+        left untouched; values that fail a mutator's validation are
+        logged and skipped so one bad field cannot block the rest.
+        """
+        # Local import keeps this module free of a hard dependency on the
+        # resume package for callers that never resume.
+        from lightsheet.resume.manifest import ResumeManifest
+
+        if not isinstance(manifest, ResumeManifest):
+            raise TypeError(
+                f"restore_from_manifest expects a ResumeManifest; got "
+                f"{type(manifest)}"
+            )
+
+        def _try(label: str, fn: object, *args: object) -> None:
+            try:
+                fn(*args)  # ty: ignore[call-non-callable]
+            except (ValueError, IndexError) as e:
+                logger.warning(
+                    "manifest restore skipped %s (%r): %s", label, args, e
+                )
+
+        if manifest.laser_power_pct is not None:
+            for idx, pct in enumerate(manifest.laser_power_pct):
+                _try("laser_power_pct", self.set_laser_power_pct, idx, pct)
+        if manifest.laser_enabled is not None:
+            for idx, enabled in enumerate(manifest.laser_enabled):
+                _try("laser_enabled", self.set_laser_enabled, idx, enabled)
+        if manifest.auto_lasers is not None:
+            _try(
+                "auto_lasers",
+                self.set_auto_lasers,
+                manifest.auto_lasers[0],
+                manifest.auto_lasers[1],
+            )
+        save_options = manifest.save_options
+        if save_options is None and manifest.save_mode:
+            save_options = {"mode": manifest.save_mode, "description": ""}
+        if save_options is not None:
+            try:
+                mode = SaveMode(str(save_options.get("mode", "stitch")))
+            except ValueError:
+                mode = SaveMode.STITCH
+                logger.warning(
+                    "manifest save mode %r is unknown; restoring stitch",
+                    save_options.get("mode"),
+                )
+            description = save_options.get("description", "")
+            _try(
+                "save_options",
+                self.set_save_options,
+                SaveOptions(
+                    description=str(description),
+                    mode=mode,
+                ),
+            )
+        if manifest.lightsheet_line_time_s is not None:
+            _try(
+                "lightsheet_line_time_s",
+                self.set_lightsheet_line_time_s,
+                manifest.lightsheet_line_time_s,
+            )
+
+    # ------------------------------------------------------------------ #
     # Worker-applied state slot
     # ------------------------------------------------------------------ #
 

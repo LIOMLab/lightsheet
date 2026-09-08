@@ -23,6 +23,7 @@ from lightsheet.state import SaveMode
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
+    from lightsheet.resume.manifest import ResumeManifest
 
 logger = logging.getLogger(__name__)
 
@@ -354,7 +355,12 @@ class AcquisitionPanelWidget(QWidget):
                     # Spawn the stack worker (shared with the queue loop).
                     self._spawn_stack_worker()
 
-    def _spawn_stack_worker(self, *, start_plane: int = 0) -> StackWorker | None:
+    def _spawn_stack_worker(
+        self,
+        *,
+        start_plane: int = 0,
+        resume_manifest: ResumeManifest | None = None,
+    ) -> StackWorker | None:
         """Spawn the stack worker on its QThread (moveToThread pattern),
         wire its finished signal to the post-stack UI cleanup, and start it.
         Shared by the single-stack Start button and the Acquisition Table
@@ -366,9 +372,64 @@ class AcquisitionPanelWidget(QWidget):
         passes through unchanged; thread-reuse and signal hygiene are
         identical for fresh and resumed runs.
 
-        Returns the spawned worker, or ``None`` if the previous stack thread
-        did not stop and a new worker cannot be started safely.
+        When ``resume_manifest`` is given (a flagged resume row), the
+        resume safety gate runs BEFORE the worker is constructed: every
+        finding is reported through ``show_resume_safety_dialog`` and only
+        an explicit Resume click proceeds (report-then-confirm — a
+        cancelled or blocked resume returns ``None`` and nothing moves).
+        A confirmed resume re-checks ``estop_event`` before the worker is
+        created — confirm is not a movement license (T-16-07-03). The
+        authoritative resume plane comes from the gate's probe of the
+        committed cursors, not the caller's nominal offset.
+
+        Returns the spawned worker, or ``None`` if the resume was
+        cancelled/blocked or the previous stack thread did not stop and a
+        new worker cannot be started safely.
         """
+        if resume_manifest is not None:
+            # Local imports keep the plain-acquisition path free of the
+            # resume machinery and keep the helpers monkeypatchable.
+            from lightsheet.config_schema.validation import (
+                load_sections_from_ini,
+            )
+            from lightsheet.gui.panels.acquisition_table_manager import (
+                show_resume_safety_dialog,
+            )
+            from lightsheet.resume.gate import ResumeSafetyGate
+
+            try:
+                live_config = load_sections_from_ini(
+                    "config.ini", "config.rig-specific.ini"
+                )
+            except Exception as e:
+                logger.warning(
+                    "Could not load the live config for the resume gate: %s",
+                    e,
+                )
+                live_config = None
+            findings = ResumeSafetyGate.from_manifest(
+                resume_manifest,
+                live_config,
+                getattr(self._shell, "motors", None),
+            )
+            if not show_resume_safety_dialog(self._shell, findings):
+                self._shell.sig_message.emit(
+                    "Resume cancelled or blocked by the safety gate — "
+                    "no movement or laser energization occurred."
+                )
+                self._shell.sig_beep.emit()
+                return None
+            # Confirm is not a movement license: re-verify the kill path
+            # after the dialog and before the worker (and its laser
+            # start) is created.
+            if self._shell.estop_event.is_set():
+                self._shell.sig_message.emit(
+                    "Resume aborted: the E-stop is actuated."
+                )
+                self._shell.sig_beep.emit()
+                return None
+            start_plane = findings.resume_plane
+
         # Disable the adaptive-autofocus controls and show the per-plane
         # progress bar when adaptive focus is active.
         self._shell.stack_panel.set_autofocus_running(True)
@@ -468,6 +529,7 @@ class AcquisitionPanelWidget(QWidget):
             autofocus_cfg=autofocus_cfg,
             autofocus_curve=autofocus_curve,
             start_plane=start_plane,
+            resume_manifest=resume_manifest,
         )
         self._shell._stack_worker.moveToThread(self._shell._stack_thread)
         # Connect the per-plane adaptive trajectory signal to the shell's
