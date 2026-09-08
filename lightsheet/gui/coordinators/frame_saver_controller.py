@@ -258,8 +258,12 @@ class FrameSaver(QObject):
 
         # Mint the resume manifest for stack acquisitions. Single-image
         # saves (scan_type "singleImage") produce no resumable artifact,
-        # so no manifest is created for them.
-        if self.scan_type == "stack":
+        # so no manifest is created for them. An empty save directory is
+        # also skipped — the manifest would otherwise be written relative
+        # to the process cwd instead of co-located with the data.
+        if self.scan_type == "stack" and str(
+            getattr(self.parent, "save_directory", "") or ""
+        ):
             self._init_resume_manifest(wavelengths)
         else:
             self.acquisition_uuid = None
