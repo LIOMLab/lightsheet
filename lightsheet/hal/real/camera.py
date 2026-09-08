@@ -403,6 +403,14 @@ class Camera(ICamera):
             cam_line_timing = {}
             cam_line_timing = self.camera.sdk.get_cmos_line_timing()
             line_timing = cam_line_timing.get("line time")
+            if line_timing is not None:
+                # The SDK-applied (possibly quantized) line time is
+                # authoritative: both the waveform-computation input
+                # (line_time) and the applied intent attribute take the
+                # readback value. camera.exposure_time is the separate
+                # Rolling/Global register and is intentionally untouched.
+                self.line_time = float(line_timing)
+                self.lightsheet_line_time = float(line_timing)
 
             cam_line_exposure_delay = {}
             cam_line_exposure_delay = self.camera.sdk.get_cmos_line_exposure_delay()

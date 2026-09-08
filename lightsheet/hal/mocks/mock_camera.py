@@ -224,9 +224,19 @@ class MockCamera(ICamera):
 
     def set_lightsheet_mode(self) -> None:
         # Apply the configured lightsheet line time to the running line_time
-        # register. Mirrors the real Camera.set_lightsheet_mode contract so
-        # line-time intent has an observable effect in demo mode.
+        # register and keep the mock's effective exposure in sync so the
+        # scripted-intensity / frame_source paths respond to Lightsheet
+        # exposure changes. Mirrors the real Camera.set_lightsheet_mode
+        # readback contract: the applied line time is authoritative for
+        # waveform computation. A non-positive exposed-line count would
+        # silently produce a zero/negative effective exposure — reject it.
+        if self.lightsheet_exposed_lines <= 0:
+            raise ValueError(
+                "lightsheet_exposed_lines must be positive; "
+                f"got {self.lightsheet_exposed_lines}"
+            )
         self.line_time = self.lightsheet_line_time
+        self.exposure_time = self.line_time * self.lightsheet_exposed_lines
         return None
 
     def get_name(self) -> str | None:

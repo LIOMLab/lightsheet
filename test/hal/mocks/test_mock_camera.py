@@ -286,3 +286,58 @@ def test_make_bundle_does_not_attach_frame_source() -> None:
 
     bundle = make_bundle()
     assert bundle.camera.frame_source is None  # ty: ignore[unresolved-attribute]
+
+
+# -- set_lightsheet_mode applied-timing contract -------------------------
+
+
+def test_set_lightsheet_mode_applies_line_time_and_effective_exposure() -> None:
+    """With ``lightsheet_line_time = 0.005`` s and
+    ``lightsheet_exposed_lines = 16``, ``set_lightsheet_mode`` leaves
+    ``line_time == 0.005`` and sets the mock's effective
+    ``exposure_time == line_time * exposed_lines`` (0.08 s) so the
+    scripted-intensity / frame_source paths respond to Lightsheet
+    exposure changes."""
+    from lightsheet.hal.mocks.mock_camera import MockCamera
+
+    camera = MockCamera(verbose=False)
+    camera.lightsheet_line_time = 0.005
+    camera.lightsheet_exposed_lines = 16
+
+    assert camera.set_lightsheet_mode() is None
+    assert camera.line_time == pytest.approx(0.005)
+    assert camera.exposure_time == pytest.approx(0.005 * 16)
+
+
+def test_set_lightsheet_mode_effective_exposure_tracks_line_time() -> None:
+    """A second ``set_lightsheet_mode`` call after changing the requested
+    line time re-derives the effective exposure from the new applied
+    value — the mock has no stale-exposure path."""
+    from lightsheet.hal.mocks.mock_camera import MockCamera
+
+    camera = MockCamera(verbose=False)
+    camera.lightsheet_exposed_lines = 16
+
+    camera.lightsheet_line_time = 0.001
+    camera.set_lightsheet_mode()
+    assert camera.exposure_time == pytest.approx(0.016)
+
+    camera.lightsheet_line_time = 0.002
+    camera.set_lightsheet_mode()
+    assert camera.line_time == pytest.approx(0.002)
+    assert camera.exposure_time == pytest.approx(0.032)
+
+
+def test_set_lightsheet_mode_rejects_non_positive_exposed_lines() -> None:
+    """A non-positive ``lightsheet_exposed_lines`` would silently produce a
+    zero or negative effective exposure — the mock must fail loudly."""
+    from lightsheet.hal.mocks.mock_camera import MockCamera
+
+    camera = MockCamera(verbose=False)
+    camera.lightsheet_exposed_lines = 0
+    with pytest.raises(ValueError, match="lightsheet_exposed_lines"):
+        camera.set_lightsheet_mode()
+
+    camera.lightsheet_exposed_lines = -4
+    with pytest.raises(ValueError, match="lightsheet_exposed_lines"):
+        camera.set_lightsheet_mode()
