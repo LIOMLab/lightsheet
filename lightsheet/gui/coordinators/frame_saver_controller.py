@@ -11,6 +11,7 @@ shell reference. The ``FrameSaver.sig_status_message`` →
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import datetime
 import logging
 import queue
@@ -34,8 +35,12 @@ from lightsheet.hal.bundle import DeviceBundle
 from lightsheet.resume import (
     ManifestUpdate,
     ResumeManifest,
+    ResumeProbeError,
     apply_manifest_update,
+    manifest_dir_contains,
     manifest_path_for,
+    probe_hdf5,
+    truncate_hdf5_tail,
     write_manifest,
 )
 
@@ -137,6 +142,7 @@ class FrameSaver(QObject):
         self.acquisition_uuid: str | None = None
         self.resume_manifest: ResumeManifest | None = None
         self._manifest_path: Path | None = None
+        self._hdf5_resume_offsets: dict[str, int] = {}
         self.manifest_update_queue: queue.Queue[ManifestUpdate] = queue.Queue()
 
     def reinit(self, block_size: int) -> None:
@@ -174,6 +180,7 @@ class FrameSaver(QObject):
         self.acquisition_uuid = None
         self.resume_manifest = None
         self._manifest_path = None
+        self._hdf5_resume_offsets = {}
         self.manifest_update_queue = queue.Queue()
 
     def add_sample_name(self, sample_name: str) -> None:
@@ -199,6 +206,7 @@ class FrameSaver(QObject):
         number_of_datasets: int,
         datasets_name: str,
         wavelengths: list[int] | None = None,
+        resume_manifest: ResumeManifest | None = None,
     ) -> None:
         """Set the number and name of files to save, ensuring unique filenames.
 
@@ -211,6 +219,12 @@ class FrameSaver(QObject):
         ``ValueError``. ``self.filenames_lists`` is built as a list of
         lists (one per channel). Single-channel mode also populates
         ``self.filenames_list`` from ``filenames_lists[0]``.
+
+        When ``resume_manifest`` is provided, each existing HDF5 file is
+        probed and either reopened for append or replaced by a ``_partN``
+        continuation fileset. Corrupt files fall back; torn tails are
+        truncated to the observed count. The resume manifest is rewritten
+        to point at the resolved (or fallback) fileset.
         """
         if wavelengths is None:
             raise ValueError(
@@ -225,26 +239,99 @@ class FrameSaver(QObject):
         self.scan_type = str(scan_type)
         self.number_of_datasets = int(number_of_datasets)
         self.datasets_name = str(datasets_name)
+        self._hdf5_resume_offsets = {}
 
         save_dir = Path(getattr(self.parent, "save_directory", "") or "")
+        save_dir_str = str(save_dir) if save_dir else ""
         width = max(2, len(str(self.number_of_files)))
+        resume_cursors = (
+            resume_manifest.cursors.get("hdf5", {}) if resume_manifest else {}
+        )
+
+        def _resolve_channel_target(
+            ch_idx: int, wl: int
+        ) -> tuple[str, int, bool, str]:
+            """Return the first-file path, the resume plane count, whether
+            a fallback happened, and the base name for subsequent files."""
+            base = self.files_name + f"_{wl}nm"
+            # Find the manifest cursor that matches this channel. Cursors
+            # are keyed by the original HDF5 path produced by set_files.
+            target_path = ""
+            cursor = 0
+            for cp, cv in resume_cursors.items():
+                if f"_{wl}nm" in cp:
+                    target_path = cp
+                    cursor = cv
+                    break
+            if not target_path or not save_dir:
+                return (
+                    self._unique_hdf5_path(save_dir, base, width, 0),
+                    0,
+                    False,
+                    base,
+                )
+
+            # Safety: the manifest must only point inside the save dir.
+            manifest_dir_contains(save_dir_str, target_path)
+
+            try:
+                observed = probe_hdf5(target_path)
+            except ResumeProbeError as e:
+                logger.warning(
+                    "HDF5 resume target %s is unopenable: %s; using _partN fallback",
+                    target_path,
+                    e,
+                )
+                # Use the original files_name with a _part2 suffix.
+                fallback_base = self.files_name + "_part2" + f"_{wl}nm"
+                fallback_path = self._unique_hdf5_path(
+                    save_dir, fallback_base, width, 0
+                )
+                return fallback_path, 0, True, fallback_base
+
+            resume_point = min(cursor, observed)
+            if observed < cursor:
+                logger.warning(
+                    "HDF5 %s torn: manifest cursor %d but observed %d; "
+                    "truncating to observed",
+                    target_path,
+                    cursor,
+                    observed,
+                )
+                truncate_hdf5_tail(target_path, resume_point)
+            self._hdf5_resume_offsets[target_path] = resume_point
+            return target_path, resume_point, False, base
 
         self.filenames_lists = []
-        for wl in wavelengths:
+        hdf5_cursors: dict[str, int] = {}
+        any_fallback = False
+        for ch_idx, wl in enumerate(wavelengths):
             channel_list: list[str] = []
-            counter = 0
-            for _plane in range(self.number_of_files):
-                base = self.files_name + f"_{wl}nm"
-                if counter == 0:
-                    candidate = base + ".hdf5"
-                else:
-                    candidate = f"{base}_{counter:0{width}d}.hdf5"
-                full = str(save_dir / candidate)
-                while Path(full).is_file():
-                    counter += 1
-                    candidate = f"{base}_{counter:0{width}d}.hdf5"
-                    full = str(save_dir / candidate)
+            base_for_channel = self.files_name + f"_{wl}nm"
+            first_path = ""
+            first_cursor = 0
+            first_fallback = False
+            first_base = base_for_channel
+            if resume_cursors:
+                (
+                    first_path,
+                    first_cursor,
+                    first_fallback,
+                    first_base,
+                ) = _resolve_channel_target(ch_idx, wl)
+                channel_list.append(first_path)
+                hdf5_cursors[first_path] = first_cursor
+                any_fallback = any_fallback or first_fallback
+
+            # Fill the remainder of the file list using the channel base.
+            counter = len(channel_list)
+            for _ in range(self.number_of_files - len(channel_list)):
+                full = self._unique_hdf5_path(
+                    save_dir, first_base, width, counter
+                )
                 channel_list.append(full)
+                if resume_cursors:
+                    hdf5_cursors[full] = 0
                 counter += 1
             self.filenames_lists.append(channel_list)
 
@@ -256,19 +343,16 @@ class FrameSaver(QObject):
             # Multi-channel: clear so the multi-channel worker branch is taken.
             self.filenames_list = []
 
-        # Mint the resume manifest for stack acquisitions. Single-image
-        # saves (scan_type "singleImage") produce no resumable artifact,
-        # so no manifest is created for them. An empty save directory is
-        # also skipped — the manifest would otherwise be written relative
-        # to the process cwd instead of co-located with the data.
-        if self.scan_type == "stack" and str(
-            getattr(self.parent, "save_directory", "") or ""
-        ):
-            self._init_resume_manifest(wavelengths)
-        else:
-            self.acquisition_uuid = None
-            self.resume_manifest = None
-            self._manifest_path = None
+        # Resume manifest handling. For a resumed stack, the sidecar is
+        # replaced with the resolved fileset; for _partN fallbacks a new
+        # manifest is written next to the continuation fileset.
+        if self.scan_type == "stack" and save_dir_str:
+            if resume_manifest is not None:
+                self._init_resume_manifest_from_resume(
+                    resume_manifest, wavelengths, hdf5_cursors
+                )
+            else:
+                self._init_resume_manifest(wavelengths)
 
     def _init_resume_manifest(self, wavelengths: list[int]) -> None:
         """Mint the acquisition UUID and write the initial sidecar
@@ -302,6 +386,55 @@ class FrameSaver(QObject):
             created_at=datetime.datetime.now(datetime.UTC).isoformat(),
         )
         write_manifest(self._manifest_path, self.resume_manifest)
+
+    def _init_resume_manifest_from_resume(
+        self,
+        resume_manifest: ResumeManifest,
+        wavelengths: list[int],
+        hdf5_cursors: dict[str, int],
+    ) -> None:
+        """Build the resumed sidecar manifest from an existing one.
+
+        The UUID and spawn parameters are inherited; the HDF5 cursor map
+        is refreshed to the resolved (or fallback) fileset. The manifest
+        is written next to the first resolved channel-0 file.
+        """
+        self.acquisition_uuid = resume_manifest.uuid
+        self._manifest_path = manifest_path_for(self.filenames_lists[0][0])
+        new_cursors = dict(resume_manifest.cursors)
+        hdf5_group = dict(new_cursors.get("hdf5", {}))
+        hdf5_group.update(hdf5_cursors)
+        new_cursors["hdf5"] = hdf5_group
+        self.resume_manifest = dataclasses.replace(
+            resume_manifest, cursors=new_cursors
+        )
+        write_manifest(self._manifest_path, self.resume_manifest)
+
+    def _unique_hdf5_path(
+        self,
+        save_dir: Path,
+        base: str,
+        width: int,
+        counter: int,
+    ) -> str:
+        """Return a path that does not collide with an existing HDF5 file.
+
+        ``counter`` is the starting sequential number. ``counter == 0``
+        produces ``<base>.hdf5``; higher counters produce
+        ``<base>_<NN>.hdf5``. The loop increments until a non-existent
+        candidate is found.
+        """
+        full = ""
+        while True:
+            if counter == 0:
+                candidate = base + ".hdf5"
+            else:
+                candidate = f"{base}_{counter:0{width}d}.hdf5"
+            full = str(save_dir / candidate)
+            if not Path(full).is_file():
+                break
+            counter += 1
+        return full
 
     def _coerce_shell_float(self, attr: str) -> float:
         """Read a numeric stack-geometry attribute off the shell, coercing
