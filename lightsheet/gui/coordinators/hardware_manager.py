@@ -285,18 +285,18 @@ class HardwareManager:
 
     def start_lasers(
         self,
-        energize_lasers: tuple[bool, bool] | None = None,
         snapshot: MicroscopeSnapshot | None = None,
+        energize_lasers: tuple[bool, bool] | None = None,
     ) -> None:
         """Start the lasers at staged power. Called from acquisition worker
         threads. Stages power via .set_power(mw) BEFORE .on() so the backend
         writes the staged power when energizing.
 
-        ``energize_lasers`` overrides the auto-laser flags in the snapshot for
-        THIS call only — used by continuous-mode workers to suppress L2 when
-        both auto-laser checkboxes are checked. When the worker did not pass a
-        snapshot, the live model is sampled on the GUI thread (for direct test
-        and toggle calls).
+        ``snapshot`` is the worker's frozen spawn snapshot; when the worker
+        did not pass one, the live model is sampled (for direct test and
+        toggle calls). ``energize_lasers`` overrides the auto-laser flags in
+        the snapshot for THIS call only — used by continuous-mode workers to
+        suppress L2 when both auto-laser checkboxes are checked.
         """
         # E-stop guard: do not energize if the kill path has already fired.
         if self._shell.estop_event.is_set():

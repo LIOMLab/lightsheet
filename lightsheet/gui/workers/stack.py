@@ -48,13 +48,14 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
     whether the run completes normally, breaks on E-stop/Stop, or an
     exception propagates.
 
-    The save-option widgets (``lineEdit_saveDescription``,
-    ``radioButton_saveStitchBlend``, ``radioButton_saveAllCrop``,
-    ``radioButton_saveAllFull``) are pre-sampled on the GUI thread in
-    ``updateUi_stack_mode_button`` and passed as constructor args
+    Save intent and auto-laser selection arrive in the frozen
+    ``MicroscopeSnapshot`` sampled once on the GUI thread in
+    ``_spawn_stack_worker``; the legacy positional save args
     (``save_description``, ``save_stitch_blend``, ``save_all_crop``,
-    ``save_all_full``) so the worker thread never reaches into
-    the shell's ``ui.*``.
+    ``save_all_full``) remain only as a constructor compatibility adapter
+    and are folded into a snapshot at construction — they are never read
+    in ``run()``. The worker thread never reaches into the shell's
+    ``ui.*``.
 
     The per-plane position update reaches the GUI thread via the queued
     ``sig_refresh_position_horizontal`` signal (already declared on the

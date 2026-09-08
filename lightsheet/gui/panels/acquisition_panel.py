@@ -8,7 +8,6 @@ enable/disable helpers. The QThread spawn pattern for each mode
 from __future__ import annotations
 
 import contextlib
-import dataclasses
 import logging
 import math
 import typing
@@ -20,7 +19,7 @@ from PySide6.QtWidgets import QMessageBox, QPushButton, QWidget
 from lightsheet.gui.panels.ui_acquisition_panel import Ui_AcquisitionPanel
 from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 from lightsheet.gui.workers import LiveWorker, PreviewWorker, SingleWorker, StackWorker
-from lightsheet.state import SaveMode, SaveOptions
+from lightsheet.state import SaveMode
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -119,9 +118,10 @@ class AcquisitionPanelWidget(QWidget):
             self._shell.ui.statusBar_progress.show()
             self._shell._update_mode_badge("PREVIEW")
 
-            # Sample the auto-laser checkboxes on the GUI thread before
-            # spawning the worker.
+            # Sample the auto-laser checkboxes into the model on the GUI
+            # thread, then freeze one MicroscopeSnapshot for the worker.
             self._shell._cache_auto_laser_flags()
+            snapshot = self._shell.state.snapshot()
             assert self._shell._hw is not None
 
             # Spawn the preview worker on a QThread (moveToThread pattern).
@@ -129,6 +129,7 @@ class AcquisitionPanelWidget(QWidget):
                 self._shell._bundle,
                 self._shell._hw,
                 self._shell,
+                snapshot=snapshot,
             )
             self._shell._preview_thread = QThread()
             self._shell._preview_worker.moveToThread(self._shell._preview_thread)
@@ -173,9 +174,10 @@ class AcquisitionPanelWidget(QWidget):
             self._shell.ui.statusBar_progress.show()
             self._shell._update_mode_badge("LIVE")
 
-            # Sample the auto-laser checkboxes on the GUI thread before
-            # spawning the worker.
+            # Sample the auto-laser checkboxes into the model on the GUI
+            # thread, then freeze one MicroscopeSnapshot for the worker.
             self._shell._cache_auto_laser_flags()
+            snapshot = self._shell.state.snapshot()
             assert self._shell._hw is not None
 
             # Spawn the live worker on a QThread (moveToThread pattern).
@@ -183,6 +185,7 @@ class AcquisitionPanelWidget(QWidget):
                 self._shell._bundle,
                 self._shell._hw,
                 self._shell,
+                snapshot=snapshot,
             )
             self._shell._live_thread = QThread()
             self._shell._live_worker.moveToThread(self._shell._live_thread)
@@ -214,22 +217,16 @@ class AcquisitionPanelWidget(QWidget):
             self._shell.updateUi_message_printer("->Getting single image")
             self._shell._update_mode_badge("SINGLE")
 
-            # Sample the auto-laser checkboxes on the GUI thread before
-            # spawning the worker.
+            # Sample the auto-laser checkboxes into the model on the GUI
+            # thread, then freeze one MicroscopeSnapshot for the worker.
+            # Save metadata and the multi-channel selection all come from
+            # the snapshot — the worker never reads widgets. The positional
+            # save/multi-channel args are the constructor's compatibility
+            # adapter, populated from the same frozen snapshot.
             self._shell._cache_auto_laser_flags()
-
-            # Multi-channel flag pre-sampled on the GUI thread (no
-            # cross-thread widget reads from workers). When both auto-laser
-            # checkboxes are checked, SingleWorker.run executes the
-            # per-channel cycle; otherwise the single-channel path runs.
-            multi_channel = self._shell._auto_laser1 and self._shell._auto_laser2
-
-            # Pre-sample the save-option widgets on the GUI thread before
-            # constructing the worker (no cross-thread widget reads from workers).
-            save_desc = str(self._shell.save_panel.ui.lineEdit_saveDescription.text())
-            save_blend = (
-                self._shell.save_panel.ui.radioButton_saveStitchBlend.isChecked()
-            )
+            snapshot = self._shell.state.snapshot()
+            save_options = snapshot.save_options
+            multi_channel = snapshot.auto_lasers[0] and snapshot.auto_lasers[1]
             assert self._shell._hw is not None
 
             # Spawn the single-image worker on a QThread (moveToThread pattern).
@@ -237,9 +234,10 @@ class AcquisitionPanelWidget(QWidget):
                 self._shell._bundle,
                 self._shell._hw,
                 self._shell,
-                save_desc,
-                save_blend,
+                save_options.description,
+                save_options.mode == SaveMode.STITCH_BLEND,
                 multi_channel,
+                snapshot=snapshot,
             )
             self._shell._single_thread = QThread()
             self._shell._single_worker.moveToThread(self._shell._single_thread)
@@ -405,38 +403,22 @@ class AcquisitionPanelWidget(QWidget):
                         prev_thread.finished.disconnect(prev_worker.deleteLater)
             self._shell._stack_thread = prev_thread
 
-        # Pre-sample the save-option widgets on the GUI thread before
-        # constructing the worker (no cross-thread widget reads from workers).
-        save_desc = str(self._shell.save_panel.ui.lineEdit_saveDescription.text())
-        save_blend = self._shell.save_panel.ui.radioButton_saveStitchBlend.isChecked()
-        save_all_crop = self._shell.save_panel.ui.radioButton_saveAllCrop.isChecked()
-        save_all_full = self._shell.save_panel.ui.radioButton_saveAllFull.isChecked()
-        # Multi-channel flag pre-sampled on the GUI thread (no
-        # cross-thread widget reads from workers). When both auto-laser
-        # checkboxes are checked, StackWorker.run executes the per-plane
-        # sequential cycle; otherwise the single-channel path runs.
-        multi_channel = self._shell._auto_laser1 and self._shell._auto_laser2
-
         # Frozen worker snapshot: sampled exactly once on the GUI thread
-        # before moveToThread. The worker receives an immutable copy of
-        # intent; mid-run GUI edits cannot mutate its inputs.
-        save_mode = (
-            SaveMode.STITCH_BLEND
-            if save_blend
-            else SaveMode.ALL_CROP
-            if save_all_crop
-            else SaveMode.ALL_FULL
-            if save_all_full
-            else SaveMode.STITCH
-        )
-        snapshot = dataclasses.replace(
-            self._shell.state.snapshot(),
-            save_options=SaveOptions(description=save_desc, mode=save_mode),
-            auto_lasers=(
-                bool(getattr(self._shell, "_auto_laser1", False)),
-                bool(getattr(self._shell, "_auto_laser2", False)),
-            ),
-        )
+        # before moveToThread. Save intent and auto-laser selection live in
+        # the model (committed by the save widgets and
+        # _cache_auto_laser_flags), so the snapshot already carries them —
+        # mid-run GUI edits cannot mutate this worker's inputs.
+        snapshot = self._shell.state.snapshot()
+        save_options = snapshot.save_options
+        save_desc = save_options.description
+        save_blend = save_options.mode == SaveMode.STITCH_BLEND
+        save_all_crop = save_options.mode == SaveMode.ALL_CROP
+        save_all_full = save_options.mode == SaveMode.ALL_FULL
+        # Multi-channel flag from the frozen snapshot (no cross-thread
+        # widget reads from workers). When both auto-laser checkboxes are
+        # checked, StackWorker.run executes the per-plane sequential cycle;
+        # otherwise the single-channel path runs.
+        multi_channel = snapshot.auto_lasers[0] and snapshot.auto_lasers[1]
 
         # Disconnect the previous worker's started→run connection only.
         # finished.disconnect() is intentionally avoided — it can deadlock

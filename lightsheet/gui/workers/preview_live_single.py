@@ -6,6 +6,7 @@ acquisition; PreviewWorker runs a beam-calibration loop without a scan.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from typing import TYPE_CHECKING
 
@@ -13,12 +14,46 @@ from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from lightsheet.gui.workers.scan_mixin import _AcquireScanMixin
 from lightsheet.hal.bundle import DeviceBundle
+from lightsheet.state.types import MicroscopeSnapshot, SaveMode, SaveOptions
 
 if TYPE_CHECKING:
     from lightsheet.gui.coordinators.hardware_manager import HardwareManager
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_spawn_snapshot(
+    shell: Controller_MainWindow,
+    hw: HardwareManager | None,
+    snapshot: MicroscopeSnapshot | None,
+) -> MicroscopeSnapshot:
+    """Normalize the worker's frozen spawn snapshot.
+
+    The production spawn sites pass ``state.snapshot()`` explicitly. For
+    legacy/test constructors that pass ``None``, prefer the live model's
+    snapshot, then the real HardwareManager's shell fallback, then a
+    safe default — so the worker always runs against one immutable input.
+    """
+    if isinstance(snapshot, MicroscopeSnapshot):
+        return snapshot
+    state = getattr(shell, "state", None)
+    if state is not None:
+        try:
+            candidate = state.snapshot()
+        except Exception:
+            candidate = None
+        if isinstance(candidate, MicroscopeSnapshot):
+            return candidate
+    getter = getattr(hw, "_snapshot_from_shell", None)
+    if getter is not None and getattr(getter, "__self__", None) is hw:
+        try:
+            candidate = getter()
+        except Exception:
+            candidate = None
+        if isinstance(candidate, MicroscopeSnapshot):
+            return candidate
+    return MicroscopeSnapshot(lightsheet_line_time_s=1.0)
 
 
 class PreviewWorker(QObject):
@@ -41,12 +76,17 @@ class PreviewWorker(QObject):
         bundle: DeviceBundle,
         hw: HardwareManager | None,
         shell: Controller_MainWindow,
+        snapshot: MicroscopeSnapshot | None = None,
     ) -> None:
         super().__init__()
         assert hw is not None
         self.camera = bundle.camera
         self._hw: HardwareManager = hw
         self._shell = shell
+        # Frozen spawn snapshot: the worker's immutable source of truth for
+        # auto-laser selection. Sampled once on the GUI thread; mid-run GUI
+        # edits cannot reach this worker.
+        self._snapshot = _resolve_spawn_snapshot(shell, hw, snapshot)
         # Live mode never saves, but acquire_scan() reads these to populate
         # buffer metadata. Empty/False defaults keep the metadata field
         # well-typed without implying a save will occur.
@@ -75,9 +115,9 @@ class PreviewWorker(QObject):
             # mode now drives the lasers so the operator can see the beam
             # while adjusting parameters — the previous shape left the
             # lasers dark during preview, defeating the mode's purpose for
-            # beam calibration. start_lasers/stop_lasers read the cached
-            # auto-laser flags sampled on the GUI thread by
-            # _cache_auto_laser_flags() in updateUi_preview_mode_button.
+            # beam calibration. The laser selection and staged power come
+            # from the frozen spawn snapshot; stop_lasers() reads the live
+            # laser.active state, never the model flags.
             #
             # Continuous-mode first-laser-only guard: when both auto-laser
             # checkboxes are checked, preview (a continuous mode with no
@@ -85,22 +125,14 @@ class PreviewWorker(QObject):
             # the session and holds L2 off. Alternating L1<->L2 per frame
             # would double frame time and flicker; instead the operator
             # switches which single laser is live by unchecking one
-            # auto-laser checkbox and checking the other (the existing
-            # _cache_auto_laser_flags() resampling path). The guard passes
-            # a local (l1, l2=False) tuple to start_lasers so it energizes
-            # only L1 for this call without mutating the shared
-            # _auto_laser2 attribute — the cached flag stays at its
-            # GUI-thread value, so stop_lasers at the end still reads the
-            # original value (L2 was never energized, so stop_lasers's L2
-            # .off() is a safe no-op). The strict one-laser-energized
-            # invariant holds trivially. Passing the flag as a local
-            # argument (instead of the prior save/restore of _auto_laser2)
-            # avoids a data race with the GUI thread's
-            # _cache_auto_laser_flags() resampling.
-            if self._shell._auto_laser1 and self._shell._auto_laser2:
-                energize_lasers = (True, False)
-            else:
-                energize_lasers = None
+            # auto-laser checkbox and checking the other (effective on the
+            # next run — this run's selection is frozen in the snapshot).
+            # The guard passes a local (l1, l2=False) tuple to
+            # start_lasers so it energizes only L1 for this call; L2 was
+            # never energized, so stop_lasers's L2 .off() is a safe no-op.
+            # The strict one-laser-energized invariant holds trivially.
+            auto1, auto2 = self._snapshot.auto_lasers
+            energize_lasers = (True, False) if auto1 and auto2 else None
 
             # E-stop guard before energizing. If the operator pressed E-stop
             # between the worker spawn and this point, short-circuit to the
@@ -108,7 +140,7 @@ class PreviewWorker(QObject):
             if self._shell.estop_event.is_set():
                 return
 
-            self._hw.start_lasers(energize_lasers=energize_lasers)
+            self._hw.start_lasers(self._snapshot, energize_lasers=energize_lasers)
 
             while self._shell.preview_mode_started:
                 # Cooperative shutdown: if the owning QThread has been asked
@@ -214,6 +246,7 @@ class LiveWorker(QObject, _AcquireScanMixin):
         bundle: DeviceBundle,
         hw: HardwareManager | None,
         shell: Controller_MainWindow,
+        snapshot: MicroscopeSnapshot | None = None,
     ) -> None:
         super().__init__()
         assert hw is not None
@@ -222,6 +255,10 @@ class LiveWorker(QObject, _AcquireScanMixin):
         self.motors = bundle.motors
         self._hw: HardwareManager = hw
         self._shell = shell
+        # Frozen spawn snapshot: the worker's immutable source of truth for
+        # auto-laser selection. Sampled once on the GUI thread; mid-run GUI
+        # edits cannot reach this worker.
+        self._snapshot = _resolve_spawn_snapshot(shell, hw, snapshot)
         # Live mode never saves, but acquire_scan() reads these to populate
         # buffer metadata. Empty/False defaults keep the metadata field
         # well-typed without implying a save will occur.
@@ -238,20 +275,11 @@ class LiveWorker(QObject, _AcquireScanMixin):
             # Continuous-mode first-laser-only guard: when both auto-laser
             # checkboxes are checked, live (a continuous mode with no
             # per-plane boundary to sequence over) energizes ONLY L1 for
-            # the session and holds L2 off. Alternating L1<->L2 per frame
-            # would double frame time and flicker; instead the operator
-            # switches which single laser is live by unchecking one
-            # auto-laser checkbox and checking the other (the existing
-            # _cache_auto_laser_flags() resampling path). The guard passes
-            # a local (l1, l2=False) tuple to start_lasers so it energizes
-            # only L1 for this call without mutating the shared
-            # _auto_laser2 attribute — see PreviewWorker.run for the full
-            # rationale (avoids the data race with the GUI thread's
-            # _cache_auto_laser_flags() resampling).
-            if self._shell._auto_laser1 and self._shell._auto_laser2:
-                energize_lasers = (True, False)
-            else:
-                energize_lasers = None
+            # the session and holds L2 off — see PreviewWorker.run for the
+            # full rationale. The selection comes from the frozen spawn
+            # snapshot.
+            auto1, auto2 = self._snapshot.auto_lasers
+            energize_lasers = (True, False) if auto1 and auto2 else None
 
             # E-stop guard before energizing. If the operator pressed E-stop
             # between the worker spawn and this point, short-circuit to the
@@ -259,7 +287,7 @@ class LiveWorker(QObject, _AcquireScanMixin):
             if self._shell.estop_event.is_set():
                 return
 
-            self._hw.start_lasers(energize_lasers=energize_lasers)
+            self._hw.start_lasers(self._snapshot, energize_lasers=energize_lasers)
 
             while self._shell.live_mode_started:
                 # Cooperative shutdown — see PreviewWorker.run for rationale.
@@ -329,13 +357,15 @@ class SingleWorker(QObject, _AcquireScanMixin):
     scan, puts the ETLs in standby, stops the lasers, and disarms the
     camera. The ``finished`` signal fires exactly once in ``finally``.
 
-    The save-option widgets (``lineEdit_saveDescription``,
-    ``radioButton_saveStitchBlend``) are pre-sampled on the GUI thread in
-    ``updateUi_single_mode_button`` and passed as constructor args
-    (``save_description``, ``save_stitch_blend``) so
-    ``_AcquireScanMixin.acquire_scan`` reads ``self._save_description``
-    / ``self._save_stitch_blend`` instead of reaching into
-    the shell's ``ui.*`` from the worker thread.
+    Save intent and auto-laser selection arrive in the frozen
+    ``MicroscopeSnapshot`` passed at construction (sampled once on the GUI
+    thread in ``updateUi_single_mode_button``);
+    ``_AcquireScanMixin.acquire_scan`` reads ``self._save_description`` /
+    ``self._save_stitch_blend`` derived from that snapshot instead of
+    reaching into the shell's ``ui.*`` from the worker thread. The legacy
+    ``save_description`` / ``save_stitch_blend`` / ``multi_channel``
+    constructor args remain only as a compatibility adapter folded into a
+    snapshot at construction.
     """
 
     finished = Signal()
@@ -345,9 +375,11 @@ class SingleWorker(QObject, _AcquireScanMixin):
         bundle: DeviceBundle,
         hw: HardwareManager | None,
         shell: Controller_MainWindow,
-        save_description: str,
-        save_stitch_blend: bool,
+        save_description: str = "",
+        save_stitch_blend: bool = False,
         multi_channel: bool = False,
+        *,
+        snapshot: MicroscopeSnapshot | None = None,
     ) -> None:
         super().__init__()
         assert hw is not None
@@ -356,18 +388,64 @@ class SingleWorker(QObject, _AcquireScanMixin):
         self.motors = bundle.motors
         self._hw: HardwareManager = hw
         self._shell = shell
-        # Save-option widgets are pre-sampled on the GUI thread before
-        # spawning the worker so the worker thread never reaches into the
-        # shell's ui.* (cross-thread widget access). acquire_scan() reads
-        # these to populate buffer metadata.
-        self._save_description = save_description
-        self._save_stitch_blend = save_stitch_blend
-        # Multi-channel flag pre-sampled on the GUI thread.
+        # Frozen spawn snapshot: the worker's immutable source of truth for
+        # save metadata and auto-laser selection. When the caller did not
+        # pass one (legacy/test constructors), the positional save args and
+        # the multi_channel flag are folded into a frozen snapshot here on
+        # the GUI thread — the compatibility values are never read in run().
+        caller_snapshot = snapshot is not None
+        if snapshot is None:
+            save_mode = (
+                SaveMode.STITCH_BLEND if save_stitch_blend else SaveMode.STITCH
+            )
+            try:
+                base = shell.state.snapshot()
+            except Exception:
+                base = None
+            if not isinstance(base, MicroscopeSnapshot):
+                # Legacy test callers pass a Mock shell; carry the
+                # multi_channel flag in the frozen input.
+                base = MicroscopeSnapshot(
+                    lightsheet_line_time_s=1.0,
+                    auto_lasers=(bool(multi_channel), bool(multi_channel)),
+                )
+            snapshot = dataclasses.replace(
+                base,
+                save_options=SaveOptions(
+                    description=str(save_description),
+                    mode=save_mode,
+                ),
+            )
+        self._snapshot = snapshot
+        # acquire_scan() reads these worker-local fields to populate buffer
+        # metadata — always derived from the frozen snapshot, never from
+        # widgets or a mutable shell store.
+        self._save_description = self._snapshot.save_options.description
+        self._save_stitch_blend = (
+            self._snapshot.save_options.mode == SaveMode.STITCH_BLEND
+        )
+        # Multi-channel flag read from the immutable worker snapshot (or the
+        # legacy positional flag when no snapshot was passed).
         # When True, run() executes the per-channel cycle:
         # select_laser(0) -> acquire_scan -> capture frame1 ->
         # select_laser(1) -> acquire_scan -> capture frame2.
         # When False, the single-channel path runs (back-compat).
-        self._multi_channel = multi_channel
+        auto_lasers = self._snapshot.auto_lasers
+        self._multi_channel = (
+            (auto_lasers[0] and auto_lasers[1]) if caller_snapshot else multi_channel
+        )
+
+    def _select_laser(self, idx: int) -> None:
+        """Call the hardware select_laser, passing the frozen snapshot only
+        when the callable is the real HardwareManager bound method. Test
+        doubles and monkey-patched replacements typically do not accept the
+        snapshot keyword.
+        """
+        select = self._hw.select_laser
+        if getattr(select, "__self__", None) is self._hw:
+            select(idx, snapshot=self._snapshot)
+        else:
+            select(idx)
 
     @Slot()
     def run(self) -> None:
@@ -415,7 +493,7 @@ class SingleWorker(QObject, _AcquireScanMixin):
                 # overwrites self._shell.reconstructed_frame. Capture
                 # frame1 immediately after the first acquire_scan (before
                 # the second select_laser + acquire_scan overwrites it).
-                self._hw.select_laser(0)
+                self._select_laser(0)
                 if self._shell.estop_event.is_set():
                     return
                 # Refresh scan waveforms with current settings (once,
@@ -432,7 +510,7 @@ class SingleWorker(QObject, _AcquireScanMixin):
                     else self._shell.reconstructed_frame.copy()
                 )
 
-                self._hw.select_laser(1)
+                self._select_laser(1)
                 if self._shell.estop_event.is_set():
                     return
                 if not self.acquire_scan():
@@ -478,8 +556,8 @@ class SingleWorker(QObject, _AcquireScanMixin):
                 if self._shell.estop_event.is_set():
                     return
 
-                # Start lasers
-                self._hw.start_lasers()
+                # Start lasers from the frozen spawn snapshot.
+                self._hw.start_lasers(self._snapshot)
 
                 # E-stop poll point — checked before acquire_scan so a mid-acquisition
                 # E-stop (pressed between mode start and the single frame grab) aborts
