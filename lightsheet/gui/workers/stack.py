@@ -469,6 +469,9 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 )
                 self._shell.sig_beep.emit()
                 return
+            remaining_planes = n_planes - self._start_plane
+            if remaining_planes <= 0:
+                remaining_planes = n_planes
             progress_increment = 100 / n_planes
             self._shell.sig_progress_update.emit(0)  # To reset progress bar
 
@@ -1074,8 +1077,15 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         if (plane % self._autofocus_cfg.cadence) == 0:
                             self._autofocus_controller.update(stage_pos_mm, sharp)
 
-                    # Update progress bar
-                    progress_value += progress_increment
+                    # Update progress bar. For resumed runs the progress
+                    # spans the remaining [start_plane, n_planes) range so
+                    # the bar fills from empty to full over the planes that
+                    # are actually being acquired.
+                    progress_value = (
+                        100
+                        * (plane - self._start_plane + 1)
+                        / remaining_planes
+                    )
                     self._shell.sig_progress_update.emit(int(progress_value))
             else:
                 # The loop exhausted without hitting a break — every plane

@@ -360,6 +360,9 @@ class Controller_MainWindow(QMainWindow):
         self.save_panel = SavePanelWidget(self)
         self.calibration_panel = CalibrationPanelWidget(self)
         self.past_panel = PastAcquisitionsPanel(self)
+        self.past_panel.past_acquisitions_scan_finished.connect(
+            self._on_startup_scan_finished
+        )
 
         # Per-field units are now fixed (motor travel in mm, plane step in µm);
         # the global units toggle is gone.
@@ -703,6 +706,12 @@ class Controller_MainWindow(QMainWindow):
         # setValue triggers updateUi_set_number_of_planes, which re-reads
         # the first-plane spinbox and overwrites stack_starting_plane).
         self._hardware_initialized = False
+
+        # One-shot startup notification for incomplete acquisitions. Set
+        # True briefly during the post-hardware_init scan so the scan
+        # completion slot can show a notification-only dialog if any
+        # resumable acquisitions are found.
+        self._startup_notification_pending = False
 
         # Image display state (referenced by save_panel.updateUi_save_single_image)
         self.image_hor_pos_text = ""
@@ -1410,6 +1419,31 @@ class Controller_MainWindow(QMainWindow):
         # value).
         self._hardware_initialized = True
 
+    def _on_startup_scan_finished(self, entries: list) -> None:
+        """Show a notification-only dialog if the startup scan found any
+        resumable acquisitions. The dialog deliberately has no Resume
+        Now button — the operator must open the Past panel and confirm
+        the safety gate."""
+        if not self._startup_notification_pending:
+            return
+        self._startup_notification_pending = False
+        if any(getattr(e, "resumable", False) for e in entries):
+            from PySide6.QtWidgets import QMessageBox
+
+            QMessageBox.information(
+                self,
+                "Incomplete acquisition",
+                "Incomplete acquisition found — see Past acquisitions",
+            )
+
+    def _check_startup_incomplete_acquisitions(self) -> None:
+        """Trigger an asynchronous past-acquisitions scan for the startup
+        notification. The actual dialog is shown by _on_startup_scan_finished
+        when the scan completes; this method returns immediately so app
+        startup is not blocked."""
+        self._startup_notification_pending = True
+        self.past_panel.refresh()
+
     def closeEvent(self, event: QCloseEvent) -> None:
         """Making sure that everything is closed when the user exits the software."""
         result = QMessageBox.question(
@@ -1776,11 +1810,14 @@ class Controller_MainWindow(QMainWindow):
             q_total = int(getattr(qm, "_queue_rows_total", 0)) if qm else 0
             mode = "FOCUS" if getattr(self, "focus_mode_started", False) else "STACK"
             # A requested-but-not-yet-completed pause must keep showing
-            # PAUSING — the per-plane progress emit would otherwise
+            # PAUSED — the per-plane progress emit would otherwise
             # overwrite the badge back to RUNNING until teardown lands.
-            run_state = (
-                "PAUSING" if self.pause_requested.is_set() else "RUNNING"
-            )
+            if self.pause_requested.is_set():
+                run_state = "PAUSED"
+            elif getattr(self, "_start_plane", 0) > 0:
+                run_state = "RESUMING"
+            else:
+                run_state = "RUNNING"
             if qm is not None and getattr(qm, "_queue_active", False):
                 self._update_mode_badge(
                     mode,

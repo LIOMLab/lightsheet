@@ -667,6 +667,9 @@ class AcquisitionPanelWidget(QWidget):
             autofocus_cfg is not None
         )
 
+        # Stash the resume offset so the mode badge and the stack worker
+        # both see the same start plane without a second cross-thread read.
+        self._shell._start_plane = start_plane
         self._shell._stack_thread.start()
         # A live stack worker can now observe the pause event — enable the
         # Pause control. Covers both the single-stack start and queue-row
@@ -695,7 +698,7 @@ class AcquisitionPanelWidget(QWidget):
             progress = self._shell.ui.statusBar_progress
             self._shell._update_mode_badge(
                 "STACK",
-                "PAUSING",
+                "PAUSED",
                 plane=int(progress.value()),
                 total=int(self._shell.number_of_planes),
             )
@@ -722,6 +725,7 @@ class AcquisitionPanelWidget(QWidget):
 
         self._shell.stack_mode_started = False
         self._shell.focus_mode_started = False
+        self._shell._start_plane = 0
         # The pause control is only meaningful while a worker polls the
         # event — latch it off when no stack worker is running.
         self._shell.stack_panel.ui.pushButton_acqPauseStack.setEnabled(False)

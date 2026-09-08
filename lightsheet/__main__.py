@@ -387,6 +387,14 @@ def main() -> int:
     controller.sig_beep.connect(app.beep)  # connection for beep sounds
     controller.sig_stylesheet.connect(set_app_stylesheet)  # stylesheet selection
 
+    # Run hardware init synchronously (the deferred 100 ms timer is a
+    # legacy artifact for the pre-show timing). After completion, scan
+    # for incomplete acquisitions and notify the operator if any are
+    # found — a notification-only dialog, never a one-click resume.
+    controller.timer_hardware_init.stop()
+    controller.hardware_init()
+    controller._check_startup_incomplete_acquisitions()
+
     # Show controller UI and execute main event loop
     controller.show()
     return app.exec()
