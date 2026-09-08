@@ -173,12 +173,35 @@ def test_single_image_save_uses_model_intent(
     stale.setChecked(True)
     stale.blockSignals(was)
 
-    set_files_calls: list[tuple] = []
+    set_files_calls: list[tuple[int, str, str, int, str, list[int] | None]] = []
     real_set_files = ctrl._fs.set_files
 
-    def _spy_set_files(*args: object, **kwargs: object) -> object:
-        set_files_calls.append(args)
-        return real_set_files(*args, **kwargs)
+    def _spy_set_files(
+        number_of_files: int,
+        files_name: str,
+        scan_type: str,
+        number_of_datasets: int,
+        datasets_name: str,
+        wavelengths: list[int] | None = None,
+    ) -> None:
+        set_files_calls.append(
+            (
+                number_of_files,
+                files_name,
+                scan_type,
+                number_of_datasets,
+                datasets_name,
+                wavelengths,
+            )
+        )
+        real_set_files(
+            number_of_files,
+            files_name,
+            scan_type,
+            number_of_datasets,
+            datasets_name,
+            wavelengths=wavelengths,
+        )
 
     with (
         patch.object(ctrl._fs, "set_files", side_effect=_spy_set_files),
@@ -218,12 +241,35 @@ def test_single_image_save_model_stitch_branch(
         SaveOptions(description="stitch desc", mode=SaveMode.STITCH)
     )
 
-    set_files_calls: list[tuple] = []
+    set_files_calls: list[tuple[int, str, str, int, str, list[int] | None]] = []
     real_set_files = ctrl._fs.set_files
 
-    def _spy_set_files(*args: object, **kwargs: object) -> object:
-        set_files_calls.append(args)
-        return real_set_files(*args, **kwargs)
+    def _spy_set_files(
+        number_of_files: int,
+        files_name: str,
+        scan_type: str,
+        number_of_datasets: int,
+        datasets_name: str,
+        wavelengths: list[int] | None = None,
+    ) -> None:
+        set_files_calls.append(
+            (
+                number_of_files,
+                files_name,
+                scan_type,
+                number_of_datasets,
+                datasets_name,
+                wavelengths,
+            )
+        )
+        real_set_files(
+            number_of_files,
+            files_name,
+            scan_type,
+            number_of_datasets,
+            datasets_name,
+            wavelengths=wavelengths,
+        )
 
     with (
         patch.object(ctrl._fs, "set_files", side_effect=_spy_set_files),

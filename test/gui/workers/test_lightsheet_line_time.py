@@ -14,6 +14,7 @@ postconditions, never on static source.
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -101,12 +102,14 @@ def _ordered_calls(worker: StackWorker) -> list[str]:
         calls.append(f"set_exposure_time:{ms}")
         orig_set_exposure_time(ms)
 
-    camera.set_lightsheet_mode = _set_lightsheet_mode
-    camera.set_exposure_time = _set_exposure_time
-    worker.siggen.compute_scan_waveforms = lambda: calls.append(
-        "compute_scan_waveforms"
+    camera.set_lightsheet_mode = _set_lightsheet_mode  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+    camera.set_exposure_time = _set_exposure_time  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+    worker.siggen.compute_scan_waveforms = (  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+        lambda: calls.append("compute_scan_waveforms")
     )
-    worker.acquire_scan = lambda: calls.append("acquire_scan") or True
+    worker.acquire_scan = (  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+        lambda: calls.append("acquire_scan") or True
+    )
     return calls
 
 
@@ -119,7 +122,7 @@ def test_lightsheet_apply_order_and_changed_only_recompute(qtbot: QtBot) -> None
     worker.camera.line_time = 0.001
     calls = _ordered_calls(worker)
 
-    emitted: list[object] = []
+    emitted: list[Any] = []
     worker.sig_applied_state.connect(emitted.append)
 
     cmd = AdaptiveCommand.fixed(exposure_s=0.080, laser1_mw=0.0, laser2_mw=0.0)
@@ -166,7 +169,7 @@ def test_rolling_mode_still_uses_ms_exposure_register(qtbot: QtBot) -> None:
     worker.camera.line_time = 0.0005
     calls = _ordered_calls(worker)
 
-    emitted: list[object] = []
+    emitted: list[Any] = []
     worker.sig_applied_state.connect(emitted.append)
 
     cmd = AdaptiveCommand.fixed(exposure_s=0.05, laser1_mw=0.0, laser2_mw=0.0)

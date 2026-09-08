@@ -27,6 +27,7 @@ takes precedence over ``scripted_intensity_fn``, still respects the
 from __future__ import annotations
 
 import time
+from typing import cast
 
 import numpy as np
 import pytest
@@ -140,6 +141,7 @@ def test_frame_source_takes_precedence_over_scripted_intensity() -> None:
 
     camera = MockCamera(verbose=False)
     camera.set_scripted_intensity_fn(lambda _i, _e: 40000)
+    assert camera.ysize is not None and camera.xsize is not None
     source = np.full((camera.ysize, camera.xsize), 0.5)
     camera.set_frame_source(lambda _cam, _i: source)
     camera.new_data_ready = True
@@ -158,13 +160,15 @@ def test_frame_source_floats_convert_to_uint16() -> None:
     from lightsheet.hal.mocks.mock_camera import MockCamera
 
     camera = MockCamera(verbose=False)
-    camera.set_frame_source(lambda _cam, _i: np.full((camera.ysize, camera.xsize), 0.5))
+    assert camera.ysize is not None and camera.xsize is not None
+    shape = (camera.ysize, camera.xsize)
+    camera.set_frame_source(lambda _cam, _i: np.full(shape, 0.5))
     camera.new_data_ready = True
     half = camera.copy_recorder_images(1)
     assert half.dtype == np.uint16
     assert np.all(half == int(np.clip(0.5 * 65535.0, 0, 65535)))
 
-    camera.set_frame_source(lambda _cam, _i: np.full((camera.ysize, camera.xsize), 2.0))
+    camera.set_frame_source(lambda _cam, _i: np.full(shape, 2.0))
     camera.new_data_ready = True
     over = camera.copy_recorder_images(1)
     assert np.all(over == 65535)
@@ -217,6 +221,7 @@ def test_frame_source_broadcasts_to_n_images() -> None:
     from lightsheet.hal.mocks.mock_camera import MockCamera
 
     camera = MockCamera(verbose=False)
+    assert camera.ysize is not None and camera.xsize is not None
     source = np.full((camera.ysize, camera.xsize), 0.25)
     camera.set_frame_source(lambda _cam, _i: source)
     camera.new_data_ready = True
@@ -236,9 +241,11 @@ def test_frame_source_index_progression_and_reset() -> None:
     from lightsheet.hal.mocks.mock_camera import MockCamera
 
     camera = MockCamera(verbose=False)
+    assert camera.ysize is not None and camera.xsize is not None
+    shape = (camera.ysize, camera.xsize)
     seen: list[int] = []
     camera.set_frame_source(
-        lambda _cam, i: seen.append(i) or np.zeros((camera.ysize, camera.xsize))
+        lambda _cam, i: seen.append(i) or np.zeros(shape)
     )
     assert camera.scripted_frame_index == 0
 
@@ -252,7 +259,7 @@ def test_frame_source_index_progression_and_reset() -> None:
     assert seen == [0, 1]
     assert camera.scripted_frame_index == 2
 
-    camera.set_frame_source(lambda _cam, _i: np.zeros((camera.ysize, camera.xsize)))
+    camera.set_frame_source(lambda _cam, _i: np.zeros(shape))
     assert camera.scripted_frame_index == 0
 
 
@@ -262,9 +269,10 @@ def test_build_demo_bundle_attaches_frame_source() -> None:
     light sheet, laser on at max power, data ready) yields a non-zero
     uint16 frame."""
     from lightsheet.__main__ import _build_demo_bundle
+    from lightsheet.hal.mocks.mock_camera import MockCamera
 
     bundle = _build_demo_bundle()
-    camera = bundle.camera
+    camera = cast(MockCamera, bundle.camera)
     assert camera.frame_source is not None
     assert callable(camera.frame_source)
 
@@ -351,6 +359,6 @@ def test_set_lightsheet_mode_rejects_invalid_line_time() -> None:
 
     camera = MockCamera(verbose=False)
     for bad in (None, 0.0, -1e-5, float("inf"), float("nan"), "x"):
-        camera.lightsheet_line_time = bad
+        camera.lightsheet_line_time = bad  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         with pytest.raises(ValueError, match="lightsheet_line_time"):
             camera.set_lightsheet_mode()

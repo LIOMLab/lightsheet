@@ -44,6 +44,8 @@ import h5py
 import numpy as np
 import pytest
 
+from lightsheet.hal.mocks.mock_camera import MockCamera
+
 pytest.importorskip("PySide6")
 
 if TYPE_CHECKING:
@@ -204,7 +206,7 @@ def test_adaptive_loop_tracks_bright_to_dim_profile(
         # scripted/frame-source branches in copy_recorder_images are
         # gated on it, so the stub must reproduce that ordering or the
         # camera returns zero-filled frames (a dead signal).
-        ctrl.camera.new_data_ready = True
+        cast(MockCamera, ctrl.camera).new_data_ready = True
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
         assert imgs is not None
         ctrl.reconstructed_frame = np.asarray(imgs[0])
@@ -335,7 +337,7 @@ def test_estop_aborts_before_adaptive_write(
         # scripted/frame-source branches in copy_recorder_images are
         # gated on it, so the stub must reproduce that ordering or the
         # camera returns zero-filled frames (a dead signal).
-        ctrl.camera.new_data_ready = True
+        cast(MockCamera, ctrl.camera).new_data_ready = True
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
         assert imgs is not None
         ctrl.reconstructed_frame = np.asarray(imgs[0])
@@ -431,7 +433,7 @@ def test_adaptive_off_preserves_fixed_stack(
         # scripted/frame-source branches in copy_recorder_images are
         # gated on it, so the stub must reproduce that ordering or the
         # camera returns zero-filled frames (a dead signal).
-        ctrl.camera.new_data_ready = True
+        cast(MockCamera, ctrl.camera).new_data_ready = True
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
         assert imgs is not None
         ctrl.reconstructed_frame = np.asarray(imgs[0])
@@ -548,7 +550,7 @@ def test_brighter_channel_drives_shared_exposure_in_multi_channel(
         # scripted/frame-source branches in copy_recorder_images are
         # gated on it, so the stub must reproduce that ordering or the
         # camera returns zero-filled frames (a dead signal).
-        ctrl.camera.new_data_ready = True
+        cast(MockCamera, ctrl.camera).new_data_ready = True
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
         assert imgs is not None
         ctrl.reconstructed_frame = np.asarray(imgs[0])
@@ -638,7 +640,7 @@ def test_one_sharp_excursion_requests_one_reacquire(
         # scripted/frame-source branches in copy_recorder_images are
         # gated on it, so the stub must reproduce that ordering or the
         # camera returns zero-filled frames (a dead signal).
-        ctrl.camera.new_data_ready = True
+        cast(MockCamera, ctrl.camera).new_data_ready = True
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
         assert imgs is not None
         ctrl.reconstructed_frame = np.asarray(imgs[0])
@@ -722,7 +724,7 @@ def _make_adaptive_worker(
         # scripted/frame-source branches in copy_recorder_images are
         # gated on it, so the stub must reproduce that ordering or the
         # camera returns zero-filled frames (a dead signal).
-        ctrl.camera.new_data_ready = True
+        cast(MockCamera, ctrl.camera).new_data_ready = True
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
         assert imgs is not None
         ctrl.reconstructed_frame = np.asarray(imgs[0])
@@ -1103,7 +1105,7 @@ def test_estop_after_successful_write_stops_later_writes(
         # scripted/frame-source branches in copy_recorder_images are
         # gated on it, so the stub must reproduce that ordering or the
         # camera returns zero-filled frames (a dead signal).
-        ctrl.camera.new_data_ready = True
+        cast(MockCamera, ctrl.camera).new_data_ready = True
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
         assert imgs is not None
         ctrl.reconstructed_frame = np.asarray(imgs[0])
@@ -1181,7 +1183,7 @@ def _sphere_acquire_scan(ctrl: Any, worker: Any) -> Callable[[], bool]:
 
     def _fake_acquire_scan() -> bool:
         n_imgs = worker.siggen.waveform_cycles or 1
-        ctrl.camera.new_data_ready = True
+        cast(MockCamera, ctrl.camera).new_data_ready = True
         imgs = ctrl.camera.copy_recorder_images(n_imgs)
         assert imgs is not None
         ctrl.reconstructed_frame = np.asarray(imgs[0])

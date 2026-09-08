@@ -45,7 +45,7 @@ def test_save_options_frozen() -> None:
     assert new.description == "new"
     assert opts.description == "old"
     with pytest.raises(dataclasses.FrozenInstanceError):
-        opts.description = "mutated"  # type: ignore[misc]
+        opts.description = "mutated"  # type: ignore[misc]  # ty: ignore[invalid-assignment]
 
 
 def test_microscope_snapshot_defaults() -> None:
@@ -57,7 +57,7 @@ def test_microscope_snapshot_defaults() -> None:
     assert snap.auto_lasers == (False, False)
     assert snap.save_options == SaveOptions()
     with pytest.raises(dataclasses.FrozenInstanceError):
-        snap.lightsheet_line_time_s = 2e-5  # type: ignore[misc]
+        snap.lightsheet_line_time_s = 2e-5  # type: ignore[misc]  # ty: ignore[invalid-assignment]
 
 
 def test_microscope_snapshot_validates_line_time() -> None:
@@ -75,7 +75,7 @@ def test_microscope_snapshot_validates_laser_power_tuple() -> None:
     with pytest.raises(ValueError, match="2-tuple"):
         MicroscopeSnapshot(
             lightsheet_line_time_s=1e-5,
-            laser_power_pct=(50.0,),
+            laser_power_pct=(50.0,),  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
         )
     with pytest.raises(ValueError, match=r"\[0, 100\]"):
         MicroscopeSnapshot(
@@ -94,12 +94,12 @@ def test_microscope_snapshot_validates_auto_lasers() -> None:
     with pytest.raises(ValueError, match="2-tuple"):
         MicroscopeSnapshot(
             lightsheet_line_time_s=1e-5,
-            auto_lasers=(True,),
+            auto_lasers=(True,),  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
         )
     with pytest.raises(ValueError, match="bool"):
         MicroscopeSnapshot(
             lightsheet_line_time_s=1e-5,
-            auto_lasers=(True, 1),
+            auto_lasers=(True, 1),  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
         )
 
 
@@ -111,7 +111,7 @@ def test_snapshot_replace_produces_independent_copy() -> None:
     assert new.laser_power_pct == (50.0, 50.0)
     assert snap.laser_power_pct == (0.0, 0.0)
     with pytest.raises(dataclasses.FrozenInstanceError):
-        new.laser_power_pct = (60.0, 60.0)  # type: ignore[misc]
+        new.laser_power_pct = (60.0, 60.0)  # type: ignore[misc]  # ty: ignore[invalid-assignment]
 
 
 def test_model_snapshot_returns_frozen_copy(qtbot: QtBot) -> None:
@@ -151,7 +151,7 @@ def test_model_set_laser_power_validates(qtbot: QtBot) -> None:
     with pytest.raises(ValueError, match=r"\[0, 100\]"):
         state.set_laser_power_pct(1, -1.0)
     with pytest.raises(ValueError, match="numeric"):
-        state.set_laser_power_pct(0, "bad")  # type: ignore[arg-type]
+        state.set_laser_power_pct(0, "bad")  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 
 
 def test_model_apply_worker_snapshot_folds_non_none_fields(qtbot: QtBot) -> None:
@@ -184,7 +184,7 @@ def test_model_apply_worker_snapshot_rejects_wrong_type(qtbot: QtBot) -> None:
 def test_applied_snapshot_validates() -> None:
     """AppliedMicroscopeSnapshot validates non-None fields."""
     with pytest.raises(ValueError, match="2-tuple"):
-        AppliedMicroscopeSnapshot(laser_power_pct=(50.0,))
+        AppliedMicroscopeSnapshot(laser_power_pct=(50.0,))  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
     with pytest.raises(ValueError, match="positive"):
         AppliedMicroscopeSnapshot(lightsheet_line_time_s=-1.0)
 
@@ -212,7 +212,7 @@ def test_model_set_save_options_validates_type(qtbot: QtBot) -> None:
     _ = QCoreApplication.instance() or QCoreApplication()
     state = MicroscopeState(lightsheet_line_time_s=1e-5)
     with pytest.raises(ValueError, match="SaveOptions"):
-        state.set_save_options({"description": "x"})  # type: ignore[arg-type]
+        state.set_save_options({"description": "x"})  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 
 
 def test_model_set_save_mode_and_description(qtbot: QtBot) -> None:
@@ -261,7 +261,7 @@ def test_model_set_laser_enabled_emits_and_validates(qtbot: QtBot) -> None:
     with pytest.raises(IndexError, match="0 or 1"):
         state.set_laser_enabled(-1, False)
     with pytest.raises(ValueError, match="bool"):
-        state.set_laser_enabled(0, 1)  # type: ignore[arg-type]
+        state.set_laser_enabled(0, 1)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 
 
 def test_model_set_laser_power_rejects_bad_index_and_nonfinite(
@@ -288,9 +288,9 @@ def test_model_set_auto_lasers_validates_bools(qtbot: QtBot) -> None:
     _ = QCoreApplication.instance() or QCoreApplication()
     state = MicroscopeState(lightsheet_line_time_s=1e-5)
     with pytest.raises(ValueError, match="bool"):
-        state.set_auto_lasers(True, 1)  # type: ignore[arg-type]
+        state.set_auto_lasers(True, 1)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
     with pytest.raises(ValueError, match="bool"):
-        state.set_auto_lasers("yes", False)  # type: ignore[arg-type]
+        state.set_auto_lasers("yes", False)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 
     with qtbot.waitSignal(state.sig_auto_lasers_changed, timeout=100):
         state.set_auto_lasers(True, False)
@@ -310,7 +310,7 @@ def test_model_set_lightsheet_line_time_emits_and_validates(
     state = MicroscopeState(lightsheet_line_time_s=1e-5)
 
     with pytest.raises(ValueError, match="numeric"):
-        state.set_lightsheet_line_time_s("fast")  # type: ignore[arg-type]
+        state.set_lightsheet_line_time_s("fast")  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
     with pytest.raises(ValueError, match="numeric"):
         state.set_lightsheet_line_time_s(True)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="finite"):

@@ -38,9 +38,9 @@ _SENSOR = (512, 512)
 
 def _make_stage(
     sample_kwargs: dict[str, Any] | None = None,
-    lasers: tuple | None = None,
+    lasers: tuple[Any, ...] | None = None,
     sensor_shape: tuple[int, int] = _SENSOR,
-) -> tuple[Any, Any, Any, tuple]:
+) -> tuple[Any, Any, Any, tuple[Any, ...]]:
     """Construct a MockStage + MockCamera pair with a single active
     laser at full power (unless ``lasers`` overrides)."""
     from lightsheet.hal.mocks.mock_camera import MockCamera
@@ -48,7 +48,7 @@ def _make_stage(
     from lightsheet.hal.mocks.mock_motors import MockMotors
     from lightsheet.hal.mocks.mock_stage import MockSample, MockStage
 
-    kwargs = {"sensor_shape": sensor_shape}
+    kwargs: dict[str, Any] = {"sensor_shape": sensor_shape}
     if sample_kwargs:
         kwargs.update(sample_kwargs)
     sample = MockSample(**kwargs)
@@ -76,7 +76,7 @@ def _focus_at_ideal(stage: Any, motors: Any, h_mm: float) -> float:
     """Park the camera axis at the (lensing-shifted) ideal focus."""
     ideal_mm = stage._ideal_focus_mm(h_mm)
     _move_cam(motors, ideal_mm)
-    return ideal_mm
+    return float(ideal_mm)
 
 
 def test_mock_stage_lateral_cross_section_centered() -> None:
@@ -336,7 +336,7 @@ def test_mock_stage_sample_post_init_validation() -> None:
     with pytest.raises(ValueError, match="sigma_y_mm"):
         MockSample(sigma_y_mm=-1.0)
     with pytest.raises(ValueError, match="sensor_shape"):
-        MockSample(sensor_shape=(512,))
+        MockSample(sensor_shape=(512,))  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
     with pytest.raises(ValueError, match="sensor_shape"):
         MockSample(sensor_shape=(512, 0))
     with pytest.raises(ValueError, match="pixel_size_um"):

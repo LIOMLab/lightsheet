@@ -58,7 +58,7 @@ def test_worker_snapshot_is_frozen_and_feedback_reaches_model(
     # queued connection (same pattern as production).
     worker.sig_applied_state.connect(
         ctrl.state.apply_worker_snapshot,
-        Qt.QueuedConnection,
+        Qt.ConnectionType.QueuedConnection,
     )
 
     # Call the adaptive command on the test thread. The emitted signal is

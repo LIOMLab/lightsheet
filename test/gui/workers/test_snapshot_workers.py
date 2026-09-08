@@ -139,7 +139,11 @@ def test_single_worker_acquire_scan_metadata_uses_spawn_snapshot(
         return_value=np.zeros((8, 8), dtype=np.uint16),
     ):
         assert worker.acquire_scan() is True
-    assert ctrl.buffer_metadata_general["Sample Name"] == "run-start name"
+    assert (
+        ctrl.buffer_metadata_general[  # ty: ignore[unresolved-attribute]
+            "Sample Name"
+        ] == "run-start name"
+    )
 
 
 def test_stack_worker_save_mode_branches_frozen_at_spawn(

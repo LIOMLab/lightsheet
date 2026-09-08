@@ -7,6 +7,7 @@ fake ``.camera.sdk`` — the same hardware-probe bypass used by
 power/motion operation runs.
 """
 
+from typing import Any, cast
 from unittest.mock import Mock, call
 
 import pytest
@@ -36,7 +37,8 @@ def test_set_lightsheet_mode_call_order_and_readback_sync() -> None:
     (possibly quantized) value so waveform computation and applied-state
     publication use the applied truth."""
     cam = _make_camera()
-    sdk = cam.camera.sdk
+    assert cam.camera is not None
+    sdk = cast(Any, cam.camera.sdk)
     sdk.get_cmos_line_timing.return_value = {"line time": 0.0049}
     sdk.get_cmos_line_exposure_delay.return_value = {
         "lines exposure": 16,
@@ -64,7 +66,8 @@ def test_set_lightsheet_mode_missing_readback_leaves_attrs() -> None:
     applied timing attributes are left untouched (the request value stays
     the best-known intent)."""
     cam = _make_camera()
-    sdk = cam.camera.sdk
+    assert cam.camera is not None
+    sdk = cast(Any, cam.camera.sdk)
     sdk.get_cmos_line_timing.return_value = {"parameter": "on"}
     sdk.get_cmos_line_exposure_delay.return_value = {
         "lines exposure": 16,
