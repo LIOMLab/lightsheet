@@ -36,7 +36,6 @@ config.rig-specific.ini
 
 # macOS dev default log directory created by logging_setup.configure().
 logs/
-.gsd-graph/
 
 # Coverage gate runtime artifacts — produced by scripts/coverage.sh
 # (pytest-cov .coverage data file + coverage.json emitted by `coverage json`).
