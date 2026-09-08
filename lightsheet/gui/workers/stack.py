@@ -160,6 +160,13 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     lightsheet_line_time_s=float(line_time),
                     auto_lasers=(multi_channel, multi_channel),
                 )
+            elif multi_channel and base.auto_lasers != (True, True):
+                # A live-model snapshot can disagree with the positional
+                # multi_channel flag (e.g. a legacy caller passes
+                # multi_channel=True while the model flags are False).
+                # Fold the flag into auto_lasers so the per-channel branch
+                # and _multi_channel read from one source.
+                base = dataclasses.replace(base, auto_lasers=(True, True))
             self._snapshot = dataclasses.replace(
                 base,
                 save_options=SaveOptions(

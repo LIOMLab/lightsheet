@@ -431,6 +431,13 @@ class SingleWorker(QObject, _AcquireScanMixin):
                     lightsheet_line_time_s=1.0,
                     auto_lasers=(bool(multi_channel), bool(multi_channel)),
                 )
+            elif multi_channel and base.auto_lasers != (True, True):
+                # A live-model snapshot can disagree with the positional
+                # multi_channel flag (e.g. a legacy caller passes
+                # multi_channel=True while the model flags are False).
+                # Fold the flag into auto_lasers so the per-channel branch
+                # and _multi_channel read from one source.
+                base = dataclasses.replace(base, auto_lasers=(True, True))
             snapshot = dataclasses.replace(
                 base,
                 save_options=SaveOptions(
