@@ -18,6 +18,7 @@ from PySide6.QtCore import QObject, QThread, Signal, Slot
 from lightsheet.gui.workers.scan_mixin import _AcquireScanMixin
 from lightsheet.gui.workers.stack_adaptive import _StackAdaptiveMixin
 from lightsheet.hal.bundle import DeviceBundle
+from lightsheet.resume import ManifestUpdate, ResumeManifest
 from lightsheet.state.types import MicroscopeSnapshot, SaveMode, SaveOptions
 
 if TYPE_CHECKING:
@@ -110,6 +111,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         autofocus_cfg: AutofocusConfig | None = None,
         autofocus_curve: FocusCurve | None = None,
         start_plane: int = 0,
+        resume_manifest: ResumeManifest | None = None,
     ) -> None:
         super().__init__()
         assert hw is not None
@@ -255,6 +257,9 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             raise ValueError(
                 f"start_plane must be >= 0; got {self._start_plane}"
             )
+        # Resume manifest: supplies the last controller checkpoint and
+        # pre-resume trajectory for adaptive/focus resumption.
+        self._resume_manifest = resume_manifest
         # Set True only when the plane loop exhausts without a break —
         # drives the completed/interrupted manifest lifecycle at teardown.
         self._run_completed = False
@@ -301,7 +306,8 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         "stack",
                         1,
                         "ETLscan",
-                        **set_files_kwargs,
+                        wavelengths=set_files_kwargs.get("wavelengths"),
+                        resume_manifest=self._resume_manifest,
                     )
                 elif self._save_all_full:
                     self._shell._fs.set_files(
@@ -310,7 +316,8 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         "stack",
                         1,
                         "FullETLscan",
-                        **set_files_kwargs,
+                        wavelengths=set_files_kwargs.get("wavelengths"),
+                        resume_manifest=self._resume_manifest,
                     )
                 else:
                     # Stitch (reconstructed_frame) branch — the "1 file
@@ -335,7 +342,8 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         "stack",
                         self._shell.number_of_planes,
                         "reconstructed_frame",
-                        **set_files_kwargs,
+                        wavelengths=set_files_kwargs.get("wavelengths"),
+                        resume_manifest=self._resume_manifest,
                     )
                 # Starting frame saver
                 self._shell._fs.start_saving()
@@ -431,9 +439,19 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             if self._adaptive_cfg is not None and self._adaptive_cfg.enabled:
                 from lightsheet.adaptive.controller import AdaptiveController
 
+                # Resume: pick up the last adaptive controller checkpoint
+                # stored in the resume manifest.
+                initial_state = None
+                if (
+                    self._resume_manifest is not None
+                    and self._resume_manifest.controller_checkpoints
+                ):
+                    initial_state = self._resume_manifest.controller_checkpoints[-1]
+
                 self._adaptive_controller = AdaptiveController(
-                    self._adaptive_cfg, n_planes
+                    self._adaptive_cfg, n_planes, initial_state=initial_state
                 )
+
                 # Effective exposure in seconds: in Lightsheet mode the
                 # per-plane integration time is the applied per-line time
                 # times the exposed-line count (both owned by the DAQ
@@ -450,33 +468,50 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     )
                 else:
                     effective_exposure_s = self.camera.exposure_time
-                # Prime with a flat trajectory at the current exposure.
-                # The PI correction handles the per-depth profile; the
-                # feedforward baseline is the current effective exposure.
-                pilot_indices = list(range(self._adaptive_cfg.pilot_count))
-                pilot_exposures = [
-                    effective_exposure_s
-                ] * self._adaptive_cfg.pilot_count
-                self._adaptive_controller.prime(pilot_indices, pilot_exposures)
-                # The initial command for plane 0 is the feedforward
-                # baseline (current exposure + current staged powers).
-                # The controller's update() will refine it from plane 0's
-                # observed intensity for plane 1 onwards.
-                current_powers = (
-                    self._snapshot.laser_power_pct[0]
-                    / 100.0
-                    * self._shell.lasers[0].max_power,
-                    self._snapshot.laser_power_pct[1]
-                    / 100.0
-                    * self._shell.lasers[1].max_power,
-                )
+
                 from lightsheet.adaptive.types import AdaptiveCommand
 
-                self._adaptive_current_cmd = AdaptiveCommand.fixed(
-                    exposure_s=effective_exposure_s,
-                    laser1_mw=current_powers[0],
-                    laser2_mw=current_powers[1],
-                )
+                if initial_state is None:
+                    # Fresh run: prime with a flat trajectory at the
+                    # current exposure and start from the staged powers.
+                    pilot_indices = list(range(self._adaptive_cfg.pilot_count))
+                    pilot_exposures = [
+                        effective_exposure_s
+                    ] * self._adaptive_cfg.pilot_count
+                    self._adaptive_controller.prime(pilot_indices, pilot_exposures)
+                    current_powers = (
+                        self._snapshot.laser_power_pct[0]
+                        / 100.0
+                        * self._shell.lasers[0].max_power,
+                        self._snapshot.laser_power_pct[1]
+                        / 100.0
+                        * self._shell.lasers[1].max_power,
+                    )
+                    self._adaptive_current_cmd = AdaptiveCommand.fixed(
+                        exposure_s=effective_exposure_s,
+                        laser1_mw=current_powers[0],
+                        laser2_mw=current_powers[1],
+                    )
+                else:
+                    # Resumed run: the restored controller carries the
+                    # last computed command for the resume plane.
+                    self._adaptive_current_cmd = (
+                        self._adaptive_controller._last_command
+                    )
+                    if self._adaptive_current_cmd is None:
+                        current_powers = (
+                            self._snapshot.laser_power_pct[0]
+                            / 100.0
+                            * self._shell.lasers[0].max_power,
+                            self._snapshot.laser_power_pct[1]
+                            / 100.0
+                            * self._shell.lasers[1].max_power,
+                        )
+                        self._adaptive_current_cmd = AdaptiveCommand.fixed(
+                            exposure_s=effective_exposure_s,
+                            laser1_mw=current_powers[0],
+                            laser2_mw=current_powers[1],
+                        )
 
             # Focus control setup: read the camera travel limits once,
             # then construct either the block-based legacy FocusController,

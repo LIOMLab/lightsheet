@@ -2414,6 +2414,7 @@ class FrameSaverController:
         number_of_datasets: int,
         datasets_name: str,
         wavelengths: list[int] | None = None,
+        resume_manifest: ResumeManifest | None = None,
     ) -> None:
         self.frame_saver.set_files(
             number_of_files,
@@ -2422,6 +2423,7 @@ class FrameSaverController:
             number_of_datasets,
             datasets_name,
             wavelengths=wavelengths,
+            resume_manifest=resume_manifest,
         )
 
     def enqueue_buffer(self, buffer: np.ndarray | tuple[int, np.ndarray]) -> None:
@@ -2435,8 +2437,32 @@ class FrameSaverController:
     def stop_saving(self, lifecycle: str | None = None) -> None:
         self.frame_saver.stop_saving(lifecycle=lifecycle)
 
+    @property
+    def manifest_update_queue(self) -> queue.Queue[ManifestUpdate]:
+        """The cross-thread queue for staging manifest updates."""
+        return self.frame_saver.manifest_update_queue
+
     def configure_adaptive(self, enabled: bool, config: object | None = None) -> None:
         self.frame_saver.configure_adaptive(enabled, config=config)
+        # If resuming, seed the trajectory list with the pre-resume samples
+        # stored in the sidecar manifest so the final file metadata carries
+        # the full merged trajectory.
+        if enabled and self.frame_saver.resume_manifest is not None:
+            from lightsheet.adaptive.types import AdaptiveSample
+
+            pre_samples: list[AdaptiveSample] = []
+            for row in self.frame_saver.resume_manifest.trajectory_samples:
+                try:
+                    pre_samples.append(AdaptiveSample(**row))
+                except Exception as e:
+                    logger.warning(
+                        "Skipping malformed pre-resume adaptive trajectory sample: %s",
+                        e,
+                    )
+            if pre_samples:
+                self.frame_saver.adaptive_trajectory = (
+                    pre_samples + self.frame_saver.adaptive_trajectory
+                )
 
     def record_adaptive_sample(self, sample: object) -> None:
         self.frame_saver.record_adaptive_sample(sample)

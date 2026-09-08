@@ -11,6 +11,7 @@ import math
 from typing import TYPE_CHECKING, cast
 
 from lightsheet.adaptive.types import AdaptiveCommand, AdaptiveConfig
+from lightsheet.resume import ManifestUpdate
 from lightsheet.state import AppliedMicroscopeSnapshot
 
 if TYPE_CHECKING:
@@ -231,6 +232,24 @@ class _StackAdaptiveMixin:
         )
         if self._shell.saving_allowed:
             self._shell._fs.record_adaptive_sample(sample)
+            # Stage the trajectory row and the controller checkpoint on
+            # the manifest update queue. The save worker drains these and
+            # persists them with the sidecar manifest so a crash or pause
+            # can resume the exposure/power trajectory.
+            self._shell._fs.manifest_update_queue.put_nowait(
+                ManifestUpdate(
+                    kind="checkpoint",
+                    payload=self._adaptive_controller.checkpoint(),
+                    plane_index=plane_idx,
+                )
+            )
+            self._shell._fs.manifest_update_queue.put_nowait(
+                ManifestUpdate(
+                    kind="trajectory",
+                    payload=sample.as_dict(),
+                    plane_index=plane_idx,
+                )
+            )
 
         # Emit the trajectory signal for the GUI-thread plot.
         self.sig_adaptive_trajectory.emit(
