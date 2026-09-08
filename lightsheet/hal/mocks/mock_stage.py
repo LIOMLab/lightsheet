@@ -140,11 +140,13 @@ class MockStage:
     state at call time and never mutates them.
     """
 
-    def __init__(self, sample: MockSample, motors: Any, lasers: tuple) -> None:
+    def __init__(
+        self, sample: MockSample, motors: Any, lasers: tuple[Any, ...]
+    ) -> None:
         self.sample = sample
         self.motors = motors
         self.lasers = lasers
-        self._lateral_key: tuple | None = None
+        self._lateral_key: tuple[Any, ...] | None = None
         self._lateral_profile: np.ndarray | None = None
 
     def frame(self, camera: Any, plane_index: int) -> np.ndarray:
