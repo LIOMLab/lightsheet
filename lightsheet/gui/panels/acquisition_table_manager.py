@@ -569,14 +569,30 @@ class AcquisitionTableManager(QWidget):
         """Insert ``row`` into the table at ``index`` and register its
         uuid + optional resume metadata. Returns the row uuid."""
         row_uuid = uuid.uuid4().hex
+        start_plane = int(meta.get("start_plane", 0)) if meta else 0
+        is_resume = start_plane > 0
         self.table.blockSignals(True)
         self.table.insertRow(index)
-        self._set_name_cell(index, row.name)
+        self._set_name_cell(index, row.name, is_resume=is_resume)
         # Cells display mm; rows store µm.
         self._set_numeric_cell(index, _COL_START, row.start / 1000.0)
         self._set_numeric_cell(index, _COL_END, row.end / 1000.0)
         self._set_numeric_cell(index, _COL_STEP, row.step)
-        self._set_readonly_cell(index, _COL_NPLANES, str(row.n_planes))
+        if is_resume:
+            n_planes_text = f"RESUME {start_plane}/{row.n_planes}"
+            from PySide6.QtGui import QColor
+
+            item = QTableWidgetItem(n_planes_text)
+            item.setFlags(
+                Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
+            )
+            item.setToolTip(
+                f"Resuming from plane {start_plane} of {row.n_planes}"
+            )
+            item.setForeground(QColor(_c.BREEZE_ACCENT))
+            self.table.setItem(index, _COL_NPLANES, item)
+        else:
+            self._set_readonly_cell(index, _COL_NPLANES, str(row.n_planes))
         mm, ss = divmod(int(row.est_time_s), 60)
         self._set_readonly_cell(index, _COL_ESTTIME, f"{mm}:{ss:02d}")
         self._set_readonly_cell(
@@ -714,10 +730,19 @@ class AcquisitionTableManager(QWidget):
     # Internal helpers
     # ------------------------------------------------------------------ #
 
-    def _set_name_cell(self, row: int, name: str) -> None:
+    def _set_name_cell(
+        self, row: int, name: str, is_resume: bool = False
+    ) -> None:
         item = QTableWidgetItem(name)
         # Long names truncate with ellipsis; the full name is in the tooltip.
         item.setToolTip(name)
+        if is_resume:
+            from PySide6.QtGui import QColor, QFont
+
+            font = QFont()
+            font.setItalic(True)
+            item.setFont(font)
+            item.setForeground(QColor(_c.MUTED_TEXT))
         self.table.setItem(row, _COL_NAME, item)
 
     def _set_numeric_cell(self, row: int, col: int, value: float) -> None:
