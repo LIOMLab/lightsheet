@@ -204,8 +204,28 @@ class ZarrSaver:
             unit="micrometer",
         )
 
-        if self._merge_mode:
-            self._copy_existing_l0()
+        if self._merge_mode and not self._copy_existing_l0():
+            # The L0 copy failed — abort the merge so the relocated source
+            # store is never deleted. Rebuild the writer at the requested
+            # channel count (overwrite discards the partially written
+            # merge writer) so this run still produces a valid single-run
+            # store, and surface the preserved source path to the operator.
+            self._writer = AnalysisOmeZarrWriter(
+                store_path=resolved,
+                shape=(n_channels, n_planes, ysize, xsize),
+                chunk_shape=chunk_shape,
+                dtype=np.uint16,
+                overwrite=True,
+                unit="micrometer",
+            )
+            new_n_channels = n_channels
+            self._merge_mode = False
+            self._merge_target_channel = 0
+            self._existing_omero_channels = []
+            self.parent.sig_message.emit(
+                "Merging into existing zarr failed — the previous "
+                f"acquisition is preserved at {self._merge_source_path}"
+            )
 
         self._n_channels = new_n_channels
         self.saving_started = True
@@ -488,7 +508,7 @@ class ZarrSaver:
             data=np.array(sharpness, dtype=float),
         )
 
-    def _copy_existing_l0(self) -> None:
+    def _copy_existing_l0(self) -> bool:
         """Copy the level-0 data from the merge source into the new
         writer's lower channels before the new run's frames are streamed.
 
@@ -496,16 +516,26 @@ class ZarrSaver:
         done plane-by-plane to keep peak memory at one chunk. Values are
         read as plain arrays before writing to avoid any subtle slicing
         coercion issues between the source and destination zarr stores.
+
+        Returns True when the copy completed (or there was nothing to
+        copy). Returns False when the source could not be read or written
+        back — the caller must treat that as merge-aborted and keep the
+        ``.merge-source`` store on disk so the pre-existing acquisition
+        is never lost to a partial copy.
         """
         if not self._merge_mode or not self._merge_source_path:
-            return
+            return True
         if self._writer is None:
-            return
+            return False
         try:
             old_root = zarr.open(self._merge_source_path, mode="r")
             old_arr = old_root["0"]  # ty: ignore[invalid-argument-type]
             if not isinstance(old_arr, zarr.Array):
-                return
+                logger.warning(
+                    "Merge source %s has no level-0 array at node '0'",
+                    self._merge_source_path,
+                )
+                return False
             n_old_channels = old_arr.shape[0]
             n_planes = old_arr.shape[1]
             for c in range(n_old_channels):
@@ -513,6 +543,8 @@ class ZarrSaver:
                     self._writer[c, z, :, :] = np.asarray(old_arr[c, z, :, :])
         except Exception as e:
             logger.warning("Failed to copy existing zarr L0: %s", e)
+            return False
+        return True
 
     def _remove_merge_source(self) -> None:
         """Delete the temporary source zarr created during a merge once

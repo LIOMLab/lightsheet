@@ -1242,3 +1242,60 @@ def test_zarr_adaptive_group_skips_none_config(
     adaptive = root["acquisition"]["adaptive"]  # ty: ignore[invalid-argument-type, not-subscriptable]
     assert list(adaptive["plane_index"][:]) == [0]  # ty: ignore[not-subscriptable, invalid-argument-type]
     assert "enabled" not in adaptive.attrs  # ty: ignore[unresolved-attribute]
+
+
+def test_zarr_merge_copy_failure_preserves_source(
+    controller: Controller_MainWindow, tmp_path: Path, monkeypatch: Any
+) -> None:
+    """A failed L0 copy during merge aborts the merge: the relocated
+    ``.merge-source`` store is preserved on disk (never deleted by
+    finalize), the operator is told via sig_message, and the run still
+    produces a valid single-channel store."""
+    import zarr
+
+    from lightsheet.gui.coordinators import zarr_saver
+
+    ctrl = controller
+    _save_directory(ctrl, tmp_path)
+    ctrl.stack_step = 1
+    ctrl._auto_laser1 = True
+    ctrl._auto_laser2 = False
+
+    store_path = str(tmp_path / "stack.ome.zarr")
+    n_planes = 2
+    assert ctrl.camera.ysize is not None and ctrl.camera.xsize is not None
+    _seed_single_channel_store(
+        store_path, n_planes, ctrl.camera.ysize, ctrl.camera.xsize
+    )
+
+    def _failing_setitem(self: Any, key: Any, value: Any) -> None:
+        raise OSError("simulated chunk write failure")
+
+    messages: list[str] = []
+    ctrl.sig_message.connect(messages.append)
+
+    saver = ZarrSaver(ctrl)
+    with monkeypatch.context() as m:
+        m.setattr(
+            zarr_saver.AnalysisOmeZarrWriter, "__setitem__", _failing_setitem
+        )
+        saver.start_stack(store_path, n_planes)
+
+    # Merge aborted: merge state cleared, source store left on disk.
+    assert saver._merge_mode is False
+    source = Path(store_path + ".merge-source")
+    assert source.is_dir()
+    assert (source / "zarr.json").is_file()
+    assert any("merge-source" in msg for msg in messages)
+
+    # The run still writes a valid single-channel store.
+    frame = np.zeros((ctrl.camera.ysize, ctrl.camera.xsize), dtype=np.uint16)
+    for z in range(n_planes):
+        saver.write_plane(0, z, frame, 0.0, 0.0, 0.0)
+    saver.finalize()
+
+    root = zarr.open(store_path, mode="r")
+    assert root["0"].shape == (1, n_planes, ctrl.camera.ysize, ctrl.camera.xsize)  # ty: ignore[invalid-argument-type, unresolved-attribute]
+    # The preserved source still holds the seeded data.
+    old_root = zarr.open(str(source), mode="r")
+    assert old_root["0"].shape[0] == 1  # ty: ignore[invalid-argument-type, unresolved-attribute]
