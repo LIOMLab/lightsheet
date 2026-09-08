@@ -151,28 +151,34 @@ def test_manifest_cursor_matches_observed_zarr_planes(
 def _adaptive_sample(plane: int) -> AdaptiveSample:
     """Minimal adaptive-trajectory sample matching the field names read
     by ``ZarrSaver._write_adaptive_group``."""
-    return cast(AdaptiveSample, SimpleNamespace(
-        plane_index=plane,
-        intensity_fraction=[0.5, 0.5],
-        exposure_s=0.01,
-        laser_power_mw=[1.0, 2.0],
-        control_variable_active="exposure",
-        reacquired=False,
-        power_fallback=False,
-    ))
+    return cast(
+        AdaptiveSample,
+        SimpleNamespace(
+            plane_index=plane,
+            intensity_fraction=[0.5, 0.5],
+            exposure_s=0.01,
+            laser_power_mw=[1.0, 2.0],
+            control_variable_active="exposure",
+            reacquired=False,
+            power_fallback=False,
+        ),
+    )
 
 
 def _focus_sample(block: int) -> FocusSample:
     """Minimal focus-trajectory sample matching the field names read
     by ``ZarrSaver._write_focus_group``."""
-    return cast(FocusSample, SimpleNamespace(
-        block_index=block,
-        stage_pos_mm=1.0 + block,
-        feedforward_camera_pos_mm=2.0,
-        residual_mm=0.01,
-        applied_camera_pos_mm=2.01,
-        sharpness_metric=None,
-    ))
+    return cast(
+        FocusSample,
+        SimpleNamespace(
+            block_index=block,
+            stage_pos_mm=1.0 + block,
+            feedforward_camera_pos_mm=2.0,
+            residual_mm=0.01,
+            applied_camera_pos_mm=2.01,
+            sharpness_metric=None,
+        ),
+    )
 
 
 def test_resumed_finalize_writes_acquisition_metadata(
@@ -228,9 +234,7 @@ def test_resumed_finalize_writes_acquisition_metadata(
     )
 
     focus = _zarr_group(acq["focus"])
-    np.testing.assert_array_equal(
-        _zarr_array(focus["block_index"])[:], np.array([0])
-    )
+    np.testing.assert_array_equal(_zarr_array(focus["block_index"])[:], np.array([0]))
 
 
 def test_resumed_finalize_without_trajectories_omits_groups(

@@ -277,9 +277,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         # drives the completed/interrupted manifest lifecycle at teardown.
         self._run_completed = False
 
-    def _last_controller_checkpoint(
-        self, controller: str
-    ) -> dict[str, Any] | None:
+    def _last_controller_checkpoint(self, controller: str) -> dict[str, Any] | None:
         """Return the most recent manifest checkpoint for ``controller``.
 
         The manifest's ``controller_checkpoints`` list mixes adaptive,

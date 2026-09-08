@@ -772,9 +772,7 @@ class FrameSaver(QObject):
             sample.power_fallback,
         )
 
-    def configure_focus(
-        self, enabled: bool, config: FocusConfig | None = None
-    ) -> None:
+    def configure_focus(self, enabled: bool, config: FocusConfig | None = None) -> None:
         """Configure the focus trajectory recorder for this acquisition.
 
         When ``enabled`` is True, the per-plane loop calls
@@ -2588,9 +2586,7 @@ class FrameSaverController:
         """Read-only view of the inner FrameSaver's focus trajectory."""
         return self.frame_saver.focus_trajectory
 
-    def configure_focus(
-        self, enabled: bool, config: FocusConfig | None = None
-    ) -> None:
+    def configure_focus(self, enabled: bool, config: FocusConfig | None = None) -> None:
         self.frame_saver.configure_focus(enabled, config=config)
         # If resuming, seed the focus trajectory list with the pre-resume
         # focus samples stored in the sidecar manifest so the final file

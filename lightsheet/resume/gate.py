@@ -49,6 +49,7 @@ if TYPE_CHECKING:
 
         def get_positions(self) -> dict[str, float]: ...
 
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_DRIFT_TOLERANCE_MM = 0.1

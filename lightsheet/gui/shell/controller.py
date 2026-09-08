@@ -1431,9 +1431,7 @@ class Controller_MainWindow(QMainWindow):
         # value).
         self._hardware_initialized = True
 
-    def _on_startup_scan_finished(
-        self, entries: list[PastAcquisitionEntry]
-    ) -> None:
+    def _on_startup_scan_finished(self, entries: list[PastAcquisitionEntry]) -> None:
         """Show a notification-only dialog if the startup scan found any
         resumable acquisitions. The dialog deliberately has no Resume
         Now button — the operator must open the Past panel and confirm
