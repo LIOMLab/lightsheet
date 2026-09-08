@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import math
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject, QThread, Signal, Slot
@@ -41,7 +42,11 @@ def _resolve_spawn_snapshot(
     if state is not None:
         try:
             candidate = state.snapshot()
-        except Exception:
+        except Exception as e:
+            # A broken model silently degrading to the legacy path hides
+            # the integration faults the model exists to surface — log
+            # before falling back.
+            logger.warning("state.snapshot() failed, falling back: %s", e)
             candidate = None
         if isinstance(candidate, MicroscopeSnapshot):
             return candidate
@@ -49,11 +54,25 @@ def _resolve_spawn_snapshot(
     if getter is not None and getattr(getter, "__self__", None) is hw:
         try:
             candidate = getter()
-        except Exception:
+        except Exception as e:
+            logger.warning(
+                "hw._snapshot_from_shell() failed, falling back: %s", e
+            )
             candidate = None
         if isinstance(candidate, MicroscopeSnapshot):
             return candidate
-    return MicroscopeSnapshot(lightsheet_line_time_s=1.0)
+    # Last resort: prefer the camera's configured line time over a
+    # hardcoded 1 s default that sits far outside the widget's µs range.
+    camera = getattr(shell, "camera", None)
+    line_time = getattr(camera, "lightsheet_line_time", None)
+    if (
+        not isinstance(line_time, (int, float))
+        or isinstance(line_time, bool)
+        or not math.isfinite(line_time)
+        or line_time <= 0
+    ):
+        line_time = 1.0
+    return MicroscopeSnapshot(lightsheet_line_time_s=float(line_time))
 
 
 class PreviewWorker(QObject):
@@ -400,7 +419,10 @@ class SingleWorker(QObject, _AcquireScanMixin):
             )
             try:
                 base = shell.state.snapshot()
-            except Exception:
+            except Exception as e:
+                logger.warning(
+                    "state.snapshot() failed, falling back: %s", e
+                )
                 base = None
             if not isinstance(base, MicroscopeSnapshot):
                 # Legacy test callers pass a Mock shell; carry the

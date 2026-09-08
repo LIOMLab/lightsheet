@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import math
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -134,13 +135,29 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             )
             try:
                 base = shell.state.snapshot()
-            except Exception:
+            except Exception as e:
+                # A broken model silently degrading to the legacy path
+                # hides the integration faults the model exists to
+                # surface — log before falling back.
+                logger.warning("state.snapshot() failed, falling back: %s", e)
                 base = None
             if not isinstance(base, MicroscopeSnapshot):
                 # Legacy test callers pass a Mock shell; build a default
                 # snapshot so the worker still has an immutable input.
+                # Prefer the camera's configured line time over a
+                # hardcoded 1 s default far outside the widget's µs range.
+                line_time = getattr(
+                    getattr(shell, "camera", None), "lightsheet_line_time", None
+                )
+                if (
+                    not isinstance(line_time, (int, float))
+                    or isinstance(line_time, bool)
+                    or not math.isfinite(line_time)
+                    or line_time <= 0
+                ):
+                    line_time = 1.0
                 base = MicroscopeSnapshot(
-                    lightsheet_line_time_s=1.0,
+                    lightsheet_line_time_s=float(line_time),
                     auto_lasers=(multi_channel, multi_channel),
                 )
             self._snapshot = dataclasses.replace(

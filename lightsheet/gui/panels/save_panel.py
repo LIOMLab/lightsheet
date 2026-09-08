@@ -7,6 +7,7 @@ and ``self._shell._fs`` / ``self._shell.save_*`` for shell-owned state.
 
 from __future__ import annotations
 
+import logging
 import typing
 from pathlib import Path
 
@@ -26,6 +27,8 @@ from lightsheet.state import SaveMode, SaveOptions
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
+
+logger = logging.getLogger(__name__)
 
 
 class SavePanelWidget(QWidget):
@@ -94,7 +97,11 @@ class SavePanelWidget(QWidget):
         if state is not None:
             try:
                 snapshot = state.snapshot()
-            except Exception:
+            except Exception as e:
+                # A broken model silently degrading to the legacy shell
+                # attribute hides the integration faults the model exists
+                # to surface — log before falling back.
+                logger.warning("state.snapshot() failed, falling back: %s", e)
                 snapshot = None
         if snapshot is not None and isinstance(snapshot.auto_lasers, tuple):
             return (
