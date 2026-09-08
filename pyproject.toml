@@ -41,6 +41,7 @@ packages = [
     "lightsheet.hal.real",
     "lightsheet.hal.mocks",
     "lightsheet.resources",
+    "lightsheet.resume",
 ]
 package-data = { "lightsheet.resources" = ["*.png", "*.json"] }
 
