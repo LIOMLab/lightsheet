@@ -284,6 +284,7 @@ class ZarrSaver:
         n_planes: int,
         n_channels: int,
         acquisition_uuid: str,
+        start_plane: int | None = None,
     ) -> None:
         """Reopen an existing pre-allocated L0 array for a resumed stack.
 
@@ -292,6 +293,15 @@ class ZarrSaver:
         shape and dtype are verified against the requested stack. On
         success, ``write_plane`` writes into the reopened L0 array and
         ``finalize`` is deferred until the resumed run completes.
+
+        ``start_plane`` is the common resume plane across all channels.
+        When provided, each channel's write offset is set to this value
+        so the resumed run overwrites any torn tail in lockstep. If any
+        channel has fewer committed planes than ``start_plane`` the store
+        is treated as corrupted and a ``ResumeProbeError`` is raised so
+        the caller can fall back to a fresh fileset. When ``None`` the
+        probed per-channel counts are used directly (single-channel
+        default behavior).
         """
         save_dir = os.path.realpath(os.path.normpath(self.parent.save_directory))
         resolved = os.path.realpath(os.path.normpath(store_path))
@@ -334,9 +344,19 @@ class ZarrSaver:
         self._l0 = l0
         self._writer = None
         self._n_channels = n_channels
-        self._resume_offsets = [
+        probed = [
             probe_zarr(resolved, f"ch{c}") for c in range(n_channels)
         ]
+        if start_plane is not None:
+            for c, count in enumerate(probed):
+                if count < start_plane:
+                    raise ResumeProbeError(
+                        f"zarr channel {c} has {count} planes, "
+                        f"less than start_plane {start_plane}"
+                    )
+            self._resume_offsets = [start_plane] * n_channels
+        else:
+            self._resume_offsets = probed
         self.saving_started = True
         self._finalized = False
         self._horizontal_positions = []

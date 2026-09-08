@@ -36,10 +36,12 @@ from lightsheet.resume import (
     ManifestUpdate,
     ResumeManifest,
     ResumeProbeError,
+    _common_resume_plane,
     apply_manifest_update,
     manifest_dir_contains,
     manifest_path_for,
     probe_hdf5,
+    probe_zarr,
     truncate_hdf5_tail,
     write_manifest,
 )
@@ -143,6 +145,9 @@ class FrameSaver(QObject):
         self.resume_manifest: ResumeManifest | None = None
         self._manifest_path: Path | None = None
         self._hdf5_resume_offsets: dict[str, int] = {}
+        # Resume start plane common across all channels/formats for the
+        # current acquisition (0 for a fresh run).
+        self._common_resume_plane: int = 0
         self.manifest_update_queue: queue.Queue[ManifestUpdate] = queue.Queue()
 
     def reinit(self, block_size: int) -> None:
@@ -181,6 +186,7 @@ class FrameSaver(QObject):
         self.resume_manifest = None
         self._manifest_path = None
         self._hdf5_resume_offsets = {}
+        self._common_resume_plane = 0
         self.manifest_update_queue = queue.Queue()
 
     def add_sample_name(self, sample_name: str) -> None:
@@ -250,12 +256,12 @@ class FrameSaver(QObject):
 
         def _resolve_channel_target(
             ch_idx: int, wl: int
-        ) -> tuple[str, int, bool, str]:
-            """Return the first-file path, the resume plane count, whether
-            a fallback happened, and the base name for subsequent files."""
+        ) -> tuple[str, int, int, bool, str]:
+            """Return the first-file path, manifest cursor, observed count,
+            whether a fallback happened, and the base name for subsequent
+            files. Truncation to the common resume plane is performed once
+            all channel cursors are known."""
             base = self.files_name + f"_{wl}nm"
-            # Find the manifest cursor that matches this channel. Cursors
-            # are keyed by the original HDF5 path produced by set_files.
             target_path = ""
             cursor = 0
             for cp, cv in resume_cursors.items():
@@ -267,11 +273,11 @@ class FrameSaver(QObject):
                 return (
                     self._unique_hdf5_path(save_dir, base, width, 0),
                     0,
+                    0,
                     False,
                     base,
                 )
 
-            # Safety: the manifest must only point inside the save dir.
             manifest_dir_contains(save_dir_str, target_path)
 
             try:
@@ -282,58 +288,51 @@ class FrameSaver(QObject):
                     target_path,
                     e,
                 )
-                # Use the original files_name with a _part2 suffix.
                 fallback_base = self.files_name + "_part2" + f"_{wl}nm"
                 fallback_path = self._unique_hdf5_path(
                     save_dir, fallback_base, width, 0
                 )
-                return fallback_path, 0, True, fallback_base
+                return fallback_path, 0, 0, True, fallback_base
 
-            resume_point = min(cursor, observed)
-            if observed < cursor:
-                logger.warning(
-                    "HDF5 %s torn: manifest cursor %d but observed %d; "
-                    "truncating to observed",
-                    target_path,
-                    cursor,
-                    observed,
-                )
-                truncate_hdf5_tail(target_path, resume_point)
-            self._hdf5_resume_offsets[target_path] = resume_point
-            return target_path, resume_point, False, base
+            return target_path, cursor, observed, False, base
 
         self.filenames_lists = []
-        hdf5_cursors: dict[str, int] = {}
-        any_fallback = False
+        channel_targets: list[tuple[str, int, int, str, bool]] = []
         for ch_idx, wl in enumerate(wavelengths):
             channel_list: list[str] = []
             base_for_channel = self.files_name + f"_{wl}nm"
             first_path = ""
-            first_cursor = 0
-            first_fallback = False
             first_base = base_for_channel
+            first_cursor = 0
+            first_observed = 0
+            first_fallback = False
             if resume_cursors:
                 (
                     first_path,
                     first_cursor,
+                    first_observed,
                     first_fallback,
                     first_base,
                 ) = _resolve_channel_target(ch_idx, wl)
                 channel_list.append(first_path)
-                hdf5_cursors[first_path] = first_cursor
-                any_fallback = any_fallback or first_fallback
+            else:
+                first_path = self._unique_hdf5_path(
+                    save_dir, base_for_channel, width, 0
+                )
+                channel_list.append(first_path)
+                first_base = base_for_channel
 
-            # Fill the remainder of the file list using the channel base.
             counter = len(channel_list)
             for _ in range(self.number_of_files - len(channel_list)):
                 full = self._unique_hdf5_path(
                     save_dir, first_base, width, counter
                 )
                 channel_list.append(full)
-                if resume_cursors:
-                    hdf5_cursors[full] = 0
                 counter += 1
             self.filenames_lists.append(channel_list)
+            channel_targets.append(
+                (first_path, first_cursor, first_observed, first_base, first_fallback)
+            )
 
         # Single-channel back-compat: populate filenames_list from
         # filenames_lists[0] so the single-channel save worker path works.
@@ -342,6 +341,45 @@ class FrameSaver(QObject):
         else:
             # Multi-channel: clear so the multi-channel worker branch is taken.
             self.filenames_list = []
+
+        # Compute the common resume plane across HDF5 and (if present) Zarr.
+        hdf5_observed: dict[str, int] = {}
+        hdf5_cursors: dict[str, int] = {}
+        any_fallback = False
+        for path, cursor, observed, _, fallback in channel_targets:
+            any_fallback = any_fallback or fallback
+            if resume_cursors:
+                hdf5_observed[path] = observed
+                hdf5_cursors[path] = cursor
+        probes: dict[str, dict[str, int]] = {"hdf5": hdf5_observed}
+        if resume_manifest is not None and save_dir_str:
+            zarr_store = str(save_dir / (self.files_name + ".ome.zarr"))
+            zarr_cursor = resume_manifest.cursors.get("zarr", {}).get(zarr_store)
+            if zarr_cursor is not None:
+                try:
+                    n_channels = len(wavelengths)
+                    z_observed = min(
+                        probe_zarr(zarr_store, f"ch{c}")
+                        for c in range(n_channels)
+                    )
+                    probes["zarr"] = {zarr_store: z_observed}
+                except ResumeProbeError:
+                    logger.warning(
+                        "Zarr resume probe for %s failed; HDF5 common resume only",
+                        zarr_store,
+                    )
+
+        if resume_manifest is not None and save_dir_str:
+            common, _ = _common_resume_plane(resume_manifest, probes)
+            self._common_resume_plane = common
+            # Truncate any HDF5 channel that is ahead of the common plane
+            # so the resumed run re-acquires the torn tail in lockstep.
+            for path, _, observed, _, _ in channel_targets:
+                if observed > common:
+                    truncate_hdf5_tail(path, common)
+            hdf5_cursors = {path: common for path, _, _, _, _ in channel_targets}
+        else:
+            self._common_resume_plane = 0
 
         # Resume manifest handling. For a resumed stack, the sidecar is
         # replaced with the resolved fileset; for _partN fallbacks a new
@@ -1177,16 +1215,33 @@ class FrameSaver(QObject):
         total_frames = n_channels * n_files_per_channel * n_datasets_per_file
         # Per-channel state: file index (0-based into filenames_lists[ch]),
         # dataset counter (1-based for naming), and the open file handle.
-        file_idx = [0] * n_channels
-        ds_counter = [1] * n_channels
+        # For a resumed run the common resume plane is split into
+        # (file_idx, ds_counter) so the first resumed dataset is named
+        # and indexed correctly.
+        resume_offset = self._common_resume_plane
+        file_idx = [
+            resume_offset // n_datasets_per_file for _ in range(n_channels)
+        ]
+        ds_counter = [
+            (resume_offset % n_datasets_per_file) + 1 for _ in range(n_channels)
+        ]
         outfiles: list = [None] * n_channels  # ty: ignore[missing-type-argument]
         frames_written = 0
 
         try:
-            # Open the first file for each channel and write root metadata.
+            # Open the resume file for each channel and write root metadata.
             for ch in range(n_channels):
-                filename = self.filenames_lists[ch][0]
-                logger.info("File created: %s", filename)
+                file_list = self.filenames_lists[ch]
+                fidx = file_idx[ch]
+                if fidx >= len(file_list):
+                    self.sig_status_message.emit(
+                        f"Save error: resume file index {fidx} out of range "
+                        f"for channel {ch}"
+                    )
+                    self.saving_started = False
+                    return
+                filename = file_list[fidx]
+                logger.info("File opened: %s", filename)
                 outfile = h5py.File(filename, "a")
                 self._write_laser_metadata(outfile)
                 self._write_acquisition_metadata(outfile)
@@ -1267,6 +1322,17 @@ class FrameSaver(QObject):
                             )
                         ds_counter[channel_idx] += 1
                         frames_written += 1
+                        # Committed-plane cursor for this channel, keyed by
+                        # the channel's first file (stitch holds all planes).
+                        plane_cursor = (
+                            file_idx[channel_idx] * n_datasets_per_file
+                            + ds_counter[channel_idx] - 1
+                        )
+                        self._commit_manifest_cursor(
+                            "hdf5",
+                            str(self.filenames_lists[channel_idx][0]),
+                            plane_cursor,
+                        )
                 except Exception as e:
                     self.sig_status_message.emit(f"Save error: {e}")
                     self.saving_started = False
@@ -1428,6 +1494,7 @@ class FrameSaver(QObject):
                     n_planes,
                     n_channels,
                     self.resume_manifest.uuid,
+                    start_plane=self._common_resume_plane,
                 )
             else:
                 self._zarr_saver.start_stack(
@@ -1571,7 +1638,7 @@ class FrameSaver(QObject):
                     )
                     z_idx_per_channel[channel_idx] = cz + 1
                     self._commit_manifest_cursor(
-                        "zarr", f"ch{channel_idx}", z_idx_per_channel[channel_idx]
+                        "zarr", store_path, z_idx_per_channel[channel_idx]
                     )
         except Exception as e:
             self.sig_status_message.emit(f"Save error: {e}")
@@ -1915,7 +1982,23 @@ class FrameSaver(QObject):
         # filename lists built by set_files(wavelengths=...).
         n_channels = len(self.filenames_lists)
         try:
-            self._zarr_saver.start_stack(store_path, n_planes, n_channels=n_channels)
+            zarr_resume_cursors = (
+                self.resume_manifest.cursors.get("zarr", {})
+                if self.resume_manifest
+                else {}
+            )
+            if store_path in zarr_resume_cursors and self.resume_manifest is not None:
+                self._zarr_saver.resume_stack(
+                    store_path,
+                    n_planes,
+                    n_channels,
+                    self.resume_manifest.uuid,
+                    start_plane=self._common_resume_plane,
+                )
+            else:
+                self._zarr_saver.start_stack(
+                    store_path, n_planes, n_channels=n_channels
+                )
         except Exception as e:
             self.sig_status_message.emit(f"Save error: {e}")
             self.saving_started = False
@@ -1926,17 +2009,36 @@ class FrameSaver(QObject):
         total_frames = n_channels * n_files_per_channel * n_datasets_per_file
         # Per-channel state: file index (0-based into filenames_lists[ch]),
         # dataset counter (1-based for naming), and the open file handle.
-        file_idx = [0] * n_channels
-        ds_counter = [1] * n_channels
+        # For a resumed run the common resume plane is split into
+        # (file_idx, ds_counter) so the first resumed dataset is named
+        # and indexed correctly.
+        resume_offset = self._common_resume_plane
+        file_idx = [
+            resume_offset // n_datasets_per_file for _ in range(n_channels)
+        ]
+        ds_counter = [
+            (resume_offset % n_datasets_per_file) + 1 for _ in range(n_channels)
+        ]
         outfiles: list = [None] * n_channels  # ty: ignore[missing-type-argument]
         frames_written = 0
-        z_idx_per_channel: dict[int, int] = {}
+        z_idx_per_channel: dict[int, int] = {
+            c: self._zarr_saver.resume_offset(c) for c in range(n_channels)
+        }
 
         try:
-            # Open the first file for each channel and write root metadata.
+            # Open the resume file for each channel and write root metadata.
             for ch in range(n_channels):
-                filename = self.filenames_lists[ch][0]
-                logger.info("File created: %s", filename)
+                file_list = self.filenames_lists[ch]
+                fidx = file_idx[ch]
+                if fidx >= len(file_list):
+                    self.sig_status_message.emit(
+                        f"Save error: resume file index {fidx} out of range "
+                        f"for channel {ch}"
+                    )
+                    self.saving_started = False
+                    return
+                filename = file_list[fidx]
+                logger.info("File opened: %s", filename)
                 outfile = h5py.File(filename, "a")
                 self._write_laser_metadata(outfile)
                 self._write_acquisition_metadata(outfile)
@@ -2009,6 +2111,17 @@ class FrameSaver(QObject):
                             )
                         ds_counter[channel_idx] += 1
                         frames_written += 1
+                        # Committed-plane cursor for this channel, keyed by
+                        # the channel's first file (stitch holds all planes).
+                        plane_cursor = (
+                            file_idx[channel_idx] * n_datasets_per_file
+                            + ds_counter[channel_idx] - 1
+                        )
+                        self._commit_manifest_cursor(
+                            "hdf5",
+                            str(self.filenames_lists[channel_idx][0]),
+                            plane_cursor,
+                        )
 
                         # --- Zarr write (per-channel — write_plane routes
                         # the frame to the channel-axis slice; channel 0
@@ -2045,6 +2158,9 @@ class FrameSaver(QObject):
                                 channel_idx, cz, frame[f_idx, :, :], hor, ver, cam
                             )
                             z_idx_per_channel[channel_idx] = cz + 1
+                            self._commit_manifest_cursor(
+                                "zarr", store_path, z_idx_per_channel[channel_idx]
+                            )
                 except Exception as e:
                     self.sig_status_message.emit(f"Save error: {e}")
                     self.saving_started = False
