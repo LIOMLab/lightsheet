@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import math
+import threading
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -35,6 +36,19 @@ if TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
 logger = logging.getLogger(__name__)
+
+
+def _pause_is_requested(shell: object) -> bool:
+    """Return True only when the shell's ``pause_requested`` is a real
+    ``threading.Event`` that is set.
+
+    The isinstance guard keeps mock-shell test doubles (whose
+    auto-generated ``pause_requested.is_set()`` returns a truthy Mock)
+    from tripping the pause poll — only the genuine cooperative-suspend
+    event can break the plane loop.
+    """
+    ev = getattr(shell, "pause_requested", None)
+    return isinstance(ev, threading.Event) and ev.is_set()
 
 
 class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
@@ -620,13 +634,23 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     # stops acquiring new planes.
                     self._shell.sig_message.emit("Stack Acquisition Interrupted")
                     break
+                elif _pause_is_requested(self._shell):
+                    # Pause poll point — a peer of the E-stop check at each
+                    # plane boundary. The current plane is already complete;
+                    # the break exits through the normal finally teardown so
+                    # the manifest finalizes as "paused" and the run can be
+                    # resumed later by a fresh worker with a plane offset.
+                    self._shell.sig_message.emit("Stack Acquisition Paused")
+                    break
                 else:
-                    # Pre-move guard: a Stop or E-stop requested while the worker
-                    # was between blocking calls (after the loop-top poll but
-                    # before this motor move) must not start a new blocking call.
+                    # Pre-move guard: a Stop, E-stop, or Pause requested
+                    # while the worker was between blocking calls (after
+                    # the loop-top poll but before this motor move) must
+                    # not start a new blocking call.
                     if (
                         not self._shell.stack_mode_started
                         or self._shell.estop_event.is_set()
+                        or _pause_is_requested(self._shell)
                     ):
                         break
 
@@ -652,6 +676,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         if (
                             not self._shell.stack_mode_started
                             or self._shell.estop_event.is_set()
+                            or _pause_is_requested(self._shell)
                         ):
                             break
 
@@ -1085,14 +1110,22 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             )
             if getattr(self._shell, "saving_allowed", False):
                 try:
-                    # The manifest lifecycle reflects whether the plane
-                    # loop ran to completion — a break path finalizes as
-                    # interrupted so the run is resumable.
-                    self._shell._fs.stop_saving(
-                        lifecycle=(
-                            "completed" if self._run_completed else "interrupted"
-                        )
-                    )
+                    # The manifest lifecycle reflects how the plane loop
+                    # exited: a full run completes; a pause request that
+                    # reached the loop top without an E-stop finalizes as
+                    # "paused" so the run can be resumed later; every
+                    # other break path (Stop, E-stop, abort) is
+                    # interrupted. E-stop wins over a pending pause — the
+                    # kill path's interrupted state is the honest record.
+                    if self._run_completed:
+                        _lifecycle = "completed"
+                    elif _pause_is_requested(
+                        self._shell
+                    ) and not self._shell.estop_event.is_set():
+                        _lifecycle = "paused"
+                    else:
+                        _lifecycle = "interrupted"
+                    self._shell._fs.stop_saving(lifecycle=_lifecycle)
                 except Exception as e:
                     logger.exception("Stack worker stop_saving cleanup failed")
                     _cleanup_errors.append(f"stop_saving: {e}")
@@ -1117,3 +1150,9 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     "Errors: " + "; ".join(_cleanup_errors)
                 )
             self.finished.emit()
+            # The pause request is consumed by this teardown — clear it so
+            # a follow-on run (queue row or manual restart) does not
+            # inherit a stale pause and break at its first plane.
+            _pause_ev = getattr(self._shell, "pause_requested", None)
+            if isinstance(_pause_ev, threading.Event):
+                _pause_ev.clear()

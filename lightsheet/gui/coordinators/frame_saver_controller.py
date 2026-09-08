@@ -2319,6 +2319,16 @@ class FrameSaver(QObject):
             # queue — the save worker is the sole manifest writer while it
             # runs, so other threads never call write_manifest directly.
             state = lifecycle if lifecycle is not None else "interrupted"
+            # E-stop precedence: a "paused" request that arrives while the
+            # kill latch is actuated records "interrupted" — the manifest
+            # must never claim a clean pause when the E-stop fired.
+            estop = getattr(self.parent, "estop_event", None)
+            if (
+                state == "paused"
+                and estop is not None
+                and estop.is_set()
+            ):
+                state = "interrupted"
             motors = getattr(self.parent, "motors", None)
             if motors is not None:
                 try:

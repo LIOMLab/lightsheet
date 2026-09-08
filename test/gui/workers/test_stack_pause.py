@@ -110,3 +110,52 @@ def test_estop_does_not_set_pause(
     controller.updateUi_estop_pressed()
     assert controller.estop_event.is_set()
     assert not controller.pause_requested.is_set()
+
+
+def test_pause_poll_breaks_at_plane_boundary(qtbot: QtBot) -> None:
+    """A set pause_requested breaks the plane loop before the next plane
+    and finalizes the manifest as paused."""
+    bundle = _make_bundle()
+    shell = _make_shell(bundle, n_planes=5)
+    shell.saving_allowed = True
+    worker = _make_worker(bundle, shell, n_planes=5)
+
+    moves: list[float] = []
+    orig = worker.motors.horizontal.move_absolute_position
+
+    def _rec(pos: float, units: str) -> None:
+        moves.append(pos)
+        orig(pos, units)
+        # Pause lands mid-run: the next loop-top poll must break.
+        if len(moves) == 1:
+            shell.pause_requested.set()
+
+    worker.motors.horizontal.move_absolute_position = _rec  # ty: ignore[invalid-assignment]
+
+    finished: list[None] = []
+    worker.finished.connect(lambda: finished.append(None))
+    worker.run()
+
+    assert moves == [0.0]  # one plane committed, then the break
+    assert worker._run_completed is False
+    assert shell._fs.stop_saving.call_args.kwargs.get("lifecycle") == "paused"
+    # The event is cleared by teardown so a follow-on run starts unpaused.
+    assert not shell.pause_requested.is_set()
+    assert len(finished) == 1
+
+
+def test_estop_precedence_over_pause(qtbot: QtBot) -> None:
+    """If E-stop is actuated after a pause request, the run finalizes as
+    interrupted — the kill path always wins."""
+    bundle = _make_bundle()
+    shell = _make_shell(bundle, n_planes=5)
+    shell.saving_allowed = True
+    worker = _make_worker(bundle, shell, n_planes=5)
+
+    shell.pause_requested.set()
+    shell.estop_event.set()
+
+    worker.run()
+
+    assert worker._run_completed is False
+    assert shell._fs.stop_saving.call_args.kwargs.get("lifecycle") == "interrupted"
