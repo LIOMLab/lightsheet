@@ -188,6 +188,18 @@ class AdaptiveSample:
         ]
         object.__setattr__(self, "intensity_fraction", normalized)
 
+    def as_dict(self) -> dict[str, Any]:
+        """Return a JSON-safe plain dict for manifest storage."""
+        return {
+            "plane_index": int(self.plane_index),
+            "intensity_fraction": [float(v) for v in self.intensity_fraction],
+            "exposure_s": float(self.exposure_s),
+            "laser_power_mw": [float(v) for v in self.laser_power_mw],
+            "control_variable_active": str(self.control_variable_active),
+            "reacquired": bool(self.reacquired),
+            "power_fallback": bool(self.power_fallback),
+        }
+
 
 # NOTE on the ``reacquired`` field name: it is kept for schema-a
 # (identical field names across HDF5 /adaptive_trajectory and Zarr
