@@ -269,7 +269,9 @@ class Controller_MainWindow(QMainWindow):
 
         # GUI-thread-owned observable state model. Constructed before panels
         # so compatibility properties (laser1_power_pct, _auto_laser*, etc.)
-        # and the model's snapshot source are available to all widgets.
+        # and the model's snapshot source are available to all widgets. The
+        # model sanitizes a non-positive/non-finite HAL line time to a safe
+        # fallback internally so a bad config value cannot crash startup.
         self.state = MicroscopeState(
             lightsheet_line_time_s=bundle.camera.lightsheet_line_time,
             parent=self,

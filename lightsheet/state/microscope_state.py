@@ -11,6 +11,7 @@ changes. Workers never mutate the model directly; they emit
 from __future__ import annotations
 
 import dataclasses
+import logging
 import math
 
 from PySide6.QtCore import QObject, Signal, Slot
@@ -21,6 +22,8 @@ from lightsheet.state.types import (
     SaveMode,
     SaveOptions,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class MicroscopeState(QObject):
@@ -42,9 +45,25 @@ class MicroscopeState(QObject):
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
-        line_time = (
-            lightsheet_line_time_s if lightsheet_line_time_s is not None else 1.0
-        )
+        line_time = lightsheet_line_time_s
+        if (
+            not isinstance(line_time, (int, float))
+            or isinstance(line_time, bool)
+            or not math.isfinite(line_time)
+            or line_time <= 0
+        ):
+            # A non-positive or non-finite source value (bad config key,
+            # test double, partially opened camera) would otherwise raise
+            # ValueError out of MicroscopeSnapshot.__post_init__ during
+            # shell construction — crash at startup. Fall back to a safe
+            # positive default and log so the divergence is visible.
+            if line_time is not None:
+                logger.warning(
+                    "Invalid lightsheet_line_time_s %r at construction; "
+                    "falling back to 1.0 s",
+                    line_time,
+                )
+            line_time = 1.0
         self._snapshot = MicroscopeSnapshot(lightsheet_line_time_s=line_time)
 
     # ------------------------------------------------------------------ #

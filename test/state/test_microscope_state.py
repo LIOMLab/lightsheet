@@ -401,3 +401,19 @@ def test_model_apply_worker_snapshot_folds_line_time(qtbot: QtBot) -> None:
         AppliedMicroscopeSnapshot(lightsheet_line_time_s=3e-5)
     )
     assert emissions == []
+
+
+def test_model_construction_sanitizes_bad_line_time(qtbot: QtBot) -> None:
+    """A non-positive or non-finite ``lightsheet_line_time_s`` at
+    construction (bad config key, test double, partially opened camera)
+    falls back to a positive default instead of raising ``ValueError``
+    out of ``MicroscopeSnapshot.__post_init__`` — a bad HAL attribute
+    must not crash the shell at startup."""
+    _ = QCoreApplication.instance() or QCoreApplication()
+    for bad in (0.0, -1e-5, float("inf"), float("nan"), "x"):
+        state = MicroscopeState(lightsheet_line_time_s=bad)  # ty: ignore[invalid-argument-type]
+        assert state.lightsheet_line_time_s == 1.0
+
+    # Valid values pass through untouched.
+    state = MicroscopeState(lightsheet_line_time_s=2e-5)
+    assert state.lightsheet_line_time_s == 2e-5
