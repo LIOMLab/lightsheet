@@ -241,13 +241,6 @@ def reopen_zarr_l0(
             f"zarr L0 dtype mismatch: {arr.dtype} != {dtype}"
         )
 
-    # Write the acquisition UUID group attribute if it is missing; in a
-    # resumed run it is verified by the caller before write_plane resumes.
-    if "acquisition" in root and "uuid" in root["acquisition"].attrs:
-        pass
-    elif "acquisition" not in root:
-        _ = root.create_group("acquisition")
-
     return arr
 
 

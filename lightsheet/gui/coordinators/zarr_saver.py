@@ -18,6 +18,7 @@ import numpy as np
 import zarr
 from liom_toolkit.utils.zarr_writer import AnalysisOmeZarrWriter
 
+from lightsheet.resume import ResumeProbeError, probe_zarr, reopen_zarr_l0
 from lightsheet.wavelength_color import wavelength_to_hex
 
 if TYPE_CHECKING:
@@ -45,6 +46,10 @@ class ZarrSaver:
     def __init__(self, shell: Controller_MainWindow) -> None:
         self.parent = shell
         self._writer: AnalysisOmeZarrWriter | None = None
+        self._l0: zarr.Array | AnalysisOmeZarrWriter | None = None
+        self._resumed: bool = False
+        self._store_path: str = ""
+        self._resume_offsets: list[int] = []
         self.saving_started = False
         self._finalized = False
         self._n_channels = 1
@@ -79,7 +84,13 @@ class ZarrSaver:
         self._merge_source_path: str = ""
         self._existing_omero_channels: list[dict[str, Any]] = []
 
-    def start_stack(self, store_path: str, n_planes: int, n_channels: int = 1) -> None:
+    def start_stack(
+        self,
+        store_path: str,
+        n_planes: int,
+        n_channels: int = 1,
+        acquisition_uuid: str | None = None,
+    ) -> None:
         """Construct the OME-Zarr writer for a new stack.
 
         ``store_path`` is a PLAIN filesystem path (NOT ``file://`` — the
@@ -251,11 +262,92 @@ class ZarrSaver:
             )
 
         self._n_channels = new_n_channels
+        self._store_path = resolved
+        self._resumed = False
+        self._resume_offsets = [0] * self._n_channels
+        self._l0 = self._writer
         self.saving_started = True
         self._finalized = False
         self._horizontal_positions = []
         self._vertical_positions = []
         self._camera_positions = []
+
+        # Stamp the acquisition UUID early so a resume can prove the store
+        # belongs to the manifest before writing any chunks.
+        if acquisition_uuid:
+            acq = self._writer.root.require_group("acquisition")
+            acq.attrs["uuid"] = acquisition_uuid
+
+    def resume_stack(
+        self,
+        store_path: str,
+        n_planes: int,
+        n_channels: int,
+        acquisition_uuid: str,
+    ) -> None:
+        """Reopen an existing pre-allocated L0 array for a resumed stack.
+
+        The store must already contain an ``/acquisition`` group with a
+        ``uuid`` attribute matching ``acquisition_uuid``. The L0 array
+        shape and dtype are verified against the requested stack. On
+        success, ``write_plane`` writes into the reopened L0 array and
+        ``finalize`` is deferred until the resumed run completes.
+        """
+        save_dir = os.path.realpath(os.path.normpath(self.parent.save_directory))
+        resolved = os.path.realpath(os.path.normpath(store_path))
+        try:
+            common = os.path.commonpath([save_dir, str(Path(resolved).parent)])
+        except ValueError:
+            common = ""
+        if common != save_dir:
+            msg = f"Zarr store_path {resolved!r} is outside save directory {save_dir!r}"
+            self.parent.sig_message.emit(msg)
+            raise ValueError(msg)
+
+        try:
+            root = zarr.open(resolved, mode="r+")
+        except Exception as e:
+            raise ResumeProbeError(
+                f"cannot reopen zarr store {resolved}: {e}"
+            ) from e
+
+        try:
+            acq = root["acquisition"]
+            stored_uuid = acq.attrs.get("uuid")
+        except Exception as e:
+            raise ResumeProbeError(
+                f"zarr store {resolved} has no /acquisition group: {e}"
+            ) from e
+
+        if stored_uuid != acquisition_uuid:
+            raise ResumeProbeError(
+                f"zarr UUID mismatch: expected {acquisition_uuid!r}, "
+                f"got {stored_uuid!r}"
+            )
+
+        cam = self.parent.camera
+        shape = (n_channels, n_planes, int(cam.ysize), int(cam.xsize))
+        l0 = reopen_zarr_l0(resolved, shape, np.uint16)
+
+        self._store_path = resolved
+        self._resumed = True
+        self._l0 = l0
+        self._writer = None
+        self._n_channels = n_channels
+        self._resume_offsets = [
+            probe_zarr(resolved, f"ch{c}") for c in range(n_channels)
+        ]
+        self.saving_started = True
+        self._finalized = False
+        self._horizontal_positions = []
+        self._vertical_positions = []
+        self._camera_positions = []
+
+    def resume_offset(self, channel_idx: int) -> int:
+        """Return the first unwritten Z index for a resumed channel."""
+        if 0 <= channel_idx < len(self._resume_offsets):
+            return self._resume_offsets[channel_idx]
+        return 0
 
     def write_plane(
         self,
@@ -268,7 +360,8 @@ class ZarrSaver:
     ) -> None:
         """Stream one reconstructed 2D frame into the L0 array.
 
-        The writer indexes a 4D array ``(c, z, y, x)``; ``channel_idx``
+        The L0 target is either a fresh ``AnalysisOmeZarrWriter`` or a
+        reopened ``zarr.Array`` for a resumed run. ``channel_idx``
         selects the channel-axis slice the frame lands in (NGFF v0.5
         channel dimension). The per-plane frame is 2D ``(y, x)``. Motor
         positions are recorded ONCE per plane — both channels of the
@@ -276,7 +369,7 @@ class ZarrSaver:
         worker records it once per plane), so the append is guarded by
         ``channel_idx == 0`` to avoid duplicating the entry per channel.
         """
-        if self._writer is None:
+        if self._l0 is None:
             raise RuntimeError("ZarrSaver.write_plane called before start_stack")
         array_channel = channel_idx
         if self._merge_mode and channel_idx == 0:
@@ -284,7 +377,7 @@ class ZarrSaver:
             # additional channel; logical channel 0 still records motor
             # positions once per plane.
             array_channel = self._merge_target_channel
-        self._writer[array_channel, z_idx, :, :] = frame
+        self._l0[array_channel, z_idx, :, :] = frame
         if channel_idx == 0:
             self._horizontal_positions.append(float(hor_pos))
             self._vertical_positions.append(float(ver_pos))
@@ -596,13 +689,18 @@ class ZarrSaver:
         wait timeout`` warning fires on the rig, the duration log shows
         whether the pyramid build was the cause.
         """
-        if self._writer is None:
-            raise RuntimeError("ZarrSaver.finalize called before start_stack")
+        if self._l0 is None:
+            raise RuntimeError(
+                "ZarrSaver.finalize called before start_stack or resume_stack"
+            )
         if self._finalized:
             raise RuntimeError("ZarrSaver.finalize called twice")
 
         try:
-            self._finalize_body()
+            if self._resumed:
+                self._finalize_resumed()
+            else:
+                self._finalize_body()
         finally:
             # Always restore the global write_empty_chunks config, even if
             # the pyramid build or acquisition-group write raised — the
@@ -681,5 +779,22 @@ class ZarrSaver:
         self._write_focus_group()
         if self._merge_mode:
             self._remove_merge_source()
+        self._finalized = True
+        self.saving_started = False
+
+    def _finalize_resumed(self) -> None:
+        """Close a resumed Zarr run without rebuilding the analysis pyramid.
+
+        The original ``AnalysisOmeZarrWriter`` cannot be safely reopened
+        on an existing store, so this path only restores the global
+        ``write_empty_chunks`` config and marks the save as finalized.
+        The L0 array is complete and a future rebuild phase can construct
+        the multiscale pyramid from it.
+        """
+        logger.warning(
+            "ZarrSaver: resumed run finalized without rebuilding the "
+            "analysis pyramid — the L0 array is complete at %s",
+            self._store_path,
+        )
         self._finalized = True
         self.saving_started = False

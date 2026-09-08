@@ -1416,8 +1416,49 @@ class FrameSaver(QObject):
         # write indexes past the channel axis (size 1) and raises
         # IndexError.
         n_channels = len(self.filenames_lists) if self.filenames_lists else 1
+        resume_cursors = (
+            self.resume_manifest.cursors.get("zarr", {})
+            if self.resume_manifest
+            else {}
+        )
         try:
-            self._zarr_saver.start_stack(store_path, n_planes, n_channels=n_channels)
+            if store_path in resume_cursors and self.resume_manifest is not None:
+                self._zarr_saver.resume_stack(
+                    store_path,
+                    n_planes,
+                    n_channels,
+                    self.resume_manifest.uuid,
+                )
+            else:
+                self._zarr_saver.start_stack(
+                    store_path,
+                    n_planes,
+                    n_channels=n_channels,
+                    acquisition_uuid=self.acquisition_uuid,
+                )
+        except ResumeProbeError:
+            logger.warning("Zarr resume failed; falling back to _partN store")
+            base = self.files_name + "_part2"
+            counter = 2
+            while True:
+                candidate = f"{base}.ome.zarr"
+                fallback_path = str(Path(self.parent.save_directory) / candidate)
+                if not Path(fallback_path).exists():
+                    break
+                counter += 1
+                base = f"{self.files_name}_part{counter}"
+            try:
+                self._zarr_saver.start_stack(
+                    fallback_path,
+                    n_planes,
+                    n_channels=n_channels,
+                    acquisition_uuid=self.acquisition_uuid,
+                )
+            except Exception as e:
+                self.sig_status_message.emit(f"Save error: {e}")
+                self.saving_started = False
+                return
+            store_path = fallback_path
         except Exception as e:
             self.sig_status_message.emit(f"Save error: {e}")
             self.saving_started = False
@@ -1445,7 +1486,9 @@ class FrameSaver(QObject):
         # ALL channels) then exit on the empty queue; this is the
         # multi-channel path where all frames are pre-loaded and the flag
         # is flipped before the worker drains.
-        z_idx_per_channel: dict[int, int] = {}
+        z_idx_per_channel: dict[int, int] = {
+            c: self._zarr_saver.resume_offset(c) for c in range(n_channels)
+        }
         try:
             while True:
                 # Natural completion (single-channel production only): the
@@ -1503,7 +1546,11 @@ class FrameSaver(QObject):
                     # frames_per_buffer times per plane, so use the plane
                     # index (cz // frames_per_buffer) when looking up
                     # positions. Guard against a short list (defensive).
-                    pos_index = cz // frames_per_buffer
+                    # For resumed runs, subtract the existing plane count so
+                    # the new frames index the new motor-position list.
+                    pos_index = (
+                        cz - self._zarr_saver.resume_offset(channel_idx)
+                    ) // frames_per_buffer
                     hor = (
                         _position_to_float(self.horizontal_positions_list[pos_index])
                         if pos_index < len(self.horizontal_positions_list)
@@ -1523,6 +1570,9 @@ class FrameSaver(QObject):
                         channel_idx, cz, frame[f_idx, :, :], hor, ver, cam
                     )
                     z_idx_per_channel[channel_idx] = cz + 1
+                    self._commit_manifest_cursor(
+                        "zarr", f"ch{channel_idx}", z_idx_per_channel[channel_idx]
+                    )
         except Exception as e:
             self.sig_status_message.emit(f"Save error: {e}")
             self.saving_started = False

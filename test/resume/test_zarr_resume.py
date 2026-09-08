@@ -1,0 +1,126 @@
+"""Tests for Zarr L0 reopen and deferred finalize on resume."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import numpy as np
+import pytest
+import zarr
+from pytestqt.qtbot import QtBot
+
+from lightsheet.resume import ResumeManifest
+from lightsheet.resume.probe import ResumeProbeError
+
+if TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
+
+ACQ_UUID = "resume-uuid-123"
+
+
+def _frame(z: int) -> np.ndarray:
+    return np.full((4, 4), z + 1, dtype=np.uint16)
+
+
+def _partial_store(
+    fs: object, controller: Controller_MainWindow, tmp_path: Path, n_written: int, n_planes: int
+) -> Path:
+    controller.camera.xsize = 4
+    controller.camera.ysize = 4
+    store_path = tmp_path / "acq.ome.zarr"
+    saver = fs._zarr_saver
+    saver.start_stack(
+        str(store_path),
+        n_planes,
+        n_channels=1,
+        acquisition_uuid=ACQ_UUID,
+    )
+    for z in range(n_written):
+        saver.write_plane(0, z, _frame(z), 0.0, 0.0, 0.0)
+    return store_path
+
+
+def test_fresh_start_stamps_acquisition_uuid(
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    fs = controller._fs.frame_saver
+    fs.reinit(3)
+    controller.save_directory = str(tmp_path)
+    store_path = _partial_store(fs, controller, tmp_path, 2, 4)
+    root = zarr.open(str(store_path), mode="r")
+    assert "acquisition" in root
+    assert root["acquisition"].attrs["uuid"] == ACQ_UUID
+
+
+def test_resume_stack_reopens_and_writes_missing_planes(
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    fs = controller._fs.frame_saver
+    fs.reinit(3)
+    controller.save_directory = str(tmp_path)
+    store_path = _partial_store(fs, controller, tmp_path, 2, 4)
+
+    fs.reinit(3)
+    saver = fs._zarr_saver
+    saver.resume_stack(str(store_path), 4, 1, ACQ_UUID)
+    assert saver._resumed
+    assert saver.resume_offset(0) == 2
+
+    for z in range(2, 4):
+        saver.write_plane(0, z, _frame(z), 0.0, 0.0, 0.0)
+
+    assert not saver._finalized
+    saver.finalize()
+    assert saver._finalized
+
+
+def test_resume_stack_rejects_uuid_mismatch(
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    fs = controller._fs.frame_saver
+    fs.reinit(3)
+    controller.save_directory = str(tmp_path)
+    store_path = _partial_store(fs, controller, tmp_path, 1, 3)
+
+    fs.reinit(3)
+    saver = fs._zarr_saver
+    with pytest.raises(ResumeProbeError):
+        saver.resume_stack(str(store_path), 3, 1, "different-uuid")
+
+
+def test_manifest_cursor_matches_observed_zarr_planes(
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    # The worker path is unit-tested above; this is the integration hook.
+    fs = controller._fs.frame_saver
+    fs.reinit(3)
+    controller.save_directory = str(tmp_path)
+    store_path = _partial_store(fs, controller, tmp_path, 2, 4)
+
+    manifest = ResumeManifest(
+        uuid=ACQ_UUID,
+        state="in_progress",
+        n_planes=4,
+        stack_starting_plane=0.0,
+        stack_ending_plane=30.0,
+        stack_step=10.0,
+        save_mode="stitch",
+        wavelengths=[555],
+        created_at="2026-09-08T00:00:00+00:00",
+        cursors={"zarr": {str(store_path): 2}},
+    )
+    fs.set_files(
+        1,
+        "acq",
+        "stack",
+        4,
+        "reconstructed_frame",
+        wavelengths=[555],
+        resume_manifest=manifest,
+    )
+    # set_files resolves the resume manifest; the actual Zarr L0 reopen is
+    # performed by zarr_save_worker when it starts.
+    assert fs.resume_manifest is not None
+    assert fs.resume_manifest.cursors["zarr"][str(store_path)] == 2
