@@ -37,6 +37,13 @@ class MockCamera(ICamera):
     # copy_recorder_images fills each frame with that uint16 value so intensity
     # tracks a synthetic profile. Default None preserves zero-fill behavior.
     scripted_intensity_fn: Any = None
+    # Frame-source hook: when set to
+    # callable(camera, plane_index) -> np.ndarray, copy_recorder_images
+    # delegates full-frame generation to it. The callable returns a float
+    # density frame (y, x); the camera owns the uint16 conversion
+    # (np.clip(raw * 65535, 0, 65535)). Takes precedence over
+    # scripted_intensity_fn; default None preserves the existing fallbacks.
+    frame_source: Any = None
     scripted_frame_index: int = 0
 
     def __init__(self, verbose: bool = False) -> None:
@@ -143,7 +150,19 @@ class MockCamera(ICamera):
         """
         assert self.xsize is not None and self.ysize is not None
         if self.new_data_ready:
-            if self.scripted_intensity_fn is not None:
+            if self.frame_source is not None:
+                # frame_source returns one 2D float density frame;
+                # convert to uint16 and replicate for the buffer.
+                raw = self.frame_source(self, self.scripted_frame_index)
+                frame2d = np.clip(
+                    np.asarray(raw, dtype=np.float64) * 65535.0, 0, 65535
+                ).astype(np.uint16)
+                images = np.broadcast_to(
+                    frame2d[None],
+                    (number_of_images, self.ysize, self.xsize),
+                ).copy()
+                self.scripted_frame_index += 1
+            elif self.scripted_intensity_fn is not None:
                 fill = int(
                     self.scripted_intensity_fn(
                         self.scripted_frame_index, self.exposure_time
@@ -191,6 +210,12 @@ class MockCamera(ICamera):
     def set_scripted_intensity_fn(self, fn: Any) -> None:
         """Set the scripted-intensity callback and reset the frame index."""
         self.scripted_intensity_fn = fn
+        self.scripted_frame_index = 0
+        return None
+
+    def set_frame_source(self, fn: Any) -> None:
+        """Set the frame-source callback and reset the frame index."""
+        self.frame_source = fn
         self.scripted_frame_index = 0
         return None
 

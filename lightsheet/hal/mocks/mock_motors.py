@@ -97,9 +97,12 @@ class MockMotor(IMotor):
             factor = pow(10, -2)
         elif units == "mm":
             factor = pow(10, -3)
-        elif units == "\u03bcm":
+        elif units in ("μm", "µm"):
+            # Accept both the Greek mu (μ, U+03BC) and the micro sign
+            # (µ, U+00B5) spellings — visually identical and both appear
+            # in callers and hardware config strings.
             factor = pow(10, -6)
-        elif units == "\u03bcStep":
+        elif units in ("μStep", "µStep"):
             factor = self.microstep_size * pow(10, -6)
         else:
             factor = 0
@@ -117,9 +120,10 @@ class MockMotor(IMotor):
             factor = pow(10, -2)
         elif units == "mm":
             factor = pow(10, -3)
-        elif units == "\u03bcm":
+        elif units in ("μm", "µm"):
+            # Accept both µ spellings (see position_to_microsteps).
             factor = pow(10, -6)
-        elif units == "\u03bcStep":
+        elif units in ("μStep", "µStep"):
             factor = self.microstep_size * pow(10, -6)
         else:
             factor = 0

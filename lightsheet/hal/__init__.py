@@ -29,6 +29,7 @@ from lightsheet.hal.mocks.mock_laser import MockLaser
 from lightsheet.hal.mocks.mock_motors import MockMotors
 from lightsheet.hal.mocks.mock_power_meter import MockPowerMeter
 from lightsheet.hal.mocks.mock_siggen import MockSigGen
+from lightsheet.hal.mocks.mock_stage import MockSample, MockStage
 from lightsheet.hal.real.camera import Camera
 from lightsheet.hal.real.daqlaser import DAQLaser, InvertedVoltMap, LinearVoltMap
 from lightsheet.hal.real.etls import ETLs
@@ -72,7 +73,9 @@ __all__ = [
     "MockLaser",
     "MockMotors",
     "MockPowerMeter",
+    "MockSample",
     "MockSigGen",
+    "MockStage",
     "Motors",
     "PM100DError",
     "PM100DNotConnected",

@@ -137,7 +137,9 @@ def _build_demo_bundle() -> DeviceBundle:
         MockETLs,
         MockLaser,
         MockMotors,
+        MockSample,
         MockSigGen,
+        MockStage,
     )
 
     camera = MockCamera(verbose=True)
@@ -161,6 +163,18 @@ def _build_demo_bundle() -> DeviceBundle:
         ),
     )
     etls = MockETLs()
+    # Attach the synthetic Gaussian-sphere stage so demo acquisitions
+    # produce realistic volume frames. The demo uses a 1500x1500 sensor
+    # for per-plane generation speed; the lateral sigmas are sized so
+    # the projected half-max cross-section still covers ~75 % of the
+    # 1500-px FOV at 6.5 um. The bound method keeps the stage alive
+    # through the camera — DeviceBundle stays unchanged.
+    sample = MockSample(sensor_shape=(1500, 1500), sigma_y_mm=3.1, sigma_z_mm=3.1)
+    stage = MockStage(sample, motors, lasers)
+    camera.xsize = 1500
+    camera.ysize = 1500
+    camera.bytes_per_image = 1500 * 1500 * 2
+    camera.frame_source = stage.frame
     return DeviceBundle(
         camera=camera,
         siggen=siggen,
