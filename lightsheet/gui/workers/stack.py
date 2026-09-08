@@ -395,29 +395,31 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             self._adaptive_controller = None
             self._adaptive_current_cmd = None
             if self._adaptive_cfg is not None and self._adaptive_cfg.enabled:
-                if getattr(self.camera, "shutter_mode", "Rolling") == "Lightsheet":
-                    # In Lightsheet mode the integration time is set by the
-                    # DAQ waveform, not by per-plane set_exposure_time. Lock
-                    # the adaptive exposure bounds to the current camera value
-                    # so the controller uses only laser power as the actuator.
-                    fixed_exposure_s = self.camera.exposure_time
-                    self._adaptive_cfg = dataclasses.replace(
-                        self._adaptive_cfg,
-                        min_exposure_s=fixed_exposure_s,
-                        max_exposure_s=fixed_exposure_s,
-                    )
-
                 from lightsheet.adaptive.controller import AdaptiveController
 
                 self._adaptive_controller = AdaptiveController(
                     self._adaptive_cfg, n_planes
                 )
+                # Effective exposure in seconds: in Lightsheet mode the
+                # per-plane integration time is the applied per-line time
+                # times the exposed-line count (both owned by the DAQ
+                # waveform contract); in Rolling/Global it is the camera
+                # exposure_time register. The operator's AdaptiveConfig
+                # bounds apply unchanged in both modes — exposure remains
+                # an active adaptive actuator in Lightsheet via the
+                # exposure_s -> line-time mapping.
+                if getattr(self.camera, "shutter_mode", "Rolling") == "Lightsheet":
+                    effective_exposure_s = (
+                        self.camera.line_time * self.camera.lightsheet_exposed_lines
+                    )
+                else:
+                    effective_exposure_s = self.camera.exposure_time
                 # Prime with a flat trajectory at the current exposure.
                 # The PI correction handles the per-depth profile; the
-                # feedforward baseline is the current camera exposure.
+                # feedforward baseline is the current effective exposure.
                 pilot_indices = list(range(self._adaptive_cfg.pilot_count))
                 pilot_exposures = [
-                    self.camera.exposure_time
+                    effective_exposure_s
                 ] * self._adaptive_cfg.pilot_count
                 self._adaptive_controller.prime(pilot_indices, pilot_exposures)
                 # The initial command for plane 0 is the feedforward
@@ -435,7 +437,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 from lightsheet.adaptive.types import AdaptiveCommand
 
                 self._adaptive_current_cmd = AdaptiveCommand.fixed(
-                    exposure_s=self.camera.exposure_time,
+                    exposure_s=effective_exposure_s,
                     laser1_mw=current_powers[0],
                     laser2_mw=current_powers[1],
                 )

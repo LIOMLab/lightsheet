@@ -7,6 +7,7 @@ through inheritance so callers still invoke them on the worker instance.
 from __future__ import annotations
 
 import logging
+import math
 from typing import TYPE_CHECKING, cast
 
 from lightsheet.adaptive.types import AdaptiveCommand, AdaptiveConfig
@@ -16,6 +17,28 @@ if TYPE_CHECKING:
     from lightsheet.gui.workers.stack import StackWorker
 
 logger = logging.getLogger(__name__)
+
+
+def _lightsheet_line_time_from_exposure(
+    exposure_s: float, exposed_lines: int
+) -> float:
+    """Convert a total per-plane integration time (seconds) into the
+    per-line time (seconds) the camera applies in Lightsheet mode.
+
+    The divisor is always the camera's ``lightsheet_exposed_lines`` —
+    adaptive control varies only the line time, never the exposed/delay
+    line counts. Non-finite or non-positive inputs would produce an
+    unsafe acquisition timing, so they are rejected loudly.
+    """
+    if not isinstance(exposure_s, (int, float)) or isinstance(exposure_s, bool):
+        raise ValueError(f"exposure_s must be numeric; got {type(exposure_s)}")
+    if not math.isfinite(exposure_s) or exposure_s <= 0:
+        raise ValueError(f"exposure_s must be finite and positive; got {exposure_s}")
+    if not isinstance(exposed_lines, int) or isinstance(exposed_lines, bool):
+        raise ValueError(f"exposed_lines must be an int; got {type(exposed_lines)}")
+    if exposed_lines <= 0:
+        raise ValueError(f"exposed_lines must be positive; got {exposed_lines}")
+    return exposure_s / exposed_lines
 
 
 class _StackAdaptiveMixin:
@@ -34,43 +57,57 @@ class _StackAdaptiveMixin:
         zeroes the power and the loop-top poll on the next iteration
         breaks.
 
-        The staged power percent is also written back to
-        ``self._shell.laser1_power_pct`` / ``laser2_power_pct`` so the
-        mock camera's scripted-intensity hook (which reads the staged
-        percent) sees the updated power — mirroring real physics where
-        more laser power produces more fluorescence.
-
-        Cross-thread attribute sharing (intentional): these shell
-        attributes are read by the GUI-thread laser readback refresh
-        and by ``_toggle_laser*`` (which re-applies the staged percent
-        when toggling a laser on). The worker also READS them at
-        adaptive-prime time (the initial command's power is derived
-        from the staged percent). Python float assignment is GIL-atomic
-        so there is no torn-read corruption; the GUI readback may
-        transiently show a value that is one refresh cycle behind the
-        hardware state, which is acceptable for a best-effort readback.
-        This mirrors the existing non-adaptive stack path, which also
-        reads shell attributes from the worker. The E-stop kill path
-        does NOT read these attributes — it calls ``laser.off()``
-        directly on the GUI thread — so this sharing does not affect
-        the lock-free kill path. Routing the write through a queued
-        signal would defer the staged-percent update past the next
-        plane's mock-camera intensity measurement and break the
-        scripted-intensity hook's timing, so the direct write is kept.
+        Applied values are published back to the GUI-thread model as one
+        frozen ``AppliedMicroscopeSnapshot`` on the queued
+        ``sig_applied_state`` signal — the worker never mutates the model
+        or the widgets directly. The mock camera's scripted-intensity hook
+        reads the HAL-applied ``ILaser.power`` after ``set_power``, so the
+        staged-percent update lands on the worker thread before the next
+        plane's intensity measurement and no cross-thread sharing is
+        needed.
         """
-        # Set camera exposure (convert seconds to ms for the HAL). This
-        # lives OUTSIDE the per-laser exception handlers below — a laser
-        # write failure must not skip the camera exposure for this plane
-        # (the next plane's loop-top E-stop poll is the abort point).
+        # Set camera exposure. This lives OUTSIDE the per-laser exception
+        # handlers below — a laser write failure must not skip the camera
+        # exposure for this plane (the next plane's loop-top E-stop poll
+        # is the abort point).
         #
-        # In Lightsheet shutter mode the integration time is fixed by the
-        # DAQ waveform (lightsheet_line_time * lightsheet_exposed_lines);
-        # calling set_exposure_time per plane changes the PCO delay/exposure
-        # register and breaks the external-trigger timing. Skip the write so
-        # the adaptive loop is power-only in Lightsheet. For Rolling/Global
-        # the exposure is still the active actuator.
+        # Rolling/Global: cmd.exposure_s is the frame exposure; convert
+        # seconds to ms for the HAL set_exposure_time register.
+        #
+        # Lightsheet: cmd.exposure_s is the total per-plane integration
+        # time; the per-line time is exposure_s / lightsheet_exposed_lines.
+        # Writing set_exposure_time here would poke the separate
+        # Rolling/Global delay/exposure register and break external-trigger
+        # timing, so the Lightsheet path instead assigns
+        # camera.lightsheet_line_time and applies it through
+        # set_lightsheet_mode(), which synchronizes the applied line_time
+        # from the SDK/mock readback. A changed applied line time
+        # invalidates the DAQ waveforms (they embed the per-line timing),
+        # so compute_scan_waveforms is re-run before the plane is acquired
+        # — but only on an actual change, so an unchanged command does not
+        # allocate a second waveform buffer.
         shutter_mode = getattr(self.camera, "shutter_mode", "Rolling")
-        if shutter_mode != "Lightsheet":
+        applied_line_time_s: float | None = None
+        if shutter_mode == "Lightsheet":
+            previous_line_time = getattr(self.camera, "line_time", None)
+            self.camera.lightsheet_line_time = (
+                _lightsheet_line_time_from_exposure(
+                    cmd.exposure_s, self.camera.lightsheet_exposed_lines
+                )
+            )
+            self.camera.set_lightsheet_mode()
+            applied_line_time_s = self.camera.line_time
+            if applied_line_time_s is not None and (
+                previous_line_time is None
+                or not math.isclose(
+                    previous_line_time,
+                    applied_line_time_s,
+                    rel_tol=1e-9,
+                    abs_tol=1e-9,
+                )
+            ):
+                self.siggen.compute_scan_waveforms()
+        else:
             self.camera.set_exposure_time(max(1, int(cmd.exposure_s * 1000)))
         # Write laser powers through the safe HAL paths. The percent is
         # computed from the command's mW value and the laser's max_power.
@@ -123,7 +160,8 @@ class _StackAdaptiveMixin:
 
         self.sig_applied_state.emit(
             AppliedMicroscopeSnapshot(
-                laser_power_pct=(applied_pct[0], applied_pct[1])
+                laser_power_pct=(applied_pct[0], applied_pct[1]),
+                lightsheet_line_time_s=applied_line_time_s,
             )
         )
 
