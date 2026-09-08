@@ -9,6 +9,7 @@ what the loop decided and what was saved.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,21 @@ class FocusSample:
     residual_mm: float
     applied_camera_pos_mm: float
     sharpness_metric: float | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return a JSON-safe plain dict for manifest storage."""
+        return {
+            "block_index": int(self.block_index),
+            "stage_pos_mm": float(self.stage_pos_mm),
+            "feedforward_camera_pos_mm": float(self.feedforward_camera_pos_mm),
+            "residual_mm": float(self.residual_mm),
+            "applied_camera_pos_mm": float(self.applied_camera_pos_mm),
+            "sharpness_metric": (
+                None
+                if self.sharpness_metric is None
+                else float(self.sharpness_metric)
+            ),
+        }
 
 
 @dataclass(frozen=True)
