@@ -159,3 +159,133 @@ def test_estop_precedence_over_pause(qtbot: QtBot) -> None:
 
     assert worker._run_completed is False
     assert shell._fs.stop_saving.call_args.kwargs.get("lifecycle") == "interrupted"
+
+
+def test_pause_resume_end_to_end(
+    qtbot: QtBot, controller: object, tmp_path: Path, request: object
+) -> None:
+    """Full pause→resume: pause a fixed 3-plane stack after the first
+    plane, verify the sidecar manifest reads ``paused`` with a committed
+    cursor, then resume on a fresh controller + fresh worker from the
+    manifest cursor and verify the run completes."""
+    import numpy as np
+
+    from lightsheet.resume import manifest_path_for, read_manifest
+
+    ctrl = controller
+    ctrl.saving_allowed = True
+    ctrl.number_of_planes = 3
+    ctrl.stack_mode_started = True
+    ctrl.stack_starting_plane = 0.0
+    ctrl.stack_ending_plane = 20.0
+    ctrl.stack_step = 10
+    ctrl.save_format = "hdf5"
+    ctrl.save_directory = str(tmp_path)
+    ctrl.save_filepath = str(tmp_path / "pause_run")
+    ctrl.current_horizontal_position_text = "0.0"
+    ctrl.current_vertical_position_text = "0.0"
+    ctrl.current_camera_position_text = "0.0"
+    ctrl.save_panel.ui.radioButton_saveAllCrop.setChecked(True)
+    ctrl.save_panel.ui.radioButton_saveAllFull.setChecked(False)
+
+    worker = StackWorker(
+        ctrl._bundle,
+        ctrl._hw,
+        ctrl,
+        save_description="pause integration",
+        save_stitch_blend=False,
+        save_all_crop=True,
+        save_all_full=False,
+        multi_channel=False,
+    )
+
+    # Commit one plane, then request the pause — the next loop-top poll
+    # must break before the second plane's motor move.
+    planes_done: list[int] = []
+
+    def _fake_acquire_scan() -> bool:
+        planes_done.append(1)
+        # Crop save mode reads the raw camera buffer (tiles, y, x).
+        ctrl.buffer = np.zeros((1, 4, 4), dtype=np.uint16)
+        ctrl.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
+        if len(planes_done) == 1:
+            ctrl.pause_requested.set()
+        return True
+
+    worker.acquire_scan = _fake_acquire_scan  # ty: ignore[invalid-assignment]
+    worker.camera.recorder_timeout_status = False
+    worker.siggen.error = 0
+
+    worker.run()
+
+    # Teardown ran: lasers are off and the event was cleared.
+    assert not any(laser.active for laser in ctrl.lasers)
+    assert not ctrl.pause_requested.is_set()
+    assert worker._run_completed is False
+
+    # The sidecar manifest finalized as paused with a durable cursor.
+    fs = ctrl._fs.frame_saver
+    manifest_path = manifest_path_for(fs.filenames_lists[0][0])
+    manifest = read_manifest(manifest_path)
+    assert manifest is not None, f"no manifest at {manifest_path}"
+    assert manifest.state == "paused"
+    hdf5_cursors = manifest.cursors.get("hdf5", {})
+    assert hdf5_cursors, "paused manifest must carry an hdf5 cursor"
+    resume_plane = min(hdf5_cursors.values())
+    assert resume_plane == 1, (
+        f"one plane must be durably committed before the pause; "
+        f"got cursor {resume_plane}"
+    )
+    assert manifest.last_motor_positions, (
+        "paused manifest must record the motor positions at pause time"
+    )
+
+    # --- Simulated app restart: new controller, fresh worker ---------
+    from test.fixtures.controller import _build_controller
+    from test.helpers.factories import make_bundle
+
+    ctrl2 = _build_controller(make_bundle(), qtbot, request)
+    ctrl2.saving_allowed = True
+    ctrl2.number_of_planes = 3
+    ctrl2.stack_mode_started = True
+    ctrl2.stack_starting_plane = 0.0
+    ctrl2.stack_ending_plane = 20.0
+    ctrl2.stack_step = 10
+    ctrl2.save_format = "hdf5"
+    ctrl2.save_directory = str(tmp_path)
+    ctrl2.save_filepath = str(tmp_path / "pause_run")
+    ctrl2.current_horizontal_position_text = "0.0"
+    ctrl2.current_vertical_position_text = "0.0"
+    ctrl2.current_camera_position_text = "0.0"
+    ctrl2.save_panel.ui.radioButton_saveAllCrop.setChecked(True)
+    ctrl2.save_panel.ui.radioButton_saveAllFull.setChecked(False)
+
+    resumed = StackWorker(
+        ctrl2._bundle,
+        ctrl2._hw,
+        ctrl2,
+        save_description="pause integration",
+        save_stitch_blend=False,
+        save_all_crop=True,
+        save_all_full=False,
+        multi_channel=False,
+        start_plane=resume_plane,
+        resume_manifest=manifest,
+    )
+
+    def _fake_acquire_scan2() -> bool:
+        ctrl2.buffer = np.zeros((1, 4, 4), dtype=np.uint16)
+        ctrl2.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
+        return True
+
+    resumed.acquire_scan = _fake_acquire_scan2  # ty: ignore[invalid-assignment]
+    resumed.camera.recorder_timeout_status = False
+    resumed.siggen.error = 0
+
+    resumed.run()
+
+    assert resumed._run_completed is True
+    fs2 = ctrl2._fs.frame_saver
+    final = read_manifest(manifest_path_for(fs2.filenames_lists[0][0]))
+    assert final is not None
+    assert final.state == "completed"
