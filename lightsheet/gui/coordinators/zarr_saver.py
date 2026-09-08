@@ -128,6 +128,9 @@ class ZarrSaver:
         self._merge_source_path = ""
         self._existing_omero_channels = []
         new_n_channels = n_channels
+        renamed = False
+        source_path = ""
+        source_path_obj = Path()
         if (
             n_channels == 1
             and resolved_path.is_dir()
@@ -155,6 +158,7 @@ class ZarrSaver:
                         else:
                             source_path_obj.unlink()
                     resolved_path.rename(source_path)
+                    renamed = True
                     old_root = zarr.open(source_path, mode="r")
                     old_arr = old_root["0"]  # ty: ignore[invalid-argument-type]
                     new_n_channels = old_arr.shape[0] + 1  # ty: ignore[unresolved-attribute]
@@ -173,11 +177,29 @@ class ZarrSaver:
             except Exception as e:
                 # If merge detection or relocation fails, fall back to
                 # the default overwrite path and clear partial state.
-                logger.info("Existing zarr merge check failed: %s", e)
+                # When the existing store was already renamed away,
+                # rename it back so it is not left orphaned at
+                # <path>.merge-source; if the restore itself fails, keep
+                # the source path recorded and tell the operator where
+                # the previous data lives.
+                logger.warning("Existing zarr merge check failed: %s", e)
                 self._merge_mode = False
                 self._merge_target_channel = 0
                 self._merge_source_path = ""
                 self._existing_omero_channels = []
+                if renamed:
+                    try:
+                        source_path_obj.rename(resolved)
+                    except Exception as e2:
+                        logger.warning(
+                            "Could not restore existing zarr store: %s", e2
+                        )
+                        self._merge_source_path = source_path
+                        self.parent.sig_message.emit(
+                            "Existing zarr could not be restored after a "
+                            "failed merge check — the previous acquisition "
+                            f"is preserved at {source_path}"
+                        )
 
         shape = (new_n_channels, n_planes, ysize, xsize)
 
