@@ -39,11 +39,13 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
     QHeaderView,
     QProgressDialog,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QWidget,
@@ -54,6 +56,7 @@ from lightsheet.gui.panels.ui_past_acquisitions_panel import (
 )
 from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.styles import spacing as _s
+from lightsheet.resume import manifest_path_for, read_manifest
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -63,13 +66,24 @@ logger = logging.getLogger(__name__)
 # Past-acquisitions table columns (display-only). The Planned-queue columns
 # stay in acquisition_table_manager.py; these are the dedicated Past panel's
 # table columns.
-_PAST_HEADERS = ["Sample", "Channel", "#Planes", "Size", "Date", "Format"]
+_PAST_HEADERS = [
+    "Sample",
+    "Channel",
+    "#Planes",
+    "Size",
+    "Date",
+    "Format",
+    "State",
+    "Resume",
+]
 _PAST_COL_SAMPLE = 0
 _PAST_COL_CHANNEL = 1
 _PAST_COL_NPLANES = 2
 _PAST_COL_SIZE = 3
 _PAST_COL_DATE = 4
 _PAST_COL_FORMAT = 5
+_PAST_COL_STATE = 6
+_PAST_COL_RESUME = 7
 
 _PAST_EMPTY_COPY = (
     "No past acquisitions in {save_directory}. Run an acquisition, then "
@@ -139,6 +153,10 @@ class PastAcquisitionEntry:
     date_str: str
     format_label: str
     source_path: str
+    state: str = "completed"
+    uuid: str = ""
+    manifest_path: str | None = None
+    resumable: bool = False
 
 
 def normalize_wavelength(wl: int | None) -> int | None:
@@ -247,15 +265,32 @@ class PastAcquisitionsBrowser(QObject):
     def _parse_file(self, path: str, sample_hint: str) -> list[PastAcquisitionEntry]:
         if self._is_hdf5(path):
             entry = self._parse_hdf5(path, sample_hint)
-            if entry is not None:
-                return [entry]
-            return []
-        if self._is_zarr(path) and Path(path).is_dir():
+        elif self._is_zarr(path) and Path(path).is_dir():
             entry = self._parse_zarr(path, sample_hint)
-            if entry is not None:
-                return [entry]
+        else:
             return []
+        if entry is not None:
+            self._read_resume_state(entry)
+            return [entry]
         return []
+
+    def _read_resume_state(self, entry: PastAcquisitionEntry) -> None:
+        """Look for a sidecar ``<acquisition>.resume.json`` and decorate the
+        parsed row with its lifecycle state. A valid manifest whose state is
+        ``in_progress``, ``paused``, or ``interrupted`` marks the row as
+        resumable. Missing, unreadable, or completed manifests leave the row
+        in the default ``completed`` state with no Resume action."""
+        sidecar = manifest_path_for(entry.source_path)
+        if not sidecar.is_file():
+            return
+        manifest = read_manifest(sidecar)
+        if manifest is None:
+            return
+        entry.manifest_path = str(sidecar)
+        entry.uuid = manifest.uuid
+        entry.state = manifest.state
+        if manifest.state in ("in_progress", "paused", "interrupted"):
+            entry.resumable = True
 
     # -- HDF5 ---------------------------------------------------------- #
 
@@ -659,6 +694,8 @@ class PastAcquisitionsPanel(QWidget):
         past_header = self.ui.tableWidget_pastAcquisitions.horizontalHeader()
         past_header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         past_header.setStretchLastSection(True)
+        self.ui.tableWidget_pastAcquisitions.setColumnCount(len(_PAST_HEADERS))
+        self.ui.tableWidget_pastAcquisitions.setHorizontalHeaderLabels(_PAST_HEADERS)
         self.ui.tableWidget_pastAcquisitions.setWordWrap(False)
         self.ui.tableWidget_pastAcquisitions.textElideMode = Qt.TextElideMode.ElideRight  # ty: ignore[invalid-assignment]
         self.ui.tableWidget_pastAcquisitions.setSortingEnabled(True)
@@ -809,6 +846,65 @@ class PastAcquisitionsPanel(QWidget):
         )
         self._set_past_cell(row, _PAST_COL_DATE, entry.date_str)
         self._set_past_cell(row, _PAST_COL_FORMAT, entry.format_label)
+        self._set_state_cell(row, entry)
+
+    def _set_state_cell(self, row: int, entry: PastAcquisitionEntry) -> None:
+        """Render the lifecycle state chip. Resumable states are an
+        explicit "Resume" action so the operator can enqueue the row
+        directly from the past-acquisitions table."""
+        if entry.resumable and entry.manifest_path:
+            btn = QPushButton("Resume")
+            btn.setToolTip(f"Resume this {entry.state} stack from the last committed plane")
+            btn.setStyleSheet(
+                f"QPushButton {{ color: {_c.BREEZE_BG}; "
+                f"background-color: {_c.BREEZE_ACCENT}; border: none; }}"
+            )
+            btn.clicked.connect(
+                lambda _checked=False, e=entry: self._on_resume_clicked(e)
+            )
+            self.ui.tableWidget_pastAcquisitions.setCellWidget(
+                row, _PAST_COL_RESUME, btn
+            )
+            state_text, state_color = self._state_text_for_manifest(
+                entry.state
+            )
+        else:
+            state_text, state_color = "Completed", _c.MUTED_TEXT
+        item = QTableWidgetItem(state_text)
+        item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+        item.setToolTip(state_text)
+        item.setForeground(QColor(state_color))
+        self.ui.tableWidget_pastAcquisitions.setItem(
+            row, _PAST_COL_STATE, item
+        )
+
+    @staticmethod
+    def _state_text_for_manifest(state: str) -> tuple[str, str]:
+        """Return (state chip text, semantic color token) for a manifest
+        lifecycle state, using the approved color tokens from 16-UI-SPEC."""
+        if state == "paused":
+            return "PAUSED", _c.BREEZE_ACCENT
+        if state == "in_progress":
+            return "IN PROGRESS", _c.WARNING
+        if state == "interrupted":
+            return "INTERRUPTED", _c.WARNING
+        if state == "completed":
+            return "Completed", _c.MUTED_TEXT
+        return state.upper(), _c.MUTED_TEXT
+
+    def _on_resume_clicked(self, entry: PastAcquisitionEntry) -> None:
+        """Enqueue a resume row for the selected past acquisition."""
+        if not entry.manifest_path:
+            return
+        manager = getattr(
+            getattr(self._shell, "stack_panel", None), "table_manager", None
+        )
+        if manager is None:
+            return
+        if manager.enqueue_resume_row(Path(entry.manifest_path)):
+            self._shell.sig_message.emit(
+                f"Queued resume for {entry.sample} ({entry.state})"
+            )
 
     def _set_past_cell(
         self, row: int, col: int, text: str, sort_value: float | None = None
