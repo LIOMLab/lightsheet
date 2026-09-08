@@ -439,7 +439,13 @@ class FrameSaver(QObject):
         fileset and its manifest always share a stem.
         """
         self.acquisition_uuid = uuid.uuid4().hex
-        self._manifest_path = manifest_path_for(self.filenames_lists[0][0])
+        # Resolve to an absolute path now: the deferred manifest writes
+        # (cursor commits, lifecycle updates) must land next to the
+        # fileset chosen here, not wherever the process cwd happens to
+        # be when they run.
+        self._manifest_path = manifest_path_for(
+            self.filenames_lists[0][0]
+        ).resolve()
         save_mode = {
             "reconstructed_frame": "stitch",
             "ETLscan": "all_crop",
@@ -522,7 +528,9 @@ class FrameSaver(QObject):
         is written next to the first resolved channel-0 file.
         """
         self.acquisition_uuid = resume_manifest.uuid
-        self._manifest_path = manifest_path_for(self.filenames_lists[0][0])
+        self._manifest_path = manifest_path_for(
+            self.filenames_lists[0][0]
+        ).resolve()
         new_cursors = dict(resume_manifest.cursors)
         # Keep only path-keyed HDF5 cursors — legacy save-mode keys
         # ("stitch"/"all_crop"/"all_full") are retired on the first
