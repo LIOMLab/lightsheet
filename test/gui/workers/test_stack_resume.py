@@ -175,3 +175,20 @@ def test_fixed_stack_crash_resume_end_to_end(
     target contract.
     """
     raise AssertionError("resume append path not implemented yet")
+
+
+@pytest.mark.xfail(
+    reason="needs full multi-channel save/resume wiring in the test harness",
+    strict=False,
+)
+def test_multi_channel_crash_resumes_at_complete_plane_pair(
+    qtbot: QtBot, controller: object, tmp_path: object
+) -> None:
+    """Full tracer: a 2-channel stack is killed mid-pair, the common
+    resume plane is the last complete pair, and a fresh worker with
+    start_plane at that pair re-acquires both channels in lockstep.
+
+    Pending fixture wiring for a multi-channel partial save; the unit
+    contract is covered in test/resume/test_multi_channel_resume.py.
+    """
+    raise AssertionError("multi-channel crash/resume harness not ready")
