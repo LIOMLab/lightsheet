@@ -16,6 +16,7 @@ shell — it is NOT in this panel.
 
 from __future__ import annotations
 
+import math
 import threading
 import typing
 
@@ -129,33 +130,28 @@ class LaserPanelWidget(QWidget):
         # (scaled, thread-offloaded) HAL write happens in _apply_laser1_amplitude
         # when the timer fires. No hardware write happens here.
         #
-        # Capture the spinbox value into laser1_power_pct NOW (on the GUI
+        # Write the spinbox value into the model immediately (on the GUI
         # thread) rather than only when the debounce timer fires. This keeps
         # the staged percentage current for _toggle_laser1's just-on path,
-        # which reads laser1_power_pct — without this, toggling the laser
-        # within the 300ms debounce window after a spinbox edit would apply
-        # the OLD percentage and the operator would see the wrong power for
-        # 300ms until the debounce fires. The debounce timer still governs
-        # when the actual DAQ write happens; this only updates the staged
-        # value the toggle reads.
-        self._shell.laser1_power_pct = self.ui.doubleSpinBox_laserOneAmplitude.value()
+        # which reads the model's percent.
+        self._shell.state.set_laser_power_pct(
+            0, self.ui.doubleSpinBox_laserOneAmplitude.value()
+        )
         self._shell._laser1_amplitude_timer.start(300)
 
     def updateUi_laser2_amplitude(self) -> None:
         # Debounce-only slot for laser 2 (iBeam). See updateUi_laser1_amplitude.
-        # Capture the staged percentage now for the same reason as laser 1:
-        # _toggle_laser2's just-on path reads laser2_power_pct.
-        self._shell.laser2_power_pct = self.ui.doubleSpinBox_laserTwoAmplitude.value()
+        # Write the spinbox value into the model immediately.
+        self._shell.state.set_laser_power_pct(
+            1, self.ui.doubleSpinBox_laserTwoAmplitude.value()
+        )
         self._shell._laser2_amplitude_timer.start(300)
 
     def _apply_laser1_amplitude(self) -> None:
-        """Debounce timeout slot (GUI thread): store the staged percentage
-        and offload the scaled DAQ write to a worker thread so the GUI event
-        loop is never blocked on a DAQ round-trip. The write itself moved
-        to HardwareManager._write_laser1_power — the slot just spawns the
-        thread targeting the collaborator method."""
-        pct = self.ui.doubleSpinBox_laserOneAmplitude.value()
-        self._shell.laser1_power_pct = pct
+        """Debounce timeout slot (GUI thread): read the committed model
+        percentage and offload the scaled DAQ write to a worker thread so
+        the GUI event loop is never blocked on a DAQ round-trip."""
+        pct = self._shell.state.laser_power_pct[0]
         assert self._shell._hw is not None
         threading.Thread(
             target=self._shell._hw._write_laser1_power,
@@ -164,17 +160,33 @@ class LaserPanelWidget(QWidget):
         ).start()
 
     def _apply_laser2_amplitude(self) -> None:
-        """Debounce timeout slot (GUI thread): store the staged percentage
-        and offload the scaled iBeam serial write to a worker thread
+        """Debounce timeout slot (GUI thread): read the committed model
+        percentage and offload the scaled iBeam serial write to a worker thread
         targeting HardwareManager._write_laser2_power."""
-        pct = self.ui.doubleSpinBox_laserTwoAmplitude.value()
-        self._shell.laser2_power_pct = pct
+        pct = self._shell.state.laser_power_pct[1]
         assert self._shell._hw is not None
         threading.Thread(
             target=self._shell._hw._write_laser2_power,
             args=(pct,),
             daemon=True,
         ).start()
+
+    @Slot(int, float)
+    def updateUi_laser_power_from_state(self, idx: int, pct: float) -> None:
+        """GUI-thread slot for model-originated power changes. Updates only
+        the matching spinbox under blockSignals to prevent a model→widget
+        →model echo loop. The previous blockSignals state is restored.
+        """
+        spin = (
+            self.ui.doubleSpinBox_laserOneAmplitude
+            if idx == 0
+            else self.ui.doubleSpinBox_laserTwoAmplitude
+        )
+        if math.isclose(spin.value(), pct, rel_tol=1e-9, abs_tol=1e-9):
+            return
+        was = spin.blockSignals(True)
+        spin.setValue(pct)
+        spin.blockSignals(was)
 
     def laser1_toggle_button(self) -> None:
         """Laser 1 toggle button handler.

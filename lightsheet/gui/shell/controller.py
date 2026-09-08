@@ -67,6 +67,7 @@ from lightsheet.gui.styles import symbols as _sym
 from lightsheet.gui.styles import typography as _t
 from lightsheet.gui.widgets.channel_radio import ChannelRadio
 from lightsheet.hal.bundle import DeviceBundle
+from lightsheet.state import MicroscopeState
 from lightsheet.wavelength_color import wavelength_to_hex
 
 logger = logging.getLogger(__name__)
@@ -265,6 +266,14 @@ class Controller_MainWindow(QMainWindow):
         self._demo_mode = demo
 
         QMainWindow.__init__(self)
+
+        # GUI-thread-owned observable state model. Constructed before panels
+        # so compatibility properties (laser1_power_pct, _auto_laser*, etc.)
+        # and the model's snapshot source are available to all widgets.
+        self.state = MicroscopeState(
+            lightsheet_line_time_s=bundle.camera.lightsheet_line_time,
+            parent=self,
+        )
 
         # Load the shell UI (E-stop toolbar, ImageView, message log, leftRail
         # + stackedPanels). The 8 per-panel widgets are composed into
@@ -2063,6 +2072,12 @@ class Controller_MainWindow(QMainWindow):
             self._mc.updateUi_set_horizontal_backward_boundary
         )
 
+        # Reactive model projections: laser-panel spinboxes reflect
+        # model-originated power changes with blockSignals to avoid echo loops.
+        self.state.sig_laser_power_changed.connect(
+            self.laser_panel.updateUi_laser_power_from_state
+        )
+
     # --- adaptive trajectory dock lifecycle ---
 
     @Slot(int, float, float, float, float, str, bool, bool)
@@ -2322,14 +2337,14 @@ class Controller_MainWindow(QMainWindow):
         self._acq.updateUi_camera_shutter_mode()
 
         # Lasers — both spinboxes are 0-100 % staged setpoints. Seed from
-        # the persistent controller-side percentage, not the live HAL state,
+        # the persistent model-side percentage, not the live HAL state,
         # so the staged value survives laser on/off and E-stop disarm/re-arm
         # cycles within the session.
         self.laser_panel.ui.doubleSpinBox_laserOneAmplitude.setValue(
-            self.laser1_power_pct
+            self.state.laser_power_pct[0]
         )
         self.laser_panel.ui.doubleSpinBox_laserTwoAmplitude.setValue(
-            self.laser2_power_pct
+            self.state.laser_power_pct[1]
         )
 
         # Wavelength labels — read from the live list[ILaser] instances.
@@ -2362,3 +2377,42 @@ class Controller_MainWindow(QMainWindow):
         # are fixed (motor travel in mm). The spinbox suffix/decimals are
         # applied via FieldSpec in a later plan.
         self.motor_panel.updateUi_position_indicators()
+
+    # ------------------------------------------------------------------ #
+    # Compatibility properties delegating to the reactive state model.
+    # These keep the existing ``laser*_power_pct`` / ``_auto_laser*``
+    # surface alive for legacy callers (hardware manager, workers) while
+    # the model becomes the single source of truth.
+    # ------------------------------------------------------------------ #
+
+    @property
+    def laser1_power_pct(self) -> float:
+        return self.state.laser_power_pct[0]
+
+    @laser1_power_pct.setter
+    def laser1_power_pct(self, value: float) -> None:
+        self.state.set_laser_power_pct(0, float(value))
+
+    @property
+    def laser2_power_pct(self) -> float:
+        return self.state.laser_power_pct[1]
+
+    @laser2_power_pct.setter
+    def laser2_power_pct(self, value: float) -> None:
+        self.state.set_laser_power_pct(1, float(value))
+
+    @property
+    def _auto_laser1(self) -> bool:
+        return self.state.auto_laser1
+
+    @_auto_laser1.setter
+    def _auto_laser1(self, value: bool) -> None:
+        self.state.set_auto_lasers(bool(value), self.state.auto_laser2)
+
+    @property
+    def _auto_laser2(self) -> bool:
+        return self.state.auto_laser2
+
+    @_auto_laser2.setter
+    def _auto_laser2(self, value: bool) -> None:
+        self.state.set_auto_lasers(self.state.auto_laser1, bool(value))
