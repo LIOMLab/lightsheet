@@ -223,6 +223,10 @@ class MockCamera(ICamera):
         return None
 
     def set_lightsheet_mode(self) -> None:
+        # Apply the configured lightsheet line time to the running line_time
+        # register. Mirrors the real Camera.set_lightsheet_mode contract so
+        # line-time intent has an observable effect in demo mode.
+        self.line_time = self.lightsheet_line_time
         return None
 
     def get_name(self) -> str | None:

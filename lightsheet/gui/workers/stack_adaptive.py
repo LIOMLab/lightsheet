@@ -10,6 +10,7 @@ import logging
 from typing import TYPE_CHECKING, cast
 
 from lightsheet.adaptive.types import AdaptiveCommand, AdaptiveConfig
+from lightsheet.state import AppliedMicroscopeSnapshot
 
 if TYPE_CHECKING:
     from lightsheet.gui.workers.stack import StackWorker
@@ -80,9 +81,9 @@ class _StackAdaptiveMixin:
         # native clamp) held the power at the safe limit; the loop does
         # NOT abort (the outer StackWorker.run failure handler is
         # bypassed). The operator can press E-stop (F12) to abort.
+        applied_pct = [0.0, 0.0]
         if self._shell.lasers[0].max_power > 0:
             pct1 = cmd.laser1_mw / self._shell.lasers[0].max_power * 100.0
-            self._shell.laser1_power_pct = pct1
             try:
                 self._hw._write_laser1_power(pct1)
             except Exception as e:
@@ -95,9 +96,13 @@ class _StackAdaptiveMixin:
                     f"changed past the safe limit. The loop will retry "
                     f"on the next plane; press E-stop (F12) to abort."
                 )
+            applied_pct[0] = (
+                self._shell.lasers[0].power
+                / self._shell.lasers[0].max_power
+                * 100.0
+            )
         if self._shell.lasers[1].max_power > 0:
             pct2 = cmd.laser2_mw / self._shell.lasers[1].max_power * 100.0
-            self._shell.laser2_power_pct = pct2
             try:
                 self._hw._write_laser2_power(pct2)
             except Exception as e:
@@ -110,6 +115,17 @@ class _StackAdaptiveMixin:
                     f"changed past the safe limit. The loop will retry "
                     f"on the next plane; press E-stop (F12) to abort."
                 )
+            applied_pct[1] = (
+                self._shell.lasers[1].power
+                / self._shell.lasers[1].max_power
+                * 100.0
+            )
+
+        self.sig_applied_state.emit(
+            AppliedMicroscopeSnapshot(
+                laser_power_pct=(applied_pct[0], applied_pct[1])
+            )
+        )
 
     def _record_adaptive_step(self: StackWorker, plane_idx: int) -> None:
         """Measure this plane's intensity, record the trajectory sample,

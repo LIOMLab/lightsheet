@@ -17,6 +17,7 @@ from PySide6.QtCore import QObject, QThread, Signal, Slot
 from lightsheet.gui.workers.scan_mixin import _AcquireScanMixin
 from lightsheet.gui.workers.stack_adaptive import _StackAdaptiveMixin
 from lightsheet.hal.bundle import DeviceBundle
+from lightsheet.state.types import MicroscopeSnapshot, SaveMode, SaveOptions
 
 if TYPE_CHECKING:
     from lightsheet.adaptive.controller import AdaptiveController
@@ -85,17 +86,22 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
     # GUI-thread status label and progress bar update without the worker
     # touching Qt widgets directly.
     sig_autofocus_status = Signal(int, int, float, float, float, str)
+    # Worker-to-GUI applied-state readback. Carries an
+    # AppliedMicroscopeSnapshot; consumed by MicroscopeState.apply_worker_snapshot.
+    sig_applied_state = Signal(object)
 
     def __init__(
         self,
         bundle: DeviceBundle,
         hw: HardwareManager | None,
         shell: Controller_MainWindow,
-        save_description: str,
-        save_stitch_blend: bool,
-        save_all_crop: bool,
-        save_all_full: bool,
+        save_description: str = "",
+        save_stitch_blend: bool = False,
+        save_all_crop: bool = False,
+        save_all_full: bool = False,
         multi_channel: bool = False,
+        *,
+        snapshot: MicroscopeSnapshot | None = None,
         adaptive_cfg: AdaptiveConfig | None = None,
         focus_cfg: FocusConfig | None = None,
         focus_curve: FocusCurve | None = None,
@@ -109,39 +115,68 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         self.motors = bundle.motors
         self._hw: HardwareManager = hw
         self._shell = shell
-        # Save-option widgets are pre-sampled on the GUI thread before
-        # spawning the worker so the worker thread never reaches into the
-        # shell's ui.* (cross-thread widget access). acquire_scan() reads
-        # these to populate buffer metadata.
-        self._save_description = save_description
-        self._save_stitch_blend = save_stitch_blend
-        self._save_all_crop = save_all_crop
-        self._save_all_full = save_all_full
-        # Multi-channel flag pre-sampled on the GUI thread.
-        # When True, run() executes the per-plane sequential cycle:
-        # move -> select_laser(0) -> acquire -> capture frame1 ->
-        # select_laser(1) -> acquire -> capture frame2 -> enqueue both.
-        # When False, the single-channel path runs (back-compat).
-        # one acquire_scan per plane, one bare-ndarray enqueue per plane.
-        self._multi_channel = multi_channel
-        # Pre-sample the configured laser wavelengths on the GUI thread
-        # so the worker thread never reads shared HAL state from run().
-        # The wavelengths are read from the live ILaser instances here,
-        # never hardcoded. In multi-channel mode these are passed to
-        # set_files(wavelengths=...) so the save side builds one
-        # per-channel filename list (and the Zarr writer allocates a
-        # channel axis); in single-channel mode the active laser's
-        # wavelength is pre-sampled (lasers[0] if _auto_laser1,
-        # lasers[1] if only _auto_laser2, lasers[0] fallback) so the
-        # saved HDF5 filename carries the _{wavelength}nm suffix.
-        if multi_channel:
+        # Snapshot-at-spawn: the worker's immutable source of truth. If the
+        # caller passed a frozen MicroscopeSnapshot (new contract), use it
+        # directly. Otherwise, build one from the legacy save-option args plus
+        # the live model state (legacy contract for test compatibility).
+        if snapshot is not None:
+            self._snapshot = snapshot
+        else:
+            save_mode = (
+                SaveMode.STITCH_BLEND
+                if save_stitch_blend
+                else SaveMode.ALL_CROP
+                if save_all_crop
+                else SaveMode.ALL_FULL
+                if save_all_full
+                else SaveMode.STITCH
+            )
+            base = shell.state.snapshot()
+            if not isinstance(base, MicroscopeSnapshot):
+                # Legacy test callers pass a Mock shell; build a default
+                # snapshot so the worker still has an immutable input.
+                base = MicroscopeSnapshot(
+                    lightsheet_line_time_s=1.0,
+                    auto_lasers=(multi_channel, multi_channel),
+                )
+            self._snapshot = dataclasses.replace(
+                base,
+                save_options=SaveOptions(
+                    description=save_description,
+                    mode=save_mode,
+                ),
+            )
+        # Convenience booleans for the existing save-option branches.
+        self._save_description = self._snapshot.save_options.description
+        self._save_stitch_blend = (
+            self._snapshot.save_options.mode == SaveMode.STITCH_BLEND
+        )
+        self._save_all_crop = (
+            self._snapshot.save_options.mode == SaveMode.ALL_CROP
+        )
+        self._save_all_full = (
+            self._snapshot.save_options.mode == SaveMode.ALL_FULL
+        )
+        # Multi-channel flag and active-laser wavelengths are read from the
+        # immutable worker snapshot; run() never reaches into the shell's
+        # mutable state. In multi-channel mode these are passed to
+        # set_files(wavelengths=...) so the save side builds one per-channel
+        # filename list (and the Zarr writer allocates a channel axis); in
+        # single-channel mode the active laser's wavelength is pre-sampled.
+        auto_lasers = self._snapshot.auto_lasers
+        self._multi_channel = (
+            auto_lasers[0] and auto_lasers[1]
+            if snapshot is not None
+            else multi_channel
+        )
+        if self._multi_channel:
             self._wavelengths: list[int] | None = [
                 int(self._shell.lasers[0].wavelength),
                 int(self._shell.lasers[1].wavelength),
             ]
-        elif getattr(self._shell, "_auto_laser1", False):
+        elif auto_lasers[0]:
             self._wavelengths = [int(self._shell.lasers[0].wavelength)]
-        elif getattr(self._shell, "_auto_laser2", False):
+        elif auto_lasers[1]:
             self._wavelengths = [int(self._shell.lasers[1].wavelength)]
         else:
             # Neither auto-laser checked (manual mode / edge case) —
@@ -193,12 +228,9 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         try:
             # Making sure saving is allowed and filename isn't empty
             if self._shell.saving_allowed:
-                # Getting sample name
-                self._shell.save_description = str(self._save_description)
-
                 # Setting frame saver
                 self._shell._fs.reinit(3)
-                self._shell._fs.add_sample_name(self._shell.save_description)
+                self._shell._fs.add_sample_name(self._save_description)
                 # In multi-channel mode, pass the pre-sampled wavelengths
                 # to set_files so the save side builds one per-channel
                 # filename list (HDF5) and the Zarr writer allocates a
@@ -314,7 +346,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 and self._shell.stack_mode_started
                 and not self._shell.estop_event.is_set()
             ):
-                self._hw.start_lasers()
+                self._hw.start_lasers(snapshot=self._snapshot)
 
             # Set progress bar
             progress_value = 0
@@ -378,10 +410,10 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 # The controller's update() will refine it from plane 0's
                 # observed intensity for plane 1 onwards.
                 current_powers = (
-                    self._shell.laser1_power_pct
+                    self._snapshot.laser_power_pct[0]
                     / 100.0
                     * self._shell.lasers[0].max_power,
-                    self._shell.laser2_power_pct
+                    self._snapshot.laser_power_pct[1]
                     / 100.0
                     * self._shell.lasers[1].max_power,
                 )
@@ -683,7 +715,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         # immediately after the first acquire_scan (before
                         # the second select_laser + acquire_scan
                         # overwrites it).
-                        self._hw.select_laser(0)
+                        self._hw.select_laser(0, snapshot=self._snapshot)
                         # E-stop poll point — checked after select_laser(0)
                         # and before acquire_scan so a mid-plane E-stop
                         # (pressed between the channel-0 energize and the
@@ -708,7 +740,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                             else self._shell.reconstructed_frame.copy()
                         )
 
-                        self._hw.select_laser(1)
+                        self._hw.select_laser(1, snapshot=self._snapshot)
                         # E-stop poll point — checked after select_laser(1)
                         # and before the channel-1 acquire_scan.
                         if self._shell.estop_event.is_set():

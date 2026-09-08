@@ -8,16 +8,18 @@ enable/disable helpers. The QThread spawn pattern for each mode
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import logging
 import typing
 
 import shiboken6
-from PySide6.QtCore import SIGNAL, QThread, Slot
+from PySide6.QtCore import SIGNAL, Qt, QThread, Slot
 from PySide6.QtWidgets import QMessageBox, QPushButton, QWidget
 
 from lightsheet.gui.panels.ui_acquisition_panel import Ui_AcquisitionPanel
 from lightsheet.gui.widgets.field_spec import FIELD_SPECS
 from lightsheet.gui.workers import LiveWorker, PreviewWorker, SingleWorker, StackWorker
+from lightsheet.state import SaveMode, SaveOptions
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -414,6 +416,27 @@ class AcquisitionPanelWidget(QWidget):
         # sequential cycle; otherwise the single-channel path runs.
         multi_channel = self._shell._auto_laser1 and self._shell._auto_laser2
 
+        # Frozen worker snapshot: sampled exactly once on the GUI thread
+        # before moveToThread. The worker receives an immutable copy of
+        # intent; mid-run GUI edits cannot mutate its inputs.
+        save_mode = (
+            SaveMode.STITCH_BLEND
+            if save_blend
+            else SaveMode.ALL_CROP
+            if save_all_crop
+            else SaveMode.ALL_FULL
+            if save_all_full
+            else SaveMode.STITCH
+        )
+        snapshot = dataclasses.replace(
+            self._shell.state.snapshot(),
+            save_options=SaveOptions(description=save_desc, mode=save_mode),
+            auto_lasers=(
+                bool(self._shell._auto_laser1),
+                bool(self._shell._auto_laser2),
+            ),
+        )
+
         # Disconnect the previous worker's started→run connection only.
         # finished.disconnect() is intentionally avoided — it can deadlock
         # under PySide6 if the worker QThread is stuck between run() and
@@ -445,6 +468,7 @@ class AcquisitionPanelWidget(QWidget):
             save_all_crop,
             save_all_full,
             multi_channel,
+            snapshot=snapshot,
             adaptive_cfg=adaptive_cfg,
             focus_cfg=focus_cfg,
             focus_curve=focus_curve,
@@ -499,6 +523,14 @@ class AcquisitionPanelWidget(QWidget):
                 self._shell._stack_worker.sig_autofocus_status.disconnect()
         self._shell._stack_worker.sig_autofocus_status.connect(
             self._shell.stack_panel._on_autofocus_status
+        )
+        # Connect the per-plane applied-state signal to the model's GUI-thread
+        # slot. Queued delivery so the worker never mutates the live model.
+        with contextlib.suppress(TypeError, RuntimeError):
+            self._shell._stack_worker.sig_applied_state.disconnect()
+        self._shell._stack_worker.sig_applied_state.connect(
+            self._shell.state.apply_worker_snapshot,
+            Qt.ConnectionType.QueuedConnection,
         )
         # When reusing the thread (2nd+ queue row), disconnect the prior
         # started→run so the reused thread's started only invokes this

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
 
 from lightsheet.hal.bundle import DeviceBundle
+from lightsheet.state.types import MicroscopeSnapshot
 
 if TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -181,7 +182,7 @@ class HardwareManager:
                 )
                 self.lasers[0].error = 0
             elif self.lasers[0].active:
-                self._write_laser1_power(self._shell.laser1_power_pct)
+                self._write_laser1_power(self._shell.state.laser_power_pct[0])
             self._poll_laser_status([0])
             self._refresh_laser_readback(0)
 
@@ -236,7 +237,7 @@ class HardwareManager:
                     self._poll_laser_status([1])
                     return
                 # Apply the staged percentage (scaled to mW).
-                self._write_laser2_power(self._shell.laser2_power_pct)
+                self._write_laser2_power(self._shell.state.laser_power_pct[1])
                 if self.lasers[1].error:
                     self.lasers[1].off()
             # Refresh status immediately (the gated poll would otherwise lag).
@@ -247,26 +248,35 @@ class HardwareManager:
     # Acquisition-worker laser start/stop.
     # ------------------------------------------------------------------ #
 
-    def start_lasers(self, energize_lasers: tuple[bool, bool] | None = None) -> None:
+    def start_lasers(
+        self,
+        energize_lasers: tuple[bool, bool] | None = None,
+        snapshot: MicroscopeSnapshot | None = None,
+    ) -> None:
         """Start the lasers at staged power. Called from acquisition worker
         threads. Stages power via .set_power(mw) BEFORE .on() so the backend
         writes the staged power when energizing.
 
-        ``energize_lasers`` overrides the cached auto-laser flags for THIS
-        call only — used by continuous-mode workers to suppress L2 when both
-        checkboxes are checked. When None, the cached flags are read.
+        ``energize_lasers`` overrides the auto-laser flags in the snapshot for
+        THIS call only — used by continuous-mode workers to suppress L2 when
+        both auto-laser checkboxes are checked. When the worker did not pass a
+        snapshot, the live model is sampled on the GUI thread (for direct test
+        and toggle calls).
         """
         # E-stop guard: do not energize if the kill path has already fired.
         if self._shell.estop_event.is_set():
             return
 
+        if snapshot is None:
+            snapshot = self._shell.state.snapshot()
+
         if energize_lasers is not None:
             energize_l1, energize_l2 = energize_lasers
         else:
-            energize_l1 = self._shell._auto_laser1
-            energize_l2 = self._shell._auto_laser2
+            energize_l1 = snapshot.auto_lasers[0]
+            energize_l2 = snapshot.auto_lasers[1]
         if energize_l1:
-            mw = self._shell.laser1_power_pct / 100.0 * self.lasers[0].max_power
+            mw = snapshot.laser_power_pct[0] / 100.0 * self.lasers[0].max_power
             self.lasers[0].set_power(mw)
             if self._shell.estop_event.is_set():
                 return
@@ -280,7 +290,7 @@ class HardwareManager:
                 )
                 self.lasers[0].error = 0
         if energize_l2:
-            mw = self._shell.laser2_power_pct / 100.0 * self.lasers[1].max_power
+            mw = snapshot.laser_power_pct[1] / 100.0 * self.lasers[1].max_power
             self.lasers[1].set_power(mw)
             if self._shell.estop_event.is_set():
                 return
@@ -334,7 +344,11 @@ class HardwareManager:
     # One-laser-energized invariant choke point.
     # ------------------------------------------------------------------ #
 
-    def select_laser(self, idx: int) -> None:
+    def select_laser(
+        self,
+        idx: int,
+        snapshot: MicroscopeSnapshot | None = None,
+    ) -> None:
         """Energize laser ``idx`` and de-energize the other, enforcing the
         one-laser-energized invariant. Called from acquisition worker
         threads in multi-channel mode.
@@ -344,7 +358,8 @@ class HardwareManager:
         2. Re-check estop_event before energizing — do not re-energize
            a Class IIIB laser past the kill path.
         3. Energize the target under its own lock; re-check estop_event
-           inside. Stage power before .on().
+           inside. Stage power before .on() from the passed snapshot (or
+           the live model if no snapshot was passed).
         4. Refresh both status labels.
 
         Lock ordering: independent per-instance RLocks, never held
@@ -377,11 +392,9 @@ class HardwareManager:
                 return
             if not self.lasers[idx].active:
                 # Stage power before .on() so the backend writes staged power.
-                pct = (
-                    self._shell.laser1_power_pct
-                    if idx == 0
-                    else self._shell.laser2_power_pct
-                )
+                if snapshot is None:
+                    snapshot = self._shell.state.snapshot()
+                pct = snapshot.laser_power_pct[idx]
                 mw = pct / 100.0 * self.lasers[idx].max_power
                 self.lasers[idx].set_power(mw)
                 self.lasers[idx].on()
