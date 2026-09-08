@@ -2208,11 +2208,17 @@ class Controller_MainWindow(QMainWindow):
         # Freeze the adaptive + focus trajectory plots AFTER the synchronous
         # laser-off kill path completes. The docks stay visible so the
         # operator can review the partial trajectory. No-op if the respective
-        # trajectory widget does not exist.
-        if hasattr(self, "adaptiveTrajectoryWidget"):
-            self._adaptive_dock_controller.freeze()
-        if hasattr(self, "focusTrajectoryWidget"):
-            self._focus_dock_controller.freeze()
+        # trajectory widget does not exist. This post-kill cosmetic step is
+        # guarded so a failure in it (e.g. the badge's model read) can never
+        # propagate out of the E-stop handler — the kill path above is
+        # already complete and the remaining UI latching must still run.
+        try:
+            if hasattr(self, "adaptiveTrajectoryWidget"):
+                self._adaptive_dock_controller.freeze()
+            if hasattr(self, "focusTrajectoryWidget"):
+                self._focus_dock_controller.freeze()
+        except Exception:
+            logger.exception("E-stop post-kill trajectory freeze failed")
         # Refresh-after-action: both status labels reflect the post-E-stop
         # state. Deferred via QTimer.singleShot(0, ...) so the GUI thread
         # releases within ~1 ms of the press — the synchronous kill loop
