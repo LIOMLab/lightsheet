@@ -254,3 +254,23 @@ def test_resume_manifest_restores_matching_controller_checkpoint(
     assert adaptive_cp is not None
     assert adaptive_cp["integral"] == 0.01
     assert worker._last_controller_checkpoint("autofocus") is None
+
+
+def test_resumed_progress_bar_offsets_from_start_plane(
+    qtbot: QtBot,
+) -> None:
+    """A resumed worker emits progress relative to the remaining planes,
+    not the total stack, so the bar fills from start_plane to n_planes."""
+    bundle = _make_bundle()
+    shell = _make_shell(bundle, n_planes=4)
+    worker = _make_worker(bundle, shell, n_planes=4, start_plane=2)
+    worker.acquire_scan = Mock(return_value=True)  # type: ignore[assignment]
+
+    worker.run()
+
+    values = [
+        c.args[0] for c in shell.sig_progress_update.emit.call_args_list
+    ]
+    assert values[0] == 0
+    assert values[-1] == 100
+    assert 50 in values, values
