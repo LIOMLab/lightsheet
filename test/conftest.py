@@ -25,6 +25,7 @@ import os
 import sys
 import types
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import pytest
@@ -367,6 +368,29 @@ _pco_is_stub: bool = getattr(sys.modules.get("pco"), "_lightsheet_stub", False)
 # sip.delete teardown was likewise removed (replaced by
 # _stop_worker_threads, which mirrors closeEvent's quit()+wait()
 # shutdown).
+
+
+@pytest.fixture(autouse=True)
+def _isolated_qsettings(tmp_path: Path) -> Iterator[None]:
+    """Point QSettings at a fresh per-test ini directory.
+
+    App code persists UI state via ``QSettings("lightsheet", "shell")``
+    (e.g. trajectory dock geometry+visibility). Without isolation a test
+    run on the rig inherits the operator's real persisted state — a dock
+    left open in production restores visible during test construction and
+    breaks the "dock starts hidden" contract. ``IniFormat`` +
+    ``setPath(UserScope)`` redirects every default QSettings() to a
+    directory that starts empty for each test.
+    """
+    from PySide6.QtCore import QSettings
+
+    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+    QSettings.setPath(
+        QSettings.Format.IniFormat,
+        QSettings.Scope.UserScope,
+        str(tmp_path),
+    )
+    yield
 
 
 @pytest.fixture(autouse=True)
