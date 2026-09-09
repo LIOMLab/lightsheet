@@ -66,6 +66,11 @@ def test_main_threads_absolute_config_paths(
             self.focus_selected = False
             _MockController._last_instance = self
 
+        def __getattr__(self, name: str) -> Any:
+            mock = Mock()
+            self.__dict__[name] = mock
+            return mock
+
         def show(self) -> None:
             pass
 

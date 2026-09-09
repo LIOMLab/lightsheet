@@ -7,11 +7,14 @@ import contextlib
 import logging
 import os
 import sys
+import traceback
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from types import TracebackType
+
     from lightsheet.hal.bundle import DeviceBundle
 
 logger = logging.getLogger(__name__)
@@ -23,6 +26,44 @@ _PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = _PACKAGE_ROOT / "config.ini"
 RIG_SPECIFIC_PATH = _PACKAGE_ROOT / "config.rig-specific.ini"
 HARDWARE_INVENTORY_PATH = _PACKAGE_ROOT / "hardware_inventory.yaml"
+
+
+# Save the original excepthook at import time; main() rebinds it to the
+# current sys.excepthook before installing _exception_hook. The default hook
+# writes to stderr, which is None under pythonw, so _exception_hook skips
+# the forward when no console is attached.
+_original_excepthook = sys.excepthook
+
+
+def _exception_hook(
+    exctype: type[BaseException],
+    value: BaseException,
+    tb: TracebackType | None,
+) -> None:
+    """Log uncaught exceptions to the rotating log or a fallback crash file.
+
+    Forwards to the original excepthook only when ``sys.stderr`` exists so
+    a no-console ``pythonw`` launch never crashes trying to write to ``None``.
+    Always ends with ``sys.exit(1)``.
+    """
+    root = logging.getLogger()
+    if root.handlers:
+        root.critical("Uncaught exception", exc_info=(exctype, value, tb))
+    else:
+        tb_text = "".join(traceback.format_exception(exctype, value, tb))
+        try:
+            from lightsheet.logging_setup import _default_log_dir
+
+            crash_dir = _default_log_dir()
+            crash_dir.mkdir(parents=True, exist_ok=True)
+            (crash_dir / "lightsheet-crash.log").write_text(
+                tb_text, encoding="utf-8"
+            )
+        except OSError:
+            pass
+    if sys.stderr is not None:
+        _original_excepthook(exctype, value, tb)
+    sys.exit(1)
 
 
 # Theme helpers — BreezeStyleSheets (vendored) + Qt6 system-default detection.
@@ -299,26 +340,19 @@ def main() -> int:
         # nidaqmx not installed (macOS dev path uses the conftest stub) — skip.
         pass
 
-    # This block permits messages display of errors occurring in all the files.
-    # Capture the original hook in a closure variable rather than on the sys
-    # module — sys._excepthook is not a documented API and could be overwritten
-    # by another library or reserved by a future CPython.
+    # Install the hardened module-level exception hook. Rebind the module
+    # copy to the hook in effect at install time so tests that pre-patch
+    # sys.excepthook are not forwarded into the real default hook.
+    global _original_excepthook
     _original_excepthook = sys.excepthook
-
-    def exception_hook(exctype: type, value: BaseException, traceback: object) -> None:
-        """Permits messages display of errors occurring in all the files."""
-        print(exctype, value, traceback)
-        _original_excepthook(exctype, value, traceback)  # ty: ignore[invalid-argument-type]
-        sys.exit(1)
-
-    sys.excepthook = exception_hook
+    sys.excepthook = _exception_hook
 
     # Initializing the app, controller (class which connects GUI to features)
     app = QApplication(sys.argv)
 
     # Read the persisted [Controller] Theme override (light/dark/system;
     # default system) and apply the Breeze stylesheet at startup.
-    cfg_theme = cfg_read("config.ini", "Controller", {"Theme": "system"})["Theme"]
+    cfg_theme = cfg_read(str(CONFIG_PATH), "Controller", {"Theme": "system"})["Theme"]
     # Initialize the module-level persisted-theme holder so the
     # colorSchemeChanged handler (connected inside set_app_stylesheet)
     # can decide whether to follow a mid-session OS theme switch.
@@ -344,7 +378,9 @@ def main() -> int:
         )
 
         try:
-            bundle = DeviceRegistry("hardware_inventory.yaml", "config.ini").resolve()
+            bundle = DeviceRegistry(
+                str(HARDWARE_INVENTORY_PATH), str(CONFIG_PATH)
+            ).resolve()
         except UnresolvedDeviceError as e:
             _show_missing_device_dialog(str(e))
             sys.exit(1)
@@ -358,11 +394,9 @@ def main() -> int:
         load_sections_from_ini,
     )
 
-    overlay_path = (
-        "config.rig-specific.ini" if Path("config.rig-specific.ini").exists() else None
-    )
+    overlay_path = str(RIG_SPECIFIC_PATH) if RIG_SPECIFIC_PATH.exists() else None
     ConfigValidator().validate_or_abort(
-        load_sections_from_ini("config.ini", overlay_path)
+        load_sections_from_ini(str(CONFIG_PATH), overlay_path)
     )
 
     # Construct the collaborators before the shell's hardware_init runs.

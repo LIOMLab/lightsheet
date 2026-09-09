@@ -222,7 +222,7 @@ def test_main_demo_mode_returns_app_exec_exit_code(
     # Patch configure_logging to avoid file I/O side effects.
     import lightsheet.logging_setup
 
-    monkeypatch.setattr(lightsheet.logging_setup, "configure", lambda: None)
+    monkeypatch.setattr(lightsheet.logging_setup, "configure", lambda **kw: None)
 
     # Patch config validation to be a no-op (config.ini may not be valid
     # in the test environment).
@@ -328,7 +328,7 @@ def test_main_rig_path_unresolved_device_shows_dialog_and_exits(
     # Mock configure_logging + QApplication.
     import lightsheet.logging_setup
 
-    monkeypatch.setattr(lightsheet.logging_setup, "configure", lambda: None)
+    monkeypatch.setattr(lightsheet.logging_setup, "configure", lambda **kw: None)
 
     # Same pure-Python fake QApplication as the demo-mode test — avoids
     # the RuntimeError from constructing a second C++ QApplication when
