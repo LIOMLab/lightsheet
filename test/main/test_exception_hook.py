@@ -26,6 +26,8 @@ def test_hook_logs_to_root_logger_when_handlers_configured(
     handler.setLevel(logging.CRITICAL)
     root.addHandler(handler)
     try:
+        original = Mock()
+        monkeypatch.setattr(lightsheet.__main__, "_original_excepthook", original)
         exits: list[int] = []
         monkeypatch.setattr(sys, "exit", lambda code: exits.append(code))
         with caplog.at_level(logging.CRITICAL):
@@ -34,6 +36,7 @@ def test_hook_logs_to_root_logger_when_handlers_configured(
             )
         assert 1 in exits
         assert "boom" in caplog.text
+        assert original.called, "exception hook did not forward to original excepthook"
     finally:
         root.removeHandler(handler)
 
