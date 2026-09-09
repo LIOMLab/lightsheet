@@ -24,6 +24,10 @@ def test_gui_script_entry_point_registered() -> None:
     matching the declaration."""
     eps = importlib.metadata.entry_points(group="gui_scripts")
     matches = [
-        e for e in eps if e.name == "lightsheetw" and e.value == "lightsheet.__main__:main"
+        e
+        for e in eps
+        if e.name == "lightsheetw" and e.value == "lightsheet.__main__:main"
     ]
-    assert matches, "lightsheetw = lightsheet.__main__:main not registered in gui_scripts"
+    assert matches, (
+        "lightsheetw = lightsheet.__main__:main not registered in gui_scripts"
+    )

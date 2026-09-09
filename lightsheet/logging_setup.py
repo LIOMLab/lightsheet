@@ -45,16 +45,18 @@ def _default_log_dir() -> Path:
     return Path("./logs")
 
 
-def configure() -> None:
+def configure(config_path: str | None = None) -> None:
     """Configure the root logger with a RotatingFileHandler + StreamHandler.
 
-    Reads ``[Logging] Level`` and ``[Logging] Log Dir`` from ``config.ini``
-    (relative to the current working directory) via ``cfg_read``, falling
-    back to ``_LOG_DEFAULTS`` when the file or section is absent. Idempotent:
-    repeated calls remove existing handlers before attaching fresh ones, so
-    the root logger never accumulates duplicate handlers.
+    Reads ``[Logging] Level`` and ``[Logging] Log Dir`` from ``config_path``
+    (or ``config.ini`` relative to the current working directory when no path
+    is given) via ``cfg_read``, falling back to ``_LOG_DEFAULTS`` when the
+    file or section is absent. Idempotent: repeated calls remove existing
+    handlers before attaching fresh ones, so the root logger never
+    accumulates duplicate handlers. The ``StreamHandler`` is omitted when
+    ``sys.stderr`` is ``None`` (e.g. a no-console ``pythonw`` launch).
     """
-    cfg = cfg_read("config.ini", "Logging", dict(_LOG_DEFAULTS))
+    cfg = cfg_read(config_path or "config.ini", "Logging", dict(_LOG_DEFAULTS))
 
     level_name = cfg["Level"].upper()
     level = getattr(logging, level_name, logging.INFO)
@@ -119,6 +121,7 @@ def configure() -> None:
         file_handler.setFormatter(formatter)
         root.addHandler(file_handler)
 
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
-    root.addHandler(stream_handler)
+    if sys.stderr is not None:
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(formatter)
+        root.addHandler(stream_handler)

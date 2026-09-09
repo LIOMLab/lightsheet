@@ -16,6 +16,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Package-root anchor for CWD-agnostic startup config/inventory resolution.
+# The rig runs the editable install; under pythonw the process CWD is wherever
+# the shortcut started, so every startup file is resolved from __file__.
+_PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+CONFIG_PATH = _PACKAGE_ROOT / "config.ini"
+RIG_SPECIFIC_PATH = _PACKAGE_ROOT / "config.rig-specific.ini"
+HARDWARE_INVENTORY_PATH = _PACKAGE_ROOT / "hardware_inventory.yaml"
+
 
 # Theme helpers — BreezeStyleSheets (vendored) + Qt6 system-default detection.
 # Module-level so they are unit-testable without Controller_MainWindow.
@@ -250,7 +258,7 @@ def main() -> int:
     # Configure root logger before hardware init and Qt import.
     from lightsheet.logging_setup import configure as configure_logging
 
-    configure_logging()
+    configure_logging(config_path=str(CONFIG_PATH))
 
     # Deferred imports so the nicaiu preload above runs first.
     from PySide6.QtWidgets import QApplication
