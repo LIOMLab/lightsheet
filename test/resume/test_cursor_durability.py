@@ -140,6 +140,62 @@ def test_interrupted_lifecycle_written_by_stop_saving(
     assert m.cursors["hdf5"][fs.filenames_list[0]] == 2
 
 
+def test_terminal_manifest_survives_bare_stop_saving(
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    """App-exit path: ``closeEvent`` calls ``stop_saving()`` with no
+    lifecycle. After a completed run the manifest is already terminal —
+    the bare call must be a manifest no-op, not a rewrite to
+    ``interrupted``."""
+    fs = _prepare_stack_saver(controller, tmp_path, n_planes=5)
+    fs.saving_started = True
+    for i in range(5):
+        fs.enqueue_buffer(_frame(i))
+    fs.frame_saver_worker()
+    fs.stop_saving(lifecycle="completed")
+
+    fs.stop_saving()  # closeEvent: no lifecycle argument
+
+    m = read_manifest(fs._manifest_path)  # ty: ignore[invalid-argument-type]
+    assert m is not None
+    assert m.state == "completed"
+
+
+def test_resumed_manifest_reopens_in_progress(
+    qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
+) -> None:
+    """A terminal manifest is immutable, so resume must reopen it as
+    ``in_progress`` — otherwise the resumed run could never record its
+    own terminal state, and ``in_progress`` is the correct crash
+    signature while the resumed run is in flight."""
+    fs = _prepare_stack_saver(controller, tmp_path, n_planes=5)
+    fs.saving_started = True
+    for i in range(2):
+        fs.enqueue_buffer(_frame(i))
+    fs.stop_saving(lifecycle="interrupted")
+    fs.frame_saver_worker()
+
+    prior = read_manifest(fs._manifest_path)  # ty: ignore[invalid-argument-type]
+    assert prior is not None and prior.state == "interrupted"
+    assert prior.completed_at is not None
+
+    fs.set_files(
+        1,
+        "durability_test",
+        "stack",
+        5,
+        "reconstructed_frame",
+        wavelengths=[555],
+        resume_manifest=prior,
+    )
+
+    m = read_manifest(fs._manifest_path)  # ty: ignore[invalid-argument-type]
+    assert m is not None
+    assert m.state == "in_progress"
+    assert m.completed_at is None
+    assert m.uuid == prior.uuid
+
+
 def test_no_manifest_for_single_image_save(
     qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:

@@ -33,6 +33,7 @@ from lightsheet.gui.coordinators.reconstruction import (
 from lightsheet.gui.coordinators.zarr_saver import ZarrSaver
 from lightsheet.hal.bundle import DeviceBundle
 from lightsheet.resume import (
+    TERMINAL_STATES,
     ManifestUpdate,
     ResumeManifest,
     ResumeProbeError,
@@ -519,6 +520,12 @@ class FrameSaver(QObject):
         The UUID and spawn parameters are inherited; the HDF5 cursor map
         is refreshed to the resolved (or fallback) fileset. The manifest
         is written next to the first resolved channel-0 file.
+
+        The lifecycle is reopened to ``in_progress`` (and any prior
+        ``completed_at`` cleared): terminal manifests are immutable, so
+        without the reset the resumed run could never record its own
+        terminal state — and ``in_progress`` is the correct crash
+        signature while the resumed run is in flight.
         """
         self.acquisition_uuid = resume_manifest.uuid
         self._manifest_path = manifest_path_for(self.filenames_lists[0][0]).resolve()
@@ -531,7 +538,12 @@ class FrameSaver(QObject):
         }
         hdf5_group.update(hdf5_cursors)
         new_cursors["hdf5"] = hdf5_group
-        self.resume_manifest = dataclasses.replace(resume_manifest, cursors=new_cursors)
+        self.resume_manifest = dataclasses.replace(
+            resume_manifest,
+            cursors=new_cursors,
+            state="in_progress",
+            completed_at=None,
+        )
         write_manifest(self._manifest_path, self.resume_manifest)
 
     def _unique_hdf5_path(
@@ -2414,10 +2426,17 @@ class FrameSaver(QObject):
         is not thread-safe across concurrent file handles, and the race can
         corrupt HDF5 state and crash the process with a native segfault.
         """
-        if self.resume_manifest is not None:
+        if (
+            self.resume_manifest is not None
+            and self.resume_manifest.state not in TERMINAL_STATES
+        ):
             # Stage the lifecycle + last motor positions on the update
             # queue — the save worker is the sole manifest writer while it
             # runs, so other threads never call write_manifest directly.
+            # Skipped once the manifest is terminal: bare stop_saving()
+            # callers (closeEvent, single-image save) would otherwise
+            # clobber a recorded completed/paused state with the
+            # "interrupted" default.
             state = lifecycle if lifecycle is not None else "interrupted"
             # E-stop precedence: a "paused" request that arrives while the
             # kill latch is actuated records "interrupted" — the manifest

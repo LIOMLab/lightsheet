@@ -7,6 +7,7 @@ update type, and the atomic sidecar I/O helpers.
 from lightsheet.resume.manifest import (
     MANIFEST_SUFFIX,
     QUEUE_MANIFEST_SUFFIX,
+    TERMINAL_STATES,
     ManifestUpdate,
     QueueResumeManifest,
     ResumeManifest,
@@ -33,6 +34,7 @@ from lightsheet.resume.probe import (
 __all__ = [
     "MANIFEST_SUFFIX",
     "QUEUE_MANIFEST_SUFFIX",
+    "TERMINAL_STATES",
     "ManifestUpdate",
     "QueueResumeManifest",
     "ResumeManifest",
