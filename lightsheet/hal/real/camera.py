@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import numpy as np
 import pco
 
+from lightsheet import CONFIG_PATH
 from lightsheet.config import cfg_read, cfg_write
 from lightsheet.hal.interfaces import ICamera
 
@@ -55,7 +56,7 @@ class Camera(ICamera):
         self.line_time = None
 
         # read configurable settings from config.ini file
-        self._cfg_filename = "config.ini"
+        self._cfg_filename = str(CONFIG_PATH)
         self._cfg_section = "Camera"
         self.cfg_load_ini()
 

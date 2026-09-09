@@ -8,6 +8,7 @@ import threading
 
 import serial
 
+from lightsheet import CONFIG_PATH
 from lightsheet.config import cfg_read, cfg_str2bool, cfg_write
 from lightsheet.hal.interfaces import IMotor, IMotors
 
@@ -46,7 +47,7 @@ class Motors(IMotors):
         self.error_message = ""
 
         # read configurable settings from config.ini file
-        self._cfg_filename = "config.ini"
+        self._cfg_filename = str(CONFIG_PATH)
         self._cfg_section = "Motors"
         self.cfg_load_ini()
 

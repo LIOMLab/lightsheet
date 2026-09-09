@@ -34,6 +34,7 @@ import time
 
 import serial
 
+from lightsheet import CONFIG_PATH
 from lightsheet.config import cfg_read
 from lightsheet.hal.interfaces import ILaser
 
@@ -65,7 +66,7 @@ class IBeam:
         self.error_message = ""
 
         self.cfg_settings = copy.deepcopy(self._cfg_settings)
-        self.cfg_settings = cfg_read("config.ini", "iBeam", self.cfg_settings)
+        self.cfg_settings = cfg_read(str(CONFIG_PATH), "iBeam", self.cfg_settings)
 
         self.port = port if port is not None else str(self.cfg_settings["Port"])
         self.baud_rate = int(self.cfg_settings["Baud Rate"])

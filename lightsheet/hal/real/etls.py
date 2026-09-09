@@ -7,6 +7,7 @@ from ctypes import c_ushort
 
 import serial
 
+from lightsheet import CONFIG_PATH
 from lightsheet.config import cfg_read
 from lightsheet.hal.interfaces import IETLs, IOptotune
 
@@ -34,7 +35,7 @@ class ETLs(IETLs):
         self.cfg_settings = copy.deepcopy(self._cfg_settings)
 
         # Update configurable settings with values found in config file
-        self.cfg_settings = cfg_read("config.ini", "ETLs", self.cfg_settings)
+        self.cfg_settings = cfg_read(str(CONFIG_PATH), "ETLs", self.cfg_settings)
 
         # Assign configurable initial settings to instance variables
         self.etl_left = None

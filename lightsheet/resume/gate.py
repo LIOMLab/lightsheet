@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from lightsheet import CONFIG_PATH, RIG_SPECIFIC_PATH
 from lightsheet.config_schema.validation import (
     ConfigValidationResult,
     collect_config_errors,
@@ -79,8 +80,10 @@ class GateFindings(ConfigValidationResult):
 
 
 def collect_safety_config(
-    baseline_path: str = "config.ini",
-    overlay_path: str | None = "config.rig-specific.ini",
+    baseline_path: str = str(CONFIG_PATH),
+    overlay_path: str | None = (
+        str(RIG_SPECIFIC_PATH) if RIG_SPECIFIC_PATH.exists() else None
+    ),
 ) -> dict[str, dict[str, str]]:
     """Snapshot the safety-relevant config keys for the manifest fingerprint.
 
@@ -144,8 +147,13 @@ class ResumeSafetyGate:
         fingerprint_diffs = 0
         if live_config is None:
             try:
+                overlay = (
+                    str(RIG_SPECIFIC_PATH)
+                    if RIG_SPECIFIC_PATH.exists()
+                    else None
+                )
                 live_config = load_sections_from_ini(
-                    "config.ini", "config.rig-specific.ini"
+                    str(CONFIG_PATH), overlay
                 )
             except Exception as e:
                 findings.warnings.append(

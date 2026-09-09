@@ -12,6 +12,7 @@ import nidaqmx
 import numpy as np
 from nidaqmx.constants import AcquisitionType, Edge, LineGrouping
 
+from lightsheet import CONFIG_PATH
 from lightsheet.channel_map import ChannelMap
 from lightsheet.config import cfg_read, cfg_str2bool, cfg_write
 from lightsheet.hal.interfaces import ISigGen
@@ -75,7 +76,7 @@ class SigGen(ISigGen):
         self.waveform_etl_left = None
         self.waveform_etl_right = None
 
-        self._cfg_filename = "config.ini"
+        self._cfg_filename = str(CONFIG_PATH)
         self._cfg_section = "SigGen"
         self.cfg_load_ini()
 

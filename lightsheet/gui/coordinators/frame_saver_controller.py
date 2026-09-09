@@ -23,6 +23,7 @@ import h5py
 import numpy as np
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
+from lightsheet import CONFIG_PATH, RIG_SPECIFIC_PATH
 from lightsheet.gui.coordinators.frame_viewer import FrameViewer
 from lightsheet.gui.coordinators.reconstruction import (
     _position_to_float,
@@ -479,8 +480,13 @@ class FrameSaver(QObject):
         try:
             from lightsheet.resume.gate import collect_safety_config
 
+            overlay = (
+                str(RIG_SPECIFIC_PATH)
+                if RIG_SPECIFIC_PATH.exists()
+                else None
+            )
             safety_config = collect_safety_config(
-                "config.ini", "config.rig-specific.ini"
+                str(CONFIG_PATH), overlay
             )
         except Exception as e:
             logger.warning("could not snapshot safety config: %s", e)

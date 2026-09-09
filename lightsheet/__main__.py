@@ -9,8 +9,18 @@ import os
 import sys
 import traceback
 import warnings
-from pathlib import Path
 from typing import TYPE_CHECKING
+
+from lightsheet import (
+    CONFIG_PATH,
+    HARDWARE_INVENTORY_PATH,
+    PACKAGE_ROOT,
+    RIG_SPECIFIC_PATH,
+)
+
+# Re-export for tests that assert the package-root anchor used for
+# config/inventory resolution is absolute and points to the tracked files.
+_PACKAGE_ROOT = PACKAGE_ROOT
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -18,14 +28,6 @@ if TYPE_CHECKING:
     from lightsheet.hal.bundle import DeviceBundle
 
 logger = logging.getLogger(__name__)
-
-# Package-root anchor for CWD-agnostic startup config/inventory resolution.
-# The rig runs the editable install; under pythonw the process CWD is wherever
-# the shortcut started, so every startup file is resolved from __file__.
-_PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PATH = _PACKAGE_ROOT / "config.ini"
-RIG_SPECIFIC_PATH = _PACKAGE_ROOT / "config.rig-specific.ini"
-HARDWARE_INVENTORY_PATH = _PACKAGE_ROOT / "hardware_inventory.yaml"
 
 
 # Save the original excepthook at import time; main() rebinds it to the

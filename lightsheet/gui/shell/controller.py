@@ -1175,7 +1175,7 @@ class Controller_MainWindow(QMainWindow):
         end = self.stack_ending_plane
         step = self.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.value()
         cfg_write(
-            "config.ini",
+            str(CONFIG_PATH),
             "Controller",
             {
                 "StackLastStart": "" if start is None else f"{start:.4f}",
@@ -1194,7 +1194,7 @@ class Controller_MainWindow(QMainWindow):
         if getattr(self, "_demo_mode", False):
             return
         cfg = cfg_read(
-            "config.ini",
+            str(CONFIG_PATH),
             "Controller",
             {
                 "StackLastStart": "",

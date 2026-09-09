@@ -391,6 +391,7 @@ class AcquisitionPanelWidget(QWidget):
         if resume_manifest is not None:
             # Local imports keep the plain-acquisition path free of the
             # resume machinery and keep the helpers monkeypatchable.
+            from lightsheet import CONFIG_PATH, RIG_SPECIFIC_PATH
             from lightsheet.config_schema.validation import (
                 load_sections_from_ini,
             )
@@ -400,8 +401,13 @@ class AcquisitionPanelWidget(QWidget):
             from lightsheet.resume.gate import ResumeSafetyGate
 
             try:
+                overlay = (
+                    str(RIG_SPECIFIC_PATH)
+                    if RIG_SPECIFIC_PATH.exists()
+                    else None
+                )
                 live_config = load_sections_from_ini(
-                    "config.ini", "config.rig-specific.ini"
+                    str(CONFIG_PATH), overlay
                 )
             except Exception as e:
                 logger.warning(
