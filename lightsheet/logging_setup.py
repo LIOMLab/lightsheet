@@ -37,12 +37,14 @@ def _default_log_dir() -> Path:
     """Platform-aware default log directory.
 
     On Windows the rig stores logs under the operator's Documents folder
-    (alongside the LightSheetData acquisition directory). On macOS dev the
-    default is a local ``./logs`` directory in the CWD.
+    (alongside the LightSheetData acquisition directory). On macOS/Linux dev
+    the default is a ``logs/`` directory anchored to the package root (the
+    same ``_PACKAGE_ROOT`` convention ``__main__`` uses) so logs do not
+    scatter into whatever directory the app happened to launch from.
     """
     if sys.platform == "win32":
         return Path.home() / "Documents" / "LightSheetData" / "logs"
-    return Path("./logs")
+    return Path(__file__).resolve().parents[1] / "logs"
 
 
 def configure(config_path: str | None = None) -> None:
@@ -59,7 +61,14 @@ def configure(config_path: str | None = None) -> None:
     cfg = cfg_read(config_path or "config.ini", "Logging", dict(_LOG_DEFAULTS))
 
     level_name = cfg["Level"].upper()
-    level = getattr(logging, level_name, logging.INFO)
+    level = getattr(logging, level_name, None)
+    if not isinstance(level, int):
+        # A typo'd Level (e.g. "DEBG") must not silently coerce to INFO —
+        # warn so a rig operator editing config.ini sees the mistake.
+        logging.getLogger(__name__).warning(
+            "Invalid [Logging] Level %r; using INFO", level_name
+        )
+        level = logging.INFO
 
     log_dir_value = cfg["Log Dir"].strip()
     log_dir = Path(log_dir_value) if log_dir_value else _default_log_dir()
@@ -96,10 +105,13 @@ def configure(config_path: str | None = None) -> None:
                 log_dir = None
         # Stream-only warning (file handler is not attached yet) — emitted to
         # stderr so the operator sees why logs are not where they configured.
+        # When even the temp dir failed, log_dir is None — say so explicitly
+        # rather than logging "falling back to None".
+        fallback = log_dir if log_dir is not None else "stream-only (no file logging)"
         logging.getLogger(__name__).warning(
             "Configured Log Dir '%s' is not writable — falling back to %s",
             log_dir_value or log_dir,
-            log_dir,
+            fallback,
         )
 
     # Remove existing handlers so repeated configure() calls do not duplicate
