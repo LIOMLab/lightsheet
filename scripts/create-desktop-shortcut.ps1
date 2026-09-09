@@ -27,8 +27,9 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Preflight: make sure the venv exists and matches the lockfile, which is
-# what produces .venv\Scripts\lightsheetw.exe.
-if (-not $SkipSync) {
+# what produces .venv\Scripts\lightsheetw.exe. Skipped under -WhatIf so a
+# dry run does not mutate .venv.
+if (-not $SkipSync -and -not $WhatIf) {
     Push-Location $RepoRoot
     try {
         uv sync
@@ -48,7 +49,11 @@ if (-not (Test-Path $Icon)) { throw "Missing $Icon - the committed icon asset mu
 $Wsh = New-Object -ComObject WScript.Shell
 try {
     $startMenuBase = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Lightsheet"
-    $null = New-Item -ItemType Directory -Force -Path $startMenuBase
+    if ($WhatIf) {
+        Write-Output "Would ensure Start Menu folder exists: $startMenuBase"
+    } else {
+        $null = New-Item -ItemType Directory -Force -Path $startMenuBase
+    }
 
     $bases = @(
         $Wsh.SpecialFolders("Desktop"),

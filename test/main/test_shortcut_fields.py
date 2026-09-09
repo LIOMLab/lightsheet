@@ -40,11 +40,26 @@ def test_script_exists() -> None:
 
 
 def test_sksync_switch_guards_uv_sync_preflight() -> None:
-    """``-SkipSync`` is declared and ``uv sync`` runs only when it is absent."""
+    """``-SkipSync`` is declared and ``uv sync`` runs only when it is absent
+    and the run is not a ``-WhatIf`` dry run."""
     text = _script_text()
     assert re.search(r"\[switch\]\$SkipSync", text)
     assert "uv sync" in text
-    assert re.search(r"if\s*\(\s*-not\s+\$SkipSync\s*\)", text)
+    assert re.search(
+        r"if\s*\(\s*-not\s+\$SkipSync\s*-and\s*-not\s+\$WhatIf\s*\)", text
+    )
+
+
+def test_whatif_is_side_effect_free() -> None:
+    """``-WhatIf`` must not mutate the machine: ``New-Item`` for the Start
+    Menu folder runs only in the non-WhatIf branch."""
+    text = _script_text()
+    assert re.search(
+        r"if\s*\(\s*\$WhatIf\s*\)\s*\{\s*Write-Output[^}]*\}\s*else\s*\{[^}]*"
+        r"New-Item\s+-ItemType\s+Directory",
+        text,
+        re.DOTALL,
+    )
 
 
 def test_wscript_shell_com_and_createshortcut() -> None:
