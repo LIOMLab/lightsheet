@@ -105,9 +105,13 @@ def configure(config_path: str | None = None) -> None:
     # Remove existing handlers so repeated configure() calls do not duplicate
     # them. We attach handlers explicitly rather than relying on the
     # logging module's one-shot basic-config helper, which is a no-op once
-    # handlers exist and would not let us replace them cleanly.
+    # handlers exist and would not let us replace them cleanly. Each removed
+    # handler is also closed — a detached RotatingFileHandler would otherwise
+    # keep lightsheet.log open, blocking rollover/deletion on Windows and
+    # leaking a file descriptor on every re-configure.
     for handler in list(root.handlers):
         root.removeHandler(handler)
+        handler.close()
 
     formatter = logging.Formatter(_LOG_FORMAT)
 
