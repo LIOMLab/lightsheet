@@ -25,6 +25,9 @@ class AdaptiveSettings(_NoEnvBaseSettings):
     kp: float = Field(alias="Kp", default=0.4)
     ki: float = Field(alias="Ki", default=0.05)
     pilot_count: int = Field(alias="Pilot Count", default=5)
+    intensity_percentile: float = Field(
+        alias="Intensity Percentile", default=99.99
+    )
 
     @field_validator("min_exposure", "max_exposure")
     @classmethod
@@ -87,6 +90,15 @@ class AdaptiveSettings(_NoEnvBaseSettings):
     def _pilot_range(cls, v: int) -> int:
         if v < 0 or v > 50:
             raise ValueError(f"pilot count {v} is outside the valid range 0..50")
+        return v
+
+    @field_validator("intensity_percentile")
+    @classmethod
+    def _intensity_percentile_range(cls, v: float) -> float:
+        if v <= 0 or v > 100:
+            raise ValueError(
+                f"intensity percentile {v} is outside the valid range (0, 100]"
+            )
         return v
 
     @field_validator("max_exposure")

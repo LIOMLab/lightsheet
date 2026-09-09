@@ -296,7 +296,7 @@ def test_mock_stage_brightest_slice_hits_target_band() -> None:
     """At h = light_sheet_x_mm, exposure 0.1 s, full power, the uint16
     frame reconstructed through copy_recorder_images lands in the
     ~0.90-0.95 adaptive target band (asserted as [0.85, 1.0] for
-    model-constant headroom)."""
+    model-constant headroom). frame_intensity_pct now uses p99.99."""
     from lightsheet.adaptive.intensity import frame_intensity_pct
 
     stage, camera, motors, _ = _make_stage(sensor_shape=(2048, 2048))
@@ -309,7 +309,7 @@ def test_mock_stage_brightest_slice_hits_target_band() -> None:
     imgs = camera.copy_recorder_images(1)
     pct = frame_intensity_pct(imgs[0])
     assert 0.85 <= pct <= 1.0, (
-        f"brightest-slice p99 fraction {pct:.3f} must sit near the "
+        f"brightest-slice tail percentile fraction {pct:.3f} must sit near the "
         "0.90-0.95 target band"
     )
 

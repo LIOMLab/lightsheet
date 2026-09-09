@@ -861,6 +861,7 @@ class FrameSaver(QObject):
             "pilot_count": int(cfg.pilot_count),
             "sensor_max": int(cfg.sensor_max),
             "max_reacquire_attempts": int(cfg.max_reacquire_attempts),
+            "intensity_percentile": float(cfg.intensity_percentile),
         }
 
     def _write_adaptive_hdf5(

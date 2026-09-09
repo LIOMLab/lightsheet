@@ -560,6 +560,7 @@ class ZarrSaver:
             grp.attrs["pilot_count"] = int(cfg.pilot_count)
             grp.attrs["sensor_max"] = int(cfg.sensor_max)
             grp.attrs["max_reacquire_attempts"] = int(cfg.max_reacquire_attempts)
+            grp.attrs["intensity_percentile"] = float(cfg.intensity_percentile)
 
         grp.create_array(
             "plane_index",

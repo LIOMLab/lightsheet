@@ -469,10 +469,10 @@ def test_read_adaptive_fixed_config_falls_back_on_cfg_exception(
     from lightsheet import config as cfg_mod
 
     monkeypatch.setattr(cfg_mod, "cfg_read", _boom)
-    target_lo, target_hi, reacquire, block_n, kp, ki, pilot = (
+    target_lo, target_hi, reacquire, block_n, kp, ki, pilot, intensity_pct = (
         sp._read_adaptive_fixed_config()
     )
-    # Defaults: 90/95/8/8/0.4/0.05/5 (target band + reacquire as fractions).
+    # Defaults: 90/95/8/8/0.4/0.05/5/99.99 (target band + reacquire as fractions).
     assert target_lo == pytest.approx(0.90)
     assert target_hi == pytest.approx(0.95)
     assert reacquire == pytest.approx(0.08)
@@ -480,6 +480,7 @@ def test_read_adaptive_fixed_config_falls_back_on_cfg_exception(
     assert kp == pytest.approx(0.4)
     assert ki == pytest.approx(0.05)
     assert pilot == 5
+    assert intensity_pct == pytest.approx(99.99)
 
 
 # ---------------------------------------------------------------------------
