@@ -159,6 +159,7 @@ _CONFIG_ATTRS = [
     "pilot_count",
     "sensor_max",
     "max_reacquire_attempts",
+    "intensity_percentile",
 ]
 
 # Expected dataset names in the adaptive group.

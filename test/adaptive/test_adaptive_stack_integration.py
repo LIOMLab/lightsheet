@@ -177,8 +177,8 @@ def test_adaptive_loop_tracks_bright_to_dim_profile(
         adaptive_cfg=cfg,
     )
 
-    # Scripted intensity: the mock camera returns frames whose p99
-    # tracks the bright→dim profile, scaled by the staged L1 power.
+    # Scripted intensity: the mock camera returns frames whose tail
+    # percentile tracks the bright→dim profile, scaled by the staged L1 power.
     # The closure captures the worker's staged L1 power so the feedback
     # signal reflects the loop's own power writes.
     state = {"acq_index": 0}
@@ -931,7 +931,7 @@ def test_record_adaptive_step_emits_exhaustion_message(
 
     # Deterministic frame: a flat frame whose intensity fraction is
     # 0.20 (well below the target midpoint 0.925). frame_intensity_pct
-    # returns the p99 / sensor_max fraction.
+    # returns the tail percentile / sensor_max fraction.
     target_mid = cfg.target_midpoint  # 0.925
     frame_frac = 0.20
     fill = round(frame_frac * cfg.sensor_max)
@@ -939,7 +939,7 @@ def test_record_adaptive_step_emits_exhaustion_message(
 
     # Compute the exact deviation percentage the worker will emit, using
     # the same frame_intensity_pct the worker uses, so the assertion is
-    # robust to p99 rounding.
+    # robust to tail-percentile rounding.
     from lightsheet.adaptive.intensity import frame_intensity_pct
 
     observed = frame_intensity_pct(ctrl.reconstructed_frame, cfg.sensor_max)
@@ -1381,9 +1381,9 @@ def test_sphere_shared_across_channels_scales_with_active_laser(
     # ratio. select_laser stages pct/100 * max_power and the stage reads
     # power/max_power, so the expected ratio is pct2/pct1 read from LIVE
     # staged state at assert time (the adaptive loop may have trimmed
-    # them mid-run — do not hardcode). Tolerance band: the p99
-    # statistic, texture modulation, and uint16 clip/rounding justify
-    # +-0.15 around the staged ratio.
+    # them mid-run — do not hardcode). Tolerance band: the tail
+    # percentile statistic, texture modulation, and uint16 clip/rounding
+    # justify +-0.15 around the staged ratio.
     from lightsheet.adaptive.intensity import frame_intensity_pct
 
     pct1 = float(ctrl.laser1_power_pct)

@@ -52,6 +52,7 @@ class AdaptiveConfig:
     pilot_count: int = 5
     sensor_max: int = 65535
     max_reacquire_attempts: int = 1
+    intensity_percentile: float = 99.99
 
     def __post_init__(self) -> None:
         if self.min_exposure_s > self.max_exposure_s:
@@ -78,6 +79,10 @@ class AdaptiveConfig:
             )
         if self.pilot_count <= 0:
             raise ValueError(f"pilot_count must be positive; got {self.pilot_count}")
+        if not (0.0 < self.intensity_percentile <= 100.0):
+            raise ValueError(
+                f"intensity_percentile must be in (0, 100]; got {self.intensity_percentile}"
+            )
 
     def clamp_exposure(self, exposure_s: float) -> float:
         """Clamp an exposure in seconds to [min_exposure_s, max_exposure_s]."""

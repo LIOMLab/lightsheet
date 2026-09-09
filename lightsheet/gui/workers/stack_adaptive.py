@@ -220,7 +220,9 @@ class _StackAdaptiveMixin:
             intensities = []
             for laser in self._shell.lasers:
                 frame = frames.get(int(laser.wavelength)) if frames else None
-                intensities.append(frame_intensity_pct(frame, cfg.sensor_max))
+                intensities.append(
+                    frame_intensity_pct(frame, cfg.sensor_max, cfg.intensity_percentile)
+                )
             # The brighter channel drives the shared exposure.
             brighter_idx = max(
                 range(len(intensities)),
@@ -228,7 +230,7 @@ class _StackAdaptiveMixin:
             )
         else:
             frame = self._shell.reconstructed_frame
-            intensities = [frame_intensity_pct(frame, cfg.sensor_max)]
+            intensities = [frame_intensity_pct(frame, cfg.sensor_max, cfg.intensity_percentile)]
             brighter_idx = 0
 
         # Record the trajectory sample.

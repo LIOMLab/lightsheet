@@ -686,6 +686,7 @@ class StackPanelWidget(QWidget):
             "Kp": "0.4",
             "Ki": "0.05",
             "Pilot Count": "5",
+            "Intensity Percentile": "99.99",
         }
         try:
             cfg = cfg_read(str(CONFIG_PATH), "Adaptive", defaults)
@@ -708,6 +709,7 @@ class StackPanelWidget(QWidget):
             kp = float(cfg.get("Kp", "0.4"))
             ki = float(cfg.get("Ki", "0.05"))
             pilot = int(float(cfg.get("Pilot Count", "5")))
+            intensity_pct = float(cfg.get("Intensity Percentile", "99.99"))
         except (ValueError, TypeError):
             target_lo = float(defaults["Target Band Lo"]) / 100.0
             target_hi = float(defaults["Target Band Hi"]) / 100.0
@@ -716,7 +718,8 @@ class StackPanelWidget(QWidget):
             kp = float(defaults["Kp"])
             ki = float(defaults["Ki"])
             pilot = int(float(defaults["Pilot Count"]))
-        return target_lo, target_hi, reacquire, block_n, kp, ki, pilot
+            intensity_pct = float(defaults["Intensity Percentile"])
+        return target_lo, target_hi, reacquire, block_n, kp, ki, pilot, intensity_pct
 
     def build_adaptive_config(self) -> AdaptiveConfig | None:
         """Pre-sample the adaptive configuration on the GUI thread and
@@ -792,9 +795,16 @@ class StackPanelWidget(QWidget):
         # threshold, block size, Kp, Ki, pilot count) are config-only —
         # read from config.ini, not from the UI (they were removed from
         # the GUI to reduce clutter; they rarely change per experiment).
-        target_lo, target_hi, reacquire, block_n, kp, ki, pilot = (
-            self._read_adaptive_fixed_config()
-        )
+        (
+            target_lo,
+            target_hi,
+            reacquire,
+            block_n,
+            kp,
+            ki,
+            pilot,
+            intensity_pct,
+        ) = self._read_adaptive_fixed_config()
         return AdaptiveConfig(
             enabled=True,
             min_exposure_s=min_exp_s,
@@ -808,6 +818,7 @@ class StackPanelWidget(QWidget):
             kp=kp,
             ki=ki,
             pilot_count=pilot,
+            intensity_percentile=intensity_pct,
         )
 
     # --- Focus configuration group (opt-in camera focus compensation) -------

@@ -227,7 +227,7 @@ def test_adaptive_checked_valid_returns_frozen_config(
     monkeypatch.setattr(
         ctrl.stack_panel,
         "_read_adaptive_fixed_config",
-        lambda: (0.90, 0.95, 0.08, 8, 0.4, 0.05, 5),
+        lambda: (0.90, 0.95, 0.08, 8, 0.4, 0.05, 5, 99.99),
     )
     cfg = ctrl.stack_panel.build_adaptive_config()
     assert cfg is not None
