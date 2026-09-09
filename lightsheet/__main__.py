@@ -301,6 +301,17 @@ def main() -> int:
 
     configure_logging(config_path=str(CONFIG_PATH))
 
+    # Install the hardened module-level exception hook as early as
+    # possible — under pythonw (sys.stderr is None) the default hook has
+    # nowhere to write, so any uncaught startup exception before this
+    # point exits silently with no window and no traceback. Rebind the
+    # module copy to the hook in effect at install time so tests that
+    # pre-patch sys.excepthook are not forwarded into the real default
+    # hook.
+    global _original_excepthook
+    _original_excepthook = sys.excepthook
+    sys.excepthook = _exception_hook
+
     # Deferred imports so the nicaiu preload above runs first.
     from PySide6.QtWidgets import QApplication
 
@@ -339,13 +350,6 @@ def main() -> int:
     except Exception:  # pragma: no cover
         # nidaqmx not installed (macOS dev path uses the conftest stub) — skip.
         pass
-
-    # Install the hardened module-level exception hook. Rebind the module
-    # copy to the hook in effect at install time so tests that pre-patch
-    # sys.excepthook are not forwarded into the real default hook.
-    global _original_excepthook
-    _original_excepthook = sys.excepthook
-    sys.excepthook = _exception_hook
 
     # Initializing the app, controller (class which connects GUI to features)
     app = QApplication(sys.argv)
