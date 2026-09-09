@@ -83,8 +83,11 @@ def test_demo_arguments_and_empty_real_arguments() -> None:
     """The demo entry passes ``--demo``; the real entry's Arguments is empty."""
     text = _script_text()
     assert '"--demo"' in text
-    assert re.search(r'@\(\s*"Lightsheet\.lnk",\s*""\s*\)', text)
-    assert re.search(r'@\(\s*"Lightsheet Demo\.lnk",\s*"--demo"\s*\)', text)
+    assert re.search(r'@\(\s*"Lightsheet\.lnk",\s*""', text)
+    assert re.search(r'@\(\s*"Lightsheet Demo\.lnk",\s*"--demo"', text)
+    # The demo shortcut carries a distinguishing Description so the operator
+    # can tell the two .lnk files apart in the same folder.
+    assert "demo mode" in text.lower()
 
 
 def test_shortcut_field_values() -> None:

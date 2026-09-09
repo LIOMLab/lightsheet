@@ -24,11 +24,11 @@ ICON_SIZES = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
 
 def build_icon(source: Path, output: Path) -> None:
     """Convert ``source`` (a PNG) into a multi-resolution ICO at ``output``."""
-    src = Image.open(source)
-    if src.mode != "RGBA":
-        src = src.convert("RGBA")
-    output.parent.mkdir(parents=True, exist_ok=True)
-    src.save(output, format="ICO", sizes=ICON_SIZES)
+    with Image.open(source) as src:
+        if src.mode != "RGBA":
+            src = src.convert("RGBA")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        src.save(output, format="ICO", sizes=ICON_SIZES)
 
 
 def main() -> None:

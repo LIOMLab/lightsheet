@@ -60,28 +60,29 @@ try {
         $startMenuBase
     )
     $shortcuts = @(
-        @("Lightsheet.lnk", ""),
-        @("Lightsheet Demo.lnk", "--demo")
+        @("Lightsheet.lnk", "", "Lightsheet microscope controller"),
+        @("Lightsheet Demo.lnk", "--demo", "Lightsheet microscope controller (demo mode)")
     )
 
     foreach ($base in $bases) {
         foreach ($pair in $shortcuts) {
             $name = $pair[0]
-            $args = $pair[1]
+            $shortcutArgs = $pair[1]
+            $description = $pair[2]
             $path = Join-Path $base $name
             if ($WhatIf) {
-                Write-Output "Would create $path -> $Exe $args"
+                Write-Output "Would create $path -> $Exe $shortcutArgs"
                 continue
             }
             $sc = $Wsh.CreateShortcut($path)
             $sc.TargetPath = $Exe
             $sc.WorkingDirectory = $RepoRoot
-            $sc.Arguments = $args
+            $sc.Arguments = $shortcutArgs
             $sc.IconLocation = "$Icon,0"
             $sc.WindowStyle = 1
-            $sc.Description = "Lightsheet microscope controller"
+            $sc.Description = $description
             $sc.Save()
-            Write-Output "Created $path -> $Exe $args"
+            Write-Output "Created $path -> $Exe $shortcutArgs"
         }
     }
 } finally {
