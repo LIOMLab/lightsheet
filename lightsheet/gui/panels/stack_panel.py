@@ -11,14 +11,13 @@ StackWorker constructor — the worker thread never reads ``ui.*``.
 from __future__ import annotations
 
 import typing
-from pathlib import Path
 from typing import ClassVar
 
 import numpy as np
-from PySide6.QtWidgets import QDoubleSpinBox, QFileDialog, QWidget
+from PySide6.QtWidgets import QDoubleSpinBox, QWidget
 
+from lightsheet import CONFIG_PATH
 from lightsheet.adaptive.types import AdaptiveConfig
-from lightsheet.focus.calibration import load_focus_curve
 from lightsheet.focus.types import AutofocusConfig, FocusConfig, FocusCurve
 from lightsheet.gui.panels.acquisition_table_manager import AcquisitionTableManager
 from lightsheet.gui.panels.ui_stack_panel import Ui_StackPanel
@@ -114,38 +113,23 @@ class StackPanelWidget(QWidget):
         self._update_adaptive_shutter_units()
 
         # --- Focus configuration group wiring ---
-        # The armed focus curve and its file path are populated by
-        # pushButton_focusLoad after a successful validating JSON parse.
-        # Until then build_focus_config/build_focus_curve return None so
-        # the stack runs with fixed camera focus.
+        # The legacy per-block focus controls were removed from the panel;
+        # only the per-plane adaptive autofocus sub-surface remains. The
+        # armed focus curve state is retained for compatibility with the
+        # worker snapshot API but is no longer loaded through the UI.
         self._armed_focus_curve: FocusCurve | None = None
         self._armed_focus_curve_path: str = ""
-        # Load the validated [Focus] defaults from config.ini into the
-        # toggle, spinbox, residual checkbox, and cached residual tuning
-        # values. The schema already rejected out-of-range values at
-        # startup, so the loaded values are safe.
-        self._load_focus_config()
-        # Wire the enable toggle → fields-container visibility. The group
+        # Wire the master toggle → fields-container visibility. The group
         # box title row stays visible (the affordance) while only the
         # fields container is hidden on toggle-off.
         self.ui.checkBox_focusEnable.toggled.connect(self._on_focus_toggled)
         self.ui.widget_focusFields.setVisible(self.ui.checkBox_focusEnable.isChecked())
-        # Wire Browse to a JSON-only file chooser, Load to the validating
-        # curve loader, and the block-size spinbox to the hard 1..100 guard.
-        self.ui.pushButton_focusBrowse.clicked.connect(self._on_focus_browse)
-        self.ui.pushButton_focusLoad.clicked.connect(self._on_focus_load)
-        self.ui.doubleSpinBox_focusBlockSize.editingFinished.connect(
-            self._on_focus_block_size_edited
-        )
-        # Render the initial empty state and block-size hint.
-        self._update_focus_status_label()
 
         # --- Adaptive autofocus configuration group wiring ---
         # The per-plane predictive focus loop. Its widgets are pre-sampled
         # on the GUI thread into a frozen AutofocusConfig; the worker
         # receives the immutable snapshot and never reads ui.*.
         self._load_autofocus_config()
-        self.ui.checkBox_adaptiveAutofocus.toggled.connect(self._on_autofocus_toggled)
         self.ui.checkBox_autofocusUseCurve.toggled.connect(
             self._on_autofocus_use_curve_toggled
         )
@@ -161,7 +145,10 @@ class StackPanelWidget(QWidget):
         self.ui.doubleSpinBox_autofocusSmoothing.editingFinished.connect(
             self._on_autofocus_smoothing_edited
         )
-        self._on_autofocus_toggled(self.ui.checkBox_adaptiveAutofocus.isChecked())
+        # The master focus toggle now doubles as the adaptive-focus enable,
+        # so a separate adaptive checkbox is no longer needed.
+        self.ui.checkBox_focusEnable.toggled.connect(self._update_autofocus_status_label)
+        self._update_autofocus_status_label()
 
         # --- Adaptive-autofocus UI review fixes ---
         # The live status label is the primary focal point and must be bold.
@@ -510,7 +497,7 @@ class StackPanelWidget(QWidget):
             "Laser2 Max Power": "",
         }
         try:
-            cfg = cfg_read("config.ini", "Adaptive", defaults)
+            cfg = cfg_read(str(CONFIG_PATH), "Adaptive", defaults)
         except Exception:
             # No [Adaptive] section or config.ini unreadable — leave the
             # FieldSpec defaults in place.
@@ -701,7 +688,7 @@ class StackPanelWidget(QWidget):
             "Pilot Count": "5",
         }
         try:
-            cfg = cfg_read("config.ini", "Adaptive", defaults)
+            cfg = cfg_read(str(CONFIG_PATH), "Adaptive", defaults)
         except Exception:
             cfg = defaults
         # The schema validator rejects malformed [Adaptive] values at
@@ -803,217 +790,30 @@ class StackPanelWidget(QWidget):
 
     # --- Focus configuration group (opt-in camera focus compensation) -------
 
-    def _load_focus_config(self) -> None:
-        """Load the validated [Focus] defaults from config.ini into the
-        widget state. The schema already rejected out-of-range values at
-        startup, so the loaded values are safe. A missing [Focus] section
-        leaves the widget defaults in place and falls back to the
-        documented residual tuning values.
-        """
-        from lightsheet.config import cfg_read
-
-        defaults = {
-            "Enabled": "",
-            "Block Size N": "",
-            "Autofocus Residual Enabled": "",
-            "Residual Gain Mm": "0.05",
-            "Max Residual Mm": "0.5",
-        }
-        try:
-            cfg = cfg_read("config.ini", "Focus", defaults)
-        except Exception:
-            cfg = defaults
-        _set = {
-            "Enabled": ("checkBox_focusEnable", "bool"),
-            "Block Size N": ("doubleSpinBox_focusBlockSize", "float"),
-            "Autofocus Residual Enabled": (
-                "checkBox_focusAutofocusResidual",
-                "bool",
-            ),
-        }
-        for key, (widget_name, kind) in _set.items():
-            raw = str(cfg.get(key, "")).strip()
-            if not raw:
-                continue
-            w = getattr(self.ui, widget_name, None)
-            if w is None:
-                continue
-            try:
-                if kind == "bool":
-                    w.setChecked(raw.lower() in ("true", "1", "yes"))
-                else:
-                    w.setValue(float(raw))
-            except (ValueError, AttributeError):
-                pass
-        # Residual tuning is config-only (no GUI widgets); cache it for
-        # build_focus_config. Parsing failures fall back to the defaults.
-        try:
-            self._focus_residual_gain_mm = float(
-                cfg.get("Residual Gain Mm", "0.05") or "0.05"
-            )
-        except ValueError:
-            self._focus_residual_gain_mm = 0.05
-        try:
-            self._focus_max_residual_mm = float(
-                cfg.get("Max Residual Mm", "0.5") or "0.5"
-            )
-        except ValueError:
-            self._focus_max_residual_mm = 0.5
-
     def _on_focus_toggled(self, checked: bool) -> None:
         """Toggle the focus fields container visibility. The group box
         title row stays visible (the affordance) while only the fields
         container is hidden on toggle-off."""
         self.ui.widget_focusFields.setVisible(checked)
 
-    def _on_focus_browse(self) -> None:
-        """Open a JSON-only file dialog and, if the operator confirms,
-        write the chosen path into lineEdit_focusCurvePath."""
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Open Focus Calibration",
-            "",
-            "Calibration files (*.json);;All files (*.*)",
-        )
-        if path:
-            self.ui.lineEdit_focusCurvePath.setText(path)
+    def build_focus_config(self) -> FocusConfig | None:
+        """Legacy per-block focus controls were removed from the panel.
 
-    def _on_focus_load(self) -> None:
-        """Validate the file chosen in lineEdit_focusCurvePath and, if
-        valid, arm the focus group. On failure emit sig_beep + sig_message
-        with the documented invalid-file copy and keep the group unarmed.
+        The frozen ``FocusConfig`` return type is retained for
+        compatibility with the worker snapshot API, but this panel no
+        longer arms a per-block focus curve.
         """
-        path = self.ui.lineEdit_focusCurvePath.text().strip()
-        if not path:
-            self._clear_focus_armed()
-            self._shell.sig_beep.emit()
-            self._shell.sig_message.emit(
-                "No focus calibration file selected. Load a file or uncheck "
-                "Camera focus compensation."
-            )
-            self.ui.label_focusStatus.setText("Invalid file — no path")
-            return
+        return None
 
-        # Read the camera travel limits from the live HAL for the
-        # validating loader; fall back to the documented 0-35 mm Zaber
-        # T-LS camera mechanical limits if the bundle is not yet available.
-        cam_lo_mm = 0.0
-        cam_hi_mm = 35.0
-        motors = getattr(self._shell, "motors", None)
-        if motors is not None:
-            try:
-                cam_lo_mm = float(motors.camera.get_limit_low("mm"))
-            except (TypeError, ValueError, AttributeError):
-                cam_lo_mm = 0.0
-            try:
-                cam_hi_mm = float(motors.camera.get_limit_high("mm"))
-            except (TypeError, ValueError, AttributeError):
-                cam_hi_mm = 35.0
-
-        try:
-            curve = load_focus_curve(path, cam_lo_mm, cam_hi_mm)
-        except ValueError as exc:
-            self._clear_focus_armed()
-            self._shell.sig_beep.emit()
-            reason = str(exc)
-            self._shell.sig_message.emit(
-                f"Focus calibration file invalid: {path}. {reason}. "
-                "The stack will run without focus compensation. "
-                "Load a valid file or uncheck Camera focus compensation."
-            )
-            self.ui.label_focusStatus.setText(f"Invalid file — {reason}")
-            return
-
-        self._armed_focus_curve = curve
-        self._armed_focus_curve_path = path
-        self._update_focus_status_label()
-        self._refresh_autofocus_use_curve_state()
-
-    def _load_demo_focus_curve(self) -> None:
-        """Arm the bundled sample focus curve when running in demo mode.
-
-        The sample lives in ``lightsheet/resources/`` next to the demo
-        image so it is packaged and present on any checkout. A missing
-        sample is silently ignored; the operator can still browse for a
-        custom file.
-        """
-        sample = (
-            Path(__file__).resolve().parents[2]
-            / "resources"
-            / "focus_sample_calibration.json"
-        )
-        if not sample.exists():
-            return
-        self.ui.lineEdit_focusCurvePath.setText(str(sample))
-        self._on_focus_load()
+    def build_focus_curve(self) -> FocusCurve | None:
+        """Legacy per-block focus curve loader was removed from the panel."""
+        return None
 
     def _clear_focus_armed(self) -> None:
-        """Disarm the focus curve. build_focus_config/build_focus_curve
-        will return None until a new file is loaded."""
+        """Disarm any loaded focus curve and refresh the use-curve seed UI."""
         self._armed_focus_curve = None
         self._armed_focus_curve_path = ""
         self._refresh_autofocus_use_curve_state()
-
-    def _update_focus_status_label(self) -> None:
-        """Render label_focusStatus and label_focusBlockHint from the
-        current armed state and block-size widget."""
-        block_size = int(self.ui.doubleSpinBox_focusBlockSize.value())
-        self.ui.label_focusBlockHint.setText(
-            f"Camera focus is updated once every {block_size} planes. "
-            "The last applied position is held between blocks."
-        )
-        if self._armed_focus_curve is None:
-            self.ui.label_focusStatus.setText("Not armed — no file loaded")
-            return
-        n_points = len(self._armed_focus_curve.stage_pos)
-        residual = (
-            "on" if self.ui.checkBox_focusAutofocusResidual.isChecked() else "off"
-        )
-        self.ui.label_focusStatus.setText(
-            f"Armed: {n_points} points | block size {block_size} "
-            f"| per-block residual {residual}"
-        )
-
-    def _on_focus_block_size_edited(self) -> None:
-        """editingFinished on doubleSpinBox_focusBlockSize: reject values
-        outside the 1..100 schema range with beep + revert to the nearest
-        bound. Valid edits update the block-size hint."""
-        sb = self.ui.doubleSpinBox_focusBlockSize
-        value = sb.value()
-        if value < 1.0 or value > 100.0:
-            self._shell.sig_beep.emit()
-            new_value = 1.0 if value < 1.0 else 100.0
-            sb.setValue(new_value)
-        self._update_focus_status_label()
-
-    def build_focus_config(self) -> FocusConfig | None:
-        """Pre-sample the focus configuration on the GUI thread and return
-        a frozen ``FocusConfig`` (or ``None`` when the toggle is unchecked
-        or no calibration file is armed).
-
-        The frozen dataclass is safe to share across threads (immutable)
-        — the worker thread receives one snapshot and never reads
-        ``ui.*``.
-        """
-        if not self.ui.checkBox_focusEnable.isChecked():
-            return None
-        if self._armed_focus_curve is None or not self._armed_focus_curve_path:
-            return None
-        return FocusConfig(
-            enabled=True,
-            block_size_n=int(self.ui.doubleSpinBox_focusBlockSize.value()),
-            autofocus_residual=self.ui.checkBox_focusAutofocusResidual.isChecked(),
-            curve_path=self._armed_focus_curve_path,
-            residual_gain_mm=self._focus_residual_gain_mm,
-            max_residual_mm=self._focus_max_residual_mm,
-        )
-
-    def build_focus_curve(self) -> FocusCurve | None:
-        """Return the armed ``FocusCurve`` object (or ``None`` when the
-        toggle is unchecked or no file is armed)."""
-        if not self.ui.checkBox_focusEnable.isChecked():
-            return None
-        return self._armed_focus_curve
 
     def _load_autofocus_config(self) -> None:
         """Load the validated [Autofocus] defaults from config.ini into the
@@ -1032,11 +832,10 @@ class StackPanelWidget(QWidget):
             "Use Curve Seed": "",
         }
         try:
-            cfg = cfg_read("config.ini", "Autofocus", defaults)
+            cfg = cfg_read(str(CONFIG_PATH), "Autofocus", defaults)
         except Exception:
             cfg = defaults
         _set = {
-            "Enabled": ("checkBox_adaptiveAutofocus", "bool"),
             "Cadence": ("doubleSpinBox_autofocusCadence", "float"),
             "Residual Gain Mm": ("doubleSpinBox_autofocusResidualGain", "float"),
             "Max Residual Mm": ("doubleSpinBox_autofocusMaxResidual", "float"),
@@ -1071,17 +870,6 @@ class StackPanelWidget(QWidget):
         else:
             cb.setEnabled(True)
 
-    def _on_autofocus_toggled(self, checked: bool) -> None:
-        """Toggle the adaptive-autofocus sub-surface. The group title and
-        master checkbox remain visible; the parameter container, status,
-        hint, and progress bar are shown only when adaptive is enabled."""
-        self.ui.widget_adaptiveAutofocusFields.setVisible(checked)
-        self.ui.line_autofocusSeparator.setVisible(checked)
-        self.ui.label_autofocusStatus.setVisible(checked)
-        self.ui.label_autofocusHint.setVisible(checked)
-        self.ui.progressBar_autofocus.setVisible(False)
-        self._update_autofocus_status_label()
-
     def _on_autofocus_use_curve_toggled(self, checked: bool) -> None:
         """Enable the use-curve checkbox only when a focus curve is armed.
         If the user checks it without an armed curve, beep and reject."""
@@ -1102,7 +890,7 @@ class StackPanelWidget(QWidget):
             "The residual is updated from the saved frame's sharpness and "
             "applied to the next plane."
         )
-        if not self.ui.checkBox_adaptiveAutofocus.isChecked():
+        if not self.ui.checkBox_focusEnable.isChecked():
             self.ui.label_autofocusStatus.setText(
                 "Adaptive focus disabled. Enable it to update the camera focus "
                 "on the fly during the stack."
@@ -1185,7 +973,7 @@ class StackPanelWidget(QWidget):
         The frozen dataclass is safe to share across threads (immutable) — the
         worker thread receives one snapshot and never reads ``ui.*``.
         """
-        if not self.ui.checkBox_adaptiveAutofocus.isChecked():
+        if not self.ui.checkBox_focusEnable.isChecked():
             return None
         return AutofocusConfig(
             enabled=True,
@@ -1242,7 +1030,7 @@ class StackPanelWidget(QWidget):
         per-plane progress bar is shown. When the stack finishes or aborts,
         the widgets are re-enabled and the progress bar is hidden.
         """
-        if not self.ui.checkBox_adaptiveAutofocus.isChecked():
+        if not self.ui.checkBox_focusEnable.isChecked():
             self.ui.progressBar_autofocus.setVisible(False)
             return
 
@@ -1251,15 +1039,15 @@ class StackPanelWidget(QWidget):
             self.ui.progressBar_autofocus.setRange(0, n_planes)
             self.ui.progressBar_autofocus.setValue(0)
             self.ui.progressBar_autofocus.setVisible(True)
-            self.ui.checkBox_adaptiveAutofocus.setEnabled(False)
+            self.ui.checkBox_focusEnable.setEnabled(False)
             self.ui.widget_adaptiveAutofocusFields.setEnabled(False)
             self.ui.checkBox_autofocusUseCurve.setEnabled(False)
         else:
             self.ui.progressBar_autofocus.setVisible(False)
-            self.ui.checkBox_adaptiveAutofocus.setEnabled(True)
+            self.ui.checkBox_focusEnable.setEnabled(True)
             # Re-enable the parameter container only when adaptive is on; the
             # use-curve checkbox follows the armed-curve policy.
             self.ui.widget_adaptiveAutofocusFields.setEnabled(
-                self.ui.checkBox_adaptiveAutofocus.isChecked()
+                self.ui.checkBox_focusEnable.isChecked()
             )
             self._refresh_autofocus_use_curve_state()

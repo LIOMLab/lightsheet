@@ -44,6 +44,7 @@ from PySide6.QtWidgets import (
     QToolButton,
 )
 
+from lightsheet import CONFIG_PATH
 from lightsheet.config import cfg_read, cfg_write
 from lightsheet.gui.coordinators.adaptive_dock_controller import (
     AdaptiveDockController,
@@ -590,7 +591,7 @@ class Controller_MainWindow(QMainWindow):
 
         # Set configurable settings to default values
         self.cfg_settings = copy.deepcopy(self._cfg_defaults)
-        self.cfg_settings = cfg_read("config.ini", "Controller", self.cfg_settings)
+        self.cfg_settings = cfg_read(str(CONFIG_PATH), "Controller", self.cfg_settings)
 
         # Reflect the persisted [Controller] Theme onto the checked action
         # of the exclusive theme QActionGroup (wired above). The read side
@@ -777,11 +778,6 @@ class Controller_MainWindow(QMainWindow):
         self.sig_progress_update.connect(self.ui.statusBar_progress.setValue)
         self.sig_progress_update.connect(self._on_progress_update)
         self.sig_message.connect(self.updateUi_message_printer)
-
-        # In demo mode, pre-load the bundled sample focus curve now that
-        # the message signal is wired so a load failure is visible.
-        if self._demo_mode:
-            self.stack_panel._load_demo_focus_curve()
 
         # ---
         # Connections for menu actions
@@ -1370,7 +1366,8 @@ class Controller_MainWindow(QMainWindow):
             self.timer_imageview.start(100)
 
             # L2 (iBeam) status poll — a separate gated QTimer
-            _ibeam_cfg = cfg_read("config.ini", "iBeam", {"Status Poll Interval": 1.0})  # ty: ignore[invalid-argument-type]
+            _ibeam_defaults = {"Status Poll Interval": "1.0"}
+            _ibeam_cfg = cfg_read(str(CONFIG_PATH), "iBeam", _ibeam_defaults)
             self.timer_laser2_status = QTimer()
             self.timer_laser2_status.timeout.connect(self._hw._poll_laser2_status_gated)
             self.timer_laser2_status.start(
@@ -1608,14 +1605,14 @@ class Controller_MainWindow(QMainWindow):
         # sig_stylesheet emission and action-checkmark stay outside the
         # guard (in-memory only).
         if not getattr(self, "_demo_mode", False):
-            cfg_write("config.ini", "Controller", {"Theme": "light"})
+            cfg_write(str(CONFIG_PATH), "Controller", {"Theme": "light"})
         self.ui.statusbar.showMessage("Theme: Light (saved).", 3000)
         self.ui.action_lightTheme.setChecked(True)
 
     def updateUi_dark_theme(self) -> None:
         self.sig_stylesheet.emit("dark")
         if not getattr(self, "_demo_mode", False):
-            cfg_write("config.ini", "Controller", {"Theme": "dark"})
+            cfg_write(str(CONFIG_PATH), "Controller", {"Theme": "dark"})
         self.ui.statusbar.showMessage("Theme: Dark (saved).", 3000)
         self.ui.action_darkTheme.setChecked(True)
 
@@ -1627,7 +1624,7 @@ class Controller_MainWindow(QMainWindow):
         override across sessions."""
         self.sig_stylesheet.emit("system")
         if not getattr(self, "_demo_mode", False):
-            cfg_write("config.ini", "Controller", {"Theme": "system"})
+            cfg_write(str(CONFIG_PATH), "Controller", {"Theme": "system"})
         self.ui.statusbar.showMessage("Theme: Follow System (saved).", 3000)
         self.ui.action_followSystemTheme.setChecked(True)
 

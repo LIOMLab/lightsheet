@@ -69,8 +69,6 @@ _OBJNAME_TO_PANEL = {
     "doubleSpinBox_adaptiveLaser1MaxPower": "stack_panel",
     "doubleSpinBox_adaptiveLaser2MinPower": "stack_panel",
     "doubleSpinBox_adaptiveLaser2MaxPower": "stack_panel",
-    # stack_panel — focus compensation group
-    "doubleSpinBox_focusBlockSize": "stack_panel",
     # stack_panel — predictive adaptive-autofocus group
     "doubleSpinBox_autofocusCadence": "stack_panel",
     "doubleSpinBox_autofocusResidualGain": "stack_panel",

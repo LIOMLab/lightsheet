@@ -16,9 +16,9 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QCheckBox, QFrame, QGridLayout,
-    QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-    QProgressBar, QPushButton, QSizePolicy, QSpacerItem,
-    QVBoxLayout, QWidget)
+    QGroupBox, QHBoxLayout, QLabel, QProgressBar,
+    QPushButton, QSizePolicy, QSpacerItem, QVBoxLayout,
+    QWidget)
 from lightsheet.gui.styles import spacing as _s
 
 from lightsheet.gui.widgets.field_spec_spinbox import FieldSpecSpinBox
@@ -327,78 +327,9 @@ class Ui_StackPanel(object):
         self.gridLayout_focusFields.setSpacing(_s.SM)
         self.gridLayout_focusFields.setObjectName(u"gridLayout_focusFields")
         self.gridLayout_focusFields.setContentsMargins(_s.ZERO, _s.ZERO, _s.ZERO, _s.ZERO)
-        self.groupBox_legacyFocus = QGroupBox(self.widget_focusFields)
-        self.groupBox_legacyFocus.setObjectName(u"groupBox_legacyFocus")
-        self.gridLayout_legacyFocus = QGridLayout(self.groupBox_legacyFocus)
-        self.gridLayout_legacyFocus.setSpacing(_s.SM)
-        self.gridLayout_legacyFocus.setObjectName(u"gridLayout_legacyFocus")
-        self.lineEdit_focusCurvePath = QLineEdit(self.groupBox_legacyFocus)
-        self.lineEdit_focusCurvePath.setObjectName(u"lineEdit_focusCurvePath")
-
-        self.gridLayout_legacyFocus.addWidget(self.lineEdit_focusCurvePath, 0, 0, 1, 2)
-
-        self.pushButton_focusBrowse = QPushButton(self.groupBox_legacyFocus)
-        self.pushButton_focusBrowse.setObjectName(u"pushButton_focusBrowse")
-
-        self.gridLayout_legacyFocus.addWidget(self.pushButton_focusBrowse, 0, 2, 1, 1)
-
-        self.pushButton_focusLoad = QPushButton(self.groupBox_legacyFocus)
-        self.pushButton_focusLoad.setObjectName(u"pushButton_focusLoad")
-
-        self.gridLayout_legacyFocus.addWidget(self.pushButton_focusLoad, 0, 3, 1, 1)
-
-        self.doubleSpinBox_focusBlockSize = FieldSpecSpinBox(self.groupBox_legacyFocus)
-        self.doubleSpinBox_focusBlockSize.setObjectName(u"doubleSpinBox_focusBlockSize")
-        self.doubleSpinBox_focusBlockSize.setDecimals(0)
-        self.doubleSpinBox_focusBlockSize.setMinimum(1.000000000000000)
-        self.doubleSpinBox_focusBlockSize.setMaximum(100.000000000000000)
-        self.doubleSpinBox_focusBlockSize.setSingleStep(1.000000000000000)
-        self.doubleSpinBox_focusBlockSize.setValue(8.000000000000000)
-
-        self.gridLayout_legacyFocus.addWidget(self.doubleSpinBox_focusBlockSize, 1, 0, 1, 4)
-
-        self.checkBox_focusAutofocusResidual = QCheckBox(self.groupBox_legacyFocus)
-        self.checkBox_focusAutofocusResidual.setObjectName(u"checkBox_focusAutofocusResidual")
-        self.checkBox_focusAutofocusResidual.setChecked(True)
-
-        self.gridLayout_legacyFocus.addWidget(self.checkBox_focusAutofocusResidual, 2, 0, 1, 4)
-
-        self.line_focusResidualSeparator = QFrame(self.groupBox_legacyFocus)
-        self.line_focusResidualSeparator.setObjectName(u"line_focusResidualSeparator")
-        self.line_focusResidualSeparator.setFrameShape(QFrame.Shape.HLine)
-        self.line_focusResidualSeparator.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.gridLayout_legacyFocus.addWidget(self.line_focusResidualSeparator, 3, 0, 1, 4)
-
-        self.label_focusStatus = QLabel(self.groupBox_legacyFocus)
-        self.label_focusStatus.setObjectName(u"label_focusStatus")
-
-        self.gridLayout_legacyFocus.addWidget(self.label_focusStatus, 4, 0, 1, 4)
-
-        self.label_focusBlockHint = QLabel(self.groupBox_legacyFocus)
-        self.label_focusBlockHint.setObjectName(u"label_focusBlockHint")
-        self.label_focusBlockHint.setWordWrap(True)
-
-        self.gridLayout_legacyFocus.addWidget(self.label_focusBlockHint, 5, 0, 1, 4)
-
-
-        self.gridLayout_focusFields.addWidget(self.groupBox_legacyFocus, 0, 0, 1, 4)
-
-        self.checkBox_adaptiveAutofocus = QCheckBox(self.widget_focusFields)
-        self.checkBox_adaptiveAutofocus.setObjectName(u"checkBox_adaptiveAutofocus")
-
-        self.gridLayout_focusFields.addWidget(self.checkBox_adaptiveAutofocus, 1, 0, 1, 4)
-
-        self.line_autofocusSeparator = QFrame(self.widget_focusFields)
-        self.line_autofocusSeparator.setObjectName(u"line_autofocusSeparator")
-        self.line_autofocusSeparator.setFrameShape(QFrame.Shape.HLine)
-        self.line_autofocusSeparator.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.gridLayout_focusFields.addWidget(self.line_autofocusSeparator, 2, 0, 1, 4)
-
         self.widget_adaptiveAutofocusFields = QWidget(self.widget_focusFields)
         self.widget_adaptiveAutofocusFields.setObjectName(u"widget_adaptiveAutofocusFields")
-        self.widget_adaptiveAutofocusFields.setVisible(False)
+        self.widget_adaptiveAutofocusFields.setVisible(True)
         self.gridLayout_adaptiveAutofocusFields = QGridLayout(self.widget_adaptiveAutofocusFields)
         self.gridLayout_adaptiveAutofocusFields.setSpacing(_s.SM)
         self.gridLayout_adaptiveAutofocusFields.setObjectName(u"gridLayout_adaptiveAutofocusFields")
@@ -470,24 +401,24 @@ class Ui_StackPanel(object):
         self.gridLayout_adaptiveAutofocusFields.addWidget(self.checkBox_autofocusUseCurve, 4, 0, 1, 2)
 
 
-        self.gridLayout_focusFields.addWidget(self.widget_adaptiveAutofocusFields, 3, 0, 1, 4)
+        self.gridLayout_focusFields.addWidget(self.widget_adaptiveAutofocusFields, 0, 0, 1, 4)
 
         self.label_autofocusStatus = QLabel(self.widget_focusFields)
         self.label_autofocusStatus.setObjectName(u"label_autofocusStatus")
 
-        self.gridLayout_focusFields.addWidget(self.label_autofocusStatus, 4, 0, 1, 4)
+        self.gridLayout_focusFields.addWidget(self.label_autofocusStatus, 1, 0, 1, 4)
 
         self.label_autofocusHint = QLabel(self.widget_focusFields)
         self.label_autofocusHint.setObjectName(u"label_autofocusHint")
         self.label_autofocusHint.setWordWrap(True)
 
-        self.gridLayout_focusFields.addWidget(self.label_autofocusHint, 5, 0, 1, 4)
+        self.gridLayout_focusFields.addWidget(self.label_autofocusHint, 2, 0, 1, 4)
 
         self.progressBar_autofocus = QProgressBar(self.widget_focusFields)
         self.progressBar_autofocus.setObjectName(u"progressBar_autofocus")
         self.progressBar_autofocus.setVisible(False)
 
-        self.gridLayout_focusFields.addWidget(self.progressBar_autofocus, 6, 0, 1, 4)
+        self.gridLayout_focusFields.addWidget(self.progressBar_autofocus, 3, 0, 1, 4)
 
 
         self.verticalLayout_focusControl.addWidget(self.widget_focusFields)
@@ -571,25 +502,6 @@ class Ui_StackPanel(object):
         self.checkBox_focusEnable.setToolTip(QCoreApplication.translate("StackPanel", u"Enable camera focus compensation during the stack. When unchecked the stack runs with fixed camera position.", None))
 #endif // QT_CONFIG(tooltip)
         self.checkBox_focusEnable.setText(QCoreApplication.translate("StackPanel", u"Camera focus compensation", None))
-        self.groupBox_legacyFocus.setTitle(QCoreApplication.translate("StackPanel", u"Legacy per-block focus", None))
-#if QT_CONFIG(tooltip)
-        self.lineEdit_focusCurvePath.setToolTip(QCoreApplication.translate("StackPanel", u"Absolute or relative path to the JSON focus calibration file.", None))
-#endif // QT_CONFIG(tooltip)
-        self.pushButton_focusBrowse.setText(QCoreApplication.translate("StackPanel", u"Browse...", None))
-        self.pushButton_focusLoad.setText(QCoreApplication.translate("StackPanel", u"Load Calibration", None))
-#if QT_CONFIG(tooltip)
-        self.doubleSpinBox_focusBlockSize.setToolTip(QCoreApplication.translate("StackPanel", u"Number of planes between camera focus updates. The last applied position is held between blocks.", None))
-#endif // QT_CONFIG(tooltip)
-#if QT_CONFIG(tooltip)
-        self.checkBox_focusAutofocusResidual.setToolTip(QCoreApplication.translate("StackPanel", u"Enable per-block sharpness-based residual correction on top of the feedforward calibration curve.", None))
-#endif // QT_CONFIG(tooltip)
-        self.checkBox_focusAutofocusResidual.setText(QCoreApplication.translate("StackPanel", u"Enable per-block residual", None))
-        self.label_focusStatus.setText(QCoreApplication.translate("StackPanel", u"Not armed \u2014 no file loaded", None))
-        self.label_focusBlockHint.setText(QCoreApplication.translate("StackPanel", u"Camera focus is updated once every 8 planes. The last applied position is held between blocks.", None))
-#if QT_CONFIG(tooltip)
-        self.checkBox_adaptiveAutofocus.setToolTip(QCoreApplication.translate("StackPanel", u"Enable per-plane adaptive autofocus to update camera focus during the stack.", None))
-#endif // QT_CONFIG(tooltip)
-        self.checkBox_adaptiveAutofocus.setText(QCoreApplication.translate("StackPanel", u"Adaptive focus", None))
         self.label_autofocusCadence.setText(QCoreApplication.translate("StackPanel", u"Update cadence (planes)", None))
         self.label_autofocusResidualGain.setText(QCoreApplication.translate("StackPanel", u"Residual gain (mm)", None))
         self.label_autofocusMaxResidual.setText(QCoreApplication.translate("StackPanel", u"Max residual (mm)", None))

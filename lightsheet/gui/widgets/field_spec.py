@@ -109,8 +109,6 @@ FIELD_SPECS: dict[str, FieldSpec] = {
     "doubleSpinBox_adaptiveLaser1MaxPower": FieldSpec("mW", 1, 0.5, 5.0, 0.0, 150.0),
     "doubleSpinBox_adaptiveLaser2MinPower": FieldSpec("mW", 1, 0.5, 5.0, 0.0, 150.0),
     "doubleSpinBox_adaptiveLaser2MaxPower": FieldSpec("mW", 1, 0.5, 5.0, 0.0, 150.0),
-    # Stack panel — focus compensation group
-    "doubleSpinBox_focusBlockSize": FieldSpec("", 0, 1, 5, 1, 100),
     # Stack panel — predictive adaptive-autofocus group
     "doubleSpinBox_autofocusCadence": FieldSpec("", 0, 1, 5, 1, 1000),
     "doubleSpinBox_autofocusResidualGain": FieldSpec("mm", 3, 0.01, 0.1, 0.0, 1.0),
@@ -158,8 +156,6 @@ FIELD_PURPOSES: dict[str, str] = {
     "doubleSpinBox_adaptiveLaser1MaxPower": "Adaptive laser 1 max power bound",
     "doubleSpinBox_adaptiveLaser2MinPower": "Adaptive laser 2 min power bound",
     "doubleSpinBox_adaptiveLaser2MaxPower": "Adaptive laser 2 max power bound",
-    # Stack panel — focus compensation group
-    "doubleSpinBox_focusBlockSize": "Focus compensation block size (planes)",
     # Stack panel — predictive adaptive-autofocus group. Each purpose leads
     # with the exact on-widget label text so tooltips and labels stay in sync.
     "doubleSpinBox_autofocusCadence": (
