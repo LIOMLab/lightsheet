@@ -38,7 +38,7 @@ def test_ico_file_exists_and_is_valid() -> None:
     """The committed icon exists, is ICO format, and embeds the required sizes."""
     assert ICO_PATH.is_file(), f"missing committed icon: {ICO_PATH}"
     sizes = _ico_sizes(ICO_PATH)
-    assert REQUIRED_SIZES <= sizes, (
+    assert sizes >= REQUIRED_SIZES, (
         f"icon missing sizes {REQUIRED_SIZES - sizes}; embedded: {sorted(sizes)}"
     )
 
