@@ -617,6 +617,7 @@ dependencies = [
 dev = [
     { name = "coverage-threshold" },
     { name = "h5py-stubs" },
+    { name = "pillow" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-env" },
@@ -650,6 +651,7 @@ requires-dist = [
 dev = [
     { name = "coverage-threshold", specifier = ">=0.6.2" },
     { name = "h5py-stubs", specifier = ">=0.1.2" },
+    { name = "pillow", specifier = ">=10" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "pytest-env", specifier = ">=1.1.3" },

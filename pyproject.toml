@@ -267,6 +267,7 @@ error-on-warning = true
 dev = [
     "coverage-threshold>=0.6.2",
     "h5py-stubs>=0.1.2",
+    "pillow>=10",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     "pytest-env>=1.1.3",
