@@ -159,6 +159,31 @@ def test_unchanged_line_time_does_not_recompute_waveforms(qtbot: QtBot) -> None:
     assert calls == ["set_lightsheet_mode", "acquire_scan"]
 
 
+def test_set_lightsheet_mode_failure_restores_line_time(qtbot: QtBot) -> None:
+    """A set_lightsheet_mode() rejection restores the pre-assignment
+    lightsheet_line_time so the refused candidate is not re-submitted by
+    every later arm_scan. The exception still propagates so the run
+    aborts loudly."""
+    worker = _make_worker(qtbot)
+    worker.camera.lightsheet_exposed_lines = 16
+    worker.camera.lightsheet_line_time = 0.005
+    worker.camera.line_time = 0.005
+
+    class _FirmwareRejection(Exception):
+        pass
+
+    def _reject() -> None:
+        raise _FirmwareRejection("line time below firmware floor")
+
+    worker.camera.set_lightsheet_mode = _reject  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+
+    cmd = AdaptiveCommand.fixed(exposure_s=0.080, laser1_mw=0.0, laser2_mw=0.0)
+    with pytest.raises(_FirmwareRejection):
+        worker._apply_adaptive_command(cmd)
+
+    assert worker.camera.lightsheet_line_time == pytest.approx(0.005)
+
+
 def test_rolling_mode_still_uses_ms_exposure_register(qtbot: QtBot) -> None:
     """Rolling-shutter regression: the adaptive exposure is written to the
     delay/exposure register in whole milliseconds via set_exposure_time,

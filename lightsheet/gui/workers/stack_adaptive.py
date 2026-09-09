@@ -89,10 +89,21 @@ class _StackAdaptiveMixin:
         applied_line_time_s: float | None = None
         if shutter_mode == "Lightsheet":
             previous_line_time = getattr(self.camera, "line_time", None)
+            previous_intent = self.camera.lightsheet_line_time
             self.camera.lightsheet_line_time = _lightsheet_line_time_from_exposure(
                 cmd.exposure_s, self.camera.lightsheet_exposed_lines
             )
-            self.camera.set_lightsheet_mode()
+            try:
+                self.camera.set_lightsheet_mode()
+            except Exception:
+                # A rejected set_lightsheet_mode must not leave the
+                # refused candidate assigned to lightsheet_line_time —
+                # every later arm_scan re-submits that attribute and
+                # would wedge the session on the same firmware rejection.
+                # Restore the pre-assignment intent, then re-raise so the
+                # run still aborts loudly.
+                self.camera.lightsheet_line_time = previous_intent
+                raise
             applied_line_time_s = self.camera.line_time
             if applied_line_time_s is not None and (
                 previous_line_time is None
