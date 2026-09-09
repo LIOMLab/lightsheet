@@ -191,12 +191,13 @@ def test_pi_residual_proportional_response() -> None:
 def test_pi_residual_integral_accumulates() -> None:
     cfg = _cfg()
     integral = 0.0
-    # Two steps of persistent +0.05 error → integral grows by ki*0.05
-    # each step.
+    exposure_span = cfg.max_exposure_s - cfg.min_exposure_s
+    # Two steps of persistent +0.05 error → integral grows by
+    # ki * 0.05 * exposure_span each step.
     _, integral = pi_residual(error=0.05, integral=integral, cfg=cfg)
-    assert integral == pytest.approx(cfg.ki * 0.05, abs=1e-9)
+    assert integral == pytest.approx(cfg.ki * 0.05 * exposure_span, abs=1e-9)
     _, integral = pi_residual(error=0.05, integral=integral, cfg=cfg)
-    assert integral == pytest.approx(2 * cfg.ki * 0.05, abs=1e-9)
+    assert integral == pytest.approx(2 * cfg.ki * 0.05 * exposure_span, abs=1e-9)
 
 
 def test_pi_residual_anti_windup_clamps_integral() -> None:

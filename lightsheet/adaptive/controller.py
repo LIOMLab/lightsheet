@@ -66,30 +66,23 @@ def pi_residual(
     loop reduces exposure/power. Anti-windup clamps the integral to the
     exposure span so a persistent large error cannot grow it unbounded.
 
-    Unit convention (intentional, not a bug): the P-term delta returned
-    here is a dimensionless fraction (``-kp * error``); the caller in
-    ``AdaptiveController.update`` scales it by the current exposure
-    (``scaled_delta = delta * current_exposure_s``) so the proportional
-    correction is proportional to the exposure level. The integral is
-    NOT scaled by exposure at the subtraction site — it accumulates
-    ``ki * error`` (dimensionless fraction x gain) and is subtracted
-    directly from exposure in seconds. The anti-windup limit
-    (``max_exposure_s - min_exposure_s``) treats the integral as having
-    units of seconds, so ``ki`` is tuned so that ``ki * error`` lands in
-    the right exposure-second magnitude. The practical consequence: the
-    integral's relative contribution to the exposure correction varies
-    with the current exposure level — at low exposure the integral
-    dominates, at high exposure the P-term dominates. This is the
-    intended tuning; ``ki`` is small (0.05) so the integral acts as a
-    slow steady-state trim rather than a fast correction. Scaling the
-    integral by exposure (matching the P-term) would change the loop
-    response and require re-tuning ``ki`` and re-validating the pilot
-    trajectory — do not change this without operator sign-off.
+    The P-term delta returned here is a dimensionless fraction
+    (``-kp * error``); the caller in ``AdaptiveController.update`` scales
+    it by the current exposure (``scaled_delta = delta *
+    current_exposure_s``) so the proportional correction is proportional
+    to the exposure level. The integral is also expressed in seconds:
+    each step it grows by ``ki * error * (max_exposure_s -
+    min_exposure_s)``. Scaling the increment by the full exposure span
+    keeps ``ki`` independent of the configured exposure bounds — a
+    ``ki`` of 0.05 means the integral can move by 5% of the span per
+    step at full error. This prevents the unscaled rule
+    (``ki * error``) from flipping the integrator between the windup
+    limits in a single step when the exposure range is narrow.
     """
-    new_integral = integral + cfg.ki * error
+    exposure_span = cfg.max_exposure_s - cfg.min_exposure_s
+    new_integral = integral + cfg.ki * error * exposure_span
     # Anti-windup: clamp the integral to the exposure span.
-    integral_limit = cfg.max_exposure_s - cfg.min_exposure_s
-    new_integral = max(-integral_limit, min(integral_limit, new_integral))
+    new_integral = max(-exposure_span, min(exposure_span, new_integral))
     # P-term delta (negative: positive error → reduce exposure).
     delta = -cfg.kp * error
     return delta, new_integral
