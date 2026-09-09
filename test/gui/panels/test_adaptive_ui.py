@@ -283,9 +283,11 @@ def test_adaptive_lightsheet_shutter_shows_us(
 def test_adaptive_lightsheet_bound_converts_to_seconds(
     qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    """In Lightsheet shutter mode the exposure bound is in µs (line time)
-    and converts to seconds as µs x 1e-6. Set Min Exposure = 2500 µs
-    → 2500e-6 = 2.5e-3 s."""
+    """In Lightsheet shutter mode the exposure bound is a per-line time
+    in µs and converts to the total per-plane integration seconds as
+    µs x 1e-6 x ``lightsheet_exposed_lines`` — the worker divides by the
+    exposed-line count to recover the per-line time. Set Min Exposure =
+    2500 µs → 2500e-6 x exposed_lines s."""
     ctrl = controller
     ui = _adaptive_ui(ctrl)
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentText("Lightsheet")
@@ -299,7 +301,8 @@ def test_adaptive_lightsheet_bound_converts_to_seconds(
     ui.doubleSpinBox_adaptiveMinExposure.editingFinished.emit()
     cfg = ctrl.stack_panel.build_adaptive_config()
     assert cfg is not None
-    assert cfg.min_exposure_s == pytest.approx(2500e-6, rel=1e-6)
+    exposed_lines = ctrl.camera.lightsheet_exposed_lines
+    assert cfg.min_exposure_s == pytest.approx(2500e-6 * exposed_lines, rel=1e-6)
 
 
 def test_adaptive_rolling_bound_converts_ms_to_seconds(

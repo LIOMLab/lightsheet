@@ -724,8 +724,9 @@ class StackPanelWidget(QWidget):
         is unchecked or the fixed-fallback latch is set).
 
         Normalizes the GUI values to the worker's canonical units:
-        - Exposure: ms → seconds (x1e-3) in Rolling; µs x 1e-6 →
-          seconds in Lightsheet.
+        - Exposure: ms → seconds (x1e-3) in Rolling; per-line µs x
+          1e-6 x ``lightsheet_exposed_lines`` → total per-plane
+          integration seconds in Lightsheet.
         - Power: mW, narrowed to the live laser maxima.
         - Target band / reacquire threshold: % → fraction (x1e-2),
           read from config.ini (config-only, not in the GUI).
@@ -751,12 +752,33 @@ class StackPanelWidget(QWidget):
             if combo is not None:
                 mode = str(combo.currentText()).strip()
 
+        # In Lightsheet mode the bound is a per-line time in µs, but the
+        # worker contract for ``AdaptiveConfig.exposure_s`` is the total
+        # per-plane integration time — the worker divides by
+        # ``lightsheet_exposed_lines`` to recover the per-line time.
+        # Multiply by the live exposed-line count here so the two sides
+        # of the contract agree. Read defensively: a camera handle that
+        # does not expose the attribute (or exposes a non-positive /
+        # non-int value) falls back to the 16-line default rather than
+        # crashing the Start button.
+        exposed_lines_raw = getattr(
+            getattr(self._shell, "camera", None), "lightsheet_exposed_lines", 16
+        )
+        exposed_lines = (
+            exposed_lines_raw
+            if isinstance(exposed_lines_raw, int)
+            and not isinstance(exposed_lines_raw, bool)
+            and exposed_lines_raw > 0
+            else 16
+        )
+
         def _exposure_to_seconds(sb_name: str) -> float:
             sb = getattr(self.ui, sb_name)
             v = float(sb.value())
             if mode == "Lightsheet":
-                # µs x 1e-6 = seconds (the bound is already in line time µs)
-                return v * 1e-6
+                # per-line µs x 1e-6 x exposed_lines = total per-plane
+                # integration seconds (the worker divides it back out).
+                return v * 1e-6 * exposed_lines
             # Rolling — ms x 1e-3 = seconds
             return v * 1e-3
 
