@@ -6,8 +6,8 @@ with h5py.File('merged.h5',mode='w') as h5fw:
     for h5name in glob.glob('*.hdf5'):
         h5fr = h5py.File(h5name,'r') 
         dset1 = list(h5fr.keys())[0]
-        arr_data = h5fr[dset1][:]
+        arr_data = h5fr[dset1][:]  # ty: ignore[not-subscriptable]
         newdset = 'frame_' + str(dset_suffix)
-        h5fw.create_dataset(newdset,data=arr_data) 
+        h5fw.create_dataset(newdset,data=arr_data)  # ty: ignore[invalid-argument-type]
         dset_suffix += 1
         

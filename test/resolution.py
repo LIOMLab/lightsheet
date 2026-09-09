@@ -34,14 +34,14 @@ with h5py.File(nomFichier, "r") as f:
     for i in range(0,len(list(f.keys()))):
         key = list(f.keys())[i]
         group = f[key]
-        data=group[()]
-        plt.imshow(np.log(np.abs(data)+1),cmap='gray')
+        data=group[()]  # ty: ignore[not-subscriptable]
+        plt.imshow(np.log(np.abs(data)+1),cmap='gray')  # ty: ignore[no-matching-overload]
         plt.show()
         for j,k,n in zip(colonnes,rangees,range(len(colonnes))):
             print(str(j)+','+str(k))
             x=np.arange(2160)
-            y=data[:,j]
-            y = (y - np.min(y))/(np.max(y) - np.min(y))
+            y=data[:,j]  # ty: ignore[invalid-argument-type, not-subscriptable]
+            y = (y - np.min(y))/(np.max(y) - np.min(y))  # ty: ignore[no-matching-overload]
             y2=signal.savgol_filter(y, 31, 3)
             f2 = interpolate.interp1d(x, y, kind='cubic')
             widt=fwhm(y2)
@@ -57,7 +57,7 @@ with h5py.File(nomFichier, "r") as f:
             plt.legend()
             plt.show()
             
-            psf[n,:,:] = data[(k-5):(k+5),(j-5):(j+5)]
+            psf[n,:,:] = data[(k-5):(k+5),(j-5):(j+5)]  # ty: ignore[invalid-argument-type, invalid-assignment, not-subscriptable]
             plt.imshow(np.log(np.abs(psf[n,:,:])+1),cmap='gray')
             plt.show()
         

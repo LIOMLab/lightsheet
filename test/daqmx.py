@@ -41,12 +41,12 @@ class DAQmx:
             # Creating and setting up the galvo + ETL scan task (AO)
             self.galvo_task = nidaqmx.Task(new_task_name = 'galvo_scan')
             self.galvo_task.ao_channels.add_ao_voltage_chan(self.ao_terminals)
-            self.galvo_task.timing.cfg_samp_clk_timing(rate = self.sample_rate, sample_mode = AcquisitionType.FINITE, samps_per_chan = self.galvo_waveform.size)
+            self.galvo_task.timing.cfg_samp_clk_timing(rate = self.sample_rate, sample_mode = AcquisitionType.FINITE, samps_per_chan = self.galvo_waveform.size)  # ty: ignore[unresolved-attribute]
 
             # Write waveforms to AO and DO tasks (to be started later)
             self.galvo_task.write(self.galvo_waveform, auto_start = False)
         except:
-            self.galvo_task.close()
+            self.galvo_task.close()  # ty: ignore[unresolved-attribute]
             self.galvo_task = None
             print('Create_scanner error. Terminals invalid?')
 
@@ -83,8 +83,8 @@ if __name__ == '__main__':
     testdaq.stop_scanner()
     testdaq.delete_scanner()
 
-    time_axis = np.arange(0, testdaq.galvo_waveform.size)
-    plt.plot(time_axis, testdaq.galvo_waveform)
+    time_axis = np.arange(0, testdaq.galvo_waveform.size)  # ty: ignore[unresolved-attribute]
+    plt.plot(time_axis, testdaq.galvo_waveform)  # ty: ignore[invalid-argument-type]
     plt.show()
 
 

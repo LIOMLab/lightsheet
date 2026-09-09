@@ -1,0 +1,646 @@
+"""SavePanelWidget — per-panel widget/controller for save/file-manager controls.
+
+Owns the save updateUi_* slots: file/dataset/directory selection and
+single-image save. Reads ``self._shell.ui.<objectName>`` for its widgets
+and ``self._shell._fs`` / ``self._shell.save_*`` for shell-owned state.
+"""
+
+from __future__ import annotations
+
+import logging
+import typing
+from pathlib import Path
+
+from PySide6.QtCore import Slot
+from PySide6.QtWidgets import (
+    QAbstractButton,
+    QAbstractItemView,
+    QFileDialog,
+    QMessageBox,
+    QTableWidgetItem,
+    QWidget,
+)
+
+from lightsheet.gui.panels.ui_save_panel import Ui_SavePanel
+from lightsheet.gui.widgets.field_spec import FIELD_SPECS
+from lightsheet.state import SaveMode, SaveOptions
+
+if typing.TYPE_CHECKING:
+    from lightsheet.gui.shell.controller import Controller_MainWindow
+
+logger = logging.getLogger(__name__)
+
+
+class SavePanelWidget(QWidget):
+    """Save/file-manager controls panel — owns file selection and
+    single-image save slots."""
+
+    def __init__(self, shell: Controller_MainWindow) -> None:
+        super().__init__()
+        self._shell = shell
+        self.ui = Ui_SavePanel()
+        self.ui.setupUi(self)
+        # Apply the declarative FieldSpec policy table to every promoted
+        # FieldSpecSpinBox by objectName. save_panel has no FieldSpecSpinBox
+        # widgets, so the loop is a no-op; kept for consistency across panels.
+        for obj_name, spec in FIELD_SPECS.items():
+            w = getattr(self.ui, obj_name, None)
+            if w is not None and hasattr(w, "applySpec"):
+                w.applySpec(spec)
+
+        # Explicit four-radio <-> SaveMode map for the exclusive
+        # save_option_button_group. The commit slot maps the clicked radio
+        # to a mode; the projection slot checks exactly the mode's radio.
+        self._radio_by_mode: dict[SaveMode, QAbstractButton] = {
+            SaveMode.STITCH: self.ui.radioButton_saveStitch,
+            SaveMode.STITCH_BLEND: self.ui.radioButton_saveStitchBlend,
+            SaveMode.ALL_CROP: self.ui.radioButton_saveAllCrop,
+            SaveMode.ALL_FULL: self.ui.radioButton_saveAllFull,
+        }
+        self._mode_by_radio: dict[QAbstractButton, SaveMode] = {
+            radio: mode for mode, radio in self._radio_by_mode.items()
+        }
+
+    def _active_single_channel_wavelength(self) -> int:
+        """Return the active laser wavelength for single-channel mode.
+
+        Reads the current model ``auto_lasers`` intent (via
+        ``shell.state.snapshot()`` when the reactive model is present,
+        falling back to the legacy ``_auto_laser*`` attributes on test
+        double shells) and returns the wavelength of the laser that will
+        actually fire:
+
+        - ``auto_laser1`` -> ``lasers[0].wavelength``
+        - ``auto_laser2`` (only L2 checked) -> ``lasers[1].wavelength``
+        - neither checked (manual mode / edge case) -> ``lasers[0].wavelength``
+          as the fallback
+
+        The wavelength is read from the live ``ILaser`` instance set at
+        startup from ``config.ini`` — a trusted value, never hardcoded.
+        Single-channel callers pass ``[this]`` to ``set_files`` so the
+        saved HDF5 filename carries the ``_{wavelength}nm`` suffix.
+        """
+        shell = self._shell
+        auto1, auto2 = self._auto_laser_selection()
+        if auto1:
+            return int(shell.lasers[0].wavelength)
+        if auto2:
+            return int(shell.lasers[1].wavelength)
+        return int(shell.lasers[0].wavelength)
+
+    def _auto_laser_selection(self) -> tuple[bool, bool]:
+        """Return the current auto-laser pair, preferring one model
+        snapshot read over the legacy shell attribute cache."""
+        shell = self._shell
+        state = getattr(shell, "state", None)
+        snapshot = None
+        if state is not None:
+            try:
+                snapshot = state.snapshot()
+            except Exception as e:
+                # A broken model silently degrading to the legacy shell
+                # attribute hides the integration faults the model exists
+                # to surface — log before falling back.
+                logger.warning("state.snapshot() failed, falling back: %s", e)
+                snapshot = None
+        if snapshot is not None and isinstance(snapshot.auto_lasers, tuple):
+            return (
+                bool(snapshot.auto_lasers[0]),
+                bool(snapshot.auto_lasers[1]),
+            )
+        return (
+            bool(getattr(shell, "_auto_laser1", False)),
+            bool(getattr(shell, "_auto_laser2", False)),
+        )
+
+    # ------------------------------------------------------------------ #
+    # SaveOptions model <-> widget bindings
+    # ------------------------------------------------------------------ #
+
+    def save_options_from_widgets(self) -> SaveOptions:
+        """Sample the save-option widgets once (GUI thread only) into a
+        frozen ``SaveOptions`` — used to seed the model with the actual
+        post-setup widget defaults."""
+        mode = SaveMode.STITCH
+        for radio, radio_mode in self._mode_by_radio.items():
+            if radio.isChecked():
+                mode = radio_mode
+                break
+        return SaveOptions(
+            description=str(self.ui.lineEdit_saveDescription.text()),
+            mode=mode,
+        )
+
+    @Slot()
+    def updateUi_save_description(self) -> None:
+        """Commit the description line edit's text to the model. Bound to
+        ``lineEdit_saveDescription.editingFinished``."""
+        self._shell.state.set_save_description(
+            str(self.ui.lineEdit_saveDescription.text())
+        )
+
+    @Slot(bool)
+    def updateUi_save_mode_checked(self, checked: bool) -> None:
+        """Commit the save mode when a save-mode radio becomes checked.
+
+        Bound to each radio's ``toggled`` signal — ``buttonClicked`` only
+        fires on real clicks, so a programmatic ``setChecked(True)``
+        (seeding, tests, future callers) would otherwise leave the model
+        stale. The exclusive group unchecks the previous radio with
+        ``toggled(False)``, which this slot ignores. Model projection
+        blocks signals, so this cannot echo."""
+        if not checked:
+            return
+        mode = self._mode_by_radio.get(self.sender())
+        if mode is not None:
+            self._shell.state.set_save_mode(mode)
+
+    @Slot(QAbstractButton)
+    def updateUi_save_mode(self, button: QAbstractButton) -> None:
+        """Map the clicked exclusive save-mode radio to a ``SaveMode``
+        and commit it to the model. Bound to
+        ``save_option_button_group.buttonClicked``."""
+        mode = self._mode_by_radio.get(button)
+        if mode is None:
+            return
+        self._shell.state.set_save_mode(mode)
+
+    @Slot(object)
+    def updateUi_save_options_from_state(self, options: object) -> None:
+        """Echo-guarded model -> widget projection. Rejects non-
+        ``SaveOptions`` payloads, sets the description text, and checks
+        exactly the radio matching ``options.mode``. Each widget's prior
+        ``blockSignals`` state is restored so the projection cannot echo
+        back into the commit slots."""
+        if not isinstance(options, SaveOptions):
+            return
+        edit = self.ui.lineEdit_saveDescription
+        if edit.text() != options.description:
+            was = edit.blockSignals(True)
+            edit.setText(options.description)
+            edit.blockSignals(was)
+        radios = list(self._radio_by_mode.values())
+        blocked = [radio.blockSignals(True) for radio in radios]
+        # The button group is exclusive: checking the target radio
+        # unchecks the others, so exactly one radio ends up checked.
+        self._radio_by_mode[options.mode].setChecked(True)
+        for radio, was in zip(radios, blocked, strict=True):
+            radio.blockSignals(was)
+
+    def updateUi_select_file(self) -> None:
+        """Allows the selection of an HDF5 file OR an OME-Zarr store
+        folder, opens it, and lists its datasets/planes.
+
+        A single non-native file dialog in Directory mode with
+        ``ShowDirsOnly=False`` lets the operator pick EITHER a file
+        (HDF5, .hdf5) OR a folder (OME-Zarr store, .ome.zarr) in one
+        step — the documented Qt way to allow both files and
+        directories in a single dialog. A single combined name filter
+        lists both formats. The open logic branches on
+        ``os.path.isdir``: directory → Zarr store, file → HDF5. A
+        corrupt or wrong-format path raises OSError / KeyError /
+        ValueError — handled gracefully with a user-facing message
+        instead of crashing the GUI thread.
+        """
+
+        # Non-native dialog in Directory mode (ShowDirsOnly NOT set) so
+        # the operator can select either a file or a folder in one
+        # step. ExistingFile mode cannot select a folder (Open navigates
+        # into it); Directory mode with ShowDirsOnly=False is the only
+        # single-dialog way to accept both.
+        dlg = QFileDialog(
+            self._shell,
+            "Choose HDF5 file or OME-Zarr store",
+            self._shell.save_directory or "",
+        )
+        dlg.setFileMode(QFileDialog.FileMode.Directory)
+        dlg.setOption(QFileDialog.Option.ShowDirsOnly, False)
+        dlg.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        dlg.setNameFilters(
+            [
+                "Lightsheet acquisition files (*.hdf5 *.ome.zarr *.zarr)",
+                "HDF5 (*.hdf5)",
+                "OME-Zarr (*.ome.zarr *.zarr)",
+            ]
+        )
+        if not dlg.exec():
+            self.ui.label_currentFileDirectory.setText("Select a file…")
+            return
+        selected = dlg.selectedFiles()
+        if not selected:
+            self.ui.label_currentFileDirectory.setText("Select a file…")
+            return
+        path = selected[0]
+
+        self._shell.open_directory = path
+        self.ui.label_currentFileDirectory.setText(path)
+        self.ui.listWidget_fileDatasets.clear()
+
+        # Branch on type: directory → Zarr store, file → HDF5.
+        try:
+            if Path(path).is_dir():
+                dataset_names = self._list_zarr_datasets(path)
+            else:
+                dataset_names = self._list_hdf5_datasets(path)
+        except (OSError, KeyError, ValueError) as exc:
+            self._shell.sig_message.emit(f"Could not open {path}: {exc}")
+            self.ui.label_currentFileDirectory.setText("Select a file…")
+            return
+
+        for item in range(len(dataset_names)):
+            self.ui.listWidget_fileDatasets.insertItem(item, dataset_names[item])
+        self.ui.listWidget_fileDatasets.setCurrentRow(0)
+        self._shell.updateUi_message_printer("File " + path + " opened")
+        self.ui.pushButton_selectDataset.setEnabled(True)
+
+    def _list_hdf5_datasets(self, path: str) -> list[str]:
+        """Open an HDF5 file and return its top-level dataset names."""
+        import h5py
+
+        with h5py.File(path, "r") as f:
+            return list(f.keys())
+
+    def _list_zarr_datasets(self, path: str) -> list[str]:
+        """Open an OME-Zarr store and return a list of selectable
+        plane labels for the L0 multiscale array.
+
+        The writer produces a 4D ``(c, z, y, x)`` L0 array at
+        ``root["0"]``. For multi-channel stores (c > 1) the labels are
+        ``ch0_plane_0001``, ``ch1_plane_0001``, ... so the operator can
+        view any (channel, plane); for single-channel stores (c == 1)
+        the labels are just ``plane_0001``, ``plane_0002``, ...
+        (matching the HDF5 ``reconstructed_frameNNN`` UX). Raises
+        ``ValueError`` if the store has no L0 array or an unexpected
+        shape so the caller's except path surfaces a clear message.
+        """
+        import zarr
+
+        root = zarr.open_group(path, mode="r")
+        arr = root.get("0")
+        if arr is None:
+            raise ValueError("OME-Zarr store has no multiscale '0' array")
+        shape = getattr(arr, "shape", None)
+        if not shape or len(shape) < 3:
+            raise ValueError(
+                f"OME-Zarr L0 array has unexpected shape {shape!r} "
+                f"(expected (c, z, y, x) or (z, y, x))"
+            )
+        # 4D (c, z, y, x) — channel-aware labels. 3D (z, y, x) —
+        # single-channel fallback (treat as c=1).
+        if len(shape) == 4:
+            n_channels, n_planes = int(shape[0]), int(shape[1])
+        else:
+            n_channels, n_planes = 1, int(shape[0])
+        labels: list[str] = []
+        for ch in range(n_channels):
+            for z in range(n_planes):
+                if n_channels > 1:
+                    labels.append(f"ch{ch}_plane_{z + 1:04d}")
+                else:
+                    labels.append(f"plane_{z + 1:04d}")
+        return labels
+
+    def updateUi_select_dataset(self) -> None:
+        """
+        Opens one or many datasets (HDF5 or OME-Zarr) and displays the
+        attributes and image of each.
+        """
+        if (self._shell.open_directory != "") and (
+            self.ui.listWidget_fileDatasets.count() != 0
+        ):
+            from matplotlib import pyplot as plt
+
+            is_zarr = Path(self._shell.open_directory).is_dir()
+            for item in range(len(self.ui.listWidget_fileDatasets.selectedItems())):
+                self._shell.dataset_name = (
+                    self.ui.listWidget_fileDatasets.selectedItems()[item].text()
+                )
+                # Wrap the open + dataset access in try/except — a
+                # corrupt file/store or a missing dataset key raises
+                # OSError / KeyError / ValueError. Emit a user-facing
+                # message and skip this item instead of crashing the GUI
+                # thread.
+                try:
+                    if is_zarr:
+                        data, attrs = self._read_zarr_dataset(
+                            self._shell.open_directory,
+                            self._shell.dataset_name,
+                        )
+                    else:
+                        data, attrs = self._read_hdf5_dataset(
+                            self._shell.open_directory,
+                            self._shell.dataset_name,
+                        )
+
+                    # Display attributes of the first selected dataset
+                    if item == 0:
+                        self.ui.label_currentDataset.setText(self._shell.dataset_name)
+                        attribute_names = list(attrs.keys())
+                        attribute_values = list(attrs.values())
+                        self.ui.tableWidget_fileAttributes.setColumnCount(2)
+                        self.ui.tableWidget_fileAttributes.setRowCount(
+                            len(attribute_names)
+                        )
+                        self.ui.tableWidget_fileAttributes.setHorizontalHeaderItem(
+                            0, QTableWidgetItem("Attributes")
+                        )
+                        self.ui.tableWidget_fileAttributes.setHorizontalHeaderItem(
+                            1, QTableWidgetItem("Values")
+                        )
+                        for attribute in range(0, len(attribute_names)):
+                            self.ui.tableWidget_fileAttributes.setItem(
+                                attribute,
+                                0,
+                                QTableWidgetItem(attribute_names[attribute]),
+                            )
+                            self.ui.tableWidget_fileAttributes.setItem(
+                                attribute,
+                                1,
+                                QTableWidgetItem(str(attribute_values[attribute])),
+                            )
+                        self.ui.tableWidget_fileAttributes.resizeColumnsToContents()
+                        self.ui.tableWidget_fileAttributes.setEditTriggers(
+                            QAbstractItemView.EditTrigger.NoEditTriggers
+                        )  # No editing possible
+
+                    # Display image
+                    plt.figure(
+                        self._shell.open_directory
+                        + " ("
+                        + self._shell.dataset_name
+                        + ")"
+                    )
+                    plt.imshow(data, cmap="gray")
+                    plt.show(
+                        block=False
+                    )  # Prevents the plot from blocking the execution of the code...
+                except (OSError, KeyError, ValueError) as exc:
+                    self._shell.sig_message.emit(
+                        f"Could not open dataset {self._shell.dataset_name} "
+                        f"in {self._shell.open_directory}: {exc}"
+                    )
+                    continue
+
+                self._shell.updateUi_message_printer(
+                    "Dataset "
+                    + self._shell.dataset_name
+                    + " of file "
+                    + self._shell.open_directory
+                    + " displayed"
+                )
+
+    def _read_hdf5_dataset(self, path: str, name: str) -> tuple[typing.Any, dict]:  # ty: ignore[missing-type-argument]
+        """Open an HDF5 file, return ``(data, attrs)`` for the named
+        top-level dataset."""
+        import h5py
+
+        with h5py.File(path, "r") as f:
+            dataset = f[name]
+            return dataset[()], dict(dataset.attrs)  # ty: ignore[not-subscriptable]
+
+    def _read_zarr_dataset(self, path: str, label: str) -> tuple[typing.Any, dict]:  # ty: ignore[missing-type-argument]
+        """Open an OME-Zarr store, return ``(data, attrs)`` for the
+        plane identified by ``label`` (``plane_NNNN`` or
+        ``chN_plane_NNNN`` as produced by ``_list_zarr_datasets``).
+
+        Returns the 2D ``(y, x)`` slice for the requested (channel,
+        plane) from the L0 multiscale array, plus the acquisition
+        group's attrs. Zarr stores scan/acquisition metadata on the
+        ``/acquisition`` group (the analog of the HDF5 dataset attrs —
+        Sample Name, Date, motor positions, siggen/camera params), not
+        per-slice on the L0 array. The OME-NGFF channel metadata lives
+        on the root group's ``ome`` attr and is merged in so the attrs
+        panel shows the channel wavelength too.
+        """
+        import re
+
+        import zarr
+
+        m = re.match(r"(?:ch(\d+)_)?plane_(\d+)", label)
+        if not m:
+            raise ValueError(f"unrecognized zarr plane label: {label}")
+        ch = int(m.group(1)) if m.group(1) is not None else 0
+        z = int(m.group(2)) - 1  # label is 1-based; array index is 0-based
+        root = zarr.open_group(path, mode="r")
+        arr = root["0"]
+        shape = arr.shape  # ty: ignore[unresolved-attribute]
+        data = arr[ch, z, :, :] if len(shape) == 4 else arr[z, :, :]  # ty: ignore[invalid-argument-type]
+        # Metadata: prefer the /acquisition group's attrs (the Zarr
+        # analog of the HDF5 dataset attrs). Fall back to the root attrs
+        # (OME-NGFF metadata) if no acquisition group exists (e.g. a
+        # store written by a different tool).
+        attrs: dict = {}  # ty: ignore[missing-type-argument]
+        acq = root.get("acquisition")
+        if acq is not None:
+            attrs.update(dict(acq.attrs))
+        # Merge the OME-NGFF channel wavelength for the selected channel
+        # so the operator sees which channel they're viewing.
+        ome = root.attrs.get("ome")
+        if isinstance(ome, dict):
+            channels = ome.get("omero", {}).get("channels", [])
+            if 0 <= ch < len(channels):
+                wl = channels[ch].get("wavelength")
+                if wl is not None:
+                    attrs["Channel Wavelength"] = wl
+        return data, attrs
+
+    def updateUi_select_directory(self) -> None:
+        """Allows the selection of a directory for single scan or stack saving"""
+        options = (
+            QFileDialog.Option.DontResolveSymlinks | QFileDialog.Option.ShowDirsOnly
+        )
+        tmp_directory = QFileDialog.getExistingDirectory(
+            self._shell, "Choose Directory", self._shell.save_directory, options
+        )
+        if tmp_directory != "":
+            self._shell.save_directory = str(Path(tmp_directory))
+
+        if self._shell.save_directory != "":
+            self.ui.lineEdit_saveDirectory.setText(self._shell.save_directory)
+            self.ui.lineEdit_saveFilename.setText("")
+            self.ui.lineEdit_saveFilename.setEnabled(True)
+            self.ui.lineEdit_saveDescription.setText("")
+            self.ui.lineEdit_saveDescription.setEnabled(True)
+        else:
+            self.ui.lineEdit_saveDirectory.setText("")
+            self.ui.lineEdit_saveFilename.setPlaceholderText(
+                "Filename - Select Save Directory First"
+            )
+            self.ui.lineEdit_saveFilename.setEnabled(False)
+            self.ui.lineEdit_saveDescription.setPlaceholderText(
+                "Description - Select Save Directory First"
+            )
+            self.ui.lineEdit_saveDescription.setEnabled(False)
+        # Keep the model in lock-step with the widget: a directory change
+        # clears the description field, so commit the (now empty) text
+        # explicitly rather than waiting for an editingFinished that never
+        # fires on programmatic clears.
+        self._shell.state.set_save_description(
+            str(self.ui.lineEdit_saveDescription.text())
+        )
+
+    def validate_file_name(self) -> None:
+        """Validate filename set by the user"""
+
+        # To validate individual char. Only alphanumeric, - and _ characters are permitted  # noqa: E501
+        def safe_char(c: str) -> str:
+            if c.isalnum() or c == "-":
+                return c
+            else:
+                return "_"
+
+        tmp_string = self.ui.lineEdit_saveFilename.text()
+        # safe_char maps every non-alnum/non-"-" char (including spaces)
+        # to "_". Strip leading/trailing underscores so leading spaces
+        # don't produce a "__hello" filename (rstrip would only clear the
+        # trailing end).
+        tmp_string = "".join(safe_char(c) for c in tmp_string).strip("_")
+
+        if tmp_string != "":
+            self._shell.save_filename = tmp_string
+
+        # save_filename holds the bare sanitized name; save_filepath holds
+        # the joined absolute path passed to FrameSaver.set_files (whose
+        # ``files_name`` arg is a path prefix, not a bare filename — see
+        # frame_saver_controller.py:278-285). Keeping the two separate
+        # avoids the lineEdit restore at controller.py:427 ever showing a
+        # full path in the filename field.
+        if (self._shell.save_directory != "") and (self._shell.save_filename != ""):
+            self._shell.save_filepath = str(
+                Path(self._shell.save_directory) / self._shell.save_filename
+            )
+            self._shell.saving_allowed = True
+        else:
+            self._shell.saving_allowed = False
+
+    def updateUi_save_single_image(self) -> None:
+        """Saves the frame generated by self.get_single_image()"""
+
+        # Check that filename is valid and saving is allowed
+        self.validate_file_name()
+
+        if self._shell.saving_allowed:
+            # Save intent comes from the model — one frozen snapshot for
+            # this save action (description + exclusive mode + auto-laser
+            # selection), not live widget reads.
+            snapshot = self._shell.state.snapshot()
+            save_options = snapshot.save_options
+            auto1, auto2 = snapshot.auto_lasers
+
+            """Setting up frame saver"""
+            self._shell._fs.reinit(1)
+            self._shell._fs.add_sample_name(save_options.description)
+            self._shell._fs.add_motor_parameters(
+                self._shell.image_hor_pos_text,
+                self._shell.image_ver_pos_text,
+                self._shell.image_cam_pos_text,
+            )
+
+            """Saving frame"""
+            if save_options.mode == SaveMode.ALL_CROP:
+                self._shell._fs.set_files(
+                    1,
+                    self._shell.save_filepath,
+                    "singleImage",
+                    1,
+                    "ETLscan",
+                    wavelengths=[self._active_single_channel_wavelength()],
+                )
+                cropped_buffer = self._shell._fs.crop_buffer(self._shell.buffer)  # ty: ignore[invalid-argument-type]
+                self._shell._fs.enqueue_buffer(cropped_buffer)
+                self._shell.updateUi_message_printer(
+                    "Saving Images (one for each ETL scan, cropped)"
+                )
+            elif save_options.mode == SaveMode.ALL_FULL:
+                self._shell._fs.set_files(
+                    1,
+                    self._shell.save_filepath,
+                    "singleImage",
+                    1,
+                    "FullETLscan",
+                    wavelengths=[self._active_single_channel_wavelength()],
+                )
+                self._shell._fs.enqueue_buffer(self._shell.buffer)  # ty: ignore[invalid-argument-type]
+                self._shell.updateUi_message_printer(
+                    "Saving Images (one for each ETL scan, full)"
+                )
+            else:
+                # SaveMode.STITCH (the default "Stitched - No blend"
+                # option) and SaveMode.STITCH_BLEND both land on the
+                # reconstructed_frame save path — the blend difference is
+                # applied at reconstruction time in the acquisition worker,
+                # not in the save branch selection here.
+                #
+                # Multi-channel single mode (both auto-laser checkboxes
+                # checked): write TWO wavelength-suffixed HDF5 files, one
+                # per channel. The wavelengths are read from the live
+                # ILaser instances so a rig with different lasers produces
+                # the correct suffixes. The per-channel frames come from
+                # the reconstructed_frames dict (keyed by laser
+                # wavelength, populated by the single-mode acquisition
+                # worker). The two tagged (channel_idx, frame) tuples go
+                # through the same enqueue_buffer → single save queue →
+                # single frame_saver_worker consumer; the worker branches
+                # on the channel tag to pick the per-channel filename
+                # list. Single-channel mode (one auto-laser checked, or
+                # neither) passes wavelengths=[active_wavelength] so the
+                # saved file carries the _{wavelength}nm suffix; the
+                # frame is enqueued as a bare ndarray.
+                multi_channel = auto1 and auto2
+                if multi_channel:
+                    wl1 = self._shell.lasers[0].wavelength
+                    wl2 = self._shell.lasers[1].wavelength
+                    # Guard against a partial acquisition: the single-mode
+                    # multi-channel worker only adds a wavelength key to
+                    # reconstructed_frames when that channel's frame was
+                    # captured (a camera timeout or siggen error on one
+                    # channel leaves the dict missing that key). Indexing
+                    # the dict directly would raise KeyError; use .get()
+                    # and abort the save with an operator message instead.
+                    frame1 = self._shell.reconstructed_frames.get(wl1)
+                    frame2 = self._shell.reconstructed_frames.get(wl2)
+                    if frame1 is None or frame2 is None:
+                        self._shell.updateUi_message_printer(
+                            "Cannot save — one or both channel frames are "
+                            "missing. Re-run the acquisition."
+                        )
+                        return
+                    self._shell._fs.set_files(
+                        1,
+                        self._shell.save_filepath,
+                        "singleImage",
+                        1,
+                        "reconstructed_frame",
+                        wavelengths=[wl1, wl2],
+                    )
+                    self._shell._fs.enqueue_buffer((0, frame1))
+                    self._shell._fs.enqueue_buffer((1, frame2))
+                    self._shell.updateUi_message_printer(
+                        "Saving Reconstructed Images (multi-channel)"
+                    )
+                else:
+                    self._shell._fs.set_files(
+                        1,
+                        self._shell.save_filepath,
+                        "singleImage",
+                        1,
+                        "reconstructed_frame",
+                        wavelengths=[self._active_single_channel_wavelength()],
+                    )
+                    self._shell._fs.enqueue_buffer(self._shell.reconstructed_frame)  # ty: ignore[invalid-argument-type]
+                    self._shell.updateUi_message_printer("Saving Reconstructed Image")
+
+            self._shell._fs.start_saving()
+            self._shell._fs.stop_saving()
+        else:
+            self._shell.sig_beep.emit()
+            QMessageBox.warning(
+                self._shell,
+                "Save Warning",
+                "Select a directory and enter a valid filename before saving",
+                QMessageBox.StandardButton.Ok,
+                QMessageBox.StandardButton.Ok,
+            )
+            self._shell.sig_message.emit(
+                "Select a directory and enter a valid filename before saving"
+            )

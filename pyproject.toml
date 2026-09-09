@@ -4,38 +4,80 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lightsheet"
-version = "0.1.0"
-description = "Light-sheet fluorescence microscope controller (PyQt5 desktop app)"
-requires-python = ">=3.10,<3.13"
+version = "1.0.0"
+description = "Light-sheet fluorescence microscope controller (PySide6 desktop app)"
+requires-python = ">=3.12,<3.13"
 dependencies = [
-    "numpy>=1.22.3",
-    "PyQt5>=5.15.6",
+    "numpy>=2.0",
+    "PySide6>=6.8",
     "nidaqmx>=0.6.0",
     "pco>=0.1.3",
     "pyserial>=3.5",
-    "h5py>=3.6.0",
-    "scipy>=1.8.0",
-    "pyqtgraph>=0.12.4",
+    "h5py>=3.11",
+    "liom-toolkit[io]>=1.1.1",
+    "scipy>=1.13",
     "tifffile>=2022.2.9",
     "matplotlib>=3.5.1",
-    "QDarkStyle>=3.0.3",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.15.0",
+    "pyyaml>=6.0.3",
+    "pyqtgraph==0.13.7",
 ]
 
 [project.scripts]
 lightsheet = "lightsheet.__main__:main"
 
+[project.gui-scripts]
+lightsheetw = "lightsheet.__main__:main"
+
 [tool.setuptools]
-package-dir = {"lightsheet" = "src"}
-packages = ["lightsheet", "gui"]
+packages = [
+    "lightsheet",
+    "lightsheet.adaptive",
+    "lightsheet.state",
+    "lightsheet.config_schema",
+    "lightsheet.config_schema.sections",
+    "lightsheet.focus",
+    "lightsheet.gui",
+    "lightsheet.gui.workers",
+    "lightsheet.hal",
+    "lightsheet.hal.real",
+    "lightsheet.hal.mocks",
+    "lightsheet.resources",
+    "lightsheet.resume",
+]
+package-data = { "lightsheet.resources" = ["*.png", "*.json", "*.ico"] }
 
 [tool.uv]
 required-environments = ["sys_platform == 'win32'", "sys_platform == 'darwin'"]
 
 [tool.ruff]
 extend-exclude = [
-    "gui/ui_controller.py",
-    "gui/ui_controller_rc.py",
-    "gui/ui_properties.py",
+    # Qt resource compiler output (pyside6-rcc) — generated, do not edit.
+    "lightsheet/gui/breeze_pyside6.py",
+    # Vendored breeze stylesheets — upstream code, not ours to lint.
+    "lightsheet/gui/_vendor",
+    "lightsheet/gui/panels/ui_properties.py",
+    # 7B generated per-panel .ui/.qrc files (pyside6-uic/pyside6-rcc output).
+    # Pre-registered so 7B regen does not trip ruff.
+    "lightsheet/gui/panels/ui_laser_panel.py",
+    "lightsheet/gui/panels/ui_motor_panel.py",
+    "lightsheet/gui/panels/ui_acquisition_panel.py",
+    "lightsheet/gui/panels/ui_save_panel.py",
+    "lightsheet/gui/panels/ui_stack_panel.py",
+    "lightsheet/gui/panels/ui_scan_panel.py",
+    "lightsheet/gui/panels/ui_calibration_panel.py",
+    "lightsheet/gui/panels/ui_past_acquisitions_panel.py",
+    "lightsheet/gui/shell/ui_shell.py",
+    "lightsheet/gui/panels/ui_laser_panel_rc.py",
+    "lightsheet/gui/panels/ui_motor_panel_rc.py",
+    "lightsheet/gui/panels/ui_acquisition_panel_rc.py",
+    "lightsheet/gui/panels/ui_save_panel_rc.py",
+    "lightsheet/gui/panels/ui_stack_panel_rc.py",
+    "lightsheet/gui/panels/ui_scan_panel_rc.py",
+    "lightsheet/gui/panels/ui_calibration_panel_rc.py",
+    "lightsheet/gui/panels/ui_past_acquisitions_panel_rc.py",
+    "lightsheet/gui/shell/ui_shell_rc.py",
     "test/axial_resolution.py",
     "test/convert_tiff_to_hdf5.py",
     "test/daqmx.py",
@@ -52,25 +94,187 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "ANN"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "ANN", "PTH"]
 ignore = ["ANN401"]
 
 [tool.ruff.lint.per-file-ignores]
-"src/__main__.py" = ["E402"]
+"lightsheet/__main__.py" = ["E402"]
 
 [tool.ruff.format]
 # defaults
+
+[tool.pytest.ini_options]
+minversion = "9.1"
+# xdist flags:
+#   -n auto                   auto-detect CPU count; test/conftest.py sets the
+#                             --maxprocesses cap (8 dev / 14 rig) so the rig can
+#                             use more workers without overloading the dev box.
+#   --dist=load               explicit xdist distribution mode (the xdist
+#                             default); xdist_group("rig_hardware") still works
+#                             under any dist mode.
+#   --max-worker-restart=0    disables silent worker-restart-on-crash so a
+#                             segfaulted worker's tests surface as failures
+#                             instead of being hidden (lightsheet has a known
+#                             shutdown segfault, exit 139, tolerated in
+#                             scripts/coverage.sh).
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "-n", "auto",
+    "--dist=loadscope",
+    "--max-worker-restart=0",
+]
+testpaths = ["test"]
+# Force the offscreen Qt platform plugin so no GUI windows pop up during
+# the test suite (headless CI + local runs). Individual tests may still
+# override via monkeypatch.setenv when they need a different platform.
+env = [
+    "QT_QPA_PLATFORM=offscreen",
+]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+pythonpath = ["test"]
+markers = [
+    "rig: requires real hardware (set LIGHTSHEET_HW=1)",
+    "mock: mock-only path (default on Mac)",
+    "slow: slow test, auto-deselected from fast iteration by convention",
+    "xdist_group: pytest-xdist group for running tests on the same worker (rig hardware)",
+]
+
+# Coverage gate machinery (D-01/D-05). The gate is an explicit, separate
+# invocation (scripts/coverage.sh), NOT always-on in addopts above — the fast
+# `uv run pytest -q` iteration path stays snappy and free of --cov
+# overhead. Branch coverage (D-05) subsumes line; coverage.py folds branch
+# into the single reported % so --cov-fail-under gates both in one number.
+[tool.coverage.run]
+branch = true
+source = ["lightsheet"]
+# D-02 correction (RESEARCH.md "D-02 Premise Verification"): only camera.py is
+# wholesale-omitted — its entire __init__ -> open() -> pco.Camera() chain is
+# Mac-unreachable with no testable logic outside the probe. The other three
+# hal/real/* safety modules (daqlaser.py, motors.py, ibeam_smart.py) stay
+# MEASURED at 100% branch (see [tool.coverage-threshold.modules.*] below) —
+# omitting them would remove the D-06 safety targets from the gate.
+#
+# The generated ui_*.py / ui_*_rc.py files (pyside6-uic / pyside6-rcc output)
+# are omitted from coverage: they are auto-generated code with branches that
+# depend on Qt Designer properties (sizePolicy, orientation, etc.) that are
+# not exercised by the test suite. The hand-written panel modules
+# (laser_panel.py, motor_panel.py, etc.) that USE these generated classes
+# are measured.
+omit = [
+    "lightsheet/hal/real/camera.py",
+    "lightsheet/gui/panels/ui_properties.py",
+    "lightsheet/gui/shell/ui_shell.py",
+    "lightsheet/gui/panels/ui_laser_panel.py",
+    "lightsheet/gui/panels/ui_motor_panel.py",
+    "lightsheet/gui/panels/ui_acquisition_panel.py",
+    "lightsheet/gui/panels/ui_save_panel.py",
+    "lightsheet/gui/panels/ui_stack_panel.py",
+    "lightsheet/gui/panels/ui_scan_panel.py",
+    "lightsheet/gui/panels/ui_calibration_panel.py",
+    "lightsheet/gui/panels/ui_past_acquisitions_panel.py",
+    "lightsheet/gui/shell/ui_shell_rc.py",
+    "lightsheet/gui/panels/ui_laser_panel_rc.py",
+    "lightsheet/gui/panels/ui_motor_panel_rc.py",
+    "lightsheet/gui/panels/ui_acquisition_panel_rc.py",
+    "lightsheet/gui/panels/ui_save_panel_rc.py",
+    "lightsheet/gui/panels/ui_stack_panel_rc.py",
+    "lightsheet/gui/panels/ui_scan_panel_rc.py",
+    "lightsheet/gui/panels/ui_calibration_panel_rc.py",
+    "lightsheet/gui/panels/ui_past_acquisitions_panel_rc.py",
+]
+
+[tool.coverage.report]
+# exclude_also EXTENDS the default `pragma: no cover` exclusion set (coverage
+# 7.2.0+). Do NOT use exclude_lines — it REPLACES the default set, dropping
+# the pragma:no-cover exclusion.
+exclude_also = [
+    "if __name__ == ['\"]__main__['\"]:",
+    "if sys\\.platform == ['\"]win32['\"]:",
+    "QApplication\\(",
+]
+
+# Per-module branch-coverage gate (D-01/D-06). coverage-threshold reads
+# coverage.json (produced by `coverage json` after pytest-cov combines the
+# -n auto xdist worker data) and enforces per-file thresholds via
+# longest-prefix-wins matching on the module-path keys below.
+#
+# Branch coverage is the gate metric (D-05: branch subsumes line for the
+# safety paths this gate protects). The global line/combined floors are
+# enforced by step 1's `--cov-fail-under=70` (combined line+branch), NOT
+# here — coverage-threshold defaults `line_coverage_min` to 100, which
+# would be unsatisfiable alongside the camera.py omit and the Qt-unreachable
+# controller shell. Pin it to 0 so the per-module branch gate is the only
+# gate this step enforces (mirroring D-05's "branch is the metric" decision).
+[tool.coverage-threshold]
+line_coverage_min = 0
+file_branch_coverage_min = 80
+
+# Safety tier (100% branch) MUST stay in sync with AGENTS.md §2's
+# safety-critical module list.
+[tool.coverage-threshold.modules."lightsheet/hal/real/daqlaser.py"]
+file_branch_coverage_min = 100
+
+[tool.coverage-threshold.modules."lightsheet/hal/real/motors.py"]
+file_branch_coverage_min = 100
+
+[tool.coverage-threshold.modules."lightsheet/hal/real/ibeam_smart.py"]
+file_branch_coverage_min = 100
+
+[tool.coverage-threshold.modules."lightsheet/hal/real/camera.py"]
+file_branch_coverage_min = 0
+
+# Native Qt6 ImageView replacement (D-05, MIG-08). New module in 7A —
+# QGraphicsView-based image display widget. 50% branch floor until the
+# SC2 render smoke test (07-02) lands and exercises the setImage path.
+[tool.coverage-threshold.modules."lightsheet/gui/panels/image_view.py"]
+file_branch_coverage_min = 50
+
+# 7B per-panel widget/controller modules. New in 07-09 — the slot bodies
+# are moved verbatim from the monolithic controller.py and tested via the
+# existing behavior tests (make_controller + real method calls). The
+# save_panel has the lowest coverage because its file-dialog slots are
+# heavily mock-dependent; floor set to current measured level.
+[tool.coverage-threshold.modules."lightsheet/gui/panels/save_panel.py"]
+file_branch_coverage_min = 50
+
+# Reactive state model package (lightsheet/state/*.py) — explicit 80%
+# branch floor matching the global default, pinned here so the model's
+# validation and changed/unchanged branches cannot silently regress below
+# the default tier.
+[tool.coverage-threshold.modules."lightsheet/state"]
+file_branch_coverage_min = 80
 
 [tool.ty.rules]
 missing-type-argument = "error"
 unsound-return-statement = "error"
 
+[tool.ty.environment]
+root = [".", "test"]
+
+[tool.ty.src]
+exclude = [
+    # Vendored breeze stylesheets — upstream code, not ours to type-check.
+    "lightsheet/gui/_vendor",
+]
+
 [tool.ty.terminal]
 error-on-warning = true
 
-[[tool.ty.overrides]]
-include = ["gui/controller.py"]
-
-[tool.ty.overrides.rules]
-missing-type-argument = "warn"
-unsound-return-statement = "warn"
+[dependency-groups]
+dev = [
+    "coverage-threshold>=0.6.2",
+    "h5py-stubs>=0.1.2",
+    "pillow>=10",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-env>=1.1.3",
+    "pytest-qt>=4.5.0",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.16.4",
+    "scipy-stubs>=1.15.3.0",
+    "ty>=0.0.74",
+    "types-pyserial>=3.5.0.20260712",
+]

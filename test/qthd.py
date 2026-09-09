@@ -1,14 +1,14 @@
 import sys
 from time import sleep
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtCore import QObject, QThread, pyqtSignal
-from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
 
 # Step 1: Create a worker class
 class Worker(QObject):
-    finished = pyqtSignal()
-    progress = pyqtSignal(int)
+    finished = Signal()
+    progress = Signal(int)
 
     def __init__(self):
         pass
@@ -25,7 +25,7 @@ class Worker(QObject):
 
 
 class Window(QMainWindow):
-    ping_worker = pyqtSignal(int)
+    ping_worker = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -35,13 +35,13 @@ class Window(QMainWindow):
     def setupUi(self):
         self.setWindowTitle("Freezing GUI")
         self.resize(300, 150)
-        self.centralWidget = QWidget()
+        self.centralWidget = QWidget()  # ty: ignore[invalid-assignment]
         self.setCentralWidget(self.centralWidget)
         # Create and connect widgets
         self.clicksLabel = QLabel("Counting: 0 clicks", self)
-        self.clicksLabel.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+        self.clicksLabel.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)  # ty: ignore[unresolved-attribute]
         self.stepLabel = QLabel("Long-Running Step: 0")
-        self.stepLabel.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+        self.stepLabel.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)  # ty: ignore[unresolved-attribute]
         self.countBtn = QPushButton("Click me!", self)
         self.countBtn.clicked.connect(self.countClicks)
         self.longRunningBtn = QPushButton("Long-Running Task!", self)
@@ -65,7 +65,7 @@ class Window(QMainWindow):
 
     def runLongTask(self):
         # Step 2: Create a QThread object
-        self.thread = QThread()
+        self.thread = QThread()  # ty: ignore[invalid-assignment]
         # Step 3: Create a worker object
         self.worker = Worker()
         # Step 4: Move worker to the thread

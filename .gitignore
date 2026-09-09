@@ -4,11 +4,10 @@
 
 # === OpenGSD (gsd-core) — keep ALL GSD-produced files out of git ===
 .cursor/
-.windsurf/
 .devin/
 .planning/
 .planning/tmp/
-/AGENTS.md
+/AGENTS.local.md
 /CLAUDE.md
 /GEMINI.md
 graphify-out/
@@ -29,3 +28,27 @@ skills-lock.json
 
 # Editable-install metadata produced by `pip install -e .`
 *.egg-info/
+
+# Rig-specific calibrated config snapshot — captured from the microscope PC over
+# SSH by scripts/snapshot-rig-config.sh. Intentionally untracked: holds rig COM
+# ports and per-instrument calibration values that must never enter git history.
+config.rig-specific.ini
+
+# macOS dev default log directory created by logging_setup.configure().
+logs/
+
+# Coverage gate runtime artifacts — produced by scripts/coverage.sh
+# (pytest-cov .coverage data file + coverage.json emitted by `coverage json`).
+# The gate config itself lives in pyproject.toml and IS tracked; only the
+# per-run data output is ephemeral.
+.coverage
+coverage.json
+htmlcov/
+
+# Stray test artifacts — HDF5/Zarr files written to repo root when a
+# test forgets tmp_path. set_files now joins with save_directory, but
+# keep this as a backstop.
+/*.hdf5
+/*.zarr
+.windsurf/
+

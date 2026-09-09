@@ -61,7 +61,7 @@ mean = sum(x*metricvar)/n
 sigma = sum(metricvar*(x-mean)**2)/n
 poscenter=np.argmax(metricvar)
 
-popt,pcov = curve_fit(gauss,x,metricvar,p0=[1,mean,sigma],bounds=(0, 'inf'))
+popt,pcov = curve_fit(gauss,x,metricvar,p0=[1,mean,sigma],bounds=(0, 'inf'))  # ty: ignore[no-matching-overload]
 
 amp,center,variance=popt
 print('center:'+str(center))

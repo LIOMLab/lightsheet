@@ -1,0 +1,376 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>LaserPanel</class>
+ <widget class="QWidget" name="laserPanel">
+  <layout class="QVBoxLayout" name="verticalLayout_panel">
+   <item>
+    <widget class="QGroupBox" name="groupBox_15">
+     <property name="title">
+      <string>Lasers Settings</string>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout_68">
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout_43">
+        <item>
+         <widget class="QLabel" name="label_72">
+          <property name="text">
+           <string>Laser1</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="Line" name="line_20">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QFormLayout" name="formLayout_14">
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_50">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Power:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="FieldSpecSpinBox" name="doubleSpinBox_laserOneAmplitude">
+        <property name="toolTip">
+         <string>Laser 1 power as a percentage of max power. Unit: %. Valid range: 0–100. Effect: applied via a debounced DAQ write; the E-stop drives it to 0 immediately.</string>
+        </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="suffix">
+             <string> %</string>
+            </property>
+            <property name="decimals">
+             <number>0</number>
+            </property>
+            <property name="minimum">
+             <double>0.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>100.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>0.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QCheckBox" name="checkBox_laserOneAutomatic">
+        <property name="toolTip">
+         <string>When checked, this laser turns on/off automatically during acquisition. When BOTH auto-laser boxes are checked, stack and single modes run a sequential multi-channel cycle (laser 1 then laser 2 per plane) and the badge shows MULTI-CH; live and preview energize only the first-checked laser for the session.</string>
+        </property>
+          <property name="text">
+           <string>Auto On/Off</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_laserOneStatus">
+          <property name="minimumSize">
+           <size>
+            <width>140</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="toolTip">
+           <string>Laser 1 emission state (ON / OFF / FAULT)</string>
+          </property>
+          <property name="text">
+           <string>○ OFF</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_laserOneReadback">
+          <property name="minimumSize">
+           <size>
+            <width>80</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="toolTip">
+           <string>Linear-through-origin estimate (mW = V * mW_per_volt). Unverified — the linear model predicts 300 mW at 5V, but the rig-measured output is ~107.5 mW at 5V (DPSS threshold knee + free-space measurement geometry). Run the rig calibration sweep to load a measured V-&gt;mW curve.</string>
+          </property>
+          <property name="text">
+           <string>0.0 mW (est.)</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="verticalSpacer_8">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="Line" name="line_21">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout_44">
+        <item>
+         <widget class="QLabel" name="label_73">
+          <property name="text">
+           <string>Laser2</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="Line" name="line_22">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QFormLayout" name="formLayout_15">
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_74">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Power:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="FieldSpecSpinBox" name="doubleSpinBox_laserTwoAmplitude">
+        <property name="toolTip">
+         <string>Laser 2 power as a percentage of max power. Unit: %. Valid range: 0–100. Effect: applied via the iBeam serial write; the E-stop drives it to 0 immediately.</string>
+        </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="suffix">
+             <string> %</string>
+            </property>
+            <property name="decimals">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <double>100.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QCheckBox" name="checkBox_laserTwoAutomatic">
+        <property name="toolTip">
+         <string>When checked, this laser turns on/off automatically during acquisition. When BOTH auto-laser boxes are checked, stack and single modes run a sequential multi-channel cycle (laser 1 then laser 2 per plane) and the badge shows MULTI-CH; live and preview energize only the first-checked laser for the session.</string>
+        </property>
+          <property name="text">
+           <string>Auto On/Off</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_laserTwoStatus">
+          <property name="minimumSize">
+           <size>
+            <width>140</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="toolTip">
+           <string>Laser 2 emission state (ON / OFF / FAULT)</string>
+          </property>
+          <property name="text">
+           <string>○ OFF</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_laserTwoReadback">
+          <property name="minimumSize">
+           <size>
+            <width>80</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="toolTip">
+           <string>iBeam power readback — click Refresh Power to re-query</string>
+          </property>
+          <property name="text">
+           <string>—</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="pushButton_laserTwoRefresh">
+          <property name="toolTip">
+           <string>Re-query iBeam status and power readback now (skipped while a power write is in progress)</string>
+          </property>
+          <property name="text">
+           <string>Refresh Power</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="verticalSpacer_15">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupBox_4">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>140</width>
+       <height>126</height>
+      </size>
+     </property>
+     <property name="title">
+      <string>Lasers</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_7">
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout_17">
+        <item>
+         <widget class="QPushButton" name="pushButton_laserOneToggle">
+        <property name="toolTip">
+         <string>Toggle Laser 1 emission on/off. Checkable: pressed-in = ON. Safety: the E-stop (F12) overrides this and drives the laser off immediately; a first-energize confirmation dialog appears once per session.</string>
+        </property>
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="toolTip">
+           <string>Activate left laser</string>
+          </property>
+          <property name="text">
+           <string>Toggle Laser1</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="pushButton_laserTwoToggle">
+        <property name="toolTip">
+         <string>Toggle Laser 2 emission on/off. Checkable: pressed-in = ON. Safety: the E-stop (F12) overrides this and drives the laser off immediately; a first-energize confirmation dialog appears once per session.</string>
+        </property>
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="toolTip">
+           <string>Activate right laser</string>
+          </property>
+          <property name="text">
+           <string>Toggle Laser2</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="verticalSpacer_12">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeType">
+           <enum>QSizePolicy::Expanding</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>1</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+ <customwidget>
+  <class>FieldSpecSpinBox</class>
+  <extends>QDoubleSpinBox</extends>
+  <header>lightsheet.gui.widgets.field_spec_spinbox</header>
+ </customwidget>
+</customwidgets>
+<resources/>
+ <connections/>
+</ui>

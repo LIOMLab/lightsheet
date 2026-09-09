@@ -18,10 +18,10 @@ for i in range(1,1502):
         for j in range(0,len(list(f.keys()))):
             key = list(f.keys())[j]
             group = f[key]
-            data=group[()]
+            data=group[()]  # ty: ignore[not-subscriptable]
             print(key)
             '''Convert to tiff format'''
-            tiff = Image.fromarray(data)
+            tiff = Image.fromarray(data)  # ty: ignore[invalid-argument-type]
             nomFichier = nomFichier.replace('gros_stack_souris', 'gros_stack_souris_tiff')
             tiff_filename = nomFichier.replace('.hdf5', '.tiff')
             tiff.save(tiff_filename)

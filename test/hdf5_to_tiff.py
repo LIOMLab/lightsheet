@@ -15,17 +15,17 @@ with h5py.File(inFilename, "r") as inFile:
             print(key)
             group = inFile[key]
 
-            data = group[()]
+            data = group[()]  # ty: ignore[not-subscriptable]
             metadata = dict(group.attrs.items())
 
-            outFile.write(data, contiguous=True, metadata = metadata )
+            outFile.write(data, contiguous=True, metadata = metadata )  # ty: ignore[invalid-argument-type]
 
 print('Done')
 
 with tifffile.TiffReader(outFilename) as readbackFile:
     print(readbackFile.tiff.version)
     print(len(readbackFile.pages))
-    print(readbackFile.pages[0].imagej_description)
+    print(readbackFile.pages[0].imagej_description)  # ty: ignore[unresolved-attribute]
     metadata = readbackFile.imagej_metadata
     print(metadata)
 

@@ -1,0 +1,1 @@
+# DAQ rig tests subpackage
