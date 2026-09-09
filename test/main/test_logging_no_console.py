@@ -7,6 +7,7 @@ import logging.handlers
 import sys
 from collections.abc import Generator
 from pathlib import Path
+from typing import TextIO
 
 import pytest
 
@@ -39,9 +40,9 @@ def _write_config(tmp_path: Path, level: str = "INFO", log_dir: str = "") -> str
     return str(path)
 
 
-def _stream_handlers() -> list[logging.StreamHandler]:
+def _stream_handlers() -> list[logging.StreamHandler[TextIO]]:
     """Return the current root plain ``StreamHandler`` instances."""
-    return [h for h in logging.getLogger().handlers if type(h) is logging.StreamHandler]
+    return [h for h in logging.getLogger().handlers if type(h) is logging.StreamHandler]  # ty: ignore[invalid-return-type]
 
 
 def _file_handlers() -> list[logging.handlers.RotatingFileHandler]:

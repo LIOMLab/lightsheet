@@ -17,7 +17,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-from PIL import Image
+from PIL import IcoImagePlugin, Image
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ICO_PATH = REPO_ROOT / "lightsheet" / "resources" / "lightsheet.ico"
@@ -31,7 +31,8 @@ def _ico_sizes(path: Path) -> set[tuple[int, int]]:
     """Return the set of embedded image sizes in an ``.ico`` file."""
     with Image.open(path) as img:
         assert img.format == "ICO"
-        return set(img.ico.sizes())
+    with path.open("rb") as buf:
+        return set(IcoImagePlugin.IcoFile(buf).sizes())
 
 
 def test_ico_file_exists_and_is_valid() -> None:
