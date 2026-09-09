@@ -309,7 +309,12 @@ def main() -> int:
     # pre-patch sys.excepthook are not forwarded into the real default
     # hook.
     global _original_excepthook
-    _original_excepthook = sys.excepthook
+    # Skip self-capture: if main() is re-entered in the same process,
+    # sys.excepthook is already _exception_hook — capturing it would make
+    # the forward call at the end of _exception_hook recurse until
+    # RecursionError.
+    if sys.excepthook is not _exception_hook:
+        _original_excepthook = sys.excepthook
     sys.excepthook = _exception_hook
 
     # Deferred imports so the nicaiu preload above runs first.
