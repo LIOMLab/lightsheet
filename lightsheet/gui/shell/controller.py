@@ -1058,6 +1058,12 @@ class Controller_MainWindow(QMainWindow):
         # tests do not write config.ini.
         self._adaptive_dock_controller.restore_state()
         self._focus_dock_controller.restore_state()
+        # restoreState applies saved dock *visibility* too: each call
+        # re-applies the whole saved window state, so a dock persisted
+        # open by a previous run would auto-open here. Docks are opt-in
+        # per session — re-hide both so only the rail buttons open them.
+        self._adaptive_dock_controller.dock.hide()
+        self._focus_dock_controller.dock.hide()
 
         # Wire the adaptive + focus enable toggles on the stack panel to
         # show/hide their trajectory docks. Both handlers now live on their
