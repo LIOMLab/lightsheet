@@ -17,10 +17,6 @@ from lightsheet.config_schema.sections.controller import (
     ControllerSettingsOverlay,
 )
 from lightsheet.config_schema.sections.etls import ETLsSettings, ETLsSettingsOverlay
-from lightsheet.config_schema.sections.focus import (
-    FocusSettings,
-    FocusSettingsOverlay,
-)
 from lightsheet.config_schema.sections.ibeam import IBeamSettings, IBeamSettingsOverlay
 from lightsheet.config_schema.sections.lasers import (
     LasersSettings,
@@ -50,8 +46,6 @@ __all__ = [
     "ControllerSettingsOverlay",
     "ETLsSettings",
     "ETLsSettingsOverlay",
-    "FocusSettings",
-    "FocusSettingsOverlay",
     "IBeamSettings",
     "IBeamSettingsOverlay",
     "LasersSettings",

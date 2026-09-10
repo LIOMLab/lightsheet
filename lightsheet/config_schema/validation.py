@@ -24,7 +24,6 @@ from .sections.autofocus import AutofocusSettings, AutofocusSettingsOverlay
 from .sections.camera import CameraSettings, CameraSettingsOverlay
 from .sections.controller import ControllerSettings, ControllerSettingsOverlay
 from .sections.etls import ETLsSettings, ETLsSettingsOverlay
-from .sections.focus import FocusSettings, FocusSettingsOverlay
 from .sections.ibeam import IBeamSettings, IBeamSettingsOverlay
 from .sections.lasers import LasersSettings, LasersSettingsOverlay
 from .sections.logging import LoggingSettings, LoggingSettingsOverlay
@@ -76,12 +75,11 @@ _SECTION_MODELS: dict[str, tuple[type[BaseSettings], type[BaseSettings]]] = {
     "Logging": (LoggingSettings, LoggingSettingsOverlay),
     "Adaptive": (AdaptiveSettings, AdaptiveSettingsOverlay),
     "Autofocus": (AutofocusSettings, AutofocusSettingsOverlay),
-    "Focus": (FocusSettings, FocusSettingsOverlay),
 }
 
 # Optional baseline sections — a config.ini without one of these sections
 # validates using the model defaults. Sections NOT in this set are required.
-_OPTIONAL_SECTIONS: frozenset[str] = frozenset({"Adaptive", "Autofocus", "Focus"})
+_OPTIONAL_SECTIONS: frozenset[str] = frozenset({"Adaptive", "Autofocus"})
 
 
 # Non-safety recommended-range WARN checks. Each entry maps a section name
