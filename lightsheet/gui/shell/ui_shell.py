@@ -321,8 +321,9 @@ class Ui_Shell(object):
         self.pushButton_estop.setObjectName(u"pushButton_estop")
         self.pushButton_estop.setMinimumSize(QSize(_s.RAIL * 2, _s.RAIL))
         self.pushButton_estop.setStyleSheet(
-            f"QPushButton {{ background-color: {_c.DANGER}; color: {_c.ON_DANGER}; "
-            f"{_t.HEADING} border: 2px solid {_c.BREEZE_BG}; }}"
+            f"QPushButton {{ background-color: {_c.DANGER}; "
+            f"color: {_c.ON_DANGER}; {_t.HEADING} "
+            f"border: 2px solid {_c.BREEZE_BG}; }}"
         )
         self.pushButton_estop.setCheckable(True)
         self.shortcut_estop = QShortcut(self.pushButton_estop)
