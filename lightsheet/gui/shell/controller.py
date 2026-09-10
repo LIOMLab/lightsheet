@@ -1168,7 +1168,15 @@ class Controller_MainWindow(QMainWindow):
         re-run does not required re-driving the stage. Called on close.
         Skipped in demo mode so the test suite (which constructs many
         controllers with demo=True and tears them down concurrently under
-        xdist) does not corrupt the real config.ini."""
+        xdist) does not corrupt the real config.ini.
+
+        Positions are stored in millimetres — the unit the plane spinboxes
+        display — even though ``stack_starting_plane``/``stack_ending_plane``
+        are micrometres internally. The step stays in µm (its spinbox's
+        display unit). Storing the display unit makes stale µm-magnitude
+        values written by earlier versions self-healing: interpreted as mm
+        they fall outside the travel limits and are discarded on load
+        instead of being clamped into the spinbox."""
         if getattr(self, "_demo_mode", False):
             return
         start = self.stack_starting_plane
@@ -1178,8 +1186,8 @@ class Controller_MainWindow(QMainWindow):
             str(CONFIG_PATH),
             "Controller",
             {
-                "StackLastStart": "" if start is None else f"{start:.4f}",
-                "StackLastEnd": "" if end is None else f"{end:.4f}",
+                "StackLastStart": "" if start is None else f"{start / 1000.0:.4f}",
+                "StackLastEnd": "" if end is None else f"{end / 1000.0:.4f}",
                 "StackLastStep": f"{step:.4f}",
             },
         )
@@ -1187,6 +1195,16 @@ class Controller_MainWindow(QMainWindow):
     def _load_stack_params(self) -> None:
         """Load the last stack's start/end/step from config.ini and
         populate the spinboxes + set the shell flags if present.
+
+        Persisted positions are in millimetres (the spinbox display
+        unit); the internal ``stack_starting_plane``/``stack_ending_plane``
+        stay in micrometres — safety-critical, a missing conversion is a
+        1000x motor over-travel error. Each value is validated against the
+        live horizontal travel limits BEFORE touching the widget: an
+        out-of-range or unparseable value (including stale µm-magnitude
+        values from versions that persisted the internal unit) is
+        discarded with an operator message rather than clamped into the
+        spinbox.
 
         Skipped in demo mode so the test suite (which constructs many
         controllers with demo=True and tears them down concurrently under
@@ -1205,20 +1223,48 @@ class Controller_MainWindow(QMainWindow):
         start_s = str(cfg.get("StackLastStart", "")).strip()
         end_s = str(cfg.get("StackLastEnd", "")).strip()
         step_s = str(cfg.get("StackLastStep", "")).strip()
-        if start_s:
+        # Read the horizontal travel limits once, in the display unit.
+        # If they cannot be read (mock shell, missing motor handle) every
+        # persisted position is unverifiable and is skipped.
+        try:
+            low_mm = float(self.motors.horizontal.get_limit_low("mm"))
+            high_mm = float(self.motors.horizontal.get_limit_high("mm"))
+            limits_ok = True
+        except (AttributeError, TypeError, ValueError):
+            limits_ok = False
+        if start_s and limits_ok:
             try:
-                self.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(float(start_s))
-                self.stack_starting_plane = float(start_s)
+                start_mm = float(start_s)
+            except ValueError:
+                start_mm = None
+            if start_mm is not None and low_mm <= start_mm <= high_mm:
+                # Programmatic setValue does not emit editingFinished, so
+                # _on_first_plane_edited does not re-enter. The spinbox
+                # displays mm; the internal var stays µm.
+                self.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(start_mm)
+                self.stack_starting_plane = start_mm * 1000.0
                 self.stack_first_plane_set = True
-            except ValueError:
-                pass
-        if end_s:
+            else:
+                self.sig_message.emit(
+                    f"Persisted stack start {start_s} mm is outside the "
+                    f"stage travel limits ({low_mm:.3f}\u2013{high_mm:.3f} mm) "
+                    "and was not restored. Re-drive the stage and press Set."
+                )
+        if end_s and limits_ok:
             try:
-                self.stack_panel.ui.doubleSpinBox_acqLastPlane.setValue(float(end_s))
-                self.stack_ending_plane = float(end_s)
-                self.stack_last_plane_set = True
+                end_mm = float(end_s)
             except ValueError:
-                pass
+                end_mm = None
+            if end_mm is not None and low_mm <= end_mm <= high_mm:
+                self.stack_panel.ui.doubleSpinBox_acqLastPlane.setValue(end_mm)
+                self.stack_ending_plane = end_mm * 1000.0
+                self.stack_last_plane_set = True
+            else:
+                self.sig_message.emit(
+                    f"Persisted stack end {end_s} mm is outside the "
+                    f"stage travel limits ({low_mm:.3f}\u2013{high_mm:.3f} mm) "
+                    "and was not restored. Re-drive the stage and press Set."
+                )
         if step_s:
             with contextlib.suppress(ValueError):
                 self.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(
