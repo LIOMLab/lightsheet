@@ -113,8 +113,8 @@ FIELD_SPECS: dict[str, FieldSpec] = {
     "doubleSpinBox_adaptiveLaser2MaxPower": FieldSpec("%", 1, 1.0, 10.0, 0.0, 100.0),
     # Stack panel — predictive adaptive-autofocus group
     "doubleSpinBox_autofocusCadence": FieldSpec("", 0, 1, 5, 1, 1000),
-    "doubleSpinBox_autofocusResidualGain": FieldSpec("mm", 3, 0.01, 0.1, 0.0, 1.0),
-    "doubleSpinBox_autofocusMaxResidual": FieldSpec("mm", 3, 0.05, 0.1, 0.0, 5.0),
+    "doubleSpinBox_autofocusResidualGain": FieldSpec("mm", 3, 0.001, 0.01, 0.0, 1.0),
+    "doubleSpinBox_autofocusMaxResidual": FieldSpec("mm", 3, 0.01, 0.1, 0.0, 5.0),
     "doubleSpinBox_autofocusSmoothing": FieldSpec("", 2, 0.05, 0.1, 0.0, 1.0),
 }
 

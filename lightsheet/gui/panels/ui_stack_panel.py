@@ -375,8 +375,8 @@ class Ui_StackPanel(object):
         self.doubleSpinBox_autofocusResidualGain.setDecimals(3)
         self.doubleSpinBox_autofocusResidualGain.setMinimum(0.000000000000000)
         self.doubleSpinBox_autofocusResidualGain.setMaximum(1.000000000000000)
-        self.doubleSpinBox_autofocusResidualGain.setSingleStep(0.010000000000000)
-        self.doubleSpinBox_autofocusResidualGain.setValue(0.050000000000000)
+        self.doubleSpinBox_autofocusResidualGain.setSingleStep(0.001000000000000)
+        self.doubleSpinBox_autofocusResidualGain.setValue(0.005000000000000)
 
         self.gridLayout_adaptiveAutofocusFields.addWidget(self.doubleSpinBox_autofocusResidualGain, 1, 1, 1, 1)
 
@@ -390,8 +390,8 @@ class Ui_StackPanel(object):
         self.doubleSpinBox_autofocusMaxResidual.setDecimals(3)
         self.doubleSpinBox_autofocusMaxResidual.setMinimum(0.000000000000000)
         self.doubleSpinBox_autofocusMaxResidual.setMaximum(5.000000000000000)
-        self.doubleSpinBox_autofocusMaxResidual.setSingleStep(0.050000000000000)
-        self.doubleSpinBox_autofocusMaxResidual.setValue(0.500000000000000)
+        self.doubleSpinBox_autofocusMaxResidual.setSingleStep(0.010000000000000)
+        self.doubleSpinBox_autofocusMaxResidual.setValue(0.050000000000000)
 
         self.gridLayout_adaptiveAutofocusFields.addWidget(self.doubleSpinBox_autofocusMaxResidual, 2, 1, 1, 1)
 

@@ -23,8 +23,8 @@ def test_autofocus_settings_defaults() -> None:
     s = AutofocusSettings()
     assert s.enabled is False
     assert s.cadence == 1
-    assert s.residual_gain_mm == 0.05
-    assert s.max_residual_mm == 0.5
+    assert s.residual_gain_mm == 0.005
+    assert s.max_residual_mm == 0.05
     assert s.smoothing == 0.5
     assert s.update_threshold == 0.0
     assert s.use_curve_seed is False
