@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -28,7 +29,7 @@ def bundle() -> DeviceBundle:
 
 
 def _build_controller(
-    bundle: DeviceBundle, qtbot: QtBot, request: Any
+    bundle: DeviceBundle, qtbot: QtBot, request: Any, tmp_path: Path
 ) -> Controller_MainWindow:
     """Construct ``Controller_MainWindow`` with all collaborators wired.
 
@@ -41,6 +42,15 @@ def _build_controller(
     qm_patch.start()
 
     controller = Controller_MainWindow(bundle, demo=True)
+
+    # Tests must never write acquisition artifacts (hdf5, resume manifests)
+    # into the operator's real save directory — the controller default is
+    # ~/Desktop/LightSheetData. Point it at a per-test tmp dir before any
+    # collaborator or worker can observe the default; sync the read-only
+    # display field so it matches.
+    controller.save_directory = str(tmp_path)
+    controller.save_panel.ui.lineEdit_saveDirectory.setText(controller.save_directory)
+
     qtbot.addWidget(controller)
 
     fs = FrameSaverController(bundle, controller)
@@ -114,10 +124,10 @@ def _build_controller(
 
 @pytest.fixture
 def controller(
-    bundle: DeviceBundle, qtbot: QtBot, request: Any
+    bundle: DeviceBundle, qtbot: QtBot, request: Any, tmp_path: Path
 ) -> Controller_MainWindow:
     """Return a fully constructed ``Controller_MainWindow`` with teardown."""
-    return _build_controller(bundle, qtbot, request)
+    return _build_controller(bundle, qtbot, request, tmp_path)
 
 
 def patch_qmessage_question() -> Any:
