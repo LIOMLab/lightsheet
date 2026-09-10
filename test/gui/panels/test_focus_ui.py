@@ -65,8 +65,6 @@ def _focus_ui(ctrl: Controller_MainWindow) -> Ui_StackPanel:
     return ctrl.stack_panel.ui
 
 
-
-
 def test_focus_group_widgets_exist(
     qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:

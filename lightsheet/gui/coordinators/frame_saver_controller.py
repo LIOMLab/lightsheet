@@ -480,14 +480,8 @@ class FrameSaver(QObject):
         try:
             from lightsheet.resume.gate import collect_safety_config
 
-            overlay = (
-                str(RIG_SPECIFIC_PATH)
-                if RIG_SPECIFIC_PATH.exists()
-                else None
-            )
-            safety_config = collect_safety_config(
-                str(CONFIG_PATH), overlay
-            )
+            overlay = str(RIG_SPECIFIC_PATH) if RIG_SPECIFIC_PATH.exists() else None
+            safety_config = collect_safety_config(str(CONFIG_PATH), overlay)
         except Exception as e:
             logger.warning("could not snapshot safety config: %s", e)
         row_index = getattr(self.parent, "stack_queue_row_index", None)

@@ -8,6 +8,7 @@ also succeed at collection time.
 import os
 
 import pytest
+
 from conftest import _nidaqmx_is_stub, _pco_is_stub
 
 _has_hardware: bool = os.environ.get("LIGHTSHEET_HW", "0") == "1"

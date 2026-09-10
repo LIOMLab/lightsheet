@@ -1131,7 +1131,7 @@ def _build_motors(
             return_value=shared_serial,
         ),
     ):
-        motors = Motors(**init_kwargs)  # ty: ignore[call-arg]
+        motors = Motors(**init_kwargs)  # ty: ignore[invalid-argument-type]
     return motors, shared_serial
 
 

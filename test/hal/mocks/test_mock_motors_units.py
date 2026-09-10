@@ -280,6 +280,7 @@ def test_mock_motors_set_axis_origin_delegates_and_syncs() -> None:
     motors.set_axis_origin("horizontal", 5.0, "mm")
     # int-microstep quantization loses sub-microstep precision on the
     # round-trip — assert to µm tolerance, not exact.
+    assert isinstance(motors.horizontal, MockMotor)
     assert motors.horizontal.get_origin("mm") == pytest.approx(5.0, abs=1e-3)
     assert motors.horizontal_origin == pytest.approx(5.0, abs=1e-3)
 

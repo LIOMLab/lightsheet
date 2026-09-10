@@ -58,9 +58,7 @@ def _exception_hook(
 
             crash_dir = _default_log_dir()
             crash_dir.mkdir(parents=True, exist_ok=True)
-            (crash_dir / "lightsheet-crash.log").write_text(
-                tb_text, encoding="utf-8"
-            )
+            (crash_dir / "lightsheet-crash.log").write_text(tb_text, encoding="utf-8")
         except OSError:
             pass
     if sys.stderr is not None:

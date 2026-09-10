@@ -229,6 +229,13 @@ class MockMotors(IMotors):
             limit_high_microsteps=258015,
         )
 
+        # Container origin attributes (the real class loads these from
+        # config.ini; the mock seeds them from each motor's initial
+        # origin). set_axis_origin keeps them in sync.
+        self.vertical_origin = self.vertical.get_origin("mm")
+        self.horizontal_origin = self.horizontal.get_origin("mm")
+        self.camera_origin = self.camera.get_origin("mm")
+
     def open(self) -> None:
         return None
 

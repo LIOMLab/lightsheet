@@ -187,9 +187,7 @@ def test_fingerprint_key_absent_from_live_section_warns(
     sets has_differences."""
     _no_config_validation(monkeypatch)
     manifest = _manifest(safety_config={"Motors": {"Limit High": "41.0"}})
-    findings = ResumeSafetyGate.from_manifest(
-        manifest, {"Motors": {}}, _FakeMotors({})
-    )
+    findings = ResumeSafetyGate.from_manifest(manifest, {"Motors": {}}, _FakeMotors({}))
     assert findings.errors == []
     assert findings.has_differences is True
     assert any("absent from the live config" in w for w in findings.warnings)
@@ -252,9 +250,7 @@ def test_legacy_hdf5_cursor_key_unresolvable_warns(
     assert findings.resume_plane == 0
 
 
-def test_zarr_cursor_is_probed(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_zarr_cursor_is_probed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """A zarr cursor entry is probed per channel and feeds resume_plane."""
     _no_config_validation(monkeypatch)
     store = tmp_path / "acq.zarr"
@@ -295,9 +291,7 @@ def test_no_motors_without_recorded_positions_quiet(
     _no_config_validation(monkeypatch)
     findings = ResumeSafetyGate.from_manifest(_manifest(), {}, None)
     assert findings.errors == []
-    assert any(
-        "no recorded positions" in c for c in findings.check_results
-    )
+    assert any("no recorded positions" in c for c in findings.check_results)
 
 
 def test_motor_readback_failure_warns(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -321,9 +315,7 @@ def test_recorded_axis_missing_from_live_readback_warns(
     findings = ResumeSafetyGate.from_manifest(manifest, {}, motors)
     assert findings.errors == []
     assert any("live" in w and "unavailable" in w for w in findings.warnings)
-    assert any(
-        "no recorded positions" in c for c in findings.check_results
-    )
+    assert any("no recorded positions" in c for c in findings.check_results)
 
 
 # --------------------------------------------------------------------- #
@@ -348,9 +340,7 @@ def test_limit_read_failure_warns(monkeypatch: pytest.MonkeyPatch) -> None:
     """Limit getters raising a typed error produce a warning, not an
     exception."""
     _no_config_validation(monkeypatch)
-    findings = ResumeSafetyGate.from_manifest(
-        _manifest(), {}, _RaisingLimitMotors()
-    )
+    findings = ResumeSafetyGate.from_manifest(_manifest(), {}, _RaisingLimitMotors())
     assert findings.errors == []
     assert any("re-validation failed" in w for w in findings.warnings)
     assert any("re-validation failed" in c for c in findings.check_results)

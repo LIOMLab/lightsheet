@@ -31,8 +31,8 @@ import os
 import threading
 
 import pytest
-from conftest import _nidaqmx_is_stub
 
+from conftest import _nidaqmx_is_stub
 from lightsheet.hal.real.daqlaser import DAQLaser
 
 # Module-level hardware gate — the on()-write-failure test depends on the

@@ -348,6 +348,13 @@ class IMotorsCore(ABC):
     horizontal: "IMotor"
     camera: "IMotor"
 
+    # Per-axis origin values in each axis's configured units. ``Motors``
+    # loads them from config.ini; ``set_axis_origin`` keeps them in sync
+    # with runtime origin changes.
+    vertical_origin: float
+    horizontal_origin: float
+    camera_origin: float
+
 
 class IMotors(IMotorsCore):
     """Extended Motors container surface — the full public method set of the

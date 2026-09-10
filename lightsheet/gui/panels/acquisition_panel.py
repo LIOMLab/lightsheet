@@ -401,14 +401,8 @@ class AcquisitionPanelWidget(QWidget):
             from lightsheet.resume.gate import ResumeSafetyGate
 
             try:
-                overlay = (
-                    str(RIG_SPECIFIC_PATH)
-                    if RIG_SPECIFIC_PATH.exists()
-                    else None
-                )
-                live_config = load_sections_from_ini(
-                    str(CONFIG_PATH), overlay
-                )
+                overlay = str(RIG_SPECIFIC_PATH) if RIG_SPECIFIC_PATH.exists() else None
+                live_config = load_sections_from_ini(str(CONFIG_PATH), overlay)
             except Exception as e:
                 logger.warning(
                     "Could not load the live config for the resume gate: %s",

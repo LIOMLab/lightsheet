@@ -229,10 +229,9 @@ class MotorController:
             self._shell.sig_beep.emit()
             return
         plane_um = self._shell.stack_starting_plane
-        if (
-            plane_um >= self.motors.horizontal.get_limit_low("μm")
-            and plane_um <= self.motors.horizontal.get_limit_high("μm")
-        ):
+        if plane_um >= self.motors.horizontal.get_limit_low(
+            "μm"
+        ) and plane_um <= self.motors.horizontal.get_limit_high("μm"):
             try:
                 self.motors.horizontal.move_absolute_position(plane_um, "μm")
             except ValueError:
@@ -264,10 +263,9 @@ class MotorController:
             self._shell.sig_beep.emit()
             return
         plane_um = self._shell.stack_ending_plane
-        if (
-            plane_um >= self.motors.horizontal.get_limit_low("μm")
-            and plane_um <= self.motors.horizontal.get_limit_high("μm")
-        ):
+        if plane_um >= self.motors.horizontal.get_limit_low(
+            "μm"
+        ) and plane_um <= self.motors.horizontal.get_limit_high("μm"):
             try:
                 self.motors.horizontal.move_absolute_position(plane_um, "μm")
             except ValueError:

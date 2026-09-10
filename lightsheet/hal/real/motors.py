@@ -50,9 +50,7 @@ class Motors(IMotors):
     _cfg_defaults["Horizontal Last Position Microsteps"] = ""
     _cfg_defaults["Camera Last Position Microsteps"] = ""
 
-    def __init__(
-        self, port: str | None = None, persist_positions: bool = True
-    ) -> None:
+    def __init__(self, port: str | None = None, persist_positions: bool = True) -> None:
         # Error status
         self.error = 0
         self.error_message = ""

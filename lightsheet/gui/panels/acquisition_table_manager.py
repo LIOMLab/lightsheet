@@ -852,7 +852,7 @@ class AcquisitionTableManager(QWidget):
         binning_x = int(getattr(cam, "binning_x", 1) or 1)
         binning_y = int(getattr(cam, "binning_y", 1) or 1)
         base_res = (abs(stack_step), 6.5 * binning_x, 6.5 * binning_y)
-        max_res = max(base_res) if base_res else 0.0
+        max_res = max(base_res)
         level_count = sum(1 for t in (10, 25, 50, 100) if t >= max_res)
         # Level 0 (raw) is always present; each downsampled level adds
         # 0.25**i of L0. The multiplier covers L0 + all pyramid levels.

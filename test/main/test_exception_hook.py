@@ -31,9 +31,7 @@ def test_hook_logs_to_root_logger_when_handlers_configured(
         exits: list[int] = []
         monkeypatch.setattr(sys, "exit", lambda code: exits.append(code))
         with caplog.at_level(logging.CRITICAL):
-            lightsheet.__main__._exception_hook(
-                ValueError, ValueError("boom"), None
-            )
+            lightsheet.__main__._exception_hook(ValueError, ValueError("boom"), None)
         assert 1 in exits
         assert "boom" in caplog.text
         assert original.called, "exception hook did not forward to original excepthook"
@@ -50,9 +48,7 @@ def test_hook_writes_crash_file_when_no_handlers(
     import lightsheet.logging_setup
 
     monkeypatch.setattr(logging.getLogger(), "handlers", [])
-    monkeypatch.setattr(
-        lightsheet.logging_setup, "_default_log_dir", lambda: tmp_path
-    )
+    monkeypatch.setattr(lightsheet.logging_setup, "_default_log_dir", lambda: tmp_path)
     exits: list[int] = []
     monkeypatch.setattr(sys, "exit", lambda code: exits.append(code))
 
