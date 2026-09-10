@@ -31,6 +31,8 @@ from pathlib import Path
 
 import pytest
 
+import lightsheet.hal.real.daqlaser as daqlaser_mod
+
 # Whether the nidaqmx stub is active (dev machine) vs the real nidaqmx (rig).
 # The write-failure tests below assert the stub's "Task() raises" behavior;
 # they must skip when the real nidaqmx is active (the real write succeeds).
@@ -190,11 +192,11 @@ def test_l2_off_is_lock_free() -> None:
         holder.join(timeout=5.0)
 
 
-def test_l2_native_unit_volts_clamp_in_write_volts() -> None:
+def test_l2_native_unit_volts_clamp_in_write_volts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The native-unit V clamp inside _write_volts is the second safety layer,
     independent of the mW clamp in set_power. 999 V -> 5.0 V (150/30)."""
-    import nidaqmx
-
     laser = _make_l2_daq()
     captured: dict[str, object] = {}
 
@@ -217,18 +219,16 @@ def test_l2_native_unit_volts_clamp_in_write_volts() -> None:
         def add_ao_voltage_chan(self, terminal: str) -> None:
             captured["terminal"] = terminal
 
-    original_task = nidaqmx.Task
-    nidaqmx.Task = _CapturingTask  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
-    try:
-        laser._write_volts(999.0)
-        assert float(captured["volts"][0]) == pytest.approx(5.0)  # ty: ignore[not-subscriptable]
-        laser._write_volts(-10.0)
-        assert float(captured["volts"][0]) == pytest.approx(0.0)  # ty: ignore[not-subscriptable]
-        laser._write_volts(2.5)
-        assert float(captured["volts"][0]) == pytest.approx(2.5)  # ty: ignore[not-subscriptable]
-        assert captured["terminal"] == "/Dev7/ao1"
-    finally:
-        nidaqmx.Task = original_task  # type: ignore[attr-defined]
+    # Patch through the consumer module's nidaqmx binding — a test-local
+    # import can resolve to a different module object under xdist.
+    monkeypatch.setattr(daqlaser_mod.nidaqmx, "Task", _CapturingTask)
+    laser._write_volts(999.0)
+    assert float(captured["volts"][0]) == pytest.approx(5.0)  # ty: ignore[not-subscriptable]
+    laser._write_volts(-10.0)
+    assert float(captured["volts"][0]) == pytest.approx(0.0)  # ty: ignore[not-subscriptable]
+    laser._write_volts(2.5)
+    assert float(captured["volts"][0]) == pytest.approx(2.5)  # ty: ignore[not-subscriptable]
+    assert captured["terminal"] == "/Dev7/ao1"
 
 
 # --------------------------------------------------------------------------- #
@@ -480,46 +480,38 @@ class _RecordingReadback:
         return self._readback_mw
 
 
-def test_daqlaser_open_delegates_to_readback_backend() -> None:
+def test_daqlaser_open_delegates_to_readback_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """DAQLaser.open() with a readback_backend writes the off-voltage to the
     DAQ AO channel first, then delegates to the iBeam serial open + channel
     enable, and mirrors the readback error surface. The DAQ off-write must
     succeed (using a capturing nidaqmx.Task) so serial setup is attempted."""
-    import nidaqmx
-
     l2 = _make_l2_daq()
     rb = _RecordingReadback()
     l2.readback_backend = rb  # ty: ignore[invalid-assignment]
     CapturingTask, _captured = _capturing_task_factory()
-    original = nidaqmx.Task
-    nidaqmx.Task = CapturingTask  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
-    try:
-        l2.open()
-    finally:
-        nidaqmx.Task = original  # type: ignore[attr-defined]
+    monkeypatch.setattr(daqlaser_mod.nidaqmx, "Task", CapturingTask)
+    l2.open()
     assert rb.opened is True
     assert l2.error == 0
 
 
-def test_daqlaser_open_surfaces_readback_error() -> None:
+def test_daqlaser_open_surfaces_readback_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """When the readback backend's open() sets an error (channel enable
     rejected), DAQLaser.open() mirrors it onto its own error surface. The
     DAQ off-write must succeed (using a capturing nidaqmx.Task) so serial
     setup is attempted and the readback error is surfaced."""
-    import nidaqmx
-
     l2 = _make_l2_daq()
     rb = _RecordingReadback()
     rb.error = 1
     rb.error_message = "enable_channel rejected: %SYS-E"
     l2.readback_backend = rb  # ty: ignore[invalid-assignment]
     CapturingTask, _captured = _capturing_task_factory()
-    original = nidaqmx.Task
-    nidaqmx.Task = CapturingTask  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
-    try:
-        l2.open()
-    finally:
-        nidaqmx.Task = original  # type: ignore[attr-defined]
+    monkeypatch.setattr(daqlaser_mod.nidaqmx, "Task", CapturingTask)
+    l2.open()
     assert l2.error == 1
     assert "enable_channel rejected" in l2.error_message
 
@@ -685,73 +677,64 @@ def _capturing_task_factory() -> tuple[type, dict[str, object]]:
     return _CapturingTask, captured
 
 
-def test_inverted_daqlaser_set_power_writes_mapped_voltage() -> None:
+def test_inverted_daqlaser_set_power_writes_mapped_voltage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """An active inverted DAQLaser writes the mapped (inverted) voltage for
     set_power: set_power(75.0) -> to_volts(75) = 2.5 V -> _write_volts(2.5).
     The mW clamp in set_power and the V clamp in _write_volts are independent
     safety layers."""
-    import nidaqmx
-
     laser = _make_inverted_l2_daq()
     laser.active = True
     CapturingTask, captured = _capturing_task_factory()
-    original = nidaqmx.Task
-    nidaqmx.Task = CapturingTask  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
-    try:
-        laser.set_power(75.0)
-        assert laser.power == 75.0
-        assert float(captured["volts"][0]) == pytest.approx(2.5), (  # ty: ignore[not-subscriptable]
-            "set_power(75.0 mW) on an inverted L2 must write 2.5 V "
-            "(InvertedVoltMap: 75 mW -> 2.5 V)"
-        )
-        # set_power(150.0) -> 0 V (max power at min voltage).
-        laser.set_power(150.0)
-        assert float(captured["volts"][0]) == pytest.approx(0.0)  # ty: ignore[not-subscriptable]
-        # set_power(0.0) -> 5 V (off at max voltage).
-        laser.set_power(0.0)
-        assert float(captured["volts"][0]) == pytest.approx(5.0)  # ty: ignore[not-subscriptable]
-    finally:
-        nidaqmx.Task = original  # type: ignore[attr-defined]
+    monkeypatch.setattr(daqlaser_mod.nidaqmx, "Task", CapturingTask)
+    laser.set_power(75.0)
+    assert laser.power == 75.0
+    assert float(captured["volts"][0]) == pytest.approx(2.5), (  # ty: ignore[not-subscriptable]
+        "set_power(75.0 mW) on an inverted L2 must write 2.5 V "
+        "(InvertedVoltMap: 75 mW -> 2.5 V)"
+    )
+    # set_power(150.0) -> 0 V (max power at min voltage).
+    laser.set_power(150.0)
+    assert float(captured["volts"][0]) == pytest.approx(0.0)  # ty: ignore[not-subscriptable]
+    # set_power(0.0) -> 5 V (off at max voltage).
+    laser.set_power(0.0)
+    assert float(captured["volts"][0]) == pytest.approx(5.0)  # ty: ignore[not-subscriptable]
 
 
-def test_inverted_daqlaser_write_volts_clamps_hostile_inputs() -> None:
+def test_inverted_daqlaser_write_volts_clamps_hostile_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Direct hostile V inputs to _write_volts are independently clamped to
     [0.0, 5.0] — the second safety layer, independent of the mW clamp.
     999 V -> 5.0 V, -10 V -> 0.0 V. NEVER negative (current-clip latch)."""
-    import nidaqmx
-
     laser = _make_inverted_l2_daq()
     CapturingTask, captured = _capturing_task_factory()
-    original = nidaqmx.Task
-    nidaqmx.Task = CapturingTask  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
-    try:
-        laser._write_volts(999.0)
-        assert float(captured["volts"][0]) == pytest.approx(5.0), (  # ty: ignore[not-subscriptable]
-            "_write_volts must clamp 999 V to 5.0 V (max_volts)"
-        )
-        laser._write_volts(-10.0)
-        assert float(captured["volts"][0]) == pytest.approx(0.0), (  # ty: ignore[not-subscriptable]
-            "_write_volts must clamp -10 V to 0.0 V — NEVER negative "
-            "(negative V trips the iBeam current-clip latch)"
-        )
-        laser._write_volts(2.5)
-        assert float(captured["volts"][0]) == pytest.approx(2.5)  # ty: ignore[not-subscriptable]
-    finally:
-        nidaqmx.Task = original  # type: ignore[attr-defined]
+    monkeypatch.setattr(daqlaser_mod.nidaqmx, "Task", CapturingTask)
+    laser._write_volts(999.0)
+    assert float(captured["volts"][0]) == pytest.approx(5.0), (  # ty: ignore[not-subscriptable]
+        "_write_volts must clamp 999 V to 5.0 V (max_volts)"
+    )
+    laser._write_volts(-10.0)
+    assert float(captured["volts"][0]) == pytest.approx(0.0), (  # ty: ignore[not-subscriptable]
+        "_write_volts must clamp -10 V to 0.0 V — NEVER negative "
+        "(negative V trips the iBeam current-clip latch)"
+    )
+    laser._write_volts(2.5)
+    assert float(captured["volts"][0]) == pytest.approx(2.5)  # ty: ignore[not-subscriptable]
 
 
-def test_inverted_daqlaser_off_writes_five_volts_lock_free() -> None:
+def test_inverted_daqlaser_off_writes_five_volts_lock_free(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """SAFETY (Class IIIB): inverted DAQLaser.off() MUST write exactly 5 V
     (true-off), NOT 0 V. Writing 0 V on an inverted L2 would drive it to
     MAXIMUM power during E-stop — a potentially blinding misfire. off()
     clears active/power, returns None, and completes while another thread
     holds _lock (lock-free E-stop kill path)."""
-    import nidaqmx
-
     laser = _make_inverted_l2_daq()
     CapturingTask, captured = _capturing_task_factory()
-    original = nidaqmx.Task
-    nidaqmx.Task = CapturingTask  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
+    monkeypatch.setattr(daqlaser_mod.nidaqmx, "Task", CapturingTask)
 
     held = threading.Event()
     release = threading.Event()
@@ -790,31 +773,26 @@ def test_inverted_daqlaser_off_writes_five_volts_lock_free() -> None:
         assert laser.active is False
         assert laser.power == 0.0
     finally:
-        nidaqmx.Task = original  # type: ignore[attr-defined]
         release.set()
         holder.join(timeout=5.0)
 
 
-def test_linear_l1_off_still_writes_zero_volts() -> None:
+def test_linear_l1_off_still_writes_zero_volts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Linear L1 off() still writes 0 V (normal polarity: 0 V = off).
     The polarity-aware off() uses volt_map.off_volts, which is 0.0 for
     LinearVoltMap and 5.0 for InvertedVoltMap."""
-    import nidaqmx
-
     laser = _make_l2_daq()  # linear fallback (mw_per_volt=30, max_power=150)
     CapturingTask, captured = _capturing_task_factory()
-    original = nidaqmx.Task
-    nidaqmx.Task = CapturingTask  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
-    try:
-        laser.set_power(75.0)
-        laser.off()
-        assert float(captured["volts"][0]) == pytest.approx(0.0), (  # ty: ignore[not-subscriptable]
-            "linear L1 off() must write 0.0 V (normal polarity: 0 V = off)"
-        )
-        assert laser.active is False
-        assert laser.power == 0.0
-    finally:
-        nidaqmx.Task = original  # type: ignore[attr-defined]
+    monkeypatch.setattr(daqlaser_mod.nidaqmx, "Task", CapturingTask)
+    laser.set_power(75.0)
+    laser.off()
+    assert float(captured["volts"][0]) == pytest.approx(0.0), (  # ty: ignore[not-subscriptable]
+        "linear L1 off() must write 0.0 V (normal polarity: 0 V = off)"
+    )
+    assert laser.active is False
+    assert laser.power == 0.0
 
 
 # --------------------------------------------------------------------------- #
@@ -824,12 +802,12 @@ def test_linear_l1_off_still_writes_zero_volts() -> None:
 # configured serial backend. If the DAQ off-voltage write fails, serial
 # setup is not attempted. L1 (no readback backend) open() remains a no-op.
 # --------------------------------------------------------------------------- #
-def test_inverted_open_preloads_five_volts_before_serial_setup() -> None:
+def test_inverted_open_preloads_five_volts_before_serial_setup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """inverted DAQLaser.open() writes 5 V before opening the configured
     serial backend. The DAQ off write happens first; the serial open is
     only attempted after the DAQ write succeeds."""
-    import nidaqmx
-
     from lightsheet.hal.real.daqlaser import InvertedVoltMap
 
     laser = DAQLaser(
@@ -862,21 +840,17 @@ def test_inverted_open_preloads_five_volts_before_serial_setup() -> None:
     laser.readback_backend = rb  # ty: ignore[invalid-assignment]
 
     CapturingTask, captured = _capturing_task_factory()
-    original = nidaqmx.Task
-    nidaqmx.Task = CapturingTask  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
-    try:
-        laser.open()
-        # 5 V was written first (true-off for inverted L2).
-        assert float(captured["volts"][0]) == pytest.approx(5.0), (  # ty: ignore[not-subscriptable]
-            "inverted L2 open() must write 5.0 V (true-off) before serial "
-            "setup — the DAQ input must be at 5 V before laser on / en ext"
-        )
-        # Serial backend was opened after the DAQ write.
-        assert rb.opened is True
-        assert rb.opened_after_daq_write is True
-        assert laser.error == 0
-    finally:
-        nidaqmx.Task = original  # type: ignore[attr-defined]
+    monkeypatch.setattr(daqlaser_mod.nidaqmx, "Task", CapturingTask)
+    laser.open()
+    # 5 V was written first (true-off for inverted L2).
+    assert float(captured["volts"][0]) == pytest.approx(5.0), (  # ty: ignore[not-subscriptable]
+        "inverted L2 open() must write 5.0 V (true-off) before serial "
+        "setup — the DAQ input must be at 5 V before laser on / en ext"
+    )
+    # Serial backend was opened after the DAQ write.
+    assert rb.opened is True
+    assert rb.opened_after_daq_write is True
+    assert laser.error == 0
 
 
 def test_inverted_open_aborts_serial_setup_when_daq_off_fails() -> None:

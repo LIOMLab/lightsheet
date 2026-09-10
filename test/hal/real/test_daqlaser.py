@@ -32,6 +32,7 @@ import threading
 
 import pytest
 
+import lightsheet.hal.real.daqlaser as daqlaser_mod
 from conftest import _nidaqmx_is_stub
 from lightsheet.hal.real.daqlaser import DAQLaser
 
@@ -360,7 +361,9 @@ def test_write_volts_aborts_on_zero_mw_per_volt() -> None:
     )
 
 
-def test_native_unit_volts_clamp_in_write_volts() -> None:
+def test_native_unit_volts_clamp_in_write_volts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The native-unit clamp inside _write_volts bounds volts to
     [0, max_power / mw_per_volt] independently of the mW-layer clamp in
     set_power (two-layer clamp).
@@ -372,9 +375,14 @@ def test_native_unit_volts_clamp_in_write_volts() -> None:
     we patch nidaqmx.Task with a capturing stub that records the volts
     array passed to task.write. The clamp inside _write_volts runs before
     the Task is constructed, so the captured value reflects the clamp.
-    """
-    import nidaqmx
 
+    The patch lands on the nidaqmx module object the consumer
+    (lightsheet.hal.real.daqlaser) actually binds — under xdist a
+    test-local ``import nidaqmx`` can resolve to a different module object
+    than the one daqlaser imported, which is the module-identity drift
+    behind the ``KeyError: 'volts'`` flakes. monkeypatch auto-restores on
+    teardown, removing the manual save/restore leak vector.
+    """
     laser = _make_l1()
     captured: dict[str, object] = {}
 
@@ -397,27 +405,23 @@ def test_native_unit_volts_clamp_in_write_volts() -> None:
         def add_ao_voltage_chan(self, terminal: str) -> None:
             captured["terminal"] = terminal
 
-    original_task = nidaqmx.Task
-    nidaqmx.Task = _CapturingTask  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
-    try:
-        # 999 V is far above max_power/mw_per_volt = 300/60 = 5.0 V.
-        laser._write_volts(999.0)
-        written = captured["volts"]
-        # _write_volts writes np.array([volts]); the single element is the
-        # clamped value.
-        assert float(written[0]) == pytest.approx(5.0)  # ty: ignore[not-subscriptable]
-        # Floor clamp: -10 V -> 0 V.
-        laser._write_volts(-10.0)
-        written = captured["volts"]
-        assert float(written[0]) == pytest.approx(0.0)  # ty: ignore[not-subscriptable]
-        # In-range value passes through unchanged.
-        laser._write_volts(2.5)
-        written = captured["volts"]
-        assert float(written[0]) == pytest.approx(2.5)  # ty: ignore[not-subscriptable]
-        # Terminal passed through to add_ao_voltage_chan unchanged.
-        assert captured["terminal"] == "/Dev7/ao0"
-    finally:
-        nidaqmx.Task = original_task  # type: ignore[attr-defined]
+    monkeypatch.setattr(daqlaser_mod.nidaqmx, "Task", _CapturingTask)
+    # 999 V is far above max_power/mw_per_volt = 300/60 = 5.0 V.
+    laser._write_volts(999.0)
+    written = captured["volts"]
+    # _write_volts writes np.array([volts]); the single element is the
+    # clamped value.
+    assert float(written[0]) == pytest.approx(5.0)  # ty: ignore[not-subscriptable]
+    # Floor clamp: -10 V -> 0 V.
+    laser._write_volts(-10.0)
+    written = captured["volts"]
+    assert float(written[0]) == pytest.approx(0.0)  # ty: ignore[not-subscriptable]
+    # In-range value passes through unchanged.
+    laser._write_volts(2.5)
+    written = captured["volts"]
+    assert float(written[0]) == pytest.approx(2.5)  # ty: ignore[not-subscriptable]
+    # Terminal passed through to add_ao_voltage_chan unchanged.
+    assert captured["terminal"] == "/Dev7/ao0"
 
 
 def test_mw_to_volts_zero_mw_per_volt_guard_returns_zero() -> None:
