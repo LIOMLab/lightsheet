@@ -351,7 +351,7 @@ class SigGen(ISigGen):
 
         elif self.camera.shutter_mode == "Rolling":
             if self.diag:
-                print("Testing rolling shutter signals generator")
+                logger.debug("Testing rolling shutter signals generator")
                 # In Rolling mode, adjust galvo_scan_time to camera exposure
                 self.galvo_scan_time = self.camera.exposure_time
                 camera_data_readout_time = (
@@ -540,6 +540,8 @@ class SigGen(ISigGen):
 if __name__ == "__main__":
     from matplotlib import pyplot as plt
 
+    logging.basicConfig(level=logging.INFO)
+
     test_camera = Camera()
     if test_camera.camera is None:
         test_camera.xsize = 2048
@@ -552,7 +554,7 @@ if __name__ == "__main__":
     # test_scanner.sample_rate = 1000
     # test_scanner.test = False
     test_scanner.compute_scan_waveforms()
-    print(test_scanner.waveform_metadata)
+    logger.info(test_scanner.waveform_metadata)
 
     time_axis = np.arange(0, test_scanner.waveform_camera.size)  # ty: ignore[unresolved-attribute]
     plt.plot(time_axis, test_scanner.waveform_camera)  # ty: ignore[invalid-argument-type]

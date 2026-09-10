@@ -76,7 +76,7 @@ class MockCamera(ICamera):
     def open(self) -> None:
         """Populate the controller-read attributes with synthetic defaults."""
         if self.verbose:
-            print("Opening mock camera...")
+            logger.debug("Opening mock camera...")
         if self.camera is None:
             self.xsize = 2048
             self.ysize = 2048
@@ -87,17 +87,17 @@ class MockCamera(ICamera):
             # Non-None sentinel makes open() idempotent.
             self.camera = "mock"
             if self.verbose:
-                print(" Mock camera opened.")
+                logger.debug(" Mock camera opened.")
         else:
             if self.verbose:
-                print(" Mock camera already opened.")
+                logger.debug(" Mock camera already opened.")
         return None
 
     def close(self) -> None:
         if self.camera is not None:
             self.camera = None
             if self.verbose:
-                print(" Mock camera closed.")
+                logger.debug(" Mock camera closed.")
         return None
 
     def arm(self) -> None:
@@ -138,7 +138,7 @@ class MockCamera(ICamera):
     def grab_image(self, exposure_time_ms: int = 100) -> Any:
         """Return a synthetic uint16 frame of the current xsize-by-ysize shape."""
         if self.verbose:
-            print("Grabbing a synthetic image...")
+            logger.debug("Grabbing a synthetic image...")
         assert self.xsize is not None and self.ysize is not None
         img = np.zeros((self.ysize, self.xsize), dtype=np.uint16)
         return img

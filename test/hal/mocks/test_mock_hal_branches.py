@@ -15,6 +15,8 @@ never a static-source grep.
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import pytest
 
@@ -36,25 +38,25 @@ def test_mock_camera_open_is_idempotent_and_sets_sentinel() -> None:
     assert cam.camera == "mock"
 
 
-def test_mock_camera_verbose_open_prints(capsys: pytest.CaptureFixture) -> None:  # ty: ignore[missing-type-argument]
-    """The verbose=True branch in open() prints the opening messages."""
-    MockCamera(verbose=True)
-    out = capsys.readouterr().out
-    assert "Opening mock camera" in out
-    assert "Mock camera opened" in out
+def test_mock_camera_verbose_open_logs(caplog: pytest.LogCaptureFixture) -> None:
+    """The verbose=True branch in open() logs the opening messages."""
+    with caplog.at_level(logging.DEBUG, logger="lightsheet.hal.mocks.mock_camera"):
+        MockCamera(verbose=True)
+    assert "Opening mock camera" in caplog.text
+    assert "Mock camera opened" in caplog.text
 
 
-def test_mock_camera_close_clears_sentinel_and_verbose_prints(
-    capsys: pytest.CaptureFixture,  # ty: ignore[missing-type-argument]
+def test_mock_camera_close_clears_sentinel_and_verbose_logs(
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """close() clears the camera sentinel; the verbose branch prints."""
-    cam = MockCamera(verbose=True)
-    capsys.readouterr()  # drain open() prints
-    assert cam.camera == "mock"
-    cam.close()
-    assert cam.camera is None
-    out = capsys.readouterr().out
-    assert "Mock camera closed" in out
+    """close() clears the camera sentinel; the verbose branch logs."""
+    with caplog.at_level(logging.DEBUG, logger="lightsheet.hal.mocks.mock_camera"):
+        cam = MockCamera(verbose=True)
+        caplog.clear()  # drain open() messages
+        assert cam.camera == "mock"
+        cam.close()
+        assert cam.camera is None
+        assert "Mock camera closed" in caplog.text
 
 
 def test_mock_camera_close_when_already_closed_is_noop() -> None:
@@ -115,13 +117,14 @@ def test_mock_camera_grab_image_returns_correct_shape() -> None:
     assert img.dtype == np.uint16
 
 
-def test_mock_camera_grab_image_verbose_prints(
-    capsys: pytest.CaptureFixture,  # ty: ignore[missing-type-argument]
+def test_mock_camera_grab_image_verbose_logs(
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    cam = MockCamera(verbose=True)
-    capsys.readouterr()
-    cam.grab_image()
-    assert "Grabbing a synthetic image" in capsys.readouterr().out
+    with caplog.at_level(logging.DEBUG, logger="lightsheet.hal.mocks.mock_camera"):
+        cam = MockCamera(verbose=True)
+        caplog.clear()
+        cam.grab_image()
+    assert "Grabbing a synthetic image" in caplog.text
 
 
 def test_mock_camera_temperature_getters_return_20c() -> None:

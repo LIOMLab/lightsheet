@@ -75,4 +75,5 @@ if __name__ == "__main__":
 
     cfg_out = cfg_read("config.ini", "HwDAQ", cfg_in)
     cfg_write("test.ini", "HwDAQ", cfg_out)
-    print(cfg_out)
+    logging.basicConfig(level=logging.INFO)
+    logger.info(cfg_out)

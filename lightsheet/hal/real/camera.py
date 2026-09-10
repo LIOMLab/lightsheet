@@ -97,7 +97,7 @@ class Camera(ICamera):
     def open(self) -> None:
         """Open a camera"""
         if self.verbose:
-            print("Opening camera...")
+            logger.debug("Opening camera...")
         if self.camera is None:
             try:
                 self.camera = pco.Camera()
@@ -127,31 +127,31 @@ class Camera(ICamera):
                 self.line_time = cam_cmos_line_timing.get("line time")
                 self.default_line_time = self.line_time
                 if self.verbose:
-                    print(" Camera opened.")
+                    logger.debug(" Camera opened.")
         else:
             if self.verbose:
-                print(" Camera already opened.")
+                logger.debug(" Camera already opened.")
         return None
 
     def close(self) -> None:
         """Closes an opened camera"""
         if self.verbose:
-            print("Closing camera...")
+            logger.debug("Closing camera...")
         if self.camera is not None:
             self.camera.close()
             self.camera = None
             if self.verbose:
-                print(" Camera closed.")
+                logger.debug(" Camera closed.")
         else:
             if self.verbose:
-                print(" Camera already closed.")
+                logger.debug(" Camera already closed.")
         return None
 
     def arm(self) -> None:
         """docstring"""
         if self.camera is not None:
             if self.verbose:
-                print("Arming camera...")
+                logger.debug("Arming camera...")
             if self.camera.sdk.get_recording_state()["recording state"] == "on":
                 self.camera.sdk.set_recording_state("off")
             self.camera.sdk.arm_camera()
@@ -175,8 +175,8 @@ class Camera(ICamera):
             self.line_time = cam_cmos_line_timing.get("line time")
 
             if self.verbose:
-                print(" Camera armed.")
-                print(" Line time:", str(self.line_time))
+                logger.debug(" Camera armed.")
+                logger.debug(" Line time: %s", self.line_time)
         return None
 
     def arm_scan(self) -> None:
@@ -186,7 +186,7 @@ class Camera(ICamera):
         if self.camera is not None:
             if self.shutter_mode == "Lightsheet":
                 if self.verbose:
-                    print("Arming camera in Lightsheet mode...")
+                    logger.debug("Arming camera in Lightsheet mode...")
                 if self.camera.sdk.get_recording_state()["recording state"] == "on":
                     self.camera.sdk.set_recording_state("off")
                 self.set_trigger_mode("external")
@@ -209,15 +209,15 @@ class Camera(ICamera):
                 delay_lines = cam_cmos_line_exposure_delay.get("lines delay")
 
                 if self.verbose:
-                    print(" Camera armed.")
-                    print(" Lightsheet mode is:", str(parameter))
-                    print(" Line time:", str(self.line_time))
-                    print(" Exposed lines:", str(exposed_lines))
-                    print(" Delay lines:", str(delay_lines))
+                    logger.debug(" Camera armed.")
+                    logger.debug(" Lightsheet mode is: %s", parameter)
+                    logger.debug(" Line time: %s", self.line_time)
+                    logger.debug(" Exposed lines: %s", exposed_lines)
+                    logger.debug(" Delay lines: %s", delay_lines)
 
             elif self.shutter_mode == "Rolling":
                 if self.verbose:
-                    print("Arming camera in Rolling Shutter mode...")
+                    logger.debug("Arming camera in Rolling Shutter mode...")
                 if self.camera.sdk.get_recording_state()["recording state"] == "on":
                     self.camera.sdk.set_recording_state("off")
                 self.set_trigger_mode("external_exposure")
@@ -230,13 +230,13 @@ class Camera(ICamera):
                 self.line_time = cam_cmos_line_timing.get("line time")
 
                 if self.verbose:
-                    print(" Camera armed.")
-                    print(" Lightsheet mode is:", str(parameter))
-                    print(" Line time:", str(self.line_time))
+                    logger.debug(" Camera armed.")
+                    logger.debug(" Lightsheet mode is: %s", parameter)
+                    logger.debug(" Line time: %s", self.line_time)
 
             elif self.shutter_mode == "Global":
                 if self.verbose:
-                    print("Arming camera in Global Shutter mode...")
+                    logger.debug("Arming camera in Global Shutter mode...")
                 if self.camera.sdk.get_recording_state()["recording state"] == "on":
                     self.camera.sdk.set_recording_state("off")
                 self.set_trigger_mode("external_exposure")
@@ -249,8 +249,8 @@ class Camera(ICamera):
                 self.line_time = cam_cmos_line_timing.get("line time")
 
                 if self.verbose:
-                    print(" Camera armed.")
-                    print(" Line time:", str(self.line_time))
+                    logger.debug(" Camera armed.")
+                    logger.debug(" Line time: %s", self.line_time)
 
             else:
                 raise Exception("Unknown shutter mode selected")
@@ -269,11 +269,11 @@ class Camera(ICamera):
         """docstring"""
         if self.camera is not None:
             if self.verbose:
-                print("Disarming camera...")
+                logger.debug("Disarming camera...")
             if self.camera.sdk.get_recording_state()["recording state"] == "on":
                 self.camera.sdk.set_recording_state("off")
             if self.verbose:
-                print(" Camera disarmed.")
+                logger.debug(" Camera disarmed.")
         return None
 
     # Managing recording sessions
@@ -283,7 +283,7 @@ class Camera(ICamera):
         if self.camera is not None:
             try:
                 if self.verbose:
-                    print("Starting camera recording session...")
+                    logger.debug("Starting camera recording session...")
                 self.camera.record(int(number_of_images), mode="sequence non blocking")
             except ValueError:
                 logger.exception("Exception while starting recorder.")
@@ -292,7 +292,7 @@ class Camera(ICamera):
                 self.is_recording = True
                 self.recorder_timeout_status = False
                 if self.verbose:
-                    print(" Recording session started.")
+                    logger.debug(" Recording session started.")
         return None
 
     def _compute_per_image_time(self) -> float:
@@ -318,29 +318,26 @@ class Camera(ICamera):
                 number_of_images * per_image_time * self.recorder_timeout_safety_factor,
             )
             if self.verbose:
-                print("Monitoring camera recording session status...")
-                print("Timeout interval is " + str(timeout_s) + "s")
+                logger.debug("Monitoring camera recording session status...")
+                logger.debug("Timeout interval is %ss", timeout_s)
             wait_until = datetime.now() + timedelta(seconds=timeout_s)
             while True:
                 images_in_buffer = self.camera.rec.get_status()["dwProcImgCount"]  # ty: ignore[unresolved-attribute]
                 if images_in_buffer >= number_of_images:
                     self.new_data_ready = True
                     if self.verbose:
-                        print(
-                            " Recording session succeeded:",
+                        logger.debug(
+                            " Recording session succeeded: %s images in buffer",
                             images_in_buffer,
-                            "images in buffer",
                         )
                     break
                 elif wait_until < datetime.now():
                     self.recorder_timeout_status = True
                     if self.verbose:
-                        print(
-                            " Timeout occurred:",
+                        logger.debug(
+                            " Timeout occurred: %s images in buffer after %s s.",
                             images_in_buffer,
-                            "images in buffer after",
                             timeout_s,
-                            "s.",
                         )
                     break
                 else:
@@ -388,7 +385,7 @@ class Camera(ICamera):
         """Set the exposure time (in ms) for the camera"""
         if self.camera is not None:
             if self.verbose:
-                print("Setting camera exposure time: " + str(exposure_time_ms) + "ms")
+                logger.debug("Setting camera exposure time: %sms", exposure_time_ms)
             self.camera.sdk.set_delay_exposure_time(0, "ms", exposure_time_ms, "ms")
         self.exposure_time = float(exposure_time_ms) * 1e-3
         return None
@@ -419,20 +416,20 @@ class Camera(ICamera):
             line_delay = cam_line_exposure_delay.get("lines delay")
 
             if self.verbose:
-                print("Camera in lightsheet mode")
-                print("Camera line timing is:", str(line_timing))
-                print("Camera line exposure is:", str(line_exposure))
-                print("Camera line delay is:", str(line_delay))
+                logger.debug("Camera in lightsheet mode")
+                logger.debug("Camera line timing is: %s", line_timing)
+                logger.debug("Camera line exposure is: %s", line_exposure)
+                logger.debug("Camera line delay is: %s", line_delay)
         return None
 
     def set_trigger_mode(self, trigger_mode: str) -> None:
         """Set the trigger mode: 'auto_trigger', 'external', or 'external_exposure'."""
         if self.camera is not None:
             if self.verbose:
-                print("Setting camera trigger mode:", trigger_mode)
+                logger.debug("Setting camera trigger mode: %s", trigger_mode)
             if self.is_recording:
                 if self.verbose:
-                    print(
+                    logger.debug(
                         " Recording in progress. Trigger mode cannot be"
                         " changed while recording."
                     )
@@ -456,7 +453,7 @@ class Camera(ICamera):
             cam_name = self.camera.sdk.get_camera_name()
             name = str(cam_name.get("camera name"))
             if self.verbose:
-                print("Camera name:", name)
+                logger.debug("Camera name: %s", name)
         else:
             name = None
         return name
@@ -468,7 +465,7 @@ class Camera(ICamera):
             cam_temperatures = self.camera.sdk.get_temperature()
             camera_temperature = float(cam_temperatures.get("camera temperature"))
             if self.verbose:
-                print("Camera internal temperature:", camera_temperature)
+                logger.debug("Camera internal temperature: %s", camera_temperature)
         else:
             camera_temperature = None
         return camera_temperature
@@ -480,7 +477,7 @@ class Camera(ICamera):
             cam_temperatures = self.camera.sdk.get_temperature()
             sensor_temperature = float(cam_temperatures.get("sensor temperature"))
             if self.verbose:
-                print("Camera sensor temperature:", sensor_temperature)
+                logger.debug("Camera sensor temperature: %s", sensor_temperature)
         else:
             sensor_temperature = None
         return sensor_temperature
@@ -492,7 +489,7 @@ class Camera(ICamera):
             cam_temperatures = self.camera.sdk.get_temperature()
             power_temperature = float(cam_temperatures.get("power temperature"))
             if self.verbose:
-                print("Camera power supply temperature:", power_temperature)
+                logger.debug("Camera power supply temperature: %s", power_temperature)
         else:
             power_temperature = None
         return power_temperature
@@ -504,7 +501,7 @@ class Camera(ICamera):
             cam_sizes = self.camera.sdk.get_sizes()
             current_xsize = int(cam_sizes.get("x"))
             if self.verbose:
-                print("Camera x-size:", current_xsize)
+                logger.debug("Camera x-size: %s", current_xsize)
         else:
             current_xsize = None
         return current_xsize
@@ -516,7 +513,7 @@ class Camera(ICamera):
             cam_sizes = self.camera.sdk.get_sizes()
             current_ysize = int(cam_sizes.get("y"))
             if self.verbose:
-                print("Camera y-size:", current_ysize)
+                logger.debug("Camera y-size: %s", current_ysize)
         else:
             current_ysize = None
         return current_ysize
@@ -528,7 +525,7 @@ class Camera(ICamera):
             cam_trigger_mode = self.camera.sdk.get_trigger_mode()
             trigger_mode = str(cam_trigger_mode.get("trigger mode"))
             if self.verbose:
-                print("Camera trigger mode:", trigger_mode)
+                logger.debug("Camera trigger mode: %s", trigger_mode)
         else:
             trigger_mode = None
         return trigger_mode
@@ -540,7 +537,7 @@ class Camera(ICamera):
             cam_acquire_mode = self.camera.sdk.get_acquire_mode()
             acquire_mode = str(cam_acquire_mode.get("acquire mode"))
             if self.verbose:
-                print("Camera acquire mode:", acquire_mode)
+                logger.debug("Camera acquire mode: %s", acquire_mode)
         else:
             acquire_mode = None
         return acquire_mode
@@ -552,7 +549,7 @@ class Camera(ICamera):
             cam_storage_mode = self.camera.sdk.get_storage_mode()
             storage_mode = str(cam_storage_mode.get("storage mode"))
             if self.verbose:
-                print("Camera storage mode:", storage_mode)
+                logger.debug("Camera storage mode: %s", storage_mode)
         else:
             storage_mode = None
         return storage_mode
@@ -564,7 +561,7 @@ class Camera(ICamera):
             cam_recorder_mode = self.camera.sdk.get_recorder_submode()
             recorder_mode = str(cam_recorder_mode.get("recorder submode"))
             if self.verbose:
-                print("Camera recorder mode:", recorder_mode)
+                logger.debug("Camera recorder mode: %s", recorder_mode)
         else:
             recorder_mode = None
         return recorder_mode
@@ -576,7 +573,7 @@ class Camera(ICamera):
             cam_delay_exposure_time = self.camera.sdk.get_delay_exposure_time()
             exposure_time = int(cam_delay_exposure_time.get("exposure"))
             if self.verbose:
-                print("Camera exposure time:", exposure_time)
+                logger.debug("Camera exposure time: %s", exposure_time)
         else:
             exposure_time = None
         return exposure_time
@@ -588,7 +585,7 @@ class Camera(ICamera):
             cam_delay_exposure_time = self.camera.sdk.get_delay_exposure_time()
             exposure_timebase = str(cam_delay_exposure_time.get("exposure timebase"))
             if self.verbose:
-                print("Camera exposure timebase:", exposure_timebase)
+                logger.debug("Camera exposure timebase: %s", exposure_timebase)
         else:
             exposure_timebase = None
         return exposure_timebase
@@ -600,7 +597,7 @@ class Camera(ICamera):
             cam_delay_exposure_time = self.camera.sdk.get_delay_exposure_time()
             delay_time = int(cam_delay_exposure_time.get("delay"))
             if self.verbose:
-                print("Camera delay time:", delay_time)
+                logger.debug("Camera delay time: %s", delay_time)
         else:
             delay_time = None
         return delay_time
@@ -612,7 +609,7 @@ class Camera(ICamera):
             cam_delay_exposure_time = self.camera.sdk.get_delay_exposure_time()
             delay_timebase = str(cam_delay_exposure_time.get("delay timebase"))
             if self.verbose:
-                print("Camera delay timebase:", delay_timebase)
+                logger.debug("Camera delay timebase: %s", delay_timebase)
         else:
             delay_timebase = None
         return delay_timebase
@@ -624,7 +621,7 @@ class Camera(ICamera):
             cam_description = self.camera.sdk.get_camera_description()
             pixel_rates = cam_description.get("pixel rate")
             if self.verbose:
-                print("Camera available pixel rates:", pixel_rates)
+                logger.debug("Camera available pixel rates: %s", pixel_rates)
         else:
             pixel_rates = {}
         return pixel_rates
@@ -636,7 +633,7 @@ class Camera(ICamera):
             cam_pixel_rate = self.camera.sdk.get_pixel_rate()
             pixel_rate = str(cam_pixel_rate.get("pixel rate"))
             if self.verbose:
-                print("Camera pixel rate:", pixel_rate)
+                logger.debug("Camera pixel rate: %s", pixel_rate)
         else:
             pixel_rate = None
         return pixel_rate
@@ -657,7 +654,7 @@ class Camera(ICamera):
             cam_readout_format = self.camera.sdk.get_interface_output_format("edge")
             readout_format = str(cam_readout_format.get("format"))
             if self.verbose:
-                print("Camera readout format:", readout_format)
+                logger.debug("Camera readout format: %s", readout_format)
         else:
             readout_format = None
         return readout_format
@@ -667,7 +664,7 @@ class Camera(ICamera):
     def get_properties(self) -> dict[str, object]:
         if self.camera is not None:
             if self.verbose:
-                print("Retrieving camera properties and current settings...")
+                logger.debug("Retrieving camera properties and current settings...")
             cam_name = {}
             cam_name = self.camera.sdk.get_camera_name()
             cam_temperatures = {}
@@ -697,7 +694,7 @@ class Camera(ICamera):
         else:
             cam_properties = {}
             if self.verbose:
-                print("Camera not open - Cannot retrieve properties")
+                logger.debug("Camera not open - Cannot retrieve properties")
         return cam_properties  # ty: ignore[unsound-return-statement]
 
     def grab_image(self, exposure_time_ms: int = 100) -> np.ndarray | None:
@@ -708,13 +705,13 @@ class Camera(ICamera):
         # (setting up trigger_mode and exposure_time takes time)
 
         if self.verbose:
-            print("Attempting to grab an image...")
+            logger.debug("Attempting to grab an image...")
 
         img_buffer: np.ndarray | None = None
         if self.camera is not None:
             if self.is_recording:
                 if self.verbose:
-                    print(" Recording already in progress. Aborted.")
+                    logger.debug(" Recording already in progress. Aborted.")
             else:
                 self.disarm()  # In case camera was previously armed
                 self.set_trigger_mode("auto_trigger")  # Camera is internally triggered
@@ -735,18 +732,18 @@ class Camera(ICamera):
                     self.recorder_timeout_status
                 ):  # Check if we had a timeout before deleting the recorder
                     if self.verbose:
-                        print(" Timeout while acquiring image.")
+                        logger.debug(" Timeout while acquiring image.")
                 elif img_buffer is None:
                     if self.verbose:
-                        print(" No image data available.")
+                        logger.debug(" No image data available.")
                 else:
                     if self.verbose:
-                        print(" Image successfully obtained.")
+                        logger.debug(" Image successfully obtained.")
 
                 self.delete_recorder()  # Recording session can now be deleted
         else:
             if self.verbose:
-                print(" Camera not open. Aborted")
+                logger.debug(" Camera not open. Aborted")
         if img_buffer is not None:
             # Returning first (and only) image from the buffer.
             return img_buffer[0]
