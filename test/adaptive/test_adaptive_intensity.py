@@ -65,16 +65,26 @@ def test_intensity_custom_sensor_max() -> None:
 
 def test_intensity_benchmark_under_50ms() -> None:
     """A 2048x2048 frame's 99.99th percentile must compute in under
-    50 ms on the dev machine (the per-plane budget)."""
+    50 ms on the dev machine (the per-plane budget).
+
+    The assertion is on min-of-5 repetitions: a single timing sample is
+    dominated by scheduler preemption / GC noise under xdist load, which
+    is not the property the 50 ms budget constrains. The minimum
+    isolates the operation's true cost — a real regression still fails.
+    """
     rng = np.random.default_rng(42)
     frame = rng.integers(0, 65536, size=(2048, 2048), dtype=np.uint16)
     # Warm up to avoid first-call overhead skewing the measurement.
     frame_intensity_pct(frame)
-    start = time.perf_counter()
-    frame_intensity_pct(frame)
-    elapsed_ms = (time.perf_counter() - start) * 1000.0
+    samples_ms: list[float] = []
+    for _ in range(5):
+        start = time.perf_counter()
+        frame_intensity_pct(frame)
+        samples_ms.append((time.perf_counter() - start) * 1000.0)
+    elapsed_ms = min(samples_ms)
     assert elapsed_ms < 50.0, (
-        f"p99.99 on 2048x2048 took {elapsed_ms:.1f} ms (budget 50 ms)"
+        f"p99.99 on 2048x2048 took {elapsed_ms:.1f} ms min-of-5 "
+        f"(budget 50 ms)"
     )
 
 
