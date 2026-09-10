@@ -22,3 +22,7 @@ if [ ${#GENERATED[@]} -gt 0 ]; then
 fi
 
 uv run python scripts/tokenize_forms.py
+
+if [ ${#GENERATED[@]} -gt 0 ]; then
+    uv run python scripts/add_generated_header.py "${GENERATED[@]}"
+fi

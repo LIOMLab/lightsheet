@@ -22,9 +22,26 @@ def _load_normalizer() -> ModuleType:
     return module
 
 
+def _load_header_tool() -> ModuleType:
+    """Load the scripts/add_generated_header.py module as a one-off."""
+    repo_root = Path(__file__).resolve().parents[2]
+    script_path = repo_root / "scripts" / "add_generated_header.py"
+    spec = importlib.util.spec_from_file_location("add_generated_header", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["add_generated_header"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 @pytest.fixture(scope="module")
 def normalizer() -> ModuleType:
     return _load_normalizer()
+
+
+@pytest.fixture(scope="module")
+def header_tool() -> ModuleType:
+    return _load_header_tool()
 
 
 _GENERATED_HEADER = """# -*- coding: utf-8 -*-
@@ -167,3 +184,79 @@ class TestMainCLI:
         valid.write_text(_GENERATED_HEADER + "x = 1\n")
         # Mixing a valid and an invalid path must return non-zero.
         assert normalizer.main(["fix_generated_ui_enums.py", str(valid), str(bad)]) != 0
+
+
+_RCC_SIGNATURE_BLOCK = """# Resource object code (Python 3)
+# Created by: object code
+# Created by: The Resource Compiler for Qt version 6.11.2
+# WARNING! All changes made in this file will be lost!
+"""
+
+
+class TestAddGeneratedHeader:
+    """Tests for ``add_generated_header.add_header(path)``."""
+
+    def test_inserts_header_after_coding_cookie(
+        self, header_tool: ModuleType, generated_ui: Path
+    ) -> None:
+        assert header_tool.add_header(generated_ui) is True
+        lines = generated_ui.read_text().splitlines()
+        # PEP 263: the coding cookie must stay within the first two lines.
+        assert lines[0].startswith("# -*- coding")
+        assert "DO NOT HAND-EDIT" in lines[1]
+        assert "compile_ui.sh" in lines[2]
+        # The stock uic signature block is preserved below the header.
+        assert "Form generated from reading UI file" in generated_ui.read_text()
+
+    def test_idempotent_second_run(
+        self, header_tool: ModuleType, generated_ui: Path
+    ) -> None:
+        assert header_tool.add_header(generated_ui) is True
+        after_first = generated_ui.read_text()
+        assert header_tool.add_header(generated_ui) is False
+        assert generated_ui.read_text() == after_first
+
+    def test_rejects_non_generated_python(
+        self, header_tool: ModuleType, tmp_path: Path
+    ) -> None:
+        p = tmp_path / "hand_written.py"
+        p.write_text("x = 1\n")
+        with pytest.raises(ValueError, match="generator signature"):
+            header_tool.add_header(p)
+
+    def test_rejects_non_python_file(
+        self, header_tool: ModuleType, tmp_path: Path
+    ) -> None:
+        p = tmp_path / "ui_test.txt"
+        p.write_text(_GENERATED_HEADER)
+        with pytest.raises(ValueError, match="\\.py"):
+            header_tool.add_header(p)
+
+    def test_rcc_signature_detected_header_at_line_one(
+        self, header_tool: ModuleType, tmp_path: Path
+    ) -> None:
+        p = tmp_path / "ui_test_rc.py"
+        p.write_text(_RCC_SIGNATURE_BLOCK + "qt_resource_data = b''\n")
+        assert header_tool.add_header(p) is True
+        lines = p.read_text().splitlines()
+        assert "DO NOT HAND-EDIT" in lines[0]
+
+    def test_detection_still_works_on_headered_output(
+        self, header_tool: ModuleType, normalizer: ModuleType, generated_ui: Path
+    ) -> None:
+        header_tool.add_header(generated_ui)
+        # Recognition is content-based, not line-1-based: the project header
+        # must not break the signature detection the post-processors rely on.
+        assert normalizer._is_generated_file(generated_ui, generated_ui.read_text())
+        assert header_tool.is_generated_file(generated_ui.read_text())
+
+    def test_cli_rejects_non_generated_path(
+        self, header_tool: ModuleType, tmp_path: Path
+    ) -> None:
+        bad = tmp_path / "hand_written.py"
+        bad.write_text("x = 1\n")
+        valid = tmp_path / "ui_test.py"
+        valid.write_text(_GENERATED_HEADER + "x = 1\n")
+        assert header_tool.main(["add_generated_header.py", str(valid), str(bad)]) != 0
+        # The valid file was still processed.
+        assert "DO NOT HAND-EDIT" in valid.read_text()
