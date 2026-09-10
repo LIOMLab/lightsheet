@@ -30,7 +30,6 @@ responsiveness invariant).
 from __future__ import annotations
 
 import logging
-import math
 import typing
 import uuid
 from pathlib import Path
@@ -50,7 +49,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from lightsheet.gui.panels import queue_resume
+from lightsheet.gui.panels import queue_estimation, queue_resume
 from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.styles import spacing as _s
 from lightsheet.gui.styles import typography as _t
@@ -645,121 +644,47 @@ class AcquisitionTableManager(QWidget):
     def _compute(
         self, start: float, end: float, step: float
     ) -> tuple[int, float, float]:
-        """Compute (#planes, est. time s, est. size MB) for a row."""
-        if step <= 0 or start == end:
-            return 0, 0.0, 0.0
-        n_planes = math.floor(abs((end - start) / step)) + 1
-        per_plane_s = self._estimate_per_plane_time()
-        est_time_s = n_planes * per_plane_s
-        est_size_mb = self._estimate_stack_size_mb(n_planes)
-        return n_planes, est_time_s, est_size_mb
+        """Compute (#planes, est. time s, est. size MB) for a row.
+
+        The body lives in ``queue_estimation.compute`` — this method is
+        a one-line delegate so ``row_at`` / ``_recompute_row_impl``
+        resolve unchanged.
+        """
+        return queue_estimation.compute(self, start, end, step)
 
     def _estimate_per_plane_time(self) -> float:
-        """Advisory per-plane acquisition time in seconds."""
-        try:
-            exposure = float(
-                self._shell.acquisition_panel.ui.doubleSpinBox_cameraExposureTime.value()
-            )
-            return exposure / 1000.0 * 1.5
-        except (AttributeError, ValueError, TypeError) as e:
-            logger.warning(
-                "Failed to read camera exposure time; using default 0.5 s/plane: %s", e
-            )
-            return 0.5
+        """Advisory per-plane acquisition time in seconds.
+
+        The body lives in ``queue_estimation.estimate_per_plane_time``.
+        """
+        return queue_estimation.estimate_per_plane_time(self)
 
     def _estimate_stack_size_mb(self, n_planes: int) -> float:
-        """Advisory stack size in MB, format-aware.
+        """Advisory stack size in MB, format-aware (hdf5 raw bytes /
+        zarr L0 + pyramid overhead / both = sum).
 
-        - ``hdf5``: raw bytes — ``rows * cols * 2 * n_planes`` (uint16),
-          unchanged from the pre-format-aware behavior. Any unknown format
-          value also falls back to this estimate.
-        - ``zarr``: raw L0 bytes plus the multiscale pyramid overhead.
-          The pyramid level count is stack_step-dependent: count the
-          targets in ``(10, 25, 50, 100)`` µm that are ``>= max(base_res)``
-          where ``base_res = (abs(stack_step), 6.5*binning_x,
-          6.5*binning_y)`` — the same target-validity filter the writer's
-          ``finalize_with_resolutions`` applies (so the estimate tracks
-          the real on-disk pyramid, NOT a hardcoded level count). Each
-          downsampled level is ~1/4 of the previous (2x Y/X downsample),
-          so the total pyramid overhead is
-          ``L0 * sum(0.25**i for i in range(level_count))``.
-        - ``both``: ``hdf5_estimate + zarr_estimate`` (sum).
+        The body lives in ``queue_estimation.estimate_stack_size_mb``.
         """
-        try:
-            # The camera HAL exposes ysize/xsize (not rows/columns);
-            # reading the wrong attrs always fell back to 2000x2000,
-            # making the estimate wrong for any non-2000x2000 camera.
-            rows = int(getattr(self._shell.camera, "ysize", 2000) or 2000)
-            cols = int(getattr(self._shell.camera, "xsize", 2000) or 2000)
-        except (AttributeError, TypeError, ValueError) as e:
-            logger.warning(
-                "Failed to read camera ysize/xsize; "
-                "falling back to 2000x2000 for size estimate: %s",
-                e,
-            )
-            rows, cols = 2000, 2000
-        bytes_per_frame = rows * cols * 2
-        l0_bytes = n_planes * bytes_per_frame
-        l0_mb = l0_bytes / (1024.0 * 1024.0)
-
-        fmt = str(getattr(self._shell, "save_format", "hdf5")).lower()
-        if fmt == "zarr":
-            return l0_mb * self._zarr_pyramid_multiplier()
-        if fmt == "both":
-            return l0_mb + l0_mb * self._zarr_pyramid_multiplier()
-        # hdf5 / unknown -> raw bytes.
-        return l0_mb
+        return queue_estimation.estimate_stack_size_mb(self, n_planes)
 
     def _zarr_pyramid_multiplier(self) -> float:
         """Total-size multiplier for the OME-Zarr pyramid relative to L0.
 
-        The level count is derived from the live ``base_res`` (Z from
-        ``stack_step``, XY from the camera binning) using the writer's
-        target-validity filter: a target resolution is kept only if
-        ``target_um >= max(base_res)``. Each retained level is ~1/4 of
-        the previous (2x Y/X downsample), so the geometric sum
-        ``sum(0.25**i for i in range(level_count))`` is the overhead
-        factor on top of L0 (level 0 contributes 1.0).
+        The body lives in ``queue_estimation.zarr_pyramid_multiplier``.
         """
-        try:
-            stack_step = float(getattr(self._shell, "stack_step", 0.0))
-        except (TypeError, ValueError) as e:
-            logger.warning(
-                "Failed to parse stack_step; "
-                "disabling Zarr pyramid overhead estimate: %s",
-                e,
-            )
-            stack_step = 0.0
-        cam = getattr(self._shell, "camera", None)
-        binning_x = int(getattr(cam, "binning_x", 1) or 1)
-        binning_y = int(getattr(cam, "binning_y", 1) or 1)
-        base_res = (abs(stack_step), 6.5 * binning_x, 6.5 * binning_y)
-        max_res = max(base_res)
-        level_count = sum(1 for t in (10, 25, 50, 100) if t >= max_res)
-        # Level 0 (raw) is always present; each downsampled level adds
-        # 0.25**i of L0. The multiplier covers L0 + all pyramid levels.
-        return sum(0.25**i for i in range(level_count))
+        return queue_estimation.zarr_pyramid_multiplier(self)
 
     def _format_size_human_readable(self, mb: float, fmt: str) -> str:
         """Format an MB value as a human-readable string with a format
-        suffix: ``>=1024 GB`` -> TB, ``>=1024 MB`` -> GB, else MB. One
-        decimal place. ``fmt`` is the uppercase label (``"HDF5"`` /
-        ``"OME-Zarr"`` / ``"Both"``)."""
-        if mb >= 1024.0 * 1024.0:
-            return f"{mb / 1024.0 / 1024.0:.1f} TB ({fmt})"
-        if mb >= 1024.0:
-            return f"{mb / 1024.0:.1f} GB ({fmt})"
-        return f"{mb:.1f} MB ({fmt})"
+        suffix (``TB``/``GB``/``MB``). The body lives in
+        ``queue_estimation.format_size_human_readable``."""
+        return queue_estimation.format_size_human_readable(mb, fmt)
 
     def _format_label(self) -> str:
         """Map ``self._shell.save_format`` to the uppercase suffix label
-        used in the Est. Size cell."""
-        fmt = str(getattr(self._shell, "save_format", "hdf5")).lower()
-        if fmt == "zarr":
-            return "OME-Zarr"
-        if fmt == "both":
-            return "Both"
-        return "HDF5"
+        used in the Est. Size cell. The body lives in
+        ``queue_estimation.format_label``."""
+        return queue_estimation.format_label(self)
 
     def recompute_all_rows(self) -> None:
         """Re-estimate every planned-queue row's Est. Size cell.
@@ -767,118 +692,27 @@ class AcquisitionTableManager(QWidget):
         Subscribed to the save-format radio group's ``buttonClicked``
         signal (wired in the controller): when the operator switches
         format, every row's size estimate is re-computed against the new
-        format so the format-dependence is visible at planning time. Uses
-        the existing ``_recomputing`` re-entrancy guard so the per-row
-        ``setItem`` calls do not re-trigger ``cellChanged``.
+        format so the format-dependence is visible at planning time.
+
+        The body lives in ``queue_estimation.recompute_all_rows`` — this
+        method is a one-line delegate so the signal wiring resolves
+        unchanged.
         """
-        if self._recomputing:
-            return
-        self._recomputing = True
-        try:
-            for i in range(self.table.rowCount()):
-                self._recompute_row_impl(i)
-        finally:
-            self._recomputing = False
+        queue_estimation.recompute_all_rows(self)
 
     def _recompute_row(self, row: int) -> None:
         """Recompute #planes/est.time/est.size for a row + validate
         start/end against the motor travel limits. Flag incomplete or
-        out-of-range cells with a red background."""
-        if self._recomputing:
-            return
-        self._recomputing = True
-        try:
-            self._recompute_row_impl(row)
-        finally:
-            self._recomputing = False
+        out-of-range cells with a red background.
+
+        The body lives in ``queue_estimation.recompute_row``.
+        """
+        queue_estimation.recompute_row(self, row)
 
     def _recompute_row_impl(self, row: int) -> None:
-        # Parse each editable numeric cell, flagging empty or non-numeric
-        # text (e.g. "", "abc", "1.0.0") instead of crashing on every
-        # keystroke. _safe_float returns 0.0 for unparseable text; the
-        # flag below surfaces the bad cell to the operator so they can fix
-        # it. Guard missing items (None) so a partially-populated row does
-        # not raise AttributeError.
-        start_item = self.table.item(row, _COL_START)
-        end_item = self.table.item(row, _COL_END)
-        step_item = self.table.item(row, _COL_STEP)
-        start_text = start_item.text() if start_item is not None else ""
-        end_text = end_item.text() if end_item is not None else ""
-        step_text = step_item.text() if step_item is not None else ""
-        bad_parses: set[int] = set()
-        start = self._parse_or_flag(row, _COL_START, start_text, bad_parses)
-        end = self._parse_or_flag(row, _COL_END, end_text, bad_parses)
-        step = self._parse_or_flag(row, _COL_STEP, step_text, bad_parses)
-        # Start/End cells display in mm; convert to µm for the plane-count
-        # computation + limit check (the step cell is already µm, so all
-        # three must share the µm unit inside _compute).
-        start_um = start * 1000.0
-        end_um = end * 1000.0
-        n_planes, est_time_s, est_size_mb = self._compute(start_um, end_um, step)
-
-        self.table.blockSignals(True)
-        self._set_readonly_cell(row, _COL_NPLANES, str(n_planes))
-        mm, ss = divmod(int(est_time_s), 60)
-        self._set_readonly_cell(row, _COL_ESTTIME, f"{mm}:{ss:02d}")
-        self._set_readonly_cell(
-            row,
-            _COL_ESTSIZE,
-            self._format_size_human_readable(est_size_mb, self._format_label()),
-        )
-        # Update the name tooltip in case the name was edited.
-        name_item = self.table.item(row, _COL_NAME)
-        if name_item is not None:
-            name_item.setToolTip(name_item.text())
-        self.table.blockSignals(False)
-
-        # Clear flags then re-validate.
-        self.table.blockSignals(True)
-        for col in range(self.table.columnCount()):
-            self._flagged_cells.discard((row, col))
-            item = self.table.item(row, col)
-            if item is not None:
-                item.setBackground(_c.Q_FLAG_NORMAL)
-        self.table.blockSignals(False)
-
-        flagged = False
-        # Bad parses (empty or non-numeric) survive the re-validation pass.
-        for col in bad_parses:
-            self._flag(row, col)
-            flagged = True
-        # Incomplete: start == end or step <= 0.
-        if step <= 0:
-            self._flag(row, _COL_STEP)
-            flagged = True
-        if start == end:
-            self._flag(row, _COL_START)
-            self._flag(row, _COL_END)
-            flagged = True
-        # Out-of-range: start/end outside the motor travel limits.
-        motors = getattr(self._shell, "motors", None)
-        if motors is not None:
-            try:
-                low = float(motors.horizontal.get_limit_low("\u03bcm"))
-                high = float(motors.horizontal.get_limit_high("\u03bcm"))
-            except (TypeError, ValueError, AttributeError) as e:
-                logger.warning(
-                    "Failed to read horizontal motor limits; "
-                    "disabling travel-limit check: %s",
-                    e,
-                )
-                low, high = None, None
-            if low is not None and high is not None:
-                # start/end are mm cell values; limits are µm — compare in µm.
-                if start_um < low or start_um > high:
-                    self._flag(row, _COL_START)
-                    flagged = True
-                if end_um < low or end_um > high:
-                    self._flag(row, _COL_END)
-                    flagged = True
-        if flagged:
-            self._shell.sig_message.emit(
-                f"Row {row + 1} is incomplete or out of range. "
-                "Fix the highlighted cells before starting the queue."
-            )
+        """Recompute + revalidate a row (the parse/flag/validate body).
+        The body lives in ``queue_estimation.recompute_row_impl``."""
+        queue_estimation.recompute_row_impl(self, row)
 
     def _flag(self, row: int, col: int) -> None:
         self._flagged_cells.add((row, col))
