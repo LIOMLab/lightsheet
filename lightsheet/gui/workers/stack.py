@@ -718,9 +718,9 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         if self._shell.saving_allowed:
                             positions = self.motors.get_positions()
                             self._shell._fs.add_motor_parameters(
-                                f"{positions['horizontal position']:.5f} mm",
-                                f"{positions['vertical position']:.5f} mm",
-                                f"{positions['camera position']:.5f} mm",
+                                f"{positions['horizontal position']:.4f} mm",
+                                f"{positions['vertical position']:.4f} mm",
+                                f"{positions['camera position']:.4f} mm",
                             )
 
                     elif (
@@ -780,9 +780,9 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         if self._shell.saving_allowed:
                             positions = self.motors.get_positions()
                             self._shell._fs.add_motor_parameters(
-                                f"{positions['horizontal position']:.5f} mm",
-                                f"{positions['vertical position']:.5f} mm",
-                                f"{positions['camera position']:.5f} mm",
+                                f"{positions['horizontal position']:.4f} mm",
+                                f"{positions['vertical position']:.4f} mm",
+                                f"{positions['camera position']:.4f} mm",
                             )
                             from lightsheet.focus.types import FocusSample
 
@@ -839,9 +839,9 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         if self._shell.saving_allowed:
                             positions = self.motors.get_positions()
                             self._shell._fs.add_motor_parameters(
-                                f"{positions['horizontal position']:.5f} mm",
-                                f"{positions['vertical position']:.5f} mm",
-                                f"{positions['camera position']:.5f} mm",
+                                f"{positions['horizontal position']:.4f} mm",
+                                f"{positions['vertical position']:.4f} mm",
+                                f"{positions['camera position']:.4f} mm",
                             )
 
                     # Pre-acquire guard: a Stop or E-stop requested while the worker

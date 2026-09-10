@@ -64,7 +64,7 @@ class MotorPanelWidget(QWidget):
     # in a later plan. The spinboxes keep their .ui defaults in this
     # intermediate state.
     _MOTOR_UNIT = "mm"
-    _MOTOR_FORMAT = "{:.5f} mm"
+    _MOTOR_FORMAT = "{:.4f} mm"
 
     def updateUi_units(self) -> None:
         """No-op retained for backward compatibility.

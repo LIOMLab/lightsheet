@@ -270,7 +270,7 @@ def test_add_motor_parameters_logs_held_camera_position_within_block(
 
     # The held camera text is the formatted real camera position.
     held_camera_mm = worker.motors.camera.get_position("mm")
-    held_text = f"{held_camera_mm:.5f} mm"
+    held_text = f"{held_camera_mm:.4f} mm"
     assert camera_texts[-1] == held_text, (
         f"last camera text {camera_texts[-1]!r} does not match "
         f"held position {held_text!r}"

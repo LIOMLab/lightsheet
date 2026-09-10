@@ -281,7 +281,7 @@ def test_updateUi_position_horizontal(controller: Controller_MainWindow) -> None
     # `!= ""` assertion would pass even if the method were a no-op. Asserting
     # the method re-writes the expected formatted value proves it ran.
     ctrl.motor_panel.ui.label_sampleCurrentHPosition.setText("")
-    expected = "{:.5f} mm".format(ctrl.motors.horizontal.get_position("mm"))
+    expected = "{:.4f} mm".format(ctrl.motors.horizontal.get_position("mm"))
     ctrl.motor_panel.updateUi_position_horizontal()
     assert ctrl.motor_panel.ui.label_sampleCurrentHPosition.text() == expected
     assert ctrl.current_horizontal_position_text == expected
@@ -290,7 +290,7 @@ def test_updateUi_position_horizontal(controller: Controller_MainWindow) -> None
 def test_updateUi_position_vertical(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.motor_panel.ui.label_sampleCurrentVPosition.setText("")
-    expected = "{:.5f} mm".format(ctrl.motors.vertical.get_position("mm"))
+    expected = "{:.4f} mm".format(ctrl.motors.vertical.get_position("mm"))
     ctrl.motor_panel.updateUi_position_vertical()
     assert ctrl.motor_panel.ui.label_sampleCurrentVPosition.text() == expected
     assert ctrl.current_vertical_position_text == expected
@@ -299,7 +299,7 @@ def test_updateUi_position_vertical(controller: Controller_MainWindow) -> None:
 def test_updateUi_position_camera(controller: Controller_MainWindow) -> None:
     ctrl = controller
     ctrl.motor_panel.ui.label_cameraCurrentPosition.setText("")
-    expected = "{:.5f} mm".format(ctrl.motors.camera.get_position("mm"))
+    expected = "{:.4f} mm".format(ctrl.motors.camera.get_position("mm"))
     ctrl.motor_panel.updateUi_position_camera()
     assert ctrl.motor_panel.ui.label_cameraCurrentPosition.text() == expected
     assert ctrl.current_camera_position_text == expected
