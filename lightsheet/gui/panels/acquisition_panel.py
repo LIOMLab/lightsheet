@@ -721,6 +721,9 @@ class AcquisitionPanelWidget(QWidget):
     @Slot()
     def updateUi_post_stack_mode(self) -> None:
         """Enabling modes after stack mode"""
+        # Entry/exit boundary logs bracket the post-stack GUI slot so a
+        # native crash during teardown localizes the last Python line.
+        logger.info("post-stack GUI slot entered")
         queue_active = getattr(
             self._shell.stack_panel.table_manager, "_queue_active", False
         )
@@ -745,6 +748,7 @@ class AcquisitionPanelWidget(QWidget):
         self._shell.ui.statusBar_label.setText("")
         self._shell.ui.statusBar_progress.hide()
         self._shell._update_mode_badge("IDLE")
+        logger.info("post-stack GUI slot exited")
 
     @Slot(float)
     def updateUi_lightsheet_line_time_from_state(self, line_time_s: float) -> None:
