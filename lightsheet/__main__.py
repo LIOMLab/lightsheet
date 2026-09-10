@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import faulthandler
 import logging
 import os
 import sys
 import traceback
 import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from lightsheet import (
@@ -24,10 +26,16 @@ _PACKAGE_ROOT = PACKAGE_ROOT
 
 if TYPE_CHECKING:
     from types import TracebackType
+    from typing import TextIO
 
     from lightsheet.hal.bundle import DeviceBundle
 
 logger = logging.getLogger(__name__)
+
+# Held open for the process lifetime: faulthandler writes into this file
+# object from a fatal-signal context, so it must never be garbage
+# collected after enable().
+_crash_log_handle: TextIO | None = None
 
 
 # Save the original excepthook at import time; main() rebinds it to the
@@ -317,44 +325,43 @@ def main() -> int:
         _original_excepthook = sys.excepthook
     sys.excepthook = _exception_hook
 
+    # Install crash capture BEFORE any Qt/native code runs: a fatal native
+    # fault kills the process without a Python traceback, so faulthandler
+    # dumps the faulting interpreter stacks into lightsheet-crash.log,
+    # landing beside lightsheet.log in whichever directory configure()
+    # resolved (its unwritable-dir fallbacks already ran). The file target
+    # exists because a no-console pythonw/lightsheetw.exe launch has
+    # sys.stderr = None — a bare enable() would write nowhere there. The
+    # handle is kept on a module global so the file object is never GC'd
+    # (faulthandler needs it live for the process lifetime), and the whole
+    # block is guarded so crash-capture setup can never abort startup.
+    global _crash_log_handle
+    try:
+        crash_dir = next(
+            (
+                Path(h.baseFilename).parent
+                for h in logging.getLogger().handlers
+                if isinstance(h, logging.FileHandler)
+            ),
+            None,
+        )
+        if crash_dir is not None:
+            with contextlib.suppress(OSError):
+                _crash_log_handle = (crash_dir / "lightsheet-crash.log").open(
+                    "a", encoding="utf-8"
+                )
+        if _crash_log_handle is not None:
+            faulthandler.enable(file=_crash_log_handle)
+        elif sys.stderr is not None:
+            faulthandler.enable()
+    except Exception:
+        logger.warning("faulthandler crash-capture setup failed", exc_info=True)
+
     # Deferred imports so the nicaiu preload above runs first.
     from PySide6.QtWidgets import QApplication
 
     from lightsheet.config import cfg_read
     from lightsheet.gui.shell.controller import Controller_MainWindow
-
-    # Workaround for a nidaqmx 0.6.x Task.__del__ bug: after the context manager
-    # closes a Task (close() -> clear()), the internal _saved_name attribute may
-    # still be present but _handle is None, while __del__ still runs during garbage
-    # collection. The original __del__ can raise AttributeError trying to access
-    # _saved_name for partially-constructed tasks. Guard the attribute access and
-    # only emit a resource-leak warning when the task handle is still live, so
-    # genuinely unclosed DAQ tasks (galvo/camera/laser AO) are reported while
-    # properly closed tasks stay silent.
-    try:
-        import nidaqmx
-        from nidaqmx.errors import DaqResourceWarning
-
-        def _safe_task_del(self: object) -> None:  # pragma: no cover
-            # A task that was explicitly closed has _handle = None. A task that
-            # should not be auto-closed has _close_on_exit = False. In both cases
-            # the original library would not warn, so mirror that contract here.
-            if getattr(self, "_handle", None) is None:
-                return
-            if not getattr(self, "_close_on_exit", False):
-                return
-            saved_name = getattr(self, "_saved_name", "<unnamed>")
-            warnings.warn(
-                f'Task "{saved_name}" was not explicitly closed and may still be '
-                "reserved.",
-                DaqResourceWarning,
-                stacklevel=2,
-            )
-
-        nidaqmx.Task.__del__ = _safe_task_del  # type: ignore[attr-defined]
-    except Exception:  # pragma: no cover
-        # nidaqmx not installed (macOS dev path uses the conftest stub) — skip.
-        pass
 
     # Initializing the app, controller (class which connects GUI to features)
     app = QApplication(sys.argv)

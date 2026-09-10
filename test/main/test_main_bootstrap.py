@@ -102,9 +102,13 @@ def test_main_demo_mode_returns_app_exec_exit_code(
     runs without a display or event loop.
 
     This exercises the full main() body: argparse, _resolve_demo, logging
-    setup, Qt imports, nidaqmx __del__ guard, exception hook, QApplication
-    construction, stylesheet, composition root (bundle + config validation
-    + controller + collaborators), and the exec return.
+    setup, faulthandler crash-capture setup (the file target exists because
+    a no-console pythonw launch has sys.stderr = None; the former nidaqmx
+    Task.__del__ workaround was removed — pinned nidaqmx 1.6.0 initializes
+    every field __del__ reads before any fallible call, so the guard was
+    dead code), Qt imports, exception hook, QApplication construction,
+    stylesheet, composition root (bundle + config validation + controller
+    + collaborators), and the exec return.
 
     ``qtbot`` is used (but not for widget registration) so pytest-qt owns
     the real QApplication lifecycle. ``main()``'s ``QApplication(sys.argv)``
