@@ -40,11 +40,26 @@ class Motors(IMotors):
     _cfg_defaults["Camera Origin"] = "0.0"
     _cfg_defaults["Camera Limit Low"] = "0.0"
     _cfg_defaults["Camera Limit High"] = "50.0"
+    # Last-known position per axis in device microsteps, saved on graceful
+    # close and restored via cmd 45 on the next init (the T-LS position
+    # counter is volatile across a power cycle). Empty default = never
+    # saved -> nothing to restore. Deliberately absent from
+    # cfg_save_ini's explicit dict: cfg_write merges without erasing, so
+    # a properties-dialog save leaves the persisted positions untouched.
+    _cfg_defaults["Vertical Last Position Microsteps"] = ""
+    _cfg_defaults["Horizontal Last Position Microsteps"] = ""
+    _cfg_defaults["Camera Last Position Microsteps"] = ""
 
-    def __init__(self, port: str | None = None) -> None:
+    def __init__(
+        self, port: str | None = None, persist_positions: bool = True
+    ) -> None:
         # Error status
         self.error = 0
         self.error_message = ""
+
+        # Persist/restore of per-axis last positions. Stored before
+        # cfg_load_ini so the flag exists even if config loading raises.
+        self._persist_positions = persist_positions
 
         # read configurable settings from config.ini file
         self._cfg_filename = str(CONFIG_PATH)
@@ -84,6 +99,9 @@ class Motors(IMotors):
             self.vertical.set_origin(self.vertical_origin, self.vertical_units)
             self.vertical.set_limit_low(self.vertical_limit_low, self.vertical_units)
             self.vertical.set_limit_high(self.vertical_limit_high, self.vertical_units)
+            # Restore AFTER the limits are loaded — the saved value is
+            # range-checked against them before any register write.
+            self._restore_saved_position("vertical")
 
         self.horizontal = ZaberMotor(
             self._serial, self.device_no_horizontal, self._io_lock
@@ -98,6 +116,7 @@ class Motors(IMotors):
             self.horizontal.set_limit_high(
                 self.horizontal_limit_high, self.horizontal_units
             )
+            self._restore_saved_position("horizontal")
 
         self.camera = ZaberMotor(self._serial, self.device_no_camera, self._io_lock)
         if self.camera.is_supported:
@@ -106,6 +125,7 @@ class Motors(IMotors):
             self.camera.set_origin(self.camera_origin, self.camera_units)
             self.camera.set_limit_low(self.camera_limit_low, self.camera_units)
             self.camera.set_limit_high(self.camera_limit_high, self.camera_units)
+            self._restore_saved_position("camera")
 
     def cfg_load_ini(self) -> None:
         self._cfg = cfg_read(self._cfg_filename, self._cfg_section, self._cfg_defaults)
@@ -129,6 +149,92 @@ class Motors(IMotors):
         self.camera_origin = float(self._cfg["Camera Origin"])
         self.camera_limit_low = float(self._cfg["Camera Limit Low"])
         self.camera_limit_high = float(self._cfg["Camera Limit High"])
+        # Saved last positions (microsteps) written by close() on the
+        # previous graceful shutdown. None = nothing saved or unparseable.
+        self._last_position_microsteps: dict[str, int | None] = {
+            "vertical": self._parse_saved_microsteps(
+                self._cfg.get("Vertical Last Position Microsteps")
+            ),
+            "horizontal": self._parse_saved_microsteps(
+                self._cfg.get("Horizontal Last Position Microsteps")
+            ),
+            "camera": self._parse_saved_microsteps(
+                self._cfg.get("Camera Last Position Microsteps")
+            ),
+        }
+
+    @staticmethod
+    def _parse_saved_microsteps(value: object) -> int | None:
+        """Parse a persisted microstep count; empty/unparseable -> None."""
+        try:
+            text = str(value).strip()
+            if not text:
+                return None
+            return int(text)
+        except (TypeError, ValueError):
+            return None
+
+    def _restore_saved_position(self, axis: str) -> None:
+        """Restore the axis's saved position register via Zaber cmd 45.
+
+        The T-LS position counter is volatile across a power cycle, so the
+        register comes back wrong after a reboot. The saved value is only
+        applied when it is inside the configured travel limits — a value
+        outside them is stale or corrupt (the stage cannot have been there
+        under these limits) and is skipped with a warning. Cmd 45 rewrites
+        the register and does NOT move the stage.
+        """
+        if not self._persist_positions:
+            return
+        saved = self._last_position_microsteps.get(axis)
+        if saved is None:
+            return
+        motor = getattr(self, axis)
+        if not motor.is_supported:
+            return
+        if motor.limit_low_microsteps <= saved <= motor.limit_high_microsteps:
+            motor.set_current_position(saved)
+        else:
+            logger.warning(
+                "Saved %s position %s microsteps is outside the configured "
+                "limits [%s, %s] and was not restored",
+                axis,
+                saved,
+                motor.limit_low_microsteps,
+                motor.limit_high_microsteps,
+            )
+
+    def _save_positions(self) -> None:
+        """Write each supported axis's live position (microsteps) to
+        config.ini. Called on graceful close while the serial handle is
+        still open. A serial failure on any axis must never block
+        shutdown — each read is individually guarded."""
+        positions: dict[str, str] = {}
+        for axis, key in (
+            ("vertical", "Vertical Last Position Microsteps"),
+            ("horizontal", "Horizontal Last Position Microsteps"),
+            ("camera", "Camera Last Position Microsteps"),
+        ):
+            motor = getattr(self, axis, None)
+            if motor is None or not getattr(motor, "is_supported", False):
+                continue
+            try:
+                # The µStep conversion returns raw microsteps exactly.
+                microsteps = int(motor.get_position("\u03bcStep"))
+            except Exception:
+                logger.exception("Failed to read %s position for persistence", axis)
+                continue
+            # A failed read leaves the motor error flag set — do not
+            # persist a garbage register value as next session's truth.
+            if getattr(motor, "error", 0):
+                continue
+            positions[key] = str(microsteps)
+        if not positions:
+            return
+        try:
+            cfg_write(self._cfg_filename, self._cfg_section, positions)
+        except Exception:
+            logger.exception("Failed to persist motor positions")
 
     def cfg_save_ini(self) -> None:
         # pack current instance variables into configuration dictionary
@@ -171,7 +277,14 @@ class Motors(IMotors):
         return motors_positions
 
     def close(self) -> None:
-        """Close the shared serial handle. Called on app shutdown."""
+        """Close the shared serial handle. Called on app shutdown.
+
+        Saves each supported axis's position first — the reads need the
+        handle still open — then closes it. The ``getattr`` default is
+        deliberate: ``Motors.__new__``-bypass containers in tests lack the
+        ``_persist_positions`` attribute and must never write config.ini."""
+        if getattr(self, "_persist_positions", False):
+            self._save_positions()
         if self._serial is not None and self._serial.is_open:
             self._serial.close()
 

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, cast
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import pytest
 
@@ -725,7 +725,7 @@ def test_motors_init_with_mocked_serial_all_supported(tmp_path: Path) -> None:
             "lightsheet.hal.real.motors.serial.Serial",
             return_value=shared_serial,
         ):
-            motors = Motors()
+            motors = Motors(persist_positions=False)
     finally:
         os.chdir(cwd)
     assert motors.vertical.is_supported is True  # ty: ignore[unresolved-attribute]
@@ -779,7 +779,7 @@ def test_motors_init_with_mocked_serial_none_supported(tmp_path: Path) -> None:
             "lightsheet.hal.real.motors.serial.Serial",
             return_value=shared_serial,
         ):
-            motors = Motors()
+            motors = Motors(persist_positions=False)
     finally:
         os.chdir(cwd)
     assert motors.vertical.is_supported is False  # ty: ignore[unresolved-attribute]
@@ -879,8 +879,8 @@ def test_move_axes_parallel_reads_one_reply_per_command() -> None:
     motors.move_axes_parallel([("horizontal", 5.0, "mm"), ("camera", 5.0, "mm")])
     assert _serial_mock(motors).write.call_count == 2
     assert _serial_mock(motors).read.call_count == 2
-    for call in _serial_mock(motors).read.call_args_list:
-        assert call[0][0] == 6
+    for read_call in _serial_mock(motors).read.call_args_list:
+        assert read_call[0][0] == 6
 
 
 def test_zaber_motor_uses_injected_shared_serial() -> None:
@@ -979,7 +979,7 @@ def test_motors_init_uses_resolved_port_override(tmp_path: Path) -> None:
             "lightsheet.hal.real.motors.serial.Serial",
             return_value=shared_serial,
         ) as MockSerial:
-            motors = Motors(port="COM7")
+            motors = Motors(port="COM7", persist_positions=False)
             called_port = MockSerial.call_args.kwargs.get("port")
     finally:
         os.chdir(cwd)
@@ -1029,9 +1029,165 @@ def test_motors_init_no_port_uses_config_port(tmp_path: Path) -> None:
             "lightsheet.hal.real.motors.serial.Serial",
             return_value=shared_serial,
         ) as MockSerial:
-            motors = Motors()
+            motors = Motors(persist_positions=False)
             called_port = MockSerial.call_args.kwargs.get("port")
     finally:
         os.chdir(cwd)
     assert motors.port == "COM7"
     assert called_port == "COM7"
+
+
+# -- Last-position persist/restore (cmd 45 on init, cfg_write on close) -----
+#
+# These tests patch lightsheet.hal.real.motors.cfg_read / cfg_write at module
+# level: Motors.__init__ resolves CONFIG_PATH to the absolute repo config.ini,
+# so the tmp_path + os.chdir dance used by the older tests above cannot
+# redirect config I/O.
+
+_ASK_ID_REPLIES = [
+    bytes([1, 50, 0x42, 0x18, 0, 0]),  # 6210 -> T-LSM050A vertical
+    bytes([2, 50, 0xB0, 0x18, 0, 0]),  # 6320 -> T-LSM100B horizontal
+    bytes([3, 50, 0x38, 0x10, 0, 0]),  # 4152 -> T-LSR150B camera
+]
+
+
+def _motors_cfg_dict(**overrides: str) -> dict[str, str]:
+    """A complete [Motors] section dict for the patched cfg_read."""
+    cfg = {
+        "Port": "COM3",
+        "Device Number Vertical": "1",
+        "Device Number Horizontal": "2",
+        "Device Number Camera": "3",
+        "Vertical Inverted": "False",
+        "Vertical Units": "mm",
+        "Vertical Origin": "0.0",
+        "Vertical Limit Low": "0.0",
+        "Vertical Limit High": "10.0",
+        "Horizontal Inverted": "False",
+        "Horizontal Units": "mm",
+        "Horizontal Origin": "0.0",
+        "Horizontal Limit Low": "0.0",
+        "Horizontal Limit High": "10.0",
+        "Camera Inverted": "False",
+        "Camera Units": "mm",
+        "Camera Origin": "0.0",
+        "Camera Limit Low": "0.0",
+        "Camera Limit High": "50.0",
+        "Vertical Last Position Microsteps": "",
+        "Horizontal Last Position Microsteps": "",
+        "Camera Last Position Microsteps": "",
+    }
+    cfg.update(overrides)
+    return cfg
+
+
+def _build_motors(
+    cfg: dict[str, str],
+    read_replies: list[bytes],
+    **init_kwargs: object,
+) -> tuple[Motors, Mock]:
+    """Construct Motors() with module-level cfg_read + serial.Serial mocked."""
+    shared_serial = _make_serial_mock()
+    shared_serial.read.side_effect = read_replies
+    with (
+        patch("lightsheet.hal.real.motors.cfg_read", return_value=dict(cfg)),
+        patch(
+            "lightsheet.hal.real.motors.serial.Serial",
+            return_value=shared_serial,
+        ),
+    ):
+        motors = Motors(**init_kwargs)  # ty: ignore[call-arg]
+    return motors, shared_serial
+
+
+def _cmd45_frames(shared_serial: Mock) -> list[bytes]:
+    """All written frames whose command byte is 45 (Set Current Position)."""
+    return [
+        c.args[0]
+        for c in shared_serial.write.call_args_list
+        if len(c.args[0]) == 6 and c.args[0][1] == 45
+    ]
+
+
+def test_motors_init_restores_saved_position_via_cmd45() -> None:
+    """A saved in-range position is restored on init: exactly one cmd-45
+    frame goes to the horizontal axis (device 2) with the saved microstep
+    count; no cmd-45 frames go to devices 1 or 3."""
+    motors, shared_serial = _build_motors(
+        _motors_cfg_dict(**{"Horizontal Last Position Microsteps": "26246"}),
+        [*_ASK_ID_REPLIES, bytes([2, 45, 0x86, 0x66, 0, 0])],
+    )
+    assert _cmd45_frames(shared_serial) == [bytes([2, 45, 0x86, 0x66, 0, 0])]
+    assert motors.horizontal.id == 6320  # ty: ignore[unresolved-attribute]
+
+
+def test_motors_init_skips_saved_position_outside_limits() -> None:
+    """A saved position outside the configured travel limits is stale or
+    corrupt (the stage cannot have been there under these limits) — it is
+    not restored, so no cmd-45 frame is written for that axis."""
+    _motors, shared_serial = _build_motors(
+        _motors_cfg_dict(**{"Horizontal Last Position Microsteps": "99999999"}),
+        list(_ASK_ID_REPLIES),
+    )
+    assert _cmd45_frames(shared_serial) == []
+
+
+def test_motors_init_persist_positions_false_disables_restore() -> None:
+    """persist_positions=False disables the restore path entirely, even
+    when in-range saved values are present for every axis."""
+    _motors, shared_serial = _build_motors(
+        _motors_cfg_dict(
+            **{
+                "Vertical Last Position Microsteps": "1000",
+                "Horizontal Last Position Microsteps": "26246",
+                "Camera Last Position Microsteps": "5000",
+            }
+        ),
+        list(_ASK_ID_REPLIES),
+        persist_positions=False,
+    )
+    assert _cmd45_frames(shared_serial) == []
+
+
+def test_motors_close_persists_positions_to_config() -> None:
+    """close() writes each supported axis's live position in microsteps to
+    config.ini [Motors] BEFORE the serial handle is closed."""
+    motors, shared_serial = _build_motors(
+        _motors_cfg_dict(),
+        [
+            *_ASK_ID_REPLIES,
+            bytes([1, 60, 0xE8, 0x03, 0, 0]),  # vertical: 1000 µStep
+            bytes([2, 60, 0x86, 0x66, 0, 0]),  # horizontal: 26246 µStep
+            bytes([3, 60, 0x88, 0x13, 0, 0]),  # camera: 5000 µStep
+        ],
+    )
+    captured: dict[str, str] = {}
+    with patch(
+        "lightsheet.hal.real.motors.cfg_write",
+        side_effect=lambda _f, _s, d: captured.update(d),
+    ):
+        motors.close()
+    assert captured == {
+        "Vertical Last Position Microsteps": "1000",
+        "Horizontal Last Position Microsteps": "26246",
+        "Camera Last Position Microsteps": "5000",
+    }
+    # The position reads must happen while the handle is still open —
+    # close() runs after the last read.
+    calls = shared_serial.mock_calls
+    last_read = max(i for i, c in enumerate(calls) if c == call.read(6))
+    close_index = calls.index(call.close())
+    assert close_index > last_read
+
+
+def test_motors_close_persist_positions_false_writes_nothing() -> None:
+    """persist_positions=False disables the save path — cfg_write is never
+    called on close."""
+    motors, _serial = _build_motors(
+        _motors_cfg_dict(),
+        list(_ASK_ID_REPLIES),
+        persist_positions=False,
+    )
+    with patch("lightsheet.hal.real.motors.cfg_write") as mock_write:
+        motors.close()
+    assert mock_write.call_count == 0
