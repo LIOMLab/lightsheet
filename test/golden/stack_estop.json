@@ -7,6 +7,14 @@
   },
   {
     "type": "call",
+    "name": "_run_setup",
+    "args": [
+      null
+    ],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
     "name": "fs.reinit",
     "args": [
       3
@@ -80,12 +88,29 @@
     "kwargs": {}
   },
   {
+    "type": "call",
+    "name": "_run_plane_loop",
+    "args": [
+      3,
+      3
+    ],
+    "kwargs": {}
+  },
+  {
     "type": "sig_message",
     "value": "Stack Acquisition Interrupted"
   },
   {
     "type": "sig_progress_update",
     "value": 3
+  },
+  {
+    "type": "call",
+    "name": "_run_teardown",
+    "args": [
+      null
+    ],
+    "kwargs": {}
   },
   {
     "type": "call",
