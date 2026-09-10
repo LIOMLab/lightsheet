@@ -154,10 +154,18 @@ FIELD_PURPOSES: dict[str, str] = {
     # Stack panel — adaptive config group
     "doubleSpinBox_adaptiveMinExposure": "Adaptive min exposure bound",
     "doubleSpinBox_adaptiveMaxExposure": "Adaptive max exposure bound",
-    "doubleSpinBox_adaptiveLaser1MinPower": "Adaptive laser 1 min power bound (% of max power)",
-    "doubleSpinBox_adaptiveLaser1MaxPower": "Adaptive laser 1 max power bound (% of max power)",
-    "doubleSpinBox_adaptiveLaser2MinPower": "Adaptive laser 2 min power bound (% of max power)",
-    "doubleSpinBox_adaptiveLaser2MaxPower": "Adaptive laser 2 max power bound (% of max power)",
+    "doubleSpinBox_adaptiveLaser1MinPower": (
+        "Adaptive laser 1 min power bound (% of max power)"
+    ),
+    "doubleSpinBox_adaptiveLaser1MaxPower": (
+        "Adaptive laser 1 max power bound (% of max power)"
+    ),
+    "doubleSpinBox_adaptiveLaser2MinPower": (
+        "Adaptive laser 2 min power bound (% of max power)"
+    ),
+    "doubleSpinBox_adaptiveLaser2MaxPower": (
+        "Adaptive laser 2 max power bound (% of max power)"
+    ),
     # Stack panel — predictive adaptive-autofocus group. Each purpose leads
     # with the exact on-widget label text so tooltips and labels stay in sync.
     "doubleSpinBox_autofocusCadence": (
