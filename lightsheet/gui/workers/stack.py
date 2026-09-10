@@ -1186,17 +1186,26 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     _lifecycle = "paused"
                 else:
                     _lifecycle = "interrupted"
+                logger.info(
+                    "Stack worker teardown: stop_saving entered (lifecycle=%s)",
+                    _lifecycle,
+                )
                 self._shell._fs.stop_saving(lifecycle=_lifecycle)
+                logger.info("Stack worker teardown: stop_saving exited")
             except Exception as e:
                 logger.exception("Stack worker stop_saving cleanup failed")
                 _cleanup_errors.append(f"stop_saving: {e}")
         try:
+            logger.info("Stack worker teardown: ETL standby entered")
             self.siggen.update_etls(left_etl=2.5, right_etl=2.5)
+            logger.info("Stack worker teardown: ETL standby exited")
         except Exception as e:
             logger.exception("Stack worker ETL cleanup failed")
             _cleanup_errors.append(f"ETL standby: {e}")
         try:
+            logger.info("Stack worker teardown: stop_lasers entered")
             self._hw.stop_lasers()
+            logger.info("Stack worker teardown: stop_lasers exited")
         except Exception as e:
             logger.exception("Stack worker stop_lasers cleanup failed")
             _cleanup_errors.append(f"stop_lasers: {e}")
@@ -1204,12 +1213,16 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         # normal stop/E-stop/pause releases the NI-DAQmx task cleanly.
         if watchdog is not None:
             try:
+                logger.info("Stack worker teardown: watchdog disarm entered")
                 watchdog.disarm()
+                logger.info("Stack worker teardown: watchdog disarm exited")
             except Exception as e:
                 logger.exception("Stack worker watchdog disarm failed")
                 _cleanup_errors.append(f"watchdog disarm: {e}")
         try:
+            logger.info("Stack worker teardown: camera disarm entered")
             self.camera.disarm()
+            logger.info("Stack worker teardown: camera disarm exited")
         except Exception as e:
             logger.exception("Stack worker camera disarm cleanup failed")
             _cleanup_errors.append(f"camera disarm: {e}")
@@ -1218,6 +1231,10 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                 "Stack acquisition failed — cleanup could not complete safely. "
                 "Errors: " + "; ".join(_cleanup_errors)
             )
+        # Last app-side record before the emit hands off to the queued
+        # post-stack GUI slot — brackets a native crash that lands
+        # between teardown completion and the slot's entry log.
+        logger.info("Stack worker teardown: finished.emit")
         self.finished.emit()
         # The pause request is consumed by this teardown — clear it so
         # a follow-on run (queue row or manual restart) does not
