@@ -263,6 +263,9 @@ class DAQLaser(ILaser):
             self.max_power = max_power_mw  # mW (canonical)
 
         self._max_volts = self._volt_map.max_volts
+        # True-off voltage used by the hardware watchdog expiration state
+        # (0 V for linear polarity, max_volts for inverted polarity).
+        self.off_volts = self._volt_map.off_volts
 
         # Laser state — mW canonical.
         self.power = 0.0

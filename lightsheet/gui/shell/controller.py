@@ -1255,6 +1255,16 @@ class Controller_MainWindow(QMainWindow):
             self.etls = self._bundle.etls
             self.lasers = list(self._bundle.lasers)
 
+            # Arm a NI-DAQmx hardware watchdog so a process crash or a
+            # hung acquisition worker leaves the laser AO channels at
+            # their safe off-voltage. The watchdog is armed by the
+            # acquisition worker at run start and disarmed in its
+            # finally block; a hung worker or a dead process lets the
+            # DAQ expire the timer and write the safe voltage.
+            from lightsheet.hal.real.laser_watchdog import LaserWatchdog
+
+            self._laser_watchdog = LaserWatchdog(self.lasers)
+
             # Give every laser a back-reference to the E-stop event so on() can
             # re-check it immediately before the HAL energization write. The kill
             # path (laser.off()) remains synchronous and lock-free in its contract
@@ -1536,6 +1546,11 @@ class Controller_MainWindow(QMainWindow):
             # lifecycle close so any per-session readback/handles are released.
             self.lasers[0].close()
             self.lasers[1].close()
+            # Release the NI-DAQmx laser watchdog tasks so a clean shutdown
+            # does not leave them armed after the app exits.
+            watchdog = getattr(self, "_laser_watchdog", None)
+            if watchdog is not None:
+                watchdog.disarm()
             # Shared serial handle for Zaber motor chain
             self.motors.close()
             # Stop the display/status timers. Guard each with getattr

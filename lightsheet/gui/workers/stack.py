@@ -327,6 +327,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
     @Slot()
     def run(self) -> None:
         """Thread for volume acquisition and saving"""
+        watchdog = getattr(self._shell, "_laser_watchdog", None)
         try:
             # Making sure saving is allowed and filename isn't empty
             if self._shell.saving_allowed:
@@ -430,6 +431,12 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
 
             # Setting the camera for scan acquisition
             self.camera.arm_scan()
+
+            # Arm the NI-DAQmx laser watchdog so a hung worker or a dead
+            # process lets the DAQ write the safe off-voltage to the laser
+            # AO channels. Armed before the lasers are energized.
+            if watchdog is not None:
+                watchdog.arm()
 
             # Pre-stop guard: a Stop or E-stop pressed in the instant between
             # thread start and this line skips energizing the lasers entirely.
@@ -647,6 +654,13 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         or _pause_is_requested(self._shell)
                     ):
                         break
+
+                    # Keep the NI-DAQmx laser watchdog from expiring while
+                    # the worker is alive; a hang or a dead process lets
+                    # the DAQ write the safe off-voltage to the laser AO
+                    # channels.
+                    if watchdog is not None:
+                        watchdog.reset()
 
                     # Moving sample position. Position is in micrometres;
                     # stage_pos_mm is the sample (horizontal) stage position
@@ -1139,6 +1153,14 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             except Exception as e:
                 logger.exception("Stack worker stop_lasers cleanup failed")
                 _cleanup_errors.append(f"stop_lasers: {e}")
+            # Disarm the laser watchdog after the lasers are off so a
+            # normal stop/E-stop/pause releases the NI-DAQmx task cleanly.
+            if watchdog is not None:
+                try:
+                    watchdog.disarm()
+                except Exception as e:
+                    logger.exception("Stack worker watchdog disarm failed")
+                    _cleanup_errors.append(f"watchdog disarm: {e}")
             try:
                 self.camera.disarm()
             except Exception as e:

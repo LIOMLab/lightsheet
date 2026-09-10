@@ -121,6 +121,7 @@ class PreviewWorker(QObject):
         parameters of the beams in the UI. There is no scan here,
         beams only changes when parameters are changed. This the preferred
         mode for beam calibration"""
+        watchdog = getattr(self._shell, "_laser_watchdog", None)
         try:
             # Setting the camera for self triggered acquisition
             self.camera.set_trigger_mode("auto_trigger")
@@ -157,6 +158,12 @@ class PreviewWorker(QObject):
             if self._shell.estop_event.is_set():
                 return
 
+            # Arm the NI-DAQmx laser watchdog so a hung worker or a dead
+            # process lets the DAQ write the safe off-voltage to the laser
+            # AO channels. Armed before the lasers are energized.
+            if watchdog is not None:
+                watchdog.arm()
+
             self._hw.start_lasers(self._snapshot, energize_lasers=energize_lasers)
 
             while self._shell.preview_mode_started:
@@ -180,6 +187,12 @@ class PreviewWorker(QObject):
                 # worker loops.
                 if self._shell.estop_event.is_set():
                     break
+
+                # Keep the NI-DAQmx laser watchdog from expiring while the
+                # worker is alive; a hang or a dead process lets the DAQ
+                # write the safe off-voltage to the laser AO channels.
+                if watchdog is not None:
+                    watchdog.reset()
 
                 # # Updating Galvo and ETL voltages
                 # self.siggen.update_all()
@@ -227,6 +240,14 @@ class PreviewWorker(QObject):
             except Exception as e:
                 logger.exception("Preview worker stop_lasers cleanup failed")
                 _cleanup_errors.append(f"stop_lasers: {e}")
+            # Disarm the laser watchdog after the lasers are off so a
+            # normal stop/E-stop releases the NI-DAQmx task cleanly.
+            if watchdog is not None:
+                try:
+                    watchdog.disarm()
+                except Exception as e:
+                    logger.exception("Preview worker watchdog disarm failed")
+                    _cleanup_errors.append(f"watchdog disarm: {e}")
             try:
                 self.camera.disarm()
             except Exception as e:
@@ -286,6 +307,7 @@ class LiveWorker(QObject, _AcquireScanMixin):
     def run(self) -> None:
         """This thread allows the execution of scan_mode while modifying
         parameters in the UI"""
+        watchdog = getattr(self._shell, "_laser_watchdog", None)
         try:
             # Starting lasers.
             #
@@ -304,6 +326,12 @@ class LiveWorker(QObject, _AcquireScanMixin):
             if self._shell.estop_event.is_set():
                 return
 
+            # Arm the NI-DAQmx laser watchdog so a hung worker or a dead
+            # process lets the DAQ write the safe off-voltage to the laser
+            # AO channels. Armed before the lasers are energized.
+            if watchdog is not None:
+                watchdog.arm()
+
             self._hw.start_lasers(self._snapshot, energize_lasers=energize_lasers)
 
             while self._shell.live_mode_started:
@@ -317,6 +345,12 @@ class LiveWorker(QObject, _AcquireScanMixin):
                 # this break just stops acquiring new frames.
                 if self._shell.estop_event.is_set():
                     break
+
+                # Keep the NI-DAQmx laser watchdog from expiring while the
+                # worker is alive; a hang or a dead process lets the DAQ
+                # write the safe off-voltage to the laser AO channels.
+                if watchdog is not None:
+                    watchdog.reset()
 
                 # Setting the camera for scan acquisition
                 self.camera.arm_scan()
@@ -350,6 +384,14 @@ class LiveWorker(QObject, _AcquireScanMixin):
             except Exception as e:
                 logger.exception("Live worker stop_lasers cleanup failed")
                 _cleanup_errors.append(f"stop_lasers: {e}")
+            # Disarm the laser watchdog after the lasers are off so a
+            # normal stop/E-stop releases the NI-DAQmx task cleanly.
+            if watchdog is not None:
+                try:
+                    watchdog.disarm()
+                except Exception as e:
+                    logger.exception("Live worker watchdog disarm failed")
+                    _cleanup_errors.append(f"watchdog disarm: {e}")
             try:
                 self.camera.disarm()
             except Exception as e:
@@ -473,6 +515,7 @@ class SingleWorker(QObject, _AcquireScanMixin):
     @Slot()
     def run(self) -> None:
         """Generates and display a single scan which can be saved afterwards"""
+        watchdog = getattr(self._shell, "_laser_watchdog", None)
         try:
             # Cooperative shutdown: if the owning QThread has been asked to
             # quit before the single acquisition starts, do nothing. The
@@ -500,6 +543,12 @@ class SingleWorker(QObject, _AcquireScanMixin):
             # Setting the camera for scan acquisition
             self.camera.arm_scan()
 
+            # Arm the NI-DAQmx laser watchdog so a hung worker or a dead
+            # process lets the DAQ write the safe off-voltage to the laser
+            # AO channels. Armed before the lasers are energized.
+            if watchdog is not None:
+                watchdog.arm()
+
             if self._multi_channel:
                 # Multi-channel per-channel cycle: energize L1 -> acquire
                 # -> capture frame1 -> energize L2 -> acquire -> capture
@@ -525,6 +574,11 @@ class SingleWorker(QObject, _AcquireScanMixin):
                 self.siggen.compute_scan_waveforms()
                 if not self.acquire_scan():
                     return
+                # Keep the laser watchdog from expiring while the worker is
+                # alive; a hang or a dead process lets the DAQ write the
+                # safe off-voltage to the laser AO channels.
+                if watchdog is not None:
+                    watchdog.reset()
                 # Capture frame1 immediately — the next acquire_scan
                 # overwrites reconstructed_frame (pitfall #3).
                 frame1 = (
@@ -538,6 +592,8 @@ class SingleWorker(QObject, _AcquireScanMixin):
                     return
                 if not self.acquire_scan():
                     return
+                if watchdog is not None:
+                    watchdog.reset()
                 frame2 = (
                     None
                     if self._shell.reconstructed_frame is None
@@ -597,6 +653,8 @@ class SingleWorker(QObject, _AcquireScanMixin):
                 # Acquire a single scan
                 if not self.acquire_scan():
                     return
+                if watchdog is not None:
+                    watchdog.reset()
 
         except Exception as e:
             self._shell.sig_message.emit(
@@ -622,6 +680,14 @@ class SingleWorker(QObject, _AcquireScanMixin):
             except Exception as e:
                 logger.exception("Single worker stop_lasers cleanup failed")
                 _cleanup_errors.append(f"stop_lasers: {e}")
+            # Disarm the laser watchdog after the lasers are off so a
+            # normal stop/E-stop releases the NI-DAQmx task cleanly.
+            if watchdog is not None:
+                try:
+                    watchdog.disarm()
+                except Exception as e:
+                    logger.exception("Single worker watchdog disarm failed")
+                    _cleanup_errors.append(f"watchdog disarm: {e}")
             try:
                 self.camera.disarm()
             except Exception as e:
