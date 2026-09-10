@@ -654,6 +654,41 @@ def test_motors_get_positions_returns_positions() -> None:
     }
 
 
+def test_motors_set_axis_origin_persists_to_config() -> None:
+    """set_axis_origin sets the motor origin, syncs the container's
+    <axis>_origin attribute, and writes the * Origin key to config.ini
+    when persistence is enabled."""
+    motors = Motors.__new__(Motors)
+    motors._persist_positions = True
+    motors._cfg_filename = "config.ini"
+    motors._cfg_section = "Motors"
+    motors.horizontal_units = "mm"
+    motors.horizontal = Mock()
+    motors.horizontal.get_origin.return_value = 5.5
+    with patch("lightsheet.hal.real.motors.cfg_write") as mock_write:
+        motors.set_axis_origin("horizontal", 5.5, "mm")
+    motors.horizontal.set_origin.assert_called_once_with(5.5, "mm")
+    assert motors.horizontal_origin == 5.5
+    mock_write.assert_called_once_with(
+        "config.ini", "Motors", {"Horizontal Origin": "5.5"}
+    )
+
+
+def test_motors_set_axis_origin_without_persist_flag_writes_nothing() -> None:
+    """A __new__-bypass container lacks _persist_positions -> no config
+    write (the getattr default keeps test doubles from touching
+    config.ini)."""
+    motors = Motors.__new__(Motors)
+    motors.horizontal_units = "mm"
+    motors.horizontal = Mock()
+    motors.horizontal.get_origin.return_value = 5.5
+    with patch("lightsheet.hal.real.motors.cfg_write") as mock_write:
+        motors.set_axis_origin("horizontal", 5.5, "mm")
+    motors.horizontal.set_origin.assert_called_once_with(5.5, "mm")
+    assert motors.horizontal_origin == 5.5
+    mock_write.assert_not_called()
+
+
 # -- Motors.__init__ + ZaberMotor.__init__ (mocked serial) ------------------
 
 

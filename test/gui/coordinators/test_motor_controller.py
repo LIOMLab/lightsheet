@@ -632,6 +632,10 @@ def test_set_sample_origin_sets_origin_and_emits_message() -> None:
     mc.updateUi_set_sample_origin()
     mc.motors.horizontal.set_origin.assert_called_once()
     mc.motors.vertical.set_origin.assert_called_once()
+    # set_axis_origin syncs the container's <axis>_origin attrs (persisted
+    # to config.ini by the real Motors class).
+    assert mc.motors.horizontal_origin == 3.0
+    assert mc.motors.vertical_origin == 4.0
     assert any("Sample origin set" in m for m in shell.message_printer_calls)
 
 
@@ -642,6 +646,7 @@ def test_set_camera_focus_sets_origin_and_emits_message() -> None:
     mc.motors.camera.get_origin = Mock(return_value=5.0)
     mc.updateUi_set_camera_focus()
     mc.motors.camera.set_origin.assert_called_once()
+    assert mc.motors.camera_origin == 5.0
     assert shell.focus_selected is True
     assert any("Camera focus manually set" in m for m in shell.message_printer_calls)
 

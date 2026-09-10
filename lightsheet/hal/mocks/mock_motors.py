@@ -275,6 +275,14 @@ class MockMotors(IMotors):
             motor.position_microsteps = target_microsteps
             motor.position = float(target_microsteps)
 
+    def set_axis_origin(self, axis: str, position: float, units: str) -> None:
+        """Set an axis origin in memory only — the mock has no config.ini.
+        Syncs ``<axis>_origin`` on the container like the real class so
+        tests can read the same attribute."""
+        motor = getattr(self, axis)
+        motor.set_origin(position, units)
+        setattr(self, f"{axis}_origin", motor.get_origin("mm"))
+
     def cfg_load_ini(self) -> None:
         return None
 

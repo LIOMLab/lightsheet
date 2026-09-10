@@ -499,11 +499,13 @@ class MotorController:
 
     def updateUi_set_sample_origin(self) -> None:
         """Modifies the sample origin position"""
-        self.motors.horizontal.set_origin(
+        self.motors.set_axis_origin(
+            "horizontal",
             self.motors.horizontal.get_position("mm"),
             "mm",
         )
-        self.motors.vertical.set_origin(
+        self.motors.set_axis_origin(
+            "vertical",
             self.motors.vertical.get_position("mm"),
             "mm",
         )
@@ -513,7 +515,8 @@ class MotorController:
     def updateUi_set_camera_focus(self) -> None:
         """Modifies manually the camera focus position"""
         self._shell.focus_selected = True
-        self.motors.camera.set_origin(
+        self.motors.set_axis_origin(
+            "camera",
             self.motors.camera.get_position("mm"),
             "mm",
         )
@@ -532,7 +535,7 @@ class MotorController:
         focus_regression = (
             self._shell.slope_camera * current_position + self._shell.intercept_camera
         )
-        self.motors.camera.set_origin(focus_regression, "mm")
+        self.motors.set_axis_origin("camera", focus_regression, "mm")
         logger.debug("focus_regression: %s", focus_regression)
         self._shell.focus_selected = True
         self._shell.updateUi_message_printer("Focus automatically set")

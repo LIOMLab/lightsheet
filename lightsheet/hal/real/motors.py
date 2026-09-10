@@ -57,8 +57,9 @@ class Motors(IMotors):
         self.error = 0
         self.error_message = ""
 
-        # Persist/restore of per-axis last positions. Stored before
-        # cfg_load_ini so the flag exists even if config loading raises.
+        # Persist/restore of per-axis last positions (and runtime origin
+        # writes via set_axis_origin). Stored before cfg_load_ini so the
+        # flag exists even if config loading raises.
         self._persist_positions = persist_positions
 
         # read configurable settings from config.ini file
@@ -259,6 +260,30 @@ class Motors(IMotors):
         self._cfg["Camera Limit Low"] = str(self.camera_limit_low)
         self._cfg["Camera Limit High"] = str(self.camera_limit_high)
         self._cfg = cfg_write(self._cfg_filename, self._cfg_section, self._cfg)
+
+    def set_axis_origin(self, axis: str, position: float, units: str) -> None:
+        """Set an axis's origin (a named position to move to) and persist it.
+
+        ``ZaberMotor.set_origin`` stores the origin in memory only; this
+        keeps the container's ``<axis>_origin`` attribute in sync (in the
+        axis's configured units) and writes the ``* Origin`` key so an
+        origin set at runtime (Set Sample Origin, Set Camera Focus)
+        survives a restart. Gated on ``_persist_positions`` via ``getattr``
+        — ``Motors.__new__``-bypass containers in tests lack the flag and
+        must never write config.ini.
+        """
+        motor = getattr(self, axis)
+        motor.set_origin(position, units)
+        # Sync the container attribute in the axis's configured units so a
+        # later cfg_save_ini writes the same value.
+        origin_value = motor.get_origin(getattr(self, f"{axis}_units"))
+        setattr(self, f"{axis}_origin", origin_value)
+        if getattr(self, "_persist_positions", False):
+            cfg_write(
+                self._cfg_filename,
+                self._cfg_section,
+                {f"{axis.capitalize()} Origin": str(origin_value)},
+            )
 
     def get_properties(self) -> dict[str, str]:
         motors_properties = {}

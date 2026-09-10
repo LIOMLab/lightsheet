@@ -374,6 +374,18 @@ class IMotors(IMotorsCore):
         send order.
         """
 
+    @abstractmethod
+    def set_axis_origin(self, axis: str, position: float, units: str) -> None:
+        """Set an axis's origin (a named position to move to) and persist it.
+
+        Container-level entry point for runtime origin changes (Set Sample
+        Origin, Set Camera Focus): the per-motor ``set_origin`` stores the
+        value in memory only; this additionally keeps the container's
+        ``<axis>_origin`` attribute in sync and writes the ``* Origin`` key
+        to config.ini so the origin survives a restart.
+        """
+        ...
+
     # Extended config surface — the controller does not call these.
     @abstractmethod
     def cfg_load_ini(self) -> None: ...
