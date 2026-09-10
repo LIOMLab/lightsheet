@@ -208,6 +208,81 @@ class MotorController:
                 )
             self._shell.motor_panel.updateUi_position_camera()
 
+    def updateUi_move_to_stack_start(self) -> None:
+        """Moves the horizontal stage to the stored stack starting plane.
+
+        ``stack_starting_plane`` is stored in micrometres (the worker +
+        motor HAL unit) and is passed through with units ``"μm"`` — no mm
+        conversion round-trip on a safety-critical stored position (the
+        1000x-error seam). The button stays always-enabled and this guard
+        is the single reject path: the set-flags flip in several places
+        across the panels and shell, so tracking enabled-state at every
+        site would silently desync.
+        """
+        if (
+            not self._shell.stack_first_plane_set
+            or self._shell.stack_starting_plane is None
+        ):
+            self._shell.updateUi_message_printer(
+                "Set the stack starting plane first — motor not moved"
+            )
+            self._shell.sig_beep.emit()
+            return
+        plane_um = self._shell.stack_starting_plane
+        if (
+            plane_um >= self.motors.horizontal.get_limit_low("μm")
+            and plane_um <= self.motors.horizontal.get_limit_high("μm")
+        ):
+            try:
+                self.motors.horizontal.move_absolute_position(plane_um, "μm")
+            except ValueError:
+                self._shell.sig_message.emit(
+                    "Move rejected — horizontal would exceed travel limits. Move the stage closer to the travel range and retry."  # noqa: E501
+                )
+                self._shell.sig_beep.emit()
+            else:
+                self._shell.updateUi_message_printer("Moving to stack start")
+            self._shell.motor_panel.updateUi_position_horizontal()
+        else:
+            self._shell.updateUi_message_printer("Out of boundaries")
+            self._shell.sig_beep.emit()
+            self._shell.motor_panel.updateUi_position_horizontal()
+
+    def updateUi_move_to_stack_end(self) -> None:
+        """Moves the horizontal stage to the stored stack ending plane.
+
+        Same contract as ``updateUi_move_to_stack_start`` — the stored
+        plane is µm, passed through with units ``"μm"``.
+        """
+        if (
+            not self._shell.stack_last_plane_set
+            or self._shell.stack_ending_plane is None
+        ):
+            self._shell.updateUi_message_printer(
+                "Set the stack ending plane first — motor not moved"
+            )
+            self._shell.sig_beep.emit()
+            return
+        plane_um = self._shell.stack_ending_plane
+        if (
+            plane_um >= self.motors.horizontal.get_limit_low("μm")
+            and plane_um <= self.motors.horizontal.get_limit_high("μm")
+        ):
+            try:
+                self.motors.horizontal.move_absolute_position(plane_um, "μm")
+            except ValueError:
+                self._shell.sig_message.emit(
+                    "Move rejected — horizontal would exceed travel limits. Move the stage closer to the travel range and retry."  # noqa: E501
+                )
+                self._shell.sig_beep.emit()
+            else:
+                self._shell.updateUi_message_printer("Moving to stack end")
+            self._shell.motor_panel.updateUi_position_horizontal()
+        else:
+            self._shell.updateUi_message_printer("Out of boundaries")
+            self._shell.sig_beep.emit()
+            self._shell.motor_panel.updateUi_position_horizontal()
+
     # ------------------------------------------------------------------ #
     # Sample / camera relative-move slots (step buttons).
     # ------------------------------------------------------------------ #

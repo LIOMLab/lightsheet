@@ -2088,6 +2088,14 @@ class Controller_MainWindow(QMainWindow):
             self._mc.updateUi_move_camera_backward
         )
 
+        # Connections for the stack 'go to plane' controls (MotorController)
+        self.stack_panel.ui.pushButton_acqGoToFirstPlane.clicked.connect(
+            self._mc.updateUi_move_to_stack_start
+        )
+        self.stack_panel.ui.pushButton_acqGoToLastPlane.clicked.connect(
+            self._mc.updateUi_move_to_stack_end
+        )
+
         # ---
         # Connections for the 'Scan Settings' tab controls
         # (AcquisitionCoordinator)
