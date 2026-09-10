@@ -79,4 +79,8 @@ ${PY} configure.py \
     --output "${TMP_OUT}"
 
 cp "${TMP_OUT}/breeze_pyside6.py" "${OUTPUT_PY}"
+
+# Re-emit the generated-file marker on the committed artifact — rcc output
+# carries only the stock Qt banner, so a rebuild would silently strip it.
+${PY} "${REPO_ROOT}/scripts/add_generated_header.py" "${OUTPUT_PY}"
 echo "Wrote ${OUTPUT_PY}"
