@@ -123,24 +123,26 @@ def test_controller_persists_stack_params_on_close(
     # config.ini during tests); disable demo mode for this test.
     ctrl._demo_mode = False
 
-    # Patch cfg_write to capture the written dict.
-    written: list[tuple] = []  # ty: ignore[missing-type-argument]
-    with patch(
-        "lightsheet.gui.shell.controller.cfg_write",
-        lambda *a, **k: written.append((a, k)),
-    ):
-        ctrl._save_stack_params()
-    assert len(written) == 1
-    args, _kw = written[0]
-    section_dict = args[2]
-    # Positions persist in mm (the spinbox display unit); the step
-    # persists in µm (the step spinbox's display unit).
-    assert section_dict["StackLastStart"] == "0.1000"
-    assert section_dict["StackLastEnd"] == "0.2000"
-    assert section_dict["StackLastStep"] == "10.0000"
-    # Restore demo mode so teardown's closeEvent does not write to the
-    # real config.ini.
-    ctrl._demo_mode = True
+    try:
+        # Patch cfg_write to capture the written dict.
+        written: list[tuple] = []  # ty: ignore[missing-type-argument]
+        with patch(
+            "lightsheet.gui.shell.controller.cfg_write",
+            lambda *a, **k: written.append((a, k)),
+        ):
+            ctrl._save_stack_params()
+        assert len(written) == 1
+        args, _kw = written[0]
+        section_dict = args[2]
+        # Positions persist in mm (the spinbox display unit); the step
+        # persists in µm (the step spinbox's display unit).
+        assert section_dict["StackLastStart"] == "0.1000"
+        assert section_dict["StackLastEnd"] == "0.2000"
+        assert section_dict["StackLastStep"] == "10.0000"
+    finally:
+        # Restore demo mode so teardown's closeEvent does not write to the
+        # real config.ini (a failed assert must not leave writes enabled).
+        ctrl._demo_mode = True
 
 
 def test_load_stack_params_round_trips_mm_to_um(
