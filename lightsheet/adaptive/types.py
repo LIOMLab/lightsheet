@@ -101,27 +101,29 @@ class AdaptiveConfig:
             raise ValueError(f"pilot_count must be positive; got {self.pilot_count}")
         if not (0.0 < self.intensity_percentile <= 100.0):
             raise ValueError(
-                f"intensity_percentile must be in (0, 100]; got {self.intensity_percentile}"
+                f"intensity_percentile must be in (0, 100]; "
+                f"got {self.intensity_percentile}"
             )
         if not (0.0 < self.saturation_threshold <= 1.0):
             raise ValueError(
-                f"saturation_threshold must be in (0, 1]; got {self.saturation_threshold}"
+                f"saturation_threshold must be in (0, 1]; "
+                f"got {self.saturation_threshold}"
             )
         if not (0.0 < self.saturation_drop_factor <= 1.0):
             raise ValueError(
-                f"saturation_drop_factor must be in (0, 1]; got {self.saturation_drop_factor}"
+                f"saturation_drop_factor must be in (0, 1]; "
+                f"got {self.saturation_drop_factor}"
             )
         if not (0.0 <= self.dead_band < 1.0):
-            raise ValueError(
-                f"dead_band must be in [0, 1); got {self.dead_band}"
-            )
+            raise ValueError(f"dead_band must be in [0, 1); got {self.dead_band}")
         if not (0.0 < self.max_step_fraction <= 1.0):
             raise ValueError(
                 f"max_step_fraction must be in (0, 1]; got {self.max_step_fraction}"
             )
         if not (0.0 < self.saturation_percentile <= 100.0):
             raise ValueError(
-                f"saturation_percentile must be in (0, 100]; got {self.saturation_percentile}"
+                f"saturation_percentile must be in (0, 100]; "
+                f"got {self.saturation_percentile}"
             )
 
     def clamp_exposure(self, exposure_s: float) -> float:

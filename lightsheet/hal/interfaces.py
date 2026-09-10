@@ -314,6 +314,21 @@ class IMotor(IMotorCore):
     @abstractmethod
     def move_home(self) -> None: ...
 
+    @abstractmethod
+    def set_current_position(self, microsteps: int) -> None:
+        """Rewrite the device position register without moving the stage.
+
+        Zaber binary command 45 (Set Current Position) — a Setting-type
+        write: it stores the given value in the device's volatile position
+        counter and replies immediately; no motion is commanded. Used to
+        restore the last-known position after a controller/stage power
+        cycle, since the T-LS position register does not survive a
+        power-down.
+
+        Takes device-native microsteps — the unit cmd 45 consumes — not a
+        (position, units) pair, so there is no float round-trip."""
+        ...
+
 
 class IMotorsCore(ABC):
     """Controller-reachable Motors container surface.
@@ -332,6 +347,13 @@ class IMotorsCore(ABC):
     vertical: "IMotor"
     horizontal: "IMotor"
     camera: "IMotor"
+
+    # Per-axis origin values in each axis's configured units. ``Motors``
+    # loads them from config.ini; ``set_axis_origin`` keeps them in sync
+    # with runtime origin changes.
+    vertical_origin: float
+    horizontal_origin: float
+    camera_origin: float
 
 
 class IMotors(IMotorsCore):
@@ -358,6 +380,18 @@ class IMotors(IMotorsCore):
         are sent back-to-back, then one 6-byte reply is read per command in
         send order.
         """
+
+    @abstractmethod
+    def set_axis_origin(self, axis: str, position: float, units: str) -> None:
+        """Set an axis's origin (a named position to move to) and persist it.
+
+        Container-level entry point for runtime origin changes (Set Sample
+        Origin, Set Camera Focus): the per-motor ``set_origin`` stores the
+        value in memory only; this additionally keeps the container's
+        ``<axis>_origin`` attribute in sync and writes the ``* Origin`` key
+        to config.ini so the origin survives a restart.
+        """
+        ...
 
     # Extended config surface — the controller does not call these.
     @abstractmethod

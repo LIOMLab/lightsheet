@@ -185,6 +185,14 @@ class MockMotor(IMotor):
     def move_home(self) -> None:
         return None
 
+    def set_current_position(self, microsteps: int) -> None:
+        """Rewrite the position register without moving (Zaber cmd 45
+        semantics). Deliberately no travel-limit check — this emulates a
+        register write, not a move, so the value is stored verbatim."""
+        self.position_microsteps = int(microsteps)
+        self.position = float(self.position_microsteps)
+        return None
+
 
 class MockMotors(IMotors):
     """Mock Motors container for demo mode — implements IMotors with no serial I/O."""
@@ -220,6 +228,13 @@ class MockMotors(IMotors):
             limit_low_microsteps=0,
             limit_high_microsteps=258015,
         )
+
+        # Container origin attributes (the real class loads these from
+        # config.ini; the mock seeds them from each motor's initial
+        # origin). set_axis_origin keeps them in sync.
+        self.vertical_origin = self.vertical.get_origin("mm")
+        self.horizontal_origin = self.horizontal.get_origin("mm")
+        self.camera_origin = self.camera.get_origin("mm")
 
     def open(self) -> None:
         return None
@@ -266,6 +281,14 @@ class MockMotors(IMotors):
         for motor, target_microsteps in validated:
             motor.position_microsteps = target_microsteps
             motor.position = float(target_microsteps)
+
+    def set_axis_origin(self, axis: str, position: float, units: str) -> None:
+        """Set an axis origin in memory only — the mock has no config.ini.
+        Syncs ``<axis>_origin`` on the container like the real class so
+        tests can read the same attribute."""
+        motor = getattr(self, axis)
+        motor.set_origin(position, units)
+        setattr(self, f"{axis}_origin", motor.get_origin("mm"))
 
     def cfg_load_ini(self) -> None:
         return None

@@ -104,12 +104,18 @@ def test_persist_last_round_trip(
 def test_controller_persists_stack_params_on_close(
     qtbot: QtBot, controller: Controller_MainWindow, tmp_path: Path
 ) -> None:
-    """closeEvent writes the current stack params to config.ini."""
+    """closeEvent writes the current stack params to config.ini.
+
+    The position values are stored in millimetres (the spinbox display
+    unit) even though ``stack_starting_plane``/``stack_ending_plane`` are
+    micrometres internally — so 100.0 µm / 200.0 µm persist as
+    "0.1000" / "0.2000" mm. The step stays in µm (its spinbox displays
+    µm)."""
     ctrl = controller
     ctrl.stack_first_plane_set = True
     ctrl.stack_last_plane_set = True
-    ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(100.0)
-    ctrl.stack_panel.ui.doubleSpinBox_acqLastPlane.setValue(200.0)
+    ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.setValue(0.1)
+    ctrl.stack_panel.ui.doubleSpinBox_acqLastPlane.setValue(0.2)
     ctrl.stack_panel.ui.doubleSpinBox_acqPlaneStepSize.setValue(10.0)
     ctrl.stack_starting_plane = 100.0
     ctrl.stack_ending_plane = 200.0
@@ -117,22 +123,92 @@ def test_controller_persists_stack_params_on_close(
     # config.ini during tests); disable demo mode for this test.
     ctrl._demo_mode = False
 
-    # Patch cfg_write to capture the written dict.
-    written: list[tuple] = []  # ty: ignore[missing-type-argument]
-    with patch(
-        "lightsheet.gui.shell.controller.cfg_write",
-        lambda *a, **k: written.append((a, k)),
-    ):
-        ctrl._save_stack_params()
-    assert len(written) == 1
-    args, _kw = written[0]
-    section_dict = args[2]
-    assert "StackLastStart" in section_dict
-    assert "StackLastEnd" in section_dict
-    assert "StackLastStep" in section_dict
-    # Restore demo mode so teardown's closeEvent does not write to the
-    # real config.ini.
-    ctrl._demo_mode = True
+    try:
+        # Patch cfg_write to capture the written dict.
+        written: list[tuple] = []  # ty: ignore[missing-type-argument]
+        with patch(
+            "lightsheet.gui.shell.controller.cfg_write",
+            lambda *a, **k: written.append((a, k)),
+        ):
+            ctrl._save_stack_params()
+        assert len(written) == 1
+        args, _kw = written[0]
+        section_dict = args[2]
+        # Positions persist in mm (the spinbox display unit); the step
+        # persists in µm (the step spinbox's display unit).
+        assert section_dict["StackLastStart"] == "0.1000"
+        assert section_dict["StackLastEnd"] == "0.2000"
+        assert section_dict["StackLastStep"] == "10.0000"
+    finally:
+        # Restore demo mode so teardown's closeEvent does not write to the
+        # real config.ini (a failed assert must not leave writes enabled).
+        ctrl._demo_mode = True
+
+
+def test_load_stack_params_round_trips_mm_to_um(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
+    """Persisted mm values restore the mm spinbox display AND the µm
+    internal vars exactly: 3.2 mm -> 3200.0 µm, 15.6 mm -> 15600.0 µm,
+    with both boundary flags set."""
+    ctrl = controller
+    ctrl._demo_mode = False
+    try:
+        with patch(
+            "lightsheet.gui.shell.controller.cfg_read",
+            return_value={
+                "StackLastStart": "3.2",
+                "StackLastEnd": "15.6",
+                "StackLastStep": "5.0",
+            },
+        ):
+            ctrl._load_stack_params()
+        assert ctrl.stack_panel.ui.doubleSpinBox_acqFirstPlane.value() == 3.2
+        assert ctrl.stack_panel.ui.doubleSpinBox_acqLastPlane.value() == 15.6
+        assert ctrl.stack_starting_plane == 3200.0
+        assert ctrl.stack_ending_plane == 15600.0
+        assert ctrl.stack_first_plane_set is True
+        assert ctrl.stack_last_plane_set is True
+    finally:
+        # Restore demo mode so teardown's closeEvent does not write to
+        # the real config.ini.
+        ctrl._demo_mode = True
+
+
+def test_load_stack_params_discards_out_of_range_values(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
+    """A persisted value whose mm interpretation is outside the stage
+    travel limits (e.g. a µm-magnitude "3200.0000" written by the buggy
+    version) is discarded: no spinbox write, no flag set, internal vars
+    untouched, and the operator is told via sig_message."""
+    ctrl = controller
+    messages: list[str] = []
+    ctrl.sig_message.connect(lambda m: messages.append(m))
+    # MockMotors horizontal limit is ~101.6 mm; all persisted positions
+    # below are far outside it.
+    prev_start = ctrl.stack_starting_plane
+    prev_end = ctrl.stack_ending_plane
+    ctrl.stack_first_plane_set = False
+    ctrl.stack_last_plane_set = False
+    ctrl._demo_mode = False
+    try:
+        with patch(
+            "lightsheet.gui.shell.controller.cfg_read",
+            return_value={
+                "StackLastStart": "3200.0000",
+                "StackLastEnd": "678.9",
+                "StackLastStep": "5.0",
+            },
+        ):
+            ctrl._load_stack_params()
+        assert ctrl.stack_first_plane_set is False
+        assert ctrl.stack_last_plane_set is False
+        assert ctrl.stack_starting_plane == prev_start
+        assert ctrl.stack_ending_plane == prev_end
+        assert any("travel limit" in m.lower() for m in messages)
+    finally:
+        ctrl._demo_mode = True
 
 
 def test_summary_updates_on_edit(

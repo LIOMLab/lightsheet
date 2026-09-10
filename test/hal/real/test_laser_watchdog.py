@@ -21,7 +21,7 @@ class _FakeLaser:
         self.off_volts = off_volts
 
 
-def test_arm_on_dev_machine_is_noop(caplog):
+def test_arm_on_dev_machine_is_noop(caplog: pytest.LogCaptureFixture) -> None:
     """On the dev machine, nidaqmx is present but the NI-DAQmx runtime is
     not supported on macOS — arm() must log and return without raising."""
     watchdog = LaserWatchdog([_FakeLaser("/Dev7/ao0", 0.0)])
@@ -34,33 +34,33 @@ def test_arm_on_dev_machine_is_noop(caplog):
     watchdog.disarm()
 
 
-def test_reset_and_disarm_are_safe_when_unarmed():
+def test_reset_and_disarm_are_safe_when_unarmed() -> None:
     """reset()/disarm() on an unarmed watchdog must not raise."""
     watchdog = LaserWatchdog([])
     watchdog.reset()
     watchdog.disarm()
 
 
-def test_arm_groups_channels_by_device(monkeypatch):
+def test_arm_groups_channels_by_device(monkeypatch: pytest.MonkeyPatch) -> None:
     """Lasers on the same DAQ device share one WatchdogTask."""
     created = []
 
     class MockWatchdogTask:
-        def __init__(self, device, timeout=10):
+        def __init__(self, device: str, timeout: float = 10) -> None:
             self.device = device
             self.states = []
             created.append(self)
 
-        def cfg_watchdog_ao_expir_states(self, states):
+        def cfg_watchdog_ao_expir_states(self, states: list[object]) -> None:
             self.states = states
 
-        def start(self):
+        def start(self) -> None:
             pass
 
-        def reset_timer(self):
+        def reset_timer(self) -> None:
             pass
 
-        def close(self):
+        def close(self) -> None:
             pass
 
     monkeypatch.setattr(
@@ -88,24 +88,24 @@ def test_arm_groups_channels_by_device(monkeypatch):
     assert len(created[0].states) == 2
 
 
-def test_arm_idempotent(monkeypatch):
+def test_arm_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
     """Calling arm() twice does not create a second WatchdogTask."""
     created = []
 
     class MockWatchdogTask:
-        def __init__(self, device, timeout=10):
+        def __init__(self, device: str, timeout: float = 10) -> None:
             created.append(device)
 
-        def cfg_watchdog_ao_expir_states(self, states):
+        def cfg_watchdog_ao_expir_states(self, states: list[object]) -> None:
             pass
 
-        def start(self):
+        def start(self) -> None:
             pass
 
-        def reset_timer(self):
+        def reset_timer(self) -> None:
             pass
 
-        def close(self):
+        def close(self) -> None:
             pass
 
     monkeypatch.setattr(
@@ -127,24 +127,24 @@ def test_arm_idempotent(monkeypatch):
     assert created == ["Dev7"]
 
 
-def test_reset_calls_reset_timer(monkeypatch):
+def test_reset_calls_reset_timer(monkeypatch: pytest.MonkeyPatch) -> None:
     """reset() forwards to each armed WatchdogTask."""
     calls = []
 
     class MockWatchdogTask:
-        def __init__(self, device, timeout=10):
+        def __init__(self, device: str, timeout: float = 10) -> None:
             pass
 
-        def cfg_watchdog_ao_expir_states(self, states):
+        def cfg_watchdog_ao_expir_states(self, states: list[object]) -> None:
             pass
 
-        def start(self):
+        def start(self) -> None:
             pass
 
-        def reset_timer(self):
+        def reset_timer(self) -> None:
             calls.append("reset")
 
-        def close(self):
+        def close(self) -> None:
             pass
 
     monkeypatch.setattr(
@@ -166,24 +166,24 @@ def test_reset_calls_reset_timer(monkeypatch):
     assert calls == ["reset"]
 
 
-def test_disarm_closes_tasks(monkeypatch):
+def test_disarm_closes_tasks(monkeypatch: pytest.MonkeyPatch) -> None:
     """disarm() closes every armed WatchdogTask."""
     calls = []
 
     class MockWatchdogTask:
-        def __init__(self, device, timeout=10):
+        def __init__(self, device: str, timeout: float = 10) -> None:
             pass
 
-        def cfg_watchdog_ao_expir_states(self, states):
+        def cfg_watchdog_ao_expir_states(self, states: list[object]) -> None:
             pass
 
-        def start(self):
+        def start(self) -> None:
             pass
 
-        def reset_timer(self):
+        def reset_timer(self) -> None:
             pass
 
-        def close(self):
+        def close(self) -> None:
             calls.append("close")
 
     monkeypatch.setattr(

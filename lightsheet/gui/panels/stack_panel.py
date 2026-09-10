@@ -147,7 +147,9 @@ class StackPanelWidget(QWidget):
         )
         # The master focus toggle now doubles as the adaptive-focus enable,
         # so a separate adaptive checkbox is no longer needed.
-        self.ui.checkBox_focusEnable.toggled.connect(self._update_autofocus_status_label)
+        self.ui.checkBox_focusEnable.toggled.connect(
+            self._update_autofocus_status_label
+        )
         self._update_autofocus_status_label()
 
         # --- Adaptive-autofocus UI review fixes ---
@@ -660,13 +662,28 @@ class StackPanelWidget(QWidget):
 
     def _read_adaptive_fixed_config(
         self,
-    ) -> tuple[float, float, float, int, float, float, int]:
+    ) -> tuple[
+        float,
+        float,
+        float,
+        int,
+        float,
+        float,
+        int,
+        float,
+        float,
+        float,
+        float,
+        float,
+        float,
+    ]:
         """Read the fixed controller-tuning settings from config.ini
         (target band lo/hi %, reacquire threshold %, block size N, Kp,
-        Ki, pilot count). These were removed from the GUI — they are
-        config-only because they rarely change per experiment. Falls
-        back to the schema defaults if the [Adaptive] section or
-        individual keys are absent.
+        Ki, pilot count, intensity percentile, saturation threshold /
+        drop factor / percentile, dead band, max step fraction). These
+        were removed from the GUI — they are config-only because they
+        rarely change per experiment. Falls back to the schema defaults
+        if the [Adaptive] section or individual keys are absent.
         """
         from lightsheet.config import cfg_read
 
@@ -765,6 +782,7 @@ class StackPanelWidget(QWidget):
             return None
         if self._adaptive_latched:
             return None
+
         # The exposure bound is always the camera exposure time in ms —
         # the total per-plane integration time. The worker contract for
         # ``AdaptiveConfig.exposure_s`` is seconds, so convert ms → s.

@@ -29,9 +29,9 @@ try:
     import nidaqmx.system.watchdog as _nidaqmx_watchdog
     import nidaqmx.types as _nidaqmx_types
 except Exception:  # pragma: no cover - exercised on the dev machine
-    _nidaqmx_constants = None  # type: ignore[assignment]
-    _nidaqmx_watchdog = None  # type: ignore[assignment]
-    _nidaqmx_types = None  # type: ignore[assignment]
+    _nidaqmx_constants = None  # ty: ignore[invalid-assignment]
+    _nidaqmx_watchdog = None  # ty: ignore[invalid-assignment]
+    _nidaqmx_types = None
 
 
 class LaserWatchdog:
@@ -71,9 +71,7 @@ class LaserWatchdog:
                 or _nidaqmx_constants is None
                 or _nidaqmx_types is None
             ):
-                logger.warning(
-                    "LaserWatchdog disabled: nidaqmx watchdog unavailable"
-                )
+                logger.warning("LaserWatchdog disabled: nidaqmx watchdog unavailable")
                 return
 
             by_device: dict[str, list[tuple[str, float]]] = {}
@@ -87,9 +85,7 @@ class LaserWatchdog:
 
             for device, entries in by_device.items():
                 try:
-                    wt = _nidaqmx_watchdog.WatchdogTask(
-                        device, timeout=self._timeout_s
-                    )
+                    wt = _nidaqmx_watchdog.WatchdogTask(device, timeout=self._timeout_s)
                     states = [
                         _nidaqmx_types.AOExpirationState(
                             physical_channel=term,

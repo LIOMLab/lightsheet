@@ -163,9 +163,7 @@ def test_reopen_hdf5_append_unopenable_raises(tmp_path: Path) -> None:
 def test_probe_zarr_root_not_group_raises(tmp_path: Path) -> None:
     """A store whose root is a bare array is rejected."""
     path = tmp_path / "arr.zarr"
-    zarr.open_array(
-        str(path), mode="w", shape=(4, 4), chunks=(4, 4), dtype=np.uint16
-    )
+    zarr.open_array(str(path), mode="w", shape=(4, 4), chunks=(4, 4), dtype=np.uint16)
     with pytest.raises(ResumeProbeError, match="root is not a group"):
         probe_zarr(path)
 
@@ -201,9 +199,7 @@ def test_probe_zarr_channel_out_of_range_raises(tmp_path: Path) -> None:
     path = tmp_path / "one_ch.zarr"
     root = zarr.open(str(path), mode="w")
     assert isinstance(root, zarr.Group)
-    root.create_array(
-        "0", shape=(1, 3, 4, 4), chunks=(1, 1, 4, 4), dtype=np.uint16
-    )
+    root.create_array("0", shape=(1, 3, 4, 4), chunks=(1, 1, 4, 4), dtype=np.uint16)
     with pytest.raises(ResumeProbeError, match="out of range"):
         probe_zarr(path, channel="ch5")
 
@@ -224,9 +220,7 @@ def test_probe_zarr_zero_plane_store_returns_zero(tmp_path: Path) -> None:
     path = tmp_path / "zero.zarr"
     root = zarr.open(str(path), mode="w")
     assert isinstance(root, zarr.Group)
-    root.create_array(
-        "0", shape=(1, 0, 4, 4), chunks=(1, 1, 4, 4), dtype=np.uint16
-    )
+    root.create_array("0", shape=(1, 0, 4, 4), chunks=(1, 1, 4, 4), dtype=np.uint16)
     assert probe_zarr(path) == 0
 
 
@@ -276,9 +270,7 @@ def test_reopen_zarr_l0_missing_store_raises(tmp_path: Path) -> None:
 
 def test_reopen_zarr_l0_root_not_group_raises(tmp_path: Path) -> None:
     path = tmp_path / "arr.zarr"
-    zarr.open_array(
-        str(path), mode="w", shape=(4, 4), chunks=(4, 4), dtype=np.uint16
-    )
+    zarr.open_array(str(path), mode="w", shape=(4, 4), chunks=(4, 4), dtype=np.uint16)
     with pytest.raises(ResumeProbeError, match="root is not a group"):
         reopen_zarr_l0(path, (4, 4), np.uint16)
 
@@ -303,9 +295,7 @@ def test_reopen_zarr_l0_shape_mismatch_raises(tmp_path: Path) -> None:
     path = tmp_path / "shape.zarr"
     root = zarr.open(str(path), mode="w")
     assert isinstance(root, zarr.Group)
-    root.create_array(
-        "0", shape=(1, 5, 4, 4), chunks=(1, 1, 4, 4), dtype=np.uint16
-    )
+    root.create_array("0", shape=(1, 5, 4, 4), chunks=(1, 1, 4, 4), dtype=np.uint16)
     with pytest.raises(ResumeProbeError, match="shape mismatch"):
         reopen_zarr_l0(path, (1, 4, 4, 4), np.uint16)
 

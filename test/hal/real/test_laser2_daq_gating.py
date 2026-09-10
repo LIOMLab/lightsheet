@@ -37,7 +37,6 @@ import pytest
 # On the rig the real nidaqmx is active even for the mock-suite run (without
 # LIGHTSHEET_HW=1), so gating on the stub — not the env var — is correct.
 from conftest import _nidaqmx_is_stub
-
 from lightsheet.hal.real.daqlaser import DAQLaser
 
 # Kept for parity with test_daqlaser.py; not used for skip gating here.

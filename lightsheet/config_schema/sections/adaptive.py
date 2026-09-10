@@ -25,18 +25,10 @@ class AdaptiveSettings(_NoEnvBaseSettings):
     kp: float = Field(alias="Kp", default=0.4)
     ki: float = Field(alias="Ki", default=0.05)
     pilot_count: int = Field(alias="Pilot Count", default=5)
-    intensity_percentile: float = Field(
-        alias="Intensity Percentile", default=99.99
-    )
-    saturation_threshold: float = Field(
-        alias="Saturation Threshold", default=0.95
-    )
-    saturation_drop_factor: float = Field(
-        alias="Saturation Drop Factor", default=0.7
-    )
-    saturation_percentile: float = Field(
-        alias="Saturation Percentile", default=100.0
-    )
+    intensity_percentile: float = Field(alias="Intensity Percentile", default=99.99)
+    saturation_threshold: float = Field(alias="Saturation Threshold", default=0.95)
+    saturation_drop_factor: float = Field(alias="Saturation Drop Factor", default=0.7)
+    saturation_percentile: float = Field(alias="Saturation Percentile", default=100.0)
     dead_band: float = Field(alias="Dead Band", default=0.02)
     max_step_fraction: float = Field(alias="Max Step Fraction", default=0.3)
 
@@ -139,9 +131,7 @@ class AdaptiveSettings(_NoEnvBaseSettings):
     @classmethod
     def _max_step_range(cls, v: float) -> float:
         if v <= 0 or v > 1:
-            raise ValueError(
-                f"max step fraction {v} is outside the valid range (0, 1]"
-            )
+            raise ValueError(f"max step fraction {v} is outside the valid range (0, 1]")
         return v
 
     @field_validator("max_exposure")

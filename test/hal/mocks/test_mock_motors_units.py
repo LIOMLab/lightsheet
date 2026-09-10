@@ -221,6 +221,28 @@ def test_move_home_is_noop() -> None:
     assert axis.position_microsteps == 500
 
 
+def test_set_current_position_updates_position_register() -> None:
+    """set_current_position rewrites the position register without moving
+    the stage (Zaber cmd 45 semantics): position_microsteps updates and
+    get_position reports the new count in both µStep and mm."""
+    axis = _make_axis(microstep_size=0.047625)
+    axis.set_current_position(500000)
+    assert axis.position_microsteps == 500000
+    assert axis.get_position("\u03bcStep") == pytest.approx(500000)
+    assert axis.get_position("mm") == pytest.approx(
+        axis.microsteps_to_position(500000, "mm")
+    )
+
+
+def test_set_current_position_allows_value_outside_limits() -> None:
+    """A register write is not a move, so a value outside the configured
+    travel limits is accepted — limit validation belongs to the move
+    verbs, not to cmd 45."""
+    axis = _make_axis(limit_low=0, limit_high=1000)
+    axis.set_current_position(500000)
+    assert axis.position_microsteps == 500000
+
+
 # -- MockMotors container extended surface ----------------------------------
 
 
@@ -249,6 +271,18 @@ def test_mock_motors_open_close_cfg_are_noops() -> None:
     assert motors.close() is None
     assert motors.cfg_load_ini() is None
     assert motors.cfg_save_ini() is None
+
+
+def test_mock_motors_set_axis_origin_delegates_and_syncs() -> None:
+    """set_axis_origin delegates to the axis's set_origin and syncs the
+    container's <axis>_origin attribute — the mock never writes config.ini."""
+    motors = MockMotors()
+    motors.set_axis_origin("horizontal", 5.0, "mm")
+    # int-microstep quantization loses sub-microstep precision on the
+    # round-trip — assert to µm tolerance, not exact.
+    assert isinstance(motors.horizontal, MockMotor)
+    assert motors.horizontal.get_origin("mm") == pytest.approx(5.0, abs=1e-3)
+    assert motors.horizontal_origin == pytest.approx(5.0, abs=1e-3)
 
 
 # -- MockMotors.move_axes_parallel safety contract ---------------------------

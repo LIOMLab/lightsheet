@@ -248,7 +248,7 @@ def test_pause_resume_end_to_end(
     from test.fixtures.controller import _build_controller
     from test.helpers.factories import make_bundle
 
-    ctrl2 = _build_controller(make_bundle(), qtbot, request)
+    ctrl2 = _build_controller(make_bundle(), qtbot, request, tmp_path)
     ctrl2.saving_allowed = True
     ctrl2.number_of_planes = 3
     ctrl2.stack_mode_started = True

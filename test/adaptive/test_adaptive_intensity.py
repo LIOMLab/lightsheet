@@ -101,6 +101,5 @@ def test_intensity_catches_small_saturated_feature() -> None:
         f"feature in a {size}x{size} frame; got {p99:.3f}"
     )
     assert p9999 > 0.9, (
-        f"p99.99 must catch the saturated {feature}x{feature} feature; "
-        f"got {p9999:.3f}"
+        f"p99.99 must catch the saturated {feature}x{feature} feature; got {p9999:.3f}"
     )

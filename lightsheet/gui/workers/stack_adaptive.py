@@ -228,7 +228,9 @@ class _StackAdaptiveMixin:
                     frame_intensity_pct(frame, cfg.sensor_max, cfg.intensity_percentile)
                 )
                 sat_intensities.append(
-                    frame_intensity_pct(frame, cfg.sensor_max, cfg.saturation_percentile)
+                    frame_intensity_pct(
+                        frame, cfg.sensor_max, cfg.saturation_percentile
+                    )
                 )
             # The brighter channel drives the shared exposure.
             brighter_idx = max(
@@ -238,7 +240,9 @@ class _StackAdaptiveMixin:
             saturation_intensity = sat_intensities[brighter_idx]
         else:
             frame = self._shell.reconstructed_frame
-            intensities = [frame_intensity_pct(frame, cfg.sensor_max, cfg.intensity_percentile)]
+            intensities = [
+                frame_intensity_pct(frame, cfg.sensor_max, cfg.intensity_percentile)
+            ]
             brighter_idx = 0
             saturation_intensity = frame_intensity_pct(
                 frame, cfg.sensor_max, cfg.saturation_percentile

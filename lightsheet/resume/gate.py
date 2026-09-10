@@ -147,14 +147,8 @@ class ResumeSafetyGate:
         fingerprint_diffs = 0
         if live_config is None:
             try:
-                overlay = (
-                    str(RIG_SPECIFIC_PATH)
-                    if RIG_SPECIFIC_PATH.exists()
-                    else None
-                )
-                live_config = load_sections_from_ini(
-                    str(CONFIG_PATH), overlay
-                )
+                overlay = str(RIG_SPECIFIC_PATH) if RIG_SPECIFIC_PATH.exists() else None
+                live_config = load_sections_from_ini(str(CONFIG_PATH), overlay)
             except Exception as e:
                 findings.warnings.append(
                     f"Live config could not be loaded for the fingerprint diff: {e}"
