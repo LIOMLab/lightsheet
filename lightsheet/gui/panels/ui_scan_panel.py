@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# GENERATED FILE — DO NOT HAND-EDIT.
+# Regenerate: bash scripts/compile_ui.sh (pyside6-uic + fix_generated_ui_enums + tokenize_forms) or pyside6-rcc / scripts/build-breeze.sh for resources.
 
 ################################################################################
 ## Form generated from reading UI file 'ui_scan_panel.ui'
