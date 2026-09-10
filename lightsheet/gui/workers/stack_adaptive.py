@@ -214,24 +214,35 @@ class _StackAdaptiveMixin:
         cfg = cast(AdaptiveConfig, self._adaptive_cfg)
         cmd = cast(AdaptiveCommand, self._adaptive_current_cmd)
 
-        # Measure intensity from the acquired frame(s).
+        # Measure intensity from the acquired frame(s). The percentile
+        # statistic drives the PI feedback; a separate higher percentile
+        # (default max) drives the hard saturation guard so a single
+        # saturated pixel trips it even when the PI percentile is low.
         if self._multi_channel:
             frames = self._shell.reconstructed_frames
             intensities = []
+            sat_intensities = []
             for laser in self._shell.lasers:
                 frame = frames.get(int(laser.wavelength)) if frames else None
                 intensities.append(
                     frame_intensity_pct(frame, cfg.sensor_max, cfg.intensity_percentile)
+                )
+                sat_intensities.append(
+                    frame_intensity_pct(frame, cfg.sensor_max, cfg.saturation_percentile)
                 )
             # The brighter channel drives the shared exposure.
             brighter_idx = max(
                 range(len(intensities)),
                 key=lambda i: intensities[i],
             )
+            saturation_intensity = sat_intensities[brighter_idx]
         else:
             frame = self._shell.reconstructed_frame
             intensities = [frame_intensity_pct(frame, cfg.sensor_max, cfg.intensity_percentile)]
             brighter_idx = 0
+            saturation_intensity = frame_intensity_pct(
+                frame, cfg.sensor_max, cfg.saturation_percentile
+            )
 
         # Record the trajectory sample.
         sample = AdaptiveSample(
@@ -284,6 +295,7 @@ class _StackAdaptiveMixin:
             current_exposure_s=cmd.exposure_s,
             current_powers_mw=current_powers,
             plane_idx=plane_idx,
+            saturation_intensity=saturation_intensity,
         )
         # Re-acquire exhaustion: when the next command carries
         # reacquire_exhausted=True, the controller has spent its

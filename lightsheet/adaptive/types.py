@@ -53,6 +53,26 @@ class AdaptiveConfig:
     sensor_max: int = 65535
     max_reacquire_attempts: int = 1
     intensity_percentile: float = 99.99
+    # Hard saturation guard: when the brighter channel's intensity
+    # statistic exceeds this fraction of the sensor max, drop the
+    # exposure by saturation_drop_factor and skip the PI update. This
+    # catches a small saturated blob that the percentile statistic alone
+    # might miss.
+    saturation_threshold: float = 0.95
+    saturation_drop_factor: float = 0.7
+    # Saturation percentile: the intensity percentile used for the hard
+    # saturation guard. Default 100 (max) catches any saturated pixel;
+    # a lower value (e.g. 99.999) trades noise immunity for catching
+    # smaller saturated blobs.
+    saturation_percentile: float = 100.0
+    # Dead band: when |error| is below this fraction of the sensor max,
+    # the PI loop makes no correction. Prevents hunting around the
+    # target midpoint.
+    dead_band: float = 0.02
+    # Slew rate limit: the commanded exposure may change by at most this
+    # fraction of the current exposure per plane. Prevents a single
+    # large error from jumping the exposure across the whole range.
+    max_step_fraction: float = 0.3
 
     def __post_init__(self) -> None:
         if self.min_exposure_s > self.max_exposure_s:
@@ -82,6 +102,26 @@ class AdaptiveConfig:
         if not (0.0 < self.intensity_percentile <= 100.0):
             raise ValueError(
                 f"intensity_percentile must be in (0, 100]; got {self.intensity_percentile}"
+            )
+        if not (0.0 < self.saturation_threshold <= 1.0):
+            raise ValueError(
+                f"saturation_threshold must be in (0, 1]; got {self.saturation_threshold}"
+            )
+        if not (0.0 < self.saturation_drop_factor <= 1.0):
+            raise ValueError(
+                f"saturation_drop_factor must be in (0, 1]; got {self.saturation_drop_factor}"
+            )
+        if not (0.0 <= self.dead_band < 1.0):
+            raise ValueError(
+                f"dead_band must be in [0, 1); got {self.dead_band}"
+            )
+        if not (0.0 < self.max_step_fraction <= 1.0):
+            raise ValueError(
+                f"max_step_fraction must be in (0, 1]; got {self.max_step_fraction}"
+            )
+        if not (0.0 < self.saturation_percentile <= 100.0):
+            raise ValueError(
+                f"saturation_percentile must be in (0, 100]; got {self.saturation_percentile}"
             )
 
     def clamp_exposure(self, exposure_s: float) -> float:

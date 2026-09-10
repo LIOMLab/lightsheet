@@ -146,6 +146,7 @@ class AdaptiveController:
         current_exposure_s: float,
         current_powers_mw: tuple[float, float],
         plane_idx: int,
+        saturation_intensity: float | None = None,
     ) -> AdaptiveCommand:
         """Compute the next per-plane AdaptiveCommand.
 
@@ -177,11 +178,62 @@ class AdaptiveController:
             brighter_intensity = 0.0
         error = brighter_intensity - cfg.target_midpoint
 
-        # PI residual: P-term delta scaled relative to current exposure;
-        # integral removes steady-state offset.
-        delta, self._integral = pi_residual(error, self._integral, cfg)
-        scaled_delta = delta * current_exposure_s
-        new_exposure = ff_exposure + scaled_delta - self._integral
+        # Hard saturation guard: a small saturated blob can saturate the
+        # sensor even when the percentile statistic is below the target.
+        # The saturation_intensity is computed at a higher percentile
+        # (default max) so a single saturated pixel trips the guard.
+        # Drop the exposure immediately and skip the PI update so the
+        # loop does not fight the guard.
+        sat_intensity = (
+            saturation_intensity
+            if saturation_intensity is not None
+            else brighter_intensity
+        )
+        if isinstance(sat_intensity, float) and math.isnan(sat_intensity):
+            sat_intensity = 0.0
+        if sat_intensity > cfg.saturation_threshold:
+            new_exposure = current_exposure_s * cfg.saturation_drop_factor
+            clamped_exposure = cfg.clamp_exposure(new_exposure)
+            power_fallback = False
+            control_variable_active = "saturation_guard"
+            # Build the command early and return — the PI residual and
+            # power-fallback paths are skipped so the guard is not
+            # overridden by the normal loop.
+            cmd = AdaptiveCommand(
+                exposure_s=clamped_exposure,
+                laser1_mw=current_powers_mw[0],
+                laser2_mw=current_powers_mw[1],
+                reacquire=False,
+                control_variable_active=control_variable_active,
+                power_fallback=power_fallback,
+                reacquire_exhausted=False,
+            )
+            self._last_command = cmd
+            return cmd
+
+        # Dead band: when |error| is below the dead band, make no
+        # correction — the PI loop is already at the target. This
+        # prevents hunting around the target midpoint.
+        if abs(error) < cfg.dead_band:
+            delta, self._integral = 0.0, self._integral
+            scaled_delta = 0.0
+            new_exposure = ff_exposure - self._integral
+        else:
+            # PI residual: P-term delta scaled relative to current
+            # exposure; integral removes steady-state offset.
+            delta, self._integral = pi_residual(error, self._integral, cfg)
+            scaled_delta = delta * current_exposure_s
+            new_exposure = ff_exposure + scaled_delta - self._integral
+
+        # Slew-rate limit: the commanded exposure may change by at most
+        # max_step_fraction of the current exposure per plane. Prevents a
+        # single large error from jumping the exposure across the whole
+        # range.
+        max_step = cfg.max_step_fraction * current_exposure_s
+        new_exposure = max(
+            current_exposure_s - max_step,
+            min(current_exposure_s + max_step, new_exposure),
+        )
 
         # Clamp exposure first.
         clamped_exposure = cfg.clamp_exposure(new_exposure)

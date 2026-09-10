@@ -636,12 +636,10 @@ class StackPanelWidget(QWidget):
         self._adaptive_latched = False
 
     def _update_adaptive_shutter_units(self) -> None:
-        """Swap the exposure-bound spinbox suffix/decimals/range between
-        Rolling (ms) and Lightsheet (µs, line time) shutter modes, and update
-        the shutter-mode hint label. The physical value is preserved
-        across the swap (a 5 ms bound stays 5 when switching to µs);
-        the build_adaptive_config normalization handles the unit
-        conversion to seconds."""
+        """The exposure bound is always the camera exposure time in ms
+        (the total per-plane integration time), regardless of shutter
+        mode. Keep the spinbox suffix as ms in both Rolling and
+        Lightsheet modes so the operator sees the same unit."""
         acq_ui = getattr(self._shell, "acquisition_panel", None)
         acq_ui = getattr(acq_ui, "ui", None) if acq_ui is not None else None
         if acq_ui is None:
@@ -650,20 +648,14 @@ class StackPanelWidget(QWidget):
         combo = getattr(acq_ui, "comboBox_cameraShutterMode", None)
         if combo is not None:
             mode = str(combo.currentText()).strip()
+        for name in self._ADAPTIVE_EXPOSURE_SPINBOXES:
+            sb = getattr(self.ui, name, None)
+            if sb is not None:
+                sb.setSuffix(" ms")
+                sb.setDecimals(0)
         if mode == "Lightsheet":
-            for name in self._ADAPTIVE_EXPOSURE_SPINBOXES:
-                sb = getattr(self.ui, name, None)
-                if sb is not None:
-                    sb.setSuffix(" µs")
-                    sb.setDecimals(0)
             self.ui.label_adaptiveShutterModeHint.setText(_HINT_LIGHTSHEET)
         else:
-            # Rolling (or unknown — default to ms).
-            for name in self._ADAPTIVE_EXPOSURE_SPINBOXES:
-                sb = getattr(self.ui, name, None)
-                if sb is not None:
-                    sb.setSuffix(" ms")
-                    sb.setDecimals(0)
             self.ui.label_adaptiveShutterModeHint.setText(_HINT_ROLLING)
 
     def _read_adaptive_fixed_config(
@@ -687,6 +679,11 @@ class StackPanelWidget(QWidget):
             "Ki": "0.05",
             "Pilot Count": "5",
             "Intensity Percentile": "99.99",
+            "Saturation Threshold": "0.95",
+            "Saturation Drop Factor": "0.7",
+            "Saturation Percentile": "100.0",
+            "Dead Band": "0.02",
+            "Max Step Fraction": "0.3",
         }
         try:
             cfg = cfg_read(str(CONFIG_PATH), "Adaptive", defaults)
@@ -710,6 +707,11 @@ class StackPanelWidget(QWidget):
             ki = float(cfg.get("Ki", "0.05"))
             pilot = int(float(cfg.get("Pilot Count", "5")))
             intensity_pct = float(cfg.get("Intensity Percentile", "99.99"))
+            saturation_threshold = float(cfg.get("Saturation Threshold", "0.95"))
+            saturation_drop = float(cfg.get("Saturation Drop Factor", "0.7"))
+            saturation_pct = float(cfg.get("Saturation Percentile", "100.0"))
+            dead_band = float(cfg.get("Dead Band", "0.02"))
+            max_step = float(cfg.get("Max Step Fraction", "0.3"))
         except (ValueError, TypeError):
             target_lo = float(defaults["Target Band Lo"]) / 100.0
             target_hi = float(defaults["Target Band Hi"]) / 100.0
@@ -719,7 +721,26 @@ class StackPanelWidget(QWidget):
             ki = float(defaults["Ki"])
             pilot = int(float(defaults["Pilot Count"]))
             intensity_pct = float(defaults["Intensity Percentile"])
-        return target_lo, target_hi, reacquire, block_n, kp, ki, pilot, intensity_pct
+            saturation_threshold = float(defaults["Saturation Threshold"])
+            saturation_drop = float(defaults["Saturation Drop Factor"])
+            saturation_pct = float(defaults["Saturation Percentile"])
+            dead_band = float(defaults["Dead Band"])
+            max_step = float(defaults["Max Step Fraction"])
+        return (
+            target_lo,
+            target_hi,
+            reacquire,
+            block_n,
+            kp,
+            ki,
+            pilot,
+            intensity_pct,
+            saturation_threshold,
+            saturation_drop,
+            saturation_pct,
+            dead_band,
+            max_step,
+        )
 
     def build_adaptive_config(self) -> AdaptiveConfig | None:
         """Pre-sample the adaptive configuration on the GUI thread and
@@ -744,45 +765,15 @@ class StackPanelWidget(QWidget):
             return None
         if self._adaptive_latched:
             return None
-        # Resolve the shutter mode for the exposure normalization. In
-        # Lightsheet mode the bound is already in µs (line time); in
-        # Rolling it is in ms.
-        acq_ui = getattr(self._shell, "acquisition_panel", None)
-        acq_ui = getattr(acq_ui, "ui", None) if acq_ui is not None else None
-        mode = ""
-        if acq_ui is not None:
-            combo = getattr(acq_ui, "comboBox_cameraShutterMode", None)
-            if combo is not None:
-                mode = str(combo.currentText()).strip()
-
-        # In Lightsheet mode the bound is a per-line time in µs, but the
-        # worker contract for ``AdaptiveConfig.exposure_s`` is the total
-        # per-plane integration time — the worker divides by
-        # ``lightsheet_exposed_lines`` to recover the per-line time.
-        # Multiply by the live exposed-line count here so the two sides
-        # of the contract agree. Read defensively: a camera handle that
-        # does not expose the attribute (or exposes a non-positive /
-        # non-int value) falls back to the 16-line default rather than
-        # crashing the Start button.
-        exposed_lines_raw = getattr(
-            getattr(self._shell, "camera", None), "lightsheet_exposed_lines", 16
-        )
-        exposed_lines = (
-            exposed_lines_raw
-            if isinstance(exposed_lines_raw, int)
-            and not isinstance(exposed_lines_raw, bool)
-            and exposed_lines_raw > 0
-            else 16
-        )
-
+        # The exposure bound is always the camera exposure time in ms —
+        # the total per-plane integration time. The worker contract for
+        # ``AdaptiveConfig.exposure_s`` is seconds, so convert ms → s.
+        # In Lightsheet mode the worker divides by
+        # ``lightsheet_exposed_lines`` to recover the per-line time; the
+        # bound here is the integrated exposure, not the line time.
         def _exposure_to_seconds(sb_name: str) -> float:
             sb = getattr(self.ui, sb_name)
             v = float(sb.value())
-            if mode == "Lightsheet":
-                # per-line µs x 1e-6 x exposed_lines = total per-plane
-                # integration seconds (the worker divides it back out).
-                return v * 1e-6 * exposed_lines
-            # Rolling — ms x 1e-3 = seconds
             return v * 1e-3
 
         min_exp_s = _exposure_to_seconds("doubleSpinBox_adaptiveMinExposure")
@@ -804,6 +795,11 @@ class StackPanelWidget(QWidget):
             ki,
             pilot,
             intensity_pct,
+            saturation_threshold,
+            saturation_drop,
+            saturation_pct,
+            dead_band,
+            max_step,
         ) = self._read_adaptive_fixed_config()
         return AdaptiveConfig(
             enabled=True,
@@ -819,6 +815,11 @@ class StackPanelWidget(QWidget):
             ki=ki,
             pilot_count=pilot,
             intensity_percentile=intensity_pct,
+            saturation_threshold=saturation_threshold,
+            saturation_drop_factor=saturation_drop,
+            saturation_percentile=saturation_pct,
+            dead_band=dead_band,
+            max_step_fraction=max_step,
         )
 
     # --- Focus configuration group (opt-in camera focus compensation) -------

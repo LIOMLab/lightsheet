@@ -525,6 +525,120 @@ def test_adaptive_sample_shape_single_channel() -> None:
     assert sample.power_fallback is False
 
 
+# --------------------------------------------------------------------- #
+# Hard saturation guard — a small saturated blob drops the exposure
+# --------------------------------------------------------------------- #
+
+
+def test_saturation_guard_drops_exposure() -> None:
+    """When the saturation_intensity (from saturation_percentile, default
+    max) exceeds saturation_threshold, the guard overrides the PI output
+    and returns exposure * saturation_drop_factor."""
+    cfg = _cfg(
+        saturation_threshold=0.95,
+        saturation_drop_factor=0.7,
+        saturation_percentile=100.0,
+    )
+    ctrl = AdaptiveController(cfg, n_planes=20)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    # The PI percentile (p99.99) is below the target — a small saturated
+    # blob does not move the p99.99 but trips the max-based guard.
+    cmd = ctrl.update(
+        intensities=[0.50],  # p99.99 is below target — PI would raise exposure
+        brighter_idx=0,
+        current_exposure_s=50e-3,
+        current_powers_mw=(20.0, 0.0),
+        plane_idx=0,
+        saturation_intensity=1.0,  # max pixel is saturated
+    )
+    # The guard overrides the PI: exposure drops by 0.7.
+    assert cmd.exposure_s == pytest.approx(50e-3 * 0.7, rel=1e-9)
+    assert cmd.control_variable_active == "saturation_guard"
+    assert cmd.power_fallback is False
+
+
+def test_saturation_guard_uses_saturation_percentile() -> None:
+    """The guard uses saturation_intensity (the max-pixel statistic), not
+    the PI percentile. A p99.99 below the threshold but a max above it
+    still trips the guard."""
+    cfg = _cfg(
+        saturation_threshold=0.95,
+        saturation_drop_factor=0.7,
+        saturation_percentile=100.0,
+    )
+    ctrl = AdaptiveController(cfg, n_planes=20)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    cmd = ctrl.update(
+        intensities=[0.50],
+        brighter_idx=0,
+        current_exposure_s=50e-3,
+        current_powers_mw=(20.0, 0.0),
+        plane_idx=0,
+        saturation_intensity=0.96,  # max pixel at 96% — trips the 0.95 guard
+    )
+    assert cmd.exposure_s == pytest.approx(50e-3 * 0.7, rel=1e-9)
+
+
+def test_saturation_guard_skipped_when_below_threshold() -> None:
+    """When saturation_intensity is below the threshold, the guard does
+    not fire — the normal PI update runs."""
+    cfg = _cfg(
+        saturation_threshold=0.95,
+        saturation_drop_factor=0.7,
+        saturation_percentile=100.0,
+    )
+    ctrl = AdaptiveController(cfg, n_planes=20)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    cmd = ctrl.update(
+        intensities=[0.50],
+        brighter_idx=0,
+        current_exposure_s=50e-3,
+        current_powers_mw=(20.0, 0.0),
+        plane_idx=0,
+        saturation_intensity=0.80,  # below the 0.95 guard
+    )
+    # Normal PI update — exposure rises toward the target.
+    assert cmd.exposure_s != pytest.approx(50e-3 * 0.7, rel=1e-9)
+
+
+def test_dead_band_stops_hunting() -> None:
+    """When |error| < dead_band, the PI makes no correction — the
+    commanded exposure equals the feedforward exposure (plus the
+    accumulated integral, if any)."""
+    cfg = _cfg(dead_band=0.02)
+    ctrl = AdaptiveController(cfg, n_planes=20)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    # Error of 0.01 < dead_band 0.02 → no PI correction.
+    cmd = ctrl.update(
+        intensities=[0.935],  # target midpoint 0.925 + 0.01
+        brighter_idx=0,
+        current_exposure_s=50e-3,
+        current_powers_mw=(20.0, 0.0),
+        plane_idx=0,
+    )
+    # The exposure equals the feedforward exposure (no PI correction).
+    assert cmd.exposure_s == pytest.approx(50e-3, rel=1e-9)
+
+
+def test_slew_rate_limits_step() -> None:
+    """The commanded exposure may change by at most max_step_fraction of
+    the current exposure per plane. A large error is capped."""
+    cfg = _cfg(max_step_fraction=0.1)  # 10% max step
+    ctrl = AdaptiveController(cfg, n_planes=20)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    # A large error would normally jump the exposure a lot — the slew
+    # rate caps it to 10% of the current exposure.
+    cmd = ctrl.update(
+        intensities=[0.10],  # far below target → large PI correction
+        brighter_idx=0,
+        current_exposure_s=50e-3,
+        current_powers_mw=(20.0, 0.0),
+        plane_idx=0,
+    )
+    # The exposure is capped at 50e-3 * 1.1 = 55e-3.
+    assert cmd.exposure_s <= 50e-3 * 1.1 + 1e-9
+
+
 def test_adaptive_sample_shape_multi_channel_with_nan_inactive() -> None:
     """Multi-channel sample with one inactive channel: the inactive
     channel's intensity_fraction entry is NaN (schema-A)."""
