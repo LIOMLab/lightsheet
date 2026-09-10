@@ -1264,8 +1264,8 @@ startup. Re-export both backends + `IPowerMeter` through the
 ## 14. Before you finish a task
 
 1. Run `uv run pytest -q` on a dev machine. Fix failures you caused. If you
-   touched style-sensitive code, also run `uv run ruff check` and
-   `uv run ruff format`, and `uv run ty check` if you touched types.
+   touched code, also run `uv run ruff check` and
+   `uv run ruff format`, and `uv run ty check`.
 2. If the change touches hardware behavior and is verifiable on the rig, say so
    and (if asked) verify on the rig (per §4) with read-only queries first
    (`uv sync` then `LIGHTSHEET_HW=1 uv run pytest -q` on the rig).
