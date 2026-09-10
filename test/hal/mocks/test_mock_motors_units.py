@@ -221,6 +221,28 @@ def test_move_home_is_noop() -> None:
     assert axis.position_microsteps == 500
 
 
+def test_set_current_position_updates_position_register() -> None:
+    """set_current_position rewrites the position register without moving
+    the stage (Zaber cmd 45 semantics): position_microsteps updates and
+    get_position reports the new count in both µStep and mm."""
+    axis = _make_axis(microstep_size=0.047625)
+    axis.set_current_position(500000)
+    assert axis.position_microsteps == 500000
+    assert axis.get_position("\u03bcStep") == pytest.approx(500000)
+    assert axis.get_position("mm") == pytest.approx(
+        axis.microsteps_to_position(500000, "mm")
+    )
+
+
+def test_set_current_position_allows_value_outside_limits() -> None:
+    """A register write is not a move, so a value outside the configured
+    travel limits is accepted — limit validation belongs to the move
+    verbs, not to cmd 45."""
+    axis = _make_axis(limit_low=0, limit_high=1000)
+    axis.set_current_position(500000)
+    assert axis.position_microsteps == 500000
+
+
 # -- MockMotors container extended surface ----------------------------------
 
 

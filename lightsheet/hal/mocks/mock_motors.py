@@ -185,6 +185,14 @@ class MockMotor(IMotor):
     def move_home(self) -> None:
         return None
 
+    def set_current_position(self, microsteps: int) -> None:
+        """Rewrite the position register without moving (Zaber cmd 45
+        semantics). Deliberately no travel-limit check — this emulates a
+        register write, not a move, so the value is stored verbatim."""
+        self.position_microsteps = int(microsteps)
+        self.position = float(self.position_microsteps)
+        return None
+
 
 class MockMotors(IMotors):
     """Mock Motors container for demo mode — implements IMotors with no serial I/O."""

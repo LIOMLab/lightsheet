@@ -314,6 +314,21 @@ class IMotor(IMotorCore):
     @abstractmethod
     def move_home(self) -> None: ...
 
+    @abstractmethod
+    def set_current_position(self, microsteps: int) -> None:
+        """Rewrite the device position register without moving the stage.
+
+        Zaber binary command 45 (Set Current Position) — a Setting-type
+        write: it stores the given value in the device's volatile position
+        counter and replies immediately; no motion is commanded. Used to
+        restore the last-known position after a controller/stage power
+        cycle, since the T-LS position register does not survive a
+        power-down.
+
+        Takes device-native microsteps — the unit cmd 45 consumes — not a
+        (position, units) pair, so there is no float round-trip."""
+        ...
+
 
 class IMotorsCore(ABC):
     """Controller-reachable Motors container surface.

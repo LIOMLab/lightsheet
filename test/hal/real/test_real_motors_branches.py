@@ -385,6 +385,53 @@ def test_move_home_id_nonzero_sends_command() -> None:
     m.move_home()
 
 
+# -- set_current_position (Zaber cmd 45 — position-register restore) ------
+
+
+def test_set_current_position_writes_cmd45_frame() -> None:
+    """set_current_position writes exactly the 6-byte cmd-45 frame on the
+    injected serial handle and reads one 6-byte reply. 26246 = 0x6686
+    little-endian -> [dev, 45, 0x86, 0x66, 0x00, 0x00]."""
+    m = _make_motor(device_number=2)
+    reply = bytes([2, 45, 0x86, 0x66, 0, 0])
+    m._serial = _make_serial_mock(reply)
+    m.set_current_position(26246)
+    written = _serial_mock(m).write.call_args[0][0]
+    assert written == bytes([2, 45, 0x86, 0x66, 0, 0])
+    _serial_mock(m).read.assert_called_once_with(6)
+
+
+def test_set_current_position_negative_microsteps_twos_complement() -> None:
+    """A negative microstep count is two's-complemented by
+    _encode_instruction, same as any other command parameter."""
+    m = _make_motor(device_number=2)
+    reply = bytes([2, 45, 0xFF, 0xFF, 0xFF, 0xFF])
+    m._serial = _make_serial_mock(reply)
+    m.set_current_position(-1)
+    written = _serial_mock(m).write.call_args[0][0]
+    assert written == bytes([2, 45, 0xFF, 0xFF, 0xFF, 0xFF])
+
+
+def test_set_current_position_id_zero_is_noop() -> None:
+    """On an unsupported device (id == 0) set_current_position exits early
+    like move_home — no serial write."""
+    m = _make_motor()
+    m.id = 0
+    m.set_current_position(26246)
+    assert _serial_mock(m).write.call_count == 0
+
+
+def test_set_current_position_does_not_extend_serial_timeout() -> None:
+    """Cmd 45 is not in the move-command set — it replies immediately, so
+    _motorIO must not extend the serial timeout to the 60 s move value."""
+    m = _make_motor(device_number=2)
+    reply = bytes([2, 45, 0x86, 0x66, 0, 0])
+    m._serial = _make_serial_mock(reply)
+    _serial_mock(m).timeout = 2.0
+    m.set_current_position(26246)
+    assert _serial_mock(m).timeout == 2.0
+
+
 # -- move_absolute / move_relative id==0 branches ---------------------------
 
 

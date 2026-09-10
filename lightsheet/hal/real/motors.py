@@ -484,6 +484,27 @@ class ZaberMotor(IMotor):
             cmd_param = 0
             self._motorIO(cmd_no, cmd_param)
 
+    def set_current_position(self, microsteps: int) -> None:
+        """Rewrite the position register without moving the stage.
+
+        Sends Zaber command 45 (Set Current Position) — a Setting-type
+        write that stores ``microsteps`` in the device's volatile position
+        counter. The stage does NOT move; the command replies immediately,
+        so it is deliberately not in the ``_motorIO`` move-command set (no
+        extended motion timeout).
+
+        The T-LS position register does not survive a power-down: after a
+        power cycle the device comes back with a wrong counter. Zaber's
+        documented recovery procedure is to save the position on the
+        controlling computer and re-write it with cmd 45 after power-up —
+        this method is that write. Caveat: after re-energizing, the rotor
+        can snap ±2 full steps if the restored register's low byte does
+        not correspond to the true stepper phase (~±24 µm on a
+        T-LSM100B — acceptable drift vs. the register reset it repairs).
+        """
+        if self.id != 0:
+            self._motorIO(45, int(microsteps))
+
     def move_absolute_position(self, absolute_position: float, units: str) -> None:
         """Moves the device to a specified absolute position.
 
