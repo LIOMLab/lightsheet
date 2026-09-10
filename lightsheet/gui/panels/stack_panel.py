@@ -87,10 +87,6 @@ class StackPanelWidget(QWidget):
         # spinboxes (the schema already rejected out-of-range values at
         # startup, so the loaded values are safe).
         self._load_adaptive_config()
-        # Narrow the laser max-power spinbox maxima to the live HAL
-        # max_power (capped at 150.0). The HAL two-layer clamp is the
-        # safety backstop; the widget soft-block is a defense-in-depth.
-        self._narrow_adaptive_power_maxima()
         # Wire the enable toggle → fields-container visibility. The
         # group box title row stays visible (the affordance) while only
         # the fields container is hidden on toggle-off.
@@ -482,21 +478,19 @@ class StackPanelWidget(QWidget):
         """Load the validated [Adaptive] defaults from config.ini into the
         spinboxes. The schema already rejected out-of-range values at
         startup, so the loaded values are safe. A missing [Adaptive]
-        section leaves the spinboxes at their FieldSpec defaults. Records
-        which keys were loaded so _narrow_adaptive_power_maxima can set
-        the laser max-power defaults to the calibrated max_power only
-        when the operator did not save an explicit value."""
+        section leaves the spinboxes at their FieldSpec defaults. The
+        power keys are percent of each laser's max power ("* Power Pct")
+        — the percent→mW conversion happens in ``build_adaptive_config``."""
         from lightsheet.config import cfg_read
 
-        self._adaptive_loaded_keys: set[str] = set()
         defaults = {
             "Enabled": "",
             "Min Exposure": "",
             "Max Exposure": "",
-            "Laser1 Min Power": "",
-            "Laser1 Max Power": "",
-            "Laser2 Min Power": "",
-            "Laser2 Max Power": "",
+            "Laser1 Min Power Pct": "",
+            "Laser1 Max Power Pct": "",
+            "Laser2 Min Power Pct": "",
+            "Laser2 Max Power Pct": "",
         }
         try:
             cfg = cfg_read(str(CONFIG_PATH), "Adaptive", defaults)
@@ -508,16 +502,15 @@ class StackPanelWidget(QWidget):
             "Enabled": ("checkBox_adaptiveEnable", "bool"),
             "Min Exposure": ("doubleSpinBox_adaptiveMinExposure", "float"),
             "Max Exposure": ("doubleSpinBox_adaptiveMaxExposure", "float"),
-            "Laser1 Min Power": ("doubleSpinBox_adaptiveLaser1MinPower", "float"),
-            "Laser1 Max Power": ("doubleSpinBox_adaptiveLaser1MaxPower", "float"),
-            "Laser2 Min Power": ("doubleSpinBox_adaptiveLaser2MinPower", "float"),
-            "Laser2 Max Power": ("doubleSpinBox_adaptiveLaser2MaxPower", "float"),
+            "Laser1 Min Power Pct": ("doubleSpinBox_adaptiveLaser1MinPower", "float"),
+            "Laser1 Max Power Pct": ("doubleSpinBox_adaptiveLaser1MaxPower", "float"),
+            "Laser2 Min Power Pct": ("doubleSpinBox_adaptiveLaser2MinPower", "float"),
+            "Laser2 Max Power Pct": ("doubleSpinBox_adaptiveLaser2MaxPower", "float"),
         }
         for key, (widget_name, kind) in _set.items():
             raw = str(cfg.get(key, "")).strip()
             if not raw:
                 continue
-            self._adaptive_loaded_keys.add(key)
             w = getattr(self.ui, widget_name, None)
             if w is None:
                 continue
@@ -528,65 +521,6 @@ class StackPanelWidget(QWidget):
                     w.setValue(float(raw))
             except (ValueError, AttributeError):
                 pass
-
-    def _narrow_adaptive_power_maxima(self) -> None:
-        """Narrow the laser max-power spinbox maxima at runtime to
-        ``min(150.0, shell._bundle.lasers[i].max_power)``. The HAL
-        two-layer clamp is the safety backstop; the widget soft-block is
-        a defense-in-depth so the operator cannot enter a bound above
-        the live laser's maximum. When the operator did not save an
-        explicit max-power value in config.ini, the spinbox default is
-        set to the laser's calibrated max_power (rather than the stale
-        FieldSpec placeholder) so the bound reflects the real hardware."""
-        bundle = getattr(self._shell, "_bundle", None)
-        lasers = getattr(bundle, "lasers", None) if bundle is not None else None
-        # Guard against a Mock shell (structural tests) or a bundle
-        # without a lasers tuple yet — skip narrowing in that case.
-        if not isinstance(lasers, (tuple, list)) or len(lasers) < 2:
-            return
-        loaded = getattr(self, "_adaptive_loaded_keys", set())
-        config_keys = ("Laser1 Max Power", "Laser2 Max Power")
-        for i, sb_name in enumerate(
-            (
-                "doubleSpinBox_adaptiveLaser1MaxPower",
-                "doubleSpinBox_adaptiveLaser2MaxPower",
-            )
-        ):
-            sb = getattr(self.ui, sb_name, None)
-            if sb is None:
-                continue
-            try:
-                live_max = float(lasers[i].max_power)
-            except (TypeError, ValueError, AttributeError):
-                continue
-            narrowed = min(150.0, live_max)
-            sb.setMaximum(narrowed)
-            # If config.ini did not provide an explicit max-power value,
-            # default the bound to the laser's calibrated max_power so
-            # the operator sees the real hardware ceiling, not the
-            # FieldSpec placeholder (5.0 mW).
-            if config_keys[i] not in loaded:
-                sb.setValue(narrowed)
-            elif sb.value() > narrowed:
-                # Operator saved a value above the live max — clamp down.
-                sb.setValue(narrowed)
-        # Also narrow the min-power spinboxes so a min cannot exceed the
-        # narrowed max (the pair validator catches it, but the soft
-        # range should match).
-        for i, sb_name in enumerate(
-            (
-                "doubleSpinBox_adaptiveLaser1MinPower",
-                "doubleSpinBox_adaptiveLaser2MinPower",
-            )
-        ):
-            sb = getattr(self.ui, sb_name, None)
-            if sb is None:
-                continue
-            try:
-                live_max = float(lasers[i].max_power)
-            except (TypeError, ValueError, AttributeError):
-                continue
-            sb.setMaximum(min(150.0, live_max))
 
     def _on_adaptive_toggled(self, checked: bool) -> None:
         """Toggle the fields container visibility. The group box title
@@ -759,6 +693,23 @@ class StackPanelWidget(QWidget):
             max_step,
         )
 
+    def _adaptive_laser_maxima_mw(self) -> tuple[float, float]:
+        """Return each laser's live ``max_power`` in mW from the device
+        bundle — the per-laser ceiling the percent power bounds scale
+        against. Falls back to (150.0, 150.0), the historical ceiling,
+        when the bundle or lasers tuple is unavailable (test/Mock-shell
+        path only — production always has a bundle post-hardware_init).
+        The HAL two-layer clamp bounds any over-estimate at the true
+        ``max_power``."""
+        bundle = getattr(self._shell, "_bundle", None)
+        lasers = getattr(bundle, "lasers", None) if bundle is not None else None
+        if isinstance(lasers, (tuple, list)) and len(lasers) >= 2:
+            try:
+                return (float(lasers[0].max_power), float(lasers[1].max_power))
+            except (TypeError, ValueError, AttributeError):
+                pass
+        return (150.0, 150.0)
+
     def build_adaptive_config(self) -> AdaptiveConfig | None:
         """Pre-sample the adaptive configuration on the GUI thread and
         return a frozen ``AdaptiveConfig`` (or ``None`` when the toggle
@@ -768,7 +719,9 @@ class StackPanelWidget(QWidget):
         - Exposure: ms → seconds (x1e-3) in Rolling; per-line µs x
           1e-6 x ``lightsheet_exposed_lines`` → total per-plane
           integration seconds in Lightsheet.
-        - Power: mW, narrowed to the live laser maxima.
+        - Power: percent of each laser's max power → mW via the live
+          bundle laser maxima (``_adaptive_laser_maxima_mw``). The
+          worker contract stays mW.
         - Target band / reacquire threshold: % → fraction (x1e-2),
           read from config.ini (config-only, not in the GUI).
         - Block size N, Kp, Ki, Pilot Count: pass-through, read from
@@ -800,6 +753,11 @@ class StackPanelWidget(QWidget):
         l1_max = float(self.ui.doubleSpinBox_adaptiveLaser1MaxPower.value())
         l2_min = float(self.ui.doubleSpinBox_adaptiveLaser2MinPower.value())
         l2_max = float(self.ui.doubleSpinBox_adaptiveLaser2MaxPower.value())
+        # The spinboxes hold percent of each laser's own max power.
+        # Convert to mW once here on the GUI thread — the worker contract
+        # (AdaptiveConfig.min_power_mw/max_power_mw) stays in mW and the
+        # HAL two-layer clamp is untouched.
+        l1_cap, l2_cap = self._adaptive_laser_maxima_mw()
         # The fixed controller-tuning settings (target band, reacquire
         # threshold, block size, Kp, Ki, pilot count) are config-only —
         # read from config.ini, not from the UI (they were removed from
@@ -823,8 +781,8 @@ class StackPanelWidget(QWidget):
             enabled=True,
             min_exposure_s=min_exp_s,
             max_exposure_s=max_exp_s,
-            min_power_mw=(l1_min, l2_min),
-            max_power_mw=(l1_max, l2_max),
+            min_power_mw=(l1_min * l1_cap / 100.0, l2_min * l2_cap / 100.0),
+            max_power_mw=(l1_max * l1_cap / 100.0, l2_max * l2_cap / 100.0),
             target_band_lo=target_lo,
             target_band_hi=target_hi,
             reacquire_threshold=reacquire,

@@ -101,14 +101,16 @@ FIELD_SPECS: dict[str, FieldSpec] = {
     "doubleSpinBox_laserTwoAmplitude": FieldSpec("%", 1, 1.0, 10.0, 0.0, 100.0),
     # Stack panel — adaptive config group (13 enumerated spinboxes). The
     # exposure bound unit is shutter-mode-dependent (ms in Rolling / lines
-    # in Lightsheet) and swapped at runtime. The power bound maximum is
-    # narrowed at runtime to min(150.0, live laser max_power).
+    # in Lightsheet) and swapped at runtime. The power bounds are percent
+    # of each laser's own max power (0-100, same convention as the Lasers
+    # panel amplitude spinboxes); the percent→mW conversion happens in
+    # build_adaptive_config via the live bundle laser maxima.
     "doubleSpinBox_adaptiveMinExposure": FieldSpec("ms", 0, 1, 10, 1, 10000),
     "doubleSpinBox_adaptiveMaxExposure": FieldSpec("ms", 0, 1, 100, 1, 10000),
-    "doubleSpinBox_adaptiveLaser1MinPower": FieldSpec("mW", 1, 0.5, 5.0, 0.0, 150.0),
-    "doubleSpinBox_adaptiveLaser1MaxPower": FieldSpec("mW", 1, 0.5, 5.0, 0.0, 150.0),
-    "doubleSpinBox_adaptiveLaser2MinPower": FieldSpec("mW", 1, 0.5, 5.0, 0.0, 150.0),
-    "doubleSpinBox_adaptiveLaser2MaxPower": FieldSpec("mW", 1, 0.5, 5.0, 0.0, 150.0),
+    "doubleSpinBox_adaptiveLaser1MinPower": FieldSpec("%", 1, 1.0, 10.0, 0.0, 100.0),
+    "doubleSpinBox_adaptiveLaser1MaxPower": FieldSpec("%", 1, 1.0, 10.0, 0.0, 100.0),
+    "doubleSpinBox_adaptiveLaser2MinPower": FieldSpec("%", 1, 1.0, 10.0, 0.0, 100.0),
+    "doubleSpinBox_adaptiveLaser2MaxPower": FieldSpec("%", 1, 1.0, 10.0, 0.0, 100.0),
     # Stack panel — predictive adaptive-autofocus group
     "doubleSpinBox_autofocusCadence": FieldSpec("", 0, 1, 5, 1, 1000),
     "doubleSpinBox_autofocusResidualGain": FieldSpec("mm", 3, 0.01, 0.1, 0.0, 1.0),
@@ -152,10 +154,10 @@ FIELD_PURPOSES: dict[str, str] = {
     # Stack panel — adaptive config group
     "doubleSpinBox_adaptiveMinExposure": "Adaptive min exposure bound",
     "doubleSpinBox_adaptiveMaxExposure": "Adaptive max exposure bound",
-    "doubleSpinBox_adaptiveLaser1MinPower": "Adaptive laser 1 min power bound",
-    "doubleSpinBox_adaptiveLaser1MaxPower": "Adaptive laser 1 max power bound",
-    "doubleSpinBox_adaptiveLaser2MinPower": "Adaptive laser 2 min power bound",
-    "doubleSpinBox_adaptiveLaser2MaxPower": "Adaptive laser 2 max power bound",
+    "doubleSpinBox_adaptiveLaser1MinPower": "Adaptive laser 1 min power bound (% of max power)",
+    "doubleSpinBox_adaptiveLaser1MaxPower": "Adaptive laser 1 max power bound (% of max power)",
+    "doubleSpinBox_adaptiveLaser2MinPower": "Adaptive laser 2 min power bound (% of max power)",
+    "doubleSpinBox_adaptiveLaser2MaxPower": "Adaptive laser 2 max power bound (% of max power)",
     # Stack panel — predictive adaptive-autofocus group. Each purpose leads
     # with the exact on-widget label text so tooltips and labels stay in sync.
     "doubleSpinBox_autofocusCadence": (

@@ -14,10 +14,15 @@ class AdaptiveSettings(_NoEnvBaseSettings):
     enabled: bool = Field(alias="Enabled", default=False)
     min_exposure: float = Field(alias="Min Exposure", default=1)
     max_exposure: float = Field(alias="Max Exposure", default=1000)
-    laser1_min_power: float = Field(alias="Laser1 Min Power", default=0.0)
-    laser1_max_power: float = Field(alias="Laser1 Max Power", default=5.0)
-    laser2_min_power: float = Field(alias="Laser2 Min Power", default=0.0)
-    laser2_max_power: float = Field(alias="Laser2 Max Power", default=150.0)
+    # Power bounds are percent of each laser's own max_power (the Lasers
+    # panel "%" convention), converted to mW on the GUI thread at
+    # stack-start. The "Pct" alias suffix is deliberate: a stale mW-era
+    # key ("Laser1 Max Power = 80.0") is rejected at startup as an unknown
+    # key by extra='forbid' instead of being silently read as 80 %.
+    laser1_min_power_pct: float = Field(alias="Laser1 Min Power Pct", default=30.0)
+    laser1_max_power_pct: float = Field(alias="Laser1 Max Power Pct", default=100.0)
+    laser2_min_power_pct: float = Field(alias="Laser2 Min Power Pct", default=30.0)
+    laser2_max_power_pct: float = Field(alias="Laser2 Max Power Pct", default=100.0)
     target_band_lo: float = Field(alias="Target Band Lo", default=90.0)
     target_band_hi: float = Field(alias="Target Band Hi", default=95.0)
     reacquire_threshold: float = Field(alias="Reacquire Threshold", default=8.0)
@@ -40,15 +45,15 @@ class AdaptiveSettings(_NoEnvBaseSettings):
         return v
 
     @field_validator(
-        "laser1_min_power",
-        "laser1_max_power",
-        "laser2_min_power",
-        "laser2_max_power",
+        "laser1_min_power_pct",
+        "laser1_max_power_pct",
+        "laser2_min_power_pct",
+        "laser2_max_power_pct",
     )
     @classmethod
     def _power_range(cls, v: float) -> float:
-        if v < 0 or v > 150:
-            raise ValueError(f"power {v} mW is outside the valid range 0..150 mW")
+        if v < 0 or v > 100:
+            raise ValueError(f"power {v} % is outside the valid range 0..100 %")
         return v
 
     @field_validator("target_band_lo", "target_band_hi")
@@ -146,23 +151,25 @@ class AdaptiveSettings(_NoEnvBaseSettings):
             )
         return v
 
-    @field_validator("laser1_max_power")
+    @field_validator("laser1_max_power_pct")
     @classmethod
     def _laser1_pair(cls, v: float, info: ValidationInfo) -> float:
-        min_v = info.data.get("laser1_min_power")
+        min_v = info.data.get("laser1_min_power_pct")
         if min_v is not None and min_v > v:
             raise ValueError(
-                f"Laser1 Min Power ({min_v}) is greater than Laser1 Max Power ({v})"
+                f"Laser1 Min Power Pct ({min_v}) is greater than "
+                f"Laser1 Max Power Pct ({v})"
             )
         return v
 
-    @field_validator("laser2_max_power")
+    @field_validator("laser2_max_power_pct")
     @classmethod
     def _laser2_pair(cls, v: float, info: ValidationInfo) -> float:
-        min_v = info.data.get("laser2_min_power")
+        min_v = info.data.get("laser2_min_power_pct")
         if min_v is not None and min_v > v:
             raise ValueError(
-                f"Laser2 Min Power ({min_v}) is greater than Laser2 Max Power ({v})"
+                f"Laser2 Min Power Pct ({min_v}) is greater than "
+                f"Laser2 Max Power Pct ({v})"
             )
         return v
 

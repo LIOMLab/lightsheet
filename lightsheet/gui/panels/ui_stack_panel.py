@@ -263,9 +263,9 @@ class Ui_StackPanel(object):
         self.doubleSpinBox_adaptiveLaser1MinPower.setObjectName(u"doubleSpinBox_adaptiveLaser1MinPower")
         self.doubleSpinBox_adaptiveLaser1MinPower.setDecimals(1)
         self.doubleSpinBox_adaptiveLaser1MinPower.setMinimum(0.000000000000000)
-        self.doubleSpinBox_adaptiveLaser1MinPower.setMaximum(150.000000000000000)
-        self.doubleSpinBox_adaptiveLaser1MinPower.setSingleStep(0.500000000000000)
-        self.doubleSpinBox_adaptiveLaser1MinPower.setValue(0.000000000000000)
+        self.doubleSpinBox_adaptiveLaser1MinPower.setMaximum(100.000000000000000)
+        self.doubleSpinBox_adaptiveLaser1MinPower.setSingleStep(1.000000000000000)
+        self.doubleSpinBox_adaptiveLaser1MinPower.setValue(30.000000000000000)
 
         self.gridLayout_adaptiveFields.addWidget(self.doubleSpinBox_adaptiveLaser1MinPower, 1, 1, 1, 1)
 
@@ -278,9 +278,9 @@ class Ui_StackPanel(object):
         self.doubleSpinBox_adaptiveLaser1MaxPower.setObjectName(u"doubleSpinBox_adaptiveLaser1MaxPower")
         self.doubleSpinBox_adaptiveLaser1MaxPower.setDecimals(1)
         self.doubleSpinBox_adaptiveLaser1MaxPower.setMinimum(0.000000000000000)
-        self.doubleSpinBox_adaptiveLaser1MaxPower.setMaximum(150.000000000000000)
-        self.doubleSpinBox_adaptiveLaser1MaxPower.setSingleStep(0.500000000000000)
-        self.doubleSpinBox_adaptiveLaser1MaxPower.setValue(5.000000000000000)
+        self.doubleSpinBox_adaptiveLaser1MaxPower.setMaximum(100.000000000000000)
+        self.doubleSpinBox_adaptiveLaser1MaxPower.setSingleStep(1.000000000000000)
+        self.doubleSpinBox_adaptiveLaser1MaxPower.setValue(100.000000000000000)
 
         self.gridLayout_adaptiveFields.addWidget(self.doubleSpinBox_adaptiveLaser1MaxPower, 1, 3, 1, 1)
 
@@ -293,9 +293,9 @@ class Ui_StackPanel(object):
         self.doubleSpinBox_adaptiveLaser2MinPower.setObjectName(u"doubleSpinBox_adaptiveLaser2MinPower")
         self.doubleSpinBox_adaptiveLaser2MinPower.setDecimals(1)
         self.doubleSpinBox_adaptiveLaser2MinPower.setMinimum(0.000000000000000)
-        self.doubleSpinBox_adaptiveLaser2MinPower.setMaximum(150.000000000000000)
-        self.doubleSpinBox_adaptiveLaser2MinPower.setSingleStep(0.500000000000000)
-        self.doubleSpinBox_adaptiveLaser2MinPower.setValue(0.000000000000000)
+        self.doubleSpinBox_adaptiveLaser2MinPower.setMaximum(100.000000000000000)
+        self.doubleSpinBox_adaptiveLaser2MinPower.setSingleStep(1.000000000000000)
+        self.doubleSpinBox_adaptiveLaser2MinPower.setValue(30.000000000000000)
 
         self.gridLayout_adaptiveFields.addWidget(self.doubleSpinBox_adaptiveLaser2MinPower, 2, 1, 1, 1)
 
@@ -308,9 +308,9 @@ class Ui_StackPanel(object):
         self.doubleSpinBox_adaptiveLaser2MaxPower.setObjectName(u"doubleSpinBox_adaptiveLaser2MaxPower")
         self.doubleSpinBox_adaptiveLaser2MaxPower.setDecimals(1)
         self.doubleSpinBox_adaptiveLaser2MaxPower.setMinimum(0.000000000000000)
-        self.doubleSpinBox_adaptiveLaser2MaxPower.setMaximum(150.000000000000000)
-        self.doubleSpinBox_adaptiveLaser2MaxPower.setSingleStep(0.500000000000000)
-        self.doubleSpinBox_adaptiveLaser2MaxPower.setValue(150.000000000000000)
+        self.doubleSpinBox_adaptiveLaser2MaxPower.setMaximum(100.000000000000000)
+        self.doubleSpinBox_adaptiveLaser2MaxPower.setSingleStep(1.000000000000000)
+        self.doubleSpinBox_adaptiveLaser2MaxPower.setValue(100.000000000000000)
 
         self.gridLayout_adaptiveFields.addWidget(self.doubleSpinBox_adaptiveLaser2MaxPower, 2, 3, 1, 1)
 
@@ -517,9 +517,13 @@ class Ui_StackPanel(object):
         self.label_adaptiveMinExposure.setText(QCoreApplication.translate("StackPanel", u"Min Exposure:", None))
         self.label_adaptiveMaxExposure.setText(QCoreApplication.translate("StackPanel", u"Max Exposure:", None))
         self.label_adaptiveLaser1MinPower.setText(QCoreApplication.translate("StackPanel", u"L1 Min Power:", None))
+        self.doubleSpinBox_adaptiveLaser1MinPower.setSuffix(QCoreApplication.translate("StackPanel", u" %", None))
         self.label_adaptiveLaser1MaxPower.setText(QCoreApplication.translate("StackPanel", u"L1 Max Power:", None))
+        self.doubleSpinBox_adaptiveLaser1MaxPower.setSuffix(QCoreApplication.translate("StackPanel", u" %", None))
         self.label_adaptiveLaser2MinPower.setText(QCoreApplication.translate("StackPanel", u"L2 Min Power:", None))
+        self.doubleSpinBox_adaptiveLaser2MinPower.setSuffix(QCoreApplication.translate("StackPanel", u" %", None))
         self.label_adaptiveLaser2MaxPower.setText(QCoreApplication.translate("StackPanel", u"L2 Max Power:", None))
+        self.doubleSpinBox_adaptiveLaser2MaxPower.setSuffix(QCoreApplication.translate("StackPanel", u" %", None))
         self.label_adaptiveShutterModeHint.setText(QCoreApplication.translate("StackPanel", u"Rolling shutter \u2014 exposure bound in milliseconds.", None))
         self.groupBox_focusControl.setTitle(QCoreApplication.translate("StackPanel", u"Focus Control", None))
 #if QT_CONFIG(tooltip)

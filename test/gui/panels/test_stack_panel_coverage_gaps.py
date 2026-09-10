@@ -3,7 +3,7 @@
 Targets the missing branches reported by ``coverage report --show-missing``:
 the ``_on_last_plane_edited`` body, the first-plane out-of-range revert
 fallback, the multi-channel summary render, the advisory-estimate exception
-fallbacks, the adaptive-config load/narrow exception + missing-widget guards,
+fallbacks, the adaptive-config load exception + missing-widget guards,
 the max-side invalid pair, the shutter-units missing-acq_ui guard, and the
 ``build_adaptive_config`` missing-acq_ui / missing-combo branches.
 
@@ -245,20 +245,6 @@ def test_estimate_stack_size_mb_falls_back_on_bad_camera(
 # ---------------------------------------------------------------------------
 
 
-def _make_mock_shell_for_panel(ctrl: Controller_MainWindow) -> Any:
-    """Build a Mock shell exposing only the attributes the panel
-    ``__init__`` reads (motors, sig_beep, sig_message, _bundle) so the
-    None-guard branches in the adaptive load/narrow paths fire."""
-    shell = MagicMock()
-    shell.motors = ctrl.motors  # real motors so _seed_spinbox_ranges works
-    shell.sig_beep = ctrl.sig_beep
-    shell.sig_message = ctrl.sig_message
-    shell._bundle = None  # triggers the lasers-None guard in _narrow_*
-    shell.acquisition_panel = None  # triggers acq_ui None guards
-    shell.laser_panel = None
-    return shell
-
-
 def test_load_adaptive_config_handles_cfg_read_exception(
     qtbot: QtBot, controller: Controller_MainWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -298,10 +284,10 @@ def test_load_adaptive_config_skips_empty_and_invalid_values(
             "Enabled": "true",
             "Min Exposure": "not-a-number",  # invalid float → except branch
             "Max Exposure": "",  # empty → continue branch
-            "Laser1 Min Power": "1.5",
-            "Laser1 Max Power": "5.0",
-            "Laser2 Min Power": "",
-            "Laser2 Max Power": "bad",  # invalid float → except branch
+            "Laser1 Min Power Pct": "1.5",
+            "Laser1 Max Power Pct": "50.0",
+            "Laser2 Min Power Pct": "",
+            "Laser2 Max Power Pct": "bad",  # invalid float → except branch
         }
 
     from lightsheet import config as cfg_mod
@@ -312,53 +298,6 @@ def test_load_adaptive_config_skips_empty_and_invalid_values(
     assert sp.ui.doubleSpinBox_adaptiveLaser1MinPower.value() == pytest.approx(1.5)
     # Enabled was set true.
     assert sp.ui.checkBox_adaptiveEnable.isChecked() is True
-
-
-# ---------------------------------------------------------------------------
-# _narrow_adaptive_power_maxima missing-widget + bad-live_max guards
-# (503, 506-507, 515, 518, 530, 533-534)
-# ---------------------------------------------------------------------------
-
-
-def test_narrow_adaptive_power_maxima_defaults_to_live_max(
-    qtbot: QtBot, controller: Controller_MainWindow
-) -> None:
-    """When config.ini did not save an explicit max-power value, the
-    spinbox default is set to ``min(150.0, live_max)`` (the
-    ``config_keys[i] not in loaded`` branch). The fixture's laser[0] has
-    max_power 300 → narrowed to 150.0; laser[1] has 150 → 150.0."""
-    ctrl = controller
-    sp = ctrl.stack_panel
-    # Clear the loaded-keys set so the default-to-live-max branch fires.
-    sp._adaptive_loaded_keys = set()
-    sp._narrow_adaptive_power_maxima()
-    assert sp.ui.doubleSpinBox_adaptiveLaser1MaxPower.value() == pytest.approx(150.0)
-    assert sp.ui.doubleSpinBox_adaptiveLaser2MaxPower.value() == pytest.approx(150.0)
-
-
-def test_narrow_adaptive_power_maxima_clamps_saved_value_above_live(
-    qtbot: QtBot, controller: Controller_MainWindow
-) -> None:
-    """When the operator saved a max-power value above the live max, the
-    spinbox is clamped down to ``min(150.0, live_max)`` (the
-    ``elif sb.value() > narrowed`` branch)."""
-    ctrl = controller
-    sp = ctrl.stack_panel
-    # Mark both keys as loaded so the default-to-live-max branch is
-    # skipped and the clamp-down branch is the only path that fires.
-    sp._adaptive_loaded_keys = {
-        "Laser1 Max Power",
-        "Laser2 Max Power",
-    }
-    # Set the spinbox values above the narrowed max (150.0) so the
-    # clamp-down branch fires.
-    sp.ui.doubleSpinBox_adaptiveLaser1MaxPower.setMaximum(1e9)
-    sp.ui.doubleSpinBox_adaptiveLaser1MaxPower.setValue(200.0)
-    sp.ui.doubleSpinBox_adaptiveLaser2MaxPower.setMaximum(1e9)
-    sp.ui.doubleSpinBox_adaptiveLaser2MaxPower.setValue(200.0)
-    sp._narrow_adaptive_power_maxima()
-    assert sp.ui.doubleSpinBox_adaptiveLaser1MaxPower.value() == pytest.approx(150.0)
-    assert sp.ui.doubleSpinBox_adaptiveLaser2MaxPower.value() == pytest.approx(150.0)
 
 
 # ---------------------------------------------------------------------------
@@ -556,9 +495,8 @@ def test_build_adaptive_config_missing_combo_uses_rolling_default(
 
 # ---------------------------------------------------------------------------
 # Defensive guard branches: laser_panel None (345->350), cb1/cb2 None
-# (348->350), missing widget in _load_adaptive_config (469), bad lasers
-# tuple in _narrow_adaptive_power_maxima (492), narrow widget-missing +
-# bad-live_max guards (503, 506-507, 530, 533-534), shutter-units loop
+# (348->350), missing widget in _load_adaptive_config (469), missing/
+# bad lasers tuple in _adaptive_laser_maxima_mw, shutter-units loop
 # sb-None guards (604->602, 612->610).
 # ---------------------------------------------------------------------------
 
@@ -613,50 +551,27 @@ def test_summary_render_laser_panel_missing_checkboxes(
     assert "2 ch" not in text
 
 
-def test_narrow_adaptive_power_maxima_no_bundle_returns(
+def test_build_adaptive_config_no_bundle_uses_fallback_ceiling(
     qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    """When ``shell._bundle`` is None or has no lasers tuple, the
-    narrow-maxima method returns early (line 492 guard)."""
+    """When ``shell._bundle`` is None, ``build_adaptive_config`` falls
+    back to the (150.0, 150.0) mW ceiling for the percent→mW conversion
+    — L1 30/50 % → 45/75 mW."""
     ctrl = controller
     sp = ctrl.stack_panel
+    ui = sp.ui
+    ui.checkBox_adaptiveEnable.setChecked(True)
+    ui.doubleSpinBox_adaptiveLaser1MinPower.setValue(30.0)
+    ui.doubleSpinBox_adaptiveLaser1MaxPower.setValue(50.0)
     real_bundle = ctrl._bundle
     ctrl._bundle = None  # ty: ignore[invalid-assignment]
     try:
-        # Must not raise — the early return fires.
-        sp._narrow_adaptive_power_maxima()
+        cfg = sp.build_adaptive_config()
     finally:
         ctrl._bundle = real_bundle
-
-
-def test_narrow_adaptive_power_maxima_bad_live_max_skips(
-    qtbot: QtBot, controller: Controller_MainWindow
-) -> None:
-    """When ``lasers[i].max_power`` raises (TypeError/ValueError), the
-    narrow loop skips that laser (the except branch, 506-507 and
-    533-534)."""
-    from dataclasses import replace
-
-    from lightsheet.hal import MockLaser
-
-    ctrl = controller
-    sp = ctrl.stack_panel
-    real_bundle = ctrl._bundle
-    # Build a laser whose max_power property raises TypeError.
-    bad_laser = MockLaser(wavelength=555, max_power_mw=300.0, label="bad")
-    # Replace max_power with a property that raises.
-    type(bad_laser).max_power = property(  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
-        lambda self: (_ for _ in ()).throw(TypeError("bad"))
-    )
-    bad_bundle = replace(real_bundle, lasers=(bad_laser, bad_laser))
-    ctrl._bundle = bad_bundle
-    try:
-        # Must not raise — the except branches swallow the TypeError.
-        sp._narrow_adaptive_power_maxima()
-    finally:
-        ctrl._bundle = real_bundle
-        # Restore the original MockLaser.max_power property.
-        del type(bad_laser).max_power  # type: ignore[attr-defined]
+    assert cfg is not None
+    assert cfg.min_power_mw[0] == pytest.approx(45.0)
+    assert cfg.max_power_mw[0] == pytest.approx(75.0)
 
 
 def test_update_adaptive_shutter_units_lightsheet_sb_none(

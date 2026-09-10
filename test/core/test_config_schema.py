@@ -301,10 +301,9 @@ def test_motors_aliases_are_case_sensitive() -> None:
 # without it must validate using the model defaults (no empty-string parse
 # failure). Both tiers carry identical aliases/defaults and the same
 # range/pair validators so a tampered overlay cannot bypass the same check
-# that guards the tracked baseline. Cross-section rejection compares the
-# adaptive laser maxima against the configured laser maxima
-# ([Lasers] Laser1 Max Power in mW; [iBeam] Max Power / 1000 in mW) and
-# rejects (never clamps) out-of-range values in one collect-all pass.
+# that guards the tracked baseline. The power bounds are percent of each
+# laser's own max power ("* Power Pct" keys, 0..100) — the percent→mW
+# conversion happens in the GUI at stack-start, not in the schema.
 
 
 def _adaptive_valid() -> dict[str, Any]:
@@ -313,10 +312,10 @@ def _adaptive_valid() -> dict[str, Any]:
         "Enabled": False,
         "Min Exposure": 1,
         "Max Exposure": 1000,
-        "Laser1 Min Power": 0.0,
-        "Laser1 Max Power": 5.0,
-        "Laser2 Min Power": 0.0,
-        "Laser2 Max Power": 150.0,
+        "Laser1 Min Power Pct": 30.0,
+        "Laser1 Max Power Pct": 100.0,
+        "Laser2 Min Power Pct": 30.0,
+        "Laser2 Max Power Pct": 100.0,
         "Target Band Lo": 90.0,
         "Target Band Hi": 95.0,
         "Reacquire Threshold": 8.0,
@@ -334,8 +333,10 @@ def test_adaptive_strict_constructs_with_defaults() -> None:
     assert s.enabled is False
     assert s.min_exposure == 1
     assert s.max_exposure == 1000
-    assert s.laser1_max_power == 5.0
-    assert s.laser2_max_power == 150.0
+    assert s.laser1_min_power_pct == 30.0
+    assert s.laser1_max_power_pct == 100.0
+    assert s.laser2_min_power_pct == 30.0
+    assert s.laser2_max_power_pct == 100.0
     assert s.target_band_lo == 90.0
     assert s.target_band_hi == 95.0
     assert s.block_size_n == 8
@@ -370,7 +371,7 @@ def test_adaptive_overlay_tolerates_extra_key() -> None:
     """The overlay tier (extra='ignore') silently ignores an extra key."""
     data = {**_adaptive_valid(), "Calibration Note": "rig tweak"}
     s = AdaptiveSettingsOverlay(**data)
-    assert s.laser1_max_power == 5.0
+    assert s.laser1_max_power_pct == 100.0
 
 
 def test_adaptive_rejects_exposure_out_of_range_both_tiers() -> None:
@@ -393,15 +394,17 @@ def test_adaptive_rejects_reversed_exposure_pair_both_tiers() -> None:
 
 
 def test_adaptive_rejects_reversed_power_pair_both_tiers() -> None:
-    """Laser1 Min Power > Laser1 Max Power is rejected on both tiers."""
+    """Laser1 Min Power Pct > Laser1 Max Power Pct is rejected on both
+    tiers. Values stay inside 0..100 so the pair check (not the range
+    check) is what fires."""
     for cls in (AdaptiveSettings, AdaptiveSettingsOverlay):
         with pytest.raises(ValidationError):
             _construct_model(
                 cls,
                 **{
                     **_adaptive_valid(),
-                    "Laser1 Min Power": 10.0,
-                    "Laser1 Max Power": 5.0,
+                    "Laser1 Min Power Pct": 80.0,
+                    "Laser1 Max Power Pct": 30.0,
                 },
             )
         with pytest.raises(ValidationError):
@@ -409,20 +412,36 @@ def test_adaptive_rejects_reversed_power_pair_both_tiers() -> None:
                 cls,
                 **{
                     **_adaptive_valid(),
-                    "Laser2 Min Power": 200.0,
-                    "Laser2 Max Power": 150.0,
+                    "Laser2 Min Power Pct": 90.0,
+                    "Laser2 Max Power Pct": 50.0,
                 },
             )
 
 
-def test_adaptive_rejects_power_above_150_both_tiers() -> None:
-    """Each power bound is rejected above 150 mW (the config-schema ceiling
-    that mirrors the [iBeam] Max Power hard limit)."""
+def test_adaptive_rejects_power_above_100_both_tiers() -> None:
+    """Each power bound is rejected above 100 % — a bound above 100 % of
+    a laser's max power is meaningless (the HAL clamp would cap it)."""
     for cls in (AdaptiveSettings, AdaptiveSettingsOverlay):
         with pytest.raises(ValidationError):
-            _construct_model(cls, **{**_adaptive_valid(), "Laser1 Max Power": 200.0})
+            _construct_model(
+                cls, **{**_adaptive_valid(), "Laser1 Max Power Pct": 100.5}
+            )
         with pytest.raises(ValidationError):
-            _construct_model(cls, **{**_adaptive_valid(), "Laser2 Max Power": 200.0})
+            _construct_model(
+                cls, **{**_adaptive_valid(), "Laser2 Max Power Pct": 100.5}
+            )
+
+
+def test_adaptive_strict_rejects_legacy_mw_key() -> None:
+    """A stale mW-era key ("Laser1 Max Power" without the Pct suffix) is
+    rejected by the strict tier as an unknown key (extra='forbid') — a
+    legacy config.ini carrying an mW value fails loudly at startup instead
+    of being silently reinterpreted as a percent."""
+    data = {**_adaptive_valid(), "Laser1 Max Power": 80.0}
+    with pytest.raises(ValidationError) as exc_info:
+        _construct_model(AdaptiveSettings, **data)
+    err_types = [e["type"] for e in exc_info.value.errors()]
+    assert any("extra" in t or "forbidden" in t for t in err_types)
 
 
 def test_adaptive_rejects_reversed_target_band_both_tiers() -> None:
@@ -460,50 +479,6 @@ def test_adaptive_rejects_bad_gains_and_counts_both_tiers() -> None:
             _construct_model(cls, **{**_adaptive_valid(), "Ki": 2.0})
         with pytest.raises(ValidationError):
             _construct_model(cls, **{**_adaptive_valid(), "Pilot Count": 60})
-
-
-def test_collect_config_errors_adaptive_cross_section_l1_and_l2() -> None:
-    """collect_config_errors surfaces BOTH cross-section errors in one
-    pass when Adaptive L1 Max > [Lasers] Laser1 Max Power AND Adaptive
-    L2 Max > [iBeam] Max Power / 1000. The tracked config has
-    Laser1 Max Power = 5 mW and iBeam Max Power = 150000 uW (150 mW).
-    To prove the cross-section check (not the per-section 0..150 range)
-    bites, the test lowers iBeam Max Power to 100000 uW (100 mW) and
-    sets Adaptive L2 Max = 150.0 mW (within the per-section 0..150 range
-    but above the configured 100 mW). Adaptive L1 Max = 5.1 mW is within
-    the per-section range but above the configured 5 mW. Both are
-    rejected cross-sectionally in one pass."""
-    sections = {
-        "Lasers": _lasers_valid(),
-        "iBeam": {**_ibeam_valid(), "Max Power": 100000},
-        "Adaptive": {
-            **_adaptive_valid(),
-            "Laser1 Max Power": 5.1,
-            "Laser2 Max Power": 150.0,
-        },
-    }
-    result = collect_config_errors(sections)
-    assert len(result.errors) == 2, (
-        f"expected 2 cross-section errors, got {len(result.errors)}: {result.errors}"
-    )
-    joined = " ".join(result.errors)
-    assert "Laser1" in joined
-    assert "Laser2" in joined
-
-
-def test_collect_config_errors_adaptive_default_at_limit_is_clean() -> None:
-    """The tracked defaults (L1 Max = 5.0 mW, L2 Max = 150.0 mW) sit
-    exactly at the configured laser maxima — collect-all returns no
-    cross-section errors (the comparison is > not >=)."""
-    sections = {
-        "Lasers": _lasers_valid(),
-        "iBeam": _ibeam_valid(),
-        "Adaptive": _adaptive_valid(),
-    }
-    result = collect_config_errors(sections)
-    assert result.errors == [], (
-        f"expected no errors for at-limit defaults, got {result.errors}"
-    )
 
 
 def test_collect_config_errors_missing_adaptive_section_uses_defaults() -> None:

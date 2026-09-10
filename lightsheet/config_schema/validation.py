@@ -2,8 +2,7 @@
 
 ``collect_config_errors`` and ``ConfigValidator`` iterate every config
 section, gather every per-section error and non-safety warning in one pass,
-and show a modal QDialog abort path. Cross-section checks (e.g. adaptive
-laser bounds vs. configured laser maxima) run after per-section validation.
+and show a modal QDialog abort path.
 """
 
 import configparser
@@ -165,9 +164,6 @@ def collect_config_errors(
     """Validate all sections collect-all: every error and warning surfaces
     in one pass, not fail-fast on the first."""
     result = ConfigValidationResult()
-    # Track the constructed settings objects so cross-section checks can
-    # compare fields across sections after every section validated.
-    constructed: dict[str, BaseSettings] = {}
     for section_name, data in sections.items():
         models = _SECTION_MODELS.get(section_name)
         if models is None:
@@ -182,7 +178,6 @@ def collect_config_errors(
         except ValidationError as exc:
             result.errors.extend(_format_pydantic_errors(section_name, exc))
             continue
-        constructed[section_name] = settings
         # Section constructed successfully — run non-safety WARN checks.
         warn_checks = _WARN_CHECKS.get(section_name, [])
         for field_name, check, violation in warn_checks:
@@ -194,49 +189,7 @@ def collect_config_errors(
                 result.warnings.append(
                     f"[{section_name}] {key} = {value}: {violation}."
                 )
-    # Cross-section safety checks — reject (never clamp) adaptive laser
-    # maxima above the configured laser maxima.
-    _cross_section_adaptive_power(result, constructed)
     return result
-
-
-def _cross_section_adaptive_power(
-    result: ConfigValidationResult,
-    constructed: dict[str, BaseSettings],
-) -> None:
-    """Reject adaptive laser maxima above the configured laser maxima.
-
-    Both checks are collect-all: a config violating both surfaces two
-    errors in one pass. The comparison is strict (>) so a value sitting
-    exactly at the configured maximum is accepted.
-    """
-    adaptive = constructed.get("Adaptive")
-    if adaptive is None:
-        # [Adaptive] absent or failed per-section validation — nothing
-        # to compare. A per-section failure is already in result.errors.
-        return
-    lasers = constructed.get("Lasers")
-    if lasers is not None:
-        l1_max = float(lasers.laser1_max_power)  # ty: ignore[unresolved-attribute]
-        adaptive_l1_max = float(adaptive.laser1_max_power)  # ty: ignore[unresolved-attribute]
-        if adaptive_l1_max > l1_max:
-            result.errors.append(
-                f"[Adaptive] Laser1 Max Power = {adaptive_l1_max} mW exceeds "
-                f"[Lasers] Laser1 Max Power = {l1_max} mW. Lower the "
-                f"adaptive bound or raise the configured laser maximum."
-            )
-    ibeam = constructed.get("iBeam")
-    if ibeam is not None:
-        # [iBeam] Max Power is in uW; convert to mW for the comparison.
-        l2_max_mw = float(ibeam.max_power) / 1000.0  # ty: ignore[unresolved-attribute]
-        adaptive_l2_max = float(adaptive.laser2_max_power)  # ty: ignore[unresolved-attribute]
-        if adaptive_l2_max > l2_max_mw:
-            result.errors.append(
-                f"[Adaptive] Laser2 Max Power = {adaptive_l2_max} mW exceeds "
-                f"[iBeam] Max Power = {l2_max_mw:.1f} mW (150000 uW / 1000). "
-                f"Lower the adaptive bound or raise the configured laser "
-                f"maximum."
-            )
 
 
 # ---------------------------------------------------------------------------

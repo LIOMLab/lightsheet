@@ -20,8 +20,9 @@ Covers the operator-facing contracts:
 - Rolling shows ms; Lightsheet shows µs (line time) and the bound
   converts to seconds via µs x 1e-6.
 - ``build_adaptive_config`` normalizes ms/µs to seconds, percentages
-  to fractions, narrows power to live maxima, and returns a frozen
-  ``AdaptiveConfig`` (or ``None`` when unchecked).
+  to fractions, converts the percent power bounds to mW via the live
+  bundle laser maxima, and returns a frozen ``AdaptiveConfig`` (or
+  ``None`` when unchecked).
 - ``_spawn_stack_worker`` pre-samples the adaptive config on the GUI
   thread and passes one frozen ``AdaptiveConfig`` as the final
   ``StackWorker`` constructor arg — the worker performs no ``ui.*``
@@ -322,17 +323,53 @@ def test_adaptive_rolling_bound_converts_ms_to_seconds(
     assert cfg.min_exposure_s == pytest.approx(5e-3, rel=1e-9)
 
 
-def test_adaptive_power_narrowed_to_live_max(
+def test_adaptive_power_spinboxes_use_percent(
     qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    """The laser max-power spinbox maximum is narrowed at runtime to
-    min(150.0, shell._bundle.lasers[i].max_power). The test fixture's
-    laser[0] has max_power 300 mW → narrowed to 150.0; laser[1] has
-    max_power 150 mW → narrowed to 150.0."""
+    """The four laser power bound spinboxes use percent semantics —
+    a " %" suffix (the Lasers panel convention), a fixed 0-100 range,
+    and 30/100 defaults. The percent→mW conversion happens in
+    ``build_adaptive_config`` via the live bundle laser maxima."""
     ctrl = controller
     ui = _adaptive_ui(ctrl)
-    assert ui.doubleSpinBox_adaptiveLaser1MaxPower.maximum() <= 150.0
-    assert ui.doubleSpinBox_adaptiveLaser2MaxPower.maximum() <= 150.0
+    for min_name, max_name in (
+        (
+            "doubleSpinBox_adaptiveLaser1MinPower",
+            "doubleSpinBox_adaptiveLaser1MaxPower",
+        ),
+        (
+            "doubleSpinBox_adaptiveLaser2MinPower",
+            "doubleSpinBox_adaptiveLaser2MaxPower",
+        ),
+    ):
+        min_sb = getattr(ui, min_name)
+        max_sb = getattr(ui, max_name)
+        assert min_sb.maximum() == 100.0
+        assert max_sb.maximum() == 100.0
+        assert min_sb.suffix() == " %"
+        assert max_sb.suffix() == " %"
+        assert min_sb.value() == pytest.approx(30.0)
+        assert max_sb.value() == pytest.approx(100.0)
+
+
+def test_build_adaptive_config_converts_pct_to_mw(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
+    """``build_adaptive_config`` converts the percent power bounds to mW
+    via pct/100 x the live bundle laser max_power. The fixture bundle's
+    lasers are 300 mW / 150 mW max → L1 30/50 % -> 90/150 mW and
+    L2 20/80 % -> 30/120 mW."""
+    ctrl = controller
+    ui = _adaptive_ui(ctrl)
+    ui.checkBox_adaptiveEnable.setChecked(True)
+    ui.doubleSpinBox_adaptiveLaser1MinPower.setValue(30.0)
+    ui.doubleSpinBox_adaptiveLaser1MaxPower.setValue(50.0)
+    ui.doubleSpinBox_adaptiveLaser2MinPower.setValue(20.0)
+    ui.doubleSpinBox_adaptiveLaser2MaxPower.setValue(80.0)
+    cfg = ctrl.stack_panel.build_adaptive_config()
+    assert cfg is not None
+    assert cfg.min_power_mw == pytest.approx((90.0, 30.0))
+    assert cfg.max_power_mw == pytest.approx((150.0, 120.0))
 
 
 def test_spawn_stack_worker_passes_frozen_adaptive_cfg(
