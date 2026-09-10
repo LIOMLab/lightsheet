@@ -15,7 +15,6 @@ import dataclasses
 import datetime
 import logging
 import queue
-import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -23,7 +22,6 @@ import h5py
 import numpy as np
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
-from lightsheet import CONFIG_PATH, RIG_SPECIFIC_PATH
 from lightsheet.gui.coordinators.frame_viewer import FrameViewer
 from lightsheet.gui.coordinators.reconstruction import (
     _position_to_float,
@@ -31,6 +29,7 @@ from lightsheet.gui.coordinators.reconstruction import (
     reconstruct_frame,
     reconstruct_frame_linear_blend,
 )
+from lightsheet.gui.coordinators.save_manifest import ManifestRecorder
 from lightsheet.gui.coordinators.zarr_saver import ZarrSaver
 from lightsheet.hal.bundle import DeviceBundle
 from lightsheet.resume import (
@@ -39,13 +38,10 @@ from lightsheet.resume import (
     ResumeManifest,
     ResumeProbeError,
     _common_resume_plane,
-    apply_manifest_update,
     manifest_dir_contains,
-    manifest_path_for,
     probe_hdf5,
     probe_zarr,
     truncate_hdf5_tail,
-    write_manifest,
 )
 
 if TYPE_CHECKING:
@@ -119,6 +115,11 @@ class FrameSaver(QObject):
 
         # ZarrSaver is a plain-Python sibling collaborator (NOT a QObject).
         self._zarr_saver = ZarrSaver(parent)
+        # ManifestRecorder is the same plain-Python collaborator shape —
+        # it owns the resume-manifest plumbing; the _*_manifest* methods
+        # below are one-line delegates so existing call sites and test
+        # patch targets keep working.
+        self._manifest_recorder = ManifestRecorder(self)
 
         # Adaptive trajectory samples. Cleared in reinit.
         self.adaptive_trajectory: list[AdaptiveSample] = []
@@ -162,6 +163,10 @@ class FrameSaver(QObject):
         self.file_format = self.parent.save_format  # ty: ignore[unresolved-attribute]
         # Reset the ZarrSaver for the next acquisition.
         self._zarr_saver = ZarrSaver(self.parent)  # ty: ignore[invalid-argument-type]
+        # Reset the manifest collaborator alongside — it is stateless
+        # (only holds the saver back-reference), so re-construction is a
+        # cheap way to keep the two sibling collaborators in lockstep.
+        self._manifest_recorder = ManifestRecorder(self)
 
         self.block_size = block_size
         self.queue = queue.Queue(
@@ -428,86 +433,10 @@ class FrameSaver(QObject):
                 self._init_resume_manifest(wavelengths)
 
     def _init_resume_manifest(self, wavelengths: list[int]) -> None:
-        """Mint the acquisition UUID and write the initial sidecar
-        ``<acquisition>.resume.json`` with ``state="in_progress"``.
-
-        Called from ``set_files`` before any frame is acquired, so a
-        crash between the first frame and the first cursor write still
-        leaves a discoverable manifest. The manifest path is derived from
-        the first resolved channel-0 filename so the post-collision-bump
-        fileset and its manifest always share a stem.
-        """
-        self.acquisition_uuid = uuid.uuid4().hex
-        # Resolve to an absolute path now: the deferred manifest writes
-        # (cursor commits, lifecycle updates) must land next to the
-        # fileset chosen here, not wherever the process cwd happens to
-        # be when they run.
-        self._manifest_path = manifest_path_for(self.filenames_lists[0][0]).resolve()
-        save_mode = {
-            "reconstructed_frame": "stitch",
-            "ETLscan": "all_crop",
-            "FullETLscan": "all_full",
-        }.get(self.datasets_name, "stitch")
-        # Operator-intent fields: captured from the live model snapshot so
-        # a resume can restore them through the MicroscopeState mutators.
-        # Guarded — a minimal shell stand-in (tests) or an unbuilt model
-        # leaves them None instead of crashing the save.
-        laser_power_pct = None
-        laser_enabled = None
-        auto_lasers = None
-        save_options = None
-        line_time_s = None
-        try:
-            from lightsheet.state.types import MicroscopeSnapshot
-
-            snap = cast("Controller_MainWindow", self.parent).state.snapshot()
-        except Exception:
-            snap = None
-        if isinstance(snap, MicroscopeSnapshot):
-            laser_power_pct = [float(v) for v in snap.laser_power_pct]
-            laser_enabled = [bool(v) for v in snap.laser_enabled]
-            auto_lasers = [bool(v) for v in snap.auto_lasers]
-            save_options = {
-                "mode": str(snap.save_options.mode),
-                "description": str(snap.save_options.description),
-            }
-            line_time_s = float(snap.lightsheet_line_time_s)
-        save_filepath = getattr(self.parent, "save_filepath", "")
-        if not isinstance(save_filepath, str):
-            save_filepath = ""
-        # Safety-config fingerprint for the resume gate's diff check.
-        safety_config: dict[str, dict[str, str]] = {}
-        try:
-            from lightsheet.resume.gate import collect_safety_config
-
-            overlay = str(RIG_SPECIFIC_PATH) if RIG_SPECIFIC_PATH.exists() else None
-            safety_config = collect_safety_config(str(CONFIG_PATH), overlay)
-        except Exception as e:
-            logger.warning("could not snapshot safety config: %s", e)
-        row_index = getattr(self.parent, "stack_queue_row_index", None)
-        if not isinstance(row_index, int) or isinstance(row_index, bool):
-            row_index = None
-        self.resume_manifest = ResumeManifest(
-            uuid=self.acquisition_uuid,
-            state="in_progress",
-            n_planes=int(self.number_of_files) * int(self.number_of_datasets),
-            stack_starting_plane=self._coerce_shell_float("stack_starting_plane"),
-            stack_ending_plane=self._coerce_shell_float("stack_ending_plane"),
-            stack_step=self._coerce_shell_float("stack_step"),
-            save_mode=save_mode,
-            wavelengths=[int(w) for w in wavelengths],
-            multi_channel=len(wavelengths) > 1,
-            created_at=datetime.datetime.now(datetime.UTC).isoformat(),
-            row_index=row_index,
-            laser_power_pct=laser_power_pct,
-            laser_enabled=laser_enabled,
-            auto_lasers=auto_lasers,
-            save_options=save_options,
-            lightsheet_line_time_s=line_time_s,
-            save_filepath=save_filepath,
-            safety_config=safety_config,
-        )
-        write_manifest(self._manifest_path, self.resume_manifest)
+        """Delegate to ``ManifestRecorder.init_manifest`` — the body lives
+        in ``save_manifest.py``; the name stays so ``set_files`` and test
+        patch targets resolve unchanged."""
+        self._manifest_recorder.init_manifest(wavelengths)
 
     def _init_resume_manifest_from_resume(
         self,
@@ -515,36 +444,10 @@ class FrameSaver(QObject):
         wavelengths: list[int],
         hdf5_cursors: dict[str, int],
     ) -> None:
-        """Build the resumed sidecar manifest from an existing one.
-
-        The UUID and spawn parameters are inherited; the HDF5 cursor map
-        is refreshed to the resolved (or fallback) fileset. The manifest
-        is written next to the first resolved channel-0 file.
-
-        The lifecycle is reopened to ``in_progress`` (and any prior
-        ``completed_at`` cleared): terminal manifests are immutable, so
-        without the reset the resumed run could never record its own
-        terminal state — and ``in_progress`` is the correct crash
-        signature while the resumed run is in flight.
-        """
-        self.acquisition_uuid = resume_manifest.uuid
-        self._manifest_path = manifest_path_for(self.filenames_lists[0][0]).resolve()
-        new_cursors = dict(resume_manifest.cursors)
-        # Keep only path-keyed HDF5 cursors — legacy save-mode keys
-        # ("stitch"/"all_crop"/"all_full") are retired on the first
-        # resume so a re-crash resolves through the path-key schema.
-        hdf5_group = {
-            k: v for k, v in new_cursors.get("hdf5", {}).items() if k.endswith(".hdf5")
-        }
-        hdf5_group.update(hdf5_cursors)
-        new_cursors["hdf5"] = hdf5_group
-        self.resume_manifest = dataclasses.replace(
-            resume_manifest,
-            cursors=new_cursors,
-            state="in_progress",
-            completed_at=None,
+        """Delegate to ``ManifestRecorder.init_manifest_from_resume``."""
+        self._manifest_recorder.init_manifest_from_resume(
+            resume_manifest, wavelengths, hdf5_cursors
         )
-        write_manifest(self._manifest_path, self.resume_manifest)
 
     def _unique_hdf5_path(
         self,
@@ -586,63 +489,25 @@ class FrameSaver(QObject):
             return 0.0
 
     def _drain_manifest_updates(self) -> None:
-        """Apply every staged ``ManifestUpdate`` to ``resume_manifest``.
-
-        Called by the save worker before each manifest write and once more
-        on exit, so updates staged by other threads (lifecycle, motor
-        positions, checkpoints, trajectory rows) land on disk.
-        """
-        while True:
-            try:
-                update = self.manifest_update_queue.get_nowait()
-            except queue.Empty:
-                break
-            if self.resume_manifest is not None:
-                self.resume_manifest = apply_manifest_update(
-                    self.resume_manifest, update
-                )
+        """Delegate to ``ManifestRecorder.drain_updates``."""
+        self._manifest_recorder.drain_updates()
 
     def _commit_manifest_cursor(self, fmt: str, key: str, value: int) -> None:
-        """Update a committed-plane cursor and rewrite the manifest.
+        """Delegate to ``ManifestRecorder.commit_cursor``.
 
         MUST only be called after the underlying write (``create_dataset``
         / ``write_plane``) has returned — the cursor is the
         durable-on-disk truth, not the number of frames enqueued.
         """
-        if self.resume_manifest is None or self._manifest_path is None:
-            return
-        self._drain_manifest_updates()
-        self.resume_manifest = apply_manifest_update(
-            self.resume_manifest,
-            ManifestUpdate(
-                kind="cursor",
-                payload={"format": fmt, "key": key, "value": int(value)},
-            ),
-        )
-        try:
-            write_manifest(self._manifest_path, self.resume_manifest)
-        except OSError as e:
-            # A manifest write failure must not abort the acquisition —
-            # the image data is already durable; a stale cursor resumes
-            # into a re-acquire, never a skip (probe clamps the cursor).
-            logger.warning("resume manifest write failed: %s", e)
+        self._manifest_recorder.commit_cursor(fmt, key, value)
 
     def _finalize_manifest(self) -> None:
-        """Drain staged updates and write the manifest one last time.
-
-        Called at the end of every save-worker body, and again from
-        ``stop_saving`` after the worker thread has been joined (the
-        worker may have already exited before the lifecycle update was
-        staged). Post-join there is exactly one writer, so the call is
-        race-free.
-        """
-        if self.resume_manifest is None or self._manifest_path is None:
-            return
-        try:
-            self._drain_manifest_updates()
-            write_manifest(self._manifest_path, self.resume_manifest)
-        except Exception as e:
-            logger.warning("resume manifest finalize failed: %s", e)
+        """Delegate to ``ManifestRecorder.finalize`` — drains staged
+        updates and writes the manifest one last time; called at the end
+        of every save-worker body and again from ``stop_saving`` after
+        the worker thread has been joined (post-join there is exactly
+        one writer, so the call is race-free)."""
+        self._manifest_recorder.finalize()
 
     # Saving methods
 
