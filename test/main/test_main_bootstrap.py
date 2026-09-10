@@ -13,13 +13,16 @@ static-source grep.
 
 from __future__ import annotations
 
+import gc
 import sys
 import types
+import warnings
 from typing import Any, Never
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from conftest import _nidaqmx_is_stub
 from lightsheet.__main__ import (
     _build_demo_bundle,
     _load_breeze_stylesheet,
@@ -386,3 +389,59 @@ def test_load_breeze_stylesheet_raises_on_missing_theme(
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     with pytest.raises(FileNotFoundError):
         _load_breeze_stylesheet("nonexistent")
+
+
+# -- nidaqmx Task.__del__ patch-removal contract ------------------------------
+#
+# Everything under test/hal/rig/ is collection-skipped on a dev machine
+# (the directory name puts "rig" in item.keywords), so the dev-runnable
+# patch-absence assertion lives here — it runs on dev AND on the rig.
+
+
+def test_nidaqmx_task_del_is_not_patched() -> None:
+    """main() does NOT patch nidaqmx.Task.__del__.
+
+    The 0.6.x-era workaround was removed: pinned nidaqmx 1.6.0 initializes
+    every field __del__ reads (_handle/_close_on_exit/_saved_name/
+    _grpc_options/_event_handlers) before any fallible call, so the guard
+    was dead code. Asserted through the consumer's own module binding —
+    lightsheet.hal.real.daqlaser.nidaqmx — so a stale sys.modules entry
+    cannot mask a live patch. On dev the stub Task defines no __del__ at
+    all; on the rig it is nidaqmx's own method.
+    """
+    import lightsheet.hal.real.daqlaser as daqlaser_mod
+
+    task_cls = daqlaser_mod.nidaqmx.Task
+    del_attr = getattr(task_cls, "__del__", None)
+    if del_attr is None:
+        # Dev stub: Task defines no __del__ — unpatched by construction.
+        return
+    qualname = getattr(del_attr, "__qualname__", "")
+    module = getattr(del_attr, "__module__", "") or ""
+    assert "_safe_task_del" not in qualname
+    assert not module.startswith("lightsheet"), (
+        "nidaqmx.Task.__del__ resolves to lightsheet code "
+        f"({module}.{qualname}) — a monkeypatch is still applied"
+    )
+
+
+def test_stub_task_partial_construction_del_is_quiet() -> None:
+    """Dev-side partial-construction contract: the conftest stub's
+    Task.__init__ raises Error before any field is set and the object
+    carries no __del__, so GC is trivially silent. Skipped on the rig —
+    the real-driver partial-construction leg lives in
+    test/hal/rig/test_daq_task_del_patch_rig.py."""
+    if not _nidaqmx_is_stub:
+        pytest.skip("Stub-only check — real nidaqmx is active")
+    import lightsheet.hal.real.daqlaser as daqlaser_mod
+
+    stub_nidaqmx = daqlaser_mod.nidaqmx
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with pytest.raises(stub_nidaqmx.errors.Error):
+            stub_nidaqmx.Task()
+        gc.collect()
+    assert not caught, (
+        "GC of a failed stub Task emitted warnings: "
+        + "; ".join(str(w.message) for w in caught)
+    )
