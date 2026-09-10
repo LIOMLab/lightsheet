@@ -242,6 +242,28 @@
             </property>
            </widget>
           </item>
+          <item>
+           <widget class="QPushButton" name="pushButton_acqGoToFirstPlane">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>80</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>Move the stage to the stack starting plane</string>
+            </property>
+            <property name="text">
+             <string>Go to Start</string>
+            </property>
+           </widget>
+          </item>
           </layout>
         </item>
         <item>
@@ -299,6 +321,28 @@
             </property>
             <property name="maximum">
              <double>100000.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushButton_acqGoToLastPlane">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>80</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>Move the stage to the stack ending plane</string>
+            </property>
+            <property name="text">
+             <string>Go to End</string>
             </property>
            </widget>
           </item>

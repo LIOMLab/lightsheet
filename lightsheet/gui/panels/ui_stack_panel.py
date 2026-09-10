@@ -147,6 +147,14 @@ class Ui_StackPanel(object):
 
         self.horizontalLayout_90.addWidget(self.doubleSpinBox_acqFirstPlane)
 
+        self.pushButton_acqGoToFirstPlane = QPushButton(self.groupBox_18)
+        self.pushButton_acqGoToFirstPlane.setObjectName(u"pushButton_acqGoToFirstPlane")
+        sizePolicy.setHeightForWidth(self.pushButton_acqGoToFirstPlane.sizePolicy().hasHeightForWidth())
+        self.pushButton_acqGoToFirstPlane.setSizePolicy(sizePolicy)
+        self.pushButton_acqGoToFirstPlane.setMinimumSize(QSize(_s.RAIL + _s.XXL, _s.ZERO))
+
+        self.horizontalLayout_90.addWidget(self.pushButton_acqGoToFirstPlane)
+
 
         self.verticalLayout_14.addLayout(self.horizontalLayout_90)
 
@@ -171,6 +179,14 @@ class Ui_StackPanel(object):
         self.doubleSpinBox_acqLastPlane.setMaximum(100000.000000000000000)
 
         self.horizontalLayout_91.addWidget(self.doubleSpinBox_acqLastPlane)
+
+        self.pushButton_acqGoToLastPlane = QPushButton(self.groupBox_18)
+        self.pushButton_acqGoToLastPlane.setObjectName(u"pushButton_acqGoToLastPlane")
+        sizePolicy.setHeightForWidth(self.pushButton_acqGoToLastPlane.sizePolicy().hasHeightForWidth())
+        self.pushButton_acqGoToLastPlane.setSizePolicy(sizePolicy)
+        self.pushButton_acqGoToLastPlane.setMinimumSize(QSize(_s.RAIL + _s.XXL, _s.ZERO))
+
+        self.horizontalLayout_91.addWidget(self.pushButton_acqGoToLastPlane)
 
 
         self.verticalLayout_14.addLayout(self.horizontalLayout_91)
@@ -477,6 +493,10 @@ class Ui_StackPanel(object):
 #endif // QT_CONFIG(tooltip)
         self.doubleSpinBox_acqFirstPlane.setSuffix(QCoreApplication.translate("StackPanel", u" \u03bcm", None))
 #if QT_CONFIG(tooltip)
+        self.pushButton_acqGoToFirstPlane.setToolTip(QCoreApplication.translate("StackPanel", u"Move the stage to the stack starting plane", None))
+#endif // QT_CONFIG(tooltip)
+        self.pushButton_acqGoToFirstPlane.setText(QCoreApplication.translate("StackPanel", u"Go to Start", None))
+#if QT_CONFIG(tooltip)
         self.pushButton_acqSetLastPlane.setToolTip(QCoreApplication.translate("StackPanel", u"Set the current horizontal position as ending point for stack acquisition", None))
 #endif // QT_CONFIG(tooltip)
         self.pushButton_acqSetLastPlane.setText(QCoreApplication.translate("StackPanel", u"Set Ending Plane", None))
@@ -484,6 +504,10 @@ class Ui_StackPanel(object):
         self.doubleSpinBox_acqLastPlane.setToolTip(QCoreApplication.translate("StackPanel", u"Stack end position. Unit: the active unit (\u03bcm/mm). Set via the Set button (reads the current motor position) or type directly. Valid range: the stage travel limits (reject-and-beep if out of range).", None))
 #endif // QT_CONFIG(tooltip)
         self.doubleSpinBox_acqLastPlane.setSuffix(QCoreApplication.translate("StackPanel", u" \u03bcm", None))
+#if QT_CONFIG(tooltip)
+        self.pushButton_acqGoToLastPlane.setToolTip(QCoreApplication.translate("StackPanel", u"Move the stage to the stack ending plane", None))
+#endif // QT_CONFIG(tooltip)
+        self.pushButton_acqGoToLastPlane.setText(QCoreApplication.translate("StackPanel", u"Go to End", None))
         self.label_stackPlanSummary.setText(QCoreApplication.translate("StackPanel", u"No stack configured. Drive the stage to the start position and press Set, or type start/end positions and a step.", None))
         self.groupBox_adaptiveControl.setTitle(QCoreApplication.translate("StackPanel", u"Adaptive Control", None))
 #if QT_CONFIG(tooltip)

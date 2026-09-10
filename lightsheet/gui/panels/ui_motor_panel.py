@@ -167,6 +167,7 @@ class Ui_MotorPanel(object):
         self.doubleSpinBox_sampleHStepSize.setMinimumSize(QSize(110, _s.ZERO))
         self.doubleSpinBox_sampleHStepSize.setMaximumSize(QSize(110, 16777215))
         self.doubleSpinBox_sampleHStepSize.setDecimals(3)
+        self.doubleSpinBox_sampleHStepSize.setValue(0.100000000000000)
 
         self.horizontalLayout_55.addWidget(self.doubleSpinBox_sampleHStepSize, 0, 1, 1, 1)
 
@@ -184,6 +185,7 @@ class Ui_MotorPanel(object):
         self.doubleSpinBox_sampleVStepSize.setMinimumSize(QSize(110, _s.ZERO))
         self.doubleSpinBox_sampleVStepSize.setMaximumSize(QSize(110, 16777215))
         self.doubleSpinBox_sampleVStepSize.setDecimals(3)
+        self.doubleSpinBox_sampleVStepSize.setValue(0.100000000000000)
 
         self.horizontalLayout_55.addWidget(self.doubleSpinBox_sampleVStepSize, 1, 1, 1, 1)
 
@@ -369,6 +371,7 @@ class Ui_MotorPanel(object):
         self.doubleSpinBox_cameraStepSize.setMinimumSize(QSize(110, _s.ZERO))
         self.doubleSpinBox_cameraStepSize.setMaximumSize(QSize(110, 16777215))
         self.doubleSpinBox_cameraStepSize.setDecimals(3)
+        self.doubleSpinBox_cameraStepSize.setValue(0.100000000000000)
 
         self.horizontalLayout_59.addWidget(self.doubleSpinBox_cameraStepSize, 0, 1, 1, 1)
 
