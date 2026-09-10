@@ -50,17 +50,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from lightsheet.gui.panels import queue_resume
 from lightsheet.gui.styles import colors as _c
 from lightsheet.gui.styles import spacing as _s
 from lightsheet.gui.styles import typography as _t
-from lightsheet.resume import (
-    QueueResumeManifest,
-    hash_queue_rows,
-    queue_manifest_path_for,
-    read_manifest,
-    read_queue_manifest,
-    write_queue_manifest,
-)
+from lightsheet.resume import queue_manifest_path_for
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -536,52 +530,12 @@ class AcquisitionTableManager(QWidget):
         rejected with an operator-visible error. On success the table
         becomes exactly ``[resume row] + remaining rows`` so Start Queue
         resumes the interrupted row and continues the rest.
+
+        The body lives in ``queue_resume.enqueue_resume_row`` — this
+        method is a one-line delegate so every call site resolves
+        unchanged.
         """
-        manifest = read_manifest(manifest_path)
-        if manifest is None:
-            self._shell.sig_message.emit(
-                f"Cannot resume: {manifest_path} is missing, unreadable, "
-                "or failed validation. The acquisition was not modified."
-            )
-            self._shell.sig_beep.emit()
-            return False
-        if manifest.state == "completed":
-            self._shell.sig_message.emit(
-                "Cannot resume: the acquisition already completed. "
-                "The acquisition was not modified."
-            )
-            self._shell.sig_beep.emit()
-            return False
-
-        # Nominal resume plane from the committed cursors; the gate
-        # recomputes the durable plane from on-disk probes at spawn time.
-        cursors = [v for group in manifest.cursors.values() for v in group.values()]
-        start_plane = min(cursors) if cursors else manifest.start_plane
-        resume_start = manifest.stack_starting_plane + start_plane * manifest.stack_step
-        if manifest.save_filepath:
-            base_name = Path(manifest.save_filepath).name
-        else:
-            base_name = Path(str(manifest_path)).stem.removesuffix(".resume")
-        row = _Row(
-            name=f"Resume: {base_name}",
-            start=resume_start,
-            end=manifest.stack_ending_plane,
-            step=abs(manifest.stack_step),
-            n_planes=manifest.n_planes,
-            est_time_s=0.0,
-            est_size_mb=0.0,
-        )
-        meta = {
-            "start_plane": int(start_plane),
-            "n_planes": manifest.n_planes,
-            "resume_manifest": manifest,
-            "save_filepath": manifest.save_filepath or "",
-        }
-
-        if queue_manifest is not None:
-            return self._apply_queue_resume(row, meta, queue_manifest)
-        self._insert_row_at(self.table.rowCount(), row, meta)
-        return True
+        return queue_resume.enqueue_resume_row(self, manifest_path, queue_manifest)
 
     def _insert_row_at(
         self, index: int, row: _Row, meta: dict[str, typing.Any] | None = None
@@ -599,13 +553,7 @@ class AcquisitionTableManager(QWidget):
         self._set_numeric_cell(index, _COL_END, row.end / 1000.0)
         self._set_numeric_cell(index, _COL_STEP, row.step)
         if is_resume:
-            n_planes_text = f"RESUME {start_plane}/{row.n_planes}"
-            item = QTableWidgetItem(n_planes_text)
-            item.setFont(_t.body_font())
-            item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
-            item.setToolTip(f"Resuming from plane {start_plane} of {row.n_planes}")
-            item.setForeground(QColor(_c.BREEZE_ACCENT))
-            self.table.setItem(index, _COL_NPLANES, item)
+            queue_resume.apply_resume_row_display(self, index, row, start_plane)
         else:
             self._set_readonly_cell(index, _COL_NPLANES, str(row.n_planes))
         mm, ss = divmod(int(row.est_time_s), 60)
@@ -625,30 +573,17 @@ class AcquisitionTableManager(QWidget):
 
     @staticmethod
     def _row_to_dict(row: _Row) -> dict[str, typing.Any]:
-        return {
-            "name": row.name,
-            "start": row.start,
-            "end": row.end,
-            "step": row.step,
-            "n_planes": row.n_planes,
-        }
+        """Row → queue-manifest dict. Delegates to
+        ``queue_resume.row_to_dict``."""
+        return queue_resume.row_to_dict(row)
 
     @staticmethod
     def _rows_match(
         a: list[dict[str, typing.Any]], b: list[dict[str, typing.Any]]
     ) -> bool:
-        if len(a) != len(b):
-            return False
-        for ra, rb in zip(a, b, strict=True):
-            if ra.get("name") != rb.get("name"):
-                return False
-            for key in ("start", "end", "step"):
-                try:
-                    if not math.isclose(float(ra[key]), float(rb[key])):
-                        return False
-                except (KeyError, TypeError, ValueError):
-                    return False
-        return True
+        """Row-dict list equality (name + isclose on start/end/step).
+        Delegates to ``queue_resume.rows_match``."""
+        return queue_resume.rows_match(a, b)
 
     def _apply_queue_resume(
         self,
@@ -657,58 +592,13 @@ class AcquisitionTableManager(QWidget):
         queue_manifest: Path | str,
     ) -> bool:
         """Validate a queue-level manifest against the live table and
-        arrange ``[resume row] + remaining rows`` for execution."""
-        qm = read_queue_manifest(queue_manifest)
-        if qm is None:
-            self._shell.sig_message.emit(
-                f"Cannot resume: the queue manifest {queue_manifest} is "
-                "missing, unreadable, or failed validation. The "
-                "acquisition was not modified."
-            )
-            self._shell.sig_beep.emit()
-            return False
+        arrange ``[resume row] + remaining rows`` for execution.
 
-        remaining = qm.rows[qm.row_index + 1 :]
-        live = [self._row_to_dict(self.row_at(i)) for i in range(self.table.rowCount())]
-
-        if self._rows_match(live, qm.rows):
-            # Untouched pre-crash queue: drop the completed rows and the
-            # interrupted row; the resume row replaces the interrupted
-            # one at the head.
-            for _ in range(min(qm.row_index + 1, self.table.rowCount())):
-                self.table.removeRow(0)
-                if self._row_uuids:
-                    del self._row_uuids[0]
-            self._insert_row_at(0, resume_row, meta)
-            return True
-        if self._rows_match(live, remaining):
-            # The table already holds exactly the remaining rows.
-            self._insert_row_at(0, resume_row, meta)
-            return True
-        if not live:
-            # Fresh session: rebuild the queue from the manifest.
-            self._insert_row_at(0, resume_row, meta)
-            for rd in remaining:
-                row = _Row(
-                    name=str(rd.get("name", "Stack")),
-                    start=float(rd.get("start", 0.0)),
-                    end=float(rd.get("end", 0.0)),
-                    step=float(rd.get("step", 0.0)),
-                    n_planes=int(rd.get("n_planes", 0)),
-                    est_time_s=0.0,
-                    est_size_mb=0.0,
-                )
-                self._insert_row_at(self.table.rowCount(), row)
-            return True
-
-        self._shell.sig_message.emit(
-            "Cannot resume: the queue table no longer matches "
-            "the recorded queue manifest — the queue was edited after the "
-            "interruption. Rebuild the queue manually and restart it. "
-            "The acquisition was not modified."
-        )
-        self._shell.sig_beep.emit()
-        return False
+        The body lives in ``queue_resume.apply_queue_resume`` — this
+        method is a one-line delegate so ``enqueue_resume_row`` resolves
+        unchanged.
+        """
+        return queue_resume.apply_queue_resume(self, resume_row, meta, queue_manifest)
 
     def _write_queue_manifest(
         self,
@@ -720,23 +610,15 @@ class AcquisitionTableManager(QWidget):
         queue_uuid: str,
         created_at: str,
     ) -> None:
-        """Atomically (re)write the queue-level resume manifest."""
-        try:
-            write_queue_manifest(
-                path,
-                QueueResumeManifest(
-                    uuid=queue_uuid,
-                    state=state,
-                    row_index=row_index,
-                    rows=rows,
-                    row_uuids=row_uuids,
-                    row_hash=hash_queue_rows(rows),
-                    created_at=created_at,
-                    save_directory=str(path.parent),
-                ),
-            )
-        except OSError as e:
-            logger.warning("could not write queue manifest %s: %s", path, e)
+        """Atomically (re)write the queue-level resume manifest.
+
+        The body lives in ``queue_resume.write_queue_manifest`` — this
+        method is a one-line delegate so ``_start_queue`` resolves
+        unchanged.
+        """
+        queue_resume.write_queue_manifest(
+            self, path, state, row_index, rows, row_uuids, queue_uuid, created_at
+        )
 
     # ------------------------------------------------------------------ #
     # Internal helpers
