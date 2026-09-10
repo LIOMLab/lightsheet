@@ -37,20 +37,50 @@ is captured as a JSON list of ``{"type": ..., "value": ...}`` dicts.
 references module-level names (``datetime``, ``logger``, ``np``) from
 there; the exec namespace is seeded with them so the body resolves them
 at call time.
+
+Two further capture families widen the net beyond ``acquire_scan``:
+
+* ``capture_stack_sequence`` execs the real ``StackWorker.run`` body
+  (sliced from ``lightsheet/gui/workers/stack.py``) against a Mock
+  stand-in and records ONE ordered call list — every ``sig_message`` /
+  ``sig_progress_update`` / ``sig_beep`` emission plus the setup and
+  teardown calls (``_fs.set_files``/``start_saving``/``stop_saving``,
+  ``camera.arm_scan``/``disarm``, ``_hw.start_lasers``/``stop_lasers``,
+  ``siggen.update_etls``, ``finished.emit``, ``pause_requested.clear``)
+  — so the emission contract AND the cleanup ordering are both pinned.
+  Every method ``run()`` invokes through ``self.`` is bound from the
+  real ``StackWorker`` class via ``types.MethodType`` (``acquire_scan``
+  is the one deliberate Mock — it has its own golden coverage), so a
+  future in-file split of ``run()`` into phase helpers resolves to real
+  bodies here instead of being swallowed by Mock auto-attrs.
+* ``capture_manifest_lifecycle`` drives the REAL ``FrameSaver`` (no
+  exec) with a minimal ``QObject`` shell stand-in and a tmp save
+  directory, snapshotting the ``.resume.json`` sidecar after each
+  lifecycle step (set_files -> staged updates -> cursor commit ->
+  stop_saving finalize). Nondeterminism (UUIDs, timestamps, absolute
+  paths, the safety-config fingerprint) is normalized before recording.
 """
 
 import datetime
+import inspect
 import json
 import logging
 import re
+import tempfile
+import threading
+import types
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
 
 import numpy as np
+from PySide6.QtCore import QObject
 
+import lightsheet.gui.workers.stack as _stack_mod
+from lightsheet.gui.coordinators.frame_saver_controller import FrameSaver
 from lightsheet.gui.coordinators.hardware_manager import HardwareManager
+from lightsheet.gui.workers.stack import StackWorker
 from lightsheet.hal import (
     DeviceBundle,
     MockCamera,
@@ -59,6 +89,7 @@ from lightsheet.hal import (
     MockMotors,
     MockSigGen,
 )
+from lightsheet.resume import ManifestUpdate
 
 _HERE = Path(__file__).resolve().parent
 _CONTROLLER_SRC = _HERE / ".." / ".." / "lightsheet" / "gui" / "controller.py"
@@ -68,6 +99,9 @@ _SCAN_MIXIN_SRC = (
 )
 _PREVIEW_LIVE_SINGLE_SRC = (
     _HERE / ".." / ".." / "lightsheet" / "gui" / "workers" / "preview_live_single.py"
+)
+_STACK_SRC = (
+    _HERE / ".." / ".." / "lightsheet" / "gui" / "workers" / "stack.py"
 )
 
 # Module-level logger the exec'd body references (controller.py:45).
@@ -92,7 +126,9 @@ def _slice_method(src: str, method_sig: str) -> str:
 
 
 def _load_method(
-    method_sig: str, src_path: str = str(_CONTROLLER_SRC)
+    method_sig: str,
+    src_path: str = str(_CONTROLLER_SRC),
+    extra_ns: dict[str, Any] | None = None,
 ) -> Callable[..., Any]:
     """Extract a method body from the given source file and return a callable.
 
@@ -100,7 +136,9 @@ def _load_method(
     to ``AcquisitionCoordinator`` in the god-object split). The exec
     namespace is seeded with the module-level names the body references
     (``datetime``, ``logger``, ``np``) so the function resolves them at
-    call time via its ``__globals__``.
+    call time via its ``__globals__``. ``extra_ns`` merges additional
+    names — pass ``dict(vars(<source module>))`` so the exec'd body
+    resolves every module-level name exactly as production does.
     """
     with Path(src_path).open(encoding="utf-8") as f:
         src = f.read()
@@ -110,6 +148,8 @@ def _load_method(
         "logger": _logger,
         "np": np,
     }
+    if extra_ns:
+        namespace.update(extra_ns)
     exec(compile(body, src_path, "exec"), namespace)
     func_name = method_sig.split("(")[0].strip()
     return namespace[func_name]
@@ -258,6 +298,437 @@ def _build_preview_standin() -> Mock:
     return standin
 
 
+# ---------------------------------------------------------------------------
+# Ordered-call recording helpers (stack + manifest captures)
+# ---------------------------------------------------------------------------
+
+
+def _json_safe_arg(value: Any) -> Any:
+    """Normalize a captured call argument to a JSON-safe deterministic value."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, np.ndarray):
+        return f"<ndarray shape={tuple(value.shape)} dtype={value.dtype}>"
+    if isinstance(value, (list, tuple)):
+        return [_json_safe_arg(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _json_safe_arg(v) for k, v in value.items()}
+    return f"<{type(value).__name__}>"
+
+
+def _call_recorder(
+    calls: list[dict],  # ty: ignore[missing-type-argument]
+    name: str,
+    fn: Callable[..., Any] | None = None,
+) -> Callable[..., Any]:
+    """Return a callable that appends a ``call`` entry to ``calls`` and
+    then invokes ``fn`` (when given) so the real behavior still runs."""
+
+    def _rec(*args: Any, **kwargs: Any) -> Any:
+        calls.append(
+            {
+                "type": "call",
+                "name": name,
+                "args": [_json_safe_arg(a) for a in args],
+                "kwargs": {
+                    str(k): _json_safe_arg(v) for k, v in kwargs.items()
+                },
+            }
+        )
+        if fn is not None:
+            return fn(*args, **kwargs)
+        return None
+
+    return _rec
+
+
+def _emit_recorder(calls: list[dict], sig_name: str) -> Callable[..., Any]:  # ty: ignore[missing-type-argument]
+    """Return an ``emit`` replacement recording the first positional arg."""
+
+    def _rec(*args: Any, **kwargs: Any) -> None:
+        calls.append(
+            {
+                "type": sig_name,
+                "value": _json_safe_arg(args[0]) if args else None,
+            }
+        )
+
+    return _rec
+
+
+def _wrap_call(
+    calls: list[dict],  # ty: ignore[missing-type-argument]
+    obj: Any,
+    attr: str,
+    name: str | None = None,
+) -> None:
+    """Shadow ``obj.attr`` with a recording wrapper that calls through to
+    the real implementation (instance-attribute shadowing — the class is
+    untouched)."""
+    orig = getattr(obj, attr)
+    setattr(obj, attr, _call_recorder(calls, name or attr, orig))
+
+
+# ---------------------------------------------------------------------------
+# StackWorker.run() emission/teardown capture
+# ---------------------------------------------------------------------------
+
+
+def _build_stack_standin(scenario: str) -> Mock:
+    """Build the Mock stand-in ``self`` for ``StackWorker.run``.
+
+    Same self-is-the-worker shape as ``_build_preview_standin``: HAL
+    attributes are the six ``Mock*`` classes and ``self._hw`` is a real
+    ``HardwareManager`` over a mock ``DeviceBundle`` so the
+    start/stop/select laser calls exercise real HardwareManager code.
+    ``self._shell`` is a Mock carrying the shell-owned state ``run()``
+    reads; ``saving_allowed`` is True so the teardown actually reaches
+    ``_fs.stop_saving(lifecycle=...)`` — the fixture's pinned cleanup
+    ordering — while ``_fs`` itself is a Mock so no filesystem is
+    touched.
+
+    Every ``StackWorker`` method is bound onto the stand-in from the
+    real class via ``types.MethodType`` — enumerating the class rather
+    than a hand-picked list keeps the harness correct across the planned
+    in-file ``run()`` split: a future ``self._run_setup()`` /
+    ``_run_plane_loop()`` / ``_run_teardown()`` call resolves to the real
+    body here instead of being silently swallowed by a Mock auto-attr.
+    """
+    from lightsheet.state.types import MicroscopeSnapshot
+
+    calls: list[dict] = []  # ty: ignore[missing-type-argument]
+
+    camera = MockCamera()
+    siggen = MockSigGen(camera)
+    siggen.compute_scan_waveforms()
+    motors = MockMotors()
+    etls = MockETLs()
+    lasers = (
+        MockLaser(wavelength=555, max_power_mw=300.0, label="Laser 1 (555 nm)"),
+        MockLaser(wavelength=647, max_power_mw=150.0, label="Laser 2 (647 nm)"),
+    )
+    bundle = DeviceBundle(
+        camera=camera, siggen=siggen, motors=motors, etls=etls, lasers=lasers
+    )
+
+    shell = Mock()
+    shell.saving_allowed = True
+    shell.stack_mode_started = True
+    shell.estop_event = threading.Event()
+    shell.pause_requested = threading.Event()
+    shell.number_of_planes = 3
+    shell.save_filepath = "stack_save"
+    shell.stack_starting_plane = 0.0
+    shell.stack_step = 10000.0
+    shell._laser_watchdog = None
+    shell.reconstructed_frame = np.zeros((4, 4), dtype=np.uint16)
+    shell.buffer = np.zeros((4, 4, 4), dtype=np.uint16)
+    shell.reconstructed_frames = {}
+
+    # Signal Mocks — emit calls append to the shared ordered call list.
+    for sig_name in (
+        "sig_message",
+        "sig_progress_update",
+        "sig_beep",
+        "sig_refresh_position_horizontal",
+        "sig_refresh_position_camera",
+    ):
+        sig = Mock()
+        sig.emit.side_effect = _emit_recorder(calls, sig_name)
+        setattr(shell, sig_name, sig)
+
+    # The save side is a Mock — the fixture pins WHICH calls run() makes
+    # (and their order), not the save internals (covered by the manifest
+    # capture and the coordinator tests).
+    fs = Mock()
+    for meth in (
+        "reinit",
+        "add_sample_name",
+        "set_files",
+        "start_saving",
+        "configure_adaptive",
+        "configure_focus",
+        "add_motor_parameters",
+        "enqueue_buffer",
+        "record_focus_sample",
+        "stop_saving",
+    ):
+        getattr(fs, meth).side_effect = _call_recorder(calls, f"fs.{meth}")
+    fs.manifest_update_queue = Mock()
+    fs.manifest_update_queue.put_nowait.side_effect = _call_recorder(
+        calls, "fs.manifest_update_queue.put_nowait"
+    )
+    shell._fs = fs
+
+    # The pause-event clear in teardown is part of the pinned ordering —
+    # wrap it on the instance so the record lands after finished.emit.
+    _real_pause_clear = shell.pause_requested.clear
+    shell.pause_requested.clear = _call_recorder(  # ty: ignore[invalid-assignment]
+        calls, "pause_requested.clear", _real_pause_clear
+    )
+
+    hw = HardwareManager(bundle, shell)
+
+    standin = Mock()
+    standin.camera = camera
+    standin.siggen = siggen
+    standin.motors = motors
+    standin.etls = etls
+    standin.lasers = list(lasers)
+    standin._hw = hw
+    standin._shell = shell
+
+    # Worker ctor attrs — the pre-sampled values __init__ would have set.
+    standin._save_description = "sample"
+    standin._save_stitch_blend = False
+    standin._save_all_crop = False
+    standin._save_all_full = False
+    standin._multi_channel = False
+    standin._start_plane = 0
+    standin._run_completed = False
+    standin._resume_manifest = None
+    standin._wavelengths = [647]
+    standin._adaptive_cfg = None
+    standin._adaptive_controller = None
+    standin._adaptive_current_cmd = None
+    standin._focus_cfg = None
+    standin._focus_controller = None
+    standin._focus_block_count = 0
+    standin._focus_curve = None
+    standin._autofocus_cfg = None
+    standin._autofocus_controller = None
+    standin._autofocus_curve = None
+    standin._snapshot = MicroscopeSnapshot(
+        lightsheet_line_time_s=1.0,
+        laser_power_pct=(50.0, 50.0),
+        auto_lasers=(False, True),
+    )
+
+    # Record the HAL-touching calls so the setup/teardown ordering is in
+    # the same ordered list as the signal emissions.
+    _wrap_call(calls, camera, "arm_scan", "camera.arm_scan")
+    _wrap_call(calls, camera, "disarm", "camera.disarm")
+    _wrap_call(calls, siggen, "compute_scan_waveforms", "siggen.compute_scan_waveforms")
+    _wrap_call(calls, siggen, "update_etls", "siggen.update_etls")
+    _wrap_call(calls, motors, "get_positions", "motors.get_positions")
+    _wrap_call(calls, motors, "move_axes_parallel", "motors.move_axes_parallel")
+    _wrap_call(
+        calls,
+        motors.horizontal,
+        "move_absolute_position",
+        "motors.horizontal.move_absolute_position",
+    )
+    _wrap_call(calls, hw, "start_lasers", "hw.start_lasers")
+    _wrap_call(calls, hw, "stop_lasers", "hw.stop_lasers")
+    _wrap_call(calls, hw, "select_laser", "hw.select_laser")
+
+    # Worker-side signals (finished + the trajectory/status signals).
+    standin.finished = Mock()
+    standin.finished.emit.side_effect = _call_recorder(calls, "finished.emit")
+    for sig_name in (
+        "sig_adaptive_trajectory",
+        "sig_focus_trajectory",
+        "sig_autofocus_status",
+        "sig_applied_state",
+    ):
+        sig = Mock()
+        sig.emit.side_effect = _emit_recorder(calls, sig_name)
+        setattr(standin, sig_name, sig)
+
+    # Bind EVERY real StackWorker method (incl. mixin members) onto the
+    # stand-in so no self.-routed call can be swallowed by a Mock
+    # auto-attr — this is what keeps the fixture honest across the
+    # planned in-file run() split.
+    for name, member in inspect.getmembers(
+        StackWorker, predicate=inspect.isfunction
+    ):
+        if name.startswith("__") and name.endswith("__"):
+            # Mock forbids magic-method attribute sets, and run() never
+            # dispatches to one through self. anyway.
+            continue
+        setattr(
+            standin,
+            name,
+            _call_recorder(calls, name, types.MethodType(member, standin)),
+        )
+
+    # The two deliberate overrides: acquire_scan is a Mock returning True
+    # (it has its own golden coverage — this capture pins run()'s
+    # skeleton, not the scan internals), and run is the exec'd body the
+    # harness drives.
+    standin.acquire_scan = _call_recorder(calls, "acquire_scan", lambda: True)
+    run_fn = _load_method(
+        "run(self) -> None",
+        src_path=str(_STACK_SRC),
+        extra_ns=dict(vars(_stack_mod)),
+    )
+    standin.run = _call_recorder(
+        calls, "run", types.MethodType(run_fn, standin)
+    )
+
+    standin._calls = calls
+    return standin
+
+
+def capture_stack_sequence(scenario: str) -> list[dict]:  # ty: ignore[missing-type-argument]
+    """Run the real ``StackWorker.run`` body against a Mock stand-in and
+    return the ordered emission/teardown call list.
+
+    Scenarios:
+
+    * ``stack_completed`` — happy path, 3 planes: progress reset, the
+      per-plane move/acquire/enqueue/progress sequence, the
+      ``_run_completed`` path to ``stop_saving(lifecycle="completed")``,
+      then the ETL/laser/disarm/finished teardown order.
+    * ``stack_estop`` — ``estop_event`` set before run: the pre-stop
+      guard skips ``start_lasers``, the first loop-top poll breaks with
+      "Stack Acquisition Interrupted", teardown records
+      ``lifecycle="interrupted"``.
+    * ``stack_paused`` — ``pause_requested`` set before run: the
+      loop-top pause poll breaks with "Stack Acquisition Paused",
+      teardown records ``lifecycle="paused"`` and clears the pause
+      event last.
+    """
+    if scenario not in ("stack_completed", "stack_estop", "stack_paused"):
+        raise ValueError(f"unknown stack scenario: {scenario!r}")
+    standin = _build_stack_standin(scenario)
+    if scenario == "stack_estop":
+        standin._shell.estop_event.set()
+    elif scenario == "stack_paused":
+        standin._shell.pause_requested.set()
+    standin.run()
+    return standin._calls
+
+
+# ---------------------------------------------------------------------------
+# Resume-manifest lifecycle capture (drives the real FrameSaver — no exec)
+# ---------------------------------------------------------------------------
+
+
+class _ManifestShell(QObject):
+    """Minimal ``QObject`` shell stand-in for the real ``FrameSaver``.
+
+    ``FrameSaver`` is a ``QObject`` that parents itself to the shell and
+    connects ``sig_status_message`` to ``updateUi_message_printer``, so
+    the stand-in must be a real ``QObject`` — a bare Mock cannot be a
+    QObject parent.
+    """
+
+    def __init__(self, save_directory: str) -> None:
+        super().__init__()
+        self.save_format = "hdf5"
+        self.save_directory = save_directory
+        self.save_filepath = str(Path(save_directory) / "stack_save")
+        self.estop_event = threading.Event()
+        self.motors = MockMotors()
+        self.stack_starting_plane = 0.0
+        self.stack_ending_plane = 20000.0
+        self.stack_step = 10000.0
+        self.messages: list[str] = []
+
+    def updateUi_message_printer(self, message: str) -> None:
+        self.messages.append(message)
+
+
+def _normalize_manifest(d: dict[str, Any]) -> dict[str, Any]:
+    """Strip nondeterministic fields from a manifest dict so the fixture
+    is stable: UUIDs, timestamps, absolute paths, and the safety-config
+    fingerprint (whose content depends on the machine's config overlay)."""
+    out = dict(d)
+    if out.get("uuid"):
+        out["uuid"] = "<UUID>"
+    if out.get("created_at"):
+        out["created_at"] = "<TS>"
+    if out.get("completed_at"):
+        out["completed_at"] = "<TS>"
+    if out.get("save_filepath"):
+        out["save_filepath"] = Path(out["save_filepath"]).name
+    if out.get("safety_config"):
+        out["safety_config"] = "<normalized>"
+    cursors = out.get("cursors") or {}
+    out["cursors"] = {
+        fmt: {Path(k).name: v for k, v in group.items()}
+        for fmt, group in cursors.items()
+    }
+    return out
+
+
+def _snapshot_manifest(saver: FrameSaver, step: str) -> dict[str, Any]:
+    """Read the on-disk sidecar JSON and return a normalized step record."""
+    path = saver._manifest_path
+    data: dict[str, Any] = {}
+    if path is not None and Path(path).is_file():
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    norm = _normalize_manifest(data)
+    return {
+        "step": step,
+        "state": norm.get("state"),
+        "cursors": norm.get("cursors"),
+        "manifest": norm,
+    }
+
+
+def capture_manifest_lifecycle(scenario: str) -> list[dict]:  # ty: ignore[missing-type-argument]
+    """Drive the real ``FrameSaver`` manifest lifecycle and record the
+    on-disk sidecar after each step.
+
+    The capture calls the same public/underscored surface the save
+    workers and ``stop_saving`` use (``set_files`` ->
+    ``manifest_update_queue.put`` -> ``_drain_manifest_updates`` ->
+    ``_commit_manifest_cursor`` -> ``stop_saving`` -> ``_finalize_manifest``),
+    so it replays unchanged whether those bodies live on ``FrameSaver``
+    or on an extracted collaborator behind delegate methods.
+    """
+    if scenario != "manifest_lifecycle":
+        raise ValueError(f"unknown manifest scenario: {scenario!r}")
+    steps: list[dict] = []  # ty: ignore[missing-type-argument]
+    with tempfile.TemporaryDirectory() as td:
+        shell = _ManifestShell(td)
+        saver = FrameSaver(shell)  # ty: ignore[invalid-argument-type]
+
+        # 1. set_files mints the acquisition UUID and writes the initial
+        # sidecar with state="in_progress".
+        saver.set_files(
+            1, "stack_save", "stack", 3, "reconstructed_frame", wavelengths=[647]
+        )
+        steps.append(_snapshot_manifest(saver, "set_files"))
+
+        # 2. Updates staged on the cross-thread queue apply to the
+        # in-memory manifest on drain but are NOT persisted by the drain
+        # alone — the on-disk snapshot must still show the pre-drain
+        # state (the save worker is the sole writer contract).
+        saver.manifest_update_queue.put(
+            ManifestUpdate(
+                kind="motor_position",
+                payload={"horizontal position": 1.5},
+            )
+        )
+        saver.manifest_update_queue.put(
+            ManifestUpdate(
+                kind="cursor",
+                payload={
+                    "format": "hdf5",
+                    "key": saver.filenames_list[0],
+                    "value": 1,
+                },
+            )
+        )
+        saver._drain_manifest_updates()
+        steps.append(_snapshot_manifest(saver, "drain_updates"))
+
+        # 3. A durable cursor commit drains staged updates, applies its
+        # own cursor, and writes the sidecar.
+        saver._commit_manifest_cursor("hdf5", saver.filenames_list[0], 2)
+        steps.append(_snapshot_manifest(saver, "commit_cursor"))
+
+        # 4. stop_saving stages the final motor positions + lifecycle,
+        # flips saving_started, and (no worker thread here) the post-join
+        # _finalize_manifest drains and writes the terminal state.
+        saver.stop_saving(lifecycle="completed")
+        steps.append(_snapshot_manifest(saver, "stop_saving_completed"))
+    return steps
+
+
 def capture_acquisition_sequence(scenario: str) -> list[dict]:  # ty: ignore[missing-type-argument]
     """Run the real acquire_scan body against a Mock stand-in and return
     the ordered ``sig_message`` / ``sig_progress_update`` emit sequence.
@@ -297,6 +768,10 @@ def capture_acquisition_sequence(scenario: str) -> list[dict]:  # ty: ignore[mis
     "sig_progress", "value": <first positional arg>}`` dicts in emission
     order.
     """
+    if scenario in ("stack_completed", "stack_estop", "stack_paused"):
+        return capture_stack_sequence(scenario)
+    if scenario == "manifest_lifecycle":
+        return capture_manifest_lifecycle(scenario)
     if scenario not in ("default", "siggen_create_scanner_fail", "preview_auto_laser"):
         raise ValueError(f"unknown scenario: {scenario!r}")
 
@@ -347,6 +822,10 @@ if __name__ == "__main__":
         "default": base / "default.json",
         "siggen_create_scanner_fail": base / "siggen_create_scanner_fail.json",
         "preview_auto_laser": base / "preview_auto_laser.json",
+        "stack_completed": base / "stack_completed.json",
+        "stack_estop": base / "stack_estop.json",
+        "stack_paused": base / "stack_paused.json",
+        "manifest_lifecycle": base / "manifest_lifecycle.json",
     }
     for name, path in scenarios.items():
         record_acquisition(str(path), name)

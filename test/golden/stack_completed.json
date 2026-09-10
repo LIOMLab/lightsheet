@@ -1,0 +1,312 @@
+[
+  {
+    "type": "call",
+    "name": "run",
+    "args": [],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "fs.reinit",
+    "args": [
+      3
+    ],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "fs.add_sample_name",
+    "args": [
+      "sample"
+    ],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "fs.set_files",
+    "args": [
+      1,
+      "stack_save",
+      "stack",
+      3,
+      "reconstructed_frame"
+    ],
+    "kwargs": {
+      "wavelengths": [
+        647
+      ]
+    }
+  },
+  {
+    "type": "call",
+    "name": "fs.start_saving",
+    "args": [],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "fs.configure_adaptive",
+    "args": [
+      false
+    ],
+    "kwargs": {
+      "config": null
+    }
+  },
+  {
+    "type": "call",
+    "name": "fs.configure_focus",
+    "args": [
+      false
+    ],
+    "kwargs": {
+      "config": null
+    }
+  },
+  {
+    "type": "call",
+    "name": "camera.arm_scan",
+    "args": [],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "hw.start_lasers",
+    "args": [],
+    "kwargs": {
+      "snapshot": "<MicroscopeSnapshot>"
+    }
+  },
+  {
+    "type": "sig_progress_update",
+    "value": 0
+  },
+  {
+    "type": "call",
+    "name": "siggen.compute_scan_waveforms",
+    "args": [],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "motors.horizontal.move_absolute_position",
+    "args": [
+      0.0,
+      "\u03bcm"
+    ],
+    "kwargs": {}
+  },
+  {
+    "type": "sig_refresh_position_horizontal",
+    "value": null
+  },
+  {
+    "type": "call",
+    "name": "motors.get_positions",
+    "args": [],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "fs.add_motor_parameters",
+    "args": [
+      "0.0000 mm",
+      "0.0000 mm",
+      "0.0000 mm"
+    ],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "acquire_scan",
+    "args": [],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "_record_adaptive_step",
+    "args": [
+      0
+    ],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "fs.enqueue_buffer",
+    "args": [
+      "<ndarray shape=(4, 4) dtype=uint16>"
+    ],
+    "kwargs": {}
+  },
+  {
+    "type": "sig_message",
+    "value": "Saving Reconstructed Image"
+  },
+  {
+    "type": "sig_progress_update",
+    "value": 1
+  },
+  {
+    "type": "call",
+    "name": "motors.horizontal.move_absolute_position",
+    "args": [
+      10000.0,
+      "\u03bcm"
+    ],
+    "kwargs": {}
+  },
+  {
+    "type": "sig_refresh_position_horizontal",
+    "value": null
+  },
+  {
+    "type": "call",
+    "name": "motors.get_positions",
+    "args": [],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "fs.add_motor_parameters",
+    "args": [
+      "9.9999 mm",
+      "0.0000 mm",
+      "0.0000 mm"
+    ],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "acquire_scan",
+    "args": [],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "_record_adaptive_step",
+    "args": [
+      1
+    ],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "fs.enqueue_buffer",
+    "args": [
+      "<ndarray shape=(4, 4) dtype=uint16>"
+    ],
+    "kwargs": {}
+  },
+  {
+    "type": "sig_message",
+    "value": "Saving Reconstructed Image"
+  },
+  {
+    "type": "sig_progress_update",
+    "value": 2
+  },
+  {
+    "type": "call",
+    "name": "motors.horizontal.move_absolute_position",
+    "args": [
+      20000.0,
+      "\u03bcm"
+    ],
+    "kwargs": {}
+  },
+  {
+    "type": "sig_refresh_position_horizontal",
+    "value": null
+  },
+  {
+    "type": "call",
+    "name": "motors.get_positions",
+    "args": [],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "fs.add_motor_parameters",
+    "args": [
+      "19.9998 mm",
+      "0.0000 mm",
+      "0.0000 mm"
+    ],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "acquire_scan",
+    "args": [],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "_record_adaptive_step",
+    "args": [
+      2
+    ],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "fs.enqueue_buffer",
+    "args": [
+      "<ndarray shape=(4, 4) dtype=uint16>"
+    ],
+    "kwargs": {}
+  },
+  {
+    "type": "sig_message",
+    "value": "Saving Reconstructed Image"
+  },
+  {
+    "type": "sig_progress_update",
+    "value": 3
+  },
+  {
+    "type": "sig_progress_update",
+    "value": 3
+  },
+  {
+    "type": "call",
+    "name": "fs.stop_saving",
+    "args": [],
+    "kwargs": {
+      "lifecycle": "completed"
+    }
+  },
+  {
+    "type": "call",
+    "name": "siggen.update_etls",
+    "args": [],
+    "kwargs": {
+      "left_etl": 2.5,
+      "right_etl": 2.5
+    }
+  },
+  {
+    "type": "call",
+    "name": "hw.stop_lasers",
+    "args": [],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "camera.disarm",
+    "args": [],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "finished.emit",
+    "args": [],
+    "kwargs": {}
+  },
+  {
+    "type": "call",
+    "name": "pause_requested.clear",
+    "args": [],
+    "kwargs": {}
+  }
+]

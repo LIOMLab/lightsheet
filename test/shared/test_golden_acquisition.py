@@ -33,6 +33,18 @@ Two scenarios are replayed:
   differs from a hypothetical pre-split re-recording: before the fold,
   ``preview_mode_worker`` did not call ``start_lasers``/``stop_lasers``
   at all.
+* ``stack_completed`` / ``stack_estop`` / ``stack_paused`` — the
+  ``StackWorker.run()`` emission + teardown skeleton: the ordered
+  ``sig_*`` emissions AND the cleanup call order
+  (``fs.stop_saving(lifecycle=...)`` → ``siggen.update_etls`` →
+  ``hw.stop_lasers`` → ``camera.disarm`` → ``finished.emit`` →
+  ``pause_requested.clear``). The manifest lifecycle string differs per
+  exit path: completed / interrupted / paused.
+* ``manifest_lifecycle`` — the resume-manifest sidecar lifecycle driven
+  through the real ``FrameSaver``: ``in_progress`` at ``set_files``,
+  staged updates held in memory by ``_drain_manifest_updates`` (not
+  persisted), the durable ``_commit_manifest_cursor`` write, and the
+  ``stop_saving(lifecycle="completed")`` finalize.
 """
 
 import json
@@ -48,6 +60,10 @@ _SCENARIOS = [
     "default",
     "siggen_create_scanner_fail",
     "preview_auto_laser",
+    "stack_completed",
+    "stack_estop",
+    "stack_paused",
+    "manifest_lifecycle",
 ]
 
 

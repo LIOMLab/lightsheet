@@ -1,0 +1,164 @@
+[
+  {
+    "step": "set_files",
+    "state": "in_progress",
+    "cursors": {},
+    "manifest": {
+      "uuid": "<UUID>",
+      "state": "in_progress",
+      "n_planes": 3,
+      "stack_starting_plane": 0.0,
+      "stack_ending_plane": 20000.0,
+      "stack_step": 10000.0,
+      "save_mode": "stitch",
+      "created_at": "<TS>",
+      "start_plane": 0,
+      "wavelengths": [
+        647
+      ],
+      "multi_channel": false,
+      "adaptive_cfg": null,
+      "focus_cfg": null,
+      "safety_config": "<normalized>",
+      "last_motor_positions": {},
+      "cursors": {},
+      "trajectory_samples": [],
+      "controller_checkpoints": [],
+      "completed_at": null,
+      "row_index": null,
+      "laser_power_pct": null,
+      "laser_enabled": null,
+      "auto_lasers": null,
+      "save_options": null,
+      "lightsheet_line_time_s": null,
+      "save_filepath": "stack_save"
+    }
+  },
+  {
+    "step": "drain_updates",
+    "state": "in_progress",
+    "cursors": {},
+    "manifest": {
+      "uuid": "<UUID>",
+      "state": "in_progress",
+      "n_planes": 3,
+      "stack_starting_plane": 0.0,
+      "stack_ending_plane": 20000.0,
+      "stack_step": 10000.0,
+      "save_mode": "stitch",
+      "created_at": "<TS>",
+      "start_plane": 0,
+      "wavelengths": [
+        647
+      ],
+      "multi_channel": false,
+      "adaptive_cfg": null,
+      "focus_cfg": null,
+      "safety_config": "<normalized>",
+      "last_motor_positions": {},
+      "cursors": {},
+      "trajectory_samples": [],
+      "controller_checkpoints": [],
+      "completed_at": null,
+      "row_index": null,
+      "laser_power_pct": null,
+      "laser_enabled": null,
+      "auto_lasers": null,
+      "save_options": null,
+      "lightsheet_line_time_s": null,
+      "save_filepath": "stack_save"
+    }
+  },
+  {
+    "step": "commit_cursor",
+    "state": "in_progress",
+    "cursors": {
+      "hdf5": {
+        "stack_save_647nm.hdf5": 2
+      }
+    },
+    "manifest": {
+      "uuid": "<UUID>",
+      "state": "in_progress",
+      "n_planes": 3,
+      "stack_starting_plane": 0.0,
+      "stack_ending_plane": 20000.0,
+      "stack_step": 10000.0,
+      "save_mode": "stitch",
+      "created_at": "<TS>",
+      "start_plane": 0,
+      "wavelengths": [
+        647
+      ],
+      "multi_channel": false,
+      "adaptive_cfg": null,
+      "focus_cfg": null,
+      "safety_config": "<normalized>",
+      "last_motor_positions": {
+        "horizontal position": 1.5
+      },
+      "cursors": {
+        "hdf5": {
+          "stack_save_647nm.hdf5": 2
+        }
+      },
+      "trajectory_samples": [],
+      "controller_checkpoints": [],
+      "completed_at": null,
+      "row_index": null,
+      "laser_power_pct": null,
+      "laser_enabled": null,
+      "auto_lasers": null,
+      "save_options": null,
+      "lightsheet_line_time_s": null,
+      "save_filepath": "stack_save"
+    }
+  },
+  {
+    "step": "stop_saving_completed",
+    "state": "completed",
+    "cursors": {
+      "hdf5": {
+        "stack_save_647nm.hdf5": 2
+      }
+    },
+    "manifest": {
+      "uuid": "<UUID>",
+      "state": "completed",
+      "n_planes": 3,
+      "stack_starting_plane": 0.0,
+      "stack_ending_plane": 20000.0,
+      "stack_step": 10000.0,
+      "save_mode": "stitch",
+      "created_at": "<TS>",
+      "start_plane": 0,
+      "wavelengths": [
+        647
+      ],
+      "multi_channel": false,
+      "adaptive_cfg": null,
+      "focus_cfg": null,
+      "safety_config": "<normalized>",
+      "last_motor_positions": {
+        "horizontal position": 0.0,
+        "vertical position": 0.0,
+        "camera position": 0.0
+      },
+      "cursors": {
+        "hdf5": {
+          "stack_save_647nm.hdf5": 2
+        }
+      },
+      "trajectory_samples": [],
+      "controller_checkpoints": [],
+      "completed_at": "<TS>",
+      "row_index": null,
+      "laser_power_pct": null,
+      "laser_enabled": null,
+      "auto_lasers": null,
+      "save_options": null,
+      "lightsheet_line_time_s": null,
+      "save_filepath": "stack_save"
+    }
+  }
+]
