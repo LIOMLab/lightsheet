@@ -30,6 +30,7 @@ from lightsheet.gui.coordinators.reconstruction import (
     reconstruct_frame_linear_blend,
 )
 from lightsheet.gui.coordinators.save_manifest import ManifestRecorder
+from lightsheet.gui.coordinators.save_workers import run_hdf5_save_loop
 from lightsheet.gui.coordinators.zarr_saver import ZarrSaver
 from lightsheet.hal.bundle import DeviceBundle
 from lightsheet.resume import (
@@ -971,187 +972,12 @@ class FrameSaver(QObject):
         ``filenames_list`` from ``filenames_lists[0]`` so the single-
         channel save loop is byte-identical except for the filename
         suffix.
+
+        The body lives in ``save_workers.run_hdf5_save_loop`` — this
+        method is a one-line delegate so ``FrameSaverWorker.start_saving``'s
+        format dispatch and every test patch target resolve unchanged.
         """
-        if len(self.filenames_lists) > 1:
-            self._frame_saver_worker_multi_channel()
-            return
-        aborted = False
-        # set_files may not have run (direct-worker tests); the offset
-        # math only applies once a fileset exists.
-        n_ds = int(getattr(self, "number_of_datasets", 1) or 1)
-        # Resume offset: split the common resume plane into the starting
-        # file index and the 1-based dataset counter within that file,
-        # so appended datasets continue the torn file's numbering.
-        resume_offset = self._common_resume_plane
-        start_file_idx = resume_offset // n_ds if n_ds else 0
-        for idx in range(start_file_idx, len(self.filenames_list)):
-            logger.info("File created: %s", self.filenames_list[idx])
-            outfile: h5py.File | None = None
-            try:
-                # Create file
-                outfile = h5py.File(self.filenames_list[idx], "a")
-                # Write per-laser metadata as file-level root attrs once per
-                # file, read from the live list[ILaser] the controller holds
-                # (never re-parsed from config.ini — fixes the config-drift
-                # metadata bug). All configured lasers are included, even
-                # inactive ones (power=0, active=False), for reproducibility.
-                self._write_laser_metadata(outfile)
-                # Write motor + scan-param + camera root attrs from the
-                # live IMotor / SigGen / camera instances (the motor +
-                # scan-param half of SAV-03). Same config-drift contract:
-                # live instances only, never re-parse config.ini.
-                self._write_acquisition_metadata(outfile)
-            except Exception as e:
-                # A file-creation or metadata-write error (disk full,
-                # permission denied, HDF5 corruption at open) must surface
-                # to the operator and stop the worker — same IN-04 contract
-                # as the per-dataset error handler below. Without this, a
-                # failure to open the file would propagate out of the worker
-                # thread as an unhandled exception and the operator would
-                # see no message, just a silently-dead save worker.
-                # Close the partially opened file before leaving so the
-                # descriptor is not leaked.
-                if outfile is not None:
-                    with contextlib.suppress(Exception):
-                        outfile.close()
-                self.sig_status_message.emit(f"Save error: {e}")
-                self.saving_started = False
-                break
-
-            counter = (resume_offset % n_ds) + 1 if idx == start_file_idx else 1
-            for dataset in range(counter - 1, n_ds):
-                while True:
-                    try:
-                        # Retrieve buffer
-                        buffer: np.ndarray = self.queue.get(True, 1)
-                        if buffer.ndim == 2:
-                            buffer = np.expand_dims(
-                                buffer, axis=0
-                            )  # To consider 2D arrays as a 3D array
-                        for frame in range(buffer.shape[0]):  # For each 2D frame
-                            # Create dataset
-                            path_root = self.datasets_name + f"{counter:03d}"
-                            self.dataset = outfile.create_dataset(
-                                path_root, data=buffer[frame, :, :]
-                            )
-                            logger.info(
-                                "Dataset %s/%s created: %s",
-                                dataset,
-                                int(self.number_of_datasets),
-                                path_root,
-                            )
-
-                            # Add attributes
-                            self.dataset.attrs["Sample Name"] = self.sample_name
-                            self.dataset.attrs["Date"] = str(datetime.date.today())
-
-                            if buffer.shape[0] == 1:
-                                pos_index = dataset + idx * int(self.number_of_datasets)
-                            else:
-                                pos_index = idx
-
-                            # Guard against empty/short position lists —
-                            # the multi-channel and both paths already guard
-                            # the same access. Without this, a save started
-                            # before add_motor_parameters has populated the
-                            # lists aborts the whole stack with an
-                            # IndexError on the first dataset.
-                            if pos_index < len(self.horizontal_positions_list):
-                                self.dataset.attrs["Horizontal Position"] = (
-                                    self.horizontal_positions_list[pos_index]
-                                )
-                                self.dataset.attrs["Vertical Position"] = (
-                                    self.vertical_positions_list[pos_index]
-                                )
-                                self.dataset.attrs["Camera Position"] = (
-                                    self.camera_positions_list[pos_index]
-                                )
-
-                            counter += 1
-                            # The committed-plane cursor advances only
-                            # after create_dataset + attrs have returned —
-                            # it is the durable-on-disk truth, not the
-                            # count of frames the producer enqueued. The
-                            # cursor is keyed by the channel's first file
-                            # path (same convention as the multi-channel
-                            # worker) so the resume resolution layer can
-                            # find the torn fileset.
-                            self._commit_manifest_cursor(
-                                "hdf5",
-                                self.filenames_list[0],
-                                idx * n_ds + counter - 1,
-                            )
-                        break
-                    except queue.Empty:
-                        # Timeout waiting for a buffer — stop_saving()
-                        # may have flipped the flag. If so, drain any
-                        # remaining frames with a non-blocking get before
-                        # exiting — in demo mode (and on fast rigs) the
-                        # acquisition queues all frames near-instantly,
-                        # then stop_saving() flips the flag while frames
-                        # are still in the queue. Only break if the queue
-                        # is truly empty (genuine abort or all frames
-                        # consumed).
-                        if not self.saving_started:
-                            try:
-                                buffer = self.queue.get_nowait()
-                            except queue.Empty:
-                                aborted = True
-                                break
-                        else:
-                            continue
-                    except Exception as e:
-                        # A non-timeout exception (e.g. h5py write error:
-                        # disk full, HDF5 corruption) must not be swallowed
-                        # and silently retried — surface it to the operator
-                        # and stop saving so we do not keep writing to a
-                        # corrupted file. The pre-extraction code caught
-                        # all exceptions here and treated them as timeouts,
-                        # which let a write error pass silently and the
-                        # worker proceeded to the next dataset on a
-                        # potentially corrupt file.
-                        self.sig_status_message.emit(f"Save error: {e}")
-                        self.saving_started = False
-                        aborted = True
-                        break
-                if aborted:
-                    break
-            # Write the adaptive trajectory group before file close.
-            # Only writes when adaptive was enabled and samples were
-            # recorded. Stitch (1 file) writes the full trajectory;
-            # per-plane (N files) writes this file's plane rows
-            # (file_idx * n_datasets .. file_idx * n_datasets + n_datasets).
-            # Cap the row count to the datasets actually written
-            # (counter - 1) so a file aborted mid-fill does not end up
-            # with more trajectory rows than image datasets.
-            try:
-                self._write_adaptive_hdf5_for_file(
-                    outfile,
-                    idx,
-                    len(self.filenames_list),
-                    int(self.number_of_datasets),
-                    actual_n_datasets=counter - 1,
-                )
-                self._write_focus_hdf5_for_file(
-                    outfile,
-                    idx,
-                    len(self.filenames_list),
-                    int(self.number_of_datasets),
-                    actual_n_datasets=counter - 1,
-                )
-            except Exception as e:
-                self.sig_status_message.emit(f"Save error: {e}")
-                self.saving_started = False
-                outfile.close()
-                break
-            outfile.close()
-            self.sig_status_message.emit("File " + self.filenames_list[idx] + " saved")
-            if aborted:
-                break
-        self._finalize_manifest()
-        logger.info(
-            "frame_saver_worker exited (saving_started=%s)", self.saving_started
-        )
+        run_hdf5_save_loop(self)
 
     def _frame_saver_worker_multi_channel(self) -> None:
         """Multi-channel HDF5 save loop body.
