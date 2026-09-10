@@ -10,9 +10,7 @@ shell reference. The ``FrameSaver.sig_status_message`` →
 
 from __future__ import annotations
 
-import contextlib
 import dataclasses
-import datetime
 import logging
 import queue
 from pathlib import Path
@@ -24,14 +22,18 @@ from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from lightsheet.gui.coordinators.frame_viewer import FrameViewer
 from lightsheet.gui.coordinators.reconstruction import (
-    _position_to_float,
+    _position_to_float as _position_to_float,  # re-export: tests import it from here
+)
+from lightsheet.gui.coordinators.reconstruction import (
     crop_buffer,
     reconstruct_frame,
     reconstruct_frame_linear_blend,
 )
 from lightsheet.gui.coordinators.save_manifest import ManifestRecorder
 from lightsheet.gui.coordinators.save_workers import (
+    run_both_multi_channel_save_loop,
     run_both_save_loop,
+    run_hdf5_multi_channel_save_loop,
     run_hdf5_save_loop,
     run_zarr_save_loop,
 )
@@ -106,6 +108,13 @@ class FrameSaver(QObject):
         self.saving_started = False
         self.block_size = block_size
         self.queue = queue.Queue(2 * block_size)
+
+        # Declared (not assigned): the save loops in save_workers.py set
+        # ``saver.dataset`` to the h5py.Dataset they just created before
+        # stamping per-dataset attrs. The bare annotation keeps the
+        # attribute typed without changing runtime semantics (the
+        # attribute still only exists once a save loop writes it).
+        self.dataset: h5py.Dataset
 
         self.sample_name = ""
         self.number_of_files = 1
@@ -1014,232 +1023,12 @@ class FrameSaver(QObject):
         files written. Both channels of the same plane share the same
         motor position (``add_motor_parameters`` is called once per
         plane by the acquisition worker).
+
+        The body lives in ``save_workers.run_hdf5_multi_channel_save_loop``
+        — this method is a one-line delegate so internal callers and
+        every test patch target resolve unchanged.
         """
-        n_channels = len(self.filenames_lists)
-        n_files_per_channel = self.number_of_files
-        n_datasets_per_file = int(self.number_of_datasets)
-        total_frames = n_channels * n_files_per_channel * n_datasets_per_file
-        # Per-channel state: file index (0-based into filenames_lists[ch]),
-        # dataset counter (1-based for naming), and the open file handle.
-        # For a resumed run the common resume plane is split into
-        # (file_idx, ds_counter) so the first resumed dataset is named
-        # and indexed correctly.
-        resume_offset = self._common_resume_plane
-        file_idx = [resume_offset // n_datasets_per_file for _ in range(n_channels)]
-        ds_counter = [
-            (resume_offset % n_datasets_per_file) + 1 for _ in range(n_channels)
-        ]
-        outfiles: list = [None] * n_channels  # ty: ignore[missing-type-argument]
-        frames_written = 0
-
-        try:
-            # Open the resume file for each channel and write root metadata.
-            for ch in range(n_channels):
-                file_list = self.filenames_lists[ch]
-                fidx = file_idx[ch]
-                if fidx >= len(file_list):
-                    self.sig_status_message.emit(
-                        f"Save error: resume file index {fidx} out of range "
-                        f"for channel {ch}"
-                    )
-                    self.saving_started = False
-                    return
-                filename = file_list[fidx]
-                logger.info("File opened: %s", filename)
-                outfile = h5py.File(filename, "a")
-                self._write_laser_metadata(outfile)
-                self._write_acquisition_metadata(outfile)
-                outfiles[ch] = outfile
-
-            while frames_written < total_frames:
-                try:
-                    item = self.queue.get(True, 1)
-                except queue.Empty:
-                    if not self.saving_started:
-                        try:
-                            item = self.queue.get_nowait()
-                        except queue.Empty:
-                            break
-                    else:
-                        continue
-
-                # Branch on the channel tag: a tagged tuple routes to
-                # the correct per-channel file; a bare ndarray falls back
-                # to channel 0 (back-compat for any producer that has not
-                # migrated to the tagged form).
-                if isinstance(item, tuple):
-                    channel_idx, frame = item
-                else:
-                    channel_idx = 0
-                    frame = item
-
-                if channel_idx < 0 or channel_idx >= n_channels:
-                    self.sig_status_message.emit(
-                        f"Save error: channel index {channel_idx} out of "
-                        f"range (0..{n_channels - 1})"
-                    )
-                    self.saving_started = False
-                    break
-
-                if outfiles[channel_idx] is None:
-                    # Channel already filled all its files — producer
-                    # over-ran. Drop the extra frame without counting it
-                    # (counting would let frames_written reach
-                    # total_frames while other channels still have queued
-                    # frames, exiting early and dropping them).
-                    continue
-
-                outfile = outfiles[channel_idx]
-                # 0-based dataset index within the current file, and the
-                # global plane index within the channel (for motor
-                # positions — one snapshot per plane, shared by both
-                # channels of the same plane).
-                ds_idx = ds_counter[channel_idx] - 1
-                pos_index = file_idx[channel_idx] * n_datasets_per_file + ds_idx
-                try:
-                    if frame.ndim == 2:
-                        frame = np.expand_dims(frame, axis=0)
-                    for f_idx in range(frame.shape[0]):
-                        path_root = (
-                            self.datasets_name + f"{ds_counter[channel_idx]:03d}"
-                        )
-                        self.dataset = outfile.create_dataset(
-                            path_root, data=frame[f_idx, :, :]
-                        )
-                        logger.info(
-                            "Dataset created: %s (channel %d plane %d)",
-                            path_root,
-                            channel_idx,
-                            pos_index,
-                        )
-                        self.dataset.attrs["Sample Name"] = self.sample_name
-                        self.dataset.attrs["Date"] = str(datetime.date.today())
-                        if pos_index < len(self.horizontal_positions_list):
-                            self.dataset.attrs["Horizontal Position"] = (
-                                self.horizontal_positions_list[pos_index]
-                            )
-                            self.dataset.attrs["Vertical Position"] = (
-                                self.vertical_positions_list[pos_index]
-                            )
-                            self.dataset.attrs["Camera Position"] = (
-                                self.camera_positions_list[pos_index]
-                            )
-                        ds_counter[channel_idx] += 1
-                        frames_written += 1
-                        # Committed-plane cursor for this channel, keyed by
-                        # the channel's first file (stitch holds all planes).
-                        plane_cursor = (
-                            file_idx[channel_idx] * n_datasets_per_file
-                            + ds_counter[channel_idx]
-                            - 1
-                        )
-                        self._commit_manifest_cursor(
-                            "hdf5",
-                            str(self.filenames_lists[channel_idx][0]),
-                            plane_cursor,
-                        )
-                except Exception as e:
-                    self.sig_status_message.emit(f"Save error: {e}")
-                    self.saving_started = False
-                    break
-
-                # If the current file is full, close it and open the
-                # next file for this channel (if any).
-                if ds_counter[channel_idx] > n_datasets_per_file:
-                    # Write the adaptive trajectory group before close.
-                    # Stitch (1 file/channel) writes the full trajectory;
-                    # per-plane (N files/channel) writes this file's rows.
-                    # The file is full here (ds_counter just exceeded
-                    # n_datasets_per_file), so the actual dataset count
-                    # equals n_datasets_per_file. Wrapped in a local
-                    # try/except matching the single-channel pattern so
-                    # an adaptive-write error surfaces to the operator
-                    # instead of propagating to the outer catch.
-                    try:
-                        self._write_adaptive_hdf5_for_file(
-                            outfile,
-                            file_idx[channel_idx],
-                            n_files_per_channel,
-                            n_datasets_per_file,
-                        )
-                        self._write_focus_hdf5_for_file(
-                            outfile,
-                            file_idx[channel_idx],
-                            n_files_per_channel,
-                            n_datasets_per_file,
-                        )
-                    except Exception as e:
-                        self.sig_status_message.emit(f"Save error: {e}")
-                        self.saving_started = False
-                        outfile.close()
-                        break
-                    outfile.close()
-                    self.sig_status_message.emit(
-                        "File "
-                        + self.filenames_lists[channel_idx][file_idx[channel_idx]]
-                        + " saved"
-                    )
-                    file_idx[channel_idx] += 1
-                    if file_idx[channel_idx] < n_files_per_channel:
-                        next_filename = self.filenames_lists[channel_idx][
-                            file_idx[channel_idx]
-                        ]
-                        logger.info("File created: %s", next_filename)
-                        next_outfile = h5py.File(next_filename, "a")
-                        self._write_laser_metadata(next_outfile)
-                        self._write_acquisition_metadata(next_outfile)
-                        outfiles[channel_idx] = next_outfile
-                        ds_counter[channel_idx] = 1
-                    else:
-                        # Channel exhausted its files — no more opens.
-                        outfiles[channel_idx] = None
-        except Exception as e:
-            self.sig_status_message.emit(f"Save error: {e}")
-            self.saving_started = False
-        finally:
-            for ch in range(n_channels):
-                outfile = outfiles[ch]
-                if outfile is not None:
-                    try:
-                        # Write the adaptive trajectory group before
-                        # close. Uses the channel's current file_idx —
-                        # the file that was still open when the loop
-                        # exited (stitch: 0; per-plane: the file that
-                        # was being filled). Cap the row count to the
-                        # datasets actually written (ds_counter[ch] - 1)
-                        # so a file aborted mid-fill does not end up with
-                        # more trajectory rows than image datasets.
-                        # Surface write errors to the operator instead
-                        # of silently swallowing them (the previous
-                        # `except Exception: pass` hid adaptive-write
-                        # failures from the operator).
-                        self._write_adaptive_hdf5_for_file(
-                            outfile,
-                            file_idx[ch],
-                            n_files_per_channel,
-                            n_datasets_per_file,
-                            actual_n_datasets=ds_counter[ch] - 1,
-                        )
-                        self._write_focus_hdf5_for_file(
-                            outfile,
-                            file_idx[ch],
-                            n_files_per_channel,
-                            n_datasets_per_file,
-                            actual_n_datasets=ds_counter[ch] - 1,
-                        )
-                        outfile.close()
-                    except Exception as e:
-                        self.sig_status_message.emit(f"Save error: {e}")
-                        with contextlib.suppress(Exception):
-                            outfile.close()
-
-        self._finalize_manifest()
-        logger.info(
-            "frame_saver_worker (multi-channel) exited "
-            "(saving_started=%s, frames_written=%d)",
-            self.saving_started,
-            frames_written,
-        )
+        run_hdf5_multi_channel_save_loop(self)
 
     def zarr_save_worker(self) -> None:
         """ZarrSaver-driven save loop body — streams reconstructed frames
@@ -1345,327 +1134,12 @@ class FrameSaver(QObject):
         NOT files written. The single-consumer queue contract is
         preserved: one queue, one consume loop, one ``sig_finished`` →
         ``thread.quit`` → ``wait(10000)``.
+
+        The body lives in ``save_workers.run_both_multi_channel_save_loop``
+        — this method is a one-line delegate so internal callers and
+        every test patch target resolve unchanged.
         """
-        if self.datasets_name in ("ETLscan", "FullETLscan"):
-            frames_per_buffer = int(
-                getattr(getattr(self, "parent"), "waveform_cycles", 1) or 1  # noqa: B009
-            )
-        else:
-            frames_per_buffer = 1
-        n_planes = (
-            self.number_of_files * int(self.number_of_datasets) * frames_per_buffer
-        )
-        store_path = str(
-            Path(self.parent.save_directory) / (self.files_name + ".ome.zarr")  # ty: ignore[unresolved-attribute]
-        )
-        # Compute the channel count BEFORE start_stack so the Zarr writer
-        # is shaped (n_channels, n_planes, y, x) — a channel-1 write_plane
-        # call would otherwise index past a size-1 channel axis and raise
-        # IndexError. The channel count comes from the per-channel
-        # filename lists built by set_files(wavelengths=...).
-        n_channels = len(self.filenames_lists)
-        try:
-            zarr_resume_cursors = (
-                self.resume_manifest.cursors.get("zarr", {})
-                if self.resume_manifest
-                else {}
-            )
-            if store_path in zarr_resume_cursors and self.resume_manifest is not None:
-                self._zarr_saver.resume_stack(
-                    store_path,
-                    n_planes,
-                    n_channels,
-                    self.resume_manifest.uuid,
-                    start_plane=self._common_resume_plane,
-                )
-            else:
-                self._zarr_saver.start_stack(
-                    store_path, n_planes, n_channels=n_channels
-                )
-        except Exception as e:
-            self.sig_status_message.emit(f"Save error: {e}")
-            self.saving_started = False
-            return
-
-        n_files_per_channel = self.number_of_files
-        n_datasets_per_file = int(self.number_of_datasets)
-        total_frames = n_channels * n_files_per_channel * n_datasets_per_file
-        # Per-channel state: file index (0-based into filenames_lists[ch]),
-        # dataset counter (1-based for naming), and the open file handle.
-        # For a resumed run the common resume plane is split into
-        # (file_idx, ds_counter) so the first resumed dataset is named
-        # and indexed correctly.
-        resume_offset = self._common_resume_plane
-        file_idx = [resume_offset // n_datasets_per_file for _ in range(n_channels)]
-        ds_counter = [
-            (resume_offset % n_datasets_per_file) + 1 for _ in range(n_channels)
-        ]
-        outfiles: list = [None] * n_channels  # ty: ignore[missing-type-argument]
-        frames_written = 0
-        z_idx_per_channel: dict[int, int] = {
-            c: self._zarr_saver.resume_offset(c) for c in range(n_channels)
-        }
-
-        try:
-            # Open the resume file for each channel and write root metadata.
-            for ch in range(n_channels):
-                file_list = self.filenames_lists[ch]
-                fidx = file_idx[ch]
-                if fidx >= len(file_list):
-                    self.sig_status_message.emit(
-                        f"Save error: resume file index {fidx} out of range "
-                        f"for channel {ch}"
-                    )
-                    self.saving_started = False
-                    return
-                filename = file_list[fidx]
-                logger.info("File opened: %s", filename)
-                outfile = h5py.File(filename, "a")
-                self._write_laser_metadata(outfile)
-                self._write_acquisition_metadata(outfile)
-                outfiles[ch] = outfile
-
-            while frames_written < total_frames:
-                try:
-                    item = self.queue.get(True, 1)
-                except queue.Empty:
-                    if not self.saving_started:
-                        try:
-                            item = self.queue.get_nowait()
-                        except queue.Empty:
-                            break
-                    else:
-                        continue
-
-                if isinstance(item, tuple):
-                    channel_idx, frame = item
-                else:
-                    channel_idx = 0
-                    frame = item
-
-                if channel_idx < 0 or channel_idx >= n_channels:
-                    self.sig_status_message.emit(
-                        f"Save error: channel index {channel_idx} out of range "
-                        f"(0..{n_channels - 1})"
-                    )
-                    self.saving_started = False
-                    break
-
-                if outfiles[channel_idx] is None:
-                    # Channel exhausted its files — producer over-ran.
-                    # Drop the extra frame without counting it (see
-                    # _frame_saver_worker_multi_channel for the rationale).
-                    continue
-
-                outfile = outfiles[channel_idx]
-                ds_idx = ds_counter[channel_idx] - 1
-                pos_index = file_idx[channel_idx] * n_datasets_per_file + ds_idx
-                try:
-                    if frame.ndim == 2:
-                        frame = np.expand_dims(frame, axis=0)
-                    for f_idx in range(frame.shape[0]):
-                        # --- HDF5 write (one dataset per plane per channel) ---
-                        path_root = (
-                            self.datasets_name + f"{ds_counter[channel_idx]:03d}"
-                        )
-                        self.dataset = outfile.create_dataset(
-                            path_root, data=frame[f_idx, :, :]
-                        )
-                        logger.info(
-                            "Dataset %s created: %s (channel %d plane %d)",
-                            f_idx,
-                            path_root,
-                            channel_idx,
-                            pos_index,
-                        )
-                        self.dataset.attrs["Sample Name"] = self.sample_name
-                        self.dataset.attrs["Date"] = str(datetime.date.today())
-                        if pos_index < len(self.horizontal_positions_list):
-                            self.dataset.attrs["Horizontal Position"] = (
-                                self.horizontal_positions_list[pos_index]
-                            )
-                            self.dataset.attrs["Vertical Position"] = (
-                                self.vertical_positions_list[pos_index]
-                            )
-                            self.dataset.attrs["Camera Position"] = (
-                                self.camera_positions_list[pos_index]
-                            )
-                        ds_counter[channel_idx] += 1
-                        frames_written += 1
-                        # Committed-plane cursor for this channel, keyed by
-                        # the channel's first file (stitch holds all planes).
-                        plane_cursor = (
-                            file_idx[channel_idx] * n_datasets_per_file
-                            + ds_counter[channel_idx]
-                            - 1
-                        )
-                        self._commit_manifest_cursor(
-                            "hdf5",
-                            str(self.filenames_lists[channel_idx][0]),
-                            plane_cursor,
-                        )
-
-                        # --- Zarr write (per-channel — write_plane routes
-                        # the frame to the channel-axis slice; channel 0
-                        # records the motor positions via its guarded append) ---
-                        cz = z_idx_per_channel.get(channel_idx, 0)
-                        if cz < n_planes:
-                            # Zarr motor positions use the per-channel
-                            # plane index (cz // frames_per_buffer), not
-                            # the sub-frame index, so all ETL sub-frames
-                            # in one plane share the same motor position.
-                            zarr_pos_index = cz // frames_per_buffer
-                            hor = (
-                                _position_to_float(
-                                    self.horizontal_positions_list[zarr_pos_index]
-                                )
-                                if zarr_pos_index < len(self.horizontal_positions_list)
-                                else 0.0
-                            )
-                            ver = (
-                                _position_to_float(
-                                    self.vertical_positions_list[zarr_pos_index]
-                                )
-                                if zarr_pos_index < len(self.vertical_positions_list)
-                                else 0.0
-                            )
-                            cam = (
-                                _position_to_float(
-                                    self.camera_positions_list[zarr_pos_index]
-                                )
-                                if zarr_pos_index < len(self.camera_positions_list)
-                                else 0.0
-                            )
-                            self._zarr_saver.write_plane(
-                                channel_idx, cz, frame[f_idx, :, :], hor, ver, cam
-                            )
-                            z_idx_per_channel[channel_idx] = cz + 1
-                            self._commit_manifest_cursor(
-                                "zarr", store_path, z_idx_per_channel[channel_idx]
-                            )
-                except Exception as e:
-                    self.sig_status_message.emit(f"Save error: {e}")
-                    self.saving_started = False
-                    break
-
-                # If the current file is full, close it and open the
-                # next file for this channel (if any).
-                if ds_counter[channel_idx] > n_datasets_per_file:
-                    # The file is full here, so the actual dataset
-                    # count equals n_datasets_per_file. Wrapped in a
-                    # local try/except matching the single-channel
-                    # pattern so an adaptive-write error surfaces to
-                    # the operator instead of propagating to the outer
-                    # catch.
-                    try:
-                        self._write_adaptive_hdf5_for_file(
-                            outfile,
-                            file_idx[channel_idx],
-                            n_files_per_channel,
-                            n_datasets_per_file,
-                        )
-                        self._write_focus_hdf5_for_file(
-                            outfile,
-                            file_idx[channel_idx],
-                            n_files_per_channel,
-                            n_datasets_per_file,
-                        )
-                    except Exception as e:
-                        self.sig_status_message.emit(f"Save error: {e}")
-                        self.saving_started = False
-                        outfile.close()
-                        break
-                    outfile.close()
-                    self.sig_status_message.emit(
-                        "File "
-                        + self.filenames_lists[channel_idx][file_idx[channel_idx]]
-                        + " saved"
-                    )
-                    file_idx[channel_idx] += 1
-                    if file_idx[channel_idx] < n_files_per_channel:
-                        next_filename = self.filenames_lists[channel_idx][
-                            file_idx[channel_idx]
-                        ]
-                        logger.info("File created: %s", next_filename)
-                        next_outfile = h5py.File(next_filename, "a")
-                        self._write_laser_metadata(next_outfile)
-                        self._write_acquisition_metadata(next_outfile)
-                        outfiles[channel_idx] = next_outfile
-                        ds_counter[channel_idx] = 1
-                    else:
-                        outfiles[channel_idx] = None
-
-            # Close any per-channel HDF5 file still open (the consume loop
-            # is done — either all frames consumed or aborted). A channel
-            # whose last file filled via the in-loop close path has
-            # outfiles[ch] = None; a channel aborted mid-file still has
-            # an open handle that must be closed here. Cap the trajectory
-            # row count to the datasets actually written (ds_counter[ch]
-            # - 1) so a file aborted mid-fill does not end up with more
-            # trajectory rows than image datasets. Surface write errors
-            # to the operator instead of silently swallowing them.
-            for ch in range(n_channels):
-                if outfiles[ch] is not None:
-                    try:
-                        self._write_adaptive_hdf5_for_file(
-                            outfiles[ch],
-                            file_idx[ch],
-                            n_files_per_channel,
-                            n_datasets_per_file,
-                            actual_n_datasets=ds_counter[ch] - 1,
-                        )
-                        self._write_focus_hdf5_for_file(
-                            outfiles[ch],
-                            file_idx[ch],
-                            n_files_per_channel,
-                            n_datasets_per_file,
-                            actual_n_datasets=ds_counter[ch] - 1,
-                        )
-                        outfiles[ch].close()
-                    except Exception as e:
-                        self.sig_status_message.emit(f"Save error: {e}")
-                        with contextlib.suppress(Exception):
-                            outfiles[ch].close()
-
-            # Finalize the Zarr store after all HDF5 files are closed.
-            # Gate on channel 0's plane count (canonical recorder): if it
-            # did not reach n_planes the stack is partial — skip finalize.
-            ch0_z = z_idx_per_channel.get(0, 0)
-            if ch0_z < n_planes:
-                logger.info(
-                    "both_save_worker (multi-channel) exiting before finalize "
-                    "(ch0_z=%d < n_planes=%d) — partial store left on disk",
-                    ch0_z,
-                    n_planes,
-                )
-            else:
-                try:
-                    self._zarr_saver.set_adaptive_trajectory(
-                        self.adaptive_trajectory, self._adaptive_config
-                    )
-                    self._zarr_saver.set_focus_trajectory(
-                        self.focus_trajectory, self._focus_config
-                    )
-                    self._zarr_saver.finalize()
-                    self.sig_status_message.emit("Zarr store " + store_path + " saved")
-                except Exception as e:
-                    self.sig_status_message.emit(f"Save error: {e}")
-                    self.saving_started = False
-        except Exception as e:
-            self.sig_status_message.emit(f"Save error: {e}")
-            self.saving_started = False
-        finally:
-            for outfile in outfiles:
-                if outfile is not None:
-                    with contextlib.suppress(Exception):
-                        outfile.close()
-        self._finalize_manifest()
-        logger.info(
-            "both_save_worker (multi-channel) exited "
-            "(saving_started=%s, frames_written=%d)",
-            self.saving_started,
-            frames_written,
-        )
+        run_both_multi_channel_save_loop(self)
 
     def stop_saving(self, lifecycle: str | None = None) -> None:
         """Signal the save worker to stop and join it with a bounded timeout.
