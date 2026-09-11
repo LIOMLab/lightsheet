@@ -322,7 +322,7 @@ bare `uv run pytest -q` (or `scripts/test.sh`).
   --fail-under=70` → `coverage json` → `coverage-threshold`. It is NOT part of
   the fast `uv run pytest -q` iteration path (that stays snappy, no `--cov`).
   Run it before committing a change that touches a safety-critical module
-  (see §2), and before any high-risk refactor — the gate exists to protect
+  (see §2), instead of `bash scripts/test.sh`, and before any high-risk refactor — the gate exists to protect
   safety-critical modules and high-risk structural work. The completed Phase 6
   threading migration and Phase 7 Qt6/Python 3.12 port are historical examples
   of the kind of work the gate exists to protect, not upcoming work. The
