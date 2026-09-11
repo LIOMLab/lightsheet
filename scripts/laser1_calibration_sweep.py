@@ -356,8 +356,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--output",
-        default="test/laser1_calibration.csv",
-        help="Output CSV path (default: test/laser1_calibration.csv)",
+        default="laser1_calibration.csv",
+        help="Output CSV path (default: laser1_calibration.csv)",
     )
     parser.add_argument(
         "--warmup-volts",

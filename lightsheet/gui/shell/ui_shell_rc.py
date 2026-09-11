@@ -1,5 +1,5 @@
 # GENERATED FILE — DO NOT HAND-EDIT.
-# Regenerate: bash scripts/compile_ui.sh (pyside6-uic + fix_generated_ui_enums + tokenize_forms) or pyside6-rcc / scripts/build-breeze.sh for resources.
+# Regenerate: bash scripts/compile_ui.sh (uic forms); bash scripts/build-breeze.sh (breeze resources); a manual *_rc.py needs pyside6-rcc then re-tag with scripts/add_generated_header.py.
 # Resource object code (Python 3)
 # Created by: object code
 # Created by: The Resource Compiler for Qt version 6.11.2
