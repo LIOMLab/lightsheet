@@ -40,9 +40,11 @@ These are physical-safety constraints, not style preferences:
 - **Laser power clamping (two-layer)**: `ILaser.set_power(mw)` clamps mW to
   `[0, max_power]` at the interface layer; each backend clamps again in its
   native unit (`DAQLaser._write_volts` clamps V; inner `IBeam.set_power` clamps
-  µW). `max_power` is loaded from `config.ini` (`Max Power` key) — treat that
-  key as safety-critical. Do not remove a clamp to "fix" a power issue —
-  escalate instead.
+  µW). `max_power` is loaded from `config.ini` — `[Lasers] Laser1 Max Power`
+  / `Laser2 Max Power` (mW) are the sole per-laser ceilings; the iBeam
+  backend's µW bound is derived from `Laser2 Max Power` via the
+  `max_power_uw` constructor arg — treat those keys as safety-critical. Do
+  not remove a clamp to "fix" a power issue — escalate instead.
 - **E-stop**: The E-stop (toolbar button / F12) must synchronously drive every
   laser off on the GUI thread (`updateUi_estop_pressed` in
   `lightsheet/gui/shell/controller.py`: `estop_event.set()` →
@@ -61,8 +63,10 @@ These are physical-safety constraints, not style preferences:
   `extra='forbid'` + ten overlay
   `extra='ignore'`) runs in `__main__.py` on BOTH the demo and rig paths
   before the controller is constructed. Safety-critical keys are **rejected**,
-  not clamped, at this tier: `[iBeam] Max Power` > 150000 and `[Motors]`
-  `* Limit High` beyond 41.0 / 18.8 / 35.0 mm abort startup with a modal
+  not clamped, at this tier: `[Lasers] Laser1 Max Power` > 300,
+  `[Lasers] Laser2 Max Power` > 150 (mW — the single L2 ceiling; a leftover
+  `[iBeam] Max Power` key is rejected as unknown via `extra='forbid'`), and
+  `[Motors]` `* Limit High` beyond 41.0 / 18.8 / 35.0 mm abort startup with a modal
   dialog listing every error in one pass (`ConfigValidator.validate_or_abort`).
   The two-layer runtime clamp in §10 is the defense during a session; the
   schema is the defense at startup. Do not relax these validators to "fix" a
@@ -356,17 +360,18 @@ bare `uv run pytest -q` (or `scripts/test.sh`).
     `updateUi_estop_pressed` warn branch (the E-stop laser-off failure path
     that emits a per-laser "STILL BE ON" warning when an `off()` returns
     `error`) is behavior-tested, but is gate-enforced only at the 80%
-    `controller.py` default tier, NOT at 100%. `controller.py` is ~2360 lines
+    `controller.py` default tier, NOT at 100%. `controller.py` is ~2126 lines
     (`lightsheet/gui/shell/controller.py`) with Qt-unreachable code
     (constructors, slot wiring, UI refresh), making 100% module-wide branch
     coverage impractical. The 100% gate enforcement applies ONLY to the 3 HAL
     safety modules above; the E-stop warn branch's ongoing correctness relies
     on its one-time behavior test staying in the suite, not on the coverage
     gate re-verifying it every run. Do not delete that test.
-- `test/` also contains legacy standalone scripts (`daqmx.py`, `h5test.py`,
-  `hdf5_to_tiff.py`, `axial_resolution.py`, etc.) at the root — these are
-  manual calibration/experiment utilities, NOT pytest tests. Don't treat
-  failures in them as test failures.
+- Legacy standalone scripts (`daqmx.py`, `h5test.py`, `hdf5_to_tiff.py`,
+  `axial_resolution.py`, `laser1_calibration_sweep.py`, etc.) live in
+  `scripts/` — they are manual calibration/experiment utilities, NOT pytest
+  tests. `test/` contains only pytest modules, conftest, and helpers.
+  Don't treat failures in `scripts/` utilities as test failures.
 - New tests go in `test/<area>/test_<thing>.py` under one of the established
   **behavior** patterns:
   - **Pure-logic** (`test/core/test_waveforms.py`, `test/core/test_config.py`,
@@ -555,13 +560,19 @@ lightsheet/                    importable package (importable as `lightsheet`)
     __init__.py                empty (package marker)
     shell/                     the UI shell — composition-root-facing controller + generated UI
       __init__.py              empty (package marker)
-      controller.py            Controller_MainWindow — a THIN UI-WIRING SHELL (~2360 lines).
+      controller.py            Controller_MainWindow — a THIN UI-WIRING SHELL (~2126 lines).
                                Holds `self._bundle` + `self.lasers`, wires Qt signals/slots,
                                owns the E-stop kill path (stays in the shell by design), and
                                delegates all real work to the 4 collaborators via `self._fs` /
                                `self._hw` / `self._acq` / `self._mc`. No worker bodies, no HAL
                                construction, no image reconstruction, no motor move logic
                                remains here.
+      ui_delegates.py          _ShellUiDelegatesMixin — the UI-only updateUi_* delegate
+                               group (theme slots, show/hide slots, properties/help,
+                               channel-radio visibility/tint, stack-param save/load)
+                               extracted from controller.py; mixin sits FIRST in the
+                               Controller_MainWindow MRO. No safety/lifecycle methods
+                               live here — those stay in controller.py.
       ui_shell.py              GENERATED by pyside6-uic — DO NOT hand-edit
       ui_shell.ui              Qt Designer source for ui_shell.py
       ui_shell.qrc             resource collection source for ui_shell_rc.py
@@ -582,9 +593,24 @@ lightsheet/                    importable package (importable as `lightsheet`)
       frame_saver_controller.py FrameSaverController + FrameSaver(QObject) +
                                FrameSaverWorker(QObject). Facade that delegates the pure
                                image-reconstruction functions to reconstruction.py, the
-                               Zarr streaming path to zarr_saver.py, and the live display
-                               queue to frame_viewer.py. Writes per-laser HDF5 metadata from
-                               the live `self.parent.lasers` (no cfg_read at save time).
+                               Zarr streaming path to zarr_saver.py, the live display
+                               queue to frame_viewer.py, the per-format save consume
+                               loops to save_workers.py, and the resume-manifest
+                               lifecycle to save_manifest.py (ManifestRecorder). Writes
+                               per-laser HDF5 metadata from the live
+                               `self.parent.lasers` (no cfg_read at save time).
+      save_workers.py          The five per-format save consume loops extracted from
+                               FrameSaver (run_hdf5_save_loop, run_zarr_save_loop,
+                               run_both_save_loop, run_hdf5_multi_channel_save_loop,
+                               run_both_multi_channel_save_loop) as plain-Python
+                               functions behind one-line FrameSaver delegates. The
+                               queue.Empty (timeout) vs real-exception separation in
+                               each loop is a do-not-regress contract — never collapse
+                               them back to one bare except.
+      save_manifest.py         ManifestRecorder — plain-Python collaborator owning the
+                               .resume.json sidecar lifecycle: initial minting (fresh
+                               and resumed), the manifest_update_queue drain, durable
+                               cursor commits, and the race-free final write.
       adaptive_dock_controller.py Presentation-only controller for the adaptive-trajectory
                                QDockWidget. Owns no HAL/E-stop; the shell calls its
                                append/freeze/toggle slots from GUI-thread worker signals.
@@ -605,7 +631,17 @@ lightsheet/                    importable package (importable as `lightsheet`)
     panels/                    per-panel widget/controller modules + generated UI
       __init__.py              empty (package marker)
       acquisition_panel.py     AcquisitionPanelWidget
-      acquisition_table_manager.py AcquisitionTableManager
+      acquisition_table_manager.py AcquisitionTableManager — row model + widget wiring;
+                               delegates the resume/queue-manifest plumbing to
+                               queue_resume.py and the time/size estimation to
+                               queue_estimation.py
+      queue_resume.py          Resume-row enqueue + queue-manifest write plumbing
+                               extracted from AcquisitionTableManager (module-level
+                               mgr-parameter functions; the manager keeps one-line
+                               delegates)
+      queue_estimation.py      Per-row time/size estimation + recompute helpers
+                               extracted from AcquisitionTableManager (same delegate
+                               pattern)
       calibration_panel.py     CalibrationPanelWidget — Camera/ETL/Horizontal calibration
                                widget container (slot logic lives in MotorController, wired in
                                wire_collaborators). The OLD calibrate_camera_worker /
@@ -717,7 +753,8 @@ scripts/
                                breeze_pyside6.py.
   compile_ui.sh                one-command UI build: runs pyside6-uic on every
                                lightsheet/gui/*.ui file, then
-                               fix_generated_ui_enums.py, then tokenize_forms.py.
+                               fix_generated_ui_enums.py, then tokenize_forms.py,
+                               then add_generated_header.py.
                                Use this after editing any .ui file in Qt Designer.
   coverage.sh                  the 3-step coverage gate (see §5)
   fix_generated_ui_enums.py    idempotent post-processor for pyside6-uic output. Run after
@@ -727,12 +764,21 @@ scripts/
                                values in generated `ui_*.py` files to `lightsheet.gui.styles`
                                design-token references (`_s.ZERO`, `_s.SM`, `_c.BREEZE_BG`,
                                etc.). Run automatically by compile_ui.sh.
+  add_generated_header.py      idempotent post-processor that prepends the project
+                               `GENERATED FILE — DO NOT HAND-EDIT` marker to uic/rcc
+                               output (see §8). Run automatically by compile_ui.sh and
+                               build-breeze.sh.
   snapshot-rig-config.sh       rig config snapshot helper
+  <other *.py>                 legacy operator/calibration utilities relocated from
+                               the test/ root (daqmx.py, h5test.py, hdf5_to_tiff.py,
+                               axial_resolution.py, laser1_calibration_sweep.py,
+                               etc.) — manual scripts, NOT pytest tests
 docs/
   gui-layout-convention.md     authoritative GUI layout convention (264 lines) — QScrollArea
                                wrap rule, size-policy table, left-rail spec, Phase 9 extension
                                seam. Agents touching GUI layout MUST read this first.
-test/                          pytest tests + legacy manual scripts (see §5)
+test/                          pytest tests (see §5); the legacy manual scripts
+                               formerly at its root now live in scripts/
 pyproject.toml                 project + tool config (ruff, pytest, ty, project.scripts).
                                requires-python >=3.12,<3.13; PySide6>=6.8, nidaqmx, pco, h5py,
                                liom-toolkit[io]>=1.1. packages include lightsheet, lightsheet.adaptive,
@@ -775,10 +821,13 @@ touching the vendored Breeze source; do NOT hand-edit `breeze_pyside6.py`
 
 `lightsheet/gui/shell/ui_shell.py`, the per-panel
 `lightsheet/gui/panels/ui_*_panel.py`, the per-panel
-`lightsheet/gui/panels/ui_*_panel_rc.py`, and
-`lightsheet/gui/shell/ui_shell_rc.py` are produced by `pyside6-uic` /
+`lightsheet/gui/panels/ui_*_panel_rc.py`,
+`lightsheet/gui/shell/ui_shell_rc.py`, and
+`lightsheet/gui/breeze_pyside6.py` are produced by `pyside6-uic` /
 `pyside6-rcc` from the `.ui` / `.qrc` sources. They begin with a
-`# WARNING: Any manual changes made to this file will be lost...` header.
+`# WARNING: Any manual changes made to this file will be lost...` header
+and carry the project `# GENERATED FILE — DO NOT HAND-EDIT` marker
+prepended by `scripts/add_generated_header.py`.
 
 - To change the UI, edit the `.ui` file in Qt Designer and regenerate, OR add
   widgets programmatically in `lightsheet/gui/shell/controller.py` (the
@@ -788,7 +837,13 @@ touching the vendored Breeze source; do NOT hand-edit `breeze_pyside6.py`
   `pyside6-uic` for every `.ui` file, then `scripts/fix_generated_ui_enums.py`
   to normalize unscoped Qt/QFrame enum tokens to scoped PySide6 equivalents,
   then `scripts/tokenize_forms.py` to remap hard-coded pixel values to the
-  `lightsheet.gui.styles` design tokens. The two post-processors are idempotent.
+  `lightsheet.gui.styles` design tokens, then
+  `scripts/add_generated_header.py` to re-emit the generated-file marker.
+  The post-processors are idempotent.
+- The rcc outputs (`*_rc.py`, `breeze_pyside6.py`) carry the same marker:
+  `build-breeze.sh` re-emits it after `configure.py --compiled`; the panel
+  `*_rc.py` files are one-shot manual `pyside6-rcc` outputs — regenerating
+  one means re-running `add_generated_header.py` on it by hand.
 - If you are only fixing enum scoping, you can run
   `uv run python scripts/fix_generated_ui_enums.py <generated.py> ...` by hand.
 - Never edit the generated `.py` files directly.
@@ -833,7 +888,8 @@ touching the vendored Breeze source; do NOT hand-edit `breeze_pyside6.py`
   every section's errors in one pass, and `ConfigValidator.validate_or_abort`
   shows them in a single modal QDialog (Exit button default) before the
   controller is constructed. Safety-critical out-of-range values
-  (`[iBeam] Max Power > 150000`, `[Motors] * Limit High` beyond
+  (`[Lasers] Laser1/Laser2 Max Power` above the 300/150 mW ceilings,
+  `[Motors] * Limit High` beyond
   41.0/18.8/35.0 mm) are **rejected** at both tiers, not clamped. When adding a
   config key, add it to the matching section module so it is validated; do not
   let a new key slip through unvalidated. The runtime `cfg_read`/`cfg_write`
@@ -1020,7 +1076,7 @@ TLPMX DLL, in `lightsheet/hal/real/pm100d.py`) and `MockPowerMeter` (in
 convenience (watts → mW); both backends preserve the read-only invariant —
 there is NO `set_power` and no power-setting path. The power meter is opened
 on demand by the laser-calibration sweep script
-(`test/laser1_calibration_sweep.py`, rig-only — see §13), not constructed at
+(`scripts/laser1_calibration_sweep.py`, rig-only — see §13), not constructed at
 startup. Re-export both backends + `IPowerMeter` through the
 `lightsheet.hal` barrel; the conformance contract lives in
 `lightsheet/hal/conformance.py` and is exercised by
@@ -1129,7 +1185,7 @@ startup. Re-export both backends + `IPowerMeter` through the
   `ignore = ["ANN401"]`. `extend-exclude` skips the generated UI files
   (`lightsheet/gui/shell/ui_shell.py`, the per-panel `ui_*_panel.py` /
   `ui_*_panel_rc.py`, `ui_properties.py`) and legacy manual scripts in
-  `test/`. `lightsheet/__main__.py` gets `E402` ignored in
+  `scripts/`. `lightsheet/__main__.py` gets `E402` ignored in
   `[tool.ruff.lint.per-file-ignores]` (deferred PySide6 imports after the
   nicaiu preload). `# noqa: RUF012` on class-level mutable `_cfg_defaults`
   templates. `# ty: ignore[invalid-assignment]` for `cfg.optionxform = str`.
@@ -1219,7 +1275,7 @@ startup. Re-export both backends + `IPowerMeter` through the
   workflow — a Camera/ETL/Horizontal motor-calibration widget container (slot
   logic in `MotorController`), not the old camera/ETL acquisition-calibration
   workers. Separately, a NEW laser-power calibration sweep exists as the
-  rig-only script `test/laser1_calibration_sweep.py`: it uses the `PM100D`
+  rig-only script `scripts/laser1_calibration_sweep.py`: it uses the `PM100D`
   power meter + S245C thermal sensor (via the `IPowerMeter` HAL ABC — see §10)
   to sweep Laser 1 V→mW and record a calibration curve. That is a laser power
   calibration, not the deleted camera/ETL calibration — do not conflate them.
