@@ -1226,3 +1226,97 @@ def test_motors_close_persist_positions_false_writes_nothing() -> None:
     with patch("lightsheet.hal.real.motors.cfg_write") as mock_write:
         motors.close()
     assert mock_write.call_count == 0
+
+
+# -- persist/restore defensive guards ---------------------------------------
+#
+# _save_positions / _restore_saved_position are invoked from Motors.__init__
+# and close() behind is_supported gates, so their internal defensive guards
+# (unparseable saved value, unsupported axis, read failure, error flag,
+# nothing-to-write, cfg_write failure) are only reachable by calling the
+# helpers directly on a __new__-bypassed container with stub axes.
+
+
+def _bare_motors() -> Motors:
+    """A __new__-bypassed Motors with only the persist/restore attrs set."""
+    motors = Motors.__new__(Motors)
+    motors._persist_positions = True
+    motors._last_position_microsteps = {}
+    motors._cfg_filename = "config.ini"
+    motors._cfg_section = "Motors"
+    return motors
+
+
+def test_parse_saved_microsteps_unparseable_returns_none() -> None:
+    """A stored value that int() cannot parse (stale/corrupt config) is
+    treated as absent — no exception propagates to __init__."""
+    assert Motors._parse_saved_microsteps("not-a-number") is None
+    assert Motors._parse_saved_microsteps("12.5.7") is None
+
+
+def test_restore_saved_position_skips_unsupported_axis() -> None:
+    """The defensive `not motor.is_supported` guard inside
+    _restore_saved_position returns early — the caller normally gates on
+    is_supported, but a direct call on an unsupported axis must not write
+    a cmd-45 frame."""
+    motors = _bare_motors()
+    motors._last_position_microsteps = {"vertical": 5000}
+    motors.vertical = Mock()
+    motors.vertical.is_supported = False
+    motors._restore_saved_position("vertical")
+    motors.vertical.set_current_position.assert_not_called()
+
+
+def test_save_positions_skips_missing_and_unsupported_axes() -> None:
+    """An axis absent from the container (getattr default None) or one
+    reporting is_supported=False is skipped; when no axis yields a
+    position the helper returns before calling cfg_write."""
+    motors = _bare_motors()
+    # `vertical` left unset -> getattr default None; horizontal present
+    # but unsupported; camera left unset.
+    motors.horizontal = Mock()
+    motors.horizontal.is_supported = False
+    with patch("lightsheet.hal.real.motors.cfg_write") as mock_write:
+        motors._save_positions()
+    mock_write.assert_not_called()
+
+
+def test_save_positions_read_failure_is_logged_and_skipped() -> None:
+    """A serial failure on one axis must never block shutdown — the
+    failed read is logged and skipped, and with no surviving positions
+    cfg_write is never called."""
+    motors = _bare_motors()
+    motors.vertical = Mock()
+    motors.vertical.is_supported = True
+    motors.vertical.get_position.side_effect = RuntimeError("serial gone")
+    with patch("lightsheet.hal.real.motors.cfg_write") as mock_write:
+        motors._save_positions()  # must not raise
+    mock_write.assert_not_called()
+
+
+def test_save_positions_error_flag_not_persisted() -> None:
+    """A read that leaves the motor error flag set is not persisted —
+    a garbage register value must not become next session's truth."""
+    motors = _bare_motors()
+    motors.vertical = Mock()
+    motors.vertical.is_supported = True
+    motors.vertical.get_position.return_value = "12345"
+    motors.vertical.error = 1
+    with patch("lightsheet.hal.real.motors.cfg_write") as mock_write:
+        motors._save_positions()
+    mock_write.assert_not_called()
+
+
+def test_save_positions_cfg_write_failure_is_logged() -> None:
+    """A cfg_write failure (e.g. unwritable config.ini) is logged and
+    swallowed — shutdown must not abort on a persistence error."""
+    motors = _bare_motors()
+    motors.vertical = Mock()
+    motors.vertical.is_supported = True
+    motors.vertical.get_position.return_value = "5000"
+    motors.vertical.error = 0
+    with patch(
+        "lightsheet.hal.real.motors.cfg_write",
+        side_effect=OSError("disk full"),
+    ):
+        motors._save_positions()  # must not raise

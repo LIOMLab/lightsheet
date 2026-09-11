@@ -8,12 +8,16 @@ Targets the specific branches left uncovered by
 - ``AdaptiveController.update`` without ``prime()`` (no pilot trajectory
   → feedforward falls back to current exposure; re-acquire expected
   falls back to the target midpoint).
-- NaN brighter / dimmer intensity guards (defensive NaN → 0.0).
+- NaN brighter / dimmer / saturation intensity guards (defensive
+  NaN → 0.0).
 - Multi-channel power-fallback path (brighter channel power trimmed).
 - 3+ channel dimmer-index selection (the latent WR-03 guard).
 - ``brighter_idx == 1`` power-slot assignment (L1 = dimmer, L2 = brighter).
 - Pilot trajectory returning ~0 exposure (ff_exp <= 1e-9 → expected =
   target midpoint).
+- ``checkpoint()`` without ``prime()`` (pilot=None) and the
+  ``restore()`` validation raise branches (malformed / out-of-bounds
+  checkpoint state rejected with ValueError).
 
 Pure-Python — no Qt, no HAL, no hardware. Mirrors the
 ``test_adaptive_controller.py`` style: construct ``AdaptiveConfig``
@@ -254,6 +258,30 @@ def test_update_brighter_idx_one_assigns_dimmer_to_l1() -> None:
     assert math.isfinite(cmd.laser2_mw)
 
 
+def test_update_brighter_idx_one_in_band_reaches_slot_assignment() -> None:
+    """The sibling test above uses intensity 0.97, which trips the
+    saturation guard and early-returns BEFORE the brighter/dimmer slot
+    assignment. This case keeps the brighter channel in-band (0.92 <=
+    saturation_threshold 0.95) at a block boundary so the else branch
+    (brighter_idx != 0 → L1 = dimmer, L2 = brighter) actually executes."""
+    cfg = _cfg(block_size_n=8)
+    ctrl = AdaptiveController(cfg, n_planes=20)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    cmd = ctrl.update(
+        intensities=[0.40, 0.92],  # channel 1 brighter but below the guard
+        brighter_idx=1,
+        current_exposure_s=50e-3,
+        current_powers_mw=(20.0, 20.0),
+        plane_idx=7,  # block boundary → dimmer (channel 0 → L1) trims
+    )
+    # Dimmer channel 0 intensity 0.40 < midpoint 0.925 → its power trims
+    # UP; it lands in the L1 slot (brighter_idx == 1 else-branch).
+    assert cmd.control_variable_active != "saturation_guard"
+    assert cmd.laser1_mw > 20.0 + 1e-9
+    # Brighter channel 1 → L2 slot; in-band so no power fallback trim.
+    assert cmd.laser2_mw == pytest.approx(20.0, abs=1e-9)
+
+
 # --------------------------------------------------------------------- #
 # Pilot trajectory returning ~0 exposure (ff_exp <= 1e-9)
 # --------------------------------------------------------------------- #
@@ -278,3 +306,96 @@ def test_update_pilot_trajectory_zero_exposure_reacquire_uses_midpoint() -> None
     )
     # ff_exp ~0 → expected = midpoint → |0.20 - 0.925| = 0.725 > 0.08.
     assert cmd.reacquire is True
+
+
+# --------------------------------------------------------------------- #
+# update() — saturation_intensity NaN guard
+# --------------------------------------------------------------------- #
+
+
+def test_update_nan_saturation_intensity_treated_as_zero() -> None:
+    """A NaN ``saturation_intensity`` (the higher-percentile stat) is
+    replaced with 0.0 so the hard saturation guard does not trip on NaN
+    and the normal PI path runs."""
+    cfg = _cfg()
+    ctrl = AdaptiveController(cfg, n_planes=20)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    cmd = ctrl.update(
+        intensities=[0.92],
+        brighter_idx=0,
+        current_exposure_s=50e-3,
+        current_powers_mw=(20.0, 0.0),
+        plane_idx=0,
+        saturation_intensity=float("nan"),
+    )
+    # NaN → 0.0 → 0.0 <= saturation_threshold → the saturation_guard
+    # early return is NOT taken.
+    assert cmd.control_variable_active != "saturation_guard"
+    assert math.isfinite(cmd.exposure_s)
+
+
+# --------------------------------------------------------------------- #
+# checkpoint() / restore() edges
+# --------------------------------------------------------------------- #
+
+
+def test_checkpoint_without_prime_records_no_pilot() -> None:
+    """checkpoint() before prime() records ``pilot=None`` (the
+    ``_pilot_indices is None`` branch) — a resumed acquisition without
+    pilot data restarts the feedforward from scratch."""
+    ctrl = AdaptiveController(_cfg(), n_planes=20)
+    state = ctrl.checkpoint()
+    assert state["pilot"] is None
+    assert state["integral"] == 0.0
+
+
+def test_restore_without_pilot_or_last_command() -> None:
+    """A checkpoint carrying only integral + reacquire_count restores
+    those fields and leaves the pilot trajectory / last command unset
+    (the ``state.get(...)`` is-None branches)."""
+    ctrl = AdaptiveController(_cfg(), n_planes=20)
+    ctrl.restore({"integral": 0.01, "reacquire_count": 2})
+    assert ctrl._integral == pytest.approx(0.01)
+    assert ctrl._reacquire_count == 2
+    assert ctrl._last_command is None
+    assert ctrl._pilot_traj is None
+
+
+def _valid_last_command(**overrides: object) -> dict[str, object]:
+    """A minimal valid last_command dict for restore() rejection cases."""
+    last: dict[str, object] = {
+        "exposure_s": 0.05,
+        "laser1_mw": 10.0,
+        "laser2_mw": 10.0,
+        "control_variable_active": "fixed",
+    }
+    last.update(overrides)
+    return last
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        "not-a-dict",  # non-dict state
+        {"integral": float("nan")},  # non-finite integral
+        {"integral": 999.0},  # integral outside anti-windup span
+        {"pilot": 5},  # non-dict pilot
+        {"pilot": {"indices": 5, "exposures": []}},  # non-sequence indices
+        {"pilot": {"indices": [0, 1], "exposures": [0.05]}},  # length mismatch
+        {"last_command": 7},  # non-dict last_command
+        {"last_command": {"exposure_s": 0.05}},  # missing required keys
+        {"last_command": _valid_last_command(exposure_s="x")},  # non-number
+        {"last_command": _valid_last_command(exposure_s=float("nan"))},
+        {"last_command": _valid_last_command(exposure_s=-1.0)},  # <= 0
+        {"last_command": _valid_last_command(laser1_mw="x")},  # non-number power
+        {"last_command": _valid_last_command(laser1_mw=999.0)},  # over max
+        {"last_command": _valid_last_command(control_variable_active="bogus")},
+    ],
+)
+def test_restore_rejects_malformed_state(state: object) -> None:
+    """restore() validates the checkpoint dict against the configured
+    bounds — malformed or out-of-bounds input raises ValueError so a
+    corrupted manifest cannot drive unsafe exposure/power values."""
+    ctrl = AdaptiveController(_cfg(), n_planes=20)
+    with pytest.raises(ValueError):
+        ctrl.restore(state)  # ty: ignore[invalid-argument-type]

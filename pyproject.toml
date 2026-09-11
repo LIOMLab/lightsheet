@@ -235,10 +235,11 @@ file_branch_coverage_min = 50
 # 7B per-panel widget/controller modules. New in 07-09 — the slot bodies
 # are moved verbatim from the monolithic controller.py and tested via the
 # existing behavior tests (make_controller + real method calls). The
-# save_panel has the lowest coverage because its file-dialog slots are
-# heavily mock-dependent; floor set to current measured level.
+# save_panel floor is pinned at its measured actual (100% branch as of the
+# test/gui/panels/test_save_panel_branches.py coverage work) — the gate can
+# only ratchet up from here, never silently decay.
 [tool.coverage-threshold.modules."lightsheet/gui/panels/save_panel.py"]
-file_branch_coverage_min = 50
+file_branch_coverage_min = 100
 
 # Reactive state model package (lightsheet/state/*.py) — explicit 80%
 # branch floor matching the global default, pinned here so the model's
